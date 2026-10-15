@@ -374,7 +374,8 @@ Each band is tagged:
 | ID | Fact | Band (scope stated per row; era-conditioned bands are keyed to the era label of the window tested, ADR-0027; sources in `research/R12_literature_verification.md`) | Kind | Statistic and test |
 |---|---|---|---|---|
 | V-SF-01 | Long-run growth without technology shocks | mean r ∈ [−0.1, +0.3]%/yr; population ∈ [0.3, 5]·K | Identity | Seed-mean r with t-interval; population range per seed |
-| V-SF-02 | Child mortality to age 15 | 35–55% | Identity | q(15) from the life-course log, per seed |
+| V-SF-02 | Child mortality to age 15 (agrarian) | 35–55%. At β = 1 this is equivalent to Brass α ∈ [0.20, 0.61] and e₀ ∈ [23.4, 36.6] (R12 §Brass; `specs/demography/selftest_brass.py`). An agrarian manifest with e₀ ≈ 45 implies q(15) ≈ 25% unless β < 1 | Identity | q(15) from the life-course log, per seed. INSUFFICIENT below about 400 births (a ±5-point band at 2σ) |
+| V-SF-02b | Adult mortality shape | l(65)/l(15) inside the range the manifest's (α, β) implies on the Brass General Standard ± 0.03; β ∈ [0.64, 1.64] unless the manifest declares extrapolation | Identity | From the life-course log; pins β, which V-SF-02 alone does not |
 | V-SF-03 | Mortality crises | ≥ 1 event of ≥ 10% loss within 1–2 years per century | Emergent | Crises per century per seed; ensemble mean with t-interval |
 | V-SF-04 | Secular cycle | Spectral peak at 120–450 years in N or W | Emergent | **Red-noise null.** Fit AR(1) to each seed's detrended series. The ensemble-mean multitaper spectrum must peak in the band and exceed the 95th percentile of the ensemble-mean spectrum of 1,000 AR(1) surrogate sets |
 | V-SF-05 | Violence waves (soft) | Secondary peak at 40–60 years during disintegrative phases, in **internal** violence only (interstate war onsets show no periodicity: Clauset 2018) | Emergent | As V-SF-04, on internal violent-event counts. Soft: reported, not counted in MOP-5 |

@@ -399,3 +399,56 @@ Population also acts *directly* on the elites (more surviving younger sons) and 
 - The data are contested (pp. 343–345), and the regressions use few decades.
 - Ψ is normalised differently in each case study.
 - The Asian cases have no mathematical model.
+
+---
+
+# Batch 2 (sources filed in `research/papers/`)
+
+## 9. Brass, W. (1971). "On the scale of mortality." In W. Brass (ed.), *Biological Aspects of Demography*, pp. 69–110. Taylor & Francis
+
+Page numbers are book pages; the PDF page is the book page + 12. We also used Barrett, "A Monte Carlo simulation of reproduction" (pp. 11–30), from the same volume.
+
+**Model.**
+- **The logit:** Y(x) = ½·ln((1 − l(x))/l(x)) (p. 74).
+- **The relational form:** Y(x) = α + β·Ys(x) (p. 77).
+- **α is "level".** Ys = 0 at age 51, so Y(51) = α.
+- **β is "slope", not "shape"** (p. 78). It sets child mortality against adult mortality. For example, l(5) can be about the same, 93.8% vs 94.9%, while l(70) differs: 78.6% vs 29.7%.
+- **Fitting:** split ages 5–80 into two groups and solve (pp. 84–85). We re-ran this and recovered Brass's UN fits to ±0.007 for α and ±0.017 for β.
+
+**The General Standard** (Table 4, p. 77; e₀ = 43.44) is now a machine-readable golden vector: `specs/demography/brass_general_standard.toml`. The self-test `specs/demography/selftest_brass.py` checks:
+- the standard's logits, to within 0.0006;
+- the Table 19 schedules, to within 1 per 10,000;
+- e₀, to within 0.06 years.
+
+**Observed ranges** (Tables 7, 12, 14A/B): α from −1.36 to 0.55, β from 0.64 to 1.64. The Coale–Demeny West schedules fit the standard closely: α = 0.55 / −0.04 / −0.89 for high, medium and low mortality (p. 90).
+
+**Weak at both ends.**
+- Age 1 is off by up to 5 points (p. 86, endogenous neonatal deaths), and old age is also weak (p. 95).
+- l(100) = 0 for every α, so modern eras need an old-age tail, such as Beard's Perks logistic (p. 59).
+- Ys(0) = −∞, so the first year needs its own sub-schedule.
+
+**Dynamics (p. 108–110).**
+- Long-run change happens mostly in α. In Sweden and England & Wales, α moved about 1 unit in 80 years.
+- Moving α from −1 to −2 adds only 14 years of e₀, against 27 years for 0 to −1.
+
+**Fertility.** The volume has no Brass relational fertility model. Barrett gives a per-woman Monte Carlo instead:
+- fecundability 0.2 per month;
+- foetal loss rising with age;
+- postpartum non-susceptibility averaging 11 months;
+- sterility onset at 20 + U/0.01, and menopause averaging 47.6;
+- the result: 10.6–12.8 live births for women married at 20 with no widowhood.
+
+These are the micro-scale fertility mechanics for `uz_job` (ADR-0028).
+
+**Verification of repo claims:**
+- The R09 formula: **confirmed**.
+- "Brass logit on Coale–Demeny West": **corrected** to Brass's own General Standard, which West fits closely. The Coale & Demeny tables are cited separately.
+- e₀ ∈ [20, 85]: **qualified**. The range needs α from −2.04 to 0.74, and both ends are extrapolation.
+- **A real tension.** V-SF-02's q(15) of 35–55% implies e₀ of 23.4–36.6 at β = 1, so the agrarian e₀ range of [20, 45] cannot reach 45 unless β < 1.
+
+**Deltas applied:**
+- M2 uses the fixed-point odds form, with α as a function of era state.
+- New parameters `brass_alpha` and `brass_beta`.
+- V-SF-02 is restated in Brass terms, with an INSUFFICIENT threshold of about 400 births.
+- A new V-SF-02b pins β.
+- The golden-vector spec and self-test are added.
