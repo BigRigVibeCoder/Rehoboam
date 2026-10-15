@@ -179,12 +179,13 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P1.4 | M3 Agriculture & climate F1 | Seasons, AR(1) spatial anomalies, volcanic shocks, seed reserve, spoilage |
 | P1.5 | M4 Economy F1 | 6–8 goods, regional markets, price rule, arbitrage, wages/rents/taxes, entitlement (feeds M2's entitlement modifier) |
 | P1.6 | M6 Polity F1 | Structural-demographic core: elites, fiscal state, legitimacy, Ψ, instability with overshoot; Granovetter revolts |
-| P1.7 | M7 Succession & dynasts F1 | Succession-law enum, hazard model calibrated to Eisner, regencies, claims, great-house dormancy (SIM-9). Named-actor tier (T1) with a minimal mind (traits, needs, opinions), IAUS for core decisions, and same-instant agenda semantics (`05.1` §4.3) |
+| P1.7 | M7 Succession & dynasts F1 | Succession-law enum; competing ruler-exit hazards (murder, deposition, battle, natural) as functions of institutional state, calibrated to Eisner, Blaydes & Chaney and Kokkonen & Sundell (R12); feud stock after a regicide; regencies, claims, great-house dormancy (SIM-9). Named-actor tier (T1) with a minimal mind (traits, needs, opinions), IAUS for core decisions, and same-instant agenda semantics (`05.1` §4.3) |
 | P1.9 | Event emission and Chronicle Writer | Typed events, roles, anchored snapshots, causal edges (contingent / motivated_by), Parquet segments including the life-course log, DuckDB read-only views |
 | P1.10 | M9 Validation harness | Stylized-fact bands (identity vs emergent tags), red-noise-null spectral test, Clauset tail fits, censoring-aware lifespans, 32-seed ensembles, Morris screening, auto-generated run report |
 | P1.11 | Reference manifests | `val_khor` (no dragons yet), `delta_republic`, and the sealed **held-out manifest** for G2: hand-authored, hash committed, never run before G2 (V-HUM-09) |
 | P1.12 | Python wheel | `rh-py` with the liveness-gate and certification APIs (`05.5` §4.2); marimo calibration notebooks |
 | P1.15 | Registry effect language v0 | The typed, total evaluator in `rh-registry` (`05.5` §2.1); succession-law eligibility and ordering; verb effects as queued commands; a golden test |
+| P1.16 | Era-state hooks (ADR-0027) | The era-state vector in the contract crates; every era-sensitive parameter of M2, M4, M6, M7 declared as a Registry function of it (agrarian range calibrated only); the era-label classifier (plane C); a lint that fails if a mechanic reads the label. About 1–2 weeks, mostly interface work |
 
 **Gate G1b** (the v1.0 G1)
 - **MOP-1** (V-PERF-01): 1,000 years at 100k in ≤ 2 min on 8 cores.
@@ -253,7 +254,8 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P3.2 | `rh-minds` v1 | Full psychological core, overlays (in the effect language), IAUS + HTN, Thoughts, opinions, ACT-R memory; light minds as pure functions of plane A |
 | P3.3 | Epistemics v1 | Bounded belief stores (T1 only), channels (including hive), distortion operators, ToM for flagged propositions, sparse Bayesian suspicion, impossible-knowledge events; knowledge rows and diffusion fronts (`05.2` §4.1) |
 | P3.4 | Hive and mimics | Hive objective, mimic cover utility, tells, detection spiral |
-| P3.5 | M8 Campaign war F1 | Supply, attrition, Helmbold battles, sieges, camp disease |
+| P3.5 | M8 Campaign war F1 | War onset hazard (force ratio × contagion, no global cooldown); war aggregation as space-time components; supply, attrition, Helmbold battles, sieges, camp disease; severity emerges from escalation (R12) |
+| P3.14 | Endogenous institutions (ADR-0027) | The Registry institution-transition graph; adoption by emulation, reform under fiscal stress, regime change after breakdown; transitions as events with causal edges; `exec_constraint`, `fiscal_capacity`, `succession_institutionalisation` dynamics |
 | P3.6 | Should-systems: S1.culture, S2.technology, S3.migration, S4.ecology | Religion and ideology, technology diffusion, migration, ecology (dragons as T1 with energetics) |
 | P3.11 | Reference worlds | `aethelgard` (modern hive, 10 years); dragons added to `val_khor` |
 | ∥ SPK-1 | Crowds spike | Godot: 50 rigged + 3,000 VAT + impostors at 1440p; 60 FPS on a 3060-class card |
@@ -433,6 +435,17 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
 ## Continuous tracks (all phases)
 
 - **Fidelity ladder.** Gap reports and F(n) → F(n+1) upgrades run as work packages, each gated by the EVO-3 consistency tests (no ratchet: `05.1` §3).
+- **Era packs (ADR-0027).** Each pack extends the technology frontier with Registry entries, era-state functions calibrated at the new range, system extensions, era-conditioned bands and a hindcast test (V-ERA). Existing worlds waiting at the frontier continue through a migration keyframe. Indicative order and timing (each about 6–10 weeks; it runs in parallel with P4–P7, inside the review-hours budget):
+
+  | Pack | Adds | Earliest start | Key sources |
+  |---|---|---|---|
+  | E1 Agrarian (baseline) | Everything in P1–P3 | — | Reading list Tier A |
+  | E2 Early modern | Gunpowder and fortification, print, the fiscal-military state, absolutism and early parliaments, overseas trade | After G3b | Tilly 1990; Dincecco 2009; Goldstone 1991 |
+  | E3 Industrial transition | Fossil energy, factories, rail and telegraph, the mortality decline then the fertility decline, urbanisation, franchise extension | After E2 | Allen 2009; Wrigley 2010; Lee 2003; Galor & Weil 2000; Acemoglu & Robinson 2000 |
+  | E4 Modern | Electrification, mass politics and media, modern medicine, industrial and total war, coups and assassination | After E3 | Archigos; Powell & Thyne 2011; Goldstone et al. 2010; Turchin 2016; Braumoeller 2019 |
+  | E5 Contemporary and beyond | Digital communication, contemporary demography; speculative and fantasy frontiers as declared Registry paths | After E4 | Per world |
+
+  The order is a proposal. `12` Q19 asks which eras matter to you first.
 - **Review-hours tracking.** Actual review time against the ≤ 6 h/week budget, reported in the weekly digest.
 - **Technology radar refresh** every quarter (`07` §3).
 - **Risk review** at every gate (`10`).

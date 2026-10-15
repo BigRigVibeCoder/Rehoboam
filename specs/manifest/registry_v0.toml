@@ -29,12 +29,22 @@ params = { r0 = [1.0, 8.0], latent_days = [1.0, 365.0], infectious_days = [2.0, 
 [systems."M6.polity"]
 fidelity_levels = ["F0", "F1"]
 hazards = ["revolt", "coup", "civil_war"]
-params = { tax_rate = [0.05, 0.4], elite_mobility_u = [0.0, 0.05], elite_growth_excess = [0.0, 0.01], psi_threshold = [1.0, 3.0], instability_mortality = [0.005, 0.05] }
+# Ψ follows Turchin (2013): Ψ = MMP × EMP × SFD, each a ratio to a reference value (R12 §Turchin).
+#   psi_threshold applies to the GEOMETRIC MEAN Ψ̄ = Ψ^(1/k) over the k active components, not the raw product.
+#   elite_mobility_u is μ0 in dE/dt = r_e·E + μ0·(w0/w − 1)·N (per year); 0.002 in Turchin's antebellum case.
+#   wage_stickiness_years is τ in W(t+τ) = f(GDP/N, labour demand/supply, institutions).
+params = { tax_rate = [0.05, 0.4], elite_mobility_u = [0.0005, 0.01], elite_growth_excess = [0.0, 0.01], psi_threshold = [1.0, 3.0], instability_mortality = [0.005, 0.05], wage_stickiness_years = [3.0, 10.0] }
 
 [systems."M7.dynasty"]
 fidelity_levels = ["F0", "F1"]
-hazards = ["regicide", "successor_purge", "succession_crisis", "extinction"]
-params = { murder_hazard_base = [0.003, 0.02], filial_piety_mean = [0.0, 1.0] }
+hazards = ["regicide", "deposition", "successor_purge", "succession_crisis", "extinction"]
+# Ruler-exit hazards are per ruler-year AT THE REFERENCE INSTITUTIONAL STATE (elective succession, no assembly,
+# no recent regicide). Realised rates come from multipliers driven by institutional state (ADR-0027, R12):
+#   murder: Eisner 2011 century rates span 0.0019–0.025/yr (all cases), pooled 0.010/yr.
+#   deposition: Kokkonen & Sundell 2014 elective baseline ≈ 0.015–0.04/yr; Blaydes & Chaney 2013 unconstrained 0.013–0.05/yr.
+#   law multipliers vs elective (Cox HR): primogeniture 0.25–0.37 (CI 0.17–0.63); agnatic seniority ≈ 2 (CI 1.17–5.6).
+#   feud stock: a murdered predecessor multiplies the murder odds by ≈ 2.6–3.0 (Eisner) and deposition by ≈ 1.56–1.8 (K&S).
+params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], filial_piety_mean = [0.0, 1.0] }
 
 [systems."M8.war"]
 fidelity_levels = ["F0", "F1"]
@@ -120,6 +130,25 @@ ids = ["caldera_with_passes", "river_delta_city", "archipelago", "continental_pl
 
 [climate_zones]
 ids = ["temperate_continental", "temperate_maritime", "mediterranean", "arid", "tropical", "boreal", "urban_temperate"]
+
+# ----------------------------------------------------------------------------- eras (ADR-0027; v0 sketch, not yet read by validators)
+# Era-state variables: plane-A quantities that era-sensitive parameters may depend on. Each has exactly one owner.
+[era_state]
+tech_adoption                    = { owner = "S2.technology", scope = "region", type = "q8_8", per = "technology" }
+energy_per_capita                = { owner = "M4.economy",    scope = "region", type = "q16_16" }
+urban_share                      = { owner = "S3.migration",  scope = "region", type = "q8_8" }
+literacy                         = { owner = "S1.culture",    scope = "region_class", type = "q8_8" }
+fiscal_capacity                  = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+exec_constraint                  = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+franchise                        = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+succession_institutionalisation  = { owner = "M7.dynasty",    scope = "polity", type = "q8_8" }
+medical_level                    = { owner = "S2.technology", scope = "region", type = "q8_8" }
+
+# Era labels: predicates over era_state, used by presentation, narrative and validation band selection ONLY.
+# A lint fails the build if any mechanic reads a label.
+[eras]
+ids = ["agrarian", "early_modern", "industrialising", "industrial", "contemporary"]
+frontier = "agrarian"            # last era the engine build supports; reaching beyond it files a gap report
 
 # ----------------------------------------------------------------------------- sifting vocabulary
 # Anchored attributes readable by patterns as `name(args)@eN`. Stored in event_snapshot.value as INTEGER:

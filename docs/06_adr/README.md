@@ -34,3 +34,4 @@ All ADRs below are **Proposed** until you review them. ADRs that sit on a critic
 | [0024](ADR-0024-three-plane-state.md) | Three-plane state model: authoritative, observation and narrative | ★ |
 | [0025](ADR-0025-scheduled-outcomes-material-inputs.md) | Scheduled outcomes for everyone; material-input semantics; no back-dating | ★ |
 | [0026](ADR-0026-genealogical-identity-life-course.md) | Genealogical content-addressed identity; life-course log for every person; signed time | ★ |
+| [0027](ADR-0027-era-generic-mechanisms.md) | Era-generic mechanisms: eras are state, not templates | ★ |

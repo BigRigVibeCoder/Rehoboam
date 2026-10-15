@@ -53,6 +53,7 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | **V-COUP** Drama-coupling scenarios | §3.2 | SIM-3, SIM-12 | Nightly; phase gates |
 | **V-FOR** Foresight validity | §3.3 | ORA-5, ORA-9 | Nightly on the cluster |
 | **V-HUM** Human validation [H] | §3.4, §3.5 | MOE-1–MOE-6, TM-6 | Phase gates |
+| **V-ERA** Era transitions | §3.6 | SIM-13, SIM-14, SIM-10 | Nightly from P1b (V-ERA-01, 02); P3a (03–05); each era pack (06, 07) |
 
 ### 1.2 Statistical conventions
 
@@ -369,17 +370,23 @@ Each band is tagged:
 - **Identity:** the fact follows from the model's equations or calibrated inputs. A failure is an implementation bug and blocks, whatever the overall pass rate.
 - **Emergent:** the fact arises from interacting systems. Emergent bands are the evidence that history happens, and their pass rate is reported separately.
 
-| ID | Fact | Band (pre-modern unless noted) | Kind | Statistic and test |
+| ID | Fact | Band (scope stated per row; era-conditioned bands are keyed to the era label of the window tested, ADR-0027; sources in `research/R12_literature_verification.md`) | Kind | Statistic and test |
 |---|---|---|---|---|
 | V-SF-01 | Long-run growth without technology shocks | mean r ∈ [−0.1, +0.3]%/yr; population ∈ [0.3, 5]·K | Identity | Seed-mean r with t-interval; population range per seed |
 | V-SF-02 | Child mortality to age 15 | 35–55% | Identity | q(15) from the life-course log, per seed |
 | V-SF-03 | Mortality crises | ≥ 1 event of ≥ 10% loss within 1–2 years per century | Emergent | Crises per century per seed; ensemble mean with t-interval |
 | V-SF-04 | Secular cycle | Spectral peak at 120–450 years in N or W | Emergent | **Red-noise null.** Fit AR(1) to each seed's detrended series. The ensemble-mean multitaper spectrum must peak in the band and exceed the 95th percentile of the ensemble-mean spectrum of 1,000 AR(1) surrogate sets |
-| V-SF-05 | Violence waves (soft) | Secondary peak at 40–60 years during disintegrative phases | Emergent | As V-SF-04, on violent-event counts. Soft: reported, not counted in MOP-5 |
-| V-SF-06 | Ruler deaths | 5–15 murders per 1,000 ruler-years; 15–30% of deaths violent | Identity | Pooled Poisson rate with exact CI; violent share with Clopper–Pearson CI |
+| V-SF-05 | Violence waves (soft) | Secondary peak at 40–60 years during disintegrative phases, in **internal** violence only (interstate war onsets show no periodicity: Clauset 2018) | Emergent | As V-SF-04, on internal violent-event counts. Soft: reported, not counted in MOP-5 |
+| V-SF-05b | Structural-demographic lead–lag (soft) | The relative-wage downturn leads the rise in relative elite numbers by 10–30 years; the rise of Ψ̄ leads major internal violence by 10–30 years (Turchin 2013: ≈ 20 and ≈ 15–25 years, one country) | Emergent | Cross-correlation lag of detrended series per seed; ensemble median lag with bootstrap CI. Soft until a second source confirms it |
+| V-SF-06 | Ruler murder (era-conditioned) | Murders per 1,000 ruler-years by institutional state: weak or contested succession (like 600–1099) 6–25; consolidating (like 1100–1399) 7–12; institutionalised hereditary monarchy (like 1400–1799) 1–5. Pooled 5–15 only for mixed medieval scenarios. Violent share of ruler *deaths* (not reigns) 15–30% (Eisner 2011: 22.4%) | Identity | Poisson rate per institutional-state window with exact CI (counts are small late; report them); violent share with Clopper–Pearson CI |
+| V-SF-06b | Deposition by succession law | Share of reigns ending in domestic deposition: primogeniture 8–16%, elective 21–49%, agnatic seniority 43–57%; primogeniture vs elective hazard ratio inside [0.17, 0.63] (Kokkonen & Sundell 2014) | Identity | Cox model on simulated reigns stratified by polity, natural death and foreign conquest censored; HR with CI |
+| V-SF-06c | Reign length follows institutions | Mean completed reign: unconstrained rulers (salaried or slave army, no assembly) 8–15 years; constrained (landed military elite plus assembly) 17–22 years; the gap appears within 1–2 entry centuries of the institutional shift and is +6 to +12 years within the same era (Blaydes & Chaney 2013) | Emergent | Kaplan–Meier restricted mean (τ = 60 years) by institutional state; difference with bootstrap CI. Shorter reigns go with more deposition (rank correlation < 0) |
+| V-SF-06d | Regicide contagion (soft) | A murdered predecessor raises the odds of the next ruler's murder: odds ratio 1.5–4 (Eisner 2011: 2.98) | Emergent | Logistic regression on consecutive reigns; OR with CI |
 | V-SF-07 | Polity lifespans | Approximately exponential, mean 100–300 years | Emergent | **Censoring-aware.** Polities alive at the horizon are right-censored. Kaplan–Meier survival curve; exponential MLE λ̂ = ends ÷ total exposure, with mean 1/λ̂ in the band. "Approximately exponential" means the fitted Weibull shape is TOST-equivalent to 1 within [0.75, 1.33]. Dynasty tenures get the same Kaplan–Meier treatment and are reported |
-| V-SF-08 | City sizes | Top-20 rank-size slope ∈ [−1.3, −0.7] | Emergent | OLS of log(rank − ½) on log(size) per seed (Gabaix–Ibragimov); seed-mean slope with t-interval |
-| V-SF-09 | War severity | Heavy tail, fitted α ∈ [1.3, 1.9] | Emergent | **Clauset–Shalizi–Newman,** pooled over seeds: x_min by KS-distance minimisation; α̂ (pdf exponent) by MLE, with a seed-level bootstrap CI; plausibility bootstrap p ≥ 0.1. Likelihood-ratio (Vuong) tests against the lognormal (reported: sign and p) and the exponential (must favour the heavy tail, p < 0.1) |
+| V-SF-08 | City sizes (soft until n suffices) | Settlement-size tail exponent α̂ (pdf) ∈ [1.8, 2.6] (Zipf corresponds to α = 2; US cities α = 2.37 ± 0.08: Clauset, Shalizi & Newman 2009) | Emergent | The V-SF-09 procedure on settlement populations at snapshots ≥ 200 years apart. **Not** OLS on log–log ranks, which CSN 2009 shows is biased. Soft while the pooled tail has n < 100 (likely at 100k persons) |
+| V-SF-09 | War severity (era-invariant shape) | Heavy tail, α̂ (pdf) ∈ [1.3, 1.9]. This is Rehoboam's widening of Clauset (2018)'s 95% CI [1.37, 1.76] for interstate wars 1823–2003 and CSN (2009)'s war intensity α = 1.7 ± 0.2. Cederman's model gives 1.49–1.64 and its ablations ≈ 2.3, so the band separates them. Absolute severity *and* intensity (deaths ÷ belligerents' population) are both logged; severity is the pre-registered band statistic | Emergent | **CSN 2009 recipe, deterministic** (R12 §CSN): exact discrete MLE for counts; x_min minimising the KS distance among candidates leaving n_tail ≥ 50; plausibility by semi-parametric bootstrap, B = 2,500 with a full refit each, **pass iff p > 0.1** (unrounded); the exponential must be rejected (normalised LR > 0, p < 0.1); lognormal, stretched exponential and cutoff (Wilks χ²₁) reported. α̂ pooled over seeds with a 10,000-resample seed-level bootstrap CI. Plausibility is also run **per seed** where n_tail ≥ 50 (≥ 75% of those seeds must pass), because pooled tests reject finite-population cutoffs. A power law with a population-scaled upper cutoff is accepted (pre-registered). Pooled n_tail < 100 → **INSUFFICIENT**, counted as a fail and shown separately. Sort keys and RNG keys as in R12 |
+| V-SF-09b | War onsets are memoryless | Gaps between interstate war onsets are geometric-plausible; the dispersion index of yearly onset counts lies in [0.7, 1.5] (Clauset 2018: geometric q̂ = 0.43, p = 0.13) | Emergent | Per era window: CSN-style bootstrap plausibility of the geometric fit (≥ 75% of seeds p > 0.1); dispersion index with bootstrap CI. There is no system-wide war cooldown, by design |
+| V-SF-09c | The war tail is produced, not fitted | Freezing power-projection technology, or turning off war contagion, raises α̂ by ≥ 0.3 or makes the tail implausible (Cederman 2003: ≈ 1.55 → ≈ 2.3 under ablation) | Emergent | CRN-paired ablation ensembles (32 seeds each); difference in α̂ with bootstrap CI. Fails if the ablated model still produces the tail |
 | V-SF-10 | Malthusian test | A technology shock raises density, not long-run income | Identity | CRN-paired shock and no-shock ensembles. Density increase with lower 95% bound > 0; long-run real income TOST-equivalent to no change, δ = ±5% |
 | V-SF-11 | Post-plague wages | Real wage rises after ≥ 20% mortality | Identity | Sign test over qualifying events across seeds, p < 0.05 |
 | V-SF-12 | Hive / testing (modern) | At prevalence < 1% with se/sp = 0.99, more than 50% of detentions are false positives | Identity | Detention outcomes on `aethelgard`, with Clopper–Pearson CI |
@@ -485,6 +492,20 @@ Ratings train a small model (logistic regression over the significance component
 - **Validate by hold-out.** On each new session, its ranking of pauses should correlate with your ratings at Spearman ρ ≥ 0.4 by P3.
 - **Freeze before gates.** For any gate evaluation it is frozen beforehand, and results are reported with and without it (§3.4.1).
 
+### 3.6 Era transitions (V-ERA; SIM-13, SIM-14; ADR-0027)
+
+Worlds must be able to pass through eras in one run. These tests check that era change comes from mechanisms, not from dates or labels.
+
+| ID | Test | Method | Pass |
+|---|---|---|---|
+| V-ERA-01 | Mechanics never read the era label | Static lint over `rh-sys-*` and the Registry expressions; a mutation test that flips the label mid-run | Lint clean; `state_hash` identical with the label flipped |
+| V-ERA-02 | No forced modernity | Agrarian reference manifest, technology invention disabled, 1,000 years × 32 seeds | V-SF-01 holds; era label stays `agrarian` in every seed |
+| V-ERA-03 | Hazards follow institutions, not dates | Ensembles with `succession_institutionalisation` and `exec_constraint` swept independently of time | Murder and deposition rates fall monotonically with institutionalisation (Spearman ρ < 0, CI excludes 0); a calendar term added to the regression has a CI that includes 0 |
+| V-ERA-04 | Institutional divergence | Two polities from the same start, one gaining a landed military elite and an assembly, one a salaried army | V-SF-06c gap (+6 to +12 years) appears within 1–2 simulated centuries of the shift |
+| V-ERA-05 | Primogeniture adoption | Polities that adopt primogeniture endogenously (one clean turnover required) | Within-polity deposition HR after adoption inside [0.17, 0.63]; short-run foreign-conquest risk not lower in the first two centuries (Kokkonen & Sundell 2014) |
+| V-ERA-06 | Transition hindcast (from era pack E3) | Agrarian start with a forced technology schedule (sanitation, medicine, fossil energy) | Mortality decline precedes fertility decline, with the lag inside the band set from Lee (2003) when pulled; output per head sustains growth. Bands fixed before the pack starts |
+| V-ERA-07 | Engine frontier | A world driven to the last supported era | It keeps running, files exactly one frontier gap report per technology, and continues under a newer build through a migration keyframe with pre-migration seeks reproducing archived hashes |
+
 ## 4. Observability for V&V
 
 - **Rerun.** Per-system timing, invariant counters, sampled agents, the hydration bubble and AOI cells on a `sim_tick` timeline.
@@ -532,6 +553,8 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | SIM-10 | Horizon declaration | P0 | V-WC-04 |
 | SIM-11 | Library and hosts | P0–P5 | V-IF-01, V-IF-03, V-IF-04, V-IF-06 |
 | SIM-12 | Should-have systems | P3a | V-INV-13, V-INV-14, V-COUP-02, V-COUP-05, V-SF-01–V-SF-12 |
+| SIM-13 | Era-generic mechanisms | P1b | V-ERA-01, V-ERA-02, V-ERA-03 |
+| SIM-14 | Endogenous institutions and era packs | P3a / packs | V-ERA-04, V-ERA-05, V-ERA-06, V-ERA-07, V-SF-06b, V-SF-06c |
 | DET-1 | History function | P0 | V-DET-04, V-DET-18, V-GOLD-01 |
 | DET-2 | Keyed RNG and branch salts | P0 | V-DET-09, V-DET-16, V-DET-17, V-DET-19 |
 | DET-3 | Fixed-point thresholds | P0 | V-DET-03, V-DET-19 |

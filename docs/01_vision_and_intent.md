@@ -109,7 +109,9 @@ The five modalities are not five features of one release. Each one alone has bee
 
 Out of scope until you decide otherwise (see `12_open_questions.md`): multiplayer and shared worlds, mobile, web distribution, and a commercial launch with store-policy compliance work.
 
-**Scenario horizons are part of the world, not of the engine** (R09 TL;DR 11 and §Recommendations S2). Pre-modern and fantasy worlds run 50–3,000 years. A modern megacity runs at day or week resolution for 1–50 years (nominally 1–30), unless the manifest declares an explicit technology and institutional trajectory, in which case the run is labelled *speculative*.
+**Worlds are not stuck in time (ADR-0027).** Eras are *state*, not templates. A world that starts agrarian can pass through early-modern, industrial and modern conditions in one continuous run, because every era-sensitive mechanism is a function of technology and institutions, and institutions themselves change. Coverage grows through **era packs**. A world that reaches the edge of what the engine can model waits there, files a gap report, and continues when the next pack ships.
+
+**Horizons** (R09 TL;DR 11, re-scoped by ADR-0027). A template sets the *starting* state, not an era lock. *Speculative* now means beyond the technological frontier: running past the last era pack, or forecasting a modern-start world beyond about 50 years. Passing *through* eras the engine supports is not speculative. A modern-start megacity still runs at day or week resolution for 1–50 years by default.
 
 ## 7. Thesis risks we accept, and how we will know early
 

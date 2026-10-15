@@ -1,7 +1,7 @@
 # R09: Simulation science for macro-history in Rehoboam
 ### Which models to use, with their equations and parameters, so 1,000-year runs are both plausible and dramatic
 
-*Research dossier, 2026-10-15. Evidence conventions: `[n]` cites the numbered source list. Sources tagged **[V]** were checked this session through search-result text. Sources tagged **[B]** are standard literature cited from background knowledge and were **not** re-fetched, because the session's network policy blocked page fetches and the shared web-search budget ran out partway through the research. Statements marked *Inference* are my own reasoning or my own quick numerical experiments (Python, run this session). Treat [B] numbers as starting points that need checking before they go into code.*
+*Research dossier, 2026-10-15. **Primary-source corrections:** several claims below were checked against full texts the director supplied; corrections are inline (marked R12) and listed in `R12_literature_verification.md`. Evidence conventions: `[n]` cites the numbered source list. Sources tagged **[V]** were checked this session through search-result text. Sources tagged **[B]** are standard literature cited from background knowledge and were **not** re-fetched, because the session's network policy blocked page fetches and the shared web-search budget ran out partway through the research. Statements marked *Inference* are my own reasoning or my own quick numerical experiments (Python, run this session). Treat [B] numbers as starting points that need checking before they go into code.*
 
 ---
 
@@ -187,8 +187,8 @@ Raising K destabilizes the equilibrium into limit cycles (the "paradox of enrich
 
 Pattern-oriented modelling: calibrate against *multiple* patterns at different scales simultaneously, not a single target [B23]. Candidate stylized facts:
 
-- City rank-size close to Zipf (slope ≈ −1) [B20].
-- Interstate war severity heavy-tailed, power-law α ≈ 1.5 [B21].
+- City rank-size close to Zipf (slope ≈ −1) [B20]. *(R12: estimate the pdf exponent by MLE, not by an OLS slope; US cities give α = 2.37 ± 0.08, i.e. slope ≈ −1.37. CSN 2009.)*
+- Interstate war severity heavy-tailed, power-law α ≈ 1.5 [B21]. *(R12: confirmed as α̂ = 1.53 ± 0.07, 95% CI [1.37, 1.76], absolute battle deaths ≥ 7,061, interstate wars 1823–2003. Clauset 2018.)*
 - Empire lifespans roughly exponential with mean ≈ 220 years (Arbesman) [B22].
 - Regicide and violent ruler death per Eisner [12].
 - Secular-cycle period 200–300 years [3].
@@ -261,12 +261,31 @@ dS/dt = τ_tax·Y − (g0 + g1·E + army_cost) − interest(debt)
 MMP   = (w*/w)·urb·youth ;  EMP = (E/E*)·(ε*/ε) ;  SFD = (debt/Y)·(1 − L)
 Ψ     = MMP·EMP·SFD      (normalized: Ψ = 1 at founding)
 dW/dt = a·max(0, Ψ − Ψ*) − b·W     effects: −δ·N·W mortality, k ↓, elite culling ∝ W, S drain
+```
+
+> **Corrected against the primary source (R12 §Turchin 2013; this block is superseded for implementation):**
+> - ε is elite income **relative to GDP per head**: ε = (G − W·L)/(g·E) = (1 − w·λ)/e.
+> - Elite dynamics: **dE/dt = r_e·E + μ₀·(w₀/w − 1)·N**. Mobility scales with commoners and is driven by the relative wage w, not by ε; it can go negative. μ₀ ≈ 0.002/yr in Turchin's antebellum case.
+> - **EMP = ε⁻¹ · E/(s·N)**, with s = offices per head. It is not E/E*.
+> - MMP and SFD are confirmed: MMP = w⁻¹·(N_urb/N)·A₂₀₋₂₉, and SFD = (debt/GDP)·distrust, with (1 − L) standing in for distrust.
+> - **Normalisation.** "Ψ = 1 at founding" is not in the paper, which uses relative change only. Normalise each component to a reference value from the Registry or from the burn-in equilibrium.
+> - **Threshold.** Apply Ψ* to the geometric mean Ψ̄ = Ψ^{1/k}.
+> - **Instability.** The paper has no Ψ → instability function. The dW/dt rule above is our own design, not Turchin's.
+```text
 L    += +victories +prosperity +faith-match −defeats −famine −false-positive purges −usurpation
 ```
 
 Revolts use a Granovetter cascade per region with thresholds drawn from Beta(α, β) shifted by grievance G = Despair·(1 − L) and repression [B4][B5]. Elite revolt/coup hazard ∝ EMP·(1 − L). *Couplings:* this is the hub, taking wages and rents from M4, youth from M2, deaths from M5 and taxes from M3/M4. *Manifest:* tax ∈ [0.05, 0.4]; u ∈ [0, 0.05]; r_e − r ∈ [0, 0.01]; Ψ* ∈ [1, 3]; δ ∈ [0.005, 0.05]. **Guard:** burn-in must show a dominant period of 120–450 years for pre-modern scenarios [3] unless the manifest explicitly asks for a static utopia.
 
 **M7: Succession and dynasts (agent tier).** *State:* every member of ruling and great houses (always tracked, a few thousand agents), age, health, legitimacy claim, psych vector {Despair, Hubris, Paranoia, FilialPiety, Corruption}, relationships. *Ruler hazards (monthly):* `h_murder = h₀·exp(b₁·log Ψ + b₂·(1−L) + b₃·Hubris_heir·(1−FilialPiety_heir) + b₄·regency)`, normalized so the ensemble mean is ≈ 10 murders per 1,000 ruler-years and violent deaths ≈ 15–25 % of reigns, declining over centuries if a "civilizing trend" flag is set [12]. *Succession law enum:* partition, primogeniture, seniority, elective, tanistry. Partition splits realms (sibling wars). Elective yields faction contests. Primogeniture lowers deposition risk [B25] but produces child kings (regency → hazard ↑). Demography alone yields an heir crisis in about 25–30 % of successions (*Inference*). *Psych mapping:* regional Despair ← entitlement deficit and bereavement; Paranoia ← fear F, purges and regicides; Corruption ← elite-income squeeze; a ruler's Hubris ← victories and legitimacy. *Manifest:* law enum; h₀ ∈ [0.003, 0.02]/yr; FilialPiety cultural mean ∈ [0, 1]; "catalyst" overrides (for example, a scripted aging king with an ambitious heir) as *initial conditions*, never as forced outcomes.
+
+> **Corrected against the primary sources** (R12 §Eisner, §Kokkonen & Sundell, §Blaydes & Chaney):
+> - **Murder rates.** The pooled ≈ 10 murders per 1,000 ruler-years is confirmed. Century rates span 1.9–25, so h₀ is now **[0.001, 0.03]/yr at a reference institutional state**.
+> - **Violent share.** The 22.4% is a share of ruler *deaths*, not of reigns.
+> - **Deposition is a separate hazard.** The elective baseline is ≈ 0.015–0.04/yr. Hazard ratios relative to elective: primogeniture 0.25–0.37, agnatic seniority ≈ 2.
+> - **No "civilising trend" flag.** Drop it. Kokkonen & Sundell find no time trend after institutional controls. Blaydes & Chaney show deposition *rising* in the Islamic world while it fell in the West. Trends must come from institutional state (ADR-0027).
+> - **Regency → hazard ↑ is unsupported.** Kokkonen & Sundell find younger accession *safer* (HR 1.02 per year of age), and they exclude regents. Eisner finds murder victims acceded younger but does not test regency. Treat this as a hypothesis.
+> - **Partition and sortition.** Neither source estimates them; their multipliers are design choices.
 
 **M8: Campaign war.** *State:* army men M, morale m ∈ [0, 1], supply days d, node and path, sick fraction. *Update (daily during campaign):* movement speed by terrain, road and season. Consumption ≈ 1 ration per man and per animal. Forage = f(local surplus, season). Deficit → attrition 3–10 %/month plus camp epidemic (M5 patch). *Battle:* Helmbold kernel `dA/dt = −β_eff·B·(A/B)^{1−W}` with β_eff scaled by tech, leadership and terrain (defender ×1.0 plains, ×1.3 hills/forest, ×1.6 river/mountain, ×3–10 behind walls). Morale drops with casualty rate and flanking, and the battle ends at breakpoint b ∈ [0.1, 0.35]. The loser takes pursuit losses ×(1.5–3) scaled by the winner's cavalry. *Siege:* garrison food F_g (days); each day F_g −= garrison; starvation surrender when F_g ≤ 0; assault optional through the fort multiplier; besieger disease grows with time. *Couplings:* armies eat regional grain (M4) → famine → unrest (M6); war cost → debt; deaths are young men (M2); armies move pathogens (M5). *Manifest:* W ∈ [0.2, 1.0]; breakpoint ∈ [0.1, 0.35]; campaign season months ∈ [3, 12]; fort multiplier ∈ [2, 10].
 
