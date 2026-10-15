@@ -82,7 +82,7 @@ The scenarios share one world, **Val-Khor** (`specs/manifest/examples/val_khor.y
    - **Anchored state** (the values the pattern read, captured when the arrest was emitted): `fear(King)@e1` = 0.72, `succession_rank(Valen, King)@e1` = 1. The inspector also shows overlay readouts at that tick: the King's Paranoia 87, realm legitimacy 0.41.
    - **Significance components:** stakes high, irony (the Prince is loyal; the King does not know this), and a pending reversal.
 4. You rate it 5/5 with the rating tool (MOE-1). Then you either press play, or open **Foresight** (OS-5).
-5. You scrub back to year 380. The scrub is instant because it reads the chronicle and aggregates. You **drop in** at year 395 to inspect the exact state of the Prince's household. That takes keyframe 390 plus 5 years of replay, about 3 s. The drop-in is **read-only**: if you acted there, the action would fork a new timeline (OS-6).
+5. You scrub back to year 380. The scrub is instant because it reads the chronicle and aggregates. You **drop in** at year 395 to inspect the exact state of the Prince's household. That loads the nearest cached keyframe (yearly near the cursor, else the permanent keyframe at 390) and replays at most a few years: about 0.3 s typically, a few seconds at worst (MOP-4 ≤ 10 s). The drop-in is **read-only**: if you acted there, the action would fork a new timeline (OS-6).
 
 **Acceptance:** the causal chain shown matches the SQL twin. Scrub latency is under 100 ms. The drop-in `state_hash` equals the original run's hash at that tick.
 

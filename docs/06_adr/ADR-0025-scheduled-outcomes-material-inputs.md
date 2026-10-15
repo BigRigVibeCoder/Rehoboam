@@ -12,7 +12,7 @@ Baseline v1.0 gave hydrated persons special "decrees", e.g. "dies at d14 h09", w
 
 ## Decision
 
-1. **Scheduled outcomes for everyone.** At each pulse, systems sample the **intra-pulse times** of state-changing outcomes for every affected person, watched or not. These outcomes are births, deaths, illness onset, migrations, marriages and similar. Each one is inserted as a **timer** in the authoritative agenda and fires at its own tick in every mode. The 3D bubble only *displays* outcomes. This costs a few thousand timers per month at 1M persons.
+1. **Scheduled outcomes for everyone.** At each pulse, systems sample the **intra-pulse times** of state-changing outcomes for every affected person, watched or not. These outcomes are births, deaths, illness onset, migrations, marriages and similar. Each one is inserted as a **timer** in the authoritative agenda and fires at its own tick in every mode. The 3D bubble only *displays* outcomes. This costs about 10⁴ timers per month at 1M persons (deaths and births alone are ≈ 6–7k; `08`).
 2. **No back-dating.** No event may be emitted with a tick earlier than the current instant. `EventId` order = emission order = `(tick, phase, seq)`.
 3. **Material inputs declare a dependency scope** (person, household, settlement or region).
    - In the `Inputs` phase, pending timers inside the scope are **cancelled and re-sampled**.

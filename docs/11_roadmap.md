@@ -1,6 +1,7 @@
 # 11 — Roadmap: Phases, Gates and Work Packages
 
-*Status: Draft v1.0 (2026-10-15). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09` §5). Phases run in order; work inside a phase runs in parallel across agents.*
+*Status: Draft v1.1 (2026-10-15). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*v1.1 changes: P1 split into P1a and P1b (16–24 weeks in total) and P3 into P3a and P3b; new WP P5.0 (M4.economy at F2) before street-level errands; a review-hours budget sized to one human reviewer; numeric thresholds for every gate, fixed before its phase starts; rating windows for G2 and G3b; WPs aligned with ADR-0024–0026 and the v1.1 architecture; total re-estimated at ≈ 22–28 months.*
 
 ---
 
@@ -8,25 +9,110 @@
 
 ```mermaid
 gantt
-    title Rehoboam phases (indicative)
+    title Rehoboam phases (indicative; bars show upper-bound durations)
     dateFormat  YYYY-MM-DD
     axisFormat  %b %Y
     section Foundations
-    P0 Foundations & determinism harness      :p0, 2026-11-01, 6w
+    P0 Foundations & determinism harness       :p0, 2026-11-01, 6w
     section Thesis
-    P1 Macro history core (headless)          :p1, after p0, 12w
-    P2 Sifter + Time-Machine console          :p2, after p1, 10w
+    P1a Core time, ledger, M1/M2               :p1a, after p0, 12w
+    P1b History systems + chronicle            :p1b, after p1a, 12w
+    P2 Sifter + Time-Machine console           :p2, after p1b, 12w
+    G2 rating window (thesis gate)             :g2, after p2, 5w
     section Agency
-    P3 Contagion/Hive, minds, Oracle-2D, Foresight :p3, after p2, 14w
+    P3a Minds, epistemics, M5/M8/S*            :p3a, after g2, 10w
+    P3b Oracle, Foresight, persuasion, 1M      :p3b, after p3a, 10w
+    G3b rating window                          :g3, after p3b, 5w
     section Story
-    P4 Narrative compiler + world compiler    :p4, after p3, 10w
+    P4 Narrative compiler + world compiler     :p4, after g3, 10w
     section Inhabit
-    P5 Diorama (3D client, street-from-seed)  :p5, after p4, 14w
-    P6 Street-level inhabitant (hydration, dialogue, TTS) :p6, after p5, 14w
-    P7 Oracle-3D + polish                     :p7, after p6, 10w
+    P5 Diorama (3D client) + M4 F2             :p5, after p4, 16w
+    P6 Street-level inhabitant                 :p6, after p5, 14w
+    P7 Oracle-3D + polish                      :p7, after p6, 10w
+    section Spikes (parallel)
+    SPK-1 Crowds                               :spk1, after g2, 6w
+    SPK-2 Street from seed                     :spk2, after spk1, 6w
+    SPK-3 Wallpaper                            :spk3, after g3, 4w
 ```
 
-The timeline totals about 18–20 months to the full vision. **P0–P2, the thesis test, takes about 7 months.** Spikes SPK-1 to SPK-3 for 3D risk run in parallel with P3 and P4 so that P5 starts de-risked.
+| Phase | Duration | Gate |
+|---|---|---|
+| P0 | 4–6 weeks | G0 |
+| P1a | 8–12 weeks | G1a |
+| P1b | 8–12 weeks | G1b |
+| P2 | 10–12 weeks, then the G2 rating window (3–5 weeks) | G2 (thesis) |
+| P3a | 8–10 weeks | G3a |
+| P3b | 8–10 weeks, then the G3b rating window (3–5 weeks) | G3b |
+| P4 | 8–10 weeks | G4 |
+| P5 | 14–16 weeks | G5 |
+| P6 | 12–14 weeks | G6 |
+| P7 | 8–10 weeks | G7 |
+| **Total** | **94–122 weeks ≈ 22–28 months** | |
+
+- **P0 to the G2 decision, the thesis test, takes about 33–47 weeks (8–11 months).**
+- v1.0 estimated 18–20 months in total and 7 months to G2. The difference comes from four changes:
+  - P1 is split, and the calibration work in P1b is no longer squeezed.
+  - P2 and P3 gained work packages from the red-team review: plane isolation, save versioning, persuasion balance.
+  - The G2 and G3b rating windows are now explicit.
+  - Every duration is sized to the review-hours budget below.
+- **Cross-check.** `14` estimates ≈ 140 person-weeks of build after reuse. At the review-limited throughput of ≈ 2–3 concurrent workstreams, that is ≈ 50–70 weeks of build. The rest of the schedule is calibration and design iteration (P1b, P2), gate windows and spikes.
+- **Spikes.** SPK-1 and SPK-2 run in parallel with P3a and P3b, and SPK-3 with P4, so that P5 starts de-risked.
+
+---
+
+## Review-hours budget
+
+You are the only human reviewer of agent output. **The plan assumes ≤ 6 h/week of your review time outside rating windows** (`12` Q16). Rating windows at gates are counted separately.
+
+**Where the hours go (a typical week):**
+
+| Item | Unit cost | Per week |
+|---|---|---|
+| WP approval: a one-page WP spec (`13` §2, §5) | 10–15 min | 6–10 WPs → 1–2.5 h |
+| Director-route PRs: breaking C2, out-of-tolerance C3, determinism machinery, ADR touches (`13` §4.2) | 30–60 min | 1–3 → 0.5–3 h |
+| Spot audit of auto-merged PRs (one per active workstream) | 15–20 min | 2–3 → 0.5–1 h |
+| Weekly digest: merged PRs, bench and ensemble trends, perf re-baselines (`08` §9), open risks | 30 min | 0.5 h |
+
+**How work packages are sized to it:**
+1. **Small specs.** A WP spec fits on one page and can be approved in ≤ 15 min. A WP is ≤ 3 agent-days (`13` §2).
+2. **Auto-merge by default.** Each WP is designed to land through an auto-merge route: C0, C1, additive C2, or C3 within tolerance (`13` §4.2–4.4). A WP expected to need your review is flagged at approval, and at most 2 such WPs are open at once.
+3. **Throughput cap.** At most 10 WP approvals a week. That gives ≈ 2–3 concurrent workstreams on average, not the 3–6 that `13` §5 allows. The durations above assume this.
+4. **Rating windows replace review time.** During a gate's rating window, nothing that needs your review merges. Agents work only on C0/C1 items (benches, tests, performance, test debt) and on spikes.
+5. **Throttling.** If review time exceeds the budget for 2 consecutive weeks, new WP approvals pause until the queue drains (R-25).
+
+**Rating time at gates (outside the weekly budget):**
+
+| Gate | [H] activity | Your time |
+|---|---|---|
+| G1b | Run reports of 3 seeds | ≈ 3–6 h |
+| G2 | Pre-registered protocol (V-HUM-09 in `09`): 10 seeds × 3–4 h of blind rating, re-presentations ≥ 7 days later, ≥ 20 chronicle pairs | **≈ 30–40 h** (3–5-week window) |
+| G3b | The G2 protocol with fresh held-out seeds, plus 3 Oracle play sessions | **≈ 30–40 h** (3–5-week window) |
+| G4 | Blind saga A/B, 10 pairs | ≈ 8–12 h |
+| G5 | Diorama believability sessions | ≈ 6–10 h |
+| G6 | Interrogation sessions | ≈ 6–10 h |
+| G7 | Full-vision acceptance (OS-1 to OS-11) | ≈ 10–15 h |
+
+---
+
+## Gate thresholds: numbers before the phase
+
+- **Fixed in advance.** Every gate's numbers are fixed **before its phase starts** and logged in `decisions-log.md`. The numbers below are the defaults; you may change any of them before the phase begins.
+- **Mid-phase changes.** A change after the phase has started needs a logged director ruling with a reason. A change after results are seen voids that gate run.
+- **G2 is pre-registered.** Its protocol (V-HUM-09 in `09`) is frozen before the first rating (WP P2.13).
+- **Test IDs.** Gate bullets cite `09` test IDs, which stay stable when `09` is re-sectioned.
+
+### Coupling thresholds (`05.1` §8; V-COUP in `09`)
+
+A coupling is **possible** when the chain completes in at least *x*% of seeds, and **not forced** when it is absent in at least *y*% (V-COUP). Each ensemble is 32 seeds. Pre-modern runs are 200 years after spin-up, so that "absent" stays meaningful: over 1,000 years almost any possible chain occurs somewhere. `aethelgard` runs are 10 years. Gates use point estimates; Clopper–Pearson intervals are reported.
+
+| Test | Coupling | Gate | Run | *x* (possible) | *y* (not forced) |
+|---|---|---|---|---|---|
+| V-COUP-01 | Famine → unrest → succession crisis, **truncated at regency or civil-war onset** | G1b | 200 y | ≥ 20% | ≥ 20% |
+| V-COUP-01 | The same, full chain (armies eat the grain; M8) | G3a | 200 y | ≥ 10% | ≥ 30% |
+| V-COUP-02 | Plague → paranoia → purge → labour revolt | G3a | 200 y | ≥ 10% | ≥ 30% |
+| V-COUP-03 | Hive detection spiral (`aethelgard`) | G3a | 10 y | ≥ 25% | ≥ 25% |
+| V-COUP-04 | Elite overproduction → 40–60-year violence wave | G1b | 200 y | ≥ 20% | ≥ 20% |
+| V-COUP-05 | Dragon raids → famine pockets, inside the energetics bound (`val_khor` with dragons) | G3a | 200 y | ≥ 20% | ≥ 20% |
 
 ---
 
@@ -36,105 +122,194 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 
 | WP | Work package | Output |
 |---|---|---|
-| P0.1 | Repo bootstrap | Cargo workspace (crate stubs per `05.0` §6), Python package skeletons, `CLAUDE.md`/`AGENTS.md`, CI (fmt, clippy, nextest, cargo-deny, licence checks) |
-| P0.2 | `rh-ids` | Typed IDs, keyed hash `H`, counter RNG (ChaCha8 streams + SplitMix64), branch salts |
+| P0.1 | Repo bootstrap | Cargo workspace (crate stubs per `05.0` §6, including `rh-contracts`), Python package skeletons, `CLAUDE.md`/`AGENTS.md`, CI (fmt, clippy, nextest, cargo-deny, licence checks), architecture lints (dependency graph, plane isolation, flavour asset), merge queue (`13` §4.4) |
+| P0.2 | `rh-ids` | Typed IDs, keyed hash `H`, counter RNG (ChaCha8 streams + SplitMix64), branch salts and salt lineage (`05.1` §6.9), genealogical `PersonId` derivation with deterministic collision rehash (ADR-0026) |
 | P0.3 | Samplers | Vendored binomial (BTPE + inversion), Poisson (PTRS), normal (ziggurat), Beta/Gamma, each with golden vectors |
-| P0.4 | `rh-core` skeleton | `SimTime`, calendar, pulses, phase order, the `SystemModel` trait, `AccessSpec` conflict checker, agenda heap, event bus with `EventDraft`, invariant framework |
-| P0.5 | Snapshot and hash | Chunked Merkle xxh3, Arrow IPC keyframe write/read, SQLite journal, unsynced guard |
-| P0.6 | Golden-run CI | A `smoke` world with dummy systems; hash ladder at thread counts 1/2/4/N; nightly cross-platform matrix |
-| P0.7 | Benchmark harness | criterion benches + regression gate; Rerun logging hooks; Textual TUI stub |
-| P0.8 | Registry v0 | TOML loader, JSON Schema generation, manifest v0 loader (from `specs/manifest`) |
+| P0.4 | `rh-core` skeleton | `SimTime` (i64 minutes, signed epoch), calendar, pulses, phase order, the `SystemModel` trait, `AccessSpec` conflict checker, derived scheduler (topological order, declared lags), agenda heap for decisions and timers, lifecycle command queues, event bus with `EventDraft`, invariant framework |
+| P0.5 | Snapshot and hash | Three plane hashes (chunked Merkle xxh3 with dirty tracking), Arrow IPC keyframe write/read, SQLite journal (push and pull inputs), unsynced guard |
+| P0.6 | Golden-run CI | A `smoke` world with dummy systems; hash ladder at thread counts 1/2/4/N; divergence bisect tool v0 (`13` §4.5); nightly cross-platform matrix |
+| P0.7 | Benchmark harness | criterion benches and the regression gate (> 10% slowdown fails; no automatic re-baseline, `08` §9); serial-fraction instrumentation; Rerun logging hooks; Textual TUI stub |
+| P0.8 | Registry v0 | TOML loader, JSON Schema generation, manifest v0 loader (from `specs/manifest`), column-ownership declarations and their lint |
 
 **Gate G0**
-- The `smoke` world produces identical hashes across thread counts and repeated runs.
-- A keyframe round-trip passes.
-- The Registry and manifest examples validate.
-- CI runs in under 15 minutes.
+- **Determinism** (V-DET-01, V-DET-02): the `smoke` world gives identical plane-A hashes at 1, 2, 4 and N threads and over 3 repeats, every sim-month for 1,000 years.
+- **Keyframes** (V-DET-05): write, load, advance 10 years; the result equals a continuous run.
+- **Samplers** (V-DET-09): golden vectors are bit-equal.
+- **Bisect** (V-DET-11): the divergence bisect tool names the injected month, table and row.
+- **Specs** (V-WC-04): `val_khor.yaml` and `aethelgard.yaml` validate and `invalid_draft_style.yaml` fails.
+- **Lints** (V-PLN-01, V-DET-19, V-INSP-03): zero violations.
+- **CI** (V-PERF-04): per-PR CI runs in ≤ 15 min, and baselines are recorded for benches 4, 7 and 8 (`08` §9).
 
 ---
 
-## P1 — Macro history core, headless (≈ 10–12 weeks)
+## P1a — Core time, ledger and demography (≈ 8–12 weeks)
+
+**Goal.** Living people on a real map: a ledger, genealogies and vital events that run for 1,000 years, deterministically and at scale. WP IDs are stable across the P1a/P1b split.
+
+| WP | Work package | Output |
+|---|---|---|
+| P1.1 | `rh-worldgen` v1 | Azgaar-style world generation: Voronoi, heightmap templates, climate, rivers, biomes, cultures, burgs, states, Urquhart routes |
+| P1.2 | Population synthesis | Iterative proportional fitting from manifest marginals → ledger. Founders are `H64(seed, "founder", k)`, with pre-epoch births. Great houses with 3-generation genealogies |
+| P1.3 | M2 Demography F1 | Age-specific hazards (Brass logit on Coale–Demeny West), density modifiers (the entitlement hook is stubbed until P1.5), binomial draws, births by age-specific fertility, **minimal partnering (fathers)**, households (minimal), genealogical IDs `H64(mother, parity)`, life-course log; dead rows leave the ledger at once |
+| P1.8 | M1 Regions F1 | Route modes and costs, settlement growth |
+| P1.13 | Scheduled outcomes and lifecycle queues | Intra-pulse outcome times as agenda timers; lifecycle commands applied in `(phase, PersonId)` order; no back-dating (ADR-0025); `rh-contracts` v0 for the M1/M2 columns |
+| P1.14 | Determinism and performance at scale | Golden runs on the M1/M2 world (1,000 years); CRN pairing test (ADR-0026); synthetic 1M world with `bench/ledger_month_1M`, `bench/timers_lifecycle_1M` and `bench/serial_fraction`; a 100-year 1M storage measurement (`08` §1, §6) |
+
+**Gate G1a**
+- **Determinism** (V-DET-01, V-DET-02, V-DET-12): identical plane-A hashes at 1/2/4/N threads, every sim-month for 1,000 years, on `smoke` and the M1/M2 world; no back-dating.
+- **Invariants** (V-INV-01, V-INV-02, V-INV-11): 0 violations over a 1,000-year debug soak, covering population conservation, acyclic genealogy, life-course consistency and valid IDs; pre-epoch founders round-trip.
+- **Identity and life-course** (V-DATA-04, V-DATA-05): every `PersonId` ever emitted has exactly one life-course entry and matches its rule; forced collisions resolve identically on every run.
+- **CRN pairing** (V-DET-17): per-person death-time correlation ≥ 0.9 at 10 years for unaffected lineages across a paired fork.
+- **Demography bands** (V-SF-01, V-SF-02; identity bands): on a 32-seed ensemble, the estimates lie inside the bands:
+  - long-run growth r ∈ [−0.1, +0.3]%/yr, with population ∈ [0.3, 5]·K;
+  - child mortality to age 15 of 35–55%.
+- **Performance:**
+  - 1,000 years at 100k with M1 + M2 in ≤ 60 s on 8 cores, half of MOP-1, leaving the rest for P1b;
+  - serial share ≤ 20% on the synthetic 1M month (`08` §1.3);
+  - the PERF-2 inputs are measured and logged.
+
+---
+
+## P1b — History systems, chronicle and first stylized facts (≈ 8–12 weeks)
 
 **Goal.** A world that lives for 1,000 years and reproduces the stylized facts.
 
 | WP | Work package | Output |
 |---|---|---|
-| P1.1 | `rh-worldgen` v1 | Azgaar-style world generation: Voronoi, heightmap templates, climate, rivers, biomes, cultures, burgs, states, Urquhart routes |
-| P1.2 | Population synthesis | Iterative proportional fitting from manifest marginals → ledger; great houses with 3-generation genealogies |
-| P1.3 | M2 Demography F1 | Age-specific hazards (Brass logit on Coale–Demeny West), density and entitlement modifiers, binomial draws, births by age-specific fertility, households (minimal), lineage table, dead-row compaction |
 | P1.4 | M3 Agriculture & climate F1 | Seasons, AR(1) spatial anomalies, volcanic shocks, seed reserve, spoilage |
-| P1.5 | M4 Economy F1 | 6–8 goods, regional markets, price rule, arbitrage, wages/rents/taxes, entitlement |
+| P1.5 | M4 Economy F1 | 6–8 goods, regional markets, price rule, arbitrage, wages/rents/taxes, entitlement (feeds M2's entitlement modifier) |
 | P1.6 | M6 Polity F1 | Structural-demographic core: elites, fiscal state, legitimacy, Ψ, instability with overshoot; Granovetter revolts |
-| P1.7 | M7 Succession & dynasts F1 | Succession-law enum, hazard model calibrated to Eisner, regencies, claims; named-actor tier with a minimal mind (traits, needs, opinions) and IAUS for core decisions |
-| P1.8 | M1 Regions F1 | Route modes and costs, settlement growth |
-| P1.9 | Event emission and Chronicle Writer | Typed events, roles, anchored snapshots, causal edges (contingent / motivated_by), Parquet segments, DuckDB views |
-| P1.10 | M9 Validation harness | Stylized-fact bands, 32-seed ensembles, Morris screening, auto-generated run report |
-| P1.11 | Reference manifests | `val_khor` (no dragons yet), `delta_republic` |
-| P1.12 | Python wheel | `rh-py` with burn-in API; marimo calibration notebooks |
+| P1.7 | M7 Succession & dynasts F1 | Succession-law enum, hazard model calibrated to Eisner, regencies, claims, great-house dormancy (SIM-9). Named-actor tier (T1) with a minimal mind (traits, needs, opinions), IAUS for core decisions, and same-instant agenda semantics (`05.1` §4.3) |
+| P1.9 | Event emission and Chronicle Writer | Typed events, roles, anchored snapshots, causal edges (contingent / motivated_by), Parquet segments including the life-course log, DuckDB read-only views |
+| P1.10 | M9 Validation harness | Stylized-fact bands (identity vs emergent tags), red-noise-null spectral test, Clauset tail fits, censoring-aware lifespans, 32-seed ensembles, Morris screening, auto-generated run report |
+| P1.11 | Reference manifests | `val_khor` (no dragons yet), `delta_republic`, and the sealed **held-out manifest** for G2: hand-authored, hash committed, never run before G2 (V-HUM-09) |
+| P1.12 | Python wheel | `rh-py` with the liveness-gate and certification APIs (`05.5` §4.2); marimo calibration notebooks |
+| P1.15 | Registry effect language v0 | The typed, total evaluator in `rh-registry` (`05.5` §2.1); succession-law eligibility and ordering; verb effects as queued commands; a golden test |
 
-**Gate G1**
-- MOP-1: 1,000 years at 100k in ≤ 2 min.
-- Stylized facts ≥ 90% across 32 seeds (MOP-5).
-- Invariants hold across 1,000 years.
-- Coupling 1 (famine → succession), **truncated at the regency / civil-war onset** because M8 war and S3 migration arrive in P3 (the full chain is tested at G3), and coupling 4 (elite overproduction) each appear in ≥ x% of seeds and are absent in ≥ y%. x and y are set at G1 and logged in the decisions log.
-- **[H] You read 3 seeds' annals and judge whether "history happens".**
+**Gate G1b** (the v1.0 G1)
+- **MOP-1** (V-PERF-01): 1,000 years at 100k in ≤ 2 min on 8 cores.
+- **MOP-5** (V-SF): on the certification ensemble (32 seeds × 1,000 years per manifest), ≥ 90% of the P1-applicable non-soft bands pass and every identity band passes. V-SF-09 (war severity), V-SF-11 (post-plague wages) and V-SF-12 (hive testing) need P3 systems and are deferred to G3a.
+- **Invariants** (V-INV-02, V-INV-03, V-INV-12): 0 violations over 1,000 years; one death path; great houses tracked from world start.
+- **Couplings:** V-COUP-01 (truncated) and V-COUP-04 meet their thresholds in §Coupling thresholds.
+- **Agenda** (V-COG-04): same-instant semantics hold; first-applied rate unbiased by entity ID (TOST, δ = ±0.05).
+- **Liveness gate and certification** (V-WC-05, V-WC-07, V-PERF-07; `08` §2):
+  - liveness gate ≤ 90 s wall at 100k on 8 cores (target 60 s);
+  - certification ≤ 30 min wall (target 20 min).
+- **PERF-2** is set from the P1 measurements and logged. It replaces the provisional band in `08` §1.4.
+- **[H] You read the run reports of 3 seeds** and judge whether "history happens". Pass: yes for ≥ 2 of 3.
 
 ---
 
-## P2 — Sifter and Time-Machine console: the thesis test (≈ 8–10 weeks)
+## P2 — Sifter and Time-Machine console: the thesis test (≈ 10–12 weeks, then the G2 rating window)
 
 **Goal.** Watch centuries pass, get stopped at the moments that matter, and understand why each one happened.
 
 | WP | Work package | Output |
 |---|---|---|
-| P2.1 | Pattern DSL v1 | TOML surface, compiler, anchoring lint, act-class and role vocabularies |
-| P2.2 | Live sifter | Partial-match automata, pruning, match events, suspense, auto-pause signal |
-| P2.3 | SQL twins + twin CI | DuckDB equivalents for every pattern; recorded-chronicle fixtures |
-| P2.4 | Pattern packs v1 | Succession, revenge, famine, reversal, irony, elite feud, about 25 patterns in total |
-| P2.5 | Significance v1 | Components, per-era recompute, hindsight pinning, compaction into collections and archive |
-| P2.6 | `rh-server` v1 | Timelines (run, pause, seek, fork), keyframe cache, JSON-RPC control plane, Arrow data endpoints |
-| P2.7 | Console v1 | Time-Machine (speed bands, run-until, overview and detail lanes), map (deck.gl), causal inspector (Sigma), person/place views, Annals, rating tool |
+| P2.1 | Pattern DSL v1 | TOML surface, compiler, anchoring lint, act-class, role and attribute vocabularies |
+| P2.2 | Live sifter | Partial-match automata, declarative pruning, declared match semantics (selection, on_complete, dedupe), match events, suspense with its rate limiter, auto-pause signal (`05.4` §2.3) |
+| P2.3 | SQL twins + twin CI | DuckDB equivalents for every pattern; clustered recorded-chronicle fixtures |
+| P2.4 | Pattern packs v1 | Succession, revenge, famine, reversal, irony, elite feud: about 25 patterns, each with a firing-rate budget. Bad-run metric (MOE-6) wired into the liveness gate |
+| P2.5 | Significance v1 | Components, per-era recompute, bounded hindsight retention, per-timeline visibility sidecar (plane C), rarity base rates |
+| P2.6 | `rh-server` v1 | Timelines (run, pause, read-only seek, fork); keyframe service (10-year permanent keyframes, yearly LRU with a RAM tier, capture at auto-pause); JSON-RPC control plane; Arrow data endpoints |
+| P2.7 | Console v1 | Time-Machine (speed bands, run-until, overview and detail lanes), map (deck.gl), causal inspector (Sigma), person/place views, Annals, rating tool. Cultivator mode only; Oracle mode arrives with P3.7 |
 | P2.8 | Annals and Chronicle (templated) | Template engine over matches and edges; provenance links |
-| P2.9 | Branching | What-if forks with override inputs; timeline diff view |
-| P2.10 | Facts ledger v1 | `facts_ledger` writes on `entity.*` display; pin-on-reveal (05.2 §6); MOE-3 re-open probe (DATA-7) |
+| P2.9 | Branching | What-if forks with override inputs; material-input dependency scopes with timer cancel and re-sample; acting in the past forks (ADR-0025); timeline diff view |
+| P2.10 | Facts ledger v1 | Pins and `facts_ledger` (plane B, `05.2` §3.3), written on `entity.*` display; MOE-3 re-open probe (DATA-7) |
 | P2.11 | Save versioning | Arrow-schema versioning, keyframe migrations, and the save-compatibility corpus in CI (DET-10, MOE-4) |
+| P2.12 | Observer invariance and plane isolation | Three plane hashes recorded per timeline; console fuzz of pins, facts and inspections with `state_hash` unchanged (DET-6, binding from P2); read-set checks against the Registry's plane tags (`05.5` §2) |
+| P2.13 | G2 protocol and rating instrumentation | The pre-registered protocol (V-HUM-09 in `09`): frozen build, Registry version, held-out manifest hash, seed derivation, pause thresholds, preference-model hash, presentation order and analysis script, logged before the first rating; blind interleaving of arms; intra-rater re-presentation; blind chronicle-pair generator for MOE-2 (coupled run against coupling-ablated run) |
+| P2.14 | Coupling-ablation harness | The G2 and MOE-2 baseline arm (V-HUM-09): every cross-system contract read is served from an independent seed's recorded run of the same manifest. A test-harness feature only, never available in play |
 
-**Gate G2 (the thesis gate)**
-- **[H] MOE-1 ≥ 3 events rated ≥ 4 per century** (median over 10 seeds).
-- MOE-2 ≥ 80% preference for curated over random chronicles.
-- MOE-6 bad-run rate < 10%.
-- MOP-3 and MOP-4 met.
-- Twin tests green.
+**Gate G2 (the thesis gate).** The decision rule is the pre-registered protocol V-HUM-09 in `09`, fixed before P2 starts. 10 seeds (7 on the tuned manifests, 3 on the held-out manifest), 2 simulated centuries per seed, the engine against its coupling-ablated baseline, rated blind (≈ 3–4 h per seed).
+- **[H] Pass criterion** (primary analysis, default pause selection):
+  - the lower 80% bound of the mean treatment rating is ≥ 2.5 on the 1–5 scale; **and**
+  - the lower 80% bound of the paired difference, treatment minus coupling-ablated, is > 0.
+- **Diversity guard:** no single pattern family accounts for more than 40% of the treatment items rated ≥ 4.
+- **Validity:** intra-rater κ ≥ 0.4, blinding intact, no protocol deviation. Otherwise the run is void and repeated.
+- **[H] P2 targets of `01`** (V-HUM-01–V-HUM-03):
+  - MOE-1: ≥ 3 events rated ≥ 4 per century (median over seeds), precision ≥ 0.5, within the pause budget of ≤ 10 auto-pauses per century;
+  - MOE-2: ≥ 80% preference for the coupled run's chronicle over the coupling-ablated run's, over ≥ 20 blind pairs;
+  - MOE-6: bad-run rate < 10% on 32 seeds (point estimate; the Clopper–Pearson interval is reported).
+- **P2 verification suites green:**
+  - MOP-3 scrub < 100 ms (V-TM-03);
+  - MOP-4 drop-in ≤ 10 s worst case at 100k, ≈ 0.3 s typical (V-TM-04; `08` §2);
+  - PERF-3: the live sifter adds ≤ 10% to run time at 100k (V-PERF-03);
+  - twin equivalence and firing-rate budgets (V-SIFT-01, V-SIFT-03), with precision@K reported (V-SIFT-04);
+  - observer invariance (V-DET-06, V-PLN-03, V-PLN-05, V-TM-10): 0 `state_hash` changes;
+  - acting in the past and input scope (V-DET-13, V-DET-14);
+  - save compatibility (V-GOLD-04).
 - **If G2 fails, iterate inside P1/P2: simulation couplings, contingent unlocking, patterns. Do not proceed to 3D.**
 
 ---
 
-## P3 — Agency: contagion and hive, minds, Oracle-2D, Foresight (≈ 12–14 weeks)
+## P3a — Minds, epistemics and the remaining systems (≈ 8–10 weeks)
+
+**Goal.** People with minds who know different things, in a world with plague, war, culture and dragons. No LLM is needed in P3a.
 
 | WP | Work package | Output |
 |---|---|---|
-| P3.1 | M5 Contagion F1 | Metapopulation SEIRS (Euler-multinomial), radiation mobility, fear coupling, testing (se/sp), covert compartment |
-| P3.2 | `rh-minds` v1 | Full psychological core, overlays, IAUS + HTN, Thoughts, opinions, ACT-R memory, light minds |
-| P3.3 | Epistemics v1 | Belief store, channels (including hive), distortion operators, ToM for flagged propositions, Bayesian suspicion, impossible-knowledge events |
+| P3.1 | M5 Contagion F1 | Metapopulation SEIRS (Euler-multinomial), radiation mobility, fear coupling, testing (se/sp), covert compartment; per-person status consistent with the counts |
+| P3.2 | `rh-minds` v1 | Full psychological core, overlays (in the effect language), IAUS + HTN, Thoughts, opinions, ACT-R memory; light minds as pure functions of plane A |
+| P3.3 | Epistemics v1 | Bounded belief stores (T1 only), channels (including hive), distortion operators, ToM for flagged propositions, sparse Bayesian suspicion, impossible-knowledge events; knowledge rows and diffusion fronts (`05.2` §4.1) |
 | P3.4 | Hive and mimics | Hive objective, mimic cover utility, tells, detection spiral |
 | P3.5 | M8 Campaign war F1 | Supply, attrition, Helmbold battles, sieges, camp disease |
 | P3.6 | Should-systems: S1.culture, S2.technology, S3.migration, S4.ecology | Religion and ideology, technology diffusion, migration, ecology (dragons as T1 with energetics) |
-| P3.7 | Oracle verbs | Movement and travel; Whisper (parse → ground → score → show, with the LLM gateway v1); Pierce; Omen; Ward |
-| P3.8 | Foresight | Prophecy DSL, rollout workers, Wilson CI, failure clustering, common-random-number A/B, reliability-diagram CI |
-| P3.9 | LLM Gateway v1 | Job API, adapters (local llama.cpp, frontier), journaling, ARG-300 eval, red-team corpus |
-| P3.10 | Scale-up | 1M-person optimisation pass; PERF-1 (P3) and PERF-2 |
-| P3.11 | Reference world | `aethelgard` (modern hive, 10 years) |
-| P3.12 | Pivotal-consult A/B | Opt-in LLM consult from legal-action menus, pre-batched; A/B against the utility argmax on MOE-1 (COG-8) |
+| P3.11 | Reference worlds | `aethelgard` (modern hive, 10 years); dragons added to `val_khor` |
 | ∥ SPK-1 | Crowds spike | Godot: 50 rigged + 3,000 VAT + impostors at 1440p; 60 FPS on a 3060-class card |
+
+**Gate G3a**
+- **Couplings:** the full V-COUP-01, and V-COUP-02, V-COUP-03 and V-COUP-05, meet their thresholds in §Coupling thresholds. They must be emergent, not forced.
+- **MOP-5** (V-SF): ≥ 90% of all non-soft bands pass and every identity band passes, now including:
+  - V-SF-09: war severity α ∈ [1.3, 1.9];
+  - V-SF-11: a post-plague real-wage rise;
+  - V-SF-12: more than 50% of detentions false positive at prevalence < 1% with se/sp = 0.99.
+- **Cognition and epistemics** (V-COG-01–V-COG-08, V-DATA-06): green; knowledge fronts agree exactly with the brute-force reference.
+- **Ecology** (V-INV-13): predator biomass never exceeds the energetics bound.
+- **Knowledge volume** (V-DATA-12, V-PERF-08; synthetic 100-year 1M run; `08` §5–6):
+  - knowledge rows plus fronts ≤ 3 GB per century;
+  - T1 belief stores ≤ 600 MB at 5k actors;
+  - a compressed keyframe ≤ 0.5 GB.
+- **SPK-1:** reported, with its pass/fail recorded.
+
+---
+
+## P3b — Oracle, Foresight, persuasion and scale (≈ 8–10 weeks, then the G3b rating window)
+
+**Goal.** You can act: travel, whisper, read probable futures, and run at 1M.
+
+| WP | Work package | Output |
+|---|---|---|
+| P3.7 | Oracle and its verbs | Oracle entity with its own belief store; Cultivator and Oracle console modes (`05.3` §6.2); movement and travel; Whisper (parse → ground → score → show, through the LLM gateway); Pierce; Omen; Ward |
+| P3.8 | Foresight | Prophecy DSL, rollout workers, belief-resampled forks in Oracle mode, Wilson CI, failure-path clustering, common-random-number A/B, validity tests (exchangeability, reduced-cost bias, scoring; `05.3` §7.6) |
+| P3.9 | LLM Gateway v1 | Job API; adapters (local llama.cpp, cluster, frontier); journaling of push and pull inputs; structured generation with Registry enums (LLM-1/2/3); ARG-300 eval; red-team corpus (LLM-6/7) |
+| P3.10 | Scale-up | 1M optimisation pass against the serial-fraction budget; PERF-1 (P3), PERF-2 and PERF-3 at 1M; Foresight batch at 1M (`08` §1, §3) |
+| P3.12 | Deliberation-consult A/B | Opt-in deliberation consults as pull inputs due at t + D, with a journaled fallback (`05.3` §8); A/B against the utility argmax on MOE-1 (COG-8) |
+| P3.13 | Persuasion balance | Leverage bands, parameter sweeps, and the adversarial player bot as a CI gate (`05.3` §6.3) |
 | ∥ SPK-2 | Street-from-seed spike | Same town on two machines; > 90% of buildings stable under growth |
 
-**Gate G3**
-- Coupling 2 (plague → purge) and coupling 3 (hive spiral) are emergent and not forced.
-- Foresight is calibrated (±0.05).
-- The red-team corpus is green.
-- MOE-1 ≥ 6 per century.
-- MOP-1 at 1M in ≤ 10 min.
-- **[H]** Oracle play sessions: whispers feel consequential but not controlling.
+**Gate G3b** (the v1.0 G3)
+- **[H] MOE-1 ≥ 6 events rated ≥ 4 per century** (V-HUM-01), median over 10 seeds, with precision ≥ 0.7 and ≤ 10 auto-pauses per century, under the G2 protocol with fresh held-out seeds.
+- **[H] Oracle play** (V-HUM-07): 3 sessions of about 1 h. You rate "whispers feel consequential but not controlling" ≥ 4/5 in ≥ 2 of them.
+- **Foresight validity** (V-FOR; `05.3` §7.6), on a panel of ≥ 200 back-test predicates:
+  - V-FOR-01 exchangeability: rank-histogram and PIT χ² p ≥ 0.01, with ≥ 400 continuations per quantity;
+  - V-FOR-02 reduced-cost bias: the 90% CI of ΔP lies inside ±0.03 for every predicate;
+  - V-FOR-03 scoring: Brier skill score > 0 (lower 95% bound) and Spiegelhalter |Z| ≤ 1.96.
+- **Oracle mode** (V-ORA-09, V-ORA-10): 0 leaks; Oracle-mode Foresight is TOST-equivalent across a secret the Oracle lacks (δ = ±0.03).
+- **LLM-facing** (V-LLM-02, V-LLM-03):
+  - ARG-300 field F1 ≥ 0.85 and meta-instruction recall ≥ 0.95;
+  - red-team corpus: no state delta beyond the documented caps.
+- **Persuasion** (V-ORA-07, V-ORA-08):
+  - a strong, verified whisper on a receptive target moves ΔP by 5–15 points, and a weak or bluffed one by < 3;
+  - the adversarial bot never exceeds the cap envelope.
+- **Pull inputs** (V-DET-15, V-COG-09): replay hard-fails on a missing, extra or mismatched answer; the fallback is journaled.
+- **Scale** (V-PERF-01–V-PERF-03, V-PERF-06; `08` §1, §3):
+  - PERF-1 (P3) [P]: 1,000 years at 1M in ≤ 15 min on 8 cores;
+  - PERF-2 as set at G1b;
+  - PERF-3: the sifter adds ≤ 20% at 1M;
+  - batch Foresight at 1M (N = 64 × 50 years) in ≤ 60 min on the desktop.
+- **Preference model** (V-HUM-10): hold-out Spearman ρ ≥ 0.4.
+- **SPK-2:** reported, with its pass/fail recorded.
 
 ---
 
@@ -147,23 +322,29 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 | P4.3 | Style cards v1 | Five cards with public-domain exemplars; stylometric metrics |
 | P4.4 | In-world documents | Biased-narrator documents with provenance |
 | P4.5 | NOVEL-20 eval | Fixed epochs, metrics, judge harness |
-| P4.6 | World compiler | Intent schema, expander, validators, burn-in integration, repair loop, gap reports; INTENT-100 eval |
+| P4.6 | World compiler | Intent schema, mapping table, expander, validators, liveness gate with deterministic calibration repair and background certification (`05.5` §4.2), LLM repair loop for schema and semantic errors only, gap reports (`data_only` / `needs_code`); INTENT-100 with its adversarial subset |
 | P4.7 | Audio-drama pipeline (optional within P4) | Voice bible, TTS rendering with ASR gate, mastering, RSS |
 | P4.8 | Offline mode | Local or cluster fallback for every job kind; full offline play test (LLM-8) |
 | ∥ SPK-3 | Wallpaper spike | Windows 11 24H2 host; power budget |
 
 **Gate G4**
-- Zero CT0/CT1 contradictions on NOVEL-20.
-- **[H]** Blind saga A/B against an ungrounded baseline.
-- INTENT-100 ≥ 90% / 98%.
-- At least 3 gap reports converted into merged Registry entries, proving the S4 loop.
+- **Canon** (V-NAR-01, V-NAR-02, V-NAR-08): 0 CT0/CT1 contradictions and 0 CT3 inventions on NOVEL-20; backbone coverage ≥ 95%; 0 epistemic leaks.
+- **[H] Blind saga A/B** (V-HUM-05) against an ungrounded baseline, 10 pairs:
+  - Rehoboam preferred on coherence and on surprise in ≥ 7 of 10 each;
+  - preferred on engagement in ≥ 5 of 10, i.e. no regression.
+- **INTENT-100** (V-WC-01, V-WC-02): template ≥ 90%; validity after repair ≥ 98%; gap recall ≥ 0.9; silent approximation ≤ 5%.
+- **The S4 loop** (V-WC-13, V-WC-10): ≥ 3 gap reports converted into merged Registry entries, at least 1 of them `data_only` through the effect language.
+- **LLM-8** (V-LLM-10): the full offline play test passes.
+- **Compiler path at 100k** (V-WC-05–V-WC-07): liveness gate ≤ 90 s, calibration repair within Registry bounds, certification ≤ 30 min.
+- **SPK-3:** reported, with its pass/fail recorded.
 
 ---
 
-## P5 — Living Diorama: first 3D client (≈ 12–14 weeks)
+## P5 — Living Diorama: first 3D client (≈ 14–16 weeks)
 
 | WP | Work package | Output |
 |---|---|---|
+| P5.0 | M4.economy F2 | Household budgets and stocks, credit (`05.1` §3); EVO-3 consistency with F1 on conserved quantities and declared targets; supported-combinations matrix updated. Prerequisite for concrete errands in P6.2 (`05.2` §2). The only plane-A WP in P5: a C3 change with a CRN-paired ensemble (`13` §4.2) |
 | P5.1 | `rh-godot` | Frame decoder → MultiMesh; settlement plans via the shared `rh-worldgen` |
 | P5.2 | Terrain and towns | Upsampled terrain, carved rivers, ward and tensor streets, shape-grammar buildings, WFC kit infill |
 | P5.3 | Crowd LoD | Rig / VAT / impostor / aggregate tiers; rendezvous-hash kitbash |
@@ -175,9 +356,13 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 | P5.9 | Replay mode | The Diorama renders a computed history (laptop-friendly) |
 
 **Gate G5**
-- Spike targets hold in the product build.
-- R3D-5 power budgets are met.
-- **[H]** Diorama believability sessions show a trend toward zero "fake" moments.
+- **Spike targets hold in the product build:**
+  - SPK-1 (V-R3D-02): ≥ 60 FPS with 50 rigged + 3,000 VAT + impostors at 1440p on a 3060-class card;
+  - SPK-2 (V-R3D-01): > 90% of buildings unchanged under growth, and no silent re-roll.
+- **R3D-5 power** (V-R3D-03): < 10% GPU and < 5 W extra package power at the 30 FPS cap; 0 FPS when covered.
+- **DET-6, passive crowds** (V-DET-07): 0 `state_hash` changes with the Diorama attached for 100 sim-years.
+- **P5.0** (V-SF, V-HYD-10): MOP-5 holds with M4 at F2; F1 ↔ F2 conserved quantities equal and declared targets TOST-equivalent on 32 CRN-paired seeds.
+- **[H] Diorama believability** (V-HUM-06): ≤ 2 "fake" moments per 30-minute session, averaged over the last 3 sessions, with a falling trend.
 
 ---
 
@@ -185,19 +370,20 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 
 | WP | Work package | Output |
 |---|---|---|
-| P6.1 | Hydration bubble | Rings, leases and decrees, pins, stub depth cap, alibi promotion, boundary flux |
-| P6.2 | Schedules and errands | T0 templates, flows, concrete errands tied to stock and plots, venue advertisements |
-| P6.3 | Dialogue | SpeechPlan IAUS, realisation with cached prefixes, claim check, speech-act extraction, facts-ledger writes from dialogue |
+| P6.1 | Hydration bubble | Rings with hysteresis; positions and activities as views over schedules and scheduled outcomes (ADR-0025); pins and facts ledger (plane B); alibi generation; boundary flux with velocity prefetch; material-input scopes for your actions in the bubble |
+| P6.2 | Schedules and errands | T0 schedule templates and flows; concrete errands tied to household stock and plots (needs P5.0); venue advertisements; behavioural flavour (ADR-0026) |
+| P6.3 | Dialogue | SpeechPlan IAUS, realisation with cached prefixes, claim check, speech-act extraction (journaled material inputs), facts-ledger writes from dialogue |
 | P6.4 | Local model selection | RP-200 eval across candidate models and hardware tiers |
 | P6.5 | Speech | Designed-voice bank, CPU TTS, ASR push-to-talk, latency masking |
 | P6.6 | Interiors | Lazy room templates |
 | P6.7 | Avatar and "a reason to walk" | Investigations (find the mimic, find the plotter) as scenario templates |
 
 **Gate G6**
-- The observer-invariance test passes with live hydration.
-- RP-200 gates pass.
-- **[H]** Interrogation sessions show 0 hard contradictions.
-- End-to-end voice latency ≤ 2 s.
+- **DET-6 with live hydration** (V-DET-08, V-HYD-08): 0 `state_hash` changes; no NPC-originated material events.
+- **Hydration consistency** (V-HYD-01–V-HYD-07; `05.2` §3.6): identity stability, conservation and temporal consistency hold 100%; distributional fidelity is TOST-equivalent within δ = ±0.02.
+- **RP-200** (V-LLM-01; LLM-4/5): leak = 0 on concealment items; unsupported claims < 2%; TTFT p95 < 0.5 s on the reference GPU.
+- **[H] Interrogation sessions** (V-HUM-04; MOE-3): 0 hard and < 1 soft contradiction per 20 people.
+- **Voice latency** (V-AUD-05; AUD-4): end-to-end p95 ≤ 2 s.
 
 ---
 
@@ -210,13 +396,44 @@ Contents:
 - the prophecy loop;
 - performance and accessibility polish.
 
-**Gate G7: [H]** the full-vision acceptance session, covering scenarios OS-1 through OS-11 in `04`.
+**Gate G7: [H]** the full-vision acceptance session (V-HUM-08), covering scenarios OS-1 through OS-11 in `04`. Every scenario's acceptance criteria pass.
+
+---
+
+## Requirement phases
+
+The phase in which each cross-cutting requirement in `03` becomes binding, and the WP that delivers it:
+
+| Requirement | Binding from | Delivered by |
+|---|---|---|
+| SIM-3: M1, M2 / M3, M4, M6, M7, M9 / M5, M8 | P1a / P1b / P3a | P1.3, P1.8 / P1.4–P1.7, P1.10 / P3.1, P3.5 |
+| SIM-12 should-have systems | P3 (P3a) | P3.6 |
+| DET-6 observer invariance | **P2** (console and inspection); P5 (passive crowds); P6 (live hydration) | P2.12; G5; G6 |
+| DET-12 three planes | P0 (lints, hashes); P2 (fuzz) | P0.1, P0.5; P2.12 |
+| DET-13 no back-dating | P0 (core); P1a (scheduled outcomes) | P0.4; P1.13 |
+| DET-14 acting in the past, input scope | P2 | P2.9 |
+| DET-15 pull inputs | P3 (P3b) | P3.9, P3.12 |
+| DATA-8 life-course log, genealogical IDs | P1 (P1a) | P0.2, P1.3 |
+| DATA-9 knowledge fronts | P3 (P3a) | P3.3 |
+| SIFT-8 match semantics and budgets | P2 | P2.2–P2.4 |
+| DET-8 keyframe cadence and LRU | P2 | P2.6 |
+| DET-10 save versioning | P2 | P2.11 |
+| DATA-7 facts ledger | P2 | P2.10 |
+| COG-1 to COG-7 | P3 (P3a) | P3.2–P3.4 |
+| COG-8 deliberation consults | P3 (P3b) | P3.12 |
+| LLM-1, LLM-2, LLM-3 gateway, journaling, structured outputs | P3 (P3b) | P3.9 |
+| LLM-6, LLM-7 parser, red-team corpus | P3 (P3b) | P3.7, P3.9 |
+| LLM-8 offline | P4 | P4.8 |
+| LLM-4, LLM-5 TTFT, belief-scoped dialogue | P6 | P6.3, P6.4 |
+| WC-3, WC-4 compile pipeline, gap reports | P4 | P4.6 |
+| PERF-1, PERF-2, PERF-3 | P1 / P3 | G1b; G3b |
 
 ---
 
 ## Continuous tracks (all phases)
 
-- **Fidelity ratchet.** Gap reports and F(n) → F(n+1) upgrades run as work packages, each gated by the EVO-3 consistency tests.
+- **Fidelity ladder.** Gap reports and F(n) → F(n+1) upgrades run as work packages, each gated by the EVO-3 consistency tests (no ratchet: `05.1` §3).
+- **Review-hours tracking.** Actual review time against the ≤ 6 h/week budget, reported in the weekly digest.
 - **Technology radar refresh** every quarter (`07` §3).
 - **Risk review** at every gate (`10`).
 - **Model re-evaluation** every quarter: RP-200, ARG-300, INTENT-100, NOVEL-20.
@@ -228,3 +445,5 @@ Contents:
 | G2 fails after 3 iteration cycles | Pivot from "emergent history" toward a **storylet hybrid**: authored vignettes cast onto simulated people, in the style of Wildermyth and CK3. The deterministic engine stays as the substrate. |
 | SPK-1 fails | Change the 3D scope to a 2.5D isometric diorama, or re-assess Unreal for the client only. The simulation is unaffected. |
 | RP-200 cannot pass with local models | Move street-level dialogue to cluster or frontier models, keeping the same plan-then-realise architecture, or use templated dialogue only. |
+| PERF-1 at 1M misses 15 min after P3.10 | Hold the scale ladder at 100k-class worlds until P5. Foresight at 1M stays batch-only (`08` §1, §3). |
+| Review time above budget for 4 consecutive weeks | Cut to 2 concurrent workstreams and re-plan the remaining durations. Move more work onto auto-merge routes (`13` §4.2) before adding agents. |

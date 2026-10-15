@@ -308,7 +308,7 @@ FROM twin_trust_then_betrayal m JOIN event e ON e.timeline_id = m.timeline_id AN
 QUALIFY row_number() OVER (PARTITION BY m.timeline_id, m.a, m.b, CAST(floor(e.tick / (365 * 1440.0)) AS BIGINT)
                            ORDER BY m.e2_id) = 1;
 
--- Causal ancestors (for hindsight pinning; R02 §3 "Labov pre-construction"): contingent + motivated_by edges.
+-- Causal ancestors (for hindsight retention and the causal inspector; R02 §3 "Labov pre-construction"): contingent + motivated_by edges.
 -- Usage: SELECT * FROM causal_ancestors(<timeline_id>, <event_id>, <max_depth>);
 CREATE OR REPLACE MACRO causal_ancestors(tl, root_id, max_depth) AS TABLE
 WITH RECURSIVE walk(event_id, depth) AS (

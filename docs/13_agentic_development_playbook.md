@@ -144,7 +144,9 @@ flowchart LR
 ```
 
 **Parallelism**
-- Work packages inside a phase are designed to touch disjoint crates and disjoint owned columns, so 3–6 agents can run concurrently.
+- Work packages inside a phase are designed to touch disjoint crates and disjoint owned columns, so 3–6 agents can run concurrently **within ≈ 2–3 workstreams**. The binding limit is your review time, not agent count.
+- **Review-hours budget.** The plan assumes ≤ 6 h/week of director review outside gate rating windows (`11`, ADR-0022, `12` Q16). WPs are sized for a ≤ 15-minute approval. Work that would exceed the budget waits; it is never auto-approved to keep pace.
+- **Performance baselines** move only through a reviewed PR (`08`): a faster build never tightens or loosens a gate automatically.
 - Integration WPs (server, console) follow the system WPs.
 - Each agent works in its own git worktree and branch.
 

@@ -84,7 +84,7 @@ Rust (core) · Python (LLM, compilers, calibration) · TypeScript + deck.gl + Si
 |---|---|---|
 | **P0** (≈ 4–6 wk) | Determinism harness, Registry, CI | Identical hashes across thread counts |
 | **P1** (≈ 16–24 wk, split into sub-phases in `11`) | 1,000 years of headless history | ≥ 90% stylized facts; ≤ 2 min/1,000 years at 100k |
-| **P2** (≈ 8–10 wk) | Sifter + Time-Machine console | **Thesis gate:** ≥ 3 events per century that *you* rate ≥ 4/5, within a pause budget |
+| **P2** (≈ 10–12 wk + a 3–5 wk G2 rating window) | Sifter + Time-Machine console | **Thesis gate:** ≥ 3 events per century that *you* rate ≥ 4/5, within a pause budget |
 | P3 (split into sub-phases in `11`) | Hive, minds, Oracle-2D, Foresight, 1M scale | Emergent witch-hunt spiral; Foresight validity tests |
 | P4 | Narrative and world compilers | 0 contradictions; gap-report loop proven |
 | P5–P7 | Diorama → Street-level → Oracle-3D | Spikes SPK-1 to SPK-3 de-risk them during P3 and P4 |

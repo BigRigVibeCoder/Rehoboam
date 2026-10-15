@@ -1,30 +1,50 @@
 # 12 — Open Questions and Decisions Needed From You
 
-*Status: 2026-10-15. Each item lists my recommendation and the default I will assume if you don't answer. Items marked ★ block P0/P1.*
+*Status: Draft v1.1 (2026-10-15). Each item lists my recommendation and the default I will assume if you don't answer. Items marked ★ block P0/P1. Question numbers are stable, so other documents can cite them.*
+*v1.1 changes: ★1 now lists exactly the ★ ADRs in `06_adr/README.md`; new questions on the review-hours budget (★16), licence mode (17) and the pre-registered G2 protocol (18); rating time re-estimated at 3–4 h per seed (Q6); consult, scale-ladder and review questions updated; questions the v1.1 architecture answers are listed as resolved.*
 
 ---
 
 | # | Question | Recommendation (default if unanswered) | Why it matters |
 |---|---|---|---|
-| ★1 | **Approve the core ADRs?** Rust core (0001), every person a ledger row (0003), determinism contract (0006), no hidden director (0009), single writer per timeline (0020). | Approve as proposed. | These decide the architecture's direction. Reversing them later is expensive. |
-| ★2 | **Which reference world first?** Feudal + dragons (`val_khor`) or modern + hive (`aethelgard`)? | **Feudal first, without dragons in P1.** Historical calibration data (demography, regicide, secular cycles) is rich, and the 1,000-year horizon fits. Dragons come in P3 (S4 ecology) and the hive in P3 (M5). | It determines which systems and stylized facts come first. |
+| ★1 | **Approve the critical-path ADRs?** These are the ★ ADRs in `06_adr/README.md`: Rust core, Python orchestration, TypeScript console (0001); SoA tables plus a version-pinned `bevy_ecs` for named actors and a SocialGraph store (0002); every person a ledger row (0003); integer sim-time, pulses and an event-driven agenda (0005); determinism contract (0006); typed Parquet chronicle with no-delete tiering (0007); custom incremental sifter with SQL twins (0008); curation, not intervention (0009); Mechanics Registry and world compiler (0010); single writer per timeline (0020); spec-first agentic development (0022); three-plane state (0024); scheduled outcomes and material inputs (0025); genealogical identity and the life-course log (0026). | Approve as proposed. | These decide the architecture's direction. Reversing them later is expensive. ADR-0024 to 0026 came out of the red-team review: they make observer invariance, event ordering and cross-branch identity hold by construction. |
+| ★2 | **Which reference world first?** Feudal + dragons (`val_khor`) or modern + hive (`aethelgard`)? | **Feudal first, without dragons in P1.** Historical calibration data (demography, regicide, secular cycles) is rich, and the 1,000-year horizon fits. Dragons and the hive both arrive in P3a (S4.ecology, M5). | It determines which systems and stylized facts come first. |
 | ★3 | **Development and play OS?** | Develop on Linux or macOS with CI on all three platforms. Play on whatever you use daily. Name it so wallpaper and packaging can be prioritised. | Affects the determinism guarantee level, the Tauri/Electron choice, the wallpaper host and GPU vendor paths. |
-| ★4 | **Compute you actually have?** Local workstation spec, cluster or cloud account, GPU types, monthly cloud budget ceiling. | Assume a strong desktop plus pay-as-you-go cloud for batch LLM work and ensembles, with a $50–200/month soft ceiling until you set one. | Sizes CI runners, Foresight N defaults and model tiers. |
+| ★4 | **Compute you actually have?** Local workstation spec, cluster or cloud account, GPU types, monthly cloud budget ceiling. | Assume a strong desktop plus pay-as-you-go cloud for batch LLM work and ensembles, with a $50–200/month soft ceiling until you set one. | Sizes CI runners, Foresight N defaults and model tiers. At 1M, Foresight is a batch job: ≈ 30–55 min on the desktop, ≈ 4–7 min on a 64-core node (`08` §3). |
 | 5 | **Calendar:** a 360-day simplified year or a realistic 365-day year? | 360-day by default, configurable per world. | Simpler arithmetic and cleaner sifter windows. |
-| 6 | **Will you commit to rating sessions at each gate?** (About 1–2 hours per gate.) | Yes. MOE-1 cannot be measured any other way. | Your ratings are the north-star metric and train the preference model. |
-| 7 | **Pivotal LLM consults for named actors:** on or off by default? | Off until an A/B shows they raise MOE-1. When enabled, pre-batched before MAX-speed runs. | Trade-off between cost, determinism hygiene and possibly richer decisions. |
+| 6 | **Rating time at gates.** G2 and G3b each need about **3–4 h per seed × 10 seeds = 30–40 h**, plus blind chronicle pairs and re-presented items (V-HUM-09 in `09`). G1b and G4–G7 need about 3–15 h each (`11` §Review-hours budget). Can you schedule it? | Yes: a 3–5-week rating window after P2 and after P3b, at about 8–10 h/week, during which nothing that needs your review merges. | MOE-1 cannot be measured any other way, and your ratings train the preference model. The window sits on the critical path: its length moves the thesis-test date (8–11 months). |
+| 7 | **Deliberation consults for named actors:** on or off by default? | Off until the A/B in WP P3.12 shows they raise MOE-1. When enabled, a consult is a **pull input** due at t + D sim-time (`05.3` §8). MAX-speed runs either stall on each consult or run under the labelled fallback policy. | Trade-off between cost, run speed and possibly richer decisions. |
 | 8 | **Frontier APIs may receive world data** (chronicles, character states) for synthesis? | Yes for synthesis jobs, with a local or cluster fallback always available. No player-identifying data is ever sent. | Privacy and data-handling posture. |
 | 9 | **Content boundaries** for narration of atrocities (purges, pogroms, witch-hunts) | "Historian" register: depict consequences, avoid gratuitous detail. Adjustable per world. | Shapes narration prompts, style cards and refusal handling. |
-| 10 | **Oracle mortality.** Permadeath, or rebirth into a new "vessel" with lost Foresight? | Rebirth with heavy loss (years of absence, Foresight reset) to keep stakes. Permadeath as a hard mode. | Game-loop design for P3/P7. |
-| 11 | **Foresight in sandbox mode.** Free, or costing the Oracle's Foresight? | Two modes: *Cultivator* (free, a developer and analysis tool) and *Oracle* (costs Foresight). | Lets you use compute freely while keeping the game mechanic meaningful. |
-| 12 | **Scale ladder.** 100k (P1) → 1M (P3) → beyond? | Hold at 1M until P5. Above 10M needs implicit individuals (ADR-0003). | Avoids premature optimisation. |
-| 13 | **Publishing intent, ever?** | Keep the option open: strict licence hygiene (ADR-0021), and clear the trademark before any release. | Commercial use was not chosen as the success bar, but keeping the door open costs little now. |
+| 10 | **Oracle mortality.** Permadeath, or rebirth into a new "vessel" with lost Foresight? | Rebirth with heavy loss (years of absence, Foresight reset) to keep stakes. Permadeath as a hard mode. | Game-loop design for P3b/P7. |
+| 11 | **Foresight in Cultivator mode.** Free, or costing the Oracle's Foresight? *Partly answered:* the two console modes now exist (`05.3` §6.2), and Cultivator mode forks from the true state (`05.3` §7). | Free in Cultivator mode, which is a developer and analysis tool. In Oracle mode it costs Foresight. | Lets you use compute freely while keeping the game mechanic meaningful. |
+| 12 | **Scale ladder.** 100k (P1) → 1M (P3) → beyond? | Hold at 1M until P5. At 1M a millennium takes ≈ 6–14 min (PERF-1 ≤ 15 min, provisional) and Foresight is batch-only, so interactive work stays on 100k-class worlds (`08` §1, §3). Above 10M needs implicit individuals (ADR-0003). | Avoids premature optimisation. |
+| 13 | **Publishing intent, ever?** See also Q17. | Keep the option open: strict licence hygiene (ADR-0021), and clear the trademark before any release. | Commercial use was not chosen as the success bar, but keeping the door open costs little now. |
 | 14 | **Multiplayer or shared worlds?** | Out of scope. Worlds can be *exported and shared* as manifest + seed + journal. | Large architectural cost. |
-| 15 | **Who reviews agent PRs?** | You approve ADR changes, Registry semantics and gate decisions. Routine PRs auto-merge when all gates are green and a second, independent agent review passes. | Throughput versus control. |
+| 15 | **Who reviews agent PRs?** *Largely answered* by the change classes in `13` §4.2. | You approve WPs, ADR changes, Registry semantics, breaking contract changes (C2), out-of-tolerance or determinism-machinery changes (C3), and gate decisions. C0/C1, additive C2 and within-tolerance C3 changes auto-merge through the merge queue after CI and an independent reviewer agent. | Throughput versus control. |
+| ★16 | **Review-hours budget.** You are the only human reviewer of agent output. How many hours a week can you give it? | Assume **≤ 6 h/week** outside rating windows. Work packages are sized to fit: one-page specs approved in ≤ 15 min, at most 10 approvals a week, and most PRs on auto-merge routes (`11` §Review-hours budget). | Sets the number of concurrent workstreams (≈ 2–3, not 3–6), and so every phase duration in `11`. Exceeding it is the early warning for R-25. |
+| 17 | **Licence mode.** Is Rehoboam personal-only, or might it ever be distributed? | Assume it **might be distributed**. Keep Tier A strict under ADR-0021: `rh-core`, `rh-sys-*`, `rh-minds`, `rh-sifter`, `rh-events`, `rh-snapshot`, `rh-protocol`, `rh-worldgen` and `rh-godot`. Allow Tier B now: GPL/AGPL programs run out of process as tools and are never shipped. Open a personal-only Tier C (`lab/`) for non-commercial voices, checker weights and assets only if you choose it, with provenance tags (`14` §Personal-use mode). | Decides which models, voices and assets are allowed: non-commercial TTS voices, NC fact-checker weights, GPL generators. Personal-only mode saves ≈ 10–20 pw at most. Moving back to "distributable" later is cheap for Tier B/C items but costly for anything in Tier A, because replacing core code changes history hashes. |
+| 18 | **Will you commit to the pre-registered G2 protocol?** (V-HUM-09 in `09`): the frozen G2 build, a sealed held-out manifest, seeds derived after freezing, blind rating against a coupling-ablated baseline, and a fixed analysis and decision rule, all logged before the first rating. Gate thresholds are fixed before P2 starts (`11`). | Yes. WP P2.13 writes the protocol, and it is logged in `decisions-log.md` before rating begins. Changing it after seeing results voids that gate run. | You built the system and you rate it. Without pre-registration, a gate rated that way drifts toward "pass", and G2 decides whether any 3D work starts. |
 
-## Questions the research could not settle (to resolve in spikes)
-- Godot crowd limits on your hardware → Spike 1.
-- TTFT with hybrid-attention local models under rendering load → P5 / P6 spike.
-- Belief-store memory at 1M scale → P3 measurement.
+## Resolved by the v1.1 architecture
+
+These questions were open in v1.0, or were raised by the red-team review. The v1.1 ADRs and specs answer them. They are listed so they are not reopened by accident.
+
+| Question | Answer | Where |
+|---|---|---|
+| Who holds authority over a hydrated person: the bubble (leases and decrees) or the macro simulation? | The macro simulation, always. Outcomes are scheduled timers for everyone, watched or not; the bubble is a view. Your material inputs cancel and re-sample timers in their dependency scope. | ADR-0025; `05.2` §3.2 |
+| How is "the same person" identified across branches and immigrants (birth serials)? | Genealogical content-addressed IDs, `H64(mother_id, parity)`, with rules for founders and immigrants. A life-course log keeps everyone ever born. | ADR-0026; `05.2` §1 |
+| Does pinning or viewing promote a person to a named actor (T1)? | No. Pins are plane B. T1 promotion happens only by simulation criteria or a journaled input. | ADR-0024; `05.3` §1.1 |
+| Can observation or re-sifting change history? | No. Three planes with separate hashes; plane A never reads B or C. | ADR-0024 |
+| How are LLM consults batched before MAX-speed runs? | They are not batched. Deliberation consults are pull inputs due at t + D, with a journaled fallback. | `05.3` §8; `05.6` §8 |
+| Is one 200-year burn-in enough to accept a world? | No. A liveness gate (200 y × 8 seeds) blocks play, and certification (1,000 y × 32 seeds) runs in the background. | `05.5` §4.2 |
+| Does SimTime overflow, or forbid births before year 0? | No. SimTime is i64 minutes with a signed epoch. | ADR-0026; `05.1` §4.1 |
+
+## Questions the research could not settle (to resolve in spikes and measurements)
+- Godot crowd limits on your hardware → SPK-1.
+- TTFT with hybrid-attention local models under rendering load → WP P6.4.
+- 1M throughput and serial share → synthetic 1M benches in P1a; PERF-2 set at G1b (`08` §1).
+- Belief-store memory at 1M → bounded by design (`08` §5); measured in P3a (`bench/belief_store_5k`).
+- Knowledge volume at 1M → measured at G3a (`08` §6).
 - Cross-platform bit-exactness (level 2) → P0/P1 nightly matrix.
-- Which local model wins RP-200 on your GPU → P6.4.
+- Which local model wins RP-200 on your GPU → WP P6.4.

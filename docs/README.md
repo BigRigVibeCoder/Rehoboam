@@ -12,7 +12,7 @@
 | 07 | [Technology stack & radar](07_technology_stack.md) | Chosen components with versions and licences; Hold and Assess lists |
 | 08 | [Performance & capacity](08_performance_and_capacity.md) | Budgets, Foresight capacity, storage, cost envelope |
 | 09 | [Verification & validation](09_verification_and_validation.md) | Test architecture, stylized facts, human validation, gates |
-| 10 | [Risk register](10_risk_register.md) | 22 risks with early-warning indicators |
+| 10 | [Risk register](10_risk_register.md) | 27 risks with owners and early-warning indicators |
 | 11 | [Roadmap](11_roadmap.md) | Phases P0–P7, work packages, gates, kill and pivot criteria |
 | 12 | [Open questions](12_open_questions.md) | Decisions needed from you |
 | 13 | [Agentic development playbook](13_agentic_development_playbook.md) | How the AI agents build it |

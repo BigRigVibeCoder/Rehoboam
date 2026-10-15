@@ -8,4 +8,5 @@ A running log of director rulings, phase-gate outcomes and approved ADR changes.
 | 2026-10-15 | The workforce is the director plus AI coding agents. | Director | ADR-0022, `docs/13` |
 | 2026-10-15 | There is no compute limit. Fidelity matters, scaling starts low. | Director | ADR-0020, `docs/08` |
 | 2026-10-15 | The first playable slice is the Time-Machine plus the Chronicle. | Director | `docs/11_roadmap.md` P0–P2 |
+| 2026-10-15 | v1.1 after red-team review: ADR-0024–0026 added; v1.1 amendments to ADR-0002–0018, 0020, 0022, 0023. All 26 ADRs and all amendments are **Proposed**, awaiting director review. | Systems design | `docs/06_adr/` |
 | 2026-10-15 | All ADRs 0001–0023 are **Proposed**, awaiting director review. | Systems design | `docs/06_adr/` |

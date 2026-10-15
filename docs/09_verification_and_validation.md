@@ -1,140 +1,647 @@
 # 09 — Verification & Validation Plan
 
-*Status: Draft v1.0 (2026-10-15). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*Status: Draft v1.1 (2026-10-15). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*v1.1 changes: test IDs for every suite and a full requirement → test matrix (§6). New suites V-PLN, V-DATA, V-COG, V-ORA, V-TM, V-WC, V-R3D and V-AUD. DET-6 console fuzz from P2. TOST equivalence replaces KS tests (§1.2). Certification statistics with a red-noise null, Clauset tail fits and censoring (§3.1). Foresight validity tests replace per-decile calibration (§3.3). A pre-registered G2 protocol (§3.4.1).*
 
 ---
 
 ## 1. Test architecture
 
 ```
-                         ┌─────────────────────────────────────────┐
-     Validation [H]      │  Rating sessions · blind A/B · MOE-1..6  │  per phase gate
-                         ├─────────────────────────────────────────┤
-     System V&V          │  Stylized-fact ensembles · coupling      │  nightly / labelled PRs
-                         │  scenarios · Foresight calibration       │
-                         ├─────────────────────────────────────────┤
-     Integration         │  Golden runs (hash) · sifter twins ·     │  every PR
-                         │  protocol conformance · hydration tests  │
-                         ├─────────────────────────────────────────┤
-     Component           │  Property tests (invariants) · sampler   │  every PR
-                         │  golden vectors · unit tests · benches   │
-                         └─────────────────────────────────────────┘
+                         ┌───────────────────────────────────────────────┐
+     Validation [H]      │  G2 pre-registered protocol · rating sessions │  phase gates
+                         │  blind A/B · MOE-1..6                         │
+                         ├───────────────────────────────────────────────┤
+     System V&V          │  Stylized-fact certification · couplings ·    │  nightly / labelled PRs
+                         │  Foresight validity · persuasion bands ·      │
+                         │  adversarial player bot · liveness gate       │
+                         ├───────────────────────────────────────────────┤
+     Integration         │  Golden runs · plane isolation · console      │  every PR
+                         │  fuzz · sifter twins · Playwright · protocol  │
+                         │  conformance · hydration tests                │
+                         ├───────────────────────────────────────────────┤
+     Component           │  Property tests (invariants) · sampler golden │  every PR
+                         │  vectors · unit tests · benches · lints       │
+                         └───────────────────────────────────────────────┘
 ```
+
+### 1.1 Suite index
+
+Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their acceptance gates (`13` §2).
+
+| Suite | Section | Covers | Cadence |
+|---|---|---|---|
+| **V-DET** Determinism | §2.1 | DET-* | Every PR; cross-platform nightly |
+| **V-INV** Invariants and properties | §2.2 | SIM-*, EVO-1, EVO-2 | Every PR; soak nightly |
+| **V-GOLD** Golden worlds and save compatibility | §2.3 | DET-5, DET-10, EVO-1 | Every PR; full length nightly; every release |
+| **V-SIFT** Sifter | §2.4 | SIFT-*, TM-2 | Every PR; budgets nightly |
+| **V-HYD** Hydration and multi-resolution consistency | §2.5 | R3D-4, EVO-3, DET-6 | PRs touching the bubble or fidelity levels; nightly |
+| **V-IF** Protocol and interface conformance | §2.6 | SIM-11, R3D-1, IF-1–IF-9 | Every PR |
+| **V-PERF** Performance | §2.7 | PERF-* | Every PR; reference desktop nightly |
+| **V-LLM** LLM-facing verification | §2.8 | LLM-*, SEC-1 | PRs touching prompts or models; quarterly |
+| **V-NAR** Narrative QA | §2.9 | NAR-* | Per artifact; NOVEL-20 on model or prompt change |
+| **V-PLN** Plane isolation | §2.10 | DET-6, DET-12 | Every PR |
+| **V-DATA** Chronicle and data | §2.11 | DATA-* | Every PR; volume runs nightly |
+| **V-COG** Cognition and epistemics | §2.12 | COG-*, SIM-7 | Every PR |
+| **V-ORA** Oracle and persuasion | §2.13 | ORA-*, SEC-1 | Every PR; sweeps and player bot nightly |
+| **V-TM** Time-Machine console (Playwright) | §2.14 | TM-*, DET-6, DET-14 | PRs touching the console or server |
+| **V-WC** World compiler | §2.15 | WC-*, SIM-10 | PRs touching the compiler or Registry; certification per compiled world |
+| **V-R3D** 3D client | §2.16 | R3D-* | Spikes; P5–P7 PRs |
+| **V-AUD** Audio | §2.17 | AUD-* | Per render; P6 latency nightly |
+| **V-INSP** Inspection and licences | §2.18 | LIC-1, OBS-1, EVO-1 | Every PR (licences); review |
+| **V-SF** Stylized-fact harness and certification | §3.1 | SIM-3, SIM-12, EVO-3, MOP-5 | Nightly; labelled PRs; per compiled world |
+| **V-COUP** Drama-coupling scenarios | §3.2 | SIM-3, SIM-12 | Nightly; phase gates |
+| **V-FOR** Foresight validity | §3.3 | ORA-5, ORA-9 | Nightly on the cluster |
+| **V-HUM** Human validation [H] | §3.4, §3.5 | MOE-1–MOE-6, TM-6 | Phase gates |
+
+### 1.2 Statistical conventions
+
+1. **Equivalence is shown, not assumed.** When a test must show that two things agree, it uses **TOST** (two one-sided tests). For a statistic θ and a margin δ fixed in advance, the two null hypotheses θ_A − θ_B ≤ −δ and θ_A − θ_B ≥ +δ are each rejected at α = 0.05. Equivalently, the 90% confidence interval of the difference lies inside (−δ, +δ). A "fail to reject" test (KS or χ² with p > 0.05) never counts as evidence of agreement: with few samples it passes broken models, and with many it fails good ones.
+2. **Margins are stated before the run**, in the system's `AggregateSpec`, the pattern spec or the table below. They are never changed after seeing results; a change is logged in `docs/decisions-log.md`.
+3. **Several statistics.** Equivalence across several statistics is claimed only if every TOST passes (intersection–union), so no multiplicity correction is needed.
+4. **Pairing.** Two configurations are compared on the same seeds and salts (common random numbers, CRN) wherever possible, and the paired differences are tested.
+5. **Units.** For ensembles, the unit of analysis is the seed. Intervals come from t-intervals over seed-level statistics or from a seed-level bootstrap (10,000 resamples).
+6. **Proportions.** Foresight probabilities use Wilson intervals. Small-count rates (bad-run rate, coupling completion) use Clopper–Pearson intervals.
+7. **Model-fit tests are different.** A goodness-of-fit test against a fitted model, such as the Clauset–Shalizi–Newman plausibility bootstrap (§3.1), asks whether a model is tenable. It does not claim that two systems agree, and it is used only as defined there.
+
+**Default equivalence margins**
+
+| Comparison | Statistic | Margin δ | Test |
+|---|---|---|---|
+| Presented crowds vs plane-A schedules | Share of persons per (cell, hour, activity) bucket and per destination type | ±0.02 absolute | V-HYD-05 |
+| Python prototype vs Rust port | Each declared aggregate, seed means over 32 seeds | Declared tolerance; default ±2% relative | V-INV-07 |
+| F(n) vs F(n+1) | Declared targets (conserved quantities are compared exactly) | Declared tolerance; default ±5% relative | V-HYD-10 |
+| Model change (change class) | Each stylized-fact statistic, CRN-paired over 32 seeds | 10% of the band width | V-GOLD-03 |
+| Should-system dynamics vs analytic solution | Shares, adoption curves, flows on fixture worlds | Declared tolerance; default ±5% relative | V-INV-14 |
+| Reduced-cost vs full-cost Foresight | P(predicate), CRN-paired | ±0.03 absolute | V-FOR-02 |
+| Oracle-mode Foresight leak | P(predicate) in two worlds that differ only in a secret the Oracle lacks | ±0.03 absolute | V-ORA-10 |
+| Agenda fairness | Spearman ρ between entity-ID rank and first-applied rate | ±0.05 | V-COG-04 |
+| Malthusian income | Long-run real income change after a technology shock | ±5% relative | V-SF-10 |
 
 ## 2. Verification suites
 
-### 2.1 Determinism (DET-*)
-| Test | Method | Gate |
-|---|---|---|
-| Thread-count invariance | Run reference worlds at 1, 2, 4 and N threads for 50 sim-years; compare monthly hashes | All equal |
-| Repeat invariance | Same binary, 3 runs | All equal |
-| Cross-platform (level 2 goal) | Nightly runs on Linux x86-64, Windows x86-64, macOS ARM; compare yearly hashes | Report. Becomes a gate once achieved |
-| Replay | Record a session with inputs (Oracle actions, forks), then replay from the journal | Final hash equal |
-| Keyframe round-trip | Write a keyframe, load it, advance 10 years; compare against a continuous run | Equal |
-| Observer invariance (DET-6) | Run A headless. Run B with a scripted camera that hydrates and inspects throughout, with no material inputs | Hashes equal |
-| Sampler golden vectors | Each vendored sampler × fixed keys | Bit-equal across releases |
-| Unsynced guard | Fuzz the read-only APIs (console queries, frame builders, LLM context builders) | No hash change |
+### 2.1 Determinism (V-DET)
 
-### 2.2 Invariants and properties (SIM-8, EVO-2)
-- **proptest** strategies generate small random worlds and manifests within bounds. After every pulse, assert the 05.1 §9 invariants: conservation, non-negativity, genealogy acyclicity, exclusive relations, and agreement between the ledger and the named-actor table.
-- **Long-run soak.** 1,000 years with invariants enabled in debug builds, nightly.
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-DET-01 | Thread-count invariance | Run reference worlds at 1, 2, 4 and N threads for 50 sim-years; compare monthly hashes | All equal |
+| V-DET-02 | Repeat invariance | Same binary, 3 runs | All equal |
+| V-DET-03 | Cross-platform (level 2 goal) | Nightly runs on Linux x86-64, Windows x86-64, macOS ARM; compare yearly hashes | Report. Becomes a gate once achieved |
+| V-DET-04 | Replay | Record a session with inputs (Oracle actions, forks, speech acts, pull inputs), then replay from the journal alone | Final and monthly hashes equal; no gateway call during replay |
+| V-DET-05 | Keyframe round-trip | Write a keyframe, load it, advance 10 years; compare against a continuous run. Check the permanent 10-year cadence and the yearly LRU cache | Equal |
+| V-DET-06 | **Console fuzz (DET-6, from P2)** | Run A headless. Run B on the same seed while a fuzzer drives random sequences of non-material console and JSON-RPC calls throughout: `entity.*` inspections (which write facts and pins), `chronicle.*` and `sift.*` queries, ratings, scrub, `timeline.seek` (drop-in, then return to the head), pause and resume at random ticks, speed-band changes, Foresight jobs. Journaled inputs are excluded | `state_hash` equal every month; plane-A Parquet segments byte-identical; EventIds identical. `observation_hash` must change (positive control) |
+| V-DET-07 | Observer invariance with passive crowds (P5) | Run B with the Diorama attached: camera director, T2c crowds, Spectacle | As V-DET-06 |
+| V-DET-08 | Observer invariance with live hydration (P6) | Run B with a scripted avatar that hydrates, inspects and opens conversations, with no material inputs | As V-DET-06 |
+| V-DET-09 | Sampler golden vectors | Each vendored sampler × fixed keys | Bit-equal across releases |
+| V-DET-10 | Unsynced guard (DET-11) | Fuzz the read-only APIs (frame builders, Python `frame()`, LLM context builders) with the debug hash check on | No hash change; the guard trips on an injected write (positive control) |
+| V-DET-11 | Divergence bisect (DET-4) | Inject a one-row perturbation at a random month and table | The tool reports that month, table and row |
+| V-DET-12 | No back-dating (DET-13) | Property test over random small worlds | Every emitted event's tick ≥ the current instant; EventIds strictly increase in emission order `(tick, phase, seq)`; sampled outcomes sit in the agenda as timers until they fire |
+| V-DET-13 | Acting in the past (DET-14) | Seek to t < head and apply a material input | `apply_input` returns `PastInput`; the Timeline Manager forks at t; the canonical timeline's journal and hashes are unchanged; the fork replays to the same hashes |
+| V-DET-14 | Material-input scope (DET-14) | Apply a scoped input; compare pending timers with a run without it | Only timers inside the scope are re-sampled, keyed by `epoch`; timers outside keep their ticks; at equal ticks the input applies first |
+| V-DET-15 | Pull inputs (DET-15) | Replay with a pull input deleted, duplicated or with a changed `menu_hash`; run live with a withheld answer | Each replay hard-fails with its specific error. The live run stalls at t + D; the timeout fallback is journaled and replays identically |
+| V-DET-16 | Branch salts (DET-2) | Property test over random fork trees | No two rollouts share a salt; `resample_on_fork` purposes re-draw after a fork and others are shared; a what-if fork without overrides matches its parent's hashes |
+| V-DET-17 | CRN survival (ADR-0026) | Paired intervention rollouts over 10 years | Correlation of per-person death times across the pair ≥ 0.9 for unaffected lineages |
+| V-DET-18 | Journal completeness (DET-1, DET-7) | Rebuild a session from `(engine_build, registry_version, manifest_hash, seed, input_journal)` only, on a clean machine; audit every journal record | Hashes equal; every record has tick, seq, class, scope and producer |
+| V-DET-19 | Forbidden APIs (DET-2, DET-3) | Clippy lints and a grep gate on authoritative crates: `HashMap` iteration, `thread_rng`, `StdRng`, `mul_add`, float types in threshold positions | Zero hits |
 
-### 2.3 Golden worlds (DET-5, MOE-4)
-- `worlds/` holds reference manifests: `val_khor` (feudal plus dragons), `aethelgard` (modern hive, 10 years), `delta_republic` (merchant republic), and a minimal `smoke` world.
-- Each has recorded hash ladders (yearly) per engine version. A PR that changes them must declare the divergence: name the affected systems and attach an ensemble comparison of stylized facts before and after. A reviewer approves the new baseline.
-- **Save compatibility corpus.** Every release must load the previous releases' saved worlds, either bit-identically under pinned model versions or through a logged migration (MOE-4).
+### 2.2 Invariants and properties (V-INV)
 
-### 2.4 Sifter (SIFT-*)
-- **Twin test.** For each pattern, the live automaton and the DuckDB SQL twin must produce identical match sets on recorded chronicles. Fixture chronicles include adversarial cases: `unless` interleavings, deaths mid-pattern, window boundaries.
-- **Anchoring lint.** The pattern compiler rejects bare (unanchored) state reads.
-- **Throughput.** `bench/sifter_throughput` must not regress.
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-INV-01 | Pulse invariants | **proptest** strategies generate small random worlds and manifests within bounds. After every pulse, assert the `05.1` §9 invariants: population conservation reconciled with the life-course log, conserved compartments, non-negativity, genealogy acyclicity and minimum parental age, life-course consistency, exclusive relations, valid IDs, plane isolation | Zero violations |
+| V-INV-02 | Long-run soak | 1,000 years with invariants enabled in debug builds, nightly | Zero violations |
+| V-INV-03 | Single death path (EVO-1) | Kill persons through each cause: `M2.demography` hazard, `M5.contagion` infection, `M8.war` battle, agenda action | Each produces the same consequence set through the lifecycle queue: ledger removal, life-course entry, succession trigger, inheritance, death event |
+| V-INV-04 | Ownership and scheduler (EVO-1, SIM-4) | Start-up checks on mutated `AccessSpec`s: two writers for one column, an undeclared read, a write outside owned columns, a cycle without a declared lag | Each refused at start-up with a named error; the derived order is stable (topological, ties by system ID) |
+| V-INV-05 | Boundary adapters (SIM-8) | Off-map F0 compartments exchange people with the ledger through the materialisation adapter | People conserved across the boundary; immigrant IDs follow `H64(seed, "immigrant", origin, t, k)` |
+| V-INV-06 | Crate checklist (EVO-2) | A script audits each system crate | Property tests, a calibration notebook and golden fixtures present |
+| V-INV-07 | Prototype port (`05.1` §10) | Rust port against the Python prototype on the fixture world, 32 seeds | TOST equivalence of every declared aggregate (§1.2) |
+| V-INV-08 | Vital-event draws (SIM-5) | Unit and property tests; grep gate | Binomial draws only; hazards respond to age, density and entitlement as declared; no Poisson death draws |
+| V-INV-09 | Capacity (SIM-1) | A synthetic 2M-person world runs 10 years with invariants on | No ID or column overflow; zero violations |
+| V-INV-10 | World generation (SIM-2) | Same seed and generator version on two machines | Identical raster, region graph and routes; resolutions follow the manifest |
+| V-INV-11 | Clocks (SIM-6) | Pulse-trace audit; founders born before the epoch | `Day` pulses only for regions, armies and sieges marked active at the preceding coarser pulse; negative `SimTime` round-trips through keyframes |
+| V-INV-12 | Great houses (SIM-9) | Run 300 years on `val_khor` | Ruling houses and active great-house members are T1 from world start; dormancy and re-promotion follow simulation criteria only; any person's genealogy reconstructs from the life-course log |
+| V-INV-13 | Ecology bound (SIM-12) | Long runs with `S4.ecology` and dragons | Predator standing biomass never exceeds the energetics bound; dragon counts change only through individual life-history events |
+| V-INV-14 | Should-system dynamics (SIM-12) | `S1.culture` shares, `S2.technology` adoption and `S3.migration` flows on fixture worlds with known analytic solutions | TOST equivalence within declared margins (§1.2) |
 
-### 2.5 Hydration and multi-resolution consistency (05.2 §3.6)
-| Criterion | Test |
-|---|---|
-| Identity stability | Hydrate the same person in different orders, at different times and on different machines: traits are identical |
-| Conservation | After every sync, macro counts equal the sum of rows, including persons under lease |
-| Non-contradiction | Display facts, dehydrate, advance a century, display again: there are no contradictions with `facts_ledger` |
-| Temporal | Decrees enacted in the bubble give the same outcomes as when the person is unobserved |
-| Distributional fidelity | Distributions of activity and destination for T2c proxies against full-sim samples: KS test p > 0.05 |
-| Observer independence | See §2.1 |
-| Fidelity ladder (EVO-3) | For each system with F(n) and F(n+1), the declared aggregates match within tolerance on 32-seed ensembles |
+### 2.3 Golden worlds and save compatibility (V-GOLD)
 
-### 2.6 Protocol and interface conformance (IF-*)
-- **JSON-RPC.** A schema conformance suite runs against the server, and the console's mock server is checked against the same suite.
-- **Binary frames.** Encode/decode round-trip, delta-against-baseline correctness, and fuzzing of corrupt frames.
-- **Python bindings.** Results from the Python bindings match the CLI.
+- `worlds/` holds reference manifests: `val_khor` (feudal plus dragons), `aethelgard` (modern hive, 10 years), `delta_republic` (merchant republic), and a minimal `smoke` world. The G2 held-out manifest (§3.4.1) is stored sealed and joins the golden set only after G2.
+- Golden baselines cover plane A only. Pattern, significance and compiler changes never require a new baseline (V-PLN-04).
 
-### 2.7 Performance (PERF-*)
-The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hardware, plus a nightly run on the reference desktop. A slowdown of more than 10% fails the build.
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-GOLD-01 | Hash ladders (DET-5) | Yearly hash ladders per engine version: `smoke` for 1,000 years and the other worlds for 200 years on every PR; all worlds at full length nightly | Equal to the approved baseline |
+| V-GOLD-02 | Declared divergence | A PR that changes a ladder declares its change class, names the affected systems and attaches the CRN-paired 32-seed stylized-fact comparison | Reviewer approval; director approval if out of tolerance |
+| V-GOLD-03 | Change classes (EVO-1; `13` §4.2) | CI detects each PR's class (C0–C3) independently of the declared one. C0–C2: hash comparison. C3: TOST on each stylized-fact statistic of the 32-seed CRN-paired ensemble, margin 10% of the band width | A C0–C2 PR with any `state_hash` change is reclassified C3. A C3 PR is auto-approved only on equivalence; otherwise, or if it changes the determinism machinery, it goes to you |
+| V-GOLD-04 | Save-compatibility corpus (DET-10, MOE-4) | Every release opens the saved worlds of all previous releases | History before each migration keyframe is reproduced hash-equal by its archived build, or read from the chronicle. The head migrates through a logged migration keyframe and then runs deterministically (repeat-run hashes equal) |
+| V-GOLD-05 | Archived builds (DET-10) | For every segment in the corpus, fetch its engine build by content hash and replay one decade; audit keyframe thinning | Build present and replay hash-equal; no keyframe gap exceeds what an archived build can regenerate |
+| V-GOLD-06 | No re-simulation on upgrade (DET-10) | Open a corpus world in the new build and scrub its whole history | The new build re-simulates no archived segment (server counters) |
 
-### 2.8 LLM-facing verification (LLM-*)
-| Eval | Gate |
-|---|---|
-| RP-200 (role-play over our belief store) | Leak = 0 on concealment items; unsupported claims < 2%; TTFT p95 < 0.5 s |
-| ARG-300 (whisper parsing) | Field F1 ≥ 0.85; meta-instruction recall ≥ 0.95 |
-| Red-team corpus (injections, master-key tokens, persuasion taxonomy) | No state delta beyond the documented caps; all meta-instructions penalised |
-| INTENT-100 (world compile) | Template match ≥ 90%; post-repair validity ≥ 98% |
-| Schema robustness | Truncation, refusal and enum-case drift inputs are handled without crashes |
+### 2.4 Sifter (V-SIFT)
 
-### 2.9 Narrative QA (NAR-*)
-- **Per-scene.** Zero CT0/CT1 contradictions and zero CT3 inventions (graph check, then NLI).
-- **Per-book.** Backbone coverage ≥ 95%. Every causal parent is shown or referenced before its child. Zero epistemic leaks.
-- **Prose.** Style metrics within the style card's bands. Slop density and repetition below thresholds. Cross-book n-gram similarity below a threshold.
-- **Exporters.** Fountain parse round-trip and page-count band. TTS manifest has complete voice mappings.
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-SIFT-01 | Twin equivalence (SIFT-3, SIFT-8) | For each pattern, run the live automaton and the DuckDB SQL twin on recorded chronicles and clustered fixtures, under every declared combination of `selection`, `on_complete` and `dedupe` | Identical match sets, including bindings and event IDs |
+| V-SIFT-02 | Clustered fixtures | A generator with actors that have about 20 interaction partners each, symmetric ties (A acts on B and B on A) and repeated interactions over decades. Adversarial cases: `unless` interleavings, deaths mid-pattern, window boundaries, several events in one tick. Uniform random fixtures are not accepted | Fixtures used by V-SIFT-01, V-SIFT-03 and V-SIFT-04 |
+| V-SIFT-03 | Firing-rate budget (SIFT-8) | Count each pattern's completions per century per 100k persons on the reference ensembles | ≤ 3× the declared budget |
+| V-SIFT-04 | precision@K (SIFT-7, SIFT-8) | Precision of each pattern's top-K matches per era against your labelled story-worthy set | Reported per pattern and per pack at each phase gate. An added or LLM-proposed pattern must not lower its pack's precision@K |
+| V-SIFT-05 | Anchoring lint (SIFT-1) | `specs/sifting/lint_patterns.py` and the pattern compiler: closed key set, declared typed attributes, every state read anchored | Bare or undeclared reads rejected |
+| V-SIFT-06 | Composition and ID space (SIFT-4) | Higher-order patterns consume `match_event`s; edit a pattern and re-run | Bindings imported correctly; simulation EventIds and plane-A hashes unchanged (V-PLN-04) |
+| V-SIFT-07 | Incremental matching and auto-pause (SIFT-2, TM-2) | Live sifter at MAX; then with induced lag on the worker thread | Auto-pause at the completing tick; suspense pauses within the rate limit; a lagging sifter pauses and seeks back to the match tick |
+| V-SIFT-08 | Significance and retention (SIFT-5, SIFT-6) | Recompute per era twice from the same events and versions; audit the retention walks | Identical components (`narrative_hash` equal). Walks follow only `contingent` edges plus the single top `motivated_by` edge, stop at root kinds or depth 12, and never touch plane A |
+| V-SIFT-09 | No LLM in detection (SIFT-7) | Dependency check on `rh-sifter` and the SQL twins | No gateway dependency |
+| V-SIFT-10 | Throughput | `bench/sifter_throughput` (V-PERF) | No regression |
+
+### 2.5 Hydration and multi-resolution consistency (V-HYD; `05.2` §3.6)
+
+| ID | Criterion | Test | Gate |
+|---|---|---|---|
+| V-HYD-01 | Identity stability | Hydrate the same person in different orders, at different times and on different machines | Traits identical |
+| V-HYD-02 | Conservation | With the bubble active, compare macro counts with the sum of living rows at every pulse | Equal |
+| V-HYD-03 | Non-contradiction | V-DATA-11, run inside the bubble | 0 contradictions with `facts_ledger` |
+| V-HYD-04 | Temporal | Run the same seed watched (bubble over the affected settlement) and unwatched | Every scheduled outcome fires at the same tick with the same EventId |
+| V-HYD-05 | Distributional fidelity | Activity and destination shares of presented T2c crowds against plane-A schedules, per (cell, hour) bucket | TOST equivalence, δ = ±0.02 absolute share (§1.2) |
+| V-HYD-06 | Observer independence | V-DET-06 to V-DET-08 | Hashes equal |
+| V-HYD-07 | Rings and budget (R3D-4) | Scripted camera paths: approach, retreat, orbit, speed-band changes | Hydrate at 80 m; dehydrate at 130 m plus ≥ 10 s out of view; never dehydrate in view; ≤ 10 hydrations/s sustained; no T3 above Live speed |
+| V-HYD-08 | No NPC-originated material events | P6 session with conversations but no material speech acts | Plane-A event set identical to the headless run |
+| V-HYD-09 | Light minds | Recompute a light mind for the same person and tick on two machines; converse without material input | Identical; no T1 promotion |
+| V-HYD-10 | Fidelity ladder (EVO-3) | Each level against V-SF on its own; F(n) against F(n+1) on 32-seed CRN-paired ensembles | Each level passes its V-SF bands. Conserved quantities equal; declared targets TOST-equivalent within declared margins. Every combination in the supported-combinations matrix tested nightly |
+| V-HYD-11 | Boundary adapters (EVO-3) | Lift and project across F0/F1 boundaries | Conservation exact; projected distributions TOST-equivalent within declared margins |
+
+### 2.6 Protocol and interface conformance (V-IF)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-IF-01 | JSON-RPC | A schema conformance suite runs against the server; the console's mock server is checked against the same suite | Pass |
+| V-IF-02 | Binary frames (R3D-1) | Encode/decode round-trip, delta-against-baseline correctness, fuzzing of corrupt frames | Pass; no crash |
+| V-IF-03 | Python bindings | Results from `rh-py` against the CLI | Equal hashes and tables |
+| V-IF-04 | Host parity (SIM-11) | The same world through the CLI, wheel, server and (P5+) GDExtension host; dependency check on `rh-core` | Equal hashes; `rh-core` has no I/O dependency |
+| V-IF-05 | Renderer process (R3D-1) | Kill and restart the Godot client mid-run | The simulation is unaffected; the client resyncs from a full frame |
+| V-IF-06 | Versioning (IF-9) | Contract tests per interface across server, wheel and gdext | Breaking changes only with a major version and a migration |
+
+### 2.7 Performance (V-PERF)
+
+The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hardware, plus a nightly run on the reference desktop.
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-PERF-01 | MOP-1 (PERF-1) | `bench/run_1000y_100k`; the 1M variant from P3b | ≤ 2 min at 100k (G1b); ≤ 15 min at 1M (G3b; provisional, `08` §1.4) |
+| V-PERF-02 | Macro step (PERF-2) | `bench/ledger_month_1M`, `bench/timers_lifecycle_1M`, `bench/serial_fraction`, `bench/raster_8x512`, `bench/agenda_5k`, `bench/plane_hashes`; end-to-end normal and crisis months at 1M | The PERF-2 value set at G1b (provisional: ≤ 60 ms per normal month and ≤ 130 ms per crisis month at 1M); serial share ≤ 20% |
+| V-PERF-03 | Sifter overhead (PERF-3) | MAX-speed runs with and without the live sifter; `bench/sifter_throughput` | ≤ 10% at 100k (G2); ≤ 20% at 1M (G3b) |
+| V-PERF-04 | Regression gate (PERF-4) | Every `08` §9 benchmark against its baseline | A slowdown of more than 10% fails the build. A speed-up never re-baselines automatically |
+| V-PERF-05 | Timeline operations | `bench/keyframe_write_read`, `bench/dropin`, fork | `08` §2 targets |
+| V-PERF-06 | Foresight throughput | `bench/foresight_256x25y_100k`; `bench/foresight_64x50y_1M` nightly on a cluster node | `08` §3 targets; batch Foresight at 1M (N = 64 × 50 years) ≤ 60 min on the desktop (G3b) |
+| V-PERF-07 | Compiler path | `bench/liveness_gate_100k`; certification wall time | Liveness gate ≤ 90 s wall at 100k on 8 cores (target 60 s); certification ≤ 30 min wall (target 20 min) |
+| V-PERF-08 | Belief stores | `bench/belief_store_5k` | Memory and update cost within `08` §5; ≤ 600 MB at 5k actors (G3a) |
+
+### 2.8 LLM-facing verification (V-LLM)
+
+| ID | Eval | Method | Gate |
+|---|---|---|---|
+| V-LLM-01 | RP-200 (LLM-4, LLM-5) | Role-play over our belief store | Leak = 0 on concealment items; unsupported claims < 2%; TTFT p95 < 0.5 s |
+| V-LLM-02 | ARG-300 (LLM-6, ORA-2) | Whisper parsing; 60 adversarial items | Field F1 ≥ 0.85; meta-instruction recall ≥ 0.95 |
+| V-LLM-03 | Red-team corpus (LLM-7, SEC-1) | Injections, master-key tokens, persuasion taxonomy | No state delta beyond the documented caps; all meta-instructions penalised |
+| V-LLM-04 | Schema robustness (LLM-3) | Truncation, refusal and enum-case drift inputs | Handled without crashes; ≤ 3 repair rounds, then the fallback |
+| V-LLM-05 | Gateway logging (LLM-1) | Audit every job record | Model ID, weights hash or provider version, prompt hash, latency, tokens and cost present |
+| V-LLM-06 | Replay without models (LLM-2) | Replay a recorded session with the network and gateway disabled | Hashes equal (V-DET-04) |
+| V-LLM-07 | Registry enums (LLM-3) | Change the Registry and regenerate schemas | Decoding enums follow the live Registry; IDs cannot be invented |
+| V-LLM-08 | No numeric deltas (LLM-6) | Schema audit of parser outputs | No numeric state fields |
+| V-LLM-09 | Claim check (LLM-5) | Inject unsupported claims into realised lines | Regenerated at most twice, then the template fallback |
+| V-LLM-10 | Offline play (LLM-8) | A full play test with the network disabled | Every job kind falls back locally; the world stays usable with degraded narration |
+
+### 2.9 Narrative QA (V-NAR)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-NAR-01 | Per scene (NAR-3) | Graph check, then NLI | 0 CT0/CT1 contradictions; 0 CT3 inventions |
+| V-NAR-02 | Per book (NAR-3) | Backbone coverage, causal order, epistemic leaks | Coverage ≥ 95%; every causal parent shown or referenced before its child; 0 leaks |
+| V-NAR-03 | Prose | Style metrics, slop and repetition density, cross-book n-gram similarity | Within the style card's bands; below thresholds |
+| V-NAR-04 | Exporters | Fountain parse round-trip, page-count band, TTS manifest | Pass; complete voice mappings |
+| V-NAR-05 | Provenance (NAR-5) | Sidecar audit | Every sentence maps to event IDs |
+| V-NAR-06 | Pipeline artifacts (NAR-2) | Stage outputs | Stages run in order; each artifact versioned with provenance |
+| V-NAR-07 | Forms and gate (NAR-1) | Digests that pass and fail the story-shape gate | Failing digests route to Saga or Chronicle; Annals and the templated Chronicle need no LLM |
+| V-NAR-08 | NOVEL-20 (NAR-3) | 20 fixed epochs × configurations | 0 CT0/CT1 contradictions |
+| V-NAR-09 | Style cards (NAR-4) | Inspection | No living or estate-protected author names; exemplars are US public domain |
+
+### 2.10 Plane isolation (V-PLN; ADR-0024)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-PLN-01 | No B/C reads from plane A | Dependency-graph lint: no crate on the plane-A path (`rh-core`, `rh-contracts`, `rh-sys-*`, `rh-minds`) depends on a plane-B or plane-C crate or type. `trybuild` compile-fail tests: a test system that tries to read each plane-B and plane-C table must not compile | Any edge or compiling read fails CI |
+| V-PLN-02 | Plane tags | Every table, column and Registry attribute carries a plane tag. Schema check: no plane-A table holds a plane-B or plane-C reference (`MatchId`, pin or rating IDs) | Zero violations (`05.1` §9) |
+| V-PLN-03 | Observation-only APIs | Call every observation API (pins, facts-ledger writes, `bubble.*`, `entity.*`, `sift.rate`) many times, in random order, between pulses | `state_hash` unchanged; `observation_hash` changes |
+| V-PLN-04 | Re-sift | Re-sift a recorded timeline with another pattern-library version and recompute significance | `state_hash` ladder and plane-A segments unchanged; `narrative_hash` changes and is reproducible from (events, versions) |
+| V-PLN-05 | Pins never promote | Pin 1,000 random commoners through the console during a run | T1 set, agenda contents, event rows and EventIds equal those of an unpinned run |
+| V-PLN-06 | Oracle-mode views | See V-ORA-09 | 0 leaks |
+
+### 2.11 Chronicle and data (V-DATA)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-DATA-01 | No physical compaction (DATA-4) | 1,000-year run with per-era significance recomputation and visibility updates; seal segments; fork twice; recompute again | Sealed plane-A segment hashes never change; no named-actor event row is moved or deleted; visibility changes touch only the plane-C sidecar; forks read identical shared bytes |
+| V-DATA-02 | Base rates (DATA-4) | Recount per (pattern, era) from the full chronicle after visibility tiering and cold archiving | Equal to the stored base-rate counts |
+| V-DATA-03 | Hard-deletion guard (DATA-4) | Dry-run the disk-pressure deletion on a corpus with hot, warm, cold and plane-A-referenced data | Acts only on opt-in cold archives; refuses anything plane A reads or the archived build cannot regenerate |
+| V-DATA-04 | Life-course completeness (DATA-8) | After 1,000 years, audit every `PersonId` ever emitted (births, founders, immigrants) | Exactly one life-course entry each; parents, or founder/immigrant provenance; a death record if and only if absent from the live ledger; residence and occupation intervals tile each lifetime with no gaps or overlaps; counts reconcile with births, deaths and migration per region and month |
+| V-DATA-05 | Genealogical IDs (DATA-8) | Property tests on the derivation rule; forced-collision injection; two branches that diverge away from a given mother | Every ID matches its rule; collisions resolve by the same deterministic rehash on every run; no ID reused; that mother's n-th child has the same ID in both branches |
+| V-DATA-06 | Knowledge fronts (DATA-9) | On small worlds, compare `knows(a, e, t)` from fronts with a brute-force per-person propagation reference | Exact agreement; arrival ticks respect channel latency and never decrease along a route |
+| V-DATA-07 | Event-row criteria (DATA-5) | Audit every event row's admission reason; repeat with heavy pinning | Every row has a plane-A reason (tellable act class, T1 participant, rarity, material input); pins create none; regional aggregates and `aggregate_event` counts reconcile with the life-course log |
+| V-DATA-08 | Anchored snapshots and intervals (DATA-3) | For every pattern-readable attribute, compare `event_snapshot` with the value at emission; check `state_interval` | Values equal; intervals per (entity, attribute) never overlap |
+| V-DATA-09 | Causal edges (DATA-2) | Schema and emission audit | Only the eight kinds; `contingent` edges only from explicit unlocking references |
+| V-DATA-10 | Store schema and formats (DATA-1, DATA-6) | Conformance with `specs/chronicle/schema.sql`; delete the DuckDB caches and rebuild | Every table in its declared plane; Parquet and Arrow schemas versioned; rebuilt caches give identical query results |
+| V-DATA-11 | Facts ledger (DATA-7, MOE-3) | Display facts, dehydrate, advance a century, display again (the MOE-3 re-open probe) | Every display writes facts with source event IDs; no later presentation contradicts `facts_ledger` |
+| V-DATA-12 | Volume | Synthetic 100-year world at 100k and 1M (`08` §5–6) | Measured sizes reported against `05.2` §8. At G3a, at 1M: knowledge rows plus fronts ≤ 3 GB per century; a compressed keyframe ≤ 0.5 GB. More than 2× an estimate opens a risk item (`10`) |
+
+### 2.12 Cognition and epistemics (V-COG)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-COG-01 | Psychological core (COG-1) | Unit and property tests | Fixed-point ranges hold; ≤ 8 OCC slots; emotions decay by half-life; mood returns to its trait baseline; opinion modifiers expire |
+| V-COG-02 | Overlays (COG-2) | Overlay values against their effect-language derivations on fixture minds | Equal; no stored overlay state |
+| V-COG-03 | Cadence (COG-3, SIM-7) | Agenda instrumentation over 100 years at MAX | Decisions only at polls or interrupts; interrupts at ≥ t + 1 day within the daily cap; zero A*/GOAP calls in fast-forward |
+| V-COG-04 | Same-instant semantics (SIM-7) | Fixture instants with conflicting actions; ensemble over seeds | Invalidated actors re-score once, then defer. First-applied rate is not biased by entity ID: TOST on Spearman ρ, δ = ±0.05 |
+| V-COG-05 | Beliefs and distortion (COG-4) | Update-rule unit tests; trace rumour variants | Records carry every declared field; each `variant_id` chain reconstructs to its original through `lineage_ptr` |
+| V-COG-06 | Channels (COG-5) | Fixture social graphs, one per channel | Latency, fidelity, trust and reach as declared; the hive channel has latency 0, fidelity 1 and full reach |
+| V-COG-07 | Pop beliefs (COG-6) | Long run with proposition templates | Shares stay in [0, 1] per pop; templates below ε for longer than τ are collected |
+| V-COG-08 | Hive and mimics (COG-7) | Scenario fixtures on `aethelgard` | Every use of hive-only knowledge in action emits an impossible-knowledge event; mimic cover behaviour responds to local risk |
+| V-COG-09 | Deliberation consults (COG-8) | A gateway stub returns in-menu, out-of-menu and late answers | Out-of-menu answers rejected; in-menu answers applied at t + D (V-DET-15); rollouts and MAX runs use the fallback policy and are labelled |
+| V-COG-10 | Motivation edges | Audit utility decisions | Each records its top contributors and margin as `motivated_by` edges |
+| V-COG-11 | Consult A/B [H] (WP P3.12) | Opt-in consults against the utility argmax, blind, on MOE-1 | Reported. Consults stay opt-in unless they win |
+
+### 2.13 Oracle and persuasion (V-ORA)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-ORA-01 | Embodiment (ORA-1) | Move the Oracle across the route graph; attempt verbs remotely and without Foresight | Travel time follows route costs; verbs refused unless co-located and funded; mortality hazards apply |
+| V-ORA-02 | Whisper pipeline (ORA-2) | Fixed `ArgumentFrame`s through ground, score and apply | Same frame and state give the same Δ; no LLM call in scoring; a meta-instruction gives Δ = 0, raises Paranoia and adds the "uncanny voice" memory; a request against the target's top values flips the sign (reactance) |
+| V-ORA-03 | Grounding (ORA-2, ORA-9) | Whispers citing facts that are true in the world but absent from the Oracle's store | Graded as bluffs. Only stored facts count as verified evidence |
+| V-ORA-04 | Pierce (ORA-3) | Pierce a hidden mimic | A `vision` belief appears in the Oracle's store only; no NPC belief store changes |
+| V-ORA-05 | Omen (ORA-4) | Repeated and failed omens on fixture pops | Credibility decays with frequency and with failed portents; morale and fear move through compartment flows |
+| V-ORA-06 | Ward (ORA-8) | Ward under a fantasy and a non-fantasy Registry | Field effect at the coordinate for the declared sim-time duration, journaled; rejected at validation without the Ward |
+| V-ORA-07 | Leverage bands (SEC-1) | Parameter sweeps; CRN-paired ΔP per whisper per unit of Foresight over the ARG-300 frames | Strong, verified whispers on receptive targets: 5–15 points. Weak or bluffed: < 3 |
+| V-ORA-08 | Adversarial player bot (SEC-1) | Nightly CI gate: a search over red-team texts and argument strategies that maximises ΔP per Foresight | No strategy exceeds the cap envelope |
+| V-ORA-09 | Oracle-mode leaks (ORA-9, DET-12) | Plant canary secrets: hidden plots, hive membership, private events. Fuzz every Oracle-mode view and API: map, inspector, chronicle, person pages, `entity.*`, `sift.*`, Foresight outputs and failure clusters, the whisper parse display | 0 returned facts, events or attributes absent from the Oracle's belief store at that tick |
+| V-ORA-10 | Oracle-mode Foresight (ORA-9) | Two worlds identical except for one secret the Oracle does not know; run the same prophecy in Oracle mode | P(predicate) TOST-equivalent between the worlds, δ = ±0.03. In Cultivator mode the difference may appear (positive control) |
+| V-ORA-11 | Cultivator mode (ORA-9) | Switch modes; enable verbs in Cultivator | Mode switches journaled; verbs disabled by default; enabled verbs journaled `omniscient`; such timelines excluded from Oracle-mode statistics |
+| V-ORA-12 | Journaling (ORA-6) | Every verb type in a recorded session | Each appears in the journal and as `player` causal edges |
+| V-ORA-13 | Oracle-3D parity (ORA-7, P7) | Issue the same verbs from the console and from the Godot client on the same seed | Identical journal records and `state_hash` ladders |
+
+### 2.14 Time-Machine console (V-TM)
+
+Playwright drives the console against the real `rh-server` and against the mock server (V-IF-01).
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-TM-01 | Speed bands and run-until (TM-1) | Each band; run-until on a date, a predicate and `next_match(salience ≥ θ)` | Stops at the right tick; bands never change hashes |
+| V-TM-02 | Auto-pause (TM-2) | Thresholds set in the UI | Pauses on completion and on suspense; the rate limiter holds |
+| V-TM-03 | Scrub (TM-3, MOP-3) | Scrub 1,000 years under a performance trace | < 100 ms per update (p95); zero `advance_until` calls |
+| V-TM-04 | Drop-in (TM-3, MOP-4, DET-14) | Drop in at random past ticks | ≤ 10 s worst case at 100k; no journal append; head `state_hash` unchanged |
+| V-TM-05 | Acting in the past (DET-14) | Seek into the past and issue a material verb from the UI | A new branch appears in the lanes; the canonical timeline is unchanged |
+| V-TM-06 | Causal inspector (TM-4) | For random events, compare the rendered graph with `chronicle.causes` and `chronicle.effects` | Same ancestors, descendants, anchored values and significance components |
+| V-TM-07 | Map (TM-5) | At random ticks, compare layers with frame data | Equal; LoD aggregation applied |
+| V-TM-08 | Rating tool (TM-6) | Rate pauses and chronicle excerpts | Ratings persist in plane C, round-trip and export |
+| V-TM-09 | Person and place pages (TM-7) | Living and dead persons | Life-course record, genealogy, life events and facts shown; writes go to plane B only |
+| V-TM-10 | UI fuzz (DET-6) | Random walk over screens and controls, excluding material verbs | Server `state_hash` ladder equal to the headless run (V-DET-06) |
+| V-TM-11 | Mode display (ORA-9) | Switch modes | Mode shown in the header; Oracle mode omits unknown events (absent, not greyed) |
+| V-TM-12 | Provenance | DOM audit | Every number and sentence links to its source events |
+
+### 2.15 World compiler (V-WC)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-WC-01 | INTENT-100 (WC-3) | 100 world prompts → expected template, key overrides and mapping table | Template match ≥ 90%; validity after repair ≥ 98% |
+| V-WC-02 | INTENT adversarial subset (WC-4) | 30 of the 100 prompts ask for things the Registry cannot express, phrased to invite a near-miss mapping | **Gap recall ≥ 0.9; silent approximation (an approximate mapping marked `exact`) ≤ 5%** |
+| V-WC-03 | Mapping checker (WC-4) | Deterministic checker on every compile | Every Registry ID in the table exists; every ID used by the Intent appears in the table; every approximate or unsupported row files a gap report |
+| V-WC-04 | Validators (WC-3, SIM-10) | A passing and a failing fixture for each `05.5` §5 validator, plus the `CLAUDE.md` spec checks: `val_khor` and `aethelgard` validate, `invalid_draft_style` fails | Every validator behaves as declared |
+| V-WC-05 | Liveness gate (WC-3) | 200 y × 8 seeds, headless, at 100k | No extinction or explosion; vital-rate guard; ≥ 2 completed arcs per century; **bad-run rate ≤ 1/8**; no invariant violations; wall time per V-PERF-07 |
+| V-WC-06 | Calibration repair (WC-3) | Force a failing gate | Every changed parameter stays inside its Registry bounds and is logged before and after; ≤ 30 gate runs; no LLM job after semantic validation (gateway log) |
+| V-WC-07 | Certification (WC-3) | 1,000 y × 32 seeds in the background, running V-SF; wall time per V-PERF-07 | The world is labelled *certified* or *uncertified* with its failing bands; nothing is rolled back |
+| V-WC-08 | Flavour isolation (WC-2) | CI lint: no `rh-core` or `rh-sys-*` crate depends on flavour asset types. Change only flavour text and re-run | Lint passes; `state_hash` unchanged |
+| V-WC-09 | Catalysts (WC-5) | Schema inspection | No forced-outcome fields; trigger→consequence rules rejected |
+| V-WC-10 | Effect language (WC-1, EVO-1) | Evaluator tests: termination within declared bounds, fixed point only, reads checked against scheduler read sets, effects only through declared commands, keyed RNG only. Land the `sortition_citizenry` fixture | All hold. The data-only extension merges with a Registry edit plus tests and no Rust change. Golden tests pin lowered expressions |
+| V-WC-11 | Registry closure (WC-1) | Generate the JSON Schema from the Registry; feed manifests with unknown IDs | Unknown IDs rejected; Registry semver bumped on change |
+| V-WC-12 | Hand authoring (WC-2) | A hand-written YAML world and compiler output for the same world | Same schema; both validate and run |
+| V-WC-13 | Gap-report loop (WC-4, G4) | Convert gap reports into Registry entries | ≥ 3 merged, at least 1 of them `data_only` through the effect language |
+
+### 2.16 3D client (V-R3D)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-R3D-01 | Street-from-seed (SPK-2; R3D-2) | The same burg on two machines; grow it from 2k to 5k people; reload a saved world after a generator update | Identical town; > 90% of buildings unchanged; no silent re-roll |
+| V-R3D-02 | Crowds (SPK-1; R3D-3) | 50 rigged + 3,000 VAT + impostors at 1440p on a 3060-class card | ≥ 60 FPS |
+| V-R3D-03 | Wallpaper power (SPK-3; R3D-5) | Windows 11 24H2 host; covered, fullscreen and battery cases | ≤ 30 FPS; < 10% GPU; < 5 W extra package power; 0 FPS and stopped audio streams when covered; photograph mode on battery |
+| V-R3D-04 | Overrides (R3D-2) | A fire destroys a block; reload and revisit | Override present; the rest of the baseline unchanged |
+| V-R3D-05 | LoD tiers (R3D-3) [D] | Diorama session at each speed band | T3 only at Live; Spectacle visible to draw distance at every band |
+| V-R3D-06 | Camera director (R3D-7) [D] | 30-minute wallpaper session; scoring unit tests | Vantage changes on the slow cadence with dissolves; the same inputs give the same choice |
+| V-R3D-07 | Replay mode (R3D-8) | Render a recorded history | Zero `advance_until` calls on the host; `state_hash` unaffected; frames match the recorded history |
+| V-R3D-08 | Investigation templates (R3D-9) [D] | Play each template end to end; inspect its definition | A clear purpose; outcomes come from simulation state and material inputs only (no scripted-outcome fields) |
+| V-R3D-09 | Art bible (R3D-6) [I] | Asset audit | Palette atlases and LUTs present; every imported asset re-shaded and provenance-logged |
+
+### 2.17 Audio (V-AUD)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-AUD-01 | Systemic ambience (AUD-1) | Telemetry trace and mix audit in Diorama sessions | `AudioTelemetry` at ~10 Hz, aggregated per tile; one-shot caps and aggregation rules hold (e.g. ≤ 3 sirens); no neural-audio dependency at runtime |
+| V-AUD-02 | Paused audio (R3D-5) | Pause and cover the wallpaper | Streams stopped, not muted; the audio device is released |
+| V-AUD-03 | Loudness (AUD-3) | ITU-R BS.1770 integrated-loudness and true-peak meter on every episode | −16 LUFS ± 1 LU integrated; true peak ≤ −1 dBTP |
+| V-AUD-04 | TTS intelligibility (AUD-3) | ASR transcript of every rendered line against its script, on normalised text (WER); speaker similarity against the voice-bible clip | Lines above the WER gate re-render (best of 3); per-episode WER reported; similarity above its threshold |
+| V-AUD-05 | Voice latency (AUD-4) | ≥ 200 scripted spoken turns on the reference machine with the 3D client rendering; measure from VAD end-of-turn to the first NPC audio sample | p95 ≤ 2 s |
+| V-AUD-06 | Voices and licences (AUD-2) | Inspection and binary symbol scan | Allow-listed TTS only; designed voices only; no espeak-ng linked |
+| V-AUD-07 | Export (AUD-3) | Validate chapters, the RSS feed and ID3 tags | CHAP/CTOC chapters, a valid private feed and AI-disclosure text present |
+
+### 2.18 Inspection and licences (V-INSP)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-INSP-01 | Licences (LIC-1) | cargo-deny, pip-licenses and license-checker on every PR; provenance check for weights and assets | No GPL, AGPL, non-commercial or territorially restricted item in shipped artifacts |
+| V-INSP-02 | ADR conformance | Reviewer-agent checklist on every PR (`13` §7) | Signed off |
+| V-INSP-03 | Crate boundaries (EVO-1) | Dependency-graph lint: system crates depend only on `rh-core`, `rh-ids`, `rh-events`, `rh-registry` and contract crates | Zero violations |
+| V-INSP-04 | Observability (OBS-1) [D] | Headless run with Rerun and the TUI | Per-system timing, invariant counters and sampled agents on the `sim_tick` timeline |
 
 ## 3. Validation (fit for purpose)
 
-### 3.1 Stylized-fact harness (MOP-5; R09 §11)
-Each reference world runs 32 seeds per manifest. A run passes when its statistics fall inside these bands:
+### 3.1 Stylized-fact harness and certification (V-SF; MOP-5; R09 §11)
 
-| Fact | Band (pre-modern unless noted) |
-|---|---|
-| Long-run growth without technology shocks | mean r ∈ [−0.1, +0.3]%/yr; population ∈ [0.3, 5]·K |
-| Child mortality to age 15 | 35–55% |
-| Mortality crises | ≥ 1 event of ≥ 10% loss within 1–2 years per century |
-| Secular cycle | Spectral peak at 120–450 years in N or W |
-| Violence waves (soft) | Secondary peak at 40–60 years during disintegrative phases |
-| Ruler deaths | 5–15 murders per 1,000 ruler-years; 15–30% of deaths violent |
-| Polity lifespans | Approximately exponential, mean 100–300 years |
-| City sizes | Top-20 rank-size slope ∈ [−1.3, −0.7] |
-| War severity | Heavy tail, fitted α ∈ [1.3, 1.9] |
-| Malthusian test | A technology shock raises density, not long-run income |
-| Post-plague wages | Real wage rises after ≥ 20% mortality (sign test) |
-| Hive / testing (modern) | At prevalence < 1% with se/sp = 0.99, more than 50% of detentions are false positives |
+The bands are used by two ensembles:
+- The **liveness gate** (200 y × 8 seeds; V-WC-05) blocks play. It checks only liveness: no extinction or explosion, vital rates, ≥ 2 completed arcs per century, bad-run rate ≤ 1/8, no invariant violations. A 200-year run cannot see secular cycles, polity lifespans or tail exponents.
+- **Certification** (1,000 y × 32 seeds; V-WC-07, and nightly per reference world) evaluates every band below. MOP-5 is measured on certification ensembles.
 
-The gate is ≥ 90% of bands passed across the ensemble. Morris and Sobol screening, run on labelled PRs, flags parameters with outsized influence.
+Each band is tagged:
+- **Identity:** the fact follows from the model's equations or calibrated inputs. A failure is an implementation bug and blocks, whatever the overall pass rate.
+- **Emergent:** the fact arises from interacting systems. Emergent bands are the evidence that history happens, and their pass rate is reported separately.
 
-### 3.2 Drama-coupling scenarios (05.1 §8)
-For each designed coupling (famine → succession crisis; plague → purge → revolt; hive detection spiral; elite overproduction; dragon age), an ensemble checks two properties:
-- **Possible.** The full chain completes in ≥ x% of seeds.
-- **Not forced.** The chain is absent in ≥ y% of seeds.
+| ID | Fact | Band (pre-modern unless noted) | Kind | Statistic and test |
+|---|---|---|---|---|
+| V-SF-01 | Long-run growth without technology shocks | mean r ∈ [−0.1, +0.3]%/yr; population ∈ [0.3, 5]·K | Identity | Seed-mean r with t-interval; population range per seed |
+| V-SF-02 | Child mortality to age 15 | 35–55% | Identity | q(15) from the life-course log, per seed |
+| V-SF-03 | Mortality crises | ≥ 1 event of ≥ 10% loss within 1–2 years per century | Emergent | Crises per century per seed; ensemble mean with t-interval |
+| V-SF-04 | Secular cycle | Spectral peak at 120–450 years in N or W | Emergent | **Red-noise null.** Fit AR(1) to each seed's detrended series. The ensemble-mean multitaper spectrum must peak in the band and exceed the 95th percentile of the ensemble-mean spectrum of 1,000 AR(1) surrogate sets |
+| V-SF-05 | Violence waves (soft) | Secondary peak at 40–60 years during disintegrative phases | Emergent | As V-SF-04, on violent-event counts. Soft: reported, not counted in MOP-5 |
+| V-SF-06 | Ruler deaths | 5–15 murders per 1,000 ruler-years; 15–30% of deaths violent | Identity | Pooled Poisson rate with exact CI; violent share with Clopper–Pearson CI |
+| V-SF-07 | Polity lifespans | Approximately exponential, mean 100–300 years | Emergent | **Censoring-aware.** Polities alive at the horizon are right-censored. Kaplan–Meier survival curve; exponential MLE λ̂ = ends ÷ total exposure, with mean 1/λ̂ in the band. "Approximately exponential" means the fitted Weibull shape is TOST-equivalent to 1 within [0.75, 1.33]. Dynasty tenures get the same Kaplan–Meier treatment and are reported |
+| V-SF-08 | City sizes | Top-20 rank-size slope ∈ [−1.3, −0.7] | Emergent | OLS of log(rank − ½) on log(size) per seed (Gabaix–Ibragimov); seed-mean slope with t-interval |
+| V-SF-09 | War severity | Heavy tail, fitted α ∈ [1.3, 1.9] | Emergent | **Clauset–Shalizi–Newman,** pooled over seeds: x_min by KS-distance minimisation; α̂ (pdf exponent) by MLE, with a seed-level bootstrap CI; plausibility bootstrap p ≥ 0.1. Likelihood-ratio (Vuong) tests against the lognormal (reported: sign and p) and the exponential (must favour the heavy tail, p < 0.1) |
+| V-SF-10 | Malthusian test | A technology shock raises density, not long-run income | Identity | CRN-paired shock and no-shock ensembles. Density increase with lower 95% bound > 0; long-run real income TOST-equivalent to no change, δ = ±5% |
+| V-SF-11 | Post-plague wages | Real wage rises after ≥ 20% mortality | Identity | Sign test over qualifying events across seeds, p < 0.05 |
+| V-SF-12 | Hive / testing (modern) | At prevalence < 1% with se/sp = 0.99, more than 50% of detentions are false positives | Identity | Detention outcomes on `aethelgard`, with Clopper–Pearson CI |
+| V-SF-13 | Sensitivity screening | — | — | Morris and Sobol screening on labelled PRs flags parameters with outsized influence |
 
-The thresholds x and y are set per coupling in P1–P3.
+**Gate (MOP-5).** At least 90% of the non-soft bands pass on the certification ensemble, and every identity band passes. A band passes when its ensemble estimate lies inside it. Intervals are reported so that a marginal pass is visible. A band is evaluated once the systems it needs exist: V-SF-01 and V-SF-02 from G1a, the other P1 bands from G1b, and V-SF-09, V-SF-11 and V-SF-12 from G3a (`11`).
 
-### 3.3 Foresight calibration (ORA-5)
-Back-test with ≥ 200 prophecies over historical forks of recorded timelines and draw a reliability diagram. Events forecast at probability p must occur at rate p ± 0.05 in each decile bucket that holds ≥ 20 samples.
+### 3.2 Drama-coupling scenarios (V-COUP; `05.1` §8)
 
-### 3.4 Human validation [H] (MOE-1, MOE-2, MOE-6)
-| Activity | Protocol | Gate |
+For each designed coupling, a 32-seed ensemble checks two properties. The unit is a seed-century (320 units in a 32-seed × 1,000-year ensemble), or a seed-run for the 10-year modern world (`11`).
+- **Possible.** The full chain completes in ≥ x% of units.
+- **Not forced.** The chain is absent in ≥ y% of units.
+
+x and y are set numerically per coupling before the phase starts (defaults in `11`) and logged in the decisions log. The gates use point estimates; Clopper–Pearson 95% intervals are reported.
+
+| ID | Coupling | Phase |
 |---|---|---|
-| **Story-yield sessions** | Ten random seeds per phase gate. You run the Time-Machine with auto-pause and rate every pause 1–5 (TM-6) | P2: median ≥ 3 events rated ≥ 4 per century. P3: ≥ 6 |
-| **Chronicle A/B** | Blind pairs: a sifter-curated chronicle against a random-event chronicle from the same run | ≥ 80% preference for curated |
-| **Bad-run audit** | Automated: count seeds with fewer than N completed arcs per century | < 10% |
-| **Interrogation sessions** (P5/P6) | Interrogate 20 random people per session; log contradictions | 0 hard, < 1 soft per 20 |
-| **Narrative read** (P4) | Blind: Rehoboam saga against an ungrounded LLM saga on the same premise; rate on HANNA criteria plus "would keep reading" | Rehoboam preferred on coherence and surprise; no regression on engagement |
-| **Diorama believability** (P5) | 30-minute ambient sessions; note "fake" moments: pops, loops, impossible errands | Trend toward 0 per session |
+| V-COUP-01 | Famine → unrest → succession crisis (truncated at regency or civil-war onset until `M8.war` lands) | P1; full chain P3 |
+| V-COUP-02 | Plague → paranoia → purge → labour revolt | P3 |
+| V-COUP-03 | Hive detection spiral (modern) | P3 |
+| V-COUP-04 | Elite overproduction → violence wave | P1 |
+| V-COUP-05 | Dragon raids, with dragon numbers inside the energetics bound | P3 |
 
-### 3.5 Personal preference model
-Ratings train a small model over significance components, which personalises auto-pause thresholds. **Validate by hold-out.** On each new session, its ranking of pauses should correlate with your ratings at Spearman ρ ≥ 0.4 by P3.
+### 3.3 Foresight validity (V-FOR; ORA-5, ORA-9)
+
+Per-decile reliability with about 20 prophecies per bucket cannot pass even for a perfect forecaster (RT-M5). v1.0's "p ± 0.05 per decile" gate is therefore replaced by the tests below, which run nightly on the cluster.
+
+**Back-test set.** Recorded timelines of the reference worlds, forked at ≥ 20 ticks each. At each fork, N = 256 rollouts run with fresh salt lineages. The recorded canonical continuation is the held-out outcome. The prophecy panel holds ≥ 200 binary predicates over 5–50-year horizons (succession, war, famine, regicide, hive detection).
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-FOR-01 | Exchangeability | Rank histogram of the canonical continuation among the rollouts, for continuous quantities at the horizon (population, treasury, named deaths), and randomised PIT for the binary predicates; 10 bins | Uniform: χ² p ≥ 0.01, with ≥ 400 continuations per quantity so that the test has ≥ 0.8 power against outer deciles holding 15% of the mass each (under-dispersion) |
+| V-FOR-02 | Reduced-cost bias | Reduced-cost rollouts (coarser cadence and richness) against full-cost rollouts, CRN-paired, per predicate | TOST: the 90% CI of ΔP lies inside ±0.03 for every predicate in the panel |
+| V-FOR-03 | Scoring | Brier and log score with bootstrap CIs, against the climatological base rate. Spiegelhalter's Z = Σ(o − p)(1 − 2p) ÷ √(Σ(1 − 2p)² p(1 − p)) | Brier skill score > 0 (lower 95% bound); \|Z\| ≤ 1.96 |
+| V-FOR-04 | Reliability diagram | Pooled reliability diagram with Wilson intervals per bin | Reported (a diagnostic, not a gate) |
+| V-FOR-05 | Oracle-mode information loss (ORA-9) | V-FOR-03 in Oracle mode (belief-resampled forks) against Cultivator mode on the same panel | Reported. Belief-resampled rollouts are not held to the V-FOR-02 bound, because they differ from true-state rollouts by design (`05.3` §7) |
+| V-FOR-06 | CRN variance reduction | Paired against independent intervention ensembles | Reported against the `08` §3 estimate |
+
+### 3.4 Human validation [H] (V-HUM; MOE-1, MOE-2, MOE-3, MOE-6)
+
+| ID | Activity | Protocol | Gate |
+|---|---|---|---|
+| V-HUM-01 | **Story-yield sessions** (MOE-1) | At G2, run under the pre-registered protocol (§3.4.1). At G3b, the same protocol with fresh held-out seeds | Pause budget ≤ 10 per century. P2: median ≥ 3 events rated ≥ 4 per century, precision ≥ 0.5. P3: ≥ 6, precision ≥ 0.7 |
+| V-HUM-02 | **Chronicle A/B** (MOE-2) | ≥ 20 blind pairs on the G2 held-out seeds: the chronicle of a run against the chronicle of the coupling-ablated run (§3.4.1) with the same engine, manifest, seed and sifter | ≥ 80% preference for the coupled run |
+| V-HUM-03 | **Bad-run audit** (MOE-6) | Automated: seeds with fewer than N = 2 completed arcs per century (complete matches from ≥ 2 pattern packs), 32 seeds per manifest | < 10% (point estimate). The Clopper–Pearson 95% interval is reported: with 32 seeds, even 0 bad runs gives an upper bound of about 11%. A borderline result is resolved by adding seeds |
+| V-HUM-04 | **Interrogation sessions** (MOE-3; P2 text, P6 voice) | Interrogate 20 random people per session; log contradictions | 0 hard, < 1 soft per 20 |
+| V-HUM-05 | **Narrative read** (P4) | Blind: Rehoboam saga against an ungrounded LLM saga on the same premise; rate on HANNA criteria plus "would keep reading" | 10 pairs. Rehoboam preferred on coherence and on surprise in ≥ 7 of 10 each, and on engagement in ≥ 5 of 10 (no regression) |
+| V-HUM-06 | **Diorama believability** (P5) | 30-minute ambient sessions; note "fake" moments: pops, loops, impossible errands | ≤ 2 "fake" moments per session, averaged over the last 3 sessions, with a falling trend |
+| V-HUM-07 | **Oracle play** (P3) | 3 Oracle-mode sessions of about 1 h | You rate "whispers feel consequential but not controlling" ≥ 4/5 in ≥ 2 of 3 |
+| V-HUM-08 | **Full-vision acceptance** (P7) | Scenarios OS-1 to OS-11 (`04`) | Accepted |
+| V-HUM-09 | **G2 thesis gate** | §3.4.1 | §3.4.1 decision rule |
+| V-HUM-10 | **Personal preference model** | §3.5 | Spearman ρ ≥ 0.4 by P3 |
+
+#### 3.4.1 G2 thesis gate: pre-registered protocol (V-HUM-09)
+
+G2 tests the core thesis (S1): unforgiving, coupled systems produce history you want to follow, so the world is worth inhabiting. If it fails, no 3D work starts (`11`). The evaluator is also the person who tuned the engine, so the protocol is **pre-registered**.
+
+**Pre-registration**
+1. The protocol is filled in and frozen before the first evaluation run: engine build, Registry version, held-out manifest hash, seed list, pause thresholds, preference-model hash, presentation-order seed and analysis-script hash. The filled-in instance is committed and its hash recorded in `docs/decisions-log.md`. It is not edited afterwards. Any deviation is logged and reported with the result.
+2. **Held-out material.** Seeds are derived as `H(preregistration_hash, "g2", i)` after freezing, so none can have been used in tuning. One **held-out manifest**, hand-authored during P1 and sealed (hash committed, never run), is opened only for G2.
+3. **Seeds.** 10 seeds: 7 on the tuned reference manifests (`val_khor`, `delta_republic`) and 3 on the held-out manifest.
+4. **Personal preference model** (§3.5). Frozen before the run, with its weights hash in the pre-registration. Results are reported both **without** it (default pause thresholds; the primary analysis) and **with** it.
+
+**Arms**
+- **Treatment:** the engine as built.
+- **Baseline: coupling-ablated simulation** (the MOE-2 baseline, `01`). The same build, manifests, seeds and sifter, with the cross-system couplings of `05.1` §8 disabled. Implementation: every read a system makes of another system's owned columns (through its contract-crate accessors) is served from an independent seed's recorded run of the same manifest. Each system keeps its own dynamics and marginal behaviour, but causation between systems is removed. Significance and pause selection are unchanged. The ablation switch is a test-harness feature, never available in play, and needs a P2 work package.
+
+**Session design**
+- **Horizon.** 2 simulated centuries per seed and arm, after the standard spin-up.
+- **Pause budget.** ≤ 10 auto-pauses per simulated century, per arm and per selection rule. The candidate pool (completed matches and suspense partials) is ranked by default salience ("without") and by the frozen model ("with"). The union is rated.
+- **Rating.** You rate each item 1–5 on "I want to know what happens next" in the rating tool (TM-6), with the causal inspector and the previous decade's annals available. Treatment and baseline items from the same seed are interleaved in keyed random order with arm labels hidden. Ratings are locked before any arm is revealed.
+- **Effort.** About 40–60 items, or 3–4 hours of rating, per seed; about 30–40 hours in total, spread over several sessions.
+- **Intra-rater reliability.** A random 10% of items are re-presented, blind, at least 7 days later. Agreement is measured with linearly weighted Cohen's κ.
+- **No interim looks.** The analysis runs once, after all ratings are locked.
+
+**Analysis** (primary: default pause selection; every quantity is also reported for the "with" selection)
+- The unit of analysis is the seed: one mean rating per seed and arm.
+- **Mean rating:** lower bound of the two-sided 80% t-interval over the 10 per-seed treatment means (9 df: mean − 1.383·s/√10).
+- **Treatment vs baseline:** per-seed paired difference d = treatment mean − baseline mean; lower bound of the two-sided 80% t-interval of mean d. A Wilcoxon signed-rank test is reported alongside.
+- **Pause count and precision:** auto-pauses per century, and the fraction rated ≥ 3, per arm.
+- **Arc-signature diversity:** the share of treatment items rated ≥ 4 whose match belongs to each pattern family (Registry pattern pack), pooled over seeds.
+- **MOE-1:** items rated ≥ 4 per century, median over seeds. **MOE-2:** V-HUM-02 on the same seeds. **MOE-6:** completed arcs per century per seed, and the bad-run rate with a Clopper–Pearson 95% interval, on the 10 rated seeds and on the 32-seed automated ensemble.
+
+**Decision rule**
+
+| Condition | Requirement |
+|---|---|
+| **Pass criterion** | The lower 80% bound of the mean treatment rating is ≥ 2.5 on the 1–5 scale, **and** the lower 80% bound of the paired difference (treatment − coupling-ablated) is > 0. Both under the primary analysis |
+| **Diversity guard** | No single pattern family accounts for more than 40% of treatment items rated ≥ 4 |
+| **Validity** | κ ≥ 0.4; blinding intact; no deviation from the frozen protocol that touches seeds, manifests, thresholds or analysis. If validity fails, the run is void and repeated: it is neither a pass nor a fail |
+
+G2 is **go** when all of the following hold:
+1. the pass criterion;
+2. the diversity guard;
+3. the P2 targets of `01`: MOE-1 (≥ 3 per century rated ≥ 4, precision ≥ 0.5, within the pause budget), MOE-2 (≥ 80%) and MOE-6 (< 10%, point estimate);
+4. the verification gates binding at P2 (§5, §6).
+
+Otherwise G2 is **iterate** (`11` P2: couplings, contingent unlocking, patterns). After 3 failed cycles the `11` pivot criterion applies.
+
+### 3.5 Personal preference model (V-HUM-10)
+
+Ratings train a small model (logistic regression over the significance components) that personalises auto-pause thresholds.
+- **Validate by hold-out.** On each new session, its ranking of pauses should correlate with your ratings at Spearman ρ ≥ 0.4 by P3.
+- **Freeze before gates.** For any gate evaluation it is frozen beforehand, and results are reported with and without it (§3.4.1).
 
 ## 4. Observability for V&V
+
 - **Rerun.** Per-system timing, invariant counters, sampled agents, the hydration bubble and AOI cells on a `sim_tick` timeline.
 - **Textual TUI.** Ticks/s, memory, pattern hits and logs for headless runs.
-- **Run report** (auto-generated per run): stylized-fact table, bad-run metrics, top arcs, timings, costs.
+- **Run report** (auto-generated per run): plane hashes, stylized-fact table with identity/emergent tags, liveness or certification status, bad-run metrics, top arcs, firing rates against budgets, timings, costs.
+- **Gate report** (per phase gate): suite results by test ID, the requirement → test matrix with status, and for G2 the pre-registration hash and the §3.4.1 analysis.
 
 ## 5. Phase gates (summary; see `11_roadmap.md`)
+
 Each phase ends with:
-1. All verification suites green.
+1. All verification suites green for the requirements binding at that phase (§6).
 2. The validation activities scheduled for that phase completed.
 3. A **go / iterate / pivot** decision recorded in `docs/decisions-log.md`, with evidence links.
+
+| Gate | Gate-specific evidence (numbers in `11`) |
+|---|---|
+| G0 | V-DET-01, V-DET-02, V-DET-05, V-DET-09, V-DET-11, V-WC-04, V-PERF-04 |
+| G1a | Demography bands V-SF-01 and V-SF-02; V-DET-17 (CRN pairing); V-INV-02 |
+| G1b | V-SF on the P1-applicable bands (MOP-5); V-COUP-01 (truncated) and V-COUP-04; V-PERF-01, V-PERF-07; [H] you read the run reports of 3 seeds |
+| G2 | The pre-registered protocol (§3.4.1): V-HUM-01, V-HUM-02, V-HUM-03, V-HUM-09; MOP-3 and MOP-4 (V-TM-03, V-TM-04); V-PERF-03 at 100k; V-SIFT-01, V-SIFT-03, V-SIFT-04; V-DET-06; V-GOLD-04 |
+| G3a | V-COUP-01 (full chain), V-COUP-02, V-COUP-03, V-COUP-05; V-SF on all applicable bands; V-DATA-12, V-PERF-08 |
+| G3b | MOE-1 ≥ 6 under the G2 protocol (V-HUM-01); V-HUM-07; V-FOR-01–V-FOR-03; V-ORA-07, V-ORA-08; V-LLM-02, V-LLM-03; V-PERF-01–V-PERF-03, V-PERF-06 at 1M; V-HUM-10 |
+| G4 | V-NAR-01, V-NAR-02, V-NAR-08; V-HUM-05; V-WC-01, V-WC-02, V-WC-13; V-LLM-10; V-PERF-07; SPK-3 (V-R3D-03) reported |
+| G5 | V-R3D-01–V-R3D-03; V-DET-07; V-HYD-10 and V-SF for `M4.economy` F2 (WP P5.0); V-HUM-06 |
+| G6 | V-DET-08; V-HYD-01, V-HYD-02, V-HYD-05; V-LLM-01; V-HUM-04; V-AUD-05 |
+| G7 | V-HUM-08 |
+
+## 6. Requirement → test matrix
+
+Every requirement in `03` maps to at least one test ID. Phases are those of `03`.
+
+### 6.1 System requirements
+
+| Req. | Subject | Phase | Tests |
+|---|---|---|---|
+| SIM-1 | Ledger rows, genealogical IDs, ≥ 2M persons | P1a | V-INV-09, V-DATA-05, V-DATA-12, V-PERF-02 |
+| SIM-2 | Region graph and raster | P1a | V-INV-10 |
+| SIM-3 | Must-have systems | P1a/P1b/P3a | V-SF-01–V-SF-12, V-COUP-01–V-COUP-04, V-INV-01 |
+| SIM-4 | `SystemModel` trait | P0 | V-INV-04, V-INSP-02 |
+| SIM-5 | Hazards and binomial draws | P1a | V-INV-08, V-SF-02, V-DET-12 |
+| SIM-6 | Clocks, `i64` sim-time, adaptive daily steps | P1a | V-INV-11, V-DET-01 |
+| SIM-7 | Agenda and same-instant semantics | P1b | V-COG-03, V-COG-04, V-PERF-02 |
+| SIM-8 | Conservation | P1a | V-INV-01, V-INV-02, V-INV-05, V-HYD-02 |
+| SIM-9 | Great houses and dormancy | P1b | V-INV-12 |
+| SIM-10 | Horizon declaration | P0 | V-WC-04 |
+| SIM-11 | Library and hosts | P0–P5 | V-IF-01, V-IF-03, V-IF-04, V-IF-06 |
+| SIM-12 | Should-have systems | P3a | V-INV-13, V-INV-14, V-COUP-02, V-COUP-05, V-SF-01–V-SF-12 |
+| DET-1 | History function | P0 | V-DET-04, V-DET-18, V-GOLD-01 |
+| DET-2 | Keyed RNG and branch salts | P0 | V-DET-09, V-DET-16, V-DET-17, V-DET-19 |
+| DET-3 | Fixed-point thresholds | P0 | V-DET-03, V-DET-19 |
+| DET-4 | State hash and divergence bisect | P0 | V-DET-01, V-DET-02, V-DET-11 |
+| DET-5 | Golden-run CI | P0 | V-GOLD-01, V-GOLD-02 |
+| DET-6 | Observer invariance | P2 | V-DET-06, V-DET-07, V-DET-08, V-TM-10, V-PLN-03, V-HYD-06, V-HYD-08 |
+| DET-7 | Input journal | P0 | V-DET-04, V-DET-18 |
+| DET-8 | Keyframes | P2 | V-DET-05, V-PERF-05 |
+| DET-9 | Forking | P2 | V-DET-13, V-DET-16, V-DATA-01 |
+| DET-10 | Frozen past, migrated future | P2 | V-GOLD-04, V-GOLD-05, V-GOLD-06 |
+| DET-11 | Immutable frames, unsynced guard | P1b | V-DET-10 |
+| DET-12 | Three planes | P0/P2 | V-PLN-01–V-PLN-06, V-ORA-09, V-HYD-09 |
+| DET-13 | No back-dating | P1a | V-DET-12, V-HYD-04, V-SIFT-01 |
+| DET-14 | Acting in the past forks; input scope | P2 | V-DET-13, V-DET-14, V-TM-04, V-TM-05 |
+| DET-15 | Pull inputs | P3b | V-DET-15, V-COG-09 |
+| DATA-1 | Typed store and plane assignment | P1a–P3a | V-DATA-10, V-PLN-02 |
+| DATA-2 | Causal edge kinds | P1b | V-DATA-09 |
+| DATA-3 | Anchored snapshots and intervals | P1b | V-DATA-08 |
+| DATA-4 | No physical compaction; base rates | P2 | V-DATA-01, V-DATA-02, V-DATA-03 |
+| DATA-5 | Event-row criteria | P1b | V-DATA-07, V-DATA-12, V-PLN-05 |
+| DATA-6 | Durable formats | P0 | V-DATA-10 |
+| DATA-7 | Facts ledger | P2 | V-DATA-11, V-HYD-03 |
+| DATA-8 | Life-course log and genealogical IDs | P1a | V-DATA-04, V-DATA-05, V-DET-17, V-HYD-01 |
+| DATA-9 | Knowledge fronts | P3a | V-DATA-06 |
+| SIFT-1 | Pattern DSL and anchoring | P2 | V-SIFT-05, V-SIFT-01 |
+| SIFT-2 | Incremental matching | P2 | V-SIFT-07 |
+| SIFT-3 | SQL twins | P2 | V-SIFT-01, V-SIFT-02 |
+| SIFT-4 | Match events, `MatchId` space | P2 | V-SIFT-06, V-PLN-04 |
+| SIFT-5 | Significance | P2 | V-SIFT-08 |
+| SIFT-6 | Hindsight retention | P2 | V-SIFT-08, V-DATA-01 |
+| SIFT-7 | No LLM in detection | P2 | V-SIFT-09, V-SIFT-04 |
+| SIFT-8 | Match semantics and budgets | P2 | V-SIFT-01, V-SIFT-02, V-SIFT-03, V-SIFT-04 |
+| COG-1 | Psychological core | P3a | V-COG-01 |
+| COG-2 | Derived overlays | P3a | V-COG-02, V-WC-10 |
+| COG-3 | IAUS + HTN cadence | P3a | V-COG-03, V-COG-10, V-PERF-02 |
+| COG-4 | Belief records | P3a | V-COG-05, V-PERF-08 |
+| COG-5 | Channels | P3a | V-COG-06, V-DATA-06 |
+| COG-6 | Pop-level beliefs | P3a | V-COG-07 |
+| COG-7 | Hive and mimics | P3a | V-COG-08, V-COUP-03 |
+| COG-8 | Deliberation consult | P3b | V-COG-09, V-COG-11, V-DET-15 |
+| LLM-1 | Gateway | P3b | V-LLM-05 |
+| LLM-2 | Journaled outputs, no re-query | P3b | V-LLM-06, V-DET-04 |
+| LLM-3 | Constrained decoding | P3b | V-LLM-04, V-LLM-07 |
+| LLM-4 | TTFT | P6 | V-LLM-01 |
+| LLM-5 | Plan-then-realise, claim check | P6 | V-LLM-01, V-LLM-09 |
+| LLM-6 | Closed-schema parsing | P3b | V-LLM-02, V-LLM-08 |
+| LLM-7 | Red-team corpus | P3b | V-LLM-03 |
+| LLM-8 | Offline use | P4 | V-LLM-10 |
+| WC-1 | Mechanics Registry | P0 | V-WC-11, V-WC-10 |
+| WC-2 | Hand-authored manifests, flavour asset | P1b | V-WC-12, V-WC-08, V-WC-04 |
+| WC-3 | Compile pipeline, liveness, certification | P4 | V-WC-01, V-WC-04, V-WC-05, V-WC-06, V-WC-07, V-SF-13, V-PERF-07 |
+| WC-4 | Mapping table and gap reports | P4 | V-WC-02, V-WC-03, V-WC-13 |
+| WC-5 | Catalysts | P1b | V-WC-09 |
+| TM-1 | Speed bands and run-until | P2 | V-TM-01 |
+| TM-2 | Auto-pause | P2 | V-TM-02, V-SIFT-07 |
+| TM-3 | Scrub and drop-in | P2 | V-TM-03, V-TM-04, V-PERF-05 |
+| TM-4 | Causal inspector | P2 | V-TM-06, V-TM-11, V-TM-12 |
+| TM-5 | Map | P2 | V-TM-07 |
+| TM-6 | Rating tool | P2 | V-TM-08, V-HUM-01 |
+| TM-7 | Person inspection | P2 | V-TM-09, V-DATA-11 |
+| ORA-1 | Embodied Oracle | P3b | V-ORA-01 |
+| ORA-2 | Whisper Counsel | P3b | V-ORA-02, V-ORA-03, V-LLM-02 |
+| ORA-3 | Pierce the Veil | P3b | V-ORA-04 |
+| ORA-4 | Plant Omen | P3b | V-ORA-05 |
+| ORA-5 | Foresight | P3b | V-FOR-01–V-FOR-04, V-FOR-06, V-PERF-06 |
+| ORA-6 | Oracle journaling | P3b | V-ORA-12 |
+| ORA-7 | Oracle-3D | P7 | V-ORA-13 |
+| ORA-8 | Forbidden Ward | P3b | V-ORA-06 |
+| ORA-9 | Oracle knowledge and console modes | P3b | V-ORA-09, V-ORA-10, V-ORA-11, V-FOR-05, V-TM-11 |
+| NAR-1 | Forms | P2/P4 | V-NAR-07, V-NAR-04 |
+| NAR-2 | Pipeline | P4 | V-NAR-06 |
+| NAR-3 | Canon tiers | P4 | V-NAR-01, V-NAR-02, V-NAR-08 |
+| NAR-4 | Style cards | P4 | V-NAR-09, V-NAR-03 |
+| NAR-5 | Sentence provenance | P4 | V-NAR-05 |
+| R3D-1 | Separate renderer process | P5 | V-IF-02, V-IF-05 |
+| R3D-2 | Street-from-seed content | P5 | V-R3D-01, V-R3D-04 |
+| R3D-3 | Crowd LoD and Spectacle | P5 | V-R3D-02, V-R3D-05, V-HYD-05 |
+| R3D-4 | Hydration rings | P6 | V-HYD-07 |
+| R3D-5 | Wallpaper power policy | P5 | V-R3D-03, V-AUD-02 |
+| R3D-6 | Art bible | P5 | V-R3D-09 |
+| R3D-7 | Camera director | P5 | V-R3D-06 |
+| R3D-8 | Replay mode | P5 | V-R3D-07 |
+| R3D-9 | Investigation templates | P6 | V-R3D-08 |
+| AUD-1 | Systemic ambience | P5 | V-AUD-01 |
+| AUD-2 | Licence-cleared TTS, designed voices | P6 | V-AUD-06 |
+| AUD-3 | Audio-drama rendering | P4+ | V-AUD-03, V-AUD-04, V-AUD-07 |
+| AUD-4 | Voice latency | P6 | V-AUD-05 |
+| PERF-1 | MOP-1 run time | P1b/P3b | V-PERF-01 |
+| PERF-2 | Macro-step budget | P1b/P3b | V-PERF-02 |
+| PERF-3 | Sifter overhead | P2/P3b | V-PERF-03, V-SIFT-10 |
+| PERF-4 | Benchmark regression gate | P0 | V-PERF-04 |
+| EVO-1 | Ownership and change scope | P0 | V-INV-03, V-INV-04, V-INSP-03, V-GOLD-03, V-WC-10 |
+| EVO-2 | Crate deliverables | P1a | V-INV-06, V-INV-07 |
+| EVO-3 | Fidelity levels | P1b/P5 | V-HYD-10, V-HYD-11, V-SF-01–V-SF-12 |
+| OBS-1 | Observability | P1a | V-INSP-04 |
+| SEC-1 | Bounded LLM worst case, leverage bands | P3b | V-ORA-07, V-ORA-08, V-LLM-03 |
+| LIC-1 | Licence allow-list | P0 | V-INSP-01, V-AUD-06 |
+
+### 6.2 Stakeholder needs (validated, not verified)
+
+| Need | Validated by |
+|---|---|
+| SN-1 | MOE-1 (V-HUM-01, V-HUM-09); preference model (V-HUM-10) |
+| SN-2 | V-TM-06; G2 items are rated with the causal inspector open (§3.4.1) |
+| SN-3 | MOE-1, MOE-2, MOE-6 (V-HUM-01–V-HUM-03); arc-signature diversity (§3.4.1) |
+| SN-4 | MOE-4 (V-GOLD-04); V-DET-04 |
+| SN-5 | MOE-3 (V-HUM-04, V-DATA-11) |
+| SN-6 | V-HUM-07; V-ORA-07; V-HUM-08 (Oracle-3D) |
+| SN-7 | V-HUM-05; MOP-6 (V-NAR-08) |
+| SN-8 | V-HUM-06; V-HUM-04; V-HUM-08 |
+| SN-9 | V-WC-01, V-WC-02 (OS-10) |
+| SN-10 | MOE-5: work-package cycle times (`13`) |
+| SN-11 | V-PERF-06; V-FOR-06 |

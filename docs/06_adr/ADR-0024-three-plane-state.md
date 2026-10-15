@@ -37,7 +37,7 @@ Rules:
 3. **T1 (named-actor) membership comes only from simulation criteria or journaled inputs.** The simulation criteria are: office, great-house rank, material involvement, Registry-declared notability, and promotion by a journaled input. Pinning does **not** promote a person to T1.
 4. **No presentation components on authoritative entities.** Authoritative iteration over `bevy_ecs` entities is sorted by `PersonId`, never by archetype order.
 5. **No lazy catch-up of authoritative state.** Everything in A advances on the simulation's own schedule.
-6. **Bubble NPCs never originate material events.** Material events come from the simulation's own scheduling or from journaled player inputs. NPC responses in conversation are deterministic functions of A plus the player's journaled inputs. The LLM only realises prose (ADR-0025).
+6. **Bubble NPCs never originate material events.** Material events come from the simulation's own scheduling or from journaled player inputs. NPC responses in conversation are deterministic functions of A plus the player's journaled inputs. The LLM only realises prose (`05.3` §8).
 7. **Re-sifting is a feature.** Any timeline can be re-sifted with any pattern-library version without touching A.
 
 ## Consequences
