@@ -9,7 +9,7 @@ Treat recalled items as leads to re-check before relying on them.
 
 | ID | Topic | Key verdicts |
 |---|---|---|
-| [R01](R01_lod_hydration_multiresolution.md) | Simulation LoD, hydration, multi-resolution modelling | Every person as a ledger row; keyed RNG; pinning; leases and decrees; interaction radius ≠ visibility radius |
+| [R01](R01_lod_hydration_multiresolution.md) | Simulation LoD, hydration, multi-resolution modelling | Every person as a ledger row; keyed RNG; pinning; leases and decrees (superseded in the plan by scheduled outcomes and material inputs, ADR-0025); interaction radius ≠ visibility radius |
 | [R02](R02_emergent_narrative_story_sifting.md) | Emergent narrative, story sifting, drama management | Curationism; never delete causality; anchored state; hybrid sifting; Viv as reference design; curation, not intervention |
 | [R03](R03_simulation_core_technology.md) | Simulation-core language, ECS, determinism, scheduling | Rust core; no Flecs Python bindings; speed arithmetic; determinism measurements; bincode is dead |
 | [R04](R04_agent_cognition_epistemics_persuasion.md) | Cognition, epistemics, persuasion | IAUS + HTN; psych core + overlays; hive as a channel; base-rate witch-hunts; ArgumentFrame persuasion |

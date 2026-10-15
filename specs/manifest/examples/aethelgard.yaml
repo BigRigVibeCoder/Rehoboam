@@ -34,7 +34,7 @@ systems:
   M1.regions: {route_cost_sea: 1.0, route_cost_river: 3.0, route_cost_land: 10.0}
   M2.demography: {e0: 81, tfr: 1.5}
   M4.economy: {alpha: 0.5, food_price_elasticity: 0.3, base_tax: 0.3, trade_kappa: 0.15}
-  M5.contagion: {r0: 1.6, latent_days: 21, infectious_days: 1.0e9, ifr: 0.0, waning_per_year: 0.0, fear_kappa: 0.5, covert_evasion: 0.4}
+  M5.contagion: {r0: 1.6, latent_days: 21, infectious_days: 1.0e9, ifr: 0.0, waning_per_year: 0.0, fear_kappa: 0.5, covert_evasion: 0.4, test_sensitivity: 0.97, test_specificity: 0.995}
   M6.polity: {tax_rate: 0.3, psi_threshold: 2.2, instability_mortality: 0.005}
 institutions: [testing_mandate, quarantine_law]
 technologies: [electric_grid, rail, germ_theory, blood_assay]

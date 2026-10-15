@@ -3,7 +3,18 @@
 #   * Roles and act classes come from the Registry (setting-agnostic). The world compiler maps concrete verbs and titles onto them.
 #   * Every state read is ANCHORED to a bound event: `attr(...)@eN`. A bare read is a lint error (fixes the draft's temporal bug).
 #   * `unless` clauses cancel partial matches. `emit` produces a match event that higher-order patterns can consume.
-#   * Each pattern needs an SQL twin (see specs/chronicle/schema.sql, view twin_trust_then_betrayal).
+#   * Attributes are typed in the Registry [attributes]. Enum attributes may be compared to symbolic values, which are stored as integer codes.
+#   * A clause may match an act class (`act`), a concrete Registry verb (`verb`), or a match event emitted by another pattern (`match_event`).
+#     Consuming a match event imports that match's role bindings.
+#   * Every pattern must have an SQL twin before it is enabled (SIFT-3). This file is paired with one example twin
+#     (trust_then_betrayal, in specs/chronicle/schema.sql, under three semantics).
+#   * Match semantics are declared, never implicit (05.4 §2.3, SIFT-8):
+#       selection   = "latest" | "earliest" | "all"            which open partial a completing event pairs with (default latest)
+#       on_complete = "clear_binding" | "consume" | "keep"     what happens to open partials after a match (default clear_binding)
+#       dedupe      = { key = [role vars], bucket_days = N }   at most one emitted match per key per bucket
+#   * firing_budget is REQUIRED: expected completed matches per simulated century per 100k persons. CI fails a
+#     pattern that fires above 3x its budget on the reference ensembles.
+#   * completion_hazard (optional) names a Registry system hazard used for suspense = stakes x P(completion).
 
 [[pattern]]
 id = "authority_purges_successor"
@@ -11,6 +22,9 @@ version = 1
 tellability = 0.9
 description = "An authority coerces or harms their designated successor, motivated by fear."
 roles = { A = "authority", S = "successor" }
+selection = "latest"
+on_complete = "clear_binding"
+firing_budget = { per_century_per_100k = 0.5 }
   [[pattern.clause]]
   bind = "e1"
   act = ["coerce", "harm", "purge"]
@@ -26,6 +40,9 @@ id = "trust_then_betrayal"
 version = 1
 tellability = 0.8
 roles = { A = "any", B = "any" }
+selection = "latest"                  # twin: twin_trust_then_betrayal (the `all` and `dedupe` variants are also twinned)
+on_complete = "clear_binding"
+firing_budget = { per_century_per_100k = 20 }
   [[pattern.clause]]
   bind = "e1"
   act = ["aid", "promise"]
@@ -53,6 +70,10 @@ version = 1
 tellability = 0.85
 description = "A victim (or their kin) later harms the original aggressor, with a contingency edge referencing the first harm."
 roles = { X = "any", V = "any", R = "any" }
+selection = "earliest"                # the first harm that the revenge explicitly references
+on_complete = "consume"
+dedupe = { key = ["X", "R"], bucket_days = 365 }
+firing_budget = { per_century_per_100k = 10 }
   [[pattern.clause]]
   bind = "e1"
   act = ["harm"]
@@ -74,6 +95,10 @@ version = 1
 tellability = 0.95
 description = "Covert-infiltration era: a test says positive, the subject is purged, and the subject was NOT infected. Irony is maximised when the subject is a notable's child."
 roles = { I = "investigator", S = "suspect", P = "kin" }
+selection = "latest"
+on_complete = "clear_binding"
+firing_budget = { per_century_per_100k = 2 }
+completion_hazard = { system = "M5.contagion", hazard = "purge_after_positive" }
   [[pattern.clause]]
   bind = "e1"
   act = ["test"]
@@ -95,6 +120,10 @@ id = "impossible_knowledge_noticed"
 version = 1
 tellability = 0.8
 roles = { M = "any", O = "any" }
+selection = "latest"
+on_complete = "clear_binding"
+dedupe = { key = ["M", "O"], bucket_days = 90 }
+firing_budget = { per_century_per_100k = 5 }
   [[pattern.clause]]
   bind = "e1"
   act = ["reveal", "aid", "harm"]
@@ -113,13 +142,18 @@ roles = { M = "any", O = "any" }
 id = "famine_to_succession_crisis"
 version = 1
 tellability = 0.9
-description = "Higher-order: consumes a famine collection and a successor_purged or regency event within five years."
+description = "Higher-order: a famine declared in a realm, followed within five years by that realm's authority purging their successor."
 roles = { A = "authority", S = "successor" }
+selection = "latest"
+on_complete = "clear_binding"
+firing_budget = { per_century_per_100k = 0.2 }
+completion_hazard = { system = "M7.dynasty", hazard = "successor_purge" }
   [[pattern.clause]]
   bind = "e1"
-  match_event = "famine_declared"
+  verb = "FAMINE_DECLARED"
   [[pattern.clause]]
   bind = "e2"
-  match_event = "successor_purged"
+  match_event = "successor_purged"      # imports bindings A and S from authority_purges_successor
   after = "e1"
   within_days = 1800
+  where = ["in_realm(e1, A)@e2"]

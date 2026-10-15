@@ -54,9 +54,8 @@
           "type": "integer"
         },
         "months": {
+          "const": 12,
           "default": 12,
-          "maximum": 24,
-          "minimum": 1,
           "title": "Months",
           "type": "integer"
         },
@@ -112,15 +111,7 @@
       "additionalProperties": false,
       "properties": {
         "zone": {
-          "enum": [
-            "temperate_continental",
-            "temperate_maritime",
-            "mediterranean",
-            "arid",
-            "tropical",
-            "boreal",
-            "urban_temperate"
-          ],
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
           "title": "Zone",
           "type": "string"
         },
@@ -544,7 +535,7 @@
           "type": "string"
         },
         "population": {
-          "maximum": 20000000,
+          "maximum": 10000000,
           "minimum": 100,
           "title": "Population",
           "type": "integer"
@@ -577,6 +568,28 @@
         "class_shares"
       ],
       "title": "HumanPeople",
+      "type": "object"
+    },
+    "Milestone": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "by_year": {
+          "maximum": 5000,
+          "minimum": 0,
+          "title": "By Year",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "by_year"
+      ],
+      "title": "Milestone",
       "type": "object"
     },
     "Narrative": {
@@ -698,6 +711,30 @@
       "title": "Presentation",
       "type": "object"
     },
+    "Trajectory": {
+      "additionalProperties": false,
+      "description": "Dated technologies and institutions a speculative world is expected to reach (05.5 \u00a75).",
+      "properties": {
+        "technologies": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Milestone"
+          },
+          "title": "Technologies",
+          "type": "array"
+        },
+        "institutions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Milestone"
+          },
+          "title": "Institutions",
+          "type": "array"
+        }
+      },
+      "title": "Trajectory",
+      "type": "object"
+    },
     "WorldMeta": {
       "additionalProperties": false,
       "properties": {
@@ -734,6 +771,17 @@
         },
         "horizon": {
           "$ref": "#/$defs/Horizon"
+        },
+        "trajectory": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Trajectory"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "fidelity_profile": {
           "additionalProperties": {

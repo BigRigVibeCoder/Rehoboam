@@ -23,14 +23,17 @@ params = { alpha = [0.4, 0.8], food_price_elasticity = [0.2, 0.6], base_tax = [0
 
 [systems."M5.contagion"]
 fidelity_levels = ["F0", "F1"]
-params = { r0 = [1.0, 8.0], latent_days = [1.0, 365.0], infectious_days = [2.0, 1.0e9], ifr = [0.0, 0.8], waning_per_year = [0.0, 1.0], fear_kappa = [0.0, 0.8], covert_evasion = [0.0, 0.9] }
+hazards = ["infection", "detection", "purge_after_positive"]       # readable by pattern completion_hazard (05.4 §2.3)
+params = { r0 = [1.0, 8.0], latent_days = [1.0, 365.0], infectious_days = [2.0, 1.0e9], ifr = [0.0, 0.8], waning_per_year = [0.0, 1.0], fear_kappa = [0.0, 0.8], covert_evasion = [0.0, 0.9], test_sensitivity = [0.5, 0.999], test_specificity = [0.9, 0.9999] }
 
 [systems."M6.polity"]
 fidelity_levels = ["F0", "F1"]
+hazards = ["revolt", "coup", "civil_war"]
 params = { tax_rate = [0.05, 0.4], elite_mobility_u = [0.0, 0.05], elite_growth_excess = [0.0, 0.01], psi_threshold = [1.0, 3.0], instability_mortality = [0.005, 0.05] }
 
 [systems."M7.dynasty"]
 fidelity_levels = ["F0", "F1"]
+hazards = ["regicide", "successor_purge", "succession_crisis", "extinction"]
 params = { murder_hazard_base = [0.003, 0.02], filial_piety_mean = [0.0, 1.0] }
 
 [systems."M8.war"]
@@ -92,15 +95,56 @@ ids = ["mythic_chronicle", "deep_time", "saga", "historian", "ensemble_space_ope
 # ----------------------------------------------------------------------------- templates
 [templates.feudal_realm]
 default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "M6.polity", "M7.dynasty", "M8.war"]
-horizon_years = [50, 1000]
+horizon_years = [50, 3000]
 modern = false
 
 [templates.merchant_republic]
 default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "M6.polity", "M7.dynasty"]
-horizon_years = [50, 1000]
+horizon_years = [50, 3000]
 modern = false
 
 [templates.modern_metropolis]
 default_systems = ["M1.regions", "M2.demography", "M4.economy", "M5.contagion", "M6.polity"]
 horizon_years = [1, 50]       # longer horizons require horizon.label = "speculative"
 modern = true
+
+# ----------------------------------------------------------------------------- culture & world vocabularies (no free-string semantics)
+[values]       # Schwartz basic values: keys allowed in Culture.value_bias
+ids = ["self_direction", "stimulation", "hedonism", "achievement", "power", "security", "conformity", "tradition", "benevolence", "universalism"]
+
+[doctrine_tags]
+ids = ["divine_kingship", "fire_rites", "ancestor_veneration", "dragon_kinship", "rule_of_law", "communal_service", "asceticism", "holy_war", "tolerance", "inquisitorial"]
+
+[heightmap_templates]
+ids = ["caldera_with_passes", "river_delta_city", "archipelago", "continental_plains", "mountain_valleys", "flat"]
+
+[climate_zones]
+ids = ["temperate_continental", "temperate_maritime", "mediterranean", "arid", "tropical", "boreal", "urban_temperate"]
+
+# ----------------------------------------------------------------------------- sifting vocabulary
+# Anchored attributes readable by patterns as `name(args)@eN`. Stored in event_snapshot.value as INTEGER:
+#   q8_8 = fixed-point (value/256); bool = 0/1; enum = index into `values`; int = raw.
+[attributes]
+fear                      = { type = "q8_8", args = ["actor"] }
+trust                     = { type = "q8_8", args = ["actor", "partner"] }
+suspicion                 = { type = "q8_8", args = ["actor", "partner"] }
+succession_rank           = { type = "int",  args = ["actor", "partner"] }
+is_self_or_kin            = { type = "bool", args = ["actor", "partner"] }
+is_parent                 = { type = "bool", args = ["actor", "partner"] }
+notable                   = { type = "bool", args = ["actor"] }
+hive_member               = { type = "bool", args = ["actor"] }
+used_hive_only_knowledge  = { type = "bool", args = ["actor"] }
+knows_event               = { type = "bool", args = ["actor", "event"] }
+in_realm                  = { type = "bool", args = ["event", "actor"] }
+test_result               = { type = "enum", args = ["actor"], values = ["negative", "positive", "inconclusive"] }
+
+# Concrete verbs (subset). Systems emit these. The world compiler maps setting verbs onto them.
+[verbs]
+FAMINE_DECLARED = { act_classes = ["death"], emitted_by = "M4.economy", aggregate = true }
+ISSUE_DECREE    = { act_classes = ["coerce"], emitted_by = "M6.polity" }
+ARREST          = { act_classes = ["coerce", "harm"], emitted_by = "rh-minds" }
+PURGE           = { act_classes = ["purge", "harm"], emitted_by = "rh-minds" }
+REVENGE         = { act_classes = ["harm"], emitted_by = "rh-minds", references = ["harm"] }
+BLOOD_TEST      = { act_classes = ["test"], emitted_by = "M5.contagion" }
+RAID_LIVESTOCK  = { act_classes = ["raid", "harm"], emitted_by = "S4.ecology" }
+SUCCEED         = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty" }

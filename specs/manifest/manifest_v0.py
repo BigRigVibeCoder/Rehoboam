@@ -7,8 +7,11 @@ Design rules (vs. the draft schema):
   * No free-string semantics: every mechanic reference is a Registry ID, checked against registry TOML.
   * No Dict[str, Any]: catalysts and peoples are discriminated unions.
   * Catalysts are INITIAL CONDITIONS, never forced outcomes (no trigger/consequence strings).
-  * Syntactic validation (this file) is necessary but not sufficient: burn-in against stylized
-    facts is the final gate and lives in the engine (docs/09 §3.1).
+  * Syntactic validation (this file) is necessary but not sufficient: the fast liveness gate
+    (200 y x 8 seeds) and the background certification run (1000 y x 32 seeds) against stylized
+    facts live in the engine (05.5 §4.2, docs/09).
+  * Flavour text (names, naming seeds, prose) is carried here only so the expander can move it into
+    the flavour asset. No simulation crate may read it.
 
 Usage:
   python manifest_v0.py validate examples/val_khor.yaml --registry registry_v0.toml
@@ -36,7 +39,7 @@ class Strict(BaseModel):
 # --------------------------------------------------------------------------- world meta
 class Calendar(Strict):
     days_per_year: Literal[360, 365] = 360
-    months: Annotated[int, Field(ge=1, le=24)] = 12
+    months: Literal[12] = 12          # fixed in v0: the M3 harvest calendar and the monthly tick assume it
     seasons: Literal[2, 4] = 4
     epoch_label: str = "Year"
 
@@ -46,6 +49,17 @@ class Horizon(Strict):
     label: Literal["historical", "speculative"] = "historical"
 
 
+class Milestone(Strict):
+    id: Slug
+    by_year: Annotated[int, Field(ge=0, le=5000)]
+
+
+class Trajectory(Strict):
+    """Dated technologies and institutions a speculative world is expected to reach (05.5 §5)."""
+    technologies: list[Milestone] = []
+    institutions: list[Milestone] = []
+
+
 class WorldMeta(Strict):
     id: Slug
     display_name: Annotated[str, Field(min_length=1, max_length=120)]
@@ -53,12 +67,21 @@ class WorldMeta(Strict):
     seed: Annotated[int, Field(ge=0, le=2**63 - 1)]
     calendar: Calendar = Calendar()
     horizon: Horizon
+    trajectory: Trajectory | None = None
     fidelity_profile: dict[str, Literal["F0", "F1", "F2", "F3"]] = {}
+
+    @model_validator(mode="after")
+    def _speculative_needs_trajectory(self) -> "WorldMeta":
+        if self.horizon.label == "speculative":
+            t = self.trajectory
+            if t is None or not (t.technologies or t.institutions):
+                raise ValueError("horizon.label = 'speculative' requires world.trajectory with at least one dated technology or institution")
+        return self
 
 
 # --------------------------------------------------------------------------- geography
 class Climate(Strict):
-    zone: Literal["temperate_continental", "temperate_maritime", "mediterranean", "arid", "tropical", "boreal", "urban_temperate"]
+    zone: Slug                        # Registry `climate_zones`
     harvest_sigma: float = 0.2
     autocorr: float = 0.35
     spatial_share: float = 0.6
@@ -107,7 +130,7 @@ class ClassShares(Strict):
 
 class HumanPeople(Strict):
     archetype: Literal["human"]
-    population: Annotated[int, Field(ge=100, le=20_000_000)]
+    population: Annotated[int, Field(ge=100, le=10_000_000)]   # > 2M total is a warning (outside the tested envelope, docs/08)
     cultures: Annotated[list[Culture], Field(min_length=1)]
     faiths: Annotated[list[Faith], Field(min_length=1)]
     class_shares: ClassShares
@@ -289,6 +312,30 @@ def validate_against_registry(m: Manifest, reg: dict) -> list[Issue]:
             if not (lo <= v <= hi):
                 err(f"geography.climate.{p}", f"value {v} outside Registry bounds [{lo}, {hi}]")
 
+    # world vocabularies (no free-string semantics)
+    if m.geography.heightmap_template not in _ids(reg, "heightmap_templates"):
+        err("geography.heightmap_template", f"'{m.geography.heightmap_template}' not in Registry")
+    if m.geography.climate.zone not in _ids(reg, "climate_zones"):
+        err("geography.climate.zone", f"'{m.geography.climate.zone}' not in Registry")
+    values, doctrines = _ids(reg, "values"), _ids(reg, "doctrine_tags")
+    for i, p in enumerate(m.peoples):
+        if isinstance(p, HumanPeople):
+            for j, c in enumerate(p.cultures):
+                for k in c.value_bias:
+                    if k not in values:
+                        err(f"peoples[{i}].cultures[{j}].value_bias.{k}", "not a Registry value")
+            for j, fa in enumerate(p.faiths):
+                for d in fa.doctrine_tags:
+                    if d not in doctrines:
+                        err(f"peoples[{i}].faiths[{j}].doctrine_tags", f"'{d}' not in Registry")
+    if m.world.trajectory is not None:
+        for kind, allowed in (("technologies", _ids(reg, "technologies")), ("institutions", _ids(reg, "institutions"))):
+            for j, ms in enumerate(getattr(m.world.trajectory, kind)):
+                if ms.id not in allowed:
+                    err(f"world.trajectory.{kind}[{j}]", f"'{ms.id}' not in Registry")
+                if ms.by_year > m.world.horizon.years:
+                    warn(f"world.trajectory.{kind}[{j}]", f"milestone year {ms.by_year} beyond horizon {m.world.horizon.years}")
+
     # vocabulary references
     vocab = {
         "institutions": (m.institutions, _ids(reg, "institutions")),
@@ -317,6 +364,8 @@ def validate_against_registry(m: Manifest, reg: dict) -> list[Issue]:
 
     polity_ids = {p.id for p in m.polities}
     humans = sum(p.population for p in m.peoples if isinstance(p, HumanPeople))
+    if humans > 2_000_000:
+        warn("peoples", f"{humans:,} persons: outside the P1–P5 performance envelope (docs/08); expect batch-speed runs")
     for i, c in enumerate(m.catalysts):
         if isinstance(c, (DynasticTension, Artifact)) and c.polity not in polity_ids:
             err(f"catalysts[{i}].polity", f"unknown polity '{c.polity}'")
@@ -331,15 +380,26 @@ def validate_against_registry(m: Manifest, reg: dict) -> list[Issue]:
                 warn(f"catalysts[{i}]", "covert outbreak without a testing technology: detection only via behavioural tells")
             if c.seed_infected > max(1, humans // 100):
                 warn(f"catalysts[{i}].seed_infected", "seed >1% of population: the 'covert' phase may be skipped")
+            m5 = m.systems.get("M5.contagion", {})
+            if {"blood_assay", "pcr_testing"} & set(m.technologies):
+                for p in ("test_sensitivity", "test_specificity"):
+                    if p not in m5:
+                        err(f"systems.M5.contagion.{p}", "a testing technology is declared: set test_sensitivity and test_specificity explicitly")
 
-    # creatures: archetype/variant + energetics (Carbone ratio)
+    # creatures: archetype/variant, capabilities, ecology system, energetics (Carbone ratio)
     arche = reg.get("archetypes", {})
+    if any(isinstance(p, CreaturePeople) for p in m.peoples) and "S4.ecology" not in m.systems:
+        err("systems", "creature peoples require system S4.ecology (prey, grazing, predator energetics)")
     prey_t = humans * m.geography.ecology.livestock_kg_per_capita / 1000.0 + m.geography.ecology.wild_prey_tonnes
     for i, p in enumerate(m.peoples):
         if isinstance(p, CreaturePeople):
             a = arche.get(p.archetype, {})
             if p.variant not in a.get("variants", []):
                 err(f"peoples[{i}].variant", f"'{p.variant}' not a Registry variant of {p.archetype}")
+            caps = set(a.get("capabilities", []))
+            for cap in ("flying", "bondable"):
+                if getattr(p.params, cap) and cap not in caps:
+                    err(f"peoples[{i}].params.{cap}", f"capability not permitted by archetype {p.archetype}")
             lo, hi = a.get("params", {}).get("mass_kg", [0, float("inf")])
             if not (lo <= p.params.mass_kg <= hi):
                 err(f"peoples[{i}].params.mass_kg", f"outside Registry bounds [{lo}, {hi}]")
@@ -386,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
     for i in issues:
         print(f"[{i.level.upper()}] {i.path}: {i.message}")
     print(f"{'INVALID' if errors else 'VALID'}: {args.manifest} "
-          f"({len(errors)} errors, {len(issues) - len(errors)} warnings) — next gate: burn-in (engine)")
+          f"({len(errors)} errors, {len(issues) - len(errors)} warnings) — next gate: liveness burn-in (engine)")
     return 1 if errors else 0
 
 
