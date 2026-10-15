@@ -1,0 +1,899 @@
+{
+  "$defs": {
+    "Artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "artifact",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "polity": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Polity",
+          "type": "string"
+        },
+        "holder_role": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Holder Role",
+          "type": "string"
+        },
+        "effects": {
+          "items": {
+            "$ref": "#/$defs/OverlayEffect"
+          },
+          "minItems": 1,
+          "title": "Effects",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "polity",
+        "holder_role",
+        "effects"
+      ],
+      "title": "Artifact",
+      "type": "object"
+    },
+    "Calendar": {
+      "additionalProperties": false,
+      "properties": {
+        "days_per_year": {
+          "default": 360,
+          "enum": [
+            360,
+            365
+          ],
+          "title": "Days Per Year",
+          "type": "integer"
+        },
+        "months": {
+          "default": 12,
+          "maximum": 24,
+          "minimum": 1,
+          "title": "Months",
+          "type": "integer"
+        },
+        "seasons": {
+          "default": 4,
+          "enum": [
+            2,
+            4
+          ],
+          "title": "Seasons",
+          "type": "integer"
+        },
+        "epoch_label": {
+          "default": "Year",
+          "title": "Epoch Label",
+          "type": "string"
+        }
+      },
+      "title": "Calendar",
+      "type": "object"
+    },
+    "ClassShares": {
+      "additionalProperties": false,
+      "properties": {
+        "commoner": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Commoner",
+          "type": "number"
+        },
+        "burgher": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Burgher",
+          "type": "number"
+        },
+        "elite": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Elite",
+          "type": "number"
+        }
+      },
+      "required": [
+        "commoner",
+        "burgher",
+        "elite"
+      ],
+      "title": "ClassShares",
+      "type": "object"
+    },
+    "Climate": {
+      "additionalProperties": false,
+      "properties": {
+        "zone": {
+          "enum": [
+            "temperate_continental",
+            "temperate_maritime",
+            "mediterranean",
+            "arid",
+            "tropical",
+            "boreal",
+            "urban_temperate"
+          ],
+          "title": "Zone",
+          "type": "string"
+        },
+        "harvest_sigma": {
+          "default": 0.2,
+          "title": "Harvest Sigma",
+          "type": "number"
+        },
+        "autocorr": {
+          "default": 0.35,
+          "title": "Autocorr",
+          "type": "number"
+        },
+        "spatial_share": {
+          "default": 0.6,
+          "title": "Spatial Share",
+          "type": "number"
+        },
+        "volcanic_rate": {
+          "default": 0.004,
+          "title": "Volcanic Rate",
+          "type": "number"
+        }
+      },
+      "required": [
+        "zone"
+      ],
+      "title": "Climate",
+      "type": "object"
+    },
+    "ClimateShock": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "climate_shock",
+          "title": "Kind",
+          "type": "string"
+        },
+        "year": {
+          "minimum": 0,
+          "title": "Year",
+          "type": "integer"
+        },
+        "severity_sigma": {
+          "maximum": 4.0,
+          "minimum": 0.5,
+          "title": "Severity Sigma",
+          "type": "number"
+        },
+        "duration_years": {
+          "default": 1,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Duration Years",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "year",
+        "severity_sigma"
+      ],
+      "title": "ClimateShock",
+      "type": "object"
+    },
+    "CovertOutbreak": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "covert_outbreak",
+          "title": "Kind",
+          "type": "string"
+        },
+        "seed_infected": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Seed Infected",
+          "type": "integer"
+        },
+        "seed_region_hint": {
+          "default": "random",
+          "enum": [
+            "capital",
+            "port",
+            "periphery",
+            "random"
+          ],
+          "title": "Seed Region Hint",
+          "type": "string"
+        },
+        "channel": {
+          "const": "hive",
+          "default": "hive",
+          "title": "Channel",
+          "type": "string"
+        },
+        "start_day": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Start Day",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "seed_infected"
+      ],
+      "title": "CovertOutbreak",
+      "type": "object"
+    },
+    "CreatureParams": {
+      "additionalProperties": false,
+      "properties": {
+        "mass_kg": {
+          "title": "Mass Kg",
+          "type": "number"
+        },
+        "metabolism_multiplier": {
+          "default": 1.0,
+          "title": "Metabolism Multiplier",
+          "type": "number"
+        },
+        "flying": {
+          "default": false,
+          "title": "Flying",
+          "type": "boolean"
+        },
+        "bondable": {
+          "default": false,
+          "title": "Bondable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mass_kg"
+      ],
+      "title": "CreatureParams",
+      "type": "object"
+    },
+    "CreaturePeople": {
+      "additionalProperties": false,
+      "properties": {
+        "archetype": {
+          "const": "apex_predator",
+          "title": "Archetype",
+          "type": "string"
+        },
+        "variant": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Variant",
+          "type": "string"
+        },
+        "population": {
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Population",
+          "type": "integer"
+        },
+        "params": {
+          "$ref": "#/$defs/CreatureParams"
+        }
+      },
+      "required": [
+        "archetype",
+        "variant",
+        "population",
+        "params"
+      ],
+      "title": "CreaturePeople",
+      "type": "object"
+    },
+    "Culture": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "naming_seed": {
+          "description": "Flavour only: seeds the name generator. Never mechanics.",
+          "maxLength": 200,
+          "title": "Naming Seed",
+          "type": "string"
+        },
+        "value_bias": {
+          "additionalProperties": {
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "type": "number"
+          },
+          "default": {},
+          "title": "Value Bias",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "naming_seed"
+      ],
+      "title": "Culture",
+      "type": "object"
+    },
+    "DynasticTension": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "dynastic_tension",
+          "title": "Kind",
+          "type": "string"
+        },
+        "polity": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Polity",
+          "type": "string"
+        },
+        "initial": {
+          "$ref": "#/$defs/DynasticTensionInitial"
+        }
+      },
+      "required": [
+        "kind",
+        "polity",
+        "initial"
+      ],
+      "title": "DynasticTension",
+      "type": "object"
+    },
+    "DynasticTensionInitial": {
+      "additionalProperties": false,
+      "properties": {
+        "opinion_successor_of_authority": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Opinion Successor Of Authority",
+          "type": "integer"
+        },
+        "opinion_authority_of_successor": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": -100,
+          "title": "Opinion Authority Of Successor",
+          "type": "integer"
+        },
+        "fear_authority": {
+          "default": 0.0,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Fear Authority",
+          "type": "number"
+        },
+        "heir_age_years": {
+          "default": 20,
+          "maximum": 80,
+          "minimum": 0,
+          "title": "Heir Age Years",
+          "type": "integer"
+        }
+      },
+      "title": "DynasticTensionInitial",
+      "type": "object"
+    },
+    "Dynasty": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "generations": {
+          "default": 3,
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Generations",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Dynasty",
+      "type": "object"
+    },
+    "Ecology": {
+      "additionalProperties": false,
+      "properties": {
+        "livestock_kg_per_capita": {
+          "default": 150.0,
+          "maximum": 2000.0,
+          "minimum": 0.0,
+          "title": "Livestock Kg Per Capita",
+          "type": "number"
+        },
+        "wild_prey_tonnes": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Wild Prey Tonnes",
+          "type": "number"
+        }
+      },
+      "title": "Ecology",
+      "type": "object"
+    },
+    "Faith": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "doctrine_tags": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          },
+          "title": "Doctrine Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Faith",
+      "type": "object"
+    },
+    "Geography": {
+      "additionalProperties": false,
+      "properties": {
+        "raster_resolution": {
+          "default": 512,
+          "enum": [
+            256,
+            512,
+            1024,
+            2048,
+            4096
+          ],
+          "title": "Raster Resolution",
+          "type": "integer"
+        },
+        "region_count": {
+          "default": 600,
+          "maximum": 5000,
+          "minimum": 20,
+          "title": "Region Count",
+          "type": "integer"
+        },
+        "heightmap_template": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Heightmap Template",
+          "type": "string"
+        },
+        "climate": {
+          "$ref": "#/$defs/Climate"
+        },
+        "ecology": {
+          "$ref": "#/$defs/Ecology",
+          "default": {
+            "livestock_kg_per_capita": 150.0,
+            "wild_prey_tonnes": 0.0
+          }
+        }
+      },
+      "required": [
+        "heightmap_template",
+        "climate"
+      ],
+      "title": "Geography",
+      "type": "object"
+    },
+    "Horizon": {
+      "additionalProperties": false,
+      "properties": {
+        "years": {
+          "maximum": 5000,
+          "minimum": 1,
+          "title": "Years",
+          "type": "integer"
+        },
+        "label": {
+          "default": "historical",
+          "enum": [
+            "historical",
+            "speculative"
+          ],
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "years"
+      ],
+      "title": "Horizon",
+      "type": "object"
+    },
+    "HumanPeople": {
+      "additionalProperties": false,
+      "properties": {
+        "archetype": {
+          "const": "human",
+          "title": "Archetype",
+          "type": "string"
+        },
+        "population": {
+          "maximum": 20000000,
+          "minimum": 100,
+          "title": "Population",
+          "type": "integer"
+        },
+        "cultures": {
+          "items": {
+            "$ref": "#/$defs/Culture"
+          },
+          "minItems": 1,
+          "title": "Cultures",
+          "type": "array"
+        },
+        "faiths": {
+          "items": {
+            "$ref": "#/$defs/Faith"
+          },
+          "minItems": 1,
+          "title": "Faiths",
+          "type": "array"
+        },
+        "class_shares": {
+          "$ref": "#/$defs/ClassShares"
+        }
+      },
+      "required": [
+        "archetype",
+        "population",
+        "cultures",
+        "faiths",
+        "class_shares"
+      ],
+      "title": "HumanPeople",
+      "type": "object"
+    },
+    "Narrative": {
+      "additionalProperties": false,
+      "properties": {
+        "pattern_packs": {
+          "items": {
+            "pattern": "^[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Pattern Packs",
+          "type": "array"
+        },
+        "default_style_card": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Default Style Card",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern_packs",
+        "default_style_card"
+      ],
+      "title": "Narrative",
+      "type": "object"
+    },
+    "OverlayEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "overlay": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Overlay",
+          "type": "string"
+        },
+        "holder_delta": {
+          "maximum": 1.0,
+          "minimum": -1.0,
+          "title": "Holder Delta",
+          "type": "number"
+        }
+      },
+      "required": [
+        "overlay",
+        "holder_delta"
+      ],
+      "title": "OverlayEffect",
+      "type": "object"
+    },
+    "Polity": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "government": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Government",
+          "type": "string"
+        },
+        "succession_law": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Succession Law",
+          "type": "string"
+        },
+        "titles": {
+          "description": "abstract role -> concrete title, e.g. authority -> High_King",
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{1,63}$": {
+              "type": "string"
+            }
+          },
+          "title": "Titles",
+          "type": "object"
+        },
+        "dynasties": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Dynasty"
+          },
+          "title": "Dynasties",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "government",
+        "succession_law",
+        "titles"
+      ],
+      "title": "Polity",
+      "type": "object"
+    },
+    "Presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "era_art": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Era Art",
+          "type": "string"
+        },
+        "palette": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Palette",
+          "type": "string"
+        }
+      },
+      "required": [
+        "era_art",
+        "palette"
+      ],
+      "title": "Presentation",
+      "type": "object"
+    },
+    "WorldMeta": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "template": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Template",
+          "type": "string"
+        },
+        "seed": {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "calendar": {
+          "$ref": "#/$defs/Calendar",
+          "default": {
+            "days_per_year": 360,
+            "months": 12,
+            "seasons": 4,
+            "epoch_label": "Year"
+          }
+        },
+        "horizon": {
+          "$ref": "#/$defs/Horizon"
+        },
+        "fidelity_profile": {
+          "additionalProperties": {
+            "enum": [
+              "F0",
+              "F1",
+              "F2",
+              "F3"
+            ],
+            "type": "string"
+          },
+          "default": {},
+          "title": "Fidelity Profile",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "display_name",
+        "template",
+        "seed",
+        "horizon"
+      ],
+      "title": "WorldMeta",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "manifest_version": {
+      "const": 0,
+      "title": "Manifest Version",
+      "type": "integer"
+    },
+    "registry_version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Registry Version",
+      "type": "string"
+    },
+    "world": {
+      "$ref": "#/$defs/WorldMeta"
+    },
+    "geography": {
+      "$ref": "#/$defs/Geography"
+    },
+    "peoples": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "apex_predator": "#/$defs/CreaturePeople",
+            "human": "#/$defs/HumanPeople"
+          },
+          "propertyName": "archetype"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/HumanPeople"
+          },
+          {
+            "$ref": "#/$defs/CreaturePeople"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Peoples",
+      "type": "array"
+    },
+    "polities": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Polity"
+      },
+      "title": "Polities",
+      "type": "array"
+    },
+    "systems": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "type": "number"
+        },
+        "type": "object"
+      },
+      "description": "system id -> {param: value}; params bounded by Registry",
+      "title": "Systems",
+      "type": "object"
+    },
+    "institutions": {
+      "default": [],
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "title": "Institutions",
+      "type": "array"
+    },
+    "technologies": {
+      "default": [],
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "title": "Technologies",
+      "type": "array"
+    },
+    "catalysts": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "artifact": "#/$defs/Artifact",
+            "climate_shock": "#/$defs/ClimateShock",
+            "covert_outbreak": "#/$defs/CovertOutbreak",
+            "dynastic_tension": "#/$defs/DynasticTension"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/DynasticTension"
+          },
+          {
+            "$ref": "#/$defs/Artifact"
+          },
+          {
+            "$ref": "#/$defs/CovertOutbreak"
+          },
+          {
+            "$ref": "#/$defs/ClimateShock"
+          }
+        ]
+      },
+      "title": "Catalysts",
+      "type": "array"
+    },
+    "overlays": {
+      "default": [],
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "title": "Overlays",
+      "type": "array"
+    },
+    "narrative": {
+      "$ref": "#/$defs/Narrative"
+    },
+    "presentation": {
+      "$ref": "#/$defs/Presentation"
+    }
+  },
+  "required": [
+    "manifest_version",
+    "registry_version",
+    "world",
+    "geography",
+    "peoples",
+    "systems",
+    "narrative",
+    "presentation"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

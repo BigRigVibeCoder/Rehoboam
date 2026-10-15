@@ -1,0 +1,39 @@
+# Negative test: the kinds of errors the draft schema let through. Expected result: INVALID.
+manifest_version: 0
+registry_version: "0.1.0"
+world:
+  id: metropolis_consensus_virus
+  display_name: "Draft-style metropolis"
+  template: modern_metropolis
+  seed: 1
+  horizon: {years: 1000, label: historical}          # modern city × 1000 years (R09 §7)
+  fidelity_profile: {M5.contagion: F3}                # fidelity level not implemented
+geography:
+  heightmap_template: flat
+  climate: {zone: urban_temperate, harvest_sigma: 0.5}  # outside bounds
+peoples:
+  - archetype: human
+    population: 100000
+    class_shares: {commoner: 0.9, burgher: 0.1, elite: 0.0}
+    cultures: [{id: civ, name: Civ, naming_seed: x}]
+    faiths: [{id: none, name: None}]
+  - archetype: apex_predator
+    variant: dragon
+    population: 45                                   # the draft's 45 drakes at metabolism ×1, no wild prey
+    params: {mass_kg: 5000, metabolism_multiplier: 1.0}
+polities:
+  - id: council
+    name: Council
+    government: municipal_democracy
+    succession_law: elective
+    titles: {authority: Mayor}                       # no successor role
+systems:
+  M5.contagion: {r0: 12.0}                           # outside bounds
+  M9.free_strings: {FORCE_COUNCIL_SCHISM: 1}         # unknown system (draft-style free semantics)
+catalysts:
+  - kind: covert_outbreak
+    seed_infected: 5000
+narrative:
+  pattern_packs: [covert_infiltration]
+  default_style_card: noir_city
+presentation: {era_art: x_era, palette: y_palette}

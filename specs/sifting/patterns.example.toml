@@ -1,0 +1,125 @@
+# Rehoboam sifting patterns, DSL v0 examples (docs/05_architecture/05.4 §2, ADR-0008).
+# Rules:
+#   * Roles and act classes come from the Registry (setting-agnostic). The world compiler maps concrete verbs and titles onto them.
+#   * Every state read is ANCHORED to a bound event: `attr(...)@eN`. A bare read is a lint error (fixes the draft's temporal bug).
+#   * `unless` clauses cancel partial matches. `emit` produces a match event that higher-order patterns can consume.
+#   * Each pattern needs an SQL twin (see specs/chronicle/schema.sql, view twin_trust_then_betrayal).
+
+[[pattern]]
+id = "authority_purges_successor"
+version = 1
+tellability = 0.9
+description = "An authority coerces or harms their designated successor, motivated by fear."
+roles = { A = "authority", S = "successor" }
+  [[pattern.clause]]
+  bind = "e1"
+  act = ["coerce", "harm", "purge"]
+  initiator = "A"
+  target = "S"
+  where = ["succession_rank(S, A)@e1 == 1", "fear(A)@e1 >= 0.6"]
+  require_edge = { into = "e1", kind = "motivated_by", from_state = "fear(A)" }
+  [pattern.emit]
+  match_event = "successor_purged"
+
+[[pattern]]
+id = "trust_then_betrayal"
+version = 1
+tellability = 0.8
+roles = { A = "any", B = "any" }
+  [[pattern.clause]]
+  bind = "e1"
+  act = ["aid", "promise"]
+  initiator = "A"
+  target = "B"
+  where = ["trust(B, A)@e1 >= 0.6"]
+  [[pattern.clause]]
+  bind = "e2"
+  act = ["harm", "betray", "conceal"]
+  initiator = "A"
+  target = "B"
+  after = "e1"
+  within_days = 3650
+  [[pattern.unless]]
+  act = ["aid"]
+  initiator = "B"
+  target = "A"
+  between = ["e1", "e2"]
+  [pattern.emit]
+  match_event = "betrayal_arc"
+
+[[pattern]]
+id = "revenge_chain"
+version = 1
+tellability = 0.85
+description = "A victim (or their kin) later harms the original aggressor, with a contingency edge referencing the first harm."
+roles = { X = "any", V = "any", R = "any" }
+  [[pattern.clause]]
+  bind = "e1"
+  act = ["harm"]
+  initiator = "X"
+  target = "V"
+  [[pattern.clause]]
+  bind = "e2"
+  act = ["harm", "depose", "accuse"]
+  initiator = "R"
+  target = "X"
+  after = "e1"
+  within_days = 18000
+  where = ["is_self_or_kin(R, V)@e2"]
+  require_edge = { from = "e1", into = "e2", kind = "contingent" }
+
+[[pattern]]
+id = "false_positive_purge_of_notable_child"
+version = 1
+tellability = 0.95
+description = "Covert-infiltration era: a test says positive, the subject is purged, and the subject was NOT infected. Irony is maximised when the subject is a notable's child."
+roles = { I = "investigator", S = "suspect", P = "kin" }
+  [[pattern.clause]]
+  bind = "e1"
+  act = ["test"]
+  initiator = "I"
+  target = "S"
+  where = ["test_result(S)@e1 == 'positive'", "hive_member(S)@e1 == false"]
+  [[pattern.clause]]
+  bind = "e2"
+  act = ["purge", "harm"]
+  target = "S"
+  after = "e1"
+  within_days = 90
+  where = ["is_parent(P, S)@e2", "notable(P)@e2 == true"]
+  [pattern.emit]
+  match_event = "innocent_purged"
+
+[[pattern]]
+id = "impossible_knowledge_noticed"
+version = 1
+tellability = 0.8
+roles = { M = "any", O = "any" }
+  [[pattern.clause]]
+  bind = "e1"
+  act = ["reveal", "aid", "harm"]
+  initiator = "M"
+  where = ["used_hive_only_knowledge(M)@e1 == true"]
+  [[pattern.clause]]
+  bind = "e2"
+  act = ["discover", "accuse"]
+  initiator = "O"
+  target = "M"
+  after = "e1"
+  within_days = 30
+  where = ["knows_event(O, e1)@e2 == true", "suspicion(O, M)@e2 >= 0.5"]
+
+[[pattern]]
+id = "famine_to_succession_crisis"
+version = 1
+tellability = 0.9
+description = "Higher-order: consumes a famine collection and a successor_purged or regency event within five years."
+roles = { A = "authority", S = "successor" }
+  [[pattern.clause]]
+  bind = "e1"
+  match_event = "famine_declared"
+  [[pattern.clause]]
+  bind = "e2"
+  match_event = "successor_purged"
+  after = "e1"
+  within_days = 1800
