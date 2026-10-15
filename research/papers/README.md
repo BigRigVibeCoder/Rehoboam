@@ -27,11 +27,27 @@ Naming: `<reading-list ID>_<first author>_<year>_<short title>.<ext>`. IDs match
 | `A16b_grimm_et_al_2020_odd_second_update.pdf` | Grimm, V. et al. (2020). "The ODD protocol … second update." *JASSS* 23(2) | System-spec documentation template | R12 (batch 3) |
 | `A12c_lucas_turkes_2004_fitting_lanchester_equations.pdf` | Lucas, T. W. & Turkes, T. (2004). *Naval Research Logistics* 51(1) | M8 attrition | R12 §11 |
 
-**Still wanted from Batch 2** (`../reading_list.md`):
-- Coale & Demeny West tables
-- Alfani & Ó Gráda (2017); Campbell & Ó Gráda (2011)
-- Arbesman (2011); Allen (2001)
-- Winnow (2021) and Felt (2019)
-- "Select the unexpected" (2022); Dramatis (2014); Suspenser (2015); Behrooz et al. (2015)
+**Still wanted** (in priority order; exact citations so they can be found):
+
+*Closes Tier A: each fills a validation band that currently rests on memory.*
+1. Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3), 127–129. Feeds V-SF-07, polity lifespans.
+2. Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38(4), 411–447. Feeds the real-wage series, V-SF-11 (post-plague wages) and M4.
+3. Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4), 859–886. Also the Introduction of Alfani, G. & Ó Gráda, C. (eds.) (2017), *Famine in European History*, CUP. Together they feed V-SF-03 (mortality crises) and M3 → M4.
+4. Coale, A. J. & Demeny, P. (1983). *Regional Model Life Tables and Stable Populations*, 2nd ed., Academic Press. Only the **West** tables and the introduction are needed. They give M2 an infant sub-schedule and sex differences, which Brass lacks.
+
+*For M8 (P3a), pre-modern battles; WWII anchors are in hand:*
+
+5. The CAA historical battle database CDB90 and its CHASE report (Helmbold & Khan 1986, as cited by Lucas & Turkes 2004). These cover battle outcomes against casualties and are needed for breakpoints.
+6. Helmbold, R. L. (1965), *Operations Research* 13, 857–859; Helmbold (1969), RAND P-4199; Helmbold (1987), CAA-TP-87-16; Hartley, D. S. & Helmbold, R. L. (1995), *Naval Research Logistics* 42, 609–633.
+
+*Story detection (the thesis gate G2):*
+
+7. Kreminski, M., Dickinson, M. & Wardrip-Fruin, N. (2019). "Felt: a simple story sifter." *ICIDS 2019*.
+8. Kreminski, M. et al. (2021). "Winnow: a domain-specific language for incremental story sifting." *AIIDE 2021*.
+9. Kreminski, M. et al. (2022). "Select the unexpected: a statistical heuristic for story sifting." *ICIDS 2022*.
+10. O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014*; and Cheong, Y.-G. & Young, R. M. (2015). "Suspenser." *IEEE TCIAIG* 7(1).
+11. Behrooz, M., Swanson, R. & Jhala, A. (2015). "Remember that time? Telling interesting stories from past interactions." *ICIDS 2015*.
+
+*Optional:* Cirillo, P. & Taleb, N. N. (2016), *Physica A* 452. Clauset (2018) already covers the war tail.
 
 Add new files with the naming rule above, or drop them in the repository root and they will be filed.
