@@ -117,5 +117,5 @@ A demographic transition multiplies population roughly 5–30 times.
   - Clauset 2018: the *shape* of the war-severity tail (α̂ = 1.53 ± 0.07) and memoryless onsets are stable over 1823–2003; scale and onset rate are not.
   - Cederman 2003: the tail needs technological change and contagion.
   - Turchin 2013: the structural-demographic mechanism applied to the antebellum and post-1960 United States, with dimensionless components.
-  - Goldstone 1991: pending.
+  - Goldstone 1991: why state breakdowns faded in 19th-century Western Europe (fiscal reform, elite birth limitation, industrial labour absorption, trade and fertiliser, power sharing, policing). This is the mechanism list for era packs E2 and E3; states that lacked these broke down in the early 1900s.
 - R09 §S2 (technology diffusion, loss below a population threshold); R09 TL;DR 11 (horizon rules, now re-scoped).

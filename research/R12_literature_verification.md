@@ -1,6 +1,6 @@
 # R12: Literature verification (primary sources supplied by the director)
 
-*Research dossier, 2026-10-15. Full texts were supplied by the director and read in full; PDFs stay outside git. Page numbers are journal pages unless stated. Figure readings are approximate and marked. Effect numbers marked *derived* were computed by us from the paper's own figures or tables. Batch 1: eight Tier-A sources from `reading_list.md`.*
+*Research dossier, 2026-10-15. Full texts were supplied by the director and read in full; PDFs stay outside git. Page numbers are journal pages unless stated. Figure readings are approximate and marked. Effect numbers marked *derived* were computed by us from the paper's own figures or tables. Batch 1: eight Tier-A sources from `reading_list.md`, all extracted.*
 
 ---
 
@@ -15,14 +15,15 @@
 2. **Some facts are era-invariant.** The *shape* of the war-severity tail is stable over 1823–2003, at α̂ = 1.53 ± 0.07 (Clauset 2018), and so is the memoryless onset process. Scale and onset rate come from population, polities and technology.
 3. **Our war model must *produce* the tail, not fit it.** In Cederman's model the tail exists only with technological change and war contagion. Without either, α rises to about 2.3. M8 needs an onset hazard with contagion, and severity that emerges from escalation.
 4. **The structural-demographic mechanism carries into the modern era.** Turchin (2013) applies the same Ψ to the antebellum and post-1960 United States. The components are dimensionless ratios, which survive a tenfold rise in GDP per head.
-5. **Corrections to the plan** (all applied; see the delta table):
+5. **Goldstone explains why breakdowns faded after 1850**: fiscal reform, elite birth limitation, industry absorbing labour, trade and fertiliser breaking the local food constraint, power sharing, policing. That is a concrete agenda for the early-modern and industrial era packs. He also says a breakdown needs *all three* strains, while two give a crisis.
+6. **Corrections to the plan** (all applied; see the delta table):
    - R09's elite dynamics and EMP formula were wrong.
    - The murder-hazard floor was too high for later centuries.
    - Deposition had no parameter of its own.
    - "Regency raises hazard" is unsupported.
    - The war-tail test used p ≥ 0.1 where the source says p > 0.1.
    - City sizes were to be fitted by OLS, which the method paper rejects.
-6. **A testability warning.** Heavy-tail bands need a pooled tail of at least 100 events, and per-seed tests need at least 50 per seed. A 100k-person world may not produce that many wars or cities. The P1b and P3a measurements will tell us; until then V-SF-08 is soft, and V-SF-09 can come out INSUFFICIENT.
+7. **A testability warning.** Heavy-tail bands need a pooled tail of at least 100 events, and per-seed tests need at least 50 per seed. A 100k-person world may not produce that many wars or cities. The P1b and P3a measurements will tell us; until then V-SF-08 is soft, and V-SF-09 can come out INSUFFICIENT.
 
 ---
 
@@ -40,6 +41,8 @@
 | V-SF-09: deterministic CSN recipe, p > 0.1, per-seed plausibility, cutoff policy, INSUFFICIENT rule; new 09b (memoryless onsets) and 09c (ablation: the tail is produced) | `09` §3.1 | CSN 2009; Clauset 2018; Cederman |
 | V-SF-05 limited to internal violence; new V-SF-05b lead–lag (soft) | `09` §3.1 | Clauset 2018; Turchin 2013 |
 | New V-ERA suite (era transitions) | `09` §3.6 | ADR-0027 |
+| M6 outcome gating by the number of elevated components (3 → breakdown, 2 → crisis/reform, 1 → none); fiscal distress per Goldstone; Goldstone's additive MMP supported as a variant | `05.1` §3 | Goldstone 1991 |
+| Era packs E2/E3 scoped by Goldstone's "why breakdowns faded" mechanisms | `11` era-pack track | Goldstone 1991 |
 | R09 annotated where primary sources disagree | `research/R09…` | All |
 
 **Still open:** the secular-cycle band (120–450 years, V-SF-04) is not in Turchin (2013); it waits for *Secular Cycles* (reading list A1). The regency effect needs another source. The modern ends of every era-sensitive function wait for Tier A-M (Archigos and others).
@@ -318,4 +321,81 @@ The paper is CC BY-NC: its numbers may be cited, but its figures and text must n
 
 ## 8. Goldstone, J. A. (1991). *Revolution and Rebellion in the Early Modern World*. UC Press
 
-*Extraction in progress. This section will be completed when the book extraction finishes.*
+Page numbers are print pages. Chapters: 1 model (pp. 1–62); 2 England (63–169); 3 France and the 19th-century wave (170–348); 4 Ottoman and Ming–Qing (349–415); 5 ideology (416–458); 6 the present (459–497).
+
+**The causal chain (Ch. 1, pp. 24–27; Fig. 3, p. 142).** Mortality falls for exogenous reasons; population rises; grain prices rise. Three strains follow:
+1. **State fiscal distress.** Taxes fixed in nominal terms lag prices, while real costs rise.
+2. **Elite mobility and competition.** This means turnover and displacement. Absorbing newcomers is harmless (pp. 109–122).
+3. **Mass mobilisation potential.** Driven by falling real wages, cities outgrowing their administration, and the youth share (pp. 134–140).
+
+Population also acts *directly* on the elites (more surviving younger sons) and on mobilisation potential. Heterodox ideology follows the three strains; it does not cause them (p. xxiv).
+
+**The index (pp. 105, 139, 142–144).** Ψ = fiscal distress × elite mobility/competition × mobilisation potential.
+- **Fiscal distress.** A five-step scale running from adequate funding to total credit failure (p. 105).
+  - It is driven by ∏ e^{k(Xᵢ − B)}, where X is decadal inflation and B is the revenue growth possible without new taxes.
+  - Fitted over 1500–1750: B = 0.5–0.7 %/yr, k = 0.25–0.75, R² ≈ 0.70 (Table 4, p. 108).
+- **Elite term.** Measured by enrolments.
+- **Mobilisation potential.** It is **additive**: W̄/W + (W̄/W − 1)·Urban·Age (p. 139), with Age = population aged 10–29 ÷ population aged 30+. With high wages, urbanisation and youth *reduce* it.
+
+**Gating (p. 469).** A sustained rise in all three strains goes with state breakdown. A rise in two can produce a state crisis. A rise in one alone rarely ends a regime.
+
+**Lags.** Pressure builds over several generations of 35–100 % population growth (p. 405). Triggers only release it (pp. 35–36). Ψ measures "the strain on institutions", not raw ecological pressure (p. 150).
+
+**Numbers.**
+- **England 1500–1650.**
+  - Population about 2M to over 5M; grain prices +600 %; real wages down to about 50 %.
+  - Elasticities: prices 2.24 and real wages −1.78 with respect to population (pp. 87–91).
+  - Gentry families roughly tripled; enrolments rose 400 % (pp. 113–124).
+  - Subsidy assessments fell to 3 % of their real value (p. 98).
+  - Ψ peaked around 2.4 in the 1630s (Fig. 5).
+- **France 1700–90.**
+  - Population 21.5M to 28.1M; price elasticity 1.94, wage elasticity −0.86.
+  - Ψ index about 1 in the 1680s, about 11 in the 1780s (Fig. 8; read from the figure).
+- **Qing 1770–1850.** Population 270M to 400M against 25 % more farmland. Top degrees grew 33 % and posts 13 % while population doubled (pp. 391–397).
+- **Europe overall.** No crises in the low-growth period 1650–1750 (Fig. 14).
+
+**Why state breakdowns faded in 19th-century Western Europe (Ch. 3 §C pp. 288–289; pp. 26, 315–338, 460–461).** This is the agenda for the early-modern and industrial era packs:
+1. **Fiscal.** States moved to excise taxes and funded debt; English debt was refinanced at 3 % (pp. 319–320). Crises then came without bankruptcy.
+2. **Elites.** Families limited their births, so there was displacement but little turnover. The civil service expanded: +250 % in Britain over 1830–70 (pp. 289, 314, 329).
+3. **Economy.** Industry absorbed surplus labour. Railways, steamships, American grain and fertiliser ended the local food constraint (pp. 26, 302, 315).
+4. **Institutions.** Reforms that shared power, and better policing (pp. 292, 316–318).
+5. **The exceptions.** Russia, China and the Ottoman Empire lacked this flexibility and broke down in the early 1900s (p. 461).
+6. **Modern states.** They can still raise Ψ by policy: too much debt, favouring cities, more graduates than posts, shutting out rising groups (pp. 472–473).
+
+**Ideology (Ch. 5).**
+- The causes are material; Ψ has no ideological term (pp. 27, 282).
+- After a breakdown the sequence is: networks build the dominant coalition; programmes move from rectification to redistribution to nationalism; radicalisation follows the threat of counter-revolution; then terror and war; then populist military rule within 10–20 years (pp. 421–436, 478).
+- A revolutionary rebuild needs marginal elites shut out on principle *and* a culture with an "eschatological" view of time. Otherwise the outcome is a conservative restoration (pp. 444–450).
+- Restorations that enforced orthodoxy stagnated (pp. 450–458).
+
+**Era-dependence.**
+- *Invariant:* the rule that three strains must coincide; nonlinear effects on marginal groups (doubling population multiplies the marginal group 6.5–11 times, pp. 33–34); booms in credential-seeking; urban growth against administrative capacity; the sequence after breakdown.
+- *Era-specific:* the driver itself — rigid nominal taxes, land-based status, local grain markets.
+- *Institutions set the direction:* Japan's rice-denominated taxes made even a stable population ruinous (pp. 404–415).
+
+**Verification of repo claims:**
+- R09's "EMP" and "debt × distrust" are **Turchin's** terms; Goldstone's middle term is elite mobility/competition, and his fiscal term is the five-step scale.
+- R09's "MMP = (w*/w)·urb·youth" is Turchin's multiplicative form; **Goldstone's is additive**.
+- R09's "instability resets the system": **not in source**. In Goldstone, exogenous disease and climate end the growth phases (pp. 25–30).
+- `psi_threshold`: **not in source**.
+- 05.1's Granovetter thresholds: **confirmed** (p. 138, n. 10).
+- The W overshoot: **not in source**.
+- ADR-0027's "modern application": **confirmed** (pp. 469–475).
+
+**Design consequences (applied).**
+1. **Count the elevated components.** M6 turns Ψ into outcomes by how many components are elevated relative to their baselines: three gives a breakdown hazard, two gives a crisis or reform window, one gives nothing.
+2. **Fiscal distress per Goldstone.** It follows exp(k·Σ(π − B)), with B a function of `fiscal_capacity` and the share of indirect taxes. Each step on the five-step scale is emitted as a Chronicle event.
+3. **Support both mortality regimes.** Goldstone's exogenous mortality phases and Turchin's endogenous ones should both be possible.
+4. **Era packs E2 and E3** implement the six "why breakdowns faded" mechanisms above as functions of era state:
+   - fiscal instruments that raise B;
+   - trade and fertiliser technology that decouples local prices from local population;
+   - elite fertility limitation;
+   - growth in offices and policing;
+   - power-sharing reforms;
+   - industrial absorption of labour.
+5. **S1.culture.** It carries a time-orientation trait and an orthodoxy level that suppresses invention; a post-breakdown phase machine drives the revolutionary sequence.
+
+**Caveats.**
+- The data are contested (pp. 343–345), and the regressions use few decades.
+- Ψ is normalised differently in each case study.
+- The Asian cases have no mathematical model.
