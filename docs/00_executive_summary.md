@@ -7,7 +7,7 @@
 
 ## What we are building
 
-**Rehoboam** is a personal world engine. A deterministic simulation runs a civilisation for centuries, from 100k people up to a target of 1M. You watch its history unfold, stop where it matters and ask *why*. You turn that history into chronicles and stories. In later phases you step inside it: as an ambient diorama, as a walker in its streets, and as a mortal Oracle who influences its rulers without commanding them.
+**Rehoboam** is a personal world engine. A deterministic simulation runs a world for centuries, **from a single household (the trials of Job) up to a realm of 1M people, on one engine** (ADR-0028). You watch its history unfold, stop where it matters and ask *why*. You turn that history into chronicles and stories. In later phases you step inside it: as an ambient diorama, as a walker in its streets, and as a mortal Oracle who influences its rulers without commanding them.
 
 **Success**, by your definition, means four things (`01` §2):
 - **S1, a creative engine:** it produces history worth reading.
@@ -42,7 +42,8 @@ A second, internal red-team review of the v1.0 plan found that *observing* the w
 ## The redesigned architecture (`05.0`)
 
 ```
- Console (TS: Time-Machine · Causal Inspector · Oracle · Foresight;      Godot 4 client (Diorama · Street · Oracle-3D)
+ Console (TS: Time-Machine · Causal Inspector · Oracle · Foresight;      Lo-fi glyph view in the console (Diorama · Street · travel map; ADR-0029)
+                                                                         [Godot 3D client: optional art phase 2]
           Cultivator / Oracle modes)
                      │  JSON-RPC control + binary columnar state frames  │
  ┌───────────────────┴──────────────────────────────────────────────────┴───────────────────┐
@@ -72,7 +73,7 @@ A second, internal red-team review of the v1.0 plan found that *observing* the w
 - **Narrative compiler.** A hierarchical, canon-gated pipeline with zero tolerated contradictions, style cards built on public-domain exemplars, and roughly $28–35 per novel (`05.4` §6).
 
 ## Stack in one line (`07`)
-Rust (core) · Python (LLM, compilers, calibration) · TypeScript + deck.gl + Sigma.js (console) · Parquet/Arrow/DuckDB/SQLite · llama.cpp + vLLM/SGLang + frontier APIs · Godot 4.7+ with Rust gdext · Chatterbox/Pocket/Qwen3-TTS · Rerun · marimo.
+Rust (core) · Python (LLM, compilers, calibration) · TypeScript + deck.gl + Sigma.js (console) · Parquet/Arrow/DuckDB/SQLite · llama.cpp + vLLM/SGLang + frontier APIs · a deck.gl glyph layer with Bitlands/Unscii (lo-fi art phase 1; Godot 3D optional later) · Chatterbox/Pocket/Qwen3-TTS · Rerun · marimo.
 
 **What we reuse from open source**, and what we build, is inventoried with licences and effort estimates in `14_reuse_inventory.md`.
 
@@ -87,9 +88,9 @@ Rust (core) · Python (LLM, compilers, calibration) · TypeScript + deck.gl + Si
 | **P2** (≈ 10–12 wk + a 3–5 wk G2 rating window) | Sifter + Time-Machine console | **Thesis gate:** ≥ 3 events per century that *you* rate ≥ 4/5, within a pause budget |
 | P3 (split into sub-phases in `11`) | Hive, minds, Oracle-2D, Foresight, 1M scale | Emergent witch-hunt spiral; Foresight validity tests |
 | P4 | Narrative and world compilers | 0 contradictions; gap-report loop proven |
-| P5–P7 | Diorama → Street-level → Oracle-3D | Spikes SPK-1 to SPK-3 de-risk them during P3 and P4 |
+| P5–P7 | Lo-fi Diorama → Street-level → Oracle travel map (Dwarf Fortress–style glyph view in the console; ADR-0029) | ≈ 20–26 weeks instead of 34–40 for a 3D client; a minimal glyph view already exists in the P1.0 skeleton |
 
-**If the thesis gate (G2) fails, no 3D work starts.** Simulation and sifting are iterated until stories emerge.
+**If the thesis gate (G2) fails, no inhabitable-modality work starts.** Simulation and sifting are iterated until stories emerge.
 
 ## Top risks (`10`)
 1. Emergent history turns out boring (R-01).

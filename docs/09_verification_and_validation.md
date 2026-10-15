@@ -337,6 +337,9 @@ Playwright drives the console against the real `rh-server` and against the mock 
 | V-R3D-07 | Replay mode (R3D-8) | Render a recorded history | Zero `advance_until` calls on the host; `state_hash` unaffected; frames match the recorded history |
 | V-R3D-08 | Investigation templates (R3D-9) [D] | Play each template end to end; inspect its definition | A clear purpose; outcomes come from simulation state and material inputs only (no scripted-outcome fields) |
 | V-R3D-09 | Art bible (R3D-6) [I] | Asset audit | Palette atlases and LUTs present; every imported asset re-shaded and provenance-logged |
+| V-R3D-10 | Glyph performance (R3D-10) | Browser on the reference laptop iGPU; 10k cells with panning and a 1 Hz frame stream; wallpaper covered and uncovered | ≥ 60 FPS uncovered; ≤ 15 FPS cap in wallpaper mode; ≈ 0 rendering work when covered |
+| V-R3D-11 | The glyph client decides nothing (R3D-10) | Lint for FOV, pathing and RNG APIs in client code; feed two clients the same recorded server stream | Lint clean; byte-identical rendered cell buffers |
+| V-R3D-12 | Glyph-pack completeness (R3D-10) | CI lint over every Registry presentation key and each shipped pack | Every key mapped; every asset's licence on the allow-list with attribution recorded |
 
 ### 2.17 Audio (V-AUD)
 
@@ -656,6 +659,7 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | R3D-7 | Camera director | P5 | V-R3D-06 |
 | R3D-8 | Replay mode | P5 | V-R3D-07 |
 | R3D-9 | Investigation templates | P6 | V-R3D-08 |
+| R3D-10 | Lo-fi glyph client first | P5 | V-R3D-10, V-R3D-11, V-R3D-12, V-DET-07 |
 | AUD-1 | Systemic ambience | P5 | V-AUD-01 |
 | AUD-2 | Licence-cleared TTS, designed voices | P6 | V-AUD-06 |
 | AUD-3 | Audio-drama rendering | P4+ | V-AUD-03, V-AUD-04, V-AUD-07 |

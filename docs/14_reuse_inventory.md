@@ -122,7 +122,7 @@ The baseline is the effort to deliver the plan's scope for that subsystem when e
 | LLM gateway + evals | P3 | 10 | **~65%** | llama.cpp, vLLM/SGLang, llguidance/XGrammar, LiteLLM (optional), inspect_ai/promptfoo | Typed job API, journaling, budgets, routing policy, red-team corpus content |
 | Narrative compiler + Annals | P2, P4 | 10 | **~35%** | Templating (bladeink, Tracery/improv patterns), WriteHERE/DOC planning patterns, MiniCheck code, Fountain/EPUB/RSS exporters | Digest, canon gate against the causal chronicle, style cards, NOVEL-20 |
 | Console (Time-Machine, inspector, Oracle-2D) | P2 | 14 | **~55%** | deck.gl, sigma/graphology, dagre, cosmos.gl, Mosaic + duckdb-wasm, Perspective, family-chart/topola, Tauri | Time-Machine UX, speed bands, auto-pause, causal inspector semantics, rating tool |
-| Godot client (Diorama, Street, crowds, content) | P5–P7 | 36 | **~50%** | gdext, Terrain3D, Sky3D, Scatter, road-gen, OpenVAT, impostors, LimboAI, Dialogue Manager, motion matching, CC0 kits + animation library | Frame decoder, crowd LoD policy, rendezvous kitbash, camera director, hydration bubble, wallpaper host |
+| Godot client (Diorama, Street, crowds, content) — **art phase 2, optional (ADR-0029)** | P5–P7 | 36 | **~50%** | gdext, Terrain3D, Sky3D, Scatter, road-gen, OpenVAT, impostors, LimboAI, Dialogue Manager, motion matching, CC0 kits + animation library | Frame decoder, crowd LoD policy, rendezvous kitbash, camera director, hydration bubble, wallpaper host |
 | Audio | P4, P6 | 8 | **~65%** | Chatterbox/Pocket/Qwen3-TTS/MOSS-TTSD, Moonshine/whisper, AudioSeal, pyloudnorm, tts-audiobook-tool patterns | Voice bible, systemic audio telemetry, latency masking, RSS packaging |
 | **Total** | | **~227** | **~38% (≈ 87 pw)** | | **≈ 140 pw** to build |
 
@@ -380,6 +380,33 @@ This is the thinnest area. No usable open code exists for structural-demographic
 | **tts-audiobook-tool** | Long-form pipeline with STT-verified retakes ("keeps the most accurate take"), EBU R128, M4B/FLAC with word timings, chapter cut points [V README] | MIT [V] | 2026-10-15 [V] · ★224 | **PORT** (pipeline patterns) / REFERENCE | Supports many NC backends (Fish, VibeVoice, etc.). Use permissive ones only. | [gh](https://github.com/zeropointnine/tts-audiobook-tool) |
 
 ---
+
+### R. Lo-fi glyph client (art phase 1; added 2026-10-15, ADR-0029)
+
+Verified with shallow clones (LICENSE + `git log -1`) and the npm and crates.io APIs. api.github.com, opengameart, kenney.nl, itch.io and int10h were blocked, so those facts are [U].
+
+| Name | What | Licence | Last activity / version | Mode |
+|---|---|---|---|---|
+| deck.gl | `IconLayer`/`TileLayer`, binary attributes; host for the `GlyphGridLayer` | MIT [V] | 2026-10-15; 9.4.0 [V] | **DEPEND** (already Adopt) |
+| wglt | WebGL roguelike terminal, single batched draw | MIT [V]; bundles an IBM ROM-dump font and a CC BY-SA font [V] | 2024-05-07; 0.6.4 [V] | **PORT** (shader pattern only; never its fonts) |
+| beamterm | WebGL2 terminal, one instanced draw | MIT [V] | 2026-04-01; 1.0.0 [V] | Fallback |
+| PixiJS + @pixi/tilemap | 2D WebGL engine | MIT [V] | 2026-10-10; 8.22.0 [V] | Fallback |
+| ratatui + crossterm | Rust TUI | MIT [V] | 2026-10-09; 0.30.2 / 0.29 [V] | DEPEND (optional `rh-tui`) |
+| ratzilla | ratatui in the browser | MIT/Apache [V] | 2026-07-04; 0.3.1 [V] | Assess |
+| rot.js | Roguelike toolkit | BSD-3 [V] | 2024-11-13; 2.2.1 [V] | REFERENCE (one draw call per cell) |
+| bracket-lib + Rust roguelike tutorial | CP437 consoles | MIT [V] | crates last released 2022-10 [V] | REFERENCE (owns the game loop) |
+| Hauberk + malison | Dart web roguelike | MIT [V] | 2026-09 / 2025-11 [V] | REFERENCE (message log and panel UX) |
+| malwoden; doryen-rs | TypeScript / Rust roguelike libraries | MIT [V] | 2022 / 2023 [V] | AVOID (dormant) |
+| Brogue CE; Cataclysm-DDA; Goblin Camp | Look and UX references | AGPL-3.0; CC BY-SA 3.0; GPL-3.0 [V] | active / active / 2018 [V] | REFERENCE only |
+| **Bitlands** (DragonDePlatino) | Full CP437 12×18 sheet + ~500 tintable creature sprites; map, building, item, plant sheets | **CC-BY 4.0** [V] | 2019-01-18 [V] | **DEPEND** (default glyph pack; attribution tracked) |
+| **Unscii-8/16** | Bitmap fonts (ttf, otf, woff) | PD/CC0 [V]; **`unscii-16-full` and `unifont.hex` are GPL** [V] | 2021-02-24 [V] | **DEPEND** (dialogue and log panels) |
+| Kenney 1-Bit / Micro Roguelike | 16×16 / 8×8 tiles | CC0 [U] | — | DEPEND (archive the licence on download) |
+| DawnLike | 16×16 tileset | **Conflict:** CC-BY-SA 3.0 vs CC-BY 4.0 [V both] | — | HOLD |
+| int10h Oldschool PC fonts | CP437 TTFs | CC BY-SA 4.0 [U] | — | HOLD (share-alike) |
+| DF community tilesets | Tilesets | No LICENSE [V] | — | AVOID |
+| Lively; Plash | Wallpaper hosts | GPL-3.0 (separate app) [V]; closed source [V] | 2026-09 / 2025-10 | DEPEND as user-installed apps |
+
+**Effort.** 7–11 pw for the lo-fi Diorama + Street client, against about 18 pw net (36 baseline) for the Godot client plus art content and SPK-1 to SPK-3. About 40% of the lo-fi work carries over if the 3D art phase is chosen later.
 
 ## Projects we had missed (new finds)
 

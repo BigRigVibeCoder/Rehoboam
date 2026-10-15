@@ -1,5 +1,7 @@
 # ADR-0018 — Godot 4.7+ separate process, Rust gdext, painted miniature, VAT crowds
 
+> **Deferred by ADR-0029 (2026-10-15):** art phase 1 is a lo-fi glyph client; this 3D client becomes the optional art phase 2.
+
 **Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context

@@ -103,9 +103,9 @@ The five modalities are not five features of one release. Each one alone has bee
 | 1 | **Millenary Time-Machine + Chronicle** (2D console) | The first playable | Cheapest test of the core thesis (S1). Exercises determinism, the sifter and the causal graph. No 3D or LLM dependency. |
 | 2 | **Itinerant Catalyst (thin)**: Oracle verbs in the console | An extension of 1 | Adds agency and "Foresight" (Monte-Carlo forecasts) using the same engine. Proves the persuasion and epistemics models. |
 | 3 | **Narrative Compiler**: chronicle, then saga, then novella | A batch pipeline | Depends on a rich chronicle. Batch and offline, so its risk is isolated. |
-| 4 | **Living Diorama**: 3D render of the live or replayed world | The first 3D client | First consumer of the rendering and street-content pipeline. No T3 hydration yet: crowd proxies (T2c), impostors and Spectacle only. The embodied bubble arrives in P6 (WP P6.1). |
+| 4 | **Living Diorama**: a lo-fi glyph view of the live or replayed world (Dwarf Fortress style; ADR-0029) | The first inhabitable view, in the console; also a desktop wallpaper | Cheap, works in every era via glyph packs, and lets you watch the world months earlier than a 3D client would. No T3 hydration yet: crowd shading, glyphs and Spectacle only. The embodied bubble arrives with 5. A 3D "painted miniature" client is an optional later art phase. |
 | 5 | **Street-Level Inhabitant**: hydration, then grounded dialogue | An extension of 4 | The highest-risk modality: an LLM facade, TTS, the hydration bubble. |
-| 6 | **Oracle in 3D**: avatar plus strategic travel map | An extension of 2 and 5 | Combines everything. |
+| 6 | **Oracle on the travel map**: avatar plus strategic travel map (lo-fi first; 3D in the optional art phase 2) | An extension of 2 and 5 | Combines everything. |
 
 Out of scope until you decide otherwise (see `12_open_questions.md`): multiplayer and shared worlds, mobile, web distribution, and a commercial launch with store-policy compliance work.
 

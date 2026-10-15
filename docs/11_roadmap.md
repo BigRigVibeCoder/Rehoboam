@@ -26,13 +26,11 @@ gantt
     section Story
     P4 Narrative compiler + world compiler     :p4, after g3, 10w
     section Inhabit
-    P5 Diorama (3D client) + M4 F2             :p5, after p4, 16w
-    P6 Street-level inhabitant                 :p6, after p5, 14w
-    P7 Oracle-3D + polish                      :p7, after p6, 10w
+    P5 Lo-fi Diorama (glyph client) + M4 F2    :p5, after p4, 8w
+    P6 Lo-fi Street-level inhabitant           :p6, after p5, 10w
+    P7 Oracle travel map + polish              :p7, after p6, 8w
     section Spikes (parallel)
-    SPK-1 Crowds                               :spk1, after g2, 6w
-    SPK-2 Street from seed                     :spk2, after spk1, 6w
-    SPK-3 Wallpaper                            :spk3, after g3, 4w
+    SPK-2 Street from seed                     :spk2, after g2, 6w
 ```
 
 | Phase | Duration | Gate |
@@ -44,10 +42,12 @@ gantt
 | P3a | 8–10 weeks | G3a |
 | P3b | 8–10 weeks, then the G3b rating window (3–5 weeks) | G3b |
 | P4 | 8–10 weeks | G4 |
-| P5 | 14–16 weeks | G5 |
-| P6 | 12–14 weeks | G6 |
-| P7 | 8–10 weeks | G7 |
-| **Total** | **94–122 weeks ≈ 22–28 months** | |
+| P5 | 6–8 weeks (lo-fi, ADR-0029) | G5 |
+| P6 | 8–10 weeks | G6 |
+| P7 | 6–8 weeks | G7 |
+| **Total** | **80–108 weeks ≈ 19–25 months** (was 94–122 with the 3D client) | |
+| Era packs E2–E4 (interleaved) | +20–40 weeks of calendar | — |
+| Art phase 2: 3D client (optional) | +18–24 weeks | — |
 
 - **P0 to the G2 decision, the thesis test, takes about 33–47 weeks (8–11 months).**
 - v1.0 estimated 18–20 months in total and 7 months to G2. The difference comes from four changes:
@@ -56,7 +56,7 @@ gantt
   - The G2 and G3b rating windows are now explicit.
   - Every duration is sized to the review-hours budget below.
 - **Cross-check.** `14` estimates ≈ 140 person-weeks of build after reuse. At the review-limited throughput of ≈ 2–3 concurrent workstreams, that is ≈ 50–70 weeks of build. The rest of the schedule is calibration and design iteration (P1b, P2), gate windows and spikes.
-- **Spikes.** SPK-1 and SPK-2 run in parallel with P3a and P3b, and SPK-3 with P4, so that P5 starts de-risked.
+- **Spikes.** SPK-2 (street from seed) runs in parallel with P3a/P3b, because settlement plans feed the glyph view. SPK-1 (crowds) and SPK-3 (application wallpaper) belong to the optional 3D art phase 2 (ADR-0029). The small WebView2 wallpaper spike is inside P5.7.
 
 ---
 
@@ -276,7 +276,6 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P3.14 | Endogenous institutions (ADR-0027) | The Registry institution-transition graph; adoption by emulation, reform under fiscal stress, regime change after breakdown; transitions as events with causal edges; `exec_constraint`, `fiscal_capacity`, `succession_institutionalisation` dynamics |
 | P3.6 | Should-systems: S1.culture, S2.technology, S3.migration, S4.ecology | Religion and ideology, technology diffusion, migration, ecology (dragons as T1 with energetics) |
 | P3.11 | Reference worlds | `aethelgard` (modern hive, 10 years); dragons added to `val_khor` |
-| ∥ SPK-1 | Crowds spike | Godot: 50 rigged + 3,000 VAT + impostors at 1440p; 60 FPS on a 3060-class card |
 
 **Gate G3a**
 - **Couplings:** the full V-COUP-01, and V-COUP-02, V-COUP-03 and V-COUP-05, meet their thresholds in §Coupling thresholds. They must be emergent, not forced.
@@ -290,7 +289,6 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
   - knowledge rows plus fronts ≤ 3 GB per century;
   - T1 belief stores ≤ 600 MB at 5k actors;
   - a compressed keyframe ≤ 0.5 GB.
-- **SPK-1:** reported, with its pass/fail recorded.
 
 ---
 
@@ -345,7 +343,6 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P4.6 | World compiler | Intent schema, mapping table, expander, validators, liveness gate with deterministic calibration repair and background certification (`05.5` §4.2), LLM repair loop for schema and semantic errors only, gap reports (`data_only` / `needs_code`); INTENT-100 with its adversarial subset |
 | P4.7 | Audio-drama pipeline (optional within P4) | Voice bible, TTS rendering with ASR gate, mastering, RSS |
 | P4.8 | Offline mode | Local or cluster fallback for every job kind; full offline play test (LLM-8) |
-| ∥ SPK-3 | Wallpaper spike | Windows 11 24H2 host; power budget |
 
 **Gate G4**
 - **Canon** (V-NAR-01, V-NAR-02, V-NAR-08): 0 CT0/CT1 contradictions and 0 CT3 inventions on NOVEL-20; backbone coverage ≥ 95%; 0 epistemic leaks.
@@ -356,67 +353,70 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 - **The S4 loop** (V-WC-13, V-WC-10): ≥ 3 gap reports converted into merged Registry entries, at least 1 of them `data_only` through the effect language.
 - **LLM-8** (V-LLM-10): the full offline play test passes.
 - **Compiler path at 100k** (V-WC-05–V-WC-07): liveness gate ≤ 90 s, calibration repair within Registry bounds, certification ≤ 30 min.
-- **SPK-3:** reported, with its pass/fail recorded.
 
 ---
 
-## P5 — Living Diorama: first 3D client (≈ 14–16 weeks)
+## P5 — Lo-fi Living Diorama: the glyph client (≈ 6–8 weeks; ADR-0029)
 
 | WP | Work package | Output |
 |---|---|---|
 | P5.0 | M4.economy F2 | Household budgets and stocks, credit (`05.1` §3); EVO-3 consistency with F1 on conserved quantities and declared targets; supported-combinations matrix updated. Prerequisite for concrete errands in P6.2 (`05.2` §2). The only plane-A WP in P5: a C3 change with a CRN-paired ensemble (`13` §4.2) |
-| P5.1 | `rh-godot` | Frame decoder → MultiMesh; settlement plans via the shared `rh-worldgen` |
-| P5.2 | Terrain and towns | Upsampled terrain, carved rivers, ward and tensor streets, shape-grammar buildings, WFC kit infill |
-| P5.3 | Crowd LoD | Rig / VAT / impostor / aggregate tiers; rendezvous-hash kitbash |
-| P5.4 | Binary state plane | Interest management, deltas, interpolation |
-| P5.5 | Camera director | Vantages, salience scoring, dissolves |
-| P5.6 | Systemic audio | AudioTelemetry, beds, one-shots, power policy |
-| P5.7 | Wallpaper host | WorkerW + Lively package; macOS desktop window; throttling |
-| P5.8 | Art bible v1 | Palette atlases, LUTs, tilt-shift; re-shading pipeline; provenance log |
+| P5.1 | Glyph layer | deck.gl `GlyphGridLayer` (instanced quads, CP437 atlas, palette indices, IF-4 binary attributes), started from `IconLayer`; shader pattern ported from wglt (MIT, code only) |
+| P5.2 | World and settlement glyph tiles | `map.glyph_tiles` from regional aggregates and the chronicle (Z0); `rh-worldgen` settlement plans rasterised to glyph chunks, cached by settlement × generator version × override epoch (Z1) |
+| P5.3 | Street glyph LoD | `bubble.subscribe(..., lod_profile: "glyph")`; cell snapping; one glyph per cell (named first) plus a count badge; ░▒▓ crowd shading |
+| P5.4 | Binary state plane | Interest management and deltas; the TypeScript IF-4 decoder |
+| P5.5 | 2D camera director | Vantage scoring from `05.7` §B5 applied to glyph views; slow cuts |
+| P5.6 | Systemic audio (minimal) | Ambience beds and one-shots from AudioTelemetry; mute when hidden |
+| P5.7 | Wallpaper | Lively **web** wallpaper package (pause on `livelyWallpaperPlaybackChanged`, 10–15 FPS cap); Plash on macOS. Includes the small spike: WebView2 localhost WebSocket and hidden-page timers |
+| P5.8 | Glyph packs v1 | Pack format and CI lint (every Registry presentation key mapped); `medieval` pack from Bitlands (CC-BY 4.0); `ancient` pack for `uz_job`; Unscii panels |
 | P5.9 | Replay mode | The Diorama renders a computed history (laptop-friendly) |
 
 **Gate G5**
-- **Spike targets hold in the product build:**
-  - SPK-1 (V-R3D-02): ≥ 60 FPS with 50 rigged + 3,000 VAT + impostors at 1440p on a 3060-class card;
-  - SPK-2 (V-R3D-01): > 90% of buildings unchanged under growth, and no silent re-roll.
-- **R3D-5 power** (V-R3D-03): < 10% GPU and < 5 W extra package power at the 30 FPS cap; 0 FPS when covered.
-- **DET-6, passive crowds** (V-DET-07): 0 `state_hash` changes with the Diorama attached for 100 sim-years.
+- **Glyph performance** (V-R3D-10): ≥ 10k cells at 60 FPS on the reference laptop iGPU in the browser; ≤ 15 FPS and ≈ 0 work when the wallpaper is covered.
+- **The client decides nothing** (V-R3D-11): no FOV, pathing or randomness in client code (lint); identical frames for identical server streams.
+- **DET-6, passive viewing** (V-DET-07): 0 `state_hash` changes with the Diorama attached for 100 sim-years.
 - **P5.0** (V-SF, V-HYD-10): MOP-5 holds with M4 at F2; F1 ↔ F2 conserved quantities equal and declared targets TOST-equivalent on 32 CRN-paired seeds.
 - **[H] Diorama believability** (V-HUM-06): ≤ 2 "fake" moments per 30-minute session, averaged over the last 3 sessions, with a falling trend.
 
 ---
 
-## P6 — Street-level Inhabitant (≈ 12–14 weeks)
+## P6 — Lo-fi Street-level Inhabitant (≈ 8–10 weeks)
 
 | WP | Work package | Output |
 |---|---|---|
 | P6.1 | Hydration bubble | Rings with hysteresis; positions and activities as views over schedules and scheduled outcomes (ADR-0025); pins and facts ledger (plane B); alibi generation; boundary flux with velocity prefetch; material-input scopes for your actions in the bubble |
 | P6.2 | Schedules and errands | T0 schedule templates and flows; concrete errands tied to household stock and plots (needs P5.0); venue advertisements; behavioural flavour (ADR-0026) |
-| P6.3 | Dialogue | SpeechPlan IAUS, realisation with cached prefixes, claim check, speech-act extraction (journaled material inputs), facts-ledger writes from dialogue |
+| P6.3 | Dialogue | SpeechPlan IAUS, realisation with cached prefixes, claim check, speech-act extraction (journaled material inputs), facts-ledger writes from dialogue; rendered in the Unscii panel with numbered options or free text |
 | P6.4 | Local model selection | RP-200 eval across candidate models and hardware tiers |
-| P6.5 | Speech | Designed-voice bank, CPU TTS, ASR push-to-talk, latency masking |
-| P6.6 | Interiors | Lazy room templates |
-| P6.7 | Avatar and "a reason to walk" | Investigations (find the mimic, find the plotter) as scenario templates |
+| P6.5 | Speech (optional) | Designed-voice bank, CPU TTS, ASR push-to-talk, latency masking |
+| P6.6 | Interiors | Lazy room templates rendered as glyph rooms |
+| P6.7 | Avatar and "a reason to walk" | `@` movement via `player.act` (journaled; position arrives in the next frame); look mode via `entity.person` (plane B); investigations (find the mimic, find the plotter) and the `uz_job` scenario as templates |
 
 **Gate G6**
 - **DET-6 with live hydration** (V-DET-08, V-HYD-08): 0 `state_hash` changes; no NPC-originated material events.
 - **Hydration consistency** (V-HYD-01–V-HYD-07; `05.2` §3.6): identity stability, conservation and temporal consistency hold 100%; distributional fidelity is TOST-equivalent within δ = ±0.02.
 - **RP-200** (V-LLM-01; LLM-4/5): leak = 0 on concealment items; unsupported claims < 2%; TTFT p95 < 0.5 s on the reference GPU.
 - **[H] Interrogation sessions** (V-HUM-04; MOE-3): 0 hard and < 1 soft contradiction per 20 people.
-- **Voice latency** (V-AUD-05; AUD-4): end-to-end p95 ≤ 2 s.
+- **Voice latency** (V-AUD-05; AUD-4), if speech is enabled: end-to-end p95 ≤ 2 s.
 
 ---
 
-## P7 — Oracle-3D and polish (≈ 8–10 weeks)
+## P7 — Oracle travel map and polish (≈ 6–8 weeks)
 
 Contents:
-- the strategic travel map with time compression;
-- Oracle verbs in 3D scenes;
-- Foresight visualisation in 3D;
+- the strategic travel map (Z0 glyph tiles) with time compression;
+- Oracle verbs from the map and in glyph scenes;
+- Foresight visualisation in the console;
 - the prophecy loop;
 - performance and accessibility polish.
 
-**Gate G7: [H]** the full-vision acceptance session (V-HUM-08), covering scenarios OS-1 through OS-11 in `04`. Every scenario's acceptance criteria pass.
+**Gate G7: [H]** the full-vision acceptance session (V-HUM-08), covering scenarios OS-1 through OS-11 in `04`, in the lo-fi presentation. Every scenario's acceptance criteria pass.
+
+---
+
+## Art phase 2 (optional): the 3D client (≈ 18–24 weeks; ADR-0018, deferred by ADR-0029)
+
+Decided by you after using the lo-fi modalities. It brings back the Godot "painted miniature" WPs, with designs kept in `05.7` Part B: `rh-godot`, terrain and towns, crowd LoD, art bible, the WorkerW host, Oracle-3D. SPK-1 (crowds) and SPK-3 (application wallpaper) run at its start. About 40% of the lo-fi work carries over.
 
 ---
 
@@ -467,7 +467,7 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
 
   **Scope guardrails.** These keep the packs from swamping the thesis or the inhabitable modalities.
   1. **Nothing era-specific before G2** except the P1.16 hooks (1–2 weeks). The thesis is tested on agrarian worlds only.
-  2. **A pack is simulation + Chronicle + Time-Machine only.** 3D art for an era (architecture kits, clothing, vehicles, audio ambience) is a separate **art pack**, decided after P5 shows what one era of art costs. Per-era 3D content is the biggest scope multiplier in the plan, so it is never bundled with a sim pack.
+  2. **A pack is simulation + Chronicle + Time-Machine + a glyph pack** (ADR-0029: a few days per era). Per-era *3D* content (architecture kits, clothing, vehicles) belongs only to the optional art phase 2. It is the biggest scope multiplier in the plan, so it is never bundled with a sim pack.
   3. **Minimum transition set.** A pack implements only the mechanisms needed to cross its transition plausibly (for E2/E3, Goldstone's damping list in R12 §8), validated by at most 10 era-conditioned bands plus one hindcast. Completeness is not a goal.
   4. **Population target 1 → 1M per world** (ADR-0028). A modern world is a city or region of up to 1M inside an off-map world system (T−1 compartments). National-scale modernity (tens to hundreds of millions) needs implicit individuals (ADR-0003) and is a stretch goal, not a requirement.
   5. **Cognition stays at 1–5k named actors.** Collective actors (parties, firms, unions, newspapers) arrive as M6 F2 factions in E4, not as more minds.
@@ -479,12 +479,14 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
   |---|---|---|
   | E2 Early modern | 8–12 weeks | Mostly new Registry entries and fiscal-military mechanisms on existing systems |
   | E3 Industrial transition | **12–20 weeks; research-grade** | The demographic transition, escape from the Malthusian regime, an energy sector and 5–30× population growth. This is the hardest single item after G2 |
-  | E4 Modern | 10–16 weeks | Mass politics, media channels, modern medicine and war, collective actors; scale pressure at the 10M ceiling |
-  | **Total** | **30–48 weeks** | Adds ≈ 20–40 weeks of calendar after G3b, because the packs share the same 2–3 workstreams as P4–P7. The program total moves from ≈ 22–28 months to **≈ 27–37 months** |
+  | E4 Modern | 10–16 weeks | Mass politics, media channels, modern medicine and war, collective actors; scale pressure at the 1M target |
+  | **Total** | **30–48 weeks** | Adds ≈ 20–40 weeks of calendar after G3b, because the packs share the same 2–3 workstreams as P4–P7. With the lo-fi client (ADR-0029), the program total moves from ≈ 19–25 months to **≈ 23–34 months** |
 
   **Recommended interleaving after G3b,** so time travel and inhabiting progress alternately:
 
-  P4 (narrative compiler) → E2 → P5 Diorama (agrarian art only) → E3 → P6 Street-level → E4 → P7 → art packs for later eras.
+  P4 (narrative compiler) → E2 → P5 lo-fi Diorama → E3 → P6 lo-fi Street-level → E4 → P7 → optional 3D art phase 2.
+
+  Each era's art is a **glyph pack** (2–4 days), so art never gates an era pack.
 
   The Time-Machine and Chronicle work in every era from the day a pack lands, because they read events, not art.
 - **Review-hours tracking.** Actual review time against the ≤ 6 h/week budget, reported in the weekly digest.
@@ -497,7 +499,8 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
 | Condition | Response |
 |---|---|
 | G2 fails after 3 iteration cycles | Pivot from "emergent history" toward a **storylet hybrid**: authored vignettes cast onto simulated people, in the style of Wildermyth and CK3. The deterministic engine stays as the substrate. |
-| SPK-1 fails | Change the 3D scope to a 2.5D isometric diorama, or re-assess Unreal for the client only. The simulation is unaffected. |
+| SPK-1 fails (art phase 2 only) | Stay lo-fi, or go to a 2.5D isometric diorama; re-assess Unreal for the client only. The simulation is unaffected. |
+| The glyph layer misses 10k cells at 60 FPS | Swap the renderer for beamterm (MIT, one instanced draw) or PixiJS; the IF-4 decoder and glyph packs are unchanged. |
 | RP-200 cannot pass with local models | Move street-level dialogue to cluster or frontier models, keeping the same plan-then-realise architecture, or use templated dialogue only. |
 | PERF-1 at 1M misses 15 min after P3.10 | Hold the scale ladder at 100k-class worlds until P5. Foresight at 1M stays batch-only (`08` §1, §3). |
 | Review time above budget for 4 consecutive weeks | Cut to 2 concurrent workstreams and re-plan the remaining durations. Move more work onto auto-merge routes (`13` §4.2) before adding agents. |

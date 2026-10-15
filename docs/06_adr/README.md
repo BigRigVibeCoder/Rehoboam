@@ -36,3 +36,4 @@ All ADRs below are **Proposed** until you review them. ADRs that sit on a critic
 | [0026](ADR-0026-genealogical-identity-life-course.md) | Genealogical content-addressed identity; life-course log for every person; signed time | ★ |
 | [0027](ADR-0027-era-generic-mechanisms.md) | Era-generic mechanisms: eras are state, not templates | ★ |
 | [0028](ADR-0028-scale-range-and-micro-worlds.md) | One engine from one person to one million: scale profiles and micro worlds | ★ |
+| [0029](ADR-0029-lofi-glyph-client-first.md) | Lo-fi glyph client first; 3D becomes a later art phase | ★ |

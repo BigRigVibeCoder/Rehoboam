@@ -44,7 +44,11 @@
 | Causal graph | Sigma.js + graphology; dagre / Graphviz-WASM for small DAGs | 4.0.3; 3.1 / 1.29 | MIT; MIT / Apache | Adopt | WebGL graphs of thousands of nodes | Cytoscape.js 3.34 |
 | Console analytics | Mosaic + duckdb-wasm; Perspective; family-chart or topola for genealogies | current | BSD-3 / MIT; Apache-2.0; MIT / Apache-2.0 | Trial | Linked brushing over chronicle extracts in the browser; genealogy trees | Custom canvas |
 | Desktop shell | Tauri (Win/macOS); Electron on Linux | 2.12 / 44 | MIT/Apache; MIT | Trial | Small binaries; Linux WebKitGTK risk | Browser |
-| 3D engine | Godot | 4.7.2 (4.8 dev) | MIT | Adopt (from P5) | Small runtime, wallpaper-friendly | Unreal 5.x (Hold unless SPK-1 fails) |
+| Art phase 1 (lo-fi) | deck.gl `GlyphGridLayer` (instanced glyph quads; IconLayer to start; shader pattern ported from wglt, MIT, code only) | deck.gl 9.4 | MIT | Adopt (P5; ADR-0029) | Dwarf Fortress-style glyph view in the console: Diorama, Street, travel map; ~10k cells at 60 FPS | beamterm (MIT) or PixiJS |
+| Glyph art | **Bitlands** (CP437 12×18 sheet + ~500 tintable sprites); Unscii-8/16 for panels; Kenney 1-Bit for modern extras | 2019 / 2021 | CC-BY 4.0 (attribution tracked); PD/CC0; CC0 | Adopt | Default glyph packs; era packs in days | Spleen (BSD-2), Cozette (MIT) |
+| Wallpaper (lo-fi) | Lively **web** wallpaper (separate app); Plash on macOS | — | GPL-3.0 (out of process); closed source (user-installed) | Adopt | Pause events, power policy for free | Windowed fallback |
+| Terminal client (optional) | ratatui + crossterm (`rh-tui`) | 0.30.2 / 0.29 | MIT | Trial | Contract tests; headless/SSH viewing | — |
+| 3D engine | Godot | 4.7.2 (4.8 dev) | MIT | Art phase 2, optional (ADR-0029; from P5) | Small runtime, wallpaper-friendly | Unreal 5.x (Hold unless SPK-1 fails) |
 | Godot bindings | godot-rust gdext | 0.5.5 (api-4-7) | MPL-2.0 | Trial | Hot paths in Rust; shares `rh-worldgen` | godot-cpp |
 | Terrain | Terrain3D or custom clipmap | 1.0.2 | MIT | Trial | Heightmaps 64 m–65 km | Custom mesher |
 | Crowds | OpenVAT-for-Godot pattern (VAT MultiMesh) | Godot 4.5+ | MIT | Trial | 1k–5k animated at 60 FPS | Impostors |
@@ -84,6 +88,8 @@
 | unified-planning per action | 11.9 ms per validation; Fast Downward wrapper is GPL. |
 | Felt / Winnow / df-storyteller code | Unlicensed / AGPL and dormant. Kept as reference designs. |
 | EbookLib | AGPL-3.0. Use epub-builder. |
+| rot.js / malwoden as the renderer | rot.js draws one call per cell (too slow when panning 10k cells); malwoden dormant since 2022. rot.js is a reference only |
+| DawnLike; int10h fonts; `unscii-16-full`; DF community tilesets; fonts bundled in wglt, libtcod, bracket-lib; WTFPL `tcod` / `rexpaint` crates | Conflicting, share-alike, GPL, unlicensed or off the allow-list (ADR-0029 licence guardrails) |
 | xxhash-rust | BSL-1.0, not on the allow-list. Use twox-hash. |
 | Veloren, watabou MFCG, Freeciv, OpenTTD, openage code | GPL. Reference only; never ported into Tier A crates (`14`, ADR-0021). |
 | big-brain, Neighborly, epirust | Archived. |

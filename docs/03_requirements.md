@@ -183,6 +183,7 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | R3D-7 | A **camera director** (Diorama) shall choose among vantages pre-computed per settlement and region, scored by salience of nearby live events × visual interest × novelty. It changes vantage on a slow cadence with long dissolves, and favours stable shots in wallpaper mode (`05.7` B5). | D | P5 | SN-8, `05.7` B5 |
 | R3D-8 | **Replay mode.** The Diorama shall render a computed history from the chronicle, keyframes and journal without running simulation work, so it can run on laptops. Replay is read-only. | D/T | P5 | DR-M18 |
 | R3D-9 | **Investigation templates.** Street-Level shall offer scenario templates that give a purpose for walking around (e.g. *investigate the mimic*, *find the plotter*). They are built on simulation state and material inputs only, never on scripted outcomes. | D | P6 | R11, `05.7` B7 |
+| R3D-10 | **Lo-fi glyph client first** (ADR-0029). Art phase 1 shall be a glyph view inside the console (deck.gl instanced glyph layer, CP437 or small-tileset glyph packs keyed by Registry IDs) serving the Diorama (including a Lively web-wallpaper mode), Street-level (with `@` movement via `player.act` and a dialogue panel), the Oracle travel map and the Time-Machine map. It shall render ≥ 10k cells at 60 FPS on a laptop iGPU and make no state decisions (no FOV, pathing or randomness). R3D-1, R3D-3, R3D-5 and R3D-6 apply to the optional 3D art phase 2. | T/I | P5 | Director 2026-10-15, ADR-0029 |
 
 ### 2.12 Audio (AUD)
 
