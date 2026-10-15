@@ -9,7 +9,7 @@ The director asked: *"What if we want to emulate into a modern era? We don't wan
 The v1.1 plan would get stuck in time, for four structural reasons:
 
 1. **Era is baked into templates.** `feudal_realm` and `modern_metropolis` are separate scenario types. Nothing moves a world from one to the other.
-2. **Era-sensitive quantities are constants per world.** Examples: the regicide hazard (`murder_hazard_base`), e₀ and TFR bounds, M6 thresholds, the M8 Helmbold exponent. A constant calibrated to 1000–1500 cannot also describe 1850 or 1950.
+2. **Era-sensitive quantities are constants per world.** Examples: the regicide hazard (`murder_hazard_base`), e₀ and TFR bounds, M6 thresholds. (The M8 Helmbold exponent turned out to be poorly identified even within one era; it is now derived from force composition, R12 §11.) A constant calibrated to 1000–1500 cannot also describe 1850 or 1950.
 3. **Institutions are static.** Governments, succession laws and institutions are declared in the manifest and never change. Yet the primary sources show that institutions drive the era effects (R12):
    - Under primogeniture the deposition hazard is 0.25–0.37 of that under elective succession, and no calendar trend remains after controls (Kokkonen & Sundell 2014).
    - Reigns lengthened from about 10 to about 20 years after a structural break around 790 CE, as feudal institutions arrived. Over the same centuries deposition *rose* in the Islamic world (Blaydes & Chaney 2013).

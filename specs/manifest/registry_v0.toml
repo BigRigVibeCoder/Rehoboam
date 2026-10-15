@@ -50,7 +50,10 @@ params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.
 
 [systems."M8.war"]
 fidelity_levels = ["F0", "F1"]
-params = { helmbold_w = [0.2, 1.0], breakpoint = [0.1, 0.35], campaign_months = [3, 12], fort_multiplier = [2.0, 10.0] }
+# helmbold_w: W in dA/dt = −β·B^W·A^(1−W); 1 = square law, 0.5 ≈ linear, 0 = logarithmic. WWII fits cannot tell the laws apart
+# (Bracken 1995; Fricker 1998; Lucas & Turkes 2004; R12 §11), so the domain is [0, 1]; derive W from force composition (state).
+# breakpoint and fort_multiplier are design values with no verified source yet (Helmbold 1969/1987 pending); apply per engagement.
+params = { helmbold_w = [0.0, 1.0], breakpoint = [0.1, 0.35], campaign_months = [3, 12], fort_multiplier = [2.0, 10.0] }
 
 [systems."S4.ecology"]
 fidelity_levels = ["F1"]

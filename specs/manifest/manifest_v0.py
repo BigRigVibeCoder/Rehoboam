@@ -303,7 +303,11 @@ class Manifest(Strict):
 
 
 # =========================================================================== Registry-aware validation
-CARBONE_RATIO = 0.009  # kg carnivore supported per kg standing prey (R09 §8)
+# Carbone & Gittleman (2002): "10,000 kg of prey supports about 90 kg" of a carnivore species (p. 2273). 0.009 is their
+# central, mass-invariant estimate for mammalian Carnivora of 0.14–310 kg; the fitted form gives ≈ 0.006 at 1–5 t, and real
+# species span 0.001–0.05. It is a design-conservative plausibility bound, not a biological maximum (R12 §10).
+CARBONE_RATIO = 0.009  # kg carnivore supported per kg standing prey
+CARBONE_MAX_MASS_KG = 310.0  # heaviest species in their data; above this the rule is extrapolated
 
 
 class Issue(BaseModel):
@@ -512,6 +516,10 @@ def validate_against_registry(m: Manifest, reg: dict) -> list[Issue]:
             mm_lo, mm_hi = reg_sys.get("S4.ecology", {}).get("params", {}).get("metabolism_multiplier", [0.1, 10.0])
             if not (mm_lo <= p.params.metabolism_multiplier <= mm_hi):
                 err(f"peoples[{i}].params.metabolism_multiplier", f"outside Registry bounds [{mm_lo}, {mm_hi}]")
+            if p.params.mass_kg > CARBONE_MAX_MASS_KG:
+                warn(f"peoples[{i}].params.mass_kg", f"{p.params.mass_kg:.0f} kg is beyond the 0.14–310 kg range behind the Carbone ratio; "
+                                                     "the energetics bound is extrapolated (metabolism_multiplier = field metabolic rate "
+                                                     "relative to a mammalian carnivore of equal mass)")
             predator_t = p.population * p.params.mass_kg / 1000.0
             supportable_t = CARBONE_RATIO * prey_t / max(p.params.metabolism_multiplier, 1e-9)
             if predator_t > supportable_t:

@@ -40,7 +40,7 @@ These set the remaining bands and bounds the first engine is judged against, and
 | 12 | Behrooz, Swanson & Jhala (2015) (B5) | Retrospective story selection from logs |
 
 ### Batch 3 — before P3 (minds, epistemics, war, contagion, Foresight)
-A12 Lanchester and Helmbold fits · B7 Talk of the Town knowledge propagation · B10 "How Johnny can persuade" · B11 Walton argumentation schemes + ELM · B13 Gneiting, Balabdaoui & Raftery (2007) (PIT; one paper is enough) · B16 Balcan et al. (2009) + Covasim.
+A12 ✓ (Bracken, Fricker, Lucas & Turkes received: WWII anchors only) plus **pre-modern war: Helmbold 1965 (*OR* 13:857–859), Helmbold 1969 (RAND P-4199) and 1987 (CAA-TP-87-16) on victory against force ratio and casualties, i.e. breakpoints; Hartley & Helmbold 1995 (*NRL* 42:609–633); Willard 1962; Weiss 1966** · B7 Talk of the Town knowledge propagation · B10 "How Johnny can persuade" · B11 Walton argumentation schemes + ELM · B13 Gneiting, Balabdaoui & Raftery (2007) (PIT; one paper is enough) · B16 Balcan et al. (2009) + Covasim.
 
 ### Batch 4 — before P4–P6 (narrative compiler, hydration)
 C6 Re3, DOC, Dramatron, Agents' Room · C7 Chakrabarty et al. (2024) + HANNA · C8 MiniCheck + FActScore · C1 Reynolds, Natrajan & Srinivasan (1997) · C3 Sunshine-Hill (2010, 2013) · C11 a fresh scan of long-form preprints.

@@ -452,3 +452,52 @@ These are the micro-scale fertility mechanics for `uz_job` (ADR-0028).
 - V-SF-02 is restated in Brass terms, with an INSUFFICIENT threshold of about 400 births.
 - A new V-SF-02b pins β.
 - The golden-vector spec and self-test are added.
+
+## 10. Carbone, C. & Gittleman, J. L. (2002). "A common rule for the scaling of carnivore density." *Science* 295, 2273–2276. doi:10.1126/science.1067994
+
+**Data.** 25 species of Carnivora from 0.14 kg to 310 kg. "Prey" is the standing biomass of the main prey species (≥ 70% of the diet) per 100 km² (Table 1, p. 2274).
+
+**Rule.** "10,000 kilograms of prey supports about 90 kilograms of a given species of carnivore, irrespective of body mass" (p. 2273).
+- The fit is 89.1 × M^−1.05 carnivores per 10,000 kg of prey (N = 25, R² = 0.83). The 95% CI is −0.845 to −1.25 for the exponent and 47–169 for the constant.
+- Against prey *productivity*, the exponent is −0.66, which is not significantly different from −0.75.
+- The energetic model (note 10) is N_max = a·R/M^0.75. Populations are sustained by productivity, and the −1 exponent on standing biomass follows because the productivity-to-biomass ratio scales as M^−0.25.
+
+**Our refit of Table 1 (derived):**
+- Species ratios run from 0.0009 to 0.048, with a median of 0.0069.
+- The 1σ scatter is about ×2.65.
+- At 5 t the central estimate is about 0.0058, with a 95% prediction interval of 0.0005–0.065.
+
+**Verdicts:**
+- `CARBONE_RATIO = 0.009` correctly reads the headline, but it is a central tendency, not a ceiling.
+- Dividing by a metabolism multiplier is consistent with note 10, provided the multiplier means field metabolic rate relative to a mammalian carnivore of equal mass.
+- The [0.1, 10] bounds are **not in the source**.
+- R09's "a 5-t dragon needs about 550 t of prey" is **corrected** to about 860 t with the fitted exponent (CI of the mean 230–3,100 t).
+
+**Deltas applied.** The validator comment now states the scope. A warning is raised above 310 kg (extrapolation), which `val_khor`'s dragons trigger, as they should. Under a mass-adjusted ratio the reference results are unchanged: `invalid_draft_style` still fails and `val_khor` still passes.
+
+## 11. Lanchester attrition fits: Bracken (1995), *NRL* 42, 559–577; Fricker (1998), *NRL* 45, 1–22; Lucas & Turkes (2004), *NRL* 51, 95–116
+
+**Notation.** Losses follow Ḃ = a·R^p·B^q. The force ratio's trajectory depends only on p − q: 0 is the linear law, 1 the square law, −1 the logarithmic law.
+
+- **Bracken** (Ardennes, days 2–11, grid search):
+  - The best fits run from (p, q) = (1.3, 0.7) to (0.7, 1.3) and are nearly equal.
+  - He finds the linear law fits and square-law concentration "apparently not present" (p. 574).
+- **Fricker** (Ardennes, all 32 days, with air sorties, log-OLS):
+  - p is insignificant; q is 3.2–5. Both the logarithmic law and Hartley's model are rejected.
+  - He concludes: "Lanchester's basic models (linear and square) do not hold when fit to known data from an actual battle" (p. 19).
+  - Timing of reserve commitment decides outcomes.
+- **Lucas & Turkes** (Kursk and both Ardennes formats, bootstrap):
+  - Kursk is best at p ≈ 5.7, q ≈ 1.3, but with R² = 0.24. The near-optimal region spans p from below 2 to over 10.
+  - Fitting four phases separately gives R² = 0.83, against 0.80 from the phase means alone.
+  - "It does not matter which of these laws you use, for with the right coefficients you will get about the same result" (abstract).
+
+**Mapping onto our Helmbold kernel.** dA/dt = −β·B^W·A^(1−W), so W_equiv = (1 + p − q)/2. Estimates scatter from about −2 to about 2.9 depending on data formatting, and the defensible range is [0, 1].
+
+**Deltas applied:**
+- `helmbold_w` is now [0, 1] (was [0.2, 1]).
+- W is derived from force composition, which is state: aimed fire pushes it toward 1, melee and area fire toward about 0.5. It is not a per-world constant, and **not an era constant** (ADR-0027 corrected).
+- Phase and posture carry most of the variance.
+- Breakpoints apply per engagement. Campaign losses of 16–23% occurred without collapse.
+- `breakpoint` and `fort_multiplier` are marked as design values with no source yet.
+
+**Still needed (pre-modern).** Helmbold 1965 (*OR* 13), 1969 (RAND P-4199) and 1987 (CAA-TP-87-16); Hartley & Helmbold 1995 (*NRL* 42); Willard 1962; Weiss 1966. Added to reading-list Batch 3.
