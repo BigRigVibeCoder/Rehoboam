@@ -45,7 +45,7 @@
 | Era packs E2/E3 scoped by Goldstone's "why breakdowns faded" mechanisms | `11` era-pack track | Goldstone 1991 |
 | R09 annotated where primary sources disagree | `research/R09…` | All |
 
-**Still open:** the secular-cycle band (120–450 years, V-SF-04) is not in Turchin (2013); it waits for *Secular Cycles* (reading list A1). The regency effect needs another source. The modern ends of every era-sensitive function wait for Tier A-M (Archigos and others).
+**Resolved in batch 2 (§12):** the 120–450-year band is not in *Secular Cycles* either. V-SF-04 is rewritten from the book's 12 observed cycles. The regency effect needs another source. The modern ends of every era-sensitive function wait for Tier A-M (Archigos and others).
 
 ---
 
@@ -501,3 +501,70 @@ These are the micro-scale fertility mechanics for `uz_job` (ADR-0028).
 - `breakpoint` and `fort_multiplier` are marked as design values with no source yet.
 
 **Still needed (pre-modern).** Helmbold 1965 (*OR* 13), 1969 (RAND P-4199) and 1987 (CAA-TP-87-16); Hartley & Helmbold 1995 (*NRL* 42); Willard 1962; Weiss 1966. Added to reading-list Batch 3.
+
+## 12. Turchin, P. & Nefedov, S. A. (2009). *Secular Cycles*. Princeton UP
+
+Read: Ch. 1 (theory), Ch. 2 (Plantagenet England) and Ch. 10 (general patterns); the other case chapters were skimmed for numbers. Page numbers are book pages (PDF page = book page + 11).
+
+**Scope and model.** The theory covers **agrarian** states, meaning more than 50% of people work in agriculture (p. 6). It has four variables: population relative to carrying capacity (N/K), elites, state fiscal strength, and instability (pp. 29–30).
+- As N approaches K, rents and prices rise and real wages fall.
+- Elites multiply. **The elite peak lags the population peak** (p. 10).
+- Income per elite falls, which drives intraelite competition and counter-elites.
+- State expenses outrun revenue.
+- Breakdown reduces both N and K (pp. 7–18).
+
+**Phases** (pp. 19–21): expansion → stagflation (integrative), then crisis → depression or intercycle (disintegrative).
+- The predicted length is 2–3 centuries for Western-European-type societies (p. 23).
+- For Ibn Khaldun-type societies, with polygynous elites and desert counter-elites, it is about one century (p. 24).
+- "Not periodic in the strictly mathematical sense" (p. 21).
+
+**Cycles observed (Ch. 10).**
+
+| Cycle | Years | Expansion / stagflation / crisis / depression (years) | Instability per decade: growth → decline |
+|---|---|---|---|
+| Plantagenet | 1150–1485 | 110 / 55 / 85 / 85 | 0.78 → 2.53 |
+| Tudor-Stuart | 1485–1730 | 95 / 60 / 20 / 70 | 0.47 → 2.44 |
+| Capetian | 1150–1450 | 100 / 65 / 50 / 85 | 0.80 → 3.26 |
+| Valois | 1450–1660 | 70 / 50 / 30 / 60 | 0.75 → 6.67 |
+| Republican Rome | 350–30 BCE | 170 / 50 / 100 / – | 0.41 → 4.40 |
+| Principate | 30 BCE–285 CE | 122 / 69 / 32 / 88 | 0.61 → 3.83 |
+| Muscovy | 1460–1620 | 70 / 35 / 50 / – | 0.60 → 3.80 |
+| Romanov | 1620–1922 | 180 / 105 / 17 / – | – |
+
+- **Table 10.2** (p. 310): instability averages 0.6 in growth phases against 3.8 in decline phases, "in all cases … (t-test; P << .001)".
+- **China** (Table 10.3): 3.4 against 11.3 events per decade.
+- **Table 10.1** adds four more Western cycles. Across all 12 (derived), cycle lengths run from 160 to 415 years, median about 270, which is about 3.6 cycles per millennium.
+
+**Fathers-and-sons waves.** These recur every "roughly two generations (forty to sixty years)" (p. 28), and Ch. 10 gives 50 ± 10 years in all 8 cases (p. 310). They sit outside the theory proper (p. 27) and also appear, more mildly, in growth phases.
+
+**Predicted vs observed:**
+- Population and elite overproduction behave as predicted (pp. 303–305).
+- Elite overproduction is the one factor always present at high instability (p. 314).
+- Fiscal crisis is a weak predictor: Rome had none before its civil war (p. 306).
+
+**Era-dependence.**
+- The inverse link between population and real wages "holds only before the Industrial Revolution" (p. 304).
+- Carrying capacity rises with technology. For example, English yields doubled in the 17th century, so a crisis came without a population collapse. This is why N/K, not N, is the right variable.
+- The chronology stops in 1870 for Western Europe and 1922 for Russia. The book is silent on whether the cycles persist after industrialisation.
+
+**Verification of repo claims:**
+- 200–300 years as the model value: **confirmed**.
+- **120–450 years: not in the source.** It appeared in R09, V-SF-04 and the burn-in guard.
+- A spectral-peak test: **inappropriate**, because the cycles are not periodic and a 1,000-year run holds only 3–4 of them.
+- 40–60-year waves: **confirmed**.
+- Rome's dates: **corrected** to 133–121, 90–71 and 50–31 BCE (p. 205).
+- "Breakdown requires all three strains": **weakened**. It is a tendency, as Rome shows.
+
+**Deltas applied (`09`):**
+- **V-SF-04 rewritten:**
+  - cycle lengths between turning points of N/K: median 200–330 years, ≥ 80% in 150–450;
+  - phase lengths;
+  - N/K amplitude ≥ 1.5;
+  - the elite lag;
+  - agrarian windows only;
+  - INSUFFICIENT below 30 completed cycles in the ensemble.
+- **New V-SF-04b:** instability contrast between phases. It must exceed 1 in every cycle, with a median of 3–10. Phases come from N/K, not from instability, to avoid circularity.
+- **V-SF-05:** the test becomes inter-peak intervals, with median 40–60 years.
+- **V-SF-14:** the magnitudes are added and the rule softened.
+
+**Implications for the build.** M6 tracks N/K (with K moved by technology) rather than raw N. Elite dynamics must produce a lag of about a generation. An "Ibn Khaldun" regime is a parameter set — elite polygyny, nomad counter-elites — not a separate system.
