@@ -4,7 +4,7 @@
 
 > The simulation decides. Language models only describe.
 
-**Status:** planning baseline v1.0 (2026-10-15). There is no engine code yet. This repository contains the research, the plan and machine-readable contracts.
+**Status:** planning baseline v1.1+ (2026-10-15). There is no engine code yet. This repository contains the research, the plan and machine-readable contracts.
 
 ## Start here
 1. [`docs/00_executive_summary.md`](docs/00_executive_summary.md): the plan on two pages.
@@ -16,14 +16,14 @@
 | Path | Contents |
 |---|---|
 | `docs/` | Plan: vision, design review, requirements, ConOps, architecture (`05_architecture/`), ADRs (`06_adr/`), stack, capacity, V&V, risks, roadmap, open questions, agent playbook |
-| `research/` | Eleven research dossiers (R01–R11) with sources, verdicts and recommendations |
+| `research/` | Research dossiers R01–R11, the primary-source verification R12, the reading list, and `papers/` (the source library; private) |
 | `specs/` | Machine-readable contracts: Mechanics Registry v0, manifest schema and examples, chronicle DDL and SQL-twin self-test, sifting DSL examples and linter |
 
 ## Verify the contracts
 ```bash
 pip install "pydantic>=2" pyyaml "duckdb>=1.5"
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml
-python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml   # expected to FAIL (7 errors)
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml   # expected to FAIL (8 errors)
 python -I specs/chronicle/selftest.py                                                              # TWIN EQUIVALENCE: PASS
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
 ```
