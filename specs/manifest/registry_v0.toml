@@ -21,7 +21,9 @@ params = { harvest_sigma = [0.08, 0.35], autocorr = [0.0, 0.6], spatial_share = 
 
 [systems."M4.economy"]
 fidelity_levels = ["F0", "F1"]
-params = { alpha = [0.4, 0.8], food_price_elasticity = [0.2, 0.6], base_tax = [0.05, 0.4], trade_kappa = [0.01, 0.2] }
+# subsistence_kg_grain: the subsistence basket in grain-equivalent kg per person-year (design value; Milanovic et al. use $300 1990 PPP).
+# tax_regressivity: 0 = proportional, 1 = fully regressive incidence (drives inequality with fiscal_capacity; R12 §13).
+params = { alpha = [0.4, 0.8], food_price_elasticity = [0.2, 0.6], base_tax = [0.05, 0.4], trade_kappa = [0.01, 0.2], subsistence_kg_grain = [180.0, 320.0], tax_regressivity = [0.0, 1.0] }
 
 [systems."M5.contagion"]
 fidelity_levels = ["F0", "F1"]
@@ -93,6 +95,9 @@ ids = ["grain", "sheep", "goats", "cattle", "oxen", "camels", "donkeys", "horses
 
 [off_map_kinds]  # actors from beyond the map that can enter it
 ids = ["raiders", "caravan", "nomads", "neighbouring_polity", "empire"]
+
+[inheritance_rules]   # property (not titles): drives land concentration and inequality (Pfister in Nigro 2020; R12 §13)
+ids = ["partible", "impartible", "entail"]
 
 [technologies]
 ids = ["heavy_plough", "crop_rotation", "printing", "gunpowder", "germ_theory", "blood_assay", "pcr_testing", "rail", "electric_grid"]
@@ -166,6 +171,8 @@ exec_constraint                  = { owner = "M6.polity",     scope = "polity", 
 franchise                        = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
 succession_institutionalisation  = { owner = "M7.dynasty",    scope = "polity", type = "q8_8" }
 medical_level                    = { owner = "S2.technology", scope = "region", type = "q8_8" }
+commons_share                    = { owner = "M4.economy",    scope = "region", type = "q8_8" }
+market_integration               = { owner = "M4.economy",    scope = "region", type = "q8_8" }
 
 # Era labels: predicates over era_state, used by presentation, narrative and validation band selection ONLY.
 # A lint fails the build if any mechanic reads a label.

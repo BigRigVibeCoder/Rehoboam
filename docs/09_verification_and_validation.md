@@ -1,6 +1,7 @@
 # 09 — Verification & Validation Plan
 
 *Status: Draft v1.1 (2026-10-15). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*v1.2 changes (R12 batches 1–3): era-conditioned and literature-sourced bands; band tags for kind, role (calibration / held-out), level and discrimination; CI-based gate with no held-out failures; non-ergodicity and typicality reporting; submodel tournaments (§3.8); V-ERA (§3.6) and V-SCALE (§3.7) suites.*
 *v1.1 changes: test IDs for every suite and a full requirement → test matrix (§6). New suites V-PLN, V-DATA, V-COG, V-ORA, V-TM, V-WC, V-R3D and V-AUD. DET-6 console fuzz from P2. TOST equivalence replaces KS tests (§1.2). Certification statistics with a red-noise null, Clauset tail fits and censoring (§3.1). Foresight validity tests replace per-decile calibration (§3.3). A pre-registered G2 protocol (§3.4.1).*
 
 ---
@@ -370,9 +371,23 @@ The bands are used by two ensembles:
 - The **liveness gate** (200 y × 8 seeds; V-WC-05) blocks play. It checks only liveness: no extinction or explosion, vital rates, ≥ 2 completed arcs per century, bad-run rate ≤ 1/8, no invariant violations. A 200-year run cannot see secular cycles, polity lifespans or tail exponents.
 - **Certification** (1,000 y × 32 seeds; V-WC-07, and nightly per reference world) evaluates every band below. MOP-5 is measured on certification ensembles.
 
-Each band is tagged:
-- **Identity:** the fact follows from the model's equations or calibrated inputs. A failure is an implementation bug and blocks, whatever the overall pass rate.
-- **Emergent:** the fact arises from interacting systems. Emergent bands are the evidence that history happens, and their pass rate is reported separately.
+Each band carries four tags (R12 §14; pattern-oriented modelling, Grimm et al. 2005; Fagiolo et al. 2007):
+- **Kind.**
+  - *Identity:* the fact follows directly from a model equation or a calibrated input. A failure is an implementation bug and blocks, whatever the overall pass rate.
+  - *Emergent:* the fact needs several systems to interact. Emergent bands are the evidence that history happens, and their pass rate is reported separately.
+- **Role.**
+  - *Calibration:* the band may be used when tuning Registry bounds and defaults during development.
+  - *Held-out:* the band is sealed before P1b tuning starts and is never used to tune. It is the independent prediction that gives a pass its credibility. Held-out bands: **V-SF-04b, V-SF-05, V-SF-06c, V-SF-07, V-SF-09b, V-SF-11b, V-SF-14**. All the others are calibration bands.
+- **Level:** individual, household, polity or system. Patterns at several levels are what constrain structure; one level alone does not.
+- **Discriminates:** the submodel candidates the band can tell apart (§3.8), or none.
+
+**Bounds are set by filtering, not hand-tuning.** Registry bounds and defaults are set as follows:
+1. Sample parameters by Latin hypercube within the Registry bounds.
+2. Keep the samples that pass the *calibration* bands.
+3. Narrow the bounds to the survivors.
+4. Report how much sensitivity dropped (Grimm et al. 2005's inverse-modelling filter).
+
+Held-out bands are evaluated only after this.
 
 | ID | Fact | Band (scope stated per row; era-conditioned bands are keyed to the era label of the window tested, ADR-0027; sources in `research/R12_literature_verification.md`) | Kind | Statistic and test |
 |---|---|---|---|---|
@@ -387,7 +402,7 @@ Each band is tagged:
 | V-SF-06 | Ruler murder (era-conditioned) | Murders per 1,000 ruler-years by institutional state: weak or contested succession (like 600–1099) 6–25; consolidating (like 1100–1399) 7–12; institutionalised hereditary monarchy (like 1400–1799) 1–5. Pooled 5–15 only for mixed medieval scenarios. Violent share of ruler *deaths* (not reigns) 15–30% (Eisner 2011: 22.4%) | Identity | Poisson rate per institutional-state window with exact CI (counts are small late; report them); violent share with Clopper–Pearson CI |
 | V-SF-06b | Deposition by succession law | Share of reigns ending in domestic deposition: primogeniture 8–16%, elective 21–49%, agnatic seniority 43–57%; primogeniture vs elective hazard ratio inside [0.17, 0.63] (Kokkonen & Sundell 2014) | Identity | Cox model on simulated reigns stratified by polity, natural death and foreign conquest censored; HR with CI |
 | V-SF-06c | Reign length follows institutions | Mean completed reign: unconstrained rulers (salaried or slave army, no assembly) 8–15 years; constrained (landed military elite plus assembly) 17–22 years; the gap appears within 1–2 entry centuries of the institutional shift and is +6 to +12 years within the same era (Blaydes & Chaney 2013) | Emergent | Kaplan–Meier restricted mean (τ = 60 years) by institutional state; difference with bootstrap CI. Shorter reigns go with more deposition (rank correlation < 0) |
-| V-SF-06d | Regicide contagion (soft) | A murdered predecessor raises the odds of the next ruler's murder: odds ratio 1.5–4 (Eisner 2011: 2.98) | Emergent | Logistic regression on consecutive reigns; OR with CI |
+| V-SF-06d | Regicide contagion (soft) | A murdered predecessor raises the odds of the next ruler's murder: odds ratio 1.5–4 (Eisner 2011: 2.98) | Identity (the odds ratio is a Registry parameter, `predecessor_killed_or`) | Logistic regression on consecutive reigns; OR with CI |
 | V-SF-07 | Polity lifespans | Approximately exponential, mean 100–300 years | Emergent | **Censoring-aware.** Polities alive at the horizon are right-censored. Kaplan–Meier survival curve; exponential MLE λ̂ = ends ÷ total exposure, with mean 1/λ̂ in the band. "Approximately exponential" means the fitted Weibull shape is TOST-equivalent to 1 within [0.75, 1.33]. Dynasty tenures get the same Kaplan–Meier treatment and are reported |
 | V-SF-08 | City sizes (soft until n suffices) | Settlement-size tail exponent α̂ (pdf) ∈ [1.8, 2.6] (Zipf corresponds to α = 2; US cities α = 2.37 ± 0.08: Clauset, Shalizi & Newman 2009) | Emergent | The V-SF-09 procedure on settlement populations at snapshots ≥ 200 years apart. **Not** OLS on log–log ranks, which CSN 2009 shows is biased. Soft while the pooled tail has n < 100 (likely at 100k persons) |
 | V-SF-09 | War severity (era-invariant shape) | Heavy tail, α̂ (pdf) ∈ [1.3, 1.9]. This is Rehoboam's widening of Clauset (2018)'s 95% CI [1.37, 1.76] for interstate wars 1823–2003 and CSN (2009)'s war intensity α = 1.7 ± 0.2. Cederman's model gives 1.49–1.64 and its ablations ≈ 2.3, so the band separates them. Absolute severity *and* intensity (deaths ÷ belligerents' population) are both logged; severity is the pre-registered band statistic | Emergent | **CSN 2009 recipe, deterministic** (R12 §CSN): exact discrete MLE for counts; x_min minimising the KS distance among candidates leaving n_tail ≥ 50; plausibility by semi-parametric bootstrap, B = 2,500 with a full refit each, **pass iff p > 0.1** (unrounded); the exponential must be rejected (normalised LR > 0, p < 0.1); lognormal, stretched exponential and cutoff (Wilks χ²₁) reported. α̂ pooled over seeds with a 10,000-resample seed-level bootstrap CI. Plausibility is also run **per seed** where n_tail ≥ 50 (≥ 75% of those seeds must pass), because pooled tests reject finite-population cutoffs. A power law with a population-scaled upper cutoff is accepted (pre-registered). Pooled n_tail < 100 → **INSUFFICIENT**, counted as a fail and shown separately. Sort keys and RNG keys as in R12 |
@@ -395,12 +410,30 @@ Each band is tagged:
 | V-SF-09c | The war tail is produced, not fitted | Freezing power-projection technology, or turning off war contagion, raises α̂ by ≥ 0.3 or makes the tail implausible (Cederman 2003: ≈ 1.55 → ≈ 2.3 under ablation) | Emergent | CRN-paired ablation ensembles (32 seeds each); difference in α̂ with bootstrap CI. Fails if the ablated model still produces the tail |
 | V-SF-10 | Malthusian test | A technology shock raises density, not long-run income | Identity | CRN-paired shock and no-shock ensembles. Density increase with lower 95% bound > 0; long-run real income TOST-equivalent to no change, δ = ±5% |
 | V-SF-11 | Post-plague wages | Real wage rises after ≥ 20% mortality | Identity | Sign test over qualifying events across seeds, p < 0.05 |
+| V-SF-11b | Post-plague levelling (soft until Alfani 2021 is read) | After a mortality shock of ≥ 20%, the top-10% wealth share falls below its pre-event level within 50 years; a CRN-paired ablation with impartible or entailed inheritance plus regressive taxes levels less | Emergent | Sign test over qualifying events across seeds, p < 0.05; ablation difference with CI |
 | V-SF-12 | Hive / testing (modern) | At prevalence < 1% with se/sp = 0.99, more than 50% of detentions are false positives | Identity | Detention outcomes on `aethelgard`, with Clopper–Pearson CI |
 | V-SF-13 | Sensitivity screening | — | — | Morris and Sobol screening on labelled PRs flags parameters with outsized influence |
 | V-SF-14 | Demographic-structural crises (agrarian era; soft until *Secular Cycles* is read) | State breakdowns follow 35–100% population growth over 2–5 generations, with grain prices ×3–7 and real wages about −50%; growth phases of ≤ 25% stay calm; breakdown usually follows elevation of all three Ψ strains, and two produce a crisis without breakdown (Goldstone 1991); this is a tendency, not a rule: Rome broke down without a prior fiscal crisis (Turchin & Nefedov 2009, pp. 306, 314). In growth phases population rises from +80% to ×3, prices ×4–6 and real wages −50–75% | Emergent | Per seed: classify windows by population growth; breakdown frequency by growth class with Clopper–Pearson CIs; count of elevated components at each breakdown |
 | V-SF-15 | Industrial damping (from era pack E3) | Once fiscal instruments, food trade and industrial labour absorption are present, population growth no longer produces breakdown; polities without them still do (Goldstone 1991, pp. 288–338, 460–461) | Emergent | CRN-paired E3 ensembles with and without the damping technologies; breakdown hazard ratio with CI < 1 |
+| V-SF-16 | Income inequality (agrarian windows, α ≤ 7) | Person-weighted Gini of per-capita household income (in kind included), as Gini2 over ≥ 8 class or occupation groups: every seed-window in [24, 64]; ensemble median in [33, 58]. **Extraction ratio** ER = Gini ÷ IPF, where the inequality possibility frontier IPF = (α − 1)/α and α = mean income ÷ subsistence: ensemble median 55–100%, per seed 45–115%. ER > 100% for over a decade must coincide with raised hunger mortality. ER falls as α rises (Spearman ρ < 0). Modern windows: ER 25–65% (Milanovic, Lindert & Williamson 2011; R12 §13) | Emergent (ER > 100% rule: identity) | Per region-window; INSUFFICIENT below 100 households |
+| V-SF-17 | Wealth inequality (soft until Alfani 2021 is read) | Wealth Gini and top-10% share over households from valued holdings (with and without zero-wealth households): wealth Gini > income Gini; the top-10% share rises over centuries without a ≥ 20% mortality shock | Emergent | Sign tests; INSUFFICIENT below 200 households (Gini) or 400 (top-10% share); n/(n−1) correction |
+| V-SF-18 | Household structure (soft until sources are read: Laslett; Hajnal) | Mean household size and the share of complex (multi-generation or multi-couple) households fall inside the manifest culture's declared range; the age at first marriage for women follows the culture's declared marriage pattern | Emergent | Household level; per region-window; INSUFFICIENT below 100 households |
+| V-SF-19 | Polity consolidation (soft) | With rising power-projection technology the number of independent polities falls over centuries; with technology frozen it does not (Cederman 2003: 200 → ≈ 35 states) | Emergent | System level; CRN-paired technology-on vs technology-frozen ensembles; sign test on polity-count trend |
 
-**Gate (MOP-5).** At least 90% of the non-soft bands pass on the certification ensemble, and every identity band passes. A band passes when its ensemble estimate lies inside it. Intervals are reported so that a marginal pass is visible. A band is evaluated once the systems it needs exist: V-SF-01 and V-SF-02 from G1a, the other P1 bands from G1b, and V-SF-09, V-SF-11 and V-SF-12 from G3a (`11`).
+**Gate (MOP-5).**
+- **Per band.** A band **passes** when the 90% interval of its ensemble statistic lies inside the band. It **fails definitively** when the interval lies wholly outside. Anything else is **marginal** and is reported as such.
+- **Gate rule.**
+  - At least 90% of the non-soft bands pass.
+  - Every identity band passes.
+  - **No held-out band fails definitively.**
+- **Phasing.** A band is evaluated once the systems it needs exist: V-SF-01 and V-SF-02 from G1a, the other P1 bands from G1b, and V-SF-09, V-SF-11 and V-SF-12 from G3a (`11`).
+- **Non-ergodicity reporting.** Seeds can diverge into different regimes, so for every band the report also gives:
+  - the **share of seeds** whose own statistic lies inside the band;
+  - between-seed vs within-seed variance (first vs second half of the run);
+  - regime clusters, if the per-seed values are multimodal.
+
+  A seed-mean inside a band that no individual seed reaches is flagged.
+- **Typicality.** Where a band is anchored on a single real history, such as Clauset's 1823–2003 war tail, the real value must also lie within the 5–95% range of the per-seed values. A real history is one draw, not the expected value.
 
 ### 3.2 Drama-coupling scenarios (V-COUP; `05.1` §8)
 
@@ -454,7 +487,7 @@ G2 tests the core thesis (S1): unforgiving, coupled systems produce history you 
 
 **Pre-registration**
 1. The protocol is filled in and frozen before the first evaluation run: engine build, Registry version, held-out manifest hash, seed list, pause thresholds, preference-model hash, presentation-order seed and analysis-script hash. The filled-in instance is committed and its hash recorded in `docs/decisions-log.md`. It is not edited afterwards. Any deviation is logged and reported with the result.
-2. **Held-out material.** Seeds are derived as `H(preregistration_hash, "g2", i)` after freezing, so none can have been used in tuning. One **held-out manifest**, hand-authored during P1 and sealed (hash committed, never run), is opened only for G2.
+2. **Held-out material.** Seeds are derived as `H(preregistration_hash, "g2", i)` after freezing, so none can have been used in tuning. Certification (§3.1) is also run on the held-out manifest, as an independent prediction test. One **held-out manifest**, hand-authored during P1 and sealed (hash committed, never run), is opened only for G2.
 3. **Seeds.** 10 seeds: 7 on the tuned reference manifests (`val_khor`, `delta_republic`) and 3 on the held-out manifest.
 4. **Personal preference model** (§3.5). Frozen before the run, with its weights hash in the pre-registration. Results are reported both **without** it (default pause thresholds; the primary analysis) and **with** it.
 
@@ -524,6 +557,25 @@ Worlds must be able to pass through eras in one run. These tests check that era 
 | V-SCALE-04 | Extinction is a valid end | Worlds driven to zero population | A journaled end event; chronicle, console and replay stay consistent |
 | V-SCALE-05 | Agentive catalysts are bounded | `uz_job` with the Adversary under deterministic and scripted-player policies; 64 seeds | No verb outside the stage scope; `spare_life` never violated; the protagonist's renounce/hold-fast outcome varies across seeds (both outcomes occur at least once), which shows it is not forced |
 | V-SCALE-06 | Personal-arc liveness (micro) | `uz_job` 64 seeds × 10 years | ≥ 1 completed personal arc (trial, lament, counsel dispute or restoration) per seed-decade in ≥ 90% of seeds |
+
+### 3.8 Submodel tournaments (pattern-oriented model selection)
+
+Where the sources support rival mechanisms, the choice is made by **strong inference against patterns**, not by taste. The method follows Grimm et al. (2005); the guard against selecting by small likelihood margins follows Fagiolo et al. (2007, p. 211).
+1. **Pre-register** in `docs/decisions-log.md`:
+   - the candidates, always including a **null**;
+   - the discriminating patterns;
+   - the calibration budget.
+2. **Calibrate every candidate equally,** with the same budget, within Registry bounds, on calibration bands only, with CRN seeds.
+3. **Reject** a candidate on a definitive fail of any held-out band. **Never** choose between survivors by small differences in fit.
+4. **If two or more survive,** log "not discriminated". Keep them as Registry variants, and look for a sharper pattern.
+
+**First tournaments:**
+
+| Mechanism | Candidates (with null) | Discriminating patterns |
+|---|---|---|
+| M6 Ψ | Turchin's multiplicative form with a geometric-mean threshold; Goldstone's additive mobilisation term with three-strain gating; **null:** a constant instability hazard | V-SF-04b, V-SF-05, V-SF-05b, V-SF-14 |
+| M8 attrition exponent W | Derived from force composition; one fixed value per world; **null:** 0.5 | V-SF-09, V-SF-09c, campaign-loss distributions (battle data cannot separate them, R12 §11) |
+| M7 ruler hazards | Institution-driven (R12 §1–3); **null:** a constant hazard per ruler-year | V-SF-06, V-SF-06b, V-SF-06c, V-ERA-03 |
 
 ## 4. Observability for V&V
 

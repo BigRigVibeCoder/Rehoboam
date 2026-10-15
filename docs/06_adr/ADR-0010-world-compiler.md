@@ -53,7 +53,7 @@ R05 §5, §Recommendations; R09 §Recommendations; R02.
    | **Liveness gate** | 200 y × 8 seeds | Yes | No extinction or explosion; vital-rate guard; ≥ 2 completed arcs per century; bad-run rate ≤ 1/8; no invariant violations |
    | **Calibration repair** | Morris screening, then Bayesian optimisation or ABC over the flagged parameters | Only when the gate fails | Re-runs the gate; capped at 30 gate runs |
    | **Spin-up** (optional) | 100–200 y | Yes, if chosen | Relaxes the expander's synthetic start. Only the end state is kept, as year 0 |
-   | **Certification** | 1,000 y × 32 seeds | **No** (background) | Stylized-fact bands with a red-noise null, Clauset tail fits, censoring-aware statistics. Each band is tagged *identity* or *emergent* |
+   | **Certification** | 1,000 y × 32 seeds | **No** (background) | Stylized-fact bands (cycle and phase statistics on N/K, Clauset–Shalizi–Newman tail fits, censoring-aware statistics; calibration vs held-out bands, CI-based pass/fail, `09` §3.1). Each band is tagged *identity* or *emergent* |
 
    If certification fails after play has started, Genesis labels the world "uncertified" and lists the failing bands. Nothing is rolled back.
 2. **Deterministic calibration repair.** Parameters move only **within Registry bounds**. Each changed value is logged with its before and after values and shown on Genesis. The LLM is never in this loop.

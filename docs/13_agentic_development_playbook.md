@@ -32,6 +32,7 @@ Every task an agent receives uses this template. It is stored in `backlog/wp/<id
 ## Fixtures & golden data (inputs; expected outputs or bands)
 ## Acceptance gates (tests to add; benches; stylized-fact bands if relevant)
 ## Out of scope (explicit)
+## System spec (for system WPs: ODD-R path, and the sections implemented or changed; `docs/templates/system_spec_odd_r.md`)
 ## Size estimate (agent-days; >3 → split)
 ```
 
@@ -166,6 +167,7 @@ flowchart LR
 - [ ] Events are registered with roles, anchored snapshots and contingency edges where applicable.
 - [ ] Benches are added for hot paths, with no regression.
 - [ ] Spec and docs are updated. The Registry is updated if semantics or ownership changed.
+- [ ] For system WPs: the ODD-R spec is updated and its completeness check passes. Edits to §2 ownership or §7.0 bounds are C2; edits to equations, defaults or RNG purposes are C3.
 - [ ] The reviewer agent has signed off. The architect agent has signed off on C2. You have signed off where §4.2 requires it.
 
 ## 8. Knowledge base for agents

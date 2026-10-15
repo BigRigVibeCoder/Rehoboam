@@ -568,3 +568,135 @@ Read: Ch. 1 (theory), Ch. 2 (Plantagenet England) and Ch. 10 (general patterns);
 - **V-SF-14:** the magnitudes are added and the rule softened.
 
 **Implications for the build.** M6 tracks N/K (with K moved by technology) rather than raw N. Elite dynamics must produce a lag of about a generation. An "Ibn Khaldun" regime is a parameter set — elite polygyny, nomad counter-elites — not a separate system.
+
+---
+
+# Batch 3
+
+## 13. Milanovic, B., Lindert, P. H. & Williamson, J. G. (2011). "Pre-industrial inequality." *Economic Journal* 121, 255–272. doi:10.1111/j.1468-0297.2010.02403.x
+
+**The inequality possibility frontier (IPF; pp. 257–258).** Take an elite of share ε and everyone else at subsistence s, with mean income μ = αs. The maximum feasible Gini is G\* = (α − 1)(1 − ε)/α, which tends to (α − 1)/α as ε → 0. So α = 2 caps the Gini at 50. The **extraction ratio** is ER = Gini ÷ G\* (p. 264).
+
+**Data.** 28 societies, from Rome (14 CE) to British India (1947), mostly from social tables; α runs from 1.5 to 6.8 (Table 2, p. 263).
+- Gini2 runs from 24.5 (China 1880) to 63.7 (Chile 1861), mean 45.7. That is not significantly different from the modern counterparts' 41.1 (p. 264).
+- **ER has median 75.5% and mean 76.8%**: "three-quarters of maximum feasible inequality was actually 'extracted'" (p. 264). Four colonies are at or above 100%.
+- England's ER was 69% in 1290, 57% in 1688 and 61% in 1801.
+- Modern counterparts average 44.1% (US ≈ 40, Sweden < 28). ER falls as income rises (Fig. 4).
+- **The era signal is in ER, not in the Gini.**
+
+**The A13b file was not Alfani (2021).** It is the abstracts section (pp. 457–472) of Nigro (ed.) (2020), *Disuguaglianza economica nelle società preindustriali* (CC BY 4.0), which we refiled as `A13x`. It contains only qualitative findings:
+- **Alfani (p. 457):** inequality fell only after the Black Death and rose through the whole early modern period. The fiscal-military state is among the main drivers; growth is not.
+- **Pfister (p. 470):** "with given technology and agrarian institutions, there is a positive correlation between population and inequality". He names four mechanisms: impartible inheritance, the land–labour ratio, guilds, and prices.
+- **Other authors:** commons kept inequality lower; urbanisation and markets raised it.
+
+**The actual JEL article is still wanted.**
+
+**Deltas applied:**
+- **V-SF-16, income inequality and ER** (agrarian windows): ensemble median Gini2 in [33, 58]; ER 55–100% (45–115% per seed). ER above 100% for more than a decade must coincide with raised hunger mortality. ER falls with α. Modern windows: 25–65%.
+- **V-SF-17, wealth Gini and top-10% share** (soft, sign tests only until Alfani 2021 is read).
+- **V-SF-11b, post-plague levelling** (soft).
+- **M4 additions:**
+  - a per-household income account;
+  - holdings valued at regional prices;
+  - a subsistence basket (`subsistence_kg_grain`, a design value);
+  - a tax-incidence function (`tax_regressivity`);
+  - an inheritance rule (`[inheritance_rules]`: partible, impartible, entail).
+- **Era state** gains `commons_share` and `market_integration`.
+- `wealth_band` becomes a derived display decile.
+- **Minimum samples:** 100 households for an income Gini, 200 for a wealth Gini, 400 for a top-10% share.
+- **Micro worlds** (fewer than 100 households) are "not evaluated", which does not count as a failure.
+
+## 14. Grimm, V. et al. (2005). "Pattern-oriented modeling of agent-based complex systems." *Science* 310, 987–991; Fagiolo, G., Moneta, A. & Windrum, P. (2007). "A critical guide to empirical validation of agent-based models in economics." *Computational Economics* 30, 195–226
+
+**Grimm (pattern-oriented modelling, POM).**
+- One pattern at one scale cannot constrain a model. Several patterns at different scales and levels select model structure as well as parameters (pp. 987–989).
+- "Weak" patterns are powerful in combination (n. 11).
+- **Strong inference:** test rival submodels, including null models, against patterns and reject the failures. In Huth's schooling study, one pattern could not separate 11 rules; adding polarisation rejected two.
+- **Inverse modelling:** filter random parameter sets through several patterns. In the bear model, 10 of 557 sets survived and sensitivity fell fourfold.
+- **Independent predictions** carry the credibility. The Anasazi model was calibrated only on household counts, yet reproduced settlement layout.
+
+**Fagiolo.**
+- Almost all agent-based validation is in-sample (p. 205).
+- Stylized facts are weak tests unless "the set of stylized facts to be jointly replicated is sufficiently large", together with validated micro rules (pp. 199, 222).
+- Choosing the "closest" model by KL or likelihood can pick a wrong model (p. 211).
+- Observed history is one draw, so its typicality is unknowable (p. 221).
+- Also flagged: over-parameterisation, non-ergodicity and regime-straddling windows (pp. 210–213, 220).
+
+**Deltas applied (`09` §3.1, §3.8).**
+- **Every band carries four tags:**
+  - kind (identity / emergent);
+  - **role** (calibration / held-out);
+  - **level** (individual / household / polity / system);
+  - **discriminates**.
+- **Held-out bands** (V-SF-04b, 05, 06c, 07, 09b, 11b, 14) are sealed before P1b tuning.
+- **Bounds are set by Latin-hypercube filtering** on calibration bands, with the drop in sensitivity reported.
+- **The gate is now CI-based.** A band passes when its 90% interval lies inside the band and fails definitively when it lies wholly outside. The gate requires 90% passing, every identity band passing, and **no definitive held-out failure**.
+- **Non-ergodicity reporting** per band: the share of seeds inside the band, between- vs within-seed variance, and regime clusters.
+- **A typicality test** for bands anchored on one real history.
+- **V-SF-06d is retagged Identity:** its odds ratio is a Registry parameter.
+- **New household and system bands:** V-SF-18 household structure (soft, sources pending) and V-SF-19 polity consolidation.
+- **G2** also certifies the held-out manifest.
+- **New §3.8, submodel tournaments,** with pre-registered candidates and nulls:
+  - the M6 Ψ form;
+  - the M8 attrition exponent W;
+  - M7 ruler hazards.
+
+  Selection is by held-out falsification, never by small fit margins.
+
+## 15. Grimm, V. et al. (2010). "The ODD protocol: a review and first update." *Ecological Modelling* 221, 2760–2768; Grimm, V. et al. (2020). "The ODD protocol … second update." *JASSS* 23(2) 7
+
+**The ODD structure (2020).**
+1. Purpose and patterns
+2. Entities, state variables and scales
+3. Process overview and scheduling
+4. Design concepts
+5. Initialization
+6. Input data
+7. Submodels
+
+Since 2020 the numbering is fixed (Fig. 1). Patterns were added in 2020 to link ODD to pattern-oriented modelling, and authors must also report the patterns a model fails to reproduce (¶4.24).
+
+**Common mistakes** (2010 review of 54 papers):
+- ambiguous scheduling (pseudo-code given in only 12% of papers);
+- parameters confused with state variables or input data (input data was correct in only 62%);
+- process names that don't match the submodels;
+- describing the intended model instead of the program.
+
+The evidence that ODD helps rests on its authors' own assessment.
+
+**Applied.** `docs/templates/system_spec_odd_r.md` adapts ODD to the `SystemModel` contract, with three Rehoboam additions:
+- §2 ownership, read sets and the restart test;
+- §3 phases, timers, lags and pseudo-code;
+- §4.9 keyed RNG purposes; §4.12 era-state dependence; §4.13 scale behaviour; §8 couplings; §9 test IDs; §10 code map.
+
+`05.1` §2 maps each trait method onto a template section. The `13` WP template and Definition of Done reference it. **Adoption is proposed and needs your ruling** (decisions log).
+
+---
+
+## Did the reading pay off? (ledger after three batches, 20 sources)
+
+| Source | Effect on the plan |
+|---|---|
+| Eisner 2011 | **Major.** Murder-hazard bounds; era-conditioned regicide bands; regicide contagion; the "civilising trend" flag removed |
+| Kokkonen & Sundell 2014 | **Major.** Deposition as its own hazard; per-law hazard ratios; "regency raises hazard" dropped |
+| Blaydes & Chaney 2013 | **Major.** Institutions, not dates, drive ruler risk; this is ADR-0027's evidence. Reign-length band |
+| Turchin 2013 | **Major.** R09's M6 equations corrected; Ψ threshold on the geometric mean |
+| Goldstone 1991 | **Major.** Three-strain gating; the agenda for era packs E2/E3 |
+| Turchin & Nefedov 2009 | **Major.** V-SF-04 rewritten (the 120–450 band was unsourced and the spectral test inappropriate) |
+| Cederman 2003 | **Major.** War onset and contagion added to M8; the ablation test |
+| Clauset 2018 | Numbers; per-seed testing; the memoryless-onset band |
+| Clauset, Shalizi & Newman 2009 | Deterministic heavy-tail recipe; city-size method corrected; testability limits |
+| Brass 1971 | **Major.** Golden vectors (`specs/demography/`); standard corrected; the q15–e₀ contradiction fixed |
+| Carbone & Gittleman 2002 | Minor. Scope documented; warning above 310 kg |
+| Bracken, Fricker, Lucas & Turkes | W domain [0, 1]; per-engagement breakpoints; an ADR-0027 claim corrected |
+| Milanovic et al. 2011 | Inequality band via the extraction ratio; M4 income accounts, holdings, inheritance |
+| Grimm 2005; Fagiolo 2007 | **Major for validation.** Held-out bands; CI-based gate; submodel tournaments; non-ergodicity reporting |
+| ODD 2010, 2020 | The system-spec template for agents |
+| Nigro (ed.) 2020 (misfiled as Alfani) | Qualitative drivers only |
+
+**Totals.**
+- 17 of 20 sources changed the design or the validation.
+- About 30 specific claims were corrected or found unsourced.
+- Three runnable or ready artefacts came out of it: the Brass golden vectors, the heavy-tail recipe and the ODD-R template.
+
+**Returns are now diminishing.** The remaining Tier-A items will mostly refine bands. The story-detection papers (Winnow and the others) are the last reading likely to change the design before the walking skeleton starts producing its own evidence.

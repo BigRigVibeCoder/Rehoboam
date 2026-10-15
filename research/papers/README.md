@@ -19,17 +19,18 @@ Naming: `<reading-list ID>_<first author>_<year>_<short title>.<ext>`. IDs match
 | `A11_carbone_gittleman_2002_carnivore_density.pdf` | Carbone, C. & Gittleman, J. L. (2002). *Science* 295 | S4 energetics validator | R12 §10 |
 | `A12a_bracken_1995_lanchester_models_ardennes.pdf` | Bracken, J. (1995). *Naval Research Logistics* 42(4) | M8 attrition | R12 §11 |
 | `A12b_fricker_1998_attrition_models_ardennes.pdf` | Fricker, R. D. (1998). *Naval Research Logistics* 45(1) | M8 attrition | R12 §11 |
-| `A13a_milanovic_lindert_williamson_2011_preindustrial_inequality.pdf` | Milanovic, B., Lindert, P. & Williamson, J. (2011). "Pre-industrial inequality." *Economic Journal* 121 | Wealth and income inequality band (M4) | R12 (batch 3) |
-| `A13b_alfani_2021_economic_inequality_preindustrial.pdf` | Alfani, G. (2021). "Economic inequality in preindustrial times: Europe and beyond." *J. Economic Literature* 59(1) | Inequality band; era dependence | R12 (batch 3) |
-| `A15a_grimm_et_al_2005_pattern_oriented_modeling.pdf` | Grimm, V. et al. (2005). "Pattern-oriented modeling of agent-based complex systems." *Science* 310 | Certification method | R12 (batch 3) |
-| `A15b_fagiolo_moneta_windrum_2007_critical_guide_validation.pdf` | Fagiolo, G., Moneta, A. & Windrum, P. (2007). *Computational Economics* 30 | Certification method | R12 (batch 3) |
-| `A16a_grimm_et_al_2010_odd_first_update.pdf` | Grimm, V. et al. (2010). "The ODD protocol: a review and first update." *Ecological Modelling* 221 | System-spec documentation template | R12 (batch 3) |
-| `A16b_grimm_et_al_2020_odd_second_update.pdf` | Grimm, V. et al. (2020). "The ODD protocol … second update." *JASSS* 23(2) | System-spec documentation template | R12 (batch 3) |
+| `A13a_milanovic_lindert_williamson_2011_preindustrial_inequality.pdf` | Milanovic, B., Lindert, P. & Williamson, J. (2011). "Pre-industrial inequality." *Economic Journal* 121 | Income inequality band V-SF-16 (income only) | R12 §13 |
+| `A13x_nigro_ed_2020_disuguaglianza_abstracts_incl_alfani.pdf` | **Not the Alfani JEL article.** Nigro, G. (ed.) (2020). *Disuguaglianza economica nelle società preindustriali*, Firenze UP, the abstracts section (pp. 457–472), including Alfani's abstract and Pfister on inheritance (CC BY 4.0) | Inequality drivers (qualitative) | R12 §13 |
+| `A15a_grimm_et_al_2005_pattern_oriented_modeling.pdf` | Grimm, V. et al. (2005). "Pattern-oriented modeling of agent-based complex systems." *Science* 310 | Certification method | R12 §13–15 |
+| `A15b_fagiolo_moneta_windrum_2007_critical_guide_validation.pdf` | Fagiolo, G., Moneta, A. & Windrum, P. (2007). *Computational Economics* 30 | Certification method | R12 §13–15 |
+| `A16a_grimm_et_al_2010_odd_first_update.pdf` | Grimm, V. et al. (2010). "The ODD protocol: a review and first update." *Ecological Modelling* 221 | System-spec documentation template | R12 §13–15 |
+| `A16b_grimm_et_al_2020_odd_second_update.pdf` | Grimm, V. et al. (2020). "The ODD protocol … second update." *JASSS* 23(2) | System-spec documentation template | R12 §13–15 |
 | `A12c_lucas_turkes_2004_fitting_lanchester_equations.pdf` | Lucas, T. W. & Turkes, T. (2004). *Naval Research Logistics* 51(1) | M8 attrition | R12 §11 |
 
 **Still wanted** (in priority order; exact citations so they can be found):
 
 *Closes Tier A: each fills a validation band that currently rests on memory.*
+0. **Alfani, G. (2021). "Economic inequality in preindustrial times: Europe and beyond." *Journal of Economic Literature* 59(1), 3–44.** The file uploaded under this name was a different item (see A13x). It feeds the wealth-inequality and post-plague levelling bands (V-SF-17, V-SF-11b).
 1. Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3), 127–129. Feeds V-SF-07, polity lifespans.
 2. Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38(4), 411–447. Feeds the real-wage series, V-SF-11 (post-plague wages) and M4.
 3. Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4), 859–886. Also the Introduction of Alfani, G. & Ó Gráda, C. (eds.) (2017), *Famine in European History*, CUP. Together they feed V-SF-03 (mortality crises) and M3 → M4.
