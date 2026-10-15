@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS causal_edge (          -- plane A
     cause_id    UBIGINT  NOT NULL,
     effect_id   UBIGINT  NOT NULL,
     kind        UTINYINT NOT NULL,             -- 0 contingent, 1 triggered, 2 relayed_knowledge, 3 motivated_by,
-                                               -- 4 enabled, 5 probabilistic, 6 player, 7 oracle, 8 director (05.4 §3)
+                                               -- 4 enabled, 5 probabilistic, 6 player, 7 oracle, 8 director (05.4 §4)
     weight      SMALLINT DEFAULT 0,
     evidence    VARCHAR                         -- optional short provenance key
 );
@@ -195,7 +195,6 @@ CREATE TABLE IF NOT EXISTS input_journal (
     kind          VARCHAR  NOT NULL,
     scope_kind    UTINYINT NOT NULL,           -- 0 none, 1 person, 2 household, 3 settlement, 4 region
     scope_id      UBIGINT,
-    epoch         UINTEGER NOT NULL,           -- per-scope counter; re-sampled timers key on it
     pull_key      BLOB,                        -- H(actor, decision_type, t_asked, menu_hash) for pull inputs
     producer      VARCHAR  NOT NULL,           -- player | llm:<job_id> | system
     model_id      VARCHAR,                     -- LLM-produced inputs only
