@@ -10,7 +10,7 @@ No model writes a good 100k-word novel in one call; output caps are 128K tokens.
 
 1. **Forms escalate**: annals (templated) → chronicle → in-world documents → saga → novel. The novel stage only runs if the material passes a story-shape gate.
 2. **Pipeline stages**: digest → selection → discourse plan → bible → beats → parallel scenes (batch) → scene QA → critique → book pass → exporters.
-3. **Canon tiers T0–T3**: T0 and T1 contradictions block release. A provenance sidecar records sources.
+3. **Canon tiers CT0–CT3**: CT0 and CT1 contradictions block release. A provenance sidecar records sources.
 4. **Style cards** with public-domain exemplars. No living or estate-protected author names.
 5. **Models**: Opus 5.5 by default, Fable 5.1 for premium output, a critic from a different model family, and a local NLI checker.
 

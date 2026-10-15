@@ -26,7 +26,7 @@ Every living person (and every creature of a ledgered archetype) is a row with a
 - Age-specific, density-dependent hazards with binomial draws: demography F1.
 - Pops (region × class × faith) are *derived aggregates* with their own belief and morale dynamics.
 - Off-map polities use compartments (F0).
-- Above ~10M people, an "implicit individuals" mode is a future fidelity level. Members are `id = H(cell, cohort, birth_year, k)`, and deaths remove the members with the smallest `H(id, tick, "death")`.
+- Above ~5M people (R01 §R2) an "implicit individuals" mode is recommended, and above ~10M it is required. It is a future fidelity level. Members are `id = H(cell, cohort, birth_year, k)`, and deaths remove the members with the smallest `H(id, tick, "death")`.
 
 ## Alternatives considered
 

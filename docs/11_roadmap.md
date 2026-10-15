@@ -26,7 +26,7 @@ gantt
     P7 Oracle-3D + polish                     :p7, after p6, 10w
 ```
 
-The timeline totals about 18–20 months to the full vision. **P0–P2, the thesis test, takes about 7 months.** Spikes S1–S3 for 3D risk run in parallel with P3 and P4 so that P5 starts de-risked.
+The timeline totals about 18–20 months to the full vision. **P0–P2, the thesis test, takes about 7 months.** Spikes SPK-1 to SPK-3 for 3D risk run in parallel with P3 and P4 so that P5 starts de-risked.
 
 ---
 
@@ -76,7 +76,7 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 - MOP-1: 1,000 years at 100k in ≤ 2 min.
 - Stylized facts ≥ 90% across 32 seeds (MOP-5).
 - Invariants hold across 1,000 years.
-- Couplings 1 (famine → succession) and 4 (elite overproduction) appear in ≥ x% of seeds and are absent in ≥ y%.
+- Coupling 1 (famine → succession), **truncated at the regency / civil-war onset** because M8 war and S3 migration arrive in P3 (the full chain is tested at G3), and coupling 4 (elite overproduction) each appear in ≥ x% of seeds and are absent in ≥ y%. x and y are set at G1 and logged in the decisions log.
 - **[H] You read 3 seeds' annals and judge whether "history happens".**
 
 ---
@@ -96,6 +96,8 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 | P2.7 | Console v1 | Time-Machine (speed bands, run-until, overview and detail lanes), map (deck.gl), causal inspector (Sigma), person/place views, Annals, rating tool |
 | P2.8 | Annals and Chronicle (templated) | Template engine over matches and edges; provenance links |
 | P2.9 | Branching | What-if forks with override inputs; timeline diff view |
+| P2.10 | Facts ledger v1 | `facts_ledger` writes on `entity.*` display; pin-on-reveal (05.2 §6); MOE-3 re-open probe (DATA-7) |
+| P2.11 | Save versioning | Arrow-schema versioning, keyframe migrations, and the save-compatibility corpus in CI (DET-10, MOE-4) |
 
 **Gate G2 (the thesis gate)**
 - **[H] MOE-1 ≥ 3 events rated ≥ 4 per century** (median over 10 seeds).
@@ -116,14 +118,15 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 | P3.3 | Epistemics v1 | Belief store, channels (including hive), distortion operators, ToM for flagged propositions, Bayesian suspicion, impossible-knowledge events |
 | P3.4 | Hive and mimics | Hive objective, mimic cover utility, tells, detection spiral |
 | P3.5 | M8 Campaign war F1 | Supply, attrition, Helmbold battles, sieges, camp disease |
-| P3.6 | S1/S2/S3/S4 Should-systems | Religion and ideology, technology diffusion, migration, ecology (dragons as T1 with energetics) |
+| P3.6 | Should-systems: S1.culture, S2.technology, S3.migration, S4.ecology | Religion and ideology, technology diffusion, migration, ecology (dragons as T1 with energetics) |
 | P3.7 | Oracle verbs | Movement and travel; Whisper (parse → ground → score → show, with the LLM gateway v1); Pierce; Omen; Ward |
 | P3.8 | Foresight | Prophecy DSL, rollout workers, Wilson CI, failure clustering, common-random-number A/B, reliability-diagram CI |
 | P3.9 | LLM Gateway v1 | Job API, adapters (local llama.cpp, frontier), journaling, ARG-300 eval, red-team corpus |
 | P3.10 | Scale-up | 1M-person optimisation pass; PERF-1 (P3) and PERF-2 |
 | P3.11 | Reference world | `aethelgard` (modern hive, 10 years) |
-| ∥ S1 | Spike 1: crowds | Godot: 50 rigged + 3,000 VAT + impostors at 1440p; 60 FPS on a 3060-class card |
-| ∥ S2 | Spike 2: street from seed | Same town on two machines; > 90% of buildings stable under growth |
+| P3.12 | Pivotal-consult A/B | Opt-in LLM consult from legal-action menus, pre-batched; A/B against the utility argmax on MOE-1 (COG-8) |
+| ∥ SPK-1 | Crowds spike | Godot: 50 rigged + 3,000 VAT + impostors at 1440p; 60 FPS on a 3060-class card |
+| ∥ SPK-2 | Street-from-seed spike | Same town on two machines; > 90% of buildings stable under growth |
 
 **Gate G3**
 - Coupling 2 (plague → purge) and coupling 3 (hive spiral) are emergent and not forced.
@@ -146,10 +149,11 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 | P4.5 | NOVEL-20 eval | Fixed epochs, metrics, judge harness |
 | P4.6 | World compiler | Intent schema, expander, validators, burn-in integration, repair loop, gap reports; INTENT-100 eval |
 | P4.7 | Audio-drama pipeline (optional within P4) | Voice bible, TTS rendering with ASR gate, mastering, RSS |
-| ∥ S3 | Spike 3: wallpaper | Windows 11 24H2 host; power budget |
+| P4.8 | Offline mode | Local or cluster fallback for every job kind; full offline play test (LLM-8) |
+| ∥ SPK-3 | Wallpaper spike | Windows 11 24H2 host; power budget |
 
 **Gate G4**
-- Zero T0/T1 contradictions on NOVEL-20.
+- Zero CT0/CT1 contradictions on NOVEL-20.
 - **[H]** Blind saga A/B against an ungrounded baseline.
 - INTENT-100 ≥ 90% / 98%.
 - At least 3 gap reports converted into merged Registry entries, proving the S4 loop.
@@ -183,7 +187,7 @@ The timeline totals about 18–20 months to the full vision. **P0–P2, the thes
 |---|---|---|
 | P6.1 | Hydration bubble | Rings, leases and decrees, pins, stub depth cap, alibi promotion, boundary flux |
 | P6.2 | Schedules and errands | T0 templates, flows, concrete errands tied to stock and plots, venue advertisements |
-| P6.3 | Dialogue | SpeechPlan IAUS, realisation with cached prefixes, claim check, speech-act extraction, facts ledger |
+| P6.3 | Dialogue | SpeechPlan IAUS, realisation with cached prefixes, claim check, speech-act extraction, facts-ledger writes from dialogue |
 | P6.4 | Local model selection | RP-200 eval across candidate models and hardware tiers |
 | P6.5 | Speech | Designed-voice bank, CPU TTS, ASR push-to-talk, latency masking |
 | P6.6 | Interiors | Lazy room templates |
@@ -222,5 +226,5 @@ Contents:
 | Condition | Response |
 |---|---|
 | G2 fails after 3 iteration cycles | Pivot from "emergent history" toward a **storylet hybrid**: authored vignettes cast onto simulated people, in the style of Wildermyth and CK3. The deterministic engine stays as the substrate. |
-| Spike 1 fails | Change the 3D scope to a 2.5D isometric diorama, or re-assess Unreal for the client only. The simulation is unaffected. |
+| SPK-1 fails | Change the 3D scope to a 2.5D isometric diorama, or re-assess Unreal for the client only. The simulation is unaffected. |
 | RP-200 cannot pass with local models | Move street-level dialogue to cluster or frontier models, keeping the same plan-then-realise architecture, or use templated dialogue only. |

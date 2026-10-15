@@ -21,7 +21,7 @@ Measured hazards:
 3. **Vendored samplers**, each checked against golden vectors.
 4. **Integer or fixed-point values** for every quantity that crosses a threshold. `libm` only. No FMA contraction and no fast-math.
 5. **No hash-map iteration** in authoritative code. Rayon only with fixed chunking and chunk-ordered reductions.
-6. **State hash** (xxh3-64) every simulated month.
+6. **State hash** (xxh3-64, chunked Merkle with dirty tracking) every simulated month in CI and debug builds; every simulated year (configurable) in release builds.
 7. **Unsynced guard** on every read-only consumer.
 8. **Golden-run CI.** Linux on every PR. Windows and macOS ARM nightly.
 9. **Guarantee levels.** Level 1, bit-exact on the same binary, OS and architecture, is required. Level 2, bit-exact across platforms, is a goal; until it holds, keyframes are the fallback.

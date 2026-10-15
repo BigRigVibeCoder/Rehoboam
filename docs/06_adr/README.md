@@ -14,7 +14,7 @@ All ADRs below are **Proposed** until you review them. ADRs that sit on a critic
 | [0006](ADR-0006-determinism-contract.md) | Determinism contract | ★ |
 | [0007](ADR-0007-chronicle-storage.md) | Typed Parquet chronicle, causal edges, no-delete tiering | ★ |
 | [0008](ADR-0008-story-sifting.md) | Custom incremental sifter + SQL twins; LLM non-authoritative | ★ |
-| [0009](ADR-0009-drama-policy.md) | Curation, not intervention | |
+| [0009](ADR-0009-drama-policy.md) | Curation, not intervention | ★ |
 | [0010](ADR-0010-world-compiler.md) | Mechanics Registry + intent → expander → validators → burn-in; gap reports | ★ |
 | [0011](ADR-0011-llm-platform.md) | LLM gateway; llama.cpp local; vLLM/SGLang cluster; frontier batch | |
 | [0012](ADR-0012-cognition.md) | Generic psych core + overlays; event-driven IAUS + HTN | |
@@ -29,3 +29,6 @@ All ADRs below are **Proposed** until you review them. ADRs that sit on a critic
 | [0021](ADR-0021-licence-policy.md) | Licence allow-list and provenance | |
 | [0022](ADR-0022-agentic-development.md) | Spec-first, contract-tested, agent-sized work packages | ★ |
 | [0023](ADR-0023-wire-protocol.md) | JSON-RPC control plane + binary columnar state plane | |
+| [0024](ADR-0024-three-plane-state.md) | Three-plane state: authoritative / observation / narrative | ★ |
+| [0025](ADR-0025-scheduled-outcomes-material-inputs.md) | Scheduled outcomes for everyone; material-input semantics; no back-dating | ★ |
+| [0026](ADR-0026-genealogical-identity-life-course.md) | Genealogical content-addressed identity; life-course log; signed time | ★ |

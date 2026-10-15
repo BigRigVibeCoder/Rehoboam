@@ -20,7 +20,7 @@
 | Region systems: economy (seasonal), polity (yearly), agriculture | [E] 2,000 regions, trivial | 0.5 ms (amortised) |
 | Named-actor decisions: ~5k due decisions/month × 1–5 µs, **evaluated in parallel against the start-of-instant snapshot and applied sequentially in agenda order** | [M] 0.81 ms for a 5k toy; [E] realistic ×3–5 | 3.0 ms |
 | Event emission: ~21k named events/month (250k/yr) into Arrow builders | [E] | 0.5 ms |
-| Live sifter: 21k events × trigger-indexed patterns; target ≥ 10⁷ events/s/core in Rust | [M] 2.2M events/s in pure Python (R10); [E] Rust | 2.0 ms |
+| Live sifter: 21k events × trigger-indexed patterns; target ≥ 10⁷ events/s/core in Rust | [M] 2.2M events/s, optimised pure Python (R10); the repo reference matcher measures ≈ 0.2M events/s; [E] Rust | 2.0 ms |
 | State hash: chunked Merkle xxh3 with dirty tracking | [E] | 1.0 ms |
 | Invariants: debug/CI builds only | — | (0 in release) |
 | Headroom and misc | — | 2.3 ms |
@@ -28,7 +28,8 @@
 
 **Implications**
 - 1,000 years = 12,000 months ≈ **2.4 min**, plus active daily sub-steps for epidemics, campaigns and sieges (≈ +30–80%). That gives **≈ 3–5 min per 1,000 years at 1M**, inside PERF-1's P3 target of ≤ 10 min.
-- At 100k persons, the ledger-proportional terms shrink ~10×, giving **≈ 4–5 ms/month**, or **≈ 1 min per 1,000 years**. That is inside the P1 target of ≤ 2 min.
+- At 100k persons, **assuming ~1k named actors**, ledger-proportional terms shrink ~10× and actor-proportional terms (decisions, emission, sifter) ~5×: 0.7 (raster) + 0.1 + 0.1 + 0.5 + 0.6 + 0.1 + 0.4 + 0.1 + ~0.8 headroom ≈ **3.5 ms/month**. That is ≈ 42 s per 1,000 years, or **≈ 55–75 s** with active daily sub-steps, inside the P1 target of ≤ 2 min.
+- **Risk to G1:** if 100k-person worlds carry the full 5k named actors, the estimate rises to ≈ 9 ms/month (≈ 2.4–3.4 min per 1,000 years), which misses MOP-1. Named-actor count must scale with population, or the actor tier must be optimised first. Measure at G1.
 - Release builds hash yearly by default. CI and debug builds hash monthly; the chunked Merkle scheme keeps that cheap.
 
 **Two-phase decision evaluation.** Named-actor decisions due in the same instant are *scored* in parallel against an immutable snapshot, then *applied* sequentially in `(time, phase, entity_id, seq)` order. If an earlier application invalidates a later actor's choice, that actor re-scores. This keeps the result deterministic and the work parallel. Semantics: "simultaneous deliberation, ordered action".

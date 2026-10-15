@@ -78,7 +78,7 @@ The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hard
 | Schema robustness | Truncation, refusal and enum-case drift inputs are handled without crashes |
 
 ### 2.9 Narrative QA (NAR-*)
-- **Per-scene.** Zero T0/T1 contradictions and zero T3 inventions (graph check, then NLI).
+- **Per-scene.** Zero CT0/CT1 contradictions and zero CT3 inventions (graph check, then NLI).
 - **Per-book.** Backbone coverage ≥ 95%. Every causal parent is shown or referenced before its child. Zero epistemic leaks.
 - **Prose.** Style metrics within the style card's bands. Slop density and repetition below thresholds. Cross-book n-gram similarity below a threshold.
 - **Exporters.** Fountain parse round-trip and page-count band. TTS manifest has complete voice mappings.

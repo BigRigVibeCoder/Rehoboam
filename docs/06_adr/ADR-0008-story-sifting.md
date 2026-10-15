@@ -32,6 +32,7 @@ No maintained, embeddable engine combines Datalog syntax, incremental evaluation
 - We own the sifter, but it is a modest, well-specified component.
 - Pattern authoring is designer work and tied to the Registry vocabulary.
 - Patterns are versioned per world so replays stay reproducible.
+- Sifter state is **outside** the authoritative state hash, and match events use a separate ID space. Patterns that feed back into simulation behaviour are promoted into the Registry rule set and become authoritative.
 
 ## Revisit when
 

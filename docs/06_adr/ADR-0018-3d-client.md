@@ -19,7 +19,7 @@ The 3D modalities need a small runtime that is wallpaper-friendly, plus crowds, 
 4. **Crowd LoD tiers**: rig, then VAT MultiMesh, then impostors, then aggregates.
 5. **Art direction**: a "painted miniature" bible.
 6. **Wallpaper**: a self-throttling host.
-7. **Spikes first**: crowd, street-from-seed, and wallpaper power.
+7. **Spikes first**: SPK-1 crowds, SPK-2 street-from-seed, SPK-3 wallpaper power.
 
 ## Alternatives considered
 
@@ -36,7 +36,7 @@ The 3D modalities need a small runtime that is wallpaper-friendly, plus crowds, 
 
 ## Revisit when
 
-- Spike 1 (crowds) fails its targets, or Godot ships GPU-driven skinning or culling.
+- SPK-1 (crowds) fails its targets, or Godot ships GPU-driven skinning or culling.
 
 ## Evidence
 
