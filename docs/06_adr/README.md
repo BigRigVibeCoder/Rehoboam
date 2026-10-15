@@ -35,3 +35,4 @@ All ADRs below are **Proposed** until you review them. ADRs that sit on a critic
 | [0025](ADR-0025-scheduled-outcomes-material-inputs.md) | Scheduled outcomes for everyone; material-input semantics; no back-dating | ★ |
 | [0026](ADR-0026-genealogical-identity-life-course.md) | Genealogical content-addressed identity; life-course log for every person; signed time | ★ |
 | [0027](ADR-0027-era-generic-mechanisms.md) | Era-generic mechanisms: eras are state, not templates | ★ |
+| [0028](ADR-0028-scale-range-and-micro-worlds.md) | One engine from one person to one million: scale profiles and micro worlds | ★ |

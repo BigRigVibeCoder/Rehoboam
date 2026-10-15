@@ -1,5 +1,49 @@
 {
   "$defs": {
+    "Agent": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "archetype": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Archetype",
+          "type": "string"
+        },
+        "verbs": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Verbs",
+          "type": "array"
+        },
+        "policy": {
+          "default": "deterministic",
+          "enum": [
+            "deterministic",
+            "player"
+          ],
+          "title": "Policy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "archetype",
+        "verbs"
+      ],
+      "title": "Agent",
+      "type": "object"
+    },
     "Artifact": {
       "additionalProperties": false,
       "properties": {
@@ -75,6 +119,101 @@
         }
       },
       "title": "Calendar",
+      "type": "object"
+    },
+    "CastMember": {
+      "additionalProperties": false,
+      "description": "A named person the expander must create exactly; everyone else is generated.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "sex": {
+          "enum": [
+            "male",
+            "female"
+          ],
+          "title": "Sex",
+          "type": "string"
+        },
+        "age_years": {
+          "maximum": 120,
+          "minimum": 0,
+          "title": "Age Years",
+          "type": "integer"
+        },
+        "household": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Household"
+        },
+        "flags": {
+          "default": [],
+          "items": {
+            "enum": [
+              "protagonist",
+              "deep"
+            ],
+            "type": "string"
+          },
+          "title": "Flags",
+          "type": "array"
+        },
+        "initial": {
+          "default": {},
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{1,63}$": {
+              "maximum": 1.0,
+              "minimum": -1.0,
+              "type": "number"
+            }
+          },
+          "title": "Initial",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "sex",
+        "age_years"
+      ],
+      "title": "CastMember",
+      "type": "object"
+    },
+    "Children": {
+      "additionalProperties": false,
+      "properties": {
+        "sons": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": 0,
+          "title": "Sons",
+          "type": "integer"
+        },
+        "daughters": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": 0,
+          "title": "Daughters",
+          "type": "integer"
+        }
+      },
+      "title": "Children",
       "type": "object"
     },
     "ClassShares": {
@@ -462,6 +601,8 @@
         "raster_resolution": {
           "default": 512,
           "enum": [
+            64,
+            128,
             256,
             512,
             1024,
@@ -474,7 +615,7 @@
         "region_count": {
           "default": 600,
           "maximum": 5000,
-          "minimum": 20,
+          "minimum": 1,
           "title": "Region Count",
           "type": "integer"
         },
@@ -526,6 +667,52 @@
       "title": "Horizon",
       "type": "object"
     },
+    "Household": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "head": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Head",
+          "type": "string"
+        },
+        "children": {
+          "$ref": "#/$defs/Children",
+          "default": {
+            "sons": 0,
+            "daughters": 0
+          }
+        },
+        "servants": {
+          "default": 0,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Servants",
+          "type": "integer"
+        },
+        "holdings": {
+          "default": {},
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{1,63}$": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "title": "Holdings",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "head"
+      ],
+      "title": "Household",
+      "type": "object"
+    },
     "HumanPeople": {
       "additionalProperties": false,
       "properties": {
@@ -536,7 +723,7 @@
         },
         "population": {
           "maximum": 10000000,
-          "minimum": 100,
+          "minimum": 1,
           "title": "Population",
           "type": "integer"
         },
@@ -615,6 +802,39 @@
         "default_style_card"
       ],
       "title": "Narrative",
+      "type": "object"
+    },
+    "OffMapActor": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Kind",
+          "type": "string"
+        },
+        "strength": {
+          "default": 0.5,
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Strength",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "title": "OffMapActor",
       "type": "object"
     },
     "OverlayEffect": {
@@ -733,6 +953,79 @@
         }
       },
       "title": "Trajectory",
+      "type": "object"
+    },
+    "Wager": {
+      "additionalProperties": false,
+      "description": "An agentive catalyst (ADR-0028 \u00a73): an in-world agent may intervene within a permission scope.\nIts verbs are journaled material inputs; consequences and the protagonist's response are simulated, never forced.",
+      "properties": {
+        "kind": {
+          "const": "wager",
+          "title": "Kind",
+          "type": "string"
+        },
+        "agent": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Agent",
+          "type": "string"
+        },
+        "protagonist": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Protagonist",
+          "type": "string"
+        },
+        "stages": {
+          "items": {
+            "$ref": "#/$defs/WagerStage"
+          },
+          "minItems": 1,
+          "title": "Stages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "agent",
+        "protagonist",
+        "stages"
+      ],
+      "title": "Wager",
+      "type": "object"
+    },
+    "WagerStage": {
+      "additionalProperties": false,
+      "properties": {
+        "allow": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Allow",
+          "type": "array"
+        },
+        "spare_life": {
+          "default": true,
+          "title": "Spare Life",
+          "type": "boolean"
+        },
+        "unlock_when": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unlock When"
+        }
+      },
+      "required": [
+        "allow"
+      ],
+      "title": "WagerStage",
       "type": "object"
     },
     "WorldMeta": {
@@ -857,6 +1150,38 @@
       "title": "Polities",
       "type": "array"
     },
+    "cast": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CastMember"
+      },
+      "title": "Cast",
+      "type": "array"
+    },
+    "households": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Household"
+      },
+      "title": "Households",
+      "type": "array"
+    },
+    "off_map_actors": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/OffMapActor"
+      },
+      "title": "Off Map Actors",
+      "type": "array"
+    },
+    "agents": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Agent"
+      },
+      "title": "Agents",
+      "type": "array"
+    },
     "systems": {
       "additionalProperties": {
         "additionalProperties": {
@@ -894,7 +1219,8 @@
             "artifact": "#/$defs/Artifact",
             "climate_shock": "#/$defs/ClimateShock",
             "covert_outbreak": "#/$defs/CovertOutbreak",
-            "dynastic_tension": "#/$defs/DynasticTension"
+            "dynastic_tension": "#/$defs/DynasticTension",
+            "wager": "#/$defs/Wager"
           },
           "propertyName": "kind"
         },
@@ -910,6 +1236,9 @@
           },
           {
             "$ref": "#/$defs/ClimateShock"
+          },
+          {
+            "$ref": "#/$defs/Wager"
           }
         ]
       },

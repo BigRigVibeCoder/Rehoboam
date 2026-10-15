@@ -142,12 +142,30 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 
 ---
 
+## Build strategy: generic machinery, one era of content, skeleton first
+
+*(Director's question: "focus the era on one, or generic? Make sure the engine works, then iterate fidelity.")*
+
+1. **The machinery is generic from day one,** because retrofitting it is expensive and building it is cheap:
+   - determinism, time, IDs, planes, journal;
+   - the Registry and effect language;
+   - era-state hooks (ADR-0027) and scale profiles (ADR-0028).
+2. **Content and calibration cover one era first: E1 "agrarian"**, meaning every pre-industrial organic economy from antiquity to about 1700. The era is chosen by its mechanics, not its date or place. It covers:
+   - the biblical Land of Uz (`uz_job`, micro);
+   - a medieval feudal realm (`val_khor`, macro);
+   - fantasy variants (dragons).
+
+   All three share the same Malthusian, pastoral-agrarian, dynastic substrate. E1 has the best data we have verified (R12) and the smallest mechanism set. Lo-fi art suits it naturally.
+3. **Walking skeleton first (WP P1.0), then fidelity, one system at a time.** Every later WP deepens one system (F0 → F1 → F2) while the whole loop stays green: world → ledger → events → chronicle → sifter → console → lo-fi view, at N = 1 and N = 100k.
+4. **The engine proves itself before it widens.** Scale is proven early, because it is cheap (N = 1 … 1M from P1). Eras are proven late, because they are expensive (packs after G3b).
+
 ## P1a — Core time, ledger and demography (≈ 8–12 weeks)
 
 **Goal.** Living people on a real map: a ledger, genealogies and vital events that run for 1,000 years, deterministically and at scale. WP IDs are stable across the P1a/P1b split.
 
 | WP | Work package | Output |
 |---|---|---|
+| **P1.0** | **Walking skeleton (first 2–3 weeks)** | The thinnest end-to-end loop at F0. Manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled outcomes → events → chronicle (Parquet) → a trivial sifter pattern → console Time-Machine with scrub and a lo-fi glyph view → journal replay. Runs **at N = 1, 60 (`uz_job` skeleton) and 100k** on the same binary, with plane hashes in CI from day one. Every later WP must keep this loop green |
 | P1.1 | `rh-worldgen` v1 | Azgaar-style world generation: Voronoi, heightmap templates, climate, rivers, biomes, cultures, burgs, states, Urquhart routes |
 | P1.2 | Population synthesis | Iterative proportional fitting from manifest marginals → ledger. Founders are `H64(seed, "founder", k)`, with pre-epoch births. Great houses with 3-generation genealogies |
 | P1.3 | M2 Demography F1 | Age-specific hazards (Brass logit on Coale–Demeny West), density modifiers (the entitlement hook is stubbed until P1.5), binomial draws, births by age-specific fertility, **minimal partnering (fathers)**, households (minimal), genealogical IDs `H64(mother, parity)`, life-course log; dead rows leave the ledger at once |
@@ -451,7 +469,7 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
   1. **Nothing era-specific before G2** except the P1.16 hooks (1–2 weeks). The thesis is tested on agrarian worlds only.
   2. **A pack is simulation + Chronicle + Time-Machine only.** 3D art for an era (architecture kits, clothing, vehicles, audio ambience) is a separate **art pack**, decided after P5 shows what one era of art costs. Per-era 3D content is the biggest scope multiplier in the plan, so it is never bundled with a sim pack.
   3. **Minimum transition set.** A pack implements only the mechanisms needed to cross its transition plausibly (for E2/E3, Goldstone's damping list in R12 §8), validated by at most 10 era-conditioned bands plus one hindcast. Completeness is not a goal.
-  4. **Population ceiling ≤ 10M per world.** A modern world is a region or city-state inside an off-map world system (T−1 compartments). National-scale modernity (tens to hundreds of millions) needs implicit individuals (ADR-0003) and is out of scope until after E4.
+  4. **Population target 1 → 1M per world** (ADR-0028). A modern world is a city or region of up to 1M inside an off-map world system (T−1 compartments). National-scale modernity (tens to hundreds of millions) needs implicit individuals (ADR-0003) and is a stretch goal, not a requirement.
   5. **Cognition stays at 1–5k named actors.** Collective actors (parties, firms, unions, newspapers) arrive as M6 F2 factions in E4, not as more minds.
   6. **Kill criterion per pack.** If the hindcast cannot be passed within the pack's upper estimate plus 50%, ship what works with the frontier left where it was, and file the gap. Worlds wait at the frontier; nothing breaks.
 

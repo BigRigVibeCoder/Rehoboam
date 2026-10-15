@@ -94,8 +94,8 @@ class Ecology(Strict):
 
 
 class Geography(Strict):
-    raster_resolution: Literal[256, 512, 1024, 2048, 4096] = 512
-    region_count: Annotated[int, Field(ge=20, le=5000)] = 600
+    raster_resolution: Literal[64, 128, 256, 512, 1024, 2048, 4096] = 512
+    region_count: Annotated[int, Field(ge=1, le=5000)] = 600     # 1 for a single household (ADR-0028)
     heightmap_template: Slug
     climate: Climate
     ecology: Ecology = Ecology()
@@ -130,7 +130,7 @@ class ClassShares(Strict):
 
 class HumanPeople(Strict):
     archetype: Literal["human"]
-    population: Annotated[int, Field(ge=100, le=10_000_000)]   # > 2M total is a warning (outside the tested envelope, docs/08)
+    population: Annotated[int, Field(ge=1, le=10_000_000)]     # target range 1 → 1M (ADR-0028); > 1M is a warning
     cultures: Annotated[list[Culture], Field(min_length=1)]
     faiths: Annotated[list[Faith], Field(min_length=1)]
     class_shares: ClassShares
@@ -211,7 +211,63 @@ class ClimateShock(Strict):
     duration_years: Annotated[int, Field(ge=1, le=10)] = 1
 
 
-Catalyst = Annotated[Union[DynasticTension, Artifact, CovertOutbreak, ClimateShock], Field(discriminator="kind")]
+class WagerStage(Strict):
+    allow: Annotated[list[str], Field(min_length=1)]            # Registry verbs the agent may use in this stage
+    spare_life: bool = True                                     # the protagonist may not be killed by the agent's verbs
+    unlock_when: Annotated[str, Field(max_length=200)] | None = None   # plane-A predicate in the effect language (05.5 §2.1)
+
+
+class Wager(Strict):
+    """An agentive catalyst (ADR-0028 §3): an in-world agent may intervene within a permission scope.
+    Its verbs are journaled material inputs; consequences and the protagonist's response are simulated, never forced."""
+    kind: Literal["wager"]
+    agent: Slug
+    protagonist: Slug
+    stages: Annotated[list[WagerStage], Field(min_length=1)]
+
+
+Catalyst = Annotated[Union[DynasticTension, Artifact, CovertOutbreak, ClimateShock, Wager], Field(discriminator="kind")]
+
+
+# --------------------------------------------------------------------------- explicit cast, households, outside world, agents (ADR-0028)
+class CastMember(Strict):
+    """A named person the expander must create exactly; everyone else is generated."""
+    id: Slug
+    name: str
+    sex: Literal["male", "female"]
+    age_years: Annotated[int, Field(ge=0, le=120)]
+    household: Slug | None = None
+    flags: list[Literal["protagonist", "deep"]] = []
+    initial: dict[Slug, Annotated[float, Field(ge=-1.0, le=1.0)]] = {}   # Registry attributes of arity 1, e.g. faith, integrity
+
+
+class Children(Strict):
+    sons: Annotated[int, Field(ge=0, le=40)] = 0
+    daughters: Annotated[int, Field(ge=0, le=40)] = 0
+
+
+class Household(Strict):
+    id: Slug
+    head: Slug                                                  # a cast member
+    children: Children = Children()
+    servants: Annotated[int, Field(ge=0, le=100_000)] = 0
+    holdings: dict[Slug, Annotated[int, Field(ge=0)]] = {}      # Registry goods → quantity
+
+
+class OffMapActor(Strict):
+    id: Slug
+    name: str
+    kind: Slug                                                  # Registry off_map_kinds
+    strength: Unit = 0.5
+
+
+class Agent(Strict):
+    id: Slug
+    name: str
+    archetype: Slug                                             # e.g. supernatural_agent
+    verbs: Annotated[list[str], Field(min_length=1)]
+    policy: Literal["deterministic", "player"] = "deterministic"
+
 
 
 # --------------------------------------------------------------------------- narrative & presentation
@@ -233,6 +289,10 @@ class Manifest(Strict):
     geography: Geography
     peoples: Annotated[list[People], Field(min_length=1)]
     polities: list[Polity] = []
+    cast: list[CastMember] = []
+    households: list[Household] = []
+    off_map_actors: list[OffMapActor] = []
+    agents: list[Agent] = []
     systems: dict[str, dict[str, float]] = Field(description="system id -> {param: value}; params bounded by Registry")
     institutions: list[Slug] = []
     technologies: list[Slug] = []
@@ -300,8 +360,8 @@ def validate_against_registry(m: Manifest, reg: dict) -> list[Issue]:
             err(f"world.fidelity_profile.{sid}", "unknown system")
         elif lvl not in reg_sys[sid]["fidelity_levels"]:
             err(f"world.fidelity_profile.{sid}", f"fidelity {lvl} not implemented (available: {reg_sys[sid]['fidelity_levels']})")
-        if sid not in m.systems:
-            warn(f"world.fidelity_profile.{sid}", "fidelity set for a system not enabled in `systems`")
+        if sid not in m.systems and sid not in (tpl or {}).get("default_systems", []):
+            warn(f"world.fidelity_profile.{sid}", "fidelity set for a system that is neither a template default nor in `systems`")
 
     # climate params share M3 bounds
     m3 = reg_sys.get("M3.agriculture", {}).get("params", {})
@@ -364,8 +424,54 @@ def validate_against_registry(m: Manifest, reg: dict) -> list[Issue]:
 
     polity_ids = {p.id for p in m.polities}
     humans = sum(p.population for p in m.peoples if isinstance(p, HumanPeople))
-    if humans > 2_000_000:
-        warn("peoples", f"{humans:,} persons: outside the P1–P5 performance envelope (docs/08); expect batch-speed runs")
+    if humans > 1_000_000:
+        warn("peoples", f"{humans:,} persons: above the 1M target range (ADR-0028); expect batch-speed runs (docs/08)")
+
+    # cast, households, outside world, agents (ADR-0028)
+    attrs = reg.get("attributes", {})
+    cast_ids = {c.id for c in m.cast}
+    hh_ids = {h.id for h in m.households}
+    if len(cast_ids) != len(m.cast):
+        err("cast", "duplicate cast ids")
+    named = len(m.cast) + sum(h.children.sons + h.children.daughters + h.servants for h in m.households)
+    if named > humans:
+        err("cast", f"cast, children and servants ({named}) exceed the human population ({humans})")
+    for i, c in enumerate(m.cast):
+        if c.household is not None and c.household not in hh_ids:
+            err(f"cast[{i}].household", f"unknown household '{c.household}'")
+        for k in c.initial:
+            if k not in attrs:
+                err(f"cast[{i}].initial.{k}", "not a Registry attribute")
+            elif len(attrs[k].get("args", [])) > 2:
+                err(f"cast[{i}].initial.{k}", "only attributes of the person (optionally towards one deity) can be set")
+    goods = _ids(reg, "goods")
+    for i, h in enumerate(m.households):
+        if h.head not in cast_ids:
+            err(f"households[{i}].head", f"'{h.head}' is not a cast member")
+        for g in h.holdings:
+            if g not in goods:
+                err(f"households[{i}].holdings.{g}", "not a Registry good")
+    for i, o in enumerate(m.off_map_actors):
+        if o.kind not in _ids(reg, "off_map_kinds"):
+            err(f"off_map_actors[{i}].kind", f"'{o.kind}' not in Registry")
+    reg_verbs = set(reg.get("verbs", {}).keys())
+    agents = {a.id: a for a in m.agents}
+    for i, a in enumerate(m.agents):
+        if a.archetype not in reg.get("archetypes", {}):
+            err(f"agents[{i}].archetype", f"unknown archetype '{a.archetype}'")
+        for v in a.verbs:
+            if v not in reg_verbs:
+                err(f"agents[{i}].verbs", f"verb '{v}' not in Registry")
+    for i, c in enumerate(m.catalysts):
+        if isinstance(c, Wager):
+            if c.agent not in agents:
+                err(f"catalysts[{i}].agent", f"unknown agent '{c.agent}'")
+            if c.protagonist not in cast_ids:
+                err(f"catalysts[{i}].protagonist", f"'{c.protagonist}' is not a cast member")
+            for j, s in enumerate(c.stages):
+                extra = set(s.allow) - set(agents[c.agent].verbs if c.agent in agents else [])
+                if extra:
+                    err(f"catalysts[{i}].stages[{j}].allow", f"verbs not held by the agent: {sorted(extra)}")
     for i, c in enumerate(m.catalysts):
         if isinstance(c, (DynasticTension, Artifact)) and c.polity not in polity_ids:
             err(f"catalysts[{i}].polity", f"unknown polity '{c.polity}'")

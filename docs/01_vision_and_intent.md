@@ -21,7 +21,7 @@ These are the elements of your drafts I treat as the **core of the vision**. The
 | V1 | Drama is born from **unforgiving, deterministic systems**: resources, logistics, contagion, death, succession. | Vision §1.1, Design §1.3 |
 | V2 | LLMs are used **only where they excel**: interpretation (compiler), facade (dialogue), synthesis (narration). They never decide physics or bookkeeping. | Vision §4, Design §1.3 |
 | V3 | **Asymmetric minds.** Fragmented, paranoid, grieving humans collide with a zero-friction collective intelligence, the Hive. | Vision §1.1 |
-| V4 | **Scale invariance.** One world can be seen from orbit across 1,000 years or from a cobblestone corner in real time. | Vision §1, Design §1.2 |
+| V4 | **Scale invariance.** One world can be seen from orbit across 1,000 years or from a cobblestone corner in real time. **And one engine runs worlds from a single person to one million** (ADR-0028): a household enduring the trials of Job, or a realm across a millennium. | Vision §1, Design §1.2; director, 2026-10-15 |
 | V5 | **Infinite worlds from prompts.** One engine, configured by a declarative world manifest. | Vision §3 |
 | V6 | **Five relationships with the world:** Diorama, Time-Machine, Inhabitant, Oracle, Narrative Compiler. | Vision §2 |
 | V7 | **Influence, not control.** The player is a mortal catalyst with a finite resource (Foresight), not an RTS god. | Vision §2 (Modality 4) |

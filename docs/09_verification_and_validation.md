@@ -54,6 +54,7 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | **V-FOR** Foresight validity | §3.3 | ORA-5, ORA-9 | Nightly on the cluster |
 | **V-HUM** Human validation [H] | §3.4, §3.5 | MOE-1–MOE-6, TM-6 | Phase gates |
 | **V-ERA** Era transitions | §3.6 | SIM-13, SIM-14, SIM-10 | Nightly from P1b (V-ERA-01, 02); P3a (03–05); each era pack (06, 07) |
+| **V-SCALE** Scale range | §3.7 | SIM-1, SIM-15, SIM-16 | Nightly from P1.0 (01–04); P3b (05, 06) |
 
 ### 1.2 Statistical conventions
 
@@ -508,6 +509,17 @@ Worlds must be able to pass through eras in one run. These tests check that era 
 | V-ERA-06 | Transition hindcast (from era pack E3) | Agrarian start with a forced technology schedule (sanitation, medicine, fossil energy) | Mortality decline precedes fertility decline, with the lag inside the band set from Lee (2003) when pulled; output per head sustains growth. Bands fixed before the pack starts |
 | V-ERA-07 | Engine frontier | A world driven to the last supported era | It keeps running, files exactly one frontier gap report per technology, and continues under a newer build through a migration keyframe with pre-migration seeks reproducing archived hashes |
 
+### 3.7 Scale range (V-SCALE; SIM-1, SIM-15, SIM-16; ADR-0028)
+
+| ID | Test | Method | Pass |
+|---|---|---|---|
+| V-SCALE-01 | Invariants and determinism across the range | The same build at N ∈ {1, 10, 60 (`uz_job`), 1k, 10k, 100k, 1M}; 100 years each (1,000 at N ≤ 10k) | 0 invariant violations; identical plane hashes at 1/2/4/N threads; journal replay exact |
+| V-SCALE-02 | No false statistics at small N | Run the certification harness on N = 1, 10 and 60 worlds | Every band reports INSUFFICIENT or a valid result; none passes or fails below its declared minimum |
+| V-SCALE-03 | Cost scales with work | Per-tick wall time against N and active timers | Fixed per-tick overhead ≤ 1 ms; a 1-person world runs 1,000 years at daily cadence in ≤ 10 s |
+| V-SCALE-04 | Extinction is a valid end | Worlds driven to zero population | A journaled end event; chronicle, console and replay stay consistent |
+| V-SCALE-05 | Agentive catalysts are bounded | `uz_job` with the Adversary under deterministic and scripted-player policies; 64 seeds | No verb outside the stage scope; `spare_life` never violated; the protagonist's renounce/hold-fast outcome varies across seeds (both outcomes occur at least once), which shows it is not forced |
+| V-SCALE-06 | Personal-arc liveness (micro) | `uz_job` 64 seeds × 10 years | ≥ 1 completed personal arc (trial, lament, counsel dispute or restoration) per seed-decade in ≥ 90% of seeds |
+
 ## 4. Observability for V&V
 
 - **Rerun.** Per-system timing, invariant counters, sampled agents, the hydration bubble and AOI cells on a `sim_tick` timeline.
@@ -557,6 +569,8 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | SIM-12 | Should-have systems | P3a | V-INV-13, V-INV-14, V-COUP-02, V-COUP-05, V-SF-01–V-SF-12 |
 | SIM-13 | Era-generic mechanisms | P1b | V-ERA-01, V-ERA-02, V-ERA-03 |
 | SIM-14 | Endogenous institutions and era packs | P3a / packs | V-ERA-04, V-ERA-05, V-ERA-06, V-ERA-07, V-SF-06b, V-SF-06c |
+| SIM-15 | No minimum-N assumptions; scale profiles | P1a | V-SCALE-01, V-SCALE-02, V-SCALE-03, V-SCALE-04 |
+| SIM-16 | Agentive catalysts | P3b | V-SCALE-05, V-SCALE-06 |
 | DET-1 | History function | P0 | V-DET-04, V-DET-18, V-GOLD-01 |
 | DET-2 | Keyed RNG and branch salts | P0 | V-DET-09, V-DET-16, V-DET-17, V-DET-19 |
 | DET-3 | Fixed-point thresholds | P0 | V-DET-03, V-DET-19 |

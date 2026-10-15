@@ -65,6 +65,10 @@ variants = ["dragon", "great_wolf", "sea_serpent"]
 capabilities = ["flying", "bondable"]
 params = { mass_kg = [50.0, 20000.0] }
 
+[archetypes.supernatural_agent]   # an in-world intervening agent with a permission scope (ADR-0028 §3); plane A, own beliefs
+ledger = "agents"
+capabilities = ["intervene"]
+
 [archetypes.hive_node]
 ledger = "persons"            # overlay on human persons: capability set by M5 covert compartment
 capabilities = ["covert_capable"]
@@ -79,13 +83,20 @@ ids = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", 
 [institutions]
 ids = ["testing_mandate", "quarantine_law", "standing_army", "guild_charter", "inquisition"]
 
+[goods]          # household holdings and market goods
+ids = ["grain", "sheep", "goats", "cattle", "oxen", "camels", "donkeys", "horses", "timber", "ore", "cloth", "tools", "arms", "luxuries", "silver"]
+
+[off_map_kinds]  # actors from beyond the map that can enter it
+ids = ["raiders", "caravan", "nomads", "neighbouring_polity", "empire"]
+
 [technologies]
 ids = ["heavy_plough", "crop_rotation", "printing", "gunpowder", "germ_theory", "blood_assay", "pcr_testing", "rail", "electric_grid"]
 
 # ----------------------------------------------------------------------------- narrative vocabulary
 [act_classes]
 ids = ["harm", "aid", "promise", "betray", "coerce", "conceal", "reveal", "infect_convert", "succeed_to", "depose",
-       "flee", "accuse", "purge", "marry", "birth", "death", "discover", "test", "rebel", "trade", "raid", "bond"]
+       "flee", "accuse", "purge", "marry", "birth", "death", "discover", "test", "rebel", "trade", "raid", "bond",
+       "counsel", "lament", "renounce", "restore"]
 
 [roles]
 ids = ["authority", "successor", "kin", "ally", "rival", "subordinate", "member", "host", "guest", "investigator", "suspect", "any"]
@@ -97,10 +108,11 @@ ids = ["witness", "testimony", "document", "crowd", "whisper", "hive"]
 ids = ["paranoia", "filial_piety", "despair", "hubris", "corruption", "dragon_sympathy"]
 
 [pattern_packs]
-ids = ["succession", "revenge", "famine", "reversal", "irony", "elite_feud", "dragon_age", "covert_infiltration", "plague_era", "witch_hunt"]
+ids = ["succession", "revenge", "famine", "reversal", "irony", "elite_feud", "dragon_age", "covert_infiltration", "plague_era", "witch_hunt",
+       "trial_of_faith", "grief_and_lament", "temptation", "counsel_dispute", "restoration", "betrayal_by_friends"]
 
 [style_cards]
-ids = ["mythic_chronicle", "deep_time", "saga", "historian", "ensemble_space_opera", "noir_city"]
+ids = ["mythic_chronicle", "deep_time", "saga", "historian", "ensemble_space_opera", "noir_city", "wisdom_dialogue"]
 
 # ----------------------------------------------------------------------------- templates
 [templates.feudal_realm]
@@ -113,6 +125,11 @@ default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy"
 horizon_years = [50, 3000]
 modern = false
 
+[templates.pastoral_household]   # micro scale (ADR-0028): one household and its neighbours
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "S1.culture"]
+horizon_years = [1, 200]
+modern = false
+
 [templates.modern_metropolis]
 default_systems = ["M1.regions", "M2.demography", "M4.economy", "M5.contagion", "M6.polity"]
 horizon_years = [1, 50]       # longer horizons require horizon.label = "speculative"
@@ -123,10 +140,11 @@ modern = true
 ids = ["self_direction", "stimulation", "hedonism", "achievement", "power", "security", "conformity", "tradition", "benevolence", "universalism"]
 
 [doctrine_tags]
-ids = ["divine_kingship", "fire_rites", "ancestor_veneration", "dragon_kinship", "rule_of_law", "communal_service", "asceticism", "holy_war", "tolerance", "inquisitorial"]
+ids = ["divine_kingship", "fire_rites", "ancestor_veneration", "dragon_kinship", "rule_of_law", "communal_service", "asceticism", "holy_war", "tolerance", "inquisitorial",
+       "monotheism", "divine_justice"]
 
 [heightmap_templates]
-ids = ["caldera_with_passes", "river_delta_city", "archipelago", "continental_plains", "mountain_valleys", "flat"]
+ids = ["caldera_with_passes", "river_delta_city", "archipelago", "continental_plains", "mountain_valleys", "flat", "desert_fringe"]
 
 [climate_zones]
 ids = ["temperate_continental", "temperate_maritime", "mediterranean", "arid", "tropical", "boreal", "urban_temperate"]
@@ -165,6 +183,9 @@ hive_member               = { type = "bool", args = ["actor"] }
 used_hive_only_knowledge  = { type = "bool", args = ["actor"] }
 knows_event               = { type = "bool", args = ["actor", "event"] }
 in_realm                  = { type = "bool", args = ["event", "actor"] }
+faith                     = { type = "q8_8", args = ["actor"] }         # confidence in the deity's goodness (micro worlds, ADR-0028)
+integrity                 = { type = "q8_8", args = ["actor"] }         # commitment to one's own innocence and conduct
+grief                     = { type = "q8_8", args = ["actor"] }
 test_result               = { type = "enum", args = ["actor"], values = ["negative", "positive", "inconclusive"] }
 
 # Concrete verbs (subset). Systems emit these. The world compiler maps setting verbs onto them.
@@ -177,3 +198,11 @@ REVENGE         = { act_classes = ["harm"], emitted_by = "rh-minds", references 
 BLOOD_TEST      = { act_classes = ["test"], emitted_by = "M5.contagion" }
 RAID_LIVESTOCK  = { act_classes = ["raid", "harm"], emitted_by = "S4.ecology" }
 SUCCEED         = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty" }
+INCITE_RAID     = { act_classes = ["harm", "raid"], emitted_by = "agents" }     # an agent moves an off-map actor to raid
+CALL_FIRE       = { act_classes = ["harm"], emitted_by = "agents" }
+RAISE_WIND      = { act_classes = ["harm"], emitted_by = "agents" }
+AFFLICT         = { act_classes = ["harm"], emitted_by = "agents" }
+COUNSEL         = { act_classes = ["counsel"], emitted_by = "rh-minds" }
+LAMENT          = { act_classes = ["lament"], emitted_by = "rh-minds" }
+RENOUNCE_FAITH  = { act_classes = ["renounce"], emitted_by = "rh-minds" }
+RESTORE         = { act_classes = ["restore", "aid"], emitted_by = "rh-minds" }

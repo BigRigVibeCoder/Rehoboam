@@ -82,9 +82,9 @@ A function is labelled with the **range it has been validated over**. Outside th
 
 ### 7. Scale through the transition
 A demographic transition multiplies population roughly 5–30 times.
-- A 100k agrarian world can grow into the millions. The per-person ledger supports up to ~10M (ADR-0020), with implicit individuals beyond that (ADR-0003).
+- The target range is **1 to 1M persons** (ADR-0028). A 100k agrarian world that modernises may approach or pass 1M. Above 1M is a stretch goal through implicit individuals (ADR-0003) and is not required.
 - Worlds that are part of a larger system keep the rest of the world as off-map T−1 compartments (`05.1` §3).
-- Performance above 2M is batch-speed (`08`); manifests warn when a trajectory is likely to cross it.
+- Performance above 1M is batch-speed (`08`); manifests warn when a trajectory is likely to cross it.
 - Named-actor cognition stays at 1–5k actors in every era.
 
 ## Alternatives considered
