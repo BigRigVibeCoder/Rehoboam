@@ -4,10 +4,12 @@ Format: *Status · Context · Decision · Alternatives considered · Consequence
 Statuses: **Proposed**, which awaits your sign-off; **Accepted**; **Superseded by ADR-xxxx**.
 All ADRs below are **Proposed** until you review them. ADRs that sit on a critical path carry a ★.
 
+**v1.1 amendments (2026-10-15).** After the red-team review, ADRs 0002–0018, 0020, 0022 and 0023 end with an *Amendment v1.1* section. Each amendment lists any text corrected inline, then the changes, with references to ADR-0024–0026 and the 05.x architecture docs, which are the source of truth. ADR-0024, 0025 and 0026 are new. ADRs 0001, 0019 and 0021 are unchanged. Like the ADRs, the amendments are **Proposed** until you approve them. Record the approval in `docs/decisions-log.md`.
+
 | ADR | Title | ★ |
 |---|---|---|
 | [0001](ADR-0001-core-language.md) | Rust core, Python orchestration, TypeScript console | ★ |
-| [0002](ADR-0002-state-model-ecs.md) | State model: SoA tables + pinned bevy_ecs for named actors + SocialGraph store | ★ |
+| [0002](ADR-0002-state-model-ecs.md) | State model: SoA tables + pinned `bevy_ecs` for named actors + SocialGraph store | ★ |
 | [0003](ADR-0003-population-ledger.md) | Every person is a ledger row | ★ |
 | [0004](ADR-0004-spatial-model.md) | Raster + region graph + shared settlement generator | |
 | [0005](ADR-0005-time-model.md) | Integer sim-time, pulses, event-driven agenda, speed bands | ★ |
@@ -29,6 +31,6 @@ All ADRs below are **Proposed** until you review them. ADRs that sit on a critic
 | [0021](ADR-0021-licence-policy.md) | Licence allow-list and provenance | |
 | [0022](ADR-0022-agentic-development.md) | Spec-first, contract-tested, agent-sized work packages | ★ |
 | [0023](ADR-0023-wire-protocol.md) | JSON-RPC control plane + binary columnar state plane | |
-| [0024](ADR-0024-three-plane-state.md) | Three-plane state: authoritative / observation / narrative | ★ |
+| [0024](ADR-0024-three-plane-state.md) | Three-plane state model: authoritative, observation and narrative | ★ |
 | [0025](ADR-0025-scheduled-outcomes-material-inputs.md) | Scheduled outcomes for everyone; material-input semantics; no back-dating | ★ |
-| [0026](ADR-0026-genealogical-identity-life-course.md) | Genealogical content-addressed identity; life-course log; signed time | ★ |
+| [0026](ADR-0026-genealogical-identity-life-course.md) | Genealogical content-addressed identity; life-course log for every person; signed time | ★ |

@@ -1,6 +1,6 @@
 # ADR-0020 — Single writer per timeline; scale out with timelines
 
-**Status:** Proposed · **Date:** 2026-10-15
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context
 
@@ -13,7 +13,7 @@ Compute is unbounded. Distributing one world across server processes (the Spatia
   - Foresight rollouts.
   - Calibration ensembles and sensitivity sweeps.
   - What-if branches.
-  - Burn-in seeds.
+  - Liveness-gate, calibration and certification seeds.
 - Extra compute also buys model fidelity (F2/F3 levels, larger regions and populations) and larger LLMs.
 - Remote clients attach to cluster-hosted timelines.
 
@@ -36,3 +36,17 @@ Compute is unbounded. Distributing one world across server processes (the Spatia
 ## Evidence
 
 R10 §5 (SpatialOS); R03 §6; R01.
+
+## Amendment v1.1 (2026-10-15)
+
+*Checked against ADR-0010 v1.1, ADR-0015 v1.1, 05.0 §4, 05.1 §6.9 and 05.2 §7. The decision stands.*
+
+**Corrected inline:**
+- "Burn-in seeds" → the liveness gate, calibration repair and background certification runs (ADR-0010 v1.1).
+
+**Changes:**
+1. **Every fork is a timeline with a unique salt lineage.** Rollouts, what-ifs and ensemble seeds never collide, however many workers run them. What-if A/B keeps the parent salt. Rollouts extend it and re-draw `resample_on_fork` timers.
+2. **Rollout workers** run the same binary as separate processes. Each is stateless apart from its keyframe input. Parquet segments before the fork are shared by reference.
+3. **No rollout waits on an LLM.** Rollouts use the declared fallback policy for deliberation consults.
+4. **Implicit individuals** are recommended above ~5M people and required above ~10M (ADR-0003).
+5. **"Single writer" has two levels.** There is one writer per timeline (this ADR), and inside it one owning system per column (ADR-0022 v1.1).

@@ -1,6 +1,6 @@
 # ADR-0008 — Custom incremental sifter + SQL twins; LLM non-authoritative
 
-**Status:** Proposed · **Date:** 2026-10-15
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context
 
@@ -14,7 +14,7 @@ No maintained, embeddable engine combines Datalog syntax, incremental evaluation
 ## Decision
 
 - A declarative **pattern DSL** (TOML surface) over abstract roles and act classes, with anchored attributes (`attr@e`), `unless` clauses, windows and composable match events.
-- Patterns compile into **partial-match automata** inside the Rust simulation, with pruning.
+- Patterns compile into **partial-match automata** in the Rust sim host (`rh-sifter`, plane C), with declarative pruning only.
 - Every pattern ships with a **DuckDB SQL twin**, and CI checks the two for equivalence.
 - LLMs may only re-rank, explain or propose patterns offline, and only for human review.
 
@@ -41,3 +41,25 @@ No maintained, embeddable engine combines Datalog syntax, incremental evaluation
 ## Evidence
 
 R02 §1, §8, §R3; R10 §2, §R3.
+
+## Amendment v1.1 (2026-10-15)
+
+*Triggered by the red-team review (RT-C1, RT-C4). Sources of truth: ADR-0024, 05.4 §2–3, 05.9 IF-7, `specs/sifting/patterns.example.toml`, `specs/sifting/lint_patterns.py`, `specs/chronicle/selftest.py`.*
+
+**Corrected inline:**
+- "inside the Rust simulation, with pruning" → the sifter runs in the sim host as plane C, outside the simulation core. It prunes only declaratively, because heuristic pruning cannot be expressed in the SQL twin.
+
+**Changes:**
+1. **Sifter output is plane C** (ADR-0024): `sift_match`, `match` events, significance and visibility. `narrative_hash` is a pure function of plane A's event stream plus the pattern-library version. Match events use a separate **`MatchId` space**, never interleaved with `EventId`s, and are **never fed back** into the event bus or plane A.
+2. **Feedback curation.** A pattern whose matches may change simulation behaviour is promoted into the **Registry rule set**. It then runs inside `rh-core`, is part of `state_hash`, and follows the golden-baseline process.
+3. **Match semantics, declared per pattern (RT-C4).** "All combinations" semantics flood on clustered data. In the repo's clustered fixture, `trust_then_betrayal` under `all` produced 79 matches per 1,000 events, 4.5× the 17.5 under the default `latest` + `clear_binding`. Uniform random fixtures hide the difference.
+   - `selection = "latest" | "earliest" | "all"`: which open partial a completing event pairs with. Default `latest`.
+   - `on_complete = "clear_binding" | "consume" | "keep"`: what happens to open partials after a match. Default `clear_binding`.
+   - `dedupe = { key = [roles], bucket_days = N }`: at most one match per binding per time bucket.
+   - All three are expressible in the SQL twin (`LAG`, `ROW_NUMBER() … QUALIFY`), so twin equivalence survives.
+4. **Declarative pruning only:** windows, `unless`, a death-tolerance flag, and the semantics above. There is no "drop after K inactive events" heuristic.
+5. **Per-pattern firing budget.** Each pattern declares an expected firing rate per century per 100k persons. CI fails a pattern that exceeds 3× its budget on the reference ensembles.
+6. **Precision@K on clustered fixtures.** Twin and budget tests run on clustered chronicles (repeated interaction among partners), not uniform random ones. CI reports precision@K against your labelled story-worthy set. An LLM-proposed pattern must report precision@K against its SQL twin before review.
+7. **Typed anchored attributes.** Reads are `attr(args)@eN`, declared and typed in the Registry `[attributes]`. A bare or undeclared read is a compile error. The pattern linter enforces a closed key set.
+8. **Re-sifting history is a feature.** Any timeline can be re-sifted with any pattern-library version without touching plane A. Pattern iteration never churns golden baselines.
+9. **Auto-pause.** Suspense auto-pauses are rate-limited (e.g. ≤ 2 per simulated decade). A sifter that lags triggers a pause, then a seek back to the match tick.

@@ -1,6 +1,6 @@
 # ADR-0004 — Raster + region graph + shared settlement generator
 
-**Status:** Proposed · **Date:** 2026-10-15
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context
 
@@ -31,8 +31,24 @@ Four nested layers:
 
 ## Revisit when
 
-- A street-scale simulation (C2 household micro-economy) needs plot-level state for every settlement, not only lazily.
+- A street-scale simulation (the X2 household micro-economy in 05.1 §3; C2 in R09) needs plot-level state for every settlement, not only lazily.
 
 ## Evidence
 
-R09 claims table and §M1; R06 §4.
+R09 *Draft claims checked* (the 512×512-grid row), §10 (Azgaar FMG as a t = 0 initializer), and *Recommendations* (Architecture decision 1; System specifications, "M1: Region graph"); R06 §4.
+
+## Amendment v1.1 (2026-10-15)
+
+*Sources of truth: 05.0 §6, 05.1 §3, 05.2 §1–2, 05.7 B3, 05.9 IF-8, ADR-0024.*
+
+**Corrected inline:**
+- **Evidence.** "R09 §M1" was not a valid citation: R09 has no §M1. **M1** is the *Regions & routes* system in the 05.1 §3 systems library. R09 specifies it under *Recommendations → System specifications* ("M1: Region graph"). The evidence line now cites the parts of R09 that support this ADR.
+- **Revisit when.** "C2 household micro-economy" is R09's ID. The 05.1 systems library calls it **X2**. Both are now given.
+
+**Changes:**
+1. **`rh-worldgen` is one crate, shared by `rh-server` and `rh-godot`.** It holds world generation (heightmaps, rivers, region graph, burgs) and settlement plans. The Godot client calls it through `RhSettlementPlan` (IF-8). It follows the same determinism rules as authoritative code.
+2. **Plan inputs.** A plan is a function of `(settlement_seed, generator_version, plane-A snapshot)`. The snapshot supplies population, wealth, era and damage overrides. Plans never read plane B.
+3. **Overrides are plane A.** Fires, demolitions and new keeps are stored as deltas over the generated baseline.
+4. **Stable IDs.** `SettlementId(u32)` follows world-gen, then founding order. The plan seed is `H(world_seed, "burg", id)`. `PlotId = H(settlement_seed, plot_index)` (05.2 §1).
+5. **Plot-level stock** and concrete errands need M4 at F2 (05.2 §2; WP P5.0).
+6. **Acceptance (SPK-2).** The same burg produces an identical town on two machines. Growing it from 2k to 5k people keeps more than 90% of its buildings unchanged (05.7 B3).

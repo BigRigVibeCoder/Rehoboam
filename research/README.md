@@ -20,3 +20,4 @@ Treat recalled items as leads to re-check before relying on them.
 | [R09](R09_macro_history_simulation_science.md) | Macro-history simulation science | SDT cycles; Leslie demography; metapopulation SEIRS; PPV collapse; Lanchester/Helmbold; Eisner regicide; systems library |
 | [R10](R10_data_infra_sifting_engines_protocols_ui.md) | Data infrastructure, sifting engines, protocols, console UI | Typed Parquet at ~11 B/event; custom incremental matcher + SQL twins; Kùzu and CozoDB dead; binary state plane |
 | [R11](R11_product_landscape_precedents.md) | Product landscape and precedents | One wedge per release; AI sentiment; Steam policy; Diorama as a funnel; naming |
+| [Reading list](reading_list.md) | Papers to pull and assimilate (academic hosts were unreachable from the sandbox) | Tier A sets Registry bounds and certification bands before P1; Tier B covers sifting, suspense, epistemics, Foresight validity; Tier C covers long-form generation and LoD |

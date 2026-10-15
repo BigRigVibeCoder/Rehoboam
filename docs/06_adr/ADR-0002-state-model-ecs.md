@@ -1,6 +1,6 @@
 # ADR-0002 — State model: SoA tables + pinned `bevy_ecs` for named actors + SocialGraph store
 
-**Status:** Proposed · **Date:** 2026-10-15
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context
 
@@ -40,3 +40,15 @@ Many-to-many weighted relations (trust, suspects, knows) fragment archetype ECS 
 ## Evidence
 
 R03 §1, §Recommendations 2; R01 §R8.
+
+## Amendment v1.1 (2026-10-15)
+
+*Triggered by the red-team review (RT-C1, RT-M11). Sources of truth: ADR-0024, ADR-0026, 05.1 §2, §5, §6.*
+
+No inline corrections. The decision stands, with these clarifications:
+
+1. **"Pinned" here means version-pinned.** The title's "pinned `bevy_ecs`" pins the crate release. It is unrelated to **pinning a person**, which is a plane-B presentation guarantee and never promotes anyone to T1 (ADR-0024).
+2. **T1 membership** comes only from simulation criteria (office, great-house rank, material involvement, Registry-declared notability) or a journaled input (ADR-0024 rule 3).
+3. **No presentation components on authoritative entities.** Authoritative iteration over `bevy_ecs` entities is sorted by `PersonId`, never by archetype order (ADR-0024 rule 4; 05.1 §6.5).
+4. **The ledger holds the living only.** Everyone ever born is in the append-only **life-course log** (Parquet, plane A; ADR-0026).
+5. **Single-writer column ownership.** Every SoA column and every SocialGraph relation has exactly one owning system, declared in the Registry. Other systems read through **contract crates** (`rh-contracts`) and change state only through **lifecycle command queues** (05.1 §2; ADR-0022 v1.1). `rh-minds` never writes another system's tables; verb effects are typed commands.

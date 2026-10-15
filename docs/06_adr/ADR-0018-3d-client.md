@@ -1,6 +1,6 @@
 # ADR-0018 — Godot 4.7+ separate process, Rust gdext, painted miniature, VAT crowds
 
-**Status:** Proposed · **Date:** 2026-10-15
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context
 
@@ -41,3 +41,18 @@ The 3D modalities need a small runtime that is wallpaper-friendly, plus crowds, 
 ## Evidence
 
 R06 (all); R01 §R1.
+
+## Amendment v1.1 (2026-10-15)
+
+*Triggered by the red-team review (RT-C1, RT-C2). Sources of truth: ADR-0024, ADR-0025, 05.0 §2, 05.2 §3, 05.7 Part B.*
+
+**Corrected inline:**
+- Spike names now use the roadmap IDs **SPK-1** (crowds), **SPK-2** (street-from-seed) and **SPK-3** (wallpaper power).
+
+**Changes:**
+1. **The client is plane B.** It renders views. Authority never moves to the bubble. Deaths, births and other outcomes are plane-A timers that the client only displays. Your material actions in the street are journaled inputs.
+2. **T3 only at Live speed** (street clock 20–60:1). Faster bands collapse the bubble to T2c crowd proxies and Spectacle. Diorama replay of computed history costs no simulation work.
+3. **Hysteresis.** Hydrate at 80 m. Stay T3 until 130 m **and** ≥ 10 s out of view. Never dehydrate an entity in view. Hard cap of 200 embodied persons; budget of 5–10 hydrations per second.
+4. **Spectacle** means objects with a world-scale footprint: T1 actors (dragons) and SoA objects (armies, processions, fires). They are visible to draw distance at any speed band and are interpolated on their own clocks.
+5. **T2c crowd proxies are real people:** `PersonId`s sampled without replacement from living persons whose schedules place them outdoors there at that hour.
+6. **`rh-worldgen`** is the same crate the server links (ADR-0004 v1.1).
