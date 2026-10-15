@@ -19,14 +19,18 @@ Naming: `<reading-list ID>_<first author>_<year>_<short title>.<ext>`. IDs match
 | `A11_carbone_gittleman_2002_carnivore_density.pdf` | Carbone, C. & Gittleman, J. L. (2002). *Science* 295 | S4 energetics validator | R12 §10 |
 | `A12a_bracken_1995_lanchester_models_ardennes.pdf` | Bracken, J. (1995). *Naval Research Logistics* 42(4) | M8 attrition | R12 §11 |
 | `A12b_fricker_1998_attrition_models_ardennes.pdf` | Fricker, R. D. (1998). *Naval Research Logistics* 45(1) | M8 attrition | R12 §11 |
+| `A13a_milanovic_lindert_williamson_2011_preindustrial_inequality.pdf` | Milanovic, B., Lindert, P. & Williamson, J. (2011). "Pre-industrial inequality." *Economic Journal* 121 | Wealth and income inequality band (M4) | R12 (batch 3) |
+| `A13b_alfani_2021_economic_inequality_preindustrial.pdf` | Alfani, G. (2021). "Economic inequality in preindustrial times: Europe and beyond." *J. Economic Literature* 59(1) | Inequality band; era dependence | R12 (batch 3) |
+| `A15a_grimm_et_al_2005_pattern_oriented_modeling.pdf` | Grimm, V. et al. (2005). "Pattern-oriented modeling of agent-based complex systems." *Science* 310 | Certification method | R12 (batch 3) |
+| `A15b_fagiolo_moneta_windrum_2007_critical_guide_validation.pdf` | Fagiolo, G., Moneta, A. & Windrum, P. (2007). *Computational Economics* 30 | Certification method | R12 (batch 3) |
+| `A16a_grimm_et_al_2010_odd_first_update.pdf` | Grimm, V. et al. (2010). "The ODD protocol: a review and first update." *Ecological Modelling* 221 | System-spec documentation template | R12 (batch 3) |
+| `A16b_grimm_et_al_2020_odd_second_update.pdf` | Grimm, V. et al. (2020). "The ODD protocol … second update." *JASSS* 23(2) | System-spec documentation template | R12 (batch 3) |
 | `A12c_lucas_turkes_2004_fitting_lanchester_equations.pdf` | Lucas, T. W. & Turkes, T. (2004). *Naval Research Logistics* 51(1) | M8 attrition | R12 §11 |
 
 **Still wanted from Batch 2** (`../reading_list.md`):
 - Coale & Demeny West tables
-- Milanovic, Lindert & Williamson (2011); Alfani (2021)
 - Alfani & Ó Gráda (2017); Campbell & Ó Gráda (2011)
 - Arbesman (2011); Allen (2001)
-- Grimm et al. (2005); Fagiolo et al. (2007)
 - Winnow (2021) and Felt (2019)
 - "Select the unexpected" (2022); Dramatis (2014); Suspenser (2015); Behrooz et al. (2015)
 
