@@ -445,7 +445,30 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
   | E4 Modern | Electrification, mass politics and media, modern medicine, industrial and total war, coups and assassination | After E3 | Archigos; Powell & Thyne 2011; Goldstone et al. 2010; Turchin 2016; Braumoeller 2019 |
   | E5 Contemporary and beyond | Digital communication, contemporary demography; speculative and fantasy frontiers as declared Registry paths | After E4 | Per world |
 
-  The order is a proposal. `12` Q19 asks which eras matter to you first.
+  **Order (director, provisional): E2 → E3 → E4.**
+
+  **Scope guardrails.** These keep the packs from swamping the thesis or the inhabitable modalities.
+  1. **Nothing era-specific before G2** except the P1.16 hooks (1–2 weeks). The thesis is tested on agrarian worlds only.
+  2. **A pack is simulation + Chronicle + Time-Machine only.** 3D art for an era (architecture kits, clothing, vehicles, audio ambience) is a separate **art pack**, decided after P5 shows what one era of art costs. Per-era 3D content is the biggest scope multiplier in the plan, so it is never bundled with a sim pack.
+  3. **Minimum transition set.** A pack implements only the mechanisms needed to cross its transition plausibly (for E2/E3, Goldstone's damping list in R12 §8), validated by at most 10 era-conditioned bands plus one hindcast. Completeness is not a goal.
+  4. **Population ceiling ≤ 10M per world.** A modern world is a region or city-state inside an off-map world system (T−1 compartments). National-scale modernity (tens to hundreds of millions) needs implicit individuals (ADR-0003) and is out of scope until after E4.
+  5. **Cognition stays at 1–5k named actors.** Collective actors (parties, firms, unions, newspapers) arrive as M6 F2 factions in E4, not as more minds.
+  6. **Kill criterion per pack.** If the hindcast cannot be passed within the pack's upper estimate plus 50%, ship what works with the frontier left where it was, and file the gap. Worlds wait at the frontier; nothing breaks.
+
+  **Effort (sim-only, agent-assisted, within the review budget):**
+
+  | Pack | Estimate | Why |
+  |---|---|---|
+  | E2 Early modern | 8–12 weeks | Mostly new Registry entries and fiscal-military mechanisms on existing systems |
+  | E3 Industrial transition | **12–20 weeks; research-grade** | The demographic transition, escape from the Malthusian regime, an energy sector and 5–30× population growth. This is the hardest single item after G2 |
+  | E4 Modern | 10–16 weeks | Mass politics, media channels, modern medicine and war, collective actors; scale pressure at the 10M ceiling |
+  | **Total** | **30–48 weeks** | Adds ≈ 20–40 weeks of calendar after G3b, because the packs share the same 2–3 workstreams as P4–P7. The program total moves from ≈ 22–28 months to **≈ 27–37 months** |
+
+  **Recommended interleaving after G3b,** so time travel and inhabiting progress alternately:
+
+  P4 (narrative compiler) → E2 → P5 Diorama (agrarian art only) → E3 → P6 Street-level → E4 → P7 → art packs for later eras.
+
+  The Time-Machine and Chronicle work in every era from the day a pack lands, because they read events, not art.
 - **Review-hours tracking.** Actual review time against the ≤ 6 h/week budget, reported in the weekly digest.
 - **Technology radar refresh** every quarter (`07` §3).
 - **Risk review** at every gate (`10`).

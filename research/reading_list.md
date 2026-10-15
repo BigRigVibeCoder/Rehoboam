@@ -1,6 +1,6 @@
 # Reading list: papers to pull, verify and assimilate
 
-*Status: v1.1 (2026-10-15). v1.1: received items marked ✓ (extractions in `R12_literature_verification.md`); new Tier A-M for modern-era anchors (ADR-0027).*
+*Status: v1.2 (2026-10-15). v1.2: prioritised into just-in-time batches; three new pre-modern sources added (Campbell & Ó Gráda 2011, Arbesman 2011, Allen 2001); low-value items dropped.* *v1.1 (2026-10-15). v1.1: received items marked ✓ (extractions in `R12_literature_verification.md`); new Tier A-M for modern-era anchors (ADR-0027).*
 
 *v1.0 note: Why this exists: the research dossiers R01–R11 could not reach arXiv, the ACM DL, AAAI, PLOS, JASSS, NCBI or eScholarship from the sandbox. Many academic claims are therefore tagged [R] or [B] (recalled from prior knowledge, not re-read). R09 alone has 24 [B] items and R04 has 48 [R] items. This list names the papers whose full text would **change a number or a decision in the plan**, not just add a citation.*
 
@@ -16,6 +16,51 @@
 **Priority key.** **A** = needed before P1 (it sets Registry bounds and the certification bands the first engine is judged against). **B** = needed before P2/P3 (sifting, significance, suspense, epistemics, Foresight). **C** = before P4–P6 (long-form generation, LoD details). ✓ = already in hand.
 
 ---
+
+## What to send, and when (v1.2 prioritisation)
+
+You have access to everything, so the constraint is not access. It is **integration**: each source has to be read, checked against the plan and turned into bounds, bands or design changes. Numbers for eras we won't build for a year would only sit there and go stale. So pull **just in time**, in batches tied to the phase that needs them. The tier tables below remain the full catalogue.
+
+### Batch 2 — send now (the agrarian thesis: P0–P2)
+These set the remaining bands and bounds the first engine is judged against, and the sifter semantics the thesis gate (G2) depends on.
+
+| # | Source | Why now |
+|---|---|---|
+| 1 | **Turchin & Nefedov (2009), *Secular Cycles*, Ch. 1–2 + one case chapter** (A1) | The secular-cycle band V-SF-04 has no verified source yet. This is the most important item in the batch |
+| 2 | Brass (1971) + **Coale & Demeny West tables** (A4) | M2 mortality golden vectors and e₀ bounds |
+| 3 | Carbone & Gittleman (2002) (A11) | The energetics validator constant |
+| 4 | Milanovic, Lindert & Williamson (2011); Alfani (2021) (A13) | The inequality band |
+| 5 | Alfani & Ó Gráda (2017), Introduction (A14); **new:** Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4) | Famine frequency (V-SF-03); harvest-to-price coupling in M3/M4 |
+| 6 | **New:** Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3) | V-SF-07 polity lifespans (mean ≈ 220 years) currently rests on memory |
+| 7 | **New:** Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38(4) | Real-wage series for M4 and V-SF-11 (post-plague wages); it also bridges to the industrial era |
+| 8 | Grimm et al. (2005); Fagiolo, Moneta & Windrum (2007) (A15) | The certification method itself |
+| 9 | **Kreminski et al. (2021), Winnow** (B3) and Felt (2019) (B2) | Winnow may already solve the sifter semantics we designed; read it before P2 specs freeze |
+| 10 | Kreminski et al. (2022), "Select the unexpected" (B4) | The significance rarity component |
+| 11 | O'Neill & Riedl (2014), Dramatis; Cheong & Young (2015), Suspenser (B6) | The suspense formula behind auto-pause |
+| 12 | Behrooz, Swanson & Jhala (2015) (B5) | Retrospective story selection from logs |
+
+### Batch 3 — before P3 (minds, epistemics, war, contagion, Foresight)
+A12 Lanchester and Helmbold fits · B7 Talk of the Town knowledge propagation · B10 "How Johnny can persuade" · B11 Walton argumentation schemes + ELM · B13 Gneiting, Balabdaoui & Raftery (2007) (PIT; one paper is enough) · B16 Balcan et al. (2009) + Covasim.
+
+### Batch 4 — before P4–P6 (narrative compiler, hydration)
+C6 Re3, DOC, Dramatron, Agents' Room · C7 Chakrabarty et al. (2024) + HANNA · C8 MiniCheck + FActScore · C1 Reynolds, Natrajan & Srinivasan (1997) · C3 Sunshine-Hill (2010, 2013) · C11 a fresh scan of long-form preprints.
+
+### Era batches — at the start of each pack
+- **E2 early modern:** M8 Tilly · M7 Besley & Persson + Dincecco.
+- **E3 industrial:** M3 Lee · M4 Galor & Weil · M5 Allen (2009) + Wrigley (2010) · M6 Acemoglu & Robinson · M11 Comin & Hobijn. Datasets: Maddison, Human Mortality Database.
+- **E4 modern:** M1 Archigos · M2 Powell & Thyne + Jones & Olken · M10 Goldstone et al. (2010) · M9 Turchin (2016) · M12 Braumoeller. Datasets: Correlates of War, V-Dem, Archigos.
+
+### Dropped or optional (low marginal value for the plan)
+| Item | Why |
+|---|---|
+| B9 Riedl & Bulitko | The drama policy is decided (ADR-0009) |
+| B12 Hegselmann–Krause, Deffuant | Standard models; the equations are well known |
+| B14 Glasserman & Yao; B15 Morris, Toni, Schuirmann | Standard methods already implemented in SALib, pyABC and TOST libraries |
+| C2 Davis & Hillestad; C4 Brom et al. | C1 and C3 cover the multi-resolution and level-of-detail points |
+| C5 RNG papers | The implementations (Random123, rand_chacha) are the reference we need |
+| C9 Generative agents; C10 differential dataflow / DBSP | Reference only, or needed only if recursive sifting rules appear |
+| A16 ODD protocol | Optional: useful as a documentation template, but no plan decision depends on it |
+| B8 Caves of Qud; GDC talks | Optional inspiration |
 
 ## Tier A: calibration targets and model forms (before P1)
 
