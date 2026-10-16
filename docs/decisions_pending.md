@@ -4,7 +4,16 @@
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
-## Still waiting on you (4 for SPR-001, 1 for later)
+## Still waiting on you (4 for SPR-001, 1 on LLMs, 1 for later)
+
+### D27 — What are LLMs for? (asked 2026-10-16; not urgent: nothing before P3b uses one)
+The plan has 19 LLM roles. Only one of them decides anything: the **deliberation consult** (COG-8, ADR-0011 §amendment, `05.3` §8), where an LLM picks a named character's action from a menu. That role contradicts three other commitments: "LLMs describe, never decide" (`01` V2, PRJ-001), "nothing slows the engine" (ADR-0030; a missing consult answer stalls the run), and the G2 thesis that the *systems* make the history. ADR-0028 also turns it on by default for deep minds, against ADR-0011 and D14.
+**Recommendation (confidence: high):**
+- **Keep** LLMs as the workforce (coding, research, review agents), where they also add the most fidelity, by helping build richer mechanics from the research.
+- **Keep, optional and late:** as translators *into* the engine (whisper and speech parsing, the world-compiler front end), always typed, validated and journaled, with a menu or form fallback; and as narrators *out of* it (chronicle polish, dialogue, saga and novel), plane C only, with templates as the fallback.
+- **Cut** the deliberation consult from the roadmap (COG-8, P3.12, the ADR-0028 default), and keep it only as a possible experiment after G3b. The engine then never waits on a model, and every decision comes from the simulation.
+On a yes, one page (`05.6` §0) states the roles, and the conflicts above are fixed in the same change.
+
 
 ### SPR-001 approval (C2)
 SPR-001 (`CODEX/05_PROJECT/SPR-001_RepoBootstrap.md`) creates the repository's contracts: layout, lints, CI. As a C2 change it needs your yes before the developer agent starts. **Default:** none; work waits for you.
