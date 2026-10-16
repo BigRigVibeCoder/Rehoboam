@@ -2,14 +2,14 @@
 id: SPR-006
 title: "Agenda, timers, lifecycle queues, event bus, invariants"
 type: how-to
-status: PLANNING
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001]
+related: [BCK-001, PRJ-001, VER-SPR-006, VER-SPR-006-TEST]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.2.1
 ---
 
 > **BLUF:** Add scheduled outcomes as timers, lifecycle command queues, the event bus with emission-order EventIds, and the invariant framework. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -135,9 +135,9 @@ Goldens: SPR-005's `stub_world_hashes.txt` is unchanged. New: `crates/rh-core/te
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-006` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-006` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class.
