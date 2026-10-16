@@ -1459,7 +1459,7 @@ fn t02_restore_of_a_snapshot_continues_exactly_like_the_unbroken_run() {
     assert!(!at_one.events.events.is_empty(), "undrained events");
     assert!(!at_one.epochs.is_empty(), "epochs");
     assert!(!at_one.inputs.is_empty(), "inputs queued for later");
-    assert!(at_one.applied_inputs > 0);
+    assert!(at_one.accepted_inputs > 0);
     let mut restored = restore(at_one.clone()).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(restored.snapshot(), at_one, "restore(x).snapshot() == x");
     restored

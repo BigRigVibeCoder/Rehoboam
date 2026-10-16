@@ -511,7 +511,7 @@ def engine_rows(st: State) -> TableRows:
     meta = (
         _opt_i64(st["cursor"])
         + _u32(st["timeline"])
-        + _u64(st["applied_inputs"])
+        + _u64(st["accepted_inputs"])
         + _u64(st["commands"]["next_seq"])
     )
     ev = st["events"]
@@ -566,7 +566,7 @@ SYNTHETIC_WORLD = [("pop.count", 21, 5), ("vital.alive", 22, 1030)]
 SYNTHETIC_STATE: State = {
     "cursor": 40 * DAY + 7,
     "timeline": 3,
-    "applied_inputs": 2,
+    "accepted_inputs": 2,
     "agenda": {
         "next_seq": 6,
         "entries": [

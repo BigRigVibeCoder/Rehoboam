@@ -124,12 +124,14 @@ pub enum ReplayError {
     Tuple(&'static str),
     /// The run reached the instant without failing.
     NoFailure,
-    /// The run applied material inputs before it failed (the artifact's journal position is
-    /// non-zero), and replay needs that journal, which P0 cannot supply (SPR-006 DEF-2; SPR-007
-    /// wires the journal in).
+    /// The run had accepted material inputs (the artifact's journal position), and the replaying
+    /// engine has not been given the same number: the host submits the journal's first
+    /// `position` inputs before replaying (SPR-006 DEF-2; VER-SPR-007-TEST GAP-10).
     JournalRequired {
-        /// The artifact's journal position: the number of material inputs applied.
+        /// The artifact's journal position: the number of material inputs accepted.
         position: u64,
+        /// The number the replaying engine has accepted.
+        submitted: u64,
     },
     /// The run failed differently.
     Mismatch {
@@ -145,9 +147,12 @@ impl fmt::Display for ReplayError {
         match self {
             Self::Tuple(field) => write!(f, "the engine differs from the artifact in {field}"),
             Self::NoFailure => f.write_str("the replay reached the instant without failing"),
-            Self::JournalRequired { position } => write!(
+            Self::JournalRequired {
+                position,
+                submitted,
+            } => write!(
                 f,
-                "the run applied {position} material inputs before it failed; replaying it needs the input journal (SPR-007)"
+                "the run had accepted {position} material inputs before it failed, the replay {submitted}: submit the journal's first {position} inputs first"
             ),
             Self::Mismatch { expected, got } => write!(
                 f,
@@ -178,8 +183,10 @@ pub struct Engine {
     by_system_id: BTreeMap<SystemId, usize>,
     epochs: BTreeMap<EntityRef, u32>,
     inputs: BTreeMap<SimTime, Vec<MaterialInput>>,
-    /// The number of material inputs applied: the journal position a crash artifact records.
-    applied_inputs: u64,
+    /// The number of material inputs accepted ([`Engine::submit_input`]), applied or still queued:
+    /// the journal position (VER-SPR-007-TEST GAP-10). The host journals an input and then submits
+    /// it, so this is the length of the journal's `seq`-order prefix the engine holds.
+    accepted_inputs: u64,
     timeline: TimelineId,
     provenance: Provenance,
     diagnostics: VecDeque<String>,
@@ -288,7 +295,7 @@ impl Engine {
             by_system_id,
             epochs: BTreeMap::new(),
             inputs: BTreeMap::new(),
-            applied_inputs: 0,
+            accepted_inputs: 0,
             timeline: TimelineId::from_raw(0),
             provenance: Provenance::default(),
             diagnostics: VecDeque::new(),
@@ -307,7 +314,7 @@ impl Engine {
         EngineState {
             cursor: self.cursor,
             timeline: self.timeline,
-            applied_inputs: self.applied_inputs,
+            accepted_inputs: self.accepted_inputs,
             tables: self.tables.clone(),
             agenda: self.agenda.state(),
             commands: self.commands.state(),
@@ -354,7 +361,7 @@ impl Engine {
         let commands =
             CommandQueues::from_state(&state.commands).map_err(RestoreError::Commands)?;
         check_epochs(&state.epochs)?;
-        check_inputs(&state.inputs, state.cursor)?;
+        check_inputs(&state.inputs, state.cursor, state.accepted_inputs)?;
         check_timers(&state.agenda.entries, state.cursor)?;
         let events = EventLog::from_state(&state.events).map_err(RestoreError::Events)?;
         let start = state.cursor.unwrap_or(SimTime::EPOCH);
@@ -410,7 +417,7 @@ impl Engine {
         engine.commands = commands;
         engine.epochs = state.epochs.into_iter().collect();
         engine.inputs = state.inputs.into_iter().collect();
-        engine.applied_inputs = state.applied_inputs;
+        engine.accepted_inputs = state.accepted_inputs;
         engine.timeline = state.timeline;
         engine.provenance = provenance;
         engine.events = events;
@@ -454,6 +461,22 @@ impl Engine {
     #[must_use]
     pub const fn branch_salt(&self) -> BranchSalt {
         self.branch_salt
+    }
+
+    /// The journal position: the number of material inputs accepted, applied or still queued
+    /// (VER-SPR-007-TEST GAP-10). A keyframe records it, a crash artifact records it, and a host
+    /// resuming from either submits only the journal's inputs after it.
+    #[must_use]
+    pub const fn journal_position(&self) -> u64 {
+        self.accepted_inputs
+    }
+
+    /// The number of material inputs applied so far: accepted, less those still queued.
+    #[must_use]
+    pub fn applied_inputs(&self) -> u64 {
+        let queued: usize = self.inputs.values().map(Vec::len).sum();
+        self.accepted_inputs
+            .saturating_sub(u64::try_from(queued).unwrap_or(u64::MAX))
     }
 
     /// The build, Registry version and manifest hash this engine runs under.
@@ -548,6 +571,7 @@ impl Engine {
         match self.cursor {
             Some(c) if at >= c => {
                 self.inputs.entry(at).or_default().push(input);
+                self.accepted_inputs += 1;
                 Ok(())
             }
             cursor => Err(InputError::PastInput { at, next: cursor }),
@@ -591,8 +615,9 @@ impl Engine {
     ///
     /// # Errors
     /// [`ReplayError`] if the tuple differs, the run does not fail, or it fails differently;
-    /// [`ReplayError::JournalRequired`] if the run had applied material inputs (a non-zero journal
-    /// position), which cannot be replayed without the input journal (SPR-007).
+    /// [`ReplayError::JournalRequired`] unless this engine has accepted exactly the artifact's
+    /// journal position of inputs: the host submits the journal's first `journal_position` inputs
+    /// (in `seq` order) before replaying, as the run did before it failed.
     pub fn replay(&mut self, artifact: &CrashArtifact) -> Result<(), ReplayError> {
         let checks: [(&'static str, bool); 6] = [
             ("timeline", artifact.timeline == self.timeline.to_raw()),
@@ -614,9 +639,10 @@ impl Engine {
         if let Some((field, _)) = checks.iter().find(|(_, ok)| !ok) {
             return Err(ReplayError::Tuple(field));
         }
-        if artifact.journal_position != 0 {
+        if artifact.journal_position != self.accepted_inputs {
             return Err(ReplayError::JournalRequired {
                 position: artifact.journal_position,
+                submitted: self.accepted_inputs,
             });
         }
         if self
@@ -690,7 +716,7 @@ impl Engine {
             manifest_hash: self.provenance.manifest_hash.clone(),
             seed: self.world_seed,
             branch_salt: self.branch_salt.to_raw(),
-            journal_position: self.applied_inputs,
+            journal_position: self.accepted_inputs,
             journal_head: self.journal_head.clone(),
             last_keyframe: self.last_keyframe.clone(),
             tick: self.at.0.minutes(),
@@ -814,8 +840,6 @@ impl Engine {
     fn apply_inputs(&mut self, t: SimTime) -> Result<usize, SimError> {
         let inputs = self.inputs.remove(&t).unwrap_or_default();
         for input in &inputs {
-            // Counted before it takes effect: an input that fails is part of the history.
-            self.applied_inputs += 1;
             for &entity in &input.scope {
                 let epoch = self.epochs.entry(entity).or_insert(0);
                 *epoch = epoch.checked_add(1).ok_or_else(|| SimError::System {

@@ -31,11 +31,12 @@ use rh_core::crash::Provenance;
 use rh_core::engine::{Engine, MaterialInput};
 use rh_core::time::SimTime;
 use rh_snapshot::guard::PlaneAState;
-use rh_snapshot::journal::{JournalPosition, chain_genesis};
+use rh_snapshot::journal::{JournalPosition, Replay, chain_genesis};
 use rh_snapshot::keyframe::{
     History, KeyframeError, load_engine, read_keyframe, seal_keyframe, unseal_keyframe,
     write_keyframe,
 };
+use rh_snapshot::resume::resume;
 use rh_snapshot::state::{decode_engine_tables, engine_tables};
 use rh_snapshot::state_hash;
 use rh_snapshot::store::{Admission, KeyframeStore};
@@ -58,7 +59,7 @@ fn history() -> History {
 /// The journal position after the inputs `e` has applied (these tests have no journal file, so
 /// the head is the genesis value).
 fn anchor(e: &Engine) -> JournalPosition {
-    position(u32::try_from(e.snapshot().applied_inputs).unwrap())
+    position(u32::try_from(e.journal_position()).unwrap())
 }
 
 fn position(inputs: u32) -> JournalPosition {
@@ -400,23 +401,25 @@ fn gap_8_every_history_field_is_checked_on_load() {
     assert!(load(&bytes).is_ok());
 }
 
-/// VER-SPR-007-TEST GAP-7: the journal anchor must count exactly the inputs the engine applied
-/// (`rh-core/engine.meta`, inside `state_hash`), on write and on load, so an edited count or an
-/// anchor past what was applied is refused without the journal.
+/// VER-SPR-007-TEST GAP-7, as GAP-10 redefined it: the journal anchor must count exactly the
+/// inputs the engine accepted (`rh-core/engine.meta`, inside `state_hash`), on write and on load,
+/// so an edited count, the applied count, or an anchor past what was accepted is refused without
+/// the journal.
 #[test]
-fn gap_7_the_journal_anchor_counts_exactly_the_applied_inputs() {
+fn gap_7_the_journal_anchor_counts_exactly_the_accepted_inputs() {
     let engine = run_to(life(), 50 * DAY + 1);
-    assert_eq!(engine.snapshot().applied_inputs, 1);
-    // The writer refuses an anchor of 99 (or 0) over one applied input.
-    for inputs in [0, 2, 99] {
+    // Three inputs accepted at the start; one applied by day 50, two still queued.
+    assert_eq!((engine.journal_position(), engine.applied_inputs()), (3, 1));
+    // The writer refuses the applied count, and any other count.
+    for inputs in [0, 1, 2, 4, 99] {
         assert!(matches!(
             write_keyframe(&engine, position(inputs)),
             Err(KeyframeError::Anchor(_))
         ));
     }
-    let (bytes, _) = write_keyframe(&engine, position(1)).unwrap();
+    let (bytes, _) = write_keyframe(&engine, position(3)).unwrap();
     // The loader refuses a header edited to another count.
-    for forged in ["999", "0", "2"] {
+    for forged in ["999", "0", "1", "2", "4"] {
         assert!(
             matches!(
                 load(&with_header(&bytes, "journal_inputs", forged)),
@@ -426,7 +429,7 @@ fn gap_7_the_journal_anchor_counts_exactly_the_applied_inputs() {
         );
     }
     // The faithful header still loads.
-    assert!(load(&with_header(&bytes, "journal_inputs", "1")).is_ok());
+    assert!(load(&with_header(&bytes, "journal_inputs", "3")).is_ok());
 }
 
 #[test]
@@ -943,4 +946,204 @@ fn def_5_keyframes_round_trip_across_world_sizes() {
             round_trips_at_every_cut(rows, seed);
         }
     }
+}
+
+/// A fresh scratch directory for one test's journal.
+fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("keyframe-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn journal_key(seed: u64) -> rh_snapshot::journal::HistoryKey {
+    rh_snapshot::journal::HistoryKey {
+        engine_build: history().provenance.build,
+        registry_version: history().provenance.registry_version,
+        manifest_hash: history().provenance.manifest_hash.into_bytes(),
+        world_seed: seed,
+    }
+}
+
+/// The host's order (05.1 section 6): check the input against the engine's cursor, journal it,
+/// then submit it, so journal (`seq`) order is acceptance order.
+fn accept(
+    e: &mut Engine,
+    j: &mut rh_snapshot::journal::Journal,
+    day: i64,
+    row: usize,
+    payload: &str,
+) {
+    use rh_snapshot::journal::{InputKind, NewInput, Producer, Scope};
+    let at = SimTime::from_minutes(day * DAY + 3);
+    assert!(e.snapshot().cursor.is_some_and(|c| at >= c), "a past input");
+    let journaled = j
+        .append(NewInput {
+            timeline_id: 0,
+            tick: at,
+            kind: InputKind::OracleMove,
+            scope: Scope::of_entity(entity(row)).unwrap(),
+            producer: Producer::Player,
+            payload: payload.as_bytes().to_vec(),
+        })
+        .unwrap();
+    let input = rh_snapshot::resume::material_input(&journaled).unwrap();
+    e.submit_input(at, input).unwrap();
+}
+
+/// VER-SPR-007-TEST GAP-10: the journal position counts the inputs the engine *accepted*. Input
+/// seq 0 applies at day 100 and seq 1 at day 10; at day 50 one is applied and both are accepted.
+/// The anchor covers both rows, so a journal whose seq 1 is forged fails `check_anchor`; an anchor
+/// at the applied count (one row) would have covered seq 0 only, the unapplied one.
+#[test]
+fn gap_10_the_anchor_covers_every_accepted_input_in_journal_order() {
+    let dir = scratch("gap10");
+    let (a_path, b_path) = (dir.join("a.sqlite"), dir.join("b.sqlite"));
+    let mut e = life_engine(SEED, 48, 3, false, 1);
+    e.set_provenance(history().provenance);
+    let mut a = rh_snapshot::journal::Journal::create(&a_path, &journal_key(SEED)).unwrap();
+    accept(&mut e, &mut a, 100, 1, "late");
+    accept(&mut e, &mut a, 10, 2, "early");
+    let e = run_to(e, 50 * DAY + 1);
+    assert_eq!((e.journal_position(), e.applied_inputs()), (2, 1));
+    let anchor = a.position(0).unwrap();
+    assert_eq!(anchor.inputs, 2);
+    let (bytes, header) = write_keyframe(&e, anchor).unwrap();
+    assert_eq!(header.journal, anchor);
+    // Journal B: the same seq 0, a forged seq 1 (another entity).
+    let mut b = rh_snapshot::journal::Journal::create(&b_path, &journal_key(SEED)).unwrap();
+    let mut scratch_engine = life_engine(SEED, 48, 3, false, 1);
+    accept(&mut scratch_engine, &mut b, 100, 1, "late");
+    accept(&mut scratch_engine, &mut b, 10, 4, "early");
+    drop((a, b));
+    let ra = Replay::open(&a_path, &journal_key(SEED), 0).unwrap();
+    let rb = Replay::open(&b_path, &journal_key(SEED), 0).unwrap();
+    ra.check_anchor(&header.journal).unwrap();
+    assert!(matches!(
+        rb.check_anchor(&header.journal),
+        Err(rh_snapshot::journal::JournalError::Mismatched { .. })
+    ));
+    // The applied-count anchor would not have seen the forgery.
+    assert_eq!(ra.chain_after(1), rb.chain_after(1));
+    // And the keyframe resumes through the true journal, refused through the forged one.
+    assert!(resume(&bytes, CALENDAR, life_registered(), &history(), &ra).is_ok());
+    assert!(matches!(
+        resume(&bytes, CALENDAR, life_registered(), &history(), &rb),
+        Err(rh_snapshot::resume::ResumeError::Journal(_))
+    ));
+}
+
+/// The month-boundary `state_hash` ladder of `e` from now to `end`, and its final state.
+fn ladder_to(e: &mut Engine, end: i64) -> (Vec<(i64, u64)>, rh_core::state::EngineState) {
+    let ladder = monthly(e, end);
+    (ladder, e.snapshot())
+}
+
+/// Resuming from a keyframe through the journal, the first real host loop (SPR-008's bisect
+/// reuses it). In a 150-person life world (inputs land while people live and have timers to
+/// re-sample), inputs are submitted out of tick order; at the day-20 keyframe two are still
+/// queued; two more are journaled after it. The resumed run equals the continuous run from the
+/// last submission on, over more than two years, and ends in the same state. Control:
+/// re-submitting from the applied count instead re-submits an applied input (refused as past)
+/// and a queued one (applied twice), and diverges.
+#[test]
+fn gap_10_a_keyframe_resumes_through_the_journal_like_the_continuous_run() {
+    let dir = scratch("resume");
+    let path = dir.join("journal.sqlite");
+    // The input queued at the keyframe and doubled by the control targets a person who still has a
+    // pending timer on day 90, so the double application re-samples a real timer. Found with a
+    // scout run: nothing before day 90 depends on that input.
+    let target = {
+        let mut scout = life_engine(SEED, 150, 3, false, 1);
+        let mut sj =
+            rh_snapshot::journal::Journal::create(&dir.join("scout.sqlite"), &journal_key(SEED))
+                .unwrap();
+        accept(&mut scout, &mut sj, 120, 3, "a");
+        accept(&mut scout, &mut sj, 15, 5, "b");
+        let scout = run_to(scout, 90 * DAY);
+        let s = scout.snapshot();
+        (0..150)
+            .find(|&row| {
+                s.agenda
+                    .entries
+                    .iter()
+                    .any(|(k, _)| k.entity == entity(row) && k.time.minutes() > 90 * DAY + 3)
+            })
+            .expect("someone has a timer after day 90")
+    };
+    let mut e = life_engine(SEED, 150, 3, false, 1);
+    e.set_provenance(history().provenance);
+    let mut j = rh_snapshot::journal::Journal::create(&path, &journal_key(SEED)).unwrap();
+    // Out of tick order: 120, 15, 90.
+    accept(&mut e, &mut j, 120, 3, "a");
+    accept(&mut e, &mut j, 15, 5, "b");
+    accept(&mut e, &mut j, 90, target, "c");
+    let mut e = run_to(e, 20 * DAY + 1);
+    assert_eq!((e.journal_position(), e.applied_inputs()), (3, 1));
+    let applied_at_keyframe = 1_u32;
+    let (bytes, header) = write_keyframe(&e, j.position(0).unwrap()).unwrap();
+    // The continuous run journals two more inputs after the keyframe.
+    e = run_to(e, 25 * DAY + 1);
+    accept(&mut e, &mut j, 60, 9, "d");
+    e = run_to(e, 40 * DAY + 1);
+    accept(&mut e, &mut j, 150, 11, "e");
+    drop(j);
+    let alive: i64 = e.tables().get("vital.alive").unwrap().iter().sum();
+    assert!(alive > 0, "people live while the inputs apply");
+    let end = 40 * DAY + 2 * YEAR + 30 * DAY;
+    let (continuous, final_state) = ladder_to(&mut e, end);
+    assert!(continuous.len() >= 24, "more than two years of months");
+    let replay = Replay::open(&path, &journal_key(SEED), 0).unwrap();
+    assert_eq!(replay.position().inputs, 5);
+    let (mut resumed, h) = resume(&bytes, CALENDAR, life_registered(), &history(), &replay)
+        .unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(h, header);
+    assert_eq!(resumed.journal_position(), 5);
+    resumed = run_to(resumed, 40 * DAY + 1);
+    let (ladder, state) = ladder_to(&mut resumed, end);
+    assert_eq!(ladder, continuous);
+    assert_eq!(state, final_state);
+    // Control: the applied-count position (1) re-submits rows from seq 1 on.
+    let (mut wrong, _) = load_engine(&bytes, CALENDAR, life_registered(), &history()).unwrap();
+    let mut rows: Vec<_> = replay
+        .inputs()
+        .iter()
+        .filter(|i| i.seq >= applied_at_keyframe)
+        .collect();
+    rows.sort_by_key(|i| i.seq);
+    // Seq 1 (day 15) was applied before the keyframe: refused as past. Seq 2 (day 90) is still
+    // queued in the keyframe: accepted a second time.
+    let mut refused = 0;
+    for row in rows {
+        let input = rh_snapshot::resume::material_input(row).unwrap();
+        if wrong.submit_input(row.tick, input).is_err() {
+            refused += 1;
+        }
+    }
+    assert_eq!(refused, 1, "the applied input is refused as past");
+    assert_eq!(
+        wrong.journal_position(),
+        6,
+        "the queued day-90 input accepted twice"
+    );
+    wrong = run_to(wrong, 40 * DAY + 1);
+    let mut good = resume(&bytes, CALENDAR, life_registered(), &history(), &replay)
+        .unwrap()
+        .0;
+    good = run_to(good, 40 * DAY + 1);
+    // The world itself diverges: some month's world tables differ, not only the counters.
+    let mut differ = 0;
+    while let Some(t) = good.next_instant().filter(|t| t.minutes() <= end) {
+        good.advance_until(t, |_, _| {}).unwrap();
+        wrong.advance_until(t, |_, _| {}).unwrap();
+        if CALENDAR.is_boundary(rh_core::Pulse::Month, t)
+            && rh_snapshot::tables_hash(good.tables()) != rh_snapshot::tables_hash(wrong.tables())
+        {
+            differ += 1;
+        }
+    }
+    println!("GAP-10 control: the world tables differ in {differ} months");
+    assert!(differ > 0, "the double-applied input changes the world");
+    assert_ne!(state_hash(&wrong.snapshot()), state_hash(&final_state));
 }

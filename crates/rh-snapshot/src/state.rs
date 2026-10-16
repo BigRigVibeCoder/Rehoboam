@@ -30,7 +30,7 @@
 //! | `rh-core/engine.commands` | queued command: owners in name order, each queue in key order | `str owner, i64 tick, u8 phase, u64 person, u64 seq, str sender, opt(u64 cause), str kind, list(i64 args), opt(u64 draft)` |
 //! | `rh-core/engine.epochs` | entity a material input touched, in entity order | `entity, u32 epoch` |
 //! | `rh-core/engine.inputs` | queued material input: instants in order, inputs in submission order | `i64 time, u32 index, list(entity scope)` |
-//! | `rh-core/engine.meta` | (one row) | `opt(i64 cursor), u32 timeline, u64 applied_inputs, u64 command next_seq` |
+//! | `rh-core/engine.meta` | (one row) | `opt(i64 cursor), u32 timeline, u64 accepted_inputs, u64 command next_seq` |
 //! | `rh-core/events.held` (carried, not hashed) | undrained event, in id order | `u64 id, i64 tick, u8 phase, str emitter, str kind, list(entity subjects), list(u64 causes), list(i64 payload)` |
 //! | `rh-core/events.meta` | (one row) | `u64 next_seq, opt(i64 tick || u8 phase) last, u64 running` |
 //!
@@ -68,7 +68,7 @@ pub const ENGINE_COMMANDS: &str = "rh-core/engine.commands";
 pub const ENGINE_EPOCHS: &str = "rh-core/engine.epochs";
 /// The queued material inputs.
 pub const ENGINE_INPUTS: &str = "rh-core/engine.inputs";
-/// The cursor, timeline, applied-input count and command counter.
+/// The cursor, timeline, accepted-input count (the journal position) and command counter.
 pub const ENGINE_META: &str = "rh-core/engine.meta";
 /// The undrained events.
 pub const EVENTS_HELD: &str = "rh-core/events.held";
@@ -123,7 +123,7 @@ pub fn engine_tables(state: &EngineState) -> Vec<(&'static str, Vec<Vec<u8>>)> {
     let mut meta = W::default();
     meta.opt_i64(state.cursor.map(SimTime::minutes))
         .u32(state.timeline.to_raw())
-        .u64(state.applied_inputs)
+        .u64(state.accepted_inputs)
         .u64(state.commands.next_seq);
     vec![
         (AGENDA_META, vec![agenda_meta.0]),
@@ -439,14 +439,14 @@ pub fn decode_engine_tables(
         None
     };
     let timeline = TimelineId::from_raw(r.u32()?);
-    let applied_inputs = r.u64()?;
+    let accepted_inputs = r.u64()?;
     let next_command = r.u64()?;
     r.end()?;
     let (entries, tombstones) = d.timers()?;
     Ok(EngineState {
         cursor,
         timeline,
-        applied_inputs,
+        accepted_inputs,
         tables: world,
         agenda: AgendaState {
             entries,

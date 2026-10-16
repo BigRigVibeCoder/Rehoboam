@@ -187,7 +187,7 @@ fn synthetic_state() -> rh_core::state::EngineState {
     rh_core::state::EngineState {
         cursor: Some(t(40 * DAY + 7)),
         timeline: TimelineId::from_raw(3),
-        applied_inputs: 2,
+        accepted_inputs: 2,
         tables: world,
         agenda: AgendaState {
             entries: vec![

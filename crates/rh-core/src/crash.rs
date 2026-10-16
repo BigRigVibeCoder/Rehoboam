@@ -5,7 +5,8 @@
 //! engine builds a [`CrashArtifact`] with:
 //! - the history tuple: build, Registry version, manifest hash, seed (with the branch salt and the
 //!   timeline, which a replay also needs);
-//! - the input-journal position: the number of material inputs applied before the failure
+//! - the input-journal position: the number of material inputs accepted (applied or still queued)
+//!   before the failure; a replay submits the journal's first that many inputs (GAP-10)
 //!   (replay refuses a non-zero one until SPR-007 supplies the journal; DEF-2);
 //! - the last keyframe (`none` until SPR-007) and the failing instant and phase;
 //! - the failing invariant or error;
@@ -72,7 +73,9 @@ pub struct CrashArtifact {
     pub seed: u64,
     /// The branch salt of the timeline.
     pub branch_salt: u64,
-    /// The input-journal position: the number of material inputs applied before the failure.
+    /// The input-journal position: the number of material inputs the engine had accepted (applied
+    /// or still queued) when it failed (VER-SPR-007-TEST GAP-10). A replay submits the journal's
+    /// first `journal_position` inputs, then runs to the failing instant.
     pub journal_position: u64,
     /// The journal's chain head (hex), as the host last set it (SPR-007; `None` in a format-1
     /// artifact or when the run has no journal).
