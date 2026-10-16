@@ -1,0 +1,45 @@
+# The nightly tier: tests too slow for the PR tier, marked #[ignore] in the code (SPR-002 T-06;
+# GOV-002; docs/13 §4.3). Today that is the V-DET-20 full sweep (10^6 draws per stream, docs/09);
+# SPR-008 adds the long golden-run hash ladders to this file.
+#
+# Same toolchain, cache and tool installs as ci.yml. A daily run on GitHub Free spends a few
+# minutes of the monthly allowance; run it by hand with workflow_dispatch.
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"  # 03:17 UTC daily, off the top of the hour
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ignored-tests:
+    name: Nightly tier (ignored tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo-nextest (prebuilt binary)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9
+
+      - name: Ignored tests (V-DET-20 full sweep)
+        run: cargo nextest run --workspace --locked --run-ignored ignored-only --no-fail-fast --no-capture
