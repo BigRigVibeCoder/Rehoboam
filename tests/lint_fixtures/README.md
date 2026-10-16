@@ -46,6 +46,8 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `arch/plane_a_loose_pin/` | `bin/lint_arch.py` (`plane-A-external`, exact pins; SPR-003 GAP-4) | `rh-sample` requiring `libm = "0.2"` | ``VIOLATION [plane-A-external] rh-sample: requires libm as `^0.2` `` |
 | `arch/plane_a_default_features/` | `bin/lint_arch.py` (`plane-A-external`, features; SPR-003 GAP-4) | `rh-sample` taking `libm = "=0.2.16"` with its default features | `VIOLATION [plane-A-external] rh-sample: uses libm with its default features` |
 | `arch/plane_a_sample_third_party/` | `bin/lint_arch.py` (`plane-A-external`; BCK-002 A-20, SPR-003 GAP-4) | `rh-sample` adding the unreviewed crate `zerocopy` (ruling item 6: `libm` only) | `VIOLATION [plane-A-external] rh-sample: depends on zerocopy, which is not on the reviewed list` |
+| `arch/plane_a_own_lints/` | `bin/lint_arch.py`, rule `lints` (SPR-003 GAP-9) | `rh-sample` with its own `[lints.rust]` and `[lints.clippy] disallowed_methods = "allow"` in place of `[lints] workspace = true` | `VIOLATION [lints] rh-sample: declares its own lint table(s) [lints.clippy]` |
+| `arch/plane_a_no_workspace_lints/` | `bin/lint_arch.py`, rule `lints` (SPR-003 GAP-9) | `rh-sample` with no `[lints]` at all | ``VIOLATION [lints] rh-sample: does not declare `[lints] workspace = true` `` |
 | `arch/relabelled_sample/` | `bin/lint_arch.py` (pinned labels, SPR-003 T-00) | `rh-sample`, the float zone, declared (tool, tool), where `bin/lint_forbidden.py` would not scan it | `VIOLATION [metadata] rh-sample: declares (plane, kind) = ('tool', 'tool'), but rh-sample is pinned` |
 | `arch/system_to_sample/` | `bin/lint_arch.py` (V-INSP-03 allow-list, SPR-003 T-00) | **negative control**: a system crate depending on `rh-sample` | must succeed |
 | `forbidden/float_zone/` | `bin/lint_forbidden.py` (float zone, SPR-003 T-00) | floats in `rh-sample` (exempt) and in `rh-sampler`, a plane-A crate named like it | ``VIOLATION [V-DET-19/float] `f64` at …/rh-sampler/src/lib.rs``; nothing reported for `rh-sample` (checked in `python/tests`) |
@@ -61,6 +63,8 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `parity/registry_drift_message.toml` | `bin/manifest_parity.py` line comparison (SPR-004 GAP-3) | the Rust side reads a Registry whose M5 `r0` bound is `[1.0, 9.0]`: same verdict and counts, different message | `PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml` |
 | `ownership/unowned_write.access.toml` | `rh-cli ownership` (single writer, 05.1 §2; SPR-004 T-03) | `S5.daily_life` declares a write to `person.alive`, owned by `M2.demography` | `VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns` |
 | `schema/drifted_bound.schema.json` | `rh-cli manifest schema --diff` (SPR-004 T-04) | the reference schema with `Horizon.years` maximum changed to 6000 | `SCHEMA DIFFERENCE $defs.Horizon.properties.years.maximum` |
+
+Since SPR-003 GAP-9, every plane-A crate in the `arch/` and `compile_fail/plane_a_names_plane_*` fixtures declares `[lints] workspace = true` (each fixture root has a `[workspace.lints]` table), so each control fails only for the rule it plants.
 
 Each compile-fail case also passes `bin/lint_arch.py` (its graph has no edge), which shows the failure
 is the language barrier: plane-A code can reach a plane-B or plane-C type only through a dependency

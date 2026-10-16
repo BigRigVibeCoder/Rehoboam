@@ -2,3 +2,7 @@
 [workspace]
 members = ["rh-sys-a", "rh-snapshot"]
 resolver = "3"
+
+# Every plane-A crate inherits these lints (bin/lint_arch.py rule lints, VER-SPR-003-TEST GAP-9).
+[workspace.lints.rust]
+unsafe_code = "forbid"

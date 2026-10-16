@@ -89,6 +89,7 @@ REQUIRED_GATES = (
     "lint_arch positive control: libm outside rh-sample must FAIL",
     "lint_arch positive control: libm with default features must FAIL (SPR-003 GAP-4)",
     "lint_arch positive control: missing plane/kind must FAIL",
+    "lint_arch positive control: own [lints.clippy] table in rh-sample must FAIL (SPR-003 GAP-9)",
     "lint_arch positive control: plane A -> plane B must FAIL",
     "lint_arch positive control: plane A -> plane C must FAIL",
     "lint_arch positive control: plane A -> rand must FAIL",
@@ -98,6 +99,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: relabelled rh-snapshot must FAIL",
     "lint_arch positive control: rh-manifest relabelled as plane A must FAIL (SPR-004)",
     "lint_arch positive control: rh-sample relabelled out of plane A must FAIL (SPR-003 T-00)",
+    "lint_arch positive control: rh-sample without [lints] workspace = true must FAIL (SPR-003 "
+    "GAP-9)",
     "lint_arch positive control: system -> rh-snapshot aliased as rh-core must FAIL",
     "lint_arch positive control: system -> rh-snapshot as a build-dependency must FAIL",
     "lint_arch positive control: system -> rh-snapshot must FAIL",

@@ -3,6 +3,7 @@
 Refs: SPR-001 T-04; docs/09 V-INSP-03 (EVO-1), V-PLN-01 (DET-12); docs/13 §3; ADR-0024.
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,9 @@ from lint_arch import (
     WorkspaceError,
     check_workspace,
     crates_from_metadata,
+    load_metadata,
     main,
+    read_lints,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -332,6 +335,8 @@ def _package(
         "name": name,
         "dependencies": deps,
         "metadata": meta,
+        # A real manifest that inherits the workspace lints (rule lints reads it).
+        "manifest_path": str(REPO / "crates" / "rh-core" / "Cargo.toml"),
     }
 
 
@@ -394,6 +399,8 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("plane_a_loose_pin", "plane-A-external"),
         ("plane_a_default_features", "plane-A-external"),
         ("plane_a_sample_third_party", "plane-A-external"),
+        ("plane_a_own_lints", "lints"),
+        ("plane_a_no_workspace_lints", "lints"),
         ("relabelled_sample", "metadata"),
     ],
 )
@@ -503,3 +510,71 @@ def test_cargo_metadata_req_and_features_reach_the_edge() -> None:
         "plane-A-external",
         "plane-A-external",
     ]
+
+
+# --- Plane-A crates take exactly the workspace lints (VER-SPR-003-TEST GAP-9) ---------------------
+
+
+def with_lints(base: Crate, *lints: str) -> Crate:
+    """Return ``base`` declaring these [lints] keys."""
+    return replace(base, lints=lints)
+
+
+@pytest.mark.parametrize(
+    "lints",
+    [(), ("clippy",), ("clippy", "rust"), ("clippy", "workspace"), ("workspace = False",)],
+)
+def test_a_plane_a_crate_must_take_exactly_the_workspace_lints(lints: tuple[str, ...]) -> None:
+    """No table of its own, and `workspace = true` itself."""
+    assert found(engine(with_lints(crate("rh-sample"), *lints))) == [("lints", "rh-sample")]
+
+
+def test_tool_crates_may_declare_their_own_lints() -> None:
+    """Tool crates are not authoritative; their declaration is only printed."""
+    crates = [with_lints(c, "clippy") if c.name == "rh-cli" else c for c in engine()]
+    assert found(crates) == []
+
+
+@pytest.mark.parametrize(
+    ("toml", "expected"),
+    [
+        ("[lints]\nworkspace = true\n", ("workspace",)),
+        ("", ()),
+        ('[lints.clippy]\ndisallowed_methods = "allow"\n', ("clippy",)),
+        ("[lints]\nworkspace = false\n", ("workspace = False",)),
+        ('[lints]\nworkspace = true\n[lints.rust]\nunsafe_code = "allow"\n', ("rust", "workspace")),
+    ],
+)
+def test_read_lints_reads_the_crate_manifest(
+    tmp_path: Path, toml: str, expected: tuple[str, ...]
+) -> None:
+    """The [lints] keys, with `workspace` named only when it is true."""
+    manifest = tmp_path / "Cargo.toml"
+    manifest.write_text('[package]\nname = "x"\n' + toml)
+    assert read_lints(manifest) == expected
+
+
+def test_an_unreadable_manifest_is_an_error(tmp_path: Path) -> None:
+    """A manifest that cannot be read never passes silently."""
+    with pytest.raises(WorkspaceError):
+        read_lints(tmp_path / "missing.toml")
+    (tmp_path / "bad.toml").write_text("[lints\n")
+    with pytest.raises(WorkspaceError):
+        read_lints(tmp_path / "bad.toml")
+
+
+def test_metadata_without_a_manifest_path_is_an_error() -> None:
+    """Real metadata always gives manifest_path; a document without it is malformed."""
+    package = _package("rh-core", [], {"rehoboam": {"plane": "A", "kind": "core"}})
+    del package["manifest_path"]
+    document = {"workspace_members": ["path+file:///rh-core#0.0.0"], "packages": [package]}
+    with pytest.raises(WorkspaceError):
+        crates_from_metadata(document)
+
+
+def test_every_real_crate_takes_the_workspace_lints() -> None:
+    """The repository's own crates, read through cargo metadata (negative control)."""
+    crates = crates_from_metadata(load_metadata(REPO / "Cargo.toml"))
+    assert {c.name: c.lints for c in crates if c.plane == "A"} == {
+        c.name: ("workspace",) for c in crates if c.plane == "A"
+    }

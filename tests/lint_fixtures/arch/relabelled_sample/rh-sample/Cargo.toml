@@ -7,3 +7,6 @@ publish = false
 [package.metadata.rehoboam]
 plane = "tool"
 kind = "tool"
+
+[lints]
+workspace = true
