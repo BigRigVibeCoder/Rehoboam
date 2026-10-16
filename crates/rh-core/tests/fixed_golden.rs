@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use rh_core::fixed::{Money, Q8_8, Q16_16};
+use rh_core::fixed::{Money, Q8_8, Q16_16, draw_hits};
 
 const VECTORS: &str = include_str!("golden/fixed_vectors.txt");
 
@@ -72,6 +72,12 @@ fn compute(op: &str, args: &[&str]) -> String {
         ("money.mul_int", [a, n]) => money(a).saturating_mul_int(int(n)).to_minor().to_string(),
         ("money.mul_rate", [a, r]) => money(a).mul_rate(q16(r)).to_minor().to_string(),
         ("money.div_int", [a, n]) => opt(money(a).checked_div_int(int(n)), Money::to_minor),
+        ("draw", [d, p]) => {
+            let draw = d
+                .parse::<u64>()
+                .unwrap_or_else(|_| panic!("not a u64 draw: {d}"));
+            u8::from(draw_hits(draw, q16(p))).to_string()
+        }
         _ => panic!(
             "unknown vector `{op}` with {} inputs: regenerate or extend this test",
             args.len()

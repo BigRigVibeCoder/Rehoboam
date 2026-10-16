@@ -3,6 +3,8 @@
 //! - `Q8_8` (i16 storage) and `Q16_16` (i32 storage): the `q8_8` and `q16_16` column types of the
 //!   system specs (`specs/systems/_template.odd.toml`).
 //! - `Money`: i64 minor units.
+//! - `draw_hits` and `chance`: a uniform `u64` draw against a `Q16_16` probability, with an exact
+//!   mapping (`draw.rs`).
 //!
 //! There is no conversion from or to `f32`/`f64` anywhere in this module, under any feature: a
 //! plane-A crate cannot reach one (`05.1` §6 item 4). A tool that wants to plot a value divides
@@ -13,9 +15,11 @@
 //! GOV-003 §2.
 
 mod arith;
+mod draw;
 mod money;
 mod q;
 mod round;
 
+pub use draw::{UniformDraw, chance, draw_hits};
 pub use money::Money;
 pub use q::{Q8_8, Q16_16};
