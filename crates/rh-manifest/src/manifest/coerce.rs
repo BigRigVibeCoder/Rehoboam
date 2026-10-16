@@ -66,7 +66,7 @@ impl fmt::Display for SchemaError {
 /// The slug pattern of `manifest_v0.py`.
 pub const SLUG_PATTERN: &str = "^[a-z][a-z0-9_]{1,63}$";
 /// The registry-version pattern of `manifest_v0.py`.
-pub const SEMVER_PATTERN: &str = r"^\d+\.\d+\.\d+$";
+pub const SEMVER_PATTERN: &str = r"^[0-9]+\.[0-9]+\.[0-9]+$";
 
 type Loc = Vec<String>;
 
@@ -295,7 +295,8 @@ fn int64(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<i64>, le: Option<i64
     if let Ok(n) = i64::try_from(n) {
         Some(n)
     } else {
-        // Only reachable without bounds; every unbounded field is held as i128 instead.
+        // Unreachable: every integer field is bounded within i64 (SPR-004 DEF-2 ruling); kept
+        // so that an unbounded field added later fails closed.
         cx.err(
             loc,
             "int_type",
@@ -1330,7 +1331,7 @@ fn covert_outbreak(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
         cx,
         "start_day",
         || 0,
-        |cx, v, l| int(cx, v, l, Some(0), None),
+        |cx, v, l| int64(cx, v, l, Some(0), Some(i64::MAX)),
     );
     o.finish(cx).then_some(())?;
     Some(Catalyst::CovertOutbreak(CovertOutbreak {
@@ -1344,7 +1345,9 @@ fn covert_outbreak(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
 fn climate_shock(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
     let mut o = Obj::new(cx, v, loc, "ClimateShock")?;
     kind(&mut o, cx, "climate_shock");
-    let year = o.req(cx, "year", |cx, v, l| int(cx, v, l, Some(0), None));
+    let year = o.req(cx, "year", |cx, v, l| {
+        int64(cx, v, l, Some(0), Some(i64::MAX))
+    });
     let severity_sigma = o.req(cx, "severity_sigma", |cx, v, l| {
         float(cx, v, l, Some(0.5), Some(4.0))
     });
@@ -1431,7 +1434,9 @@ fn household(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Household> {
         |cx, v, l| int64(cx, v, l, Some(0), Some(100_000)),
     );
     let holdings = o.opt(cx, "holdings", OrderedMap::default, |cx, v, l| {
-        dict(cx, v, l, Key::Slug, |cx, v, l| int(cx, v, l, Some(0), None))
+        dict(cx, v, l, Key::Slug, |cx, v, l| {
+            int64(cx, v, l, Some(0), Some(i64::MAX))
+        })
     });
     o.finish(cx).then_some(())?;
     Some(Household {

@@ -651,7 +651,7 @@ fn push_duplicates(out: &mut Vec<String>, what: &str, ids: &[String]) {
     }
 }
 
-/// `^\d+\.\d+\.\d+$` with ASCII digits.
+/// `^[0-9]+\.[0-9]+\.[0-9]+$` (ASCII digits, as the reference since SPR-004 GAP-4).
 #[must_use]
 pub fn is_semver(s: &str) -> bool {
     let parts: Vec<&str> = s.split('.').collect();
