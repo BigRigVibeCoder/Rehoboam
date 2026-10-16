@@ -4,6 +4,8 @@ A running log of director rulings, phase-gate outcomes and approved ADR changes.
 
 | Date | Decision | By | Evidence / links |
 |---|---|---|---|
+| 2026-10-16 | **Accepted:** ADR-0032, the Agentic Architect operating model ("make it our own; adapt and expand where needed"); set up in SPR-000-ARCH. D3 resolved: about 2–4 h/week of director time. | Director | ADR-0032; `CODEX/`; VER-SPR-000-ARCH |
+| 2026-10-16 | **Accepted:** ODD-R for every simulation system (D7), taken further as machine-checked specs as data (ADR-0033). | Director | ADR-0033; `specs/systems/` |
 | 2026-10-16 | **Proposed** (director's suggestion for D3): run the project on the Agentic Architect operating model, adapted for a deterministic simulation (ADR-0032). | Director; systems design | ADR-0032; `agentic_architect` @ f3677c4 |
 | 2026-10-16 | **Accepted:** ADR-0030 v2, the World Stream (D1). | Director | `decisions_pending.md` D1 |
 | 2026-10-16 | **Accepted:** the 18 critical-path ADRs: 0001–0003, 0005–0010, 0020, 0022, 0024–0030 (D2). | Director | D2; `06_adr/README.md` |

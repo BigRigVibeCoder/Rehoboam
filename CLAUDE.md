@@ -3,6 +3,9 @@
 ## Project state
 This repository is in the **planning phase**. There is no engine code yet. The plan lives in `docs/`, the evidence in `research/`, and executable contracts in `specs/`.
 
+## Operating model (ADR-0032)
+Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and backlogs (`CODEX/05_PROJECT/`), governance (`CODEX/10_GOVERNANCE/`), and the generated index (`CODEX/00_INDEX/MANIFEST.yaml`). Start each session with `AGENTS.md`. Run `bin/check_all.sh` before asking for an audit; no report, no pass. Be direct: no flattery, no softened bad news; bring the director decisions with a recommendation and a confidence rating, not open questions.
+
 ## Read before any work
 1. `docs/00_executive_summary.md`
 2. `docs/01_vision_and_intent.md` (success criteria S1–S4, principles)
@@ -26,7 +29,9 @@ This repository is in the **planning phase**. There is no engine code yet. The p
 - **Licences:** no GPL, AGPL, non-commercial or territorial-licensed code, weights or assets in shipped crates (ADR-0021). GPL/AGPL tools may run only out of process; see `docs/14_reuse_inventory.md` for traps (EbookLib, xxhash-rust, MiniCheck-7B weights).
 
 ## Checks to run after touching `specs/`
+All of them, fail-fast, with a report: `bin/check_all.sh` (set `PYTHON` to an interpreter with pydantic, pyyaml and duckdb). Individually:
 ```bash
+python -I bin/gen_manifest.py --check
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml

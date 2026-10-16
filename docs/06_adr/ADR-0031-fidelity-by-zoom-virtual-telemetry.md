@@ -4,7 +4,7 @@
 
 ## Context
 
-The director wants "as much fidelity as I can get, so I can attach my viewer and see exactly how things are going". He is unsure whether that means SimCity or The Sims, and asks four things:
+The director wants "as much fidelity as I can get, so I can attach my viewer and see exactly how things are going". They are unsure whether that means SimCity or The Sims, and ask four things:
 - whether there is a compressed "world language" for the stream;
 - whether the stream is compressed;
 - whether every person's movement can be stored as telemetry;

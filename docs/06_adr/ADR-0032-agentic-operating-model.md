@@ -4,7 +4,7 @@
 
 ## Context
 
-The director proposes running Rehoboam on his Agentic Architect template:
+The director proposes running Rehoboam on their Agentic Architect template:
 - **A three-tier hierarchy:** Human → Architect Agent → Developer and Tester agents.
 - **CODEX:** a Markdown "project-management operating system" with typed documents: PRJ, BCK, SPR, BLU, CON, DEF, EVO, VER, RES, AGT and GOV.
 - **Scope-bounded sprints,** one agent per branch, with the spec written before any code.

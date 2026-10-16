@@ -1,5 +1,7 @@
 # 13 — Agentic Development Playbook
 
+> **Since ADR-0032 (2026-10-16):** the process (roles, the work loop, sprints, defects, verification, planning) lives in `CODEX/10_GOVERNANCE/` (GOV-005, GOV-007, GOV-002). This document remains the **Rehoboam engineering supplement**: ownership rules, change classes, CI gates, the merge queue and golden-hash divergence (§4), the work-package fields now merged into `CODEX/_templates/template_sprint.md`, and context hygiene for agents.
+
 *Status: Draft v1.1 (2026-10-15). How you and the AI coding agents build Rehoboam together. It implements ADR-0022.*
 *v1.1 changes: new governance rules in §4 (single-writer column ownership, contract crates, lifecycle command queues, change classes C0–C3, merge queue, divergence bisect), aligned with `05.1` §2 and §6; `rh-contracts` and `rh-worldgen` added to the dependency rules; the decisions log already exists.*
 

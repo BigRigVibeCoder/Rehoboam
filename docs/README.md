@@ -17,5 +17,6 @@
 | 12 | [Open questions](12_open_questions.md) | Decisions needed from you |
 | 13 | [Agentic development playbook](13_agentic_development_playbook.md) | How the AI agents build it |
 | 14 | [Reuse inventory](14_reuse_inventory.md) | What we bootstrap from open source (about 150 projects, licences verified), what must be built, and the personal-use licence trade-off |
+| — | [**CODEX**](../CODEX/README.md) | The operating system: roadmap front page, backlogs, sprints, defects, verification, governance, agent roles (ADR-0032) |
 | — | [**Your decisions, in one place**](decisions_pending.md) | Every decision waiting on you, with recommendations and defaults; answer in chat |
 | — | [Decisions log](decisions-log.md) | Running log of rulings and gate outcomes |

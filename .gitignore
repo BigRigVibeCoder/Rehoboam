@@ -1,3 +1,6 @@
 
 # research/papers/ is tracked by the director's choice (private repository). Keep the repo private while it holds them.
 __pycache__/
+
+# Check reports and crash artifacts (GOV-002, GOV-004)
+artifacts/
