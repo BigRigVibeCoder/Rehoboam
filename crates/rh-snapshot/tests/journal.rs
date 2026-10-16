@@ -620,3 +620,67 @@ fn the_journal_position_is_the_count_and_the_chain_head() {
     t.scope = Scope::Household(u64::MAX);
     assert_ne!(row_digest(&t), base);
 }
+
+/// VER-SPR-007-TEST GAP-5: each LLM provenance field enters the row digest. Rows 5 and 9 are
+/// LLM-produced; every edit keeps the producer valid, so only the digest can catch it.
+#[test]
+fn every_llm_provenance_field_is_covered_by_the_row_digest() {
+    for (name, sql) in [
+        (
+            "job_id",
+            "UPDATE inputs SET job_id = 'job-18' WHERE seq = 5",
+        ),
+        (
+            "model_id",
+            "UPDATE inputs SET model_id = 'test-model-2' WHERE seq = 9",
+        ),
+        (
+            "weights_hash",
+            "UPDATE inputs SET weights_hash = X'01' WHERE seq = 5",
+        ),
+        (
+            "provider_version",
+            "UPDATE inputs SET provider_version = '2026-10-02' WHERE seq = 9",
+        ),
+        (
+            "prompt_hash",
+            "UPDATE inputs SET prompt_hash = X'08' WHERE seq = 5",
+        ),
+    ] {
+        let dir = fresh_dir(name);
+        let (path, _) = written(&dir);
+        tamper(&path, sql);
+        let err = Replay::open(&path, &key(), 0).unwrap_err();
+        assert!(
+            matches!(&err, JournalError::Mismatched { reason, .. } if reason.contains("row digest")),
+            "{name}: {err}"
+        );
+    }
+}
+
+/// VER-SPR-007-TEST GAP-5: the chain mixes in the previous link, so two journals that differ only
+/// in their first row end in different heads although every later row is the same.
+#[test]
+fn an_early_difference_changes_the_head() {
+    let heads: Vec<_> = ["a", "b"]
+        .into_iter()
+        .map(|variant| {
+            let dir = fresh_dir(&format!("early-{variant}"));
+            let path = dir.join("j.sqlite");
+            let mut j = Journal::create(&path, &key()).unwrap();
+            for (k, mut input) in inputs().into_iter().enumerate() {
+                if k == 0 {
+                    input.payload = variant.as_bytes().to_vec();
+                }
+                j.append(input).unwrap();
+            }
+            let position = j.position(0).unwrap();
+            drop(j);
+            let replay = Replay::open(&path, &key(), 0).unwrap();
+            let last_digest = row_digest(replay.inputs().iter().find(|r| r.seq == 11).unwrap());
+            (position.head, last_digest)
+        })
+        .collect();
+    assert_eq!(heads[0].1, heads[1].1, "the last rows are the same");
+    assert_ne!(heads[0].0, heads[1].0, "the heads differ through the chain");
+}

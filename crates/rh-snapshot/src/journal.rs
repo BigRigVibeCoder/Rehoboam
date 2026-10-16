@@ -38,7 +38,9 @@
 //! artifact record as their journal position (T-02). The tags are `D_ROW =
 //! "rehoboam/rh-snapshot/journal/v2/row"` and `D_CHAIN = ".../journal/v2/chain"`. This is
 //! integrity against accident and naive edits, not a signature: a writer who recomputes every
-//! digest can forge a journal.
+//! digest can forge a journal. In particular, a tail truncated together with a forged count and head
+//! (the head recomputed to the new last row) is consistent in itself; it is detected only against
+//! an anchor kept elsewhere, the [`JournalPosition`] a keyframe records (T-02).
 //!
 //! # Replay
 //!
