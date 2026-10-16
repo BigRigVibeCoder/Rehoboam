@@ -1,0 +1,5 @@
+# Fixture for bin/lint_forbidden.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# Only fixture-core (plane A) and fixture-undeclared (no plane: scanned conservatively) are scanned.
+[workspace]
+members = ["fixture-core", "fixture-cli", "fixture-undeclared"]
+resolver = "3"

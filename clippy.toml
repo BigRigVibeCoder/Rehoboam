@@ -1,6 +1,31 @@
 # Clippy configuration for the whole workspace (GOV-003 §2).
+#
+# The disallowed lists are the second line of defence behind bin/lint_forbidden.py (V-DET-19). They
+# apply to every crate; a tool crate (plane "tool") that genuinely needs one of these opts out at the
+# use site with #[allow(clippy::disallowed_types, reason = "...")] or the methods equivalent.
+# Paths into crates the workspace does not depend on (rand) cannot be resolved by clippy and are
+# marked allow-invalid; the grep gate covers them.
 
 # GOV-003 §2: unwrap/expect/panic are denied in library code, not in tests.
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
+
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order is unspecified; use BTreeMap, an insertion-ordered map or a sorted Vec (GOV-003 §2, V-DET-19)" },
+    { path = "std::collections::HashSet", reason = "iteration order is unspecified; use BTreeSet or a sorted Vec (GOV-003 §2, V-DET-19)" },
+    { path = "std::time::Instant", reason = "wall clock; simulation time comes from rh-core (GOV-003 §2, V-DET-19)" },
+    { path = "std::time::SystemTime", reason = "wall clock; simulation time comes from rh-core (GOV-003 §2, V-DET-19)" },
+    { path = "rand::rngs::StdRng", reason = "unkeyed RNG whose algorithm may change between releases; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::rngs::ThreadRng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+]
+
+disallowed-methods = [
+    { path = "f64::mul_add", reason = "fused multiply-add rounds differently from mul-then-add across targets (docs/13 §3, V-DET-19)" },
+    { path = "f32::mul_add", reason = "fused multiply-add rounds differently from mul-then-add across targets (docs/13 §3, V-DET-19)" },
+    { path = "std::time::Instant::now", reason = "wall clock (GOV-003 §2, V-DET-19)" },
+    { path = "std::time::SystemTime::now", reason = "wall clock (GOV-003 §2, V-DET-19)" },
+    { path = "rand::thread_rng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::rng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::random", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+]

@@ -1,0 +1,4 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+[workspace]
+members = ["rh-sys-a", "rh-sys-b"]
+resolver = "3"

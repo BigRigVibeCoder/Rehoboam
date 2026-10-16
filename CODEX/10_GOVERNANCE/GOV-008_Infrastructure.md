@@ -9,7 +9,7 @@ tags: [governance, infrastructure]
 related: [GOV-007, ADR-0030, ADR-0021, RUN-001, RUN-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.3.0
+version: 1.3.1
 ---
 
 > **BLUF:** Development and play happen on the director's Linux laptop, a ThinkPad P51 with 4 cores and 32 GB (D5, D6; set up by RUN-001). There is no deployed service: the engine runs headless on localhost and viewers attach to it. CI's PR tier runs on GitHub-hosted Linux runners; benchmarks and heavy runs use the director's Google Cloud VM `adjutant` (8 cores, 64 GB; RUN-002), our reference-class machine, **on demand only**: it is started when needed and shut down when not simulating. Coding agents run in cloud sessions. Performance targets stay quoted on the reference desktop of `docs/08`; the laptop is a development machine, not the yardstick. The move to the cloud comes after local testing is complete, on x86-64 Linux instances, and is planned in this document when it happens.
@@ -42,7 +42,8 @@ console/                 (after G2) TypeScript web console
 specs/                   executable contracts
 worlds/                  reference manifests and golden baselines (changed only by approved C3 merges; `docs/13` §4.4)
 docs/ research/ CODEX/   plan, evidence, operations
-bin/                     check_all.sh, gen_manifest.py, developer scripts
+bin/                     check_all.sh, gen_manifest.py, architecture lints, developer scripts
+tests/lint_fixtures/     planted violations: positive controls for the gates (SPR-001)
 artifacts/               reports, crash artifacts (git-ignored)
 ```
 

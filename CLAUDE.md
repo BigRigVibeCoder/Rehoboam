@@ -28,9 +28,22 @@ Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and b
 - **Mechanics come only from the Registry.** No free-string semantics in manifests (ADR-0010).
 - **Licences:** no GPL, AGPL, non-commercial or territorial-licensed code, weights or assets in shipped crates (ADR-0021). GPL/AGPL tools may run only out of process; see `docs/14_reuse_inventory.md` for traps (EbookLib, xxhash-rust, MiniCheck-7B weights).
 
-## Checks to run after touching `specs/`
-All of them, fail-fast, with a report: `bin/check_all.sh` (set `PYTHON` to an interpreter with pydantic, pyyaml and duckdb). Individually:
+## Checks to run after any change
+All of them, fail-fast, with a report: `bin/check_all.sh`. It uses `python/.venv` (create it with `uv sync --frozen --project python`; `PYTHON` overrides) and needs cargo-nextest and cargo-deny (RUN-001). Each gate also runs on a planted violation that must FAIL (`tests/lint_fixtures/`). Individually:
 ```bash
+# Rust: workspace in crates/, toolchain pinned in rust-toolchain.toml
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo deny --locked check bans licenses sources   # ADR-0021 allow-list; xxhash-rust banned
+cargo nextest run --workspace --locked
+# Architecture lints: stdlib Python
+python -I bin/lint_arch.py        # crate boundaries (V-INSP-03) and plane isolation (V-PLN-01)
+python -I bin/lint_forbidden.py   # forbidden APIs in plane-A crates (V-DET-19)
+# Python: configuration in python/pyproject.toml, run from the repository root
+python -m ruff check --config python/pyproject.toml .
+python -m mypy --config-file python/pyproject.toml
+python -m pytest -c python/pyproject.toml --rootdir=.
+# Specs
 python -I bin/gen_manifest.py --check
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml
@@ -49,3 +62,5 @@ python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml spe
 - Requirements use IDs from `docs/03`. ADRs are numbered `ADR-NNNN`.
 - Cite research as `R0x §n`.
 - Record director rulings and gate outcomes in `docs/decisions-log.md`.
+- Every crate declares its plane and kind in `[package.metadata.rehoboam]` (`bin/lint_arch.py` checks it).
+- A forbidden API in plane A needs `// LINT-ALLOW(forbidden-api): <reason>` on its line; the gate counts and prints every escape.
