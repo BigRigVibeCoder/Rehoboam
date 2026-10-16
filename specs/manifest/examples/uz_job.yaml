@@ -1,4 +1,5 @@
-# Reference world 3 (micro scale, N ≈ 60): the trials of Job (ADR-0028).
+# Reference world uz_job (micro scale, N ≈ 60), at rung 2 (hamlet) of the complexity ladder: the trials
+# of Job (ADR-0028).
 # One household and its neighbours, at daily cadence, with every person a full mind.
 # The Adversary intervenes only within the wager's permission scope. Its verbs are journaled
 # material inputs; what they do, and how Job, his wife and his friends respond, is simulated.
