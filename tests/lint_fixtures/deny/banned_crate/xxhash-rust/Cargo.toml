@@ -1,0 +1,7 @@
+# Planted crate named xxhash-rust with an allowed licence: only the [bans] entry can catch it (docs/14).
+# Deliberately publishable (no publish = false), so cargo-deny's private-crate exemption does not apply.
+[package]
+name = "xxhash-rust"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
