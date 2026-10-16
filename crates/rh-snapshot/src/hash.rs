@@ -440,7 +440,9 @@ impl MerkleCache {
 
     /// Brings one table's digest up to date by row marks and returns its root: a changed row
     /// count re-hashes from the first chunk whose size changed, and otherwise only the chunks
-    /// marked with [`mark_rows`](Self::mark_rows) are re-hashed.
+    /// marked with [`mark_rows`](Self::mark_rows) are re-hashed. A table that shrinks and regrows
+    /// to the same row count between two updates shows no count change, so the caller marks the
+    /// regrown rows (VER-SPR-007 OBS-5).
     ///
     /// **Hazard:** the cache trusts the marks. A caller that changes a row without marking it gets
     /// a stale root; [`verify`](Self::verify) or a fresh cache finds that. World tables go through

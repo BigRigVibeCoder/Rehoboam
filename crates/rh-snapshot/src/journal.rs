@@ -63,6 +63,7 @@ use std::fmt;
 use std::path::Path;
 
 use rh_core::time::SimTime;
+use rh_ids::{EntityKind, EntityRef};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, params};
 
 use crate::hash::xxh3_128;
@@ -231,6 +232,35 @@ impl Scope {
     #[must_use]
     pub const fn is_material(self) -> bool {
         !matches!(self, Self::None)
+    }
+
+    /// The entity whose timers a material input in this scope cancels and re-samples (Architect
+    /// ruling 3 on the T-02 plan): the [`EntityKind`] of the same name and the raw id. Not
+    /// material, no entity. This is the one conversion between journal scopes and entities.
+    #[must_use]
+    pub const fn entity(self) -> Option<EntityRef> {
+        let (kind, raw) = match self {
+            Self::None => return None,
+            Self::Person(id) => (EntityKind::Person, id),
+            Self::Household(id) => (EntityKind::Household, id),
+            Self::Settlement(id) => (EntityKind::Settlement, id),
+            Self::Region(id) => (EntityKind::Region, id),
+        };
+        Some(EntityRef::new(kind, raw))
+    }
+
+    /// The scope of a material input on `entity`, the inverse of [`Scope::entity`]; the world as a
+    /// whole is no scope (ADR-0025 scopes are a person, household, settlement or region).
+    #[must_use]
+    pub const fn of_entity(entity: EntityRef) -> Option<Self> {
+        let raw = entity.raw();
+        match entity.kind() {
+            EntityKind::World => None,
+            EntityKind::Person => Some(Self::Person(raw)),
+            EntityKind::Household => Some(Self::Household(raw)),
+            EntityKind::Settlement => Some(Self::Settlement(raw)),
+            EntityKind::Region => Some(Self::Region(raw)),
+        }
     }
 
     fn encode(self) -> (&'static str, Option<i64>) {

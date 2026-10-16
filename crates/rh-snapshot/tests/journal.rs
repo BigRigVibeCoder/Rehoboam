@@ -684,3 +684,26 @@ fn an_early_difference_changes_the_head() {
     assert_eq!(heads[0].1, heads[1].1, "the last rows are the same");
     assert_ne!(heads[0].0, heads[1].0, "the heads differ through the chain");
 }
+
+/// Architect ruling 3 on the T-02 plan: a journal scope is the entity of the same kind and raw
+/// id, both ways; not material is no entity, and the world is no scope.
+#[test]
+fn a_scope_is_the_entity_of_the_same_kind_and_id() {
+    use rh_ids::{EntityKind, EntityRef};
+    assert_eq!(Scope::None.entity(), None);
+    for kind in EntityKind::ALL {
+        let entity = EntityRef::new(kind, 0x0123_4567_89ab_cdef);
+        match Scope::of_entity(entity) {
+            None => assert_eq!(kind, EntityKind::World),
+            Some(scope) => {
+                assert!(scope.is_material());
+                assert_eq!(scope.entity(), Some(entity));
+            }
+        }
+    }
+    assert_eq!(
+        Scope::Household(7).entity(),
+        Some(EntityRef::new(EntityKind::Household, 7))
+    );
+    assert_eq!(Scope::of_entity(EntityRef::WORLD), None);
+}
