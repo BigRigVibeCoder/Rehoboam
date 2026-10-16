@@ -41,21 +41,34 @@ impl Plane {
     }
 }
 
-/// When a read sees the column: the `[[reads]] lag` of the specs (`lint_odd.py`).
+/// When a read sees the column: the `[[reads]] lag` of the specs (`lint_odd.py`), defined in
+/// `05.1` §2 rule 4:
 ///
-/// `SameInstant` reads see every write made earlier in the same instant, so the scheduler runs
-/// the writer first; a writer in a later phase is a registration error. The three lagged kinds
-/// read the value the column had at the start of the instant (`05.1` §2 rule 4: "the reader sees
-/// the value from the previous instant") and impose no order.
+/// - `same_instant`: the value written earlier in this instant; it creates a scheduler edge, so the
+///   owner runs first (a writer in a later phase is a registration error);
+/// - `lagged`: the value at the start of the current instant;
+/// - `start_of_day`: the value at the start of the current day's first instant;
+/// - `previous_pulse`: the value at the end of the instant in which the reader last fired on this
+///   binding (the initial value at its first firing).
+///
+/// The last three create no edge.
+///
+/// DECISION (P0 approximation, Architect ruling on SPR-005): all three non-edge lags read the
+/// start-of-instant value ([`Lag::is_lagged`]; `crate::engine` snapshots those columns when an
+/// instant begins). That is exact for `lagged`, exact for `start_of_day` at a day's first instant,
+/// and an approximation of `previous_pulse`. Exact `start_of_day` and `previous_pulse` (column
+/// snapshots) are BCK-002 A-28, due before the first system that declares them runs (P1a: S5, S6,
+/// S7).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Lag {
-    /// `same_instant`: after the writer, within the instant.
+    /// `same_instant`: the value written earlier in this instant (an edge).
     SameInstant,
-    /// `start_of_day`: the value at the start of the instant.
+    /// `start_of_day`: the value at the start of the day's first instant (P0: start of instant).
     StartOfDay,
-    /// `previous_pulse`: the value at the start of the instant.
+    /// `previous_pulse`: the value when the reader last fired on this binding (P0: start of
+    /// instant).
     PreviousPulse,
-    /// `lagged`: the value at the start of the instant.
+    /// `lagged`: the value at the start of the current instant.
     Lagged,
 }
 
@@ -85,7 +98,8 @@ impl Lag {
         Self::ALL.into_iter().find(|l| l.name() == name)
     }
 
-    /// Whether the read sees the start-of-instant value (any lag but `SameInstant`).
+    /// Whether the read creates no scheduler edge and, in P0, sees the start-of-instant value
+    /// (any lag but `SameInstant`).
     #[must_use]
     pub const fn is_lagged(self) -> bool {
         !matches!(self, Self::SameInstant)
