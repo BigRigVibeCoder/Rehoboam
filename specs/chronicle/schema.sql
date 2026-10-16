@@ -1,8 +1,9 @@
--- Rehoboam Chronicle schema v0.2 (DuckDB dialect; the system of record is Parquet with the same columns).
+-- Rehoboam Chronicle schema v0.3 (DuckDB dialect; the system of record is Parquet with the same columns).
 -- Spec: docs/05_architecture/05.2 §4 and §6, 05.4 §2.3, ADR-0007, ADR-0024 (planes), ADR-0025, ADR-0026.
 -- Conventions:
 --   * Timeline-scoped composite keys.
---   * event_id = (day_index << 24) | seq_in_day. EventId order IS emission order (tick, phase, seq); no back-dating.
+--   * event_id: one counter per timeline, from 0, assigned at the scheduler's level merge (rh-events; 05.1 §2 rule 4).
+--     EventId order IS emission order (tick, phase, seq); no back-dating. The id carries no date: day = floor(tick / 1440).
 --   * tick = SimTime: signed BIGINT minutes since the world epoch. Negative values are allowed (founders born before year 0).
 --   * Each table is tagged with its plane: A authoritative, B observation, C narrative. Plane A never reads B or C.
 
