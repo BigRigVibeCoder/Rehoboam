@@ -1,5 +1,5 @@
-//! System registration: the access conflict checker and the derived schedule (SPR-005 T-04,
-//! T-05).
+//! System registration: the access conflict checker, the RNG purpose check and the derived
+//! schedule (SPR-005 T-04, T-05, T-06).
 //!
 //! [`register`] takes the systems and the ownership table the host built from the specs
 //! (`rh_registry::ownership::Ownership`; `rh-core` has no I/O). It refuses the whole set, with
@@ -12,9 +12,11 @@
 //! | `single-writer`, `undeclared-read`, `plane` | each `AccessSpec` against the specs: the ownership lint's own check (`Ownership::check`) | ruling 3 |
 //! | `single-writer` | across the registered `AccessSpec`s: one writer per column, reads name the writer (`ownership::single_writer`) | ruling 3; T-04 |
 //! | `plane` | a plane-A system reads no plane-B/C column a registered system writes (`ownership::plane_leak`) | ADR-0024 |
+//! | `rng-purpose` | every purpose a system draws under is in its spec's `[[rng]]`, once | ruling 2; T-06 |
 //! | `phase-order`, `schedule-cycle` | the schedule derives (see [`crate::schedule`]) | T-05 |
 //!
-//! Reported, not refused: a read whose owner is not registered (its owner has no code yet).
+//! Reported, not refused: a spec purpose the code never declares, and a read whose owner is not
+//! registered (its owner has no code yet).
 //!
 //! The single-writer and plane rules are the functions `rh_registry::ownership` exports, the
 //! ones the spec lint (`rh-cli ownership`) runs: where they meet, the lint reads the specs and this
@@ -24,7 +26,7 @@
 //! in.
 //!
 //! REF: `docs/05_architecture/05.1_simulation_core.md` §2 rules 1, 4 and 6; ADR-0006; ADR-0024;
-//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04, T-05, ruling 3.
+//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04–T-06, rulings 2 and 3.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -82,7 +84,7 @@ impl Registered {
         &self.schedule
     }
 
-    /// Notes that are not violations (reads of unregistered owners).
+    /// Notes that are not violations (unused spec purposes, reads of unregistered owners).
     #[must_use]
     pub fn reports(&self) -> &[String] {
         &self.reports
@@ -211,6 +213,9 @@ pub fn register(
         }
     }
 
+    // RNG purposes against the spec's [[rng]] table (ruling 2).
+    check_purposes(&entries, ownership, &mut violations, &mut reports);
+
     // The schedule (T-05), only when the declarations themselves are sound.
     let inputs: Vec<SchedulerInput<'_>> = entries
         .iter()
@@ -238,6 +243,44 @@ pub fn register(
                 violations,
                 reports,
             })
+        }
+    }
+}
+
+/// T-06: every purpose a system draws under is in its spec's `[[rng]]` table, once; a spec
+/// purpose with no code use is reported.
+fn check_purposes(
+    entries: &[Entry],
+    ownership: &Ownership,
+    violations: &mut Vec<Violation>,
+    reports: &mut Vec<String>,
+) {
+    for e in entries {
+        let Some(spec) = ownership.specs.get(e.id) else {
+            continue; // `registry` already reported by Ownership::check.
+        };
+        let mut declared = BTreeSet::new();
+        for &p in &e.purposes {
+            if !declared.insert(p) {
+                violations.push(violation(
+                    e.id,
+                    "rng-purpose",
+                    format!("declares RNG purpose {p} twice"),
+                ));
+            } else if !spec.rng.iter().any(|s| s == p) {
+                violations.push(violation(
+                    e.id,
+                    "rng-purpose",
+                    format!(
+                        "draws under RNG purpose {p}, which its spec's [[rng]] table does not declare (ruling 2)"
+                    ),
+                ));
+            }
+        }
+        for s in &spec.rng {
+            if !declared.contains(s.as_str()) {
+                reports.push(format!("{}: spec RNG purpose {s} has no use in code", e.id));
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
-//! T-03 on the real specs: the generated skeletons compile against the `SystemModel` contract
-//! (SPR-005).
+//! T-03 and T-06 on the real specs: the generated skeletons compile against the `SystemModel`
+//! contract, and registration checks their RNG purposes against the specs (SPR-005).
 //!
 //! Each `tests/generated/*.rs` is the unedited output of `lint_odd.py --rust <id>`
 //! (`bin/gen_skeletons.py --check` keeps it so). Each module below brings `Fixed`, `Phase` and
@@ -7,6 +7,8 @@
 //! `RngPurpose` enum: the only way a system names a purpose (ruling 2).
 //!
 //! Acceptance (T-03): the S5 and M2 skeletons compile, and so do S6 and S7.
+//! Acceptance (T-06): a purpose not in the spec fails registration; a spec purpose with no code use
+//! is reported.
 //!
 //! Refs: SPR-005 T-03, T-06, rulings 1 and 2; ADR-0033 §3; `05.1` §2.
 
@@ -16,6 +18,7 @@ mod support;
 
 use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, Lag, Plane};
 use rh_core::fixed::Q16_16;
+use rh_core::register::register;
 use rh_core::system::{
     AggregateSpec, Fixed, InvariantResult, ParamSchema, PulseBinding, SimError, SpecPurpose,
     StepCtx, SystemDescriptor, SystemModel,
@@ -202,6 +205,94 @@ fn every_skeleton_matches_its_spec() {
         3,
         "S7 binds Day twice (Vital, Agenda) and Month once"
     );
+}
+
+#[test]
+fn s5_and_m2_register_on_their_skeletons() {
+    let t = support::real_ownership();
+    let r = register(
+        vec![
+            Box::new(s5_system(s5::RngPurpose::names())),
+            Box::new(m2_system()),
+        ],
+        &t,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(r.ids(), ["M2.demography", "S5.daily_life"]);
+    assert_eq!(r.order(Phase::Vital), ["M2.demography"]);
+    assert_eq!(r.order(Phase::Activity), ["S5.daily_life"]);
+    // S5 reads columns whose owners have no code yet: reported, not refused.
+    assert!(
+        r.reports().iter().any(|n| n
+            == "S5.daily_life: reads person.residence from S3.migration, which is not registered")
+    );
+    // The code declarations are what `rh-cli ownership` will count "from code".
+    assert_eq!(r.lint_accesses().len(), 2);
+}
+
+/// A generated-style enum whose hand-written names drift from the spec.
+#[allow(dead_code, reason = "only the names matter")]
+enum Misspelt {
+    ActivityBlock,
+    Encounter,
+}
+
+impl SpecPurpose for Misspelt {
+    const ALL: &'static [Self] = &[Self::ActivityBlock, Self::Encounter];
+    fn name(&self) -> &'static str {
+        match self {
+            Self::ActivityBlock => "activity_block",
+            Self::Encounter => "encounter",
+        }
+    }
+}
+
+#[test]
+fn an_undeclared_purpose_fails_registration() {
+    let t = support::real_ownership();
+    let Err(e) = register(vec![Box::new(s5_system(Misspelt::names()))], &t) else {
+        panic!("a purpose missing from S5's [[rng]] must fail registration");
+    };
+    let rng: Vec<_> = e
+        .violations
+        .iter()
+        .filter(|v| v.rule == "rng-purpose")
+        .collect();
+    assert_eq!(rng.len(), 1, "{e}");
+    assert_eq!(
+        rng[0].to_string(),
+        "VIOLATION [rng-purpose] S5.daily_life: draws under RNG purpose encounter, which its spec's [[rng]] table does not declare (ruling 2)"
+    );
+    // And the spec purpose the code no longer names is reported.
+    assert!(
+        e.reports
+            .iter()
+            .any(|n| n == "S5.daily_life: spec RNG purpose encounter_outcome has no use in code")
+    );
+}
+
+#[test]
+fn a_spec_purpose_with_no_code_use_is_reported() {
+    let t = support::real_ownership();
+    let r = register(vec![Box::new(s5_system(vec!["activity_block"]))], &t)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        r.reports()
+            .iter()
+            .any(|n| n == "S5.daily_life: spec RNG purpose encounter_outcome has no use in code")
+    );
+    let dup = register(
+        vec![Box::new(s5_system(vec![
+            "activity_block",
+            "activity_block",
+        ]))],
+        &t,
+    );
+    assert!(dup.is_err_and(|e| {
+        e.violations
+            .iter()
+            .any(|v| v.message == "declares RNG purpose activity_block twice")
+    }));
 }
 
 #[test]
