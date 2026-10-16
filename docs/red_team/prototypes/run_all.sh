@@ -36,6 +36,9 @@ $PYTHON "$DIR/prototype_8_causal_sifter_sql.py"
 echo -e "\n>>> 9. THE 4-BEAT COMIC STORYBOARD COMPILER (RT-ACT-011) <<<"
 $PYTHON "$DIR/prototype_9_comic_beat_compiler.py"
 
+echo -e "\n>>> 10. RELIC CORRUPTION ATTRACTOR & MENTAL BREAK (RT-ACT-013) <<<"
+$PYTHON "$DIR/prototype_10_relic_corruption_attractor.py"
+
 echo -e "\n================================================================================"
-echo "ALL 9 PROTOTYPES COMPLETED SUCCESSFULLY."
+echo "ALL 10 PROTOTYPES COMPLETED SUCCESSFULLY."
 echo "================================================================================"
