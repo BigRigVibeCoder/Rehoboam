@@ -671,6 +671,33 @@ The evidence that ODD helps rests on its authors' own assessment.
 
 `05.1` §2 maps each trait method onto a template section. The `13` WP template and Definition of Done reference it. **Adoption is proposed and needs your ruling** (decisions log).
 
+## 16. Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3), 127–129. doi:10.1080/01615440.2011.577733
+
+**What the paper does.** It takes the lifetimes of 41 empires from Taagepera (1978, 1979), 3000 BCE–600 CE, measured in centuries and using range midpoints (p. 127). It then fits an exponential by maximum likelihood: λ = 0.46 per century, mean ≈ 220 years (p. 128). Log-normal and gamma fit better; the exponential is kept because it has one parameter and no mechanistic model favours the others (pp. 127–128). The author notes that other forms "might be fit to our small data set" (p. 128). Exponential ruler and cabinet tenures elsewhere (Roman and Chinese emperors, Italian cabinets) are cited as support (p. 128).
+
+**Our refit of the appendix table** (Table A1, p. 129; all *derived*):
+- **Mean 215 years, λ̂ = 0.464 per century:** the paper's figure is confirmed. Exact 95% CI for the mean: 162–300 years.
+- **Median 130 years.** 44% of the empires lasted a century or less; an exponential predicts 37%.
+- **Weibull shape k̂ = 1.26** (bootstrap 90% CI 1.11–1.62). The collapse hazard rises mildly with age.
+- **A Lilliefors-type test rejects the pure exponential** (D = 0.194; parametric bootstrap with the table's rounding, p ≈ 0.01). Log-normal beats the exponential by ΔAIC ≈ 9.
+
+"Memoryless" is therefore the paper's parsimonious summary, not what its data show.
+
+**What it does not cover.**
+- **Scale.** Taagepera's empires were large territorial states with millions of subjects. A world of up to 1M persons holds a fraction of one medieval kingdom (England c. 1300 had about 4–5M), so its polities are mostly lordships, principalities and small kingdoms. The paper says nothing about their lifespans.
+- **Definition.** "Duration" is Taagepera's measure and is not restated in the paper.
+
+**Corrections and deltas applied.**
+- **V-SF-07 (held-out) rewritten** (`09` §3.1). The old test required the Weibull shape to be equivalent to 1 within [0.75, 1.33]. It would have **failed the source's own data**, so a held-out band would have penalised a correct engine. The new band has three parts:
+  - (a) shape k ∈ [0.8, 1.7] for all top-level polities;
+  - (b) mean 150–320 years for empire-class polities only, INSUFFICIENT below 20 completed spells;
+  - (c) other polities' means are reported, not gated.
+- **M6** (`05.1` §3): no polity carries an imposed age-dependent hazard; mild ageing must emerge from the secular dynamics. V-SF-07 joins the M6 tournament's discriminating patterns (`09` §3.8); the constant-hazard null gives k ≈ 1.
+- **R09** annotated (§11 and the harness table).
+- **Wanted:**
+  - Taagepera 1978/1979, for the duration definition;
+  - a source on small-polity survival. Abramson (2017), *International Organization* 71(1), on European polities from 1100 to 1790, is a candidate; the citation is from memory and needs checking.
+
 ---
 
 ## Did the reading pay off? (ledger after three batches, 20 sources)

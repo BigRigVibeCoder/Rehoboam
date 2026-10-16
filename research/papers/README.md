@@ -26,6 +26,10 @@ Naming: `<reading-list ID>_<first author>_<year>_<short title>.<ext>`. IDs match
 | `A16a_grimm_et_al_2010_odd_first_update.pdf` | Grimm, V. et al. (2010). "The ODD protocol: a review and first update." *Ecological Modelling* 221 | System-spec documentation template | R12 §13–15 |
 | `A16b_grimm_et_al_2020_odd_second_update.pdf` | Grimm, V. et al. (2020). "The ODD protocol … second update." *JASSS* 23(2) | System-spec documentation template | R12 §13–15 |
 | `A12c_lucas_turkes_2004_fitting_lanchester_equations.pdf` | Lucas, T. W. & Turkes, T. (2004). *Naval Research Logistics* 51(1) | M8 attrition | R12 §11 |
+| `A14a_campbell_ograda_2011_harvest_shortfalls_famines.pdf` | Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4), 859–886 | V-SF-03 mortality crises; M3 harvests → M4 prices | R12 §17 |
+| `A14b_alfani_mocarelli_strangio_2017_famine_italy.pdf` | Alfani, G., Mocarelli, L. & Strangio, D. (2017). "Italy." Ch. 2 in Alfani, G. & Ó Gráda, C. (eds.), *Famine in European History*, CUP | V-SF-03 famine chronology 1250–1810; provisioning institutions | R12 §17 |
+| `A17_arbesman_2011_lifespans_of_empires.pdf` | Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3), 127–129 | V-SF-07 polity lifespans | R12 §16 |
+| `A18_allen_2001_great_divergence_wages_prices.pdf` | Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38, 411–447 | M4 wages and subsistence; V-SF-10, V-SF-11 | R12 §18 |
 
 **Still wanted** (in priority order; exact citations so they can be found):
 

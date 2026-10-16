@@ -189,7 +189,7 @@ Pattern-oriented modelling: calibrate against *multiple* patterns at different s
 
 - City rank-size close to Zipf (slope ≈ −1) [B20]. *(R12: estimate the pdf exponent by MLE, not by an OLS slope; US cities give α = 2.37 ± 0.08, i.e. slope ≈ −1.37. CSN 2009.)*
 - Interstate war severity heavy-tailed, power-law α ≈ 1.5 [B21]. *(R12: confirmed as α̂ = 1.53 ± 0.07, 95% CI [1.37, 1.76], absolute battle deaths ≥ 7,061, interstate wars 1823–2003. Clauset 2018.)*
-- Empire lifespans roughly exponential with mean ≈ 220 years (Arbesman) [B22].
+- Empire lifespans roughly exponential with mean ≈ 220 years (Arbesman) [B22]. *(R12 §16: the mean is confirmed (215 years, 95% CI 162–300), but the paper's own data reject a pure exponential (p ≈ 0.01); the hazard rises mildly with age, Weibull k ≈ 1.26. The sample is 41 large ancient empires, so the mean does not apply to small polities.)*
 - Regicide and violent ruler death per Eisner [12].
 - Secular-cycle period 200–300 years [3].
 - Child mortality 40–50 % [14].
@@ -309,6 +309,8 @@ Revolts use a Granovetter cascade per region with thresholds drawn from Beta(α,
 
 ### Validation harness (M9): stylized-fact tests run on ≥ 32 seeds per manifest
 
+*(R12: this table is superseded by `09` §3.1, which carries the bands as verified against primary sources. Several rows below were corrected there: secular cycles (R12 §12), ruler deaths (§1–3), war severity (§6–7), polity lifespans (§16), mortality crises and wages (§17–18).)*
+
 | Test | Target band (pre-modern unless noted) | Source |
 |---|---|---|
 | Long-run growth | mean r ∈ [−0.1, +0.3] %/yr without tech shocks; pop within [0.3, 5]·K | [15][22] |
@@ -317,7 +319,7 @@ Revolts use a Granovetter cascade per region with thresholds drawn from Beta(α,
 | Secular cycle | spectral peak 120–450 years in N or W | [3] |
 | Violence waves | secondary peak 40–60 years during disintegrative phases (soft) | [4] |
 | Ruler death | murders 5–15 per 1,000 ruler-years; violent deaths 15–30 % | [12] |
-| Polity lifespans | approximately exponential, mean 100–300 years | [B22] |
+| Polity lifespans | approximately exponential, mean 100–300 years *(R12 §16: shape k ∈ [0.8, 1.7]; the mean applies to empire-class polities only; see `09` V-SF-07)* | [B22] |
 | City sizes | top-20 rank-size slope ∈ [−1.3, −0.7] | [B20] |
 | War severity | heavy tail, fitted α ∈ [1.3, 1.9] | [B21] |
 | Malthusian test | tech shock raises density, not long-run income | [22] |
@@ -405,7 +407,7 @@ Use Morris/Sobol sensitivity screening to find which manifest parameters actuall
 - B19. https://doi.org/10.1038/ngeo2652: Büntgen et al. 2016, Late Antique Little Ice Age.
 - B20. https://doi.org/10.1162/003355399556133: Gabaix 1999, Zipf's law for cities.
 - B21. https://doi.org/10.1126/sciadv.aao3580: Clauset 2018, severity of interstate wars (power-law tail).
-- B22. https://doi.org/10.1080/01615440.2011.577733: Arbesman 2011, life-spans of empires (exponential, mean ≈ 220 years).
+- B22. https://doi.org/10.1080/01615440.2011.577733: Arbesman 2011, life-spans of empires (exponential, mean ≈ 220 years; R12 §16 refit: Weibull k ≈ 1.26).
 - B23. https://doi.org/10.1126/science.1116681: Grimm et al. 2005, pattern-oriented modelling.
 - B24. https://doi.org/10.1287/opre.2.2.163: Engel 1954, Lanchester square-law fit to Iwo Jima.
 - B25. https://doi.org/10.1017/S000305541400015X: Kokkonen & Sundell 2014, primogeniture and autocratic survival.
