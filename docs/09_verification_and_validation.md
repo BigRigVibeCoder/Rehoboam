@@ -1,6 +1,7 @@
 # 09 — Verification & Validation Plan
 
 *Status: Draft v1.1 (2026-10-15). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*v1.6 (2026-10-16): V-SCALE-04's end event is in channel A, not the journal, which holds inputs only.*
 *v1.5 (2026-10-16): V-INSP-03 lists `rh-sample`, as `bin/lint_arch.py` allows; V-INSP-05 uses the one engine-crate list of `05.0` §6.*
 *v1.4 (2026-10-16): ADR-0035, the saga engine. New V-SAGA suite (§2.20, V-SAGA-01 to V-SAGA-21), V-INSP-05 (engine purity) and V-HUM-13 (the G3 season); V-R3D-02, 03, 05 and 09 withdrawn; band gate status under ADR-0035 (§3.1): economic-history bands become report-only; gates G1a–G5 re-aimed (§5); the matrix follows the new phases (§6).*
 *v1.3 (2026-10-16): D27 (ADR-0034): V-DET-15, V-COG-09 and V-COG-11 withdrawn; V-DET-04 records push inputs only; new V-LLM-11 for LLM-9.*
@@ -648,7 +649,7 @@ Worlds must be able to pass through eras in one run. These tests check that era 
 | V-SCALE-01 | Invariants and determinism across the range | The same build at N ∈ {1, 10, 60 (`uz_job`), 1k, 10k, 100k, 1M}; 100 years each (1,000 at N ≤ 10k) | 0 invariant violations; identical plane hashes at 1/2/4/N threads; journal replay exact |
 | V-SCALE-02 | No false statistics at small N | Run the certification harness on N = 1, 10 and 60 worlds | Every band reports INSUFFICIENT or a valid result; none passes or fails below its declared minimum |
 | V-SCALE-03 | Cost scales with work | Per-tick wall time against N and active timers | Fixed per-tick overhead ≤ 1 ms; a 1-person world runs 1,000 years at daily cadence in ≤ 10 s |
-| V-SCALE-04 | Extinction is a valid end | Worlds driven to zero population | A journaled end event; chronicle, console and replay stay consistent |
+| V-SCALE-04 | Extinction is a valid end | Worlds driven to zero population | An end event in channel A (the journal holds inputs only); chronicle, console and replay stay consistent |
 | V-SCALE-05 | Agentive catalysts are bounded | `uz_job` with the Adversary under deterministic and scripted-player policies; 64 seeds | No verb outside the stage scope; `spare_life` never violated; the protagonist's renounce/hold-fast outcome varies across seeds (both outcomes occur at least once), which shows it is not forced |
 | V-SCALE-06 | Personal-arc liveness (micro) | `uz_job` 64 seeds × 10 years | ≥ 1 completed personal arc (trial, lament, counsel dispute or restoration) per seed-decade in ≥ 90% of seeds |
 
