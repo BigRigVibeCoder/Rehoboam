@@ -26,15 +26,21 @@ dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
 } > "$REPORT"
 
 n=0; failed=""
-run() {   # run <name> <expect: pass|fail> <command...>
+# run <name> <expect> <command...>
+#   expect: pass | fail | fail:<text>. A positive control uses fail:<text>: the command must fail AND
+#   print <text>, so a control that fails for the wrong reason (a crash, a missing lockfile) is caught.
+run() {
   local name="$1" expect="$2"; shift 2
   n=$((n+1))
   local t0=$(date +%s) out rc
   out="$("$@" 2>&1)"; rc=$?
   local dt=$(( $(date +%s) - t0 ))
   local ok=0
-  if [ "$expect" = pass ] && [ $rc -eq 0 ]; then ok=1; fi
-  if [ "$expect" = fail ] && [ $rc -ne 0 ]; then ok=1; fi
+  case "$expect" in
+    pass) if [ $rc -eq 0 ]; then ok=1; fi ;;
+    fail) if [ $rc -ne 0 ]; then ok=1; fi ;;
+    fail:*) if [ $rc -ne 0 ] && grep -qF -- "${expect#fail:}" <<<"$out"; then ok=1; fi ;;
+  esac
   if [ $ok -eq 1 ]; then
     echo "| $n | $name | PASS | $dt |" >> "$REPORT"; echo "PASS  $name"
   else
@@ -50,7 +56,10 @@ run() {   # run <name> <expect: pass|fail> <command...>
 require_tools() {
   local missing=""
   command -v cargo >/dev/null 2>&1 || missing="$missing cargo(RUN-001 §2)"
+  cargo fmt --version >/dev/null 2>&1 || missing="$missing rustfmt(RUN-001 §2)"
+  cargo clippy --version >/dev/null 2>&1 || missing="$missing clippy(RUN-001 §2)"
   cargo nextest --version >/dev/null 2>&1 || missing="$missing cargo-nextest(RUN-001 §3)"
+  cargo deny --version >/dev/null 2>&1 || missing="$missing cargo-deny(RUN-001 §3)"
   local mod
   for mod in ruff mypy pytest pydantic yaml duckdb; do
     "$PY" -I -c "import $mod" >/dev/null 2>&1 || missing="$missing python:$mod(RUN-001 §4)"
@@ -65,6 +74,10 @@ run "Document index is current (gen_manifest --check)" pass "$PY" -I bin/gen_man
 run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pyproject.toml --no-cache . &&
 run "Python: format (ruff format --check)" pass "$PY" -I -m ruff format --config python/pyproject.toml --no-cache --check . &&
 run "Python: types (mypy --strict)" pass "$PY" -I -m mypy --config-file python/pyproject.toml &&
+run "Rust: format (cargo fmt --check)" pass cargo fmt --all --check &&
+run "Rust: licences, bans, sources (cargo deny; ADR-0021)" pass cargo deny --color never --locked check bans licenses sources &&
+run "cargo deny positive control: GPL dependency must FAIL" "fail:error[rejected]" cargo deny --color never --offline --locked --manifest-path tests/lint_fixtures/deny/gpl_dependency/Cargo.toml check licenses &&
+run "cargo deny positive control: xxhash-rust must FAIL" "fail:error[banned]" cargo deny --color never --offline --locked --manifest-path tests/lint_fixtures/deny/banned_crate/Cargo.toml check bans &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
@@ -72,6 +85,7 @@ run "Manifest: val_khor" pass "$PY" -I specs/manifest/manifest_v0.py validate sp
 run "Manifest: aethelgard" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml &&
 run "Manifest: uz_job" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml &&
 run "Manifest: invalid_draft_style must FAIL" fail "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml &&
+run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-targets --locked --quiet -- -D warnings &&
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
 run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&

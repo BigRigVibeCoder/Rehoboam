@@ -1,0 +1,7 @@
+# Planted GPL dependency: cargo-deny must reject its licence (ADR-0021).
+# Deliberately publishable (no publish = false), so cargo-deny's private-crate exemption does not apply.
+[package]
+name = "gpl-crate"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-only"
