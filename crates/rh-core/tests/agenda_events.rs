@@ -1474,7 +1474,7 @@ fn t02_restore_refuses_every_non_canonical_or_unknown_part() {
     type Edit = fn(&mut EngineState);
     type Want = fn(&R) -> bool;
     let base = life_run_to(SPLIT).snapshot();
-    let cases: [(&str, Edit, Want); 12] = [
+    let cases: [(&str, Edit, Want); 13] = [
         (
             "unsorted agenda",
             |s| s.agenda.entries.swap(0, 1),
@@ -1528,6 +1528,12 @@ fn t02_restore_refuses_every_non_canonical_or_unknown_part() {
         (
             "unsorted inputs",
             |s| s.inputs.reverse(),
+            |e| matches!(e, R::Inputs(_)),
+        ),
+        (
+            // GAP-11: more inputs queued than the engine ever accepted.
+            "queued inputs beyond the accepted count",
+            |s| s.accepted_inputs = 0,
             |e| matches!(e, R::Inputs(_)),
         ),
         (
