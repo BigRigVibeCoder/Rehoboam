@@ -139,7 +139,7 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | Minds | V-COG-03, V-COG-04 | SPR-024 |
 | Succession | V-SF-06, V-SF-06b reported; V-SAGA-19 | SPR-022 with SPR-028; SPR-021 |
 | Stream | V-STR-01–03, V-STR-05, V-PERF-09 | SPR-013 (01); SPR-026 (03, 05); SPR-027 (02); SPR-030 (V-PERF-09, P1a variant: D34) |
-| Envelope and stress | V-SAGA-15 (P1a variant: the 10k dynastic world, 100 years); V-SAGA-16's stress-accounting identity (its break band is reported at G1a and gates G1b: D34) | SPR-020; SPR-025 |
+| Envelope and stress | V-SAGA-15 (P1a variant: the 10k dynastic world, 100 years); V-SAGA-16's stress-accounting identity (its break band is reported at G1a and gates G1b: D34); V-SAGA-16b, no runaway grief chain on the isolation fixture court | SPR-020; SPR-025 |
 | Performance: 10k persons, ≤ 500 named actors, 1,000 years in ≤ 60 s on 8 cores | (G1a default) | SPR-030 |
 | [H] the family history of 3 seeds | — | SPR-029, then the director |
 
