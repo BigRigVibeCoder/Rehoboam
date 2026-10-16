@@ -286,9 +286,11 @@ pub fn empty_plane_hash(plane: Plane) -> u64 {
     encode_plane(plane, [])
 }
 
-/// `state_hash`: the plane-A hash of the world tables, every chunk hashed.
+/// The plane-A hash of world tables alone, every chunk hashed: the world-column part of
+/// `state_hash` ([`crate::state::state_hash`]), for tables that no engine holds (synthetic tests,
+/// the guard over bare tables). An engine's plane-A hash also covers its engine tables.
 #[must_use]
-pub fn state_hash(tables: &WorldTables) -> u64 {
+pub fn tables_hash(tables: &WorldTables) -> u64 {
     PlaneDigest::of_world(tables).hash
 }
 
@@ -504,7 +506,7 @@ impl MerkleCache {
     }
 
     /// Brings every column of the world tables up to date, drops removed ones, and returns
-    /// `state_hash`. Only plane-A caches may hash the world.
+    /// their [`tables_hash`]. Only plane-A caches may hash the world.
     ///
     /// Column versions are unique within one `WorldTables` instance only, so tables of another
     /// identity (a clone, a fork, a loaded keyframe) are re-hashed in full (VER-SPR-007 DEF-1).

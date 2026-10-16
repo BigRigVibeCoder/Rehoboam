@@ -36,6 +36,7 @@ import argparse
 import itertools
 import sys
 from pathlib import Path
+from typing import Any
 
 GOLDEN = (
     Path(__file__).resolve().parent.parent
@@ -430,6 +431,257 @@ def plane_hash(plane: str, tables: list[tuple[str, int]]) -> int:
     return xxh3_64(D_PLANE + plane.encode() + _u64(len(tables)) + body)
 
 
+# --- Engine tables (layout v1, SPR-007 T-02) --------------------------------------------------
+#
+# The plane-A state hash covers the world columns and eight engine tables named "rh-core/...";
+# the rows are encoded as crates/rh-snapshot/src/state.rs documents. Little-endian integers;
+# str = u32 len || UTF-8; opt(x) = u8 0 | u8 1 || x; entity = u8 kind tag || u64 raw; phase = u8
+# index; list(x) = u32 count || x...
+
+ENTITY_TAGS = {"world": 0, "person": 1, "household": 2, "settlement": 3, "region": 4}
+TableRows = dict[str, list[bytes]]
+# An engine state as plain data: nested dicts, lists and tuples of ints and strings.
+State = dict[str, Any]
+
+
+def _u8(x: int) -> bytes:
+    return x.to_bytes(1, "little")
+
+
+def _i64(x: int) -> bytes:
+    return (x & MASK64).to_bytes(8, "little")
+
+
+def _str(text: str) -> bytes:
+    b = text.encode()
+    return _u32(len(b)) + b
+
+
+def _entity(e: tuple[str, int]) -> bytes:
+    return _u8(ENTITY_TAGS[e[0]]) + _u64(e[1])
+
+
+def _opt_u64(x: int | None) -> bytes:
+    return _u8(0) if x is None else _u8(1) + _u64(x)
+
+
+def _opt_i64(x: int | None) -> bytes:
+    return _u8(0) if x is None else _u8(1) + _i64(x)
+
+
+def _list_i64(xs: list[int]) -> bytes:
+    return _u32(len(xs)) + b"".join(_i64(x) for x in xs)
+
+
+def engine_rows(st: State) -> TableRows:
+    """The eight engine tables of a state given as plain data (see SYNTHETIC_STATE)."""
+    ag = st["agenda"]
+    timers = [
+        _i64(t["time"])
+        + _u8(t["phase"])
+        + _entity(t["entity"])
+        + _u64(t["seq"])
+        + _u32(t["owner"])
+        + _u64(t["purpose"])
+        + _u32(t["kind"])
+        + _i64(t["payload"])
+        + _u8(1 if t["seq"] in ag["tombstones"] else 0)
+        for t in ag["entries"]
+    ]
+    commands = [
+        _str(owner)
+        + _i64(c["tick"])
+        + _u8(c["phase"])
+        + _u64(c["person"])
+        + _u64(c["seq"])
+        + _str(c["sender"])
+        + _opt_u64(c["cause"])
+        + _str(c["kind"])
+        + _list_i64(c["args"])
+        + _opt_u64(c["draft"])
+        for owner, queue in st["commands"]["queues"]
+        for c in queue
+    ]
+    epochs = [_entity(e) + _u32(n) for e, n in st["epochs"]]
+    inputs = [
+        _i64(t) + _u32(i) + _u32(len(scope)) + b"".join(_entity(e) for e in scope)
+        for t, scopes in st["inputs"]
+        for i, scope in enumerate(scopes)
+    ]
+    meta = (
+        _opt_i64(st["cursor"])
+        + _u32(st["timeline"])
+        + _u64(st["applied_inputs"])
+        + _u64(st["commands"]["next_seq"])
+    )
+    ev = st["events"]
+    held = [
+        _u64(e["id"])
+        + _i64(e["tick"])
+        + _u8(e["phase"])
+        + _str(e["emitter"])
+        + _str(e["kind"])
+        + _u32(len(e["subjects"]))
+        + b"".join(_entity(x) for x in e["subjects"])
+        + _u32(len(e["causes"]))
+        + b"".join(_u64(c) for c in e["causes"])
+        + _list_i64(e["payload"])
+        for e in ev["events"]
+    ]
+    last = _u8(0) if ev["last"] is None else _u8(1) + _i64(ev["last"][0]) + _u8(ev["last"][1])
+    return {
+        "rh-core/agenda.meta": [_u64(ag["next_seq"])],
+        "rh-core/agenda.timers": timers,
+        "rh-core/engine.commands": commands,
+        "rh-core/engine.epochs": epochs,
+        "rh-core/engine.inputs": inputs,
+        "rh-core/engine.meta": [meta],
+        "rh-core/events.held": held,
+        "rh-core/events.meta": [_u64(ev["next_seq"]) + last + _u64(ev["running"])],
+    }
+
+
+def state_hash(world: list[tuple[str, int, int]], st: State) -> tuple[TableRows, int]:
+    """The plane-A hash of synthetic world columns ``(name, salt, rows)`` plus engine tables."""
+    tables: TableRows = {name: column_rows(salt, n) for name, salt, n in world}
+    tables.update(engine_rows(st))
+    roots = [(name, table_digest(name, rows)[1]) for name, rows in sorted(tables.items())]
+    return tables, plane_hash("A", sorted(roots, key=lambda r: r[0].encode()))
+
+
+DAY = 1_440
+# A synthetic engine state that every engine table has rows in; crates/rh-snapshot/tests/golden.rs
+# builds the same state with the Rust types.
+SYNTHETIC_WORLD = [("pop.count", 21, 5), ("vital.alive", 22, 1030)]
+SYNTHETIC_STATE: State = {
+    "cursor": 40 * DAY + 7,
+    "timeline": 3,
+    "applied_inputs": 2,
+    "agenda": {
+        "next_seq": 6,
+        "entries": [
+            {
+                "time": 100,
+                "phase": 4,
+                "entity": ("person", 7),
+                "seq": 2,
+                "owner": 11,
+                "purpose": 0xABC,
+                "kind": 1,
+                "payload": -5,
+            },
+            {
+                "time": 100,
+                "phase": 4,
+                "entity": ("person", 9),
+                "seq": 0,
+                "owner": 11,
+                "purpose": 0xABC,
+                "kind": 2,
+                "payload": 7,
+            },
+            {
+                "time": 250,
+                "phase": 1,
+                "entity": ("household", 3),
+                "seq": 5,
+                "owner": 12,
+                "purpose": 0xDEF,
+                "kind": 3,
+                "payload": 0,
+            },
+        ],
+        "tombstones": [5],
+    },
+    "commands": {
+        "next_seq": 9,
+        "queues": [
+            (
+                "X2.estate",
+                [
+                    {
+                        "tick": DAY,
+                        "phase": 3,
+                        "person": 7,
+                        "seq": 4,
+                        "sender": "X1.vital",
+                        "cause": 12,
+                        "kind": "Inherit",
+                        "args": [1, -2],
+                        "draft": 0,
+                    },
+                    {
+                        "tick": DAY,
+                        "phase": 3,
+                        "person": 8,
+                        "seq": 8,
+                        "sender": "X5.war",
+                        "cause": None,
+                        "kind": "Inherit",
+                        "args": [],
+                        "draft": None,
+                    },
+                ],
+            ),
+        ],
+    },
+    "epochs": [(("person", 7), 1), (("household", 3), 2)],
+    "inputs": [
+        (45 * DAY + 3, [[("person", 1), ("person", 6)], []]),
+        (400 * DAY, [[("region", 2)]]),
+    ],
+    "events": {
+        "next_seq": 20,
+        "last": (57_603, 9),
+        "running": 0x1234_5678_9ABC_DEF0,
+        "events": [
+            {
+                "id": 18,
+                "tick": 57_600,
+                "phase": 4,
+                "emitter": "X1.vital",
+                "kind": "DEATH",
+                "subjects": [("person", 7)],
+                "causes": [3],
+                "payload": [1],
+            },
+            {
+                "id": 19,
+                "tick": 57_603,
+                "phase": 9,
+                "emitter": "X4.census",
+                "kind": "CENSUS",
+                "subjects": [],
+                "causes": [],
+                "payload": [-1, 40],
+            },
+        ],
+    },
+}
+
+
+def lines_engine() -> list[str]:
+    """``engine_table`` vectors and the ``engine`` plane-A hash of the synthetic state."""
+    tables, h = state_hash(SYNTHETIC_WORLD, SYNTHETIC_STATE)
+    out = []
+    for name, rows in sorted(engine_rows(SYNTHETIC_STATE).items()):
+        chunks, root = table_digest(name, rows)
+        out.append(
+            " ".join(
+                [
+                    "engine_table",
+                    name,
+                    str(len(rows)),
+                    f"{root:016x}",
+                    *(f"{c:016x}" for c in chunks),
+                ]
+            )
+        )
+    assert len(tables) == len(SYNTHETIC_WORLD) + 8
+    out.append(f"engine {h:016x}")
+    return out
+
+
 # --- The vectors -------------------------------------------------------------------------------
 
 
@@ -527,8 +779,13 @@ def render() -> str:
         "#   bytes <name> <rows> <root> <chunks..>   row i = (i mod 7) bytes of value i mod 256",
         "#   (GAMMA = 0x9e3779b97f4a7c15; names are UTF-8)",
         "#   plane <A|B|C> <t> (<name> <salt> <rows>)*t <plane hash>  (tables are columns)",
+        "#   engine_table <name> <rows> <root> <chunks..>  the synthetic engine state's tables",
+        "#   engine <plane hash>   its state_hash: the synthetic world columns and engine tables",
     ]
-    return "\n".join([*header, *lines_xxh3(), *lines_tables(), *lines_planes()]) + "\n"
+    return (
+        "\n".join([*header, *lines_xxh3(), *lines_tables(), *lines_planes(), *lines_engine()])
+        + "\n"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
