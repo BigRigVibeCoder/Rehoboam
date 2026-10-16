@@ -23,6 +23,10 @@
 //!   and the hash layout (`rh_snapshot::hash::LAYOUT`). Nothing else: no build id, no wall time,
 //!   no thread count, no host name. So ladders written on two machines, by two builds or at two
 //!   thread counts compare byte for byte.
+//! - **Injection.** A run perturbed with the V-DET-11 test hook (`--inject`) adds the line
+//!   `inject <month>:<table>:<row>` after `hash`, so an injected ladder can never pass as a
+//!   clean one: it differs from every baseline byte for byte, and [`compare`] reports it
+//!   (VER-SPR-008 MIN-2). A clean run has no such line.
 //! - **Rungs.** One per year end (`yearly`) or month end (`monthly`), from the first. A rung is
 //!   its 1-based index, the tick of the instant it closes (the last minute of the year or the
 //!   month), the date of that instant as `YYYY-MM` (the year counts from 0), and the plane-A
@@ -94,6 +98,8 @@ pub struct Header {
     pub rung: RungKind,
     /// The hash layout.
     pub hash: String,
+    /// The V-DET-11 perturbation `month:table:row`, if the run was perturbed.
+    pub inject: Option<String>,
 }
 
 /// One rung: the state at the end of a year or a month.
@@ -154,6 +160,9 @@ impl Ladder {
             h.rung.name(),
             h.hash
         );
+        if let Some(inject) = &h.inject {
+            let _ = writeln!(out, "inject {inject}");
+        }
         for r in &self.rungs {
             out.push_str(&render_rung(r));
         }
@@ -187,16 +196,23 @@ impl Ladder {
         let rung = RungKind::from_name(field(rung_line, "rung")?)
             .ok_or_else(|| err(rung_line.0, "rung is yearly or monthly".to_owned()))?;
         let hash = field(next("hash")?, "hash")?.to_owned();
+        let inject_line = text
+            .lines()
+            .nth(6)
+            .and_then(|l| l.strip_prefix("inject "))
+            .map(str::to_owned);
+        let body = 6 + usize::from(inject_line.is_some());
         let header = Header {
             world,
             seed,
             years,
             rung,
             hash,
+            inject: inject_line,
         };
         let mut rungs: Vec<Rung> = Vec::new();
         let mut failed = None;
-        for (n, line) in text.lines().enumerate().skip(6).map(|(i, l)| (i + 1, l)) {
+        for (n, line) in text.lines().enumerate().skip(body).map(|(i, l)| (i + 1, l)) {
             let words: Vec<&str> = line.split(' ').collect();
             match words.as_slice() {
                 ["rung", index, tick, date, hash, months] if failed.is_none() => {
@@ -296,6 +312,14 @@ pub enum Difference {
     },
     /// Every rung agrees, but one ladder records a failure the other does not (or another one).
     Failure,
+    /// Every rung agrees, but one ladder was perturbed by the V-DET-11 hook and the other was
+    /// not (or differently): an injected ladder never passes as a clean one (MIN-2).
+    Inject {
+        /// The first ladder's perturbation.
+        a: Option<String>,
+        /// The second ladder's.
+        b: Option<String>,
+    },
 }
 
 impl fmt::Display for Difference {
@@ -319,6 +343,12 @@ impl fmt::Display for Difference {
                 Ok(())
             }
             Self::Failure => f.write_str("every rung agrees, but the runs ended differently"),
+            Self::Inject { a, b } => write!(
+                f,
+                "every rung agrees, but the perturbations differ: {} / {}",
+                a.as_deref().unwrap_or("none"),
+                b.as_deref().unwrap_or("none")
+            ),
         }
     }
 }
@@ -358,7 +388,13 @@ pub fn compare(a: &Ladder, b: &Ladder) -> Option<Difference> {
             tables,
         });
     }
-    (a.failed != b.failed).then_some(Difference::Failure)
+    if a.failed != b.failed {
+        return Some(Difference::Failure);
+    }
+    (ha.inject != hb.inject).then(|| Difference::Inject {
+        a: ha.inject.clone(),
+        b: hb.inject.clone(),
+    })
 }
 
 /// The tables whose roots differ, or that only one side has, in name order.
@@ -389,6 +425,7 @@ mod tests {
                 years: 2,
                 rung: RungKind::Yearly,
                 hash: "rehoboam/rh-snapshot/hash/v1".to_owned(),
+                inject: None,
             },
             rungs: (1..=2)
                 .map(|i| Rung {
@@ -416,6 +453,28 @@ mod tests {
         let mut failed = ladder();
         failed.failed = Some((150, "invariant INV-X1-01 violated".to_owned()));
         assert_eq!(Ladder::parse(&failed.render()), Ok(failed));
+        let mut injected = ladder();
+        injected.header.inject = Some("12:harvest.stock:2".to_owned());
+        let text = injected.render();
+        assert!(
+            text.contains("hash rehoboam/rh-snapshot/hash/v1\ninject 12:harvest.stock:2\nrung 1 ")
+        );
+        assert_eq!(Ladder::parse(&text), Ok(injected));
+    }
+
+    #[test]
+    fn an_injected_ladder_never_compares_equal_to_a_clean_one() {
+        let clean = ladder();
+        let mut injected = ladder();
+        injected.header.inject = Some("12:harvest.stock:2".to_owned());
+        assert!(matches!(
+            compare(&clean, &injected),
+            Some(Difference::Inject {
+                a: None,
+                b: Some(_)
+            })
+        ));
+        assert_ne!(clean.render(), injected.render());
     }
 
     #[test]

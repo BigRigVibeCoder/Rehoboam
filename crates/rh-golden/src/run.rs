@@ -288,6 +288,10 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
             years: args.years,
             rung: args.rung,
             hash: LAYOUT.to_owned(),
+            inject: args
+                .inject
+                .as_ref()
+                .map(|i| format!("{}:{}:{}", i.month, i.table, i.row)),
         },
         rungs: Vec::new(),
         failed: None,

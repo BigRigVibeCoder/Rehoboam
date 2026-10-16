@@ -360,7 +360,8 @@ fn divergent_year(sides: &[Side<'_>; 2], a: &BisectArgs) -> Result<Option<i64>, 
         sides[1].ladder("yearly.ladder")?,
     ];
     let year = match compare(&yearly[0], &yearly[1]) {
-        None => return Ok(None),
+        // Only the perturbation records differ: the histories agree rung for rung.
+        None | Some(Difference::Inject { .. }) => return Ok(None),
         Some(Difference::Header { field }) => {
             return Err(Error(format!(
                 "the yearly ladders differ in their header ({field})"
