@@ -7,8 +7,9 @@
 //!
 //! Created by SPR-001 (repository bootstrap); SPR-005 fills the world and the scheduler.
 //! SPR-010 adds `fixed`: the fixed-point and money types (DET-3).
-//! SPR-005 adds `time` (sim-time, calendar, pulses).
+//! SPR-005 adds `time` (sim-time, calendar, pulses) and `phase` (the phase order).
 #![forbid(unsafe_code)]
 
 pub mod fixed;
+pub mod phase;
 pub mod time;

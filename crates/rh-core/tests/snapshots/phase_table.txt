@@ -1,0 +1,12 @@
+1 Inputs
+2 Environment
+3 Production
+4 Exchange
+5 Vital
+5a Activity
+6 Contagion
+7 Polity
+8 Military
+9 Agenda
+10 Culture
+11 Bookkeeping
