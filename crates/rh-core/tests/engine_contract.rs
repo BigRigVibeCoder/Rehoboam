@@ -1,0 +1,389 @@
+//! The engine against its contract, by mutation guards and a serial oracle (SPR-005 DEF-6).
+//!
+//! The Tester's mutation matrix found breakages that the differential tests (1 vs N threads, run
+//! vs run) cannot see, because they change every run alike. Each test here pins one rule against
+//! an independent expectation:
+//!
+//! - (a) a lagged read sees the start-of-instant value (`05.1` §2 rule 4, P0 approximation);
+//! - (b) `StepCtx::rng` keys on the current instant: a draw equals `rh_ids::h` computed directly;
+//! - (c) when several systems of one level fail, the canonical-first error is reported at 1, 2, 4
+//!   and 8 threads;
+//! - (d) within a phase, the coarsest firing pulse's bindings run first;
+//! - the serial oracle: a plain serial reference computes order, lags and draws for a tiny world,
+//!   and the engine must match it month by month at 1 and 4 threads.
+//!
+//! Refs: SPR-005 T-05, DEF-6; `05.1` §2 rules 4 and 6, §6 item 2.
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "test helpers: a broken fixture must fail the test loudly"
+)]
+
+mod support;
+
+use rh_core::access::Lag;
+use rh_core::engine::Engine;
+use rh_core::register::{register, system_id};
+use rh_core::system::{PulseBinding, SimError, SpecPurpose, StepCtx};
+use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
+use rh_core::world::{SystemView, WorldTables};
+use rh_core::{Phase, Pulse};
+use rh_ids::{BranchSalt, PurposeId, RegionId, RngKey, h};
+use support::{Stub, agreeing_specs};
+
+const CALENDAR: Calendar = Calendar::new(DaysPerYear::D360, SeasonsPerYear::Two);
+const SEED: u64 = 0x00C0_FFEE;
+const SALT: u64 = 7;
+const ROWS: u16 = 4;
+
+enum Draw {
+    Noise,
+}
+
+impl SpecPurpose for Draw {
+    const ALL: &'static [Self] = &[Self::Noise];
+    fn name(&self) -> &'static str {
+        "noise"
+    }
+}
+
+/// `H(seed, salt, system_id(system), 0, "noise", row, t, 0)`, computed without `StepCtx`.
+fn independent_draw(system: &str, row: u16, t: SimTime) -> u64 {
+    h(
+        &RngKey {
+            world_seed: SEED,
+            branch_salt: BranchSalt::from_raw(SALT),
+            system: system_id(system),
+            purpose: PurposeId::of("noise"),
+            entity: u64::from(row),
+            epoch: 0,
+            t: t.minutes(),
+        },
+        0,
+    )
+}
+
+fn engine(stubs: Vec<Stub>, start: SimTime, threads: usize) -> Engine {
+    let t = agreeing_specs(&stubs);
+    let r = register(stubs.into_iter().map(Stub::boxed).collect(), &t)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut e = Engine::new(
+        CALENDAR,
+        SEED,
+        BranchSalt::from_raw(SALT),
+        r,
+        WorldTables::new(),
+        start,
+    );
+    e.set_threads(threads);
+    e
+}
+
+fn draw_mod_100(c: &StepCtx<'_>, row: u16) -> Result<i64, SimError> {
+    Ok(i64::try_from(c.rng(&Draw::Noise, RegionId::from_raw(row), 0)? % 100).unwrap())
+}
+
+// The tiny oracle world, all at Month:
+//   X1.a (Production): a[i] = H(.., i, t, 0) % 100
+//   X2.b (Exchange):   b[i] += a[i]                 (reads a at same_instant)
+//   X3.c (Exchange):   c[i] = 2 * b_start[i] + a[i] (reads b lagged, a at same_instant)
+fn step_a(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let rows = v.write("a.v")?;
+    rows.resize(usize::from(ROWS), 0);
+    for row in 0..ROWS {
+        rows[usize::from(row)] = draw_mod_100(c, row)?;
+    }
+    Ok(())
+}
+fn step_b(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    _: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let a = v.read("a.v")?.to_vec();
+    let b = v.write("b.v")?;
+    b.resize(a.len(), 0);
+    for (x, y) in b.iter_mut().zip(&a) {
+        *x += y;
+    }
+    Ok(())
+}
+fn step_c(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    _: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let a = v.read("a.v")?.to_vec();
+    let b = v.read("b.v")?.to_vec();
+    let c = v.write("c.v")?;
+    c.resize(a.len(), 0);
+    for (i, x) in c.iter_mut().enumerate() {
+        *x = 2 * b.get(i).copied().unwrap_or(0) + a[i];
+    }
+    Ok(())
+}
+
+fn oracle_world() -> Vec<Stub> {
+    let s = |id| Stub::new(id).purposes_of::<Draw>();
+    vec![
+        s("X1.a")
+            .writes("a.v")
+            .at(Pulse::Month, Phase::Production)
+            .stepping(step_a),
+        s("X2.b")
+            .writes("b.v")
+            .reads("a.v", "X1.a", Lag::SameInstant)
+            .at(Pulse::Month, Phase::Exchange)
+            .stepping(step_b),
+        s("X3.c")
+            .writes("c.v")
+            .reads("a.v", "X1.a", Lag::SameInstant)
+            .reads("b.v", "X2.b", Lag::Lagged)
+            .at(Pulse::Month, Phase::Exchange)
+            .stepping(step_c),
+    ]
+}
+
+/// The serial oracle (the Tester's model): the expected tables after each month, computed by a
+/// plain loop with the draws from `rh_ids::h` directly. It covers (a) and (b) as well: a lagged read
+/// that saw the current value, or a draw keyed on the wrong instant, diverges at the first month.
+#[test]
+fn the_engine_matches_a_serial_oracle() {
+    let start = CALENDAR
+        .from_date(rh_core::time::Date {
+            year: -1,
+            month: 11,
+            day: 1,
+            hour: 0,
+            minute: 0,
+        })
+        .unwrap();
+    for threads in [1, 4] {
+        let mut e = engine(oracle_world(), start, threads);
+        let (mut b, mut c) = (
+            vec![0_i64; usize::from(ROWS)],
+            vec![0_i64; usize::from(ROWS)],
+        );
+        let mut months = 0;
+        let end = SimTime::from_minutes(2 * CALENDAR.minutes_per_year() - 1);
+        e.advance_until(end, |t, tables| {
+            let a: Vec<i64> = (0..ROWS)
+                .map(|row| i64::try_from(independent_draw("X1.a", row, t) % 100).unwrap())
+                .collect();
+            let b_start = b.clone();
+            for (x, y) in b.iter_mut().zip(&a) {
+                *x += y;
+            }
+            for i in 0..c.len() {
+                c[i] = 2 * b_start[i] + a[i];
+            }
+            assert_eq!(
+                tables.get("a.v").unwrap(),
+                &a,
+                "{threads} threads, {t}: a (draws)"
+            );
+            assert_eq!(
+                tables.get("b.v").unwrap(),
+                &b,
+                "{threads} threads, {t}: b (same_instant)"
+            );
+            assert_eq!(
+                tables.get("c.v").unwrap(),
+                &c,
+                "{threads} threads, {t}: c (lagged)"
+            );
+            months += 1;
+        })
+        .unwrap();
+        assert_eq!(months, 26, "Nov and Dec of year -1, then two years");
+    }
+}
+
+/// (a) A lagged read sees the start-of-instant value even when the writer ran earlier in the same
+/// instant (an earlier phase), where a `same_instant` read would see the new value.
+#[test]
+fn a_lagged_read_ignores_this_instants_write() {
+    fn mark(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        *v.write("w.x")? = vec![c.now().minutes()];
+        Ok(())
+    }
+    fn copy(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let seen = v.read("w.x")?.to_vec();
+        *v.write("r.x")? = seen;
+        Ok(())
+    }
+    let w = Stub::new("X1.w")
+        .writes("w.x")
+        .at(Pulse::Day, Phase::Production)
+        .stepping(mark);
+    let r = Stub::new("X2.r")
+        .writes("r.x")
+        .reads("w.x", "X1.w", Lag::Lagged)
+        .at(Pulse::Day, Phase::Polity)
+        .stepping(copy);
+    let mut e = engine(vec![w, r], SimTime::EPOCH, 1);
+    let day = SimTime::from_minutes(1_440);
+    e.advance_until(day, |_, _| {}).unwrap();
+    assert_eq!(
+        e.tables().get("w.x").unwrap(),
+        &vec![1_440],
+        "the writer marked day 1"
+    );
+    assert_eq!(
+        e.tables().get("r.x").unwrap(),
+        &vec![0],
+        "the reader saw day 0's mark"
+    );
+}
+
+/// (b) `StepCtx::rng` keys on the current instant: each day's draw equals `rh_ids::h` at that day.
+#[test]
+fn draws_are_keyed_on_the_current_instant() {
+    fn record(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let d = c.rng(&Draw::Noise, RegionId::from_raw(3), 0)?;
+        v.write("d.x")?.push(d.cast_signed());
+        Ok(())
+    }
+    let s = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .writes("d.x")
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(record);
+    let start = SimTime::from_minutes(-2 * 1_440);
+    let mut e = engine(vec![s], start, 1);
+    e.advance_until(SimTime::from_minutes(1_440), |_, _| {})
+        .unwrap();
+    let expected: Vec<i64> = (-2..=1)
+        .map(|d| independent_draw("X1.d", 3, SimTime::from_minutes(d * 1_440)).cast_signed())
+        .collect();
+    assert_eq!(e.tables().get("d.x").unwrap(), &expected);
+    assert_ne!(
+        expected[0], expected[1],
+        "different instants, different draws"
+    );
+}
+
+/// (c) Three systems in one level, the second and third failing: the canonical-first failure (the
+/// second) is reported at every thread count. With two threads the workers hold jobs [0, 2] and
+/// [1], so an engine that did not re-sort the outcomes would report the third.
+#[test]
+fn the_canonical_first_error_wins_at_every_thread_count() {
+    fn ok(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        v.write("a.x")?.push(1);
+        Ok(())
+    }
+    fn fail_b(
+        _: &Stub,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        Err(SimError::System {
+            system: "X2.b",
+            message: "b failed".to_owned(),
+        })
+    }
+    fn fail_c(
+        _: &Stub,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        Err(SimError::System {
+            system: "X3.c",
+            message: "c failed".to_owned(),
+        })
+    }
+    let at = |s: Stub| s.at(Pulse::Day, Phase::Vital);
+    for threads in [1, 2, 4, 8] {
+        let stubs = vec![
+            at(Stub::new("X1.a").writes("a.x").stepping(ok)),
+            at(Stub::new("X2.b").writes("b.x").stepping(fail_b)),
+            at(Stub::new("X3.c").writes("c.x").stepping(fail_c)),
+        ];
+        let mut e = engine(stubs, SimTime::EPOCH, threads);
+        let err = e.advance_until(SimTime::EPOCH, |_, _| {}).unwrap_err();
+        assert_eq!(err.to_string(), "X2.b: b failed", "{threads} threads");
+        assert_eq!(
+            e.tables().get("a.x").unwrap(),
+            &vec![1],
+            "{threads} threads: the whole level ran"
+        );
+    }
+}
+
+/// (d) Within a phase the coarsest firing pulse's bindings run first (`05.1` §2 rule 4): at a
+/// month start, A's Month step and B's Month step both run before A's Day step.
+#[test]
+fn within_a_phase_the_coarsest_pulse_runs_first() {
+    fn log(
+        _: &Stub,
+        b: PulseBinding,
+        v: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        v.write("a.log")?
+            .push(if b.pulse == Pulse::Month { 30 } else { 1 });
+        Ok(())
+    }
+    fn seen(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let len = i64::try_from(v.read("a.log")?.len()).unwrap();
+        v.write("b.seen")?.push(len);
+        Ok(())
+    }
+    let a = Stub::new("X1.a")
+        .writes("a.log")
+        .at(Pulse::Month, Phase::Vital)
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(log);
+    let b = Stub::new("X2.b")
+        .writes("b.seen")
+        .reads("a.log", "X1.a", Lag::SameInstant)
+        .at(Pulse::Month, Phase::Vital)
+        .stepping(seen);
+    let mut e = engine(vec![a, b], SimTime::EPOCH, 1);
+    e.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
+    assert_eq!(
+        e.tables().get("a.log").unwrap(),
+        &vec![30, 1],
+        "Month, then Day"
+    );
+    assert_eq!(
+        e.tables().get("b.seen").unwrap(),
+        &vec![1],
+        "B ran after A's Month step, before its Day step"
+    );
+}

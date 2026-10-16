@@ -4,11 +4,12 @@
 //! At each instant where a bound pulse fires, the engine:
 //! 1. records the start-of-instant value of every column some system reads with a lag;
 //! 2. runs the phases in `05.1` §4.2 order;
-//! 3. within a phase, runs each system whose binding fires, level by level in the derived schedule:
-//!    with one thread a level's systems run in id order; with several they are spread over the
-//!    threads, their owned columns moved to the thread and back. Every system of a level runs
-//!    before an error is reported. A system bound in one phase to several firing pulses steps once
-//!    per binding, coarsest pulse first.
+//! 3. within a phase, takes the firing pulses coarsest first (Year, Season, Month, Day, Hour) and,
+//!    for each, runs the systems bound to it level by level in the derived schedule (`05.1` §2
+//!    rule 4): with one thread a level's systems run in id order; with several they are spread
+//!    over the threads, their owned columns moved to the thread and back. Every system of a level
+//!    runs before an error is reported. A system bound in one phase to several firing pulses steps
+//!    once per binding.
 //!
 //! The thread count changes scheduling only, never the result: `tests/determinism.rs` runs the
 //! stub world at 1, 2, 4 and 8 threads and compares monthly state hashes (V-DET-01), and repeats a
@@ -46,8 +47,8 @@ pub struct Engine {
     poisoned: Option<SimError>,
 }
 
-/// One system's work at one instant and phase: the entry index and the bindings that fire.
-type Job = (usize, Vec<PulseBinding>);
+/// One system's work at one instant: the entry index and the binding that fires.
+type Job = (usize, PulseBinding);
 
 /// The columns one system owns, moved out of the tables for its step.
 type Owned = BTreeMap<&'static str, Column>;
@@ -197,25 +198,28 @@ impl Engine {
                 snapshot.insert(c, rows.clone());
             }
         }
+        // Within a phase, the coarsest firing pulse's bindings run first (Year, Season, Month, Day,
+        // Hour; `05.1` §2 rule 4), and within one pulse the canonical order: its levels, each in id
+        // order. Restricting the levels to one pulse's systems keeps them in dependency order.
         for phase in Phase::ALL {
             let plan = self.registered.schedule().phase(phase).clone();
-            let job = |i: usize| -> Option<Job> {
-                let bindings: Vec<PulseBinding> = fired
+            for &pulse in &fired {
+                let binding = PulseBinding { pulse, phase };
+                let groups: Vec<Vec<Job>> = plan
+                    .levels
                     .iter()
-                    .map(|&pulse| PulseBinding { pulse, phase })
-                    .filter(|b| self.registered.entries[i].bindings.contains(b))
+                    .map(|level| {
+                        level
+                            .iter()
+                            .filter(|&&i| self.registered.entries[i].bindings.contains(&binding))
+                            .map(|&i| (i, binding))
+                            .collect::<Vec<Job>>()
+                    })
+                    .filter(|jobs| !jobs.is_empty())
                     .collect();
-                (!bindings.is_empty()).then_some((i, bindings))
-            };
-            // One group per level, at every thread count.
-            let groups: Vec<Vec<Job>> = plan
-                .levels
-                .into_iter()
-                .map(|level| level.into_iter().filter_map(job).collect::<Vec<_>>())
-                .filter(|jobs| !jobs.is_empty())
-                .collect();
-            for jobs in groups {
-                self.run_level(t, &snapshot, &jobs)?;
+                for jobs in groups {
+                    self.run_level(t, &snapshot, &jobs)?;
+                }
             }
         }
         Ok(())
@@ -260,17 +264,11 @@ impl Engine {
             let tables = &self.tables;
             let entries = &self.registered.entries;
             let key = |e: &Entry| SystemKey::new(self.world_seed, self.branch_salt, e.system_id, 0);
-            let run = |(i, bindings): &Job, cols: Owned| -> JobOutcome {
-                let e = &entries[*i];
+            let run = |&(i, binding): &Job, cols: Owned| -> JobOutcome {
+                let e = &entries[i];
                 let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
                 let mut ctx = StepCtx::new(e.id, key(e), t, &e.purposes);
-                let mut result = Ok(());
-                for &b in bindings {
-                    result = e.model.step(b, &mut view, &mut ctx);
-                    if result.is_err() {
-                        break;
-                    }
-                }
+                let result = e.model.step(binding, &mut view, &mut ctx);
                 (view.into_owned(), result)
             };
             let threads = self.threads.min(jobs.len());
