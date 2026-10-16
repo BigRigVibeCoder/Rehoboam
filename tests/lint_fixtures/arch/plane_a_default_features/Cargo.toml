@@ -1,0 +1,5 @@
+# Positive-control fixture for bin/lint_arch.py (VER-SPR-003-TEST GAP-4; tests/lint_fixtures/README.md): rh-sample takes libm with its default features.
+# Read with cargo metadata --no-deps: nothing is fetched. Not in the Rehoboam workspace.
+[workspace]
+members = ["rh-sample"]
+resolver = "3"

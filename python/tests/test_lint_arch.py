@@ -303,7 +303,7 @@ def test_the_external_rule_skips_dev_dependencies_tools_and_rng_crates() -> None
 
 def test_every_reviewed_entry_has_a_note() -> None:
     """The list is a review record: every entry says whether it can return a float."""
-    for name, (allowed, note) in PLANE_A_EXTERNAL_DEPS.items():
+    for name, (allowed, note, _no_defaults) in PLANE_A_EXTERNAL_DEPS.items():
         assert note.strip(), name
         assert allowed is None or allowed, name
 
@@ -391,6 +391,9 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("rng_building_block_outside_ids", "rng-crate"),
         ("plane_a_unlisted_dep", "plane-A-external"),
         ("plane_a_scoped_dep_outside", "plane-A-external"),
+        ("plane_a_loose_pin", "plane-A-external"),
+        ("plane_a_default_features", "plane-A-external"),
+        ("plane_a_sample_third_party", "plane-A-external"),
         ("relabelled_sample", "metadata"),
     ],
 )
@@ -418,3 +421,85 @@ def test_rh_sample_cannot_leave_its_pinned_labels(plane: str, kind: str) -> None
 def test_main_reports_an_unreadable_workspace(tmp_path: Path) -> None:
     """A missing manifest is an error (exit 2), not a pass."""
     assert main(["--manifest-path", str(tmp_path / "Cargo.toml")]) == EXIT_UNREADABLE
+
+
+# --- Exact pins and default features (VER-SPR-003-TEST GAP-4) ------------------------------------
+
+
+def pinned(
+    base: Crate, target: str, req: str, *, defaults: bool = False, kind: str = "normal"
+) -> Crate:
+    """Return ``base`` with one third-party dependency, with cargo metadata's req and features."""
+    return Crate(
+        base.name,
+        base.plane,
+        base.kind,
+        base.edges,
+        (Edge(target, kind, req=req, default_features=defaults),),
+    )
+
+
+@pytest.mark.parametrize("req", ["=0.2.16", "= 0.2.16", "=1.0.0-rc.1", "=1.2.3+build.5"])
+def test_an_exact_pin_passes(req: str) -> None:
+    """`=x.y.z`, with an optional pre-release or build suffix."""
+    assert found(engine(pinned(crate("rh-sample"), "libm", req))) == []
+
+
+@pytest.mark.parametrize("req", ["^0.2", "0.2.16", "^0.2.16", "~0.2.16", ">=0.2", "*", "=0.2"])
+def test_a_loose_requirement_is_plane_a_external(req: str) -> None:
+    """Anything but an exact pin can move plane A's results with a `cargo update`."""
+    assert found(engine(pinned(crate("rh-sample"), "libm", req))) == [
+        ("plane-A-external", "rh-sample")
+    ]
+
+
+def test_rng_building_blocks_are_pinned_too() -> None:
+    """rand_chacha in rh-ids is judged by rng-crate for its owner, and by the pin rule."""
+    crates = [pinned(c, "rand_chacha", "^0.10") if c.name == "rh-ids" else c for c in engine()]
+    assert found(crates) == [("plane-A-external", "rh-ids")]
+
+
+def test_libm_must_come_without_its_default_features() -> None:
+    """The libm entry requires default-features = false; the serde entry does not."""
+    assert found(engine(pinned(crate("rh-sample"), "libm", "=0.2.16", defaults=True))) == [
+        ("plane-A-external", "rh-sample")
+    ]
+    assert found(engine(pinned(crate("rh-minds"), "serde", "=1.0.0", defaults=True))) == []
+
+
+def test_dev_dependencies_need_no_pin() -> None:
+    """Test code is not authoritative (the rule's DECISION)."""
+    assert found(engine(pinned(crate("rh-sample"), "libm", "0.2", kind="dev", defaults=True))) == []
+
+
+def test_the_reviewed_list_says_libm_needs_no_default_features() -> None:
+    """The ruling's portable-routines choice is recorded in the list itself."""
+    assert PLANE_A_EXTERNAL_DEPS["libm"][2] is True
+
+
+def test_cargo_metadata_req_and_features_reach_the_edge() -> None:
+    """crates_from_metadata reads `req` and `uses_default_features` for third-party edges."""
+    document = {
+        "workspace_members": ["path+file:///rh-sample#0.0.0"],
+        "packages": [
+            _package(
+                "rh-sample",
+                [
+                    {
+                        "name": "libm",
+                        "source": "registry+https://x",
+                        "kind": None,
+                        "req": "^0.2",
+                        "uses_default_features": True,
+                    }
+                ],
+                {"rehoboam": {"plane": "A", "kind": "machinery"}},
+            )
+        ],
+    }
+    (edge,) = crates_from_metadata(document)[0].external
+    assert (edge.req, edge.default_features) == ("^0.2", True)
+    assert [v.rule for v in check_workspace(crates_from_metadata(document))] == [
+        "plane-A-external",
+        "plane-A-external",
+    ]
