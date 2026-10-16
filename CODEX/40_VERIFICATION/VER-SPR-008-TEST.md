@@ -9,9 +9,11 @@ tags: [verification, testing, determinism]
 related: [SPR-008, VER-SPR-008, VER-SPR-007-TEST, AGT-003-DET, ADR-0006, ADR-0033]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
+> **BLUF (round 2, head `8e17816`; section 7):** DEF-1 and DEF-2 are fixed and I could not reproduce either; my own thread-identity, HashMap-order and wall-clock leaks are all caught now. GAP-3, GAP-4 and GAP-6 hold, MAJ-1 fails closed. **One new defect: DEF-3 (low-medium), `check_all.sh` fails with an absolute `CARGO_TARGET_DIR`; with one line patched the tier is 210 of 210.** Details in section 7. Round 1 follows.
+>
 > **BLUF (round 1, head `29abe04`):** The machinery works and I could not break it, with one hole that matters: **the smoke world never runs two jobs in one level, so thread-count invariance on it is vacuous (DEF-2).** Ladders are byte-identical at 1 to 64 threads, across repeats, debug and release builds, `target-cpu=native`, and `+fma,+avx2`. Resume equals the continuous run at six cut points. My own bisect harness named the exact month, table and row in 66 of 66 random and edge cases (plus 8 more for added and removed rows, cancel-out and multi-table cases). The `include!` scan held against 67 of 69 evasions (the other two were wrong expectations of mine). A hand-edited or regenerated baseline fails the gate, and a planted history change was bisected automatically to its month and table. `bin/check_all.sh` is 187 of 187 on a clean archive. **Open: DEF-1 (low) and DEF-2 (medium), both accepted by the Architect for round 2; GAP-1 goes to BCK-002 A-36.** Cross-machine evidence was not run, as instructed.
 
 Tested head: `29abe041d2547f93f3c49fdf7b1f0a03df192247` (PR #28, on main `c8acb54`). Probes ran on `git archive` copies with a fresh `CARGO_TARGET_DIR` per copy; the repository's working tree was only read. The probe plan was written from the contracts (SPR-008 v1.2.0 with its nine rulings, `docs/13` §4.2–4.5, ADR-0006, ADR-0033 §3, `05.1` §2, §4.2, §6, `09` V-DET-01, 02 and 11, BCK-002 A-27) before the branch was opened. The Architect's answers on `include!($file)`, the `[C3]` title and the cancel-within-a-year case were applied. Mutants of the engine (a perturbation hook of my own, an event-only change, planted leaks, and counters that log every dispatched job) were built in throwaway copies and are not in the repository. Tester model: set by the Architect in GOV-005 §4.2; not recorded here by instruction.
@@ -192,3 +194,89 @@ Ruling 3 never requires siblings in one level, so the Developer met its letter; 
 - The full nightly (`golden_nightly.sh`) end to end: I ran its parts (1,000 years monthly at 1 and 4 threads, the bisect cases) but not the 12-run loop or its 64-case V-DET-11 test.
 - Month 0, an empty table and a table over 1,024 rows through the bisect (§2.5).
 - Round 2 (the Developer's fixes for DEF-1 and DEF-2); I will re-run the three leaks, the parallel-dispatch counters, DEF-1 and the baseline-gate changes on the head I am sent.
+
+## 7. Round 2 (head `8e17816`; the branch head when I committed was `cac67de`, a merge of main that I did not test)
+
+Probes ran on a `git archive` copy of `8e17816` with a fresh `CARGO_TARGET_DIR`. The Developer's merge `cac67de` adds main's changes (manifest examples, the `05.1` changelog); I did not re-run the tier on it.
+
+| Item | Verdict | Basis |
+|---|---|---|
+| DEF-2 (vacuous thread invariance) | **fixed** | Section 7.1 |
+| DEF-1 (resume header) | **fixed** | Section 7.2 |
+| MAJ-1 (baseline gate fails closed) | **pass** | Section 7.3 |
+| GAP-3 (`\|\| true`) | **fixed**, with a lint evasion (GAP-7) | Section 7.4 |
+| GAP-4 (strict ladder bytes) | **fixed** | 8 of 8 malformed ladders refused (section 7.4) |
+| GAP-6 (nightly cut = baseline) | **fixed** | Section 7.4 |
+| MIN-1 PTRS, MIN-2 inject line, MIN-3 includes | **pass** | Section 7.5 |
+| Bisect after the changes | **pass** | 33 of 33 (section 7.6) |
+| `bin/check_all.sh` | **FAIL as shipped (DEF-3); 210 of 210 with one line patched** | Section 7.7 |
+
+### 7.1 DEF-2
+- **Real parallelism.** Counters in a throwaway copy (30 years, 4 threads): 287,782 one-job levels and 21,900 two-job levels; `parallel_dispatch` 21,900; 43,801 distinct thread ids (one at 1 thread). Before: 0 and 1. The runner's own summary agrees (100 years: 73,000 of 1,032,358 levels, 7%, at most 2 jobs in a level) and is the same at 1 thread, since it counts jobs per level, not threads used.
+- **`--require-parallel`.** 5: passes. 8 and 99: exit 1, "PARALLEL LEVELS BELOW THE FLOOR: 14600 of 206472 levels (7%) ... the floor is 8%". 0: passes.
+- **My leaks, planted in X1's Hour step** (which now shares levels with X7), 30 years monthly at threads 1, 2, 4, 4 × 3 repeats, 11 comparisons each, written by me and not the Developer's `--leak-thread`:
+
+| Leak | Round 1 | Round 2 |
+|---|---|---|
+| none (control) | 0 of 11 | 0 of 11 |
+| `HashMap` iteration order | 11 of 11 | 11 of 11 (the PR-shaped 1-vs-4 run ends differently: one side fails an invariant) |
+| wall clock | 11 of 11 | 11 of 11; PR-shaped: rung 1 differs |
+| thread identity (`ThreadId` hashed) | **0 of 11** | **9 of 11**; the 2 equal are the 1-thread repeats, which must be equal. PR-shaped (yearly, 100 years, 1 vs 4): first differing rung 6, `weather.hours` |
+
+- The Developer's `--leak-thread` also fails 1-vs-4 at rung 1 (`market.ticks`) and is stable across two 4-thread repeats. Its ladder carries a `leak thread` header line, but `check_baseline.py` accepts such a ladder as a baseline when the recomputation is the same file (it is not in the real gate, whose recomputation has no leak). Defence in depth: refuse a baseline with an `inject` or `leak` line.
+- Limit: no level holds more than 2 jobs, so only 2 threads are ever busy at once.
+
+### 7.2 DEF-1
+| Command | Result |
+|---|---|
+| 100-year keyframe, 200-year journal, `--years 100` | exit 2: "--years 100 disagrees with the journal's horizon: the journal holds 224 inputs, not the 112 of a 100-year history ... stop earlier with --until" |
+| 100-year journal, `--years 200` | exit 2: "goes past the journal's last input ... Pass --extend" |
+| `--years 200 --extend` | runs; the header says `years 200` and `journal 112 <head>`, so it cannot pass for a real 200-year ladder (`journal 224 ...`) |
+| 100-year journal, `--years 50 --extend` | exit 2 |
+| honest resume at 50 | header equal to the continuous run's, all 600 resumed rungs equal |
+| `--until 60`; `--until 120` (past the horizon); `--until 0`; `--until -3` | 720 rungs, header keeps `years 100`; exit 2; 0 rungs, exit 0; exit 2 |
+| header journal line | `journal <count> <chain head>`; changing the hash, the count, or deleting the line each give "the headers differ in `journal`" |
+
+### 7.3 MAJ-1: the baseline gate, driven by real git history
+- A pull request with no base: exit 2 (fails closed). A bad base ref or a bad `before` sha: exit 2.
+- Titles for a changed baseline: pass for `x [C3]`, `[C3]`, `x [C3] [perf]`, `x [perf] [C3]`, trailing spaces; fail for `docs: explain the [C3] rule`, `[C3] x`, `x [C3] y`, `[c3]`, Cyrillic `[С3]`, `[C3 ]`, `[[C3]]` and the empty title.
+- Push ranges: `C0..C1` (a regeneration commit with no tag) fails; `C0..C2` (plus a docs commit whose subject has `[C3]` in the middle) fails; `C0..C3` (a commit ending in `[C3]`) passes; `C1..C4` (no baseline change in range) passes; a `[C3]` only in a commit body does not count.
+- `ci.yml`: `types: [opened, synchronize, reopened, edited]`, `fetch-depth: 0` on a push, the base fetched for a pull request.
+- Residual (observations): a push to a new branch (`before` all zeros) reports "C3 rule not checked: no base" and passes; and `concurrency: cancel-in-progress` cancels a superseded push run, so the next run's range (`before` = the cancelled head) no longer includes the cancelled push's baseline change. Both matter only for pushes that bypass pull requests; recommendation in GAP-8.
+
+### 7.4 GAP-3, GAP-4, GAP-6
+- **GAP-3.** `check_all_selftest.py verdict` runs the real `run()` and verdict code on a planted chain: a failed gate hidden by `|| true` still gives `FAIL at "planted failing gate"`. The new lint refuses `|| true`, `|| :` and `||true`, on a continuation line too. **It does not see** `|| exit 0`, `|| /bin/true`, `|| echo ok`, `|| { :; }`, `; true`, a subshell wrap, or `if ...; then :; fi`; of these only `|| exit 0` defeats the verdict (it ends the script with status 0 before the verdict). Reproduced on a copy of `check_all.sh` whose first gate was `false || exit 0`: exit code 0, `FAIL planted failing first gate` in the report, no verdict line. **GAP-7.**
+- **GAP-4.** `ladder compare` now refuses (exit 2, with the line): CRLF, a lone CR, no final newline, an extra blank line, a trailing space, a tab, a BOM.
+- **GAP-6.** `ladder cut-yearly` turns a monthly ladder into a yearly one. The 100-year cut is byte-equal to a real yearly run; the 1,000-year monthly run's cut is **byte-equal to the committed baseline**; `golden_nightly.sh` does `compare` and `cmp` of that cut. A yearly input is refused (exit 2).
+
+### 7.5 MIN-1, MIN-2, MIN-3
+- **MIN-1.** `SHOCK_MEAN = [5, 5, 5, 12]`; `rh-sample`'s `PTRS_THRESHOLD` is 10, so region 4 draws through PTRS and the others through inversion, inside the golden run.
+- **MIN-2.** `--inject 30:person.alive:3` writes an `inject 30:person.alive:3` header line, and the bisect still names the month, table and row through `--candidate-arg`. (See the note in 7.1 on baselines that carry it.)
+- **MIN-3.** The 69 round-1 `include!` probes: the same 67 as expected and the same 2 wrong expectations. New probes, 24: a symlinked include resolves from the link's directory (clean-beside-link passes, dirty-beside-link fails, an inner file only beside the target fails); `use core::include as inc;`, `use std::include as inc;`, `use std::{include as inc};`, `use ::core::{self, include as inc};`, `pub use ... as inc;` and `as _` are all refused; a `macro_rules` that passes a literal to `include!` is refused, one with the literal inside its body is followed; `include_str!` and `include_bytes!` with an in-repo literal pass, and a `concat!`, `env!`, absolute, `../` or missing path is refused. Two differences from my expectations: a renamed `include_str` (`use core::include_str as is;`) is not caught, which is harmless since it can only produce a string (OBS-6); and `use include::X;` for a user module named `include` is refused (a conservative false positive, OBS-7).
+
+### 7.6 Bisect after the changes
+33 cases through `rh-cli bisect --candidate-arg --inject M:T:R` (the Developer's hook, my seeds 20261016): month 1, 12, 13, 119, 120, 121, 479 and 480 of 480, 22 random months and tables, and the three new market tables; all 33 named the exact month, table and row.
+
+### 7.7 DEF-3 (low-medium): `check_all.sh` fails with an absolute `CARGO_TARGET_DIR`
+`bin/check_all.sh:278` builds `ladder="$PWD/$GOLDEN/smoke_yearly_t1.ladder"`. The script's header says built binaries live under `$CARGO_TARGET_DIR` when it is set, and GOV-002's verification protocol (a fresh target directory per copy) sets it to an absolute path; `$PWD/<absolute>` is `<repo>/<absolute>`, which does not exist.
+```
+CARGO_TARGET_DIR=/abs/path bin/check_all.sh
+FAIL  Golden baseline positive control: a push that changes the baseline with no [C3] commit must FAIL (VER-SPR-008 MAJ-1)
+check_baseline: <repo>/<abs path>/golden/smoke_yearly_t1.ladder: No such file or directory
+```
+The control fails for the wrong reason, and the tier stops at 181 of 187 gates. It passes on CI only because `target/` is relative there. With line 278 changed to `ladder="$(realpath "$GOLDEN")/smoke_yearly_t1.ladder"` in my copy, the tier is **210 of 210** (a clean archive, 18 minutes under load). The expected-text match (`fail:BASELINE CHANGED ...`) did its job: a control that fails for the wrong reason is caught, as designed.
+
+## 8. Round 2: gaps and observations
+| Item | Recommendation | Confidence |
+|---|---|---|
+| **GAP-7** (low): the `\|\| true` lint is textual; `\|\| exit 0` ends `check_all.sh` with status 0 and no verdict | Compute the verdict in an `EXIT` trap (a non-empty `$failed` forces exit 1), so no spelling can skip it; extend the lint to `exit 0`, `/bin/true`, `echo` | 0.8 |
+| **GAP-8** (low): the push rule is not checked for a new branch, and a cancelled push run drops its range | Set `cancel-in-progress` only for pull requests; for a push with an all-zero `before`, compare with the default branch | 0.6 |
+| **GAP-2** (remainder, backlog) | as recorded in section 4 | |
+| **GAP-5** (backlog) | as recorded in section 4 | |
+- OBS-6: a renamed `include_str!` is not caught (data only). OBS-7: `use include::X;` (a user module named `include`) is flagged.
+- OBS-8: `check_baseline.py` does not refuse a baseline whose header has an `inject` or `leak thread` line; the recomputation in the real gate never has one, so it fails there.
+- OBS-9: the full tier took 1,073 s wall under load on 4 cores (about 18 minutes); `ci.yml` has a 30-minute timeout and the round-1 warm-cache run took 11.5 minutes. The round-2 CI time was not measured.
+
+## 9. Not run in round 2
+- The merge `cac67de`, and CI on a runner; the cross-machine check; the full nightly loop (12 monthly ladders and its 64 bisect cases): I ran its parts (1,000 years monthly at 1 thread, the cut against the baseline, the bisect cases).
+- `golden_bisect_ci.sh` after MIN-4 (the bisect on a push): read, not run.
