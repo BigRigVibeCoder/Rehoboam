@@ -140,6 +140,17 @@ def test_raw_identifiers_are_code() -> None:
         ("let d = chrono::Utc::now();", "wall-clock"),
         ("unsafe { x }", "unsafe"),
         ("unsafe fn f() {}", "unsafe"),
+        ("let t = std :: time :: Instant :: now();", "wall-clock"),
+        ("let t = Instant ::now();", "wall-clock"),
+        ("use std :: time :: { Duration , Instant };", "wall-clock"),
+        ("let t = std::time /* hidden */ ::Instant::now();", "wall-clock"),
+        ("macro_rules! m { () => { rand :: rng() }; }", "thread-rng"),
+        ("let x = rand :: random::<u8>();", "rand-random"),
+        ('#[path = "../../outside.rs"] mod outside;', "source-include"),
+        ('#![path = "x"]', "source-include"),
+        ('#[cfg_attr(test, path = "mock.rs")] mod clock;', "source-include"),
+        ('include!("../../outside.rs");', "source-include"),
+        ('include! { "gen.rs" }', "source-include"),
     ],
 )
 def test_each_forbidden_api_is_caught_by_its_rule(snippet: str, rule: str) -> None:
@@ -157,6 +168,10 @@ def test_each_forbidden_api_is_caught_by_its_rule(snippet: str, rule: str) -> No
         "use std::time::Duration;",
         "use rand_chacha::ChaCha8Rng;",
         "let rngs = 3;",
+        'let s = include_str!("table.csv");',
+        'let b = include_bytes!("golden.bin");',
+        "fn path() -> u8 { 0 }",
+        "let path = 1;",
     ],
 )
 def test_allowed_code_is_not_flagged(snippet: str) -> None:
@@ -196,6 +211,21 @@ def test_an_escape_alone_on_the_line_above_excuses_the_next_line() -> None:
 def test_an_escape_without_a_reason_excuses_nothing(comment: str) -> None:
     """No reason, no escape: the finding stays and the escape is reported too."""
     assert sorted(rules_hit(f"unsafe {{ x }} {comment}\n")) == ["escape", "unsafe"]
+
+
+def test_a_spaced_path_is_reported_without_its_spaces() -> None:
+    """The report names the path as written without whitespace (DEF-4)."""
+    (violation,) = scan("let t = std :: time :: Instant :: now();\n").violations
+    assert "`time::Instant` at snippet.rs:1:" in violation
+
+
+def test_a_source_include_can_be_escaped_with_a_reason() -> None:
+    """#[path] and include! are allowed where a reason is given, and counted."""
+    report = scan(
+        '#[path = "gen/table.rs"] // LINT-ALLOW(forbidden-api): generated in-crate, scanned too\n'
+        "mod table;\n"
+    )
+    assert (report.violations, len(report.escaped)) == ([], 1)
 
 
 def test_an_unused_escape_is_a_violation() -> None:
@@ -249,6 +279,10 @@ PLANTED = {
     "instant": ("wall-clock", "Instant::now"),
     "system_time": ("wall-clock", "SystemTime"),
     "unsafe": ("unsafe", "unsafe"),
+    "spaced_path": ("wall-clock", "time::Instant"),
+    "spaced_rand": ("thread-rng", "rand::rng"),
+    "path_attr": ("source-include", "#[path"),
+    "include_macro": ("source-include", "include!("),
 }
 
 
