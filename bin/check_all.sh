@@ -409,6 +409,29 @@ fixed_point_compile_controls() {
 
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
 # two `&&` lines splits the chain, and later checks would run after a failure (DEF-2).
+# The verdict (VER-SPR-008-TEST GAP-3, GAP-7), computed in an EXIT trap so that no exit, early or
+# late, ends the tier without one: a gate line ending in `|| true` or `|| exit 0`, or a stray exit,
+# cannot turn failed or unrun gates into a pass. The tier passes only when the chain ran to its end,
+# no gate failed and the chain's last status is 0. bin/check_all_selftest.py runs this code on
+# planted chains; its lint refuses `|| true`, `|| :` and `|| exit` on a run line.
+finish() {
+  local status=$? verdict
+  if [ -n "${chain_done:-}" ] && [ -z "$failed" ] && [ "$status" -eq 0 ]; then
+    verdict="PASS ($n checks)"; status=0
+  elif [ -n "$failed" ]; then
+    verdict="FAIL at \"$failed\" (later checks skipped: fail-fast)"; status=1
+  elif [ -z "${chain_done:-}" ]; then
+    verdict="FAIL (the chain exited early, status $status, after $n checks: later gates unrun)"; status=1
+  else
+    verdict="FAIL (the chain stopped with no gate named)"; status=1
+  fi
+  { echo; echo "## Verdict: $verdict"; } >> "$REPORT"
+  echo "Report: $REPORT"
+  exit "$status"
+}
+chain_done=""
+trap finish EXIT
+
 run "Required tools present" pass require_tools &&
 # Tier 1 — static and contract lints (fastest first)
 run "Document index builds (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
@@ -582,8 +605,11 @@ run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 b
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 run "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST GAP-3)" "pass:Verdict: PASS (2 checks)" "$PY" -I bin/check_all_selftest.py verdict &&
 run "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier (VER-SPR-008-TEST GAP-3)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-true &&
-run "check_all chain: no run line ends in || true or || : (check_all_selftest lint; VER-SPR-008-TEST GAP-3)" "pass:NO OR-TRUE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh &&
+run "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; VER-SPR-008-TEST GAP-3, GAP-7)" "pass:NO OR-TRUE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh &&
 run "check_all chain positive control: a run line mutated with || true must FAIL the lint (VER-SPR-008-TEST GAP-3)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-true &&
+run "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint (VER-SPR-008-TEST GAP-7)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-exit &&
+run "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-exit &&
+run "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL (the chain exited early" "$PY" -I bin/check_all_selftest.py verdict --early-exit &&
 run "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)" "pass:ABSOLUTE TARGET DIR: both baseline push controls fail and pass for the right reason" "$PY" -I bin/check_all_selftest.py abs-target &&
 run "check_all positive control: the old PWD-joined golden path under an absolute CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)" "fail:a baseline push control behaved wrongly" "$PY" -I bin/check_all_selftest.py abs-target --plant-pwd-join &&
 # Tier 5 — golden vectors
@@ -602,16 +628,5 @@ run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtu
 run "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip (SPR-011 ruling 13)" "pass:CHANNEL A v0: PASS" "$PY" -I specs/stream/selftest_channel_a.py &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py
 status=$?
-# VER-SPR-008-TEST GAP-3: the tier fails when any gate failed, whatever the status of the chain's
-# last command, so a gate line ending in `|| true` cannot hide a failure (bin/check_all_selftest.py
-# runs this verdict on a planted chain; the inventory test refuses `|| true` and `|| :`).
-if [ -z "$failed" ] && [ "$status" -eq 0 ]; then status=0; else status=1; fi
-
-{
-  echo
-  if [ $status -eq 0 ]; then echo "## Verdict: PASS ($n checks)"
-  elif [ -n "$failed" ]; then echo "## Verdict: FAIL at \"$failed\" (later checks skipped: fail-fast)"
-  else echo "## Verdict: FAIL (the chain stopped with no gate named)"; fi
-} >> "$REPORT"
-echo "Report: $REPORT"
-exit $status
+chain_done=1
+exit "$status"

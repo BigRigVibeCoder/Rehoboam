@@ -1,16 +1,19 @@
-"""Self-test of bin/check_all.sh's own verdict and chain (VER-SPR-008-TEST GAP-3).
+"""Self-test of bin/check_all.sh's own verdict and chain (VER-SPR-008-TEST GAP-3, GAP-7).
 
 `check_all.sh` once exited with the status of its chain's last command, so a gate line ending in
-`|| true` stayed green. Two guards close that, and this script checks both:
+`|| true` stayed green (GAP-3), and `|| exit 0` ended it with status 0 and no verdict (GAP-7). The
+verdict is now computed in an EXIT trap (`finish`), and a lint refuses those forms; this script
+checks both:
 
-- `verdict [--or-true]`: runs check_all.sh's real `run()` function and its real verdict code (cut
-  from the script, not copied) on a planted two-gate chain in a temporary directory, and prints
-  the planted report. The first gate fails; with `--or-true` its line ends in `|| true`, so the
-  chain goes on and its last command succeeds. The verdict must still be FAIL (exit 1). Without
-  `--or-true`, both planted gates pass and the verdict is PASS (exit 0).
-- `lint FILE [--plant-or-true]`: refuses a `run` line of the chain that ends in `|| true` or
-  `|| :` (exit 1, naming the line). `--plant-or-true` appends `|| true` to the chain's first `run`
-  line in memory, as the planted control.
+- `verdict [--or-true | --or-exit | --early-exit]`: runs check_all.sh's real `run()` and `finish()`
+  functions and its EXIT trap and chain end (cut from the script, not copied) on a planted chain
+  in a temporary directory, and prints the planted report. Plain, both planted gates pass and the
+  verdict is PASS (exit 0). With `--or-true` the first gate fails and its line ends in `|| true`;
+  with `--or-exit` it fails and its line ends in `|| exit 0`; with `--early-exit` a passing gate
+  is followed by `exit 0` before the chain's end. Each must be FAIL (exit 1).
+- `lint FILE [--plant-or-true | --plant-or-exit]`: refuses a `run` line of the chain that ends in
+  `|| true`, `|| :` or `|| exit ...` (exit 1, naming the line). The plant flags append `|| true`
+  or `|| exit 0` to the chain's first `run` line in memory, as the planted controls.
 - `abs-target [--plant-pwd-join]` (VER-SPR-008-TEST DEF-3): runs check_all.sh's real
   `baseline_push_control` and its real `GOLDEN` definition (cut from the script) with an absolute
   `TARGET_DIR` in a temporary directory, the committed baseline standing in for the recomputed
@@ -18,8 +21,8 @@
   other outcome (a missing file, say) exits 1. `--plant-pwd-join` restores the old
   `$PWD/$GOLDEN` join in memory, which must then fail for the wrong reason.
 
-Usage: python -I bin/check_all_selftest.py verdict [--or-true]
-       python -I bin/check_all_selftest.py lint bin/check_all.sh [--plant-or-true]
+Usage: python -I bin/check_all_selftest.py verdict [--or-true | --or-exit | --early-exit]
+       python -I bin/check_all_selftest.py lint bin/check_all.sh [--plant-or-true | --plant-or-exit]
        python -I bin/check_all_selftest.py abs-target [--plant-pwd-join]
 """
 
@@ -37,7 +40,15 @@ JOINED = 'ladder="$GOLDEN/smoke_yearly_t1.ladder"'
 C3_MISSING = "BASELINE CHANGED in a PR not marked [C3]"
 C3_PRESENT = "regenerated in a [C3] PR"
 BASELINE = "worlds/smoke/baselines/smoke_yearly_1000y.ladder"
-OR_TRUE = re.compile(r"\|\|\s*(true|:)\s*(&&)?\s*$")
+OR_TRUE = re.compile(r"\|\|\s*(true|:|exit(\s+\$?\w+)?)\s*(&&)?\s*$")
+LATER = '\nrun "planted later gate" pass true'
+PLANTED_CHAINS = {
+    "": 'run "planted gate" pass true &&' + LATER,
+    "--or-true": 'run "planted failing gate" pass false || true &&' + LATER,
+    "--or-exit": 'run "planted failing gate" pass false || exit 0 &&' + LATER,
+    "--early-exit": 'run "planted gate" pass true && exit 0' + LATER,
+}
+PLANTS = {"--plant-or-true": " || true &&", "--plant-or-exit": " || exit 0 &&"}
 
 
 def chain(lines: list[str]) -> list[tuple[int, str]]:
@@ -47,12 +58,15 @@ def chain(lines: list[str]) -> list[tuple[int, str]]:
     return [(i + 1, lines[i]) for i in range(start, end)]
 
 
-def lint(text: str, *, plant: bool = False) -> list[str]:
-    """Return one finding per chain line that ends in `|| true` or `|| :`."""
+def lint(text: str, *, plant: str = "") -> list[str]:
+    """Return one finding per chain line that ends in `|| true`, `|| :` or `|| exit ...`.
+
+    `plant` (a `PLANTS` suffix) is first appended to the chain's first `run` line.
+    """
     lines = text.splitlines()
     if plant:
         first = chain(lines)[0][0] - 1
-        lines[first] = lines[first].removesuffix(" &&") + " || true &&"
+        lines[first] = lines[first].removesuffix(" &&") + plant
     return [
         f"line {n}: {line.strip()[:100]}"
         for n, line in chain(lines)
@@ -60,24 +74,27 @@ def lint(text: str, *, plant: bool = False) -> list[str]:
     ]
 
 
+def _function(lines: list[str], name: str) -> list[str]:
+    start = lines.index(f"{name}() {{")
+    return lines[start : lines.index("}", start) + 1]
+
+
 def _cut(text: str) -> tuple[str, str]:
-    """Return check_all.sh's `run()` definition and its verdict code (from `status=$?`)."""
+    """Return check_all.sh's `run()`, `finish()`, the trap's lines, and the chain's end."""
     lines = text.splitlines()
-    start = lines.index("run() {")
-    end = lines.index("}", start)
-    tail = lines[lines.index("status=$?") :]
-    return "\n".join(lines[start : end + 1]), "\n".join(tail)
+    trap = [line for line in lines if line in ('chain_done=""', "trap finish EXIT")]
+    head = _function(lines, "run") + _function(lines, "finish") + trap
+    return "\n".join(head), "\n".join(lines[lines.index("status=$?") :])
 
 
-def verdict(*, or_true: bool) -> int:
-    """Run the planted chain through check_all.sh's own `run()` and verdict; return its status."""
+def verdict(mode: str = "") -> int:
+    """Run a planted chain through check_all.sh's own verdict code; return its status.
+
+    The chain is `PLANTED_CHAINS[mode]`, between check_all.sh's `run()`, `finish()`, EXIT trap
+    and chain end.
+    """
     run_fn, tail = _cut(SCRIPT.read_text(encoding="utf-8"))
-    if or_true:
-        planted = (
-            'run "planted failing gate" pass false || true &&\nrun "planted later gate" pass true'
-        )
-    else:
-        planted = 'run "planted gate" pass true &&\nrun "planted later gate" pass true'
+    planted = PLANTED_CHAINS[mode]
     with tempfile.TemporaryDirectory() as tmp:
         report = Path(tmp) / "report.md"
         script = "\n".join(
@@ -144,23 +161,23 @@ def abs_target(*, plant: bool) -> int:
     return 1
 
 
-def _lint(file: str, *, plant: bool) -> int:
+def _lint(file: str, *, plant: str) -> int:
     found = lint(Path(file).read_text(encoding="utf-8"), plant=plant)
     for f in found:
         print(f"OR-TRUE ON A RUN LINE: {f}")
     if found:
         return 1
-    print(f"NO OR-TRUE: no run line of {file} ends in || true or || :")
+    print(f"NO OR-TRUE: no run line of {file} ends in || true, || : or || exit")
     return 0
 
 
 def main(argv: list[str]) -> int:
     """Run the self-test named by `argv`."""
     match argv:
-        case ["verdict", *flag] if flag in ([], ["--or-true"]):
-            return verdict(or_true=bool(flag))
-        case ["lint", file, *flag] if flag in ([], ["--plant-or-true"]):
-            return _lint(file, plant=bool(flag))
+        case ["verdict", *flag] if flag in ([], *([m] for m in PLANTED_CHAINS if m)):
+            return verdict(flag[0] if flag else "")
+        case ["lint", file, *flag] if flag in ([], *([p] for p in PLANTS)):
+            return _lint(file, plant=PLANTS[flag[0]] if flag else "")
         case ["abs-target", *flag] if flag in ([], ["--plant-pwd-join"]):
             return abs_target(plant=bool(flag))
     print(__doc__.split("Usage: ", 1)[1], file=sys.stderr)

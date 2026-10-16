@@ -150,14 +150,20 @@ REQUIRED_GATES = (
     "cargo deny positive control: wildcard version must FAIL",
     "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the "
     "right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)",
+    "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint "
+    "(VER-SPR-008-TEST GAP-7)",
     "check_all chain positive control: a run line mutated with || true must FAIL the lint "
     "(VER-SPR-008-TEST GAP-3)",
-    "check_all chain: no run line ends in || true or || : (check_all_selftest lint; "
-    "VER-SPR-008-TEST GAP-3)",
+    "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; "
+    "VER-SPR-008-TEST GAP-3, GAP-7)",
     "check_all positive control: the old PWD-joined golden path under an absolute "
     "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
+    "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the "
+    "tier (VER-SPR-008-TEST GAP-7)",
     "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier "
     "(VER-SPR-008-TEST GAP-3)",
+    "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier "
+    "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
@@ -252,8 +258,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "lint_odd applies control: a sender's payload matching [[applies]] field for field passes "
     "(REV-P1a section 7)",
-    "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, "
-    "must FAIL (REV-P1a section 7)",
+    "lint_odd applies positive control: a sender's payload fields differ from [[applies]], "
+    "frozen, must FAIL (REV-P1a section 7)",
     "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 "
     "ruling 11)",
     "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
@@ -329,24 +335,29 @@ def test_the_fixed_point_loop_covers_every_compile_fail_crate() -> None:
     assert "-p fixed-ok --target-dir" in script, "the well-typed control must still compile"
 
 
-def test_no_run_line_ends_in_or_true() -> None:
-    """VER-SPR-008-TEST GAP-3: `|| true` or `|| :` on a `run` line would hide its failure."""
+def test_no_run_line_ends_in_or_true_or_exit() -> None:
+    """GAP-3, GAP-7: `|| true`, `|| :` or `|| exit` on a `run` line would hide its failure."""
     text = SCRIPT.read_text(encoding="utf-8")
     assert check_all_selftest.lint(text) == []
-    planted = check_all_selftest.lint(text, plant=True)
-    assert len(planted) == 1
-    assert "|| true" in planted[0]
-    for suffix in (" || true &&", " || : &&", " ||true", " || :"):
+    for plant in check_all_selftest.PLANTS.values():
+        planted = check_all_selftest.lint(text, plant=plant)
+        assert len(planted) == 1
+        assert plant.removesuffix(" &&").strip() in planted[0]
+    for suffix in (" || true &&", " || : &&", " ||true", " || :", " || exit 0 &&", " || exit"):
         lines = text.splitlines()
         first = next(i for i, line in enumerate(lines) if line.startswith("run "))
         lines[first] = lines[first].removesuffix(" &&") + suffix
         assert check_all_selftest.lint("\n".join(lines)) != [], suffix
 
 
-def test_the_verdict_fails_when_any_gate_failed() -> None:
-    """GAP-3: a failed gate hidden by `|| true` still fails the tier; a clean chain passes."""
-    assert check_all_selftest.verdict(or_true=False) == 0
-    assert check_all_selftest.verdict(or_true=True) == 1
+def test_the_verdict_fails_when_any_gate_failed_or_the_chain_exits_early() -> None:
+    """GAP-3, GAP-7: hidden failures and early exits still fail the tier; a clean chain passes.
+
+    A failed gate hidden by `|| true` or `|| exit 0`, or an early `exit 0`, must each be FAIL.
+    """
+    assert check_all_selftest.verdict() == 0
+    for mode in ("--or-true", "--or-exit", "--early-exit"):
+        assert check_all_selftest.verdict(mode) == 1, mode
 
 
 def test_the_baseline_push_controls_hold_with_an_absolute_target_dir() -> None:
