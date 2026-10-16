@@ -250,6 +250,8 @@ struct PyYamlGrammar<'t> {
     tab_ok: Vec<(usize, usize)>,
     /// Byte ranges of every scalar, so that a `#` inside one does not start a comment.
     scalars: Vec<(usize, usize)>,
+    /// Where the last implicit flow key ended: its `:` must follow on the same line (DEF-14).
+    flow_key_end: Option<usize>,
 }
 
 impl<'t> PyYamlGrammar<'t> {
@@ -264,6 +266,7 @@ impl<'t> PyYamlGrammar<'t> {
             flow: Vec::new(),
             tab_ok: Vec::new(),
             scalars: Vec::new(),
+            flow_key_end: None,
         }
     }
 
@@ -274,6 +277,9 @@ impl<'t> PyYamlGrammar<'t> {
         end: usize,
         key_position: bool,
     ) -> Result<(), String> {
+        if let Some(key_end) = self.flow_key_end.take() {
+            self.colon_on_key_line(key_end)?;
+        }
         let bytes = self.text.as_bytes();
         match event {
             Event::SequenceStart(..) | Event::MappingStart(..) => {
@@ -326,15 +332,53 @@ impl<'t> PyYamlGrammar<'t> {
     /// An empty implicit key sits at a `:` that no `?` indicator precedes.
     /// An implicit key in a flow collection must fit on one line, as `PyYAML` requires of a simple
     /// key (SPR-004 DEF-13); an explicit `? key` may span lines.
-    fn single_line_flow_key(&self, flow_key: bool, start: usize, end: usize) -> Result<(), String> {
+    fn single_line_flow_key(
+        &mut self,
+        flow_key: bool,
+        start: usize,
+        end: usize,
+    ) -> Result<(), String> {
+        let before = self.text[..start].trim_end_matches([' ', '\t', '\r', '\n']);
+        if !flow_key || before.ends_with('?') {
+            return Ok(());
+        }
         let source = self.text.get(start..end.max(start)).unwrap_or_default();
-        if flow_key && source.contains(['\n', '\r']) {
-            let before = self.text[..start].trim_end_matches([' ', '\t', '\r', '\n']);
-            if !before.ends_with('?') {
-                return Err(format!(
-                    "found a line break inside the implicit flow key '{}' (PyYAML refuses it)",
-                    source.split_whitespace().collect::<Vec<_>>().join(" ")
-                ));
+        if source.contains(['\n', '\r']) {
+            return Err(format!(
+                "found a line break inside the implicit flow key '{}' (PyYAML refuses it)",
+                source.split_whitespace().collect::<Vec<_>>().join(" ")
+            ));
+        }
+        self.flow_key_end = Some(end.max(start));
+        Ok(())
+    }
+
+    /// The `:` after an implicit flow key must be on the key's line: `PyYAML` refuses
+    /// `{key` / `: value}` (SPR-004 DEF-14). Called at the event after the key, with the key's
+    /// end; a key with no `:` (`{a, b}`) passes.
+    fn colon_on_key_line(&self, key_end: usize) -> Result<(), String> {
+        let bytes = self.text.as_bytes();
+        let mut i = key_end;
+        let mut crossed = false;
+        while let Some(&c) = bytes.get(i) {
+            match c {
+                b' ' | b'\t' => i += 1,
+                b'\n' | b'\r' => {
+                    crossed = true;
+                    i += 1;
+                }
+                b'#' => {
+                    while bytes.get(i).is_some_and(|c| !matches!(c, b'\n' | b'\r')) {
+                        i += 1;
+                    }
+                }
+                b':' if crossed => {
+                    return Err(
+                        "found the ':' of an implicit flow key on a later line than the key (PyYAML refuses it)"
+                            .to_owned(),
+                    );
+                }
+                _ => return Ok(()),
             }
         }
         Ok(())
@@ -1239,6 +1283,10 @@ mod tests {
     /// DEF-9: every refusal still fires after multi-byte text (the parser's positions count
     /// characters); DEF-10: a `?` that starts a flow plain scalar is `PyYAML`'s key indicator.
     #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one table of PyYAML cases; splitting it would scatter the comparison"
+    )]
     fn refusals_survive_non_ascii_text_and_flow_key_indicators_follow_pyyaml() {
         let refused = [
             "a:\tx\n",
@@ -1253,6 +1301,13 @@ mod tests {
             "a: [la\n  bel: x]\n",
             "a: {\"la\n  bel\": x}\n",
             "a: {'la\n  bel': x}\n",
+            "a: {label\n   : x}\n",
+            "a: {\"label\"\n   : x}\n",
+            "a: {'label'\r\n   : x}\n",
+            "a: [k\n   : x]\n",
+            "a: {k # c\n   : x}\n",
+            "a: {k\u{2028}   : x}\n",
+            "a: {k\u{85}   : x}\n",
         ];
         for t in refused {
             for prefix in [
@@ -1310,6 +1365,21 @@ mod tests {
             (
                 "a: [la\n  bel]\n",
                 m(vec![(s("a"), Value::Seq(vec![s("la bel")]))]),
+            ),
+            (
+                "a: {? k\n   : x}\n",
+                m(vec![(s("a"), m(vec![(s("k"), s("x"))]))]),
+            ),
+            (
+                "a: {k:\n   x}\n",
+                m(vec![(s("a"), m(vec![(s("k"), s("x"))]))]),
+            ),
+            (
+                "a: {k\n , j}\n",
+                m(vec![(
+                    s("a"),
+                    m(vec![(s("k"), Value::Null), (s("j"), Value::Null)]),
+                )]),
             ),
         ];
         for (t, want) in cases {
