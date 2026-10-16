@@ -320,6 +320,7 @@ run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY M
 run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
 run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" "$RH_CLI" ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
+run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
 run "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)" "pass:SCHEMA: no unexplained difference" "$RH_CLI" manifest schema --diff specs/manifest/manifest_v0.schema.json &&
 run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERENCE \$defs.Horizon.properties.years.maximum" "$RH_CLI" manifest schema --diff tests/lint_fixtures/schema/drifted_bound.schema.json &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&

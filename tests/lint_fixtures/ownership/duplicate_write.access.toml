@@ -1,0 +1,7 @@
+# Positive control for the ownership lint (SPR-005 Tester DEF-3): M2.demography declares its own
+# column person.alive twice. `rh-cli ownership` must FAIL with
+# VIOLATION [duplicate] M2.demography: declares a write to person.alive twice,
+# the same verdict rh-core's registration gives (crates/rh-registry/tests/real_specs.rs).
+[[access]]
+system = "M2.demography"
+writes = ["person.birth_tick", "person.alive", "person.alive"]

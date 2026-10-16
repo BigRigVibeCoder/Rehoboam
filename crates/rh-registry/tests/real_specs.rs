@@ -406,3 +406,139 @@ fn system_ids_are_name_derived_and_distinct_for_the_registry() {
     );
     assert_eq!(system_id("M2.demography"), system_id("M2.demography"));
 }
+
+/// A system that declares a given access and its spec's RNG purposes, and nothing else: so that
+/// registration judges only the access (Tester DEF-3).
+struct Declared {
+    id: &'static str,
+    access: AccessSpec,
+    purposes: Vec<&'static str>,
+}
+
+impl SystemModel for Declared {
+    fn descriptor(&self) -> SystemDescriptor {
+        SystemDescriptor {
+            id: self.id,
+            fidelity: "F1",
+            spec_version: "0.1.0",
+        }
+    }
+    fn access(&self) -> AccessSpec {
+        self.access.clone()
+    }
+    fn schedule(&self) -> Vec<PulseBinding> {
+        Vec::new()
+    }
+    fn rng_purposes(&self) -> Vec<&'static str> {
+        self.purposes.clone()
+    }
+    fn params_schema(&self) -> ParamSchema {
+        ParamSchema::default()
+    }
+    fn step(
+        &self,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        Ok(())
+    }
+    fn invariants(&self, _: &WorldTables) -> Vec<InvariantResult> {
+        Vec::new()
+    }
+    fn declared_aggregates(&self) -> Vec<AggregateSpec> {
+        Vec::new()
+    }
+}
+
+/// Tester DEF-3: the ownership lint (`Ownership::check`, what `rh-cli ownership` runs on an access
+/// file) and registration give the same verdict, with the same rules, on the same declaration.
+#[test]
+fn the_lint_and_registration_agree_on_one_fixture_set() {
+    type Case = (
+        &'static str,
+        &'static [&'static str],
+        &'static [&'static str],
+    );
+    let cases: [Case; 8] = [
+        (
+            "M2.demography",
+            &[],
+            &["person.birth_tick", "person.alive", "person.alive"],
+        ),
+        ("M2.demography", &[], &["person.birth_tick", "person.sex"]),
+        ("M2.demography", &["person.residence"], &["person.alive"]),
+        (
+            "S5.daily_life",
+            &["person.sex"],
+            &["encounter_log.day_index", "person.alive"],
+        ),
+        (
+            "S5.daily_life",
+            &["person.sex", "person.residence"],
+            &["encounter_log.day_index"],
+        ),
+        ("S5.daily_life", &["person.mood"], &[]),
+        ("S5.daily_life", &["person.sex", "person.sex"], &[]),
+        ("M9.ghost", &[], &["ghost.x"]),
+    ];
+    let t = real_ownership();
+    let mut verdicts = (0, 0);
+    for (system, reads, writes) in cases {
+        let lint = t.check(&rh_registry::ownership::AccessSpec {
+            system: system.to_owned(),
+            reads: reads.iter().map(ToString::to_string).collect(),
+            writes: writes.iter().map(ToString::to_string).collect(),
+        });
+        let declared = Declared {
+            id: system,
+            access: AccessSpec {
+                reads: reads
+                    .iter()
+                    .map(|&column| ColumnRead {
+                        column,
+                        owner: t
+                            .owners
+                            .get(column)
+                            .map_or("M9.ghost", |o| &*o.system.clone().leak()),
+                        lag: Lag::StartOfDay,
+                    })
+                    .collect(),
+                writes: writes
+                    .iter()
+                    .map(|&column| ColumnWrite {
+                        column,
+                        plane: Plane::A,
+                    })
+                    .collect(),
+            },
+            purposes: t
+                .specs
+                .get(system)
+                .map(|s| s.rng.iter().map(|p| &*p.clone().leak()).collect())
+                .unwrap_or_default(),
+        };
+        let registered = register(vec![Box::new(declared)], &t.spec_table());
+        let mut lint_rules: Vec<&str> = lint.iter().map(|v| v.rule).collect();
+        let mut reg_rules: Vec<&str> = match &registered {
+            Ok(_) => Vec::new(),
+            Err(e) => e.violations.iter().map(|v| v.rule).collect(),
+        };
+        lint_rules.sort_unstable();
+        lint_rules.dedup();
+        reg_rules.sort_unstable();
+        reg_rules.dedup();
+        assert_eq!(
+            lint.is_empty(),
+            registered.is_ok(),
+            "{system} {reads:?} {writes:?}: lint {lint:?}"
+        );
+        assert_eq!(lint_rules, reg_rules, "{system} {reads:?} {writes:?}");
+        if lint.is_empty() {
+            verdicts.0 += 1;
+        } else {
+            verdicts.1 += 1;
+        }
+    }
+    assert_eq!(verdicts, (2, 6), "the fixture set has both verdicts");
+}
