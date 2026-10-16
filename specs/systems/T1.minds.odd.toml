@@ -4,12 +4,17 @@
 # Phasing: P1a is traits, ambition, relations, opinions, four decision types (marry, seek_office, press_claim, feud),
 # stress from grief and value conflict, and mental breaks. P1b adds the vow, relic and knowledge couplings (S6, S7,
 # secrets v0) and the swear_vow and pursue_goal decision types. Items that wait for P1b say so.
+# Round 1 rulings (Architect, PR #32): decisions 1-20 accepted; grief reads the instant's deaths from M2's instant_death
+# accessor through minds' own relation rows; every death takes effect as an M2 death timer in Vital (BCK-002 A-30);
+# no P1a-only stress source (the P1a break rate is measured in isolation and taken to the director before G1a);
+# respond_to_threat goes to the P1b sprint; action_order stays here until a second system needs the permutation;
+# the cascade scenario test is V-SAGA-16b.
 odd_r = 2
 
 [system]
 id = "T1.minds"
 name = "Minds of named actors (minds v0)"
-spec_version = "0.1.0"
+spec_version = "0.2.0"
 fidelity = "F1"
 status = "draft"
 crate = "rh-minds"
@@ -22,6 +27,7 @@ role = "drama_coupling"
 patterns = [
   { test = "V-SAGA-16", pattern = "stress(t) = stress(t0) + accrual - decay - break relief exactly, inside [0, 100]; each threshold crossing schedules exactly one break timer, which fires at its own tick with an act from the Registry break table", kind = "identity", role = "sole" },
   { test = "V-SAGA-16", pattern = "Breaks per 100 named-actor-years inside 0.5 to 5 on the kingdom ensemble (the band this spec declares; a design value)", kind = "emergent", role = "sole" },
+  { test = "V-SAGA-16b", pattern = "Cascade scenario: one court death keeps the break rate inside V-SAGA-16's band, and the chain branching ratio (breaks caused per break) stays below 1 over the fixture", kind = "emergent", role = "sole" },
   { test = "V-COG-03", pattern = "Decisions happen only at polls or interrupts; interrupts at t + 1 day or later, within the daily cap", kind = "identity", role = "sole" },
   { test = "V-COG-04", pattern = "Same-instant actions: invalidated actors re-score once, then defer; the first-applied rate is unbiased by entity id", kind = "identity", role = "sole" },
   { test = "V-COG-10", pattern = "Every utility decision records its top contributors and its margin over the runner-up as motivated_by edges", kind = "identity", role = "sole" },
@@ -34,7 +40,7 @@ not_yet = [
   "In P1a only grief and value conflict raise stress; vow conflict (S7) and kin-loyalty conflict (which needs knowledge rows) arrive in P1b. The P1a break rate may fall below 0.5 per 100 actor-years: measured in the isolation run before G1a, and reported to the director if the Registry bounds cannot reach the band",
   "Needs are a stub: the needs input to every consideration is the neutral constant 1 until P3.2b",
   "Schwartz values, PAD mood, OCC emotions and memory are P3.2b (P4); no emotion snapshot is stored for the event envelope until then (05.2 §4.1a: only what is simulated)",
-  "No survival-response decision type (respond_to_threat) exists in v0; V-SAGA-09's paired fixture needs one by G1b (open question for the P1b sprint)",
+  "No survival-response decision type exists in v0: respond_to_threat goes to the P1b sprint (Architect round 1, Q8), reads no vow weight by construction, and serves V-SAGA-09's paired fixture at G1b",
   "HTN plans, beliefs with distortion and channels are P3.2b and P3.3 (P4): a decision is one act, not a plan",
   "Social practices (Versu; RT-2026-10-16 item 10a): evaluated and not adopted in v0 (see design.interaction); a candidate for the inquest institution with M6-lite",
 ]
@@ -442,6 +448,16 @@ owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
 [[reads]]
+column = "instant_death.person"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "instant_death.tick"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
 column = "person.birth_tick"
 owner = "M2.demography"
 lag = "lagged"
@@ -590,7 +606,7 @@ use = "Top-k weighted choice among the iaus_top_k best-scoring candidates (05.3 
 [[rng]]
 purpose = "action_order"
 key = ["tick", "person"]
-use = "The keyed permutation H(seed, salt, t, entity) in which same-instant actions apply (05.1 §4.3 item 4). If the engine provides it, this purpose moves to rh-core (open question)"
+use = "The keyed permutation H(seed, salt, t, entity) in which same-instant actions apply (05.1 §4.3 item 4). Kept in T1 for v0; it moves to rh-core when a second system needs the same-instant keyed permutation (Architect round 1, Q9)"
 [[rng]]
 purpose = "break_delay"
 key = ["person", "tick"]
@@ -696,8 +712,8 @@ source = "design value; canonical minimums of 12 and 14 are the lower end (not y
 # ----------------------------------------------------------------------------- submodels (ODD 7)
 [[submodels]]
 name = "grief"
-summary = "At a death instant, for each named actor a with an unended edge to a dead person d: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; relation.ended_at := now. A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). person.alive is read at the same instant: the deaths are M2's death timers in this Vital slot"
-earns_its_place_by = ["V-SAGA-16"]
+summary = "At a death instant, the dead are M2's instant_death rows with tick = now (Architect round 1, Q4); for each named actor a with an unended relation row to a dead person d: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; relation.ended_at := now. A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). The deaths are M2's death timers in this Vital slot: every death, however caused, takes effect there (BCK-002 A-30)"
+earns_its_place_by = ["V-SAGA-16", "V-SAGA-16b"]
 [[submodels]]
 name = "threshold"
 summary = "For each actor changed in this binding: if adult (age >= marriage_min_age), break_state = calm and stress >= stress_threshold, then break_state := pending and a break timer is scheduled at (now + d days, Agenda) with d = 1 + break_delay draw mod break_delay_max_days; break_timer := its TimerId. A crossing is the false-to-true transition of (adult and calm and stress >= threshold); a minor's stress accrues and is evaluated at majority. Deterministic: no draw decides whether"
@@ -844,11 +860,11 @@ lag = "applied at the next tick boundary"
 forcing = [
   { input = "vow.conflict", series = "step", note = "P1b: one vow per actor; conflict 0 for 10 years, then 0.5, then 1.0 from year 20, then 0 from year 30; plus constant runs at 0, 0.5 and 1" },
   { input = "artifact.rumour_reach", series = "step", note = "P1b: one relic; reach 0, then 3 hops from year 10, then rumour_max_hops from year 20; ambitious and unambitious actors at distances 0..6" },
-  { input = "person.alive", series = "historical:court_deaths", note = "scripted deaths on a fixture court: natural deaths at Brass rates, plus the cascade scenario: the sovereign murdered in front of the court at year 50" },
+  { input = "instant_death.person", series = "historical:court_deaths", note = "scripted deaths on a fixture court: natural deaths at Brass rates, plus the cascade scenario: the sovereign murdered in front of the court at year 50" },
 ]
 horizon = "1,000 sim-years on a fixture court of 60 named actors in 3 houses (genealogy and seats scripted, M7 and S7 stubbed: no petitions applied, no vows unless forced); the cascade scenario in an ensemble of 32 seeds"
 expect = "INV-T1-01 to 07 hold with 0 violations; stress stays in [0, 100] with exact accounting; breaks per 100 named-actor-years inside 0.5 to 5 under the P1b forcing and reported (with the shortfall stated) under P1a sources alone; cascade scenario: in the year after the sovereign's murder the court's break rate rises but stays inside the band in the ensemble mean, no actor breaks twice within break_refractory_days, and the chain branching ratio (breaks caused per break, via MURDER_ATTEMPT deaths and grief) is below 1, so no chain runs away without a lock or a cap; break counts fall back to baseline within 5 years"
 
 [verification]
-tests = ["V-SAGA-16", "V-COG-01", "V-COG-03", "V-COG-04", "V-COG-10", "V-SAGA-09", "V-SAGA-13", "V-SAGA-18", "V-INV-04", "V-INV-12", "V-SF-22", "V-SF-23", "V-DET-12"]
+tests = ["V-SAGA-16", "V-SAGA-16b", "V-COG-01", "V-COG-03", "V-COG-04", "V-COG-10", "V-SAGA-09", "V-SAGA-13", "V-SAGA-18", "V-INV-04", "V-INV-12", "V-SF-22", "V-SF-23", "V-DET-12"]
 prototype = ""
