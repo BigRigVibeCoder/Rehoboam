@@ -9,13 +9,13 @@ tags: [verification, roadmap]
 related: [BCK-001, BCK-002, PRJ-001, SPR-001, SPR-002, SPR-003, SPR-004, SPR-005, SPR-006, SPR-007, SPR-008, SPR-009, SPR-010]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.5.0
+version: 0.6.0
 ---
 
 > **BLUF:** DRAFT tracker; this is not a verdict. G0 closes when SPR-001 to SPR-010 are closed and the seven criteria of `docs/11` pass, and the red-team inbox is folded in with a dispositions record. Status on 2026-10-16:
-> - seven sprints are closed (SPR-001 to SPR-006, SPR-010);
-> - SPR-007 is in progress;
-> - SPR-008 and SPR-009 have not started.
+> - eight sprints are closed (SPR-001 to SPR-007, SPR-010);
+> - SPR-008 is in progress;
+> - SPR-009 has not started.
 >
 > The director ruled on the G0 decisions on 2026-10-16 (§3, §4): P0.7 loses the Rerun hooks and the TUI stub, the V-PERF-04 criterion covers benches 7 and 8, and the red-team inbox is disposed of (`docs/red_team/RT-2026-10-16-G0-dispositions.md`).
 
@@ -25,7 +25,7 @@ version: 0.5.0
 | Criterion | Test | Owning sprint | Status |
 |---|---|---|---|
 | Determinism: identical plane-A hashes at 1, 2, 4 and N threads, 3 repeats, every sim-month for 1,000 years | V-DET-01, V-DET-02 | SPR-008 (with SPR-005 to SPR-007) | Not started |
-| Keyframes: write, load, advance 10 years; equal to a continuous run | V-DET-05 | SPR-007 | Not started |
+| Keyframes: write, load, advance 10 years; equal to a continuous run | V-DET-05 | SPR-007 | Passing in `check_all` on the life world (48 to 5,000 rows), also resumed through the journal; on `smoke` with SPR-008 |
 | Samplers: golden vectors bit-equal | V-DET-09 | SPR-003 | Passing in `check_all` and CI (opt-level 0 and 3, GitHub's runner); nightly statistics green |
 | Bisect: names the injected month, table and row | V-DET-11 | SPR-008 | Not started |
 | Specs: `val_khor` and `aethelgard` validate, `invalid_draft_style` fails | V-WC-04 | SPR-001 (Python); SPR-004 (Rust parity) | Passing in `check_all`: Python, and Rust parity line for line |
@@ -41,12 +41,12 @@ version: 0.5.0
 | SPR-004 | Registry and manifest loaders, ownership lint, `rh-manifest` | Closed | `VER-SPR-004` PASS | 0 |
 | SPR-005 | Time, phases, SystemModel, AccessSpec, scheduler | Closed | `VER-SPR-005` PASS | 0 |
 | SPR-006 | Agenda, lifecycle queues, event bus, invariants | Closed | `VER-SPR-006` PASS | 0 |
-| SPR-007 | Plane hashes, keyframes, journal | In progress (T-02 waits on SPR-006) | — | — |
-| SPR-008 | Golden-run CI, bisect | Waits on SPR-006 and SPR-007 | — | — |
-| SPR-009 | Benchmarks, regression gate | Waits on SPR-007 and SPR-008; T-04 needs `adjutant` and the laptop | — | — |
+| SPR-007 | Plane hashes, keyframes, journal | Closed | `VER-SPR-007` PASS | 0 |
+| SPR-008 | Golden-run CI, bisect | In progress (T-00 and the smoke world done; the rest resumes on SPR-007) | — | — |
+| SPR-009 | Benchmarks, regression gate | Starts now SPR-007 is merged; merges after SPR-008; T-04 needs `adjutant` and the laptop | — | — |
 | SPR-010 | `rh-core::fixed` | Closed | `VER-SPR-010` PASS | 0 |
 
-The escape-rate count (BCK-002 A-05) stands at 1 escape across 7 closed sprints.
+The escape-rate count (BCK-002 A-05) stands at 1 escape across 8 closed sprints.
 
 ## 3. P0 work packages that no sprint owns (ruled by the director, 2026-10-16)
 Both recommendations were approved. `docs/11` v1.4 drops the Rerun hooks from P0 and moves the TUI stub to P1.17.

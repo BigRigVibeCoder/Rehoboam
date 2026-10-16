@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [BCK-001, AGT-001, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.6.0
+version: 1.7.0
 ---
 
 > **BLUF:** The Architect's own work stream, run in parallel with development: operating-model upkeep, audit tooling, gate preparation, and documentation debt.
@@ -50,3 +50,4 @@ version: 1.6.0
 | A-30 | Same-instant conflicts in lifecycle application: timers due at the same (t, phase) fire simultaneously against the same state (SPR-006 G2), so a person can die and act in one slot. When the queue is applied in `(tick, phase, PersonId, seq)` order, a command for a person who died earlier in that application is dropped, with a diagnostic | With the first death command (M2, P1a) | Open |
 | A-31 | A lifecycle command queue that its owner never drains grows silently (VER-SPR-006-TEST GAP-7: 101 commands in 100 days). Add an invariant on each queue's age or length, with the owner's declared pulse as the allowance | With the first real lifecycle command (M2, P1a) | Open |
 | A-32 | Drive the per-tick heap allocation count of the engine to the `docs/08` budget (default 0 for machinery): pooled per-level buffers and a persistent worker pool instead of scoped threads per level. SPR-009 T-05 records today's counts as the baseline (Architect ruling) | Before benches 1 and 2 (P1a) | Open |
+| A-33 | When non-material journaled inputs (`Scope::None`, for example `ManifestSet`) reach the engine, count them as accepted inputs, like material ones, so the journal position (`Engine::journal_position`) stays the length of the journal's `seq`-order prefix the engine holds, and `resume` stops refusing them (SPR-007 GAP-10 ruling; `05.1` §6) | When the first non-material input reaches the engine | Open |
