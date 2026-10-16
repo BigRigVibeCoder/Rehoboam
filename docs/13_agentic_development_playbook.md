@@ -3,6 +3,7 @@
 > **Since ADR-0032 (2026-10-16):** the process (roles, the work loop, sprints, defects, verification, planning) lives in `CODEX/10_GOVERNANCE/` (GOV-005, GOV-007, GOV-002). This document remains the **Rehoboam engineering supplement**: ownership rules, change classes, CI gates, the merge queue and golden-hash divergence (§4), the work-package fields now merged into `CODEX/_templates/template_sprint.md`, and context hygiene for agents.
 
 *Status: Draft v1.1 (2026-10-15). How you and the AI coding agents build Rehoboam together. It implements ADR-0022.*
+*v1.4 (2026-10-16): §4.3: the golden-run tiers follow SPR-011 ruling 16, the same text as GOV-002 tier 9.*
 *v1.3 (2026-10-16): §3: one engine-crate list, matching `bin/lint_arch.py` and the crates' `[package.metadata.rehoboam]`; crates not yet built are marked (planned).*
 *v1.2 (2026-10-16), ADR-0035: §3 gains the engine-purity rule (V-INSP-05, planned in `bin/lint_arch.py` as BCK-002 A-14); `rh-godot` is cut.*
 *v1.1 changes: new governance rules in §4 (single-writer column ownership, contract crates, lifecycle command queues, change classes C0–C3, merge queue, divergence bisect), aligned with `05.1` §2 and §6; `rh-contracts` and `rh-worldgen` added to the dependency rules; the decisions log already exists.*
@@ -105,7 +106,7 @@ Agents must not "fix" a failing golden run by re-recording baselines. Only an ap
 | Architecture lints | Dependency-graph lint (§3), plane-isolation lint, column-ownership lint against the Registry, flavour-asset lint |
 | Unit + property tests | cargo-nextest, proptest, pytest + hypothesis |
 | Determinism | Thread-count hash ladder on reference worlds (50 sim-years); observer-invariance fuzz of read-only APIs from P2 (DET-6) |
-| Golden runs | Yearly plane-A hash ladders on `worlds/` (1,000 years for `smoke`, 200 for the others on PRs; full length nightly). On a mismatch, the divergence bisect tool runs automatically (§4.5) |
+| Golden runs | Plane-A hash ladders on `worlds/`. PR tier: `solo` end to end, plus 200-year yearly ladders for the other reference worlds; nightly: the full 1,000-year monthly ladders at 1/2/4/N threads × 3 repeats (SPR-011 ruling 16; GOV-002 tier 9). The P0 `smoke` world keeps its 1,000-year yearly ladder on every PR (ADR-0006 amendment v1.1 item 10). On a mismatch, the divergence bisect tool runs automatically (§4.5) |
 | Contracts | Protocol conformance, Python-binding parity, SQL-twin equivalence, consumer contract tests for changed contract crates |
 | Performance | criterion benches against baseline (> 10% regression fails) |
 | Licences | cargo-deny, pip-licenses, license-checker; provenance check for assets (ADR-0021) |

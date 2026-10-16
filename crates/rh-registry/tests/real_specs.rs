@@ -10,12 +10,14 @@
 //!   scope, `include!`s its skeleton and implements `SpecPurpose` for the generated `RngPurpose`
 //!   with the generated `name()`: the only way a system names a purpose (ruling 2). Only the variant
 //!   list (`SpecPurpose::ALL`) is written by hand, and registration checks it against the spec.
-//!   Acceptance: the S5 and M2 skeletons compile, and so do S6 and S7.
+//!   Acceptance: the S5 and M2 skeletons compile, and so do S6 and S7, T1 and M7 (PR #32).
 //! - T-06: a purpose not in the spec fails registration; a spec purpose with no code use is
 //!   reported.
 //! - Ruling 3: the lint and the registration checker share one single-writer rule, and agree on
 //!   the real specs.
 //! - The RNG `system_id`s of the Registry systems are distinct.
+//! - PR #32 (Architect round 1, P5): M2, M7 and T1, declared exactly as their specs say, register
+//!   together, so ownership, lags, commands and the phase-order rule are checked mechanically.
 //!
 //! Refs: SPR-005 T-03, T-04, T-06, rulings 1–3; ADR-0033 §3; `05.1` §2, §6 item 2.
 #![allow(
@@ -81,6 +83,35 @@ skeleton!(
     s6,
     "../../rh-core/tests/generated/S6_artifacts.rs",
     [LossOnDeath, TheftOutcome, SearchFind]
+);
+skeleton!(
+    t1,
+    "../../rh-core/tests/generated/T1_minds.rs",
+    [
+        TraitDraw,
+        PollJitter,
+        IausSelect,
+        ActionOrder,
+        BreakDelay,
+        BreakAct,
+        BreakOutcome,
+        AttackOutcome
+    ]
+);
+skeleton!(
+    m7,
+    "../../rh-core/tests/generated/M7_dynasty.rs",
+    [
+        ExitMurder,
+        ExitDeposition,
+        ExitDay,
+        MurderCulprit,
+        ArbitrationTie,
+        RegrantTie,
+        Sortition,
+        InterregnumDelay,
+        Vocation
+    ]
 );
 skeleton!(
     s7,
@@ -225,11 +256,13 @@ fn the_generated_params_are_q16_16() {
 #[test]
 fn every_skeleton_matches_its_spec() {
     let t = real_ownership();
-    let cases: [(&str, &[(Pulse, Phase)], Vec<&'static str>); 4] = [
+    let cases: [(&str, &[(Pulse, Phase)], Vec<&'static str>); 6] = [
         (s5::SYSTEM_ID, s5::SCHEDULE, s5::RngPurpose::names()),
         (m2::SYSTEM_ID, m2::SCHEDULE, m2::RngPurpose::names()),
         (s6::SYSTEM_ID, s6::SCHEDULE, s6::RngPurpose::names()),
         (s7::SYSTEM_ID, s7::SCHEDULE, s7::RngPurpose::names()),
+        (t1::SYSTEM_ID, t1::SCHEDULE, t1::RngPurpose::names()),
+        (m7::SYSTEM_ID, m7::SCHEDULE, m7::RngPurpose::names()),
     ];
     for (id, schedule, purposes) in cases {
         let spec = &t.specs[id];
@@ -657,5 +690,117 @@ fn bindings_and_lags_must_match_the_spec() {
         [
             "VIOLATION [spec] M2.demography: binds Day/Vital but its spec's [[schedule]] declares Month/Vital"
         ]
+    );
+}
+
+/// `system` declared exactly as its spec says, in a world that registers `world`: every read with its
+/// spec lag, declared unconditionally (REV-P1a round 4, NEW-4: registration reports a read of an
+/// absent owner; SPR-014 adds the rule that drops it and applies the coupling's neutral value),
+/// every owned column written, the event kinds it emits, the commands it submits to a
+/// registered owner (ruling 5: a P1a world enables no command whose owner it does not register), and
+/// the commands the other registered specs submit to it.
+fn as_specified(t: &Ownership, system: &'static str, world: &[&'static str]) -> Declared {
+    let spec = &t.specs[system];
+    let leak = |s: &String| -> &'static str { s.clone().leak() };
+    let mut applies: Vec<&'static str> = world
+        .iter()
+        .filter(|&&w| w != system)
+        .flat_map(|w| t.specs[*w].commands.iter())
+        .filter(|c| c.target == system)
+        .map(|c| leak(&c.command))
+        .collect();
+    applies.sort_unstable();
+    applies.dedup();
+    Declared {
+        id: system,
+        access: AccessSpec {
+            reads: spec
+                .reads
+                .iter()
+                .map(|r| ColumnRead {
+                    column: leak(&r.column),
+                    owner: leak(&r.owner),
+                    lag: Lag::from_name(&r.lag).expect("a spec lag"),
+                })
+                .collect(),
+            writes: spec.owns.iter().map(|o| write(leak(&o.column))).collect(),
+            sends: spec
+                .commands
+                .iter()
+                .filter(|c| world.contains(&c.target.as_str()))
+                .map(|c| rh_core::access::CommandSend {
+                    command: leak(&c.command),
+                    target: leak(&c.target),
+                })
+                .collect(),
+            applies,
+            emits: spec.emits.iter().map(leak).collect(),
+        },
+        bindings: spec
+            .schedule
+            .iter()
+            .map(|(p, f)| PulseBinding {
+                pulse: Pulse::from_name(p).expect("a pulse"),
+                phase: Phase::from_name(f).expect("a phase"),
+            })
+            .collect(),
+        purposes: spec.rng.iter().map(leak).collect(),
+    }
+}
+
+/// PR #32 (Architect round 1, P5): the P1a trio M2, M7 and T1, each declared as its spec says,
+/// registers together: no two owners, every same-instant read in phase order, no scheduler cycle
+/// (T1 and M7 read each other only with lags), every command with a registered owner. A planted
+/// same-instant read of a column M7 writes in a later phase is refused (the positive control).
+#[test]
+fn m2_m7_and_t1_register_together_as_specified() {
+    let t = real_ownership();
+    let world = ["M2.demography", "M7.dynasty", "T1.minds"];
+    let trio = || -> Vec<Box<dyn SystemModel>> {
+        world
+            .iter()
+            .map(|&id| Box::new(as_specified(&t, id, &world)) as Box<dyn SystemModel>)
+            .collect()
+    };
+    let r = register(trio(), &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(r.ids(), world);
+    assert_eq!(r.order(Phase::Vital), ["M2.demography", "T1.minds"]);
+    // One entry per binding (Year, Month, Day), coarser pulse first within a level.
+    assert_eq!(
+        r.order(Phase::Polity),
+        ["M7.dynasty", "M7.dynasty", "M7.dynasty"]
+    );
+    // No same-instant edge between M7 and T1 in Agenda: one level, T1's Month binding first.
+    assert_eq!(
+        r.order(Phase::Agenda),
+        ["T1.minds", "M7.dynasty", "T1.minds"]
+    );
+    // Reads of owners the world does not register (S6, S7, M6) are declared and reported, not
+    // refused (NEW-4).
+    for note in [
+        "T1.minds: reads vow.conflict from S7.vows, which is not registered",
+        "M7.dynasty: reads polity.exec_constraint from M6.polity, which is not registered",
+    ] {
+        assert!(r.reports().iter().any(|n| n == note), "{:?}", r.reports());
+    }
+    // Positive control: T1 reading title.holder at same_instant (M7 writes it at Polity, after
+    // T1's Vital binding) is a phase-order violation.
+    let mut planted = as_specified(&t, "T1.minds", &world);
+    for r in &mut planted.access.reads {
+        if r.column == "title.holder" {
+            r.lag = Lag::SameInstant;
+        }
+    }
+    let mut systems = trio();
+    systems.retain(|s| s.descriptor().id != "T1.minds");
+    systems.push(Box::new(planted));
+    let Err(e) = register(systems, &t.spec_table()) else {
+        panic!("a same_instant read of a column written in a later phase must be refused");
+    };
+    assert!(
+        e.violations.iter().any(|v| v.rule == "phase-order"
+            && v.system == "T1.minds"
+            && v.message.contains("title.holder")),
+        "{e}"
     );
 }

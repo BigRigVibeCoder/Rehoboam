@@ -151,6 +151,7 @@ when = "A bearer's exposure first crosses corruption_threshold (at most once per
 [[commands]]
 target = "T1.minds"
 command = "ApplyInfluence"
+payload = "{ bearer, overlay, delta }"
 why = "The artifact's monthly pull on its bearer: {bearer, overlay, delta}. Minds owns traits and overlays and turns it into a Thought on the core vectors the overlay reads; S6 never writes a minds column"
 
 [[reads]]

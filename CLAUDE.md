@@ -51,6 +51,9 @@ python -I bin/gen_manifest.py --check
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml   # rung 1 (BCK-002 A-06)
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml      # rung 2 (BCK-002 A-06)
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml  # must FAIL
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
@@ -61,6 +64,8 @@ python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference d
 cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sampler golden vectors at opt-level 3 (SPR-003 T-05)
 cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)
 python -I specs/demography/selftest_brass.py
+python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
+python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
 python -I specs/systems/lint_odd.py
@@ -74,6 +79,7 @@ cargo build -p rh-cli && python -I bin/manifest_parity.py specs/manifest/example
 target/debug/rh-cli ownership    # single-writer column ownership from specs/systems (SPR-004)
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
+python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml   # life_ends (SPR-011)
 ```
 
 ## Conventions

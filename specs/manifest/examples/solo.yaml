@@ -1,11 +1,11 @@
 # Reference world solo, rung 0 of the complexity ladder (director's ruling D4, 2026-10-16):
 # one person on a tiny map. It tests the engine end to end with the least possible world:
-#   life course (ageing, illness, death), a household's food (harvest, stores, hunger),
-#   daily life at minute resolution (every minute of Ada's life is authoritative, ADR-0031),
-#   the World Stream, replay, forks and virtual telemetry.
+#   ageing and death on day boundaries, the World Stream and replay (D31, 2026-10-16).
+#   No food and no minutes in P1a: M4 and S5 below are reported as not built (SPR-011 ruling 3);
+#   a household's food comes in P1b and minute-level daily life is Later.
 # Later rungs add people and systems one at a time (docs/11_roadmap.md, "Complexity ladder").
 manifest_version: 0
-registry_version: "0.1.0"
+registry_version: "0.2.0"
 world:
   id: solo
   display_name: "Solo test world"

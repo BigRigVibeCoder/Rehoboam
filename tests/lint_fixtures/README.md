@@ -77,6 +77,12 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `ownership/duplicate_write.access.toml` | `rh-cli ownership` (the shared rule's `duplicate` check; SPR-005 DEF-3) | `M2.demography` declares a write to its own `person.alive` twice | `VIOLATION [duplicate] M2.demography: declares a write to person.alive twice` |
 | `schema/drifted_bound.schema.json` | `rh-cli manifest schema --diff` (SPR-004 T-04) | the reference schema with `Horizon.years` maximum changed to 6000 | `SCHEMA DIFFERENCE $defs.Horizon.properties.years.maximum` |
 | `skeletons/stale/` | `bin/gen_skeletons.py --check --out …` (regenerate-and-diff, GOV-003 §2; SPR-005 T-03) | a copy of `crates/rh-core/tests/generated/` with `M2_demography.rs` hand-edited (`SPEC_VERSION` 0.0.9). After a spec change, regenerate it with `--out tests/lint_fixtures/skeletons/stale` and re-apply the edit | `STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs` |
+| `odd_emits/frozen/` | `specs/systems/lint_odd.py --extra-specs` (SPR-011 ruling 11) | a frozen spec emitting a kind that is not a Registry verb, and another system's verb | `ERROR M1.regions.odd.toml: emits NOT_A_VERB, which is not a Registry verb` |
+| `odd_emits/draft/` | `specs/systems/lint_odd.py --extra-specs` (SPR-011 ruling 11) | the same emits on a draft spec | must succeed and warn `emits SUCCEED, which the Registry gives to M7.dynasty` |
+| `odd_emits/overlay/`, `odd_emits/overlay.toml` | `specs/systems/lint_odd.py --extra-specs --overlay` (SPR-011 ruling 11) | a frozen spec emitting a kind only a world's Registry overlay declares | must succeed (`PASS: 7 system specs linted`) |
+| `odd_applies/mismatch/` | `specs/systems/lint_odd.py --extra-specs` (PR #32 `[[applies]]`; REV-P1a §7) | a frozen spec whose `[[commands]]` payload lists the `[[applies]]` fields in another order | `has payload fields ['a', 'c', 'b'], but [[applies]] declares ['a', 'b', 'c']` |
+| `odd_applies/match/` | as above | the same spec with matching payload fields | must succeed (`PASS: 7 system specs linted`) |
+| `sifting/life_ends_unanchored.toml` | `specs/sifting/lint_patterns.py` (V-SIFT-05; SPR-011 ruling 14) | `life_ends` with a `where` read that is not anchored to a bound event | `ERROR life_ends.e1: UNANCHORED state read` |
 
 Since SPR-003 GAP-9, every plane-A crate in the `arch/` and `compile_fail/plane_a_names_plane_*` fixtures declares `[lints] workspace = true` (each fixture root has a `[workspace.lints]` table), so each control fails only for the rule it plants.
 
