@@ -171,6 +171,11 @@ These are not dispositions; those come at G0. The Architect ran prototypes 6 to 
 - Prototype 8 is reframed as backward causal-chain extraction, not sifting discovery.
 - Priority-Flood (item 11), the beat compiler (item 14) and the bug autopsies (item 15) stand as G0 input.
 
+**Rebuilt prototypes, checked by the Architect (2026-10-16):**
+- **Prototype 7 now meets N7.** No rule reads the population count. The rules are 50 finite fiefs, inheritance and re-grant of vacant fiefs, vocations for third and later children, and demotion of any unlanded noble at 35 into M2. The Architect's run ended at 98 active nobles, against 2,529 without the rules.
+  - Residuals for the G0 spec: the docstring gives 40/35/25 per cent for the vocations, but the code uses 45/35/20; children sent to holy orders or mercenary companies are dropped from the model, whereas in Rehoboam they remain people in the ledger.
+- **Prototype 8 now separates discovery from extraction, and 2,000 causal trees add causal noise.** Stage 1 is still a filtered scan of a hand-set `importance` column and two known climax types, so the hard part of discovery (judging salience) is built into the data. It shows that an indexed filter plus backward extraction is sub-millisecond. It does not measure pattern search. Architect's run: 0.433 ms end to end.
+
 | # | Item | Finding | Contract |
 |---|---|---|---|
 | N7 | Item 12, prototype 7 (thermostat) | **The prototype is the global controller the director rejected on 2026-10-16.** It uses two count thresholds:<ul><li>below 160 nobles it creates `180 - N` new ones from nothing (a random house and birth year, flagged as heirs);</li><li>above 300 it demotes down to 280, taking non-heirs first and then the oldest lines whatever their land.</li></ul>The 150–350 band follows from those thresholds, so the run cannot show the band emerging. The spawning also breaks the charter's Law 2 (nothing exists without a journaled pedigree). A valid test has no count thresholds: seats (titles, estates) are in-world objects, and a demotion rule fires when a noble holds no seat, estate or active vow. Then measure the band | Director's ruling, 2026-10-16 (batch 03 notes); ADR-0007; Law 2 |
