@@ -475,6 +475,15 @@ impl Journal {
         &self.key
     }
 
+    /// The writer connection's `journal_mode` and `synchronous` (`"wal"` and 2, FULL, on every
+    /// open journal; read back for tests and diagnostics).
+    ///
+    /// # Errors
+    /// [`JournalError::Sqlite`] if `SQLite` cannot report them.
+    pub fn durability(&self) -> Result<(String, i64), JournalError> {
+        durability_of(&self.conn)
+    }
+
     /// Appends an already validated input, assigning its `seq` and `payload_hash`, and returns
     /// the journaled record. The append and the timeline's count advance in one transaction.
     ///
@@ -564,7 +573,22 @@ fn set_write_pragmas(conn: &Connection) -> Result<(), JournalError> {
         )));
     }
     conn.execute_batch("PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;")?;
+    let (_, synchronous) = durability_of(conn)?;
+    if synchronous != SYNCHRONOUS_FULL {
+        return Err(JournalError::Schema(format!(
+            "synchronous=FULL did not take (got {synchronous})"
+        )));
+    }
     Ok(())
+}
+
+/// `SQLite`'s `PRAGMA synchronous` value for FULL.
+const SYNCHRONOUS_FULL: i64 = 2;
+
+fn durability_of(conn: &Connection) -> Result<(String, i64), JournalError> {
+    let mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0))?;
+    let synchronous: i64 = conn.query_row("PRAGMA synchronous", [], |r| r.get(0))?;
+    Ok((mode, synchronous))
 }
 
 fn validate_producer(p: &Producer) -> Result<(), JournalError> {
