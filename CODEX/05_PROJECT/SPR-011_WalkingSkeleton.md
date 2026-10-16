@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-001, PRJ-002, SPR-007, SPR-008, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.4.0
+version: 0.5.0
 ---
 
 > **BLUF:** Close the engine's loop end to end at the lowest fidelity: manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled death timers → events → the Parquet chronicle and World Stream v0 (channel A) → `rh-cli tail` → a trivial sifter pattern → journal replay. It runs on `solo` first, then on `household` and `hamlet`, on one binary, with plane-hash ladders in CI from the first commit. Developer: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET, AGT-003-IF, AGT-003-STAT. **APPROVED by the director at G0** (C3; D30, 2026-10-16; `docs/decisions_pending.md` D30 to D32); the rulings below are binding. The work is about 9 agent-days, three times the GOV-005 bound, so ruling 1 runs it as three sprints: SPR-011 (increment A), SPR-012 (increment B) and SPR-013 (increment C).
@@ -41,7 +41,7 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 13. **World Stream v0 and the chronicle: one writer, `rh-stream`.**
     - A new crate `rh-stream`, pinned (A, machinery), so the forbidden-API gate scans it. It holds the record types, the canonical text form and its parser, the segment writer and the reader. `parquet` (=60.0.0, matching SPR-007's arrow-rs pins; default features off, `zstd` only) is reviewed into `PLANE_A_EXTERNAL_DEPS`: it can carry float columns, and `rh-stream` declares none. The alternative is to put the writer in `rh-snapshot`.
     - Channel A in P1.0 carries `EVENT`, `INPUT`, `STEP_DIGEST` (monthly: living count, deaths in the month, the three plane hashes) and `KEYFRAME`. It also carries two new kinds, `LIFE_ENTRY` and `LIFE_EXIT`, because the fidelity promise (`05.10` §4) needs every birth and death in channel A while DATA-5 keeps commoner deaths out of `event` rows at scale. `05.10` §4 and `05.9` IF-0 are amended.
-    - Order within an instant: inputs, events in `EventId` order, life records in `PersonId` order, the digest, the keyframe marker. Genesis writes the founders' `LIFE_ENTRY` records at tick 0 in `PersonId` order.
+    - Order within an instant: inputs, events in `EventId` order, life records in `PersonId` order, the digest, the keyframe marker. Genesis writes the founders' `LIFE_ENTRY` records at tick 0 in `PersonId` order. At tick 0 an `INPUT` therefore orders before the founders' `LIFE_ENTRY` records (PR #37 Q12, accepted).
     - A sealed segment is one directory per (timeline, channel, sim-year) holding one Parquet file per table: `event`, `event_role`, `causal_edge`, `life_course_entry`, `life_course_exit`, `input`, `step_digest`, `keyframe_marker`, `verb`. Every record row carries its `seq`. A DuckDB view joins entry and exit into `schema.sql`'s `life_course`.
     - Sealing is atomic: temporary file, `fsync`, rename. There is no live socket (P1.17); `tail` follows sealed segments.
     - V-STR-01 compares the segment files byte for byte within one build, plus a canonical digest of the records in `seq` order that survives a Parquet library upgrade.
@@ -90,6 +90,7 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 | `specs/chronicle/schema.sql` | Exists | EventId comment (ruling 12); `life_course` entry/exit split (ruling 13); `concrete_role` codes (initiator, target, partner, bystander, instrument) differ from the Registry's `[event_roles]` (actor, target, witness, instrument); `regional_aggregate.value` is `DOUBLE` in a plane-A table | Architect | T-09 |
 | `specs/stream/channel_a_v0.sql`: segment DDL, record header, kinds, in-instant order | Missing (`05.10` §5 and `05.9` IF-0 are prose) | Ruling 13 | Architect | T-09 |
 | `specs/sifting/patterns.solitary_life.toml` (`life_ends`) | Missing | Ruling 14 | Architect | T-11 |
+| `specs/stream/channel_c_v0.sql`: channel-C segment DDL (`sift_match`) | Missing | PR #37 Q10 | Architect | T-11 |
 | `docs/05.5` §3.2 | Exists | — | — | T-04 |
 | Probability type | Missing | Ruling 4 | Architect | T-01 |
 
@@ -161,6 +162,8 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 
 ### Increment C: the stream, the sifter, replay and the ladder (SPR-013 under ruling 1; about 3.5 agent-days)
 
+Fixed in SPR-013's plan before it starts (PR #37's carried questions): what makes an act class "tellable" for DATA-5 (Q8; ruling 11 already admits every death at rungs 0–2 as tellable); the canonical text form and `segment.canonical_digest`, XXH3-128 over the canonical lines in `seq` order (Q11).
+
 #### T-09: `rh-stream`: channel A and the sealed chronicle (rulings 11, 12, 13)
 - **Deliverable:** Crate `rh-stream`, pinned (A, machinery), with `parquet` reviewed in. The record header and the P1.0 kinds; the in-instant order; per-sim-year sealed segments matching `schema.sql` and `specs/stream/channel_a_v0.sql`; atomic sealing; the per-segment canonical digest; the lossless one-line canonical text form and its parser. The host writes after each instant, from `Engine::drain_events`, the journal and the life-course delta.
 - **Acceptance:** V-STR-01 on `solo` and a 60-person fixture: segments byte-identical across two runs and across 1 and N threads, and canonical digests equal. V-DATA-10 subset: a Python test reads every sealed table with DuckDB, with `schema.sql`'s types. `seq` is contiguous from 0 across segments. The canonical form round-trips every record (property test; the parser joins the nightly fuzz tier). A `kill -9` during sealing leaves no partial segment, and the resumed run reseals the same bytes (GOV-002 tier 15). No channel-A table has a float column.
@@ -194,6 +197,7 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 - The live in-process sifter and multi-clause patterns (P2.1).
 - Same-instant command delivery, BCK-002 A-30 and A-31 (P1.13); exact lags, A-28 (P1.18).
 - Food (P1b, D31); daily life (P1.18, in P1b since D33; Later for `minutes`, D31); worlds above 60 persons (P1.14).
+- The infant sub-schedule (P1.3): rung 0's hazard stays linear through year 0 until then (PR #37 Q13, accepted).
 
 ## Director approvals (given at G0, 2026-10-16)
 1. **The plan, as C3** (GOV-005 §2): **approved (D30)**, with the C2 changes inside it: the frozen M2 spec (ownership of `person.id` and `life_course.*`), the Registry additions (`DEATH`, `EXTINCTION`, verb `tellability`, system `defaults`), the channel-A segment schema and the `LIFE_ENTRY`/`LIFE_EXIT` kinds, four new crates (`rh-worldgen`, `rh-sys-demography`, `rh-stream`, `rh-sifter`) and one new plane-A dependency (`parquet`).
