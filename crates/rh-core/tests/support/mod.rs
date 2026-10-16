@@ -17,6 +17,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, Lag, Plane};
+use rh_core::ownership::SpecTable;
 use rh_core::system::{
     AggregateSpec, InvariantResult, ParamSchema, PulseBinding, SimError, SpecPurpose, StepCtx,
     SystemDescriptor, SystemModel,
@@ -184,14 +185,19 @@ pub fn real_ownership() -> Ownership {
     Ownership::build(&specs, &ids)
 }
 
-/// An ownership table from in-memory specs. The Registry check is the lint's business; tests
-/// that build synthetic systems pass their ids as the Registry.
-pub fn ownership(specs: &[SystemSpec]) -> Ownership {
-    let ids: BTreeSet<String> = specs.iter().map(|s| s.id.clone()).collect();
-    Ownership::build(specs, &ids)
+/// The real specs as registration takes them: data built by rh-registry, the host's spec reader.
+pub fn real_specs() -> SpecTable {
+    real_ownership().spec_table()
 }
 
-/// An ownership table in which every stub's spec says exactly what the stub declares.
-pub fn agreeing_ownership(stubs: &[Stub]) -> Ownership {
-    ownership(&stubs.iter().map(Stub::spec).collect::<Vec<_>>())
+/// A spec table from in-memory specs. The Registry check is the lint's business; tests that build
+/// synthetic systems pass their ids as the Registry.
+pub fn spec_table(specs: &[SystemSpec]) -> SpecTable {
+    let ids: BTreeSet<String> = specs.iter().map(|s| s.id.clone()).collect();
+    Ownership::build(specs, &ids).spec_table()
+}
+
+/// A spec table in which every stub's spec says exactly what the stub declares.
+pub fn agreeing_specs(stubs: &[Stub]) -> SpecTable {
+    spec_table(&stubs.iter().map(Stub::spec).collect::<Vec<_>>())
 }

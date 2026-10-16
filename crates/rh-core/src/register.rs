@@ -1,15 +1,15 @@
 //! System registration: the access conflict checker, the RNG purpose check and the derived
 //! schedule (SPR-005 T-04, T-05, T-06).
 //!
-//! [`register`] takes the systems and the ownership table the host built from the specs
-//! (`rh_registry::ownership::Ownership`; `rh-core` has no I/O). It refuses the whole set, with
+//! [`register`] takes the systems and the spec table the host built from the specs
+//! ([`SpecTable`], from `rh_registry::ownership::Ownership::spec_table`; `rh-core` has no I/O). It refuses the whole set, with
 //! every violation, if any of these fails:
 //!
 //! | Rule | Check | Source |
 //! |---|---|---|
 //! | `registry` | each system id is registered once and has a spec | ADR-0033 |
 //! | `system-id` | no two ids hash to the same RNG `system_id` | this module |
-//! | `single-writer`, `undeclared-read`, `plane` | each `AccessSpec` against the specs: the ownership lint's own check (`Ownership::check`) | ruling 3 |
+//! | `single-writer`, `undeclared-read`, `plane` | each `AccessSpec` against the specs: the ownership lint's own check (`ownership::check_access`) | ruling 3 |
 //! | `single-writer` | across the registered `AccessSpec`s: one writer per column, reads name the writer (`ownership::single_writer`) | ruling 3; T-04 |
 //! | `plane` | a plane-A system reads no plane-B/C column a registered system writes (`ownership::plane_leak`) | ADR-0024 |
 //! | `rng-purpose` | every purpose a system draws under is in its spec's `[[rng]]`, once | ruling 2; T-06 |
@@ -18,9 +18,9 @@
 //! Reported, not refused: a spec purpose the code never declares, and a read whose owner is not
 //! registered (its owner has no code yet).
 //!
-//! The single-writer and plane rules are the functions `rh_registry::ownership` exports, the
-//! ones the spec lint (`rh-cli ownership`) runs: where they meet, the lint reads the specs and this
-//! checker reads the registered code (ruling 3).
+//! The single-writer and plane rules are the functions of [`crate::ownership`], the ones the spec
+//! lint (`rh-cli ownership`, through `rh_registry::ownership`) runs: where they meet, the lint
+//! reads the specs and this checker reads the registered code (ruling 3).
 //!
 //! Registration sorts systems by id, so the result does not depend on the order they are passed
 //! in.
@@ -31,8 +31,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use crate::ownership::{Source, SpecTable, Violation, check_access, plane_leak, single_writer};
 use rh_ids::SystemId;
-use rh_registry::ownership::{Ownership, Source, Violation, plane_leak, single_writer};
 
 use crate::access::AccessSpec;
 use crate::schedule::{self, Schedule, SchedulerInput};
@@ -44,10 +44,12 @@ pub const TAG_SYSTEM_ID: u64 = rh_ids::rng::tag("rehoboam/rh-core/system/v1");
 /// The RNG `system_id` of a Registry system id: the high 32 bits of
 /// `h64_bytes(tag("rehoboam/rh-core/system/v1"), id)`.
 ///
-/// DECISION (SPR-005; reported to the Architect): no contract numbers the systems. A
+/// Contract text since SPR-005 (`05.1` §6 item 2, the `system_id` row; Architect ruling): a
 /// name-derived id never changes when another system is added, so adding a system never shifts
-/// anyone else's draws; a collision is a registration error (`system-id`). Changing this layout
-/// changes every draw: a C3 change.
+/// anyone else's draws; a collision is a registration error (`system-id`). Changing this layout,
+/// or renaming a system, changes that system's draws: a C3 change. Golden values from the
+/// independent reference (`bin/gen_rng_golden.py`, `system` lines) pin it
+/// (`tests/system_id_golden.rs`).
 #[must_use]
 pub fn system_id(id: &str) -> SystemId {
     let h = rh_ids::rng::h64_bytes(TAG_SYSTEM_ID, id.as_bytes());
@@ -101,14 +103,11 @@ impl Registered {
             .collect()
     }
 
-    /// The access declarations from code, in id order, in the form the ownership lint takes:
-    /// what `rh-cli ownership` counts as "access declarations from code".
+    /// The access declarations from code, in id order: what `rh-cli ownership` will count as
+    /// "access declarations from code".
     #[must_use]
-    pub fn lint_accesses(&self) -> Vec<rh_registry::ownership::AccessSpec> {
-        self.entries
-            .iter()
-            .map(|e| e.access.lint_access(e.id))
-            .collect()
+    pub fn accesses(&self) -> Vec<(&'static str, &AccessSpec)> {
+        self.entries.iter().map(|e| (e.id, &e.access)).collect()
     }
 }
 
@@ -144,13 +143,13 @@ fn violation(system: &str, rule: &'static str, message: String) -> Violation {
     }
 }
 
-/// Registers `systems` against the specs' ownership table.
+/// Registers `systems` against the specs' table.
 ///
 /// # Errors
 /// [`RegistrationError`] with every violation of the rules in the module table.
 pub fn register(
     systems: Vec<Box<dyn SystemModel>>,
-    ownership: &Ownership,
+    specs: &SpecTable,
 ) -> Result<Registered, RegistrationError> {
     let mut entries: Vec<Entry> = systems
         .into_iter()
@@ -192,7 +191,13 @@ pub fn register(
 
     // Each declaration against the specs: the lint's own check.
     for e in &entries {
-        violations.extend(ownership.check(&e.access.lint_access(e.id)));
+        violations.extend(check_access(
+            &specs.owners,
+            specs.specs.get(e.id),
+            e.id,
+            &e.access.read_columns(),
+            &e.access.write_columns(),
+        ));
     }
 
     // The declarations against each other: the shared single-writer and plane rules.
@@ -214,7 +219,7 @@ pub fn register(
     }
 
     // RNG purposes against the spec's [[rng]] table (ruling 2).
-    check_purposes(&entries, ownership, &mut violations, &mut reports);
+    check_purposes(&entries, specs, &mut violations, &mut reports);
 
     // The schedule (T-05), only when the declarations themselves are sound.
     let inputs: Vec<SchedulerInput<'_>> = entries
@@ -251,13 +256,13 @@ pub fn register(
 /// purpose with no code use is reported.
 fn check_purposes(
     entries: &[Entry],
-    ownership: &Ownership,
+    specs: &SpecTable,
     violations: &mut Vec<Violation>,
     reports: &mut Vec<String>,
 ) {
     for e in entries {
-        let Some(spec) = ownership.specs.get(e.id) else {
-            continue; // `registry` already reported by Ownership::check.
+        let Some(spec) = specs.specs.get(e.id) else {
+            continue; // `registry` already reported by check_access.
         };
         let mut declared = BTreeSet::new();
         for &p in &e.purposes {

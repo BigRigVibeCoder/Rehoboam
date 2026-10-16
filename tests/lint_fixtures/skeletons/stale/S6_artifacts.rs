@@ -7,10 +7,21 @@ pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Month, Phase::Culture),
 ];
 #[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {
     LossOnDeath = 1,  // key: (artifact, tick)
     TheftOutcome = 2,  // key: (thief, artifact, tick)
     SearchFind = 3,  // key: (seeker, artifact, month)
+}
+impl RngPurpose {
+    /// The purpose's name in the spec's `[[rng]]` table.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::LossOnDeath => "loss_on_death",
+            Self::TheftOutcome => "theft_outcome",
+            Self::SearchFind => "search_find",
+        }
+    }
 }
 pub struct Params {
     pub influence_base: Fixed,  // bounds checked against the Registry at load

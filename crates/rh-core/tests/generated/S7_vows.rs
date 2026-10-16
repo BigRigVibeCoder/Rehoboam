@@ -7,9 +7,19 @@ pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Month, Phase::Agenda),
 ];
 #[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {
     GrudgeForm = 1,  // key: (person, event)
     BreakMode = 2,  // key: (vow, month)
+}
+impl RngPurpose {
+    /// The purpose's name in the spec's `[[rng]]` table.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::GrudgeForm => "grudge_form",
+            Self::BreakMode => "break_mode",
+        }
+    }
 }
 pub struct Params {
     pub vow_priority_base: Fixed,  // bounds checked against the Registry at load

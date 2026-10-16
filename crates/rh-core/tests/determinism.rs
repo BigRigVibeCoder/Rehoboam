@@ -33,7 +33,7 @@ use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
 use rh_ids::{BranchSalt, RegionId};
-use support::{Stub, agreeing_ownership};
+use support::{Stub, agreeing_specs};
 
 const ROWS: u16 = 64;
 const YEARS: i64 = 50;
@@ -218,7 +218,7 @@ fn stubs() -> Vec<Stub> {
 
 fn registered(order: impl Fn(&mut Vec<Stub>)) -> Registered {
     let mut all = stubs();
-    let t = agreeing_ownership(&all);
+    let t = agreeing_specs(&all);
     order(&mut all);
     register(all.into_iter().map(Stub::boxed).collect(), &t).unwrap_or_else(|e| panic!("{e}"))
 }
@@ -404,7 +404,7 @@ fn a_draw_under_an_unregistered_purpose_stops_the_run() {
             .writes("s.x")
             .at(Pulse::Day, Phase::Vital)
             .stepping(step);
-        let t = agreeing_ownership(std::slice::from_ref(&s));
+        let t = agreeing_specs(std::slice::from_ref(&s));
         let r = register(vec![s.boxed()], &t).unwrap();
         let mut engine = Engine::new(
             CALENDAR,
@@ -424,7 +424,7 @@ fn instants_follow_the_bound_pulses() {
     let s = Stub::new("X1.s")
         .writes("s.x")
         .at(Pulse::Month, Phase::Vital);
-    let t = agreeing_ownership(std::slice::from_ref(&s));
+    let t = agreeing_specs(std::slice::from_ref(&s));
     let r = register(vec![s.boxed()], &t).unwrap();
     let start = SimTime::from_minutes(-3 * CALENDAR.minutes_per_year());
     let mut engine = Engine::new(
@@ -487,7 +487,7 @@ fn the_reported_error_is_the_same_at_every_thread_count() {
         .stepping(fail_b);
     let mut seen = Vec::new();
     for threads in [1, 2, 4] {
-        let t = agreeing_ownership(&[a.clone(), b.clone()]);
+        let t = agreeing_specs(&[a.clone(), b.clone()]);
         let r = register(vec![b.clone().boxed(), a.clone().boxed()], &t).unwrap();
         let mut engine = Engine::new(
             CALENDAR,

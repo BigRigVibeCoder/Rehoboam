@@ -36,7 +36,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use rh_registry::ownership::Violation;
+use crate::ownership::Violation;
 
 use crate::access::AccessSpec;
 use crate::phase::Phase;

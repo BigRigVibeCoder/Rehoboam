@@ -165,6 +165,7 @@ dependencies = [
 name = "rh-registry"
 version = "0.0.0"
 dependencies = [
+ "rh-core",
  "serde",
  "toml",
 ]
