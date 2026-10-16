@@ -302,6 +302,15 @@ fixed_point_compile_controls() {
   done <<<"$FIXED_POINT_COMPILE_FAIL"
 }
 
+# Effect-language golden control (SPR-017 spec): the committed golden file with one expected value
+# altered, which the reference must reject by the case's name.
+effect_golden_control() {
+  local planted=target/rendered-fixtures/altered_effect_language_golden_v0.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^expect = "bool:true"$/s//expect = "bool:false"/' specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
+  "$PY" -I specs/registry/effect_ref.py --check --golden "$planted"
+}
+
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
 # two `&&` lines splits the chain, and later checks would run after a failure (DEF-2).
 run "Required tools present" pass require_tools &&
@@ -434,6 +443,8 @@ run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:"
 run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
+run "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml (effect_ref --check; SPR-017)" "pass:EFFECT LANGUAGE v0.1.0: PASS" "$PY" -I specs/registry/effect_ref.py --check &&
+run "effect_ref positive control: one altered expected value must FAIL (SPR-017)" "fail:FAIL lit_true" effect_golden_control &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
 # Tier 6/8 — determinism-style and contract prototypes

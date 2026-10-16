@@ -41,6 +41,8 @@ REQUIRED_GATES = (
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
     "T-03)",
+    "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml "
+    "(effect_ref --check; SPR-017)",
     "Golden vectors: Brass (M2)",
     "Golden vectors: M4 basket and price rule",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
@@ -95,6 +97,7 @@ REQUIRED_GATES = (
     "Virtual telemetry (S5 prototype)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
+    "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
     "GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
