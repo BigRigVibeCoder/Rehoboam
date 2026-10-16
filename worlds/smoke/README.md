@@ -16,7 +16,7 @@ The code is `crates/rh-sys-smoke`: plane A, kind `system`, with the generated sk
 
 Format `rehoboam-ladder v1` is documented normatively in `crates/rh-golden/src/ladder.rs`.
 
-- **Header:** the world, seed, horizon, rung kind (`yearly` or `monthly`) and hash layout (`rehoboam/rh-snapshot/hash/v1`). There is **no** build id, wall time, thread count or host name. So ladders from two machines, two builds or two thread counts compare byte for byte.
+- **Header:** the world, seed, horizon, rung kind (`yearly` or `monthly`) and hash layout (`rehoboam/rh-snapshot/hash/v1`). There is **no** build id, wall time, thread count or host name. So ladders from two machines, two builds or two thread counts compare byte for byte. A run perturbed with the V-DET-11 hook adds `inject <month>:<table>:<row>`, so an injected ladder can never pass as a clean one.
 - **Rungs:** one per year end or month end. Each holds:
   - its index, tick and date;
   - `state_hash`, the plane-A hash of the world tables and the engine-held tables;
@@ -39,13 +39,18 @@ target/release/rh-cli ladder compare a.ladder worlds/smoke/baselines/smoke_yearl
 
 ## Baselines (SPR-008 ruling 6; `docs/13` §4.4)
 
-- `bin/check_baseline.py` compares the committed baseline with CI's recomputation:
-  - **unchanged** against the base branch, it must equal the recomputation byte for byte;
-  - **changed**, it must equal the recomputation byte for byte **and** the PR title must carry `[C3]`.
+- `bin/check_baseline.py` compares the committed baseline with CI's recomputation. In every case the baseline must equal the recomputation byte for byte, so it can only be regenerated, never typed. On top of that, the **C3 rule** fails closed (VER-SPR-008 MAJ-1):
+  - **pull request:** the base branch is required (no base: exit 2). If the baseline changed against it, the PR title must end with a tag group holding `[C3]`. `SPR-008: golden CI [C3]` passes; `docs: explain the [C3] rule` does not. A title edit re-runs the gate.
+  - **push:** if the baseline changed in `before..after`, a commit subject in that range must end with `[C3]`. A push with no previous commit (a new branch) reports the rule "not checked: no base".
+  - **local run with no base:** reports "C3 rule not checked (no base ref)", never "unchanged".
 
-  So a baseline can only be regenerated, never typed. A hand-edited one fails, and so does one regenerated in a PR that is not C3. Both controls run in `bin/check_all.sh`.
-- There is no merge queue (GitHub Free). The C3 PR's own **final commit** writes the new baseline with `bin/regen_baseline.sh`, and the Architect merges it.
+  Controls in `bin/check_all.sh`: a hand-edited baseline fails; a regenerated one fails without the mark and passes with it (title and push forms); `[C3]` outside the trailing tag group fails; a pull request with no base fails closed.
+- There is no merge queue (GitHub Free). The C3 PR's own **final commit** writes the new baseline with `bin/regen_baseline.sh`, and the commit subject must end with `[C3]`. The Architect merges it.
 - A golden failure in a PR that is not C3 is never fixed by regenerating. Read the bisect report and explain the divergence: either an intended model change (declare C3) or a bug (fix it). See `docs/13` §4.5.
+
+## What the golden run covers
+
+The full engine loop, every phase and pulse, timers, lifecycle commands, events and material inputs through the journal (`crates/rh-sys-smoke/src/lib.rs` lists them per system). From the float zone (`rh-sample`) it covers **Poisson**, on both paths: inversion (mean 5, three regions) and PTRS (mean 12, one region; logs, `lgamma` and a variable number of draws; VER-SPR-008 MIN-1). The binomial, normal, gamma and beta samplers are not in the golden run; their golden vectors (V-DET-09) cover them.
 
 ## The bisect
 

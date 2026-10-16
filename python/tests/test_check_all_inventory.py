@@ -41,12 +41,24 @@ REQUIRED_GATES = (
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
     "T-03)",
+    "Golden baseline control: a local run with no base says the C3 rule was not checked "
+    "(VER-SPR-008 MAJ-1)",
+    "Golden baseline control: a push that changes the baseline in a [C3] commit passes "
+    "(VER-SPR-008 MAJ-1)",
     "Golden baseline control: a regenerated baseline in a [C3] PR passes (SPR-008 T-04)",
+    "Golden baseline positive control: [C3] outside the title's trailing tag group must FAIL "
+    "(VER-SPR-008 MAJ-1)",
     "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)",
+    "Golden baseline positive control: a pull_request run with no base must FAIL closed "
+    "(VER-SPR-008 MAJ-1)",
+    "Golden baseline positive control: a push that changes the baseline with no [C3] commit must "
+    "FAIL (VER-SPR-008 MAJ-1)",
     "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL "
     "(SPR-008 T-04)",
     "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR "
     "(check_baseline; SPR-008 T-04)",
+    "Golden ladder positive control: an injected run never compares equal to a clean one "
+    "(VER-SPR-008 MIN-2)",
     "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread (SPR-008 T-02)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads (SPR-008 T-02)",
@@ -188,9 +200,14 @@ REQUIRED_GATES = (
     "T-00)",
     "lint_forbidden positive control: a forbidden API in an included skeleton must FAIL (SPR-008 "
     "T-00)",
+    "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)",
     "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)",
+    "lint_forbidden positive control: an include! reached through a symlink resolves from the "
+    "link, as rustc does (VER-SPR-008 MIN-3)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
     "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)",
+    "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
+    "(VER-SPR-008)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "

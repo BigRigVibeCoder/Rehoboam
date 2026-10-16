@@ -269,6 +269,33 @@ baseline_hand_edited_control() {
   "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed no
 }
 
+# The push form of the C3 rule (VER-SPR-008 MAJ-1): a two-commit repository whose second commit, with
+# subject $1, adds the baseline; the gate runs over before..after there.
+baseline_push_control() {
+  local repo="$TARGET_DIR/rendered-fixtures/baseline_push" ladder="$PWD/$GOLDEN/smoke_yearly_t1.ladder"
+  local g=(git -C "$repo" -c user.name=check_all -c user.email=check_all@localhost -c commit.gpgsign=false)
+  rm -rf "$repo" && mkdir -p "$repo" || return 1
+  "${g[@]}" init -q && echo x > "$repo/other.txt" && "${g[@]}" add . && "${g[@]}" commit -qm base || return 1
+  local before; before=$("${g[@]}" rev-parse HEAD) || return 1
+  cp worlds/smoke/baselines/smoke_yearly_1000y.ladder "$repo/baseline.ladder" && "${g[@]}" add . && "${g[@]}" commit -qm "$1" || return 1
+  local after; after=$("${g[@]}" rev-parse HEAD) || return 1
+  local py="$PY" script="$PWD/bin/check_baseline.py"
+  [[ "$py" == /* || "$py" != */* ]] || py="$PWD/$py"
+  (cd "$repo" && "$py" -I "$script" --baseline baseline.ladder --recomputed "$ladder" \
+    --event push --before "$before" --after "$after")
+}
+
+# MIN-2: two years clean and two years with the V-DET-11 hook; the ladders (which record the hook in
+# their header) must differ.
+injected_ladder_control() {
+  local dir="$TARGET_DIR/rendered-fixtures/injected"
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  "$RH_CLI_RELEASE" run smoke --years 2 --out "$dir/clean.ladder" >/dev/null || return 1
+  "$RH_CLI_RELEASE" run smoke --years 2 --out "$dir/injected.ladder" --inject 24:harvest.stock:0 >/dev/null || return 1
+  grep -q '^inject 24:harvest.stock:0$' "$dir/injected.ladder" || { echo "no inject line in the header"; return 0; }
+  "$RH_CLI_RELEASE" ladder compare "$dir/clean.ladder" "$dir/injected.ladder"
+}
+
 # Doctests (nextest skips them). The compile-fail cases are acceptance tests (SPR-002 T-01), so the
 # gate counts them per file: a case demoted to plain text, deleted or renamed must turn it red, not
 # just vanish (VER-SPR-002-TEST DEF-2). Each entry is file:compile_fail:compiling, the number of
@@ -410,6 +437,9 @@ run "lint_forbidden positive control: a forbidden API in an included skeleton mu
 run "lint_forbidden positive control: a forbidden API behind a nested include! must FAIL (SPR-008 T-00)" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/include/skeletons/dirty_skeleton.rs:5:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/nested.rs &&
 run "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)" "fail:VIOLATION [V-DET-19/source-include] \`include!(\` at tests/lint_fixtures/forbidden/include/concat.rs:5:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/concat.rs &&
 run "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)" "fail:resolves outside the repository" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/outside.rs &&
+run "lint_forbidden positive control: an include! reached through a symlink resolves from the link, as rustc does (VER-SPR-008 MIN-3)" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/include/symlink/gen.rs:3:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/symlink/link.rs &&
+run "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)" "fail:VIOLATION [V-DET-19/source-include] \`use core::include\` at tests/lint_fixtures/forbidden/include/renamed.rs:3:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/renamed.rs &&
+run "lint_forbidden positive control: include_str! of a file outside the repository must FAIL (VER-SPR-008)" "fail:VIOLATION [V-DET-19/data-include] \`include_str!(\` at tests/lint_fixtures/forbidden/include/data_outside.rs:3:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/data_outside.rs &&
 run "Clippy float backstop positive control: unnamed float arithmetic in plane A must FAIL (SPR-010 GAP-3)" "fail:floating-point arithmetic detected" clippy_control float_unnamed fixture-core &&
 run "Clippy libm-only positive control: std ln in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::ln`' clippy_control std_transcendental rh-sample &&
 run "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::exp`' clippy_control std_transcendental rh-sample &&
@@ -467,6 +497,12 @@ run "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] P
 run "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)" "fail:BASELINE MISMATCH" baseline_hand_edited_control &&
 run "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL (SPR-008 T-04)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "SPR-008: Golden-run CI" &&
 run "Golden baseline control: a regenerated baseline in a [C3] PR passes (SPR-008 T-04)" "pass:regenerated in a [C3] PR" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "SPR-008: Golden-run CI [C3]" &&
+run "Golden baseline positive control: a pull_request run with no base must FAIL closed (VER-SPR-008 MAJ-1)" "fail:needs its base" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --event pull_request --base-ref "" &&
+run "Golden baseline control: a local run with no base says the C3 rule was not checked (VER-SPR-008 MAJ-1)" "pass:C3 rule not checked (no base ref)" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --event local --base-ref "" &&
+run "Golden baseline positive control: [C3] outside the title's trailing tag group must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "docs: explain the [C3] rule" &&
+run "Golden baseline positive control: a push that changes the baseline with no [C3] commit must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_push_control "feat(SPR-008): regenerate the smoke baseline" &&
+run "Golden baseline control: a push that changes the baseline in a [C3] commit passes (VER-SPR-008 MAJ-1)" "pass:regenerated in a [C3] PR (the commit subjects of" baseline_push_control "feat(SPR-008): regenerate the smoke baseline [C3]" &&
+run "Golden ladder positive control: an injected run never compares equal to a clean one (VER-SPR-008 MIN-2)" "fail:LADDERS DIFFER" injected_ladder_control &&
 run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 # Tier 5 — golden vectors
