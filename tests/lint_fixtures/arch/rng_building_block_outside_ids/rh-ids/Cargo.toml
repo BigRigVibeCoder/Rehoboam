@@ -8,6 +8,9 @@ publish = false
 plane = "A"
 kind = "machinery"
 
+[lints]
+workspace = true
+
 [dependencies]
 rand_core = "0.9"
 rand_chacha = "0.9"

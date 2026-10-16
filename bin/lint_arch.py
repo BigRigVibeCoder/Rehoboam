@@ -40,6 +40,14 @@ workspace crates, of every dependency kind (normal, build and dev):
                      Dev-dependencies are exempt, as above; the RNG crates are otherwise left to
                      rng-crate.
 
+    lints            Every plane-A crate takes exactly `[lints] workspace = true` and no
+                     `[lints.*]` table of its own: an own table (for example `[lints.clippy]
+                     disallowed_methods = "allow"`) would switch off the workspace denies, the
+                     std-transcendental ban and float_arithmetic among them, for that crate
+                     without a trace (VER-SPR-003-TEST GAP-9). cargo metadata does not carry
+                     lints, so each crate's Cargo.toml is read with tomllib. Tool crates may
+                     differ; every crate's declaration is printed.
+
 Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
 Usage:  python -I bin/lint_arch.py [--manifest-path Cargo.toml]
@@ -52,6 +60,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -124,6 +133,9 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
     }
 )
 
+# The [lints] declaration of a crate that takes the workspace's lints and nothing else (rule lints).
+INHERITED_LINTS = ("workspace",)
+
 EXIT_OK = 0
 EXIT_VIOLATIONS = 1
 EXIT_UNREADABLE = 2
@@ -160,6 +172,9 @@ class Crate:
     kind: str | None
     edges: tuple[Edge, ...]
     external: tuple[Edge, ...] = ()
+    # The crate's own [lints] keys, as read from its Cargo.toml: ("workspace",) for exactly
+    # `[lints] workspace = true`, which every plane-A crate must declare.
+    lints: tuple[str, ...] = INHERITED_LINTS
 
     @property
     def declared_ok(self) -> bool:
@@ -232,6 +247,48 @@ def _edges(
     return tuple(sorted(internal)), tuple(sorted(external))
 
 
+def read_lints(manifest: Path) -> tuple[str, ...]:
+    """Return a crate's own [lints] declaration: its keys, `workspace` only when it is true.
+
+    Raises:
+        WorkspaceError: The manifest cannot be read or parsed.
+    """
+    try:
+        document = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
+        raise WorkspaceError(f"cannot read {manifest}: {err}") from err
+    lints = document.get("lints", {})
+    if not isinstance(lints, dict):
+        return (f"lints = {lints!r}",)
+    return tuple(
+        sorted(
+            key if key != "workspace" or value is True else f"workspace = {value!r}"
+            for key, value in lints.items()
+        )
+    )
+
+
+def check_lints(crate: Crate) -> list[Violation]:
+    """Check that a plane-A crate takes exactly the workspace's lints (VER-SPR-003-TEST GAP-9)."""
+    if crate.plane != "A" or crate.lints == INHERITED_LINTS:
+        return []
+    own = [key for key in crate.lints if key != "workspace"]
+    if own:
+        tables = ", ".join(f"[lints.{key}]" for key in own)
+        problem = f"declares its own lint table(s) {tables}"
+    else:
+        problem = "does not declare `[lints] workspace = true`"
+    return [
+        Violation(
+            "lints",
+            crate.name,
+            f"{problem}; a plane-A crate takes exactly `[lints] workspace = true` and no lint "
+            "table of its own, or the workspace denies (the std transcendentals, floats, "
+            "unwrap) stop applying to it (VER-SPR-003-TEST GAP-9)",
+        )
+    ]
+
+
 def crates_from_metadata(document: object) -> list[Crate]:
     """Build the workspace crates from ``cargo metadata --format-version 1`` output.
 
@@ -252,6 +309,9 @@ def crates_from_metadata(document: object) -> list[Crate]:
     crates = []
     for package in in_workspace:
         internal, external = _edges(package, names)
+        manifest = package.get("manifest_path")
+        if not isinstance(manifest, str):
+            raise WorkspaceError(f"package {package.get('name')!r} has no manifest_path")
         crates.append(
             Crate(
                 name=str(package.get("name")),
@@ -259,6 +319,7 @@ def crates_from_metadata(document: object) -> list[Crate]:
                 kind=_declared(package, "kind"),
                 edges=internal,
                 external=external,
+                lints=read_lints(Path(manifest)),
             )
         )
     return sorted(crates, key=lambda crate: crate.name)
@@ -470,6 +531,7 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     by_name = {crate.name: crate for crate in crates}
     violations += [v for crate in crates if crate.declared_ok for v in check_rng_crates(crate)]
     violations += [v for crate in crates if crate.declared_ok for v in check_external_deps(crate)]
+    violations += [v for crate in crates if crate.declared_ok for v in check_lints(crate)]
     for crate in crates:
         for edge in crate.edges:
             target = by_name.get(edge.target)
@@ -519,7 +581,7 @@ def describe(crate: Crate) -> str:
 
     return (
         f"  {crate.name}: plane={crate.plane} kind={crate.kind} -> {names(crate.edges)}; "
-        f"external: {names(crate.external)}"
+        f"external: {names(crate.external)}; lints: {', '.join(crate.lints) or '(none)'}"
     )
 
 

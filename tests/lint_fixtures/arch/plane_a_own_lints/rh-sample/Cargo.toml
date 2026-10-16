@@ -1,0 +1,15 @@
+[package]
+name = "rh-sample"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+disallowed_methods = "allow"

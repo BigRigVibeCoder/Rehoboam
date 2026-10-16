@@ -8,5 +8,8 @@ publish = false
 plane = "A"
 kind = "machinery"
 
+[lints]
+workspace = true
+
 [dependencies]
 libm = "=0.2.16"
