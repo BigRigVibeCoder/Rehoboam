@@ -1,0 +1,5 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# A crate not named rh-contracts or rh-contract-* declares kind "contract" to open a system edge.
+[workspace]
+members = ["rh-sys-a", "rh-shadow"]
+resolver = "3"

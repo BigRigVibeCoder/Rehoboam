@@ -1,0 +1,5 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# rh-snapshot relabelled as a contract crate so that a system may depend on it: the pinned labels refuse it.
+[workspace]
+members = ["rh-sys-a", "rh-snapshot"]
+resolver = "3"

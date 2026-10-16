@@ -6,8 +6,11 @@ workspace crates, of every dependency kind (normal, build and dev):
 
     metadata         Every crate declares plane and kind from the vocabularies below,
                      consistently: kinds core, contract and system are plane A; plane "tool"
-                     goes with kind "tool"; crates named rh-sys-* are kind "system", and only
-                     they.
+                     goes with kind "tool". Labels cannot be chosen to pass the law: the seven
+                     SPR-001 crates are pinned to their (plane, kind) by name; crates named
+                     rh-sys-* are (A, system), and only they are kind "system"; kind
+                     "contract" belongs only to rh-contracts and rh-contract-* crates. Edges are
+                     judged with the pinned labels, not the declared ones.
     V-INSP-03        A system crate depends only on rh-core, rh-ids, rh-events, rh-registry and
                      contract crates, never on another system crate (docs/13 §3; EVO-1).
     V-PLN-01         A plane-A crate never depends on a plane-B or plane-C crate (ADR-0024 rule 1;
@@ -33,8 +36,9 @@ import json
 import subprocess
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 
 PLANES = frozenset({"A", "B", "C", "tool"})
 KINDS = frozenset({"core", "machinery", "contract", "system", "tool"})
@@ -43,6 +47,22 @@ KINDS = frozenset({"core", "machinery", "contract", "system", "tool"})
 SYSTEM_ALLOWED_DEPS = frozenset({"rh-core", "rh-ids", "rh-events", "rh-registry"})
 PLANE_A_KINDS = frozenset({"core", "contract", "system"})
 SYSTEM_CRATE_PREFIX = "rh-sys-"
+# REF: docs/05_architecture/05.0 §6; the SPR-001 audit (relabelling rh-snapshot as a contract crate
+# let a system depend on it). The expected (plane, kind) of the crates SPR-001 created, by name.
+PINNED_LABELS = MappingProxyType(
+    {
+        "rh-ids": ("A", "machinery"),
+        "rh-core": ("A", "core"),
+        "rh-events": ("A", "machinery"),
+        "rh-registry": ("A", "machinery"),
+        "rh-contracts": ("A", "contract"),
+        "rh-snapshot": ("A", "machinery"),
+        "rh-cli": ("tool", "tool"),
+    }
+)
+SYSTEM_LABELS = ("A", "system")
+CONTRACT_CRATE = "rh-contracts"
+CONTRACT_CRATE_PREFIX = "rh-contract-"
 OBSERVATION_AND_NARRATIVE = frozenset({"B", "C"})
 # REF: ADR-0006 (keyed RNG only); DET-2; V-DET-19; DEF-1 (rand 0.9's thread-local functions passed
 # every text gate). The single list of crates whose purpose is unkeyed or entropy-seeded randomness.
@@ -181,8 +201,8 @@ def crates_from_metadata(document: object) -> list[Crate]:
     return sorted(crates, key=lambda crate: crate.name)
 
 
-def check_metadata(crate: Crate) -> list[Violation]:
-    """Check that a crate declares a valid, consistent plane and kind."""
+def _vocabulary_problems(crate: Crate) -> list[str]:
+    """Return what is missing, unknown or inconsistent in a crate's declared plane and kind."""
     problems: list[str] = []
     if crate.plane not in PLANES:
         problems.append(f"plane = {crate.plane!r} is missing or not one of {sorted(PLANES)}")
@@ -193,9 +213,43 @@ def check_metadata(crate: Crate) -> list[Violation]:
             problems.append(f'kind "{crate.kind}" must be plane "A", not "{crate.plane}"')
         if (crate.plane == "tool") != (crate.kind == "tool"):
             problems.append('plane "tool" and kind "tool" must be declared together')
-    if crate.name.startswith(SYSTEM_CRATE_PREFIX) != (crate.kind == "system"):
-        problems.append(f'crates named {SYSTEM_CRATE_PREFIX}* are kind "system", and only they')
+    return problems
+
+
+def _label_problems(crate: Crate) -> list[str]:
+    """Return where a crate's labels contradict what its name requires."""
+    problems: list[str] = []
+    declared = (crate.plane, crate.kind)
+    pinned = PINNED_LABELS.get(crate.name)
+    if pinned is not None and declared != pinned:
+        problems.append(
+            f"declares (plane, kind) = {declared}, but {crate.name} is pinned to {pinned}"
+        )
+    is_system_name = crate.name.startswith(SYSTEM_CRATE_PREFIX)
+    if is_system_name and declared != SYSTEM_LABELS:
+        problems.append(f"crates named {SYSTEM_CRATE_PREFIX}* are {SYSTEM_LABELS}, not {declared}")
+    if crate.kind == "system" and not is_system_name:
+        problems.append(f'only crates named {SYSTEM_CRATE_PREFIX}* are kind "system"')
+    is_contract_name = crate.name == CONTRACT_CRATE or crate.name.startswith(CONTRACT_CRATE_PREFIX)
+    if crate.kind == "contract" and not is_contract_name:
+        problems.append(
+            f'kind "contract" belongs only to {CONTRACT_CRATE} and {CONTRACT_CRATE_PREFIX}* crates'
+        )
+    return problems
+
+
+def check_metadata(crate: Crate) -> list[Violation]:
+    """Check that a crate declares a valid, consistent plane and kind that its name allows."""
+    problems = _vocabulary_problems(crate) + _label_problems(crate)
     return [Violation("metadata", crate.name, f"{p}; {METADATA_HINT}") for p in problems]
+
+
+def effective(crate: Crate) -> Crate:
+    """Return the crate with its pinned labels, if it has any, in place of the declared ones."""
+    pinned = PINNED_LABELS.get(crate.name)
+    if pinned is None:
+        return crate
+    return replace(crate, plane=pinned[0], kind=pinned[1])
 
 
 def _via(edge: Edge) -> str:
@@ -280,11 +334,13 @@ def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:
 def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     """Check every crate's metadata and every workspace edge.
 
-    Edges with an endpoint whose metadata is invalid are skipped: that crate is already reported,
-    and its plane or kind cannot be trusted.
+    Edges are judged with each crate's effective labels (pinned where pinned), so relabelling a
+    crate cannot open an edge. Edges with an endpoint whose labels are still invalid are skipped:
+    that crate is already reported, and its plane or kind cannot be trusted.
     """
-    by_name = {crate.name: crate for crate in crates}
     violations = [v for crate in crates for v in check_metadata(crate)]
+    crates = [effective(crate) for crate in crates]
+    by_name = {crate.name: crate for crate in crates}
     violations += [v for crate in crates if crate.declared_ok for v in check_rng_crates(crate)]
     for crate in crates:
         for edge in crate.edges:
