@@ -12,12 +12,12 @@
 | SPR-004 | Registry and manifest loaders, ownership lint | Merged (#6) | VER-SPR-004 PASS |
 | SPR-005 | Time, phases, `SystemModel`, `AccessSpec`, a parallel scheduler identical at every thread count | Merged (#21) | VER-SPR-005 PASS |
 | SPR-006 | Agenda of timers, lifecycle command queues, event bus, invariants with replayable crash artifacts | Merged (#26) | VER-SPR-006 PASS |
-| SPR-007 | Plane hashes, keyframes (Arrow IPC with zstd), the SQLite journal, the unsynced guard | PR #25, final fix round, then Tester round 2b and the audit | Draft |
-| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | PR #28. T-00, the smoke world and `StepCtx::stream` are done (CI green); the rest waits for SPR-007 to merge | — |
-| SPR-009 | Benchmarks and the regression gate | Rulings merged (#29); launches when SPR-007 merges | — |
+| SPR-007 | Plane hashes, keyframes (Arrow IPC with zstd), the SQLite journal, the unsynced guard, `resume` | Merged (#25) | VER-SPR-007 PASS |
+| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | PR #28. T-00, the smoke world and `StepCtx::stream` are done (CI green); the rest resumes now that SPR-007 has merged | — |
+| SPR-009 | Benchmarks and the regression gate | Developer building (benches 7 and 8, the gate, the observer); Tester's plan written | — |
 | SPR-010 | `rh-core::fixed` | Merged (#5) | VER-SPR-010 PASS |
 
-Escapes found after a sprint closed: 1 (documentation only) across 8 closed sprints.
+Escapes found after a sprint closed: 1 (documentation only) across 8 closed sprints (SPR-001 to SPR-007, SPR-010).
 
 ## 2. SPR-007 in detail
 
@@ -26,10 +26,15 @@ Escapes found after a sprint closed: 1 (documentation only) across 8 closed spri
 - **Round 2** found:
   - **GAP-6** (my own ruling, corrected): undrained events were in `state_hash`, which made the hash depend on when the host drains them. They are now carried in keyframes, outside the hash.
   - **DEF-3**: a forged Arrow body under a valid envelope crashed the loader, aborts included. Fixed with a metadata guard ahead of Arrow, which held over all 93,648 single-bit flips.
-  - **DEF-3b**, found in my review: the guard itself panicked on a negative length, a value no single bit flip can reach. Its fix is in the final round.
+  - **DEF-3b**, found in my review: the guard itself panicked on a negative length, a value no single bit flip can reach. Fixed; a structured forge test covers 56 fields.
   - **DEF-4, GAP-7, GAP-8, GAP-9** (fixed in `24d2262`): keyframe history taken from the engine, a journal-anchor check, all five history fields tested, and restore refusing a timer dated in the past.
   - **DEF-5** (high; found by the Tester and, independently, by the new write-time read-back): keyframes of any world with 150 or more rows failed to load, because agenda tombstones were decoded in the wrong order. Fixed in `24d2262`.
-- **Lesson:** every keyframe test used a 48-row world. The final round adds a property test over world sizes from 48 to 5,000 rows.
+  - **GAP-10** (found by the Tester, widened by me): the journal position counted *applied* inputs. Replaying the journal from a keyframe would have applied queued inputs twice, and nothing tested that path. The position is now the count of *accepted* inputs, and `rh_snapshot::resume` is the one host loop that replays from a keyframe.
+  - **GAP-11** (test coverage): the guard's size bounds are now pinned by a test; I checked that the mutant fails.
+- **Final tester evidence:** about 157,000 forged keyframes in child processes, with 0 panics, 0 aborts and 0 wrong loads; 29,926 dense keyframes; 160 resumes through the journal, all equal.
+- **Lessons:**
+  - Every keyframe test used a 48-row world, so the tests now vary world size.
+  - The journal-replay path had no test at all until GAP-10.
 
 ## 3. Your rulings at G0 (2026-10-16)
 
@@ -66,6 +71,9 @@ Resolved since the first version of this summary:
   |---|---|---|
   | SPR-007 | `session_01WmNv3YSUNTk24yQRdQxAgt` | `session_018tMdk4RQu94uNuTxuxCAER` |
   | SPR-008 | `session_01SoW2LBVGVDsxGFnMPnkoCx` | `session_01MLXhAvqPwGMV9FyKu2uiU6` |
+  | SPR-009 | `session_018ggWNPkngHp6tw4r1dimut` | `session_01GwtdHCuGkDRRwPKeF2y8H3` |
 
-- **SPR-008, when it resumes:** its keyframe-assisted bisect is the first host to replay a journal from a keyframe. It must call `Replay::check_anchor` (SPR-007 GAP-7) before it does.
-- **To file in the SPR-007 audit:** BCK-002 A-33. When non-material journaled inputs reach the engine, the engine counts every journaled input it applies, beside `applied_inputs`, and the keyframe anchor compares against that count.
+  The P1a spec drafter, writing `T1.minds` and `M7.dynasty` for the Architect's review, is `session_0197w1yjvJqAKATkCbw9KanD`.
+
+- **SPR-008:** its keyframe-assisted bisect must go through `rh_snapshot::resume`, which calls `Replay::check_anchor` (SPR-007 GAP-7, GAP-10). Its journaled input follows the host order: check, journal, submit, one row per input.
+- **BCK-002 A-33** (filed): when non-material journaled inputs reach the engine, count them as accepted inputs, like material ones.

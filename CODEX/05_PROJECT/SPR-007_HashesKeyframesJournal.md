@@ -2,14 +2,14 @@
 id: SPR-007
 title: "Plane hashes, keyframes and the input journal"
 type: how-to
-status: PLANNING
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001]
+related: [BCK-001, PRJ-001, VER-SPR-007, VER-SPR-007-TEST]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.3.0
+version: 1.3.1
 ---
 
 > **BLUF:** Make every state reproducible and checkable: three plane hashes, Arrow keyframes and the SQLite input journal. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -118,9 +118,9 @@ version: 1.3.0
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-007` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-007` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class.
