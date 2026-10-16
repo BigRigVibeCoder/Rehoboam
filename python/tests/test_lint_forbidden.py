@@ -11,8 +11,11 @@ from lint_forbidden import (
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
     FLOAT_EXEMPT_CRATES,
+    FloatScan,
+    FloatScope,
     Report,
     declared_float_fields,
+    float_yielding_apis,
     lex,
     main,
     plane_a_crate_dirs,
@@ -732,3 +735,76 @@ def test_a_reasoned_escape_counts_the_allow() -> None:
     violations, escaped = lint_allow_texts(source)
     assert violations == []
     assert len(escaped) == 1
+
+
+# --- Float-yielding dependency APIs (VER-SPR-007-TEST GAP-1) ----------------------------------
+
+FLOAT_DEP = FIXTURES / "float_dep"
+
+
+def scan_with_deps(source: str, floats: str = "rule") -> Report:
+    """Scan a snippet as a file of a crate allowed rusqlite."""
+    report = Report(violations=[], escaped=[])
+    rusqlite = float_yielding_apis()["rusqlite"][1]
+    scope: FloatScope = "none" if floats == "none" else "rule"
+    scan_source(source, "snippet.rs", report, floats=FloatScan(scope, (("rusqlite", rusqlite),)))
+    return report
+
+
+def test_the_float_yielding_apis_come_from_lint_arch() -> None:
+    """The REAL accessors of rusqlite are listed, for the one crate allowed rusqlite."""
+    apis = float_yielding_apis()
+    users, pattern = apis["rusqlite"]
+    assert users == frozenset({"rh-snapshot"})
+    for token in ("Real", "as_f64", "as_f64_or_null"):
+        assert pattern.fullmatch(token), token
+    assert not pattern.search("RealTime is_real as_f64x")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "match v { ValueRef::Real(x) => x.to_bits(), _ => 0 }",
+        "matches!((a, b), (ValueRef::Real(x), ValueRef::Real(y)) if x < y)",
+        "if let ValueRef::Real(x) = v { x.max(y).floor() as i64 } else { 0 }",
+        "v.as_f64_or_null()",
+    ],
+)
+def test_each_float_yielding_use_is_reported(source: str) -> None:
+    """The Tester's snippets name no float type, yet each is a violation."""
+    assert scan(source).violations == [] or "float" in scan(source).violations[0]
+    report = scan_with_deps(source)
+    assert any("[V-DET-19/float-dep]" in v for v in report.violations), report.violations
+
+
+def test_float_yielding_apis_are_not_checked_in_tests_or_other_crates() -> None:
+    """tests/ is float-free by the DECISION; a crate not allowed the dependency gets no list."""
+    source = "match v { ValueRef::Real(x) => x.to_bits(), _ => 0 }"
+    assert scan_with_deps(source, floats="none").violations == []
+    assert scan(source).violations == []
+
+
+def test_a_declared_float_field_escape_excuses_a_float_yielding_api() -> None:
+    """The same escape as a float, and only that one."""
+    line = "let m = ValueRef::Real(x); // LINT-ALLOW(forbidden-api): f32_field region.soil_moisture"
+    report = Report(violations=[], escaped=[])
+    rusqlite = float_yielding_apis()["rusqlite"][1]
+    fields = frozenset({"region.soil_moisture"})
+    scan_source(line, "s.rs", report, fields, floats=FloatScan("rule", (("rusqlite", rusqlite),)))
+    assert report.violations == []
+    assert len(report.escaped) == 1
+    other = "let m = ValueRef::Real(x); // LINT-ALLOW(forbidden-api): it is fine"
+    report = Report(violations=[], escaped=[])
+    scan_source(other, "s.rs", report, floats=FloatScan("rule", (("rusqlite", rusqlite),)))
+    assert any("float-dep" in v for v in report.violations)
+
+
+def test_the_float_dep_fixture_reports_each_plant_and_not_tests(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Every planted file of float_dep/ is reported; its tests/ file is not."""
+    assert main(["--manifest-path", str(FLOAT_DEP / "Cargo.toml")]) == EXIT_VIOLATIONS
+    out = capsys.readouterr().out
+    for name in ("accessor.rs", "real_bits.rs", "real_cmp.rs", "real_floor.rs"):
+        assert "float-dep] `" in out and f"rh-snapshot/src/{name}" in out, name
+    assert "tests/allowed.rs" not in out

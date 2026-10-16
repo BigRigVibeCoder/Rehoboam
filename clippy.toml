@@ -73,6 +73,10 @@ disallowed-methods = [
     { path = "f32::hypot", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
     { path = "std::time::Instant::now", reason = "wall clock (GOV-003 §2, V-DET-19)" },
     { path = "std::time::SystemTime::now", reason = "wall clock (GOV-003 §2, V-DET-19)" },
+    # VER-SPR-007-TEST GAP-1: rusqlite's REAL accessors hand plane A a float (bin/lint_arch.py FLOAT_YIELDING_APIS
+    # holds the textual twin); the input journal stores no REAL. allow-invalid: only rh-snapshot links rusqlite.
+    { path = "rusqlite::types::ValueRef::as_f64", reason = "a REAL from SQLite is a float in plane A; the journal stores INTEGER, TEXT and BLOB only (SPR-007 ruling 3, GAP-1)", allow-invalid = true },
+    { path = "rusqlite::types::ValueRef::as_f64_or_null", reason = "a REAL from SQLite is a float in plane A; the journal stores INTEGER, TEXT and BLOB only (SPR-007 ruling 3, GAP-1)", allow-invalid = true },
     { path = "rand::thread_rng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
     { path = "rand::rng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
     { path = "rand::random", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },

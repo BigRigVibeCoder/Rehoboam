@@ -1,0 +1,7 @@
+# Positive controls for the float-yielding dependency APIs (VER-SPR-007-TEST GAP-1; Architect ruling
+# 2026-10-16; tests/lint_fixtures/README.md); not in the Rehoboam workspace. A crate named like the real
+# rh-snapshot, the one crate PLANE_A_EXTERNAL_DEPS allows rusqlite, takes a float from rusqlite in three
+# ways that name no float type; bin/lint_forbidden.py must report each through FLOAT_YIELDING_APIS.
+[workspace]
+members = ["rh-snapshot"]
+resolver = "3"
