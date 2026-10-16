@@ -3,7 +3,8 @@
 # 0.2.0 (SPR-011 rulings 4-8, 11, 17): owns person.id and the life-course log; emits DEATH and EXTINCTION; parameter
 # defaults; the rung-0 mortality algorithm stated exactly ([algorithm.mortality_rung0]); death_time is resample_on_fork.
 # Amended ruling 7 (Architect, 2026-10-16): a death fires at the start of a keyed day (a Day-pulse instant), not a keyed minute.
-# Still a draft until the director approves D30; it is frozen before SPR-012 (increment B) builds against it.
+# Frozen 2026-10-16: the director approved D30 and D36 at G0. SPR-012 (increment B) builds against it; any change is a
+# new spec_version through the Architect (C2).
 # lint_odd.py checks this file against the Registry, the other specs and the test catalogue.
 odd_r = 2
 
@@ -12,7 +13,7 @@ id = "M2.demography"
 name = "Demography"
 spec_version = "0.2.0"
 fidelity = "F1"
-status = "draft"
+status = "frozen"                          # 2026-10-16, director D30/D36
 crate = "rh-sys-demography"
 adrs = ["ADR-0003", "ADR-0006", "ADR-0007", "ADR-0024", "ADR-0025", "ADR-0026"]
 requirements = ["DATA-8", "SIM-5", "SIM-6", "DET-13"]
