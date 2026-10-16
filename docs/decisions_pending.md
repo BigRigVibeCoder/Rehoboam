@@ -4,11 +4,9 @@
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
-## Still waiting on you (1)
+## Still waiting on you
 
-### SPR-010 — Fixed-point types (approve the plan?)
-The SPR-001 audit found that no P0 sprint builds the fixed-point number types that requirement DET-3 needs (`Q8_8`, `Q16_16`, money in whole minor units, all saturating). Every threshold in the simulation, such as a death probability or a price, must use them. SPR-010 (`CODEX/05_PROJECT/SPR-010_FixedPoint.md`) is a small sprint (about 2 agent-days) that depends only on SPR-001, so it can run beside SPR-002 and SPR-004. It is determinism machinery (C3): you approve the plan and, later, the merge.
-**Recommendation (confidence: high):** approve. **Default:** it waits.
+Nothing is waiting on you.
 
 ## Decided on 2026-10-16
 
@@ -17,6 +15,7 @@ The SPR-001 audit found that no P0 sprint builds the fixed-point number types th
 | D27 | **Accepted: LLMs translate in and describe out; they never decide.** The deliberation consult is cut ([ADR-0034](06_adr/ADR-0034-llm-roles-translate-describe-never-decide.md); `05.6` §0) |
 | D6 (cloud spend) | **No ceiling: you manage Google Cloud spend yourself.** The VM `adjutant` runs only on demand, when simulating or benchmarking, and is shut down otherwise; there is no nightly schedule. The Architect tells you in advance when a VM session is needed and roughly for how long |
 | SPR-001 | **Approved** (C2): repository bootstrap and CI |
+| SPR-010 | **Approved** (C3): fixed-point and money types in `rh-core::fixed` (DET-3), the P0 gap found by the SPR-001 audit. You also merge it |
 | SPR-002–009 | **Approved as a batch:** the rest of the P0 sprint plans. You still merge the sprints that change the determinism machinery (SPR-002, 003, 005–008) |
 | Branches | **Approved:** `main` plus one branch and one pull request per sprint, rebase and merge, one merge at a time; agent sessions per sprint (GOV-005 §4). `main` is the default branch |
 | Q-INFRA-1 | GitHub **Free**: no required checks on a private repository, so the Architect enforces "no green report, no merge" by hand |
