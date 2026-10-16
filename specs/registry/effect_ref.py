@@ -41,6 +41,8 @@ FRAC_BITS = {"q8_8": 8, "q16_16": 16}
 STORAGE_BITS = {"q8_8": 16, "q16_16": 32}
 KIN_DEGREES_MAX = 4
 DESCENT_MAX = 6
+GENEALOGY = ("life_course.person_id", "life_course.mother", "life_course.father")
+AGNATIC_GENEALOGY = ("life_course.person_id", "life_course.father")
 NESTING_MAX = 2
 BOUND_PRODUCT_MAX = 65_536
 DRAW_BITS = 64
@@ -60,10 +62,12 @@ DIVISION_OPS = frozenset({"/", "div", "mod"})
 
 # Relation prelude (spec §5.3): name -> (argument kinds, yielded kind, columns read, bound).
 RELATIONS: dict[str, tuple[tuple[str, ...], str, tuple[str, ...], int]] = {
-    "children": (("person",), "person", ("person.mother", "person.father"), 64),
-    "kin": (("person", "degree"), "person", ("person.mother", "person.father"), 256),
-    "line": (("person", "person"), "person", ("person.mother", "person.father"), DESCENT_MAX),
-    "line_agnatic": (("person", "person"), "person", ("person.father",), DESCENT_MAX),
+    "children": (("person",), "person", GENEALOGY, 64),
+    "kin": (("person", "degree"), "person", GENEALOGY, 256),
+    "ancestors": (("person", "generations"), "person", GENEALOGY, 64),
+    "descendants": (("person", "generations"), "person", GENEALOGY, 256),
+    "line": (("person", "person"), "person", GENEALOGY, DESCENT_MAX),
+    "line_agnatic": (("person", "person"), "person", AGNATIC_GENEALOGY, DESCENT_MAX),
     "titles": (("person",), "title", ("title.holder",), 16),
     "vassals": (("title",), "title", ("title.liege",), 64),
     "offices": (("person",), "office", ("office.holder",), 16),
@@ -79,10 +83,10 @@ RELATIONS: dict[str, tuple[tuple[str, ...], str, tuple[str, ...], int]] = {
 }
 # Genealogical accessors: name -> (result type, columns read).
 ACCESSORS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "up": ("int", ("person.mother", "person.father")),
-    "common": ("ent:person", ("person.mother", "person.father")),
-    "up_agnatic": ("int", ("person.father",)),
-    "common_agnatic": ("ent:person", ("person.father",)),
+    "up": ("int", GENEALOGY),
+    "common": ("ent:person", GENEALOGY),
+    "up_agnatic": ("int", AGNATIC_GENEALOGY),
+    "common_agnatic": ("ent:person", AGNATIC_GENEALOGY),
 }
 # Builtins with fixed signatures: name -> (parameter types, result type).
 FIXED_BUILTINS: dict[str, tuple[tuple[str, ...], str]] = {
@@ -97,7 +101,7 @@ KNOWN_CALLS = (
     frozenset(FIXED_BUILTINS)
     | frozenset(POLY_BUILTINS)
     | frozenset(ACCESSORS)
-    | frozenset({"ordinal", "exists", "floor", "round", "draw", "chance"})
+    | frozenset({"ordinal", "exists", "floor", "round", "draw", "chance", "related"})
 )
 
 
@@ -262,6 +266,7 @@ class Column:
     ty: str  # a language type: bool, int, q8_8, q16_16, enum:<name>, ent:<kind>
     plane: str
     owner: str
+    key: str  # the entity kind a read takes: the entity itself, or `person` for the life-course log
 
 
 @dataclass
@@ -353,7 +358,7 @@ def load_registry(raw: dict[str, Any]) -> Registry:
             params=params,
         )
     columns = {
-        name: Column(c["entity"], parse_type(c), c["plane"], c["owner"])
+        name: Column(c["entity"], parse_type(c), c["plane"], c["owner"], c.get("key", c["entity"]))
         for name, c in raw["columns"].items()
     }
     commands = {
@@ -713,7 +718,7 @@ class Read(Node):
     def check(self, cx: Ctx) -> str:
         """Check the read is allowed and the argument has the column's entity kind."""
         self.column = cx.check_read(self.name)
-        self.arg.resolve(unify(self.arg.check(cx), f"ent:{self.column.entity}"))
+        self.arg.resolve(unify(self.arg.check(cx), f"ent:{self.column.key}"))
         self.ty = self.column.ty
         return self.ty
 
@@ -747,7 +752,9 @@ class Rel(Node):
             raise CompileError("E_ARITY", self.name)
         for arg, kind in zip(self.args, kinds, strict=True):
             if kind == "degree":
-                check_degree(arg)
+                check_degree(arg, KIN_DEGREES_MAX)
+            elif kind == "generations":
+                check_degree(arg, DESCENT_MAX)
             else:
                 arg.resolve(unify(arg.check(cx), f"ent:{kind}"))
         for column in reads:
@@ -761,12 +768,12 @@ class Rel(Node):
         return relation(ev.world, self.name, args)
 
 
-def check_degree(arg: Node) -> None:
-    """``kin``'s degree: an ``Int`` literal in ``1..KIN_DEGREES_MAX``."""
+def check_degree(arg: Node, upper: int) -> None:
+    """A degree or generation count: an ``Int`` literal in ``1..upper``."""
     if not isinstance(arg, NumLit) or "." in arg.text:
-        raise CompileError("E_CONST", "kin degree must be an Int literal")
-    if not 1 <= int(arg.text) <= KIN_DEGREES_MAX:
-        raise CompileError("E_BOUND", f"kin degree {arg.text}")
+        raise CompileError("E_CONST", "a degree must be an Int literal")
+    if not 1 <= int(arg.text) <= upper:
+        raise CompileError("E_BOUND", f"degree {arg.text} outside 1..{upper}")
     arg.resolve("int")
 
 
@@ -787,6 +794,7 @@ class Call(Node):
             "round": self.check_rounding,
             "draw": self.check_draw,
             "chance": self.check_draw,
+            "related": self.check_related,
         }
         if self.name in handlers:
             self.ty = handlers[self.name](cx)
@@ -860,6 +868,16 @@ class Call(Node):
             cx.check_read(column)
         return result
 
+    def check_related(self, cx: Ctx) -> str:
+        """``related(a, b, n) -> bool``: within ``n`` degrees of kinship."""
+        self.arity(3)
+        for arg in self.args[:2]:
+            arg.resolve(unify(arg.check(cx), "ent:person"))
+        check_degree(self.args[2], KIN_DEGREES_MAX)
+        for column in GENEALOGY:
+            cx.check_read(column)
+        return "bool"
+
     def check_draw(self, cx: Ctx) -> str:
         """``draw(purpose, e, k) -> int`` and ``chance(purpose, e, k, p) -> bool``."""
         self.arity(3 if self.name == "draw" else 4)
@@ -890,6 +908,11 @@ class Call(Node):
         """Evaluate the builtin."""
         if self.name in ("draw", "chance"):
             return self.eval_draw(ev)
+        if self.name == "related":
+            a, b, n = (arg.eval(ev) for arg in self.args)
+            assert isinstance(a, Et) and isinstance(b, Et) and isinstance(n, int)
+            both = a.ident != 0 and b.ident != 0
+            return both and b.ident in kin_within(ev.world, a.ident, n)
         if self.name in ACCESSORS:
             x, p = (self.args[0].eval(ev), self.args[1].eval(ev))
             assert isinstance(x, Et) and isinstance(p, Et)
@@ -1696,8 +1719,8 @@ class Parser:
 
 # ----------------------------------------------------------------------------- relations
 def parents(world: World, ident: int, agnatic: bool) -> list[int]:
-    """The parent ids of a person, father first (``none`` skipped); fathers only if agnatic."""
-    row = world.row("person", ident)
+    """The parent ids from the life-course log, father first; fathers only if ``agnatic``."""
+    row = world.row("life_course", ident)
     if row is None:
         return []
     out: list[int] = []
@@ -1709,9 +1732,9 @@ def parents(world: World, ident: int, agnatic: bool) -> list[int]:
 
 
 def children_of(world: World, ident: int) -> list[int]:
-    """Every person whose mother or father is ``ident``, ascending."""
+    """Every person whose mother or father is ``ident`` in the life-course log, ascending."""
     out: list[int] = []
-    for pid, row in world.tables.get("person", {}).items():
+    for pid, row in world.tables.get("life_course", {}).items():
         for column in ("mother", "father"):
             parent = row.get(column)
             if isinstance(parent, Et) and parent.ident == ident:
@@ -1728,6 +1751,23 @@ def ancestors_or_self(world: World, ident: int, depth: int, agnatic: bool) -> se
         frontier = [p for y in frontier for p in parents(world, y, agnatic) if p not in seen]
         seen.update(frontier)
     return seen
+
+
+def by_generation(world: World, ident: int, depth: int, down: bool) -> list[int]:
+    """``ancestors`` or ``descendants`` within ``depth`` generations: by generation, then id."""
+    seen = {ident}
+    frontier = [ident]
+    out: list[int] = []
+    for _ in range(depth):
+        nxt: set[int] = set()
+        for y in frontier:
+            for z in children_of(world, y) if down else parents(world, y, False):
+                if z not in seen:
+                    seen.add(z)
+                    nxt.add(z)
+        frontier = sorted(nxt)
+        out.extend(frontier)
+    return out
 
 
 def kin_within(world: World, ident: int, degrees: int) -> list[int]:
@@ -1814,6 +1854,8 @@ def relation(world: World, name: str, args: list[Value]) -> list[Et]:
     simple = {
         "children": lambda: children_of(world, ids[0]),
         "kin": lambda: kin_within(world, ids[0], ids[1]),
+        "ancestors": lambda: by_generation(world, ids[0], ids[1], False),
+        "descendants": lambda: by_generation(world, ids[0], ids[1], True),
         "line": lambda: line_between(world, ids[0], ids[1], False),
         "line_agnatic": lambda: line_between(world, ids[0], ids[1], True),
         "titles": lambda: rows_where(world, "title", "holder", ids[0]),

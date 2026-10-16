@@ -146,6 +146,7 @@ Every operator and builtin is total on well-typed arguments. `num` stands for `i
 | `draw(purpose, e, k)` | → `int` | keyed uniform draw, §4.6 |
 | `chance(purpose, e, k, p)` | `… × q16_16 → bool` | `draw_hits` of `rh-core::fixed::draw`, §4.6 |
 | `up(x, p)`, `common(x, p)`, `up_agnatic(x, p)`, `common_agnatic(x, p)` | `person × person → int`, `→ person` | genealogical accessors, §5.3 |
+| `related(a, b, n)` | `person × person × Int → bool` | `a` and `b` are distinct persons within `n` degrees of kinship (`n` an `Int` literal in 1..4): the predicate form of `kin`, §5.3 |
 | `entity.column(e)` | entity `K` → the column's type | a declared read, §4.5 |
 | `params.name` | → `int` or `q16_16` | a Registry parameter of the declaring system, §4.7 |
 | `calendar.days_per_year` | → `int` | the manifest's calendar, §4.7 |
@@ -202,11 +203,11 @@ Rounding happens before saturation, so a result is always the representable valu
 
 ### 4.4 Constants and guarded division
 
-A **constant** is an `Int` or `Decimal` literal (under unary minus or not), `calendar.days_per_year`, or `params.<name>` whose Registry bounds `[lo, hi]` exclude zero (`lo > 0` or `hi < 0`). The divisor of `/`, `div` and `mod` must be a constant whose value is not zero, or the program is rejected (`E_DIV`); every other division is written `safe_div(a, b, d)` with an explicit default. This is `05.5` §2.1's "no division by a non-constant without a guard" made checkable. `kin`'s degree, `draw`'s and `chance`'s index `k`, and a relation's bound-setting arguments must be `Int` literals (`E_CONST`).
+A **constant** is an `Int` or `Decimal` literal (under unary minus or not), `calendar.days_per_year`, or `params.<name>` whose Registry bounds `[lo, hi]` exclude zero (`lo > 0` or `hi < 0`). The divisor of `/`, `div` and `mod` must be a constant whose value is not zero, or the program is rejected (`E_DIV`); every other division is written `safe_div(a, b, d)` with an explicit default. This is `05.5` §2.1's "no division by a non-constant without a guard" made checkable. `kin`'s and `related`'s degree, `ancestors`'s and `descendants`'s generation count, `draw`'s and `chance`'s index `k` must be `Int` literals (`E_CONST`).
 
 ### 4.5 Reads
 
-`entity.column(e)` reads column `entity.column` of the entity `e`, which must have kind `entity`. The checker accepts the read only if the declaring system owns the column or lists it in `[[reads]]` (`E_UNDECLARED_READ`), and only if the column's plane is `A` (`E_PLANE`). A relation (§5.3) reads the columns of its definition; using a relation requires those reads of the declaring system too. **Missing entity:** a read through `none`, or of an id with no row in the snapshot, yields the **zero of the column's type** (`0`, `0.0`, `false`, the enum's first value, `none`), and the evaluator counts it in its diagnostics (`missing_reads`); a program that must distinguish the cases tests `exists(e)` first. The count is not part of the value and does not enter hashes; invariant tests may require it to be zero.
+`entity.column(e)` reads column `entity.column` of the entity `e`, which must have the kind the column is keyed by: the table's own entity, except that the life-course log (`life_course.*`) is keyed by `life_course.person_id` and is read with a `person`. The checker accepts the read only if the declaring system owns the column or lists it in `[[reads]]` (`E_UNDECLARED_READ`), and only if the column's plane is `A` (`E_PLANE`). A relation (§5.3) reads the columns of its definition; using a relation requires those reads of the declaring system too. **Missing entity:** a read through `none`, or of an id with no row in the snapshot, yields the **zero of the column's type** (`0`, `0.0`, `false`, the enum's first value, `none`), and the evaluator counts it in its diagnostics (`missing_reads`); a program that must distinguish the cases tests `exists(e)` first. The count is not part of the value and does not enter hashes; invariant tests may require it to be zero.
 
 ### 4.6 Randomness
 
@@ -232,17 +233,20 @@ A relation yields its elements in **ascending entity id** (`none` never appears)
 
 ### 5.3 The v0 prelude
 
-Genealogy is read from `person.mother` and `person.father` (M2). "Ancestor-or-self of `x` at height `h`" is the set `A_h(x)`: `A_0 = {x}`, `A_{h+1} = {father(y), mother(y) : y ∈ A_h} \ {none}`; the agnatic variant follows fathers only. Heights are bounded by `KIN_DEGREES_MAX = 4` for `up` and `common`, and path lengths by `DESCENT_MAX = 6`.
+**Genealogy comes from the life-course log** (M2: `life_course.person_id`, `life_course.mother`, `life_course.father`, `u64` with 0 for unknown; REV-P1a NEW-3), not from the live ledger: the ledger's dead rows are compacted at Bookkeeping of the death instant (SPR-011 ruling 5), while the log keeps every person who ever lived, so a line through a dead intermediary (a grandson whose father predeceased the holder) stays complete. The genealogy relations read these three columns, declared `lagged` by their users (genealogy never changes within an instant). "Ancestor-or-self of `x` at height `h`" is the set `A_h(x)`: `A_0 = {x}`, `A_{h+1} = {father(y), mother(y) : y ∈ A_h} \ {none}`; the agnatic variant follows fathers only. Heights are bounded by `KIN_DEGREES_MAX = 4` for `kin`, `related`, `up` and `common`, and generations by `DESCENT_MAX = 6` for `ancestors`, `descendants` and the lines. Children are ordered by `life_course.person_id`, so every order below is deterministic without hashing.
 
 | Name | Owner | Yields | Reads | Bound | Definition |
 |---|---|---|---|---|---|
-| `children(p)` | M2 | `person` | `person.mother`, `person.father` | 64 | every person whose mother or father is `p`, alive or dead; id order |
-| `kin(p, n)` | M2 | `person` | `person.mother`, `person.father` | 256 | every person other than `p` reachable from `p` in at most `n` parent-or-child steps (`n` an `Int` literal in 1..4); alive or dead; id order |
-| `line(a, x)` | M2 | `person` | mother, father | 6 | the persons on the shortest parent-chain from `x` up to `a`, listed from `a`'s child down to `x` (`a` excluded, `x` included); among equally short chains, the one that takes the father at the first step where the chains differ; `line(x, x)` and a pair with no chain of length ≤ 6 yield the empty list |
-| `line_agnatic(a, x)` | M2 | `person` | father | 6 | as `line`, following fathers only |
-| `up(x, p)` | M2 | `int` | mother, father | | the least `h` in 0..4 such that some member of `A_h(p)` is an ancestor-or-self of `x` within 6 generations; `5` if there is none |
-| `common(x, p)` | M2 | `person` | mother, father | | the member of `A_h(p)` found by `up`; when several qualify at that height, the first in father-first enumeration order (`L_0 = [p]`, `L_{h+1}` = for each `y` in `L_h`: `father(y)`, then `mother(y)`, each once, `none` skipped); `none` when `up` is 5 |
-| `up_agnatic(x, p)`, `common_agnatic(x, p)` | M2 | `int`, `person` | father | | as `up` and `common` through fathers only, on both sides |
+| `children(p)` | M2 | `person` | the three genealogy columns | 64 | every person whose mother or father is `p`, alive or dead; id order |
+| `kin(p, n)` | M2 | `person` | genealogy | 256 | every person other than `p` reachable from `p` in at most `n` parent-or-child steps (`n` an `Int` literal in 1..4); alive or dead; id order |
+| `related(a, b, n)` | M2 | `bool` | genealogy | | `b` is in `kin(a, n)` (false when either is `none`); the predicate form the review calls `kin(a, b, n)` |
+| `ancestors(p, g)` | M2 | `person` | genealogy | 64 | the ancestors of `p` within `g` generations (`g` an `Int` literal in 1..6), by generation (parents first), then id |
+| `descendants(p, g)` | M2 | `person` | genealogy | 256 | the descendants of `p` within `g` generations, alive or dead, by generation (children first), then id |
+| `line(a, x)` | M2 | `person` | genealogy | 6 | the persons on the shortest parent-chain from `x` up to `a`, listed from `a`'s child down to `x` (`a` excluded, `x` included); among equally short chains, the one that takes the father at the first step where the chains differ; `line(x, x)` and a pair with no chain of length ≤ 6 yield the empty list |
+| `line_agnatic(a, x)` | M2 | `person` | `person_id`, `father` | 6 | as `line`, following fathers only |
+| `up(x, p)` | M2 | `int` | genealogy | | the least `h` in 0..4 such that some member of `A_h(p)` is an ancestor-or-self of `x` within 6 generations; `5` if there is none |
+| `common(x, p)` | M2 | `person` | genealogy | | the member of `A_h(p)` found by `up`; when several qualify at that height, the first in father-first enumeration order (`L_0 = [p]`, `L_{h+1}` = for each `y` in `L_h`: `father(y)`, then `mother(y)`, each once, `none` skipped); `none` when `up` is 5 |
+| `up_agnatic(x, p)`, `common_agnatic(x, p)` | M2 | `int`, `person` | `person_id`, `father` | | as `up` and `common` through fathers only, on both sides |
 | `titles(p)` | M7 | `title` | `title.holder` | 16 | titles whose holder is `p`; id order |
 | `vassals(t)` | M7 | `title` | `title.liege` | 64 | titles whose liege is `t`; id order |
 | `offices(p)` | M7 | `office` | `office.holder` | 16 | offices whose holder is `p`; id order |
@@ -347,27 +351,27 @@ The seven laws are the ids of `[succession_laws]`; M7's spec names all seven (`e
 # uncles and aunts and theirs). An ancestor never inherits from a descendant (common(x, holder) != x).
 candidates = "kin(holder, 4)"
 eligible   = "person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x"
-order      = "(up(x, holder), [(person.sex(y) == sex.female, person.birth_tick(y), y) for y in line(common(x, holder), x)])"
+order      = "(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])"
 
 [succession_laws.ultimogeniture]
 # As primogeniture, youngest first within each set of siblings (still male-preference).
 candidates = "kin(holder, 4)"
 eligible   = "person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x"
-order      = "(up(x, holder), [(person.sex(y) == sex.female, -person.birth_tick(y), y) for y in line(common(x, holder), x)])"
+order      = "(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y), y) for y in line(common(x, holder), x)])"
 
 [succession_laws.seniority]
 # Agnatic seniority (the rota): the eldest male of the most senior generation of the male line, generations
 # counted relative to the holder (uncles before brothers before sons), then by age.
 candidates = "kin(holder, 4)"
-eligible   = "person.alive(x) and x != holder and person.sex(x) == sex.male and up_agnatic(x, holder) <= 4 and common_agnatic(x, holder) != x"
-order      = "(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), person.birth_tick(x))"
+eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 4 and common_agnatic(x, holder) != x"
+order      = "(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), life_course.birth_tick(x))"
 
 [succession_laws.partition]
 # Partible: the holder's living children, sons by age then daughters by age. M7 F1 holds one title per holder, so
 # the first takes the title; what the others take is open question Q3 (§12).
 candidates = "children(holder)"
 eligible   = "person.alive(x) and x != holder"
-order      = "(person.sex(x) == sex.female, person.birth_tick(x))"
+order      = "(life_course.sex(x) == sex.female, life_course.birth_tick(x))"
 
 [succession_laws.elective]
 # Election by the magnates: the court of the title (vassal title holders and office holders), the holder of the
@@ -375,14 +379,14 @@ order      = "(person.sex(x) == sex.female, person.birth_tick(x))"
 # within a tier, office holders without a title last. Votes are open question Q4 (§12).
 candidates = "court(title)"
 eligible   = "person.alive(x) and x != holder"
-order      = "(min(t in titles(x): ordinal(title.tier(t)) else 3), person.birth_tick(x))"
+order      = "(min(t in titles(x): ordinal(title.tier(t)) else 3), life_course.birth_tick(x))"
 
 [succession_laws.tanistry]
 # The derbfine: adult males of the male line within three generations up and three down of a common ancestor;
 # the eldest first (the election of the tánaiste is Q4).
 candidates = "kin(holder, 4)"
-eligible   = "person.alive(x) and x != holder and person.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and common_agnatic(x, holder) != x and now - person.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year))"
-order      = "person.birth_tick(x)"
+eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and common_agnatic(x, holder) != x and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year))"
+order      = "life_course.birth_tick(x)"
 
 [succession_laws.sortition]
 # Lots among the court: a keyed draw per candidate (05.5 §2.1's rng_permutation). M7 must declare the purpose
@@ -392,7 +396,7 @@ eligible   = "person.alive(x) and x != holder"
 order      = "draw(sortition, x, 0)"
 ```
 
-Reads these programs need from `M7.dynasty` (all declared in its spec, or owned): `person.alive`, `person.sex`, `person.birth_tick`, `person.mother`, `person.father` (M2); `title.tier`, `title.holder`, `title.liege`, `office.title`, `office.holder` (owned). `params.majority_age` is M7's. The fixture's expected lines are in the golden file (`succession_*` cases).
+Reads these programs need from `M7.dynasty`: `person.alive` (M2, declared); `life_course.person_id`, `life_course.mother`, `life_course.father`, `life_course.birth_tick` and `life_course.sex` (M2, lagged; M7's and T1's specs must add them, Q11; `life_course.sex` does not exist yet, Q12); `title.tier`, `title.holder`, `title.liege`, `office.title`, `office.holder` (owned). `params.majority_age` is M7's. A dead candidate's `person.alive(x)` is a missing read after its death instant (the row is compacted) and so reads `false`, which is the right answer for eligibility. Every other fact about a person on a line (sex, birth tick) is read from the log, never from the ledger: a dead intermediary's ledger row is gone, and a ledger read of it would silently give the zero (the golden case `sum_int_from_the_ledger_misses_the_compacted_dead` shows the pitfall). The fixture's expected lines are in the golden file (`succession_*` cases).
 
 ## 9. Verb effects and vow predicates (the consumers' programs)
 
@@ -434,7 +438,7 @@ A program is compiled once, at Registry load, against the environment of §7.4. 
 | `E_ARITY` | a builtin, relation or command with the wrong number of arguments, or a command argument missing or repeated |
 | `E_CONST` | a degree, draw index or other constant-only argument that is not an `Int` literal |
 | `E_DIV` | a divisor that is not a non-zero constant (§4.4) |
-| `E_BOUND` | nesting deeper than 2, a bound product above 65,536, `kin` degree outside 1..4 |
+| `E_BOUND` | nesting deeper than 2, a bound product above 65,536, a `kin` or `related` degree outside 1..4, an `ancestors` or `descendants` generation count outside 1..6 |
 | `E_PLANE` | a read of a column whose plane is not `A` |
 | `E_UNDECLARED_READ` | a column read, or a relation whose columns, the declaring system neither owns nor lists in `[[reads]]` |
 | `E_UNDECLARED_COMMAND` | a command the declaring system's spec does not list in `[[commands]]` |
@@ -472,7 +476,8 @@ Each decision is the Architect's recommendation with a confidence; the director 
 | D9 | `draw` returns the 64-bit draw shifted right by one (an `int` in [0, 2⁶³)); `chance` is `draw_hits` on the unshifted draw | `int` is signed; `chance` keeps the exact mapping of `draw.rs` | 8/10 |
 | D10 | A `[commands]` Registry section with parameter lists, lint-checked against the specs | The checker cannot type a command argument otherwise; the specs' `[[commands]]` carry no signature | 7/10 |
 | D11 | Effects are commands only: no timer, no event, no entity creation from a program | `05.5` §2.1 lists `schedule_outcome` and `emit_event`; neither is needed before SPR-024, and each adds host state the checker cannot see; v0.2 if a consumer needs them | 7/10 |
-| D12 | Bounds: `kin` degree ≤ 4, paths ≤ 6, nesting ≤ 2, bound product ≤ 65,536; relation bounds as in §5.3 | Dormancy's `dormancy_degrees` is bounded `[1, 6]` in the Registry, but every law here needs at most 4; 65,536 keeps a program under a millisecond at `08`'s budgets | 6/10 |
+| D12 | Bounds: `kin` degree ≤ 4, paths and generations ≤ 6, nesting ≤ 2, bound product ≤ 65,536; relation bounds as in §5.3 | Dormancy's `dormancy_degrees` is bounded `[1, 6]` in the Registry, but every law here needs at most 4; 65,536 keeps a program under a millisecond at `08`'s budgets | 6/10 |
+| D13 | Genealogy is read from the life-course log (`life_course.person_id`, `.mother`, `.father`), lagged, never from the ledger's `person.mother`/`person.father`; the review's `kin(a, b, n)` is `related(a, b, n)` here because `kin(p, n)` is already the relation `05.5` §2.1 names | The log covers the dead (REV-P1a NEW-3); the ledger compacts them, which would cut every line through a dead intermediary. One name for a relation and a predicate would make the grammar ambiguous | 8/10 |
 
 **Open questions** (the Registry or a spec is silent)
 
@@ -488,6 +493,8 @@ Each decision is the Architect's recommendation with a confidence; the director 
 | Q8 | `emitted_by = "rh-minds"` on the older verbs (`ARREST`, `PURGE`, `REVENGE`, …) is a crate name, not a system id | Rename to `T1.minds` in the Registry with SPR-017's loader change; the checker needs a system id to find the spec | 9/10 |
 | Q9 | Who evaluates: the host system at its binding, or `rh-core`? | The host, through an `rh-registry` API (`compile(program, env) -> Compiled`, `Compiled::eval(&SystemView, &Bindings) -> Value`): the reads then pass through the same `SystemView` that enforces `AccessSpec` at run time, so the compile-time check and the run-time guard agree | 8/10 |
 | Q10 | Should overlays (`derive`) be in v0 at all? | Reserve the kind and its signature only; its accessors (values, fear, success streaks) do not exist before P3.2b | 8/10 |
+| Q11 | M7's and T1's specs declare `person.mother`/`person.father` reads, not the life-course columns the genealogy relations read | In PR #32's next round, M7 and T1 add `[[reads]]` of `life_course.person_id`, `life_course.mother`, `life_course.father` and `life_course.birth_tick` (`lagged`, `identity`); the `person.mother`/`person.father` reads can go | 8/10 |
+| Q12 | The life-course log (M2 on `arch/P1a-skeleton-specs`) has no `sex` column, yet every lineage law needs the sex of dead intermediaries (a dead son's line before a living daughter) | M2 adds `life_course.sex` (an enum written at entry, never changed) in the skeleton specs; until then the laws cannot be evaluated correctly past a death instant. The golden environment carries the column as proposed | 8/10 |
 
 ## 13. Conformance
 

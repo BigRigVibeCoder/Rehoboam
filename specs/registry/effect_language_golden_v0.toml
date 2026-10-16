@@ -42,10 +42,11 @@ overlays          = ["paranoia", "filial_piety", "despair", "hubris", "corruptio
 region_conditions = ["normal", "famine", "siege", "war"]
 
 [registry.entities]
-kinds = ["person", "title", "office", "claim", "house", "polity", "artifact", "vow", "region", "mind"]
+kinds = ["person", "life_course", "title", "office", "claim", "house", "polity", "artifact", "vow", "region", "mind"]
 
 # Columns as the system specs declare them ([[owns]]), with language types: bool | int | q8_8 | q16_16 |
 # enum (+ enum) | ref (+ ref). Spec storage types map as u64/i64/u32/u16/u8 -> int, a "<Kind>Id" u64 -> ref.
+# `key` is the entity kind a read takes when it is not the table's own: the life-course log is read by person.
 [registry.columns]
 "person.alive"       = { entity = "person", type = "bool", plane = "A", owner = "M2.demography" }
 "person.sex"         = { entity = "person", type = "enum", enum = "sex", plane = "A", owner = "M2.demography" }
@@ -59,6 +60,11 @@ kinds = ["person", "title", "office", "claim", "house", "polity", "artifact", "v
 "person.vocation"    = { entity = "person", type = "enum", enum = "vocations", plane = "A", owner = "M7.dynasty" }
 "person.named"       = { entity = "person", type = "bool", plane = "A", owner = "T1.minds" }
 "person.residence"   = { entity = "person", type = "ref", ref = "region", plane = "A", owner = "S3.migration" }
+"life_course.person_id" = { entity = "life_course", key = "person", type = "ref", ref = "person", plane = "A", owner = "M2.demography" }   # the log keeps the dead
+"life_course.mother" = { entity = "life_course", key = "person", type = "ref", ref = "person", plane = "A", owner = "M2.demography" }
+"life_course.father" = { entity = "life_course", key = "person", type = "ref", ref = "person", plane = "A", owner = "M2.demography" }
+"life_course.birth_tick" = { entity = "life_course", key = "person", type = "int", plane = "A", owner = "M2.demography" }
+"life_course.sex"    = { entity = "life_course", key = "person", type = "enum", enum = "sex", plane = "A", owner = "M2.demography" }   # proposed: open question Q12
 "title.tier"         = { entity = "title", type = "enum", enum = "title_tiers", plane = "A", owner = "M7.dynasty" }
 "title.liege"        = { entity = "title", type = "ref", ref = "title", plane = "A", owner = "M7.dynasty" }
 "title.polity"       = { entity = "title", type = "ref", ref = "polity", plane = "A", owner = "M7.dynasty" }
@@ -102,7 +108,7 @@ rng = ["death_hazard"]
 params = { e0 = [20.0, 85.0] }
 
 [registry.systems."M7.dynasty"]
-reads = ["person.alive", "person.death_cause", "person.death_tick", "person.birth_tick", "person.sex", "person.mother", "person.father", "person.named", "vow.vower", "vow.status", "polity.exec_constraint"]
+reads = ["person.alive", "person.death_cause", "person.death_tick", "person.birth_tick", "person.sex", "person.mother", "person.father", "life_course.person_id", "life_course.mother", "life_course.father", "life_course.birth_tick", "life_course.sex", "person.named", "vow.vower", "vow.status", "polity.exec_constraint"]   # life_course.*: open question Q11
 sends = [
   { command = "ScheduleDeath", target = "M2.demography" },
   { command = "Promote", target = "T1.minds" },
@@ -114,7 +120,7 @@ rng = ["exit_murder", "exit_deposition", "exit_day", "murder_culprit", "successi
 params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], predecessor_deposed_hr = [1.3, 2.0], exec_constraint_hr = [0.3, 1.0], majority_age = [12.0, 21.0], arb_legal_weight = [0.0, 1.0], arb_claim_weight = [0.0, 1.0], arb_military_weight = [0.0, 1.0], arb_treasury_weight = [0.0, 1.0], contest_margin = [0.0, 1.0], interregnum_max_days = [7, 730], dormancy_degrees = [1, 6], vocation_holy_orders = [0.0, 0.6], vocation_mercenary = [0.0, 0.6] }
 
 [registry.systems."T1.minds"]
-reads = ["person.alive", "person.death_tick", "person.birth_tick", "person.sex", "person.mother", "person.father", "person.spouse", "person.house", "title.holder", "title.liege", "title.tier", "title.regent", "office.holder", "office.title", "claim.claimant", "claim.title", "claim.status", "vow.vower", "vow.conflict", "artifact.bearer", "artifact.location"]
+reads = ["person.alive", "person.death_tick", "person.birth_tick", "person.sex", "person.mother", "person.father", "life_course.person_id", "life_course.mother", "life_course.father", "life_course.birth_tick", "life_course.sex", "person.spouse", "person.house", "title.holder", "title.liege", "title.tier", "title.regent", "office.holder", "office.title", "claim.claimant", "claim.title", "claim.status", "vow.vower", "vow.conflict", "artifact.bearer", "artifact.location"]
 sends = [
   { command = "Marry", target = "M2.demography" },
   { command = "ScheduleDeath", target = "M2.demography" },
@@ -185,32 +191,32 @@ systems = ["M2.demography", "M7.dynasty", "T1.minds", "S6.artifacts", "S7.vows"]
 [registry.programs.succession_laws.primogeniture]
 candidates = 'kin(holder, 4)'
 eligible   = 'person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x'
-order      = '(up(x, holder), [(person.sex(y) == sex.female, person.birth_tick(y), y) for y in line(common(x, holder), x)])'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.ultimogeniture]
 candidates = 'kin(holder, 4)'
 eligible   = 'person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x'
-order      = '(up(x, holder), [(person.sex(y) == sex.female, -person.birth_tick(y), y) for y in line(common(x, holder), x)])'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.seniority]
 candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and person.sex(x) == sex.male and up_agnatic(x, holder) <= 4 and common_agnatic(x, holder) != x'
-order      = '(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), person.birth_tick(x))'
+eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 4 and common_agnatic(x, holder) != x'
+order      = '(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), life_course.birth_tick(x))'
 
 [registry.programs.succession_laws.partition]
 candidates = 'children(holder)'
 eligible   = 'person.alive(x) and x != holder'
-order      = '(person.sex(x) == sex.female, person.birth_tick(x))'
+order      = '(life_course.sex(x) == sex.female, life_course.birth_tick(x))'
 
 [registry.programs.succession_laws.elective]
 candidates = 'court(title)'
 eligible   = 'person.alive(x) and x != holder'
-order      = '(min(t in titles(x): ordinal(title.tier(t)) else 3), person.birth_tick(x))'
+order      = '(min(t in titles(x): ordinal(title.tier(t)) else 3), life_course.birth_tick(x))'
 
 [registry.programs.succession_laws.tanistry]
 candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and person.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and common_agnatic(x, holder) != x and now - person.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year))'
-order      = 'person.birth_tick(x)'
+eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and common_agnatic(x, holder) != x and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year))'
+order      = 'life_course.birth_tick(x)'
 
 [registry.programs.succession_laws.sortition]
 candidates = 'court(title)'
@@ -221,17 +227,17 @@ order      = 'draw(sortition, x, 0)'
 [registry.programs.succession_laws.absolute_primogeniture]
 candidates = 'kin(holder, 4)'
 eligible   = 'person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x'
-order      = '(up(x, holder), [(person.birth_tick(y), y) for y in line(common(x, holder), x)])'
+order      = '(up(x, holder), [(life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.agnatic_primogeniture]
 candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and person.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and common_agnatic(x, holder) != x'
-order      = '(up_agnatic(x, holder), [(person.birth_tick(y), y) for y in line_agnatic(common_agnatic(x, holder), x)])'
+eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and common_agnatic(x, holder) != x'
+order      = '(up_agnatic(x, holder), [(life_course.birth_tick(y), y) for y in line_agnatic(common_agnatic(x, holder), x)])'
 
 [registry.programs.succession_laws.primogeniture_lay]   # open question Q1: holy orders excluded by the law itself
 candidates = 'kin(holder, 4)'
 eligible   = 'person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x and person.vocation(x) != vocations.holy_orders'
-order      = '(up(x, holder), [(person.sex(y) == sex.female, person.birth_tick(y), y) for y in line(common(x, holder), x)])'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
 
 # ============================================================================= the fixture world
 # House Khorvath at the instant High King Halvard (7) is murdered: `now` = 0, ticks in days before it.
@@ -246,6 +252,8 @@ order      = '(up(x, holder), [(person.sex(y) == sex.female, person.birth_tick(y
 #   │   └── Jorund (9, m, -12500) ── Ragnar (16, m, -3000), Varg (20, m, -1500)
 #   └── Yrsa (22, f, -11000): Dagny's daughter by an unknown father (a half-sister of Halvard through the mother)
 #
+# The ledger (worlds.dynasty.person) holds the living and Halvard, who dies at this instant; Aldric, Bera, Cedric and
+# Nils died earlier and are compacted (SPR-011 ruling 5), so they exist only in the life-course log.
 # Titles: 100 the sovereign seat (holder 7), its vassals 101 (major, Edmund), 102 (minor, Jorund), 103 (minor,
 # Freya); 104 a vacant vassal of 101. Offices of 100: marshal Ragnar (16), steward Liv (11), chaplain Ulf (19),
 # spymaster vacant; of 101: steward Sif (17). Claims: 300 Jorund on 100 (active, pressed), 301 Jorund on 101
@@ -319,48 +327,6 @@ e0 = "32.0"
 "act_outcome/person:9/0" = "42"
 "act_outcome/person:16/0" = "9223372036854775808"  # 2^63: u / 2^64 = 0.5, misses p = 0.3
 
-[[worlds.dynasty.person]]
-id = 1
-alive = false
-sex = "male"
-birth_tick = -34000
-death_tick = -5000
-death_cause = "natural"
-mother = 0
-father = 0
-spouse = 2
-house = 1
-vocation = "none"
-named = false
-residence = 1
-[[worlds.dynasty.person]]
-id = 2
-alive = false
-sex = "female"
-birth_tick = -33500
-death_tick = -4000
-death_cause = "natural"
-mother = 0
-father = 0
-spouse = 1
-house = 1
-vocation = "none"
-named = false
-residence = 1
-[[worlds.dynasty.person]]
-id = 3
-alive = false
-sex = "male"
-birth_tick = -24000
-death_tick = -2000
-death_cause = "battle"
-mother = 2
-father = 1
-spouse = 4
-house = 1
-vocation = "none"
-named = false
-residence = 1
 [[worlds.dynasty.person]]
 id = 4
 alive = true
@@ -483,20 +449,6 @@ death_cause = "natural"
 mother = 11
 father = 7
 spouse = 0
-house = 1
-vocation = "none"
-named = true
-residence = 1
-[[worlds.dynasty.person]]
-id = 13
-alive = false
-sex = "male"
-birth_tick = -7000
-death_tick = -100
-death_cause = "accident"
-mother = 11
-father = 7
-spouse = 15
 house = 1
 vocation = "none"
 named = true
@@ -627,6 +579,162 @@ house = 0
 vocation = "none"
 named = false
 residence = 1
+
+# The life-course log: every person who ever lived, with the genealogy the relations read (§5.3).
+[[worlds.dynasty.life_course]]
+id = 1
+person_id = 1
+mother = 0
+father = 0
+birth_tick = -34000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 2
+person_id = 2
+mother = 0
+father = 0
+birth_tick = -33500
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 3
+person_id = 3
+mother = 2
+father = 1
+birth_tick = -24000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 4
+person_id = 4
+mother = 0
+father = 0
+birth_tick = -23500
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 5
+person_id = 5
+mother = 2
+father = 1
+birth_tick = -22000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 6
+person_id = 6
+mother = 2
+father = 1
+birth_tick = -22500
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 7
+person_id = 7
+mother = 4
+father = 3
+birth_tick = -14000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 8
+person_id = 8
+mother = 4
+father = 3
+birth_tick = -13500
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 9
+person_id = 9
+mother = 4
+father = 3
+birth_tick = -12500
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 10
+person_id = 10
+mother = 11
+father = 7
+birth_tick = -8000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 11
+person_id = 11
+mother = 0
+father = 0
+birth_tick = -13800
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 12
+person_id = 12
+mother = 11
+father = 7
+birth_tick = -8500
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 13
+person_id = 13
+mother = 11
+father = 7
+birth_tick = -7000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 14
+person_id = 14
+mother = 15
+father = 13
+birth_tick = -400
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 15
+person_id = 15
+mother = 0
+father = 0
+birth_tick = -7500
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 16
+person_id = 16
+mother = 0
+father = 9
+birth_tick = -3000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 17
+person_id = 17
+mother = 0
+father = 5
+birth_tick = -4000
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 18
+person_id = 18
+mother = 0
+father = 10
+birth_tick = -300
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 19
+person_id = 19
+mother = 0
+father = 5
+birth_tick = -2000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 20
+person_id = 20
+mother = 0
+father = 9
+birth_tick = -1500
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 21
+person_id = 21
+mother = 8
+father = 0
+birth_tick = -9000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 22
+person_id = 22
+mother = 4
+father = 0
+birth_tick = -11000
+sex = "female"
 
 [[worlds.dynasty.title]]
 id = 100
@@ -1980,12 +2088,34 @@ bind = { x = "person:11" }
 text = 'exists(person.father(x))'
 expect = "bool:false"
 [[case]]
-id = "exists_dead_but_present"
+id = "exists_dying_this_instant"
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:10" }
+text = 'exists(person.father(x))'
+expect = "bool:true"
+[[case]]
+id = "exists_of_a_compacted_dead_row"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'exists(person.father(holder))'
-expect = "bool:true"
+expect = "bool:false"
+[[case]]
+id = "read_of_a_compacted_dead_row_is_missing"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'person.alive(person.father(holder))'
+expect = "bool:false"
+missing_reads = 1
+[[case]]
+id = "genealogy_of_a_compacted_dead_row_is_in_the_log"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'count(y in children(person.father(holder)))'
+expect = "int:3"
 [[case]]
 id = "exists_absent_id"
 kind = "expr"
@@ -2377,8 +2507,16 @@ id = "sum_int"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
-text = 'sum(y in children(holder): person.birth_tick(y))'
+text = 'sum(y in children(holder): life_course.birth_tick(y))'
 expect = "int:-23500"
+[[case]]
+id = "sum_int_from_the_ledger_misses_the_compacted_dead"   # Nils (13) is compacted: his ledger birth tick reads 0
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'sum(y in children(holder): person.birth_tick(y))'
+expect = "int:-16500"
+missing_reads = 1
 [[case]]
 id = "sum_saturates"
 kind = "expr"
@@ -2405,14 +2543,14 @@ id = "min_aggregate"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
-text = 'min(y in children(holder): person.birth_tick(y) else 0)'
+text = 'min(y in children(holder): life_course.birth_tick(y) else 0)'
 expect = "int:-8500"
 [[case]]
 id = "max_aggregate"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
-text = 'max(y in children(holder): person.birth_tick(y) else 0)'
+text = 'max(y in children(holder): life_course.birth_tick(y) else 0)'
 expect = "int:-7000"
 [[case]]
 id = "min_over_empty_takes_else"
@@ -2954,6 +3092,155 @@ system = "M7.dynasty"
 text = 'up(1, 2)'
 expect = "error:E_TYPE"
 
+# ----------------------------------------------------------------------------- ancestors, descendants, related (§5.3)
+[[case]]
+id = "ancestors_one_generation"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'ancestors(holder, 1)'
+expect = "relation:[3, 4]"
+[[case]]
+id = "ancestors_two_generations_by_generation_then_id"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'ancestors(holder, 2)'
+expect = "relation:[3, 4, 1, 2]"
+[[case]]
+id = "ancestors_through_a_mother_only"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { x = "person:21" }
+text = 'ancestors(x, 6)'
+expect = "relation:[8, 3, 4, 1, 2]"
+[[case]]
+id = "ancestors_of_a_founder"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { x = "person:11" }
+text = 'ancestors(x, 6)'
+expect = "relation:[]"
+[[case]]
+id = "descendants_one_generation"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'descendants(holder, 1)'
+expect = "relation:[10, 12, 13]"
+[[case]]
+id = "descendants_through_a_dead_son"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'descendants(holder, 2)'
+expect = "relation:[10, 12, 13, 14, 18]"
+[[case]]
+id = "descendants_of_the_founder"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { a = "person:1" }
+text = 'descendants(a, 6)'
+expect = "relation:[3, 5, 6, 7, 8, 9, 17, 19, 10, 12, 13, 16, 20, 21, 14, 18]"
+[[case]]
+id = "descendants_generations_too_many"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'descendants(holder, 7)'
+expect = "error:E_BOUND"
+[[case]]
+id = "ancestors_generations_must_be_a_literal"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'ancestors(holder, now)'
+expect = "error:E_CONST"
+[[case]]
+id = "related_brother"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:9" }
+text = 'related(holder, x, 1)'
+expect = "bool:false"
+[[case]]
+id = "related_brother_at_two"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:9" }
+text = 'related(holder, x, 2)'
+expect = "bool:true"
+[[case]]
+id = "related_is_symmetric"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:9" }
+text = 'related(x, holder, 2)'
+expect = "bool:true"
+[[case]]
+id = "related_cousin_at_four"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:19" }
+text = 'related(holder, x, 4)'
+expect = "bool:true"
+[[case]]
+id = "related_cousin_not_at_three"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:19" }
+text = 'related(holder, x, 3)'
+expect = "bool:false"
+[[case]]
+id = "related_to_self_is_false"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'related(holder, holder, 4)'
+expect = "bool:false"
+[[case]]
+id = "related_to_none_is_false"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'related(holder, none, 4)'
+expect = "bool:false"
+[[case]]
+id = "related_degree_too_large"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:9" }
+text = 'related(holder, x, 5)'
+expect = "error:E_BOUND"
+[[case]]
+id = "related_reads_must_be_declared"
+kind = "expr"
+system = "S7.vows"
+bind = { holder = "person:7", x = "person:9" }
+text = 'related(holder, x, 2)'
+expect = "error:E_UNDECLARED_READ"
+[[case]]
+id = "line_to_a_nephew"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:16" }
+text = 'line(common(x, holder), x)'
+expect = "relation:[9, 16]"
+[[case]]
+id = "line_to_a_cousin"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:19" }
+text = 'line(common(x, holder), x)'
+expect = "relation:[5, 19]"
+[[case]]
+id = "line_to_a_grandson_through_a_dead_son"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7", x = "person:14" }
+text = 'line(common(x, holder), x)'
+expect = "relation:[13, 14]"
+
 # ----------------------------------------------------------------------------- keys (§3.4)
 [[case]]
 id = "key_scalar_int"
@@ -2997,7 +3284,7 @@ id = "key_list_in_relation_order"
 kind = "order"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
-text = '[person.birth_tick(y) for y in children(holder)]'
+text = '[life_course.birth_tick(y) for y in children(holder)]'
 expect = "key:[int:-8000, int:-8500, int:-7000]"
 [[case]]
 id = "key_list_of_a_line"
@@ -3025,7 +3312,7 @@ id = "key_primogeniture_of_a_sisters_son"
 kind = "order"
 system = "M7.dynasty"
 bind = { holder = "person:7", x = "person:21" }
-text = '(up(x, holder), [(person.sex(y) == sex.female, person.birth_tick(y), y) for y in line(common(x, holder), x)])'
+text = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
 expect = "key:(int:1, [(bool:true, int:-13500, person:8), (bool:false, int:-9000, person:21)])"
 [[case]]
 id = "key_conditional"
