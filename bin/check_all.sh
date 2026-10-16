@@ -127,7 +127,10 @@ clippy_control() {
 # fp_contract_guard <root> fails if
 #   - any *RUSTFLAGS* variable (RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, CARGO_BUILD_RUSTFLAGS,
 #     CARGO_TARGET_*_RUSTFLAGS) mentions fp-contract at all;
-#   - any *CFLAGS* variable holds an fp-contract token other than exactly -ffp-contract=off;
+#   - any C or C++ compiler variable the cc crate reads holds an fp-contract token other than exactly
+#     -ffp-contract=off: *CFLAGS* (CFLAGS, HOST_CFLAGS, TARGET_CFLAGS, CFLAGS_<target>), *CXXFLAGS*,
+#     and CC, CXX with their HOST_/TARGET_ and _<target> variants (a compiler given as
+#     `CC="gcc -ffp-contract=fast"`; VER-SPR-007-TEST GAP-2);
 #   - any .cargo/config or .cargo/config.toml under <root> (target/, .git/ and the lint fixtures
 #     excluded) mentions fp-contract on a line that is not a CFLAGS setting, or with any token other
 #     than exactly -ffp-contract=off, or in a CFLAGS entry without `force = true` (without it, a CFLAGS
@@ -135,6 +138,8 @@ clippy_control() {
 #     comments set nothing and are skipped.
 # The one accepted form is the repository's own `CFLAGS = { value = "-ffp-contract=off", ... }`.
 FP_CONTRACT_OK="-ffp-contract=off"
+# The variable names the guard reads as compiler settings (an extended regex over `compgen -v`).
+C_COMPILER_VARS='CFLAGS|CXXFLAGS|^(HOST_|TARGET_)?(CC|CXX)(_.+)?$'
 # fp_contract_bad_tokens <text>: prints every fp-contract token of <text> that is not $FP_CONTRACT_OK.
 fp_contract_bad_tokens() {
   grep -oE -- "[^[:space:]\"',]*fp-contract[^[:space:]\"',]*" <<<"$1" | grep -vxF -- "$FP_CONTRACT_OK"
@@ -144,7 +149,7 @@ fp_contract_guard() {
   for var in $(compgen -v | grep RUSTFLAGS); do
     if grep -q -- 'fp-contract' <<<"${!var}"; then echo "$var sets fp-contract: ${!var}"; bad=1; fi
   done
-  for var in $(compgen -v | grep CFLAGS); do
+  for var in $(compgen -v | grep -E "$C_COMPILER_VARS"); do
     if fp_contract_bad_tokens "${!var}" >/dev/null; then echo "$var sets fp-contract other than $FP_CONTRACT_OK: ${!var}"; bad=1; fi
   done
   while IFS= read -r file; do
@@ -157,7 +162,7 @@ fp_contract_guard() {
     done < <(grep -- 'fp-contract' "$file" | grep -vE '^[[:space:]]*#')
   done < <(find "$root" \( -path "$root/target" -o -path "$root/.git" -o -path "$root/tests/lint_fixtures" \) -prune \
              -o -type f \( -path '*/.cargo/config' -o -path '*/.cargo/config.toml' \) -print)
-  [ $bad -eq 0 ] && echo "no fp-contract in any RUSTFLAGS variable; none but CFLAGS = $FP_CONTRACT_OK in CFLAGS variables or .cargo/config under $root"
+  [ $bad -eq 0 ] && echo "no fp-contract in any RUSTFLAGS variable; none but CFLAGS = $FP_CONTRACT_OK in C/C++ compiler variables (CFLAGS, CXXFLAGS, CC, CXX) or .cargo/config under $root"
   return $bad
 }
 # Its environment controls: the guard with RUSTFLAGS or CFLAGS set as a contracting build would set them.
@@ -166,6 +171,20 @@ fp_contract_env_control() {
 }
 fp_contract_cflags_env_control() {
   CFLAGS="-O2 -ffp-contract=fast" fp_contract_guard .
+}
+# GAP-2: the same through CXXFLAGS, a CC wrapper and a target-specific CXX.
+fp_contract_cxxflags_env_control() {
+  CXXFLAGS="-ffp-contract=on" fp_contract_guard .
+}
+fp_contract_cc_env_control() {
+  CC="gcc -ffp-contract=fast" fp_contract_guard .
+}
+fp_contract_cxx_target_env_control() {
+  CXX_x86_64_unknown_linux_gnu="g++ -ffp-contract=fast" fp_contract_guard .
+}
+# And the accepted value passes through every one of them.
+fp_contract_compiler_vars_ok_control() {
+  CC="gcc -ffp-contract=off" CXX="g++" CXXFLAGS="-O2 -ffp-contract=off" fp_contract_guard .
 }
 # The C dependencies really were built with it (SPR-007 ruling 4): the repository's .cargo/config.toml
 # sets CFLAGS to exactly $FP_CONTRACT_OK, and the cc build-script output of every C-building crate
@@ -293,6 +312,10 @@ run "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp
 run "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL" "fail:RUSTFLAGS sets fp-contract" fp_contract_env_control &&
 run "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL" "fail:.cargo/config.toml sets fp-contract" fp_contract_guard tests/lint_fixtures/fp_contract &&
 run "fp-contract guard positive control: CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling 4)" "fail:CFLAGS sets fp-contract other than -ffp-contract=off" fp_contract_cflags_env_control &&
+run "fp-contract guard positive control: CXXFLAGS with -ffp-contract=on must FAIL (SPR-007 GAP-2)" "fail:CXXFLAGS sets fp-contract other than -ffp-contract=off" fp_contract_cxxflags_env_control &&
+run "fp-contract guard positive control: CC with -ffp-contract=fast must FAIL (SPR-007 GAP-2)" "fail:CC sets fp-contract other than -ffp-contract=off" fp_contract_cc_env_control &&
+run "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must FAIL (SPR-007 GAP-2)" "fail:CXX_x86_64_unknown_linux_gnu sets fp-contract other than -ffp-contract=off" fp_contract_cxx_target_env_control &&
+run "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 GAP-2)" "pass:no fp-contract in any RUSTFLAGS variable" fp_contract_compiler_vars_ok_control &&
 run "fp-contract guard positive control: a .cargo/config.toml CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling 4)" "fail:.cargo/config.toml sets fp-contract other than CFLAGS = -ffp-contract=off" fp_contract_guard tests/lint_fixtures/fp_contract_cflags &&
 run "fp-contract guard positive control: a .cargo/config.toml CFLAGS without force = true must FAIL (SPR-007 ruling 4)" "fail:.cargo/config.toml sets CFLAGS without force = true" fp_contract_guard tests/lint_fixtures/fp_contract_cflags_unforced &&
 run "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off passes (SPR-007 ruling 4)" "pass:none but CFLAGS = -ffp-contract=off" fp_contract_guard tests/lint_fixtures/fp_contract_cflags_ok &&
