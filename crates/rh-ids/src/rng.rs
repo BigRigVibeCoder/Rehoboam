@@ -20,10 +20,10 @@
 //!   8-byte little-endian chunks, the last one zero-padded.
 //! - `tag(name) = h64_bytes(0, name)`: a domain tag from an ASCII name.
 //! - [`LightStream`] draw `k` = `mix(base + (k + 1) · GAMMA)` with
-//!   `base = h64_words(tag("rehoboam/rh-ids/light/v1"), [seed, salt, system, purpose, entity, t])`:
-//!   the `SplitMix64` sequence started at `base`.
+//!   `base = h64_words(tag("rehoboam/rh-ids/light/v2"), [seed, salt, system, purpose, entity,
+//!   epoch, t])`: the `SplitMix64` sequence started at `base` (version 2 added `epoch`).
 //!
-//! TRADEOFF: a light stream compresses the 352-bit key to 64 bits, so two keys collide with
+//! TRADEOFF: a light stream compresses the 384-bit key to 64 bits, so two keys collide with
 //! probability 2⁻⁶⁴ per pair; over 10¹⁰ keys (10⁶ persons × 10⁴ months) a few pairs are expected
 //! to share draws. That is harmless noise for scalar uses, but anything whose draws must never
 //! coincide (or that needs more than a handful of draws per key) uses [`RngStream`], whose keys
@@ -57,8 +57,7 @@
 use rand_chacha::ChaCha8Rng;
 use rand_core::Rng;
 
-use crate::hash::{BranchSalt, PurposeId, RngKey, StreamKey, word_pos};
-use crate::ids::SystemId;
+use crate::hash::{PurposeId, RngKey, StreamKey, word_pos};
 
 /// The `SplitMix64` increment, the odd integer closest to 2⁶⁴/φ.
 /// REF: Steele, Lea and Flood (2014), "Fast splittable pseudorandom number generators".
@@ -122,7 +121,7 @@ pub const fn tag(name: &str) -> u64 {
 /// Domain of purpose identifiers.
 pub const TAG_PURPOSE: u64 = tag("rehoboam/rh-ids/purpose/v1");
 /// Domain of light-stream bases.
-pub const TAG_LIGHT: u64 = tag("rehoboam/rh-ids/light/v1");
+pub const TAG_LIGHT: u64 = tag("rehoboam/rh-ids/light/v2");
 
 impl PurposeId {
     /// The identifier of a purpose name: `h64_bytes(TAG_PURPOSE, name)`. Depends on the name only.
@@ -326,33 +325,14 @@ impl LightStream {
     /// The light stream of `key`.
     #[must_use]
     pub const fn new(key: &RngKey) -> Self {
-        Self::from_parts(
-            key.world_seed,
-            key.branch_salt,
-            key.system,
-            key.purpose,
-            key.entity,
-            key.t,
-        )
-    }
-
-    /// The light stream of the key given field by field.
-    #[must_use]
-    pub const fn from_parts(
-        world_seed: u64,
-        branch_salt: BranchSalt,
-        system: SystemId,
-        purpose: PurposeId,
-        entity: u64,
-        t: i64,
-    ) -> Self {
         let words = [
-            world_seed,
-            branch_salt.to_raw(),
-            system.to_raw() as u64,
-            purpose.to_raw(),
-            entity,
-            t.cast_unsigned(),
+            key.world_seed,
+            key.branch_salt.to_raw(),
+            key.system.to_raw() as u64,
+            key.purpose.to_raw(),
+            key.entity,
+            key.epoch as u64,
+            key.t.cast_unsigned(),
         ];
         Self {
             base: h64_words(TAG_LIGHT, &words),
@@ -371,7 +351,8 @@ impl LightStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hash::h;
+    use crate::hash::{BranchSalt, h};
+    use crate::ids::SystemId;
 
     fn key(entity: u64) -> RngKey {
         RngKey {
@@ -380,6 +361,7 @@ mod tests {
             system: SystemId::from_raw(2),
             purpose: PurposeId::of("death_time"),
             entity,
+            epoch: 0,
             t: 43_200,
         }
     }

@@ -1,23 +1,25 @@
 """Reference implementation of the rh-ids keyed hash and RNG; writes their golden vectors (SPR-002).
 
 This is an independent, standard-library re-implementation of the byte layouts that
-``crates/rh-ids`` documents. It generates ``crates/rh-ids/tests/golden/rh_ids_v1.txt``; the Rust
+``crates/rh-ids`` documents. It generates ``crates/rh-ids/tests/golden/rh_ids_v2.txt``; the Rust
 tests (``crates/rh-ids/tests/golden.rs``) must reproduce every line bit for bit. Two independent
 implementations agreeing is the known-answer test (V-DET-09 style); the ChaCha core itself is first
 checked here against published test vectors. Golden vectors are generated, never hand-typed.
 
-Layout, version 1 (all integers little-endian; ``i64`` as its two's-complement ``u64``):
+Layout, version 2 for H and the light stream (version 1 had no ``epoch``); version 1 for the
+rest (all integers little-endian; ``i64`` as its two's-complement ``u64``):
 
 ChaCha8
     The original (D. J. Bernstein) ChaCha with 8 rounds, a 64-bit block counter in state words
     12-13 and a 64-bit nonce ("stream") in words 14-15. This is what ``rand_chacha`` implements.
 
 H (T-02)
-    ``K0 = le64(world_seed) || b"rehoboam/rh-ids/H/v1" || 4 zero bytes`` (32 bytes)
+    ``K0 = le64(world_seed) || b"rehoboam/rh-ids/H/v2" || 4 zero bytes`` (32 bytes)
     ``PRF(K, nonce, block)`` = the first 32 bytes of ChaCha8 block ``block`` under key ``K``
-    ``K1 = PRF(K0, nonce=branch_salt, block=system_id)``
+    ``K1 = PRF(K0, nonce=branch_salt, block=system_id | epoch << 32)`` (two u32 halves)
     ``K2 = PRF(K1, nonce=purpose_id, block=entity_id)``
-    The stream for ``(world_seed, branch_salt, system_id, purpose_id, entity_id, t)`` is ChaCha8
+    The stream for ``(world_seed, branch_salt, system_id, purpose_id, entity_id, epoch, t)`` is
+    ChaCha8
     under ``K2`` with nonce ``t``; ``H(..., t, k)`` is the u64 made of stream words ``2k`` (low)
     and ``2k + 1`` (high).
 
@@ -28,7 +30,8 @@ SplitMix64 scalar hash (T-03)
     ``n`` the byte length. ``tag(name) = h64_bytes(0, name)``.
     ``purpose_id(name) = h64_bytes(tag("rehoboam/rh-ids/purpose/v1"), name)``.
     Light stream draw ``k`` = ``mix(base + (k + 1) * GAMMA)``, with
-    ``base = h64_words(tag("rehoboam/rh-ids/light/v1"), [seed, salt, system, purpose, entity, t])``.
+    ``base = h64_words(tag("rehoboam/rh-ids/light/v2"),
+    [seed, salt, system, purpose, entity, epoch, t])``.
 
 Branch salt (T-04)
     ``branch_salt(t) = h64_words(tag("rehoboam/rh-ids/salt/v1"), [at1, tl1, at2, tl2, ...])``
@@ -53,7 +56,7 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
-GOLDEN = Path(__file__).resolve().parent.parent / "crates/rh-ids/tests/golden/rh_ids_v1.txt"
+GOLDEN = Path(__file__).resolve().parent.parent / "crates/rh-ids/tests/golden/rh_ids_v2.txt"
 EXIT_OK = 0
 EXIT_STALE = 1
 EXIT_SELFTEST = 2
@@ -66,7 +69,7 @@ CHACHA8_ROUNDS = 8
 CHACHA20_ROUNDS = 20
 BLOCK_BYTES = 64
 KEY_BYTES = 32
-DOMAIN_H_V1 = b"rehoboam/rh-ids/H/v1\x00\x00\x00\x00"
+DOMAIN_H_V2 = b"rehoboam/rh-ids/H/v2\x00\x00\x00\x00"
 
 # Published known answers for the all-zero key, nonce 0, block 0.
 # REF: RFC 8439 Appendix A.1 test vector #1 (ChaCha20; the zero counter and nonce make the 64/64
@@ -127,13 +130,20 @@ def prf(key: bytes, nonce: int, block: int) -> bytes:
 
 
 def seed_key(world_seed: int) -> bytes:
-    """K0: the world seed and the version-1 domain tag."""
-    return (world_seed & MASK64).to_bytes(8, "little") + DOMAIN_H_V1
+    """K0: the world seed and the version-2 domain tag."""
+    return (world_seed & MASK64).to_bytes(8, "little") + DOMAIN_H_V2
 
 
-def stream_key(world_seed: int, salt: int, system: int, purpose: int, entity: int) -> bytes:
-    """K2, the key of the streams of one (salt, system, purpose, entity)."""
-    k1 = prf(seed_key(world_seed), salt, system)
+# (world_seed, branch_salt, system_id, purpose_id, entity_id, epoch, t): every field of H but k.
+RngKey = tuple[int, int, int, int, int, int, int]
+
+
+def stream_key(key: RngKey) -> bytes:
+    """K2, the key of the streams of one (salt, system, epoch, purpose, entity)."""
+    world_seed, salt, system, purpose, entity, epoch, _t = key
+    if not (0 <= system <= MASK32 and 0 <= epoch <= MASK32):
+        raise ValueError("system_id and epoch are u32")
+    k1 = prf(seed_key(world_seed), salt, system | (epoch << 32))
     return prf(k1, purpose, entity)
 
 
@@ -145,14 +155,9 @@ def stream_u64(key: bytes, t: int, k: int) -> int:
     return int.from_bytes(block[off : off + 8], "little")
 
 
-# (world_seed, branch_salt, system_id, purpose_id, entity_id, t): every field of H but k.
-RngKey = tuple[int, int, int, int, int, int]
-
-
 def h(key: RngKey, k: int) -> int:
-    """H(world_seed, branch_salt, system_id, purpose, entity_id, t, k) (ADR-0006 v1.1 item 2)."""
-    world_seed, salt, system, purpose, entity, t = key
-    return stream_u64(stream_key(world_seed, salt, system, purpose, entity), t, k)
+    """H(world_seed, branch_salt, system_id, purpose, entity_id, epoch, t, k) (05.1 §6 item 2)."""
+    return stream_u64(stream_key(key), key[6], k)
 
 
 GAMMA = 0x9E37_79B9_7F4A_7C15
@@ -194,7 +199,7 @@ def tag(name: str) -> int:
 
 
 TAG_PURPOSE = tag("rehoboam/rh-ids/purpose/v1")
-TAG_LIGHT = tag("rehoboam/rh-ids/light/v1")
+TAG_LIGHT = tag("rehoboam/rh-ids/light/v2")
 
 
 def purpose_id(name: str) -> int:
@@ -255,36 +260,41 @@ def lines_chacha() -> list[str]:
 
 def lines_h() -> list[str]:
     """H over edge and varied keys, including adjacent entities, adjacent t and negative t."""
-    keys = [
-        (0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 1),
-        (0, 0, 0, 0, 0, 1, 0),
-        (0, 0, 0, 0, 1, 0, 0),
-        (0, 0, 0, 1, 0, 0, 0),
-        (0, 0, 1, 0, 0, 0, 0),
-        (0, 1, 0, 0, 0, 0, 0),
-        (1, 0, 0, 0, 0, 0, 0),
-        (MASK64, MASK64, 0xFFFF_FFFF, MASK64, MASK64, -1, 7),
-        (42, 0, 3, 0x1234_5678_9ABC_DEF0, 1_000_000, -525_600, 0),
-        (42, 0, 3, 0x1234_5678_9ABC_DEF0, 1_000_000, -525_600, 8),  # crosses into block 1
-        (42, 0, 3, 0x1234_5678_9ABC_DEF0, 1_000_000, -525_600, 1 << 40),
-        (42, 0, 3, 0x1234_5678_9ABC_DEF0, 1_000_000, -(1 << 63), MASK64),
+    p = 0x1234_5678_9ABC_DEF0
+    keys: list[tuple[RngKey, int]] = [
+        ((0, 0, 0, 0, 0, 0, 0), 0),
+        ((0, 0, 0, 0, 0, 0, 0), 1),
+        ((0, 0, 0, 0, 0, 0, 1), 0),
+        ((0, 0, 0, 0, 0, 1, 0), 0),  # epoch 1
+        ((0, 0, 0, 0, 1, 0, 0), 0),
+        ((0, 0, 0, 1, 0, 0, 0), 0),
+        ((0, 0, 1, 0, 0, 0, 0), 0),
+        ((0, 1, 0, 0, 0, 0, 0), 0),
+        ((1, 0, 0, 0, 0, 0, 0), 0),
+        ((0, 0, 1, 0, 0, 1, 0), 0),  # system and epoch in their own halves of K1's counter
+        ((0, 0, MASK32, 0, 0, MASK32, 0), 0),
+        ((MASK64, MASK64, MASK32, MASK64, MASK64, MASK32, -1), 7),
+        ((42, 0, 3, p, 1_000_000, 0, -525_600), 0),
+        ((42, 0, 3, p, 1_000_000, 0, -525_600), 8),  # crosses into block 1
+        ((42, 0, 3, p, 1_000_000, 2, -525_600), 1 << 40),
+        ((42, 0, 3, p, 1_000_000, 0, -(1 << 63)), MASK64),
     ]
-    pick = _splitmix_sequence(2)
-    for _ in range(24):
-        seed, salt, system, purpose, entity, t = (next(pick) for _ in range(6))
-        keys.append((seed, salt, system & MASK32, purpose, entity, _signed64(t), next(pick) % 64))
-    return [
-        f"h {s} {b} {y} {p} {e} {t} {k} {h((s, b, y, p, e, t), k)}" for s, b, y, p, e, t, k in keys
-    ]
+    keys += _varied_keys(2, 24, 64)
+    return [f"h {' '.join(map(str, key))} {k} {h(key, k)}" for key, k in keys]
 
 
-def _varied_keys(seed: int, count: int) -> list[tuple[RngKey, int]]:
+# Every EPOCH_EVERY-th random key has a non-zero epoch; the rest are epoch 0, the common case.
+EPOCH_EVERY = 3
+
+
+def _varied_keys(seed: int, count: int, k_range: int) -> list[tuple[RngKey, int]]:
+    """Random keys and draw indices; every ``EPOCH_EVERY``-th key has a non-zero epoch."""
     pick = _splitmix_sequence(seed)
-    out = []
-    for _ in range(count):
-        s, b, y, p, e, t = (next(pick) for _ in range(6))
-        out.append(((s, b, y & MASK32, p, e, _signed64(t)), next(pick) % 1000))
+    out: list[tuple[RngKey, int]] = []
+    for i in range(count):
+        s, b, y, p, e, ep, t = (next(pick) for _ in range(7))
+        epoch = ep & MASK32 if i % EPOCH_EVERY == 0 else 0
+        out.append(((s, b, y & MASK32, p, e, epoch, _signed64(t)), next(pick) % k_range))
     return out
 
 
@@ -297,12 +307,13 @@ def lines_splitmix() -> list[str]:
         fields = [domain, len(words), *words, h64_words(domain, words)]
         out.append("h64_words " + " ".join(map(str, fields)))
     names = ["", "a", "death_time", "activity_block", "encounter_outcome", "exactly8", "nine_char"]
-    names += ["rehoboam/rh-ids/purpose/v1", "rehoboam/rh-ids/light/v1"]
+    names += ["rehoboam/rh-ids/purpose/v1", "rehoboam/rh-ids/light/v2"]
     out += [f"tag {n or '-'} {tag(n)}" for n in names]
     purposes = ["death_time", "activity_block", "encounter_outcome", "birth_interval", "x"]
     out += [f"purpose {n} {purpose_id(n)}" for n in purposes]
-    keys: list[tuple[RngKey, int]] = [((0, 0, 0, 0, 0, 0), 0), ((0, 0, 0, 0, 0, -1), MASK64)]
-    keys += _varied_keys(3, 16)
+    keys: list[tuple[RngKey, int]] = [((0, 0, 0, 0, 0, 0, 0), 0), ((0, 0, 0, 0, 0, 0, -1), MASK64)]
+    keys += [((0, 0, 0, 0, 0, 1, 0), 0), ((0, 0, 0, 0, 0, MASK32, 0), 0)]
+    keys += _varied_keys(3, 16, 1000)
     out += [f"light {' '.join(map(str, key))} {k} {light(key, k)}" for key, k in keys]
     return out
 
@@ -376,16 +387,18 @@ def lines_person() -> list[str]:
 def render() -> str:
     """The whole golden file."""
     header = [
-        "# rh-ids golden vectors, layout version 1.",
+        "# rh-ids golden vectors: H and light stream layout version 2 (with epoch); others v1.",
         "# GENERATED by bin/gen_rng_golden.py; do not edit.",
         "# Decimal integers; t is signed. Formats:",
         "#   chacha8 <key hex> <block counter> <nonce> <64-byte block hex>",
-        "#   h <world_seed> <branch_salt> <system_id> <purpose_id> <entity_id> <t> <k> <u64>",
+        "#   h <world_seed> <branch_salt> <system_id> <purpose_id> <entity_id> <epoch> <t> <k>"
+        " <u64>",
         "#   mix <z> <u64>",
         "#   h64_words <domain> <n> <w1> .. <wn> <u64>",
         "#   tag <name, '-' for empty> <u64>",
         "#   purpose <name> <purpose_id>",
-        "#   light <world_seed> <branch_salt> <system_id> <purpose_id> <entity_id> <t> <k> <u64>",
+        "#   light <world_seed> <branch_salt> <system_id> <purpose_id> <entity_id> <epoch> <t> <k>"
+        " <u64>",
         "#   salt <n> <at1> <timeline1> .. <atn> <timelinen> <t> <branch_salt(t)>",
         "#   founder <world_seed> <k> <person_id>",
         "#   child <mother> <parity> <person_id>",

@@ -9,8 +9,9 @@
 //! # Design
 //!
 //! - **Pairs.** [`PAIRS`] key pairs, in [`Kind`]s that each differ in one field by the smallest
-//!   step (adjacent entity, t, system, purpose identifier, world seed; sibling rollout salts;
-//!   disjoint `k` ranges of one stream), plus the same for [`LightStream`]. Base keys are drawn
+//!   step (adjacent entity, t, system, purpose identifier, world seed, entity epoch; sibling
+//!   rollout salts; disjoint `k` ranges of one stream), plus adjacent entity, t and epoch and
+//!   sibling salts for [`LightStream`]. Base keys are drawn
 //!   from a keyed stream, so the sweep is deterministic and a failure is reproducible.
 //! - **Statistics per pair** (stream A, stream B, `n` draws each):
 //!   1. Pearson correlation of the draws as uniforms on [0, 1): `z = r·√n`, ~N(0, 1);
@@ -69,23 +70,27 @@ enum Kind {
     AdjacentSystem,
     AdjacentPurpose,
     AdjacentSeed,
+    AdjacentEpoch,
     SiblingSalts,
     DisjointK,
     LightAdjacentEntity,
     LightAdjacentT,
+    LightAdjacentEpoch,
     LightSiblingSalts,
 }
 
-const KINDS: [Kind; 10] = [
+const KINDS: [Kind; 12] = [
     Kind::AdjacentEntity,
     Kind::AdjacentT,
     Kind::AdjacentSystem,
     Kind::AdjacentPurpose,
     Kind::AdjacentSeed,
+    Kind::AdjacentEpoch,
     Kind::SiblingSalts,
     Kind::DisjointK,
     Kind::LightAdjacentEntity,
     Kind::LightAdjacentT,
+    Kind::LightAdjacentEpoch,
     Kind::LightSiblingSalts,
 ];
 
@@ -103,14 +108,15 @@ fn sibling_salts(t: i64, n: u32) -> (BranchSalt, BranchSalt) {
 /// The two draw sequences of pair `i`.
 fn pair(i: usize, n: usize) -> (Kind, Vec<u64>, Vec<u64>) {
     let kind = KINDS[i % KINDS.len()];
-    let pick = LightStream::from_parts(
-        0xD7_20,
-        CANONICAL_SALT,
-        SystemId::from_raw(0),
-        PurposeId::of("v_det_20_keys"),
-        i as u64,
-        0,
-    );
+    let pick = LightStream::new(&RngKey {
+        world_seed: 0xD7_20,
+        branch_salt: CANONICAL_SALT,
+        system: SystemId::from_raw(0),
+        purpose: PurposeId::of("v_det_20_keys"),
+        entity: i as u64,
+        epoch: 0,
+        t: 0,
+    });
     // Small t and entity values, as in real worlds, so that "adjacent" is realistic.
     let t = i64::try_from(pick.draw(5) % 10_000_000).expect("t") - 5_000_000;
     let a = RngKey {
@@ -119,6 +125,8 @@ fn pair(i: usize, n: usize) -> (Kind, Vec<u64>, Vec<u64>) {
         system: SystemId::from_raw(u32::try_from(pick.draw(1) % 64).expect("system")),
         purpose: PurposeId::from_raw(pick.draw(2)),
         entity: pick.draw(3) % 1_000_000,
+        // Epochs are small in practice: most entities are never re-sampled by an input.
+        epoch: u32::try_from(pick.draw(6) % 4).expect("epoch"),
         t,
     };
     let mut b = a;
@@ -138,6 +146,7 @@ fn pair(i: usize, n: usize) -> (Kind, Vec<u64>, Vec<u64>) {
         Kind::AdjacentSystem => b.system = SystemId::from_raw(a.system.to_raw() + 1),
         Kind::AdjacentPurpose => b.purpose = PurposeId::from_raw(a.purpose.to_raw() ^ 1),
         Kind::AdjacentSeed => b.world_seed ^= 1,
+        Kind::AdjacentEpoch | Kind::LightAdjacentEpoch => b.epoch += 1,
         Kind::SiblingSalts | Kind::LightSiblingSalts => {
             let mut a2 = a;
             (a2.branch_salt, b.branch_salt) = sibling_salts(a.t, timeline);
@@ -156,9 +165,10 @@ fn finish(
     light: impl Fn(&RngKey) -> Vec<u64>,
 ) -> (Kind, Vec<u64>, Vec<u64>) {
     match kind {
-        Kind::LightAdjacentEntity | Kind::LightAdjacentT | Kind::LightSiblingSalts => {
-            (kind, light(a), light(b))
-        }
+        Kind::LightAdjacentEntity
+        | Kind::LightAdjacentT
+        | Kind::LightAdjacentEpoch
+        | Kind::LightSiblingSalts => (kind, light(a), light(b)),
         _ => (kind, chacha(a, 0), chacha(b, 0)),
     }
 }
@@ -346,6 +356,7 @@ fn harness_detects_planted_dependence() {
         system: SystemId::from_raw(1),
         purpose: PurposeId::of("control"),
         entity: 1,
+        epoch: 0,
         t: 0,
     };
     let mut s = RngStream::new(&key);
