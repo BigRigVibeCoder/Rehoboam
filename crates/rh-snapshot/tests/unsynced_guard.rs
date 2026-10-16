@@ -66,7 +66,7 @@ fn registered() -> Registered {
             .stepping(count),
         Stub::new("sum")
             .writes("sum.s")
-            .reads("count.n", "count", Lag::PreviousPulse)
+            .reads("count.n", "count", Lag::Lagged)
             .at(Pulse::Month, Phase::Culture)
             .stepping(sum),
     ];

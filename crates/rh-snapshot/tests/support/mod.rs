@@ -1,6 +1,6 @@
 //! Test support for rh-snapshot's engine-level tests (SPR-007): a copy of rh-core's
-//! `tests/support/mod.rs` (SPR-005), a configurable stub system and a helper that builds a spec
-//! table in memory. rh-core's tests cannot use rh-snapshot (it depends on rh-core; Architect
+//! `tests/support/mod.rs` (SPR-005, SPR-006), a configurable stub system and a helper that builds a
+//! spec table in memory. rh-core's tests cannot use rh-snapshot (it depends on rh-core; Architect
 //! ruling), so the tests that need the plane hash and a stub engine live here.
 //!
 //! A stub is a real `SystemModel`: descriptor, access, bindings and purposes are data, and the
@@ -10,18 +10,30 @@
     reason = "each test file uses a different subset of the helpers"
 )]
 
-use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, Lag, Plane};
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
+use rh_core::agenda::TimerEntry;
 use rh_core::ownership::{Declaration, Source, SpecEntry, SpecTable, single_writer};
 use rh_core::system::{
-    AggregateSpec, InvariantResult, ParamSchema, PulseBinding, SimError, SpecPurpose, StepCtx,
-    SystemDescriptor, SystemModel,
+    AggregateSpec, InvariantResult, ParamSchema, PulseBinding, ResampleCtx, SimError, SpecPurpose,
+    StepCtx, SystemDescriptor, SystemModel,
 };
+use rh_core::time::SimTime;
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
 
 /// A step function.
 pub type StepFn =
     fn(&Stub, PulseBinding, &mut SystemView<'_>, &mut StepCtx<'_>) -> Result<(), SimError>;
+
+/// A timer handler (SPR-006).
+pub type FireFn =
+    fn(&Stub, &TimerEntry, &mut SystemView<'_>, &mut StepCtx<'_>) -> Result<(), SimError>;
+
+/// A re-sample handler (SPR-006).
+pub type ResampleFn = fn(&Stub, &TimerEntry, &ResampleCtx) -> Result<Option<SimTime>, SimError>;
+
+/// An invariant check (SPR-006).
+pub type InvariantFn = fn(&Stub, &WorldTables) -> Vec<InvariantResult>;
 
 /// A stub system.
 #[derive(Clone)]
@@ -31,6 +43,12 @@ pub struct Stub {
     pub bindings: Vec<PulseBinding>,
     pub purposes: Vec<&'static str>,
     pub step: StepFn,
+    /// `None`: the trait's default (a loud error).
+    pub fire: Option<FireFn>,
+    /// `None`: the trait's default (a loud error).
+    pub resample: Option<ResampleFn>,
+    /// `None`: no invariants.
+    pub check: Option<InvariantFn>,
 }
 
 #[allow(
@@ -55,6 +73,9 @@ impl Stub {
             bindings: Vec::new(),
             purposes: Vec::new(),
             step: no_op,
+            fire: None,
+            resample: None,
+            check: None,
         }
     }
 
@@ -97,13 +118,49 @@ impl Stub {
         self
     }
 
+    /// Sets the timer handler.
+    pub fn firing(mut self, fire: FireFn) -> Self {
+        self.fire = Some(fire);
+        self
+    }
+
+    /// Sets the re-sample handler.
+    pub fn resampling(mut self, resample: ResampleFn) -> Self {
+        self.resample = Some(resample);
+        self
+    }
+
+    /// Sets the invariant check.
+    pub fn checking(mut self, check: InvariantFn) -> Self {
+        self.check = Some(check);
+        self
+    }
+
+    /// Declares a command submission to `target`.
+    pub fn sends(mut self, command: &'static str, target: &'static str) -> Self {
+        self.access.sends.push(CommandSend { command, target });
+        self
+    }
+
+    /// Declares a command it owns and applies.
+    pub fn applies(mut self, command: &'static str) -> Self {
+        self.access.applies.push(command);
+        self
+    }
+
+    /// Declares an event kind it emits.
+    pub fn emits(mut self, kind: &'static str) -> Self {
+        self.access.emits.push(kind);
+        self
+    }
+
     /// Boxes it for registration.
     pub fn boxed(self) -> Box<dyn SystemModel> {
         Box::new(self)
     }
 
     /// The spec entry this stub's declarations imply (writes = owns, reads = reads, purposes =
-    /// rng): a spec the stub agrees with.
+    /// rng, sends = commands, emits = emits): a spec the stub agrees with.
     pub fn spec(&self) -> (Declaration, SpecEntry) {
         let declaration = self.access.declaration(self.id);
         let entry = SpecEntry {
@@ -121,6 +178,13 @@ impl Stub {
                 .iter()
                 .map(|r| (r.column.to_owned(), r.lag.name().to_owned()))
                 .collect(),
+            commands: self
+                .access
+                .sends
+                .iter()
+                .map(|c| (c.target.to_owned(), c.command.to_owned()))
+                .collect(),
+            emits: self.access.emits.iter().map(|k| (*k).to_owned()).collect(),
         };
         (declaration, entry)
     }
@@ -154,11 +218,38 @@ impl SystemModel for Stub {
     ) -> Result<(), SimError> {
         (self.step)(self, binding, world, ctx)
     }
-    fn invariants(&self, _: &WorldTables) -> Vec<InvariantResult> {
-        Vec::new()
+    fn invariants(&self, world: &WorldTables) -> Vec<InvariantResult> {
+        self.check.map(|f| f(self, world)).unwrap_or_default()
     }
     fn declared_aggregates(&self) -> Vec<AggregateSpec> {
         Vec::new()
+    }
+    fn fire(
+        &self,
+        timer: &TimerEntry,
+        world: &mut SystemView<'_>,
+        ctx: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        match self.fire {
+            Some(f) => f(self, timer, world, ctx),
+            None => Err(SimError::System {
+                system: self.id,
+                message: format!("{} fired, but the stub has no fire handler", timer.id()),
+            }),
+        }
+    }
+    fn resample_timer(
+        &self,
+        timer: &TimerEntry,
+        ctx: &ResampleCtx,
+    ) -> Result<Option<SimTime>, SimError> {
+        match self.resample {
+            Some(f) => f(self, timer, ctx),
+            None => Err(SimError::System {
+                system: self.id,
+                message: format!("{} re-sampled, but the stub has no handler", timer.id()),
+            }),
+        }
     }
 }
 
