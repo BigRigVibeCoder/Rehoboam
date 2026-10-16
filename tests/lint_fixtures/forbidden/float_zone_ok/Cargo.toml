@@ -1,0 +1,5 @@
+# Negative control for the float zone (SPR-003 Architect ruling item 2; tests/lint_fixtures/README.md); not in
+# the Rehoboam workspace. rh-sample alone, with floats in src/: lint_forbidden must PASS and name the exemption.
+[workspace]
+members = ["rh-sample"]
+resolver = "3"

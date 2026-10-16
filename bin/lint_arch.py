@@ -7,13 +7,14 @@ workspace crates, of every dependency kind (normal, build and dev):
     metadata         Every crate declares plane and kind from the vocabularies below,
                      consistently: kinds core, contract and system are plane A; plane "tool"
                      goes with kind "tool". Labels cannot be chosen to pass the law: the seven
-                     SPR-001 crates and rh-manifest (SPR-004) are pinned to their (plane,
-                     kind) by name; crates named rh-sys-* are (A, system), and only they are
-                     kind "system"; kind "contract" belongs only to rh-contracts and
+                     SPR-001 crates, rh-manifest (SPR-004) and rh-sample (SPR-003) are pinned to
+                     their (plane, kind) by name; crates named rh-sys-* are (A, system), and only
+                     they are kind "system"; kind "contract" belongs only to rh-contracts and
                      rh-contract-* crates. Edges are judged with the pinned labels, not the
                      declared ones.
-    V-INSP-03        A system crate depends only on rh-core, rh-ids, rh-events, rh-registry and
-                     contract crates, never on another system crate (docs/13 §3; EVO-1).
+    V-INSP-03        A system crate depends only on rh-core, rh-ids, rh-events, rh-registry,
+                     rh-sample and contract crates, never on another system crate (docs/13 §3;
+                     EVO-1; rh-sample by the SPR-003 Architect ruling).
     V-PLN-01         A plane-A crate never depends on a plane-B or plane-C crate (ADR-0024 rule 1;
                      05.1 §6 item 7).
     plane-A-closure  A plane-A crate depends only on plane-A workspace crates. A tool crate is not
@@ -53,12 +54,15 @@ from types import MappingProxyType
 PLANES = frozenset({"A", "B", "C", "tool"})
 KINDS = frozenset({"core", "machinery", "contract", "system", "tool"})
 # REF: docs/13 §3 ("Crate boundaries are law"); docs/09 V-INSP-03. Contract crates (kind
-# "contract") are allowed in addition to these names.
-SYSTEM_ALLOWED_DEPS = frozenset({"rh-core", "rh-ids", "rh-events", "rh-registry"})
+# "contract") are allowed in addition to these names. rh-sample, the vendored samplers, joined by
+# the SPR-003 Architect ruling (2026-10-16), item 1.
+SYSTEM_ALLOWED_DEPS = frozenset({"rh-core", "rh-ids", "rh-events", "rh-registry", "rh-sample"})
 PLANE_A_KINDS = frozenset({"core", "contract", "system"})
 SYSTEM_CRATE_PREFIX = "rh-sys-"
 # REF: docs/05_architecture/05.0 §6; the SPR-001 audit (relabelling rh-snapshot as a contract crate
-# let a system depend on it). The expected (plane, kind) of the crates SPR-001 created, by name.
+# let a system depend on it). The expected (plane, kind) of the crates SPR-001 created, by name, and
+# of rh-sample (SPR-003 ruling item 1): bin/lint_forbidden.py exempts that name from its float rule,
+# so relabelling the crate out of plane A, where nothing would scan it, must fail here.
 PINNED_LABELS = MappingProxyType(
     {
         "rh-ids": ("A", "machinery"),
@@ -70,6 +74,7 @@ PINNED_LABELS = MappingProxyType(
         "rh-cli": ("tool", "tool"),
         # SPR-004 ruling A: the load-time front end reproduces the reference's float checks.
         "rh-manifest": ("tool", "tool"),
+        "rh-sample": ("A", "machinery"),
     }
 )
 SYSTEM_LABELS = ("A", "system")

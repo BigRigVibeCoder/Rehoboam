@@ -495,3 +495,45 @@ def test_an_unreadable_spec_is_an_error(tmp_path: Path) -> None:
     assert main(["--scan", str(FIXTURES / "planted" / "unsafe.rs"), "--specs", str(tmp_path)]) == 2
     missing = tmp_path / "missing"
     assert main(["--scan", str(FIXTURES / "planted" / "unsafe.rs"), "--specs", str(missing)]) == 2
+
+
+# --- The sampler float zone (SPR-003 Architect ruling, 2026-10-16, item 2) ----------------------
+
+
+def test_the_float_zone_exempts_rh_sample_and_nothing_else(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """rh-sample's floats pass; rh-sampler, named like it, is still reported (exact-name match)."""
+    assert main(["--manifest-path", str(FIXTURES / "float_zone" / "Cargo.toml")]) == 1
+    out = capsys.readouterr().out
+    violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
+    assert len(violations) == 3
+    assert all("float_zone/rh-sampler/src/lib.rs" in v for v in violations)
+    assert "float rule exempts rh-sample only" in out
+
+
+def test_a_float_in_rh_sample_alone_passes(capsys: pytest.CaptureFixture[str]) -> None:
+    """The negative control: the float zone crate with floats in src/ is clean."""
+    assert main(["--manifest-path", str(FIXTURES / "float_zone_ok" / "Cargo.toml")]) == EXIT_OK
+    assert "1 files scanned; 0 violations" in capsys.readouterr().out
+
+
+def test_every_other_rule_still_applies_to_rh_sample(capsys: pytest.CaptureFixture[str]) -> None:
+    """The exemption is the float rule only: rh-sample's mul_add is reported, its floats are not."""
+    manifest = FIXTURES / "float_zone_other_rules" / "Cargo.toml"
+    assert main(["--manifest-path", str(manifest)]) == EXIT_VIOLATIONS
+    violations = [line for line in capsys.readouterr().out.splitlines() if "VIOLATION" in line]
+    assert len(violations) == 1
+    assert "[V-DET-19/mul-add] `mul_add` at" in violations[0]
+
+
+def test_the_exemption_is_by_crate_root_not_by_path_text(tmp_path: Path) -> None:
+    """scan_paths exempts only the roots it is given; --scan never exempts (it names no crate)."""
+    zone, other = tmp_path / "rh-sample", tmp_path / "other"
+    for root in (zone, other):
+        (root / "src").mkdir(parents=True)
+        (root / "src" / "lib.rs").write_text("pub fn f(x: f64) -> f64 { x }\n")
+    report = scan_paths([zone, other], float_exempt=frozenset({zone}))
+    assert len(report.violations) == 2
+    assert all("other" in v for v in report.violations)
+    assert main(["--scan", str(zone)]) == EXIT_VIOLATIONS

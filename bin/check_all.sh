@@ -103,17 +103,19 @@ git_source_control() {
   cargo deny --color never --offline --locked --manifest-path "$dst/Cargo.toml" check sources
 }
 
-# The clippy float backstop control (SPR-010 GAP-3): renders tests/lint_fixtures/clippy/float_unnamed/ into
-# target/, with the [workspace.lints.*] tables copied from the repository's Cargo.toml, so it tests the real
-# lint settings; clippy must reject plane-A float arithmetic on values that carry no float token.
-clippy_float_control() {
-  local src=tests/lint_fixtures/clippy/float_unnamed dst=target/rendered-fixtures/float_unnamed lints
-  rm -rf "$dst" && mkdir -p "$dst" && cp -R "$src/." "$dst/" || return 1
+# Clippy controls: clippy_control <fixture> <package> renders tests/lint_fixtures/clippy/<fixture>/ into
+# target/, with the [workspace.lints.*] tables copied from the repository's Cargo.toml and the repository's
+# clippy.toml beside it, so it tests the real lint settings, then runs clippy -D warnings on <package>.
+#   float_unnamed (SPR-010 GAP-3): plane-A float arithmetic on values that carry no float token.
+#   std_transcendental (SPR-003 T-00): the float zone calling std ln and exp instead of libm.
+clippy_control() {
+  local src="tests/lint_fixtures/clippy/$1" dst="target/rendered-fixtures/$1" lints
+  rm -rf "$dst" && mkdir -p "$dst" && cp -R "$src/." "$dst/" && cp clippy.toml "$dst/" || return 1
   lints="$(awk '/^\[workspace\.lints\./ {on=1} /^\[/ && !/^\[workspace\.lints\./ {on=0} on' Cargo.toml)"
   [ -n "$lints" ] || { echo "no [workspace.lints.*] tables in Cargo.toml"; return 1; }
   awk -v lints="$lints" '$0 == "@WORKSPACE_LINTS@" {print lints; next} {print}' "$dst/Cargo.toml.in" > "$dst/Cargo.toml" || return 1
   cargo generate-lockfile --quiet --offline --manifest-path "$dst/Cargo.toml" || return 1
-  cargo clippy --offline --locked --quiet --manifest-path "$dst/Cargo.toml" -p fixture-core --target-dir target/lint-fixtures -- -D warnings
+  cargo clippy --offline --locked --quiet --manifest-path "$dst/Cargo.toml" -p "$2" --target-dir target/lint-fixtures -- -D warnings
 }
 
 # Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, holding exactly
@@ -222,6 +224,8 @@ run "lint_arch positive control: plane A -> plane C must FAIL" "fail:VIOLATION [
 run "lint_arch positive control: missing plane/kind must FAIL" "fail:VIOLATION [metadata]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/missing_metadata/Cargo.toml &&
 run "lint_arch positive control: relabelled rh-snapshot must FAIL" "fail:VIOLATION [metadata] rh-snapshot: declares (plane, kind) = ('A', 'contract'), but rh-snapshot is pinned" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_snapshot/Cargo.toml &&
 run "lint_arch positive control: kind contract outside rh-contract-* must FAIL" 'fail:VIOLATION [metadata] rh-shadow: kind "contract" belongs only to' "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/contract_name/Cargo.toml &&
+run "lint_arch positive control: rh-sample relabelled out of plane A must FAIL (SPR-003 T-00)" "fail:VIOLATION [metadata] rh-sample: declares (plane, kind) = ('tool', 'tool'), but rh-sample is pinned" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_sample/Cargo.toml &&
+run "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)" pass "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_sample/Cargo.toml &&
 run "lint_arch positive control: plane A -> rand must FAIL" "fail:VIOLATION [rng-crate] rh-core: plane-A crate depends on rand;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_rng_crate/Cargo.toml &&
 run "lint_arch positive control: rand_chacha outside rh-ids must FAIL" "fail:VIOLATION [rng-crate] rh-core: depends on rand_chacha;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/rng_building_block_outside_ids/Cargo.toml &&
 run "lint_arch positive control: plane A -> unreviewed third-party crate must FAIL" "fail:VIOLATION [plane-A-external] rh-core: depends on itoa, which is not on the reviewed list" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_unlisted_dep/Cargo.toml &&
@@ -237,8 +241,13 @@ run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lin
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
 run "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)" "fail:VIOLATION [V-DET-19/float] \`f32\` at tests/lint_fixtures/forbidden/float_workspace/fixture-sys/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_workspace/Cargo.toml &&
+run "lint_forbidden positive control: a float outside rh-sample must FAIL (SPR-003 T-00)" "fail:VIOLATION [V-DET-19/float] \`f64\` at tests/lint_fixtures/forbidden/float_zone/rh-sampler/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_zone/Cargo.toml &&
+run "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)" "pass:float rule exempts rh-sample only (SPR-003 float zone); 1 files scanned; 0 violations" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_zone_ok/Cargo.toml &&
+run "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)" "fail:VIOLATION [V-DET-19/mul-add] \`mul_add\` at tests/lint_fixtures/forbidden/float_zone_other_rules/rh-sample/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_zone_other_rules/Cargo.toml &&
 run "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)" "pass:0 violations; 1 escapes; 1 declared f32_field columns" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/float_field/declared.rs --specs tests/lint_fixtures/forbidden/float_field/specs &&
-run "Clippy float backstop positive control: unnamed float arithmetic in plane A must FAIL (SPR-010 GAP-3)" "fail:floating-point arithmetic detected" clippy_float_control &&
+run "Clippy float backstop positive control: unnamed float arithmetic in plane A must FAIL (SPR-010 GAP-3)" "fail:floating-point arithmetic detected" clippy_control float_unnamed fixture-core &&
+run "Clippy libm-only positive control: std ln in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::ln`' clippy_control std_transcendental rh-sample &&
+run "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::exp`' clippy_control std_transcendental rh-sample &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&

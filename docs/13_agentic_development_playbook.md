@@ -44,10 +44,10 @@ Every task an agent receives uses this template. It is stored in `backlog/wp/<id
 ## 3. Repository conventions (summarised in `CLAUDE.md`)
 
 - **Crate boundaries are law.**
-  - System crates (`rh-sys-*`) depend only on `rh-core`, `rh-ids`, `rh-events`, `rh-registry` and `rh-contracts`.
+  - System crates (`rh-sys-*`) depend only on `rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry` and `rh-contracts` (`rh-sample`, the vendored samplers, by the SPR-003 Architect ruling of 2026-10-16).
   - Systems never import each other. They communicate through owned tables (read via contract crates), lifecycle commands and events (§4.1).
   - `rh-worldgen` (world generation and settlement plans) is an allowed dependency of `rh-server` (`rh-godot` is cut, ADR-0035). It follows the same determinism rules as authoritative code.
-  - **The engine only engines (ADR-0035 §6; EVO-4).** Engine crates (`rh-core`, `rh-ids`, `rh-events`, `rh-registry`, `rh-manifest`, `rh-contracts`, `rh-snapshot`, `rh-sys-*`, `rh-sifter`, `rh-server`, `rh-cli`) contain no presentation, web UI, audio, image, TTS or LLM code and may not depend on media, HTTP-UI or LLM-client crates. One deny-list, kept in one place: for example `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`. **Planned rule** (V-INSP-05): BCK-002 A-14 adds it to `bin/lint_arch.py` in P1a, next to V-INSP-03. Presentation tools live in `python/`; only the P5 diorama lives in `console/`.
+  - **The engine only engines (ADR-0035 §6; EVO-4).** Engine crates (`rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry`, `rh-manifest`, `rh-contracts`, `rh-snapshot`, `rh-sys-*`, `rh-sifter`, `rh-server`, `rh-cli`) contain no presentation, web UI, audio, image, TTS or LLM code and may not depend on media, HTTP-UI or LLM-client crates. One deny-list, kept in one place: for example `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`. **Planned rule** (V-INSP-05): BCK-002 A-14 adds it to `bin/lint_arch.py` in P1a, next to V-INSP-03. Presentation tools live in `python/`; only the P5 diorama lives in `console/`.
   - Plane-A crates never depend on plane-B or plane-C crates (`05.1` §6.7). No `rh-sys-*` or `rh-core` crate depends on the flavour-asset types (`05.5` §3).
   - `cargo-deny` and a dependency-graph lint enforce all of this.
 - **Randomness:**
@@ -56,7 +56,8 @@ Every task an agent receives uses this template. It is stored in `backlog/wp/<id
   - Never use `rand::thread_rng`, `StdRng` or `HashMap` iteration in authoritative code. Clippy lints and a custom grep gate enforce this.
 - **Numerics:**
   - Threshold quantities are fixed-point types from `rh-core::fixed`.
-  - Use `libm` for transcendentals and never call `mul_add`.
+  - Use `libm` for transcendentals and never call `mul_add`. `clippy.toml` disallows the `std` float transcendentals (`ln`, `exp`, `powf`, `sin`, ...) in every crate; `sqrt` is allowed, because IEEE 754 rounds it correctly.
+  - Floats are allowed in one plane-A crate only, `rh-sample` (the samplers' float zone, SPR-003). Distributions are drawn there, from keyed streams, and come back as integers or fixed point; no other plane-A crate computes in floats (V-DET-19).
 - **Events:**
   - New verbs, act classes and attributes need Registry entries first. Attributes a pattern reads are declared in the Registry `[attributes]`.
   - Emit roles and anchored snapshots for anything a pattern might read.

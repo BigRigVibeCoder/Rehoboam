@@ -43,6 +43,14 @@ specs/systems/*.odd.toml (or of --specs DIR). Any other reason, or an undeclared
 float a violation:
     pub moisture: f32, // LINT-ALLOW(forbidden-api): f32_field region.soil_moisture
 
+The sampler float zone (SPR-003 Architect ruling, 2026-10-16, item 2). In workspace mode, the
+float rule does not apply to the crate named exactly `rh-sample` (FLOAT_ZONE_CRATE), the vendored
+samplers, which compute in f64 with libm and return integers or fixed point. The exemption is by
+that name, which bin/lint_arch.py pins to (A, machinery), so the crate cannot be relabelled out of
+plane A; every other rule still applies to it, and no other crate shares the exemption (a crate
+named `rh-sampler` does not). `--scan` never exempts anything: it scans paths, not crates. The
+summary line names the exemption.
+
 DECISION (SPR-010 T-04): the float rule does not apply to files under a crate's tests/, benches/ or
 examples/ directories. They never link into the engine, so they hold no threshold position, and a
 statistical test may legitimately compute in floats. Every other rule still applies there, and the
@@ -80,6 +88,8 @@ FLOAT_FIELD_REASON = re.compile(r"f32_field\s+(?P<column>\S+)")
 FLOAT_RULE = "float"
 # Crate directories that never link into the engine: the float rule skips them (DECISION above).
 FLOAT_FREE_DIRS = frozenset({"tests", "benches", "examples"})
+# The one plane-A crate exempt from the float rule, by its pinned name (module docstring; SPR-003).
+FLOAT_ZONE_CRATE = "rh-sample"
 DEFAULT_SPECS = Path(__file__).resolve().parents[1] / "specs" / "systems"
 
 
@@ -468,8 +478,18 @@ def float_rule_applies(file: Path, root: Path) -> bool:
     return file.relative_to(root).parts[0] not in FLOAT_FREE_DIRS
 
 
-def scan_paths(paths: Iterable[Path], float_fields: frozenset[str] = frozenset()) -> Report:
+def scan_paths(
+    paths: Iterable[Path],
+    float_fields: frozenset[str] = frozenset(),
+    float_exempt: frozenset[Path] = frozenset(),
+) -> Report:
     """Scan every ``.rs`` file under ``paths`` as plane-A code.
+
+    Args:
+        paths: Files or directories to scan.
+        float_fields: The columns the system specs declare ``f32_field``.
+        float_exempt: Roots among ``paths`` whose files the float rule skips entirely (the float
+            zone crate's directory); every other rule still applies to them.
 
     Raises:
         OSError: A file cannot be read.
@@ -479,7 +499,8 @@ def scan_paths(paths: Iterable[Path], float_fields: frozenset[str] = frozenset()
     floats: dict[Path, bool] = {}
     for root in paths:
         for file in rust_files([root]):
-            floats.setdefault(file, float_rule_applies(file, root))
+            applies = root not in float_exempt and float_rule_applies(file, root)
+            floats.setdefault(file, applies)
     for file in sorted(floats):
         source = file.read_text(encoding="utf-8")
         scan_source(source, display(file), report, float_fields, floats=floats[file])
@@ -588,7 +609,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             crates = plane_a_crate_dirs(args.manifest_path)
             names = ", ".join(name for name, _ in crates)
             scope = f"{len(crates)} crates scanned as plane A ({names})"
-            report = scan_paths((directory for _, directory in crates), float_fields)
+            zone = frozenset(directory for name, directory in crates if name == FLOAT_ZONE_CRATE)
+            if zone:
+                scope += f"; float rule exempts {FLOAT_ZONE_CRATE} only (SPR-003 float zone)"
+            report = scan_paths((directory for _, directory in crates), float_fields, zone)
     except (WorkspaceError, SpecError, OSError, UnicodeDecodeError) as err:
         print(f"lint_forbidden: cannot read the code to scan: {err}", file=sys.stderr)
         return EXIT_UNREADABLE

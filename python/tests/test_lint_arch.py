@@ -88,11 +88,12 @@ def test_a_system_depending_on_a_non_allowed_crate_is_v_insp_03(target: str) -> 
 
 
 @pytest.mark.parametrize(
-    "target", ["rh-core", "rh-ids", "rh-events", "rh-registry", "rh-contracts"]
+    "target", ["rh-core", "rh-ids", "rh-events", "rh-registry", "rh-contracts", "rh-sample"]
 )
 def test_a_system_may_depend_on_each_allowed_crate(target: str) -> None:
-    """Each crate on the allow-list is accepted."""
-    assert found(engine(crate("rh-sys-war", kind="system", deps=(target,)))) == []
+    """Each crate on the allow-list is accepted (rh-sample by the SPR-003 ruling)."""
+    crates = engine(crate("rh-sample"), crate("rh-sys-war", kind="system", deps=(target,)))
+    assert found(crates) == []
 
 
 @pytest.mark.parametrize("plane", ["B", "C"])
@@ -161,14 +162,15 @@ PINNED = {
     "rh-snapshot": ("A", "machinery"),
     "rh-cli": ("tool", "tool"),
     "rh-manifest": ("tool", "tool"),
+    "rh-sample": ("A", "machinery"),
 }
 
 
 @pytest.mark.parametrize("name", sorted(PINNED))
 def test_each_pinned_crate_must_keep_its_labels(name: str) -> None:
-    """The SPR-001 crates and rh-manifest cannot be relabelled, even to another valid one."""
+    """The SPR-001 crates, rh-manifest and rh-sample cannot be relabelled, even to a valid one."""
     relabel = ("A", "core") if PINNED[name] != ("A", "core") else ("A", "machinery")
-    crates = [crate(name, *relabel) if c.name == name else c for c in engine()]
+    crates = [crate(name, *relabel) if c.name == name else c for c in engine(crate("rh-sample"))]
     assert ("metadata", name) in found(crates)
 
 
@@ -389,6 +391,7 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("rng_building_block_outside_ids", "rng-crate"),
         ("plane_a_unlisted_dep", "plane-A-external"),
         ("plane_a_scoped_dep_outside", "plane-A-external"),
+        ("relabelled_sample", "metadata"),
     ],
 )
 def test_main_catches_each_fixture(
@@ -398,6 +401,18 @@ def test_main_catches_each_fixture(
     status = main(["--manifest-path", str(ARCH_FIXTURES / fixture / "Cargo.toml")])
     assert status == EXIT_VIOLATIONS
     assert f"VIOLATION [{rule}]" in capsys.readouterr().out
+
+
+def test_a_system_may_depend_on_rh_sample_in_a_real_workspace() -> None:
+    """The SPR-003 ruling's allow-list edge, through cargo metadata (negative control)."""
+    manifest = ARCH_FIXTURES / "system_to_sample" / "Cargo.toml"
+    assert main(["--manifest-path", str(manifest)]) == EXIT_OK
+
+
+@pytest.mark.parametrize(("plane", "kind"), [("tool", "tool"), ("B", "machinery"), ("A", "core")])
+def test_rh_sample_cannot_leave_its_pinned_labels(plane: str, kind: str) -> None:
+    """Relabelled out of plane A, the float zone would not be scanned at all (SPR-003 ruling)."""
+    assert ("metadata", "rh-sample") in found(engine(crate("rh-sample", plane=plane, kind=kind)))
 
 
 def test_main_reports_an_unreadable_workspace(tmp_path: Path) -> None:
