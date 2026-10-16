@@ -20,9 +20,14 @@ on:
 permissions:
   contents: read
 
+# Only pull_request runs are cancelled by a newer one (VER-SPR-008-TEST GAP-8). A push run on main
+# checks the baseline over its own before..after range; cancelling it would let the next push's
+# range skip the cancelled commits, so a baseline change in them would never be checked against
+# the C3 rule. Pushes queue instead. The push trigger is main only, so a push that opens a new
+# branch (no previous commit) never runs here.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check-all:
