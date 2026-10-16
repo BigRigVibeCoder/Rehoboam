@@ -91,16 +91,22 @@ REQUIRED_GATES = (
     "Virtual telemetry (S5 prototype)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
+    "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
+    "GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
     "passes (SPR-007 ruling 4)",
+    "fp-contract guard positive control: CC with -ffp-contract=fast must FAIL (SPR-007 GAP-2)",
     "fp-contract guard positive control: CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling "
     "4)",
+    "fp-contract guard positive control: CXXFLAGS with -ffp-contract=on must FAIL (SPR-007 GAP-2)",
     "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL",
     "fp-contract guard positive control: a .cargo/config.toml CFLAGS with -ffp-contract=fast must "
     "FAIL (SPR-007 ruling 4)",
     "fp-contract guard positive control: a .cargo/config.toml CFLAGS without force = true must "
     "FAIL (SPR-007 ruling 4)",
     "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL",
+    "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must FAIL "
+    "(SPR-007 GAP-2)",
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
