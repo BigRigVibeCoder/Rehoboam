@@ -14,7 +14,7 @@
 # NEW-4) the coupling's neutral value applies to a read of an absent owner. MAJ-3 exit probabilities are
 # Prob32 (SPR-011 ruling 4), linear in h. MAJ-4 ScheduleDeath carries M2's declared payload. MAJ-5 an on_birth step sets
 # the newborn's house. Minor findings: RNG key mapping, enumeration order, separate tie purposes, derived values labelled.
-# Round 4 rulings (REV-P1a §7): NEW-1 kinship walks M2's life-course columns (the dead stay in it), read lagged, through
+# Round 4 rulings (REV-P1a §7): NEW-1 kinship walks M2's life-course columns (the dead stay in it), read at same_instant (4c), through
 # the effect language's kin(n) (SPR-017); house membership moves from person.house (compacted with the dead) to
 # house_member rows; NEW-2 exit probabilities cover the whole month; NEW-3 claim.rank is an M7 column; NEW-4 every read
 # is declared, and SPR-014's registration rule drops a read of an absent owner and applies the coupling's neutral value.
@@ -335,7 +335,7 @@ why = "Property inheritance through the death path by the house's [inheritance_r
 # ----------------------------------------------------------------------------- reads
 # Round 4 (NEW-4): the reads below are declared unconditionally (round 4, NEW-4); the rh-core registration rule that SPR-014 adds drops and reports a read whose owner the world does not register, and gives the view the coupling's neutral value (M6: exec_constraint = 0, so m_ec = 1; S7: no active vow).
 # Kinship (heirs, regents, dormancy distance, regrant kin) walks life_course.mother/father through kin(n) (SPR-017), read
-# lagged: everyone born before this instant is in it, the dead included (round 4, NEW-1). M7 rebuilds a children-by-parent
+# at same_instant (round 4c, NEW-6): everyone born up to this instant's Vital slot is in it, the dead included (round 4, NEW-1). M7 rebuilds a children-by-parent
 # index over those columns at restore and on each birth: derived state, outside the plane-A hash and the keyframe. M2 is read at
 # same_instant (M2 binds only Vital, earlier than every M7 binding), so births and deaths of this instant are visible.
 # No read is previous_pulse (MAJ-1: Engine::new refuses it until BCK-002 A-28).
@@ -377,17 +377,27 @@ use = "identity"
 [[reads]]
 column = "life_course.person_id"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "life_course.mother"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "life_course.father"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "life_course.birth_tick"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "life_course.sex"
+owner = "M2.demography"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "person.named"
@@ -597,7 +607,7 @@ summary = "In the death instant's Day/Polity binding (every death is an M2 timer
 earns_its_place_by = ["V-SAGA-19", "V-INV-03"]
 [[submodels]]
 name = "arbitrate"
-summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (effect-language eligibility and order over kin(n), the SPR-017 relation over life_course.mother/father, so the line runs through dead parents; P1.15; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims (each claim.rank is recomputed here), and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees through kin(n) over the life-course columns); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest living adult kin in the law's order through kin(n), else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
+summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (effect-language eligibility and order over kin(n), the SPR-017 relation over life_course.mother/father, so the line runs through dead parents; birth order and sex for the order and for eligibility, the dead's included (primogeniture by representation, cognatic eligibility through a dead ancestor), come from life_course.birth_tick and life_course.sex; ties in birth order are broken by ascending life_course.person_id (round 4c, NEW-7); P1.15; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims (each claim.rank is recomputed here), and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees through kin(n) over the life-course columns); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest living adult kin in the law's order through kin(n), else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
 earns_its_place_by = ["V-SAGA-19", "V-SF-06b"]
 [[submodels]]
 name = "exit"

@@ -18,7 +18,7 @@
 # relation rows hold only liege and vassal. MAJ-6 considerations and response curves are typed Registry tables. MAJ-9
 # re-promotion reuses the kept mind; traits are drawn once. Minor findings: RNG key mapping, enumeration order, separate
 # outcome purposes, grief_instant_cap below stress_threshold by its bounds, decision types gated by `requires`.
-# Round 4 rulings (REV-P1a §7): NEW-1 derived kinship walks M2's life-course columns (the dead stay in it), read lagged,
+# Round 4 rulings (REV-P1a §7): NEW-1 derived kinship walks M2's life-course columns (the dead stay in it), read at same_instant (round 4c, NEW-6),
 # through the effect language's kin(n) (SPR-017), so grandparents through a dead parent and cousins are reached; the
 # living spouse stays person.spouse. NEW-3 claim_rank reads M7's claim.rank column. NEW-4 every read is declared, and
 # SPR-014's registration rule drops a read of an absent owner and applies the coupling's neutral value.
@@ -460,7 +460,7 @@ why = "pursue_goal for DESTROY_RELIC (P1b)"
 
 # ----------------------------------------------------------------------------- reads
 # Round 4 (NEW-4): the reads below are declared unconditionally (round 4, NEW-4); the rh-core registration rule that SPR-014 adds drops and reports a read whose owner the world does not register, and gives the view the coupling's neutral value
-# Kinship walks life_course.mother/father through kin(n) (SPR-017), read lagged (round 4, NEW-1). minds rebuilds a
+# Kinship walks life_course.mother/father through kin(n) (SPR-017), read at same_instant (round 4c, NEW-6: the log is append-only and written only by M2 in Vital, so same_instant is exact and avoids P0's per-instant clone of a lagged column) (round 4, NEW-1). minds rebuilds a
 # children-by-parent index over those columns at restore and on each birth: derived state, outside the plane-A hash and
 # the keyframe. Neutral values (S7: vow conflict 0, so s_vow = 0, and no goals; S6: rumour_reach 0, so the
 # seek consideration is as at R = 0). M2 is read at same_instant (M2 binds only Vital and precedes minds there).
@@ -498,17 +498,17 @@ use = "identity"
 [[reads]]
 column = "life_course.person_id"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "life_course.mother"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "life_course.father"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "person.spouse"
@@ -679,7 +679,7 @@ adaptation = "IAUS: score = product of fixed-point response curves over the cons
 objectives = "Implicit in the curves: ambition rewards seats, offices and claims; agreeableness and honesty-humility penalise harm and betrayal; vows add a bounded goal weight (S7). There is no survival decision in v0 (see not_yet)"
 learning = "n/a: minds v0 does not learn; memory and consolidation are P3.2b (RT-2026-10-16 item 6)"
 prediction = "n/a: actors do not forecast; a consideration reads the present snapshot"
-sensing = "Kin through the life-course columns at the start of the instant and the living spouse at the same instant (derived from M2), house, seats, offices and claims at the start of the instant (lagged reads), deaths in the same instant, S7's vow conflict and S6's rumour reach at the start of the instant; a read of an absent owner is dropped by SPR-014's registration rule and its neutral value applies. From P1b an actor reacts only to events it holds a knowledge row for (SAGA-4, V-SAGA-18); in P1a it senses only its relations' deaths, which every kin knows by the death path"
+sensing = "Kin through the life-course columns and the living spouse at the same instant (derived from M2), house, seats, offices and claims at the start of the instant (lagged reads), deaths in the same instant, S7's vow conflict and S6's rumour reach at the start of the instant; a read of an absent owner is dropped by SPR-014's registration rule and its neutral value applies. From P1b an actor reacts only to events it holds a knowledge row for (SAGA-4, V-SAGA-18); in P1a it senses only its relations' deaths, which every kin knows by the death path"
 interaction = "Lifecycle commands only (05.1 §2 rule 2): Marry and ScheduleDeath to M2; PetitionSeat, PressClaim, RenounceClaim and Resign to M7; SwearVow to S7 and Transfer, Search and Destroy to S6 (P1b). Applied from others: Promote and Demote (M7); AgendaGoal, ClearGoal, OpinionModifier, ApplyThought (S7); ApplyInfluence (S6). Social practices (RT-2026-10-16 item 10a) were evaluated and not adopted in v0: the six decision types already bound their candidate sets by the actor's situation (the row-5 guard), so a practice layer would add a mechanism with no band to earn its place (ADR-0033 §5); its natural first use is the inquest, an institution that waits for M6-lite"
 stochasticity = "Keyed RNG only: trait draws, poll jitter, top-k selection, action order, break delay, break act, attempt outcome. Threshold crossings are deterministic"
 collectives = "Houses and courts (M7) define the situation sets: the court of an actor is the named actors whose seats or offices share its top liege. Feuds are person-level at F1 (house feuds are F2)"
@@ -763,7 +763,7 @@ source = "design value; canonical minimums of 12 and 14 are the lower end (not y
 # ----------------------------------------------------------------------------- submodels (ODD 7)
 [[submodels]]
 name = "grief"
-summary = "In the Day/Vital binding of a death instant (a day start; round 3, BLK-1). The dead are the persons with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5; a read of a dead row after it is a bug), in ascending PersonId. For each dead d, the grievers are the named actors kin to d, derived through kin(2), the effect-language relation (SPR-017) over M2's life_course.mother and life_course.father (so a grandparent is reached through a dead parent; round 4, NEW-1), plus the living spouse from person.spouse, (parents, children, spouse, siblings, grandparents, grandchildren; kin_other: uncles, aunts, nephews, nieces, first cousins), plus the holders of unended liege or vassal rows with b = d; a pair related in several ways counts its closest kind once. For each griever a: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; rows with b = d get ended_at := now. A child born after its parent's promotion is grieved like any other: kinship is read, not stored (MAJ-5); a child born in this same instant is not yet in the lagged life-course read, which is the only kin it can miss. A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). The deaths are M2's death timers in this Vital slot: every death, however caused, takes effect there (BCK-002 A-30)"
+summary = "In the Day/Vital binding of a death instant (a day start; round 3, BLK-1). The dead are the persons with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5; a read of a dead row after it is a bug), in ascending PersonId. For each dead d, the grievers are the named actors kin to d, derived through kin(2), the effect-language relation (SPR-017) over M2's life_course.mother and life_course.father (so a grandparent is reached through a dead parent; round 4, NEW-1), plus the living spouse from person.spouse, (parents, children, spouse, siblings, grandparents, grandchildren; kin_other: uncles, aunts, nephews, nieces, first cousins), plus the holders of unended liege or vassal rows with b = d; a pair related in several ways counts its closest kind once. For each griever a: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; rows with b = d get ended_at := now. A child born after its parent's promotion is grieved like any other: kinship is read, not stored (MAJ-5); A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). The deaths are M2's death timers in this Vital slot: every death, however caused, takes effect there (BCK-002 A-30)"
 earns_its_place_by = ["V-SAGA-16", "V-SAGA-16b"]
 [[submodels]]
 name = "threshold"
