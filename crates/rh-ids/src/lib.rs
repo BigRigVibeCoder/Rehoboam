@@ -7,6 +7,8 @@
 //! `CODEX/05_PROJECT/SPR-002_IdsAndRng.md`; `CLAUDE.md`.
 #![forbid(unsafe_code)]
 
+pub mod hash;
 pub mod ids;
 
+pub use hash::{BranchSalt, PurposeId, RngKey, StreamKey, SystemKey, h};
 pub use ids::{EntityKey, EventId, MatchId, PersonId, RegionId, SystemId, TimelineId};

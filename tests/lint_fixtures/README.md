@@ -30,6 +30,7 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source co
 | `compile_fail/plane_a_names_plane_b/` | `cargo check` (V-PLN-01, compile-fail) | plane-A code naming a plane-B type without a dependency edge | ``unlinked crate `fixture_observation` `` |
 | `compile_fail/plane_a_names_plane_c/` | `cargo check` (V-PLN-01, compile-fail) | plane-A code naming a plane-C type without a dependency edge | ``unlinked crate `fixture_narrative` `` |
 | `forbidden/planted/<api>.rs` | `bin/lint_forbidden.py --scan` (V-DET-19) | exactly one forbidden API per file (24 files): HashMap, HashSet, thread_rng, ThreadRng, rand::rng, StdRng, SmallRng, OsRng, from_entropy, from_os_rng, getrandom, rand::random, random_range, random_bool, random_ratio, random_iter, mul_add, Instant::now, SystemTime, unsafe; paths spaced around `::` (`std :: time :: Instant :: now()` in a macro body, `rand :: rng()`); `#[path]` and `include!` (DEF-4) | ``VIOLATION [V-DET-19/<rule>] `<token>` `` |
+| `golden/stale_rh_ids_v1.txt` | `bin/gen_rng_golden.py --check` (SPR-002 T-02) | an rh-ids golden file that differs from the reference implementation | `STALE:` |
 | `uv_drift/` | `uv lock --check --offline` (T-02) | a `pyproject.toml` changed after its `uv.lock` was generated | `needs to be updated` |
 | `forbidden/workspace/` | `bin/lint_forbidden.py` (V-DET-19) | HashMap in a plane-A crate, and also in a tool crate (skipped), comments and strings (ignored), plus one reasoned escape (counted) | `VIOLATION [V-DET-19/hash-collections]` |
 
