@@ -25,8 +25,15 @@ workspace crates, of every dependency kind (normal, build and dev):
                      `package =` alias does not hide one. Dev-dependencies are exempt: test code
                      is not authoritative, and property testing (proptest, GOV-002 tier 3)
                      needs rand. The forbidden-API gate still scans src/ (V-DET-19).
+    plane-A-external Every other third-party dependency of a plane-A crate (normal or build) is
+                     on one reviewed list, PLANE_A_EXTERNAL_DEPS, with the crates allowed to use
+                     it and a note on whether it can hand plane A a float. Clippy has no lint for
+                     float < and >, so a float that plane-A code never names could only enter
+                     through such a dependency (VER-SPR-010 GAP-3; BCK-002 A-20). A new
+                     dependency turns the gate red until it is reviewed and listed.
+                     Dev-dependencies are exempt, as above; the RNG crates are left to rng-crate.
 
-Other edges to third-party crates are governed by cargo-deny (deny.toml), not by this lint.
+Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
 Usage:  python -I bin/lint_arch.py [--manifest-path Cargo.toml]
 Exit:   0 clean, 1 violations, 2 the workspace could not be read.
@@ -72,6 +79,29 @@ UNKEYED_RNG_CRATES = frozenset({"rand", "getrandom", "fastrand", "oorandom", "na
 # Building blocks of the keyed RNG (ChaCha8, SPR-002), allowed only in the crate that owns it.
 KEYED_RNG_BUILDING_BLOCKS = frozenset({"rand_core", "rand_chacha"})
 KEYED_RNG_OWNER = "rh-ids"
+# REF: BCK-002 A-20; VER-SPR-010 GAP-3. The reviewed third-party dependencies of plane-A crates:
+# package name -> (the plane-A crates that may use it, or None for any; the review note). The note
+# says whether the crate can return a float to plane A. Keep it alphabetical; adding an entry is a
+# review, and the reviewer names it in the PR.
+ANY_PLANE_A_CRATE = None
+PLANE_A_EXTERNAL_DEPS = MappingProxyType(
+    {
+        "libm": (
+            frozenset({"rh-sample"}),
+            "returns f32/f64: the transcendentals of the sampler float zone, the only "
+            "plane-A crate allowed float arithmetic (SPR-003 ruling)",
+        ),
+        "serde": (
+            ANY_PLANE_A_CRATE,
+            "no floats of its own: the (de)serialisation traits and derives",
+        ),
+        "toml": (
+            frozenset({"rh-registry"}),
+            "can return f64 (toml::Value::Float); rh-registry reads only strings, arrays and "
+            "tables from the system specs for the ownership lint (SPR-004)",
+        ),
+    }
+)
 
 EXIT_OK = 0
 EXIT_VIOLATIONS = 1
@@ -290,6 +320,43 @@ def check_rng_crates(crate: Crate) -> list[Violation]:
     return found
 
 
+def check_external_deps(crate: Crate) -> list[Violation]:
+    """Check a plane-A crate's third-party edges against the reviewed list (BCK-002 A-20)."""
+    if crate.plane != "A":
+        return []
+    found: list[Violation] = []
+    for edge in crate.external:
+        # DECISION: dev-dependencies are exempt, as for rng-crate; RNG crates are judged by
+        # rng-crate alone, so one edge is never reported twice. REF: BCK-002 A-20.
+        if edge.kind == "dev" or edge.target in UNKEYED_RNG_CRATES | KEYED_RNG_BUILDING_BLOCKS:
+            continue
+        entry = PLANE_A_EXTERNAL_DEPS.get(edge.target)
+        if entry is None:
+            found.append(
+                Violation(
+                    "plane-A-external",
+                    crate.name,
+                    f"depends on {edge.target}{_via(edge)}, which is not on the reviewed list of "
+                    "plane-A third-party dependencies; review it (can it hand plane A a float, "
+                    "or nondeterminism?) and add it to PLANE_A_EXTERNAL_DEPS with a note "
+                    "(BCK-002 A-20)",
+                )
+            )
+            continue
+        allowed, _note = entry
+        if allowed is not None and crate.name not in allowed:
+            users = ", ".join(sorted(allowed))
+            found.append(
+                Violation(
+                    "plane-A-external",
+                    crate.name,
+                    f"depends on {edge.target}{_via(edge)}, which plane A may use only in "
+                    f"{users} (PLANE_A_EXTERNAL_DEPS)",
+                )
+            )
+    return found
+
+
 def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:
     """Check one workspace edge against V-INSP-03, V-PLN-01 and the plane-A closure."""
     found: list[Violation] = []
@@ -348,6 +415,7 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     crates = [effective(crate) for crate in crates]
     by_name = {crate.name: crate for crate in crates}
     violations += [v for crate in crates if crate.declared_ok for v in check_rng_crates(crate)]
+    violations += [v for crate in crates if crate.declared_ok for v in check_external_deps(crate)]
     for crate in crates:
         for edge in crate.edges:
             target = by_name.get(edge.target)
