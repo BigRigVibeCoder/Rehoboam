@@ -57,6 +57,6 @@ Both recommendations were approved. `docs/11` v1.4 drops the Rerun hooks from P0
 | P0.7 "Textual TUI stub" | Owned by no sprint and not a G0 criterion. `rh-tui` is a stream viewer, not an engine crate (`05.0` §6) | Move it to P1a as a consumer of the first real World Stream, where it has something to show | 75% |
 
 ## 4. Before the gate
-- **Red-team inbox:** done. Batches 01 to 04 are disposed of in `docs/red_team/RT-2026-10-16-G0-dispositions.md`. The director ruled on Laws 2 and 3 (principles 8 and 9 of `docs/01` §5) and item 15 (GOV-003 §6). One later dossier (`28b44ac`, demography and inequality) is held for the director (§5 of that record).
+- **Red-team inbox:** done. Batches 01 to 04 are disposed of in `docs/red_team/RT-2026-10-16-G0-dispositions.md`. The director ruled on Laws 2 and 3 (principles 8 and 9 of `docs/01` §5) and item 15 (GOV-003 §6). A later dossier on demography and inequality is taken in as batch 05, a proposal for G1a (director, 2026-10-16).
 - **Architect backlog that must close before G0:** A-09, this record. (A-20, the plane-A external dependency allow-list, is done.)
 - **Director:** T-00 of SPR-001 (`RUN-001` on the laptop) is still open (BCK-002 A-16). The laptop and one `adjutant` session are also needed for SPR-008 T-02 (cross-machine hashes) and SPR-009 T-04 (wall-clock baselines). The director will open a session of about 2 hours on the laptop when the Architect reports SPR-008 ready (2026-10-16).

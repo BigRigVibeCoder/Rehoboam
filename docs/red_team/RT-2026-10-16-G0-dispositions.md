@@ -51,7 +51,7 @@ Facts that apply to several items:
 
 ## 2. Laws 2 and 3 (director ruled, 2026-10-16)
 
-The director adopted both, each worded narrowly. The Architect recommended the same, with slightly different wording (kept below for the record). `docs/01` §5 carries the director's wording, with the Architect's reading of how it applies. The director may overturn that reading.
+The director adopted both, each worded narrowly. The Architect recommended the same, with slightly different wording (kept below for the record). `docs/01` §5 carries the director's wording, with the Architect's reading of how it applies. The director confirmed that reading the same day.
 
 | Law | Director's ruling | Architect's reading (`docs/01` §5) | Recommendation it replaces |
 |---|---|---|---|
@@ -91,4 +91,4 @@ Ruling: **no change to the `CLAUDE.md` non-negotiables.** Most of the ten bugs a
 | Commit (on `arch/red-team-batch-04`) | What | Disposition |
 |---|---|---|
 | `c3fa703` | Prototype 10: the relic corruption attractor, with vow dissonance as a stress source (`RT-ACT-013`) | **Taken in** as evidence for item 8. Three notes: (1) it drifts the bearer's traits, while in Rehoboam traits are static and S6 never writes minds columns, so the pull acts on an S6 exposure overlay and reaches minds through in-coupling; (2) it computes in floats, while the engine would use fixed point; (3) its 2-to-5-year window is a hand-set check with no source. It runs and passes (`run_all.sh`, now 10 prototypes) |
-| `28b44ac` | A science dossier on pre-industrial demography, inequality and empire lifespans (Alfani 2021; Coale and Demeny 1983; Taagepera 1978, 1979) | **Held for the director** (the intake rule: the Architect believes parts are mistaken). The sources are on the "still wanted" list, so the figures cannot be checked against them. The Coale–Demeny level labels do not match the published levels (female West level 6 is e₀ = 32.5, not 30). The Weibull parameters and the 85% fracture risk have no source. "Gini clamped to [0.65, 0.85]" is a global controller, which Law 2 forbids: a band is a test (`V-SF`), never enforced |
+| `28b44ac` | A science dossier on pre-industrial demography, inequality and empire lifespans (Alfani 2021; Coale and Demeny 1983; Taagepera 1978, 1979) | **Taken in as a proposal, not evidence** (director, 2026-10-16), as batch 05 in `inbox.md` with intake notes N13 to N17. It was first held for the director under the intake rule, because the Architect believed parts were mistaken. The sources are on the "still wanted" list, so the figures cannot be checked against them. The Coale–Demeny level labels do not match the published levels (female West level 6 is e₀ = 32.5, not 30). The Weibull parameters and the 85% fracture risk have no source. "Gini clamped to [0.65, 0.85]" is a global controller, which Law 2 forbids: a band is a test (`V-SF`), never enforced |

@@ -2,7 +2,7 @@
 
 > **Purpose:** Consolidated design inbox maintained by the Red Team for the Lead Architect.  
 > **Rule:** In-flight defect fixes are communicated immediately; all architectural and gameplay design enhancements are batched here for formal incorporation at project planning gates (next gate: **Gate G0** at the conclusion of P0).
-> **Status (2026-10-16):** batches 01 to 04 were disposed of at G0 in `RT-2026-10-16-G0-dispositions.md`, with the director's rulings. New batches go below for the next gate (G1a).  
+> **Status (2026-10-16):** batches 01 to 04 were disposed of at G0 in `RT-2026-10-16-G0-dispositions.md`, with the director's rulings. Batch 05 and later go below for the next gate (G1a).  
 
 ---
 
@@ -185,3 +185,19 @@ These are not dispositions; those come at G0. The Architect ran prototypes 6 to 
 | N10 | Item 15 (immunity protocol) | The ten invariants would go into GOV-008 and `CLAUDE.md`. `CLAUDE.md` non-negotiables change only on a director ruling; some invariants (zero heap allocation in tick loops, six fixed item slots, monthly climate zones) are design choices with costs, to be weighed at G0 | `CLAUDE.md`; GOV-008 |
 | N11 | Item 11, prototype 6 (Priority-Flood) | Sound: Barnes, Lehman and Mulla (2014) is the standard depression-filling method, and the prototype implements it from the paper. Check the licence of any RichDEM code before porting it; the paper alone is enough to implement from | `docs/14` (reuse inventory) |
 | N12 | `DISPOSITION_LEDGER.md` | The ledger counts seven items as "approved in principle for G0". Inbox batches 01 to 03 await G0; the only rulings so far are the batch 03 directions and the charter (decisions log, 2026-10-16). The decisions log is the authoritative record | `docs/decisions-log.md` |
+
+---
+
+## Batch 05 (2026-10-16): Pre-industrial demography, inequality and empire lifespans (for Gate G1a)
+
+`RT-2026-10-16-demography-inequality-science.md`: a science dossier proposing calibration from Alfani (2021) for M4, Coale and Demeny (1983, Model West) for M2, and Taagepera (1978, 1979) for M6. Taken in as a **proposal, not evidence** (director, 2026-10-16). The sources are still wanted; final calibration waits for them, in P1a.
+
+### Architect's intake notes on batch 05 (2026-10-16)
+
+| # | Item | Finding | Contract |
+|---|---|---|---|
+| N13 | The whole dossier | None of the three sources is in the repository; all are on the "still wanted" list. No figure in the dossier can be checked against its source, so none enters a spec or a band until the source is read | `research/reading_list.md`; R12 |
+| N14 | §3, Coale–Demeny West | The level labels do not match the published tables. Female Model West levels run e₀ = 17.5 + 2.5 × level, so level 4 is 27.5, level 6 is 32.5 and level 8 is 37.5, not 25, 30 and 35. The rows therefore cannot be used as given. M2 already uses Brass's General Standard, which West fits closely (R12 §15); whether infant and child mortality need a separate schedule is a question for P1.3, with the book in hand | `05.1` §3 (M2); P1.3 |
+| N15 | §4, Taagepera | The repository already holds a reading of Taagepera's empires through Arbesman (2011): 41 empires, mean 215 years, median 130, Weibull k̂ = 1.26 (R12 §16). The dossier's "120 empires", "median 140 to 180 years", β = 1.35 and the 85% fracture risk have no source. M6 imposes no age-dependent hazard; mild ageing must emerge from the secular dynamics (R12 §16), so a Weibull hazard written into M6 is declined. V-SF-07 already tests the shape | `09` V-SF-07; M6 |
+| N16 | §5, "invariants to enforce" | "Wealth Gini clamped to [0.65, 0.85]" and any enforced band are global controllers, which principle 8 (Law 2) and ADR-0009 forbid. A band is a validation test (V-SF), never a rule the engine enforces | `01` §5 principle 8; ADR-0009 |
+| N17 | §2, Alfani | The qualitative claim matches what the repository already holds (R12: inequality fell only after the Black Death). The compression coefficients (0.85, 0.70) are the red team's, not Alfani's. V-SF-17 stays soft (sign tests) until Alfani (2021) is read | `09` V-SF-17; R12 |
