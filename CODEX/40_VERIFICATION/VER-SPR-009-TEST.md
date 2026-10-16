@@ -14,6 +14,8 @@ version: 1.0.0
 
 > **BLUF:** The gate does what SPR-009 and the Architect's rulings say, and after the Developer's two fix commits every defect but one is closed. `bin/check_all.sh` is green on clean archives of all three heads I saw: `874a302` (194 of 194, 542 s), `8d6c51c` (194, 437 s) and `46f0f59` (194, 386 s). The instruction-count gate passes 10.00% and fails 10.01%; a real measured +4.55% and +7.46% slowdown pass and +10.92% and +12.92% fail; a 30% speed-up passes and never rewrites the baseline; runs in one checkout, under `taskset`, with ASLR off, and from checkout paths of 2, 81, 83 and 106 characters agree within 42 instructions (the band is 64). The R-8 band, the `[perf-baseline]` title and reason rules, R-7 (arena containment, exclusion, exhaustion) and R-9 behave as ruled. A hostile observer (clock reads, id-dependent sleeps, allocation, thread spawns, attach and detach mid-run) changes no monthly `state_hash` at 1, 2, 4 and 8 threads, and no clock API is reachable from plane A by name or through `unsafe`. **Four defects:** DEF-1 (medium) a panicking observer corrupted the engine silently, fixed in `8d6c51c` and re-verified; DEF-2 (medium-low) nothing pinned the content of an observer notice, fixed in `46f0f59` and re-verified; DEF-4 (low) the allocator self-test could not see `alloc_zeroed`, fixed in `46f0f59` and re-verified; **DEF-3 (low) `wall_trend.py check` passes a `nan` median, still open on `46f0f59`.** **Mutation:** of 35 mutants of the gate, the observer and the CI workflow, 18 turned the checks red at `874a302` and 17 survived; at `46f0f59` 27 are red and 8 survive (the six CI-workflow edits, one meta-level expectation in a control, one immaterial boundary in the allocator). **Twelve contract gaps**, none blocking; GAP-1 (the workflow does not re-run when a PR title is edited) is the one I would fix before merge. T-03 (vitals) and T-05's per-tick baseline are out of scope at these heads by the Architect's instruction; T-04's machines were not available.
 
+> **Phase 2 BLUF (§7, head `c29787c`):** the merge of main, T-03 vitals and T-05 hold, and the phase-1 fixes are in, but **`c29787c` is red on GitHub** (DEF-5: one pytest test reads `RH_EVENT`, which the workflow sets; it passes on a developer's machine and fails on all three CI event shapes) and its PR tier needs about 17 min 40 s, **over the 15-minute criterion** (V-PERF-04). The Developer's `ded5f7f` (two parallel jobs, 11 min) turns CI green; I re-ran only its pytest. One more defect (DEF-6, low), six contract gaps, and 13 of 28 new mutants survive, most of them in the vitals timing logic and the allocation gate's branches.
+
 Tested commit: `874a30271da9c22a12e14775a011379e9f02263f` on `sprint/SPR-009-benchmarks` (PR #34), five SPR-009 commits (`d549bf8`, `671dbe6`, `b35ac48`, `82bdddf`, `874a302`) on top of `4ac588d`. During the run the Developer pushed two commits: `8d6c51c` (the DEF-1 fix, four files in `rh-core` and `rh-snapshot`) and `46f0f59` (DEF-2 and DEF-4 tests and the survivors of my first mutation round, in `observer.rs`, `test_perf_gate.py` and `alloc_budget.rs`; no gate code changed). Each defect was re-verified on the commit that fixes it, `check_all.sh` was run whole on all three heads, and the mutants that had survived were re-run on `46f0f59` (§4). This file is committed on top of `46f0f59`; every other result is from `874a302`, which the two later commits change only in the observer and in tests. The probe plan was written from the contracts before the branch was opened (SPR-009 v1.5.0 with its six rulings, `docs/08` §9, `docs/09` V-PERF-04, V-PERF-11, V-DET-07, GOV-003 §2 and §5, GOV-006, `docs/13` §4.2–4.5); the Architect's later rulings R-7, R-8, R-9, 7 and 8 and deviation 3 were applied when the head arrived. All probing ran on `git archive` copies of the SHA, each with its own `CARGO_TARGET_DIR`; the repository tree was only read. Tools: valgrind 3.22.0, cargo-nextest 0.9.148, cargo-deny 0.20.2, iai-callgrind-runner 0.16.1, rustc 1.97.0 (pinned), glibc 2.39, a 4-core Xeon 2.1 GHz with BMI2, AVX2 and AVX-512. Probes are in the scratchpad (`probe_plan.md`, `mutate.py`, `mkperf.py`, `tester_obs.rs`, `tester_alloc.rs`); nothing but this file is committed. The Tester runs on a model different from the Developer's (GOV-005 §4.2); which one is not recorded here by instruction.
 
 ## 1. Verdicts
@@ -193,3 +195,143 @@ Y1–Y6 cannot be seen by a local run of `check_all`; the first three would turn
 - **Windows and macOS.** Linux x86-64 only.
 - **Nightly tiers** (`--run-ignored only` suites) were not run; they do not cover SPR-009.
 - **A kill during a baseline write:** `record` writes the file in one `write_text`; I did not interrupt it.
+
+## 7. Phase 2: the merge of main, T-03, T-05, the phase-1 fixes, V-PERF-04 (head `c29787c`)
+
+Tested commit: `c29787cef3f93adbbfeb826ddf4a197b94472f61` (`feat(SPR-009): T-03 vitals, T-05 the smoke-world allocation budget, VER-SPR-009-TEST phase-1 fixes [perf-baseline]`), on `5d77e25` (main at `3bd2262`, SPR-008, merged in). Method: a `git archive` of the commit given a git history (its merge base with `origin/main` is `3bd2262`, as in CI), a cold target directory, this 4-core sandbox. While I worked the Developer pushed `ded5f7f` (the review of `c29787c`); I read its CI result and re-ran its pytest, nothing more (§7.7). This file is committed on top of `ded5f7f`.
+
+### 7.1 Verdicts
+
+| Item | Verdict | Basis |
+|---|---|---|
+| `bin/check_all.sh` on a clean archive | **PASS** | 265 of 265, 889 s (14 min 49 s) from a cold target directory. |
+| **GitHub CI on `c29787c`** | **FAIL: DEF-5** | Run 38972047368, job 117212500585: `FAIL Python: unit tests (pytest)` at check 243 of 265, after 16 min 36 s. |
+| 1. The merge of main | **PASS** | §7.2. |
+| 2. T-03 vitals | **PASS with DEF-6, GAP-13, GAP-14** | §7.3. |
+| 3. T-05 allocation budget | **PASS** | §7.4. 82 of 82 repeat runs identical; every allocating fixture fails; integrity covers the file. GAP-15. |
+| 4. The phase-1 fixes | **PASS** | §7.5. DEF-3, GAP-2, GAP-6, GAP-9, OBS-1, C2 closed; residuals noted. |
+| 5. V-PERF-04, per-PR CI ≤ 15 min | **FAIL on `c29787c`** (about 17 min 40 s); **plausibly met on `ded5f7f`** (11 min, warm cache) | §7.6. |
+| 6. Keyframe refusal on a poisoned engine | **PASS** | 18 of 18 (9 notice kinds, 1 and 4 threads) on `8d6c51c`; 36 of 36 (1, 2, 4 and 8 threads) on the merged engine with the smoke world. |
+| T-04 | **NOT TESTABLE** (the director's machines) | As ruled. |
+
+### 7.2 The merge of main
+
+- **`engine.rs`.** Against main (`3bd2262`) the diff is the observer (`Engine::observer`, `notify`, `observe`, `run_passes`, `JobStart`/`JobEnd`/`LevelMerge` notices) and three extractions: `binding_pass`, `DispatchStats::record` and `check_owned_columns`. I read each against main's inline code; the logic is the same. `StepCtx::stream` (`system.rs` adds only `SimError::Observer`), the parallel dispatch (`dispatch`, job `k` on worker `k % threads`) and `DispatchStats` are intact.
+- **The merge itself** was resolved by hand in four files (`ci.yml`, `CLAUDE.md`, `engine.rs`, `test_check_all_inventory.py`). Against git's own three-way merge of `58debbd` and `3bd2262`, what differs is the removal of conflict markers and the union of both sides' lines; nothing of main's was dropped.
+- **The smoke golden ladder.** `rh-cli run smoke --years 1000 --ladder yearly` at 1, 2, 4 and 8 threads, and with `--vitals` at 1, 4 and 8: all seven ladders are byte for byte (`cmp`) equal to `worlds/smoke/baselines/smoke_yearly_1000y.ladder`. The baseline file is identical to main at `3bd2262` and at the current `c5b197a`.
+- **Observer invariance on the merged engine with the smoke world** (20,000 instants, 40 state hashes, 1,660 parallel levels; probe in `crates/rh-bench/tests`, not committed): the hostile observer (clock reads, sleeps that depend on sim time, worker and a counter, allocation, a spawned thread, atomics) at 1, 2, 4 and 8 threads equals the unobserved 1-thread reference, and so does the unobserved 4-thread run. Attach and detach every 7 instants at 4 threads: equal. The `Timing` observer with a second thread calling `vitals()` in a tight loop (4.0 M, 8.5 M and 9.5 M reads) at 1, 4 and 8 threads: equal. A consumer cannot hold `Timing`'s lock (`vitals()` clones and returns), so a stalled consumer cannot stall the engine either.
+- **Panic matrix on the smoke world** at an instant that holds all nine notice kinds (minute 360), 9 kinds × 1, 2, 4, 8 threads: nothing unwinds; the engine is poisoned; every column is back in the tables; `write_keyframe` is refused; the artifact's system is `observer` and its tick is 360, the failing instant, for all nine kinds (OBS-1); the error text and the state hash are the same at every thread count; a further `advance_until` errors.
+- **`ci.yml`:** the `edited` trigger, the PR-only `cancel-in-progress` expression, `fetch-depth` full history, the bisect step on `failure()` and the SPR-008 ladder uploads are intact, with SPR-009's valgrind, `iai-callgrind-runner@0.16.1`, `RH_PR_BODY` and perf-artifact steps added.
+
+### 7.3 T-03 vitals
+
+`rh-cli run smoke --years 1000 --threads T --vitals`, T = 1, 4, 8, against GOV-006 §1–2.
+
+| Field | Result |
+|---|---|
+| tip, pace, ticks/s, plane hashes A, B, C (GOV-006 §1) | All present in one line. The state hash (`bef936ec026341a0`) equals the last ladder rung at 1, 4 and 8 threads; the observation and narrative hashes agree across thread counts. |
+| Per-system time (GOV-006 §2) | Printed per system as a share and in ms. At 1 thread the seven systems sum to 11.9 s of a 68.5 s run. |
+| Serial fraction | 90.7% at 1 thread, 47.8% at 4, 48.2% at 8 (§7.3, GAP-14). |
+| The ladder with `--vitals` equals the one without | **Yes**, at 1, 4 and 8 threads; also equal to the baseline. |
+| A slow or stalled consumer | Cannot change the run (§7.2). |
+| Edge cases | `--years 0` prints no vitals line and exits 0; `--years 1` prints one. |
+
+- **DEF-6 (low): the pace is truncated to whole years before the division.** `Vitals::line` computes `per_second(sim_minutes / MINUTES_PER_YEAR, wall)`. A 1-year run (77 ms, 12.9 sim-years/s) prints `pace 0.0`; 2 years (141 ms) prints `7.0` for a true 14.2; 3 years prints `8.5` for 12.9; 10 years `14.8`. At 1,000 years the error is 0.1%. Fix: divide minutes by wall first, then scale (`sim_minutes * 10 * NANOS / (MINUTES_PER_YEAR * wall)`).
+- **GAP-14: what "serial fraction" measures.** It is the wall share not inside a level with two or more jobs (`jobs >= 2`, not `workers >= 2`). At 1 thread nothing runs in parallel, yet 9.3% of the time is booked as parallel; at 4 threads each parallel level also pays its thread spawn (the run is 2.3 times slower than at 1 thread: 6.3 against 14.5 sim-years/s; BCK-002 A-32), and that sits inside the "parallel" share. The figure depends on the thread count, so it is not the Amdahl `s` of `docs/08` §1.3 yet. Say what it measures before P1a builds its ≤ 20% gate on it.
+- **GAP-13: the timing logic has no test beyond the format of the line.** `check_all` runs the vitals at 1 thread and greps for the line's shape; the one unit test uses invented numbers. Six of seven mutants of `Timing::notify` and `Vitals::line` survive (§7.8): parallel levels counted from one job, per-system time halved, the tip stuck at the first instant, `JobStart` always on worker 0 (invisible at 1 thread), instants not counted, the pace scaled wrongly. Only the inverted serial share is caught. Feed `Timing` a scripted notice sequence with a fake clock (an `Instant`-free injection point) and assert the numbers.
+- **GAP-16 (info): GOV-006 §2 lists signals the vitals do not carry:** invariant counters, events emitted, peak RSS, stream size per channel, keyframes written. T-03's acceptance asks only for the vitals line and per-system timings, so this is not a defect; a later sprint owns them.
+
+### 7.4 T-05 allocation budget
+
+- **Repeatability.** `perf_gate.py alloc-measure` (4-thread measurement included) was run 82 times and every output is identical byte for byte to `crates/rh-bench/baselines/allocations_v1.txt`: 21 on all four cores, 12 each pinned to 1, 2 and 3 cores (`taskset`), 12 with six busy loops competing, 6 pinned to one core and competing, 4 with `RUST_BACKTRACE=full MALLOC_ARENA_MAX=1 RUST_MIN_STACK=8M`, 3 from another working directory. Thread spawns and scheduling do not leak into the count.
+- **Positive controls** (the control wraps one system; all fail unless noted): `vec![0; 64]` after X1's step (the Architect's X1) **OVER BUDGET**, +8,761 allocations at 1 thread, +2 on the most in a tick; `Vec::with_capacity(8)`; `Box::new(7_u64)`; `String::from(..)`; a `Vec` pushed 100 times (growths 856 → 44,661); a thread spawned inside the step (+43,805); `with_capacity(100)` then `shrink_to_fit`. All fail at 1 and 4 threads. An allocation in `fire` (the timer path) of X3, the only smoke system with timers, fails with +42; in any other system that path never runs in the window, so it passes, which is right.
+- **Integrity.** With the budget file as `--exact`: a regenerated file (= the tool's output) that differs from the base passes only in a PR titled `[perf-baseline]` with a `perf-baseline-reason:` line (untagged and tagged-without-reason both fail); a hand-typed growth, window line or shrink count fails "does not equal the tool's output"; the instruction-count path refuses the file's format.
+- **GAP-15: four branches of `alloc_compare` have no test** (mutants A2–A5 survive): `growths` and `max_per_tick` not gated, a changed window line not noticed, a changed tick count not noticed. The controls only raise `allocations`. Add one case per field to `python/tests`.
+- Shrinks (730 at 4 threads, 0 at 1) are reported and not gated: a shrink is a realloc to a smaller size and the regrowth it needs is counted as a growth. Informational.
+
+### 7.5 The phase-1 fixes
+
+| Fix | Result |
+|---|---|
+| DEF-3 | `wall_trend.py check --gate` refuses (exit 2, "not a rehoboam/rh-bench/wall/v1 line") `nan`, `NaN`, `inf`, `-inf`, `1e999`, a median of 0 or below, a negative spread, and 0 samples, in the measured file and in the trend file. A spread of 0 is accepted. The check_all control plants a NaN. |
+| GAP-2, in scratch repositories, push range | Tag at the end of the subject (`… [perf-baseline]`, `… (#29) [perf-baseline]`, `… [perf-baseline] [C1]`) plus a `Reason:` line **passes**; a reason without the tag, a tag without the reason, an empty `Reason:` and an upper-case `[PERF-BASELINE]` **fail**; a typed edit 10,000,000 off fails whatever the tag; an unchanged baseline passes. A push with no `RH_PUSH_BEFORE`/`AFTER` is an error (exit 2). A run with no context prints "equals the tool's output; tag and reason not checked here", never the success wording. A `pull_request` run without a title is an error. |
+| GAP-6 | `cfg_attr(feature = "x", global_allocator)`, nested parentheses, a multi-line attribute, `# [ global_allocator ]`, a path-qualified `#[::core::prelude::v1::global_allocator]` and a macro-generated one are all flagged. **Residual:** a `]` inside a string or comment earlier in the same attribute (`cfg_attr(feature = "a]b", global_allocator)`) is not. Low: the attribute must be hand-crafted to evade. |
+| GAP-9 | Invalid `IDLE_MINUTES` (`abc`, `0`, `00`, `-5`, `1.5`, `1e2`, `5 `) is logged and 30 is used; empty or unset gives 30; a runner job or any `who` output keeps the VM up. **Residual:** `99999999999999999999` is a "positive integer" and `find -mmin` never matches it, so the VM never powers off; `007` is rejected with the message "not a positive integer". Low. |
+| OBS-1 | Artifact tick = the failing instant at all 9 kinds, 1, 2, 4, 8 threads (§7.2). |
+| C2 | The 15% slowdown control requires `REGRESSION plane_hashes/state_full/rows_10k` in its output and passes in the run. Loosening the expectation to "any failure" is not caught by anything: a meta-level survivor. |
+
+### 7.6 V-PERF-04: does the per-PR tier fit 15 minutes?
+
+| Measurement | Time |
+|---|---|
+| `check_all.sh` on a clean archive, cold target, 4 cores, 265 checks | **889 s = 14 min 49 s** |
+| of which the checks that name SPR-009 (gate, repeatability, integrity controls, wall smoke, allocation, vitals, observer) | about 196 s (22%) |
+| the slowest: golden N threads 136 s; workspace nextest 135 s; V-DET-10 release build 73 s; V-PERF-04 gate 71 s; vitals gate 68 s; golden 1 thread 55 s | |
+| **GitHub, `c29787c`** (run 38972047368, one job): job 21:50:38 → 22:08:00 | **17 min 22 s**, stopped at check 243 of 265 |
+| of which the `check_all` step | 16 min 36 s; set-up before it 43 s |
+| the 22 checks it did not reach take 18 s locally | a passing run needs about **17 min 40 s** |
+| GitHub, earlier PR runs without SPR-009's steps (run level, queue included): #211 15 min 09 s, #213 14 min 34 s; main pushes #212 7 min 34 s, #214 10 min 22 s | |
+| **GitHub, `ded5f7f`** (run 38977023421), two parallel jobs: golden part 10 min 54 s, core part 9 min 55 s | **11 min 02 s** to completion, green |
+
+**The tier does not fit on `c29787c`:** 17 min 40 s against 15. The pre-SPR-009 PR runs were already at 14.5 to 15 min; SPR-009 adds about 3 min. I cannot confirm the 13 min 49 s cold-cache figure for main; my own cold run on 4 cores is 14 min 49 s, and the hosted job (with its restored cache) was slower. Two further points: pytest, a 9-second check, runs at position 243, so a Python failure costs the whole 16-minute run before it shows (move cheap checks first); and `ded5f7f`'s split into two parallel jobs does reach 11 minutes, but its run restored a rust-cache in 1 s, so I have no cold-cache figure for it.
+
+### 7.7 Defects of this phase
+
+**DEF-5 (high, blocks the merge; fixed in `ded5f7f`, pytest re-verified): CI is red on `c29787c`.** `python/tests/test_perf_gate.py::test_a_pull_request_run_without_a_title_is_an_error` sets `GITHUB_EVENT_NAME=push` and expects "without RH_PUSH_BEFORE", but `change_context()` reads `RH_EVENT` first and `ci.yml` exports `RH_EVENT` for the whole job. Repro from the root of the archive, with the venv: `RH_EVENT=pull_request RH_PR_TITLE="x [perf-baseline]" python -m pytest -c python/pyproject.toml --rootdir=. -q` → 1 failed, 479 passed ("Actual message: a pull_request run without RH_PR_TITLE"); with `RH_EVENT=push` or `RH_EVENT=local` (push, `workflow_dispatch`) the same test fails with "DID NOT RAISE GateError". So the Python check fails on all three event shapes and passes only with `RH_EVENT` unset, which is how a developer runs `check_all`. The commit message says "check_all: PASS, 265 checks"; true locally, false in CI. It is the mistake SPR-008 fixed in `750ce32` for `test_check_baseline`. Confidence: high. **On `ded5f7f`:** `python/tests/conftest.py` clears every `RH_*` and `GITHUB_*` variable before each test; the 487 tests pass with no variables, as a pull request, as a push, as `workflow_dispatch`, and with every variable set at once.
+
+**DEF-6 (low, open): the vitals pace is truncated to whole years** (§7.3).
+
+### 7.8 Mutation matrix of this phase
+
+Method as in §4, on `c29787c`, with the release build of `rh-cli` added to the chain (41 checks) and, for the `rh-golden` mutants, the crate's unit tests. The unmutated chain is green. The eight survivors of §4 were re-run unchanged in effect (C2, R4, Y1–Y6): all eight still survive, and two new workflow mutants (Y7 `RH_PR_BODY` not passed, Y8 `edited` removed) survive with them. Twenty-eight mutants of the code new in this commit:
+
+| # | Mutation | Result |
+|---|---|---|
+| V1 | a level counts as parallel from one job (`jobs >= 1`) | **green** |
+| V2 | per-system time halved | **green** |
+| V3 | the tip stuck at the first instant | **green** |
+| V4 | `JobStart` always recorded on worker 0 | **green** (the gate runs 1 thread) |
+| V5 | serial share inverted | red: `rh-golden` unit test |
+| V6 | instants not counted | **green** |
+| V7 | pace scaled by half a year | **green** |
+| A1 | an equal count counts as over budget (`>` → `>=`) | red: allocation budget |
+| A2 | `growths` not gated | **green** |
+| A3 | `max_per_tick` not gated | **green** |
+| A4 | a changed window line not noticed | **green** |
+| A5 | a changed tick count not noticed | **green** |
+| A6 | exact integrity accepts any file | red: integrity control |
+| A7 | the 4-thread window dropped | red: allocation budget |
+| A8 | the `vec![0; n]` control deleted | red: pytest (inventory) |
+| A9 | the allocation repeatability check deleted | red: pytest (inventory) |
+| G1 | push: a tag **or** a reason suffices | red: pytest |
+| G2 | push: the tag anywhere in the subject | red: pytest |
+| G3 | the all-zero `before` (no base) push no longer skipped | **green** |
+| G4 | push: tag and reason unchecked | red: push control |
+| G5 | a local run prints the success wording | red: local control |
+| D1 | wall: the finite check removed | red: NaN control |
+| D2 | wall: a median of 0 allowed | red: pytest |
+| D3 | wall: a negative spread allowed | red: pytest |
+| D4 | wall: 0 samples allowed | **green** |
+| L1 | the `global_allocator` regex reverted to the old one | red: `cfg_attr` control |
+| K1 | OBS-1: the instant not recorded before `InstantStart` | red: observer test |
+| I1 | idle shutdown: no `IDLE_MINUTES` validation | red: pytest |
+
+15 red, 13 green. The survivors are the vitals timing logic (GAP-13), four branches of the allocation comparison (GAP-15), the no-base push, and 0 samples. Together with the 10 older and workflow survivors, 23 mutants of 38 run in this phase survive.
+
+### 7.9 New contract gaps
+
+| # | Gap | Recommendation | Confidence |
+|---|---|---|---|
+| GAP-13 | The timing logic of `Timing` has no test; six of seven mutants survive. | A fake-clock test of scripted notice sequences, at one and several workers. | High |
+| GAP-14 | "Serial fraction" is thread-count dependent and includes spawn cost. | Name it in the line and in `docs/08` §9; define the P1a gate on single-thread work shares. | Medium |
+| GAP-15 | `alloc_compare`'s growth, max-per-tick, window and tick branches are untested. | One unit test per field. | High |
+| GAP-16 | Signals of GOV-006 §2 (counters, events, RSS, stream size, keyframes) are not in the vitals. | Backlog item for the sprint that owns observability. | Medium |
+| GAP-17 | The push rule is satisfied by one tagged commit anywhere in `before..after`, and `[perf-baseline]` must end the subject, so GitHub's default squash subject `title (#N)` fails the push to main (the repo's own merges write `(#N) [tag]`). | Say so in `worlds/smoke/README.md` and RUN-001, beside the `[C3]` text; or accept the tag anywhere as the PR check does. | Medium |
+| GAP-18 | `check_all` runs the cheap Python checks last (pytest at 243 of 265). | Run lint and pytest before the builds. | High |
+
+### 7.10 What was not run in this phase
+
+- Anything of `ded5f7f` except its pytest and the CI result of run 38977023421: its `--part` split, its re-recorded allocation baseline with toolchain lines, the typo control, the push-concurrency change and the unknown-event refusal are unverified by me.
+- A cold-cache hosted run: the only hosted timings are those above.
+- The nightly golden tier, the cross-machine procedure, peak RSS, a second CPU or glibc, and T-04.
+- The full `check_all` under each mutant (a 41-check chain judged them).
