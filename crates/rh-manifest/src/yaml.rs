@@ -142,7 +142,19 @@ fn yerr(message: impl Into<String>) -> YamlError {
 /// A syntax error, more than one document, an unknown tag, an unhashable or recursive key, or a
 /// value `PyYAML`'s constructor rejects.
 pub fn load(text: &str) -> Result<Value, YamlError> {
-    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let original = text.strip_prefix('\u{feff}').unwrap_or(text);
+    // YAML 1.1 line breaks (SPR-004 DEF-11): PyYAML also breaks lines at NEL, LS and PS. The
+    // parser sees them as '\n' (one character for one, so character positions are unchanged);
+    // scalars whose source holds LS or PS get their value re-derived from the original text,
+    // because PyYAML keeps those two in scalar content where '\n' would fold.
+    let normalized = normalize_breaks(original);
+    let special = normalized.is_some();
+    let text = normalized.as_deref().unwrap_or(original);
+    let source: Vec<char> = if special {
+        original.chars().collect()
+    } else {
+        Vec::new()
+    };
     let mut builder = Builder::default();
     let mut grammar = PyYamlGrammar::new(text);
     // saphyr's Marker::index counts characters, not bytes (its doc comment says bytes; every
@@ -178,6 +190,13 @@ pub fn load(text: &str) -> Result<Value, YamlError> {
                 }
             }
             Event::Scalar(text, style, anchor, tag) => {
+                let refolded = if special {
+                    refold(&source, &text, style, span.start.index(), span.end.index())
+                        .map_err(|m| yerr(format!("{m} ({})", at())))?
+                } else {
+                    None
+                };
+                let text = refolded.map_or(text, std::borrow::Cow::Owned);
                 let value = if in_flow
                     && style == ScalarStyle::Plain
                     && tag.is_none()
@@ -352,6 +371,257 @@ impl<'t> PyYamlGrammar<'t> {
         }
         Ok(())
     }
+}
+
+/// The text with NEL, LS and PS replaced by `\n`, or `None` when it has none.
+fn normalize_breaks(original: &str) -> Option<String> {
+    original.contains(YAML11_EXTRA_BREAKS).then(|| {
+        original
+            .chars()
+            .map(|c| {
+                if YAML11_EXTRA_BREAKS.contains(&c) {
+                    '\n'
+                } else {
+                    c
+                }
+            })
+            .collect()
+    })
+}
+
+/// The line breaks YAML 1.1 (and `PyYAML`) adds to `\n` and `\r`: NEL, LS and PS.
+const YAML11_EXTRA_BREAKS: [char; 3] = ['\u{85}', '\u{2028}', '\u{2029}'];
+
+fn is_break(c: char) -> bool {
+    matches!(c, '\n' | '\r') || YAML11_EXTRA_BREAKS.contains(&c)
+}
+
+/// `PyYAML`'s `scan_line_break`: `\r\n`, `\r`, `\n` and NEL are `\n`; LS and PS are themselves.
+/// Returns the break and how many characters it spans.
+fn line_break(chars: &[char]) -> (char, usize) {
+    match chars {
+        ['\r', '\n', ..] => ('\n', 2),
+        ['\r' | '\n' | '\u{85}', ..] => ('\n', 1),
+        [c, ..] => (*c, 1),
+        [] => ('\n', 0),
+    }
+}
+
+/// The value `PyYAML` gives a scalar whose source holds LS or PS, or `None` when the parser's
+/// value (from the `\n`-normalised text) is already right. `start..end` are character positions.
+fn refold(
+    source: &[char],
+    parsed: &str,
+    style: ScalarStyle,
+    start: usize,
+    end: usize,
+) -> Result<Option<String>, String> {
+    let keeps_itself = |c: &char| matches!(c, '\u{2028}' | '\u{2029}');
+    let slice = |a: usize, b: usize| source.get(a..b.min(source.len())).unwrap_or_default();
+    match style {
+        ScalarStyle::Plain => {
+            let raw = slice(start, end);
+            if !raw.iter().any(keeps_itself) {
+                return Ok(None);
+            }
+            let trimmed = raw
+                .iter()
+                .rposition(|c| *c != ' ' && !is_break(*c))
+                .map_or(0, |i| i + 1);
+            Ok(Some(fold_plain(&raw[..trimmed])))
+        }
+        ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => {
+            let double = style == ScalarStyle::DoubleQuoted;
+            let quote = if double { '"' } else { '\'' };
+            let mut i = start + 1;
+            while i < source.len() {
+                match source[i] {
+                    '\\' if double => i += 2,
+                    c if c == quote && !double && source.get(i + 1) == Some(&quote) => i += 2,
+                    c if c == quote => break,
+                    _ => i += 1,
+                }
+            }
+            let inner = slice(start + 1, i);
+            if !inner.iter().any(keeps_itself) {
+                return Ok(None);
+            }
+            fold_flow(inner, double).map(Some)
+        }
+        ScalarStyle::Literal => {
+            // A literal scalar keeps every break: the k-th break of the source is the k-th '\n'
+            // of the parsed value.
+            let raw = slice(start, end);
+            if !raw.iter().any(keeps_itself) {
+                return Ok(None);
+            }
+            let mut breaks = Vec::new();
+            let mut i = 0;
+            while i < raw.len() {
+                if is_break(raw[i]) {
+                    let (b, n) = line_break(&raw[i..]);
+                    breaks.push(b);
+                    i += n;
+                } else {
+                    i += 1;
+                }
+            }
+            let mut k = 0;
+            Ok(Some(
+                parsed
+                    .chars()
+                    .map(|c| {
+                        if c == '\n' {
+                            k += 1;
+                            breaks.get(k - 1).copied().unwrap_or('\n')
+                        } else {
+                            c
+                        }
+                    })
+                    .collect(),
+            ))
+        }
+        ScalarStyle::Folded => {
+            if slice(start, end).iter().any(keeps_itself) {
+                Err("a line separator (U+2028) or paragraph separator (U+2029) inside a folded block scalar is not supported".to_owned())
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// Applies `PyYAML`'s folding rule after a line break: an LS or PS break is kept; a `\n` break
+/// becomes a space when no empty line follows, else nothing; the breaks of empty lines are kept.
+fn fold_break(out: &mut String, first: char, more: &[char]) {
+    if first != '\n' {
+        out.push(first);
+    } else if more.is_empty() {
+        out.push(' ');
+    }
+    out.extend(more);
+}
+
+/// `PyYAML`'s `scan_plain` content folding for a plain scalar's source text.
+fn fold_plain(raw: &[char]) -> String {
+    let mut out = String::new();
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] != ' ' && !is_break(raw[i]) {
+            out.push(raw[i]);
+            i += 1;
+            continue;
+        }
+        let ws = i;
+        while i < raw.len() && raw[i] == ' ' {
+            i += 1;
+        }
+        if i < raw.len() && is_break(raw[i]) {
+            let (first, n) = line_break(&raw[i..]);
+            i += n;
+            let mut more = Vec::new();
+            while i < raw.len() && (raw[i] == ' ' || is_break(raw[i])) {
+                if raw[i] == ' ' {
+                    i += 1;
+                } else {
+                    let (b, n) = line_break(&raw[i..]);
+                    more.push(b);
+                    i += n;
+                }
+            }
+            fold_break(&mut out, first, &more);
+        } else {
+            out.extend(&raw[ws..i]);
+        }
+    }
+    out
+}
+
+/// `PyYAML`'s `scan_flow_scalar` for the text between the quotes.
+fn fold_flow(inner: &[char], double: bool) -> Result<String, String> {
+    let mut out = String::new();
+    let mut i = 0;
+    let breaks_after = |i: &mut usize| {
+        let mut more = Vec::new();
+        loop {
+            while *i < inner.len() && matches!(inner[*i], ' ' | '\t') {
+                *i += 1;
+            }
+            if *i < inner.len() && is_break(inner[*i]) {
+                let (b, n) = line_break(&inner[*i..]);
+                more.push(b);
+                *i += n;
+            } else {
+                return more;
+            }
+        }
+    };
+    while i < inner.len() {
+        let c = inner[i];
+        if !double && c == '\'' {
+            out.push('\'');
+            i += 2;
+        } else if double && c == '\\' {
+            let Some(&e) = inner.get(i + 1) else {
+                return Err("unfinished escape".to_owned());
+            };
+            i += 2;
+            if is_break(e) {
+                i -= 1;
+                let (_, n) = line_break(&inner[i..]);
+                i += n;
+                out.extend(breaks_after(&mut i));
+            } else if let Some(width) = match e {
+                'x' => Some(2),
+                'u' => Some(4),
+                'U' => Some(8),
+                _ => None,
+            } {
+                let hex: String = inner.get(i..i + width).unwrap_or_default().iter().collect();
+                let ch = u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32);
+                out.push(ch.ok_or_else(|| format!("invalid escape \\{e}{hex}"))?);
+                i += width;
+            } else {
+                out.push(match e {
+                    '0' => '\0',
+                    'a' => '\u{7}',
+                    'b' => '\u{8}',
+                    't' | '\t' => '\t',
+                    'n' => '\n',
+                    'v' => '\u{b}',
+                    'f' => '\u{c}',
+                    'r' => '\r',
+                    'e' => '\u{1b}',
+                    ' ' => ' ',
+                    '"' => '"',
+                    '/' => '/',
+                    '\\' => '\\',
+                    'N' => '\u{85}',
+                    '_' => '\u{a0}',
+                    'L' => '\u{2028}',
+                    'P' => '\u{2029}',
+                    other => return Err(format!("unknown escape character '{other}'")),
+                });
+            }
+        } else if matches!(c, ' ' | '\t') || is_break(c) {
+            let ws = i;
+            while i < inner.len() && matches!(inner[i], ' ' | '\t') {
+                i += 1;
+            }
+            if i < inner.len() && is_break(inner[i]) {
+                let (first, n) = line_break(&inner[i..]);
+                i += n;
+                let more = breaks_after(&mut i);
+                fold_break(&mut out, first, &more);
+            } else {
+                out.extend(&inner[ws..i]);
+            }
+        } else {
+            out.push(c);
+            i += 1;
+        }
+    }
+    Ok(out)
 }
 
 /// Where a value lands in the collection being built.
@@ -1016,6 +1286,74 @@ mod tests {
                 "after non-ASCII: {t:?}"
             );
         }
+    }
+
+    /// DEF-11: NEL, LS and PS are line breaks, as in `PyYAML` 6 (values observed 2026-10-16).
+    #[test]
+    fn yaml_1_1_line_breaks_follow_pyyaml() {
+        let a = |v: Value| Value::Map(vec![(Value::Str("a".into()), v)]);
+        let ab = Value::Map(vec![
+            (Value::Str("a".into()), Value::Int(1)),
+            (Value::Str("b".into()), Value::Int(2)),
+        ]);
+        for c in ['\u{85}', '\u{2028}', '\u{2029}'] {
+            // NEL folds like '\n'; LS and PS are kept in scalar content.
+            let (one, two) = if c == '\u{85}' {
+                (" ".to_owned(), "\n".to_owned())
+            } else {
+                (c.to_string(), format!("{c}{c}"))
+            };
+            let lit = if c == '\u{85}' {
+                "\n".to_owned()
+            } else {
+                c.to_string()
+            };
+            let cases: Vec<(String, Option<Value>)> = vec![
+                (format!("a: 1{c}b: 2\n"), Some(ab.clone())),
+                (format!("a: 1 # c{c}b: 2\n"), Some(ab.clone())),
+                (format!("{c}a: 1\nb: 2\n"), Some(ab.clone())),
+                (format!("a: x{c}y\n"), None),
+                (format!("a: 1 # c{c}x\n"), None),
+                (
+                    format!("a: x{c}  y\n"),
+                    Some(a(Value::Str(format!("x{one}y")))),
+                ),
+                (
+                    format!("a: \"x{c}  y\"\n"),
+                    Some(a(Value::Str(format!("x{one}y")))),
+                ),
+                (
+                    format!("a: 'x{c}  y'\n"),
+                    Some(a(Value::Str(format!("x{one}y")))),
+                ),
+                (
+                    format!("- \"x{c}y\"\n"),
+                    Some(Value::Seq(vec![Value::Str(format!("x{one}y"))])),
+                ),
+                (
+                    format!("a: \"x{c}{c}  y\"\n"),
+                    Some(a(Value::Str(format!("x{two}y")))),
+                ),
+                (
+                    format!("a: |\n  x{c}  y\n"),
+                    Some(a(Value::Str(format!("x{lit}y\n")))),
+                ),
+                (
+                    format!("a: [1,{c}  2]\n"),
+                    Some(a(Value::Seq(vec![Value::Int(1), Value::Int(2)]))),
+                ),
+            ];
+            for (t, want) in cases {
+                for prefix in ["", "# \u{e9}\n"] {
+                    let doc = format!("{prefix}{t}");
+                    assert_eq!(load(&doc).ok(), want, "{doc:?}");
+                }
+            }
+        }
+        assert_eq!(
+            load("a: >\n  x\u{85}  y\n").ok(),
+            Some(a(Value::Str("x y\n".into())))
+        );
     }
 
     #[test]
