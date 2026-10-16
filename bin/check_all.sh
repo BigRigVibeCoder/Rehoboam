@@ -130,7 +130,9 @@ clippy_control() {
 #   - any *CFLAGS* variable holds an fp-contract token other than exactly -ffp-contract=off;
 #   - any .cargo/config or .cargo/config.toml under <root> (target/, .git/ and the lint fixtures
 #     excluded) mentions fp-contract on a line that is not a CFLAGS setting, or with any token other
-#     than exactly -ffp-contract=off. Whole-line TOML comments set nothing and are skipped.
+#     than exactly -ffp-contract=off, or in a CFLAGS entry without `force = true` (without it, a CFLAGS
+#     already in the environment beats the config; Architect ruling, 2026-10-16). Whole-line TOML
+#     comments set nothing and are skipped.
 # The one accepted form is the repository's own `CFLAGS = { value = "-ffp-contract=off", ... }`.
 FP_CONTRACT_OK="-ffp-contract=off"
 # fp_contract_bad_tokens <text>: prints every fp-contract token of <text> that is not $FP_CONTRACT_OK.
@@ -149,6 +151,8 @@ fp_contract_guard() {
     while IFS= read -r line; do
       if ! grep -qE '^[[:space:]]*CFLAGS[[:space:]]*=' <<<"$line" || fp_contract_bad_tokens "$line" >/dev/null; then
         echo "$file sets fp-contract other than CFLAGS = $FP_CONTRACT_OK: $line"; bad=1
+      elif ! grep -qE 'force[[:space:]]*=[[:space:]]*true' <<<"$line"; then
+        echo "$file sets CFLAGS without force = true, so an environment CFLAGS would replace it: $line"; bad=1
       fi
     done < <(grep -- 'fp-contract' "$file" | grep -vE '^[[:space:]]*#')
   done < <(find "$root" \( -path "$root/target" -o -path "$root/.git" -o -path "$root/tests/lint_fixtures" \) -prune \
@@ -290,6 +294,7 @@ run "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL" "
 run "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL" "fail:.cargo/config.toml sets fp-contract" fp_contract_guard tests/lint_fixtures/fp_contract &&
 run "fp-contract guard positive control: CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling 4)" "fail:CFLAGS sets fp-contract other than -ffp-contract=off" fp_contract_cflags_env_control &&
 run "fp-contract guard positive control: a .cargo/config.toml CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling 4)" "fail:.cargo/config.toml sets fp-contract other than CFLAGS = -ffp-contract=off" fp_contract_guard tests/lint_fixtures/fp_contract_cflags &&
+run "fp-contract guard positive control: a .cargo/config.toml CFLAGS without force = true must FAIL (SPR-007 ruling 4)" "fail:.cargo/config.toml sets CFLAGS without force = true" fp_contract_guard tests/lint_fixtures/fp_contract_cflags_unforced &&
 run "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off passes (SPR-007 ruling 4)" "pass:none but CFLAGS = -ffp-contract=off" fp_contract_guard tests/lint_fixtures/fp_contract_cflags_ok &&
 run "Python: uv.lock matches pyproject.toml (uv lock --check)" pass uv lock --check --offline --project python &&
 run "uv lock --check positive control: drifted lock must FAIL" "fail:needs to be updated" uv lock --check --offline --project tests/lint_fixtures/uv_drift &&

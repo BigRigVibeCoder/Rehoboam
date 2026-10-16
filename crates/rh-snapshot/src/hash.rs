@@ -16,16 +16,24 @@
 //!    `R = 1024` ([`CHUNK_ROWS`]). There are `⌈n / R⌉` chunks; an empty table has none.
 //!    `chunk(c) = XXH3(D_CHUNK || u64(c) || u64(m) || u32(len(row)) || row ...)` over the chunk's
 //!    `m` rows in order.
-//! 3. **Table root.** `root = XXH3(D_TABLE || u64(n) || u64(k) || u64(chunk(0)) ... u64(chunk(k-1)))`.
+//! 3. **Table root.** `root = XXH3(D_TABLE || u32(len(name)) || name || u64(n) || u64(k) ||
+//!    u64(chunk(0)) ... u64(chunk(k-1)))`, with `name` the table's UTF-8 name, `n` its row count and
+//!    `k` its chunk count.
 //! 4. **Plane hash.** `plane = XXH3(D_PLANE || u8(p) || u64(t) || u32(len(name)) || name ||
 //!    u64(root) ...)` over the plane's `t` tables in strictly increasing byte order of their UTF-8
 //!    names, with `p` the ASCII letter of the plane (`A`, `B` or `C`). A plane with no tables
 //!    hashes `D_PLANE || u8(p) || u64(0)`.
 //!
-//! The domain prefixes are the ASCII strings `D_CHUNK = "rehoboam/rh-snapshot/hash/v1/chunk"`,
-//! `D_TABLE = ".../v1/table"` and `D_PLANE = ".../v1/plane"`. They have equal length, so none is a
-//! prefix of another, and every variable-length field is length-prefixed, so each level's input
-//! decodes uniquely.
+//! Each level hashes under its own domain tag, the ASCII bytes (no terminator) of
+//! `D_CHUNK = "rehoboam/rh-snapshot/hash/v1/chunk"`, `D_TABLE = "rehoboam/rh-snapshot/hash/v1/table"`
+//! and `D_PLANE = "rehoboam/rh-snapshot/hash/v1/plane"`. The tags have equal length, so none is a
+//! prefix of another; every variable-length field is length-prefixed, so each level's input
+//! decodes uniquely. Two planes with identical tables differ by the plane letter, and two tables
+//! with identical rows by their names.
+//!
+//! **Version line.** The layout's version is the `v1` component of every tag and of [`LAYOUT`]. Any
+//! change to these bytes is a new version: new tags (`.../hash/v2/...`), regenerated golden vectors,
+//! a C3 change.
 //!
 //! `bin/gen_hash_golden.py` re-implements XXH3 and this layout independently, in the Python
 //! standard library, and writes `tests/golden/rh_snapshot_hash_v1.txt`; `tests/golden.rs` must
@@ -166,11 +174,13 @@ pub fn chunk_hash<T: HashRows + ?Sized>(table: &T, chunk: usize, buf: &mut Vec<u
     xxh3(buf)
 }
 
-/// A table root from its row count and chunk hashes (layout level 3).
+/// A table root from the table's name, row count and chunk hashes (layout level 3).
 #[must_use]
-pub fn table_root(rows: usize, chunks: &[u64]) -> u64 {
-    let mut buf = Vec::with_capacity(D_TABLE.len() + 16 + 8 * chunks.len());
+pub fn table_root(name: &str, rows: usize, chunks: &[u64]) -> u64 {
+    let mut buf = Vec::with_capacity(D_TABLE.len() + 20 + name.len() + 8 * chunks.len());
     buf.extend_from_slice(D_TABLE);
+    put_u32(&mut buf, name.len());
+    buf.extend_from_slice(name.as_bytes());
     put_u64(&mut buf, len64(rows));
     put_u64(&mut buf, len64(chunks.len()));
     for &c in chunks {
@@ -191,15 +201,15 @@ pub struct TableDigest {
 }
 
 impl TableDigest {
-    /// The digest of `table`, every chunk hashed.
+    /// The digest of the table `name`, every chunk hashed.
     #[must_use]
-    pub fn of<T: HashRows + ?Sized>(table: &T) -> Self {
+    pub fn of<T: HashRows + ?Sized>(name: &str, table: &T) -> Self {
         let rows = table.row_count();
         let mut buf = Vec::new();
         let chunks: Vec<u64> = (0..chunk_count(rows))
             .map(|c| chunk_hash(table, c, &mut buf))
             .collect();
-        let root = table_root(rows, &chunks);
+        let root = table_root(name, rows, &chunks);
         Self { rows, chunks, root }
     }
 }
@@ -308,7 +318,7 @@ impl PlaneDigest {
     pub fn of_world(world: &WorldTables) -> Self {
         let tables = world
             .columns()
-            .map(|(name, _, rows)| (name.to_owned(), TableDigest::of(rows)))
+            .map(|(name, _, rows)| (name.to_owned(), TableDigest::of(name, rows)))
             .collect();
         Self::from_tables(Plane::A, tables)
     }
@@ -429,7 +439,7 @@ impl MerkleCache {
         let rows = table.row_count();
         let mut buf = Vec::new();
         let Some(c) = self.tables.get_mut(name) else {
-            let digest = TableDigest::of(table);
+            let digest = TableDigest::of(name, table);
             self.rehashed_chunks += len64(digest.chunks.len());
             let root = digest.root;
             self.tables.insert(
@@ -463,7 +473,7 @@ impl MerkleCache {
             touched = true;
         }
         if touched || resized {
-            c.digest.root = table_root(rows, &c.digest.chunks);
+            c.digest.root = table_root(name, rows, &c.digest.chunks);
         }
         c.digest.root
     }

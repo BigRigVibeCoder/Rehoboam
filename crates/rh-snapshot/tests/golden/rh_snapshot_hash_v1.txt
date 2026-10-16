@@ -3,8 +3,9 @@
 # Hashes are lowercase hex; XXH3-128 is high half first. Formats:
 #   xxh3_64 <len> <hash of input(len)>     input byte j = (131 j + len) mod 256
 #   xxh3_128 <len> <hash of input(len)>
-#   column <salt> <rows> <root> <chunks..> row i = ((i + 1) * 0x9e3779b97f4a7c15) ^ salt
-#   bytes <rows> <root> <chunks..>         row i = (i mod 7) bytes of value i mod 256
+#   column <name> <salt> <rows> <root> <chunks..>  row i = ((i + 1) * GAMMA) ^ salt
+#   bytes <name> <rows> <root> <chunks..>   row i = (i mod 7) bytes of value i mod 256
+#   (GAMMA = 0x9e3779b97f4a7c15; names are UTF-8)
 #   plane <A|B|C> <t> (<name> <salt> <rows>)*t <plane hash>  (tables are columns)
 xxh3_64 0 2d06800538d394c2
 xxh3_64 1 e12ef9d2eb86ceeb
@@ -542,20 +543,20 @@ xxh3_128 2048 75058f75eeb7e5c7d65c6d0c8c6ab041
 xxh3_128 2049 40909e895e12f4e7b6ae2330bf90b391
 xxh3_128 4099 7f07fe8a102bd907f96cf3d9d96c35aa
 xxh3_128 10000 a1c2e4da0265734dbaa46f6deee673df
-column 0 0 f4f704b2ac256a67
-column 1 1 65d1cc871575390c 14195bb666d5e6fd
-column 2 1023 50db6aeec87e6e55 5e026cf091ecf1df
-column 3 1024 f71e9e90d839165d 3f9e6867df28e6d5
-column 4 1025 66b74413e207f037 2c9c895dadec434d 3fbb7990a1920b79
-column 5 3000 cdc4a1c61c270502 1c2aabd95183ab45 bc3b1d1dd0f95f07 81db2e7c35f08760
-column 18446744073709551615 2048 d3f3ca5d360bab12 fe6383e1a752dbe9 814f2aa373f90317
-bytes 0 f4f704b2ac256a67
-bytes 1 8632a7e7e1e618fd ff52770432d9facd
-bytes 1024 c7adf850c2d56e3b ea127db08a8bbf45
-bytes 1500 b839b1dfea6a1fab ea127db08a8bbf45 31735f46c157b269
+column pop.count 0 0 d418f193547d07fa
+column ledger.wealth 1 1 4d4944a68b12612e 14195bb666d5e6fd
+column région.sol 2 1023 9cd721f931d2f155 5e026cf091ecf1df
+column t 3 1024 ead47b94c5c4f374 3f9e6867df28e6d5
+column pop.count 4 1025 e70ae7fd292b95c6 2c9c895dadec434d 3fbb7990a1920b79
+column ledger.wealth 5 3000 3676798d33133dbe 1c2aabd95183ab45 bc3b1d1dd0f95f07 81db2e7c35f08760
+column région.sol 18446744073709551615 2048 3e0c4f3f99f3bf9d fe6383e1a752dbe9 814f2aa373f90317
+bytes pop.count 0 d418f193547d07fa
+bytes ledger.wealth 1 7bd10b2b2ebb7efc ff52770432d9facd
+bytes région.sol 1024 487f605148bc83cf ea127db08a8bbf45
+bytes t 1500 08da41f08e8937ad ea127db08a8bbf45 31735f46c157b269
 plane A 0 8e74abc138690eaa
 plane B 0 21c422eabe75b5df
 plane C 0 549b025fe7108880
-plane A 3 agenda.due 3 1000 ledger.wealth 1 3000 pop.count 2 3000 403db69a0640d4ed
-plane B 2 Z 9 1 a 9 1 a6c23401e3bdf4f9
-plane C 2 matches 11 2049 visibility 12 0 b2e4002f2ff822bc
+plane A 3 agenda.due 3 1000 ledger.wealth 1 3000 pop.count 2 3000 6bc94fc991135cde
+plane B 2 Z 9 1 a 9 1 95e7cdb91dcdcb6d
+plane C 2 matches 11 2049 visibility 12 0 0ffb5de057e69a3f

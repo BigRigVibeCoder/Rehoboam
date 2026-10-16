@@ -40,12 +40,12 @@ fn world(rows: usize) -> WorldTables {
 fn a_one_row_change_alters_exactly_one_chunk() {
     let rows = 5 * CHUNK_ROWS + 17;
     let base = column(rows, 7);
-    let before = TableDigest::of(base.as_slice());
+    let before = TableDigest::of("t", base.as_slice());
     assert_eq!(before.chunks.len(), 6);
     for row in [0, CHUNK_ROWS - 1, CHUNK_ROWS, 3 * CHUNK_ROWS + 5, rows - 1] {
         let mut changed = base.clone();
         changed[row] ^= 1;
-        let after = TableDigest::of(changed.as_slice());
+        let after = TableDigest::of("t", changed.as_slice());
         let differing: Vec<usize> = (0..before.chunks.len())
             .filter(|&k| before.chunks[k] != after.chunks[k])
             .collect();
@@ -123,19 +123,19 @@ fn row_marks_rehash_exactly_the_marked_chunks() {
     cache.mark_rows("t", 2 * CHUNK_ROWS + 9..2 * CHUNK_ROWS + 10);
     let root = cache.update("t", None, rows.as_slice());
     assert_eq!(cache.rehashed_chunks(), base + 1);
-    assert_eq!(root, TableDigest::of(rows.as_slice()).root);
+    assert_eq!(root, TableDigest::of("t", rows.as_slice()).root);
     // A range across a chunk boundary marks both chunks.
     rows[CHUNK_ROWS - 1] = 1;
     rows[CHUNK_ROWS] = 1;
     cache.mark_rows("t", CHUNK_ROWS - 1..CHUNK_ROWS + 1);
     let root = cache.update("t", None, rows.as_slice());
     assert_eq!(cache.rehashed_chunks(), base + 3);
-    assert_eq!(root, TableDigest::of(rows.as_slice()).root);
+    assert_eq!(root, TableDigest::of("t", rows.as_slice()).root);
     // Appending rows re-hashes the last old chunk and the new ones only.
     rows.extend(column(CHUNK_ROWS + 1, 9));
     let root = cache.update("t", None, rows.as_slice());
     assert_eq!(cache.rehashed_chunks(), base + 3 + 2);
-    assert_eq!(root, TableDigest::of(rows.as_slice()).root);
+    assert_eq!(root, TableDigest::of("t", rows.as_slice()).root);
 }
 
 #[test]
@@ -154,8 +154,11 @@ fn planes_b_and_c_hash_empty_and_synthetic_table_sets() {
         .map(|i| vec![b'f'; usize::try_from(i).unwrap()])
         .collect();
     let mut tables = BTreeMap::new();
-    tables.insert("facts".to_owned(), TableDigest::of(facts.as_slice()));
-    tables.insert("pins".to_owned(), TableDigest::of(pins.as_slice()));
+    tables.insert(
+        "facts".to_owned(),
+        TableDigest::of("facts", facts.as_slice()),
+    );
+    tables.insert("pins".to_owned(), TableDigest::of("pins", pins.as_slice()));
     let b = PlaneDigest::from_tables(Plane::B, tables.clone());
     let c = PlaneDigest::from_tables(Plane::C, tables.clone());
     assert_ne!(b.hash, c.hash);
@@ -165,12 +168,17 @@ fn planes_b_and_c_hash_empty_and_synthetic_table_sets() {
         ("pins", tables["pins"].root),
     ];
     assert_eq!(plane_hash(Plane::B, roots).unwrap(), b.hash);
+    // The table name is part of the root: the same rows under two names differ.
+    assert_ne!(
+        TableDigest::of("pins", pins.as_slice()).root,
+        TableDigest::of("pinz", pins.as_slice()).root
+    );
     // Row boundaries are part of the encoding: ["ab", ""] and ["a", "b"] differ.
     let x: Vec<Vec<u8>> = vec![b"ab".to_vec(), Vec::new()];
     let y: Vec<Vec<u8>> = vec![b"a".to_vec(), b"b".to_vec()];
     assert_ne!(
-        TableDigest::of(x.as_slice()).root,
-        TableDigest::of(y.as_slice()).root
+        TableDigest::of("t", x.as_slice()).root,
+        TableDigest::of("t", y.as_slice()).root
     );
 }
 

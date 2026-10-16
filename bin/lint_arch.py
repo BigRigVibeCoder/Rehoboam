@@ -143,7 +143,9 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
             "can return f64 (FromSql for f64, Value::Real); the input journal stores no REAL: its "
             "tables are STRICT with INTEGER, TEXT and BLOB columns only, and rh-snapshot names no "
             "float type (SPR-007 ruling 3); feature bundled only, whose C build takes "
-            "CFLAGS=-ffp-contract=off from .cargo/config.toml (ruling 4)",
+            "CFLAGS=-ffp-contract=off from .cargo/config.toml (ruling 4). Its transitive crates "
+            "(libsqlite3-sys, bitflags, smallvec, fallible-iterator) reach plane A only through "
+            "this API; cargo-deny bans non-crates.io sources and wildcards across the whole graph",
             NO_DEFAULT_FEATURES,
             frozenset({"bundled"}),
         ),
@@ -164,7 +166,8 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
             frozenset({"rh-snapshot"}),
             "no floats: XXH3-64 for the plane hashes and XXH3-128 for the journal's payload hash "
             "(SPR-007 ruling 1); default features off (they add rand and std), features "
-            "xxhash3_64 and xxhash3_128 only",
+            "xxhash3_64 and xxhash3_128 only. Its API hands plane A only u64, u128 and bytes; with "
+            "these features it has no transitive dependencies",
             NO_DEFAULT_FEATURES,
             frozenset({"xxhash3_64", "xxhash3_128"}),
         ),
