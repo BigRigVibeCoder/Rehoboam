@@ -354,3 +354,31 @@ fn bindings_and_lags_are_checked_against_the_spec() {
         ]
     );
 }
+
+/// DEF-6 (f): a plane-B system may read a plane-B column; a plane-A system reading it is refused.
+/// (A `system_plane` that always answered "A" would refuse both.)
+#[test]
+fn a_plane_b_system_may_read_plane_b() {
+    let pins = Stub::new("X1.pins").writes_in("region.pins", Plane::B);
+    let view = Stub::new("X2.view")
+        .writes_in("region.view", Plane::B)
+        .reads("region.pins", "X1.pins", Lag::Lagged);
+    let t = agreeing_specs(&[pins.clone(), view.clone()]);
+    assert!(
+        register(vec![pins.clone().boxed(), view.boxed()], &t).is_ok(),
+        "plane B reading plane B is allowed"
+    );
+    let reader = Stub::new("X3.reader")
+        .writes("r.x")
+        .reads("region.pins", "X1.pins", Lag::Lagged);
+    let e = refused(vec![pins.clone(), reader.clone()], &[pins, reader]);
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [plane] X3.reader: a plane-A system reads plane-B column region.pins (ADR-0024)"
+        ]
+    );
+}
