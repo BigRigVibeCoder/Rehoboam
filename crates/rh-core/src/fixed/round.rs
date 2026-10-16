@@ -81,6 +81,22 @@ pub(crate) const fn saturate_i32(value: i128) -> i32 {
     }
 }
 
+/// Clamps an exact value to `i64`: the saturation step of `Money`.
+pub(crate) const fn saturate_i64(value: i128) -> i64 {
+    if value > i64::MAX as i128 {
+        i64::MAX
+    } else if value < i64::MIN as i128 {
+        i64::MIN
+    } else {
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "INVARIANT: value is within i64 here"
+        )]
+        let narrowed = value as i64;
+        narrowed
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{div_round_half_even, saturate_i16, shr_round_half_even};
