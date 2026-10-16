@@ -16,8 +16,9 @@ pub enum RngPurpose {
     MurderCulprit = 4,  // key: (ruler, month)
     ArbitrationTie = 5,  // key: (title, tick)
     RegrantTie = 6,  // key: (title, tick)
-    InterregnumDelay = 7,  // key: (title, tick)
-    Vocation = 8,  // key: (person)
+    Sortition = 7,  // key: (person, tick)
+    InterregnumDelay = 8,  // key: (title, tick)
+    Vocation = 9,  // key: (person)
 }
 impl RngPurpose {
     /// The purpose's name in the spec's `[[rng]]` table.
@@ -29,6 +30,7 @@ impl RngPurpose {
             Self::MurderCulprit => "murder_culprit",
             Self::ArbitrationTie => "arbitration_tie",
             Self::RegrantTie => "regrant_tie",
+            Self::Sortition => "sortition",
             Self::InterregnumDelay => "interregnum_delay",
             Self::Vocation => "vocation",
         }

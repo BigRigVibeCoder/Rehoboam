@@ -15,9 +15,12 @@
 # Prob32 (SPR-011 ruling 4), linear in h. MAJ-4 ScheduleDeath carries M2's declared payload. MAJ-5 an on_birth step sets
 # the newborn's house. Minor findings: RNG key mapping, enumeration order, separate tie purposes, derived values labelled.
 # Round 4 rulings (REV-P1a §7): NEW-1 kinship walks M2's life-course columns (the dead stay in it), read at same_instant (4c), through
-# the effect language's kin(n) (SPR-017); house membership moves from person.house (compacted with the dead) to
+# the effect language's kin(p, n) (SPR-017); house membership moves from person.house (compacted with the dead) to
 # house_member rows; NEW-2 exit probabilities cover the whole month; NEW-3 claim.rank is an M7 column; NEW-4 every read
 # is declared, and SPR-014's registration rule drops a read of an absent owner and applies the coupling's neutral value.
+# Round 4d (from the effect-language spec, PR #41 §5.3): relations by their exact names, kin(p, n) and related(a, b, n);
+# the legal heir is "by the title's law (the effect language's succession laws, SPR-017)", the candidate set is not
+# restated here; the sortition law's draws are the `sortition` purpose.
 odd_r = 2
 
 [system]
@@ -326,6 +329,7 @@ why = "A named great-house member meets the dormancy criteria; minds defers it w
 [[commands]]
 target = "T1.minds"
 command = "OpinionModifier"
+payload = "{ holder, about, kind, magnitude, source_event }"
 why = "PASSED_OVER (the legal heir about the successor), DEPOSED_BY (the deposed about the deposer), CLAIM_PRESSED_BY (the holder about the claimant), GRANTED_BY (the grantee about the granter); minds owns opinions"
 [[commands]]
 target = "M4.economy"
@@ -334,7 +338,7 @@ why = "Property inheritance through the death path by the house's [inheritance_r
 
 # ----------------------------------------------------------------------------- reads
 # Round 4 (NEW-4): the reads below are declared unconditionally (round 4, NEW-4); the rh-core registration rule that SPR-014 adds drops and reports a read whose owner the world does not register, and gives the view the coupling's neutral value (M6: exec_constraint = 0, so m_ec = 1; S7: no active vow).
-# Kinship (heirs, regents, dormancy distance, regrant kin) walks life_course.mother/father through kin(n) (SPR-017), read
+# Kinship (heirs, regents, dormancy distance, regrant kin) walks life_course.mother/father through kin(p, n) (SPR-017), read
 # at same_instant (round 4c, NEW-6): everyone born up to this instant's Vital slot is in it, the dead included (round 4, NEW-1). M7 rebuilds a children-by-parent
 # index over those columns at restore and on each birth: derived state, outside the plane-A hash and the keyframe. M2 is read at
 # same_instant (M2 binds only Vital, earlier than every M7 binding), so births and deaths of this instant are visible.
@@ -491,6 +495,10 @@ purpose = "regrant_tie"
 key = ["title", "tick"]
 use = "entity = the title or office, k = 0, t = the year's first instant: an exact score tie in the yearly regrant (separate from arbitration_tie, which an interregnum resolution can draw at the same instant)"
 [[rng]]
+purpose = "sortition"
+key = ["person", "tick"]
+use = "entity = the candidate, k = 0, t = the arbitration instant: under the sortition law the effect language's rng_permutation(purpose = \"sortition\") (05.5 §2.1; SPR-017) orders the eligible candidates by ascending draw, ties in ascending PersonId; one draw per candidate per arbitration"
+[[rng]]
 purpose = "interregnum_delay"
 key = ["title", "tick"]
 use = "entity = the title, k = 0, t = the crisis instant: days to the resolution, 1 + draw mod interregnum_max_days; the timer is at that day's start, Polity"
@@ -599,7 +607,7 @@ summary = "On the first day of each month, for each sovereign title (ascending T
 earns_its_place_by = ["V-SF-06", "V-SF-06b", "V-SF-06d", "V-ERA-03"]
 [[submodels]]
 name = "on_birth"
-summary = "MAJ-5: for each person born this instant (birth_tick = now; births are M2 timers in this instant's Vital slot; the newborn's parents are read from person.mother and person.father at the same instant): a house_member row with the father's house, else the mother's (looked up in house_member, which keeps the dead), else no row. The newborn's kinship needs no step: it is the life-course columns, which kin(n) walks from the next instant on (round 4, NEW-1). A newborn of a ruling house who is first or second in the line of one of its titles meets the naming criteria at once: Promote. Other relations are not stored: T1.minds derives kinship from M2's life-course columns (life_course.mother and life_course.father) through kin(n), plus person.spouse for the living spouse, when it reads them"
+summary = "MAJ-5: for each person born this instant (birth_tick = now; births are M2 timers in this instant's Vital slot; the newborn's parents are read from person.mother and person.father at the same instant): a house_member row with the father's house, else the mother's (looked up in house_member, which keeps the dead), else no row. The newborn's kinship needs no step: it is the life-course columns, which kin(p, n) walks from this instant on (round 4, NEW-1). A newborn of a ruling house who is first or second in the line of one of its titles meets the naming criteria at once: Promote. Other relations are not stored: T1.minds derives kinship from M2's life-course columns (life_course.mother and life_course.father) through kin(p, n), plus person.spouse for the living spouse, when it reads them"
 earns_its_place_by = ["V-INV-12"]
 [[submodels]]
 name = "on_death"
@@ -607,7 +615,7 @@ summary = "In the death instant's Day/Polity binding (every death is an M2 timer
 earns_its_place_by = ["V-SAGA-19", "V-INV-03"]
 [[submodels]]
 name = "arbitrate"
-summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (effect-language eligibility and order over kin(n), the SPR-017 relation over life_course.mother/father, so the line runs through dead parents; birth order and sex for the order and for eligibility, the dead's included (primogeniture by representation, cognatic eligibility through a dead ancestor), come from life_course.birth_tick and life_course.sex; ties in birth order are broken by ascending life_course.person_id (round 4c, NEW-7); P1.15; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims (each claim.rank is recomputed here), and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees through kin(n) over the life-course columns); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest living adult kin in the law's order through kin(n), else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
+summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (the effect language's succession laws, SPR-017; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims (each claim.rank is recomputed here), and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees through kin(holder, dormancy_degrees) over the life-course columns); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest living adult kin in the law's order through kin(p, n), else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
 earns_its_place_by = ["V-SAGA-19", "V-SF-06b"]
 [[submodels]]
 name = "exit"
@@ -623,7 +631,7 @@ summary = "PressClaim{claim}: pressed := true, CLAIM_PRESSED, CLAIM_PRESSED_BY m
 earns_its_place_by = ["V-SAGA-19", "V-SF-06b"]
 [[submodels]]
 name = "regrant"
-summary = "Yearly: each title held in demesne by its liege's holder (a second title of the same holder below its own tier) and each vacant office goes to the best candidate: petitioners for it, then the holder's kin within dormancy_degrees (kin(n) over the life-course columns) who hold no seat or office (persons in holy orders only for chaplain), scored by the arbitration score without the legal term, ties by regrant_tie, candidates in ascending PersonId; SEAT_GRANTED and a GRANTED_BY modifier; the liege keeps the seat when no candidate exists. Seats are never created (finite seats)"
+summary = "Yearly: each title held in demesne by its liege's holder (a second title of the same holder below its own tier) and each vacant office goes to the best candidate: petitioners for it, then the holder's kin within dormancy_degrees (kin(holder, dormancy_degrees) over the life-course columns) who hold no seat or office (persons in holy orders only for chaplain), scored by the arbitration score without the legal term, ties by regrant_tie, candidates in ascending PersonId; SEAT_GRANTED and a GRANTED_BY modifier; the liege keeps the seat when no candidate exists. Seats are never created (finite seats)"
 earns_its_place_by = ["V-INV-12"]
 [[submodels]]
 name = "vocation"
@@ -631,7 +639,7 @@ summary = "Yearly: each great-house member who reached majority_age this year, i
 earns_its_place_by = ["V-INV-12"]
 [[submodels]]
 name = "dormancy"
-summary = "Yearly, and at world start: a named great-house member is dormant-eligible when an adult, holding no seat, office or claim, with no active vow (S7, P1b), and farther than dormancy_degrees (kin(n) over the life-course columns, through dead kin) from every holder of a title, claim or office of its house, its house read from house_member: Demote. A dormant member who comes within dormancy_degrees, gains a seat, office or claim, or is a ruling house's heir: Promote. Criteria only; never a count; nothing is deleted (ADR-0007)"
+summary = "Yearly, and at world start: a named great-house member is dormant-eligible when an adult, holding no seat, office or claim, with no active vow (S7, P1b), and farther than dormancy_degrees (not related(member, holder, dormancy_degrees) over the life-course columns, through dead kin) from every holder of a title, claim or office of its house, its house read from house_member: Demote. A dormant member who comes within dormancy_degrees, gains a seat, office or claim, or is a ruling house's heir: Promote. Criteria only; never a count; nothing is deleted (ADR-0007)"
 earns_its_place_by = ["V-INV-12"]
 
 # ----------------------------------------------------------------------------- invariants
