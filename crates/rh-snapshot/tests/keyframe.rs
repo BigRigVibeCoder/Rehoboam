@@ -779,15 +779,11 @@ fn patch(bytes: &mut [u8], at: usize, width: usize, value: i64) {
     bytes[at..at + width].copy_from_slice(&value.to_le_bytes()[..width]);
 }
 
-/// DEF-3b (Architect review of b9c3ede): multi-byte forgeries a bit-flip sweep cannot reach. Every
-/// footer block's `offset`, `metaDataLength` and `bodyLength`, and every buffer `offset` and
-/// `length` of the first block's message, set to 0, -1, -8, the extremes, the true value +- 8 and
-/// the file length; each forgery re-sealed and loaded. Refused or equal state, never a panic.
-#[test]
-fn def_3b_forged_block_and_buffer_fields_are_refused_without_a_panic() {
-    let engine = run_to(life(), 50 * DAY + 1);
-    let (bytes, header) = write_keyframe(&engine, anchor(&engine)).unwrap();
-    let body = unseal_keyframe(&bytes).unwrap().to_vec();
+/// Every forgeable length or offset field of a keyframe's Arrow body, as (byte position, width,
+/// true value): each footer block's `offset`, `metaDataLength` and `bodyLength`, and in the first
+/// block's message every buffer's `offset` and `length`, every node's `length` and `null_count`,
+/// and the batch `length`. Located through the verified accessors.
+fn forgeable_fields(body: &[u8]) -> Vec<(usize, usize, i64)> {
     let n = body.len();
     let footer_len =
         usize::try_from(i32::from_le_bytes(body[n - 10..n - 6].try_into().unwrap())).unwrap();
@@ -797,7 +793,7 @@ fn def_3b_forged_block_and_buffer_fields_are_refused_without_a_panic() {
     // (byte position in the body, width, true value) of every field to forge.
     let mut fields: Vec<(usize, usize, i64)> = Vec::new();
     for block in blocks {
-        let at = offset_in(&body, block);
+        let at = offset_in(body, block);
         fields.push((at, 8, block.offset()));
         fields.push((at + 8, 4, i64::from(block.metaDataLength())));
         fields.push((at + 16, 8, block.bodyLength()));
@@ -812,10 +808,51 @@ fn def_3b_forged_block_and_buffer_fields_are_refused_without_a_panic() {
     let buffers = message.header_as_record_batch().unwrap().buffers().unwrap();
     assert_eq!(buffers.len(), 6);
     for buffer in buffers {
-        let at = offset_in(&body, buffer);
+        let at = offset_in(body, buffer);
         fields.push((at, 8, buffer.offset()));
         fields.push((at + 8, 8, buffer.length()));
     }
+    let batch = message.header_as_record_batch().unwrap();
+    let nodes = batch.nodes().unwrap();
+    assert_eq!(nodes.len(), 2);
+    for node in nodes {
+        let at = offset_in(body, node);
+        fields.push((at, 8, node.length()));
+        fields.push((at + 8, 8, node.null_count()));
+    }
+    // The batch length is a table field, not a struct: find it as the one 8-byte slot holding the
+    // length that, when changed, changes what the accessor reads.
+    let rows = batch.length();
+    let slot = (meta_at..meta_at + fb_len - 7)
+        .step_by(8)
+        .find(|&at| {
+            let mut f = body.to_vec();
+            if i64::from_le_bytes(f[at..at + 8].try_into().unwrap()) != rows {
+                return false;
+            }
+            patch(&mut f, at, 8, rows + 1);
+            arrow_ipc::root_as_message(&f[meta_at..meta_at + fb_len])
+                .ok()
+                .and_then(|m| m.header_as_record_batch())
+                .is_some_and(|b| b.length() == rows + 1)
+        })
+        .expect("the batch length's slot");
+    fields.push((slot, 8, rows));
+    fields
+}
+
+/// DEF-3b (Architect review of b9c3ede): multi-byte forgeries a bit-flip sweep cannot reach. Every
+/// footer block's `offset`, `metaDataLength` and `bodyLength`, and every buffer `offset` and
+/// `length`, node `length` and `null_count`, and the batch `length` of the first block's message,
+/// set to 0, -1, -8, the extremes, the true value +- 8 and
+/// the file length; each forgery re-sealed and loaded. Refused or equal state, never a panic.
+#[test]
+fn def_3b_forged_block_and_buffer_fields_are_refused_without_a_panic() {
+    let engine = run_to(life(), 50 * DAY + 1);
+    let (bytes, header) = write_keyframe(&engine, anchor(&engine)).unwrap();
+    let body = unseal_keyframe(&bytes).unwrap().to_vec();
+    let fields = forgeable_fields(&body);
+    let n = body.len();
     // The located fields really are the ones the accessors read.
     for &(at, width, value) in &fields {
         let mut raw = [0_u8; 8];
@@ -871,4 +908,39 @@ fn def_3b_forged_block_and_buffer_fields_are_refused_without_a_panic() {
     assert_eq!(sweep.panicked, 0, "{sweep:?}");
     assert_eq!(sweep.accepted_other, 0, "{sweep:?}");
     assert!(sweep.cases > 300, "{sweep:?}");
+}
+
+/// DEF-5 (VER-SPR-007-TEST round 2, found independently of the read-back): the life world with
+/// `rows` people and seed `seed`, written (and read back) and loaded at days 10, 50, 100, 150 and
+/// 200; each load equals the live state. Larger worlds have tombstoned timers out of key order,
+/// which a decoder keeping row order lost (fixed in 24d2262).
+fn round_trips_at_every_cut(rows: usize, seed: u64) {
+    let mut e = life_engine(seed, rows, 3, false, 1);
+    e.set_provenance(history().provenance);
+    let mut expected = history();
+    expected.world_seed = seed;
+    for day in [10, 50, 100, 150, 200] {
+        e.advance_until(SimTime::from_minutes(day * DAY + 1), |_, _| {})
+            .unwrap_or_else(|err| panic!("{err}"));
+        let (bytes, _) = write_keyframe(&e, anchor(&e))
+            .unwrap_or_else(|err| panic!("rows {rows}, seed {seed}, day {day}: {err}"));
+        let (loaded, _) = load_engine(&bytes, CALENDAR, life_registered(), &expected)
+            .unwrap_or_else(|err| panic!("rows {rows}, seed {seed}, day {day}: {err}"));
+        assert_eq!(
+            loaded.snapshot(),
+            e.snapshot(),
+            "rows {rows}, seed {seed}, day {day}"
+        );
+    }
+}
+
+/// Rows 48, 150, 257, 1,000 and 5,000, three seeds each (about 7 s in a debug build, so all in the
+/// PR tier).
+#[test]
+fn def_5_keyframes_round_trip_across_world_sizes() {
+    for rows in [48, 150, 257, 1_000, 5_000] {
+        for seed in [13, 99, 0x5EED] {
+            round_trips_at_every_cut(rows, seed);
+        }
+    }
 }
