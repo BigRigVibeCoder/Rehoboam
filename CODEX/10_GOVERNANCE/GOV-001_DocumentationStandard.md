@@ -9,7 +9,7 @@ tags: [governance, documentation]
 related: [GOV-007, ADR-0032]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** Every document starts with a BLUF. CODEX documents carry YAML frontmatter, and the index (`CODEX/00_INDEX/MANIFEST.yaml`) is generated from it, never written by hand. Design documents in `docs/` keep their current form and are indexed by inference until they next change substantially, when they gain frontmatter. New documents stay under about 10 KB; split rather than sprawl.
@@ -50,7 +50,7 @@ Immediately after the frontmatter comes the BLUF:
 ## 3. The index
 
 - **Generation.** `bin/gen_manifest.py` writes `CODEX/00_INDEX/MANIFEST.yaml` from frontmatter. For `docs/` files without frontmatter, it infers the ID, title, status and summary from the filename, H1, `Status:` line and first paragraph.
-- **Staleness check.** `bin/gen_manifest.py --check` fails if the committed index differs from a fresh one. It runs in `bin/check_all.sh`.
+- **Validation, not staleness (2026-10-16).** The index is **not committed**: a committed generated file conflicted with every concurrent PR that touched a document. Agents run `bin/gen_manifest.py` at session start. `bin/gen_manifest.py --check` builds it in memory and fails on any error (missing or invalid frontmatter, unknown tags, duplicate ids); `bin/check_all.sh` runs it.
 - **Agents start from the index:** filter by `id`, `type`, `status`, `tags`, then read only what matches.
 
 ## 4. Tags (controlled)

@@ -4,7 +4,7 @@
 P0 (foundations) is under way. SPR-001 created the Cargo workspace (stub crates in `crates/`), the Python tooling (`python/`), the architecture lints and CI. The plan lives in `docs/`, the evidence in `research/`, and executable contracts in `specs/`.
 
 ## Operating model (ADR-0032)
-Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and backlogs (`CODEX/05_PROJECT/`), governance (`CODEX/10_GOVERNANCE/`), and the generated index (`CODEX/00_INDEX/MANIFEST.yaml`). Start each session with `AGENTS.md`. Run `bin/check_all.sh` before asking for an audit; no report, no pass. Be direct: no flattery, no softened bad news; bring the director decisions with a recommendation and a confidence rating, not open questions.
+Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and backlogs (`CODEX/05_PROJECT/`), governance (`CODEX/10_GOVERNANCE/`), and the generated index (`CODEX/00_INDEX/MANIFEST.yaml`: run `python -I bin/gen_manifest.py` to create it; it is not committed). Start each session with `AGENTS.md`. Run `bin/check_all.sh` before asking for an audit; no report, no pass. Be direct: no flattery, no softened bad news; bring the director decisions with a recommendation and a confidence rating, not open questions.
 
 ## Read before any work
 1. `docs/00_executive_summary.md`
