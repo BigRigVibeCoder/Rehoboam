@@ -44,7 +44,7 @@ systems:
   M3.agriculture: {seed_yield_ratio: 4.0}
   M4.economy: {alpha: 0.6, food_price_elasticity: 0.3, base_tax: 0.15, trade_kappa: 0.05}
   M6.polity: {tax_rate: 0.15, elite_mobility_u: 0.002, elite_growth_excess: 0.004, psi_threshold: 1.8, instability_mortality: 0.02}
-  M7.dynasty: {murder_hazard_base: 0.01, filial_piety_mean: 0.6}
+  M7.dynasty: {murder_hazard_base: 0.01}
   M8.war: {helmbold_w: 0.45, breakpoint: 0.2, campaign_months: 6, fort_multiplier: 5.0}
   S4.ecology: {}                # enabled; dragon metabolism is a creature param (peoples[1].params)
 institutions: [standing_army]

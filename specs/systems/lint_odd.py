@@ -8,20 +8,33 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
   - the coupling rules (RT-2026-10-16): a read that enters a rate needs a bounded, sourced in-coupling with a
     neutral value, and every rate or mode read needs a synthetic forcing in [isolation] (docs/09 V-SF-22/23).
     Missing coupling detail is a warning on a draft spec and an error on a frozen one,
+  - the event vocabulary (SPR-011 ruling 11): every [[emits]] kind is a Registry verb whose emitted_by is the
+    spec's system, and every verb the Registry gives to a system with a spec is in that spec's [[emits]].
+    A warning on a draft spec, an error on a frozen one,
+  - parameter defaults (SPR-011 ruling 8): a [[params]] `default` equals the Registry's `defaults` entry, both ways,
+  - lifecycle commands (PR #32; REV-P1a §7): each [[applies]] of a spec names a command, its payload fields and its
+    senders (`from`); every sender's [[commands]] entry for it carries a `payload` with the same field names in the same
+    order, `from` lists exactly the specs that send it, and a command sent to a spec that declares [[applies]] must be
+    one of them. A warning on a draft spec, an error on a frozen one,
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
 
 Run: python -I specs/systems/lint_odd.py            (lints everything; exit 1 on any error)
      python -I specs/systems/lint_odd.py --brief S5.daily_life
+     python -I specs/systems/lint_odd.py --extra-specs DIR --overlay FILE
+        DIR: more *.odd.toml specs, linted with the repository's (an id may not repeat), e.g. a world's own
+        systems (SPR-008: worlds/smoke/systems); FILE: a Registry overlay whose [systems] and [verbs] entries are
+        added to the Registry's (a name may not repeat), e.g. worlds/smoke/registry_overlay.toml
 
 A spec set outside the Registry (SPR-008 ruling 2: the smoke world's dummy systems never enter the real
 Registry) is linted, and its skeletons generated, with
      python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml
      python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --rust X1.smoke_weather
-The overlay's [systems] are added to the Registry's for this run only. Each overlay id is X-prefixed
-(`X<digits>.<name>`) and new to the Registry, and with an overlay every spec in --specs must be one of its
-systems, so a dummy spec can never stand in for a real one.
+--specs DIR replaces the repository's specs (where --extra-specs adds to them). The overlay's [systems] and
+[verbs] are added to the Registry's for this run only; with --specs, each overlay system id is X-prefixed
+(`X<digits>.<name>`) and every spec in DIR must be one of the overlay's systems, so a dummy spec can never
+stand in for a real one.
 """
 import re
 import sys
@@ -48,32 +61,89 @@ SERIES = ("constant", "step", "sine", "ramp", "historical")
 OVERLAY_ID = re.compile(r"^X\d+\.[a-z][a-z0-9_]*$")
 
 
-def apply_overlay(reg, overlay_path):
-    """Return the overlay's problems after adding its [systems] to ``reg`` (SPR-008 ruling 2)."""
+def replacement_problems(overlay_path, specs):
+    """With --specs (a spec set outside the Registry, SPR-008 ruling 2): every overlay system id is
+    X-prefixed, and every spec is one of the overlay's systems. ``load`` has already refused an overlay
+    entry that repeats a Registry name."""
     overlay = tomllib.loads(Path(overlay_path).read_text(encoding="utf-8"))
-    problems = [f"{overlay_path}: only a [systems] table is allowed, not [{k}]" for k in overlay if k != "systems"]
-    for sid, sysdef in overlay.get("systems", {}).items():
-        if not OVERLAY_ID.match(sid):
-            problems.append(f"{overlay_path}: overlay system '{sid}' must be X-prefixed (X<digits>.<snake_name>)")
-        elif sid in reg.get("systems", {}):
-            problems.append(f"{overlay_path}: overlay system '{sid}' is already in the Registry")
-        else:
-            reg.setdefault("systems", {})[sid] = sysdef
-    return problems, set(overlay.get("systems", {}))
+    ids = set(overlay.get("systems", {}))
+    problems = [f"{overlay_path}: overlay system '{sid}' must be X-prefixed (X<digits>.<snake_name>)"
+                for sid in sorted(ids) if not OVERLAY_ID.match(sid)]
+    problems += [f"{f.name}: system '{sid}' is not in the overlay {overlay_path}; a spec linted with an "
+                 "overlay must be one of its systems" for sid, (f, _) in specs.items() if sid not in ids]
+    return problems
 
 
-def load(specs_dir=SPECS):
+def load(extra_dirs=(), overlay=None, specs_dir=SPECS):
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
+    if overlay is not None:                       # a world's own systems and verbs (SPR-011 ruling 11)
+        over = tomllib.loads(Path(overlay).read_text(encoding="utf-8"))
+        unknown = sorted(set(over) - {"systems", "verbs"})
+        if unknown:
+            raise SystemExit(f"overlay {overlay}: only [systems] and [verbs] may be overlaid, found {unknown}")
+        for sec in ("systems", "verbs"):
+            clash = sorted(set(over.get(sec, {})) & set(reg.get(sec, {})))
+            if clash:
+                raise SystemExit(f"overlay {overlay}: [{sec}] entries already in the Registry: {clash}")
+            reg.setdefault(sec, {}).update(over.get(sec, {}))
     specs = {}
-    for f in sorted(p for p in Path(specs_dir).glob("*.odd.toml") if not p.name.startswith("_")):   # _template is not a spec
+    files = sorted(p for p in Path(specs_dir).glob("*.odd.toml") if not p.name.startswith("_"))   # _template is not a spec
+    for d in extra_dirs:
+        files += sorted(p for p in Path(d).glob("*.odd.toml") if not p.name.startswith("_"))
+    for f in files:
         s = tomllib.loads(f.read_text(encoding="utf-8"))
-        specs[s.get("system", {}).get("id", f.stem)] = (f, s)
+        sid = s.get("system", {}).get("id", f.stem)
+        if sid in specs:
+            raise SystemExit(f"{f}: system {sid} already has a spec ({specs[sid][0]})")
+        specs[sid] = (f, s)
     plan03 = (ROOT / "docs" / "03_requirements.md").read_text(encoding="utf-8")
     plan09 = (ROOT / "docs" / "09_verification_and_validation.md").read_text(encoding="utf-8")
     req_ids = set(re.findall(r"^\| ([A-Z][A-Z0-9]*-\d+) \|", plan03, re.M))
     test_ids = set(re.findall(r"^\| (V-[A-Z0-9]+-\d+[a-z]?) \|", plan09, re.M))
     adr_ids = {p.name[:8] for p in (ROOT / "docs" / "06_adr").glob("ADR-*.md")}
     return reg, specs, req_ids, test_ids, adr_ids
+
+
+def payload_fields(text):
+    """Field names of a payload written `{ name: Type, name: Type }` (types may hold `|` and `or`, never commas)."""
+    inner = str(text).strip()
+    if not (inner.startswith("{") and inner.endswith("}")):
+        return None
+    return [f.split(":")[0].strip() for f in inner[1:-1].split(",") if f.strip()]
+
+
+def lint_applies(specs, errs, warns):
+    """[[applies]] against the senders' [[commands]] (PR #32; REV-P1a §7)."""
+    for tid, (tf, ts) in specs.items():
+        strict = errs if ts.get("system", {}).get("status") == "frozen" else warns
+        applies = {a.get("command"): a for a in ts.get("applies", [])}
+        senders = {}                              # command -> [(sender id, its [[commands]] entry)]
+        for sid, (sf, ss) in specs.items():
+            for c in ss.get("commands", []):
+                if c.get("target") == tid:
+                    senders.setdefault(c.get("command"), []).append((sid, c))
+        if not applies:
+            continue
+        for cmd in sorted(set(senders) - set(applies)):
+            strict.append(f"{tf.name}: {', '.join(s for s, _ in senders[cmd])} send {cmd}, which [[applies]] does not declare")
+        for cmd, a in sorted(applies.items()):
+            want = payload_fields(a.get("payload"))
+            if not want:
+                errs.append(f"{tf.name}: [[applies]] {cmd} needs payload = \"{{ field: Type, ... }}\"")
+                continue
+            declared, actual = set(a.get("from", [])), {s for s, _ in senders.get(cmd, [])}
+            for s in sorted(declared - actual):
+                (strict if s in specs else warns).append(f"{tf.name}: [[applies]] {cmd} lists {s} in from, but {s} does not send it")
+            for s in sorted(actual - declared):
+                strict.append(f"{tf.name}: {s} sends {cmd}, but [[applies]] {cmd} does not list it in from")
+            for s, c in senders.get(cmd, []):
+                got = payload_fields(c.get("payload")) if "payload" in c else None
+                sp = errs if specs[s][1].get("system", {}).get("status") == "frozen" else warns
+                if got is None:
+                    sp.append(f"{specs[s][0].name}: [[commands]] {cmd} to {tid} needs payload = \"{{ {', '.join(want)} }}\" ({tid}'s [[applies]])")
+                elif got != want:
+                    (sp if sp is errs else strict).append(
+                        f"{specs[s][0].name}: [[commands]] {cmd} to {tid} has payload fields {got}, but [[applies]] declares {want}")
 
 
 def lint(reg, specs, req_ids, test_ids, adr_ids):
@@ -215,6 +285,25 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
         for x in s.get("params", []):
             if not x.get("source"):
                 errs.append(f"{p}: parameter '{x.get('name')}' needs a source (a reference or 'design value')")
+        # defaults (SPR-011 ruling 8): the spec mirrors the Registry's defaults exactly, both ways
+        reg_defaults = sysdef.get("defaults", {})
+        for x in s.get("params", []):
+            n, d = x.get("name"), x.get("default")
+            if d is not None and reg_defaults.get(n) != d:
+                errs.append(f"{p}: parameter '{n}' default {d} differs from the Registry's ({reg_defaults.get(n)})")
+        spec_defaults = {x.get("name") for x in s.get("params", []) if "default" in x}
+        for n in sorted(set(reg_defaults) - spec_defaults):
+            errs.append(f"{p}: Registry default for '{n}' ({reg_defaults[n]}) is not mirrored as `default` in [[params]]")
+        # event vocabulary (SPR-011 ruling 11): [[emits]] against the Registry's [verbs], both ways
+        verbs = reg.get("verbs", {})
+        emitted = [e.get("kind") for e in s.get("emits", [])]
+        for k in emitted:
+            if k not in verbs:
+                strict.append(f"{p}: emits {k}, which is not a Registry verb ([verbs]; SPR-011 ruling 11)")
+            elif verbs[k].get("emitted_by") != sid:
+                strict.append(f"{p}: emits {k}, which the Registry gives to {verbs[k].get('emitted_by')}")
+        for k in sorted(v for v, d in verbs.items() if d.get("emitted_by") == sid and v not in emitted):
+            strict.append(f"{p}: the Registry gives verb {k} to {sid}, but [[emits]] does not declare it")
         # submodels earn their place
         for sm in s.get("submodels", []):
             ep = sm.get("earns_its_place_by", [])
@@ -236,6 +325,7 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
         for c in s.get("couplings", []):
             if c.get("system") not in reg.get("systems", {}) and c.get("system") not in ("S1.culture", "S2.technology", "S3.migration"):
                 errs.append(f"{p}: coupling to unknown system {c.get('system')}")
+    lint_applies(specs, errs, warns)
     return errs, warns
 
 
@@ -245,7 +335,7 @@ def brief(sid, specs, reg):
     out = [f"# {h['id']} — {h['name']} (fidelity {h['fidelity']}, spec {h['spec_version']}, {h['status']})", "",
            f"**What it does.** {pu['statement']}", "",
            "**What it owns:** " + (", ".join(o["column"] for o in s.get("owns", [])) or "nothing (pure function)"),
-           "**What it reads:** " + ", ".join(f"{r['column']} ({r['owner']})" for r in s.get("reads", [])),
+           "**What it reads:** " + (", ".join(f"{r['column']} ({r['owner']})" for r in s.get("reads", [])) or "nothing"),
            "**What it emits:** " + (", ".join(e["kind"] for e in s.get("emits", [])) or "no events"),
            "**When it runs:** " + "; ".join(f"{x['pulse']} pulse, {x['phase']} phase" for x in s["schedule"]),
            "**Randomness:** " + ", ".join(f"{g['purpose']} keyed by ({', '.join(g['key'])})" for g in s["rng"]),
@@ -254,7 +344,8 @@ def brief(sid, specs, reg):
     regp = reg["systems"][sid].get("params", {})
     for x in s["params"]:
         lo, hi = regp.get(x["name"], ["?", "?"])
-        out.append(f"- `{x['name']}` [{lo}, {hi}]: {x['meaning']} — source: {x['source']}")
+        dflt = f" default {x['default']}" if "default" in x else ""
+        out.append(f"- `{x['name']}` [{lo}, {hi}]{dflt}: {x['meaning']} — source: {x['source']}")
     out += ["", "**How we know it works:** " + ", ".join(s["verification"]["tests"]),
             "**Not reproduced yet:** " + ("; ".join(pu.get("not_yet", [])) or "nothing listed")]
     return "\n".join(out)
@@ -285,14 +376,17 @@ def rust(sid, specs):
 
 
 def parse_args(argv):
-    """Return (specs dir, overlay path or None, (mode, id) or None) from ``argv``, or raise ValueError."""
-    specs_dir, overlay, gen = SPECS, None, None
+    """Return (specs dir, extra spec dirs, overlay path or None, (mode, id) or None) from ``argv``, or raise
+    ValueError."""
+    specs_dir, extra, overlay, gen = SPECS, [], None, None
     i = 0
     while i < len(argv):
-        if argv[i] in ("--specs", "--overlay", "--brief", "--rust") and i + 1 < len(argv):
+        if argv[i] in ("--specs", "--extra-specs", "--overlay", "--brief", "--rust") and i + 1 < len(argv):
             flag, value = argv[i], argv[i + 1]
             if flag == "--specs":
                 specs_dir = Path(value)
+            elif flag == "--extra-specs":
+                extra.append(value)
             elif flag == "--overlay":
                 overlay = value
             else:
@@ -300,21 +394,19 @@ def parse_args(argv):
             i += 2
         else:
             raise ValueError(f"unknown argument {argv[i]!r}; see the module docstring")
-    return specs_dir, overlay, gen
+    return specs_dir, extra, overlay, gen
 
 
 def main() -> int:
     try:
-        specs_dir, overlay, gen = parse_args(sys.argv[1:])
+        specs_dir, extra, overlay, gen = parse_args(sys.argv[1:])
     except ValueError as e:
         print(e)
         return 2
-    reg, specs, req_ids, test_ids, adr_ids = load(specs_dir)
+    reg, specs, req_ids, test_ids, adr_ids = load(extra, overlay, specs_dir)
     overlay_errs = []
-    if overlay is not None:
-        overlay_errs, overlay_ids = apply_overlay(reg, overlay)
-        overlay_errs += [f"{f.name}: system '{sid}' is not in the overlay {overlay}; a spec linted with an "
-                         "overlay must be one of its systems" for sid, (f, _) in specs.items() if sid not in overlay_ids]
+    if overlay is not None and specs_dir != SPECS:
+        overlay_errs = replacement_problems(overlay, specs)
     if gen is not None:
         sid = gen[1]
         if sid not in specs:
@@ -345,6 +437,17 @@ def main() -> int:
         assert any(needle in e for e in caught), (needle, caught)
     if "M2.demography" in specs:
         assert any("also owned" in e for e in caught), caught
+    # self-check (SPR-011 ruling 11): a frozen spec emitting an unknown verb or another system's verb is an error;
+    # a draft one only warns
+    m2 = specs.get("M2.demography")
+    if m2 is not None:
+        for status, want_err in (("frozen", True), ("draft", False)):
+            probe_spec = dict(m2[1], system=dict(m2[1]["system"], status=status),
+                              emits=m2[1].get("emits", []) + [{"kind": "NOT_A_VERB"}, {"kind": "SUCCEED"}])
+            pe, pw = lint(reg, {"M2.demography": (m2[0], probe_spec)}, req_ids, test_ids, adr_ids)
+            for needle in ("emits NOT_A_VERB, which is not a Registry verb", "emits SUCCEED, which the Registry gives to M7.dynasty"):
+                assert any(needle in e for e in (pe if want_err else pw)), (status, needle, pe, pw)
+                assert not any(needle in e for e in (pw if want_err else pe)), (status, needle, pe, pw)
     print(f"  self-check (broken spec rejected): {len(caught)} errors, e.g. {caught[0]}")
     print(f"{'PASS' if not errs else 'FAIL'}: {len(specs)} system specs linted ({len(warns)} warnings)")
     return 1 if errs else 0

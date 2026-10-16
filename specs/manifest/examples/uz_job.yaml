@@ -5,7 +5,7 @@
 # material inputs; what they do, and how Job, his wife and his friends respond, is simulated.
 # Nothing is forced: Job may hold fast or renounce, and the friends may persuade him or fail.
 manifest_version: 0
-registry_version: "0.1.0"
+registry_version: "0.2.0"
 world:
   id: uz_job
   display_name: "The Land of Uz"

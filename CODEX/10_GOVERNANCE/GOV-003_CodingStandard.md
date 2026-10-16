@@ -70,7 +70,7 @@ Director's ruling at G0, 2026-10-16 (red-team item 15; `docs/red_team/RT-2026-10
 | 2 | Item clutter: unbounded loose objects | SAGA-12 and V-SAGA-17: an artifact has exactly one bearer or location; goods are aggregate stocks (M4) | Covered |
 | 3 | Per-tick temperature and other over-fine physics | M3 F0 is an annual anomaly; each system has its own fidelity ladder (`05.1` §3) | Covered |
 | 4 | A trivial act cascading into a death (a cat licking spilt beer) | The abstraction horizon is the fidelity ladder; plane A has no hygiene model | Covered |
-| 5 | Full-map job scans for every actor | Candidate actions come from the agenda and the actor's situation, never a world scan | Check when the minds spec is written |
+| 5 | Full-map job scans for every actor | Candidate actions come from the agenda and the actor's situation, never a world scan | Specified: `T1.minds` submodel `decide` builds candidates only from the actor's situation sets (its court, relation rows, own claims and agenda goals; PR #32) |
 | 6 | Allocation stutter | V-PERF-11: an allocation budget per bench, failing like an instruction-count regression (SPR-009 T-05; BCK-002 A-32) | Covered: a budget, not a blanket ban |
 | 7 | Nested containers | S6: one bearer or location; no containers in the schema | Add "no nested containers" to S6 explicitly (P1.19) |
 | 8 | Seams at the edge of a "reality bubble" | The world runs whole, watched or not (ADR-0025); V-DET-07, observer invariance | Covered |

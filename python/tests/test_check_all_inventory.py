@@ -85,6 +85,7 @@ REQUIRED_GATES = (
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
+    "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)",
     "Golden vectors: M4 basket and price rule",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
@@ -95,6 +96,8 @@ REQUIRED_GATES = (
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
     "Manifest: aethelgard",
+    "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
+    "Manifest: household (rung 1; SPR-011 ruling 18)",
     "Manifest: invalid_draft_style must FAIL",
     "Manifest: solo",
     "Manifest: uz_job",
@@ -120,6 +123,7 @@ REQUIRED_GATES = (
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
+    "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)",
     "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 "
     "ruling 2)",
     "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)",
@@ -140,6 +144,8 @@ REQUIRED_GATES = (
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
     "Virtual telemetry (S5 prototype)",
+    "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip "
+    "(SPR-011 ruling 13)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
     "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the "
@@ -244,9 +250,19 @@ REQUIRED_GATES = (
     "(VER-SPR-008)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
+    "lint_odd applies control: a sender's payload matching [[applies]] field for field passes "
+    "(REV-P1a section 7)",
+    "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, "
+    "must FAIL (REV-P1a section 7)",
+    "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 "
+    "ruling 11)",
+    "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
+    "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling "
+    "11)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
+    "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "

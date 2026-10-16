@@ -500,6 +500,11 @@ run "Clippy float backstop positive control: unnamed float arithmetic in plane A
 run "Clippy libm-only positive control: std ln in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::ln`' clippy_control std_transcendental rh-sample &&
 run "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::exp`' clippy_control std_transcendental rh-sample &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
+run "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling 11)" "fail:ERROR M1.regions.odd.toml: emits NOT_A_VERB, which is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/frozen &&
+run "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)" "pass:WARN  M1.regions.odd.toml: emits SUCCEED, which the Registry gives to M7.dynasty" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/draft &&
+run "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 ruling 11)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/overlay --overlay tests/lint_fixtures/odd_emits/overlay.toml &&
+run "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, must FAIL (REV-P1a section 7)" "fail:has payload fields ['a', 'c', 'b'], but [[applies]] declares ['a', 'b', 'c']" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/mismatch &&
+run "lint_odd applies control: a sender's payload matching [[applies]] field for field passes (REV-P1a section 7)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/match &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
 run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
@@ -508,10 +513,14 @@ run "lint_odd positive control: a smoke spec missing from the overlay must FAIL 
 run "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 ruling 2)" "pass:SKELETONS: 7 up to date in crates/rh-sys-smoke/src/generated" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check &&
 run "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)" "fail:STALE: tests/lint_fixtures/skeletons/smoke_stale/X3_smoke_vital.rs" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out tests/lint_fixtures/skeletons/smoke_stale --check &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
+run "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)" "pass:PASS: 1 patterns linted." "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml &&
+run "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)" "fail:ERROR life_ends.e1: UNANCHORED state read" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
 run "Manifest: val_khor" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml &&
 run "Manifest: aethelgard" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml &&
 run "Manifest: uz_job" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml &&
+run "Manifest: household (rung 1; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml &&
+run "Manifest: hamlet (rung 2; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml &&
 run "Manifest: invalid_draft_style must FAIL" fail "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml &&
 run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-targets --locked --quiet -- -D warnings &&
 # Tier 2 — unit tests
@@ -586,9 +595,11 @@ run "Sampler reference: exact distributions are current (gen_sampler_reference -
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
+run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
 # Tier 6/8 — determinism-style and contract prototypes
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
+run "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip (SPR-011 ruling 13)" "pass:CHANNEL A v0: PASS" "$PY" -I specs/stream/selftest_channel_a.py &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py
 status=$?
 # VER-SPR-008-TEST GAP-3: the tier fails when any gate failed, whatever the status of the chain's
