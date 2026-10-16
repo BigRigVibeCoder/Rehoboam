@@ -16,7 +16,8 @@ The code is `crates/rh-sys-smoke`: plane A, kind `system`, with the generated sk
 
 Format `rehoboam-ladder v1` is documented normatively in `crates/rh-golden/src/ladder.rs`.
 
-- **Header:** the world, seed, horizon, rung kind (`yearly` or `monthly`) and hash layout (`rehoboam/rh-snapshot/hash/v1`). There is **no** build id, wall time, thread count or host name. So ladders from two machines, two builds or two thread counts compare byte for byte. A run perturbed with the V-DET-11 hook adds `inject <month>:<table>:<row>`, so an injected ladder can never pass as a clean one.
+- **Header:** the world, seed, horizon, rung kind (`yearly` or `monthly`) and hash layout (`rehoboam/rh-snapshot/hash/v1`). There is **no** build id, wall time, thread count or host name. So ladders from two machines, two builds or two thread counts compare byte for byte. A run perturbed with the V-DET-11 hook adds `inject <month>:<table>:<row>`, so an injected ladder can never pass as a clean one. The header also names the input journal the history ran from (`journal <inputs> <head chain hash>`), and a run stopped before its horizon says so (`until <year>`).
+- **Horizon:** `--years` is the history's horizon, because the synthetic inputs are those of the horizon. A run resumed from a keyframe must use its journal's own horizon: a shorter one is refused, and a longer one is refused unless `--extend` is given. `--until` stops a run early without changing its history; the bisect's resumed runs use it (VER-SPR-008 DEF-1).
 - **Rungs:** one per year end or month end. Each holds:
   - its index, tick and date;
   - `state_hash`, the plane-A hash of the world tables and the engine-held tables;

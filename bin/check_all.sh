@@ -296,6 +296,19 @@ injected_ladder_control() {
   "$RH_CLI_RELEASE" ladder compare "$dir/clean.ladder" "$dir/injected.ladder"
 }
 
+# DEF-1: a 24-year run with keyframes (made once per check_all run), then a run resumed from its
+# year-10 keyframe with --years $1 and any further flags; prints the resumed ladder's header.
+def1_resume() {
+  local dir="${TARGET_DIR:?}/rendered-fixtures/def1" years="$1"; shift
+  if [ ! -f "$dir/kf/year-0010.rhkf" ]; then
+    rm -rf "$dir" && mkdir -p "$dir" || return 1
+    "$RH_CLI_RELEASE" run smoke --years 24 --out "$dir/full.ladder" --journal "$dir/journal.sqlite" --keyframes "$dir/kf" >/dev/null || return 1
+  fi
+  "$RH_CLI_RELEASE" run smoke --years "$years" --resume "$dir/kf/year-0010.rhkf" --journal "$dir/journal.sqlite" \
+    --out "$dir/resumed.ladder" "$@" || return 1
+  head -9 "$dir/resumed.ladder"
+}
+
 # Doctests (nextest skips them). The compile-fail cases are acceptance tests (SPR-002 T-01), so the
 # gate counts them per file: a case demoted to plain text, deleted or renamed must turn it red, not
 # just vanish (VER-SPR-002-TEST DEF-2). Each entry is file:compile_fail:compiling, the number of
@@ -503,6 +516,10 @@ run "Golden baseline positive control: [C3] outside the title's trailing tag gro
 run "Golden baseline positive control: a push that changes the baseline with no [C3] commit must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_push_control "feat(SPR-008): regenerate the smoke baseline" &&
 run "Golden baseline control: a push that changes the baseline in a [C3] commit passes (VER-SPR-008 MAJ-1)" "pass:regenerated in a [C3] PR (the commit subjects of" baseline_push_control "feat(SPR-008): regenerate the smoke baseline [C3]" &&
 run "Golden ladder positive control: an injected run never compares equal to a clean one (VER-SPR-008 MIN-2)" "fail:LADDERS DIFFER" injected_ladder_control &&
+run "Golden resume positive control: a --years shorter than the journal's horizon must FAIL (VER-SPR-008 DEF-1)" "fail:disagrees with the journal's horizon" def1_resume 13 &&
+run "Golden resume positive control: a --years past the journal's last input must FAIL without --extend (VER-SPR-008 DEF-1)" "fail:past the journal's last input" def1_resume 30 &&
+run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
+run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
 run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 # Tier 5 — golden vectors

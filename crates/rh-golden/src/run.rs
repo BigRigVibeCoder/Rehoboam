@@ -45,7 +45,9 @@ use rh_core::time::{Pulse, SimTime};
 use rh_ids::BranchSalt;
 use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
 use rh_snapshot::hash::{LAYOUT, PlaneDigest, xxh3};
-use rh_snapshot::journal::{HistoryKey, InputKind, Journal, NewInput, Producer, Replay, Scope};
+use rh_snapshot::journal::{
+    HistoryKey, InputKind, Journal, JournalPosition, NewInput, Producer, Replay, Scope,
+};
 use rh_snapshot::keyframe::{History, write_keyframe};
 use rh_snapshot::resume::{material_input, resume};
 use rh_snapshot::state::state_digest;
@@ -94,8 +96,15 @@ pub struct RunArgs {
     pub repo: PathBuf,
     /// The world seed.
     pub seed: u64,
-    /// The run ends at the end of this sim-year.
+    /// The horizon: the history is the smoke world's synthetic inputs of this many sim-years, and
+    /// the run ends at the end of this year unless `until` stops it earlier.
     pub years: i64,
+    /// Stop at the end of this sim-year (at most `years`), keeping the horizon's history: the
+    /// bisect's resumed runs stop at the divergent year (VER-SPR-008 DEF-1).
+    pub until: Option<i64>,
+    /// A resumed run may go past the journal's last input (DEF-1): without it, `years` must be
+    /// the journal's own horizon.
+    pub extend: bool,
     /// Worker threads.
     pub threads: usize,
     /// Rung kind.
@@ -126,6 +135,8 @@ impl RunArgs {
             rung,
             out: out.to_path_buf(),
             journal: out.with_extension("journal.sqlite"),
+            until: None,
+            extend: false,
             keyframes: None,
             resume: None,
             inject: None,
@@ -216,8 +227,9 @@ struct Stop {
 
 fn stops(args: &RunArgs) -> BTreeMap<SimTime, Stop> {
     let mut stops: BTreeMap<SimTime, Stop> = BTreeMap::new();
-    let months = month_ends(args.years);
-    for year in 1..=args.years {
+    let last = args.until.unwrap_or(args.years).min(args.years);
+    let months = month_ends(last);
+    for year in 1..=last {
         stops.entry(year_end(year)).or_default().year_end = Some(year);
         if args.rung == RungKind::Yearly {
             stops.entry(year_end(year)).or_default().rung = u64::try_from(year).ok();
@@ -248,38 +260,7 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
     let specs = spec_table(&args.repo)?;
     let registered =
         || register(rh_sys_smoke::systems(), &specs).map_err(|e| error("registration")(&e));
-    let mut journal = None;
-    let mut engine = if let Some(keyframe) = &args.resume {
-        let bytes = std::fs::read(keyframe).map_err(|e| error("keyframe")(&e))?;
-        let replay = Replay::open(&args.journal, &journal_key(args.seed), TIMELINE)
-            .map_err(|e| error("journal")(&e))?;
-        resume(
-            &bytes,
-            CALENDAR,
-            registered()?,
-            &history(args.seed),
-            &replay,
-        )
-        .map_err(|e| error("resume")(&e))?
-        .0
-    } else {
-        {
-            for suffix in ["", "-wal", "-shm"] {
-                let mut path = args.journal.clone().into_os_string();
-                path.push(suffix);
-                let _ = std::fs::remove_file(path);
-            }
-            journal = Some(
-                Journal::create(&args.journal, &journal_key(args.seed))
-                    .map_err(|e| error("journal")(&e))?,
-            );
-            let mut e = rh_sys_smoke::engine(&specs, args.seed, 1)
-                .map_err(|e| error("registration")(&e))?;
-            e.set_provenance(provenance());
-            e
-        }
-    };
-    engine.set_threads(args.threads);
+    let (mut engine, journal, identity) = start(args, &specs, &registered)?;
     let start = engine.snapshot().cursor.unwrap_or(SimTime::EPOCH);
     let mut ladder = Ladder {
         header: Header {
@@ -288,6 +269,8 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
             years: args.years,
             rung: args.rung,
             hash: LAYOUT.to_owned(),
+            journal: None,
+            until: None,
             inject: args
                 .inject
                 .as_ref()
@@ -296,11 +279,8 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
         rungs: Vec::new(),
         failed: None,
     };
-    if let Some(j) = journal.as_mut() {
-        for (at, entity) in synthetic_inputs(args.years) {
-            accept(&mut engine, j, at, entity)?;
-        }
-    }
+    ladder.header.journal = identity.map(|p| (p.inputs, dump::hex(&p.head)));
+    ladder.header.until = args.until.filter(|&u| u < args.years);
     let store = KeyframeStore::default();
     if let (Some(dir), Some(j)) = (&args.keyframes, &journal) {
         std::fs::create_dir_all(dir).map_err(|e| error("keyframes")(&e))?;
@@ -345,6 +325,99 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
     }
     std::fs::write(&args.out, ladder.render()).map_err(|e| error("ladder")(&e))?;
     Ok(ladder)
+}
+
+type Started = (Engine, Option<Journal>, Option<JournalPosition>);
+
+/// The engine a run starts from, the journal a full run writes, and the journal's identity: a
+/// full run creates the journal and journals every synthetic input of the horizon in the host
+/// order; a resumed run checks the journal's horizon (DEF-1) and resumes through it.
+fn start(
+    args: &RunArgs,
+    specs: &SpecTable,
+    registered: &dyn Fn() -> Result<rh_core::register::Registered, Error>,
+) -> Result<Started, Error> {
+    if args.until.is_some_and(|u| u < 0 || u > args.years) {
+        return Err(Error(format!(
+            "--until {} is outside the horizon of {} years",
+            args.until.unwrap_or_default(),
+            args.years
+        )));
+    }
+    if let Some(keyframe) = &args.resume {
+        let bytes = std::fs::read(keyframe).map_err(|e| error("keyframe")(&e))?;
+        let replay = Replay::open(&args.journal, &journal_key(args.seed), TIMELINE)
+            .map_err(|e| error("journal")(&e))?;
+        check_horizon(&replay, args)?;
+        let (mut engine, _) = resume(
+            &bytes,
+            CALENDAR,
+            registered()?,
+            &history(args.seed),
+            &replay,
+        )
+        .map_err(|e| error("resume")(&e))?;
+        engine.set_threads(args.threads);
+        return Ok((engine, None, Some(replay.position())));
+    }
+    for suffix in ["", "-wal", "-shm"] {
+        let mut path = args.journal.clone().into_os_string();
+        path.push(suffix);
+        let _ = std::fs::remove_file(path);
+    }
+    let mut journal = Journal::create(&args.journal, &journal_key(args.seed))
+        .map_err(|e| error("journal")(&e))?;
+    let mut engine =
+        rh_sys_smoke::engine(specs, args.seed, 1).map_err(|e| error("registration")(&e))?;
+    engine.set_provenance(provenance());
+    engine.set_threads(args.threads);
+    for (at, entity) in synthetic_inputs(args.years) {
+        accept(&mut engine, &mut journal, at, entity)?;
+    }
+    let identity = journal
+        .position(TIMELINE)
+        .map_err(|e| error("journal")(&e))?;
+    Ok((engine, Some(journal), Some(identity)))
+}
+
+/// DEF-1: a resumed run's horizon must be the journal's. The journal must hold exactly the
+/// synthetic inputs of `args.years`, in order; with `--extend`, a strict prefix of them is
+/// allowed too (the run goes past the journal's last input, and the ladder's journal line says
+/// which journal it ran).
+fn check_horizon(replay: &Replay, args: &RunArgs) -> Result<(), Error> {
+    let rows: Vec<(SimTime, Scope)> = replay.inputs().iter().map(|r| (r.tick, r.scope)).collect();
+    let expected = synthetic_inputs(args.years)
+        .into_iter()
+        .map(|(t, e)| {
+            Scope::of_entity(e)
+                .map(|s| (t, s))
+                .ok_or_else(|| Error(format!("{e} has no journal scope")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if rows == expected {
+        return Ok(());
+    }
+    let n = rows.len();
+    if n < expected.len() && rows[..] == expected[..n] {
+        if args.extend {
+            return Ok(());
+        }
+        return Err(Error(format!(
+            "--years {} goes past the journal's last input: it holds {n} of the {} inputs of a \
+             {}-year history. Pass --extend to run past it on purpose (VER-SPR-008 DEF-1)",
+            args.years,
+            expected.len(),
+            args.years
+        )));
+    }
+    Err(Error(format!(
+        "--years {} disagrees with the journal's horizon: the journal holds {n} inputs, not the \
+         {} of a {}-year history. Resume with the journal's own horizon, and stop earlier with \
+         --until (VER-SPR-008 DEF-1)",
+        args.years,
+        expected.len(),
+        args.years
+    )))
 }
 
 /// The host order (SPR-007): check `at` against the engine's cursor, journal the input, then

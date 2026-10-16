@@ -60,6 +60,13 @@ REQUIRED_GATES = (
     "Golden ladder positive control: an injected run never compares equal to a clean one "
     "(VER-SPR-008 MIN-2)",
     "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)",
+    "Golden resume control: past the journal's last input with --extend passes, and the header "
+    "names the journal (VER-SPR-008 DEF-1)",
+    "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)",
+    "Golden resume positive control: a --years past the journal's last input must FAIL without "
+    "--extend (VER-SPR-008 DEF-1)",
+    "Golden resume positive control: a --years shorter than the journal's horizon must FAIL "
+    "(VER-SPR-008 DEF-1)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread (SPR-008 T-02)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads (SPR-008 T-02)",
     "Golden vectors: Brass (M2)",

@@ -23,6 +23,11 @@
 //!   and the hash layout (`rh_snapshot::hash::LAYOUT`). Nothing else: no build id, no wall time,
 //!   no thread count, no host name. So ladders written on two machines, by two builds or at two
 //!   thread counts compare byte for byte.
+//! - **Journal.** `journal <inputs> <head>` follows `hash`: the input journal's row count and
+//!   its head chain hash (32 hex digits), the identity of the inputs the history was run from.
+//!   Two runs of one horizon from two journals cannot share a header (VER-SPR-008 DEF-1).
+//! - **Until.** A run stopped before its horizon (`--until`, the bisect's resumed runs) adds
+//!   `until <year>` after the journal line.
 //! - **Injection.** A run perturbed with the V-DET-11 test hook (`--inject`) adds the line
 //!   `inject <month>:<table>:<row>` after `hash`, so an injected ladder can never pass as a
 //!   clean one: it differs from every baseline byte for byte, and [`compare`] reports it
@@ -98,6 +103,10 @@ pub struct Header {
     pub rung: RungKind,
     /// The hash layout.
     pub hash: String,
+    /// The input journal's row count and head chain hash (hex), DEF-1.
+    pub journal: Option<(u32, String)>,
+    /// The year the run stopped at, when before its horizon.
+    pub until: Option<i64>,
     /// The V-DET-11 perturbation `month:table:row`, if the run was perturbed.
     pub inject: Option<String>,
 }
@@ -160,6 +169,12 @@ impl Ladder {
             h.rung.name(),
             h.hash
         );
+        if let Some((inputs, head)) = &h.journal {
+            let _ = writeln!(out, "journal {inputs} {head}");
+        }
+        if let Some(until) = h.until {
+            let _ = writeln!(out, "until {until}");
+        }
         if let Some(inject) = &h.inject {
             let _ = writeln!(out, "inject {inject}");
         }
@@ -196,19 +211,41 @@ impl Ladder {
         let rung = RungKind::from_name(field(rung_line, "rung")?)
             .ok_or_else(|| err(rung_line.0, "rung is yearly or monthly".to_owned()))?;
         let hash = field(next("hash")?, "hash")?.to_owned();
-        let inject_line = text
-            .lines()
-            .nth(6)
-            .and_then(|l| l.strip_prefix("inject "))
-            .map(str::to_owned);
-        let body = 6 + usize::from(inject_line.is_some());
+        let mut body = 6;
+        let mut optional = |prefix: &str| {
+            let value = text
+                .lines()
+                .nth(body)
+                .and_then(|l| l.strip_prefix(prefix))
+                .map(|v| (body + 1, v.to_owned()));
+            body += usize::from(value.is_some());
+            value
+        };
+        let journal_line = optional("journal ");
+        let until_line = optional("until ");
+        let inject_line = optional("inject ");
+        let journal = match journal_line {
+            None => None,
+            Some((n, j)) => {
+                let (inputs, head) = j
+                    .split_once(' ')
+                    .filter(|(_, h)| h.len() == 32 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+                    .ok_or_else(|| {
+                        err(n, "expected `journal <inputs> <32 hex digits>`".to_owned())
+                    })?;
+                Some((num(n, inputs)?, head.to_owned()))
+            }
+        };
+        let until = until_line.map(|(n, u)| num(n, &u)).transpose()?;
         let header = Header {
             world,
             seed,
             years,
             rung,
             hash,
-            inject: inject_line,
+            journal,
+            until,
+            inject: inject_line.map(|(_, v)| v),
         };
         let mut rungs: Vec<Rung> = Vec::new();
         let mut failed = None;
@@ -357,12 +394,13 @@ impl fmt::Display for Difference {
 #[must_use]
 pub fn compare(a: &Ladder, b: &Ladder) -> Option<Difference> {
     let (ha, hb) = (&a.header, &b.header);
-    let fields: [(&'static str, bool); 5] = [
+    let fields: [(&'static str, bool); 6] = [
         ("world", ha.world == hb.world),
         ("seed", ha.seed == hb.seed),
         ("years", ha.years == hb.years),
         ("rung", ha.rung == hb.rung),
         ("hash", ha.hash == hb.hash),
+        ("journal", ha.journal == hb.journal),
     ];
     if let Some((field, _)) = fields.iter().find(|(_, same)| !same) {
         return Some(Difference::Header { field });
@@ -425,6 +463,8 @@ mod tests {
                 years: 2,
                 rung: RungKind::Yearly,
                 hash: "rehoboam/rh-snapshot/hash/v1".to_owned(),
+                journal: Some((8, "0123456789abcdef0123456789abcdef".to_owned())),
+                until: None,
                 inject: None,
             },
             rungs: (1..=2)
@@ -456,10 +496,25 @@ mod tests {
         let mut injected = ladder();
         injected.header.inject = Some("12:harvest.stock:2".to_owned());
         let text = injected.render();
-        assert!(
-            text.contains("hash rehoboam/rh-snapshot/hash/v1\ninject 12:harvest.stock:2\nrung 1 ")
-        );
+        assert!(text.contains(
+            "hash rehoboam/rh-snapshot/hash/v1\njournal 8 0123456789abcdef0123456789abcdef\n\
+                 inject 12:harvest.stock:2\nrung 1 "
+        ));
         assert_eq!(Ladder::parse(&text), Ok(injected));
+    }
+
+    #[test]
+    fn the_journal_and_until_lines_round_trip_and_the_journal_is_compared() {
+        let mut stopped = ladder();
+        stopped.header.until = Some(1);
+        stopped.rungs.pop();
+        assert_eq!(Ladder::parse(&stopped.render()), Ok(stopped));
+        let mut other = ladder();
+        other.header.journal = Some((9, "0123456789abcdef0123456789abcdef".to_owned()));
+        assert_eq!(
+            compare(&ladder(), &other),
+            Some(Difference::Header { field: "journal" })
+        );
     }
 
     #[test]
@@ -526,8 +581,12 @@ mod tests {
         let text = ladder()
             .render()
             .replace("root b.y 0000000000000007", "root b.y 7");
-        assert_eq!(Ladder::parse(&text).map_err(|e| e.line), Err(9));
+        assert_eq!(Ladder::parse(&text).map_err(|e| e.line), Err(10));
         assert!(Ladder::parse("rehoboam-ladder v2\n").is_err());
+        let bad_journal = ladder()
+            .render()
+            .replace("0123456789abcdef0123456789abcdef", "xyz");
+        assert_eq!(Ladder::parse(&bad_journal).map_err(|e| e.line), Err(7));
         let upper = ladder().render().replace("abc1", "ABC1");
         assert!(Ladder::parse(&upper).is_err());
     }

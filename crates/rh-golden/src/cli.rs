@@ -1,8 +1,10 @@
 //! The command-line form of the golden tools, shared by `rh-cli` and by [`crate::bisect::Process`]
 //! so that a spawned build reads exactly the arguments the bisect wrote.
 //!
-//! - `rh-cli run smoke [--repo R] [--seed S] --years N [--threads T] [--ladder yearly|monthly]
-//!   --out F [--journal J] [--keyframes D] [--resume K] [--dump M:F] [--inject M:TABLE:ROW]`:
+//! - `rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T]
+//!   [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]]
+//!   [--dump M:F] [--inject M:TABLE:ROW]`: `--years` is the history's horizon (with `--resume`,
+//!   the journal's own, unless `--extend`); `--until` stops earlier (DEF-1).
 //!   exit 0 when the run reaches the horizon, 1 when the simulation fails (the ladder ends in
 //!   `failed`), 2 on a tool error.
 //! - `rh-cli ladder compare A B`: exit 0 when equal, 1 when they differ (the first differing rung
@@ -42,6 +44,9 @@ pub fn to_argv(args: &RunArgs, repo: bool) -> Vec<String> {
     push("--ladder", args.rung.name().to_owned());
     push("--out", args.out.display().to_string());
     push("--journal", args.journal.display().to_string());
+    if let Some(u) = args.until {
+        push("--until", u.to_string());
+    }
     if let Some(d) = &args.keyframes {
         push("--keyframes", d.display().to_string());
     }
@@ -53,6 +58,9 @@ pub fn to_argv(args: &RunArgs, repo: bool) -> Vec<String> {
     }
     if let Some(i) = &args.inject {
         push("--inject", format!("{}:{}:{}", i.month, i.table, i.row));
+    }
+    if args.extend {
+        v.push("--extend".to_owned());
     }
     v
 }
@@ -67,6 +75,10 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
     let (mut years, mut out, mut journal) = (None, None, None);
     let mut it = words.iter();
     while let Some(flag) = it.next() {
+        if flag == "--extend" {
+            args.extend = true;
+            continue;
+        }
         let value = it
             .next()
             .ok_or_else(|| bad(&format!("{flag} needs a value")))?;
@@ -76,6 +88,11 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
                 .map_err(|_| bad(&format!("{what} `{value}` is not a number")))
         };
         match flag.as_str() {
+            "--until" => {
+                args.until = Some(
+                    i64::try_from(number("--until")?).map_err(|_| bad("--until is too large"))?,
+                );
+            }
             "--repo" => args.repo = PathBuf::from(value),
             "--seed" => args.seed = number("--seed")?,
             "--years" => {

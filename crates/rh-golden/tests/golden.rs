@@ -200,3 +200,56 @@ fn ladders_from_two_seeds_differ_at_the_header() {
         Some(rh_golden::ladder::Difference::Header { field: "seed" })
     ));
 }
+
+/// VER-SPR-008 DEF-1: a resumed run's horizon is its journal's. A shorter `--years` (whose
+/// history is a strict prefix of the journal's) is refused; a longer one is refused unless
+/// `--extend`; `--until` stops early and says so; the header names the journal's identity.
+#[test]
+fn def_1_a_resumed_run_keeps_its_journals_horizon() {
+    let dir = scratch("def1");
+    let mut full = RunArgs::new(&repo(), 24, 1, RungKind::Yearly, &dir.join("full.ladder"));
+    full.keyframes = Some(dir.join("kf"));
+    let continuous = run(&full).unwrap();
+    let journal = continuous.header.journal.clone().unwrap();
+    assert_eq!(journal.0, 3 * 8, "inputs in years 7, 14 and 21, eight each");
+    let resumed = |years: i64, extend: bool, until: Option<i64>, name: &str| {
+        let mut args = RunArgs::new(&repo(), years, 1, RungKind::Yearly, &dir.join(name));
+        args.journal.clone_from(&full.journal);
+        args.resume = Some(keyframe_path(&dir.join("kf"), 10));
+        args.extend = extend;
+        args.until = until;
+        run(&args)
+    };
+    let shorter = resumed(13, false, None, "shorter.ladder").unwrap_err();
+    assert!(
+        shorter.0.contains("disagrees with the journal's horizon"),
+        "{shorter}"
+    );
+    assert!(
+        resumed(13, true, None, "shorter_ext.ladder").is_err(),
+        "--extend never shortens"
+    );
+    let longer = resumed(30, false, None, "longer.ladder").unwrap_err();
+    assert!(
+        longer.0.contains("past the journal's last input"),
+        "{longer}"
+    );
+    let extended = resumed(30, true, None, "longer_ext.ladder").unwrap();
+    assert_eq!(extended.header.journal, Some(journal.clone()));
+    assert_eq!(extended.header.years, 30);
+    assert_ne!(
+        compare(&extended, &continuous),
+        None,
+        "an extended ladder never passes for the journal's own horizon"
+    );
+    // Within the horizon of 24 (the inputs of 21..27 are the same three batches), it resumes.
+    let same = resumed(24, false, Some(18), "until.ladder").unwrap();
+    assert_eq!(same.header.until, Some(18));
+    assert_eq!(same.header.journal, Some(journal));
+    assert_eq!(same.rungs, continuous.rungs[10..18], "years 11 to 18");
+    assert!(
+        std::fs::read_to_string(dir.join("until.ladder"))
+            .unwrap()
+            .contains("\nuntil 18\n")
+    );
+}

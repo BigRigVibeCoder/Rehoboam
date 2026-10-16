@@ -287,7 +287,9 @@ pub fn bisect(
     // 2. Monthly, from the latest keyframe year before `year` that both sides wrote.
     let keyframe_year = keyframe_year(&sides, year)?;
     let resumed = |s: &Side<'_>, out: &str, dump: Option<(u64, PathBuf)>| {
-        let mut args = s.args(a, RungKind::Monthly, year, out);
+        // The horizon stays the journal's (DEF-1); the run stops at the divergent year.
+        let mut args = s.args(a, RungKind::Monthly, a.years, out);
+        args.until = Some(year);
         args.resume = Some(keyframe_path(&s.keyframes(), keyframe_year));
         args.dump = dump;
         s.build.run(&args)
