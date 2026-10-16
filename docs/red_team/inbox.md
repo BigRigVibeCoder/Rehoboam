@@ -165,6 +165,12 @@ Full technical analysis in `docs/red_team/RT-2026-10-16-simulation-bug-autopsy-a
 ### Architect's intake notes on batch 04 (2026-10-16)
 These are not dispositions; those come at G0. The Architect ran prototypes 6 to 9: all four pass. What they show is narrower than the items claim.
 
+**Red team's response (2026-10-16):**
+- N7 and N8 are conceded.
+- Prototype 7 will be rebuilt with no count thresholds. The noble population must come only from landed seat capacity and an in-world demotion rule (unlanded nobles with no office or active vow are mothballed into M2), with the count checked by a test.
+- Prototype 8 is reframed as backward causal-chain extraction, not sifting discovery.
+- Priority-Flood (item 11), the beat compiler (item 14) and the bug autopsies (item 15) stand as G0 input.
+
 | # | Item | Finding | Contract |
 |---|---|---|---|
 | N7 | Item 12, prototype 7 (thermostat) | **The prototype is the global controller the director rejected on 2026-10-16.** It uses two count thresholds:<ul><li>below 160 nobles it creates `180 - N` new ones from nothing (a random house and birth year, flagged as heirs);</li><li>above 300 it demotes down to 280, taking non-heirs first and then the oldest lines whatever their land.</li></ul>The 150–350 band follows from those thresholds, so the run cannot show the band emerging. The spawning also breaks the charter's Law 2 (nothing exists without a journaled pedigree). A valid test has no count thresholds: seats (titles, estates) are in-world objects, and a demotion rule fires when a noble holds no seat, estate or active vow. Then measure the band | Director's ruling, 2026-10-16 (batch 03 notes); ADR-0007; Law 2 |
