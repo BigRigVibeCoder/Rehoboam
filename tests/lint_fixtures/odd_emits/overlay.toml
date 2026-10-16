@@ -1,0 +1,3 @@
+# Planted Registry overlay for lint_odd.py (SPR-011 ruling 11): a world may declare its own event kinds. Never a contract.
+[verbs]
+X_FIXTURE_FORMED = { act_classes = ["discover"], emitted_by = "M1.regions", tellability = 0 }

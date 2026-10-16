@@ -171,6 +171,11 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
+    "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 "
+    "ruling 11)",
+    "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
+    "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling "
+    "11)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
