@@ -1044,3 +1044,80 @@ fn d7_the_default_fire_is_a_sim_error_that_poisons_the_engine() {
     let a = e.crash_artifact().unwrap();
     assert_eq!((a.tick, a.phase.as_str()), (DAY / 2, "Vital"));
 }
+
+fn schedule_twins(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now() == SimTime::EPOCH {
+        for kind in [rh_ids::EntityKind::Person, rh_ids::EntityKind::Household] {
+            c.schedule(
+                &Np::N,
+                TimerSpec {
+                    time: SimTime::from_minutes(300 * DAY),
+                    phase: Phase::Vital,
+                    entity: EntityRef::new(kind, 5),
+                    kind: 0,
+                    payload: 0,
+                },
+            )?;
+        }
+    }
+    Ok(())
+}
+
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "it must have the ResampleFn signature"
+)]
+fn redraw_far(_: &Stub, _: &TimerEntry, ctx: &ResampleCtx) -> Result<Option<SimTime>, SimError> {
+    Ok(ctx
+        .now()
+        .checked_add_minutes(1 + (ctx.draw(0) % (100 * 1_440)).cast_signed()))
+}
+
+#[test]
+fn g3_resample_draws_key_on_the_entity_kind_too() {
+    let stubs = vec![
+        Stub::new("Y1.twins")
+            .purposes_of::<Np>()
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(schedule_twins)
+            .resampling(redraw_far),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs).unwrap();
+    let mut e = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        WorldTables::new(),
+        SimTime::EPOCH,
+    );
+    let person = EntityRef::new(rh_ids::EntityKind::Person, 5);
+    let household = EntityRef::new(rh_ids::EntityKind::Household, 5);
+    let at = SimTime::from_minutes(DAY + 3);
+    e.submit_input(
+        at,
+        MaterialInput {
+            scope: [person, household].into_iter().collect(),
+        },
+    )
+    .unwrap();
+    e.advance_until(at, |_, _| {}).unwrap();
+    assert_eq!((e.epoch(person), e.epoch(household)), (1, 1));
+    let p = e.agenda().pending_for(person)[0].0.time;
+    let h = e.agenda().pending_for(household)[0].0.time;
+    assert_ne!(
+        p, h,
+        "same purpose, raw id, epoch and instant, different kinds: different draws"
+    );
+    assert_eq!(
+        rh_core::system::resample_entity_id(person),
+        h64_words(rh_core::system::TAG_RESAMPLE_ENTITY, &[1, 5]),
+        "the entity_id layout"
+    );
+}
