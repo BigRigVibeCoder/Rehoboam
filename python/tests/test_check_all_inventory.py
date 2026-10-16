@@ -142,10 +142,14 @@ REQUIRED_GATES = (
     "Virtual telemetry (S5 prototype)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
+    "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the "
+    "right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)",
     "check_all chain positive control: a run line mutated with || true must FAIL the lint "
     "(VER-SPR-008-TEST GAP-3)",
     "check_all chain: no run line ends in || true or || : (check_all_selftest lint; "
     "VER-SPR-008-TEST GAP-3)",
+    "check_all positive control: the old PWD-joined golden path under an absolute "
+    "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
     "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier "
     "(VER-SPR-008-TEST GAP-3)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
@@ -327,3 +331,9 @@ def test_the_verdict_fails_when_any_gate_failed() -> None:
     """GAP-3: a failed gate hidden by `|| true` still fails the tier; a clean chain passes."""
     assert check_all_selftest.verdict(or_true=False) == 0
     assert check_all_selftest.verdict(or_true=True) == 1
+
+
+def test_the_baseline_push_controls_hold_with_an_absolute_target_dir() -> None:
+    """VER-SPR-008-TEST DEF-3: no `$PWD/$GOLDEN` join; an absolute CARGO_TARGET_DIR works."""
+    assert check_all_selftest.abs_target(plant=False) == 0
+    assert check_all_selftest.abs_target(plant=True) == 1

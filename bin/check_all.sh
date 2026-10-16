@@ -249,9 +249,11 @@ forbidden_api_controls() {
 
 # Golden runs (SPR-008): the release rh-cli, its output directory and the N of "N threads" (at least 2).
 RH_CLI_RELEASE="$TARGET_DIR/release/rh-cli"
-GOLDEN="$TARGET_DIR/golden"
+mkdir -p "$TARGET_DIR/golden"
+# Absolute (VER-SPR-008-TEST DEF-3): $CARGO_TARGET_DIR may be absolute or relative, and some controls
+# run from another directory. Never join it to $PWD.
+GOLDEN="$(cd "$TARGET_DIR/golden" && pwd -P)"
 GOLDEN_THREADS=$(( $(nproc 2>/dev/null || echo 2) > 2 ? $(nproc 2>/dev/null || echo 2) : 2 ))
-mkdir -p "$GOLDEN"
 # DEF-2: the floor of the share of scheduler levels that hold two or more jobs (the smoke world
 # runs at about 7%: Environment and Activity every day; the gate names say 5%, keep them in step).
 PARALLEL_FLOOR=5
@@ -275,7 +277,7 @@ baseline_hand_edited_control() {
 # The push form of the C3 rule (VER-SPR-008 MAJ-1): a two-commit repository whose second commit, with
 # subject $1, adds the baseline; the gate runs over before..after there.
 baseline_push_control() {
-  local repo="$TARGET_DIR/rendered-fixtures/baseline_push" ladder="$PWD/$GOLDEN/smoke_yearly_t1.ladder"
+  local repo="$TARGET_DIR/rendered-fixtures/baseline_push" ladder="$GOLDEN/smoke_yearly_t1.ladder"
   local g=(git -C "$repo" -c user.name=check_all -c user.email=check_all@localhost -c commit.gpgsign=false)
   rm -rf "$repo" && mkdir -p "$repo" || return 1
   "${g[@]}" init -q && echo x > "$repo/other.txt" && "${g[@]}" add . && "${g[@]}" commit -qm base || return 1
@@ -573,6 +575,8 @@ run "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VE
 run "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier (VER-SPR-008-TEST GAP-3)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-true &&
 run "check_all chain: no run line ends in || true or || : (check_all_selftest lint; VER-SPR-008-TEST GAP-3)" "pass:NO OR-TRUE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh &&
 run "check_all chain positive control: a run line mutated with || true must FAIL the lint (VER-SPR-008-TEST GAP-3)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-true &&
+run "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)" "pass:ABSOLUTE TARGET DIR: both baseline push controls fail and pass for the right reason" "$PY" -I bin/check_all_selftest.py abs-target &&
+run "check_all positive control: the old PWD-joined golden path under an absolute CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)" "fail:a baseline push control behaved wrongly" "$PY" -I bin/check_all_selftest.py abs-target --plant-pwd-join &&
 # Tier 5 — golden vectors
 run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
