@@ -8,12 +8,20 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
   - the coupling rules (RT-2026-10-16): a read that enters a rate needs a bounded, sourced in-coupling with a
     neutral value, and every rate or mode read needs a synthetic forcing in [isolation] (docs/09 V-SF-22/23).
     Missing coupling detail is a warning on a draft spec and an error on a frozen one,
+  - the event vocabulary (SPR-011 ruling 11): every [[emits]] kind is a Registry verb whose emitted_by is the
+    spec's system, and every verb the Registry gives to a system with a spec is in that spec's [[emits]].
+    A warning on a draft spec, an error on a frozen one,
+  - parameter defaults (SPR-011 ruling 8): a [[params]] `default` equals the Registry's `defaults` entry, both ways,
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
 
 Run: python -I specs/systems/lint_odd.py            (lints everything; exit 1 on any error)
      python -I specs/systems/lint_odd.py --brief S5.daily_life
+     python -I specs/systems/lint_odd.py --extra-specs DIR --overlay FILE
+        DIR: more *.odd.toml specs, linted with the repository's (an id may not repeat), e.g. a world's own
+        systems (SPR-008: worlds/smoke/systems); FILE: a Registry overlay whose [systems] and [verbs] entries are
+        added to the Registry's (a name may not repeat), e.g. worlds/smoke/registry_overlay.toml
 """
 import re
 import sys
@@ -37,12 +45,28 @@ IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_
 SERIES = ("constant", "step", "sine", "ramp", "historical")
 
 
-def load():
+def load(extra_dirs=(), overlay=None):
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
+    if overlay is not None:                       # a world's own systems and verbs (SPR-011 ruling 11)
+        over = tomllib.loads(Path(overlay).read_text(encoding="utf-8"))
+        unknown = sorted(set(over) - {"systems", "verbs"})
+        if unknown:
+            raise SystemExit(f"overlay {overlay}: only [systems] and [verbs] may be overlaid, found {unknown}")
+        for sec in ("systems", "verbs"):
+            clash = sorted(set(over.get(sec, {})) & set(reg.get(sec, {})))
+            if clash:
+                raise SystemExit(f"overlay {overlay}: [{sec}] entries already in the Registry: {clash}")
+            reg.setdefault(sec, {}).update(over.get(sec, {}))
     specs = {}
-    for f in sorted(p for p in SPECS.glob("*.odd.toml") if not p.name.startswith("_")):   # _template is not a spec
+    files = sorted(p for p in SPECS.glob("*.odd.toml") if not p.name.startswith("_"))   # _template is not a spec
+    for d in extra_dirs:
+        files += sorted(p for p in Path(d).glob("*.odd.toml") if not p.name.startswith("_"))
+    for f in files:
         s = tomllib.loads(f.read_text(encoding="utf-8"))
-        specs[s.get("system", {}).get("id", f.stem)] = (f, s)
+        sid = s.get("system", {}).get("id", f.stem)
+        if sid in specs:
+            raise SystemExit(f"{f}: system {sid} already has a spec ({specs[sid][0]})")
+        specs[sid] = (f, s)
     plan03 = (ROOT / "docs" / "03_requirements.md").read_text(encoding="utf-8")
     plan09 = (ROOT / "docs" / "09_verification_and_validation.md").read_text(encoding="utf-8")
     req_ids = set(re.findall(r"^\| ([A-Z][A-Z0-9]*-\d+) \|", plan03, re.M))
@@ -190,6 +214,25 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
         for x in s.get("params", []):
             if not x.get("source"):
                 errs.append(f"{p}: parameter '{x.get('name')}' needs a source (a reference or 'design value')")
+        # defaults (SPR-011 ruling 8): the spec mirrors the Registry's defaults exactly, both ways
+        reg_defaults = sysdef.get("defaults", {})
+        for x in s.get("params", []):
+            n, d = x.get("name"), x.get("default")
+            if d is not None and reg_defaults.get(n) != d:
+                errs.append(f"{p}: parameter '{n}' default {d} differs from the Registry's ({reg_defaults.get(n)})")
+        spec_defaults = {x.get("name") for x in s.get("params", []) if "default" in x}
+        for n in sorted(set(reg_defaults) - spec_defaults):
+            errs.append(f"{p}: Registry default for '{n}' ({reg_defaults[n]}) is not mirrored as `default` in [[params]]")
+        # event vocabulary (SPR-011 ruling 11): [[emits]] against the Registry's [verbs], both ways
+        verbs = reg.get("verbs", {})
+        emitted = [e.get("kind") for e in s.get("emits", [])]
+        for k in emitted:
+            if k not in verbs:
+                strict.append(f"{p}: emits {k}, which is not a Registry verb ([verbs]; SPR-011 ruling 11)")
+            elif verbs[k].get("emitted_by") != sid:
+                strict.append(f"{p}: emits {k}, which the Registry gives to {verbs[k].get('emitted_by')}")
+        for k in sorted(v for v, d in verbs.items() if d.get("emitted_by") == sid and v not in emitted):
+            strict.append(f"{p}: the Registry gives verb {k} to {sid}, but [[emits]] does not declare it")
         # submodels earn their place
         for sm in s.get("submodels", []):
             ep = sm.get("earns_its_place_by", [])
@@ -259,14 +302,24 @@ def rust(sid, specs):
 
 
 def main() -> int:
-    reg, specs, req_ids, test_ids, adr_ids = load()
-    if len(sys.argv) == 3 and sys.argv[1] in ("--brief", "--rust"):
-        sid = sys.argv[2]
+    args, extra, overlay = sys.argv[1:], [], None
+    while args[:1] in (["--extra-specs"], ["--overlay"]) and len(args) >= 2:
+        if args[0] == "--extra-specs":
+            extra.append(args[1])
+        else:
+            overlay = args[1]
+        args = args[2:]
+    reg, specs, req_ids, test_ids, adr_ids = load(extra, overlay)
+    if len(args) == 2 and args[0] in ("--brief", "--rust"):
+        sid = args[1]
         if sid not in specs:
             print(f"no spec for {sid}; have {sorted(specs)}")
             return 1
-        print(brief(sid, specs, reg) if sys.argv[1] == "--brief" else rust(sid, specs))
+        print(brief(sid, specs, reg) if args[0] == "--brief" else rust(sid, specs))
         return 0
+    if args:
+        print(__doc__)
+        return 2
     errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids)
     for w in warns:
         print("WARN ", w)
@@ -286,6 +339,17 @@ def main() -> int:
         assert any(needle in e for e in caught), (needle, caught)
     if "M2.demography" in specs:
         assert any("also owned" in e for e in caught), caught
+    # self-check (SPR-011 ruling 11): a frozen spec emitting an unknown verb or another system's verb is an error;
+    # a draft one only warns
+    m2 = specs.get("M2.demography")
+    if m2 is not None:
+        for status, want_err in (("frozen", True), ("draft", False)):
+            probe_spec = dict(m2[1], system=dict(m2[1]["system"], status=status),
+                              emits=m2[1].get("emits", []) + [{"kind": "NOT_A_VERB"}, {"kind": "SUCCEED"}])
+            pe, pw = lint(reg, {"M2.demography": (m2[0], probe_spec)}, req_ids, test_ids, adr_ids)
+            for needle in ("emits NOT_A_VERB, which is not a Registry verb", "emits SUCCEED, which the Registry gives to M7.dynasty"):
+                assert any(needle in e for e in (pe if want_err else pw)), (status, needle, pe, pw)
+                assert not any(needle in e for e in (pw if want_err else pe)), (status, needle, pe, pw)
     print(f"  self-check (broken spec rejected): {len(caught)} errors, e.g. {caught[0]}")
     print(f"{'PASS' if not errs else 'FAIL'}: {len(specs)} system specs linted ({len(warns)} warnings)")
     return 1 if errs else 0
