@@ -39,32 +39,32 @@ version: 1.1.0
 ### T-01: Typed IDs
 - **Deliverable:** `PersonId`, `RegionId`, `EventId`, `MatchId`, `TimelineId` newtypes; no implicit integer conversion
 - **Acceptance:** compile-fail tests for mixing ID types
-- **Status:** [ ] not started
+- **Status:** [x] done, awaiting verification (5df3eb9)
 
 ### T-02: Keyed hash H
 - **Deliverable:** The keyed hash from ADR-0006 with fixed byte layout; documented endianness
 - **Acceptance:** Golden vectors: fixed keys → fixed outputs, committed
-- **Status:** [ ] not started
+- **Status:** [x] done, awaiting verification (c79f1ae)
 
 ### T-03: Counter RNG
 - **Deliverable:** ChaCha8 streams keyed by H, plus SplitMix64 for light uses; purpose registry API (purposes declared per system spec)
 - **Acceptance:** Streams are independent of call order (property test); known-answer vectors
-- **Status:** [ ] not started
+- **Status:** [x] done, awaiting verification (f43e08e)
 
 ### T-04: Branch salts and lineage
 - **Deliverable:** `branch_salt(t)` and salt lineage per `05.1` §6.9; `resample_on_fork` flag per purpose
 - **Acceptance:** V-DET-16 property test over random fork trees
-- **Status:** [ ] not started
+- **Status:** [x] done, awaiting verification (4eeaa54)
 
 ### T-05: Genealogical PersonId
 - **Deliverable:** PersonId derivation from parents and birth per ADR-0026, with deterministic collision rehash
 - **Acceptance:** Collision test with forced collisions; IDs stable across runs
-- **Status:** [ ] not started
+- **Status:** [x] done, awaiting verification (8293217)
 
 ### T-06: Statistical stream independence (RT-2026-10-16)
 - **Deliverable:** A test harness drawing from streams with distinct (system, purpose, entity, t, k) keys and sibling branch salts, including adjacent entities and adjacent t, with pairwise correlation, byte chi-square and runs statistics
 - **Acceptance:** V-DET-20: every statistic inside its 99.9% band, with no more exceedances than a binomial 99.9% allows across all pairs; runs in the PR tier in under 30 s (a larger sweep may run nightly)
-- **Status:** [ ] not started
+- **Status:** [x] done, awaiting verification (this commit)
 
 ## Verification assignment (Testers)
 

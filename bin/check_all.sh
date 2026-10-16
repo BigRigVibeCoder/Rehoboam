@@ -172,6 +172,7 @@ run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
 run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&
+run "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)" "pass:V-DET-20: 1000 pairs" cargo nextest run -p rh-ids --locked --test fork_trees --test stream_independence --no-capture &&
 run "Rust: doctests, incl. typed-ID compile-fail cases (cargo test --doc; SPR-002 T-01)" "pass:compile fail ... ok" cargo test --doc --workspace --locked &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 # Tier 5 — golden vectors
