@@ -42,6 +42,7 @@ REQUIRED_GATES = (
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
     "T-03)",
     "Golden vectors: Brass (M2)",
+    "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)",
     "Golden vectors: M4 basket and price rule",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
