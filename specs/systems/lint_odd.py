@@ -14,6 +14,14 @@ and it generates what people and code need from the same source:
 
 Run: python -I specs/systems/lint_odd.py            (lints everything; exit 1 on any error)
      python -I specs/systems/lint_odd.py --brief S5.daily_life
+
+A spec set outside the Registry (SPR-008 ruling 2: the smoke world's dummy systems never enter the real
+Registry) is linted, and its skeletons generated, with
+     python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml
+     python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --rust X1.smoke_weather
+The overlay's [systems] are added to the Registry's for this run only. Each overlay id is X-prefixed
+(`X<digits>.<name>`) and new to the Registry, and with an overlay every spec in --specs must be one of its
+systems, so a dummy spec can never stand in for a real one.
 """
 import re
 import sys
@@ -37,10 +45,27 @@ IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_
 SERIES = ("constant", "step", "sine", "ramp", "historical")
 
 
-def load():
+OVERLAY_ID = re.compile(r"^X\d+\.[a-z][a-z0-9_]*$")
+
+
+def apply_overlay(reg, overlay_path):
+    """Return the overlay's problems after adding its [systems] to ``reg`` (SPR-008 ruling 2)."""
+    overlay = tomllib.loads(Path(overlay_path).read_text(encoding="utf-8"))
+    problems = [f"{overlay_path}: only a [systems] table is allowed, not [{k}]" for k in overlay if k != "systems"]
+    for sid, sysdef in overlay.get("systems", {}).items():
+        if not OVERLAY_ID.match(sid):
+            problems.append(f"{overlay_path}: overlay system '{sid}' must be X-prefixed (X<digits>.<snake_name>)")
+        elif sid in reg.get("systems", {}):
+            problems.append(f"{overlay_path}: overlay system '{sid}' is already in the Registry")
+        else:
+            reg.setdefault("systems", {})[sid] = sysdef
+    return problems, set(overlay.get("systems", {}))
+
+
+def load(specs_dir=SPECS):
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
     specs = {}
-    for f in sorted(p for p in SPECS.glob("*.odd.toml") if not p.name.startswith("_")):   # _template is not a spec
+    for f in sorted(p for p in Path(specs_dir).glob("*.odd.toml") if not p.name.startswith("_")):   # _template is not a spec
         s = tomllib.loads(f.read_text(encoding="utf-8"))
         specs[s.get("system", {}).get("id", f.stem)] = (f, s)
     plan03 = (ROOT / "docs" / "03_requirements.md").read_text(encoding="utf-8")
@@ -238,7 +263,8 @@ def brief(sid, specs, reg):
 def rust(sid, specs):
     f, s = specs[sid]
     camel = lambda n: "".join(w.capitalize() for w in n.split("_"))
-    lines = [f"// GENERATED from specs/systems/{f.name} by lint_odd.py --rust. Do not edit; edit the spec.",
+    shown = f.resolve().relative_to(ROOT).as_posix() if f.resolve().is_relative_to(ROOT) else f.name
+    lines = [f"// GENERATED from {shown} by lint_odd.py --rust. Do not edit; edit the spec.",
              f'pub const SYSTEM_ID: &str = "{sid}";',
              f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
              "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
@@ -258,16 +284,49 @@ def rust(sid, specs):
     return "\n".join(lines)
 
 
+def parse_args(argv):
+    """Return (specs dir, overlay path or None, (mode, id) or None) from ``argv``, or raise ValueError."""
+    specs_dir, overlay, gen = SPECS, None, None
+    i = 0
+    while i < len(argv):
+        if argv[i] in ("--specs", "--overlay", "--brief", "--rust") and i + 1 < len(argv):
+            flag, value = argv[i], argv[i + 1]
+            if flag == "--specs":
+                specs_dir = Path(value)
+            elif flag == "--overlay":
+                overlay = value
+            else:
+                gen = (flag, value)
+            i += 2
+        else:
+            raise ValueError(f"unknown argument {argv[i]!r}; see the module docstring")
+    return specs_dir, overlay, gen
+
+
 def main() -> int:
-    reg, specs, req_ids, test_ids, adr_ids = load()
-    if len(sys.argv) == 3 and sys.argv[1] in ("--brief", "--rust"):
-        sid = sys.argv[2]
+    try:
+        specs_dir, overlay, gen = parse_args(sys.argv[1:])
+    except ValueError as e:
+        print(e)
+        return 2
+    reg, specs, req_ids, test_ids, adr_ids = load(specs_dir)
+    overlay_errs = []
+    if overlay is not None:
+        overlay_errs, overlay_ids = apply_overlay(reg, overlay)
+        overlay_errs += [f"{f.name}: system '{sid}' is not in the overlay {overlay}; a spec linted with an "
+                         "overlay must be one of its systems" for sid, (f, _) in specs.items() if sid not in overlay_ids]
+    if gen is not None:
+        sid = gen[1]
         if sid not in specs:
             print(f"no spec for {sid}; have {sorted(specs)}")
             return 1
-        print(brief(sid, specs, reg) if sys.argv[1] == "--brief" else rust(sid, specs))
+        if overlay_errs:
+            print("\n".join(overlay_errs))
+            return 1
+        print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
         return 0
     errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids)
+    errs = overlay_errs + errs
     for w in warns:
         print("WARN ", w)
     for e in errs:

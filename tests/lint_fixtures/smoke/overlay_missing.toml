@@ -1,0 +1,23 @@
+# Planted control (SPR-008 ruling 2): an overlay that lacks a spec's system must FAIL lint_odd.py:
+# a spec linted with an overlay must be one of its systems.
+
+[systems."X1.smoke_weather"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X2.smoke_harvest"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X3.smoke_vital"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X4.smoke_estate"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X5.smoke_polity"]
+fidelity_levels = ["F0"]
+params = {}
+

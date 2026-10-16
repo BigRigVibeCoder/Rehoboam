@@ -76,6 +76,9 @@ REQUIRED_GATES = (
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
+    "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 "
+    "ruling 2)",
+    "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)",
     "System specs (lint_odd)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
@@ -114,6 +117,7 @@ REQUIRED_GATES = (
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
+    "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
@@ -178,6 +182,9 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
+    "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
+    "ruling 2)",
+    "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
@@ -187,6 +194,8 @@ REQUIRED_GATES = (
     "exact distributions (SPR-003)",
     "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard "
     "(SPR-007 T-01..T-04)",
+    "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
+    "small-scale V-DET-01/02 (SPR-008 T-01)",
     "uv lock --check positive control: drifted lock must FAIL",
 )
 

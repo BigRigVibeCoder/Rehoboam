@@ -1,0 +1,29 @@
+# Registry overlay of the smoke world (SPR-008 ruling 2). The smoke world's dummy systems never enter
+# the real Registry (specs/manifest/registry_v0.toml): their ids live here, X-prefixed, and only the
+# smoke world's tools read this file (lint_odd.py --overlay, gen_skeletons.py --overlay, the smoke
+# runner's registration). lint_odd.py refuses an overlay id that is not X-prefixed or that the
+# Registry already has. The systems take no parameters.
+
+[systems."X1.smoke_weather"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X2.smoke_harvest"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X3.smoke_vital"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X4.smoke_estate"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X5.smoke_polity"]
+fidelity_levels = ["F0"]
+params = {}
+
+[systems."X6.smoke_chronicle"]
+fidelity_levels = ["F0"]
+params = {}
