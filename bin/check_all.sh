@@ -222,6 +222,23 @@ hash_golden_control() {
   "$PY" -I bin/gen_hash_golden.py --check --golden "$planted"
 }
 
+# Canonical-form golden control (SPR-013 T-09): the committed canonical golden file with one digest changed.
+canonical_golden_control() {
+  local planted=target/rendered-fixtures/stale_canonical_v0.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^digest /s/^digest .*/digest 00000000000000000000000000000000/' specs/stream/golden/canonical_v0.txt > "$planted" || return 1
+  "$PY" -I specs/stream/canonical_v0.py --check --golden "$planted"
+}
+
+# Channel-C float control (SPR-013 T-11): the channel-C DDL with closed_by_seq made a DOUBLE; the self-test must FAIL.
+channel_c_float_control() {
+  local planted=target/rendered-fixtures/channel_c_float_column.sql
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/^    closed_by_seq      UBIGINT   NOT NULL,/    closed_by_seq      DOUBLE    NOT NULL,/' specs/stream/channel_c_v0.sql > "$planted" || return 1
+  grep -q 'closed_by_seq      DOUBLE' "$planted" || { echo "control not planted: closed_by_seq not found in channel_c_v0.sql"; return 1; }
+  "$PY" -I specs/stream/selftest_channel_c.py --ddl "$planted"
+}
+
 # Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, holding exactly
 # that API, which must be reported under its own rule with its own token (tests/lint_fixtures/README.md).
 # Each entry is file:rule:token; a token may itself contain "::".
@@ -617,6 +634,8 @@ run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
 run "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden --check; SPR-007 T-01)" "pass:OK:" "$PY" -I bin/gen_hash_golden.py --check &&
 run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:" hash_golden_control &&
+run "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 --check; SPR-013 T-09)" "pass:OK:" "$PY" -I specs/stream/canonical_v0.py --check &&
+run "canonical_v0 positive control: a stale golden digest must FAIL" "fail:STALE:" canonical_golden_control &&
 run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
@@ -626,6 +645,8 @@ run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selft
 # Tier 6/8 — determinism-style and contract prototypes
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
 run "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip (SPR-011 ruling 13)" "pass:CHANNEL A v0: PASS" "$PY" -I specs/stream/selftest_channel_a.py &&
+run "World Stream v0 channel-C segment schema: no floats, header, order, sealed round trip, digests, life_ends twin (SPR-013 T-11)" "pass:CHANNEL C v0: PASS" "$PY" -I specs/stream/selftest_channel_c.py &&
+run "channel-C self-test positive control: a float column in the DDL must FAIL" "fail:CHANNEL C v0: FAIL" channel_c_float_control &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py
 status=$?
 chain_done=1

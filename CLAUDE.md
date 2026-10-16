@@ -65,6 +65,8 @@ cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler stati
 python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
+python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
+python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
 python -I specs/systems/lint_odd.py
