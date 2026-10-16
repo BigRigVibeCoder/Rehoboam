@@ -1,6 +1,6 @@
 # Your decisions, in one place
 
-*Updated 2026-10-16, after your rulings (D28: the saga engine). The SPR items below are unchanged. Full reasoning is in [`12_open_questions.md`](12_open_questions.md) and [`06_adr/`](06_adr/README.md). Every ruling is recorded in [`decisions-log.md`](decisions-log.md).*
+*Updated 2026-10-16 (afternoon): D30 to D36, the P1a plan, wait for G0. Earlier: your rulings (D28: the saga engine). The SPR items below are unchanged. Full reasoning is in [`12_open_questions.md`](12_open_questions.md) and [`06_adr/`](06_adr/README.md). Every ruling is recorded in [`decisions-log.md`](decisions-log.md).*
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
@@ -9,6 +9,13 @@
 | ID | Question | Recommendation (default if unanswered) | Needed by |
 |---|---|---|---|
 | D29 | **Which image provider, and what monthly budget?** The graphic chronicle renders storyboard panels in batch after a saga is compiled (`05.11` §6; `12` Q24). | **A serverless API, in batch, no GPU VM.** Choose among fal.ai, Replicate and Together AI (FLUX.1 [dev] or SDXL) by a two-week trial on the same 50 panels at the start of P3. About $0.005–0.015 per panel, ≈ $1 per season (estimate, verify at P3). Default ceiling: $10 a month. Confidence: medium | Start of P3 (nothing earlier depends on it) |
+| D30 | **Approve the P1a plan and the walking skeleton?** `CODEX/05_PROJECT/PRJ-002` plans P1a as 22 sprints (SPR-011 to SPR-032). `SPR-011` is the walking skeleton in full: manifest → founders → monthly deaths → events → the Parquet chronicle and World Stream v0 → `rh-cli tail` → a trivial sifter pattern → journal replay, on `solo`, `household` and `hamlet`. It is about 9 agent-days, so it runs as three sprints (SPR-011, -012 and -013) under one plan. It is C3: four new crates, the first real golden worlds, and `parquet` as a plane-A dependency. | **Approve**, as three sprints. 75% | G0 |
+| D31 | **Rung 0 in P1a: ageing and death, without food or minute-level daily life?** The `docs/11` ladder puts "a household's food" and "every minute authoritative" at rung 0, but food is P1b and `minutes` is Later. `solo.yaml` names systems P1a does not build; the run header lists them as not built and skips them (SPR-011 rulings 2 and 3). | **Yes**: record it in `docs/11` and PRJ-001, rather than let rung 0 look incomplete. 75% | G0 |
+| D32 | **Withdraw the "P1.0 runs at 100k" claim?** ADR-0028, `docs/12` Q12 and V-SCALE-01 predate ADR-0035, which made 100k and 1M optional. P1.0 is tested at N = 1, 5 and 60; 10k comes with P1.14 (SPR-011 ruling 19). | **Yes**: an ADR-0028 consequence and two document edits. 80% | G0 |
+| D33 | **Move `S5.daily_life` F1 (P1.18) and M1 F1 (P1.8) to P1b?** S5 F1 reads M4 and M6 columns, which have no owner in P1a, and registration refuses a read without an owner. ADR-0031 had placed S5 in P1b. M1 F1's first consumer is the fugitives of P1b (PRJ-002 rulings M-4 and M-5). | **Yes for S5** (70%); **yes for M1 F1** (60%) | G0 |
+| D34 | **Make G1a's tests runnable in P1a?** As written, some G1a tests need things P1a cannot have: `val_khor` (V-INV-12), occupation (V-DATA-04), M5 and M8 deaths (V-INV-03), and a 100k world with a hydration bubble (V-PERF-09). `docs/11` and `docs/09` also list two different G1a sets. Proposal (PRJ-002 ruling M-7): P1a variants of those four tests, and one G1a list. The numbers are fixed before the phase, as `docs/11` requires. | **Yes**. 75% | G0 |
+| D35 | **P1a inherits titles and claims only, not property?** P1.7 says "titles and property", but property belongs to M4 (P1b) (PRJ-002 ruling M-8). | **Yes**: property inheritance comes with M4 F0 in P1b. 70% | G0 |
+| D36 | **Approve the `T1.minds` and `M7.dynasty` specs (C2)?** Draft PR #32: minds v0 (stress and breaks under Laws 2 and 3, grief damping, relic thoughts) and succession (immediate succession, finite seats, vocations, no count controller). Under the Architect's review; the briefs are in the PR. | Read the two briefs when the Architect reports the review done | G0 |
 
 ## Decided on 2026-10-16
 

@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [PRJ-001, BCK-002, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.3.0
 ---
 
 > **BLUF:** The development backlog, rolling wave. P0 is planned in full as SPR-001 to SPR-010 and is unchanged by ADR-0035 (the saga engine). P1a "Bloodlines" is sketched as items. Later phases are listed by their `docs/11` work packages. Priorities follow GOV-007 §4. The Architect re-plans at every gate.
@@ -24,11 +24,11 @@ version: 1.2.0
 | SPR-002 | P0.2 | `rh-ids`: IDs, keyed hash, counter RNG, salts (**closed** 2026-10-16, `VER-SPR-002`) | 001 | C3 (machinery) | P1 |
 | SPR-003 | P0.3 | Samplers with golden vectors (**closed** 2026-10-16, `VER-SPR-003`) | 002 | C3 (machinery) | P1 |
 | SPR-004 | P0.8 | Registry v0 loader and ownership lint (**closed** 2026-10-16, `VER-SPR-004`) | 001 | C2 | P1 |
-| SPR-005 | P0.4a | `rh-core` time, pulses, phases, `SystemModel`, `AccessSpec`, scheduler | 002, 004 | C3 (machinery) | P1 |
-| SPR-006 | P0.4b | Agenda, timers, lifecycle queues, event bus, invariants | 005 | C3 (machinery) | P1 |
-| SPR-007 | P0.5 | Plane hashes, keyframes, journal | 005; T-02 006 | C3 (machinery) | P1 |
-| SPR-008 | P0.6 | Golden-run CI, the `smoke` world, bisect tool | 006, 007 | C3 (machinery) | P1 |
-| SPR-009 | P0.7 | Benchmark harness and regression gate | 007, 008 | C1 | P2 |
+| SPR-005 | P0.4a | `rh-core` time, pulses, phases, `SystemModel`, `AccessSpec`, scheduler (**closed** 2026-10-16, `VER-SPR-005`) | 002, 004 | C3 (machinery) | P1 |
+| SPR-006 | P0.4b | Agenda, timers, lifecycle queues, event bus, invariants (**closed** 2026-10-16, `VER-SPR-006`) | 005 | C3 (machinery) | P1 |
+| SPR-007 | P0.5 | Plane hashes, keyframes, journal (**closed** 2026-10-16, `VER-SPR-007`) | 005; T-02 006 | C3 (machinery) | P1 |
+| SPR-008 | P0.6 | Golden-run CI, the `smoke` world, bisect tool (in progress) | 006, 007 | C3 (machinery) | P1 |
+| SPR-009 | P0.7 | Benchmark harness and regression gate (in progress; bench 4 moved to the first P1a field sprint, director 2026-10-16) | 007, 008 | C1 | P2 |
 | SPR-010 | P0.4 (DET-3) | `rh-core::fixed`: fixed-point and money types (gap found by the SPR-001 audit; approved 2026-10-16; **closed** 2026-10-16, `VER-SPR-010`) | 001 | C3 (machinery) | P1 |
 
 **Approvals:** SPR-001 approved 2026-10-16; SPR-002 to SPR-009 approved as a batch on 2026-10-16; SPR-010 approved 2026-10-16. The Architect merges every sprint after its Tester pass and audit (GOV-005 §6, director's ruling 2026-10-16); the director approved the plans. The director no longer merges the C3 sprints that change the determinism machinery (GOV-005 §6).
@@ -37,26 +37,13 @@ version: 1.2.0
 
 **Gate G0** is assembled by the Architect as `VER-G0` once SPR-001 to SPR-010 are closed.
 
-## 2. Next phase: P1a "Bloodlines" (sketched; written up as sprints at G0)
+## 2. Next phase: P1a "Bloodlines" (planned; awaiting the director at G0)
 
-Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the templated chronicle reads as a family history (G1a).
+The proposed plan is `PRJ-002` (22 sprints, SPR-011 to SPR-032), with the walking skeleton written up in full as `SPR-011` (to be issued as SPR-011, -012 and -013 under its ruling 1). The director decides at G0 (`docs/decisions_pending.md` D30 to D35). Once approved, `PRJ-002` §2 replaces this section.
 
-| Item | WP | Notes |
-|---|---|---|
-| Walking skeleton on `solo` | P1.0 | Manifest → worldgen stub → ledger → timers → events → World Stream v0 → `rh-cli tail` → replay |
-| Worldgen-lite | P1.1a | Regions, a few settlements, routes; the full Azgaar-style generation waits for P4 |
-| M2 demography F1 (rung-0 slice, then births, partnering, households and kinship for rungs 1–2) | P1.3 | Spec exists (rung-0 slice); keep Brass; lean |
-| M7 succession and dynasts F1 (moved up from P1b) | P1.7 | Needs a spec: `M7.dynasty` (§3). Hazards at the reference institutional state until M6-lite (P1b) |
-| Minds v0 (moved up from P3a) | P3.2a | Needs a spec: `T1.minds` (§3). Traits, ambition, relationships, opinions; IAUS; same-instant agenda; stress and mental breaks (V-SAGA-16) |
-| Event emission, causal edges, Chronicle Writer (moved up from P1b) | P1.9 | Typed events, anchored snapshots, Parquet; **the cinematic event envelope** (ADR-0035 §7a, `05.2` §4.1a; V-SAGA-15). **Note for P0:** SPR-006's event schema (`EventDraft`) must leave room for event roles (actor, target, witnesses, instrument), anchored snapshots and typed edges, including the Registry's motive edge types. SPR-006 is approved and is not changed; its implementer keeps the schema open for these |
-| Family annals v0 | P2.8a | Templates in `python/` (plane C); the G1a family-history read |
-| World Stream v1 (moved up from P1b) | P1.17 | Channels, segments, cursors, materializer; V-STR-01–05 |
-| `S5.daily_life` F1 | P1.18 | Virtual telemetry; `rh-cli where/who`; spec exists (`specs/systems/S5.daily_life.odd.toml`) |
-| M9 harness v0: isolation harness and the demography and dynasty bands | P1.10 | V-SF-22 for M2, M7, `T1.minds` |
-| Effect language v0 | P1.15 | Succession-law eligibility and ordering |
-| Household food for `solo` | P1.4, P1.5a | Needs specs: `M3.agriculture` (F0/F1), `M4.economy` (F0: stores, no markets) |
-| Rung 1 `household`, rung 2 `hamlet` manifests | P1.11 | `uz_job` is the rung-2 world |
-| Engine-purity lint rule | BCK-002 A-14 | V-INSP-05; EVO-4 |
+Corrections to the earlier sketch here:
+- **Household food** (P1.4, P1.5a) and **the rung manifests as P1.11** were listed in P1a. `docs/11` puts P1.4, P1.5a and P1.11 in P1b, and the rung-1 and rung-2 manifests are BCK-002 A-06 (Architect).
+- **`S5.daily_life` F1 (P1.18)** reads M4 and M6 columns that have no owner in P1a; `PRJ-002` ruling M-4 proposes moving it to P1b.
 
 ## 3. Specs to write before their sprints (warnings from `lint_odd.py`)
 
