@@ -360,3 +360,63 @@ Method as before: `git archive` of `e6e03d2`, a fresh copy and target directory 
 ### 10.5 Not run in this pass
 
 The sampler statistics, determinism builds and conversion checks (no code change since `743ce83`; section 8.1 holds); `CLIPPY_CONF_DIR` or a `clippy.toml` above the repository root (local to a machine); a `float-api` ground truth from rustdoc JSON.
+
+## 11. Final regression at `911ef6628864f2a55ad7bdcfe3856ad5a39aaa52` (rebased onto `main` `230b418`, 137 checks)
+
+**Verdict: PASS.** No open defect, and no open gap that I can reproduce. `bin/check_all.sh` is 137 PASS, 0 FAIL on a clean `git archive` of the head. Every mutation in my set that the sprint's gates are meant to stop turns the tier red; the four that stay green are the documented ones. The rebase changed nothing in the sampler code or the golden file, and nothing but conflict resolutions and the `[lints]` fixture adaptation apart from `289aa2c`.
+
+### 11.1 `bin/check_all.sh`
+
+137 PASS, 0 FAIL, `rc=0`, tree clean afterwards. At `e6e03d2` the count was 126. The 11 added checks are 7 from SPR-004 (manifest schema, ownership lint and its control, schema-diff control, V-WC-04 parity and its two controls), 2 `lint_arch` controls from SPR-004 (plane A → `rh-manifest`, `rh-manifest` relabelled) and the 2 GAP-13 controls (a `clippy.toml` reached through a symlinked member; a symlinked workspace member). Comparing the lists of check names between the two runs, **no check present at `e6e03d2` is absent at `911ef66`**.
+
+### 11.2 Rebase diff
+
+`git range-diff 2a2f9a9..ee83a63 230b418..911ef66` pairs all 23 old commits with 23 new ones, plus the two new ones (`289aa2c`, `911ef66`). 16 pairs are identical (`=`). The 7 marked changed (`!`) are the commits that touch files SPR-004 also touched; every difference in them is one of these:
+1. merged lists: `Cargo.lock` (both crates' entries), the pinned-label docstring and dict of `bin/lint_arch.py` (`rh-manifest` and `rh-sample` both pinned), the crate enumerations in `05.0`, `05.10`, `13` (both `rh-sample` and `rh-manifest` named; I counted the mentions), `tests/lint_fixtures/README.md` and the `check_all.sh` inventory rows (SPR-004 rows and SPR-003 rows both present);
+2. context lines of the SPR-004 rows around the SPR-003 ones in the same files.
+
+Beyond that I checked the file level: of the 133 files the sprint alone touched, 2 differ between `e6e03d2` and `911ef66`: one is explained by `289aa2c`, the other is this report (section 10 landed after `e6e03d2`). Of the 11 files both the sprint and `main` touched, no sprint or `main` line is lost except where it was reworded into a merged list (listed above) or rewritten by `289aa2c` (`bin/lint_arch.py`: the config walker; `python/tests/test_lint_arch.py`: its tests). `911ef66` itself adds six `[lints] workspace = true` fixture manifests for SPR-004's `plane_a_to_manifest` and `relabelled_manifest` controls and updates the sprint file's commit hashes and version (1.1.3). Nothing else.
+
+### 11.3 The sampler code, golden vectors and port
+
+| Check | Result |
+|---|---|
+| Non-comment lines of all ten files in `crates/rh-sample/src`, `743ce83` vs `911ef66` | identical |
+| `tests/golden/samplers_v1.txt` | byte-identical to `743ce83` |
+| Independent Python port against the golden file | 136 of 136 lines, draw counts included |
+| Port against a probe built from this head, 1,200 random parameter sets | 0 mismatches (720 samples each, hash and draws) |
+| Builds at opt-level 0, 1 and 3, and with fat LTO, 27 cases | 0 differences; the hashes equal those I recorded at `743ce83` |
+
+### 11.4 Mutations (66 trials; 65 valid)
+
+| Group | Trials | Result at `911ef66` |
+|---|---|---|
+| The 13 of section 3.2 (B06, B09 to B11, C07, C08 and its six spellings, C09, D02, D03, D05, E02) | 17 | all red at the intended gate; B05 (`libm::fma`) green by ruling |
+| GAP-9, the `lints` rule (H01; no `[lints]` table; misspelt `[lint]`; `lints.workspace` in `[package]`; a second plane-A crate with its own table; root `[workspace.lints]` override; `-A` in `.cargo/config.toml`) | 8 | red; the two equivalent spellings (`lints.workspace = true`, `lints = { workspace = true }`) green as they should be |
+| GAP-10, the pin rule (H03 to H09: target table, `features = ["arch"]`, `unstable`, `force-soft-floats`, build-dependency, table form) | 7 | red at `lint_arch`; the renamed second edge (H05) is stopped by `cargo deny`, as before |
+| GAP-11 and 11b (private alias, associated type, generic alias, alias in a macro body, `use … as`, nested `use`, glob `use`, module rename, alias by path) | 12 | red at `lint_forbidden`; the trait-method residual (A05) green, as documented |
+| GAP-12 (crate-local `clippy.toml` and `.clippy.toml`, one in `src/`, a symlinked file, a hard link, `[env] CLIPPY_CONF_DIR` into a real directory and into `node_modules/c`, the allow-listed fixture reached by a symlink, a crate moved into the allow-listed fixture directory) | 12 | red at `clippy-config`. `[env] CLIPPY_CONF_DIR` into `target/c` is red at the std-`ln` clippy control (the root `target/` is still pruned), as in section 10. The `node_modules/c` case, which was stopped only by that control in section 10, is now red at `lint_arch`. |
+| **GAP-13**: a symlinked member into `node_modules/` (the section 10 route, N01); into `target/` (N02); into an ordinary directory (N07); a symlinked member with no config at all (N08); the whole `crates/` directory a symlink into `node_modules/crates` with a parent-level config (N06); a `clippy.toml` in `crates/` (the parent of every member, N03) and a `.clippy.toml` there (N04); a root `.clippy.toml` beside the root file (N05); a hard link to the root file (N10) | 9 | **all red at `lint_arch`** (`clippy-config`, or the symlinked-member rule). The route that passed all 126 checks in section 10 is closed. |
+| N09: a member in a directory named `target` | 1 | not claimed: my edit to the workspace `members` list made `cargo fmt` fail before any gate ran |
+
+Total: 61 red at the intended gate, 4 green as documented (B05, A05, and the two equivalent `[lints]` spellings), 1 invalid (N09).
+
+### 11.5 What I could not close, and what remains by design
+
+1. **Residuals the Architect accepted:** the textual limits of `float-api` (a float in a trait method signature, a projection, a macro-passed type, an opaque `impl Trait` return), and `libm::fma` allowed. All reproduce as documented.
+2. **A dependency between controls (recorded in the audit):** an `[env] CLIPPY_CONF_DIR` entry pointing under the root `target/` is stopped by the std-`ln` clippy control, not by `clippy-config`; the control runs under the same cargo configuration. If the control ever ran from another working directory, that route would reopen.
+3. **Not tried:** a `clippy.toml` above the repository root, `~/.cargo/config.toml`, `RUSTC_WRAPPER`, and the rustdoc-JSON ground truth for `float-api`; all local to a machine, not to the repository.
+4. **Cross-platform:** unchanged from section 7: only GitHub's runner is a second machine. I did not look at CI for this head; the Architect reports it separately.
+
+### 11.6 Summary of the whole report
+
+| Item | Final state |
+|---|---|
+| T-00 float zone | PASS |
+| T-01 binomial, T-02 Poisson, T-03 normal, T-04 gamma and beta | PASS |
+| T-05 no drift; V-DET-09 | PASS |
+| DEF-1 | closed (section 8.3) |
+| GAP-1 to GAP-6, GAP-8, GAP-9 to GAP-13, GAP-11b | closed, with controls; GAP-5(a) by ruling |
+| GAP-7 | in the crate docs; `05.1` §6 item 3 per the Architect's audit |
+| OBS-1 to OBS-4 | observations, no action |
+| Open defects | none |
