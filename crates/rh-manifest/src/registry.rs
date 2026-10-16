@@ -56,7 +56,7 @@ impl fmt::Display for Number {
 
 /// Inclusive parameter bounds `[lo, hi]`, written as a two-element TOML array.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(from = "[Number; 2]", into = "[Number; 2]")]
+#[serde(try_from = "Vec<Number>", into = "[Number; 2]")]
 pub struct Bounds {
     /// Lowest allowed value.
     pub lo: Number,
@@ -64,9 +64,18 @@ pub struct Bounds {
     pub hi: Number,
 }
 
-impl From<[Number; 2]> for Bounds {
-    fn from([lo, hi]: [Number; 2]) -> Self {
-        Bounds { lo, hi }
+impl TryFrom<Vec<Number>> for Bounds {
+    type Error = String;
+
+    /// Exactly two elements: a third is an error, never dropped (SPR-004 DEF-5).
+    fn try_from(v: Vec<Number>) -> Result<Self, String> {
+        match v.as_slice() {
+            [lo, hi] => Ok(Bounds { lo: *lo, hi: *hi }),
+            _ => Err(format!(
+                "bounds must be [lo, hi], found {} elements",
+                v.len()
+            )),
+        }
     }
 }
 
@@ -81,6 +90,18 @@ impl Bounds {
     #[must_use]
     pub fn contains(&self, v: f64) -> bool {
         self.lo.as_f64() <= v && v <= self.hi.as_f64()
+    }
+}
+
+/// Deserialises a two-element array, refusing any other length (SPR-004 DEF-5).
+fn exactly_two<'de, D: serde::Deserializer<'de>>(d: D) -> Result<[i64; 2], D::Error> {
+    let v: Vec<i64> = Vec::deserialize(d)?;
+    match v.as_slice() {
+        [lo, hi] => Ok([*lo, *hi]),
+        _ => Err(serde::de::Error::custom(format!(
+            "expected [min, max], found {} elements",
+            v.len()
+        ))),
     }
 }
 
@@ -171,7 +192,8 @@ pub struct Basket {
 pub struct Template {
     /// Systems enabled by default.
     pub default_systems: Vec<String>,
-    /// Supported historical horizon in years, `[min, max]`.
+    /// Supported historical horizon in years, `[min, max]` (exactly two elements).
+    #[serde(deserialize_with = "exactly_two")]
     pub horizon_years: [i64; 2],
     /// Whether the template starts in the modern era.
     pub modern: bool,
@@ -756,6 +778,28 @@ mod tests {
             Registry::from_toml(unknown_field),
             Err(RegistryError::Parse(_))
         ));
+    }
+
+    /// DEF-5: a third element is an error, not silently dropped.
+    #[test]
+    fn pairs_have_exactly_two_elements() {
+        let reg = std::fs::read_to_string(registry_path()).unwrap();
+        let three = reg.replace(
+            "harvest_sigma = [0.04, 0.35]",
+            "harvest_sigma = [0.04, 0.35, 99.0]",
+        );
+        assert!(
+            matches!(Registry::from_toml(&three), Err(RegistryError::Parse(m)) if m.contains("3 elements"))
+        );
+        let horizon = reg.replace(
+            "horizon_years = [50, 3000]",
+            "horizon_years = [50, 3000, 9]",
+        );
+        assert!(
+            matches!(Registry::from_toml(&horizon), Err(RegistryError::Parse(m)) if m.contains("3 elements"))
+        );
+        let one = reg.replace("harvest_sigma = [0.04, 0.35]", "harvest_sigma = [0.04]");
+        assert!(Registry::from_toml(&one).is_err());
     }
 
     #[test]
