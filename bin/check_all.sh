@@ -130,7 +130,7 @@ forbidden_api_controls() {
 run "Required tools present" pass require_tools &&
 # Tier 1 — static and contract lints (fastest first)
 run "Document index is current (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
-run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml &&
+run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml .github/workflows/nightly.yml &&
 run "Python: uv.lock matches pyproject.toml (uv lock --check)" pass uv lock --check --offline --project python &&
 run "uv lock --check positive control: drifted lock must FAIL" "fail:needs to be updated" uv lock --check --offline --project tests/lint_fixtures/uv_drift &&
 run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pyproject.toml --no-cache . &&
