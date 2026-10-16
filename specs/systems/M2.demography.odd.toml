@@ -246,7 +246,7 @@ when = "apply_death leaves no ledger row with alive = 1: emitted once, right aft
 
 [scales]
 spatial = "person"
-temporal = "Month pulse; intra-month death times as timers at the start of a keyed day (the Day-pulse instant; amended ruling 7)"
+temporal = "Month pulse; each death a timer at a day start (a Day-pulse instant) inside the month, never the Month-pulse instant (amended ruling 7)"
 extent = "every living person in the ledger (on the map; there is no off-map ledger at rung 0)"
 restart = "Owned columns (ledger and life-course log) plus the pending death timers in the agenda restore the system exactly. K is a pure function of the compiled e0 and is recomputed at construction, never stored"
 

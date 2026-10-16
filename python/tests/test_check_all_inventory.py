@@ -176,6 +176,10 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
+    "lint_odd applies control: a sender's payload matching [[applies]] field for field passes "
+    "(REV-P1a section 7)",
+    "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, "
+    "must FAIL (REV-P1a section 7)",
     "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 "
     "ruling 11)",
     "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
