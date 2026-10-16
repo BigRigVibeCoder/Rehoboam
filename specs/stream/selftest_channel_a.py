@@ -190,7 +190,7 @@ def write_segments(con: duckdb.DuckDBPyConnection, run: Run, root: Path) -> list
             con.execute(f"COPY {table} TO '{d / table}.parquet'")
         con.execute(
             f"INSERT INTO segment SELECT 0, 'A', {year}, '{FORMAT}', min(seq), max(seq), count(*), "
-            "min(tick), max(tick), 'test', '0.1.0', '\\x00'::BLOB, 1, ['M2.demography'], "
+            "min(tick), max(tick), 'test', '0.2.0', '\\x00'::BLOB, 1, ['M2.demography'], "
             f"['M4.economy'], '\\x00'::BLOB FROM record_header WHERE {span}"
         )
         con.execute(

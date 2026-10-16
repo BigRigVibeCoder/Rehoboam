@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS event (                -- plane A
     event_id      UBIGINT   NOT NULL,
     tick          BIGINT    NOT NULL,          -- SimTime (i64 minutes); always the emission tick
     verb_id       USMALLINT NOT NULL,          -- FK Registry verbs
-    act_classes   UINTEGER  NOT NULL,          -- bitset over Registry act classes
+    act_classes   UBIGINT   NOT NULL,          -- bitset: bit i = Registry [act_classes].ids[i]; 64 classes at most (the
+                                               -- Registry has 34; more than 64 is a C2 change of this column)
     place_id      UINTEGER,
     magnitude     INTEGER   DEFAULT 0,
     tellability   UTINYINT  NOT NULL,          -- Registry prior (0..255), NOT the retroactive significance (plane C)

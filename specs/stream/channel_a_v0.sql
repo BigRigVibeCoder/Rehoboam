@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS event (                -- kind 2 EVENT (schema.sql ev
     event_id     UBIGINT   NOT NULL,               -- the timeline's event counter (SPR-006; ruling 12), not (day << 24) | seq
     phase        UTINYINT  NOT NULL,               -- 05.1 §4.2 phase index of the emission
     verb_id      USMALLINT NOT NULL,               -- verb.verb_id
-    act_classes  UBIGINT   NOT NULL,               -- the verb's act classes (64 bits: the Registry has 34 classes)
+    act_classes  UBIGINT   NOT NULL,               -- the verb's act classes, bit i = [act_classes].ids[i]; 64 classes at most (34 today)
     place_id     UINTEGER,                         -- NULL until places exist (P1.1a)
     magnitude    INTEGER   NOT NULL DEFAULT 0,
     tellability  UTINYINT  NOT NULL,               -- the verb's Registry prior at emission

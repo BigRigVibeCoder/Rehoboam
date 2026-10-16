@@ -5,7 +5,7 @@
 #   the World Stream, replay, forks and virtual telemetry.
 # Later rungs add people and systems one at a time (docs/11_roadmap.md, "Complexity ladder").
 manifest_version: 0
-registry_version: "0.1.0"
+registry_version: "0.2.0"
 world:
   id: solo
   display_name: "Solo test world"

@@ -5,7 +5,7 @@
 # (person.spouse = 0), and the template's other systems are listed as not built in the run header (SPR-011 ruling 3).
 # M2 takes its Registry defaults (e0 = 30, beta = 1; SPR-011 ruling 8): systems sets nothing.
 manifest_version: 0
-registry_version: "0.1.0"
+registry_version: "0.2.0"
 world:
   id: household
   display_name: "One household"
