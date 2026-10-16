@@ -145,7 +145,7 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | ID | Test | Method | Gate |
 |---|---|---|---|
 | V-SIFT-01 | Twin equivalence (SIFT-3, SIFT-8) | For each pattern, run the live automaton and the DuckDB SQL twin on recorded chronicles and clustered fixtures, under every declared combination of `selection`, `on_complete` and `dedupe` | Identical match sets, including bindings and event IDs |
-| V-SIFT-02 | Clustered fixtures | A generator with actors that have about 20 interaction partners each, symmetric ties (A acts on B and B on A) and repeated interactions over decades. Adversarial cases: `unless` interleavings, deaths mid-pattern, window boundaries, several events in one tick. Uniform random fixtures are not accepted | Fixtures used by V-SIFT-01, V-SIFT-03 and V-SIFT-04 |
+| V-SIFT-02 | Clustered fixtures | A generator with actors that have about 20 interaction partners each, symmetric ties (A acts on B and B on A) and repeated interactions over decades. Adversarial cases: `unless` interleavings, an event that both completes a match and matches an `unless` (it completes), deaths of tolerant and non-tolerant roles mid-pattern, window boundaries, several events in one tick. Uniform random fixtures are not accepted | Fixtures used by V-SIFT-01, V-SIFT-03 and V-SIFT-04 |
 | V-SIFT-03 | Firing-rate budget (SIFT-8) | Count each pattern's completions per century per 100k persons on the reference ensembles | ≤ 3× the declared budget |
 | V-SIFT-04 | precision@K (SIFT-7, SIFT-8) | Precision of each pattern's top-K matches per era against your labelled story-worthy set | Reported per pattern and per pack at each phase gate. An added or LLM-proposed pattern must not lower its pack's precision@K |
 | V-SIFT-05 | Anchoring lint (SIFT-1) | `specs/sifting/lint_patterns.py` and the pattern compiler: closed key set, declared typed attributes, every state read anchored | Bare or undeclared reads rejected |
@@ -154,6 +154,10 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | V-SIFT-08 | Significance and retention (SIFT-5, SIFT-6) | Recompute per era twice from the same events and versions; audit the retention walks | Identical components (`narrative_hash` equal). Walks follow only `contingent` edges plus the single top `motivated_by` edge, stop at root kinds or depth 12, and never touch plane A |
 | V-SIFT-09 | No LLM in detection (SIFT-7) | Dependency check on `rh-sifter` and the SQL twins | No gateway dependency |
 | V-SIFT-10 | Throughput | `bench/sifter_throughput` (V-PERF) | No regression |
+| V-SIFT-11 | Mode equivalence under state drift | Anchored attributes change between stages and after completion; the live sifter and the SQL twin run on the same chronicle. Positive control: a harness-only unanchored read (never a DSL feature) | Identical match sets; the unanchored control differs (Winnow's incremental and compiled modes diverge in exactly this way, R12 §19) |
+| V-SIFT-12 | Multi-stage conformance | Winnow's published three-stage trace (Kreminski et al. 2021, Fig. 1), re-authored as a fixture, under `all` + `keep` | Exactly the published match; the death or departure of the guest kills every open partial bound to them; the twin agrees |
+| V-SIFT-13 | Partial-match bound | Peak live partials per pattern on the clustered 10M-event chronicle | Within the `08` bound; the pool plateaus (no monotone growth over the last half of the run). Winnow's windowless pool grew to 21,269 with no plateau |
+| V-SIFT-14 | Why-not | For each expected-but-missing fixture match, query the per-clause twin views | The first failing clause is named (after Felt's `whyNot`) |
 
 ### 2.5 Hydration and multi-resolution consistency (V-HYD; `05.2` §3.6)
 

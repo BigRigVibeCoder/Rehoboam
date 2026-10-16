@@ -158,15 +158,16 @@ CREATE TABLE IF NOT EXISTS sig_component (        -- plane C: retroactive signif
 
 CREATE TABLE IF NOT EXISTS sift_match (           -- plane C: separate MatchId space, never interleaved with EventIds
     timeline_id         UINTEGER  NOT NULL,
-    match_id            UBIGINT   NOT NULL,
+    match_id            UBIGINT   NOT NULL,    -- H64(pattern_id, pattern_version, event_ids): content-addressed, stable across re-sifts and equal to the twin's
     pattern_id          VARCHAR   NOT NULL,
     pattern_version     USMALLINT NOT NULL,
     pattern_lib_version USMALLINT NOT NULL,
     bindings            MAP(VARCHAR, UBIGINT),
     event_ids           UBIGINT[],
-    status              UTINYINT  NOT NULL,    -- 0 partial, 1 complete, 2 expired
+    status              UTINYINT  NOT NULL,    -- 0 partial, 1 complete, 2 expired (window), 3 killed (unless or death of a non-tolerant role)
     opened_tick         BIGINT    NOT NULL,
     closed_tick         BIGINT,
+    closed_by_event_id  UBIGINT,               -- the completing or killing event (B3: redemption arcs need the kill)
     score               FLOAT
 );
 

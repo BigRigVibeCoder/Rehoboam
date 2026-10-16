@@ -41,7 +41,7 @@ The v1.0 figure (≈ 12 ms per month) counted one hazard draw per person and lit
 **Total: ≈ 22–52 ms, or ≈ 25–60 ms per normal month with ≈ 15% headroom.**
 
 - **Serial share** of the subtotal: 4 of 22 ms to 10 of 52 ms, i.e. **≈ 18–20%** (§1.3).
-- **Live sifter.** 21k events at ≥ 10⁷ events/s per core is ≈ 2 ms [E] on its own core. It is off the critical path unless it lags (`05.4` §2.3 item 10). Its budget is PERF-3.
+- **Live sifter.** 21k events at ≥ 10⁷ events/s per core is ≈ 2 ms [E] on its own core. It is off the critical path unless it lags (`05.4` §2.3 item 10). Its budget is PERF-3. Indexed lookup is mandatory: Winnow's scan of every partial costs about 0.9 ms per partial per event (R12 §19).
 - **8 vs 16 cores.** More cores shrink only the parallel column. On a dual-channel desktop the ledger passes become memory-bandwidth-bound, and the serial column does not shrink at all. A 16-core desktop is therefore ≈ 1.3–1.5× faster, not 2×. That is why the band is quoted for 8–16 cores: the uncertainty in the [E] constants is larger than the core-count effect.
 
 ### 1.2 A crisis month
@@ -164,7 +164,7 @@ Per-run costs use ≈ 5 CPU-min per 1,000 years at 100k (≈ 1 CPU-min per 200 y
 | Per-actor knowledge index (recent decades) | 50–200 MB | Rows for witnessed, faction, secret and testimony hops only; older rows are on disk |
 | **Knowledge fronts in flight** | 50–100 MB | Public events whose fronts are still spreading (≈ 3–6k events × regions reached × 8 B). Finished fronts are on disk |
 | Agenda: decisions and timers | < 10 MB | 10⁴–10⁵ pending entries |
-| Sifter partial matches (plane C) | < 200 MB | Bounded by declared windows and match semantics (`05.4` §2.3) |
+| Sifter partial matches (plane C) | < 200 MB | Bounded by declared windows and match semantics (`05.4` §2.3). Per pattern, `latest` + `clear_binding` needs one open partial per join key per stage; `all`, `earliest` and `keep` hold every stage-1 event in the window per key, and fork-all patterns of three or more clauses multiply across stages. Clustered fixture: peak 1,566 partials (`latest`) vs 4,492 (`all`); a windowless pool grew to 21,269 with no plateau (R12 §19; V-SIFT-13) |
 | Hot event window (30 sim-days) and Arrow builders | < 50 MB | |
 | **Sim host, without the keyframe cache** | **≈ 0.5–2 GB** | |
 | **Keyframe LRU, RAM tier** (2–4 decompressed keyframes near the cursor) | ≈ 1–4 GB | Holds auto-pause and recent drop-in keyframes (§2) |

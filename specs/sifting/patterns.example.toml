@@ -17,6 +17,16 @@
 #   * completion_hazard (optional) names a Registry system hazard used for suspense (05.4 §2.3). It requires threatened_role:
 #     the bound role for whom completion is a negative outcome (Dramatis: suspense exists only once a bad outcome is expected).
 #     The pattern's `unless` clauses are its escape routes.
+#   * Clause order is the kernel order (B3 p3): each clause's event has a strictly greater EventId than the previous
+#     clause's. `after` names the event `within_days` is measured from. Patterns with >2 clauses use
+#     selection = "all", on_complete = "keep" (B3 fork-and-accept) until 05.4 §2.3 defines per-stage semantics.
+#   * [[pattern.unless]] may `bind = "uN"` and carry anchored `where` reads of itself and of kernel events bound at or
+#     before between[0]. `between` defaults to [first clause, last clause]. An event that both completes a match and
+#     matches an unless completes it (between is strict, as in the SQL twin).
+#   * death_tolerant (optional) lists role variables whose death does NOT kill an open partial. The death of any other
+#     bound role kills it (an implicit unless on act class `death`, and an escape route for suspense; B3 p7).
+#   * surface_from (optional, default: the penultimate clause) is the first clause whose binding makes an open partial
+#     eligible for `sift.partial` and suspense (B3 p5: narrate FATAL ERROR once ?loseLead is bound).
 
 [[pattern]]
 id = "authority_purges_successor"
@@ -75,6 +85,7 @@ roles = { X = "any", V = "any", R = "any" }
 selection = "earliest"                # the first harm that the revenge explicitly references
 on_complete = "consume"
 dedupe = { key = ["X", "R"], bucket_days = 365 }
+death_tolerant = ["V"]                # kin avenging a dead victim is the point of the trope
 firing_budget = { per_century_per_100k = 10 }
   [[pattern.clause]]
   bind = "e1"
@@ -161,3 +172,39 @@ threatened_role = "S"
   after = "e1"
   within_days = 1800
   where = ["in_realm(e1, A)@e2"]
+
+[[pattern]]
+id = "guest_right_violated"
+version = 1
+tellability = 0.85
+description = "Three-stage kernel after Winnow's breakHospitality (B3 pp2-3): a refugee arrives, is aided by a host of high integrity at the time of the aid, then is harmed by that host before fleeing again."
+roles = { H = "host", G = "guest" }
+selection = "all"                     # >2 clauses: fork-and-accept (B3 p3) until per-stage semantics are defined
+on_complete = "keep"
+dedupe = { key = ["H", "G"], bucket_days = 365 }   # B3 p7: role bindings, not event IDs, carry perceived identity
+firing_budget = { per_century_per_100k = 3 }
+surface_from = "e2"
+  [[pattern.clause]]
+  bind = "e1"
+  act = ["flee"]
+  initiator = "G"
+  [[pattern.clause]]
+  bind = "e2"
+  act = ["aid"]
+  initiator = "H"
+  target = "G"
+  after = "e1"
+  within_days = 365
+  where = ["integrity(H)@e2 >= 0.6"]   # checked at e2, not at completion (B3 p6)
+  [[pattern.clause]]
+  bind = "e3"
+  act = ["harm", "betray"]
+  initiator = "H"
+  target = "G"
+  after = "e2"
+  within_days = 365
+  [[pattern.unless]]
+  bind = "u1"
+  act = ["flee"]
+  initiator = "G"
+  between = ["e1", "e3"]

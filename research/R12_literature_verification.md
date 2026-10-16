@@ -784,6 +784,48 @@ The evidence that ODD helps rests on its authors' own assessment.
 - Allen reports no population or mortality series.
 - There are two misprints: the egg price (0.010 should be about 0.10) and "meat 6.0%" (the 6.0% is beans).
 
+## 19. Kreminski, M., Dickinson, M. & Wardrip-Fruin, N. (2019). "Felt: a simple story sifter." *ICIDS 2019*; Kreminski, M., Dickinson, M. & Mateas, M. (2021). "Winnow: a domain-specific language for incremental story sifting." *AIIDE 2021*
+
+**The question** (reading list): does Winnow already solve the sifter semantics we designed? **No.** We keep ours, adapt six features, and reuse no code.
+
+**What Felt and Winnow do.**
+- **Felt:** Datalog queries over a DataScript event database, evaluated retrospectively. Sift results drive actions in the same store, and every case study coupled sifting with simulation (pp. 5–12). Weighted random selection makes it nondeterministic (p. 7). Felt also provides `whyNot` debugging (p. 11).
+- **Winnow:** a pattern is a kernel of ordered stages plus `unless-event` clauses. On each new event every partial match is re-queried. A match that advances forks and the parent is kept; there are no time windows (p. 3, Fig. 1). Partial matches can be narrated once they reach a chosen stage (p. 5).
+  - **Its two modes disagree.** The incremental and compiled (retrospective) modes are only "roughly equivalent", because constraints read end state (p. 6).
+  - **Pruning is only proposed:** K-inactivity, advancing directly, death pruning (pp. 6–7). None of it is implemented.
+  - **Speed:** 13 ms per event at a pool of 10 partials and 912 ms at 1,000 (Table 1).
+
+**Our measurements** (*derived*, on the repo's fixtures):
+- **Winnow's default is our flooding baseline:** `all` + `keep` without windows. On the clustered fixture it gives 99.3 matches per 1,000 events, against 79.4 with a 3,650-day window and 17.5 under `latest` + `clear_binding`.
+- **Its pool never stops growing.** On the uniform fixture it reached 21,269 partials and was still rising at the end.
+- **A second divergence, in Winnow's code.** When one event both completes a match and matches an `unless`, the live matcher kills the match but the compiled query keeps it. Our completion-first order agrees with our SQL twin.
+- **No licence** in any commit of either repository.
+
+**Why keep ours.**
+- Anchored reads (`attr@eN`) remove the mode divergence; Winnow's p. 6 is the published evidence for anchoring.
+- Windows and declared semantics bound the pool.
+- Dedupe, firing budgets, precision@K and plane separation have no counterpart in either paper.
+- Winnow's syntax embeds raw Datalog rule and builtin calls, which would be free-string semantics (ADR-0010).
+
+**Adapted** (ADR-0008 v1.2; `05.4` §2.3; `specs/sifting/` linter and examples, which pass):
+1. **Kernel order**, plus a guard: patterns with more than two clauses must use `all` + `keep` until per-stage semantics are defined and twinned.
+2. **`unless` with `bind` and anchored `where`**, a default `between` of [first, last], and completion taking precedence over a coincident `unless`.
+3. **`death_tolerant = [roles]`**, which ADR-0008, `05.4` and SIFT-8 had named but the linter rejected.
+4. **`surface_from`**, the stage from which a partial is surfaced and can carry suspense.
+5. **A `killed` match status** with the killing event, and a **content-addressed `MatchId`**.
+6. **Per-clause why-not twin views.**
+
+A new three-stage example, `guest_right_violated`, follows Winnow's hospitality pattern. Bounded transitive causal ancestry in patterns is noted as a gap; the twin already has a `causal_ancestors` macro.
+
+**Corrections.**
+- **"912 ms per event"** holds at a pool of 1,000; it is 13 ms at 10.
+- **"All three semantics are twin-expressible"** has been *shown* only for two of the three options, on a two-clause pattern. `earliest`, `consume` and patterns of three or more clauses still need twins.
+- **The linter defaulted a missing `selection` or `on_complete`**, despite "declared, never implicit". It now requires both.
+- **The rejection of K-inactivity pruning had the wrong reason.** It is twin-expressible as a window in global event count; it is rejected because it makes matches depend on unrelated event volume.
+- **"Winnow may already solve our semantics"** (reading list): no.
+
+**New tests:** V-SIFT-11 (mode equivalence under state drift), 12 (Winnow's Fig. 1 trace as a conformance fixture), 13 (partial-match bound and plateau) and 14 (why-not).
+
 ## 20. O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014*, 944–950; Behrooz, M., Swanson, R. & Jhala, A. (2015). "Remember that time? Telling interesting stories from past interactions." *ICIDS 2015*; Lessard, J., Friedrich, S., Paré-Chouinard, S. & Kosseim, L. (2026). "Narrative gold digging: sifting and narrating stories from a procedural simulation." *FDG '26*. doi:10.1145/3815598.3815687
 
 **All three are weak evidence, and we weight them accordingly.**
@@ -824,7 +866,7 @@ The evidence that ODD helps rests on its authors' own assessment.
 
 ---
 
-## Did the reading pay off? (ledger after four batches, 24 sources)
+## Did the reading pay off? (ledger after five batches, 29 sources)
 
 | Source | Effect on the plan |
 |---|---|
@@ -848,10 +890,14 @@ The evidence that ODD helps rests on its authors' own assessment.
 | Campbell & Ó Gráda 2011 | **Major.** V-SF-03 was a plague band; the famine band family; M3/M4 bounds corrected; Davenant golden vector; storage and entitlement mechanics |
 | Alfani, Mocarelli & Strangio 2017 | The crisis detector and famine frequencies; provisioning institutions; "×3–5" corrected |
 | Allen 2001 | **Major.** Lagged post-plague wage test; English −50% corrected; the welfare-ratio basket (golden vectors); the E2 hindcast |
+| Felt 2019; Winnow 2021 | **Answered the open design question:** keep our semantics. Six features adapted; four claims corrected; four new sifter tests |
+| Dramatis 2014 | The suspense structure (a threatened-role gate, escape routes, perceived likelihood); the Oracle-mode leak; an inconsistent rate limit found |
+| Behrooz et al. 2015 | The random-window control design (V-HUM-11) |
+| Lessard et al. 2026 | **Major for G2.** Narration outweighs selection, so rendering is held constant; designer bias; MOE-2's low power exposed; the story × narration test |
 
 **Totals.**
-- 21 of 24 sources changed the design or the validation.
-- About 45 specific claims were corrected or found unsourced. Batch 4 found the two most expensive kinds of error: a **held-out** band that would have failed real history (V-SF-07), and a band that tested the wrong phenomenon (V-SF-03: plague, not famine).
+- 26 of 29 sources changed the design or the validation.
+- About 60 specific claims were corrected or found unsourced. Batch 4 found the two most expensive kinds of error: a **held-out** band that would have failed real history (V-SF-07), and a band that tested the wrong phenomenon (V-SF-03: plague, not famine).
 - Four runnable or ready artefacts came out of it: the Brass golden vectors, the M4 golden vectors (basket and price rule), the heavy-tail recipe and the ODD-R template.
 
-**Are returns diminishing?** Not yet for the bands. Batch 4 found a held-out band that would have failed and a band testing the wrong phenomenon, so the remaining Tier-A items are still worth reading: Alfani 2021, the famine Introduction, Coale & Demeny, Helmbold. The story-detection papers (Winnow and the others) are the last reading likely to change the *design* before the walking skeleton starts producing its own evidence.
+**Are returns diminishing?** Not yet for the bands. Batch 4 found a held-out band that would have failed and a band testing the wrong phenomenon, so the remaining Tier-A items are still worth reading: Alfani 2021, the famine Introduction, Coale & Demeny, Helmbold. The story-detection papers have now been read: they changed the G2 protocol more than the sifter, which held up. The next design-level evidence will come from the walking skeleton itself.

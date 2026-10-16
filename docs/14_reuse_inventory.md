@@ -260,7 +260,7 @@ This is the thinnest area. No usable open code exists for structural-demographic
 | Project | What it gives us | Licence (verified) | Last activity · adoption | Mode | Notes / risks | Link |
 |---|---|---|---|---|---|---|
 | Felt | Datalog sifting patterns as action preconditions | **No licence** [V] | 2020-08-14 [V] · ★23 | REFERENCE | 291 lines; clean-room is cheap | [gh](https://github.com/mkremins/felt) |
-| Winnow | Incremental, partial-match sifting DSL; `unless-event`; pruning | **No licence** [V] | 2021-10-05 [V] · ★33 | REFERENCE | The design ancestor of `rh-sifter` | [gh](https://github.com/mkremins/winnow) |
+| Winnow | Incremental, partial-match sifting DSL; `unless-event`; pruning (proposed, not implemented) | **No licence** [V] | 2021-10-05 [V] · ★33 | REFERENCE | The design ancestor of `rh-sifter`; about 610 lines of JS; read in full (R12 §19): six features adapted, semantics not adopted | [gh](https://github.com/mkremins/winnow) |
 | statistical-sifting | "Select the Unexpected" rarity heuristic | **No licence** [V] | 2022-07-29 [V] | REFERENCE | Feeds the significance "rarity" component | [gh](https://github.com/mkremins/statistical-sifting) |
 | **Viv** (Sifty) | Causal bookkeeping, knowledge relay, sifting patterns, tropes | **Proprietary, non-commercial** ("For non-commercial purposes only…") [V] | 2026-09-05 [V] · ★38 | REFERENCE | A commercial licence is available from Sifty | [gh](https://github.com/siftystudio/viv) |
 | Ascent | Datalog in Rust (batch hindsight analysis) | MIT [V] | rel 0.8.1, 2026-08-29 [V] · ★590, 610k dl | DEPEND (offline) | — | [gh](https://github.com/s-arash/ascent) |

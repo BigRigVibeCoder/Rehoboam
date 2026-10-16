@@ -19,14 +19,15 @@ import tomllib
 from pathlib import Path
 
 PATTERN_KEYS = {"id", "version", "tellability", "description", "roles", "clause", "unless", "emit",
-                "selection", "on_complete", "dedupe", "firing_budget", "completion_hazard", "threatened_role"}
+                "selection", "on_complete", "dedupe", "firing_budget", "completion_hazard", "threatened_role",
+                "death_tolerant", "surface_from"}
 SELECTIONS = {"latest", "earliest", "all"}
 ON_COMPLETE = {"clear_binding", "consume", "keep"}
 DEDUPE_KEYS = {"key", "bucket_days"}
 BUDGET_KEYS = {"per_century_per_100k"}
 HAZARD_KEYS = {"system", "hazard"}
 CLAUSE_KEYS = {"bind", "act", "verb", "match_event", "initiator", "target", "where", "after", "within_days", "require_edge"}
-UNLESS_KEYS = {"act", "verb", "initiator", "target", "between"}
+UNLESS_KEYS = {"bind", "act", "verb", "initiator", "target", "between", "where"}
 EDGE_KEYS = {"from", "into", "kind", "from_state"}
 EMIT_KEYS = {"match_event"}
 EDGE_KINDS = {"contingent", "triggered", "relayed_knowledge", "motivated_by", "enabled", "probabilistic", "player", "oracle", "director"}
@@ -78,10 +79,17 @@ def lint(patterns: dict, reg: dict) -> list[str]:
         for var, role in p.get("roles", {}).items():
             if role not in roles:
                 errs.append(f"{pid}: role {var}='{role}' not in Registry")
-        if p.get("selection", "latest") not in SELECTIONS:
-            errs.append(f"{pid}: selection '{p['selection']}' not in {sorted(SELECTIONS)}")
-        if p.get("on_complete", "clear_binding") not in ON_COMPLETE:
-            errs.append(f"{pid}: on_complete '{p['on_complete']}' not in {sorted(ON_COMPLETE)}")
+        for key, allowed in (("selection", SELECTIONS), ("on_complete", ON_COMPLETE)):
+            if key not in p:
+                errs.append(f"{pid}: missing {key} (match semantics are declared, never implicit; 05.4 §2.3)")
+            elif p[key] not in allowed:
+                errs.append(f"{pid}: {key} '{p[key]}' not in {sorted(allowed)}")
+        if len(p.get("clause", [])) > 2 and (p.get("selection"), p.get("on_complete")) != ("all", "keep"):
+            errs.append(f"{pid}: >2 clauses needs selection='all', on_complete='keep' until 05.4 §2.3 defines "
+                        f"per-stage latest/earliest/clear_binding/consume (B3 fork-and-accept is the only N-stage rule)")
+        for var in p.get("death_tolerant", []):
+            if var not in p.get("roles", {}):
+                errs.append(f"{pid}.death_tolerant: '{var}' is not a role variable")
         if "dedupe" in p:
             d = p["dedupe"]
             _unknown(set(d), DEDUPE_KEYS, f"{pid}.dedupe", errs)
@@ -133,6 +141,8 @@ def lint(patterns: dict, reg: dict) -> list[str]:
                 errs.append(f"{where}: consumes match_event '{c['match_event']}' that no pattern emits")
             if "after" in c and c["after"] not in bound:
                 errs.append(f"{where}: 'after' references unbound event {c['after']}")
+            if not bound and ("after" in c or "within_days" in c):
+                errs.append(f"{where}: the first clause cannot take 'after' or 'within_days'")
             if c.get("within_days", 1) <= 0:
                 errs.append(f"{where}: within_days must be > 0")
             visible = set(bound) | {ev}
@@ -149,14 +159,25 @@ def lint(patterns: dict, reg: dict) -> list[str]:
                 if "from_state" in edge:   # names the motivating state; must be a declared attribute (anchored to `into`)
                     _check_reads(edge["from_state"], visible, attrs, f"{where}.require_edge", errs, require_anchor=False)
             bound.append(ev)
+        sf = p.get("surface_from")
+        if sf is not None and (sf not in bound or sf == bound[-1]):
+            errs.append(f"{pid}.surface_from: '{sf}' must name a bound clause other than the last")
         for u in p.get("unless", []):
             _unknown(set(u), UNLESS_KEYS, f"{pid}.unless", errs)
             for a in u.get("act", []):
                 if a not in acts:
                     errs.append(f"{pid}.unless: act class '{a}' not in Registry")
-            for e in u.get("between", []):
-                if e not in bound:
-                    errs.append(f"{pid}.unless: between references unbound {e}")
+            btw = u.get("between", [bound[0], bound[-1]] if bound else [])   # default: whole kernel (B3 compiler default)
+            if len(btw) != 2 or any(e not in bound for e in btw) or bound.index(btw[0]) >= bound.index(btw[1]):
+                errs.append(f"{pid}.unless: between must name two bound clauses in kernel order, got {btw}")
+                continue
+            ub = u.get("bind")
+            if ub is not None and not re.fullmatch(r"u\d+", ub):
+                errs.append(f"{pid}.unless: bind must look like 'uN', got {ub}")
+            # an unless event arrives while btw[0] is bound and btw[1] is not: it may read only those anchors
+            visible_u = set(bound[: bound.index(btw[0]) + 1]) | ({ub} if ub else set())
+            for w in u.get("where", []):
+                _check_reads(w, visible_u, attrs, f"{pid}.unless", errs)
     return errs
 
 
@@ -166,17 +187,27 @@ def main(argv: list[str]) -> int:
     errs = lint(pats, reg)
     # Self-checks: the draft's rule and a misspelled key must both be rejected.
     draft = {"pattern": [{"id": "draft_tyrant_cleansing_order", "roles": {"S": "authority", "H": "successor"},
+                          "selection": "latest", "on_complete": "clear_binding",
                           "firing_budget": {"per_century_per_100k": 1},
                           "clause": [{"bind": "e1", "act": ["coerce"], "initiator": "S", "target": "H",
                                       "where": ["psychology(S, 'paranoia') > 80"]}]}]}
-    typo = {"pattern": [{"id": "typo", "roles": {"A": "authority"}, "firing_budget": {"per_century_per_100k": 1},
+    typo = {"pattern": [{"id": "typo", "roles": {"A": "authority"}, "selection": "all", "on_complete": "keep",
+                         "firing_budget": {"per_century_per_100k": 1},
                          "clause": [{"bind": "e1", "act": ["harm"], "edge": {"to": "e1", "kind": "motivated_by"}}]}]}
     implicit = {"pattern": [{"id": "implicit", "roles": {"A": "any"}, "selection": "first",
                              "clause": [{"bind": "e1", "act": ["harm"], "initiator": "A"}]}]}
-    d_errs, t_errs, s_errs = lint(draft, reg), lint(typo, reg), lint(implicit, reg)
+    three = {"pattern": [{"id": "three", "roles": {"A": "any", "B": "any"}, "firing_budget": {"per_century_per_100k": 1},
+                          "selection": "latest", "on_complete": "clear_binding",
+                          "clause": [{"bind": "e1", "act": ["aid"], "initiator": "A"},
+                                     {"bind": "e2", "act": ["aid"], "initiator": "B", "target": "A"},
+                                     {"bind": "e3", "act": ["harm"], "initiator": "B", "target": "A"}],
+                          "unless": [{"bind": "u1", "act": ["flee"], "initiator": "A", "between": ["e1", "e3"],
+                                      "where": ["trust(A, B)@e2 >= 0.5"]}]}]}
+    d_errs, t_errs, s_errs, m_errs = lint(draft, reg), lint(typo, reg), lint(implicit, reg), lint(three, reg)
     assert any("not declared" in e or "UNANCHORED" in e for e in d_errs), d_errs
     assert any("unknown key 'edge'" in e for e in t_errs), t_errs
     assert any("selection" in e for e in s_errs) and any("firing_budget" in e for e in s_errs), s_errs
+    assert any(">2 clauses" in e for e in m_errs) and any("anchor @e2 not bound" in e for e in m_errs), m_errs
     for e in errs:
         print("ERROR", e)
     n = len(pats.get("pattern", []))
@@ -184,6 +215,7 @@ def main(argv: list[str]) -> int:
     print(f"  self-check (draft rule rejected): {d_errs[0]}")
     print(f"  self-check (unknown key rejected): {t_errs[0]}")
     print(f"  self-check (undeclared semantics rejected): {'; '.join(s_errs)}")
+    print(f"  self-check (multi-stage guard, unless anchors): {'; '.join(m_errs)}")
     return 1 if errs else 0
 
 
