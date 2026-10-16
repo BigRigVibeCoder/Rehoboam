@@ -1,0 +1,26 @@
+[package]
+name = "rh-sample"
+description = "Vendored distribution samplers: plane A's only float zone"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# REF: SPR-003, Architect ruling 2026-10-16 (the sampler float zone). lint_arch.py pins this crate to
+# (A, machinery) by name, and lint_forbidden.py exempts it, by that pinned name, from the float rule
+# only. Every other plane-A rule applies here unchanged.
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints]
+workspace = true
+
+# REF: docs/14 (libm: DEPEND; rand_distr: PORT, never DEPEND). The only external dependency of the
+# float zone (ruling item 6; BCK-002 A-20). Pinned exactly: a libm bump can move a sampler's golden
+# vectors, so it is a C3 change. Default features off: the portable software routines on every
+# target, never an architecture-specific one.
+[dependencies]
+libm = { version = "=0.2.16", default-features = false }
+rh-core = { path = "../rh-core" }
+rh-ids = { path = "../rh-ids" }

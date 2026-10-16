@@ -1,0 +1,6 @@
+# Positive control for the float zone's reach (SPR-003 Architect ruling item 2; tests/lint_fixtures/README.md);
+# not in the Rehoboam workspace. rh-sample (exempt by its pinned name) and rh-sampler, a plane-A crate whose
+# name merely starts like it, both hold floats: only rh-sampler's must be reported.
+[workspace]
+members = ["rh-sample", "rh-sampler"]
+resolver = "3"

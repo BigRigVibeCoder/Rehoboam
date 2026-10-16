@@ -206,7 +206,10 @@ fn chi_square(counts: &[u64; 256]) -> f64 {
     let expected = total as f64 / 256.0;
     counts
         .iter()
-        .map(|&c| (c as f64 - expected).powi(2) / expected)
+        .map(|&c| {
+            let d = c as f64 - expected;
+            d * d / expected
+        })
         .sum()
 }
 
@@ -244,12 +247,27 @@ fn runs_z(a: &[u64], b: &[u64]) -> f64 {
 /// 255 df). REF: Wilson and Hilferty (1931); Johnson, Kotz and Balakrishnan, vol. 1, §18.5.
 fn chi_square_quantile(df: f64, z: f64) -> f64 {
     let c = 2.0 / (9.0 * df);
-    df * (1.0 - c + z * c.sqrt()).powi(3)
+    let t = 1.0 - c + z * c.sqrt();
+    df * t * t * t
+}
+
+/// `base^n` by repeated squaring. The `std` transcendentals (`powf`, `powi`, ...) are disallowed
+/// workspace-wide by `clippy.toml` (SPR-003 Architect ruling item 3), test code included.
+fn pow_int(base: f64, n: usize) -> f64 {
+    let (mut result, mut square, mut n) = (1.0, base, n);
+    while n > 0 {
+        if n & 1 == 1 {
+            result *= square;
+        }
+        square *= square;
+        n >>= 1;
+    }
+    result
 }
 
 /// The smallest `m` with P(Binomial(trials, p) ≤ m) ≥ 0.999.
 fn binomial_allowance(trials: usize, p: f64) -> usize {
-    let mut pmf = (1.0 - p).powf(trials as f64);
+    let mut pmf = pow_int(1.0 - p, trials);
     let mut cdf = pmf;
     let mut m = 0;
     while cdf < 1.0 - ALPHA {

@@ -1,0 +1,5 @@
+# Positive control for the float zone (SPR-003 Architect ruling item 2; tests/lint_fixtures/README.md); not in
+# the Rehoboam workspace. The exemption covers the float rule only: rh-sample's mul_add must still be reported.
+[workspace]
+members = ["rh-sample"]
+resolver = "3"
