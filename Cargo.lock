@@ -187,7 +187,6 @@ version = "0.0.0"
 dependencies = [
  "rh-events",
  "rh-ids",
- "rh-snapshot",
 ]
 
 [[package]]
@@ -239,6 +238,7 @@ name = "rh-snapshot"
 version = "0.0.0"
 dependencies = [
  "rh-core",
+ "rh-ids",
  "rusqlite",
  "twox-hash",
 ]

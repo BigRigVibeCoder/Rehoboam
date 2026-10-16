@@ -1,6 +1,7 @@
 //! V-DET-10 on the stub world (SPR-007 T-04): fuzz the engine's read-only APIs under the unsynced
 //! guard at every instant of a run; none changes plane A, and the run's hashes equal an unguarded
-//! run's. The guard's positive control (an injected write) is `rh-snapshot/tests/guard.rs`.
+//! run's. The guard's positive control (an injected write) is `tests/guard.rs`. The stub support in
+//! `support/` is a copy of rh-core's `tests/support/` (rh-core's tests stay hash-agnostic).
 //!
 //! The guard exists only in debug builds (CI's tests), so the file is compiled only there.
 //!

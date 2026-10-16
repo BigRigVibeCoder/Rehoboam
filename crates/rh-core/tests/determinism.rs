@@ -12,7 +12,8 @@
 //!   `Culture`), and a Day system between the Month ones.
 //!
 //! V-DET-01 (thread-count invariance): 50 sim-years at 1, 2, 4 and 8 threads; every monthly state
-//! hash equal. V-DET-02 (repeat invariance): the same run three times; all equal. The derived
+//! equal (whole tables, not hashes; the plane hash and the stub-world hash golden are in
+//! `rh-snapshot/tests/stub_world.rs`). V-DET-02 (repeat invariance): the same run three times; all equal. The derived
 //! order is checked identical across registrations in different input orders.
 //!
 //! Refs: SPR-005 T-05; `docs/09` V-DET-01, V-DET-02; `05.1` §2 rules 4 and 6, §4.2, §6 item 5.
@@ -240,8 +241,10 @@ fn world() -> WorldTables {
     w
 }
 
-/// Runs the stub world for `YEARS` and returns the state hash after every Month instant.
-fn monthly_hashes(threads: usize, seed: u64) -> Vec<u64> {
+/// Runs the stub world for `YEARS` and returns the tables after every Month instant. The tests
+/// compare whole states, not hashes: rh-core's tests stay hash-agnostic, since the plane hash lives
+/// in `rh-snapshot`, which depends on rh-core (Architect ruling, SPR-007).
+fn monthly_states(threads: usize, seed: u64) -> Vec<WorldTables> {
     let mut engine = Engine::new(
         CALENDAR,
         seed,
@@ -252,15 +255,15 @@ fn monthly_hashes(threads: usize, seed: u64) -> Vec<u64> {
     );
     engine.set_threads(threads);
     let end = SimTime::from_minutes(YEARS * CALENDAR.minutes_per_year() - 1);
-    let mut hashes = Vec::new();
+    let mut states = Vec::new();
     engine
         .advance_until(end, |t, tables| {
             if CALENDAR.is_boundary(Pulse::Month, t) {
-                hashes.push(rh_snapshot::state_hash(tables));
+                states.push(tables.clone());
             }
         })
         .unwrap_or_else(|e| panic!("{e}"));
-    hashes
+    states
 }
 
 #[test]
@@ -299,19 +302,19 @@ fn the_derived_order_is_identical_across_registrations() {
     );
 }
 
-/// V-DET-01: thread-count invariance, monthly hashes over 50 sim-years.
+/// V-DET-01: thread-count invariance, monthly states over 50 sim-years.
 #[test]
 fn v_det_01_thread_count_invariance() {
-    let one = monthly_hashes(1, 0x5EED);
+    let one = monthly_states(1, 0x5EED);
     assert_eq!(one.len(), usize::try_from(YEARS * 12).unwrap());
     for threads in [2, 4, 8] {
-        let many = monthly_hashes(threads, 0x5EED);
+        let many = monthly_states(threads, 0x5EED);
         let first = one.iter().zip(&many).position(|(a, b)| a != b);
         assert_eq!(first, None, "{threads} threads diverge at month {first:?}");
         assert_eq!(many.len(), one.len());
     }
     println!(
-        "V-DET-01: {} monthly hashes equal at 1, 2, 4 and 8 threads",
+        "V-DET-01: {} monthly states equal at 1, 2, 4 and 8 threads",
         one.len()
     );
 }
@@ -319,13 +322,13 @@ fn v_det_01_thread_count_invariance() {
 /// V-DET-02: repeat invariance, three runs of the same binary.
 #[test]
 fn v_det_02_repeat_invariance() {
-    let runs: Vec<Vec<u64>> = (0..3).map(|_| monthly_hashes(4, 0x5EED)).collect();
+    let runs: Vec<Vec<WorldTables>> = (0..3).map(|_| monthly_states(4, 0x5EED)).collect();
     assert_eq!(runs[0], runs[1]);
     assert_eq!(runs[1], runs[2]);
-    // The hashes carry information: another seed gives another history, and the state changes.
-    assert_ne!(monthly_hashes(4, 0x5EEE), runs[0]);
+    // The states carry information: another seed gives another history, and the state changes.
+    assert_ne!(monthly_states(4, 0x5EEE), runs[0]);
     assert_ne!(runs[0][0], runs[0][1]);
-    println!("V-DET-02: 3 runs of {} monthly hashes equal", runs[0].len());
+    println!("V-DET-02: 3 runs of {} monthly states equal", runs[0].len());
 }
 
 /// The lagged read really sees the start of the instant: X6 (trade) reads wages at `lagged`
@@ -505,7 +508,7 @@ fn the_reported_error_is_the_same_at_every_thread_count() {
         );
         engine.set_threads(threads);
         let err = engine.advance_until(SimTime::EPOCH, |_, _| {}).unwrap_err();
-        seen.push((err.to_string(), rh_snapshot::state_hash(engine.tables())));
+        seen.push((err.to_string(), engine.tables().clone()));
     }
     assert_eq!(seen[0].0, "X1.a: first");
     assert!(seen.iter().all(|s| s == &seen[0]), "{seen:?}");
@@ -606,49 +609,4 @@ fn a_step_error_poisons_the_engine() {
         "no step replayed"
     );
     assert_eq!(engine.poisoned(), Some(&first));
-}
-
-/// The committed golden of the stub world's first 120 monthly hashes (`tests/golden/`).
-const STUB_GOLDEN: &str = "tests/golden/stub_world_hashes.txt";
-
-fn render_stub_golden(ladder: &[u64]) -> String {
-    let mut out = String::from(
-        "# rh-core stub-world hash ladder: the plane-A state hash (rh_snapshot::state_hash, layout\n\
-         # rehoboam/rh-snapshot/hash/v1; SPR-007) after each of the first 120 monthly instants of\n\
-         # the tests/determinism.rs stub world (seed 0x5EED, salt 0, 1 thread).\n\
-         # GENERATED by `RH_CORE_WRITE_STUB_GOLDEN=1 cargo test -p rh-core --test determinism`;\n\
-         # never edited by hand. A change here is a change of phase order, scheduler order, pulse\n\
-         # order, draw keys or the hash layout: a C3 change (docs/13 §4.2).\n\
-         # Format: <month index from 0> <state hash, decimal u64>\n",
-    );
-    for (i, hash) in ladder.iter().enumerate() {
-        out.push_str(&i.to_string());
-        out.push(' ');
-        out.push_str(&hash.to_string());
-        out.push('\n');
-    }
-    out
-}
-
-/// DEF-6 (e): the stub world's monthly hashes against a committed golden. Thread-count and repeat
-/// comparisons cannot see a change that alters every run alike (phase order, scheduler order, pulse
-/// order, draw keys); this golden can.
-#[test]
-fn the_stub_world_hash_ladder_matches_its_golden() {
-    let ladder: Vec<u64> = monthly_hashes(1, 0x5EED).into_iter().take(120).collect();
-    let text = render_stub_golden(&ladder);
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(STUB_GOLDEN);
-    if std::env::var_os("RH_CORE_WRITE_STUB_GOLDEN").is_some() {
-        std::fs::write(&path, &text).unwrap();
-    }
-    let committed = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{STUB_GOLDEN}: {e}"));
-    let first = committed
-        .lines()
-        .zip(text.lines())
-        .position(|(a, b)| a != b);
-    assert_eq!(
-        first, None,
-        "{STUB_GOLDEN} differs at line {first:?}: a C3 change of the run"
-    );
-    assert_eq!(committed.lines().count(), text.lines().count());
 }
