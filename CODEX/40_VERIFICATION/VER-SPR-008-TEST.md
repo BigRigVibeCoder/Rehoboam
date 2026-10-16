@@ -9,9 +9,11 @@ tags: [verification, testing, determinism]
 related: [SPR-008, VER-SPR-008, VER-SPR-007-TEST, AGT-003-DET, ADR-0006, ADR-0033]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
+> **BLUF (round 3, head `6a87616`; section 10): DEF-3, GAP-7 and GAP-8 are fixed and the merge of main resolved correctly. `bin/check_all.sh` is 226 of 226 on a clean archive with an absolute `CARGO_TARGET_DIR`. The rewritten baseline equals my own recomputation byte for byte, and my three leaks are still caught on the new world. No open defect.** Round 2 follows.
+>
 > **BLUF (round 2, head `8e17816`; section 7):** DEF-1 and DEF-2 are fixed and I could not reproduce either; my own thread-identity, HashMap-order and wall-clock leaks are all caught now. GAP-3, GAP-4 and GAP-6 hold, MAJ-1 fails closed. **One new defect: DEF-3 (low-medium), `check_all.sh` fails with an absolute `CARGO_TARGET_DIR`; with one line patched the tier is 210 of 210.** Details in section 7. Round 1 follows.
 >
 > **BLUF (round 1, head `29abe04`):** The machinery works and I could not break it, with one hole that matters: **the smoke world never runs two jobs in one level, so thread-count invariance on it is vacuous (DEF-2).** Ladders are byte-identical at 1 to 64 threads, across repeats, debug and release builds, `target-cpu=native`, and `+fma,+avx2`. Resume equals the continuous run at six cut points. My own bisect harness named the exact month, table and row in 66 of 66 random and edge cases (plus 8 more for added and removed rows, cancel-out and multi-table cases). The `include!` scan held against 67 of 69 evasions (the other two were wrong expectations of mine). A hand-edited or regenerated baseline fails the gate, and a planted history change was bisected automatically to its month and table. `bin/check_all.sh` is 187 of 187 on a clean archive. **Open: DEF-1 (low) and DEF-2 (medium), both accepted by the Architect for round 2; GAP-1 goes to BCK-002 A-36.** Cross-machine evidence was not run, as instructed.
@@ -280,3 +282,48 @@ The control fails for the wrong reason, and the tier stops at 181 of 187 gates. 
 ## 9. Not run in round 2
 - The merge `cac67de`, and CI on a runner; the cross-machine check; the full nightly loop (12 monthly ladders and its 64 bisect cases): I ran its parts (1,000 years monthly at 1 thread, the cut against the baseline, the bisect cases).
 - `golden_bisect_ci.sh` after MIN-4 (the bisect on a push): read, not run.
+
+## 10. Round 3 (head `6a87616`)
+
+A clean `git archive` of `6a87616`, a fresh absolute `CARGO_TARGET_DIR` per copy. The head adds the pytest isolation fix, DEF-3, a merge of main (`070d6ac`, four conflicts resolved), the smoke world under the new `[[emits]]` lint (X3 emits `X_DEATH`, so the history changed and the baseline was regenerated in a `[C3]` commit), GAP-7 and GAP-8.
+
+| Item | Verdict | Basis |
+|---|---|---|
+| DEF-3 (absolute `CARGO_TARGET_DIR`) | **fixed** | The full tier ran with an absolute target directory: **226 of 226**. `check_all_selftest.py abs-target` passes, and with `--plant-pwd-join` (the old join) it fails for the wrong reason, as a control should |
+| GAP-7 (`EXIT`-trap verdict) | **fixed** | Section 10.1 |
+| GAP-8 (no cancel on pushes) | **fixed** | `ci.yml`: `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`; the push trigger is main only, so the new-branch case cannot arise |
+| pytest under CI's `RH_*` variables | **pass** | 447 of 447 plain, with the pull-request variables, with the push variables, and with hostile values (`RH_EVENT=bogus`, garbage shas, `GITHUB_*`, a nonexistent `CARGO_TARGET_DIR`) |
+| Merge resolutions | **pass** | Section 10.2 |
+| New baseline | **confirmed** | Section 10.3 |
+| Leaks on the new world | **caught** | Section 10.4 |
+| `bin/check_all.sh` | **PASS, 226 of 226** | Clean archive, absolute target directory; 1,192 s wall under load on 4 cores |
+
+### 10.1 GAP-7: the verdict cannot be skipped
+Each variant was planted into a copy of `check_all.sh` and run for real:
+
+| Planted | Exit | Verdict line |
+|---|---|---|
+| first gate `false \|\| exit 0` | 1 | `FAIL at "planted failing first gate"` |
+| second gate `false \|\| exit 0` | 1 | `FAIL at "planted failing second gate"`; the lint also refuses it |
+| a passing gate then `&& exit 0` (an early exit) | 1 | `FAIL (the chain exited early, status 0, after 2 checks: later gates unrun)` |
+| `\|\| { exit 0; }` | 1 | `FAIL at "planted brace exit"` (the lint does not see it; the trap does) |
+| `bash -c "exit 0" && exit 0` | 1 | `FAIL (the chain exited early ...)` |
+| `; true` | 1 | `FAIL` |
+| `kill -9 $$` after a failed gate | 137 | none (a signal, non-zero) |
+| **`trap - EXIT; exit 0`** | **0** | none |
+
+The last one removes the trap on purpose. It needs a visible, deliberate edit and no spelling of `|| ...` reaches it; I record it as the accepted residual. The self-test (`verdict --or-true`, `--or-exit`, `--early-exit`) and the lint with its planted controls are in the tier.
+
+### 10.2 The merge of main
+- `lint_odd.py`, three modes. Real specs: `PASS: 6 system specs linted`. Smoke `--specs`: `PASS: 7`. Controls: an overlay id without the X prefix fails; a smoke spec missing from the overlay fails; `--specs` without `--overlay` fails; a real spec (M2) dropped into the smoke directory fails ("not in the overlay"); an overlay that claims a real id fails ("already in the Registry"); `--specs` together with `--extra-specs` over the same ids fails ("already has a spec"); `--extra-specs` with a duplicate of a real id fails; **X3 emitting M2's real verb `DEATH` fails** ("the Registry gives verb DEATH to M2.demography" and "[[emits]] does not declare X_DEATH"). `--extra-specs` with the smoke set alone fails on column ownership (`person.alive` is also M2's), which is the single-writer rule doing its job when the two sets are mixed. The `--extra-specs` fixtures (frozen, draft, overlay for `[[emits]]` and `[[applies]]`) are in the tier and pass.
+- `gen_skeletons --check`: real `6 up to date`, smoke `7 up to date`; the stale fixture fails; a hand-edited smoke skeleton (mine) fails; a missing smoke skeleton (mine, X7) fails with `MISSING`; a hand-edited real skeleton (mine) fails.
+- `real_specs.rs`: eight literal `include!` calls, no `LINT-ALLOW`; `lint_forbidden` reports `0 violations; 13 literal include! followed`.
+
+### 10.3 The new baseline
+I recomputed it from a build of my own: `rh-cli run smoke --years 1000 --ladder yearly --require-parallel 5` at 1 and at 4 threads (10,323,515 levels, 730,000 with two or more jobs, 7%). The two ladders are byte-equal, and **equal to the committed baseline byte for byte** (`journal 1136 d9c497e0...`, final state hash `bef936ec026341a0`). The change from round 2 is the X_DEATH event kind and the overlay's own verbs, which is what the commit says.
+
+### 10.4 Leaks on the new world
+The same three leaks as round 2, planted again by me (X1 Hour step, probability about 1 in 4,000 per step), 30 years monthly at threads 1, 2, 4, 4 × 3: none 0 of 11; `HashMap` order 11 of 11; wall clock 11 of 11; thread identity 9 of 11 (the two equal ones are the 1-thread repeats). PR-shaped (100 years yearly, 1 vs 4 threads): all three differ. Counters: 21,900 parallel dispatches in 30 years at 4 threads, 43,801 thread ids seen. The Developer's `--leak-thread` also fails 1-vs-4 at rung 1.
+
+### 10.5 Status
+No open defect. Open gaps, all backlog: GAP-2 (the remainder), GAP-5, and the accepted residuals: `trap - EXIT` (10.1), the renamed `include_str!` and the `use include::X;` false positive (OBS-6, OBS-7), and `check_baseline.py` accepting a baseline whose header carries `inject` or `leak thread` when the recomputation is the same file (OBS-8). Not run in round 3: CI on a runner, the cross-machine check, the full nightly loop, and the bisect cases (unchanged code; the round-2 33 cases stand).
