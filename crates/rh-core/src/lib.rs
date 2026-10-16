@@ -12,9 +12,11 @@
 //! and the step view),
 //! `register` (the conflict checker and RNG purpose check), `schedule` (the derived scheduler) and
 //! `engine` (the instant loop).
+//! SPR-006 adds `agenda` (timers keyed by `(time, phase, entity, seq)`).
 #![forbid(unsafe_code)]
 
 pub mod access;
+pub mod agenda;
 pub mod engine;
 pub mod fixed;
 pub mod ownership;
