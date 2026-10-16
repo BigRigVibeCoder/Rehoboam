@@ -75,6 +75,12 @@ jobs:
           RH_PR_BODY: ${{ github.event.pull_request.body }}
         run: bin/check_all.sh
 
+      - name: Instruction counts of this run and their difference from the baseline (SPR-009 R-8)
+        if: always()
+        run: |
+          cat artifacts/perf/instructions.txt || echo "no instruction counts: the tier stopped before the gate"
+          diff crates/rh-bench/baselines/instructions_v1.txt artifacts/perf/instructions.txt && echo "identical to the baseline" || true
+
       - name: Upload the check report and the licence ledger
         if: always()
         uses: actions/upload-artifact@v4
