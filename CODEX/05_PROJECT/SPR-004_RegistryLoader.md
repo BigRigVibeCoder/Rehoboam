@@ -2,14 +2,14 @@
 id: SPR-004
 title: "Registry v0 loader and ownership lint"
 type: how-to
-status: PLANNING
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001]
+related: [BCK-001, PRJ-001, VER-SPR-004, VER-SPR-004-TEST]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** Load the Mechanics Registry and manifests in Rust, generate their JSON Schema, and enforce column ownership from the Registry and the system specs. Developer: AGT-002-CORE. Testers: AGT-003-IF. Scope-bounded; at most about 3 agent-days.
@@ -70,9 +70,9 @@ version: 1.0.0
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-004` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-004` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class.
