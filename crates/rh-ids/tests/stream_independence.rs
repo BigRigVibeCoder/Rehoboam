@@ -33,6 +33,11 @@
     reason = "statistics on counts below 2^53: the f64 conversion is exact"
 )]
 #![allow(
+    clippy::float_arithmetic,
+    reason = "statistical test: the bands are computed in f64; tests/ never links into the engine \
+              (SPR-010 GAP-3; the same exemption as bin/lint_forbidden.py's float rule)"
+)]
+#![allow(
     clippy::expect_used,
     reason = "test helpers: an impossible key must fail loudly"
 )]

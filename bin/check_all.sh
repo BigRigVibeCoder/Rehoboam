@@ -103,6 +103,19 @@ git_source_control() {
   cargo deny --color never --offline --locked --manifest-path "$dst/Cargo.toml" check sources
 }
 
+# The clippy float backstop control (SPR-010 GAP-3): renders tests/lint_fixtures/clippy/float_unnamed/ into
+# target/, with the [workspace.lints.*] tables copied from the repository's Cargo.toml, so it tests the real
+# lint settings; clippy must reject plane-A float arithmetic on values that carry no float token.
+clippy_float_control() {
+  local src=tests/lint_fixtures/clippy/float_unnamed dst=target/rendered-fixtures/float_unnamed lints
+  rm -rf "$dst" && mkdir -p "$dst" && cp -R "$src/." "$dst/" || return 1
+  lints="$(awk '/^\[workspace\.lints\./ {on=1} /^\[/ && !/^\[workspace\.lints\./ {on=0} on' Cargo.toml)"
+  [ -n "$lints" ] || { echo "no [workspace.lints.*] tables in Cargo.toml"; return 1; }
+  awk -v lints="$lints" '$0 == "@WORKSPACE_LINTS@" {print lints; next} {print}' "$dst/Cargo.toml.in" > "$dst/Cargo.toml" || return 1
+  cargo generate-lockfile --quiet --offline --manifest-path "$dst/Cargo.toml" || return 1
+  cargo clippy --offline --locked --quiet --manifest-path "$dst/Cargo.toml" -p fixture-core --target-dir target/lint-fixtures -- -D warnings
+}
+
 # Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, holding exactly
 # that API, which must be reported under its own rule with its own token (tests/lint_fixtures/README.md).
 # Each entry is file:rule:token; a token may itself contain "::".
@@ -221,6 +234,7 @@ forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
 run "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)" "fail:VIOLATION [V-DET-19/float] \`f32\` at tests/lint_fixtures/forbidden/float_workspace/fixture-sys/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_workspace/Cargo.toml &&
 run "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)" "pass:0 violations; 1 escapes; 1 declared f32_field columns" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/float_field/declared.rs --specs tests/lint_fixtures/forbidden/float_field/specs &&
+run "Clippy float backstop positive control: unnamed float arithmetic in plane A must FAIL (SPR-010 GAP-3)" "fail:floating-point arithmetic detected" clippy_float_control &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&

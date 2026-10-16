@@ -8,7 +8,7 @@ list the planted licence (`pass:<text>`).
 
 Fixture workspaces carry their own `[workspace]` table and sit under the root `Cargo.toml`
 `exclude`, so they never join the Rehoboam workspace. Nothing here is built except the compile-fail
-cases (into `target/lint-fixtures/`). Everything runs offline; the git-source control is rendered into
+cases (into `target/lint-fixtures/`). Everything runs offline; the git-source and clippy-float controls are rendered into
 `target/rendered-fixtures/` and fetches its dependency from a local `file://` repository.
 
 | Fixture | Gate | Plants | Must fail with |
@@ -36,6 +36,7 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source co
 | `forbidden/planted/float_*.rs` | `bin/lint_forbidden.py --scan` (V-DET-19 float rule, SPR-010 T-04) | one float per file: `float_type` (`f32`), `float_literal` (`0.5`), `float_suffix` (`2e-3f64`), `float_conversion` (`to_f64`); `float_escape_reason` (an escape whose reason is not `f32_field <entity.column>`); `float_undeclared_field` (`f32_field region.fertility`, which no system spec declares) | ``VIOLATION [V-DET-19/float] `<token>` `` |
 | `forbidden/float_workspace/` | `bin/lint_forbidden.py` (V-DET-19 float rule, SPR-010 T-04) | a float famine threshold in a plane-A system crate's `src/`, and a float statistic in its `tests/` (exempt, never reported) | ``VIOLATION [V-DET-19/float] `f32` at …/fixture-sys/src/lib.rs`` |
 | `forbidden/float_field/` | `bin/lint_forbidden.py --scan … --specs …/specs` (SPR-010 T-04) | **negative control**: an `f32` escaped as `f32_field region.soil_moisture`, which `specs/X1.fields.odd.toml` declares | must succeed: `0 violations; 1 escapes; 1 declared f32_field columns` |
+| `clippy/float_unnamed/` (template) | `cargo clippy -p fixture-core -- -D warnings` with the root `[workspace.lints.*]` tables rendered in (SPR-010 GAP-3) | plane-A float arithmetic (`store * store`) on values a dependency returns as `f64`, with no float token for `bin/lint_forbidden.py` to see | `floating-point arithmetic detected` (`clippy::float_arithmetic`). Known limit: no clippy lint catches a float `<`/`>` (or, on this toolchain, `==`) between such values, so the control plants arithmetic |
 | `uv_drift/` | `uv lock --check --offline` (T-02) | a `pyproject.toml` changed after its `uv.lock` was generated | `needs to be updated` |
 | `forbidden/workspace/` | `bin/lint_forbidden.py` (V-DET-19) | HashMap in a plane-A crate, and also in a tool crate (skipped), comments and strings (ignored), plus one reasoned escape (counted) | `VIOLATION [V-DET-19/hash-collections]` |
 
