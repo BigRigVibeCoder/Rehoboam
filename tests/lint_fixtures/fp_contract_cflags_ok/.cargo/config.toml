@@ -1,0 +1,5 @@
+# Control for the fp-contract guard of bin/check_all.sh (SPR-007 ruling 4; tests/lint_fixtures/README.md).
+# Never used by a build. The one accepted form, the same as the repository's own .cargo/config.toml: the
+# guard must PASS on it.
+[env]
+CFLAGS = { value = "-ffp-contract=off", force = true }

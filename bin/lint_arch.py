@@ -138,6 +138,15 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
             NO_DEFAULT_FEATURES,
             NO_FEATURES,
         ),
+        "rusqlite": (
+            frozenset({"rh-snapshot"}),
+            "can return f64 (FromSql for f64, Value::Real); the input journal stores no REAL: its "
+            "tables are STRICT with INTEGER, TEXT and BLOB columns only, and rh-snapshot names no "
+            "float type (SPR-007 ruling 3); feature bundled only, whose C build takes "
+            "CFLAGS=-ffp-contract=off from .cargo/config.toml (ruling 4)",
+            NO_DEFAULT_FEATURES,
+            frozenset({"bundled"}),
+        ),
         "serde": (
             ANY_PLANE_A_CRATE,
             "no floats of its own: the (de)serialisation traits and derives",
@@ -150,6 +159,14 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
             "tables from the system specs for the ownership lint (SPR-004)",
             DEFAULT_FEATURES_ALLOWED,
             ANY_FEATURES,
+        ),
+        "twox-hash": (
+            frozenset({"rh-snapshot"}),
+            "no floats: XXH3-64 for the plane hashes and XXH3-128 for the journal's payload hash "
+            "(SPR-007 ruling 1); default features off (they add rand and std), features "
+            "xxhash3_64 and xxhash3_128 only",
+            NO_DEFAULT_FEATURES,
+            frozenset({"xxhash3_64", "xxhash3_128"}),
         ),
     }
 )

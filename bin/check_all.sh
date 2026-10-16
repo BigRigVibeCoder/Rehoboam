@@ -121,26 +121,82 @@ clippy_control() {
   cargo clippy --offline --locked --quiet --manifest-path "$dst/Cargo.toml" -p "$2" --target-dir target/lint-fixtures -- -D warnings
 }
 
-# The fp-contract guard (ADR-0006 item 4: no FMA contraction; VER-SPR-003-TEST GAP-6). rustc never fuses
-# a * b + c by default, but -C llvm-args=-fp-contract=fast would, and no golden vector can see the
-# 1-ulp effect. fp_contract_guard <root> fails if any *RUSTFLAGS* variable (RUSTFLAGS,
-# CARGO_ENCODED_RUSTFLAGS, CARGO_BUILD_RUSTFLAGS, CARGO_TARGET_*_RUSTFLAGS) or any .cargo/config or
-# .cargo/config.toml under <root> (target/, .git/ and the lint fixtures excluded) mentions fp-contract.
+# The fp-contract guard (ADR-0006 item 4: no FMA contraction; VER-SPR-003-TEST GAP-6, narrowed by
+# SPR-007 ruling 4). rustc never fuses a * b + c by default, but -C llvm-args=-fp-contract=fast would,
+# and no golden vector can see the 1-ulp effect; C compilers may contract unless told not to.
+# fp_contract_guard <root> fails if
+#   - any *RUSTFLAGS* variable (RUSTFLAGS, CARGO_ENCODED_RUSTFLAGS, CARGO_BUILD_RUSTFLAGS,
+#     CARGO_TARGET_*_RUSTFLAGS) mentions fp-contract at all;
+#   - any *CFLAGS* variable holds an fp-contract token other than exactly -ffp-contract=off;
+#   - any .cargo/config or .cargo/config.toml under <root> (target/, .git/ and the lint fixtures
+#     excluded) mentions fp-contract on a line that is not a CFLAGS setting, or with any token other
+#     than exactly -ffp-contract=off. Whole-line TOML comments set nothing and are skipped.
+# The one accepted form is the repository's own `CFLAGS = { value = "-ffp-contract=off", ... }`.
+FP_CONTRACT_OK="-ffp-contract=off"
+# fp_contract_bad_tokens <text>: prints every fp-contract token of <text> that is not $FP_CONTRACT_OK.
+fp_contract_bad_tokens() {
+  grep -oE -- "[^[:space:]\"',]*fp-contract[^[:space:]\"',]*" <<<"$1" | grep -vxF -- "$FP_CONTRACT_OK"
+}
 fp_contract_guard() {
-  local root="$1" bad=0 var file
+  local root="$1" bad=0 var file line
   for var in $(compgen -v | grep RUSTFLAGS); do
     if grep -q -- 'fp-contract' <<<"${!var}"; then echo "$var sets fp-contract: ${!var}"; bad=1; fi
   done
+  for var in $(compgen -v | grep CFLAGS); do
+    if fp_contract_bad_tokens "${!var}" >/dev/null; then echo "$var sets fp-contract other than $FP_CONTRACT_OK: ${!var}"; bad=1; fi
+  done
   while IFS= read -r file; do
-    if grep -q -- 'fp-contract' "$file"; then echo "$file sets fp-contract"; bad=1; fi
+    while IFS= read -r line; do
+      if ! grep -qE '^[[:space:]]*CFLAGS[[:space:]]*=' <<<"$line" || fp_contract_bad_tokens "$line" >/dev/null; then
+        echo "$file sets fp-contract other than CFLAGS = $FP_CONTRACT_OK: $line"; bad=1
+      fi
+    done < <(grep -- 'fp-contract' "$file" | grep -vE '^[[:space:]]*#')
   done < <(find "$root" \( -path "$root/target" -o -path "$root/.git" -o -path "$root/tests/lint_fixtures" \) -prune \
              -o -type f \( -path '*/.cargo/config' -o -path '*/.cargo/config.toml' \) -print)
-  [ $bad -eq 0 ] && echo "no fp-contract in any RUSTFLAGS variable or .cargo/config under $root"
+  [ $bad -eq 0 ] && echo "no fp-contract in any RUSTFLAGS variable; none but CFLAGS = $FP_CONTRACT_OK in CFLAGS variables or .cargo/config under $root"
   return $bad
 }
-# Its environment control: the guard with RUSTFLAGS set as a contracting build would set it.
+# Its environment controls: the guard with RUSTFLAGS or CFLAGS set as a contracting build would set them.
 fp_contract_env_control() {
   RUSTFLAGS="-C llvm-args=-fp-contract=fast" fp_contract_guard .
+}
+fp_contract_cflags_env_control() {
+  CFLAGS="-O2 -ffp-contract=fast" fp_contract_guard .
+}
+# The C dependencies really were built with it (SPR-007 ruling 4): the repository's .cargo/config.toml
+# sets CFLAGS to exactly $FP_CONTRACT_OK, and the cc build-script output of every C-building crate
+# (each `output` file under <target dir>/{debug,release}/build/<crate>-*/) records CFLAGS = Some(that).
+C_BUILD_CRATES="libsqlite3-sys"
+c_fp_contract_check() {
+  local dir="$1" crate out found bad=0
+  grep -qxF "CFLAGS = { value = \"$FP_CONTRACT_OK\", force = true }" .cargo/config.toml ||
+    { echo ".cargo/config.toml does not set CFLAGS = { value = \"$FP_CONTRACT_OK\", force = true }"; return 1; }
+  for crate in $C_BUILD_CRATES; do
+    found=0
+    for out in "$dir"/debug/build/"$crate"-*/output "$dir"/release/build/"$crate"-*/output; do
+      [ -f "$out" ] || continue
+      found=1
+      if grep -qxF "CFLAGS = Some($FP_CONTRACT_OK)" "$out"; then echo "$out: CFLAGS = Some($FP_CONTRACT_OK)"
+      else echo "$out: the C build of $crate did not get CFLAGS = $FP_CONTRACT_OK"; bad=1; fi
+    done
+    [ $found -eq 1 ] || { echo "no build-script output for $crate under $dir: build first"; bad=1; }
+  done
+  return $bad
+}
+# Its control: the same check over a rendered build tree whose cc output lacks the flag.
+c_fp_contract_control() {
+  local dst=target/rendered-fixtures/c_fp_contract
+  rm -rf "$dst" && mkdir -p "$dst/debug/build/libsqlite3-sys-0000/" || return 1
+  printf 'cargo:rerun-if-env-changed=CFLAGS\nCFLAGS = None\n' > "$dst/debug/build/libsqlite3-sys-0000/output" || return 1
+  c_fp_contract_check "$dst"
+}
+
+# Hash golden-vector control (SPR-007 T-01): the committed rh-snapshot golden file with one hash changed.
+hash_golden_control() {
+  local planted=target/rendered-fixtures/stale_rh_snapshot_hash_v1.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^xxh3_64 0 /s/^xxh3_64 0 .*/xxh3_64 0 0000000000000000/' crates/rh-snapshot/tests/golden/rh_snapshot_hash_v1.txt > "$planted" || return 1
+  "$PY" -I bin/gen_hash_golden.py --check --golden "$planted"
 }
 
 # Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, holding exactly
@@ -229,9 +285,12 @@ run "Required tools present" pass require_tools &&
 # Tier 1 — static and contract lints (fastest first)
 run "Document index builds (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
 run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml .github/workflows/nightly.yml &&
-run "No FMA contraction: no fp-contract in RUSTFLAGS or .cargo/config (SPR-003 GAP-6)" pass fp_contract_guard . &&
+run "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp-contract=off (SPR-003 GAP-6; SPR-007 ruling 4)" pass fp_contract_guard . &&
 run "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL" "fail:RUSTFLAGS sets fp-contract" fp_contract_env_control &&
 run "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL" "fail:.cargo/config.toml sets fp-contract" fp_contract_guard tests/lint_fixtures/fp_contract &&
+run "fp-contract guard positive control: CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling 4)" "fail:CFLAGS sets fp-contract other than -ffp-contract=off" fp_contract_cflags_env_control &&
+run "fp-contract guard positive control: a .cargo/config.toml CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling 4)" "fail:.cargo/config.toml sets fp-contract other than CFLAGS = -ffp-contract=off" fp_contract_guard tests/lint_fixtures/fp_contract_cflags &&
+run "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off passes (SPR-007 ruling 4)" "pass:none but CFLAGS = -ffp-contract=off" fp_contract_guard tests/lint_fixtures/fp_contract_cflags_ok &&
 run "Python: uv.lock matches pyproject.toml (uv lock --check)" pass uv lock --check --offline --project python &&
 run "uv lock --check positive control: drifted lock must FAIL" "fail:needs to be updated" uv lock --check --offline --project tests/lint_fixtures/uv_drift &&
 run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pyproject.toml --no-cache . &&
@@ -307,6 +366,11 @@ run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
 run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&
+run "rh-snapshot gates by name: plane hashes, golden vectors, journal, unsynced guard (SPR-007 T-01, T-03, T-04)" "pass:every_golden_line_reproduces" cargo nextest run -p rh-snapshot --locked --test hash --test golden --test journal --test guard --status-level pass &&
+run "V-DET-10 unsynced guard: read-only APIs fuzzed on the stub world (SPR-007 T-04)" "pass:v_det_10_read_only_apis_never_change_plane_a" cargo nextest run -p rh-core --locked --test unsynced_guard --status-level pass &&
+run "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)" "pass:release_builds_compile_the_guard_out" cargo nextest run -p rh-snapshot --locked --release --test guard --status-level pass &&
+run "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite (SPR-007 ruling 4)" "pass:CFLAGS = Some(-ffp-contract=off)" c_fp_contract_check "$TARGET_DIR" &&
+run "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)" "fail:did not get CFLAGS = -ffp-contract=off" c_fp_contract_control &&
 run "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)" "pass:V-DET-20: 1000 pairs" cargo nextest run -p rh-ids --locked --test fork_trees --test stream_independence --no-capture &&
 run "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the exact distributions (SPR-003)" "pass:V-DET-09: 136 golden vectors" cargo nextest run -p rh-sample --locked --test golden --test stats --no-capture &&
 run "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)" "pass:V-DET-09: 136 golden vectors" cargo nextest run -p rh-sample --locked --release --test golden --no-capture &&
@@ -330,6 +394,8 @@ run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.to
 # Tier 5 — golden vectors
 run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
+run "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden --check; SPR-007 T-01)" "pass:OK:" "$PY" -I bin/gen_hash_golden.py --check &&
+run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:" hash_golden_control &&
 run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
