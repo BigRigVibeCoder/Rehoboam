@@ -11,6 +11,7 @@
 //!   (DEF-2).
 //!   exit 0 when the run reaches the horizon, 1 when the simulation fails (the ladder ends in
 //!   `failed`), 2 on a tool error.
+//! - `rh-cli ladder cut-yearly MONTHLY OUT`: the yearly ladder of a monthly one (GAP-6).
 //! - `rh-cli ladder compare A B`: exit 0 when equal, 1 when they differ (the first differing rung
 //!   is printed), 2 on a tool error.
 //! - `rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg ARG ...] [--seed S]
@@ -240,6 +241,35 @@ pub fn ladder_compare(first: &Path, second: &Path) -> u8 {
             }
         },
         (Err(e), _) | (_, Err(e)) => {
+            eprintln!("{e}");
+            TOOL
+        }
+    }
+}
+
+/// `ladder cut-yearly MONTHLY OUT`: writes the yearly cut of a monthly ladder (GAP-6). Returns the
+/// exit code: 0 written, 2 on a tool error.
+#[must_use]
+pub fn ladder_cut_yearly(monthly: &Path, out: &Path) -> u8 {
+    let cut = std::fs::read_to_string(monthly)
+        .map_err(|e| format!("{}: {e}", monthly.display()))
+        .and_then(|t| Ladder::parse(&t).map_err(|e| format!("{}: {e}", monthly.display())))
+        .and_then(|l| l.cut_yearly())
+        .and_then(|l| {
+            std::fs::write(out, l.render())
+                .map(|()| l.rungs.len())
+                .map_err(|e| format!("{}: {e}", out.display()))
+        });
+    match cut {
+        Ok(n) => {
+            println!(
+                "CUT: {n} yearly rungs from {} to {}",
+                monthly.display(),
+                out.display()
+            );
+            OK
+        }
+        Err(e) => {
             eprintln!("{e}");
             TOOL
         }

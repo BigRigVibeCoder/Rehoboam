@@ -15,6 +15,8 @@ Refs: SPR-010 GAP-4 (VER-SPR-010-TEST); GOV-002 §1 laws 4 and 9, §4.
 import re
 from pathlib import Path
 
+import check_all_selftest
+
 SCRIPT = Path(__file__).resolve().parents[2] / "bin" / "check_all.sh"
 FIXED_POINT_FIXTURE = (
     Path(__file__).resolve().parents[2] / "tests" / "lint_fixtures" / "compile_fail" / "fixed_point"
@@ -57,6 +59,12 @@ REQUIRED_GATES = (
     "(SPR-008 T-04)",
     "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR "
     "(check_baseline; SPR-008 T-04)",
+    "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for "
+    "byte (VER-SPR-008-TEST GAP-6)",
+    "Golden ladder positive control: CRLF line ends must FAIL ladder compare (VER-SPR-008-TEST "
+    "GAP-4)",
+    "Golden ladder positive control: a missing final newline must FAIL ladder compare "
+    "(VER-SPR-008-TEST GAP-4)",
     "Golden ladder positive control: an injected run never compares equal to a clean one "
     "(VER-SPR-008 MIN-2)",
     "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)",
@@ -134,6 +142,14 @@ REQUIRED_GATES = (
     "Virtual telemetry (S5 prototype)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
+    "check_all chain positive control: a run line mutated with || true must FAIL the lint "
+    "(VER-SPR-008-TEST GAP-3)",
+    "check_all chain: no run line ends in || true or || : (check_all_selftest lint; "
+    "VER-SPR-008-TEST GAP-3)",
+    "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier "
+    "(VER-SPR-008-TEST GAP-3)",
+    "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
+    "GAP-3)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
     "GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
@@ -291,3 +307,23 @@ def test_the_fixed_point_loop_covers_every_compile_fail_crate() -> None:
     on_disk = {p.parent.name for p in FIXED_POINT_FIXTURE.glob("*/Cargo.toml")}
     assert crates == on_disk - {"fixed-ok"}
     assert "-p fixed-ok --target-dir" in script, "the well-typed control must still compile"
+
+
+def test_no_run_line_ends_in_or_true() -> None:
+    """VER-SPR-008-TEST GAP-3: `|| true` or `|| :` on a `run` line would hide its failure."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert check_all_selftest.lint(text) == []
+    planted = check_all_selftest.lint(text, plant=True)
+    assert len(planted) == 1
+    assert "|| true" in planted[0]
+    for suffix in (" || true &&", " || : &&", " ||true", " || :"):
+        lines = text.splitlines()
+        first = next(i for i, line in enumerate(lines) if line.startswith("run "))
+        lines[first] = lines[first].removesuffix(" &&") + suffix
+        assert check_all_selftest.lint("\n".join(lines)) != [], suffix
+
+
+def test_the_verdict_fails_when_any_gate_failed() -> None:
+    """GAP-3: a failed gate hidden by `|| true` still fails the tier; a clean chain passes."""
+    assert check_all_selftest.verdict(or_true=False) == 0
+    assert check_all_selftest.verdict(or_true=True) == 1

@@ -13,7 +13,7 @@
 //! - `rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]`: the
 //!   single-writer ownership lint (SPR-004 T-03). With no access files it checks the access each
 //!   spec implies; with files, the `[[access]]` declarations in them. Exit 1 on any violation.
-//! - `rh-cli run smoke …`, `rh-cli ladder compare <a> <b>` and `rh-cli bisect …`: the golden
+//! - `rh-cli run smoke …`, `rh-cli ladder compare <a> <b>`, `rh-cli ladder cut-yearly <monthly> <out>` and `rh-cli bisect …`: the golden
 //!   runs, their hash ladders and the divergence bisect (SPR-008; `rh_golden::cli` documents the
 //!   flags and exit codes).
 //!
@@ -27,7 +27,7 @@ use rh_manifest::Registry;
 use rh_manifest::manifest;
 use rh_registry::ownership::{self, AccessSpec, Ownership};
 
-const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]\n       rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--dump M:F] [--inject M:TABLE:ROW]\n       rh-cli ladder compare <a.ladder> <b.ladder>\n       rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg A ...] [--seed S] [--years N] [--threads T] --work DIR [--out REPORT]";
+const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]\n       rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT]\n       rh-cli ladder compare <a.ladder> <b.ladder>\n       rh-cli ladder cut-yearly <monthly.ladder> <out.ladder>\n       rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg A ...] [--seed S] [--years N] [--threads T] --work DIR [--out REPORT]";
 /// The repository the golden runs read `worlds/` from: this binary's own source tree, so a build
 /// of another revision runs that revision's world (SPR-008 T-03).
 const DEFAULT_REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
@@ -62,6 +62,9 @@ fn main() -> ExitCode {
         ["ladder", "compare", a, b] => {
             ExitCode::from(rh_golden::cli::ladder_compare(a.as_ref(), b.as_ref()))
         }
+        ["ladder", "cut-yearly", monthly, out] => ExitCode::from(
+            rh_golden::cli::ladder_cut_yearly(monthly.as_ref(), out.as_ref()),
+        ),
         ["bisect", rest @ ..] => golden(rh_golden::cli::bisect_cmd, rest),
         _ => usage(),
     }

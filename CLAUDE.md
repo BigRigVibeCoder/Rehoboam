@@ -70,7 +70,8 @@ cargo nextest run -p rh-sys-smoke --locked --test smoke   # smoke world: registr
 cargo build --release -p rh-cli && target/release/rh-cli run smoke --years 1000 --ladder yearly --require-parallel 5 --out target/golden/smoke.ladder   # the golden run: 1,000 sim-years, plane-A hash ladder, at least 5% parallel levels (SPR-008 T-02, DEF-2)
 python -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed target/golden/smoke.ladder   # baseline = recomputation; changed only in a [C3] PR (T-04)
 cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
-bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), V-DET-11 x 64
+python -I bin/check_all_selftest.py verdict --or-true   # must FAIL: check_all's own verdict fails a gate hidden by || true (VER-SPR-008-TEST GAP-3)
+bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), the yearly cut = the baseline (GAP-6), V-DET-11 x 64
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
 cargo nextest run -p rh-snapshot --test hash --test golden --test journal --test keyframe --test guard --test unsynced_guard --test stub_world   # plane hashes, input journal, V-DET-05 keyframes, V-DET-10 unsynced guard, stub-world hash golden (SPR-007)

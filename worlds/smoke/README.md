@@ -24,6 +24,7 @@ Format `rehoboam-ladder v1` is documented normatively in `crates/rh-golden/src/l
   - `months`, the XXH3 of the month-end hashes the rung covers;
   - every table's Merkle root.
 - **Failure:** a run that fails ends with a `failed` line.
+- **Bytes:** lines end in `\n` only, and the file ends with one. `ladder compare` refuses CRLF line ends and a missing final newline (VER-SPR-008-TEST GAP-4).
 
 ```bash
 target/release/rh-cli run smoke --years 1000 --threads 4 --ladder yearly --out a.ladder
@@ -36,7 +37,7 @@ target/release/rh-cli ladder compare a.ladder worlds/smoke/baselines/smoke_yearl
 |---|---|---|
 | PR (`bin/check_all.sh`) | 1,000 years, yearly, at 1 thread and at N, each with at least 5% parallel levels. The two ladders must be identical and must equal the baseline. About 1 minute per run on a GitHub runner. | `Golden …` gates |
 | PR, on a golden failure | `bin/golden_bisect_ci.sh`: builds the base revision and bisects it against the head. The report goes into the job's `check-report` artifact (`artifacts/bisect_report.txt`). | `ci.yml` |
-| Nightly | 1,000 years, monthly, at 1, 2, 4 and N threads × 3 repeats, all identical (V-DET-01, V-DET-02: the G0 criterion), then V-DET-11 on 64 injected perturbations. The monthly ladder is uploaded as `golden-nightly-ladder`. | `bin/golden_nightly.sh`, `nightly.yml` |
+| Nightly | 1,000 years, monthly, at 1, 2, 4 and N threads × 3 repeats, all identical (V-DET-01, V-DET-02: the G0 criterion). The yearly cut of the monthly run (`rh-cli ladder cut-yearly`) must equal the committed baseline byte for byte (VER-SPR-008-TEST GAP-6). Then V-DET-11 runs on 64 injected perturbations. The monthly ladder is uploaded as `golden-nightly-ladder`. | `bin/golden_nightly.sh`, `nightly.yml` |
 
 ## Baselines (SPR-008 ruling 6; `docs/13` §4.4)
 

@@ -48,6 +48,14 @@
 //!   (`rh_snapshot::hash::TableDigest::root`), in strictly increasing byte order of the names,
 //!   the order the plane hash takes them in.
 //!
+//! **Bytes.** Lines end in `\n` only, and the file ends with one: [`Ladder::parse`] refuses a
+//! carriage return anywhere and a missing final newline, so two ladders that parse equal are equal
+//! byte for byte (ruling 4; VER-SPR-008-TEST GAP-4).
+//!
+//! **Cut.** [`Ladder::cut_yearly`] makes the yearly ladder of a monthly one: each year's last
+//! monthly rung, with `months` recomputed over the year's twelve month hashes. The nightly tier
+//! compares the cut of its monthly run with the committed yearly baseline (GAP-6).
+//!
 //! A run that fails stops writing rungs; the ladder then ends with a `failed <tick> <message>`
 //! line, so a crash is a difference too.
 //!
@@ -200,6 +208,7 @@ impl Ladder {
     /// # Errors
     /// [`ParseError`] at the first line that does not follow the format.
     pub fn parse(text: &str) -> Result<Self, ParseError> {
+        check_bytes(text)?;
         let mut lines = text.lines().enumerate().map(|(i, l)| (i + 1, l));
         let mut next = |what: &str| {
             lines.next().ok_or_else(|| ParseError {
@@ -399,6 +408,67 @@ impl fmt::Display for Difference {
     }
 }
 
+impl Ladder {
+    /// The yearly ladder of a monthly one: for every year, its December rung (the year's last
+    /// month), re-indexed by year, with `months` = XXH3-64 of the year's month hashes in order. A
+    /// year with fewer than twelve monthly rungs (a run that failed or stopped in it) is left out;
+    /// the failure line is kept.
+    ///
+    /// # Errors
+    /// A message when the ladder is not monthly, or a rung's date is not `YYYY-MM`.
+    pub fn cut_yearly(&self) -> Result<Self, String> {
+        if self.header.rung != RungKind::Monthly {
+            return Err("cut-yearly needs a monthly ladder".to_owned());
+        }
+        let mut rungs = Vec::new();
+        let mut year: Vec<&Rung> = Vec::new();
+        for r in &self.rungs {
+            let (y, m) = r
+                .date
+                .split_once('-')
+                .and_then(|(y, m)| Some((y.parse::<u64>().ok()?, m.parse::<u32>().ok()?)))
+                .ok_or_else(|| format!("rung {}: date `{}` is not YYYY-MM", r.index, r.date))?;
+            year.push(r);
+            if m == 12 {
+                if year.len() == 12 {
+                    let hashes: Vec<u8> = year.iter().flat_map(|r| r.hash.to_le_bytes()).collect();
+                    rungs.push(Rung {
+                        index: y + 1,
+                        months: rh_snapshot::hash::xxh3(&hashes),
+                        ..r.clone()
+                    });
+                }
+                year.clear();
+            }
+        }
+        let mut header = self.header.clone();
+        header.rung = RungKind::Yearly;
+        Ok(Self {
+            header,
+            rungs,
+            failed: self.failed.clone(),
+        })
+    }
+}
+
+/// GAP-4: lines end in `\n` only, and a non-empty file ends with one.
+fn check_bytes(text: &str) -> Result<(), ParseError> {
+    let line_of = |i: usize| text[..i].matches('\n').count() + 1;
+    if let Some(i) = text.find('\r') {
+        return Err(err(
+            line_of(i),
+            "a carriage return: ladder lines end in `\\n` only (GAP-4)".to_owned(),
+        ));
+    }
+    if !text.is_empty() && !text.ends_with('\n') {
+        return Err(err(
+            line_of(text.len()),
+            "the file does not end in a newline (GAP-4)".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
 /// The first place `a` and `b` differ, or `None` if they are the same ladder.
 #[must_use]
 pub fn compare(a: &Ladder, b: &Ladder) -> Option<Difference> {
@@ -543,6 +613,20 @@ mod tests {
             })
         ));
         assert_ne!(clean.render(), injected.render());
+    }
+
+    #[test]
+    fn crlf_and_a_missing_final_newline_are_refused() {
+        let text = ladder().render();
+        assert!(Ladder::parse(&text).is_ok());
+        let crlf = text.replace('\n', "\r\n");
+        let e = Ladder::parse(&crlf).unwrap_err();
+        assert_eq!(e.line, 1, "{e}");
+        assert!(e.message.contains("carriage return"), "{e}");
+        let unterminated = text.trim_end_matches('\n');
+        let e = Ladder::parse(unterminated).unwrap_err();
+        assert!(e.message.contains("does not end in a newline"), "{e}");
+        assert_eq!(e.line, unterminated.lines().count(), "{e}");
     }
 
     #[test]

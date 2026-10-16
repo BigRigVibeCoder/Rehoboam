@@ -299,6 +299,30 @@ injected_ladder_control() {
   "$RH_CLI_RELEASE" ladder compare "$dir/clean.ladder" "$dir/injected.ladder"
 }
 
+# GAP-4: the 1-thread golden ladder with CRLF line ends (crlf) or without its final newline
+# (unterminated), compared with itself: the strict parser must refuse it.
+ladder_bytes_control() {
+  local dir="${TARGET_DIR:?}/rendered-fixtures/ladder_bytes"
+  mkdir -p "$dir" || return 1
+  case "$1" in
+    crlf) sed 's/$/\r/' "$GOLDEN/smoke_yearly_t1.ladder" > "$dir/$1.ladder" || return 1 ;;
+    unterminated) head -c -1 "$GOLDEN/smoke_yearly_t1.ladder" > "$dir/$1.ladder" || return 1 ;;
+  esac
+  "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$dir/$1.ladder"
+}
+
+# GAP-6: the nightly compares the yearly cut of its monthly run with the baseline; here the cut
+# of a 3-year monthly run must equal the 3-year yearly run byte for byte.
+ladder_cut_control() {
+  local dir="${TARGET_DIR:?}/rendered-fixtures/ladder_cut"
+  mkdir -p "$dir" || return 1
+  "$RH_CLI_RELEASE" run smoke --years 3 --ladder monthly --out "$dir/monthly.ladder" >/dev/null || return 1
+  "$RH_CLI_RELEASE" run smoke --years 3 --ladder yearly --out "$dir/yearly.ladder" >/dev/null || return 1
+  "$RH_CLI_RELEASE" ladder cut-yearly "$dir/monthly.ladder" "$dir/cut.ladder" || return 1
+  "$RH_CLI_RELEASE" ladder compare "$dir/cut.ladder" "$dir/yearly.ladder" || return 1
+  cmp "$dir/cut.ladder" "$dir/yearly.ladder" && echo "CUT EQUAL: 3 yearly rungs, byte for byte"
+}
+
 # DEF-2: 2 years at 1 and N threads, with the planted thread-identity leak when given
 # --leak-thread, then the 1-versus-N comparison. With the leak the header must say so.
 thread_leak_control() {
@@ -316,8 +340,9 @@ thread_leak_control() {
 # year-10 keyframe with --years $1 and any further flags; prints the resumed ladder's header.
 def1_resume() {
   local dir="${TARGET_DIR:?}/rendered-fixtures/def1" years="$1"; shift
-  if [ ! -f "$dir/kf/year-0010.rhkf" ]; then
-    rm -rf "$dir" && mkdir -p "$dir" || return 1
+  # Keyed to this check_all run ($$): keyframes of an earlier run, or of another world, are stale.
+  if [ "$(cat "$dir/run.id" 2>/dev/null)" != "$$" ] || [ ! -f "$dir/kf/year-0010.rhkf" ]; then
+    rm -rf "$dir" && mkdir -p "$dir" && echo "$$" > "$dir/run.id" || return 1
     "$RH_CLI_RELEASE" run smoke --years 24 --out "$dir/full.ladder" --journal "$dir/journal.sqlite" --keyframes "$dir/kf" >/dev/null || return 1
   fi
   "$RH_CLI_RELEASE" run smoke --years "$years" --resume "$dir/kf/year-0010.rhkf" --journal "$dir/journal.sqlite" \
@@ -532,6 +557,9 @@ run "Golden baseline positive control: [C3] outside the title's trailing tag gro
 run "Golden baseline positive control: a push that changes the baseline with no [C3] commit must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_push_control "feat(SPR-008): regenerate the smoke baseline" &&
 run "Golden baseline control: a push that changes the baseline in a [C3] commit passes (VER-SPR-008 MAJ-1)" "pass:regenerated in a [C3] PR (the commit subjects of" baseline_push_control "feat(SPR-008): regenerate the smoke baseline [C3]" &&
 run "Golden ladder positive control: an injected run never compares equal to a clean one (VER-SPR-008 MIN-2)" "fail:LADDERS DIFFER" injected_ladder_control &&
+run "Golden ladder positive control: CRLF line ends must FAIL ladder compare (VER-SPR-008-TEST GAP-4)" "fail:a carriage return" ladder_bytes_control crlf &&
+run "Golden ladder positive control: a missing final newline must FAIL ladder compare (VER-SPR-008-TEST GAP-4)" "fail:does not end in a newline" ladder_bytes_control unterminated &&
+run "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for byte (VER-SPR-008-TEST GAP-6)" "pass:CUT EQUAL" ladder_cut_control &&
 run "Golden thread-leak positive control: the planted thread-identity leak must FAIL the 1-versus-N comparison (VER-SPR-008 DEF-2)" "fail:LADDERS DIFFER" thread_leak_control --leak-thread &&
 run "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)" "pass:LADDERS EQUAL: 2 rungs" thread_leak_control &&
 run "Golden parallel-level positive control: a floor above the run's share of parallel levels must FAIL (VER-SPR-008 DEF-2)" "fail:PARALLEL LEVELS BELOW THE FLOOR" "$RH_CLI_RELEASE" run smoke --years 2 --threads 1 --require-parallel 50 --out "$TARGET_DIR/rendered-fixtures/parallel_floor.ladder" &&
@@ -541,6 +569,10 @@ run "Golden resume control: past the journal's last input with --extend passes, 
 run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
 run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
+run "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST GAP-3)" "pass:Verdict: PASS (2 checks)" "$PY" -I bin/check_all_selftest.py verdict &&
+run "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier (VER-SPR-008-TEST GAP-3)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-true &&
+run "check_all chain: no run line ends in || true or || : (check_all_selftest lint; VER-SPR-008-TEST GAP-3)" "pass:NO OR-TRUE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh &&
+run "check_all chain positive control: a run line mutated with || true must FAIL the lint (VER-SPR-008-TEST GAP-3)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-true &&
 # Tier 5 — golden vectors
 run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
@@ -555,10 +587,16 @@ run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selft
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py
 status=$?
+# VER-SPR-008-TEST GAP-3: the tier fails when any gate failed, whatever the status of the chain's
+# last command, so a gate line ending in `|| true` cannot hide a failure (bin/check_all_selftest.py
+# runs this verdict on a planted chain; the inventory test refuses `|| true` and `|| :`).
+if [ -z "$failed" ] && [ "$status" -eq 0 ]; then status=0; else status=1; fi
 
 {
   echo
-  if [ $status -eq 0 ]; then echo "## Verdict: PASS ($n checks)"; else echo "## Verdict: FAIL at \"$failed\" (later checks skipped: fail-fast)"; fi
+  if [ $status -eq 0 ]; then echo "## Verdict: PASS ($n checks)"
+  elif [ -n "$failed" ]; then echo "## Verdict: FAIL at \"$failed\" (later checks skipped: fail-fast)"
+  else echo "## Verdict: FAIL (the chain stopped with no gate named)"; fi
 } >> "$REPORT"
 echo "Report: $REPORT"
 exit $status
