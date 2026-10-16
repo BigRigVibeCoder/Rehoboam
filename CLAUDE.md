@@ -50,6 +50,7 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.ya
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml  # must FAIL
+python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I specs/chronicle/selftest.py
 python -I specs/demography/selftest_brass.py
 python -I specs/economy/selftest_economy.py

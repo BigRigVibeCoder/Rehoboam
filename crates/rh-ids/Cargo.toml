@@ -12,3 +12,10 @@ kind = "machinery"
 
 [lints]
 workspace = true
+
+# REF: docs/14 (rand_chacha: DEPEND, pin exactly; "StdRng is not portable across versions").
+# The keyed hash's outputs are golden (tests/golden/), so a version bump is a C3 change.
+# lint_arch.py allows these two crates in rh-ids only (rng-crate rule).
+[dependencies]
+rand_chacha = { version = "=0.10.0", default-features = false }
+rand_core = { version = "=0.10.0", default-features = false }

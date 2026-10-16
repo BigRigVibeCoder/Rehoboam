@@ -1,0 +1,3 @@
+# Positive control for `bin/gen_rng_golden.py --check` (SPR-002 T-02): a golden file that does not
+# match the reference implementation. The check must report it STALE.
+h 0 0 0 0 0 0 0 0
