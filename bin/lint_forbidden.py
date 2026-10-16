@@ -51,6 +51,14 @@ plane A; every other rule still applies to it, and no other crate shares the exe
 named `rh-sampler` does not). `--scan` never exempts anything: it scans paths, not crates. The
 summary line names the exemption.
 
+    float-api         In the float zone only (ruling item 4: floats never leave the crate): the
+                      public surface of its src/ (outside tests/, benches/, examples/) may not
+                      name f32, f64 or libm. Checked: every `pub` item (not `pub(crate)` and
+                      the like): a fn signature up to its body, a const or static type, a type
+                      alias, a `pub use`, a struct, enum, trait or mod header, and a `pub` field;
+                      and every `impl` header (a trait impl is public without `pub`). No escape
+                      excuses it (VER-SPR-003-TEST GAP-1).
+
 DECISION (SPR-010 T-04): the float rule does not apply to files under a crate's tests/, benches/ or
 examples/ directories. They never link into the engine, so they hold no threshold position, and a
 statistical test may legitimately compute in floats. Every other rule still applies there, and the
@@ -75,6 +83,7 @@ import tomllib
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 RULE_ID = "V-DET-19"
 EXIT_OK = 0
@@ -90,6 +99,25 @@ FLOAT_RULE = "float"
 FLOAT_FREE_DIRS = frozenset({"tests", "benches", "examples"})
 # The one plane-A crate exempt from the float rule, by its pinned name (module docstring; SPR-003).
 FLOAT_ZONE_CRATE = "rh-sample"
+FLOAT_API_RULE = "float-api"
+# Which float rule a file gets (scan_source): the float rule, the float-api rule, or neither.
+FloatScope = Literal["rule", "zone", "none"]
+FLOAT_API_WHY = (
+    "the float zone's public API never exposes f32, f64 or libm (SPR-003 ruling item 4): return "
+    "integers or rh_core::fixed values; no escape excuses this"
+)
+# `pub` that is not `pub(crate)`, `pub(super)` or `pub(in ...)`.
+PUBLIC = re.compile(r"\bpub\b(?!\s*\()")
+PUBLIC_KIND = re.compile(
+    r"\s*(?:(?:const|unsafe|async|extern(?:\s+[^\s]+)?)\s+)*"
+    r"(?P<kind>fn|struct|enum|union|trait|mod|const|static|type|use)\b"
+)
+# Where the public part of an item ends, by kind; anything else after `pub` is a field.
+PUBLIC_END = {"fn": "{;", "const": "=;", "static": "=;", "type": ";", "use": ";"}
+HEADER_END = "{;("
+FIELD_END = ",})"
+IMPL_HEADER = re.compile(r"\bimpl\b[^{;]*")
+FLOAT_API_TOKEN = re.compile(r"\b(?:f32|f64|libm)\b")
 DEFAULT_SPECS = Path(__file__).resolve().parents[1] / "specs" / "systems"
 
 
@@ -389,13 +417,53 @@ def _float_escape_problem(escape: Escape, float_fields: frozenset[str]) -> str |
     return None
 
 
+def _span_end(code: str, start: int, stops: str) -> int:
+    """Return the index of the first character of ``stops`` at or after ``start``, or the end."""
+    ends = [i for i in (code.find(ch, start) for ch in stops) if i >= 0]
+    return min(ends, default=len(code))
+
+
+def public_spans(code: str) -> list[tuple[int, int]]:
+    """Return the (start, end) spans of blanked code that form a crate's public surface.
+
+    A `pub` item's signature or header (its body excluded), a `pub` field, and every `impl`
+    header. Spans are found textually; they over-approximate (a `pub` item in a private module
+    counts), which is the safe side for a no-floats rule.
+    """
+    spans: list[tuple[int, int]] = []
+    for match in PUBLIC.finditer(code):
+        kind = PUBLIC_KIND.match(code, match.end())
+        stops = FIELD_END if kind is None else PUBLIC_END.get(kind.group("kind"), HEADER_END)
+        spans.append((match.start(), _span_end(code, match.end(), stops)))
+    spans += [(m.start(), m.end()) for m in IMPL_HEADER.finditer(code)]
+    return spans
+
+
+def find_float_api(code: str, path: str) -> list[Finding]:
+    """Return each f32, f64 or libm in the public surface of blanked code (rule float-api)."""
+    line_starts = [0] + [m.end() for m in re.finditer("\n", code)]
+    seen: set[int] = set()
+    found: list[Finding] = []
+    for start, end in public_spans(code):
+        for token in FLOAT_API_TOKEN.finditer(code, start, end):
+            if token.start() in seen:
+                continue
+            seen.add(token.start())
+            line_index = bisect.bisect_right(line_starts, token.start()) - 1
+            column = token.start() - line_starts[line_index] + 1
+            found.append(
+                Finding(FLOAT_API_RULE, path, line_index + 1, column, token.group(0), FLOAT_API_WHY)
+            )
+    return sorted(found, key=lambda f: (f.line, f.column))
+
+
 def scan_source(
     source: str,
     path: str,
     report: Report,
     float_fields: frozenset[str] = frozenset(),
     *,
-    floats: bool = True,
+    floats: FloatScope = "rule",
 ) -> None:
     """Scan one file's text and add its violations and excused findings to ``report``.
 
@@ -405,11 +473,16 @@ def scan_source(
         report: Where violations and excused findings are added.
         float_fields: The columns the system specs declare ``f32_field``; only an escape naming
             one of them excuses a float.
-        floats: Whether the float rule applies to this file (not under tests/, benches/ or
-            examples/; see the module DECISION).
+        floats: Which float rule applies to this file: ``"rule"`` the float rule (plane-A code);
+            ``"zone"`` the float-api rule instead (the float zone's src/); ``"none"`` neither
+            (tests/, benches/ and examples/; see the module DECISION).
     """
     lexed = lex(source)
-    findings = [f for f in find_forbidden(lexed.code, path) if floats or f.rule != FLOAT_RULE]
+    findings = [
+        f for f in find_forbidden(lexed.code, path) if floats == "rule" or f.rule != FLOAT_RULE
+    ]
+    if floats == "zone":
+        findings += find_float_api(lexed.code, path)
     escapes = find_escapes(lexed, path)
     valid = {e.covers: e for e in escapes if e.reason}
     covered_lines = {f.line for f in findings}
@@ -419,6 +492,8 @@ def scan_source(
         problem = None
         if escape is not None and finding.rule == FLOAT_RULE:
             problem = _float_escape_problem(escape, float_fields)
+        elif escape is not None and finding.rule == FLOAT_API_RULE:
+            problem = FLOAT_API_WHY
         if escape is not None and problem is None:
             report.escaped.append(
                 f"ESCAPE [{RULE_ID}/{finding.rule}] `{finding.text}` at {where}; "
@@ -496,14 +571,16 @@ def scan_paths(
         UnicodeDecodeError: A file is not UTF-8.
     """
     report = Report(violations=[], escaped=[])
-    floats: dict[Path, bool] = {}
+    scopes: dict[Path, FloatScope] = {}
     for root in paths:
         for file in rust_files([root]):
-            applies = root not in float_exempt and float_rule_applies(file, root)
-            floats.setdefault(file, applies)
-    for file in sorted(floats):
+            if not float_rule_applies(file, root):
+                scopes.setdefault(file, "none")
+            else:
+                scopes.setdefault(file, "zone" if root in float_exempt else "rule")
+    for file in sorted(scopes):
         source = file.read_text(encoding="utf-8")
-        scan_source(source, display(file), report, float_fields, floats=floats[file])
+        scan_source(source, display(file), report, float_fields, floats=scopes[file])
     return report
 
 

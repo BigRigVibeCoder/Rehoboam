@@ -98,6 +98,14 @@ REQUIRED_GATES = (
     "lint_arch positive control: system -> system must FAIL",
     "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)",
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
+    "lint_forbidden float-api positive control: field in rh-sample's public API must FAIL "
+    "(SPR-003 GAP-1)",
+    "lint_forbidden float-api positive control: fn_return in rh-sample's public API must FAIL "
+    "(SPR-003 GAP-1)",
+    "lint_forbidden float-api positive control: impl_from in rh-sample's public API must FAIL "
+    "(SPR-003 GAP-1)",
+    "lint_forbidden float-api positive control: reexport in rh-sample's public API must FAIL "
+    "(SPR-003 GAP-1)",
     "lint_forbidden positive control: a float outside rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
