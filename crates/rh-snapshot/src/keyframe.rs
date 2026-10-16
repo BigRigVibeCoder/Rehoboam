@@ -251,13 +251,6 @@ pub fn write_keyframe(
         world_seed: engine.world_seed(),
         branch_salt: engine.branch_salt().to_raw(),
     };
-    if journal.timeline_id != state.timeline.to_raw() {
-        return Err(KeyframeError::Anchor(format!(
-            "the journal position is timeline {}'s, the engine runs timeline {}",
-            journal.timeline_id,
-            state.timeline.to_raw()
-        )));
-    }
     let header = KeyframeHeader {
         history,
         journal,
