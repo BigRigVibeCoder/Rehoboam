@@ -32,17 +32,20 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
 GOLDEN = REPO / "specs" / "registry" / "effect_language_golden_v0.toml"
-LANGUAGE_VERSION = "0.1.0"
+LANGUAGE_VERSION = "0.2.0"
 
 # ----------------------------------------------------------------------------- numeric limits
 I64_MIN = -(1 << 63)
 I64_MAX = (1 << 63) - 1
 FRAC_BITS = {"q8_8": 8, "q16_16": 16}
 STORAGE_BITS = {"q8_8": 16, "q16_16": 32}
-KIN_DEGREES_MAX = 4
+KIN_DEGREES_MAX = 6
 DESCENT_MAX = 6
+LINEAGE_HEIGHT_MAX = 3
+EXPRESSION_DEPTH_MAX = 64
 GENEALOGY = ("life_course.person_id", "life_course.mother", "life_course.father")
 AGNATIC_GENEALOGY = ("life_course.person_id", "life_course.father")
+LINEAGE_READS = (*GENEALOGY, "life_course.birth_tick")
 NESTING_MAX = 2
 BOUND_PRODUCT_MAX = 65_536
 DRAW_BITS = 64
@@ -64,8 +67,9 @@ DIVISION_OPS = frozenset({"/", "div", "mod"})
 RELATIONS: dict[str, tuple[tuple[str, ...], str, tuple[str, ...], int]] = {
     "children": (("person",), "person", GENEALOGY, 64),
     "kin": (("person", "degree"), "person", GENEALOGY, 256),
-    "ancestors": (("person", "generations"), "person", GENEALOGY, 64),
+    "ancestors": (("person", "generations"), "person", GENEALOGY, 126),
     "descendants": (("person", "generations"), "person", GENEALOGY, 256),
+    "lineage": (("person", "height"), "person", LINEAGE_READS, 1024),
     "line": (("person", "person"), "person", GENEALOGY, DESCENT_MAX),
     "line_agnatic": (("person", "person"), "person", AGNATIC_GENEALOGY, DESCENT_MAX),
     "titles": (("person",), "title", ("title.holder",), 16),
@@ -87,6 +91,13 @@ ACCESSORS: dict[str, tuple[str, tuple[str, ...]]] = {
     "common": ("ent:person", GENEALOGY),
     "up_agnatic": ("int", AGNATIC_GENEALOGY),
     "common_agnatic": ("ent:person", AGNATIC_GENEALOGY),
+    "descends": ("bool", GENEALOGY),
+}
+# Degree-like relation arguments: the bound each one is checked against.
+DEGREE_BOUNDS = {
+    "degree": KIN_DEGREES_MAX,
+    "generations": DESCENT_MAX,
+    "height": LINEAGE_HEIGHT_MAX,
 }
 # Builtins with fixed signatures: name -> (parameter types, result type).
 FIXED_BUILTINS: dict[str, tuple[tuple[str, ...], str]] = {
@@ -103,6 +114,10 @@ KNOWN_CALLS = (
     | frozenset(ACCESSORS)
     | frozenset({"ordinal", "exists", "floor", "round", "draw", "chance", "related"})
 )
+
+
+class InvariantError(Exception):
+    """A hard invariant failure at evaluation (a truncated candidates relation)."""
 
 
 class CompileError(Exception):
@@ -187,8 +202,8 @@ def literal_bits(ty: str, text: str) -> int:
     return bits
 
 
-def zero_of(ty: str) -> Value:
-    """Return the zero of a scalar type (the result of a missing read, spec §4.5)."""
+def zero_of(ty: str, enum_defaults: dict[str, int] | None = None) -> Value:
+    """Return the zero of a scalar type (a missing read, spec §4.5); enums take their default."""
     if ty == "bool":
         return False
     if ty == "int":
@@ -196,7 +211,7 @@ def zero_of(ty: str) -> Value:
     if ty in FIXED:
         return Fx(ty, 0)
     if ty.startswith("enum:"):
-        return En(ty[5:], 0)
+        return En(ty[5:], (enum_defaults or {}).get(ty[5:], 0))
     return Et(ty[4:], 0)
 
 
@@ -277,6 +292,7 @@ class System:
     sends: dict[str, str]  # command -> declared target
     rng: set[str]
     params: dict[str, tuple[Fraction, Fraction, str]]  # name -> (lo, hi, type)
+    neutral: dict[str, object]  # column -> the coupling's neutral value, raw (NEW-4)
 
 
 @dataclass
@@ -292,11 +308,13 @@ class Registry:
     """The Registry slice of the golden file."""
 
     enums: dict[str, list[str]]
+    enum_defaults: dict[str, int]
     columns: dict[str, Column]
     systems: dict[str, System]
     commands: dict[str, Command]
     registered: set[str]
     programs: dict[str, dict[str, dict[str, str]]]
+    keys: dict[str, str]  # entity kind -> the column its rows are keyed by (life_course: person_id)
 
 
 @dataclass
@@ -305,11 +323,15 @@ class World:
 
     now: int
     days_per_year: int
+    minutes_per_day: int
     tables: dict[str, dict[int, dict[str, Value]]]
     params: dict[str, dict[str, Value]]
     draws: dict[tuple[str, str, int, int], int]
+    enum_defaults: dict[str, int] = field(default_factory=dict)
     missing_reads: int = 0
     truncated: int = 0
+    dropped_actions: int = 0
+    neutral_reads: int = 0
 
     def row(self, kind: str, ident: int) -> dict[str, Value] | None:
         """Return the row of an entity, or ``None`` if it does not exist."""
@@ -320,7 +342,7 @@ class World:
         row = self.row(column.entity, entity.ident) if entity.ident else None
         if row is None or name not in row:
             self.missing_reads += 1
-            return zero_of(column.ty)
+            return zero_of(column.ty, self.enum_defaults)
         return row[name]
 
     def ids(self, kind: str) -> list[int]:
@@ -356,6 +378,7 @@ def load_registry(raw: dict[str, Any]) -> Registry:
             sends={c["command"]: c["target"] for c in s.get("sends", [])},
             rng=set(s.get("rng", [])),
             params=params,
+            neutral=dict(s.get("neutral", {})),
         )
     columns = {
         name: Column(c["entity"], parse_type(c), c["plane"], c["owner"], c.get("key", c["entity"]))
@@ -365,13 +388,17 @@ def load_registry(raw: dict[str, Any]) -> Registry:
         name: Command(c["owner"], [(p["name"], parse_type(p)) for p in c.get("params", [])])
         for name, c in raw["commands"].items()
     }
+    enums = {k: list(v["values"]) for k, v in raw["enums"].items()}
+    defaults = {k: enums[k].index(str(v["default"])) for k, v in raw["enums"].items()}
     return Registry(
-        enums={k: list(v) for k, v in raw["enums"].items()},
+        enums=enums,
+        enum_defaults=defaults,
         columns=columns,
         systems=systems,
         commands=commands,
         registered=set(raw["registered"]["systems"]),
         programs=raw.get("programs", {}),
+        keys=dict(raw["entities"].get("keys", {})),
     )
 
 
@@ -395,12 +422,14 @@ def load_world(reg: Registry, raw: dict[str, Any]) -> World:
         if not isinstance(rows, list):
             continue
         tables[kind] = {}
+        key_column = reg.keys.get(kind, "id")
         for row in rows:
             cells: dict[str, Value] = {}
             for col, raw_cell in row.items():
                 if col != "id":
                     cells[col] = cell_value(reg, reg.columns[f"{kind}.{col}"], raw_cell)
-            tables[kind][int(row["id"])] = cells
+            key = int(row[key_column]) if key_column == "id" else scalar_int(cells[key_column])
+            tables[kind][key] = cells
     params: dict[str, dict[str, Value]] = {}
     for system, values in raw.get("params", {}).items():
         params[system] = {}
@@ -414,7 +443,16 @@ def load_world(reg: Registry, raw: dict[str, Any]) -> World:
         purpose, entity, k = key.split("/")
         kind, ident = entity.split(":")
         draws[purpose, kind, int(ident), int(k)] = int(str(raw_draw))
-    return World(int(raw["now"]), int(raw["days_per_year"]), tables, params, draws)
+
+    return World(
+        int(raw["now"]),
+        int(raw["days_per_year"]),
+        int(raw["minutes_per_day"]),
+        tables,
+        params,
+        draws,
+        enum_defaults=reg.enum_defaults,
+    )
 
 
 # ----------------------------------------------------------------------------- lexer
@@ -477,6 +515,7 @@ class Ctx:
     allow_key: bool = False
     depth: int = 0
     bound_product: int = 1
+    draw_sites: set[str] = field(default_factory=set)
 
     @property
     def system(self) -> System:
@@ -502,9 +541,30 @@ class Ctx:
             raise CompileError("E_UNKNOWN_NAME", f"column {name}")
         if column.plane != "A":
             raise CompileError("E_PLANE", name)
-        if column.owner != self.system_name and name not in self.system.reads:
+        if column.owner != self.base_system and name not in self.system.reads:
             raise CompileError("E_UNDECLARED_READ", f"{self.system_name} reads {name}")
         return column
+
+    @property
+    def base_system(self) -> str:
+        """The declaring system's Registry id (a case variant strips its suffix)."""
+        return self.system_name.split("@")[0]
+
+    def neutral_for(self, name: str, column: Column) -> Value | None:
+        """The neutral value of a read whose owner is not registered (NEW-4), or ``None``."""
+        if column.owner in self.reg.registered or column.owner == self.base_system:
+            return None
+        if name not in self.system.neutral:
+            raise CompileError(
+                "E_NO_NEUTRAL", f"{self.system_name} reads {name} of an absent owner"
+            )
+        return cell_value(self.reg, column, self.system.neutral[name])
+
+    def note_draw(self, site: str) -> None:
+        """Every ``(purpose, entity, k)`` call site is unique within a system's programs."""
+        if site in self.draw_sites:
+            raise CompileError("E_RNG_REUSE", site)
+        self.draw_sites.add(site)
 
     def enter(self, bound: int) -> None:
         """Enter a bounded iteration: nesting depth and bound product are budgeted."""
@@ -517,6 +577,11 @@ class Ctx:
         """Leave a bounded iteration."""
         self.depth -= 1
         self.bound_product //= bound
+
+
+def is_key(ty: str) -> bool:
+    """Whether a type is a tuple or list key type (spec §3.4)."""
+    return ty.startswith(("tuple(", "list("))
 
 
 def unify(ta: str, tb: str) -> str:
@@ -677,7 +742,7 @@ class Dotted(Node):
                 raise CompileError("E_UNKNOWN_NAME", f"params.{self.tail}")
             self.ty = cx.system.params[self.tail][2]
         elif self.head == "calendar":
-            if self.tail != "days_per_year":
+            if self.tail not in ("days_per_year", "minutes_per_day"):
                 raise CompileError("E_UNKNOWN_NAME", f"calendar.{self.tail}")
             self.ty = "int"
         elif self.head in cx.reg.enums and self.tail in cx.reg.enums[self.head]:
@@ -687,13 +752,14 @@ class Dotted(Node):
             raise CompileError("E_UNKNOWN_NAME", f"{self.head}.{self.tail}")
         return self.ty
 
-    def is_constant(self, cx: Ctx) -> bool:
-        """Whether this is a non-zero constant divisor (spec §4.4)."""
+    def is_constant(self, cx: Ctx, ty: str) -> bool:
+        """Whether this is a constant divisor whose rounded bounds exclude zero (spec §4.4)."""
         if self.head == "calendar":
             return True
         if self.head == "params":
             lo, hi, _ = cx.system.params[self.tail]
-            return lo > 0 or hi < 0
+            scale = 1 if ty == "int" else 1 << FRAC_BITS[ty]
+            return round(lo * scale) > 0 or round(hi * scale) < 0
         return False
 
     def eval(self, ev: Ev) -> Value:
@@ -701,7 +767,9 @@ class Dotted(Node):
         if self.head == "params":
             return ev.world.params[ev.system_name][self.tail]
         if self.head == "calendar":
-            return ev.world.days_per_year
+            return (
+                ev.world.days_per_year if self.tail == "days_per_year" else ev.world.minutes_per_day
+            )
         return En(self.head, self.index)
 
 
@@ -714,19 +782,24 @@ class Read(Node):
         self.entity = entity
         self.arg = arg
         self.column: Column | None = None
+        self.neutral: Value | None = None
 
     def check(self, cx: Ctx) -> str:
         """Check the read is allowed and the argument has the column's entity kind."""
         self.column = cx.check_read(self.name)
+        self.neutral = cx.neutral_for(self.name, self.column)
         self.arg.resolve(unify(self.arg.check(cx), f"ent:{self.column.key}"))
         self.ty = self.column.ty
         return self.ty
 
     def eval(self, ev: Ev) -> Value:
-        """Read the column of the entity (missing: the type's zero)."""
+        """Read the column (missing: the type's zero; an absent owner: the neutral value)."""
         assert self.column is not None
         entity = self.arg.eval(ev)
         assert isinstance(entity, Et)
+        if self.neutral is not None:
+            ev.world.neutral_reads += 1
+            return self.neutral
         return ev.world.read(self.column, self.name.split(".")[1], entity)
 
 
@@ -751,10 +824,8 @@ class Rel(Node):
         if len(self.args) != len(kinds):
             raise CompileError("E_ARITY", self.name)
         for arg, kind in zip(self.args, kinds, strict=True):
-            if kind == "degree":
-                check_degree(arg, KIN_DEGREES_MAX)
-            elif kind == "generations":
-                check_degree(arg, DESCENT_MAX)
+            if kind in DEGREE_BOUNDS:
+                check_degree(arg, DEGREE_BOUNDS[kind], cx)
             else:
                 arg.resolve(unify(arg.check(cx), f"ent:{kind}"))
         for column in reads:
@@ -768,12 +839,18 @@ class Rel(Node):
         return relation(ev.world, self.name, args)
 
 
-def check_degree(arg: Node, upper: int) -> None:
-    """A degree or generation count: an ``Int`` literal in ``1..upper``."""
-    if not isinstance(arg, NumLit) or "." in arg.text:
-        raise CompileError("E_CONST", "a degree must be an Int literal")
-    if not 1 <= int(arg.text) <= upper:
-        raise CompileError("E_BOUND", f"degree {arg.text} outside 1..{upper}")
+def check_degree(arg: Node, upper: int, cx: Ctx) -> None:
+    """A degree: an ``Int`` literal, or an ``int`` parameter whose bounds lie in ``1..upper``."""
+    if isinstance(arg, NumLit) and "." not in arg.text:
+        lo = hi = Fraction(arg.text)
+    elif isinstance(arg, Dotted) and arg.head == "params":
+        if arg.check(cx) != "int":
+            raise CompileError("E_TYPE", f"params.{arg.tail} is not an int parameter")
+        lo, hi, _ = cx.system.params[arg.tail]
+    else:
+        raise CompileError("E_CONST", "a degree must be an Int literal or an int parameter")
+    if not 1 <= lo <= hi <= upper:
+        raise CompileError("E_BOUND", f"degree in [{lo}, {hi}] outside 1..{upper}")
     arg.resolve("int")
 
 
@@ -873,7 +950,7 @@ class Call(Node):
         self.arity(3)
         for arg in self.args[:2]:
             arg.resolve(unify(arg.check(cx), "ent:person"))
-        check_degree(self.args[2], KIN_DEGREES_MAX)
+        check_degree(self.args[2], KIN_DEGREES_MAX, cx)
         for column in GENEALOGY:
             cx.check_read(column)
         return "bool"
@@ -890,11 +967,12 @@ class Call(Node):
         if not self.args[1].ty.startswith("ent:"):
             raise CompileError("E_TYPE", "draw entity")
         index = self.args[2]
-        if not isinstance(index, NumLit) or "." in index.text:
-            raise CompileError("E_CONST", "draw index must be an Int literal")
-        index.resolve("int")
+        index.resolve(concrete(index.check(cx)))
+        if index.ty != "int" and not index.ty.startswith("ent:"):
+            raise CompileError("E_TYPE", "draw index must be an int or an entity")
         if self.name == "chance":
             self.args[3].resolve(unify(self.args[3].check(cx), "q16_16"))
+        cx.note_draw(f"{purpose.name}/{canon(self.args[1])}/{canon(self.args[2])}")
         return "int" if self.name == "draw" else "bool"
 
     def resolve(self, ty: str) -> None:
@@ -916,6 +994,8 @@ class Call(Node):
         if self.name in ACCESSORS:
             x, p = (self.args[0].eval(ev), self.args[1].eval(ev))
             assert isinstance(x, Et) and isinstance(p, Et)
+            if self.name == "descends":
+                return descends(ev.world, x.ident, p.ident)
             return accessor(ev.world, self.name, x, p)
         values = [a.eval(ev) for a in self.args]
         return builtin(self.name, values)
@@ -927,8 +1007,9 @@ class Call(Node):
         entity = self.args[1].eval(ev)
         assert isinstance(entity, Et)
         index = self.args[2].eval(ev)
-        assert isinstance(index, int)
-        key = (purpose.name, entity.kind, entity.ident, index)
+        k = index.ident if isinstance(index, Et) else index
+        assert isinstance(k, int)
+        key = (purpose.name, entity.kind, entity.ident, k)
         if key not in ev.world.draws:
             raise KeyError(f"the golden world lists no draw for {key}")
         u = ev.world.draws[key]
@@ -937,6 +1018,17 @@ class Call(Node):
         p = self.args[3].eval(ev)
         assert isinstance(p, Fx)
         return draw_hits(u, p)
+
+
+def canon(node: object) -> str:
+    """A canonical text of a node: its class and attributes, recursively (the draw-site lint)."""
+    if isinstance(node, Node):
+        skip = {"ty", "bits", "column", "neutral", "index"}
+        parts = [f"{k}={canon(v)}" for k, v in sorted(vars(node).items()) if k not in skip]
+        return f"{type(node).__name__}({', '.join(parts)})"
+    if isinstance(node, list):
+        return "[" + ", ".join(canon(item) for item in node) + "]"
+    return repr(node)
 
 
 def draw_hits(u: int, p: Fx) -> bool:
@@ -1131,13 +1223,14 @@ class Tuple(Node):
         self.items = items
 
     def check(self, cx: Ctx) -> str:
-        """Every element is a scalar or a key; only where keys are allowed."""
+        """Every element is a scalar or a key; the tuple's type fixes arity and element types."""
         if not cx.allow_key:
             raise CompileError("E_TYPE", "a tuple outside an order program")
+        parts = []
         for item in self.items:
             item.check(cx)
-            item.finish()
-        self.ty = "key"
+            parts.append(item.finish())
+        self.ty = f"tuple({','.join(parts)})"
         return self.ty
 
     def eval(self, ev: Ev) -> Value:
@@ -1163,11 +1256,11 @@ class ListKey(Node):
         cx.bind(self.var, f"ent:{rel_ty[4:]}")
         try:
             self.body.check(cx)
-            self.body.finish()
+            element = self.body.finish()
         finally:
             cx.unbind(self.var)
             cx.leave(self.rel.bound)
-        self.ty = "key"
+        self.ty = f"list({element})"
         return self.ty
 
     def eval(self, ev: Ev) -> Value:
@@ -1275,7 +1368,7 @@ class Bin(Node):
     def check_cmp(self, cx: Ctx) -> str:
         """Comparisons: same type; ordering only on numbers."""
         ty = concrete(unify(self.a.check(cx), self.b.check(cx)))
-        if ty == "key" or ty.startswith("rel:"):
+        if is_key(ty) or ty.startswith("rel:"):
             raise CompileError("E_TYPE", f"comparison of {ty}")
         if self.op in ORDER_OPS and ty not in NUMERIC:
             raise CompileError("E_TYPE", f"{self.op} on {ty}")
@@ -1289,20 +1382,20 @@ class Bin(Node):
         require_numeric(ty)
         if self.op in ("div", "mod") and ty not in ("int", "lit_int"):
             raise CompileError("E_TYPE", f"{self.op} on {ty}")
-        if self.op in DIVISION_OPS:
-            self.check_divisor(cx)
         if ty not in LITERALS:
             self.resolve(ty)
+        if self.op in DIVISION_OPS:
+            self.check_divisor(cx, concrete(ty))
         return ty
 
-    def check_divisor(self, cx: Ctx) -> None:
-        """The divisor is a non-zero constant (spec §4.4)."""
+    def check_divisor(self, cx: Ctx, ty: str) -> None:
+        """The divisor is a constant whose bits, after rounding to ``ty``, cannot be zero (§4.4)."""
         d = self.b.e if isinstance(self.b, Neg) else self.b
-        if isinstance(d, NumLit) and Fraction(d.text) != 0:
+        if isinstance(d, NumLit) and literal_bits(ty, d.text) != 0:
             return
-        if isinstance(d, Dotted) and d.is_constant(cx):
+        if isinstance(d, Dotted) and d.is_constant(cx, ty):
             return
-        raise CompileError("E_DIV", "divisor is not a non-zero constant")
+        raise CompileError("E_DIV", "divisor is not a constant with non-zero bits")
 
     def resolve(self, ty: str) -> None:
         """Arithmetic passes the type down; comparisons and logic are already concrete."""
@@ -1343,6 +1436,7 @@ class Action:
     args: list[tuple[str, Node]]
     person_index: int = -1
     order: list[int] = field(default_factory=list)
+    dropped: bool = False
 
     def check(self, cx: Ctx) -> None:
         """The command is known, declared, sent to its owner, registered, and fully named."""
@@ -1354,8 +1448,7 @@ class Action:
             raise CompileError("E_UNDECLARED_COMMAND", f"{cx.system_name} sends {self.name}")
         if target != command.owner:
             raise CompileError("E_COMMAND_OWNER", f"{self.name} to {target}, owner {command.owner}")
-        if command.owner not in cx.reg.registered:
-            raise CompileError("E_OWNER_NOT_REGISTERED", command.owner)
+        self.dropped = command.owner not in cx.reg.registered  # NEW-4: dropped at registration
         self.check_args(cx, command)
 
     def check_args(self, cx: Ctx, command: Command) -> None:
@@ -1370,9 +1463,12 @@ class Action:
         self.person_index = by_name["person"]
         self.order = [by_name[name] for name, _ in command.params]
 
-    def eval(self, ev: Ev) -> Cmd:
-        """Evaluate the arguments left to right, then encode (spec §6)."""
+    def eval(self, ev: Ev) -> Cmd | None:
+        """Evaluate the arguments in order, then encode (§6); dropped when the owner is absent."""
         values = [node.eval(ev) for _, node in self.args]
+        if self.dropped:
+            ev.world.dropped_actions += 1
+            return None
         person = values[self.person_index]
         assert isinstance(person, Et)
         return Cmd(self.name, person.ident, tuple(encode(values[i]) for i in self.order))
@@ -1422,15 +1518,19 @@ class Effect:
 
     def eval(self, ev: Ev) -> list[Cmd]:
         """The commands this effect emits, in order."""
+        out: list[Cmd] = []
         if self.rel is None or self.var is None:
-            return [self.action.eval(ev)] if self.when is None or self.when.eval(ev) else []
+            if self.when is None or self.when.eval(ev):
+                emitted = self.action.eval(ev)
+                out.extend([emitted] if emitted is not None else [])
+            return out
         elements = self.rel.eval(ev)
         assert isinstance(elements, list)
-        out: list[Cmd] = []
         for element in elements:
             ev.vars[self.var] = element
             if self.where is None or self.where.eval(ev):
-                out.append(self.action.eval(ev))
+                emitted = self.action.eval(ev)
+                out.extend([emitted] if emitted is not None else [])
         ev.vars.pop(self.var, None)
         return out
 
@@ -1459,6 +1559,7 @@ class Parser:
         """Tokenise the program."""
         self.tokens = lex(text)
         self.pos = 0
+        self.depth = 0
 
     def peek(self, offset: int = 0) -> Token:
         """The token ``offset`` ahead."""
@@ -1570,10 +1671,14 @@ class Parser:
 
     # --- expressions
     def expr(self) -> Node:
-        """``or_expr``."""
+        """``or_expr``; nesting deeper than ``EXPRESSION_DEPTH_MAX`` is ``E_BOUND``."""
+        self.depth += 1
+        if self.depth > EXPRESSION_DEPTH_MAX:
+            raise CompileError("E_BOUND", f"expression nesting above {EXPRESSION_DEPTH_MAX}")
         node = self.and_expr()
         while self.accept("or"):
             node = Bin("or", node, self.and_expr())
+        self.depth -= 1
         return node
 
     def and_expr(self) -> Node:
@@ -1770,6 +1875,40 @@ def by_generation(world: World, ident: int, depth: int, down: bool) -> list[int]
     return out
 
 
+def descends(world: World, x: int, a: int) -> bool:
+    """Whether ``x`` is a descendant-or-self of ``a`` within ``DESCENT_MAX`` generations."""
+    return x != 0 and a != 0 and a in ancestors_or_self(world, x, DESCENT_MAX, False)
+
+
+def line_key(world: World, a: int, x: int) -> tuple[tuple[int, int], ...]:
+    """The ``(birth_tick, person_id)`` key of each person on ``line(a, x)``."""
+    out: list[tuple[int, int]] = []
+    for y in line_between(world, a, x, False):
+        row = world.row("life_course", y) or {}
+        out.append((scalar_int(row.get("birth_tick", 0)), y))
+    return tuple(out)
+
+
+def lineage(world: World, p: int, height: int) -> list[int]:
+    """The lineage of ``p``: ``(up, line)``-ordered descendants of its ancestors (spec §5.3).
+
+    Every descendant within ``DESCENT_MAX`` generations of every ancestor-or-self of ``p`` at
+    height ``0..height``, ``p`` itself excluded.
+    """
+    members: set[int] = set()
+    level = [p]
+    for _ in range(height + 1):
+        for a in level:
+            members.update(by_generation(world, a, DESCENT_MAX, True))
+        level = [q for y in level for q in parents(world, y, False)]
+    members.discard(p)
+    keyed = []
+    for x in members:
+        up, common = up_and_common(world, x, p, False)
+        keyed.append(((up, line_key(world, common, x)), x))
+    return [x for _, x in sorted(keyed)]
+
+
 def kin_within(world: World, ident: int, degrees: int) -> list[int]:
     """Persons within ``degrees`` parent-or-child steps, excluding ``ident``, ascending."""
     seen = {ident}
@@ -1856,6 +1995,7 @@ def relation(world: World, name: str, args: list[Value]) -> list[Et]:
         "kin": lambda: kin_within(world, ids[0], ids[1]),
         "ancestors": lambda: by_generation(world, ids[0], ids[1], False),
         "descendants": lambda: by_generation(world, ids[0], ids[1], True),
+        "lineage": lambda: lineage(world, ids[0], ids[1]),
         "line": lambda: line_between(world, ids[0], ids[1], False),
         "line_agnatic": lambda: line_between(world, ids[0], ids[1], True),
         "titles": lambda: rows_where(world, "title", "holder", ids[0]),
@@ -1868,17 +2008,22 @@ def relation(world: World, name: str, args: list[Value]) -> list[Et]:
     }
     found = simple[name]() if ids[0] or name.startswith("line") else []
     if len(found) > bound:
+        if name == "lineage":
+            raise InvariantError("E_TRUNCATED: a candidates relation exceeded its bound")
         world.truncated += 1
         found = found[:bound]
     return [Et(yields, i) for i in found]
 
 
 # ----------------------------------------------------------------------------- compiling
-def compile_expr(text: str, cx: Ctx) -> Node:
-    """Parse, check and resolve an expression program."""
+def compile_expr(text: str, cx: Ctx, expected: str | None = None) -> Node:
+    """Parse, check and resolve an expression program; the kind's result type is a context."""
     node = Parser(text).program()
-    node.check(cx)
-    node.finish()
+    ty = node.check(cx)
+    if expected is not None:
+        node.resolve(unify(ty, expected))
+    else:
+        node.finish()
     return node
 
 
@@ -2009,6 +2154,7 @@ def system_for_case(reg: Registry, case: dict[str, Any]) -> str:
         sends={**base.sends, **{s["command"]: s["target"] for s in extra_sends or []}},
         rng=base.rng,
         params=base.params,
+        neutral=base.neutral,
     )
     variant_name = f"{name}@{case['id']}"
     reg.systems[variant_name] = variant
@@ -2041,14 +2187,10 @@ def prepare(golden: Golden, case: dict[str, Any]) -> Run:
 
 def run_expr(run: Run, case: dict[str, Any]) -> str:
     """Evaluate an ``expr`` or ``order`` case."""
-    node = compile_expr(str(case["text"]), run.cx)
+    wanted = case.get("result")
+    node = compile_expr(str(case["text"]), run.cx, str(wanted) if wanted else None)
     if case["kind"] == "order":
         return "key:" + render_key(node.eval(run.ev))
-    wanted = case.get("result")
-    if wanted is not None and node.ty != wanted:
-        raise CompileError("E_TYPE", f"program is {node.ty}, kind wants {wanted}")
-    if node.ty == "key":
-        raise CompileError("E_TYPE", "a key outside an order program")
     return render_scalar(node.eval(run.ev))
 
 
@@ -2070,9 +2212,7 @@ def succession_line(run: Run, programs: dict[str, str]) -> list[int]:
     """The succession protocol of spec §7.2 for one law."""
     cands = compile_candidates(programs["candidates"], run.cx)
     run.cx.bind("x", "ent:person")
-    eligible = compile_expr(programs["eligible"], run.cx)
-    if eligible.ty != "bool":
-        raise CompileError("E_TYPE", "eligible must be bool")
+    eligible = compile_expr(programs["eligible"], run.cx, "bool")
     run.cx.allow_key = True
     order = compile_expr(programs["order"], run.cx)
     run.cx.unbind("x")
@@ -2102,8 +2242,11 @@ RUNNERS = {
 }
 
 
-def run_case(golden: Golden, case: dict[str, Any]) -> tuple[str, int]:
-    """Run one case; return the rendered result (or ``error:CODE``) and the missing-read count."""
+DIAGNOSTICS = ("missing_reads", "dropped_actions", "neutral_reads", "truncated")
+
+
+def run_case(golden: Golden, case: dict[str, Any]) -> tuple[str, dict[str, int]]:
+    """Run one case; return the rendered result (or ``error:CODE``) and the diagnostics."""
     run = prepare(golden, case)
     try:
         if case["kind"] == "succession":
@@ -2111,8 +2254,10 @@ def run_case(golden: Golden, case: dict[str, Any]) -> tuple[str, int]:
         else:
             text = RUNNERS[str(case["kind"])](run, case)
     except CompileError as error:
-        return f"error:{error.code}", 0
-    return text, run.ev.world.missing_reads
+        return f"error:{error.code}", {}
+    except InvariantError as error:
+        return f"invariant:{str(error).split(':')[0]}", {}
+    return text, {name: getattr(run.ev.world, name) for name in DIAGNOSTICS}
 
 
 def check_all(golden: Golden, verbose: bool, only: str | None) -> int:
@@ -2135,15 +2280,18 @@ def report_case(golden: Golden, case: dict[str, Any], verbose: bool) -> int:
     """Run and compare one case; print a line; return 1 on failure."""
     ident = str(case["id"])
     try:
-        got, missing = run_case(golden, case)
+        got, diags = run_case(golden, case)
     except Exception as error:  # a crash is a failed case, reported by name, never a traceback
         print(f"FAIL {ident}: crashed: {type(error).__name__}: {error}")
         return 1
     expected = str(case["expect"])
-    ok = got == expected and missing == int(case.get("missing_reads", missing))
+    ok = got == expected
+    for name in DIAGNOSTICS:
+        if name in case:
+            ok = ok and int(case[name]) == diags.get(name, -1)
     if verbose or not ok:
         print(f"{'ok  ' if ok else 'FAIL'} {ident}: {case['text']!r}")
-        print(f"      expected {expected}  got {got}  missing_reads {missing}")
+        print(f"      expected {expected}  got {got}  diagnostics {diags}")
     return 0 if ok else 1
 
 

@@ -12,37 +12,43 @@
 #   effects:[Name(person=<id>, args=[<i64>, ...]); ...]   the queue form of §6     (kind = "effects")
 #   line:[ids]      the law's line by the succession protocol of §7.2              (kind = "succession")
 #   error:E_CODE    a rejected program (§10)
-# A case may pin the evaluator's missing-read diagnostic with `missing_reads = N` (default: not checked).
-# Variable bindings are "kind:id" strings (an entity), integers or booleans; `now` comes from the world.
+#   invariant:E_TRUNCATED   a hard invariant failure at evaluation (a candidates relation above its bound)
+# A case may pin the evaluator's diagnostics with `missing_reads`, `neutral_reads`, `dropped_actions` or `truncated`
+# (default: not checked). Ticks are SimTime minutes (B1): the fixture's day is 1440 minutes.
+# Variable bindings are "kind:id" strings (an entity), integers or booleans; `now` comes from the world; an
+# effects case binds `event`, the EventId the host resolves for the verb's own event (§6).
 # `extra_reads` and `extra_sends` give a case a variant of its declaring system (§7.4), used to show what a
 # spec change would accept (open questions Q6 and Q7 of the spec).
 
 language = "effect_language_v0"
-version = "0.1.0"
+version = "0.2.0"
 spec = "specs/registry/effect_language_v0.md"
 
 # ============================================================================= the Registry slice (§7.4)
 [registry]
-effect_language_version = "0.1.0"
+effect_language_version = "0.2.0"
 
+# Every enum declares its default: the value a missing read yields (minor 2); it is not the first value by position.
 [registry.enums]
-sex               = ["male", "female"]
-death_cause       = ["natural", "murder", "battle", "execution", "accident"]
-vocations         = ["none", "holy_orders", "mercenary", "household"]
-title_tiers       = ["sovereign", "major", "minor"]
-office_kinds      = ["chancellor", "marshal", "steward", "spymaster", "chaplain"]
-title_state       = ["held", "awaiting", "interregnum"]
-claim_status      = ["active", "realised", "renounced", "void"]
-artifact_state    = ["borne", "placed", "lost", "destroyed"]
-vow_status        = ["active", "fulfilled", "broken", "void"]
-vow_kinds         = ["AVENGE_KIN", "RECOVER_RELIC", "DESTROY_RELIC", "PROTECT", "CLAIM_TITLE", "PILGRIMAGE", "GRUDGE"]
-opinion_modifiers = ["KIN_HARMED_BY", "PASSED_OVER", "DEPOSED_BY", "CLAIM_PRESSED_BY", "FEUD_WITH", "MARRIED_TO", "GRANTED_BY", "DESPAIR_PACT_WITH", "VOW_BROKEN_BY", "VOW_FULFILLED_BY"]
-succession_laws   = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", "tanistry", "sortition"]
-overlays          = ["paranoia", "filial_piety", "despair", "hubris", "corruption", "dragon_sympathy"]
-region_conditions = ["normal", "famine", "siege", "war"]
+sex               = { values = ["male", "female"], default = "male" }
+death_cause       = { values = ["natural", "murder", "battle", "execution", "accident"], default = "natural" }
+vocations         = { values = ["none", "holy_orders", "mercenary", "household"], default = "none" }
+title_tiers       = { values = ["sovereign", "major", "minor"], default = "minor" }
+office_kinds      = { values = ["chancellor", "marshal", "steward", "spymaster", "chaplain"], default = "chancellor" }
+title_state       = { values = ["held", "awaiting", "interregnum"], default = "held" }
+claim_status      = { values = ["active", "realised", "renounced", "void"], default = "void" }
+artifact_state    = { values = ["borne", "placed", "lost", "destroyed"], default = "lost" }
+vow_status        = { values = ["active", "fulfilled", "broken", "void"], default = "void" }
+vow_kinds         = { values = ["AVENGE_KIN", "RECOVER_RELIC", "DESTROY_RELIC", "PROTECT", "CLAIM_TITLE", "PILGRIMAGE", "GRUDGE"], default = "GRUDGE" }
+opinion_modifiers = { values = ["KIN_HARMED_BY", "PASSED_OVER", "DEPOSED_BY", "CLAIM_PRESSED_BY", "FEUD_WITH", "MARRIED_TO", "GRANTED_BY", "DESPAIR_PACT_WITH", "VOW_BROKEN_BY", "VOW_FULFILLED_BY"], default = "KIN_HARMED_BY" }
+succession_laws   = { values = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", "tanistry", "sortition"], default = "primogeniture" }
+overlays          = { values = ["paranoia", "filial_piety", "despair", "hubris", "corruption", "dragon_sympathy"], default = "paranoia" }
+region_conditions = { values = ["normal", "famine", "siege", "war"], default = "normal" }
+life_course_death_cause = { values = ["none", "natural", "murder", "battle", "execution", "accident"], default = "none" }   # PR #37's M2
 
 [registry.entities]
 kinds = ["person", "life_course", "title", "office", "claim", "house", "polity", "artifact", "vow", "region", "mind"]
+keys = { life_course = "person_id" }   # the log's rows are keyed by person_id, not by their row id (M7)
 
 # Columns as the system specs declare them ([[owns]]), with language types: bool | int | q8_8 | q16_16 |
 # enum (+ enum) | ref (+ ref). Spec storage types map as u64/i64/u32/u16/u8 -> int, a "<Kind>Id" u64 -> ref.
@@ -65,6 +71,7 @@ kinds = ["person", "life_course", "title", "office", "claim", "house", "polity",
 "life_course.father" = { entity = "life_course", key = "person", type = "ref", ref = "person", plane = "A", owner = "M2.demography" }
 "life_course.birth_tick" = { entity = "life_course", key = "person", type = "int", plane = "A", owner = "M2.demography" }
 "life_course.sex"    = { entity = "life_course", key = "person", type = "enum", enum = "sex", plane = "A", owner = "M2.demography" }   # REV-P1a NEW-7
+"life_course.death_cause" = { entity = "life_course", key = "person", type = "enum", enum = "life_course_death_cause", plane = "A", owner = "M2.demography" }   # PR #37 (Q7)
 "title.tier"         = { entity = "title", type = "enum", enum = "title_tiers", plane = "A", owner = "M7.dynasty" }
 "title.liege"        = { entity = "title", type = "ref", ref = "title", plane = "A", owner = "M7.dynasty" }
 "title.polity"       = { entity = "title", type = "ref", ref = "polity", plane = "A", owner = "M7.dynasty" }
@@ -73,6 +80,7 @@ kinds = ["person", "life_course", "title", "office", "claim", "house", "polity",
 "title.state"        = { entity = "title", type = "enum", enum = "title_state", plane = "A", owner = "M7.dynasty" }
 "title.held_since"   = { entity = "title", type = "int", plane = "A", owner = "M7.dynasty" }
 "title.regent"       = { entity = "title", type = "ref", ref = "person", plane = "A", owner = "M7.dynasty" }
+"title.founder"      = { entity = "title", type = "ref", ref = "person", plane = "A", owner = "M7.dynasty" }   # M8: the first acquirer, whose blood the title follows (proposed)
 "office.title"       = { entity = "office", type = "ref", ref = "title", plane = "A", owner = "M7.dynasty" }
 "office.kind"        = { entity = "office", type = "enum", enum = "office_kinds", plane = "A", owner = "M7.dynasty" }
 "office.holder"      = { entity = "office", type = "ref", ref = "person", plane = "A", owner = "M7.dynasty" }
@@ -117,6 +125,7 @@ sends = [
   { command = "TransferHoldings", target = "M4.economy" },
 ]
 rng = ["exit_murder", "exit_deposition", "exit_day", "murder_culprit", "succession_tie", "interregnum_delay", "vocation", "sortition"]
+neutral = { "polity.exec_constraint" = "0.0" }   # NEW-4: M6 is not registered in P1a; its coupling's neutral value applies
 params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], predecessor_deposed_hr = [1.3, 2.0], exec_constraint_hr = [0.3, 1.0], majority_age = [12.0, 21.0], arb_legal_weight = [0.0, 1.0], arb_claim_weight = [0.0, 1.0], arb_military_weight = [0.0, 1.0], arb_treasury_weight = [0.0, 1.0], contest_margin = [0.0, 1.0], interregnum_max_days = [7, 730], dormancy_degrees = [1, 6], vocation_holy_orders = [0.0, 0.6], vocation_mercenary = [0.0, 0.6] }
 
 [registry.systems."T1.minds"]
@@ -134,7 +143,7 @@ sends = [
   { command = "Destroy", target = "S6.artifacts" },
   { command = "BurnHoldings", target = "M4.economy" },   # HOLDINGS_BURNED: M4 is P1b, so it is refused in the P1a world
 ]
-rng = ["trait_draw", "poll_jitter", "iaus_select", "action_order", "break_delay", "break_act", "act_outcome"]
+rng = ["trait_draw", "poll_jitter", "iaus_select", "action_order", "break_delay", "break_act", "break_outcome", "attack_outcome"]   # PR #32 head 770811a
 params = { stress_threshold = [50.0, 95.0], stress_decay = [0.0, 10.0], vow_conflict_gain = [0.0, 20.0], break_delay_max_days = [1, 90], grief_gain = [0.0, 60.0], grief_instant_cap = [5.0, 60.0], loyalty_conflict_gain = [0.0, 20.0], dissonance_gain = [0.0, 30.0], break_refractory_days = [30, 1825], attempt_success = [0.05, 0.6], trait_sd = [15.0, 50.0], iaus_top_k = [1, 5], interrupt_daily_cap = [1, 4], thought_cap = [0.0, 50.0], thought_decay = [0.0, 10.0], marriage_min_age = [12.0, 20.0] }
 
 [registry.systems."S6.artifacts"]
@@ -144,7 +153,8 @@ rng = ["loss_on_death", "theft_outcome", "search_find"]
 params = { influence_base = [0.0, 0.05], resist_slope = [0.0, 1.0], corruption_threshold = [0.2, 0.9], rumour_max_hops = [1, 20], rumour_decay_years = [5, 200], find_chance = [0.0, 0.2], theft_success = [0.05, 0.6], loss_on_death = [0.0, 0.5] }
 
 [registry.systems."S7.vows"]
-reads = ["person.alive", "artifact.bearer", "artifact.state", "title.holder", "knowledge.knows", "mind.conscientiousness", "region.conditions"]
+reads = ["person.alive", "artifact.bearer", "artifact.state", "title.holder", "knowledge.knows", "mind.conscientiousness", "region.conditions", "life_course.death_cause"]   # life_course.death_cause: Q7
+neutral = { "region.conditions" = "normal" }   # NEW-4: M6 is not registered in P1a
 sends = [
   { command = "AgendaGoal", target = "T1.minds" },
   { command = "ClearGoal", target = "T1.minds" },
@@ -156,15 +166,16 @@ params = { vow_priority_base = [0.05, 0.5], vow_priority_cap = [0.1, 0.8], max_a
 
 # A fixture system with deliberately wrong declarations, for the rejection cases only.
 [registry.systems."X.fixture"]
-reads = ["pin.flag", "person.alive"]
-sends = [{ command = "PressClaim", target = "M2.demography" }, { command = "BurnHoldings", target = "M4.economy" }]
+reads = ["pin.flag", "person.alive", "polity.exec_constraint"]   # exec_constraint without a neutral value: E_NO_NEUTRAL
+sends = [{ command = "PressClaim", target = "M2.demography" }]
 rng = ["sortition"]
-params = {}
+params = { tiny = [0.000001, 1.0] }   # a lower bound that rounds to 0 bits in q16_16 (M1)
 
 # Command signatures (§7.3, the new [commands] section): owner, the name of the queue-key person, parameters.
 [registry.commands]
-ScheduleDeath    = { owner = "M2.demography", person = "victim", params = [{ name = "cause", type = "enum", enum = "death_cause" }, { name = "culprit", type = "ref", ref = "person" }] }
-Marry            = { owner = "M2.demography", person = "person", params = [{ name = "partner", type = "ref", ref = "person" }] }
+# ScheduleDeath and Marry are M2's [[applies]] payloads at PR #32 head 770811a (M6): the lint checks them in both directions.
+ScheduleDeath    = { owner = "M2.demography", person = "victim", params = [{ name = "tick", type = "int" }, { name = "cause", type = "enum", enum = "death_cause" }, { name = "culprit", type = "ref", ref = "person" }, { name = "cause_event", type = "int" }] }
+Marry            = { owner = "M2.demography", person = "a", params = [{ name = "b", type = "ref", ref = "person" }, { name = "tick", type = "int" }] }
 Promote          = { owner = "T1.minds", person = "person", params = [] }
 Demote           = { owner = "T1.minds", person = "person", params = [] }
 OpinionModifier  = { owner = "T1.minds", person = "holder", params = [{ name = "about", type = "ref", ref = "person" }, { name = "kind", type = "enum", enum = "opinion_modifiers" }] }
@@ -188,19 +199,27 @@ Destroy          = { owner = "S6.artifacts", person = "actor", params = [{ name 
 systems = ["M2.demography", "M7.dynasty", "T1.minds", "S6.artifacts", "S7.vows"]
 
 # ----------------------------------------------------------------------------- the laws (spec §8)
+# Lineage laws (B2, M8): candidates are the lineage of the holder (the descendants of its ancestors up to height 3);
+# the title-blood rule keeps collaterals who descend from the title's founder; siblings order by birth tick, ties by
+# person_id (the host's final tie-break), so twins' keys are equal.
 [registry.programs.succession_laws.primogeniture]
-candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x'
-order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and descends(x, title.founder(title))'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
+
+[registry.programs.succession_laws.primogeniture_open]   # the unrestricted variant (no title-blood rule): for the director (M8)
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.ultimogeniture]
-candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x'
-order      = '(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and descends(x, title.founder(title))'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.seniority]
-candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 4 and common_agnatic(x, holder) != x'
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and descends(x, title.founder(title))'
 order      = '(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), life_course.birth_tick(x))'
 
 [registry.programs.succession_laws.partition]
@@ -214,8 +233,8 @@ eligible   = 'person.alive(x) and x != holder'
 order      = '(min(t in titles(x): ordinal(title.tier(t)) else 3), life_course.birth_tick(x))'
 
 [registry.programs.succession_laws.tanistry]
-candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and common_agnatic(x, holder) != x and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year))'
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and descends(x, title.founder(title)) and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year)) * calendar.minutes_per_day'
 order      = 'life_course.birth_tick(x)'
 
 [registry.programs.succession_laws.sortition]
@@ -225,22 +244,23 @@ order      = 'draw(sortition, x, 0)'
 
 # Data-only extensions (§8): variants are Registry edits, not code.
 [registry.programs.succession_laws.absolute_primogeniture]
-candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x'
-order      = '(up(x, holder), [(life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and descends(x, title.founder(title))'
+order      = '(up(x, holder), [life_course.birth_tick(y) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.agnatic_primogeniture]
-candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and common_agnatic(x, holder) != x'
-order      = '(up_agnatic(x, holder), [(life_course.birth_tick(y), y) for y in line_agnatic(common_agnatic(x, holder), x)])'
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and descends(x, title.founder(title))'
+order      = '(up_agnatic(x, holder), [life_course.birth_tick(y) for y in line_agnatic(common_agnatic(x, holder), x)])'
 
 [registry.programs.succession_laws.primogeniture_lay]   # open question Q1: holy orders excluded by the law itself
-candidates = 'kin(holder, 4)'
-eligible   = 'person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x and person.vocation(x) != vocations.holy_orders'
-order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and descends(x, title.founder(title)) and person.vocation(x) != vocations.holy_orders'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
 
 # ============================================================================= the fixture world
-# House Khorvath at the instant High King Halvard (7) is murdered: `now` = 0, ticks in days before it.
+# House Khorvath at the instant High King Halvard (7) is murdered: `now` = 0; the tree gives ages in days before it,
+# the rows hold minutes (days x 1440).
 #
 #   Aldric (1, m, dead) = Bera (2, f, dead)
 #   ├── Cedric (3, m, dead -2000) = Dagny (4, f)        ├── Freya (6, f)        └── Edmund (5, m)
@@ -263,8 +283,9 @@ order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.bi
 # (renounced), 302 Edmund on 100 (active). Artifacts: 400 borne by Kell, 401 destroyed. Vows: 500 Edmund
 # CLAIM_TITLE 100; 501 Ragnar AVENGE_KIN against Halvard.
 [worlds.dynasty]
-now = 0
+now = 0            # SimTime minutes from the epoch (B1); every tick below is in minutes, 1440 to a day
 days_per_year = 360
+minutes_per_day = 1440
 
 [worlds.dynasty.params."M7.dynasty"]
 murder_hazard_base = "0.01"
@@ -327,14 +348,15 @@ e0 = "32.0"
 "sortition/person:19/0"  = "0"
 "sortition/person:19/1"  = "281474976710655"      # 2^48 - 1: the last draw that hits Q16_16::EPSILON
 "sortition/person:19/2"  = "281474976710656"      # 2^48: the first that misses it
-"act_outcome/person:9/0" = "42"
-"act_outcome/person:16/0" = "9223372036854775808"  # 2^63: u / 2^64 = 0.5, misses p = 0.3
+"sortition/person:19/7"  = "12345"
+"attack_outcome/person:9/5" = "42"                  # T1's attack_outcome, keyed (actor, k = target id, t)
+"attack_outcome/person:16/5" = "9223372036854775808"  # 2^63: u / 2^64 = 0.5, misses p = 0.3
 
 [[worlds.dynasty.person]]
 id = 4
 alive = true
 sex = "female"
-birth_tick = -23500
+birth_tick = -33840000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -348,7 +370,7 @@ residence = 1
 id = 5
 alive = true
 sex = "male"
-birth_tick = -22000
+birth_tick = -31680000
 death_tick = 0
 death_cause = "natural"
 mother = 2
@@ -362,7 +384,7 @@ residence = 1
 id = 6
 alive = true
 sex = "female"
-birth_tick = -22500
+birth_tick = -32400000
 death_tick = 0
 death_cause = "natural"
 mother = 2
@@ -376,7 +398,7 @@ residence = 1
 id = 7
 alive = false
 sex = "male"
-birth_tick = -14000
+birth_tick = -20160000
 death_tick = 0
 death_cause = "murder"
 mother = 4
@@ -390,7 +412,7 @@ residence = 1
 id = 8
 alive = true
 sex = "female"
-birth_tick = -13500
+birth_tick = -19440000
 death_tick = 0
 death_cause = "natural"
 mother = 4
@@ -404,7 +426,7 @@ residence = 1
 id = 9
 alive = true
 sex = "male"
-birth_tick = -12500
+birth_tick = -18000000
 death_tick = 0
 death_cause = "natural"
 mother = 4
@@ -418,7 +440,7 @@ residence = 1
 id = 10
 alive = true
 sex = "male"
-birth_tick = -8000
+birth_tick = -11520000
 death_tick = 0
 death_cause = "natural"
 mother = 11
@@ -432,7 +454,7 @@ residence = 1
 id = 11
 alive = true
 sex = "female"
-birth_tick = -13800
+birth_tick = -19872000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -446,7 +468,7 @@ residence = 1
 id = 12
 alive = true
 sex = "female"
-birth_tick = -8500
+birth_tick = -12240000
 death_tick = 0
 death_cause = "natural"
 mother = 11
@@ -460,7 +482,7 @@ residence = 1
 id = 14
 alive = true
 sex = "male"
-birth_tick = -400
+birth_tick = -576000
 death_tick = 0
 death_cause = "natural"
 mother = 15
@@ -474,7 +496,7 @@ residence = 1
 id = 15
 alive = true
 sex = "female"
-birth_tick = -7500
+birth_tick = -10800000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -488,7 +510,7 @@ residence = 1
 id = 16
 alive = true
 sex = "male"
-birth_tick = -3000
+birth_tick = -4320000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -502,7 +524,7 @@ residence = 1
 id = 17
 alive = true
 sex = "female"
-birth_tick = -4000
+birth_tick = -5760000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -516,7 +538,7 @@ residence = 1
 id = 18
 alive = true
 sex = "female"
-birth_tick = -300
+birth_tick = -432000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -530,7 +552,7 @@ residence = 1
 id = 19
 alive = true
 sex = "male"
-birth_tick = -2000
+birth_tick = -2880000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -544,7 +566,7 @@ residence = 1
 id = 20
 alive = true
 sex = "male"
-birth_tick = -1500
+birth_tick = -2160000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -558,7 +580,7 @@ residence = 1
 id = 21
 alive = true
 sex = "male"
-birth_tick = -9000
+birth_tick = -12960000
 death_tick = 0
 death_cause = "natural"
 mother = 8
@@ -572,7 +594,7 @@ residence = 1
 id = 24
 alive = true
 sex = "male"
-birth_tick = -200
+birth_tick = -288000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -586,7 +608,7 @@ residence = 1
 id = 26
 alive = true
 sex = "male"
-birth_tick = -1000
+birth_tick = -1440000
 death_tick = 0
 death_cause = "natural"
 mother = 25
@@ -600,7 +622,7 @@ residence = 1
 id = 27
 alive = true
 sex = "male"
-birth_tick = -3000
+birth_tick = -4320000
 death_tick = 0
 death_cause = "natural"
 mother = 0
@@ -614,7 +636,7 @@ residence = 1
 id = 22
 alive = true
 sex = "female"
-birth_tick = -11000
+birth_tick = -15840000
 death_tick = 0
 death_cause = "natural"
 mother = 4
@@ -625,197 +647,225 @@ vocation = "none"
 named = false
 residence = 1
 
-# The life-course log: every person who ever lived, with the genealogy the relations read (§5.3).
+# The life-course log: every person who ever lived, with the genealogy the relations read (§5.3). Rows are keyed by
+# person_id; their row ids are 1000 + person_id so that an evaluator indexing by row id fails (M7).
 [[worlds.dynasty.life_course]]
-id = 1
+id = 1001
 person_id = 1
 mother = 0
 father = 0
-birth_tick = -34000
+birth_tick = -48960000
 sex = "male"
+death_cause = "natural"
 [[worlds.dynasty.life_course]]
-id = 2
+id = 1002
 person_id = 2
 mother = 0
 father = 0
-birth_tick = -33500
+birth_tick = -48240000
 sex = "female"
+death_cause = "natural"
 [[worlds.dynasty.life_course]]
-id = 3
+id = 1003
 person_id = 3
 mother = 2
 father = 1
-birth_tick = -24000
+birth_tick = -34560000
 sex = "male"
+death_cause = "battle"
 [[worlds.dynasty.life_course]]
-id = 4
+id = 1004
 person_id = 4
 mother = 0
 father = 0
-birth_tick = -23500
+birth_tick = -33840000
 sex = "female"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 5
+id = 1005
 person_id = 5
 mother = 2
 father = 1
-birth_tick = -22000
+birth_tick = -31680000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 6
+id = 1006
 person_id = 6
 mother = 2
 father = 1
-birth_tick = -22500
+birth_tick = -32400000
 sex = "female"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 7
+id = 1007
 person_id = 7
 mother = 4
 father = 3
-birth_tick = -14000
+birth_tick = -20160000
 sex = "male"
+death_cause = "murder"
 [[worlds.dynasty.life_course]]
-id = 8
+id = 1008
 person_id = 8
 mother = 4
 father = 3
-birth_tick = -13500
+birth_tick = -19440000
 sex = "female"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 9
+id = 1009
 person_id = 9
 mother = 4
 father = 3
-birth_tick = -12500
+birth_tick = -18000000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 10
+id = 1010
 person_id = 10
 mother = 11
 father = 7
-birth_tick = -8000
+birth_tick = -11520000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 11
+id = 1011
 person_id = 11
 mother = 0
 father = 0
-birth_tick = -13800
+birth_tick = -19872000
 sex = "female"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 12
+id = 1012
 person_id = 12
 mother = 11
 father = 7
-birth_tick = -8500
+birth_tick = -12240000
 sex = "female"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 13
+id = 1013
 person_id = 13
 mother = 11
 father = 7
-birth_tick = -7000
+birth_tick = -10080000
 sex = "male"
+death_cause = "accident"
 [[worlds.dynasty.life_course]]
-id = 14
+id = 1014
 person_id = 14
 mother = 15
 father = 13
-birth_tick = -400
+birth_tick = -576000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 15
+id = 1015
 person_id = 15
 mother = 0
 father = 0
-birth_tick = -7500
+birth_tick = -10800000
 sex = "female"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 16
+id = 1016
 person_id = 16
 mother = 0
 father = 9
-birth_tick = -3000
+birth_tick = -4320000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 17
+id = 1017
 person_id = 17
 mother = 0
 father = 5
-birth_tick = -4000
+birth_tick = -5760000
 sex = "female"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 18
+id = 1018
 person_id = 18
 mother = 0
 father = 10
-birth_tick = -300
+birth_tick = -432000
 sex = "female"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 19
+id = 1019
 person_id = 19
 mother = 0
 father = 5
-birth_tick = -2000
+birth_tick = -2880000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 20
+id = 1020
 person_id = 20
 mother = 0
 father = 9
-birth_tick = -1500
+birth_tick = -2160000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 21
+id = 1021
 person_id = 21
 mother = 8
 father = 0
-birth_tick = -9000
+birth_tick = -12960000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 22
+id = 1022
 person_id = 22
 mother = 4
 father = 0
-birth_tick = -11000
+birth_tick = -15840000
 sex = "female"
+death_cause = "none"
 
 [[worlds.dynasty.life_course]]
-id = 23
+id = 1023
 person_id = 23
 mother = 0
 father = 9
-birth_tick = -5000
+birth_tick = -7200000
 sex = "male"
+death_cause = "natural"
 [[worlds.dynasty.life_course]]
-id = 24
+id = 1024
 person_id = 24
 mother = 0
 father = 23
-birth_tick = -200
+birth_tick = -288000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 25
+id = 1025
 person_id = 25
 mother = 11
 father = 7
-birth_tick = -9000
+birth_tick = -12960000
 sex = "female"
+death_cause = "natural"
 [[worlds.dynasty.life_course]]
-id = 26
+id = 1026
 person_id = 26
 mother = 25
 father = 0
-birth_tick = -1000
+birth_tick = -1440000
 sex = "male"
+death_cause = "none"
 [[worlds.dynasty.life_course]]
-id = 27
+id = 1027
 person_id = 27
 mother = 0
 father = 9
-birth_tick = -3000
+birth_tick = -4320000
 sex = "male"
+death_cause = "none"
 
 [[worlds.dynasty.title]]
 id = 100
@@ -825,8 +875,9 @@ polity = 1
 law = "primogeniture"
 holder = 7
 state = "held"
-held_since = -9000
+held_since = -12960000
 regent = 0
+founder = 1
 [[worlds.dynasty.title]]
 id = 101
 tier = "major"
@@ -835,8 +886,9 @@ polity = 0
 law = "primogeniture"
 holder = 5
 state = "held"
-held_since = -12000
+held_since = -17280000
 regent = 0
+founder = 1
 [[worlds.dynasty.title]]
 id = 102
 tier = "minor"
@@ -845,8 +897,9 @@ polity = 0
 law = "primogeniture"
 holder = 9
 state = "held"
-held_since = -6000
+held_since = -8640000
 regent = 0
+founder = 9
 [[worlds.dynasty.title]]
 id = 103
 tier = "minor"
@@ -855,8 +908,9 @@ polity = 0
 law = "primogeniture"
 holder = 6
 state = "held"
-held_since = -15000
+held_since = -21600000
 regent = 0
+founder = 6
 [[worlds.dynasty.title]]
 id = 104
 tier = "minor"
@@ -867,6 +921,7 @@ holder = 0
 state = "interregnum"
 held_since = 0
 regent = 0
+founder = 0
 
 [[worlds.dynasty.office]]
 id = 200
@@ -1411,6 +1466,24 @@ system = "M7.dynasty"
 text = '1.0 / params.majority_age'
 expect = "q16_16:4096"
 [[case]]
+id = "div_q8_by_a_decimal_that_rounds_to_zero"   # 0.001 is 0.256 q8_8 bits, which rounds to 0 (M1)
+kind = "expr"
+system = "M7.dynasty"
+text = 'q8(1) / 0.001'
+expect = "error:E_DIV"
+[[case]]
+id = "div_by_a_param_whose_lower_bound_rounds_to_zero"   # [0.000001, 1.0]: the lower bound is 0.07 q16_16 bits
+kind = "expr"
+system = "X.fixture"
+text = '1.0 / params.tiny'
+expect = "error:E_DIV"
+[[case]]
+id = "div_by_a_q16_param_with_nonzero_bits"
+kind = "expr"
+system = "M7.dynasty"
+text = '1.0 / params.exec_constraint_hr'
+expect = "q16_16:131072"
+[[case]]
 id = "div_by_the_calendar"
 kind = "expr"
 system = "M7.dynasty"
@@ -1623,14 +1696,14 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:10" }
 text = '1 + person.birth_tick(x)'
-expect = "int:-7999"
+expect = "int:-11519999"
 [[case]]
-id = "q16_of_an_int_column"
+id = "q16_of_an_int_column_saturates"
 kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:10" }
 text = 'q16(person.birth_tick(x))'
-expect = "q16_16:-524288000"
+expect = "q16_16:-2147483648"
 
 # ----------------------------------------------------------------------------- conversions (§3.3, §4.3)
 [[case]]
@@ -2276,11 +2349,11 @@ text = 'person.birth_tick(none)'
 expect = "int:0"
 missing_reads = 1
 [[case]]
-id = "read_enum_of_none_is_the_first_value"
+id = "read_enum_of_none_is_the_declared_default"
 kind = "expr"
 system = "M7.dynasty"
-text = 'person.sex(none)'
-expect = "enum:sex.male"
+text = 'claim.status(none)'
+expect = "enum:claim_status.void"
 missing_reads = 1
 [[case]]
 id = "read_ref_of_none_is_none"
@@ -2305,12 +2378,65 @@ text = 'vow.priority(none)'
 expect = "q8_8:0"
 missing_reads = 1
 [[case]]
+id = "read_of_an_absent_owner_is_the_neutral_value"   # NEW-4: M6 is not registered; M7's coupling declares exec_constraint = 0
+kind = "expr"
+system = "M7.dynasty"
+bind = { p = "polity:1" }
+text = 'polity.exec_constraint(p)'
+expect = "q8_8:0"
+neutral_reads = 1
+missing_reads = 0
+[[case]]
+id = "read_of_an_absent_owner_enum_neutral"   # the fixture row says famine; the neutral value, normal, is read instead
+kind = "expr"
+system = "S7.vows"
+bind = { r = "region:1" }
+text = 'region.conditions(r)'
+expect = "enum:region_conditions.normal"
+neutral_reads = 1
+[[case]]
+id = "read_of_an_absent_owner_without_a_neutral"
+kind = "expr"
+system = "X.fixture"
+bind = { p = "polity:1" }
+text = 'polity.exec_constraint(p)'
+expect = "error:E_NO_NEUTRAL"
+[[case]]
+id = "and_evaluates_both_sides"   # a short-circuiting evaluator counts 0 here and fails (minor 3)
+kind = "expr"
+system = "M7.dynasty"
+text = 'false and person.alive(none)'
+expect = "bool:false"
+missing_reads = 1
+[[case]]
+id = "or_evaluates_both_sides"
+kind = "expr"
+system = "M7.dynasty"
+text = 'true or person.alive(none)'
+expect = "bool:true"
+missing_reads = 1
+[[case]]
+id = "if_evaluates_only_the_taken_branch"
+kind = "expr"
+system = "M7.dynasty"
+text = 'if false then person.alive(none) else true'
+expect = "bool:true"
+missing_reads = 0
+[[case]]
+id = "guarded_read_idiom"   # the idiom that avoids a counted missing read: test exists, then read in the taken branch
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:11" }
+text = 'if exists(person.father(x)) then person.alive(person.father(x)) else false'
+expect = "bool:false"
+missing_reads = 0
+[[case]]
 id = "read_present_counts_no_missing"
 kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:10" }
 text = 'person.birth_tick(x)'
-expect = "int:-8000"
+expect = "int:-11520000"
 missing_reads = 0
 [[case]]
 id = "read_undeclared"
@@ -2323,13 +2449,6 @@ expect = "error:E_UNDECLARED_READ"
 id = "read_plane_b_declared"
 kind = "expr"
 system = "X.fixture"
-bind = { x = "person:10" }
-text = 'pin.flag(x)'
-expect = "error:E_PLANE"
-[[case]]
-id = "read_plane_b_undeclared"
-kind = "expr"
-system = "M7.dynasty"
 bind = { x = "person:10" }
 text = 'pin.flag(x)'
 expect = "error:E_PLANE"
@@ -2405,6 +2524,12 @@ kind = "expr"
 system = "M7.dynasty"
 text = 'calendar.days_per_year'
 expect = "int:360"
+[[case]]
+id = "calendar_minutes_per_day"
+kind = "expr"
+system = "M7.dynasty"
+text = 'calendar.minutes_per_day'
+expect = "int:1440"
 [[case]]
 id = "calendar_unknown"
 kind = "expr"
@@ -2589,14 +2714,14 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'sum(y in children(holder): life_course.birth_tick(y))'
-expect = "int:-32500"
+expect = "int:-46800000"
 [[case]]
 id = "sum_int_from_the_ledger_misses_the_compacted_dead"   # Nils (13) is compacted: his ledger birth tick reads 0
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'sum(y in children(holder): person.birth_tick(y))'
-expect = "int:-16500"
+expect = "int:-23760000"
 missing_reads = 2
 [[case]]
 id = "sum_saturates"
@@ -2625,14 +2750,14 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'min(y in children(holder): life_course.birth_tick(y) else 0)'
-expect = "int:-9000"
+expect = "int:-12960000"
 [[case]]
 id = "max_aggregate"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'max(y in children(holder): life_course.birth_tick(y) else 0)'
-expect = "int:-7000"
+expect = "int:-10080000"
 [[case]]
 id = "min_over_empty_takes_else"
 kind = "expr"
@@ -2717,12 +2842,47 @@ bind = { holder = "person:7" }
 text = 'count(y in person.alive(holder))'
 expect = "error:E_SYNTAX"
 [[case]]
-id = "kin_degree_too_large"
+id = "kin_5"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'count(y in kin(holder, 5))'
+expect = "int:26"
+[[case]]
+id = "kin_6"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'count(y in kin(holder, 6))'
+expect = "int:26"
+[[case]]
+id = "kin_degree_too_large"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'count(y in kin(holder, 7))'
 expect = "error:E_BOUND"
+[[case]]
+id = "kin_degree_from_a_parameter"   # dormancy_degrees has bounds [1, 6] and the value 3 (M3)
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'count(y in kin(holder, params.dormancy_degrees))'
+expect = "int:23"
+[[case]]
+id = "kin_degree_parameter_out_of_bounds"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'count(y in kin(holder, params.interregnum_max_days))'
+expect = "error:E_BOUND"
+[[case]]
+id = "kin_degree_parameter_must_be_int"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'count(y in kin(holder, params.majority_age))'
+expect = "error:E_TYPE"
 [[case]]
 id = "kin_degree_zero"
 kind = "expr"
@@ -2791,8 +2951,15 @@ id = "nesting_bound_product_at_the_limit"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
-text = 'count(a in kin(holder, 4) where any(b in kin(a, 4): b == holder))'
+text = 'count(a in kin(holder, 6) where any(b in kin(a, 6): b == holder))'
 expect = "int:26"
+[[case]]
+id = "nesting_bound_product_exceeded"   # 256 x 1024 > 65,536
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'count(a in kin(holder, 6) where any(b in lineage(a, 3): b == holder))'
+expect = "error:E_BOUND"
 [[case]]
 id = "shadowing_a_bound_variable"
 kind = "expr"
@@ -2891,6 +3058,20 @@ system = "M7.dynasty"
 bind = { t = "title:101" }
 text = 'court(t)'
 expect = "relation:[17]"
+[[case]]
+id = "candidates_lineage"   # the lineage of Halvard: (up, line) order, the ancestors themselves excluded (B2)
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'lineage(holder, 3)'
+expect = "relation:[25, 26, 12, 10, 18, 13, 14, 3, 8, 21, 9, 23, 24, 16, 27, 20, 22, 6, 5, 17, 19]"
+[[case]]
+id = "lineage_height_too_large"
+kind = "candidates"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'lineage(holder, 4)'
+expect = "error:E_BOUND"
 [[case]]
 id = "candidates_line_down_two"
 kind = "candidates"
@@ -3004,7 +3185,7 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:11", holder = "person:7" }
 text = 'up(x, holder)'
-expect = "int:5"
+expect = "int:7"
 [[case]]
 id = "up_of_the_mother"
 kind = "expr"
@@ -3039,14 +3220,14 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'up(none, holder)'
-expect = "int:5"
+expect = "int:7"
 [[case]]
 id = "up_from_none"
 kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:10" }
 text = 'up(x, none)'
-expect = "int:5"
+expect = "int:7"
 [[case]]
 id = "common_of_a_brother_is_the_father_first"
 kind = "expr"
@@ -3102,7 +3283,7 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:21", holder = "person:7" }
 text = 'up_agnatic(x, holder)'
-expect = "int:5"
+expect = "int:7"
 [[case]]
 id = "up_agnatic_of_an_uncle"
 kind = "expr"
@@ -3123,7 +3304,7 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:22", holder = "person:7" }
 text = 'up_agnatic(x, holder)'
-expect = "int:5"
+expect = "int:7"
 [[case]]
 id = "common_agnatic_of_a_sisters_son_is_none"
 kind = "expr"
@@ -3291,7 +3472,7 @@ id = "related_degree_too_large"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7", x = "person:9" }
-text = 'related(holder, x, 5)'
+text = 'related(holder, x, 7)'
 expect = "error:E_BOUND"
 [[case]]
 id = "related_reads_must_be_declared"
@@ -3300,6 +3481,34 @@ system = "S7.vows"
 bind = { holder = "person:7", x = "person:9" }
 text = 'related(holder, x, 2)'
 expect = "error:E_UNDECLARED_READ"
+[[case]]
+id = "descends_through_a_mother"
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:21", a = "person:1" }
+text = 'descends(x, a)'
+expect = "bool:true"
+[[case]]
+id = "descends_not_of_the_blood"   # Yrsa does not descend from Aldric (M8)
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:22", a = "person:1" }
+text = 'descends(x, a)'
+expect = "bool:false"
+[[case]]
+id = "descends_self"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'descends(holder, holder)'
+expect = "bool:true"
+[[case]]
+id = "descends_none"
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:21" }
+text = 'descends(x, none)'
+expect = "bool:false"
 [[case]]
 id = "line_to_a_nephew"
 kind = "candidates"
@@ -3366,7 +3575,7 @@ kind = "order"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = '[life_course.birth_tick(y) for y in children(holder)]'
-expect = "key:[int:-8000, int:-8500, int:-7000, int:-9000]"
+expect = "key:[int:-11520000, int:-12240000, int:-10080000, int:-12960000]"
 [[case]]
 id = "key_list_of_a_line"
 kind = "order"
@@ -3393,14 +3602,26 @@ id = "key_primogeniture_of_a_sisters_son"
 kind = "order"
 system = "M7.dynasty"
 bind = { holder = "person:7", x = "person:21" }
-text = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
-expect = "key:(int:1, [(bool:true, int:-13500, person:8), (bool:false, int:-9000, person:21)])"
+text = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
+expect = "key:(int:1, [(bool:true, int:-19440000), (bool:false, int:-12960000)])"
 [[case]]
 id = "key_conditional"
 kind = "order"
 system = "M7.dynasty"
 text = 'if true then (1, 2) else (3, 4)'
 expect = "key:(int:1, int:2)"
+[[case]]
+id = "key_tuple_arity_must_agree"   # keys are structurally typed (minor 1)
+kind = "order"
+system = "M7.dynasty"
+text = 'if true then (1, 2) else (3, 4, 5)'
+expect = "error:E_TYPE"
+[[case]]
+id = "key_tuple_element_types_must_agree"
+kind = "order"
+system = "M7.dynasty"
+text = 'if true then (true, 2) else (5, 1)'
+expect = "error:E_TYPE"
 [[case]]
 id = "key_tuple_outside_order"
 kind = "expr"
@@ -3464,19 +3685,40 @@ bind = { x = "person:19" }
 text = 'draw(nosuch, x, 0)'
 expect = "error:E_RNG_PURPOSE"
 [[case]]
-id = "draw_index_must_be_a_literal"
+id = "draw_index_may_be_an_expression"
 kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:19" }
 text = 'draw(sortition, x, now)'
-expect = "error:E_CONST"
+expect = "int:0"
 [[case]]
-id = "draw_index_must_be_an_int_literal"
+id = "draw_index_must_be_int_or_entity"
 kind = "expr"
 system = "M7.dynasty"
 bind = { x = "person:19" }
 text = 'draw(sortition, x, 1.0)'
-expect = "error:E_CONST"
+expect = "error:E_TYPE"
+[[case]]
+id = "draw_index_may_be_an_entity"   # k = the entity's id (M4): T1 keys attack_outcome by (actor, k = target, t)
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:19", holder = "person:7" }
+text = 'draw(sortition, x, holder)'
+expect = "int:6172"
+[[case]]
+id = "draw_site_reuse_is_rejected"   # two calls with the same (purpose, entity, k) would share a draw (M4)
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:19" }
+text = 'draw(sortition, x, 0) + draw(sortition, x, 0)'
+expect = "error:E_RNG_REUSE"
+[[case]]
+id = "draw_sites_distinct"
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:19" }
+text = 'draw(sortition, x, 0) + draw(sortition, x, 1)'
+expect = "int:140737488355327"
 [[case]]
 id = "draw_purpose_must_be_an_identifier"
 kind = "expr"
@@ -3571,15 +3813,15 @@ expect = "error:E_ARITY"
 id = "chance_against_a_param_hits"
 kind = "expr"
 system = "T1.minds"
-bind = { actor = "person:9" }
-text = 'chance(act_outcome, actor, 0, params.attempt_success)'
+bind = { actor = "person:9", target = "person:5" }
+text = 'chance(attack_outcome, actor, target, params.attempt_success)'
 expect = "bool:true"
 [[case]]
 id = "chance_against_a_param_misses"
 kind = "expr"
 system = "T1.minds"
-bind = { actor = "person:16" }
-text = 'chance(act_outcome, actor, 0, params.attempt_success)'
+bind = { actor = "person:16", target = "person:5" }
+text = 'chance(attack_outcome, actor, target, params.attempt_success)'
 expect = "bool:false"
 
 # ----------------------------------------------------------------------------- effects (§6)
@@ -3594,15 +3836,15 @@ expect = "effects:[]"
 id = "effects_murder_attempt_hits"
 kind = "effects"
 system = "T1.minds"
-bind = { actor = "person:9", target = "person:5" }
-text = 'when chance(act_outcome, actor, 0, params.attempt_success): ScheduleDeath(person: target, cause: death_cause.murder, culprit: actor)'
-expect = "effects:[ScheduleDeath(person=5, args=[1, 9])]"
+bind = { actor = "person:9", target = "person:5", event = 9001 }
+text = 'when chance(attack_outcome, actor, target, params.attempt_success): ScheduleDeath(person: target, tick: now + calendar.minutes_per_day, cause: death_cause.murder, culprit: actor, cause_event: event)'
+expect = "effects:[ScheduleDeath(person=5, args=[1440, 1, 9, 9001])]"
 [[case]]
 id = "effects_murder_attempt_misses"
 kind = "effects"
 system = "T1.minds"
-bind = { actor = "person:16", target = "person:5" }
-text = 'when chance(act_outcome, actor, 0, params.attempt_success): ScheduleDeath(person: target, cause: death_cause.murder, culprit: actor)'
+bind = { actor = "person:16", target = "person:5", event = 9001 }
+text = 'when chance(attack_outcome, actor, target, params.attempt_success): ScheduleDeath(person: target, tick: now + calendar.minutes_per_day, cause: death_cause.murder, culprit: actor, cause_event: event)'
 expect = "effects:[]"
 [[case]]
 id = "effects_fled_resigns_each_office"
@@ -3637,8 +3879,8 @@ id = "effects_two_in_order"
 kind = "effects"
 system = "T1.minds"
 bind = { actor = "person:16" }
-text = 'Resign(person: actor, office: none); when true: Resign(person: actor, office: none)'
-expect = "effects:[Resign(person=16, args=[0]); Resign(person=16, args=[0])]"
+text = 'Resign(person: actor, office: none); when true: PetitionSeat(person: actor, target: 203)'
+expect = "effects:[Resign(person=16, args=[0]); PetitionSeat(person=16, args=[203])]"
 [[case]]
 id = "effects_when_false_emits_nothing"
 kind = "effects"
@@ -3658,8 +3900,8 @@ id = "effects_encoding_enum_and_none"
 kind = "effects"
 system = "T1.minds"
 bind = { actor = "person:9", target = "person:5" }
-text = 'ScheduleDeath(person: target, cause: death_cause.accident, culprit: none)'
-expect = "effects:[ScheduleDeath(person=5, args=[4, 0])]"
+text = 'ScheduleDeath(person: target, tick: now, cause: death_cause.accident, culprit: none, cause_event: 0)'
+expect = "effects:[ScheduleDeath(person=5, args=[0, 4, 0, 0])]"
 [[case]]
 id = "effects_encoding_q8_and_int"
 kind = "effects"
@@ -3678,9 +3920,9 @@ expect = "effects:[SwearVow(person=9, args=[6, 7, 1])]"
 id = "effects_argument_order_is_the_signature"
 kind = "effects"
 system = "T1.minds"
-bind = { actor = "person:9", target = "person:5" }
-text = 'ScheduleDeath(culprit: actor, person: target, cause: death_cause.murder)'
-expect = "effects:[ScheduleDeath(person=5, args=[1, 9])]"
+bind = { actor = "person:9", target = "person:5", event = 9001 }
+text = 'ScheduleDeath(culprit: actor, cause_event: event, person: target, cause: death_cause.murder, tick: now + calendar.minutes_per_day)'
+expect = "effects:[ScheduleDeath(person=5, args=[1440, 1, 9, 9001])]"
 [[case]]
 id = "effects_trailing_semicolon"
 kind = "effects"
@@ -3749,7 +3991,7 @@ id = "effects_undeclared_command"
 kind = "effects"
 system = "S7.vows"
 bind = { vower = "person:16" }
-text = 'ScheduleDeath(person: vower, cause: death_cause.murder, culprit: vower)'
+text = 'ScheduleDeath(person: vower, tick: now, cause: death_cause.murder, culprit: vower, cause_event: 0)'
 expect = "error:E_UNDECLARED_COMMAND"
 [[case]]
 id = "effects_command_to_a_non_owner"
@@ -3759,12 +4001,20 @@ bind = { x = "person:9" }
 text = 'PressClaim(person: x, claim: none)'
 expect = "error:E_COMMAND_OWNER"
 [[case]]
-id = "effects_owner_not_registered"
+id = "effects_to_an_absent_owner_are_dropped"
 kind = "effects"
 system = "T1.minds"
 bind = { actor = "person:16" }
 text = 'BurnHoldings(person: actor)'
-expect = "error:E_OWNER_NOT_REGISTERED"
+expect = "effects:[]"
+dropped_actions = 1
+[[case]]
+id = "effects_marry"   # Marry {a, b, tick} as M2's [[applies]] declares it (M6)
+kind = "effects"
+system = "T1.minds"
+bind = { actor = "person:9", target = "person:5" }
+text = 'Marry(person: actor, b: target, tick: now)'
+expect = "effects:[Marry(person=9, args=[5, 0])]"
 [[case]]
 id = "effects_self_send_undeclared"
 kind = "effects"
@@ -3792,8 +4042,8 @@ id = "effects_from_m7_schedule_death"
 kind = "effects"
 system = "M7.dynasty"
 bind = { ruler = "person:7", culprit = "person:9" }
-text = 'ScheduleDeath(person: ruler, cause: death_cause.murder, culprit: culprit)'
-expect = "effects:[ScheduleDeath(person=7, args=[1, 9])]"
+text = 'ScheduleDeath(person: ruler, tick: now, cause: death_cause.murder, culprit: culprit, cause_event: 0)'
+expect = "effects:[ScheduleDeath(person=7, args=[0, 1, 9, 0])]"
 
 # ----------------------------------------------------------------------------- vow predicates (§9)
 [[case]]
@@ -3839,28 +4089,28 @@ bind = { vower = "person:16", target = "person:7" }
 text = 'not person.alive(target)'
 expect = "bool:true"
 [[case]]
-id = "vow_avenge_kin_needs_an_undeclared_read"   # open question Q7
+id = "vow_avenge_kin_cannot_read_the_ledger_cause"   # open question Q7
 kind = "expr"
 system = "S7.vows"
 bind = { vower = "person:16", target = "person:7" }
 text = 'not person.alive(target) and person.death_cause(target) == death_cause.murder'
 expect = "error:E_UNDECLARED_READ"
 [[case]]
-id = "vow_avenge_kin_fulfilled_with_the_read"
+id = "vow_avenge_kin_fulfilled_from_the_log"
 kind = "expr"
 system = "S7.vows"
-extra_reads = ["person.death_cause"]
 bind = { vower = "person:16", target = "person:7" }
-text = 'not person.alive(target) and person.death_cause(target) == death_cause.murder'
+text = '(if exists(target) then not person.alive(target) else true) and life_course.death_cause(target) == life_course_death_cause.murder'
 expect = "bool:true"
+missing_reads = 0
 [[case]]
 id = "vow_avenge_kin_not_fulfilled_by_an_accident"
 kind = "expr"
 system = "S7.vows"
-extra_reads = ["person.death_cause"]
 bind = { vower = "person:16", target = "person:13" }
-text = 'not person.alive(target) and person.death_cause(target) == death_cause.murder'
+text = '(if exists(target) then not person.alive(target) else true) and life_course.death_cause(target) == life_course_death_cause.murder'
 expect = "bool:false"
+missing_reads = 0
 [[case]]
 id = "vow_conflict_serving_the_target"
 kind = "expr"
@@ -3880,13 +4130,13 @@ result = "q8_8"
 text = 'if any(o in offices(vower): any(t in titles(target): office.title(o) == t)) then q8(1) else q8(0)'
 expect = "q8_8:0"
 [[case]]
-id = "vow_conflict_must_be_q8"
+id = "vow_conflict_literals_adopt_the_kind_result_type"
 kind = "expr"
 system = "S7.vows"
 bind = { vower = "person:5", target = "person:7" }
 result = "q8_8"
 text = 'if person.alive(target) then 1.0 else 0.0'
-expect = "error:E_TYPE"
+expect = "q8_8:0"
 [[case]]
 id = "eligible_must_be_bool"
 kind = "expr"
@@ -3903,7 +4153,15 @@ kind = "succession"
 system = "M7.dynasty"
 law = "primogeniture"
 bind = { holder = "person:7", title = "title:100" }
-text = 'male-preference cognatic primogeniture by representation: Kell, Thora, Orm (through the dead Nils), Sten (through the dead daughter Brynja: after every son, before the living younger daughter Mara), Mara; Jorund, Ivar (through the dead elder son Hakon, ahead of the living twins), Ragnar before his twin Rolf by person_id, Varg, Ingrid, Wulf, Yrsa; Edmund, Ulf, Sif, Freya'
+text = 'male-preference cognatic primogeniture by representation under the title-blood rule: Kell, Thora, Orm (through the dead Nils), Sten (through the dead daughter Brynja: after every son, before the living younger daughter Mara), Mara; Jorund, Ivar (through the dead elder son Hakon, ahead of the living twins), Ragnar before his twin Rolf by person_id, Varg, Ingrid, Wulf; Edmund, Ulf, Sif, Freya. Yrsa, not of Aldric blood, is out (M8)'
+expect = "line:[10, 18, 14, 26, 12, 9, 24, 16, 27, 20, 8, 21, 5, 19, 17, 6]"
+[[case]]
+id = "succession_primogeniture_open"   # the unrestricted variant: Yrsa, Halvard's maternal half-sister, inherits before Edmund (M8)
+kind = "succession"
+system = "M7.dynasty"
+law = "primogeniture_open"
+bind = { holder = "person:7", title = "title:100" }
+text = 'primogeniture without the title-blood rule: as primogeniture, with Yrsa between Wulf and Edmund'
 expect = "line:[10, 18, 14, 26, 12, 9, 24, 16, 27, 20, 8, 21, 22, 5, 19, 17, 6]"
 [[case]]
 id = "succession_ultimogeniture"
@@ -3911,8 +4169,8 @@ kind = "succession"
 system = "M7.dynasty"
 law = "ultimogeniture"
 bind = { holder = "person:7", title = "title:100" }
-text = 'male-preference ultimogeniture: Orm (youngest son Nils, dead), Kell, Thora, Mara, Sten (through Brynja, the eldest daughter); Jorund, Varg, the twins Ragnar then Rolf, Ivar (through Hakon, the eldest son), Yrsa, Ingrid, Wulf; Edmund, Ulf, Sif, Freya'
-expect = "line:[14, 10, 18, 12, 26, 9, 20, 16, 27, 24, 22, 8, 21, 5, 19, 17, 6]"
+text = 'male-preference ultimogeniture: Orm (youngest son Nils, dead), Kell, Thora, Mara, Sten (through Brynja, the eldest daughter); Jorund, Varg, the twins Ragnar then Rolf, Ivar (through Hakon, the eldest son), Ingrid, Wulf; Edmund, Ulf, Sif, Freya'
+expect = "line:[14, 10, 18, 12, 26, 9, 20, 16, 27, 24, 8, 21, 5, 19, 17, 6]"
 [[case]]
 id = "succession_seniority"
 kind = "succession"
@@ -3960,7 +4218,7 @@ system = "M7.dynasty"
 law = "absolute_primogeniture"
 bind = { holder = "person:7", title = "title:100" }
 text = 'absolute primogeniture (a data-only extension): eldest first regardless of sex, so the dead eldest daughter Brynja is represented by Sten first'
-expect = "line:[26, 12, 10, 18, 14, 8, 21, 9, 24, 16, 27, 20, 22, 6, 5, 17, 19]"
+expect = "line:[26, 12, 10, 18, 14, 8, 21, 9, 24, 16, 27, 20, 6, 5, 17, 19]"
 [[case]]
 id = "succession_agnatic_primogeniture"
 kind = "succession"
@@ -3976,14 +4234,22 @@ system = "M7.dynasty"
 law = "primogeniture_lay"
 bind = { holder = "person:7", title = "title:100" }
 text = 'primogeniture excluding holy orders in the law itself (Q1): Ulf drops out'
-expect = "line:[10, 18, 14, 26, 12, 9, 24, 16, 27, 20, 8, 21, 22, 5, 17, 6]"
+expect = "line:[10, 18, 14, 26, 12, 9, 24, 16, 27, 20, 8, 21, 5, 17, 6]"
 [[case]]
 id = "succession_representation_grandson_before_living_younger_sons"   # REV-P1a NEW-7
 kind = "succession"
 system = "M7.dynasty"
 law = "primogeniture"
 bind = { holder = "person:9", title = "title:102" }
-text = 'Jorund as holder: Ivar, the son of the dead elder son Hakon, ahead of the living twins Ragnar and Rolf (tie by person_id) and Varg; then the brother Halvard line (he dies this instant), Ingrid, Wulf, Yrsa; then Edmund, Ulf, Sif, Freya'
+text = 'Jorund as founder and holder of 102: Ivar, the son of the dead elder son Hakon, ahead of the living twins Ragnar and Rolf (tie by person_id) and Varg; the title-blood rule (M8) keeps every collateral out, because none descends from Jorund'
+expect = "line:[24, 16, 27, 20]"
+[[case]]
+id = "succession_representation_open"   # the same holder without the blood rule: the collaterals follow
+kind = "succession"
+system = "M7.dynasty"
+law = "primogeniture_open"
+bind = { holder = "person:9", title = "title:102" }
+text = 'Jorund as holder, unrestricted: his own line, then his brother Halvard line (he dies this instant), Ingrid, Wulf, Yrsa; then Edmund, Ulf, Sif, Freya'
 expect = "line:[24, 16, 27, 20, 10, 18, 14, 26, 12, 8, 21, 22, 5, 19, 17, 6]"
 [[case]]
 id = "twins_tie_broken_by_person_id"   # REV-P1a NEW-7
@@ -3993,17 +4259,24 @@ bind = { x = "person:9" }
 text = 'children(x)'
 expect = "relation:[16, 20, 23, 27]"
 [[case]]
-id = "twins_have_equal_keys"
+id = "twins_have_equal_keys_rolf"
 kind = "order"
 system = "M7.dynasty"
 bind = { holder = "person:9", x = "person:27" }
-text = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
-expect = "key:(int:0, [(bool:false, int:-3000, person:27)])"
+text = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
+expect = "key:(int:0, [(bool:false, int:-4320000)])"
+[[case]]
+id = "twins_have_equal_keys_ragnar"   # the same key as his twin Rolf: the host's person_id tie-break puts 16 first
+kind = "order"
+system = "M7.dynasty"
+bind = { holder = "person:9", x = "person:16" }
+text = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
+expect = "key:(int:0, [(bool:false, int:-4320000)])"
 [[case]]
 id = "succession_primogeniture_for_a_vassal"
 kind = "succession"
 system = "M7.dynasty"
 law = "primogeniture"
 bind = { holder = "person:5", title = "title:101" }
-text = 'Edmund as holder: his children, then his brother Cedric line (Halvard dead; Thora, Orm, Sten and Ivar are 5 degrees away, beyond kin(holder, 4): open question Q2), then Freya'
-expect = "line:[19, 17, 10, 12, 9, 16, 27, 20, 8, 21, 6]"
+text = 'Edmund as holder of a title of Aldric blood: his children, then the whole line of his dead brother Cedric by representation (Thora, Orm, Sten and Ivar included: the lineage relation reaches them, B2), then Freya'
+expect = "line:[19, 17, 10, 18, 14, 26, 12, 9, 24, 16, 27, 20, 8, 21, 6]"

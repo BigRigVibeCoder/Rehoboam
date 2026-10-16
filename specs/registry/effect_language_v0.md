@@ -1,6 +1,6 @@
 # Registry effect language v0
 
-*Status: Draft for the director's approval at the SPR-017 plan gate (C2). Version `0.1.0` of the language. Contract for WP P1.15 (`docs/11`), SPR-017 (`CODEX/05_PROJECT/PRJ-002_P1aPlan.md`) and its dependants SPR-021 (M7 succession) and SPR-024 (minds' verbs). Sources: `05.5` §2.1 and §3.2, `05.1` §2, §4.3 and §6, ADR-0006, ADR-0010 (amendment v1.1 item 4), ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035, `docs/01` §5 principles 8 and 9, `crates/rh-core/src/fixed/`. Golden cases: `specs/registry/effect_language_golden_v0.toml`. Reference implementation: `specs/registry/effect_ref.py` (standard-library Python; `--check` reproduces every golden case).*
+*Status: Draft for the director's approval at the SPR-017 plan gate (C2). Version `0.2.0` of the language (round 2 of PR #41: the review's two blockers, eight majors and seven minors). Contract for WP P1.15 (`docs/11`), SPR-017 (`CODEX/05_PROJECT/PRJ-002_P1aPlan.md`) and its dependants SPR-021 (M7 succession) and SPR-024 (minds' verbs). Sources: `05.5` §2.1 and §3.2, `05.1` §2, §4.3 and §6, ADR-0006, ADR-0010 (amendment v1.1 item 4), ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035, `docs/01` §5 principles 8 and 9, `crates/rh-core/src/fixed/`. Golden cases: `specs/registry/effect_language_golden_v0.toml`. Reference implementation: `specs/registry/effect_ref.py` (standard-library Python; `--check` reproduces every golden case).*
 
 > **BLUF.** The effect language is the small, typed, total expression language in which the Registry states succession laws (who may inherit a title and in what order), verb effects (which lifecycle commands an act queues), and the vows' completion and conflict predicates. A program reads only the columns its declaring system has declared, iterates only over Registry relations with declared bounds, draws randomness only from the keyed RNG with a declared purpose, and changes the world only by queuing typed commands to the column's owner. Every well-typed program terminates and yields a value: there is no recursion, every loop is bounded, and division by zero, overflow and reads of missing entities have defined results (the saturating, round-half-to-even rules of `rh-core::fixed`). Floats do not exist in the language. This document is the grammar, the type system, the evaluation rules, the v0 prelude of relations and accessors, the seven succession laws of the Registry as programs, the error classes a program can be rejected with, and the versioning rule. The Rust evaluator of SPR-017 (`rh-registry`) must reproduce every golden case bit for bit; the Python reference is the independent oracle, as `bin/gen_fixed_vectors.py` is for `rh-core::fixed`.
 
@@ -8,7 +8,7 @@
 
 **In v0:**
 - Expressions over fixed-point numbers, integers, booleans, Registry enums and entity references (§3).
-- Bounded aggregates (`count`, `any`, `all`, `sum`, `min`, `max`) over declared relations, nested at most two deep (§5.4).
+- Bounded aggregates (`count`, `any`, `all`, `sum`, `min`, `max`) over declared relations, nested at most two deep (§5.4); the lineage relation that gives a succession its candidates (§5.3).
 - Sort keys (tuples and bounded lists of tuples) for ordering candidates (§3.4).
 - Effect programs: ordered, conditional, bounded emission of lifecycle commands (§6).
 - Program kinds: succession laws (`candidates`, `eligible`, `order`), verb `effects`, vow `fulfilled` and `conflict`, and the reserved overlay `derive` (§7).
@@ -24,7 +24,7 @@
 | The simulation decides; LLMs describe | ADR-0034 | A program is Registry data compiled at load; nothing at run time can replace it. The language has no input channel |
 | Fixed point for thresholds; no floats in plane A | `05.1` §6 item 4; SPR-003 ruling | Numbers are `int`, `q8_8` or `q16_16` with the `rh-core::fixed` rules (§3.1, §4.3). A decimal literal is compiled to fixed point by exact half-to-even rounding (`05.5` §3.2); exponent or float syntax is rejected (`E_FLOAT_LITERAL`) |
 | Determinism: no hash-ordered iteration; ties by a stated total order | ADR-0006; `05.1` §6 item 5 | Relations yield their elements in the canonical order of §5.2; aggregates fold in that order; sorting is by key, then entity id (§3.4, §7.2) |
-| Keyed RNG only, with a declared purpose | `05.1` §6 item 2; ADR-0006 | `draw` and `chance` take a purpose the declaring system lists in its `[[rng]]`, an entity and a literal draw index; no other randomness exists (§4.6) |
+| Keyed RNG only, with a declared purpose | `05.1` §6 item 2; ADR-0006 | `draw` and `chance` take a purpose the declaring system lists in its `[[rng]]`, an entity and a draw index; every call site is unique per system; no other randomness exists (§4.6) |
 | Single writer; effects are queued commands to the owner, never inline writes | `05.1` §2 rules 1–2, 5; `05.5` §2.1 | An effect program can only emit commands the declaring system's spec lists in `[[commands]]`, to the command's owner (§6); there is no assignment |
 | Plane A never reads plane B or C | ADR-0024 | A read of a column whose plane is not `A` is rejected (`E_PLANE`); a read the declaring system does not declare in `[[reads]]` or own is rejected (`E_UNDECLARED_READ`) |
 | No spontaneous reality | `docs/01` principle 8 | A program cannot create an entity, a column or an event; it can only queue commands that the owner applies through its own simulated path |
@@ -107,7 +107,7 @@ Disambiguation rules:
 
 `05.5` §2.1 writes the fixed types `q8.8` and `q16.16`; they are the same types, spelled here as the column types of the system specs (`q8_8`, `q16_16`). There is no money type in v0 (`Money` arrives with M4 F0, P1b) and no float type at all.
 
-**Enum types** are the Registry's id lists (`sex`, `death_cause`, `vocations`, `title_tiers`, `succession_laws`, `vow_kinds`, `opinion_modifiers`, …) and the per-column enums the system specs declare (`title.state`, `claim.status`, `artifact.state`, …). The environment the checker sees (§7.4) names each enum column's type. Enums have no order in the language: `ordinal(e)` gives the declaration index as an `int` when an order is wanted, which makes the dependency on list order explicit (reordering an id list a program takes the ordinal of is then a C3 change, §11).
+**Enum types** are the Registry's id lists (`sex`, `death_cause`, `vocations`, `title_tiers`, `succession_laws`, `vow_kinds`, `opinion_modifiers`, …) and the per-column enums the system specs declare (`title.state`, `claim.status`, `artifact.state`, …). Every enum declares a **default** value, the one a missing read yields (§4.5); it is named, never "the first value", so reordering a list cannot change what a missing read returns. The environment the checker sees (§7.4) names each enum column's type and default. Enums have no order in the language: `ordinal(e)` gives the declaration index as an `int` when an order is wanted, which makes the dependency on list order explicit. An enum crosses into a command as its ordinal (§6), so reordering an id list that any program passes to a command or takes the `ordinal` of is a C3 change (§11).
 
 **Entity kinds** are the `entity` values of `[[owns]]` across the system specs: `person`, `title`, `office`, `claim`, `house`, `polity`, `artifact`, `vow`, `region`, … The value `none` belongs to every kind and is the id 0, the convention of every `… or 0` column of the specs (`person.father`, `title.holder`). `exists(e)` is true iff `e` is not `none` and a row with that id exists in the snapshot.
 
@@ -129,10 +129,10 @@ Every operator and builtin is total on well-typed arguments. `num` stands for `i
 | `a / b` | `num × num → num` | quotient rounded half to even, saturating; `b` must be a non-zero constant (§4.4) |
 | `a div b`, `a mod b` | `int × int → int` | Euclidean quotient and remainder (`mod` ≥ 0); `b` a non-zero constant |
 | `-a` | `num → num` | saturating negation (`-MIN = MAX`) |
-| `a == b`, `a != b` | same scalar type | equality; fixed point compares bits; entities compare ids; `none == none` |
+| `a == b`, `a != b` | same scalar type | equality; fixed point compares bits; entities compare ids (a `none` literal needs a kind from the other side) |
 | `a < b`, `<=`, `>`, `>=` | `num × num → bool` | numeric order (fixed point: order of bits) |
-| `not a`, `a and b`, `a or b` | `bool` | logic; `and` and `or` do not short-circuit in effect (both sides are total; evaluation order is left to right, §4.2) |
-| `if c then a else b` | `bool × T × T → T` | conditional; `T` any type, including `key` |
+| `not a`, `a and b`, `a or b` | `bool` | logic; `and` and `or` **evaluate both sides** (the right side's reads count, §4.5) |
+| `if c then a else b` | `bool × T × T → T` | conditional; **only the taken branch is evaluated**; `T` any type, keys included (structurally equal, §3.4) |
 | `abs(a)` | `num → num` | saturating absolute value (`abs(MIN) = MAX`) |
 | `min(a, b)`, `max(a, b)` | `num × num → num` | the smaller, the larger |
 | `clamp(x, lo, hi)` | `num³ → num` | `min(max(x, lo), hi)`: defined for `lo > hi` too (it is then `hi`) |
@@ -143,24 +143,25 @@ Every operator and builtin is total on well-typed arguments. `num` stands for `i
 | `floor(a)`, `round(a)` | `q → int` | floor; nearest, half to even (always fits `int`) |
 | `ordinal(e)` | enum → `int` | declaration index, from 0 |
 | `exists(e)` | entity → `bool` | §3.1 |
-| `draw(purpose, e, k)` | → `int` | keyed uniform draw, §4.6 |
+| `draw(purpose, e, k)` | `purpose × entity × (int \| entity) → int` | keyed uniform draw, §4.6 |
 | `chance(purpose, e, k, p)` | `… × q16_16 → bool` | `draw_hits` of `rh-core::fixed::draw`, §4.6 |
 | `up(x, p)`, `common(x, p)`, `up_agnatic(x, p)`, `common_agnatic(x, p)` | `person × person → int`, `→ person` | genealogical accessors, §5.3 |
-| `related(a, b, n)` | `person × person × Int → bool` | `a` and `b` are distinct persons within `n` degrees of kinship (`n` an `Int` literal in 1..4): the predicate form of `kin`, §5.3 |
+| `related(a, b, n)` | `person × person × degree → bool` | `a` and `b` are distinct persons within `n` degrees of kinship (`n` a degree constant in 1..6, §4.4): the predicate form of `kin`, §5.3 |
+| `descends(x, a)` | `person × person → bool` | `x` is `a` or a descendant of `a` within 6 generations; false when either is `none` (the title-blood rule of §8) |
 | `entity.column(e)` | entity `K` → the column's type | a declared read, §4.5 |
 | `params.name` | → `int` or `q16_16` | a Registry parameter of the declaring system, §4.7 |
-| `calendar.days_per_year` | → `int` | the manifest's calendar, §4.7 |
+| `calendar.days_per_year`, `calendar.minutes_per_day` | → `int` | the manifest's calendar, §4.7; ticks are `SimTime` minutes |
 | aggregates | §5.4 | |
 
 ### 3.4 Keys
 
-The `order` program of a succession law evaluates to a **key**. A key is a scalar, a tuple of two or more keys, or a bounded list of keys built by `[ key_expr for y in relation ]`. All keys an `order` program produces have the same static type (lists may differ in length). Keys compare by a total order:
+The `order` program of a succession law evaluates to a **key**. A key is a scalar, a tuple of two or more keys, or a bounded list of keys built by `[ key_expr for y in relation ]`. Keys are **structurally typed**: a tuple's type is its arity and the type of each element (`tuple(int,list(tuple(bool,int)))`), a list's type is its element type, and the two branches of a conditional, like every key an `order` program can produce, must have the same key type (`(true, 2)` against `(5, 1)` is `E_TYPE`); lists may differ in length. Keys compare by a total order:
 
 - scalars: `int` and fixed point by value; `bool` with `false < true`; an enum by declaration index (so `ordinal` is implied inside a key); an entity by id with `none` first;
 - tuples: element by element, lexicographically;
 - lists: lexicographically, element by element; when one list is a prefix of the other, the shorter comes first (an ancestor before its line).
 
-Candidates sort by key ascending, then by entity id ascending (§7.2). Key values never enter columns: a key exists only between an `order` program and the host's sort.
+Candidates sort by key ascending, then by entity id ascending (§7.2), so two candidates with equal keys (twins on the same line) are ordered by `life_course.person_id`, and a key need not name the candidate. Key values never enter columns: a key exists only between an `order` program and the host's sort.
 
 ### 3.5 What has no type
 
@@ -172,13 +173,13 @@ Relations, programs and command names are not values: a relation appears only af
 
 1. Column reads, variables, parameters, accessors and builtins with fixed signatures have concrete types.
 2. In a binary operator, a comparison, `min`/`max`/`clamp`/`safe_div`, a conditional and the body-or-else of an aggregate, the operands unify: a concrete type is adopted by a polymorphic literal; two literals default (`Int` to `int`; any `Decimal` to `q16_16`); two different concrete types are `E_TYPE`.
-3. A literal passed to a parameter of a known type (a command argument, `q8(n)`, `chance(..., p)`) adopts that type.
+3. A literal passed to a parameter of a known type (a command argument, `q8(n)`, `chance(..., p)`) adopts that type, and so does the whole program's value when its kind declares a result type (§7.1): `conflict = "0.0"` is a `q8_8` program.
 4. A literal with no context (a key element, the body of `sum` over nothing concrete) takes its default.
-5. A relation's arguments, `kin`'s degree and `draw`'s index must be constants (§4.4); the degree and the index are `Int` literals.
+5. A degree argument (`kin`, `related`, `ancestors`, `descendants`, `lineage`) is an `Int` literal or an `int` parameter whose declared bounds lie inside the relation's range (§4.4); `draw`'s index is an `int` expression or an entity.
 
 ### 4.2 Evaluation order
 
-Evaluation is innermost first, left to right, in the order of the syntax tree. The order is observable only through the ordered emission of effects (§6) and through diagnostics; `draw` is keyed by its arguments, not by evaluation order, so no construct can change which draw a call returns. A relation yields its elements in its canonical order (§5.2); an aggregate folds over them in that order; a `for` effect emits in that order. The host evaluates each program over one snapshot of plane A (the lagged or same-instant view its `[[reads]]` declare; lags are the host's business, not the language's).
+Evaluation is innermost first, left to right, in the order of the syntax tree; `and` and `or` evaluate both operands, `if` evaluates its condition and the taken branch only. The order is observable only through the ordered emission of effects (§6) and through the diagnostics of §4.5; `draw` is keyed by its arguments, not by evaluation order, so no construct can change which draw a call returns. Expression nesting is bounded (64 levels, `E_BOUND`), so the evaluator's recursion is too. A relation yields its elements in its canonical order (§5.2); an aggregate folds over them in that order; a `for` effect emits in that order. The host evaluates each program over one snapshot of plane A (the lagged or same-instant view its `[[reads]]` declare; lags are the host's business, not the language's).
 
 ### 4.3 Arithmetic: the `rh-core::fixed` rules
 
@@ -203,49 +204,51 @@ Rounding happens before saturation, so a result is always the representable valu
 
 ### 4.4 Constants and guarded division
 
-A **constant** is an `Int` or `Decimal` literal (under unary minus or not), `calendar.days_per_year`, or `params.<name>` whose Registry bounds `[lo, hi]` exclude zero (`lo > 0` or `hi < 0`). The divisor of `/`, `div` and `mod` must be a constant whose value is not zero, or the program is rejected (`E_DIV`); every other division is written `safe_div(a, b, d)` with an explicit default. This is `05.5` §2.1's "no division by a non-constant without a guard" made checkable. `kin`'s and `related`'s degree, `ancestors`'s and `descendants`'s generation count, `draw`'s and `chance`'s index `k` must be `Int` literals (`E_CONST`).
+A **constant** is an `Int` or `Decimal` literal (under unary minus or not), a calendar constant, or `params.<name>`. The divisor of `/`, `div` and `mod` must be a constant **whose bits, in the division's type, cannot be zero**: a literal is compiled to the type first (`q8(1) / 0.001` is `E_DIV`, because `0.001` is 0 `q8_8` bits), and a parameter's bounds are rounded to the type before the test (`[0.000001, 1.0]` reaches 0 `q16_16` bits, so it is `E_DIV`; `[0.3, 1.0]` is fine). Every other division is written `safe_div(a, b, d)` with an explicit default. This is `05.5` §2.1's "no division by a non-constant without a guard" made checkable. A **degree** (`kin`, `related`: 1..6; `ancestors`, `descendants`: 1..6; `lineage`: 1..3) is an `Int` literal or an `int` parameter whose declared bounds lie inside that range (`E_CONST` for anything else, `E_BOUND` outside the range), so M7's `dormancy_degrees` (bounds `[1, 6]`) can be a degree.
 
 ### 4.5 Reads
 
-`entity.column(e)` reads column `entity.column` of the entity `e`, which must have the kind the column is keyed by: the table's own entity, except that the life-course log (`life_course.*`) is keyed by `life_course.person_id` and is read with a `person`. The checker accepts the read only if the declaring system owns the column or lists it in `[[reads]]` (`E_UNDECLARED_READ`), and only if the column's plane is `A` (`E_PLANE`). A relation (§5.3) reads the columns of its definition; using a relation requires those reads of the declaring system too. **Missing entity:** a read through `none`, or of an id with no row in the snapshot, yields the **zero of the column's type** (`0`, `0.0`, `false`, the enum's first value, `none`), and the evaluator counts it in its diagnostics (`missing_reads`); a program that must distinguish the cases tests `exists(e)` first. The count is not part of the value and does not enter hashes; invariant tests may require it to be zero.
+`entity.column(e)` reads column `entity.column` of the entity `e`, which must have the kind the column is keyed by: the table's own entity, except that the life-course log (`life_course.*`) is keyed by `life_course.person_id` and is read with a `person`. The checker accepts the read only if the declaring system owns the column or lists it in `[[reads]]` (`E_UNDECLARED_READ`), and only if the column's plane is `A` (`E_PLANE`). A relation (§5.3) reads the columns of its definition; using a relation requires those reads of the declaring system too. **Missing entity:** a read through `none`, or of an id with no row in the snapshot, yields the **zero of the column's type** (`0`, `0.0`, `false`, the enum's declared default, `none`), and the evaluator counts it: `missing_reads` is the number of `entity.column(e)` evaluations whose `e` was `none` or had no row, over one evaluation of one program, counted at each evaluation (a read inside an aggregate counts once per element). Because `and` and `or` evaluate both sides, `exists(e) and entity.column(e)` still counts a missing read; the idiom that avoids one is the conditional, which evaluates only its taken branch: `if exists(e) then entity.column(e) else d`. The count is not part of the value and does not enter hashes; invariant tests may require it to be zero. **Absent owner (NEW-4):** a read of a column whose owner is not registered in the world compiles, and the declaring system's spec must give the coupling's **neutral value** for it (`E_NO_NEUTRAL` otherwise); at registration `rh-core` drops the read and reports it, and the view supplies the neutral value, which the evaluator counts as `neutral_reads`. The ledger's dead rows are compacted (SPR-011 ruling 5); a read of a compacted person is a missing read, which is why the laws read the life-course log (§5.3).
 
 ### 4.6 Randomness
 
-`draw(purpose, e, k)` is the keyed draw `H(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)` of `05.1` §6 item 2, with `system_id` the declaring system's, `t = now`, `entity_id = e` (an entity reference of any kind; `none` is id 0) and `k` the literal index. Its value is the 64-bit draw shifted right by one bit, an `int` in [0, 2⁶³). `chance(purpose, e, k, p)` is `rh_core::fixed::draw_hits(u, p)` on the unshifted 64-bit draw `u`: true iff `u / 2⁶⁴ < p`, so `p <= 0` never hits and `p >= 1` always hits. `purpose` must be a purpose the declaring system lists in `[[rng]]` (`E_RNG_PURPOSE`). Because the key fixes the value, two calls with the same arguments return the same value, and the call-site rule of `05.1` §6 item 3 holds by construction: every draw has its own `(purpose, entity, k)`. The host supplies the draws; the golden cases list them explicitly, so the reference and the Rust evaluator see the same numbers without re-implementing ChaCha8.
+`draw(purpose, e, k)` is the keyed draw `H(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)` of `05.1` §6 item 2, with `system_id` the declaring system's, `t = now` (the instant, in minutes), `entity_id = e` (an entity reference whose kind is the kind of the expression `e`; `none` is id 0; the kind is part of the key through the typed `EntityRef` of `05.1` §4.3) and `k` an `int` expression or an entity, whose id is then `k`. That is how T1's purposes are written: `attack_outcome` keyed `(actor, k = target, t)` is `chance(attack_outcome, actor, target, p)`. Its value is the 64-bit draw shifted right by one bit, an `int` in [0, 2⁶³). `chance(purpose, e, k, p)` is `rh_core::fixed::draw_hits(u, p)` on the unshifted 64-bit draw `u`: true iff `u / 2⁶⁴ < p`, so `p <= 0` never hits and `p >= 1` always hits. `purpose` must be a purpose the declaring system lists in `[[rng]]` (`E_RNG_PURPOSE`). Because the key fixes the value, two calls with the same arguments return the same value; so that no two call sites share a draw by accident (the call-site rule of `05.1` §6 item 3), the checker requires every `(purpose, entity expression, k expression)` call site to be unique within the declaring system's programs (`E_RNG_REUSE`); SPR-017's loader runs the same lint across all of a system's programs. The host supplies the draws; the golden cases list them explicitly, so the reference and the Rust evaluator see the same numbers without re-implementing ChaCha8.
 
 ### 4.7 Names
 
-Every identifier resolves at compile time to exactly one of: a keyword; a bound variable of the program kind (§7.1) or of an enclosing aggregate, `for` or list comprehension; a builtin (§3.3); a prelude relation or accessor (§5.3); the prefix of a column read, an enum literal, `params` or `calendar`. An unresolved name is `E_UNKNOWN_NAME`; a variable that shadows another is `E_SYNTAX`. `params.<name>` is a parameter of the declaring system's Registry entry, typed `int` when both bounds are written as integers and `q16_16` otherwise, with the manifest's value compiled by the rule of `05.5` §3.2. `calendar.days_per_year` is the manifest's calendar (`int`).
+Every identifier resolves at compile time to exactly one of: a keyword; a bound variable of the program kind (§7.1) or of an enclosing aggregate, `for` or list comprehension; a builtin (§3.3); a prelude relation or accessor (§5.3); the prefix of a column read, an enum literal, `params` or `calendar`. An unresolved name is `E_UNKNOWN_NAME`; a variable that shadows another is `E_SYNTAX`. `params.<name>` is a parameter of the declaring system's Registry entry, typed `int` when both bounds are written as integers and `q16_16` otherwise, with the manifest's value compiled by the rule of `05.5` §3.2. `calendar.days_per_year` and `calendar.minutes_per_day` are the manifest's calendar (`int`); a tick is a `SimTime` minute, so an age in years is `(now - life_course.birth_tick(x)) div (calendar.days_per_year * calendar.minutes_per_day)` and a threshold in years is converted the other way, in `int`.
 
 ### 4.8 Totality
 
-Every well-typed program terminates and yields a value of its declared type. Proof sketch: the syntax has no recursion and no user-defined names, so evaluation is structural over a finite tree; the only iteration is over relations, each of which yields at most its declared bound (§5.2), and nesting is limited to depth 2 with a product of bounds of at most 65,536 (`E_BOUND`); every partial operation has a defined result (§4.3: saturation; §4.4: guarded division; §4.5: missing reads; §5.3: empty paths and absent ancestors; §5.4: `else` for empty `min` and `max`); draws are pure functions of their keys. The checker enforces every precondition at compile time, so the evaluator has no error path: its result type is the value, plus diagnostics (`missing_reads`, `truncated_relations`).
+Every well-typed program terminates and yields a value of its declared type. Proof sketch: the syntax has no recursion and no user-defined names, so evaluation is structural over a finite tree; the only iteration is over relations, each of which yields at most its declared bound (§5.2), and nesting is limited to depth 2 with a product of bounds of at most 65,536 (`E_BOUND`); every partial operation has a defined result (§4.3: saturation; §4.4: guarded division; §4.5: missing reads; §5.3: empty paths and absent ancestors; §5.4: `else` for empty `min` and `max`); draws are pure functions of their keys. The checker enforces every precondition at compile time, so the evaluator has one failure path only: a `candidates` relation above its bound is a hard invariant failure (`E_TRUNCATED`, §5.2), never a silent truncation. Its result is otherwise the value, plus diagnostics (`missing_reads`, `neutral_reads`, `truncated_relations`, `dropped_actions`).
 
 ## 5. Relations and iteration
 
 ### 5.1 What a relation is
 
-A relation is a named, bounded, ordered set of entities computed by the owning system's contract crate from declared columns (`05.5` §2.1: "only over declared relations with a declared upper bound"). Relations are code, not data: the prelude (§5.3) is the v0 set, each with its owner, its arguments, the columns it reads, its bound and its order. Adding a relation is a `needs_code` gap in a contract crate (`rh-contracts`), never an effect-language change.
+A relation is a named, bounded, ordered set of entities computed from declared columns (`05.5` §2.1: "only over declared relations with a declared upper bound"). Relations are code, not data, and the code lives in **`rh-registry`**, the evaluator's crate: a contract crate holds types and accessors only (`05.1` §2 rule 1; REV-P1a NEW-3), so it can hold neither a genealogy walk nor the children-by-parent index that `children` needs. The evaluator reads every column through the host's `SystemView`, which enforces the declaring system's `AccessSpec` at run time, and takes the derived children index from the host. The prelude (§5.3) is the v0 set, each with its owner (the system whose columns it reads), its arguments, the columns it reads, its bound and its order. Adding a relation is a `needs_code` gap in `rh-registry`, never an effect-language change.
 
 ### 5.2 Canonical order and bounds
 
-A relation yields its elements in **ascending entity id** (`none` never appears), except the path relations `line` and `line_agnatic`, which yield in path order. A relation yields at most its bound; when the underlying set is larger, the elements beyond the bound in canonical order are dropped and the evaluator counts a `truncated_relations` diagnostic (an invariant test may require zero). This keeps every program bounded without a hidden failure.
+A relation yields its elements in **ascending entity id** (`none` never appears), except the path relations `line` and `line_agnatic`, which yield in path order, `ancestors` and `descendants`, which yield by generation then id, and `lineage`, which yields in `(up, line)` order (§5.3). A relation yields at most its bound; when the underlying set is larger, the elements beyond the bound in canonical order are dropped and the evaluator counts a `truncated_relations` diagnostic (an invariant test may require zero). **`lineage` is the exception:** it is the candidates relation of every lineage law, and an heir dropped by truncation would be a silent wrong succession, so exceeding its bound is a hard invariant failure (`E_TRUNCATED`; a `SimError` in the host), never a diagnostic. No golden case exceeds it (the fixture is far below 1,024); SPR-017's Rust test builds a synthetic world for it.
 
 ### 5.3 The v0 prelude
 
-**Genealogy comes from the life-course log** (M2: `life_course.person_id`, `life_course.mother`, `life_course.father`, `u64` with 0 for unknown; `life_course.birth_tick`, `i64`; `life_course.sex`, the enum of `person.sex` at entry; REV-P1a NEW-3 and NEW-7), not from the live ledger: the ledger's dead rows are compacted at Bookkeeping of the death instant (SPR-011 ruling 5), while the log keeps every person who ever lived, so a line through a dead intermediary (a grandson whose father predeceased the holder) stays complete. The log is append-only, so its users declare these reads `same_instant`. The genealogy relations read `person_id`, `mother` and `father`; the law programs read `birth_tick` and `sex` of the persons on a line. Siblings are ordered by `life_course.birth_tick`, ties (twins) by `life_course.person_id`, which every key below ends with. "Ancestor-or-self of `x` at height `h`" is the set `A_h(x)`: `A_0 = {x}`, `A_{h+1} = {father(y), mother(y) : y ∈ A_h} \ {none}`; the agnatic variant follows fathers only. Heights are bounded by `KIN_DEGREES_MAX = 4` for `kin`, `related`, `up` and `common`, and generations by `DESCENT_MAX = 6` for `ancestors`, `descendants` and the lines. Children are ordered by `life_course.person_id`, so every order below is deterministic without hashing.
+**Genealogy comes from the life-course log** (M2: `life_course.person_id`, `life_course.mother`, `life_course.father`, `u64` with 0 for unknown; `life_course.birth_tick`, `i64`; `life_course.sex`, the enum of `person.sex` at entry; REV-P1a NEW-3 and NEW-7), not from the live ledger: the ledger's dead rows are compacted at Bookkeeping of the death instant (SPR-011 ruling 5), while the log keeps every person who ever lived, so a line through a dead intermediary (a grandson whose father predeceased the holder) stays complete. The log is append-only, so its users declare these reads `same_instant`; its rows are keyed by `life_course.person_id` (a read `life_course.x(p)` takes the person, §4.5), never by a row id. The genealogy relations read `person_id`, `mother` and `father` (`lineage` also `birth_tick`); the law programs read `birth_tick` and `sex` of the persons on a line. Siblings are ordered by `life_course.birth_tick`, ties (twins) by `life_course.person_id`, the host's final tie-break (§7.2). "Ancestor-or-self of `x` at height `h`" is the set `A_h(x)`: `A_0 = {x}`, `A_{h+1} = {father(y), mother(y) : y ∈ A_h} \ {none}`; the agnatic variant follows fathers only. Heights are bounded by `KIN_DEGREES_MAX = 6` for `kin`, `related`, `up` and `common` (M7's `dormancy_degrees` and the Registry's `kin(6)` need it), generations by `DESCENT_MAX = 6` for `ancestors`, `descendants` and the lines, and `lineage`'s height by 3. Children are ordered by `life_course.person_id`, so every order below is deterministic without hashing.
 
 | Name | Owner | Yields | Reads | Bound | Definition |
 |---|---|---|---|---|---|
 | `children(p)` | M2 | `person` | the three genealogy columns | 64 | every person whose mother or father is `p`, alive or dead; id order |
-| `kin(p, n)` | M2 | `person` | genealogy | 256 | every person other than `p` reachable from `p` in at most `n` parent-or-child steps (`n` an `Int` literal in 1..4); alive or dead; id order |
+| `kin(p, n)` | M2 | `person` | genealogy | 256 | every person other than `p` reachable from `p` in at most `n` parent-or-child steps (`n` a degree in 1..6); alive or dead; id order |
 | `related(a, b, n)` | M2 | `bool` | genealogy | | `b` is in `kin(a, n)` (false when either is `none`); the predicate form the review calls `kin(a, b, n)` |
-| `ancestors(p, g)` | M2 | `person` | genealogy | 64 | the ancestors of `p` within `g` generations (`g` an `Int` literal in 1..6), by generation (parents first), then id |
+| `ancestors(p, g)` | M2 | `person` | genealogy | 126 | the ancestors of `p` within `g` generations (`g` a degree in 1..6), by generation (parents first), then id; 126 is 2 + 4 + … + 64 |
 | `descendants(p, g)` | M2 | `person` | genealogy | 256 | the descendants of `p` within `g` generations, alive or dead, by generation (children first), then id |
+| `lineage(p, h)` | M2 | `person` | genealogy, `birth_tick` | 1024 | every descendant within 6 generations of every ancestor-or-self of `p` at height 0..`h` (`h` a degree in 1..3), `p` itself excluded, each once; ordered by `up(x, p)` ascending, then by the `(birth_tick, person_id)` sequence of `line(common(x, p), x)`, lexicographically; the candidates relation of the lineage laws (§7.2, §8); exceeding the bound is `E_TRUNCATED` (§5.2) |
+| `descends(x, a)` | M2 | `bool` | genealogy | | `a` is an ancestor-or-self of `x` within 6 generations; false when either is `none` |
 | `line(a, x)` | M2 | `person` | genealogy | 6 | the persons on the shortest parent-chain from `x` up to `a`, listed from `a`'s child down to `x` (`a` excluded, `x` included); among equally short chains, the one that takes the father at the first step where the chains differ; `line(x, x)` and a pair with no chain of length ≤ 6 yield the empty list |
 | `line_agnatic(a, x)` | M2 | `person` | `person_id`, `father` | 6 | as `line`, following fathers only |
-| `up(x, p)` | M2 | `int` | genealogy | | the least `h` in 0..4 such that some member of `A_h(p)` is an ancestor-or-self of `x` within 6 generations; `5` if there is none |
-| `common(x, p)` | M2 | `person` | genealogy | | the member of `A_h(p)` found by `up`; when several qualify at that height, the first in father-first enumeration order (`L_0 = [p]`, `L_{h+1}` = for each `y` in `L_h`: `father(y)`, then `mother(y)`, each once, `none` skipped); `none` when `up` is 5 |
+| `up(x, p)` | M2 | `int` | genealogy | | the least `h` in 0..6 such that some member of `A_h(p)` is an ancestor-or-self of `x` within 6 generations; `7` if there is none |
+| `common(x, p)` | M2 | `person` | genealogy | | the member of `A_h(p)` found by `up`; when several qualify at that height, the first in father-first enumeration order (`L_0 = [p]`, `L_{h+1}` = for each `y` in `L_h`: `father(y)`, then `mother(y)`, each once, `none` skipped); `none` when `up` is 7 |
 | `up_agnatic(x, p)`, `common_agnatic(x, p)` | M2 | `int`, `person` | `person_id`, `father` | | as `up` and `common` through fathers only, on both sides |
 | `titles(p)` | M7 | `title` | `title.holder` | 16 | titles whose holder is `p`; id order |
 | `vassals(t)` | M7 | `title` | `title.liege` | 64 | titles whose liege is `t`; id order |
@@ -275,8 +278,8 @@ A relation yields its elements in **ascending entity id** (`none` never appears)
 
 An effect program (`verbs.<V>.effects`) emits an ordered list of lifecycle commands; it writes nothing itself (`05.5` §2.1: "effects are queued, never applied inline"; `05.1` §2 rule 5). The host (the system that emitted the verb) submits them through `StepCtx::submit` in the listed order, with the verb's event as every command's `cause`; `rh-core` queues each for its owner and the owner applies it when it next runs (`05.1` §2 rule 2).
 
-- An action `Cmd(person: e, a: v, …)` names a command of the Registry `[commands]` table (§7.4) and gives every parameter once by name (`E_ARITY` otherwise). The `person` argument is the queue key (`rh_core::command::Command::person`); the remaining arguments are the command's parameters in the declared order.
-- The checker accepts an action only if the declaring system's spec lists the command in `[[commands]]` with `target` equal to the command's owner (`E_UNDECLARED_COMMAND` when not listed; `E_COMMAND_OWNER` when the listed target is not the owner, which is the rejected "write to a non-owned column"), and only if the owner is a registered system of the world (`E_OWNER_NOT_REGISTERED`; SPR-006 G5: a sender whose owner is not registered is refused). A command to the declaring system's own columns is still a queued command, to itself, and must be listed the same way.
+- An action `Cmd(person: e, a: v, …)` names a command of the Registry `[commands]` table (§7.4) and gives every parameter once by name (`E_ARITY` otherwise). The `person` argument is the queue key (`rh_core::command::Command::person`); the remaining arguments are the command's parameters in the declared order. The signatures are the owner's `[[applies]]` payloads, lint-checked both ways (§7.3): `ScheduleDeath {victim, tick, cause, culprit, cause_event}` and `Marry {a, b, tick}` from M2's spec. An effect program binds `event`, the EventId of the verb's own event, for `cause_event`: the host passes its `DraftRef` and the merge resolves it, as for `Command::cause`. A tick-valued argument is a `SimTime` minute, computed in `int` from `now` and the calendar.
+- The checker accepts an action only if the declaring system's spec lists the command in `[[commands]]` with `target` equal to the command's owner (`E_UNDECLARED_COMMAND` when not listed; `E_COMMAND_OWNER` when the listed target is not the owner, which is the rejected "write to a non-owned column"). An action whose owner is not registered in the world **compiles** (NEW-4): at registration `rh-core` drops the send and reports it, and the evaluator emits nothing for it and counts `dropped_actions`. A command to the declaring system's own columns is still a queued command, to itself, and must be listed the same way.
 - `when c: A` emits `A` iff `c`; `for y in R where c: A` emits `A` once per element of `R` passing `c`, in canonical order.
 - **Encoding into `Command::args`** (`Vec<i64>`): `int` as itself; `q8_8` and `q16_16` as their raw bits; `bool` as 0 or 1; an enum as its ordinal; an entity as its id reinterpreted as two's-complement `i64` (`none` is 0). The golden file renders a command as `Name(person=<id>, args=[<i64>, …])`, the exact queue form.
 
@@ -291,20 +294,20 @@ Neither `draw` nor a read is an effect: a program is pure except for the command
 | `candidates` | `[succession_laws.<law>]` | `holder: person` (the previous holder, dead or deposed, readable in the instant per SPR-011 ruling 5), `title: title`, `now: int` | relation of `person` |
 | `eligible` | same | as above plus `x: person` (the candidate) | `bool` |
 | `order` | same | as `eligible` | `key` |
-| `effects` | `[verbs.<verb>]` | `actor: person`, `target: person` (`none` if the verb has no target), `instrument: artifact` (`none` if none), `now: int` | effects |
+| `effects` | `[verbs.<verb>]` | `actor: person`, `target: person` (`none` if the verb has no target), `instrument: artifact` (`none` if none), `event: int` (the verb's own EventId, resolved at the merge), `now: int` | effects |
 | `fulfilled` | `[vow_kinds.<kind>]` | `vower: person`, `target` of the kind's `target` entity kind, `now: int` | `bool` |
 | `conflict` | same | as `fulfilled` | `q8_8`, expected in [0, 1] (S7 clamps) |
 | `derive` | `[overlays.<overlay>]` | `self: person`, `now: int` | `q8_8` (reserved: the psychological core it reads is P3.2b; no v0 Registry entry declares one) |
 
-`now` is the instant's tick (`int`, days since the epoch, `05.1` §4.1). The declaring system is: the owner of the law's consumer, `M7.dynasty`, for succession laws; the verb's `emitted_by` for effects; `S7.vows` for vow predicates; `T1.minds` for overlays.
+`now` is the instant's tick (`int`, `SimTime` minutes from the epoch, `05.1` §4.1; a day is `calendar.minutes_per_day`). The declaring system is: the owner of the law's consumer, `M7.dynasty`, for succession laws; the verb's `emitted_by` for effects; `S7.vows` for vow predicates; `T1.minds` for overlays.
 
 ### 7.2 The succession protocol
 
 For a title `t` whose holder `h` died or was deposed at `now`, under law `L` (`title.law(t)`), the host computes the law's line:
 
-1. `C` = the elements of `candidates` evaluated with `holder = h`, `title = t`.
+1. `C` = the elements of `candidates` evaluated with `holder = h`, `title = t`: for a lineage law, `lineage(holder, 3)`, which reaches every line of the holder's ancestors up to great-grandparents and is never truncated silently (§5.2).
 2. `E` = `[x in C where eligible(x)]`, in canonical order.
-3. The **line** is `E` sorted by `(order(x), id(x))` ascending, the id as the final tie-break (§3.4).
+3. The **line** is `E` sorted by `(order(x), id(x))` ascending, `life_course.person_id` as the final tie-break (§3.4), which is what orders twins.
 
 The first of the line is the legal heir; M7's arbitration (`M7.dynasty` submodel `arbitrate`) applies its own exclusions (the deposed ruler, persons in holy orders) and scoring after this step. The regent rule ("the nearest adult kin in the law's order") reads the same line. The law never reads claims, offices or opinions: those are M7's arbitration terms, not the law.
 
@@ -314,58 +317,64 @@ The programs live next to the ids they belong to. `ids` stays the enumeration ma
 
 ```toml
 [effect_language]
-version = "0.1.0"                 # this document's version; the Registry's registry_version covers it
+version = "0.2.0"                 # this document's version; the Registry's registry_version covers it
 
 [succession_laws]
 ids = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", "tanistry", "sortition"]
 
 [succession_laws.primogeniture]   # §8
-candidates = "kin(holder, 4)"
+candidates = "lineage(holder, 3)"
 eligible   = "…"
 order      = "…"
 
 [verbs]
-MURDER_ATTEMPT = { act_classes = ["harm"], emitted_by = "T1.minds", effects = "when chance(act_outcome, actor, 0, params.attempt_success): ScheduleDeath(person: target, cause: death_cause.murder, culprit: actor)" }
+MURDER_ATTEMPT = { act_classes = ["harm"], emitted_by = "T1.minds", effects = "when chance(attack_outcome, actor, target, params.attempt_success): ScheduleDeath(person: target, tick: now + calendar.minutes_per_day, cause: death_cause.murder, culprit: actor, cause_event: event)" }
 
 [vow_kinds]
 CLAIM_TITLE = { kind_weight = 0.8, target = "title", fulfilled = "title.holder(target) == vower", conflict = "0.0" }
 
-[commands]                        # the signatures the checker and the queues share (new section)
-ScheduleDeath = { owner = "M2.demography", person = "victim", params = [{ name = "cause", type = "enum:death_cause" }, { name = "culprit", type = "person" }] }
+[commands]                        # the signatures the checker and the queues share (new section; = the owners' [[applies]])
+ScheduleDeath = { owner = "M2.demography", person = "victim", params = [{ name = "tick", type = "int" }, { name = "cause", type = "enum:death_cause" }, { name = "culprit", type = "person" }, { name = "cause_event", type = "int" }] }
 ```
 
-The `[commands]` section is new: today a command's owner is declared by the owner's `AccessSpec::applies` and named by each sender's `[[commands]] target` (SPR-006). The checker needs the parameter list, which nothing declares today, so the Registry gains it; SPR-017's lint checks `[commands]` against the specs' `[[commands]]` tables in both directions. The Rust loader's `IdList` form of `[succession_laws]` and the `Verb` type gain the optional program fields; the Python reference validator reads only `ids`, so no manifest changes.
+The `[commands]` section is new: today a command's owner is declared by the owner's `AccessSpec::applies` and named by each sender's `[[commands]] target` (SPR-006), and the owner's spec documents the payload in `[[applies]]` (M2: `ScheduleDeath { victim, tick, cause, culprit, cause_event }`, `Marry { a, b, tick }`). The checker needs the parameter list as data, so the Registry gains it; SPR-017's lint checks `[commands]` against the owners' `[[applies]]` payloads and the senders' `[[commands]]` tables in both directions. The `[succession_laws.<law>]` tables of lineage laws also read `title.founder`, a new M7 column (§8). The Rust loader's `IdList` form of `[succession_laws]` and the `Verb` type gain the optional program fields; the Python reference validator reads only `ids`, so no manifest changes.
 
 ### 7.4 The environment the checker sees
 
-A program is checked against: the Registry enums and the `[commands]` signatures; every column of the system specs with its entity, type, enum type and plane (`[[owns]]`); the declaring system's `[[reads]]`, `[[commands]]`, `[[rng]]` and Registry parameters with their bounds; the set of registered systems; the manifest's calendar. The golden file carries one such environment in full (`[registry]`), so the checker's decisions are reproducible without the engine.
+A program is checked against: the Registry enums with their defaults and the `[commands]` signatures; every column of the system specs with its entity, key, type, enum type and plane (`[[owns]]`); the declaring system's `[[reads]]`, `[[commands]]`, `[[rng]]`, the neutral values of its couplings and its Registry parameters with their bounds; the set of registered systems; the manifest's calendar. The golden file carries one such environment in full (`[registry]`), so the checker's decisions are reproducible without the engine.
 
 ## 8. The succession laws of the Registry, as programs
 
-The seven laws are the ids of `[succession_laws]`; M7's spec names all seven (`exit_hazards`: the law multiplier covers every id; `arbitrate`: "the legal heir by the title's law"). Each program below is checked and evaluated in the golden file on a fixture dynasty (`world.dynasty`) and its expected line is pinned. Every lineage law orders siblings by `life_course.birth_tick` with ties broken by `life_course.person_id`, and inherits **by representation**: a dead elder child's line comes before a living younger child (the golden cases `succession_primogeniture` and `succession_representation_grandson_before_living_younger_sons`). The sex rule of each law is stated in its comment and is a design decision (D4, §12): the Registry has one `primogeniture`, so it is male-preference cognatic; `seniority` and `tanistry` are agnatic, as their sources are; the golden file also carries `absolute_primogeniture` and `agnatic_primogeniture` as data-only extensions, to show that a variant is a Registry edit. Under male-preference cognatic order a dead daughter's son comes after every son's line and before a living younger daughter's line: the daughter's own key (female, her birth tick) places her line, and she is represented by it.
+The seven laws are the ids of `[succession_laws]`; M7's spec names all seven (`exit_hazards`: the law multiplier covers every id; `arbitrate`: "the legal heir by the title's law"). Each program below is checked and evaluated in the golden file on a fixture dynasty (`world.dynasty`) and its expected line is pinned. Every lineage law takes its candidates from `lineage(holder, 3)` (§5.3: the lines of the holder's ancestors up to great-grandparents, never silently truncated, B2), orders siblings by `life_course.birth_tick` with ties broken by `life_course.person_id` (a key never names the candidate; the host's tie-break orders twins), and inherits **by representation**: a dead elder child's line comes before a living younger child (the golden cases `succession_primogeniture` and `succession_representation_grandson_before_living_younger_sons`). **Title blood (M8, for the director):** a collateral is eligible only if it descends from the title's founder, `title.founder`, the first acquirer whose blood the title follows (a new M7 column, set at world creation and at a `SEAT_GRANTED` into a new line); the law's order then applies within that set. Without it the cognatic `common` lets a holder's maternal half-sister (Yrsa in the fixture, not of Aldric's blood) inherit before the founder's own son. The rule is the default of every lineage law here; the unrestricted form is the Registry variant `primogeniture_open` in the golden file, so the director's choice is a one-line Registry edit either way. The sex rule of each law is stated in its comment and is a design decision (D4, §12): the Registry has one `primogeniture`, so it is male-preference cognatic; `seniority` and `tanistry` are agnatic, as their sources are; the golden file also carries `absolute_primogeniture` and `agnatic_primogeniture` as data-only extensions, to show that a variant is a Registry edit. Under male-preference cognatic order a dead daughter's son comes after every son's line and before a living younger daughter's line: the daughter's own key (female, her birth tick) places her line, and she is represented by it.
 
 ```toml
 [succession_laws.primogeniture]
 # Sex rule: male-preference cognatic (sons by age, then daughters by age, each represented by their line).
 # Primogeniture by representation, lineal. Descendants first (sons by age, each son's line before the next
 # son, then daughters likewise), then the lines of the nearest common ancestor (siblings and their lines, then
-# uncles and aunts and theirs). An ancestor never inherits from a descendant (common(x, holder) != x).
-candidates = "kin(holder, 4)"
-eligible   = "person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x"
-order      = "(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])"
+# uncles and aunts and theirs). Ancestors are not in the lineage relation, so none inherits from a descendant.
+# Title blood: collaterals only of the founder's blood (M8).
+candidates = "lineage(holder, 3)"
+eligible   = "person.alive(x) and x != holder and descends(x, title.founder(title))"
+order      = "(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])"
+
+[succession_laws.primogeniture_open]   # the variant without the title-blood rule, for the director's choice (M8)
+candidates = "lineage(holder, 3)"
+eligible   = "person.alive(x) and x != holder"
+order      = "(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])"
 
 [succession_laws.ultimogeniture]
 # Sex rule: male-preference cognatic. As primogeniture, youngest first within each set of siblings.
-candidates = "kin(holder, 4)"
-eligible   = "person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x"
-order      = "(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y), y) for y in line(common(x, holder), x)])"
+candidates = "lineage(holder, 3)"
+eligible   = "person.alive(x) and x != holder and descends(x, title.founder(title))"
+order      = "(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y)) for y in line(common(x, holder), x)])"
 
 [succession_laws.seniority]
 # Sex rule: agnatic (males through fathers only; a person in a father column is male by construction).
 # Agnatic seniority (the rota): the eldest male of the most senior generation of the male line, generations
 # counted relative to the holder (uncles before brothers before sons), then by age.
-candidates = "kin(holder, 4)"
-eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 4 and common_agnatic(x, holder) != x"
+candidates = "lineage(holder, 3)"
+eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and descends(x, title.founder(title))"
 order      = "(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), life_course.birth_tick(x))"
 
 [succession_laws.partition]
@@ -385,9 +394,9 @@ order      = "(min(t in titles(x): ordinal(title.tier(t)) else 3), life_course.b
 
 [succession_laws.tanistry]
 # Sex rule: agnatic, adult males. The derbfine: adult males of the male line within three generations up and three down of a common ancestor;
-# the eldest first (the election of the tánaiste is Q4).
-candidates = "kin(holder, 4)"
-eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and common_agnatic(x, holder) != x and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year))"
+# the eldest first (the election of the tánaiste is Q4). The age test is in int minutes (B1).
+candidates = "lineage(holder, 3)"
+eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and descends(x, title.founder(title)) and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year)) * calendar.minutes_per_day"
 order      = "life_course.birth_tick(x)"
 
 [succession_laws.sortition]
@@ -398,17 +407,17 @@ eligible   = "person.alive(x) and x != holder"
 order      = "draw(sortition, x, 0)"
 ```
 
-Reads these programs need from `M7.dynasty`: `person.alive` (M2, declared); `life_course.person_id`, `life_course.mother`, `life_course.father`, `life_course.birth_tick` and `life_course.sex` (M2, `same_instant`; M7's and T1's specs must add them, Q11); `title.tier`, `title.holder`, `title.liege`, `office.title`, `office.holder` (owned). `params.majority_age` is M7's. A dead candidate's `person.alive(x)` is a missing read after its death instant (the row is compacted) and so reads `false`, which is the right answer for eligibility. Every other fact about a person on a line (sex, birth tick) is read from the log, never from the ledger: a dead intermediary's ledger row is gone, and a ledger read of it would silently give the zero (the golden case `sum_int_from_the_ledger_misses_the_compacted_dead` shows the pitfall). The fixture's expected lines are in the golden file (`succession_*` cases).
+Reads these programs need from `M7.dynasty`: `person.alive` (M2, declared); `life_course.person_id`, `life_course.mother`, `life_course.father`, `life_course.birth_tick` and `life_course.sex` (M2, `same_instant`, declared since PR #32 round 4c); `title.founder` (owned, new); `title.tier`, `title.holder`, `title.liege`, `office.title`, `office.holder` (owned). `params.majority_age` is M7's. The fixture's expected lines are in the golden file; the two data-only variants `absolute_primogeniture` and `agnatic_primogeniture` and the Q1 variant `primogeniture_lay` carry the same blood rule. A dead candidate's `person.alive(x)` is a missing read after its death instant (the row is compacted) and so reads `false`, which is the right answer for eligibility. Every other fact about a person on a line (sex, birth tick) is read from the log, never from the ledger: a dead intermediary's ledger row is gone, and a ledger read of it would silently give the zero (the golden case `sum_int_from_the_ledger_misses_the_compacted_dead` shows the pitfall). The fixture's expected lines are in the golden file (`succession_*` cases).
 
 ## 9. Verb effects and vow predicates (the consumers' programs)
 
 Verb effects (SPR-024, `T1.minds`): the four break acts of `[mental_breaks]` and the feud attack are the v0 verbs with effects. The golden file checks these programs against T1's spec (`[[commands]]`: `ScheduleDeath` and `Marry` to M2; `PetitionSeat`, `PressClaim`, `RenounceClaim`, `Resign` to M7):
 
 ```toml
-MURDER_ATTEMPT.effects = "when chance(act_outcome, actor, 0, params.attempt_success): ScheduleDeath(person: target, cause: death_cause.murder, culprit: actor)"
+MURDER_ATTEMPT.effects = "when chance(attack_outcome, actor, target, params.attempt_success): ScheduleDeath(person: target, tick: now + calendar.minutes_per_day, cause: death_cause.murder, culprit: actor, cause_event: event)"   # T1's attack_outcome keyed (actor, target, t); the death at the next day start (MAJ-4)
 FLED.effects           = "for o in offices(actor): Resign(person: actor, office: o)"
 DESPAIR_PACT.effects   = "for c in claims_of(actor) where claim.status(c) == claim_status.active: RenounceClaim(person: actor, claim: c)"
-HOLDINGS_BURNED.effects = "BurnHoldings(person: actor)"     # rejected until M4 is registered: E_OWNER_NOT_REGISTERED (the P1a world)
+HOLDINGS_BURNED.effects = "BurnHoldings(person: actor)"     # compiles; dropped and reported at registration while M4 is absent (NEW-4)
 ```
 
 `DESPAIR_PACT` also adds `DESPAIR_PACT_WITH` opinion modifiers both ways (T1's spec, `break_act`); that is a command from T1 to itself (`OpinionModifier`), which T1's spec lists only under `applies`, not `[[commands]]`. The golden file carries both outcomes: rejected (`E_UNDECLARED_COMMAND`) against the spec as drafted, accepted against an environment where T1 declares the self-send (Q6, §12).
@@ -416,14 +425,14 @@ HOLDINGS_BURNED.effects = "BurnHoldings(person: actor)"     # rejected until M4 
 Vow predicates (S7, P1b): S7's spec says the completion predicate per kind and the conflict signal are effect-language programs (`fulfil`, `feed`). The programs the v0 columns can express:
 
 ```toml
-AVENGE_KIN.fulfilled    = "not person.alive(target) and person.death_cause(target) == death_cause.murder"   # needs S7 to read person.death_cause (Q7)
+AVENGE_KIN.fulfilled    = "(if exists(target) then not person.alive(target) else true) and life_course.death_cause(target) == life_course_death_cause.murder"   # the log's cause (PR #37), readable after the death instant; no missing read
 GRUDGE.fulfilled        = "not person.alive(target)"
 RECOVER_RELIC.fulfilled = "artifact.bearer(target) == vower"
 DESTROY_RELIC.fulfilled = "artifact.state(target) == artifact_state.destroyed"
 CLAIM_TITLE.fulfilled   = "title.holder(target) == vower"
 PROTECT.fulfilled       = "false"      # ends by breaking or voiding only; Q7
 PILGRIMAGE.fulfilled    = "false"      # needs person.residence (S3, P1b); Q7
-AVENGE_KIN.conflict     = "if any(o in offices(vower): any(t in titles(target): office.title(o) == t)) then 1.0 else 0.0"   # serving the target; needs office reads (Q7)
+AVENGE_KIN.conflict     = "if any(o in offices(vower): any(t in titles(target): office.title(o) == t)) then 1.0 else 0.0"   # serving the target; needs office reads (Q7); the literals are q8_8 by the kind's result type (§4.1)
 ```
 
 ## 10. Error classes (compile-time rejection)
@@ -438,25 +447,26 @@ A program is compiled once, at Registry load, against the environment of §7.4. 
 | `E_UNKNOWN_NAME` | an unresolved identifier, column, enum, enum value, command, relation, parameter or purpose |
 | `E_TYPE` | an operand, argument, branch, key element or program result of the wrong type; `int` mixed with fixed point; two fixed types mixed; a comparison of enums with `<` |
 | `E_ARITY` | a builtin, relation or command with the wrong number of arguments, or a command argument missing or repeated |
-| `E_CONST` | a degree, draw index or other constant-only argument that is not an `Int` literal |
-| `E_DIV` | a divisor that is not a non-zero constant (§4.4) |
-| `E_BOUND` | nesting deeper than 2, a bound product above 65,536, a `kin` or `related` degree outside 1..4, an `ancestors` or `descendants` generation count outside 1..6 |
+| `E_CONST` | a degree that is neither an `Int` literal nor an `int` parameter; a purpose that is not an identifier |
+| `E_DIV` | a divisor that is not a constant with non-zero bits in the division's type (§4.4) |
+| `E_BOUND` | nesting deeper than 2, a bound product above 65,536 (reachable: `kin` × `lineage`), expression nesting above 64, a degree outside its relation's range (§4.4) |
 | `E_PLANE` | a read of a column whose plane is not `A` |
 | `E_UNDECLARED_READ` | a column read, or a relation whose columns, the declaring system neither owns nor lists in `[[reads]]` |
+| `E_NO_NEUTRAL` | a read of a column whose owner is not registered, with no neutral value declared by the reading spec (NEW-4) |
 | `E_UNDECLARED_COMMAND` | a command the declaring system's spec does not list in `[[commands]]` |
 | `E_COMMAND_OWNER` | a command listed with a target that is not the command's owner |
-| `E_OWNER_NOT_REGISTERED` | a command whose owner is not registered in the world |
-| `E_RNG_PURPOSE` | a `draw` or `chance` purpose the declaring system does not list in `[[rng]]` |
+| `E_RNG_PURPOSE` | a `draw` or `chance` purpose the declaring system does not list in `[[rng]]` (purposes resolve only against that list, so an unknown name is this code, not `E_UNKNOWN_NAME`) |
+| `E_RNG_REUSE` | two `draw` or `chance` call sites with the same purpose, entity expression and index expression (§4.6) |
 
-A program with several faults is rejected with one of their codes (the checker stops at the first fault it meets, walking the program left to right, innermost first); every rejected golden program has exactly one fault, so its code is pinned. A program that compiles has no run-time failure mode (§4.8).
+A command to an owner the world does not register is not a rejection: it compiles and is dropped at registration (§6). A program with several faults is rejected with one of their codes (the checker stops at the first fault it meets, walking the program left to right, innermost first); every rejected golden program has exactly one fault, so its code is pinned. A program that compiles has no run-time failure mode (§4.8).
 
 ## 11. Versioning and change classes
 
-- The language is versioned `MAJOR.MINOR.PATCH`, recorded in `[effect_language] version` of the Registry and in the golden file's header; v0 is `0.1.0`. The Rust evaluator refuses a Registry whose language version it does not implement.
+- The language is versioned `MAJOR.MINOR.PATCH`, recorded in `[effect_language] version` of the Registry and in the golden file's header; this document is `0.2.0` (`0.1.0` was the first draft of PR #41; nothing evaluates it). The Rust evaluator refuses a Registry whose language version it does not implement.
 - **Additive** changes (a builtin, a relation, a program kind, a new error class that only rejects programs that were already invalid) bump MINOR and are **C2** (Registry schema): `state_hash` is unchanged on every golden world because no existing program's value changes.
 - A change to the **value of any existing construct** (a rounding rule, an order, a missing-read result, a bound, a tie rule, the draw mapping) bumps MAJOR and is **C3** as soon as any registered system evaluates a program on a golden world; until then (before SPR-021 lands) it is C2 with the golden file re-approved by the director. The golden file is the detector: a change that alters any expected value is at least the class above.
 - Editing a **program** in the Registry (a law, a verb's effects) is a Registry edit: C2 for the schema, and C3 if a golden world's hash moves (`docs/13` §4.2: CI detects the class independently). Adding a law or a verb with effects is `data_only` (S4), C2.
-- Reordering an id list that any program takes the `ordinal` of, or compares in a key, is C3 (§3.1).
+- Reordering an id list that any program takes the `ordinal` of, compares in a key, or passes to a command (enum arguments are encoded as ordinals, §6) is C3 (§3.1); reordering one that only missing reads depend on is not, because the default is named (§3.1).
 - A PR that changes `effect_ref.py` must keep every golden case; a PR that changes the golden file says which rows moved and why.
 
 ## 12. Decisions taken here, and open questions
@@ -474,32 +484,44 @@ Each decision is the Architect's recommendation with a confidence; the director 
 | D5 | Ascendants never inherit from descendants (`common(x, holder) != x`) | The usual reading of primogeniture; without it a living mother precedes the holder's brothers | 7/10 |
 | D6 | Keys may hold bounded lists, compared lexicographically with a prefix first | The only way to state lineal primogeniture without recursion or a Rust-side rank | 7/10 |
 | D7 | Enums carry no order; `ordinal` makes list order an explicit dependency | Keeps id-list reordering a C0 edit unless a program depends on it | 8/10 |
-| D8 | Relations and accessors are code in contract crates (the prelude); programs are data | `05.5` §2.1 says iteration is over *declared* relations; a relation's bound and reads must be auditable | 8/10 |
+| D8 | Relations and accessors are code in `rh-registry` (the prelude), read through the host's `SystemView` with the host's derived children index; programs are data | `05.5` §2.1 says iteration is over *declared* relations; a contract crate holds types and accessors only (`05.1` §2 rule 1, NEW-3), so the walks cannot live there | 8/10 |
 | D9 | `draw` returns the 64-bit draw shifted right by one (an `int` in [0, 2⁶³)); `chance` is `draw_hits` on the unshifted draw | `int` is signed; `chance` keeps the exact mapping of `draw.rs` | 8/10 |
 | D10 | A `[commands]` Registry section with parameter lists, lint-checked against the specs | The checker cannot type a command argument otherwise; the specs' `[[commands]]` carry no signature | 7/10 |
 | D11 | Effects are commands only: no timer, no event, no entity creation from a program | `05.5` §2.1 lists `schedule_outcome` and `emit_event`; neither is needed before SPR-024, and each adds host state the checker cannot see; v0.2 if a consumer needs them | 7/10 |
-| D12 | Bounds: `kin` degree ≤ 4, paths and generations ≤ 6, nesting ≤ 2, bound product ≤ 65,536; relation bounds as in §5.3 | Dormancy's `dormancy_degrees` is bounded `[1, 6]` in the Registry, but every law here needs at most 4; 65,536 keeps a program under a millisecond at `08`'s budgets | 6/10 |
-| D13 | Genealogy is read from the life-course log (`life_course.person_id`, `.mother`, `.father`, `.birth_tick`, `.sex`), `same_instant` (the log is append-only), never from the ledger's `person.mother`/`person.father`; the review's `kin(a, b, n)` is `related(a, b, n)` here because `kin(p, n)` is already the relation `05.5` §2.1 names | The log covers the dead (REV-P1a NEW-3); the ledger compacts them, which would cut every line through a dead intermediary. One name for a relation and a predicate would make the grammar ambiguous | 8/10 |
+| D12 | Bounds: `kin` and `related` degree ≤ 6, generations and paths ≤ 6, `lineage` height ≤ 3, aggregate nesting ≤ 2, bound product ≤ 65,536, expression nesting ≤ 64; relation bounds as in §5.3 (`lineage` 1,024, a hard failure above it) | `dormancy_degrees` is bounded `[1, 6]` and the Registry's `kin(6)` needs 6; 65,536 keeps a program under a millisecond at `08`'s budgets; 1,024 lineage members is a realm of several great houses. **For the director** with D4 and D14 | 6/10 |
+| D13 | Genealogy is read from the life-course log (`life_course.person_id`, `.mother`, `.father`, `.birth_tick`, `.sex`), `same_instant` (the log is append-only), keyed by `person_id`, never from the ledger's `person.mother`/`person.father`; the review's `kin(a, b, n)` is `related(a, b, n)` here because `kin(p, n)` is already the relation `05.5` §2.1 names | The log covers the dead (REV-P1a NEW-3, NEW-7); the ledger compacts them, which would cut every line through a dead intermediary. One name for a relation and a predicate would make the grammar ambiguous | 8/10 |
+| D14 | **Title blood** (M8): a collateral inherits only if it descends from `title.founder`; the law's order applies within that set; the unrestricted form is a Registry variant. **For the director** | Without it a maternal half-sister outranks the founder's son; with it the title follows one blood, which is what a reader of a dynasty expects. The cost is one M7 column | 7/10 |
+| D15 | Absent owners follow NEW-4: a read or send to an unregistered owner compiles; registration drops and reports it; the read takes the coupling's declared neutral value | One rule in `rh-core` (SPR-014) instead of a per-program rejection that would make a Registry load depend on the world | 8/10 |
+| D16 | Ticks are `SimTime` minutes; age tests are `int` arithmetic from `now`, `calendar.days_per_year` and `calendar.minutes_per_day` | `rh_core::time::SimTime` is minutes (B1); a `q16_16` cannot hold a tick | 9/10 |
 
 **Open questions** (the Registry or a spec is silent)
 
 | # | Question | Recommendation | Confidence |
 |---|---|---|---|
 | Q1 | Should `person.vocation == holy_orders` be in the laws' `eligible`, or stay M7's exclusion (the spec says M7 excludes "the deposed ruler and persons in holy orders")? | Keep it M7's: the law states the lineage rule; the court's exclusions change with institutions, not with the law. The golden file shows the alternative as `primogeniture_lay` | 7/10 |
-| Q2 | Does `kin(holder, 4)` reach far enough for a realm whose houses are three generations deep (`PRJ-002` SPR-019)? | Yes for F1: cousins' lines are degree 4; second cousins are F2 ("cadet branches"). Raise `KIN_DEGREES_MAX` to 6 only if SPR-030's dynastic fixture shows empty lines | 6/10 |
+| Q2 | *Closed (B2):* candidates come from `lineage(holder, 3)`, which reaches every line of the holder's ancestors to great-grandparents; a first cousin's son is in it, and truncation is a hard failure | |
 | Q3 | `partition`: what do the other eligible children receive when M7 F1 cannot create titles? | The first of the line takes the title; each other eligible child gets a claim (`CLAIM_CREATED`), so partition reads as a contested inheritance until F2 divides seats | 6/10 |
 | Q4 | `elective` and `tanistry` are orders, not votes. Is a vote needed in P1a? | No: M7's arbitration already weighs claims and offices; a vote with opinions is M6-lite or P1b. The orders here are the deterministic fallback M7's spec names for a sovereign with no candidate | 7/10 |
 | Q5 | `sortition` needs an RNG purpose that M7's spec does not declare | Add `[[rng]] purpose = "sortition", key = ["title", "tick", "person"]` to M7's spec in PR #32's next round | 9/10 |
 | Q6 | A verb effect of T1 on T1's own columns (`DESPAIR_PACT`'s opinion modifiers) is a self-sent command; T1's spec lists `OpinionModifier` only under `applies` | T1 declares the self-send in `[[commands]]` (`target = "T1.minds"`); `rh-core` already allows an owner to send to itself. The alternative, applying inline inside `break_act`, is what `05.5` §2.1 forbids | 7/10 |
-| Q7 | Vow predicates need reads S7 does not declare (`person.death_cause`, `office.*`, `person.residence`), and `PROTECT` has no completion | S7's P1b sprint adds the reads (`death_cause` same-instant through the death path, offices lagged); `PROTECT` ends only by breaking (the beneficiary harmed by the vower, S7 `strain`) or voiding; `PILGRIMAGE` waits for S3 | 6/10 |
+| Q7 | Vow predicates need reads S7 does not declare (`office.*`, `person.residence`), and `PROTECT` has no completion | `AVENGE_KIN` reads `life_course.death_cause` (PR #37's M2, written once at exit), which S7 declares: closed. The office reads come with S7's P1b sprint; `PROTECT` ends only by breaking (the beneficiary harmed by the vower, S7 `strain`) or voiding; `PILGRIMAGE` waits for S3 | 6/10 |
 | Q8 | `emitted_by = "rh-minds"` on the older verbs (`ARREST`, `PURGE`, `REVENGE`, …) is a crate name, not a system id | Rename to `T1.minds` in the Registry with SPR-017's loader change; the checker needs a system id to find the spec | 9/10 |
-| Q9 | Who evaluates: the host system at its binding, or `rh-core`? | The host, through an `rh-registry` API (`compile(program, env) -> Compiled`, `Compiled::eval(&SystemView, &Bindings) -> Value`): the reads then pass through the same `SystemView` that enforces `AccessSpec` at run time, so the compile-time check and the run-time guard agree | 8/10 |
+| Q9 | Who evaluates: the host system at its binding, or `rh-core`? | The host, through an `rh-registry` API (`compile(program, env) -> Compiled`, `Compiled::eval(&SystemView, &ChildrenIndex, &Bindings) -> Value`): the reads pass through the same `SystemView` that enforces `AccessSpec` at run time, the prelude's walks run inside `rh-registry` over it, and the host supplies its derived children-by-parent index (M2) | 8/10 |
 | Q10 | Should overlays (`derive`) be in v0 at all? | Reserve the kind and its signature only; its accessors (values, fear, success streaks) do not exist before P3.2b | 8/10 |
-| Q11 | M7's and T1's specs declare `person.mother`/`person.father` reads, not the life-course columns the genealogy relations and the laws read | In PR #32's next round, M7 and T1 add `[[reads]]` of `life_course.person_id`, `life_course.mother`, `life_course.father`, `life_course.birth_tick` and `life_course.sex` (`same_instant`, `identity`); the `person.mother`/`person.father` reads can go. `life_course.sex` is REV-P1a NEW-7's column, due in M2's skeleton spec | 8/10 |
+| Q11 | *Closed:* PR #32 round 4c (head 770811a) has M7 reading `life_course.person_id`, `mother`, `father`, `birth_tick` and `sex` at `same_instant`, T1 the genealogy columns; PR #37 (head 235a248) declares `life_course.sex` and `life_course.death_cause`; M7's `on_birth` keeps `person.mother`/`person.father` | |
+| Q12 | `title.founder` does not exist in M7's spec | M7 adds `title.founder` (`u64` PersonId, set at world creation from the manifest's dynasties and at a `SEAT_GRANTED` into a new line, never changed by a succession) in PR #32's next round, if the director takes D14; otherwise the laws use `primogeniture_open`'s form | 7/10 |
+
+### 12.1 For the director (at the SPR-017 plan gate)
+
+| Choice | Options | Recommendation | Confidence |
+|---|---|---|---|
+| Title blood (D14, M8) | (a) collaterals only of the founder's blood, the default here; (b) unrestricted cognatic succession (`primogeniture_open`) | (a). A title that follows one blood reads as a dynasty; (b) lets a maternal half-sibling outrank the founder's son. Both are in the golden file, so either is a one-line Registry edit | 7/10 |
+| Sex rules (D4) | `primogeniture` male-preference cognatic, `seniority` and `tanistry` agnatic; variants (`absolute_primogeniture`, `agnatic_primogeniture`) as Registry entries | As stated: one id per law in the Registry, variants as data | 6/10 |
+| Bounds (D12) | kin degree 6, generations 6, lineage height 3 and 1,024 members (a hard failure above), nesting 2, bound product 65,536 | As stated; raise the lineage bound only if SPR-030's dynastic fixture world trips it | 6/10 |
 
 ## 13. Conformance
 
 - The golden file is the contract's test: every grammar rule, every row of §4.3, every relation and accessor of §5.3, every aggregate, every program kind, the seven laws and the three extensions, and every error class, each with an expected value or code.
-- `python -I specs/registry/effect_ref.py --check` exits 0 iff every golden case reproduces; `bin/check_all.sh` runs it, with a positive control (an altered expected value must fail).
+- `python -I specs/registry/effect_ref.py --check` exits 0 iff every golden case reproduces (487 cases at v0.2.0); `bin/check_all.sh` runs it, with a positive control (an altered expected value must fail).
 - SPR-017's Rust evaluator (`rh-registry`, V-WC-10) reads the same file and must reproduce every case bit for bit, in debug and release builds, as `rh-sample`'s golden vectors do at both optimisation levels.
 - The Python reference is standard-library only, exact (`fractions.Fraction`), and shares no code with the engine.
