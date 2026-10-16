@@ -1026,9 +1026,10 @@ impl Replay {
     /// journal.
     ///
     /// # Errors
-    /// [`JournalError::Missing`] if the journal has another input first (one the run lacks),
-    /// [`JournalError::Extra`] if the journal has no more inputs, [`JournalError::Mismatched`] if
-    /// the record at that place differs.
+    /// [`JournalError::Missing`] if the journal's next input sorts before `live` (one the run
+    /// lacks); [`JournalError::Extra`] if `live` sorts before the journal's next input, or the
+    /// journal has no more (one the journal lacks); [`JournalError::Mismatched`] if the record at
+    /// the same `(tick, seq)` differs.
     pub fn expect(&mut self, live: &JournaledInput) -> Result<(), JournalError> {
         let Some(next) = self.inputs.get(self.next) else {
             return Err(JournalError::Extra {
@@ -1042,6 +1043,13 @@ impl Replay {
                 timeline_id: self.timeline_id,
                 seq: next.seq,
                 reason: "the journal has an input the run does not",
+            });
+        }
+        if (live.tick, live.seq) < (next.tick, next.seq) {
+            return Err(JournalError::Extra {
+                timeline_id: self.timeline_id,
+                seq: live.seq,
+                reason: "the run has an input, before the journal's next, that the journal does not",
             });
         }
         if next != live {
