@@ -652,3 +652,58 @@ fn the_taken_pairs_reset_with_each_step() {
         Ok(())
     );
 }
+
+/// SPR-008 (Architect ruling on D3): the pair set spans every fire of one system in one timer
+/// pass. Two timers due in the same slot that ask for the same `(purpose, entity)` stream would
+/// draw identical numbers, so the second fire is refused (one slot fires together, SPR-006 G2).
+#[test]
+fn the_fires_of_one_timer_pass_share_the_pair_set() {
+    use rh_core::agenda::TimerEntry;
+    use rh_core::system::TimerSpec;
+    use rh_ids::EntityRef;
+    fn schedule_two(
+        _: &Stub,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let time = c.now().checked_add_minutes(1_440).unwrap();
+        for (row, payload) in [(0_u16, 0_i64), (1, 1)] {
+            c.schedule(
+                &Draw::Noise,
+                TimerSpec {
+                    time,
+                    phase: Phase::Vital,
+                    entity: EntityRef::region(RegionId::from_raw(row)),
+                    kind: 0,
+                    payload,
+                },
+            )?;
+        }
+        Ok(())
+    }
+    fn fire(
+        _: &Stub,
+        _: &TimerEntry,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        c.stream(&Draw::Noise, RegionId::from_raw(3)).map(|_| ())
+    }
+    let s = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .at(Pulse::Year, Phase::Vital)
+        .stepping(schedule_two)
+        .firing(fire);
+    let mut e = engine(vec![s], SimTime::EPOCH, 1);
+    assert_eq!(
+        e.advance_until(SimTime::from_minutes(2 * 1_440), |_, _| {}),
+        Err(SimError::StreamReuse {
+            system: "X1.d",
+            purpose: "noise",
+            entity: 3,
+            taken: "stream",
+        })
+    );
+    assert_eq!(e.crash_artifact().map(|a| a.tick), Some(1_440));
+}

@@ -354,7 +354,9 @@ pub struct StepCtx<'a> {
     phase: Phase,
     inbox: Vec<QueuedCommand>,
     pub(crate) out: Outbox,
-    /// The `(purpose, entity)` pairs this step has drawn from, and how (05.1 §6 item 3).
+    /// The `(purpose, entity)` pairs this step has drawn from, and how (05.1 §6 item 3). The
+    /// `RefCell` makes `StepCtx` `!Sync`: a step, or one system's timer pass, runs on one thread
+    /// and the context is never shared, so the set cannot be reached from two threads.
     taken: RefCell<BTreeSet<(u64, u64, Taken)>>,
 }
 
