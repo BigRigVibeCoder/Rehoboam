@@ -9,7 +9,7 @@ tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.1.0
+version: 0.2.0
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
@@ -32,7 +32,7 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-011 | P1.0 (A) | Walking skeleton A: engine prerequisites. Engine-purity lint (A-14); a 32-bit probability type and keyed uniform draws (A-21); epoch-keyed draws (A-29); ledger rows and the life-course log; authored numbers into plane A | G0; SPR-007, SPR-008 merged | C3 (machinery; regenerates the `smoke` baseline) | `05.1` §2, §6 (exist); `05.5` §3.2 (exists); probability-type ruling (missing) | P1 |
 | SPR-012 | P1.0 (B) | Walking skeleton B: `solo` lives and dies. M2 schedule in fixed point, `rh-worldgen` stub, `rh-sys-demography` rung-0 slice, `rh-cli run`, the `solo` golden ladder | SPR-011 | C3 (first real system crate; first real golden world) | M2 rung-0 slice (draft, incomplete); Registry `DEATH`, `EXTINCTION`, verb `tellability`, system `defaults` (missing); `solo.yaml` (exists) | P1 |
 | SPR-013 | P1.0 (C) | Walking skeleton C: World Stream v0 and the Parquet chronicle (`rh-stream`), `rh-cli tail`, the `life_ends` pattern and its twin (`rh-sifter` v0), journal replay, rungs 1–2 on the same binary | SPR-012; A-06 | C3 (stream format; two new golden worlds) | `schema.sql` (exists; conflicts on EventId and roles); channel-A segment DDL (missing); `life_ends` (missing); `household.yaml`, `hamlet.yaml` (missing) | P1 |
-| SPR-014 | P1.13 | Lifecycle queues for P1a: same-instant delivery of a command to its owner at a later phase; ledger row inserts for births; dead-person drop (A-30); queue-age invariant (A-31); `rh-contracts` v0 for M2's columns | SPR-013 | C3 (scheduler semantics) with C2 (contract crate) | `05.1` §2 rule 2 (exists; same-instant delivery unstated: EVO needed) | P1 |
+| SPR-014 | P1.13 | Lifecycle queues for P1a: same-instant delivery of a command to its owner at a later phase; M2's Day/`Vital` drain of `ScheduleDeath` and `Marry` (REV-P1a MAJ-4); ledger row inserts for births; dead-person drop (A-30); queue-age invariant (A-31); `rh-contracts` v0 for M2's columns | SPR-013 | C3 (scheduler semantics) with C2 (contract crate) | `05.1` §2 rule 2 (exists; same-instant delivery unstated: EVO needed) | P1 |
 | SPR-015 | P1.3 (a) | M2 F1 births: age-specific fertility, partnering (fathers), households and kinship, `H64(mother, parity)` ids at runtime, marriage intervals | SPR-014 | C3 | M2 F1 births, partnering, households (missing; spec is the rung-0 slice); fertility schedule source (missing); ADR-0026 (exists) | P1 |
 | SPR-016 | P1.3 (b) | M2 F1 mortality: fixed-point `exp` and `ln`, Brass at any (α, β), infant sub-schedule and old-age tail, density modifier (entitlement hook stubbed) | SPR-012 (code); merges after SPR-015 | C3 (machinery and model) | M2 F1 mortality (missing); `exp`/`ln` ruling and reference (missing); `specs/demography/` (exists) | P1 |
 | SPR-017 | P1.15 | Registry effect language v0: the typed, total evaluator in `rh-registry`; succession-law eligibility and ordering; verb effects as queued commands; golden test | G0 | C2 (Registry schema); no hash change until a system uses it | `05.5` §2.1 (exists, prose); grammar and golden cases (missing) | P1 |
@@ -42,7 +42,7 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-021 | P1.7 (a) | M7 F1: titles, succession law, immediate succession (V-SAGA-19), titles inherited through the death path | SPR-014, SPR-015, SPR-017, SPR-020 | C3 | `M7.dynasty` (missing; drafting) | P1 |
 | SPR-022 | P1.7 (b) | M7 F1: ruler-exit hazards at the reference institutional state, feud stock after a regicide, claims, regencies, great-house dormancy (SIM-9) | SPR-021 | C3 | `M7.dynasty` (missing) | P1 |
 | SPR-023 | P3.2a (a) | Minds v0: named actors promoted by simulation criteria; HEXACO traits, ambition, relationships, opinion modifiers; `rh-minds` | SPR-014, SPR-015 | C3 | `T1.minds` (missing; drafting); `bevy_ecs` plane-A review (missing) | P1 |
-| SPR-024 | P3.2a (b) | Minds v0: event-driven IAUS for a few decisions; same-instant agenda semantics (`05.1` §4.3) | SPR-023, SPR-017 | C3 | `T1.minds` (missing) | P1 |
+| SPR-024 | P3.2a (b) | Minds v0: event-driven IAUS for a few decisions, with the Registry's typed `[considerations]` and `[response_curves]` (REV-P1a MAJ-6); same-instant agenda semantics (`05.1` §4.3) | SPR-023, SPR-017, SPR-021 (`seek_office` and `press_claim` send to M7, and the court sets need titles: REV-P1a MAJ-7) | C3 | `T1.minds` (missing) | P1 |
 | SPR-025 | P3.2a (c) | Minds v0: stress and mental breaks (V-SAGA-16); typed break table (A-24, part); grief damping and refractory period (red-team item 1) | SPR-024 | C3 | `T1.minds` (missing); `[mental_breaks]` typed (A-24) | P1 |
 | SPR-026 | P1.17 (a) | World Stream v1: live edge over a local socket, viewer cursors, `stream.subscribe` / `stream.status`, catch-up from sealed segments, channel C live | SPR-013 | C2 (IF-0); channel A unchanged | `05.10`, `05.9` IF-0 (exist, prose); wire format, `rh-protocol` (missing) | P1 |
 | SPR-027 | P1.17 (b) | World Stream v1: the materializer (V-STR-02), the pace command, `tail` filters and the regional digest, the Textual TUI stub | SPR-026 | C2 / C1 | `05.10` (exists) | P1 |
@@ -80,6 +80,7 @@ flowchart LR
   S015 --> S023
   S023 --> S024[SPR-024<br/>P3.2a-b IAUS, agenda]
   S017 --> S024
+  S021 --> S024
   S024 --> S025[SPR-025<br/>P3.2a-c stress, breaks]
   S013 --> S026[SPR-026<br/>P1.17a live edge, cursors]
   S026 --> S027[SPR-027<br/>P1.17b materializer, TUI stub]
@@ -168,10 +169,10 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 | M-1 | P1.0 runs as three sprints (SPR-011 ruling 1) | 70% |
 | M-2 | P1.3 splits into births (SPR-015) and mortality with fixed-point `exp`/`ln` (SPR-016): two different specs and one is machinery | 75% |
 | M-3 | P1.7 splits into two sprints and P3.2a into three, along their spec sections; each half is still about 3 agent-days | 70% |
-| M-4 | P1.18 (S5 F1) moves to P1b. Its reads of `person.occupation` (M4) and `region.conditions` (M6) have no owner in P1a, and registration refuses a read without one. G1a does not gate V-STR-07, and ADR-0031 had placed it in P1b. A director decision: it changes `docs/11` | 70% |
+| M-4 | P1.18 (S5 F1) moves to P1b. Its reads of `person.occupation` (M4) and `region.conditions` (M6) have no owner in P1a, so S5 F1 would run on neutral values only (registration reports an unowned read and refuses only sends: REV-P1a MAJ-2). G1a does not gate V-STR-07, and ADR-0031 had placed it in P1b. A director decision: it changes `docs/11` | 70% |
 | M-5 | P1.8 (M1 F1) moves to P1b with fugitives, its first consumer. P1a needs only M1 F0, inside worldgen-lite | 60% |
 | M-6 | `S3.migration` F0 (residence at genesis and at birth, no moves) enters P1a inside SPR-018, so V-DATA-04 has residence intervals at G1a | 65% |
-| M-7 | G1a's tests are made runnable before P1a starts (`docs/11`: numbers before the phase). V-INV-12 runs on the dynastic fixture world, not `val_khor` (optional under ADR-0035). V-DATA-04 at G1a checks identity, parents, death and residence; occupation waits for M4 (P1b). V-INV-03 at G1a kills through M2, M7 and agenda actions; M5 and M8 are P4. V-PERF-09 gets a P1a variant: the 10k dynastic world, `rh-cli tail`, the TUI stub and a stalled consumer, with no hydration bubble and no 100k world. The G1a lists of `docs/11` and `docs/09` §5 become one list. A director decision | 75% |
+| M-7 | G1a's tests are made runnable before P1a starts (`docs/11`: numbers before the phase). V-INV-12 runs on the dynastic fixture world, not `val_khor` (optional under ADR-0035). V-DATA-04 at G1a checks identity, parents, death and residence; occupation waits for M4 (P1b). V-INV-03 at G1a kills through M2, M7 and agenda actions; M5 and M8 are P4. V-PERF-09 gets a P1a variant: the 10k dynastic world, `rh-cli tail`, the TUI stub and a stalled consumer, with no hydration bubble and no 100k world. V-SAGA-16: its stress-accounting identity gates G1a, and its break band (0.5–5 per 100 named-actor-years, declared on the kingdom ensemble) is reported at G1a and gates G1b (REV-P1a MAJ-8). The G1a lists of `docs/11` and `docs/09` §5 become one list. A director decision | 75% |
 | M-8 | Inheritance in P1a is titles and claims only. Property inheritance waits for M4 F0 holdings (P1b), although P1.7's text says "titles and property" | 70% |
 | M-9 | The rung-1 and rung-2 manifests are BCK-002 A-06 (Architect), not P1.11, which is a P1b WP | 85% |
 | M-10 | BCK-002 A-15 (coverage gates, owned by no sprint since SPR-002) joins SPR-028, the P1a tools sprint | 60% |
