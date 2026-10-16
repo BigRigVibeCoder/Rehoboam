@@ -3,12 +3,12 @@
 version = 4
 
 [[package]]
-name = "fixture-banned-root"
+name = "fixture-wildcard-root"
 version = "0.0.0"
 dependencies = [
- "xxhash-rust",
+ "wildcard-dep",
 ]
 
 [[package]]
-name = "xxhash-rust"
-version = "0.0.0"
+name = "wildcard-dep"
+version = "0.1.0"

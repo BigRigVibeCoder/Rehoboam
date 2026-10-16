@@ -1,0 +1,15 @@
+# Positive control for `cargo deny check bans` (wildcards = "deny"; see ../../README.md).
+# Not part of the Rehoboam workspace. The root is deliberately publishable (no publish = false), so
+# allow-wildcard-paths, which exempts private crates' path dependencies, does not apply; the planted
+# `version = "*"` must be rejected. A registry wildcard is rejected in private crates too, but needs
+# the network to resolve, so this offline form stands in for it.
+[workspace]
+
+[package]
+name = "fixture-wildcard-root"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+wildcard-dep = { path = "dep", version = "*" }

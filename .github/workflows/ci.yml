@@ -59,10 +59,12 @@ jobs:
       - name: bin/check_all.sh
         run: bin/check_all.sh
 
-      - name: Upload the check report
+      - name: Upload the check report and the licence ledger
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: check-report
-          path: artifacts/check_report.md
-          if-no-files-found: error
+          path: |
+            artifacts/check_report.md
+            artifacts/licence_ledger.txt
+          if-no-files-found: warn

@@ -1,46 +1,27 @@
 # cargo-deny configuration (SPR-001 T-03).
-# REF: ADR-0021 (licence allow-list and provenance); docs/14_reuse_inventory.md (licence traps);
-#      GOV-003 §5 (no GPL, AGPL, non-commercial or territorial code in shipped crates).
+# REF: ADR-0021 as amended on 2026-10-16 (personal-use mode): Rehoboam is a private experiment that is
+#      never distributed, so any licence may be used and licences do not gate a change.
 #
-# The PR tier (bin/check_all.sh) runs `cargo deny check bans licenses sources`. Advisories run on a
-# schedule only (.github/workflows/advisories.yml): a newly published advisory can turn the check red
-# without any change in the repository, and a gate that changes colour by itself is flaky (GOV-002 §1
-# law 8).
+# The PR tier (bin/check_all.sh) runs `cargo deny check bans sources`, which blocks, and
+# `cargo deny list`, which does not: it writes every dependency's licence to
+# artifacts/licence_ledger.txt so that a future decision to share the code can see what would need
+# replacing. Advisories run on a schedule only (.github/workflows/advisories.yml): a newly published
+# advisory can turn the check red with no change in the repository, and a gate that changes colour by
+# itself is flaky (GOV-002 §1 law 8).
+#
+# There is deliberately no [licenses] section and `cargo deny check licenses` is not part of any gate.
+# Do not run a bare `cargo deny check` (all checks) as a gate.
 
 [graph]
 all-features = true
 
-[licenses]
-# The ADR-0021 allow-list, exactly. CC-BY-4.0 (allowed with attribution tracking) is added only when
-# a dependency needs it. Never widen this list for one crate: add a [[licenses.exceptions]] entry for
-# that crate, citing ADR-0021's "conditional, recorded per item" clause.
-allow = [
-    "MIT",
-    "Apache-2.0",
-    "BSD-2-Clause",
-    "BSD-3-Clause",
-    "ISC",
-    "MPL-2.0",
-    "Zlib",
-    "CC0-1.0",
-]
-confidence-threshold = 0.93
-# The allow-list is policy, not a record of what is in use today.
-unused-allowed-license = "allow"
-exceptions = []
-
-[licenses.private]
-# Workspace crates are `publish = false` and carry no licence field of their own.
-ignore = true
-
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
-# Path dependencies between private workspace crates carry no version requirement.
+# Path dependencies between private workspace crates carry no version requirement. Wildcards in
+# registry dependencies, and in any publishable crate, are still denied.
 allow-wildcard-paths = true
-deny = [
-    { crate = "xxhash-rust", reason = "BSL-1.0 is not on the ADR-0021 allow-list; use twox-hash (MIT). docs/14 licence traps" },
-]
+deny = []
 
 [sources]
 # crates.io only. A git or alternative-registry source is a C2 decision recorded here.

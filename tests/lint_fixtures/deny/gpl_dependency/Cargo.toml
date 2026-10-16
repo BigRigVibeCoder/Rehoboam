@@ -1,4 +1,4 @@
-# Positive-control fixture for cargo-deny (see ../README.md). Not part of the Rehoboam workspace.
+# Licence-ledger fixture (see ../../README.md). Not part of the Rehoboam workspace.
 [workspace]
 
 [package]

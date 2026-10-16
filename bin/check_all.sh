@@ -31,8 +31,9 @@ dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
 
 n=0; failed=""
 # run <name> <expect> <command...>
-#   expect: pass | fail | fail:<text>. A positive control uses fail:<text>: the command must fail AND
-#   print <text>, so a control that fails for the wrong reason (a crash, a missing lockfile) is caught.
+#   expect: pass | fail | fail:<text> | pass:<text>. A positive control uses fail:<text>: the command
+#   must fail AND print <text>, so a control that fails for the wrong reason (a crash, a missing
+#   lockfile) is caught. pass:<text> is the same for a command that must succeed and print <text>.
 run() {
   local name="$1" expect="$2"; shift 2
   n=$((n+1))
@@ -45,6 +46,7 @@ run() {
     pass) if [ $rc -eq 0 ]; then ok=1; fi ;;
     fail) if [ $rc -ne 0 ]; then ok=1; fi ;;
     fail:*) if [ $rc -ne 0 ] && grep -qF -- "${expect#fail:}" <<<"$out"; then ok=1; fi ;;
+    pass:*) if [ $rc -eq 0 ] && grep -qF -- "${expect#pass:}" <<<"$out"; then ok=1; fi ;;
   esac
   if [ $ok -eq 1 ]; then
     echo "| $n | $name | PASS | $dt |" >> "$REPORT"; echo "PASS  $name"
@@ -73,6 +75,33 @@ require_tools() {
   echo "All required tools present."
 }
 
+# Licence ledger (ADR-0021 as amended 2026-10-16, personal-use mode): it records, it never gates.
+# licence_ledger <Cargo.toml> <output file>: writes every crate in the graph with its licence(s), and
+# prints the ledger so a control can look for a licence in it.
+licence_ledger() {
+  local manifest="$1" out="$2"
+  mkdir -p "$(dirname "$out")" || return 1
+  {
+    echo "# Licence ledger for ${manifest} at ${commit}: every crate in the graph and its licence(s)."
+    echo "# Personal-use mode (ADR-0021 as amended 2026-10-16): recorded for a future decision to share; not a gate."
+    cargo deny --color never --locked --manifest-path "$manifest" list --layout crate
+  } > "$out" || return 1
+  cat "$out"
+}
+
+# The git-source control: copies tests/lint_fixtures/deny/git_source/ to target/, serves its dep/ from
+# a local git repository (file://, no network), and runs `cargo deny check sources`, which must reject it.
+git_source_control() {
+  local dst=target/rendered-fixtures/git_source
+  rm -rf "$dst" && mkdir -p "$dst" && cp -R tests/lint_fixtures/deny/git_source/. "$dst/" || return 1
+  git -C "$dst/dep" init -q && git -C "$dst/dep" add . &&
+    git -C "$dst/dep" -c user.name=fixture -c user.email=fixture@localhost -c commit.gpgsign=false \
+      commit -q -m "git-source fixture" || return 1
+  sed "s|@DEP_GIT_URL@|file://$PWD/$dst/dep|" "$dst/Cargo.toml.in" > "$dst/Cargo.toml" || return 1
+  cargo generate-lockfile --quiet --manifest-path "$dst/Cargo.toml" || return 1
+  cargo deny --color never --offline --locked --manifest-path "$dst/Cargo.toml" check sources
+}
+
 # Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, each of which
 # must be caught by its own rule (tests/lint_fixtures/README.md).
 forbidden_api_controls() {
@@ -95,9 +124,11 @@ run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pypr
 run "Python: format (ruff format --check)" pass "$PY" -I -m ruff format --config python/pyproject.toml --no-cache --check . &&
 run "Python: types (mypy --strict)" pass "$PY" -I -m mypy --config-file python/pyproject.toml &&
 run "Rust: format (cargo fmt --check)" pass cargo fmt --all --check &&
-run "Rust: licences, bans, sources (cargo deny; ADR-0021)" pass cargo deny --color never --locked check bans licenses sources &&
-run "cargo deny positive control: GPL dependency must FAIL" "fail:error[rejected]" cargo deny --color never --offline --locked --manifest-path tests/lint_fixtures/deny/gpl_dependency/Cargo.toml check licenses &&
-run "cargo deny positive control: xxhash-rust must FAIL" "fail:error[banned]" cargo deny --color never --offline --locked --manifest-path tests/lint_fixtures/deny/banned_crate/Cargo.toml check bans &&
+run "Rust: bans and sources (cargo deny: crates.io only, no wildcards)" pass cargo deny --color never --locked check bans sources &&
+run "cargo deny positive control: git source must FAIL" "fail:error[source-not-allowed]" git_source_control &&
+run "cargo deny positive control: wildcard version must FAIL" "fail:error[wildcard]" cargo deny --color never --offline --locked --manifest-path tests/lint_fixtures/deny/wildcard_version/Cargo.toml check bans &&
+run "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)" pass licence_ledger Cargo.toml artifacts/licence_ledger.txt &&
+run "Licence ledger control: the GPL fixture is listed as GPL-3.0-only" "pass:GPL-3.0-only" licence_ledger tests/lint_fixtures/deny/gpl_dependency/Cargo.toml target/rendered-fixtures/licence_ledger_gpl.txt &&
 run "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)" pass "$PY" -I bin/lint_arch.py &&
 run "lint_arch positive control: system -> system must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_system/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_disallowed/Cargo.toml &&
