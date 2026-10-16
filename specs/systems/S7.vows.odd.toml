@@ -114,18 +114,22 @@ when = "The vower dies with the vow active (the death path, same instant)"
 [[commands]]
 target = "T1.minds"
 command = "AgendaGoal"
+payload = "{ vow, holder, kind, target, priority }"
 why = "Puts an active vow into the vower's agenda as a goal with its bounded priority; minds owns the agenda's utility and decides every action"
 [[commands]]
 target = "T1.minds"
 command = "ClearGoal"
+payload = "{ vow, holder }"
 why = "Removes the goal when the vow ends"
 [[commands]]
 target = "T1.minds"
 command = "OpinionModifier"
+payload = "{ holder, about, kind, magnitude, source_event }"
 why = "A broken public vow costs the oath-breaker opinion and honour with witnesses and kin (broken_vow_opinion); a fulfilled one gains it. Minds owns opinions"
 [[commands]]
 target = "T1.minds"
 command = "ApplyThought"
+payload = "{ holder, overlay, delta, source_event }"
 why = "The curse hook: a vow sworn on a relic, or under a mythic catalyst that declares a curse, lays a Thought on an oath-breaker"
 
 [[reads]]

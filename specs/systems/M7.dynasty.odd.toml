@@ -321,10 +321,12 @@ why = "A sovereign's background murder, with M2's declared payload ScheduleDeath
 [[commands]]
 target = "T1.minds"
 command = "Promote"
+payload = "{ person }"
 why = "A person meets the naming criteria (SIM-9): a seat, office, claim or active vow, or within dormancy_degrees of a holder"
 [[commands]]
 target = "T1.minds"
 command = "Demote"
+payload = "{ person }"
 why = "A named great-house member meets the dormancy criteria; minds defers it while a break is pending or refractory"
 [[commands]]
 target = "T1.minds"
