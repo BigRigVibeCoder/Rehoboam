@@ -34,11 +34,13 @@ REQUIRED_GATES = (
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
+    "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
+    "T-03)",
     "Golden vectors: Brass (M2)",
     "Golden vectors: M4 basket and price rule",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
-    "Golden vectors: rh-ids reference matches the committed file "
-    "(gen_rng_golden --check; V-DET-09)",
+    "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
+    "V-DET-09)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
@@ -82,6 +84,7 @@ REQUIRED_GATES = (
     "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
+    "gen_skeletons positive control: hand-edited skeleton must FAIL",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",

@@ -133,6 +133,10 @@ version = "0.0.0"
 [[package]]
 name = "rh-core"
 version = "0.0.0"
+dependencies = [
+ "rh-ids",
+ "rh-registry",
+]
 
 [[package]]
 name = "rh-events"

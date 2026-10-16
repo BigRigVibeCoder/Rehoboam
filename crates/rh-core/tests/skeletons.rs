@@ -1,0 +1,236 @@
+//! T-03 on the real specs: the generated skeletons compile against the `SystemModel` contract
+//! (SPR-005).
+//!
+//! Each `tests/generated/*.rs` is the unedited output of `lint_odd.py --rust <id>`
+//! (`bin/gen_skeletons.py --check` keeps it so). Each module below brings `Fixed`, `Phase` and
+//! `Pulse` into scope, `include!`s its skeleton and implements `SpecPurpose` for the generated
+//! `RngPurpose` enum: the only way a system names a purpose (ruling 2).
+//!
+//! Acceptance (T-03): the S5 and M2 skeletons compile, and so do S6 and S7.
+//!
+//! Refs: SPR-005 T-03, T-06, rulings 1 and 2; ADR-0033 §3; `05.1` §2.
+
+#![allow(clippy::type_complexity, reason = "a table of test cases")]
+
+mod support;
+
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, Lag, Plane};
+use rh_core::fixed::Q16_16;
+use rh_core::system::{
+    AggregateSpec, Fixed, InvariantResult, ParamSchema, PulseBinding, SimError, SpecPurpose,
+    StepCtx, SystemDescriptor, SystemModel,
+};
+use rh_core::world::{SystemView, WorldTables};
+use rh_core::{Phase, Pulse};
+
+macro_rules! skeleton {
+    ($module:ident, $file:literal, [$($variant:ident => $name:literal),* $(,)?]) => {
+        #[allow(dead_code, reason = "generated items a stub does not use")]
+        #[allow(clippy::all, clippy::pedantic, reason = "generated code is never hand-edited")]
+        mod $module {
+            use rh_core::{Fixed, Phase, Pulse};
+            include!($file); // LINT-ALLOW(forbidden-api): the unedited lint_odd.py --rust skeleton (tests/generated/), kept identical by bin/gen_skeletons.py --check
+
+            impl rh_core::system::SpecPurpose for RngPurpose {
+                const ALL: &'static [Self] = &[$(Self::$variant),*];
+                fn name(&self) -> &'static str {
+                    match self {
+                        $(Self::$variant => $name),*
+                    }
+                }
+            }
+        }
+    };
+}
+
+skeleton!(s5, "generated/S5_daily_life.rs", [ActivityBlock => "activity_block", EncounterOutcome => "encounter_outcome"]);
+skeleton!(m2, "generated/M2_demography.rs", [DeathTime => "death_time"]);
+skeleton!(s6, "generated/S6_artifacts.rs", [LossOnDeath => "loss_on_death", TheftOutcome => "theft_outcome", SearchFind => "search_find"]);
+skeleton!(s7, "generated/S7_vows.rs", [GrudgeForm => "grudge_form", BreakMode => "break_mode"]);
+
+/// A system built on a skeleton: everything the spec fixes comes from the generated module.
+struct OnSkeleton {
+    id: &'static str,
+    spec_version: &'static str,
+    schedule: &'static [(Pulse, Phase)],
+    purposes: Vec<&'static str>,
+    access: AccessSpec,
+    params: Vec<&'static str>,
+}
+
+impl SystemModel for OnSkeleton {
+    fn descriptor(&self) -> SystemDescriptor {
+        SystemDescriptor {
+            id: self.id,
+            fidelity: "F1",
+            spec_version: self.spec_version,
+        }
+    }
+    fn access(&self) -> AccessSpec {
+        self.access.clone()
+    }
+    fn schedule(&self) -> Vec<PulseBinding> {
+        PulseBinding::from_schedule(self.schedule)
+    }
+    fn rng_purposes(&self) -> Vec<&'static str> {
+        self.purposes.clone()
+    }
+    fn params_schema(&self) -> ParamSchema {
+        ParamSchema {
+            names: self.params.clone(),
+        }
+    }
+    fn step(
+        &self,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        Ok(())
+    }
+    fn invariants(&self, _: &WorldTables) -> Vec<InvariantResult> {
+        Vec::new()
+    }
+    fn declared_aggregates(&self) -> Vec<AggregateSpec> {
+        Vec::new()
+    }
+}
+
+fn read(column: &'static str, owner: &'static str) -> ColumnRead {
+    ColumnRead {
+        column,
+        owner,
+        lag: Lag::StartOfDay,
+    }
+}
+
+fn write(column: &'static str) -> ColumnWrite {
+    ColumnWrite {
+        column,
+        plane: Plane::A,
+    }
+}
+
+/// S5 as its spec declares it: one owned column, six start-of-day reads.
+fn s5_system(purposes: Vec<&'static str>) -> OnSkeleton {
+    OnSkeleton {
+        id: s5::SYSTEM_ID,
+        spec_version: s5::SPEC_VERSION,
+        schedule: s5::SCHEDULE,
+        purposes,
+        access: AccessSpec {
+            reads: vec![
+                read("person.birth_tick", "M2.demography"),
+                read("person.sex", "M2.demography"),
+                read("person.alive", "M2.demography"),
+                read("person.residence", "S3.migration"),
+                read("person.occupation", "M4.economy"),
+                read("region.conditions", "M6.polity"),
+            ],
+            writes: vec![write("encounter_log.day_index")],
+        },
+        params: vec!["blocks_per_day", "encounter_tie_rate"],
+    }
+}
+
+/// M2 as its spec declares it: four owned columns, no reads.
+fn m2_system() -> OnSkeleton {
+    OnSkeleton {
+        id: m2::SYSTEM_ID,
+        spec_version: m2::SPEC_VERSION,
+        schedule: m2::SCHEDULE,
+        purposes: m2::RngPurpose::names(),
+        access: AccessSpec {
+            reads: vec![],
+            writes: vec![
+                write("person.birth_tick"),
+                write("person.sex"),
+                write("person.alive"),
+                write("person.death_tick"),
+            ],
+        },
+        params: vec![
+            "e0",
+            "brass_alpha",
+            "brass_beta",
+            "tfr",
+            "eps_f",
+            "eps_m",
+            "elite_fertility_mult",
+        ],
+    }
+}
+
+#[test]
+fn the_generated_params_are_q16_16() {
+    // Ruling 1: `Fixed` is `Q16_16`, and the spec ranges fit it (e0 up to about 85).
+    let p = m2::Params {
+        e0: Q16_16::from_int(85),
+        brass_alpha: Fixed::from_ratio(-136, 100).unwrap(),
+        brass_beta: Fixed::ONE,
+        tfr: Fixed::from_int(8),
+        eps_f: Fixed::from_ratio(1, 10).unwrap(),
+        eps_m: Fixed::from_int(3),
+        elite_fertility_mult: Fixed::from_ratio(16, 10).unwrap(),
+    };
+    assert_eq!(p.e0.to_bits(), 85 << 16);
+    let _ = s5::Params {
+        blocks_per_day: Fixed::from_int(6),
+        encounter_tie_rate: Fixed::EPSILON,
+    };
+}
+
+#[test]
+fn every_skeleton_matches_its_spec() {
+    let t = support::real_ownership();
+    let cases: [(&str, &[(Pulse, Phase)], Vec<&'static str>); 4] = [
+        (s5::SYSTEM_ID, s5::SCHEDULE, s5::RngPurpose::names()),
+        (m2::SYSTEM_ID, m2::SCHEDULE, m2::RngPurpose::names()),
+        (s6::SYSTEM_ID, s6::SCHEDULE, s6::RngPurpose::names()),
+        (s7::SYSTEM_ID, s7::SCHEDULE, s7::RngPurpose::names()),
+    ];
+    for (id, schedule, purposes) in cases {
+        let spec = &t.specs[id];
+        assert_eq!(
+            spec.rng, purposes,
+            "{id}: the SpecPurpose names are the spec's [[rng]]"
+        );
+        assert!(!schedule.is_empty(), "{id}");
+    }
+    assert_eq!(
+        s7::SCHEDULE.len(),
+        3,
+        "S7 binds Day twice (Vital, Agenda) and Month once"
+    );
+}
+
+#[test]
+fn a_system_on_a_skeleton_reports_its_spec_data() {
+    let s5 = s5_system(s5::RngPurpose::names());
+    let m2 = m2_system();
+    assert_eq!(s5.descriptor().id, "S5.daily_life");
+    assert_eq!(s5.descriptor().spec_version, "0.1.0");
+    assert_eq!(
+        s5.schedule(),
+        [PulseBinding {
+            pulse: Pulse::Day,
+            phase: Phase::Activity
+        }]
+    );
+    assert_eq!(
+        m2.schedule(),
+        [PulseBinding {
+            pulse: Pulse::Month,
+            phase: Phase::Vital
+        }]
+    );
+    assert_eq!(s5.rng_purposes(), ["activity_block", "encounter_outcome"]);
+    assert_eq!(m2.params_schema().names.len(), 7);
+    assert_eq!(s5.access().plane(), "A");
+    assert!(m2.access().writes_column("person.alive"));
+    assert_eq!(
+        s5.access().read_of("person.sex").map(|r| r.lag),
+        Some(Lag::StartOfDay)
+    );
+    assert!(s5.invariants(&WorldTables::new()).is_empty() && m2.declared_aggregates().is_empty());
+}
