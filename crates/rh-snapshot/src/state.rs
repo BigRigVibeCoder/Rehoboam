@@ -1,13 +1,23 @@
-//! `state_hash` over all plane-A state: the world tables and the engine-held tables (SPR-007 T-02;
-//! Architect ruling 2026-10-16: one plane-A hash, covering what the engine holds outside
-//! `WorldTables`).
+//! `state_hash` over the authoritative plane-A state: the world tables and the engine-held tables
+//! (SPR-007 T-02; Architect ruling 2026-10-16: one plane-A hash, covering what the engine holds
+//! outside `WorldTables`), the carried undrained events excepted.
 //!
 //! # Engine tables (layout `rehoboam/rh-snapshot/hash/v1`, normative)
 //!
 //! An [`EngineState`] is hashed as one plane-A table set: each world column (a table whose row `i`
-//! is its `i`-th `i64`, see [`crate::hash`]) and the eight engine tables below, all under the
-//! plane-hash rule (strictly increasing byte order of names). Engine table names start with
-//! `rh-core/`, which no `entity.column` name can, so they never collide with a world column.
+//! is its `i`-th `i64`, see [`crate::hash`]) and the engine tables below except the carried ones,
+//! all under the plane-hash rule (strictly increasing byte order of names). Engine table names
+//! start with `rh-core/`, which no `entity.column` name can, so they never collide with a world
+//! column.
+//!
+//! **`state_hash` covers authoritative state only.** The carried tables ([`CARRIED_TABLES`]:
+//! `rh-core/events.held`, the undrained events) are channel-A output waiting for the host, not
+//! history: draining empties them, and when the host drains is in neither the journal nor the
+//! history tuple, so hashing them would let watching change history. A keyframe stores them, so a
+//! load restores the pending output, but `state_hash` does not read them. History is committed
+//! by `rh-core/events.meta` (the next `EventId` and the running event-log hash, which draining does
+//! not reset; SPR-006 G4), so `state_hash` is drain-independent too (Architect ruling on
+//! VER-SPR-007-TEST round 2 GAP-6, replacing T-02 plan ruling 1's "and the hash").
 //!
 //! Row encodings use little-endian integers; `str` is `u32 len || UTF-8`; `opt(x)` is `u8 0`, or
 //! `u8 1 || x`; an entity is `u8 kind tag || u64 raw` (`rh_ids::EntityKind::tag`); a phase is
@@ -21,11 +31,12 @@
 //! | `rh-core/engine.epochs` | entity a material input touched, in entity order | `entity, u32 epoch` |
 //! | `rh-core/engine.inputs` | queued material input: instants in order, inputs in submission order | `i64 time, u32 index, list(entity scope)` |
 //! | `rh-core/engine.meta` | (one row) | `opt(i64 cursor), u32 timeline, u64 applied_inputs, u64 command next_seq` |
-//! | `rh-core/events.held` | undrained event, in id order | `u64 id, i64 tick, u8 phase, str emitter, str kind, list(entity subjects), list(u64 causes), list(i64 payload)` |
+//! | `rh-core/events.held` (carried, not hashed) | undrained event, in id order | `u64 id, i64 tick, u8 phase, str emitter, str kind, list(entity subjects), list(u64 causes), list(i64 payload)` |
 //! | `rh-core/events.meta` | (one row) | `u64 next_seq, opt(i64 tick || u8 phase) last, u64 running` |
 //!
 //! `bin/gen_hash_golden.py` encodes a synthetic engine state the same way, independently, and
-//! `tests/golden.rs` checks every table root and the plane hash. The keyframe (T-02) stores these
+//! `tests/golden.rs` checks every table root (carried tables included: their encoding is the
+//! keyframe's) and the plane hash. The keyframe (T-02) stores these
 //! rows and decodes them with [`decode_engine_tables`].
 //!
 //! REF: `docs/05_architecture/05.1_simulation_core.md` §6 item 6; ADR-0024;
@@ -76,13 +87,18 @@ pub const ENGINE_TABLES: [&str; 8] = [
     EVENTS_META,
 ];
 
-/// `state_hash`: the plane-A hash of an engine state (world columns and engine tables).
+/// The engine tables a keyframe carries that `state_hash` does not cover: the undrained events,
+/// which depend on when the host drains (see the module docs).
+pub const CARRIED_TABLES: [&str; 1] = [EVENTS_HELD];
+
+/// `state_hash`: the plane-A hash of an engine state (world columns and the engine tables except
+/// [`CARRIED_TABLES`]). Independent of when, or whether, the host drains events.
 #[must_use]
 pub fn state_hash(state: &EngineState) -> u64 {
     state_digest(state).hash
 }
 
-/// The full plane-A digest of an engine state.
+/// The full plane-A digest of an engine state ([`CARRIED_TABLES`] excepted).
 #[must_use]
 pub fn state_digest(state: &EngineState) -> PlaneDigest {
     let mut tables: BTreeMap<String, TableDigest> = state
@@ -91,12 +107,15 @@ pub fn state_digest(state: &EngineState) -> PlaneDigest {
         .map(|(name, _, rows)| (name.to_owned(), TableDigest::of(name, rows)))
         .collect();
     for (name, rows) in engine_tables(state) {
-        tables.insert(name.to_owned(), TableDigest::of(name, rows.as_slice()));
+        if !CARRIED_TABLES.contains(&name) {
+            tables.insert(name.to_owned(), TableDigest::of(name, rows.as_slice()));
+        }
     }
     PlaneDigest::from_tables(Plane::A, tables)
 }
 
-/// The engine tables of a state, each as its encoded rows, in name order.
+/// The engine tables of a state, each as its encoded rows, in name order: every table a keyframe
+/// stores, [`CARRIED_TABLES`] included.
 #[must_use]
 pub fn engine_tables(state: &EngineState) -> Vec<(&'static str, Vec<Vec<u8>>)> {
     let mut agenda_meta = W::default();

@@ -446,3 +446,96 @@ fn a_converged_run_that_emitted_a_different_event_hashes_differently() {
     assert_eq!(read.events.running, s1.events.running);
     assert_eq!(state_hash(&read), state_hash(&s1));
 }
+
+/// When the host drains events, `state_hash` drains nothing (VER-SPR-007-TEST round 2 GAP-6,
+/// Architect ruling): the undrained events are carried output, outside the hash.
+#[derive(Clone, Copy, Debug)]
+enum Drain {
+    Never,
+    EveryInstant,
+    Monthly,
+    /// At pseudo-random instants (a fixed LCG, so the test is deterministic).
+    Random(u64),
+}
+
+/// The life world (seed 13) run two years one instant at a time, draining per `drain`: the
+/// `state_hash` at every month boundary, and the largest number of events held at a rung.
+fn drained_ladder(drain: Drain) -> (Vec<(i64, u64)>, usize) {
+    let mut e = life_engine(13, 48, 3, false, 1);
+    let mut lcg = match drain {
+        Drain::Random(seed) => seed,
+        _ => 0,
+    };
+    let (mut ladder, mut most_held) = (Vec::new(), 0);
+    while let Some(t) = e.next_instant().filter(|t| t.minutes() <= 2 * YEAR) {
+        e.advance_until(t, |_, _| {})
+            .unwrap_or_else(|err| panic!("{err}"));
+        let month = CALENDAR.is_boundary(rh_core::Pulse::Month, t);
+        if month {
+            let state = e.snapshot();
+            most_held = most_held.max(state.events.events.len());
+            ladder.push((t.minutes(), state_hash(&state)));
+        }
+        let now = match drain {
+            Drain::Never => false,
+            Drain::EveryInstant => true,
+            Drain::Monthly => month,
+            Drain::Random(_) => {
+                lcg = lcg
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                lcg >> 61 == 0
+            }
+        };
+        if now {
+            e.drain_events();
+        }
+    }
+    (ladder, most_held)
+}
+
+#[test]
+fn state_hash_does_not_depend_on_when_the_host_drains() {
+    let (never, held) = drained_ladder(Drain::Never);
+    assert_eq!(
+        never.len(),
+        25,
+        "the month rungs of two years, both ends included"
+    );
+    assert!(held > 0, "without draining, events are held at the rungs");
+    for drain in [
+        Drain::EveryInstant,
+        Drain::Monthly,
+        Drain::Random(1),
+        Drain::Random(0x5EED),
+    ] {
+        let (ladder, _) = drained_ladder(drain);
+        assert_eq!(ladder, never, "{drain:?}");
+    }
+}
+
+/// A keyframe written with events held keeps them on load, and the loaded engine hashes equal.
+#[test]
+fn a_keyframe_keeps_the_held_events_outside_the_hash() {
+    let engine = run_to(life(), 50 * DAY + 1);
+    let state = engine.snapshot();
+    assert!(!state.events.events.is_empty(), "events are held");
+    let (bytes, header) = write_keyframe(&engine, &history(), position(1)).unwrap();
+    let mut loaded = load(&bytes).unwrap();
+    assert_eq!(loaded.snapshot().events.events, state.events.events);
+    assert_eq!(state_hash(&loaded.snapshot()), header.state_hash);
+    // Draining the loaded engine changes no hash: the held events were never in it.
+    let drained = loaded.drain_events();
+    assert_eq!(drained, state.events.events);
+    assert_eq!(state_hash(&loaded.snapshot()), header.state_hash);
+    // The carried table is in the keyframe: altering a held row is still refused.
+    let altered = rewrite(&bytes, |pairs| {
+        let p = pairs
+            .iter_mut()
+            .find(|p| p.0 == rh_snapshot::state::EVENTS_HELD)
+            .unwrap();
+        let last = p.1.len() - 1;
+        p.1[last] ^= 1;
+    });
+    assert!(load(&altered).is_err());
+}

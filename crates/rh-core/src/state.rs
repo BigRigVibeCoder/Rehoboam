@@ -7,7 +7,8 @@
 //! - the lifecycle command queues;
 //! - the per-entity epochs;
 //! - the queued material inputs;
-//! - the event log's held events, counter, last `(tick, phase)` and running hash;
+//! - the event log's held events (carried output: kept by a keyframe, outside `state_hash`), counter,
+//!   last `(tick, phase)` and running hash;
 //! - the cursor (the next instant to consider), the number of material inputs applied, and the
 //!   timeline.
 //!

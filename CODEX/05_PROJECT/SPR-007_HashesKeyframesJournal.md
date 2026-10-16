@@ -105,6 +105,7 @@ version: 1.3.0
 | SPR-006 DEF-6 | The crash artifact keeps exactly the last 1000 diagnostic records | Test `the_crash_artifact_keeps_exactly_the_last_1000_diagnostic_records` (fails at 1001) | `1abe93f` |
 | SPR-006 GAP-6 | Restore accepts only the canonical form, everywhere | `Agenda::restore`, `CommandQueues::from_state`, `EventLog::from_state`, epochs and inputs checked; `Engine::restore` validates names against `Registered`; 11 refused cases in `agenda_events.rs` | `1abe93f` |
 | SPR-006 event hash | `rh-core/events.meta` carries the running event-log hash (SPR-006 G4), so a converged run that emitted different events still changes `state_hash` | Test `a_converged_run_that_emitted_a_different_event_hashes_differently`; a mutant dropping the running hash fails it | `2ef968e` |
+| VER-SPR-007-TEST round 2 GAP-6 | `rh-core/events.held` was in `state_hash`, so the hash depended on when the host drained (seed 13: never vs every instant differed at 782 instants) | Ruling replaced (T-02 plan ruling 1 "and the hash"): held events are a carried table, in the keyframe and outside `state_hash`; `state_hash` covers authoritative state only. Tests: drain never / every instant / monthly / random give one ladder; a keyframe keeps held events, hash unchanged. Synthetic and stub-world goldens regenerated (C3), Python cross-check at months 0, 59, 119 | (this commit) |
 
 ## Completion
 
