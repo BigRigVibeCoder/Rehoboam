@@ -53,9 +53,13 @@ workspace crates, of every dependency kind (normal, build and dev):
                      in a crate (the root list minus `f64::ln`, say) would quietly replace the
                      disallowed lists for that crate (VER-SPR-003-TEST GAP-12). Every file of
                      either name under the workspace root is reported, except the root's own
-                     clippy.toml and the lint fixtures listed in CLIPPY_CONFIG_FIXTURES;
-                     target/, .git/ and virtual environments are skipped. CLIPPY_CONF_DIR, which
-                     points clippy at another configuration, must not be set.
+                     clippy.toml and the lint fixtures listed in CLIPPY_CONFIG_FIXTURES. Two
+                     searches: clippy's own lookup, from each member's manifest directory up to
+                     the root, following symlinks (GAP-13); and a crawl of the whole tree that
+                     skips only the root's target/ and .git/. A workspace member whose manifest
+                     directory is a symlink is reported too: nothing needs one, and it can hide
+                     a config from the crawl. CLIPPY_CONF_DIR, which points clippy at another
+                     configuration, must not be set.
 
 Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
@@ -155,9 +159,13 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
 CLIPPY_CONFIG_NAMES = frozenset({"clippy.toml", ".clippy.toml"})
 ROOT_CLIPPY_CONFIG = "clippy.toml"
 CLIPPY_CONFIG_FIXTURES = frozenset(
-    {"tests/lint_fixtures/clippy_config/crate_local/crates/rh-sample/clippy.toml"}
+    {
+        "tests/lint_fixtures/clippy_config/crate_local/crates/rh-sample/clippy.toml",
+        "tests/lint_fixtures/clippy_config/symlink_target/rh-sample/clippy.toml",
+    }
 )
-SKIPPED_DIRS = frozenset({"target", ".git", ".venv", "node_modules"})
+# The only directories the crawl skips, and only at the workspace root (GAP-13).
+SKIPPED_ROOT_DIRS = frozenset({"target", ".git"})
 
 # The [lints] declaration of a crate that takes the workspace's lints and nothing else (rule lints).
 INHERITED_LINTS = ("workspace",)
@@ -203,6 +211,8 @@ class Crate:
     # The crate's own [lints] keys, as read from its Cargo.toml: ("workspace",) for exactly
     # `[lints] workspace = true`, which every plane-A crate must declare.
     lints: tuple[str, ...] = INHERITED_LINTS
+    # The manifest's directory as cargo metadata gives it (not resolved, so a symlink shows).
+    directory: Path | None = None
 
     @property
     def declared_ok(self) -> bool:
@@ -358,6 +368,7 @@ def crates_from_metadata(document: object) -> list[Crate]:
                 edges=internal,
                 external=external,
                 lints=read_lints(Path(manifest)),
+                directory=Path(manifest).parent,
             )
         )
     return sorted(crates, key=lambda crate: crate.name)
@@ -594,11 +605,14 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
 def clippy_configs(root: Path) -> list[str]:
     """Return every clippy.toml or .clippy.toml under ``root``, relative and sorted.
 
-    Directories named in SKIPPED_DIRS are not entered (build output, git data, environments).
+    Only the root's own target/ and .git/ are skipped; symlinked directories are not entered
+    (os.walk's default), which is why ``member_clippy_configs`` exists.
     """
     found: list[str] = []
     for directory, subdirectories, files in os.walk(root):
-        subdirectories[:] = sorted(d for d in subdirectories if d not in SKIPPED_DIRS)
+        if Path(directory) == root:
+            subdirectories[:] = [d for d in subdirectories if d not in SKIPPED_ROOT_DIRS]
+        subdirectories.sort()
         found += [
             (Path(directory) / name).relative_to(root).as_posix()
             for name in files
@@ -607,10 +621,41 @@ def clippy_configs(root: Path) -> list[str]:
     return sorted(found)
 
 
-def check_clippy_configs(root: Path) -> list[Violation]:
-    """Check that the root clippy.toml is the only clippy config (VER-SPR-003-TEST GAP-12)."""
+def member_clippy_configs(root: Path, crates: Sequence[Crate]) -> list[str]:
+    """Return the clippy configs clippy itself would find for each member, relative and sorted.
+
+    Clippy looks in the crate's manifest directory and then each parent. This walks from each
+    member's directory (unresolved, so through any symlink) up to ``root``, testing both names
+    with Path.exists(), which follows symlinks.
+    """
+    found: set[str] = set()
+    for crate in crates:
+        if crate.directory is None:
+            continue
+        directory = crate.directory
+        while True:
+            for name in CLIPPY_CONFIG_NAMES:
+                if (directory / name).exists():
+                    found.add(Path(os.path.relpath(directory / name, root)).as_posix())
+            if directory in (root, directory.parent):
+                break
+            directory = directory.parent
+    return sorted(found)
+
+
+def check_clippy_configs(root: Path, crates: Sequence[Crate] = ()) -> list[Violation]:
+    """Check that the root clippy.toml is the only clippy config (VER-SPR-003-TEST GAP-12, 13)."""
     allowed = CLIPPY_CONFIG_FIXTURES | {ROOT_CLIPPY_CONFIG}
-    found = []
+    found = [
+        Violation(
+            "clippy-config",
+            crate.name,
+            f"its manifest directory {crate.directory} is a symlink; a workspace member lives "
+            "in the tree, where every check can see it (VER-SPR-003-TEST GAP-13)",
+        )
+        for crate in crates
+        if crate.directory is not None and crate.directory.is_symlink()
+    ]
     if os.environ.get("CLIPPY_CONF_DIR"):
         found.append(
             Violation(
@@ -628,7 +673,7 @@ def check_clippy_configs(root: Path) -> list[Violation]:
             "nearest one, so it would replace the disallowed lists (the std transcendentals, "
             "HashMap, Instant, mul_add) for the crates below it (VER-SPR-003-TEST GAP-12)",
         )
-        for path in clippy_configs(root)
+        for path in sorted(set(clippy_configs(root)) | set(member_clippy_configs(root, crates)))
         if path not in allowed
     ]
 
@@ -692,7 +737,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except WorkspaceError as err:
         print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
         return EXIT_UNREADABLE
-    violations = check_workspace(crates) + check_clippy_configs(args.manifest_path.resolve().parent)
+    root = args.manifest_path.absolute().parent
+    violations = check_workspace(crates) + check_clippy_configs(root, crates)
     print(f"lint_arch: {args.manifest_path}")
     for crate in crates:
         print(describe(crate))
