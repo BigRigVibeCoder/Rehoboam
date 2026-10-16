@@ -37,7 +37,9 @@
 mod binomial;
 mod convert;
 mod error;
+mod poisson;
 mod uniform;
 
 pub use binomial::Binomial;
 pub use error::SampleError;
+pub use poisson::Poisson;
