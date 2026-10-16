@@ -9,7 +9,7 @@ tags: [governance, testing]
 related: [GOV-005, GOV-007, ADR-0032, ADR-0006]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** The laws of the director's GOV-002 are kept: proof, not claims; no report means no pass; regression test first; flaky means broken; trace everything. The 17 tiers are mapped onto a headless deterministic simulation, and the five tiers that matter most here are added: determinism, observer invariance, statistical validation with held-out bands, golden vectors, and pre-registered human evaluation. Tests run in three cadences: every PR, nightly, and at gates. `docs/09` is the test catalogue; this document is the policy.
@@ -47,10 +47,10 @@ version: 1.0.0
 | **7. Observer invariance** | Viewers and console fuzz leave `state_hash` unchanged (V-DET-06–08); harness isolation (V-PERF-09) | Every PR from P2 |
 | 8. Integration and contract | ICD conformance (V-IF); **SQL-twin equivalence** (V-SIFT-01); stream contracts (V-STR); consumer contract tests of changed contract crates | Every PR |
 | 9. End-to-end | **The complexity ladder:** `solo` on every PR; higher rungs nightly | Every PR / nightly |
-| 10. Performance | Instruction counts (`iai-callgrind`): > 10% more fails (V-PERF-04, PERF-4); criterion wall-clock benches as trends, alerting above 10%. Wall clock gates only on a dedicated machine: on a laptop or a shared runner its noise exceeds 10% (SPR-009) | Every PR (instruction counts); wall clock in each `adjutant` session (on demand, RUN-002) |
+| 10. Performance | Instruction counts (`iai-callgrind`): > 10% more fails (V-PERF-04, PERF-4); heap allocations per steady-state tick above the recorded budget fail (V-PERF-11); criterion wall-clock benches as trends, alerting above 10%. Wall clock gates only on a dedicated machine: on a laptop or a shared runner its noise exceeds 10% (SPR-009) | Every PR (instruction counts); wall clock in each `adjutant` session (on demand, RUN-002) |
 | 11. Mutation | `cargo-mutants` on `rh-core`, the Registry evaluator, RNG and fixed-point primitives; target ≥ 80% kill | Nightly; a regression blocks the next merge to those crates |
 | 12. Fuzz | `cargo-fuzz` on journal, stream, manifest and pattern parsers | Nightly |
-| **13. Statistical validation** | Stylized-fact bands, CRN-paired ensembles, submodel tournaments (`09` §3.1, §3.8); held-out bands only in sealed runs | 32-seed ensemble on every C3 PR; full certification nightly and at gates |
+| **13. Statistical validation** | Stylized-fact bands, CRN-paired ensembles, submodel tournaments (`09` §3.1, §3.8); held-out bands only in sealed runs; **each system alone under synthetic forcing before coupling (V-SF-22), and the coupling-strength sweep (V-SF-23)** | 32-seed ensemble on every C3 PR; full certification nightly and at gates |
 | 14. Soak | 1,000-year runs: memory, stream growth, keyframe store | Weekly |
 | 15. Crash consistency | `kill -9` during keyframe or segment writes; resume with identical hashes | Nightly |
 | **16. Human evaluation** | Rung checkpoints (the director watches the stream); **G2/G3b pre-registered ratings** (`09` §3.4.1) | Rungs and gates |

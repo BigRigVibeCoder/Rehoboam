@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -31,7 +31,7 @@ version: 1.1.0
 | RNG purposes | none |
 | Golden-hash effect | none |
 | Determinism lints (GOV-003 §2) | must pass |
-| Tests that gate this sprint | V-PERF-04 (a deliberate 15% slowdown, measured in instructions, fails CI; a speed-up never re-baselines automatically) |
+| Tests that gate this sprint | V-PERF-04 (a deliberate 15% slowdown, measured in instructions, fails CI; a speed-up never re-baselines automatically); V-PERF-11 (allocation budget per tick) |
 | Docs updated in the same sprint | `bin/check_all.sh` gains this sprint's checks; `docs/09` rows if tests change; `CLAUDE.md` checks |
 
 ## Tasks
@@ -54,6 +54,11 @@ version: 1.1.0
 ### T-04: Machine ratios and wall-clock baselines
 - **Deliverable:** The `adjutant` runner and its idle shutdown (RUN-002 §3). The benches of T-01 run on `adjutant` in one VM session (RUN-002 §4–5) and on the laptop (RUN-001 §6). `adjutant` becomes the wall-clock baseline machine; its run-to-run spread decides whether a wall-clock gate is possible there. Both machines' ratios to the `08` reference desktop are recorded in `08` as [M]
 - **Acceptance:** Ratios, spreads and run conditions (machine type, CPU model, power profile, temperature) are in `VER-SPR-009`
+- **Status:** [ ] not started
+
+### T-05: Allocation budget per tick (RT-2026-10-16)
+- **Deliverable:** A counting global allocator, enabled only in bench builds, that reports heap allocations per steady-state tick of the `smoke` world; buffer growth on capacity doubling counted separately; the budget recorded per bench (default 0 for P0 machinery) and gated like instruction counts
+- **Acceptance:** V-PERF-11 positive control: a fixture system that allocates in its tick fails the gate; two runs on the same commit report identical counts
 - **Status:** [ ] not started
 
 ## Verification assignment (Testers)

@@ -5,6 +5,9 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
   - every other spec (single writer per column; read set resolves to an owner that declares the column),
   - the plan (requirement IDs exist in docs/03, test IDs in docs/09, phases in 05.1 §4.2, ADR files exist),
   - the plane rules (a plane-A system never reads plane-B or plane-C columns),
+  - the coupling rules (RT-2026-10-16): a read that enters a rate needs a bounded, sourced in-coupling with a
+    neutral value, and every rate or mode read needs a synthetic forcing in [isolation] (docs/09 V-SF-22/23).
+    Missing coupling detail is a warning on a draft spec and an error on a frozen one,
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
@@ -29,6 +32,9 @@ DESIGN_KEYS = ["basic_principles", "emergence", "adaptation", "objectives", "lea
                "interaction", "stochasticity", "collectives", "observation", "era_state", "scale_behaviour"]
 TYPES = {"i64", "u64", "i32", "u32", "u16", "u8", "bool", "enum", "q8_8", "q16_16", "f32_field"}
 SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
+READ_USES = ("identity", "mode", "rate")
+IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_range", "source")
+SERIES = ("constant", "step", "sine", "ramp", "historical")
 
 
 def load():
@@ -106,6 +112,43 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
                 warns.append(f"{p}: reads {col} from {owner}, which has no spec yet")
             if r.get("lag") not in ("same_instant", "start_of_day", "previous_pulse", "lagged"):
                 errs.append(f"{p}: read {col} needs lag same_instant | start_of_day | previous_pulse | lagged")
+            if r.get("use") not in READ_USES:
+                errs.append(f"{p}: read {col} needs use = identity | mode | rate (RT-2026-10-16)")
+        # couplings and isolation (RT-2026-10-16): detail is required once the spec is frozen
+        strict = errs if hdr.get("status") == "frozen" else warns
+        couplings = s.get("couplings", [])
+        for c in couplings:
+            if c.get("direction") not in ("in", "out"):
+                errs.append(f"{p}: coupling to {c.get('system')} needs direction = in | out")
+        in_by_col = {c.get("column"): c for c in couplings if c.get("direction") == "in"}
+        for r in s.get("reads", []):
+            if r.get("use") != "rate":
+                continue
+            col = r.get("column")
+            c = in_by_col.get(col)
+            if c is None:
+                strict.append(f"{p}: rate read {col} needs an in-coupling with {', '.join(IN_COUPLING_FIELDS)}")
+                continue
+            missing = [k for k in IN_COUPLING_FIELDS if not c.get(k)]
+            if missing:
+                strict.append(f"{p}: in-coupling on {col} is missing {missing}")
+            ob = c.get("output_bounds")
+            if ob is not None and (not isinstance(ob, list) or len(ob) != 2):
+                errs.append(f"{p}: in-coupling on {col}: output_bounds must be [min, max]")
+        iso = s.get("isolation")
+        if iso is None:
+            strict.append(f"{p}: missing [isolation] (synthetic forcing for this system alone; docs/09 V-SF-22)")
+        else:
+            forced = {fo.get("input") for fo in iso.get("forcing", [])}
+            for fo in iso.get("forcing", []):
+                if not str(fo.get("series", "")).split(":")[0] in SERIES:
+                    errs.append(f"{p}: forcing of {fo.get('input')}: series must be one of {SERIES}")
+            for r in s.get("reads", []):
+                if r.get("use") in ("mode", "rate") and r.get("column") not in forced:
+                    strict.append(f"{p}: [isolation] has no forcing for {r.get('use')} read {r.get('column')}")
+            for k in ("horizon", "expect"):
+                if not iso.get(k):
+                    strict.append(f"{p}: [isolation] needs {k}")
         # schedule
         for sc in s.get("schedule", []):
             if sc.get("pulse") not in PULSES:
@@ -224,13 +267,15 @@ def main() -> int:
         print("ERROR", e)
     # self-check: a broken spec (wrong fidelity, a column M2 already owns, an unregistered parameter, a bad RNG
     # purpose, missing sections) must be rejected
-    bad = (Path("bad.odd.toml"), {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F9"},
+    bad = (Path("bad.odd.toml"), {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F9", "status": "frozen"},
            "owns": [{"column": "person.alive", "type": "bool", "plane": "A"}],
+           "reads": [{"column": "region.conditions", "owner": "M6.polity", "lag": "start_of_day", "use": "rate"}],
            "params": [{"name": "nonsense", "source": ""}], "rng": [{"purpose": "Bad Name"}]})
     probe = {"M2.demography": specs["M2.demography"], "S5.daily_life": bad} if "M2.demography" in specs else {"S5.daily_life": bad}
     b_errs, _ = lint(reg, probe, req_ids, test_ids, adr_ids)
     caught = [e for e in b_errs if "bad.odd.toml" in e or "also owned" in e]
-    for needle in ("not among Registry levels", "snake_case", "not declared in the Registry", "missing section"):
+    for needle in ("not among Registry levels", "snake_case", "not declared in the Registry", "missing section",
+                   "needs an in-coupling", "missing [isolation]"):
         assert any(needle in e for e in caught), (needle, caught)
     if "M2.demography" in specs:
         assert any("also owned" in e for e in caught), caught

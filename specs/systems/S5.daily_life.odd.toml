@@ -45,26 +45,32 @@ why = "Encounters form or strengthen ties; the social graph's owner applies them
 column = "person.birth_tick"
 owner = "M2.demography"
 lag = "start_of_day"
+use = "identity"
 [[reads]]
 column = "person.sex"
 owner = "M2.demography"
 lag = "start_of_day"
+use = "identity"
 [[reads]]
 column = "person.alive"
 owner = "M2.demography"
 lag = "start_of_day"
+use = "identity"
 [[reads]]
 column = "person.residence"
 owner = "S3.migration"
 lag = "start_of_day"
+use = "identity"
 [[reads]]
 column = "person.occupation"
 owner = "M4.economy"
 lag = "start_of_day"
+use = "identity"
 [[reads]]
 column = "region.conditions"
 owner = "M6.polity"
 lag = "start_of_day"
+use = "mode"
 
 [scales]
 spatial = "raster cell (64-4096 per side); settlement for focus regions"
@@ -147,12 +153,19 @@ test = "V-STR-08"
 
 [[couplings]]                              # ODD-R 8
 system = "M5.contagion"
+direction = "out"
 via = "ENCOUNTER events give contact counts per cell and day"
 lag = "same day, later phase (Contagion)"
 [[couplings]]
 system = "S1.culture"
+direction = "out"
 via = "TieDelta lifecycle commands"
 lag = "applied at the next tick boundary"
+
+[isolation]                                # docs/09 V-SF-22
+forcing = [{ input = "region.conditions", series = "step", note = "normal, then siege from day 100, then plague from day 200" }]
+horizon = "80 sim-years for one person (the solo world)"
+expect = "the day pattern switches at each step and returns when conditions clear; time-use shares stay within the template's ranges"
 
 [verification]                             # ODD-R 9
 tests = ["V-STR-06", "V-STR-07", "V-STR-08", "V-PERF-10"]
