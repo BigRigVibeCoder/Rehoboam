@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.5.0
+version: 1.7.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -44,6 +44,32 @@ version: 1.5.0
 6. **Order and machines.**
    - This sprint starts once SPR-007 merges and merges after SPR-008, whose `rh-cli run smoke` it uses for T-03 and T-05.
    - T-04 (the `adjutant` and laptop baselines) needs the director's machines (RUN-001, RUN-002). Build the procedure and scripts. The sprint closes with T-04 marked "blocked: director's machines" if they are not available, and the Architect re-opens it as a follow-up.
+
+## Architect rulings during the sprint, 2026-10-16 (binding)
+7. **criterion approved** for the wall-clock trends (T-02b), not a std-only runner (70%).
+   - Pinned `=0.8.2`, `default-features = false`, features `cargo_bench_support` only (no rayon, plotters or HTML reports). It is a dev-dependency of `rh-bench` and used by the `wall` bench target only.
+   - It adds 28 packages to `Cargo.lock`, among them clap, ciborium, regex, itertools, tinytemplate, walkdir, and Windows-only shims that never build on Linux. `cargo deny` stays green, and the licence ledger lists the tree.
+   - Reporting (RUN-002 §5): `bin/wall_trend.py` takes the median and spread of criterion's own samples (at least 5), not its bootstrap summary, records the run conditions, and alerts when a median is more than 10% above the committed trend file.
+8. **Our own counting allocator approved** (75%). `rh-bench` is on GOV-003 §2's reviewed unsafe allow-list for one module, `src/alloc_count.rs`.
+   - The allow-list is `UNSAFE_ALLOW_LIST` in `bin/lint_arch.py`.
+   - The crate's own `[lints]` equal the workspace's but for `unsafe_code = "deny"`.
+   - The module is compiled only behind `count-alloc`, which only the `alloc_budget` bench target requires.
+   - `lint_arch` gates this (rules unsafe-allow, global-allocator and count-alloc), with planted violations.
+9. **R-7, the deterministic arena: approved** (85%).
+   - **Why:** instruction counts depended on the checkout's path, by up to 13% between two directories (measured), because the bench process's path strings change glibc malloc's state before the measured code.
+   - **What:** the instruction-count targets run on a bump arena. Every block is 64-byte aligned in one 1 GiB reservation, and nothing is reused. A 10k-row bench takes 16–32 MiB.
+   - **Where it lives:** in the allow-listed `src/alloc_count.rs`, behind `arena-alloc`. It never shares a binary with `count-alloc` (a compile error), and lint_arch covers both features, with controls both ways.
+   - **On exhaustion:** it aborts with a message naming the request and the reservation.
+   - **Modelling:** instruction counts measure computation, with allocation at a constant cost; V-PERF-11 counts allocations (`crates/rh-bench/README.md`).
+10. **R-8, ruling 3 amended: a determinism band** (75%).
+    - **Band:** a committed instruction-count baseline equals CI's recomputation within max(64 instructions, 1e-5 relative) per count, with every difference printed.
+    - **Exact as before:** toolchain lines, allocation counts (V-PERF-11), the `[perf-baseline]` title and reason, and "a speed-up never re-baselines".
+    - **Controls:** a count typed 65 off fails; one 40 off passes and is printed.
+11. **R-9, BMI2 on the toolchain lines** (70%). zstd chooses its BMI2 path at run time, so a host without BMI2 reports "toolchain changed: re-baseline required".
+
+## Deviations (Developer)
+- **Instruction counts run on a deterministic arena, not on glibc's malloc** (R-7). Instruction counts measure computation, with allocation at a constant cost; V-PERF-11 counts allocations.
+- **Baseline integrity is equality within a band, not byte for byte** (R-8). The executable's path still moves a count by up to 48 instructions in 66 million across checkouts.
 
 ## Compliance (every task)
 

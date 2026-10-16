@@ -23,6 +23,10 @@ use std::fmt::Display;
 use std::hint::black_box;
 
 use iai_callgrind::{library_benchmark, library_benchmark_group, main};
+
+/// The deterministic arena: counts that do not depend on the checkout's path (`alloc_count::Arena`).
+#[global_allocator]
+static ARENA: rh_bench::alloc_count::Arena = rh_bench::alloc_count::Arena;
 use rh_bench::fixture::{self, ByteTables, COLUMNS, PR_ROWS};
 use rh_core::state::EngineState;
 use rh_core::world::WorldTables;

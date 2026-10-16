@@ -7,14 +7,15 @@ toolchain host x86_64-unknown-linux-gnu
 toolchain valgrind valgrind-3.22.0
 toolchain libc glibc 2.39
 toolchain iai-callgrind 0.16.1
+toolchain bmi2 yes
 slot raster_8x512 bench 4: no baseline until P1a, the first sprint with a spatial field (M1 or M3)
-bench keyframe_write_read/load/rows_10k 48999595
-bench keyframe_write_read/read/rows_10k 46319371
-bench keyframe_write_read/write/rows_10k 95301456
-bench plane_hashes/narrative_dirty_chunk/rows_10k 156909
-bench plane_hashes/narrative_full/rows_10k 4966422
-bench plane_hashes/observation_dirty_chunk/rows_10k 156964
-bench plane_hashes/observation_full/rows_10k 4966410
-bench plane_hashes/state_dirty_chunk/rows_10k 114745
-bench plane_hashes/state_dirty_column/rows_10k 587471
-bench plane_hashes/state_full/rows_10k 2327495
+bench keyframe_write_read/load/rows_10k 33030236
+bench keyframe_write_read/read/rows_10k 30393219
+bench keyframe_write_read/write/rows_10k 66396014
+bench plane_hashes/narrative_dirty_chunk/rows_10k 158779
+bench plane_hashes/narrative_full/rows_10k 4998899
+bench plane_hashes/observation_dirty_chunk/rows_10k 158786
+bench plane_hashes/observation_full/rows_10k 4998906
+bench plane_hashes/state_dirty_chunk/rows_10k 108731
+bench plane_hashes/state_dirty_column/rows_10k 581613
+bench plane_hashes/state_full/rows_10k 2311755

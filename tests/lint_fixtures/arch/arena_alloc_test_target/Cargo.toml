@@ -1,0 +1,13 @@
+# Fixture for bin/lint_arch.py (SPR-009 R-7; tests/lint_fixtures/README.md); not in the Rehoboam
+# workspace. rh-bench has a [[test]] target that requires arena-alloc: only
+# bench targets may.
+[workspace]
+members = ["rh-bench"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"

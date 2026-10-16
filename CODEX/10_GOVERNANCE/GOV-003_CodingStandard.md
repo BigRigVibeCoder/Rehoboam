@@ -9,7 +9,7 @@ tags: [governance, coding]
 related: [GOV-002, GOV-004, ADR-0006, ADR-0024, ADR-0021]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.2.1
 ---
 
 > **BLUF:** The authoritative engine is Rust. Its code must be deterministic, fixed-point where it matters, plane-isolated and owned per column. Python and TypeScript follow the director's template principles (types everywhere, no magic numbers, guard clauses, readable for incidents). Every rule here is either checked by a tool or by the Architect's audit.
@@ -30,7 +30,7 @@ version: 1.2.0
 | Rule | Check |
 |---|---|
 | `cargo fmt`; `clippy -D warnings` (`clippy::pedantic` where practical) | CI |
-| `#![forbid(unsafe_code)]`, except crates on a reviewed allow-list (e.g. SIMD kernels) with a `SAFETY:` comment per block | CI lint |
+| `#![forbid(unsafe_code)]`, except crates on a reviewed allow-list (e.g. SIMD kernels) with a `SAFETY:` comment per block. The allow-list is `UNSAFE_ALLOW_LIST` in `bin/lint_arch.py`, by crate and file; today it holds one file, `rh-bench`'s `src/alloc_count.rs` (V-PERF-11's counting allocator, SPR-009 T-05). A listed crate relaxes `unsafe_code` to `deny` only, keeping every other workspace lint | CI lint (`lint_arch`: unsafe-allow, global-allocator, count-alloc) |
 | **No `HashMap`/`HashSet` iteration** in authoritative code; use `BTreeMap`, `IndexMap` with a deterministic insertion order, or sorted vectors | Architecture lint |
 | **No float-order-dependent reductions** in authoritative code: fixed point, or ordered reductions with a declared order | Lint plus review |
 | **Fixed point** (`q8_8`, `q16_16`, `i64` minutes) for any quantity that crosses a threshold; floats only for declared fields | Spec (`.odd.toml` `fixed_point`) plus lint |

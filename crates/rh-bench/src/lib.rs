@@ -12,8 +12,20 @@
 //! line (`bin/perf_gate.py`, `SLOTS`): it measures stencil fields, which do not exist before the
 //! first field system (P1a).
 //!
+//! With the `count-alloc` or `arena-alloc` feature, `alloc_count` holds the bench allocators:
+//! V-PERF-11's counting allocator (the `alloc_budget` target) and the deterministic arena the
+//! instruction-count targets run on.
+//!
 //! REF: `docs/08_performance_and_capacity.md` §9; `docs/09` V-PERF-04, V-PERF-11;
 //! `CODEX/05_PROJECT/SPR-009_Benchmarks.md` T-01, T-02, rulings 1 and 2.
-#![forbid(unsafe_code)]
+// No `#![forbid(unsafe_code)]` here: the crate's [lints] deny it instead, so that `alloc_count`,
+// GOV-003 §2's one allow-listed file, may allow it (bin/lint_arch.py, UNSAFE_ALLOW_LIST).
 
+// SPR-009 R-7: the counting allocator and the arena are separate bench targets; one binary never
+// holds both.
+#[cfg(all(feature = "count-alloc", feature = "arena-alloc"))]
+compile_error!("count-alloc and arena-alloc are for separate bench targets: enable one, not both");
+
+#[cfg(any(feature = "count-alloc", feature = "arena-alloc"))]
+pub mod alloc_count;
 pub mod fixture;

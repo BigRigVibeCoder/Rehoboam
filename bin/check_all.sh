@@ -332,7 +332,9 @@ perf_toolchain_control() {
 }
 # perf_integrity_control <case>: ruling 3, both ways. Each case is a baseline that differs from its
 # base revision (the base is this run's counts with one count changed):
-#   typed     one count typed by hand, in a [perf-baseline] PR with a reason: must FAIL
+#   typed     one count typed by hand, 65 off (outside the R-8 band), in a [perf-baseline] PR with
+#             a reason: must FAIL
+#   inband    one count 40 off: inside the band, passes and is printed (R-8)
 #   untagged  regenerated (= the tool's output), in a PR without [perf-baseline]: must FAIL
 #   noreason  regenerated, [perf-baseline], no reason line: must FAIL
 #   regen     regenerated, [perf-baseline], with a reason: passes
@@ -340,8 +342,10 @@ perf_integrity_control() {
   local title="[perf-baseline] control" body="perf-baseline-reason: the control's" baseline="$PERF_RUN"
   perf_plant base '$1 == "bench" && !done { $3 = $3 + 7; done = 1 } { print }' || return 1
   case "$1" in
-    typed) perf_plant typed '$1 == "bench" && !done { $3 = $3 + 1; done = 1 } { print }' || return 1
+    typed) perf_plant typed '$1 == "bench" && $2 == "plane_hashes/state_full/rows_10k" { $3 = $3 + 65 } { print }' || return 1
            baseline="$PERF_FIXTURES/typed.txt" ;;
+    inband) perf_plant inband '$1 == "bench" && $2 == "plane_hashes/state_full/rows_10k" { $3 = $3 + 40 } { print }' || return 1
+           baseline="$PERF_FIXTURES/inband.txt" ;;
     untagged) title="perf: control" ;;
     noreason) body="no reason given" ;;
     regen) ;;
@@ -349,6 +353,29 @@ perf_integrity_control() {
   esac
   RH_PR_TITLE="$title" RH_PR_BODY="$body" "$PY" -I bin/perf_gate.py integrity \
     --baseline "$baseline" --measured "$PERF_RUN" --base-file "$PERF_FIXTURES/base.txt"
+}
+
+# SPR-009 T-02b: the wall-clock harness at a smoke size, so it keeps working between adjutant
+# sessions. Wall time never gates here (RUN-001 §6); the controls check wall_trend.py's verdicts.
+WALL_RUN=artifacts/perf/wall_smoke.txt
+wall_smoke() {
+  rm -rf "$TARGET_DIR/criterion" || return 1
+  RH_WALL_ROWS=1000 cargo bench --locked --quiet -p rh-bench --bench wall -- \
+    --warm-up-time 0.05 --measurement-time 0.1 >/dev/null || return 1
+  "$PY" -I bin/wall_trend.py summarize --criterion-dir "$TARGET_DIR/criterion" --machine runner --out "$WALL_RUN"
+}
+# wall_control <case>: a trend file planted from this run's summary.
+#   slower   medians 20% below this run's (this run is slower): an ALERT, which --gate fails
+#   machine  another CPU model: "machine changed", never a silent comparison
+wall_control() {
+  local planted="$PERF_FIXTURES/wall_$1.txt"
+  mkdir -p "$PERF_FIXTURES" || return 1
+  case "$1" in
+    slower) awk '$1 == "bench" { $3 = sprintf("%.1f", $3 * 0.8) } { print }' "$WALL_RUN" > "$planted" ;;
+    machine) awk '$1 == "condition" && $2 == "cpu" { $0 = "condition cpu Another CPU" } { print }' "$WALL_RUN" > "$planted" ;;
+    *) echo "unknown case $1"; return 1 ;;
+  esac
+  "$PY" -I bin/wall_trend.py check --trend "$planted" --measured "$WALL_RUN" --gate
 }
 
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
@@ -380,6 +407,15 @@ run "cargo deny positive control: wildcard version must FAIL" "fail:error[wildca
 run "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)" pass licence_ledger Cargo.toml artifacts/licence_ledger.txt &&
 run "Licence ledger control: the GPL fixture is listed as GPL-3.0-only" "pass:GPL-3.0-only" licence_ledger tests/lint_fixtures/deny/gpl_dependency/Cargo.toml target/rendered-fixtures/licence_ledger_gpl.txt &&
 run "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)" pass "$PY" -I bin/lint_arch.py &&
+run "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL (SPR-009 T-05)" "fail:VIOLATION [global-allocator] rh-tool: src/lib.rs declares a #[global_allocator]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/global_allocator_elsewhere/Cargo.toml &&
+run "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)" "fail:VIOLATION [count-alloc] rh-tool: enables rh-bench/count-alloc" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/count_alloc_enabled/Cargo.toml &&
+run "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL (SPR-009 R-7)" "fail:VIOLATION [count-alloc] rh-sys-x: enables rh-bench/arena-alloc" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/arena_alloc_plane_a/Cargo.toml &&
+run "lint_arch positive control: a test target requiring arena-alloc must FAIL (SPR-009 R-7)" "fail:VIOLATION [count-alloc] rh-bench: a [test] target requires arena-alloc" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/arena_alloc_test_target/Cargo.toml &&
+run "lint_arch control: a bench target requiring arena-alloc, with its allocator in benches/, passes (SPR-009 R-7)" "pass:0 violations" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/arena_alloc_bench_ok/Cargo.toml &&
+run "lint_arch positive control: a non-bench target requiring count-alloc must FAIL (SPR-009 T-05)" "fail:VIOLATION [count-alloc] rh-bench: a [bin] target requires count-alloc" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/count_alloc_bin/Cargo.toml &&
+run "lint_arch positive control: unsafe_code relaxed by a crate not on the allow-list must FAIL (GOV-003 §2; SPR-009 T-05)" "fail:VIOLATION [unsafe-allow] rh-tool: declares unsafe_code = 'allow'" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/unsafe_unlisted/Cargo.toml &&
+run "lint_arch positive control: an allow-listed crate whose lints drift from the workspace's must FAIL (SPR-009 T-05)" "fail:VIOLATION [unsafe-allow] rh-bench: its own [lints] must equal [workspace.lints]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/unsafe_drift/Cargo.toml &&
+run "lint_arch positive control: unsafe outside the allow-listed file must FAIL (SPR-009 T-05)" "fail:VIOLATION [unsafe-allow] rh-bench: src/lib.rs holds unsafe code" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/unsafe_outside_file/Cargo.toml &&
 run "lint_arch positive control: system -> system must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_system/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_disallowed/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot as a build-dependency must FAIL" "fail:VIOLATION [V-INSP-03] rh-sys-a: depends on rh-snapshot (as a build-dependency)" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_build_dependency/Cargo.toml &&
@@ -445,6 +481,9 @@ run "Manifest: aethelgard" pass "$PY" -I specs/manifest/manifest_v0.py validate 
 run "Manifest: uz_job" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml &&
 run "Manifest: invalid_draft_style must FAIL" fail "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml &&
 run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-targets --locked --quiet -- -D warnings &&
+run "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)" pass cargo clippy -p rh-bench --all-targets --features count-alloc --locked --quiet -- -D warnings &&
+run "Rust: lint rh-bench with the arena, the instruction-count targets included (cargo clippy -D warnings; SPR-009 R-7)" pass cargo clippy -p rh-bench --all-targets --features arena-alloc --locked --quiet -- -D warnings &&
+run "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 R-7)" "fail:count-alloc and arena-alloc are for separate bench targets" cargo check -p rh-bench --lib --features count-alloc,arena-alloc --locked --quiet &&
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
 run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&
@@ -468,13 +507,18 @@ run "T-05 crash replay positive control: an artifact with an altered instant mus
 run "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 T-02a)" "pass:V-PERF-04 PASS" "$PY" -I bin/perf_gate.py gate --baseline "$PERF_BASELINE" --out "$PERF_RUN" &&
 run "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 T-02)" "pass:identical counts in two runs" sh -c '"$1" -I bin/perf_gate.py measure --out artifacts/perf/instructions_run2.txt && "$1" -I bin/perf_gate.py same "$2" artifacts/perf/instructions_run2.txt' sh "$PY" "$PERF_RUN" &&
 run "Baseline integrity: a changed instruction-count baseline equals the tool's output, in a [perf-baseline] PR (SPR-009 ruling 3)" pass "$PY" -I bin/perf_gate.py integrity --baseline "$PERF_BASELINE" --measured "$PERF_RUN" &&
-run "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)" "fail:does not equal the tool's output" perf_integrity_control typed &&
+run "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)" "fail:plane_hashes/state_full/rows_10k: the baseline's" perf_integrity_control typed &&
+run "Baseline integrity control: a count 40 instructions off passes inside the band and is printed (SPR-009 R-8)" "pass:within band plane_hashes/state_full/rows_10k" perf_integrity_control inband &&
 run "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must FAIL (SPR-009 ruling 3)" "fail:needs [perf-baseline] in the pull request's title" perf_integrity_control untagged &&
 run "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 ruling 3)" "fail:needs a \`perf-baseline-reason: <why>\` line" perf_integrity_control noreason &&
 run "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason passes (SPR-009 ruling 3)" "pass:equals the tool's output" perf_integrity_control regen &&
 run "V-PERF-04 control: a speed-up passes and never re-baselines (docs/08 §9)" "pass:speed-up passed; the baseline is unchanged" perf_speedup_control &&
 run "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline required (SPR-009 ruling 2)" "fail:toolchain changed: re-baseline required" perf_toolchain_control &&
 run "V-PERF-04 positive control: a deliberate 15% slowdown in instructions must FAIL (SPR-009 T-02)" "fail:REGRESSION plane_hashes/state_full/rows_10k" "$PY" -I bin/perf_gate.py gate --features slowdown-control --baseline "$PERF_BASELINE" --out artifacts/perf/instructions_slowdown.txt &&
+run "V-PERF-11 counting allocator self-test: a known pattern is counted exactly (SPR-009 T-05)" "pass:as expected" cargo bench --locked --quiet -p rh-bench --features count-alloc --bench alloc_budget &&
+run "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, medians and spreads from the samples (SPR-009)" "pass:8 cases on runner" wall_smoke &&
+run "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails (SPR-009)" "fail:wall-clock ALERT above +10% (gating)" wall_control slower &&
+run "T-02b wall-clock control: another CPU model must report machine changed, never compare (RUN-002 §5)" "fail:machine changed: new trend baseline required" wall_control machine &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&
 run "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)" pass doctest_count_gate "$DOCTEST_LOG" &&
 run "Doctest count gate positive control: one typed-ID case missing must FAIL" "fail:crates/rh-ids/src/ids.rs: expected 7 compile-fail doctests, found 6" doctest_count_control &&

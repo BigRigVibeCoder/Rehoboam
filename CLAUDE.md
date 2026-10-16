@@ -78,6 +78,8 @@ python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF
 python -I bin/perf_gate.py integrity --measured artifacts/perf/instructions.txt   # ruling 3: a changed baseline = the tool's output, [perf-baseline] PR
 python -I bin/perf_gate.py record   # regenerate the baseline (never by hand); only in a [perf-baseline] PR with a perf-baseline-reason: line
 cargo nextest run -p rh-snapshot --locked --test observer   # observer invariance: a host observer changes no hash (SPR-009 ruling 4)
+RH_WALL_ROWS=100000,1000000 cargo bench -p rh-bench --bench wall && python -I bin/wall_trend.py summarize --machine <adjutant|laptop> --out artifacts/perf/wall.txt   # T-02b wall-clock trends (gate only on adjutant)
+cargo bench -p rh-bench --features count-alloc --bench alloc_budget   # V-PERF-11 counting allocator (SPR-009 T-05)
 ```
 
 ## Conventions

@@ -13,6 +13,7 @@ from perf_gate import (
     SLOTS,
     Counts,
     GateError,
+    band_problems,
     compare,
     has_reason,
     integrity_problems,
@@ -81,12 +82,24 @@ def test_the_reason_line_needs_text() -> None:
     assert not has_reason("the keyframe writer batches rows")
 
 
+def test_the_band_is_64_instructions_or_1e5_of_the_tool_count() -> None:
+    """R-8: max(64, 1e-5 relative); toolchain lines stay exact."""
+    tool = counts(a=1_000_000, b=100_000_000)
+    assert band_problems(counts(a=1_000_064, b=100_000_000), tool) == []
+    assert len(band_problems(counts(a=1_000_065, b=100_000_000), tool)) == 1
+    assert band_problems(counts(a=1_000_000, b=100_001_000), tool) == []
+    assert len(band_problems(counts(a=1_000_000, b=100_001_001), tool)) == 1
+    other = counts(a=1_000_000, b=100_000_000)
+    other.toolchain["valgrind"] = "valgrind-3.23.0"
+    assert band_problems(other, tool)[0].startswith("toolchain valgrind:")
+
+
 def test_integrity_both_ways() -> None:
     """Ruling 3: typed fails, untagged fails, no reason fails, regenerated with both passes."""
-    tool = counts(a=1).render()
-    typed = counts(a=2).render()
+    tool = counts(a=1000).render()
+    typed = counts(a=1065).render()
     good = ("[perf-baseline] rows batched", "perf-baseline-reason: batching")
-    assert integrity_problems(typed, tool, good)[0].startswith("the changed baseline does not")
+    assert integrity_problems(typed, tool, good)[0].startswith("a: the baseline's 1065 is +65")
     assert integrity_problems(tool, tool, ("rows batched", good[1])) == [
         "a changed baseline needs [perf-baseline] in the pull request's title: 'rows batched'"
     ]

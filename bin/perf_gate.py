@@ -17,7 +17,9 @@ Subcommands:
     gate       measure, then check.
     same       Two measured files must be identical (T-02 acceptance: two runs on one commit).
     integrity  Ruling 3: a baseline is regenerated, never typed. If the committed baseline differs
-               from the base revision's (or is new), it must equal the tool's output byte for byte,
+               from the base revision's (or is new), it must equal the tool's output: toolchain
+               lines exactly, each count within max(64, 1e-5 relative) (R-8), every difference
+               printed,
                and the pull request's title must carry [perf-baseline] and its body a line
                `perf-baseline-reason: <why>`. The title and body come from RH_PR_TITLE and
                RH_PR_BODY; outside a pull request (no RH_PR_TITLE, GITHUB_EVENT_NAME not
@@ -28,7 +30,7 @@ Subcommands:
 Baseline format `rehoboam/rh-bench/instructions/v1`, one record per line, `#` lines are comments:
 
     format rehoboam/rh-bench/instructions/v1
-    toolchain <name> <version text>     rustc, llvm, host, valgrind, libc, iai-callgrind
+    toolchain <name> <version text>     rustc, llvm, host, valgrind, libc, iai-callgrind, bmi2
     slot <bench> <note>                 a named, empty slot of docs/08 §9 (bench 4, ruling 1)
     bench <file>/<function>/<case> <Ir> one per measured case, in byte order of keys
 
@@ -70,6 +72,13 @@ SLOTS = (
         "bench 4: no baseline until P1a, the first sprint with a spatial field (M1 or M3)",
     ),
 )
+
+# R-8 (Architect, 2026-10-16), amending ruling 3: a committed baseline equals the tool's output
+# within max(64 instructions, 1e-5 of the tool's count). Within one checkout two runs are identical;
+# across checkouts the executable's path still moves the stack, by up to 48 instructions in 66
+# million on the arena (SPR-009, measured). Far below anything that could loosen a 10% gate.
+BAND_INSTRUCTIONS = 64
+BAND_RELATIVE_DIVISOR = 100_000
 
 PR_TAG = "[perf-baseline]"
 REASON_KEY = "perf-baseline-reason:"
@@ -164,6 +173,20 @@ def locked_version(package: str) -> str:
     return versions[0]
 
 
+def cpu_flag(flag: str) -> str:
+    """Whether the host CPU reports `flag` in /proc/cpuinfo.
+
+    R-9: zstd picks its BMI2 code path at run time, and valgrind passes the host's BMI2 through,
+    so a host without it counts other instructions.
+    """
+    try:
+        text = Path("/proc/cpuinfo").read_text(encoding="utf-8")
+    except OSError:
+        return "unknown"
+    flags = next((line for line in text.splitlines() if line.startswith("flags")), "")
+    return "yes" if flag in flags.split() else "no"
+
+
 def toolchain() -> dict[str, str]:
     """The versions an instruction count depends on besides the code (ruling 2), in fixed order."""
     rustc = dict(line.split(": ", 1) for line in _first_lines(["rustc", "-vV"]) if ": " in line)
@@ -174,6 +197,7 @@ def toolchain() -> dict[str, str]:
         "valgrind": _first_line(["valgrind", "--version"]),
         "libc": os.confstr("CS_GNU_LIBC_VERSION") or "?",
         "iai-callgrind": locked_version("iai-callgrind"),
+        "bmi2": cpu_flag("bmi2"),
     }
 
 
@@ -196,8 +220,8 @@ def measure(features: Sequence[str]) -> Counts:
     cmd = ["cargo", "bench", "--locked", "--quiet", "-p", PACKAGE]
     for target in BENCH_TARGETS:
         cmd += ["--bench", target]
-    if features:
-        cmd += ["--features", ",".join(features)]
+    # The instruction-count targets run on the deterministic arena (crates/rh-bench, arena-alloc).
+    cmd += ["--features", ",".join(["arena-alloc", *features])]
     cmd += ["--", "--output-format=json"]
     with tempfile.TemporaryDirectory(prefix="rh-iai-") as home:
         env = dict(os.environ, IAI_CALLGRIND_HOME=home)
@@ -318,14 +342,48 @@ def has_reason(body: str) -> bool:
     )
 
 
+def within_band(tool: int, committed: int) -> bool:
+    """R-8: |committed - tool| <= max(BAND_INSTRUCTIONS, tool / BAND_RELATIVE_DIVISOR)."""
+    diff = abs(committed - tool)
+    return diff <= BAND_INSTRUCTIONS or diff * BAND_RELATIVE_DIVISOR <= tool
+
+
+def band_problems(committed: Counts, measured: Counts) -> list[str]:
+    """Ruling 3 as amended by R-8: the baseline equals the tool's output within the band.
+
+    Toolchain and slot lines must be equal exactly, and so must the set of cases. Every count that
+    differs is printed, inside the band or not.
+    """
+    problems = [
+        f"toolchain {n}: the baseline says {committed.toolchain.get(n)!r}, the tool "
+        f"{measured.toolchain.get(n)!r}; toolchain lines are exact"
+        for n in sorted(set(committed.toolchain) | set(measured.toolchain))
+        if committed.toolchain.get(n) != measured.toolchain.get(n)
+    ]
+    if committed.slots != measured.slots or set(committed.benches) != set(measured.benches):
+        problems.append("the baseline's slots or cases differ from the tool's output")
+    for key in sorted(set(committed.benches) & set(measured.benches)):
+        base, now = committed.benches[key], measured.benches[key]
+        if base == now:
+            continue
+        inside = within_band(now, base)
+        print(
+            f"{'within band' if inside else 'OUTSIDE BAND'} {key}: baseline {base}, tool {now} "
+            f"({base - now:+d})"
+        )
+        if not inside:
+            problems.append(
+                f"{key}: the baseline's {base} is {base - now:+d} from the tool's {now}, outside "
+                f"max({BAND_INSTRUCTIONS} instructions, 1/{BAND_RELATIVE_DIVISOR}); a baseline is "
+                "regenerated with `python -I bin/perf_gate.py record`, never typed (SPR-009 "
+                "ruling 3, R-8)"
+            )
+    return problems
+
+
 def integrity_problems(committed: str, measured: str, pr: tuple[str, str] | None) -> list[str]:
     """Why a changed baseline is not acceptable (ruling 3); empty if it is."""
-    problems = []
-    if committed != measured:
-        problems.append(
-            "the changed baseline does not equal the tool's output: a baseline is regenerated "
-            "with `python -I bin/perf_gate.py record`, never typed (SPR-009 ruling 3)"
-        )
+    problems = band_problems(parse(committed, "the baseline"), parse(measured, "the tool's output"))
     if pr is None:
         print("PR title and body not checked: no pull-request context here; CI checks them")
         return problems

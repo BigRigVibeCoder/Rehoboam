@@ -24,6 +24,8 @@ RUN_NAME = re.compile(r'^\s*run "(?P<name>[^"]*)"')
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
     "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)",
+    "Baseline integrity control: a count 40 instructions off passes inside the band and is "
+    "printed (SPR-009 R-8)",
     "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason "
     "passes (SPR-009 ruling 3)",
     "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 "
@@ -83,11 +85,20 @@ REQUIRED_GATES = (
     "Rust: doctests (cargo test --doc)",
     "Rust: format (cargo fmt --check)",
     "Rust: lint (cargo clippy -D warnings)",
+    "Rust: lint rh-bench with the arena, the instruction-count targets included (cargo clippy -D "
+    "warnings; SPR-009 R-7)",
+    "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)",
     "Rust: unit tests (cargo nextest)",
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
     "System specs (lint_odd)",
+    "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails "
+    "(SPR-009)",
+    "T-02b wall-clock control: another CPU model must report machine changed, never compare "
+    "(RUN-002 §5)",
+    "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, medians and spreads from "
+    "the samples (SPR-009)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
@@ -105,6 +116,7 @@ REQUIRED_GATES = (
     "T-02)",
     "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline "
     "required (SPR-009 ruling 2)",
+    "V-PERF-11 counting allocator self-test: a known pattern is counted exactly (SPR-009 T-05)",
     "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL",
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
@@ -135,13 +147,24 @@ REQUIRED_GATES = (
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "lint_arch control: a bench target requiring arena-alloc, with its allocator in benches/, "
+    "passes (SPR-009 R-7)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
+    "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL "
+    "(SPR-009 T-05)",
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",
+    "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)",
     "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)",
+    "lint_arch positive control: a non-bench target requiring count-alloc must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL (SPR-009 "
+    "R-7)",
     "lint_arch positive control: a second, target-specific libm entry must FAIL (SPR-003 GAP-10)",
     "lint_arch positive control: a symlinked workspace member must FAIL (SPR-003 GAP-13)",
+    "lint_arch positive control: a test target requiring arena-alloc must FAIL (SPR-009 R-7)",
     "lint_arch positive control: a third-party crate in rh-sample must FAIL (SPR-003 GAP-4)",
+    "lint_arch positive control: an allow-listed crate whose lints drift from the workspace's "
+    "must FAIL (SPR-009 T-05)",
     "lint_arch positive control: kind contract outside rh-contract-* must FAIL",
     "lint_arch positive control: libm not pinned exactly must FAIL (SPR-003 GAP-4)",
     "lint_arch positive control: libm outside rh-sample must FAIL",
@@ -164,6 +187,9 @@ REQUIRED_GATES = (
     "lint_arch positive control: system -> rh-snapshot as a build-dependency must FAIL",
     "lint_arch positive control: system -> rh-snapshot must FAIL",
     "lint_arch positive control: system -> system must FAIL",
+    "lint_arch positive control: unsafe outside the allow-listed file must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: unsafe_code relaxed by a crate not on the allow-list must FAIL "
+    "(GOV-003 §2; SPR-009 T-05)",
     "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)",
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
     "lint_forbidden float-api positive control: a private float alias in rh-sample must FAIL "
@@ -190,6 +216,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
+    "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
+    "R-7)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "

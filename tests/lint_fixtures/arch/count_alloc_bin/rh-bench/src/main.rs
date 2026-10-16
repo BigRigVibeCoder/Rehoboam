@@ -1,0 +1,2 @@
+//! Fixture binary.
+fn main() {}
