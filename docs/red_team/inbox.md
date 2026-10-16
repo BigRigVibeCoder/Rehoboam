@@ -2,6 +2,7 @@
 
 > **Purpose:** Consolidated design inbox maintained by the Red Team for the Lead Architect.  
 > **Rule:** In-flight defect fixes are communicated immediately; all architectural and gameplay design enhancements are batched here for formal incorporation at project planning gates (next gate: **Gate G0** at the conclusion of P0).
+> **Status (2026-10-16):** batches 01 to 04 were disposed of at G0 in `RT-2026-10-16-G0-dispositions.md`, with the director's rulings. New batches go below for the next gate (G1a).  
 
 ---
 

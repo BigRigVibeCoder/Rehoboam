@@ -9,7 +9,7 @@ tags: [governance, coding]
 related: [GOV-002, GOV-004, ADR-0006, ADR-0024, ADR-0021]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** The authoritative engine is Rust. Its code must be deterministic, fixed-point where it matters, plane-isolated and owned per column. Python and TypeScript follow the director's template principles (types everywhere, no magic numbers, guard clauses, readable for incidents). Every rule here is either checked by a tool or by the Architect's audit.
@@ -59,3 +59,20 @@ version: 1.1.0
 - Free-string semantics in manifests or code where the Registry has a vocabulary (ADR-0010).
 - Code, weights or assets whose licence forbids the use itself, and copied code that carries no licence (ADR-0021 as amended: personal-use mode, D19, 2026-10-16; any other licence is allowed, and the licence ledger records it).
 - Re-recording golden baselines by hand (`docs/13` §4.2).
+
+## 6. Known failure modes and anti-patterns (binding in review)
+
+Director's ruling at G0, 2026-10-16 (red-team item 15; `docs/red_team/RT-2026-10-16-G0-dispositions.md` §3). Each row is a bug that earlier simulation engines shipped, paired with the guard that keeps it out of Rehoboam. A reviewer cites the row by number. A change that reintroduces a failure mode without its guard is refused. These rows are not `CLAUDE.md` non-negotiables: each guard lives in the spec or test named here.
+
+| # | Failure mode | Its guard | Status |
+|---|---|---|---|
+| 1 | Repath storm: agents re-planning routes every tick | A static route graph at M1 F0; an unreachable target fails with a backoff timer | Add the backoff to the movement spec (fugitives, P1b) |
+| 2 | Item clutter: unbounded loose objects | SAGA-12 and V-SAGA-17: an artifact has exactly one bearer or location; goods are aggregate stocks (M4) | Covered |
+| 3 | Per-tick temperature and other over-fine physics | M3 F0 is an annual anomaly; each system has its own fidelity ladder (`05.1` §3) | Covered |
+| 4 | A trivial act cascading into a death (a cat licking spilt beer) | The abstraction horizon is the fidelity ladder; plane A has no hygiene model | Covered |
+| 5 | Full-map job scans for every actor | Candidate actions come from the agenda and the actor's situation, never a world scan | Check when the minds spec is written |
+| 6 | Allocation stutter | V-PERF-11: an allocation budget per bench, failing like an instruction-count regression (SPR-009 T-05; BCK-002 A-32) | Covered: a budget, not a blanket ban |
+| 7 | Nested containers | S6: one bearer or location; no containers in the schema | Add "no nested containers" to S6 explicitly (P1.19) |
+| 8 | Seams at the edge of a "reality bubble" | The world runs whole, watched or not (ADR-0025); V-DET-07, observer invariance | Covered |
+| 9 | Rivers flowing uphill | Priority-Flood depression filling before flow routing, with a total-order tie-break (red-team item 11) | Adopted for worldgen |
+| 10 | Subgraph explosion in pattern search | Ordered, anchored sifting patterns with declared budgets (`05.4`; `specs/sifting/lint_patterns.py`) | Covered |

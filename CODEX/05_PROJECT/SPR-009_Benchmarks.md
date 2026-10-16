@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.4.0
+version: 1.5.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -22,7 +22,7 @@ version: 1.4.0
 - **Requirements covered:** PERF-4
 
 ## Architect rulings, 2026-10-16 (binding; written before the sprint starts)
-1. **Bench 4 waits on a director decision.** Bench 4 (`raster_8x512`, stencil fields) measures field code that does not exist until the first field system (M1 or M3, P1a). The Architect has recommended to the director that its baseline move to that sprint, so that the G0 criterion reads "benches 7 and 8". Until the director rules, build the harness and benches 7 and 8, and leave bench 4 as a named, empty slot.
+1. **Bench 4 is out of this sprint** (director's ruling at G0, 2026-10-16). Bench 4 (`raster_8x512`, stencil fields) measures field code that does not exist until the first field system (M1 or M3, P1a), so its baseline moves to that sprint, and the G0 criterion reads "benches 7 and 8" (`docs/11` v1.4). Build the harness and benches 7 and 8, and leave bench 4 as a named, empty slot.
 2. **The instruction-count gate (T-02a).**
    - `iai-callgrind`, exactly pinned, as a dev-dependency of the bench targets only. It never enters a plane-A crate's normal dependency graph, so `PLANE_A_EXTERNAL_DEPS` does not apply.
    - valgrind is installed in CI from the runner's package manager.
@@ -61,7 +61,7 @@ version: 1.4.0
 ## Tasks
 
 ### T-01: criterion benches
-- **Deliverable:** Benches 4, 7 and 8 of `08` §9 against the smoke world
+- **Deliverable:** Benches 7 and 8 of `08` §9 against the smoke world; bench 4 as a named, empty slot (ruling 1)
 - **Acceptance:** Baselines recorded
 - **Status:** [ ] not started
 

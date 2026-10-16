@@ -9,7 +9,7 @@ tags: [verification, roadmap]
 related: [BCK-001, BCK-002, PRJ-001, SPR-001, SPR-002, SPR-003, SPR-004, SPR-005, SPR-006, SPR-007, SPR-008, SPR-009, SPR-010]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.4.0
+version: 0.5.0
 ---
 
 > **BLUF:** DRAFT tracker; this is not a verdict. G0 closes when SPR-001 to SPR-010 are closed and the seven criteria of `docs/11` pass, and the red-team inbox is folded in with a dispositions record. Status on 2026-10-16:
@@ -17,7 +17,7 @@ version: 0.4.0
 > - SPR-007 is in progress;
 > - SPR-008 and SPR-009 have not started.
 >
-> One roadmap item is owned by no sprint, and part of it conflicts with ADR-0035 §6 (§3). It needs a director ruling.
+> The director ruled on the G0 decisions on 2026-10-16 (§3, §4): P0.7 loses the Rerun hooks and the TUI stub, the V-PERF-04 criterion covers benches 7 and 8, and the red-team inbox is disposed of (`docs/red_team/RT-2026-10-16-G0-dispositions.md`).
 
 # VER-G0 — Gate G0 (draft tracker)
 
@@ -30,7 +30,7 @@ version: 0.4.0
 | Bisect: names the injected month, table and row | V-DET-11 | SPR-008 | Not started |
 | Specs: `val_khor` and `aethelgard` validate, `invalid_draft_style` fails | V-WC-04 | SPR-001 (Python); SPR-004 (Rust parity) | Passing in `check_all`: Python, and Rust parity line for line |
 | Lints: zero violations | V-PLN-01, V-DET-19, V-INSP-03 | SPR-001; SPR-010 (floats); SPR-003 (sampler float zone) | Passing in `check_all` |
-| CI: per-PR CI ≤ 15 min; baselines for benches 4, 7 and 8 | V-PERF-04 | SPR-009 | CI: about 1 min today. Baselines: not started |
+| CI: per-PR CI ≤ 15 min; baselines for benches 7 and 8 (bench 4 moved to the first P1a field sprint: director, 2026-10-16) | V-PERF-04 | SPR-009 | CI: about 1 min today. Baselines: not started |
 
 ## 2. Sprints
 | Sprint | Scope | Status | Audit | Escapes found later |
@@ -48,13 +48,15 @@ version: 0.4.0
 
 The escape-rate count (BCK-002 A-05) stands at 1 escape across 7 closed sprints.
 
-## 3. P0 work packages that no sprint owns
+## 3. P0 work packages that no sprint owns (ruled by the director, 2026-10-16)
+Both recommendations were approved. `docs/11` v1.4 drops the Rerun hooks from P0 and moves the TUI stub to P1.17.
+
 | Item (`docs/11` P0) | Gap | Recommendation | Confidence |
 |---|---|---|---|
 | P0.7 "Rerun logging hooks" | Owned by no sprint. Logging from the engine into a visualisation tool conflicts with ADR-0035 §6 ("the engine only engines": the World Stream is the engine's only output) | Drop it from P0. A Rerun view, if wanted, is a downstream consumer of the World Stream (`python/`). The `docs/11` edit is a roadmap change, so it needs the director | 85% |
 | P0.7 "Textual TUI stub" | Owned by no sprint and not a G0 criterion. `rh-tui` is a stream viewer, not an engine crate (`05.0` §6) | Move it to P1a as a consumer of the first real World Stream, where it has something to show | 75% |
 
 ## 4. Before the gate
-- **Red-team inbox:** fold batches 01 to 04 into a dispositions record (`docs/red_team/RT-<date>-G0-dispositions.md`), starting from the Architect's intake notes. The director rules on anything that changes an ADR, the roadmap or `CLAUDE.md`.
+- **Red-team inbox:** done. Batches 01 to 04 are disposed of in `docs/red_team/RT-2026-10-16-G0-dispositions.md`. The director ruled on Laws 2 and 3 (principles 8 and 9 of `docs/01` §5) and item 15 (GOV-003 §6). One later dossier (`28b44ac`, demography and inequality) is held for the director (§5 of that record).
 - **Architect backlog that must close before G0:** A-09, this record. (A-20, the plane-A external dependency allow-list, is done.)
-- **Director:** T-00 of SPR-001 (`RUN-001` on the laptop) is still open (BCK-002 A-16). The laptop and one `adjutant` session are also needed for SPR-008 T-02 (cross-machine hashes) and SPR-009 T-04 (wall-clock baselines).
+- **Director:** T-00 of SPR-001 (`RUN-001` on the laptop) is still open (BCK-002 A-16). The laptop and one `adjutant` session are also needed for SPR-008 T-02 (cross-machine hashes) and SPR-009 T-04 (wall-clock baselines). The director will open a session of about 2 hours on the laptop when the Architect reports SPR-008 ready (2026-10-16).
