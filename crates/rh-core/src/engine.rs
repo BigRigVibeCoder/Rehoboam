@@ -42,6 +42,8 @@ pub struct Engine {
     threads: usize,
     bound_pulses: Vec<Pulse>,
     lagged_columns: BTreeSet<&'static str>,
+    /// The error that stopped the run, if any. A poisoned engine never runs again (G-d).
+    poisoned: Option<SimError>,
 }
 
 /// One system's work at one instant and phase: the entry index and the bindings that fire.
@@ -96,6 +98,7 @@ impl Engine {
             threads: 1,
             bound_pulses: bound.into_iter().collect(),
             lagged_columns: lagged,
+            poisoned: None,
         }
     }
 
@@ -135,21 +138,35 @@ impl Engine {
     /// the instant and the tables (for hashes, invariants, logging).
     ///
     /// # Errors
-    /// The first [`SimError`] in schedule order; the engine stops at that instant.
+    /// The first [`SimError`] in schedule order; the engine stops at that instant and is
+    /// poisoned: every later call returns that same error and runs nothing, so a failed instant is
+    /// never replayed on half-mutated tables (G-d; SPR-006 adds the crash artifact).
     pub fn advance_until(
         &mut self,
         end: SimTime,
         mut after_instant: impl FnMut(SimTime, &WorldTables),
     ) -> Result<(), SimError> {
+        if let Some(e) = &self.poisoned {
+            return Err(e.clone());
+        }
         while let Some(t) = self.next_instant() {
             if t > end {
                 break;
             }
-            self.run_instant(t)?;
+            if let Err(e) = self.run_instant(t) {
+                self.poisoned = Some(e.clone());
+                return Err(e);
+            }
             after_instant(t, &self.tables);
             self.cursor = t.checked_add_minutes(1);
         }
         Ok(())
+    }
+
+    /// The error that poisoned the engine, if a step has failed.
+    #[must_use]
+    pub fn poisoned(&self) -> Option<&SimError> {
+        self.poisoned.as_ref()
     }
 
     /// Every system's invariants over the current tables, in id order.

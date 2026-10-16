@@ -550,3 +550,54 @@ fn columns_come_only_from_declared_writes() {
         "nothing was created"
     );
 }
+
+/// G-d: a step error poisons the engine. Later calls return the original error and run nothing:
+/// the failed instant is never replayed on half-mutated tables.
+#[test]
+fn a_step_error_poisons_the_engine() {
+    fn count_then_fail(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let rows = v.write("n.x")?;
+        rows.push(1);
+        if rows.len() == 2 {
+            return Err(SimError::System {
+                system: "X1.n",
+                message: "second day".to_owned(),
+            });
+        }
+        Ok(())
+    }
+    let s = Stub::new("X1.n")
+        .writes("n.x")
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(count_then_fail);
+    let t = agreeing_specs(std::slice::from_ref(&s));
+    let r = register(vec![s.boxed()], &t).unwrap();
+    let mut engine = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        r,
+        WorldTables::new(),
+        SimTime::EPOCH,
+    );
+    let end = SimTime::from_minutes(10 * 1_440);
+    let first = engine.advance_until(end, |_, _| {}).unwrap_err();
+    assert_eq!(first.to_string(), "X1.n: second day");
+    let rows_after_failure = engine.tables().get("n.x").unwrap().clone();
+    assert_eq!(rows_after_failure.len(), 2);
+    let mut ran = 0;
+    let again = engine.advance_until(end, |_, _| ran += 1).unwrap_err();
+    assert_eq!(again, first, "the original error");
+    assert_eq!(ran, 0, "nothing ran");
+    assert_eq!(
+        engine.tables().get("n.x").unwrap(),
+        &rows_after_failure,
+        "no step replayed"
+    );
+    assert_eq!(engine.poisoned(), Some(&first));
+}
