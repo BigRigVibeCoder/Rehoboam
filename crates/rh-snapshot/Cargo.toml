@@ -12,3 +12,7 @@ kind = "machinery"
 
 [lints]
 workspace = true
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }
+twox-hash = { version = "=2.1.5", default-features = false, features = ["xxhash3_64", "xxhash3_128"] }

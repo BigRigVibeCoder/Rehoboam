@@ -24,3 +24,5 @@ rh-ids = { version = "0.0.0", path = "../rh-ids" }
 # SPR-006: the integration tests build event drafts and read the log.
 [dev-dependencies]
 rh-events = { version = "0.0.0", path = "../rh-events" }
+# SPR-007: the tests compare plane-A hashes (`rh_snapshot::state_hash`). A dev-only edge.
+rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }

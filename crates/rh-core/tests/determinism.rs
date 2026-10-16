@@ -256,7 +256,7 @@ fn monthly_hashes(threads: usize, seed: u64) -> Vec<u64> {
     engine
         .advance_until(end, |t, tables| {
             if CALENDAR.is_boundary(Pulse::Month, t) {
-                hashes.push(tables.state_hash());
+                hashes.push(rh_snapshot::state_hash(tables));
             }
         })
         .unwrap_or_else(|e| panic!("{e}"));
@@ -505,7 +505,7 @@ fn the_reported_error_is_the_same_at_every_thread_count() {
         );
         engine.set_threads(threads);
         let err = engine.advance_until(SimTime::EPOCH, |_, _| {}).unwrap_err();
-        seen.push((err.to_string(), engine.tables().state_hash()));
+        seen.push((err.to_string(), rh_snapshot::state_hash(engine.tables())));
     }
     assert_eq!(seen[0].0, "X1.a: first");
     assert!(seen.iter().all(|s| s == &seen[0]), "{seen:?}");
