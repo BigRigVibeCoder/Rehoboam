@@ -1,0 +1,11 @@
+# Positive control for `uv lock --check` (tests/lint_fixtures/README.md): uv.lock was generated for
+# requires-python = ">=3.12", then this file was changed to ">=3.11" without relocking. The check must
+# report that the lockfile needs to be updated. No dependencies, so it runs offline.
+[project]
+name = "uv-drift-fixture"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false
