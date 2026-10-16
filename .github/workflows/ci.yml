@@ -13,6 +13,8 @@ on:
   push:
     branches: [main]
   pull_request:
+    # `edited`: a title change re-runs the baseline gate's C3 rule (VER-SPR-008 MAJ-1).
+    types: [opened, synchronize, reopened, edited]
   workflow_dispatch:
 
 permissions:
@@ -30,12 +32,20 @@ jobs:
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
-      # SPR-008 T-04: the golden baseline may change only in a PR whose title carries [C3]
-      # (bin/check_baseline.py). Passed through the environment, never interpolated into a script.
+      # SPR-008 T-04: the golden baseline may change only in a C3 change (bin/check_baseline.py):
+      # a PR whose title carries [C3], or on a push a commit in before..after whose subject does.
+      # The rule fails closed (VER-SPR-008 MAJ-1). Passed through the environment, never
+      # interpolated into a script.
+      RH_EVENT: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && github.event_name || 'local' }}
       RH_PR_TITLE: ${{ github.event.pull_request.title }}
       RH_BASELINE_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+      RH_PUSH_BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+      RH_PUSH_AFTER: ${{ github.event_name == 'push' && github.sha || '' }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # A push needs before..after for the C3 rule and the bisect (MAJ-1, MIN-4).
+          fetch-depth: ${{ github.event_name == 'push' && '0' || '1' }}
 
       - name: The base branch, for the baseline gate and the bisect (SPR-008)
         if: github.event_name == 'pull_request'

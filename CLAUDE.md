@@ -71,7 +71,6 @@ cargo build --release -p rh-cli && target/release/rh-cli run smoke --years 1000 
 python -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed target/golden/smoke.ladder   # baseline = recomputation; changed only in a [C3] PR (T-04)
 cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
 bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), V-DET-11 x 64
-bin/regen_baseline.sh            # only in a [C3] PR's final commit: regenerate the golden baseline (never type it)
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
 cargo nextest run -p rh-snapshot --test hash --test golden --test journal --test keyframe --test guard --test unsynced_guard --test stub_world   # plane hashes, input journal, V-DET-05 keyframes, V-DET-10 unsynced guard, stub-world hash golden (SPR-007)
@@ -82,6 +81,8 @@ target/debug/rh-cli ownership    # single-writer column ownership from specs/sys
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
 ```
+
+Not a check: `bin/regen_baseline.sh` regenerates the smoke golden baseline, only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`).
 
 ## Conventions
 - Docs are Markdown, and diagrams are Mermaid.

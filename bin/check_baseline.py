@@ -4,39 +4,76 @@ CI recomputes the smoke ladder on every PR head (`rh-cli run smoke`, at 1 thread
 this gate compares the committed baseline with the recomputation (SPR-008 ruling 6):
 
 - the recomputed ladders must equal each other byte for byte (thread-count invariance, V-DET-01);
-- whether or not the baseline changed in this PR, it must equal the recomputation byte for byte,
-  so a hand-edited baseline fails, and so does a baseline left stale by a change in history (run
-  the bisect: `docs/13` §4.5);
-- if the baseline changed against the base branch, the PR title must carry `[C3]`: only a C3 PR
-  may record a new history, and its own final commit writes the baseline with the golden-run tool
-  (`bin/regen_baseline.sh`; the fallback of `docs/13` §4.4, there being no merge queue).
+- whether or not the baseline changed, it must equal the recomputation byte for byte, so a
+  hand-edited baseline fails, and so does a baseline left stale by a change in history (run the
+  bisect: `docs/13` §4.5);
+- the **C3 rule**: a baseline that changed may only come from a C3 change. There is no merge
+  queue (GitHub Free), so the C3 PR's own final commit writes the baseline with the golden-run
+  tool (`bin/regen_baseline.sh`; the fallback of `docs/13` §4.4).
 
-Whether the baseline changed is `git diff --quiet <base> -- <baseline>` (`--base-ref`, default
-`$RH_BASELINE_BASE`); with no base (a local run, a push to main) it counts as unchanged.
-`--changed yes|no` overrides it, for the planted controls. The comparison is with the working
-tree, so a regenerated but uncommitted baseline counts too, provided git tracks the file (CI
-checks out the PR head, where it is committed). The title is `--title`, default
-`$RH_PR_TITLE`.
+The C3 rule fails closed (VER-SPR-008 MAJ-1). By event (`--event`, default `$RH_EVENT`, else
+`local`):
+
+- `pull_request`: the base (`--base-ref`, default `$RH_BASELINE_BASE`) is required; without one
+  the gate exits 2. The baseline changed if `git diff --quiet <base> -- <baseline>` says so
+  (against the working tree, which CI checks out as the PR's merge commit). Then the PR title
+  (`--title`, default `$RH_PR_TITLE`) must carry `[C3]` in its trailing tag group.
+- `push`: the range is `--before` (default `$RH_PUSH_BEFORE`) to `--after` (default
+  `$RH_PUSH_AFTER`, else `HEAD`). An empty or all-zero `before` (a new branch) leaves the rule
+  "not checked: no base", said so. If the baseline changed in the range, at least one commit
+  subject in it must carry `[C3]` in its trailing tag group: the commit `bin/regen_baseline.sh`
+  asks for.
+- `local`: with `--base-ref`, as for a pull request; without one, the rule is reported "not
+  checked (no base ref)", never "unchanged".
+
+`--changed yes|no` overrides the change detection (with the title rule), for the planted controls.
+
+A trailing tag group is the run of `[...]` tags that ends the title or subject: `SPR-008: golden
+CI [C3]` and `x [C3] [perf]` carry it; `docs: explain the [C3] rule` does not.
 
 Usage:  python -I bin/check_baseline.py --baseline B --recomputed R [R ...]
-            [--base-ref REF | --changed yes|no] [--title TITLE]
-Exit:   0 the baseline holds; 1 it does not; 2 a file or the base ref cannot be read.
+            [--event pull_request|push|local] [--base-ref REF] [--before SHA] [--after SHA]
+            [--changed yes|no] [--title TITLE]
+Exit:   0 the baseline holds; 1 it does not; 2 a file, a ref or a needed base is missing.
 Standard library only (GOV-003 §3).
 
-Refs: SPR-008 T-04, ruling 6; docs/13 §4.4, §4.5; docs/09 V-DET-01.
+Refs: SPR-008 T-04, ruling 6; VER-SPR-008 MAJ-1; docs/13 §4.4, §4.5; docs/09 V-DET-01.
 """
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 EXIT_OK = 0
 EXIT_FAIL = 1
 EXIT_UNREADABLE = 2
 C3_MARK = "[C3]"
+TRAILING_TAGS = re.compile(r"(?:\s*\[[^\[\]]+\])+\s*$")
+NO_COMMIT = re.compile(r"^0*$")
+
+
+def has_c3_tag(text: str) -> bool:
+    """Return whether ``text`` ends with a tag group that holds ``[C3]``."""
+    match = TRAILING_TAGS.search(text.strip())
+    return match is not None and C3_MARK in re.findall(r"\[[^\[\]]+\]", match.group(0))
+
+
+@dataclass(frozen=True)
+class C3Rule:
+    """What the C3 rule found: whether the baseline changed, and whether a C3 mark covers it.
+
+    ``where`` says where the mark was looked for; with ``changed`` None, the rule could not be
+    checked and ``where`` says why.
+    """
+
+    changed: bool | None
+    marked: bool
+    where: str
 
 
 class UnreadableError(Exception):
@@ -52,20 +89,56 @@ def first_difference(a: bytes, b: bytes) -> str:
     return f"line {min(len(la), len(lb)) + 1}: one file ends first"
 
 
-def changed_against(base: str, baseline: Path) -> bool:
-    """Return whether ``baseline`` differs from its version at ``base`` (absent there counts)."""
+def git(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run git with ``args``."""
     try:
-        done = subprocess.run(
-            ["git", "diff", "--quiet", base, "--", str(baseline)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        return subprocess.run(["git", *args], capture_output=True, text=True, check=False)
     except FileNotFoundError as err:
         raise UnreadableError("git is not on PATH") from err
+
+
+def changed_against(base: str, baseline: Path, after: str | None = None) -> bool:
+    """Return whether ``baseline`` differs from its version at ``base`` (absent there counts).
+
+    The comparison is with the working tree, or with commit ``after`` when it is given.
+    """
+    span = [base] if after is None else [base, after]
+    done = git("diff", "--quiet", *span, "--", str(baseline))
     if done.returncode not in (0, 1):
-        raise UnreadableError(f"git diff against {base} failed: {done.stderr.strip()}")
+        raise UnreadableError(f"git diff {' '.join(span)} failed: {done.stderr.strip()}")
     return done.returncode == 1
+
+
+def subjects(before: str, after: str) -> list[str]:
+    """Return the commit subjects of ``before..after``."""
+    done = git("log", "--format=%s", f"{before}..{after}")
+    if done.returncode != 0:
+        raise UnreadableError(f"git log {before}..{after} failed: {done.stderr.strip()}")
+    return done.stdout.splitlines()
+
+
+def c3_rule(args: argparse.Namespace) -> C3Rule:
+    """Apply the C3 rule for the event (module docs)."""
+    if args.changed is not None:
+        return C3Rule(args.changed == "yes", has_c3_tag(args.title), f"the title `{args.title}`")
+    if args.event == "push":
+        before = args.before.strip()
+        if NO_COMMIT.match(before):
+            return C3Rule(None, False, "no base: the push has no previous commit")
+        after = args.after or "HEAD"
+        if not changed_against(before, args.baseline, after):
+            return C3Rule(False, False, f"{before[:12]}..{after[:12]}")
+        marked = any(has_c3_tag(s) for s in subjects(before, after))
+        return C3Rule(True, marked, f"the commit subjects of {before[:12]}..{after[:12]}")
+    if not args.base_ref:
+        if args.event == "pull_request":
+            raise UnreadableError(
+                "a pull_request run needs its base (--base-ref or $RH_BASELINE_BASE): the C3 "
+                "rule fails closed (VER-SPR-008 MAJ-1)"
+            )
+        return C3Rule(None, False, "no base ref")
+    changed = changed_against(args.base_ref, args.baseline)
+    return C3Rule(changed, has_c3_tag(args.title), f"the title `{args.title}`")
 
 
 def read(path: Path) -> bytes:
@@ -76,9 +149,7 @@ def read(path: Path) -> bytes:
         raise UnreadableError(f"{path}: {err}") from err
 
 
-def check(
-    baseline: Path, recomputed: Sequence[Path], changed: bool, title: str
-) -> tuple[bool, str]:
+def check(baseline: Path, recomputed: Sequence[Path], rule: C3Rule) -> tuple[bool, str]:
     """Return whether the baseline holds, and the report line."""
     runs = [(p, read(p)) for p in recomputed]
     first_path, first = runs[0]
@@ -100,15 +171,20 @@ def check(
             f"{first_difference(committed, first)}. A baseline is regenerated, never typed; if "
             "the history changed, run rh-cli bisect and explain it (docs/13 §4.5)"
         )
-    if changed and C3_MARK not in title:
+    if rule.changed and not rule.marked:
         return False, (
-            f"BASELINE CHANGED in a PR not marked {C3_MARK}: {baseline} differs from the base "
-            f"branch, and the title is `{title}`. Only a C3 PR records a new history "
+            f"BASELINE CHANGED in a PR not marked {C3_MARK}: {baseline} changed, but no "
+            f"trailing {C3_MARK} tag is in {rule.where}. Only a C3 change records a new history "
             "(SPR-008 ruling 6)"
         )
-    how = f"regenerated in a {C3_MARK} PR" if changed else "unchanged"
+    if rule.changed is None:
+        how = f"C3 rule not checked ({rule.where})"
+    elif rule.changed:
+        how = f"regenerated in a {C3_MARK} PR ({rule.where})"
+    else:
+        how = f"unchanged against the base ({rule.where})"
     return True, (
-        f"BASELINE OK: {baseline} equals the recomputation ({len(runs)} run(s) agree; {how})"
+        f"BASELINE OK: {baseline} equals the recomputation ({len(runs)} run(s) agree); {how}"
     )
 
 
@@ -117,18 +193,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0] if __doc__ else None)
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--recomputed", type=Path, nargs="+", required=True)
+    parser.add_argument(
+        "--event",
+        choices=("pull_request", "push", "local"),
+        default=os.environ.get("RH_EVENT") or "local",
+    )
     parser.add_argument("--base-ref", default=os.environ.get("RH_BASELINE_BASE", ""))
+    parser.add_argument("--before", default=os.environ.get("RH_PUSH_BEFORE", ""))
+    parser.add_argument("--after", default=os.environ.get("RH_PUSH_AFTER", ""))
     parser.add_argument("--changed", choices=("yes", "no"))
     parser.add_argument("--title", default=os.environ.get("RH_PR_TITLE", ""))
     args = parser.parse_args(argv)
     try:
-        if args.changed is not None:
-            changed = args.changed == "yes"
-        elif args.base_ref:
-            changed = changed_against(args.base_ref, args.baseline)
-        else:
-            changed = False
-        ok, line = check(args.baseline, args.recomputed, changed, args.title)
+        ok, line = check(args.baseline, args.recomputed, c3_rule(args))
     except UnreadableError as err:
         print(f"check_baseline: {err}", file=sys.stderr)
         return EXIT_UNREADABLE

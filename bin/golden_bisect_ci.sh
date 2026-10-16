@@ -2,10 +2,13 @@
 # On a golden-run mismatch in CI, bisect the base revision against this head and write the report
 # (SPR-008 ruling 7; docs/13 §4.5: the report is attached to the PR as a job artifact).
 #
-# Runs only when bin/check_all.sh's report shows a failed golden gate (a "Golden ..." row marked
-# FAIL); otherwise it says so and exits 0. The baseline build is the base revision
-# ($RH_BASELINE_BASE, else HEAD^) built in a worktree under target/; the candidate is this
-# checkout's release rh-cli. Both read their own revision's worlds/smoke.
+# Runs only when bin/check_all.sh's report shows a failed golden-run gate: a "Golden run:",
+# "Golden ladders:" or "Golden baseline:" row marked FAIL (not the "Golden vectors" rows, and not
+# the planted controls); otherwise it says so and exits 0. The baseline build is the base revision,
+# built in a worktree under target/: on a pull request $RH_BASELINE_BASE; on a push
+# $RH_PUSH_BEFORE (ci.yml fetches the full history for a push), skipped with a message for a push
+# with no previous commit; locally $RH_BASELINE_BASE, else HEAD^ (VER-SPR-008 MIN-4). The candidate
+# is this checkout's release rh-cli. Both read their own revision's worlds/smoke.
 #
 # Usage: bin/golden_bisect_ci.sh            writes artifacts/bisect_report.txt
 set -uo pipefail
@@ -14,11 +17,19 @@ TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 REPORT=artifacts/check_report.md
 OUT=artifacts/bisect_report.txt
 mkdir -p artifacts
-if ! grep -qE '^\| [0-9]+ \| Golden [^|]* \| \*\*FAIL\*\* \|' "$REPORT" 2>/dev/null; then
-  echo "golden_bisect_ci: no golden gate failed; nothing to bisect"
+if ! grep -qE '^\| [0-9]+ \| Golden (run|ladders|baseline): [^|]* \| \*\*FAIL\*\* \|' "$REPORT" 2>/dev/null; then
+  echo "golden_bisect_ci: no golden-run gate failed; nothing to bisect"
   exit 0
 fi
-base="${RH_BASELINE_BASE:-HEAD^}"
+case "${RH_EVENT:-local}" in
+  push)
+    base="${RH_PUSH_BEFORE:-}"
+    if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+      echo "golden_bisect_ci: the push has no previous commit, so there is no base to bisect against" | tee "$OUT"
+      exit 0
+    fi ;;
+  *) base="${RH_BASELINE_BASE:-HEAD^}" ;;
+esac
 src="$TARGET_DIR/bisect-base-src"
 rm -rf "$src" && git worktree prune
 if ! git worktree add --detach "$src" "$base" >/dev/null 2>&1; then
