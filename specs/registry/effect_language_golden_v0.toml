@@ -178,7 +178,7 @@ ScheduleDeath    = { owner = "M2.demography", person = "victim", params = [{ nam
 Marry            = { owner = "M2.demography", person = "a", params = [{ name = "b", type = "ref", ref = "person" }, { name = "tick", type = "int" }] }
 Promote          = { owner = "T1.minds", person = "person", params = [] }
 Demote           = { owner = "T1.minds", person = "person", params = [] }
-OpinionModifier  = { owner = "T1.minds", person = "holder", params = [{ name = "about", type = "ref", ref = "person" }, { name = "kind", type = "enum", enum = "opinion_modifiers" }] }
+OpinionModifier  = { owner = "T1.minds", person = "holder", params = [{ name = "about", type = "ref", ref = "person" }, { name = "kind", type = "enum", enum = "opinion_modifiers" }, { name = "magnitude", type = "q8_8" }, { name = "source_event", type = "int" }] }   # T1's and M7's payload at PR #32 head d8bbddb
 AgendaGoal       = { owner = "T1.minds", person = "holder", params = [{ name = "vow", type = "ref", ref = "vow" }, { name = "kind", type = "enum", enum = "vow_kinds" }, { name = "target", type = "int" }, { name = "priority", type = "q8_8" }] }
 ClearGoal        = { owner = "T1.minds", person = "holder", params = [{ name = "vow", type = "ref", ref = "vow" }] }
 ApplyThought     = { owner = "T1.minds", person = "holder", params = [{ name = "overlay", type = "enum", enum = "overlays" }, { name = "delta", type = "q8_8" }] }
@@ -237,6 +237,8 @@ candidates = 'lineage(holder, 3)'
 eligible   = 'person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and descends(x, title.founder(title)) and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year)) * calendar.minutes_per_day'
 order      = 'life_course.birth_tick(x)'
 
+# sortition: 05.5 §2.1's rng_permutation(purpose = "sortition") is this order plus the host's PersonId tie-break: ascending
+# draw keyed (person = the candidate, k = 0, t = the arbitration instant), ties in ascending PersonId (M7 at PR #32 d8bbddb).
 [registry.programs.succession_laws.sortition]
 candidates = 'court(title)'
 eligible   = 'person.alive(x) and x != holder'
@@ -4016,20 +4018,20 @@ bind = { actor = "person:9", target = "person:5" }
 text = 'Marry(person: actor, b: target, tick: now)'
 expect = "effects:[Marry(person=9, args=[5, 0])]"
 [[case]]
-id = "effects_self_send_undeclared"
+id = "effects_self_send_undeclared"   # bind: event = the verb's own EventId
 kind = "effects"
 system = "T1.minds"
-bind = { actor = "person:9", target = "person:7" }
-text = 'OpinionModifier(person: actor, about: target, kind: opinion_modifiers.DESPAIR_PACT_WITH)'
+bind = { actor = "person:9", target = "person:7", event = 9001 }
+text = 'OpinionModifier(person: actor, about: target, kind: opinion_modifiers.DESPAIR_PACT_WITH, magnitude: 30.0, source_event: event)'
 expect = "error:E_UNDECLARED_COMMAND"
 [[case]]
 id = "effects_self_send_declared"   # open question Q6: T1 lists the self-send in [[commands]]
 kind = "effects"
 system = "T1.minds"
 extra_sends = [{ command = "OpinionModifier", target = "T1.minds" }]
-bind = { actor = "person:9", target = "person:7" }
-text = 'OpinionModifier(person: actor, about: target, kind: opinion_modifiers.DESPAIR_PACT_WITH)'
-expect = "effects:[OpinionModifier(person=9, args=[7, 7])]"
+bind = { actor = "person:9", target = "person:7", event = 9001 }
+text = 'OpinionModifier(person: actor, about: target, kind: opinion_modifiers.DESPAIR_PACT_WITH, magnitude: 30.0, source_event: event)'
+expect = "effects:[OpinionModifier(person=9, args=[7, 7, 7680, 9001])]"
 [[case]]
 id = "effects_for_variable_scope_ends"
 kind = "effects"

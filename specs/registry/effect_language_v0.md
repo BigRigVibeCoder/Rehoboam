@@ -278,7 +278,7 @@ A relation yields its elements in **ascending entity id** (`none` never appears)
 
 An effect program (`verbs.<V>.effects`) emits an ordered list of lifecycle commands; it writes nothing itself (`05.5` §2.1: "effects are queued, never applied inline"; `05.1` §2 rule 5). The host (the system that emitted the verb) submits them through `StepCtx::submit` in the listed order, with the verb's event as every command's `cause`; `rh-core` queues each for its owner and the owner applies it when it next runs (`05.1` §2 rule 2).
 
-- An action `Cmd(person: e, a: v, …)` names a command of the Registry `[commands]` table (§7.4) and gives every parameter once by name (`E_ARITY` otherwise). The `person` argument is the queue key (`rh_core::command::Command::person`); the remaining arguments are the command's parameters in the declared order. The signatures are the owner's `[[applies]]` payloads, lint-checked both ways (§7.3): `ScheduleDeath {victim, tick, cause, culprit, cause_event}` and `Marry {a, b, tick}` from M2's spec. An effect program binds `event`, the EventId of the verb's own event, for `cause_event`: the host passes its `DraftRef` and the merge resolves it, as for `Command::cause`. A tick-valued argument is a `SimTime` minute, computed in `int` from `now` and the calendar.
+- An action `Cmd(person: e, a: v, …)` names a command of the Registry `[commands]` table (§7.4) and gives every parameter once by name (`E_ARITY` otherwise). The `person` argument is the queue key (`rh_core::command::Command::person`); the remaining arguments are the command's parameters in the declared order. The signatures are the owner's `[[applies]]` payloads, lint-checked both ways (§7.3): `ScheduleDeath {victim, tick, cause, culprit, cause_event}` and `Marry {a, b, tick}` from M2's spec; `OpinionModifier {holder, about, kind, magnitude, source_event}`, `Promote {person}` and `Demote {person}` from T1's (PR #32 at d8bbddb). An effect program binds `event`, the EventId of the verb's own event, for `cause_event`: the host passes its `DraftRef` and the merge resolves it, as for `Command::cause`. A tick-valued argument is a `SimTime` minute, computed in `int` from `now` and the calendar.
 - The checker accepts an action only if the declaring system's spec lists the command in `[[commands]]` with `target` equal to the command's owner (`E_UNDECLARED_COMMAND` when not listed; `E_COMMAND_OWNER` when the listed target is not the owner, which is the rejected "write to a non-owned column"). An action whose owner is not registered in the world **compiles** (NEW-4): at registration `rh-core` drops the send and reports it, and the evaluator emits nothing for it and counts `dropped_actions`. A command to the declaring system's own columns is still a queued command, to itself, and must be listed the same way.
 - `when c: A` emits `A` iff `c`; `for y in R where c: A` emits `A` once per element of `R` passing `c`, in canonical order.
 - **Encoding into `Command::args`** (`Vec<i64>`): `int` as itself; `q8_8` and `q16_16` as their raw bits; `bool` as 0 or 1; an enum as its ordinal; an entity as its id reinterpreted as two's-complement `i64` (`none` is 0). The golden file renders a command as `Name(person=<id>, args=[<i64>, …])`, the exact queue form.
@@ -400,8 +400,10 @@ eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male
 order      = "life_course.birth_tick(x)"
 
 [succession_laws.sortition]
-# Sex rule: none. Lots among the court: a keyed draw per candidate (05.5 §2.1's rng_permutation). M7 must declare the purpose
-# `sortition` in its [[rng]] (Q5).
+# Sex rule: none. Lots among the court. 05.5 §2.1's rng_permutation(purpose = "sortition") is exactly this order plus the
+# host's tie-break of §7.2: candidates in ascending draw keyed (person = the candidate, k = 0, t = the arbitration
+# instant), ties in ascending PersonId, which is how M7's spec states it (PR #32 at d8bbddb). The language needs no
+# permutation built-in: a per-candidate draw as the sort key is the permutation. M7 declares `sortition` (Q5).
 candidates = "court(title)"
 eligible   = "person.alive(x) and x != holder"
 order      = "draw(sortition, x, 0)"
