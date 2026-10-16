@@ -5,9 +5,19 @@ pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Activity),
 ];
 #[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {
     ActivityBlock = 1,  // key: (person, day, block)
     EncounterOutcome = 2,  // key: (cell, day, block, person_a, person_b)
+}
+impl RngPurpose {
+    /// The purpose's name in the spec's `[[rng]]` table.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::ActivityBlock => "activity_block",
+            Self::EncounterOutcome => "encounter_outcome",
+        }
+    }
 }
 pub struct Params {
     pub blocks_per_day: Fixed,  // bounds checked against the Registry at load

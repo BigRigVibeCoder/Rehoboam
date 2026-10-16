@@ -4,7 +4,7 @@
 //! reads at) and the columns it writes (which must be columns it owns, with their plane).
 //! Registration ([`crate::register`]) checks the declarations of all registered systems against
 //! each other and against the system specs, with the same single-writer rule as the ownership
-//! lint (`rh_registry::ownership`; SPR-005 ruling 3). At run time the step view
+//! lint (`crate::ownership`, which `rh_registry::ownership` calls; SPR-005 ruling 3). At run time the step view
 //! ([`crate::world::SystemView`]) refuses any read or write the declaration does not list.
 //!
 //! Lifecycle commands and event types are declared in the specs (`[[commands]]`, `[[emits]]`);
@@ -16,7 +16,7 @@
 
 use core::fmt;
 
-use rh_registry::ownership::Declaration;
+use crate::ownership::Declaration;
 
 /// The plane a column lives in (ADR-0024).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -123,10 +123,10 @@ pub struct AccessSpec {
 
 impl AccessSpec {
     /// The plane of the declaring system, by the rule the lint uses
-    /// (`rh_registry::ownership::system_plane`).
+    /// ([`crate::ownership::system_plane`]).
     #[must_use]
     pub fn plane(&self) -> &'static str {
-        rh_registry::ownership::system_plane(self.writes.iter().map(|w| w.plane.name()))
+        crate::ownership::system_plane(self.writes.iter().map(|w| w.plane.name()))
     }
 
     /// The declared read of `column`, if any.
@@ -159,14 +159,16 @@ impl AccessSpec {
         }
     }
 
-    /// The view of this declaration the spec lint's `Ownership::check` takes.
+    /// The columns read, as [`crate::ownership::check_access`] takes them.
     #[must_use]
-    pub fn lint_access(&self, system: &str) -> rh_registry::ownership::AccessSpec {
-        rh_registry::ownership::AccessSpec {
-            system: system.to_owned(),
-            reads: self.reads.iter().map(|r| r.column.to_owned()).collect(),
-            writes: self.writes.iter().map(|w| w.column.to_owned()).collect(),
-        }
+    pub fn read_columns(&self) -> Vec<String> {
+        self.reads.iter().map(|r| r.column.to_owned()).collect()
+    }
+
+    /// The columns written, as [`crate::ownership::check_access`] takes them.
+    #[must_use]
+    pub fn write_columns(&self) -> Vec<String> {
+        self.writes.iter().map(|w| w.column.to_owned()).collect()
     }
 }
 

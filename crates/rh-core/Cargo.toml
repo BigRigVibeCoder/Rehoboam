@@ -13,8 +13,12 @@ kind = "core"
 [lints]
 workspace = true
 
-# SPR-005: the keyed RNG for StepCtx::rng (rh-ids), and the single-writer rule and spec tables
-# shared with the ownership lint (rh-registry; SPR-005 ruling 3). Both are plane-A workspace crates.
+# SPR-005: the keyed RNG for StepCtx::rng. rh-core sits at the bottom with rh-ids: rh-registry
+# depends on rh-core, never the reverse (Architect ruling 2026-10-16).
 [dependencies]
 rh-ids = { version = "0.0.0", path = "../rh-ids" }
+
+# Tests that register systems against the real specs load them with rh-registry's spec reader.
+# A dev-dependency only: the library never depends on rh-registry.
+[dev-dependencies]
 rh-registry = { version = "0.0.0", path = "../rh-registry" }

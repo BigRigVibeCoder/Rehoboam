@@ -5,8 +5,17 @@ pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Month, Phase::Vital),
 ];
 #[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {
     DeathTime = 1,  // key: (person, month)
+}
+impl RngPurpose {
+    /// The purpose's name in the spec's `[[rng]]` table.
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::DeathTime => "death_time",
+        }
+    }
 }
 pub struct Params {
     pub e0: Fixed,  // bounds checked against the Registry at load

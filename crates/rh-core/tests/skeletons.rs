@@ -4,7 +4,9 @@
 //! Each `tests/generated/*.rs` is the unedited output of `lint_odd.py --rust <id>`
 //! (`bin/gen_skeletons.py --check` keeps it so). Each module below brings `Fixed`, `Phase` and
 //! `Pulse` into scope, `include!`s its skeleton and implements `SpecPurpose` for the generated
-//! `RngPurpose` enum: the only way a system names a purpose (ruling 2).
+//! `RngPurpose` enum with the generated `name()`: the only way a system names a purpose (ruling 2).
+//! Only the variant list (`SpecPurpose::ALL`) is written by hand, and registration checks it against
+//! the spec.
 //!
 //! Acceptance (T-03): the S5 and M2 skeletons compile, and so do S6 and S7.
 //! Acceptance (T-06): a purpose not in the spec fails registration; a spec purpose with no code use
@@ -27,7 +29,7 @@ use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
 
 macro_rules! skeleton {
-    ($module:ident, $file:literal, [$($variant:ident => $name:literal),* $(,)?]) => {
+    ($module:ident, $file:literal, [$($variant:ident),* $(,)?]) => {
         #[allow(dead_code, reason = "generated items a stub does not use")]
         #[allow(clippy::all, clippy::pedantic, reason = "generated code is never hand-edited")]
         mod $module {
@@ -37,19 +39,25 @@ macro_rules! skeleton {
             impl rh_core::system::SpecPurpose for RngPurpose {
                 const ALL: &'static [Self] = &[$(Self::$variant),*];
                 fn name(&self) -> &'static str {
-                    match self {
-                        $(Self::$variant => $name),*
-                    }
+                    RngPurpose::name(*self) // the generated name (lint_odd.py --rust)
                 }
             }
         }
     };
 }
 
-skeleton!(s5, "generated/S5_daily_life.rs", [ActivityBlock => "activity_block", EncounterOutcome => "encounter_outcome"]);
-skeleton!(m2, "generated/M2_demography.rs", [DeathTime => "death_time"]);
-skeleton!(s6, "generated/S6_artifacts.rs", [LossOnDeath => "loss_on_death", TheftOutcome => "theft_outcome", SearchFind => "search_find"]);
-skeleton!(s7, "generated/S7_vows.rs", [GrudgeForm => "grudge_form", BreakMode => "break_mode"]);
+skeleton!(
+    s5,
+    "generated/S5_daily_life.rs",
+    [ActivityBlock, EncounterOutcome]
+);
+skeleton!(m2, "generated/M2_demography.rs", [DeathTime]);
+skeleton!(
+    s6,
+    "generated/S6_artifacts.rs",
+    [LossOnDeath, TheftOutcome, SearchFind]
+);
+skeleton!(s7, "generated/S7_vows.rs", [GrudgeForm, BreakMode]);
 
 /// A system built on a skeleton: everything the spec fixes comes from the generated module.
 struct OnSkeleton {
@@ -215,7 +223,7 @@ fn s5_and_m2_register_on_their_skeletons() {
             Box::new(s5_system(s5::RngPurpose::names())),
             Box::new(m2_system()),
         ],
-        &t,
+        &t.spec_table(),
     )
     .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(r.ids(), ["M2.demography", "S5.daily_life"]);
@@ -227,10 +235,10 @@ fn s5_and_m2_register_on_their_skeletons() {
             == "S5.daily_life: reads person.residence from S3.migration, which is not registered")
     );
     // The code declarations are what `rh-cli ownership` will count "from code".
-    assert_eq!(r.lint_accesses().len(), 2);
+    assert_eq!(r.accesses().len(), 2);
 }
 
-/// A generated-style enum whose hand-written names drift from the spec.
+/// An enum whose names drift from the spec, as a stale or hand-written one would.
 #[allow(dead_code, reason = "only the names matter")]
 enum Misspelt {
     ActivityBlock,
@@ -250,7 +258,10 @@ impl SpecPurpose for Misspelt {
 #[test]
 fn an_undeclared_purpose_fails_registration() {
     let t = support::real_ownership();
-    let Err(e) = register(vec![Box::new(s5_system(Misspelt::names()))], &t) else {
+    let Err(e) = register(
+        vec![Box::new(s5_system(Misspelt::names()))],
+        &t.spec_table(),
+    ) else {
         panic!("a purpose missing from S5's [[rng]] must fail registration");
     };
     let rng: Vec<_> = e
@@ -274,8 +285,11 @@ fn an_undeclared_purpose_fails_registration() {
 #[test]
 fn a_spec_purpose_with_no_code_use_is_reported() {
     let t = support::real_ownership();
-    let r = register(vec![Box::new(s5_system(vec!["activity_block"]))], &t)
-        .unwrap_or_else(|e| panic!("{e}"));
+    let r = register(
+        vec![Box::new(s5_system(vec!["activity_block"]))],
+        &t.spec_table(),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     assert!(
         r.reports()
             .iter()
@@ -286,7 +300,7 @@ fn a_spec_purpose_with_no_code_use_is_reported() {
             "activity_block",
             "activity_block",
         ]))],
-        &t,
+        &t.spec_table(),
     );
     assert!(dup.is_err_and(|e| {
         e.violations

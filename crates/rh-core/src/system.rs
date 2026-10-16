@@ -7,8 +7,8 @@
 //! The skeleton `lint_odd.py --rust <id>` generates (ADR-0033 §3) compiles against this module:
 //! it names [`Pulse`], [`Phase`] and [`Fixed`] unqualified, so a system module brings them in with
 //! `use rh_core::{Fixed, Phase, Pulse};` and `include!`s its generated file. The skeleton's
-//! `SCHEDULE` feeds [`PulseBinding::from_schedule`], and its `RngPurpose` enum implements
-//! [`SpecPurpose`], the only way a system names an RNG purpose (ruling 2).
+//! `SCHEDULE` feeds [`PulseBinding::from_schedule`], and its `RngPurpose` enum (with its generated
+//! `name()`) implements [`SpecPurpose`], the only way a system names an RNG purpose (ruling 2).
 //!
 //! Signatures that differ from the illustrative one in `05.1` §2 (the final ones are frozen here,
 //! P0):
@@ -163,9 +163,10 @@ impl std::error::Error for SimError {}
 /// An RNG purpose enum generated from a spec's `[[rng]]` table (`lint_odd.py --rust`, the
 /// `RngPurpose` enum). Ruling 2: this is the only way a system names a purpose.
 ///
-/// The generated enum carries no names yet, so the system module implements this trait next to
-/// the `include!`; registration checks every name against the spec (T-06), so a misspelt or
-/// stale name fails registration rather than drawing from the wrong stream.
+/// The system module implements it next to the `include!`: `ALL` lists the variants and `name`
+/// returns the generated `RngPurpose::name()`. Registration checks every name against the spec
+/// (T-06), so a stale or incomplete list fails registration (or is reported) rather than drawing
+/// from the wrong stream.
 pub trait SpecPurpose: Sized + 'static {
     /// Every variant, in spec order.
     const ALL: &'static [Self];

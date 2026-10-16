@@ -15,13 +15,14 @@
 mod support;
 
 use rh_core::access::{Lag, Plane};
+use rh_core::ownership::{Declaration, Source, single_writer};
 use rh_core::register::{RegistrationError, register, system_id};
 use rh_core::{Phase, Pulse};
-use rh_registry::ownership::{Declaration, Source, single_writer};
-use support::{Stub, agreeing_ownership, ownership};
+use rh_registry::ownership::SystemSpec;
+use support::{Stub, agreeing_specs, spec_table};
 
 fn refused(stubs: Vec<Stub>, specs_from: &[Stub]) -> RegistrationError {
-    let t = agreeing_ownership(specs_from);
+    let t = agreeing_specs(specs_from);
     match register(stubs.into_iter().map(Stub::boxed).collect(), &t) {
         Ok(r) => panic!("registration should fail; order {:?}", r.ids()),
         Err(e) => e,
@@ -76,7 +77,7 @@ fn registration_order_does_not_matter() {
         .reads("a.x", "X1.a", Lag::SameInstant)
         .writes("b.x")
         .at(Pulse::Day, Phase::Production);
-    let t = agreeing_ownership(&[a.clone(), b.clone()]);
+    let t = agreeing_specs(&[a.clone(), b.clone()]);
     let one =
         register(vec![a.clone().boxed(), b.clone().boxed()], &t).unwrap_or_else(|e| panic!("{e}"));
     let two = register(vec![b.boxed(), a.boxed()], &t).unwrap_or_else(|e| panic!("{e}"));
@@ -160,7 +161,7 @@ fn a_same_instant_read_against_phase_order_needs_a_lag() {
         .reads("w.x", "X1.w", Lag::PreviousPulse)
         .writes("r.x")
         .at(Pulse::Day, Phase::Production);
-    let t = agreeing_ownership(&[w.clone(), lagged.clone()]);
+    let t = agreeing_specs(&[w.clone(), lagged.clone()]);
     assert!(register(vec![w.boxed(), lagged.boxed()], &t).is_ok());
 }
 
@@ -188,7 +189,7 @@ fn a_same_instant_cycle_within_a_phase_needs_a_lag() {
         .writes("b.x")
         .reads("a.x", "X1.a", Lag::Lagged)
         .at(Pulse::Day, Phase::Exchange);
-    let t = agreeing_ownership(&[a.clone(), b_lagged.clone()]);
+    let t = agreeing_specs(&[a.clone(), b_lagged.clone()]);
     let r = register(vec![a.boxed(), b_lagged.boxed()], &t).unwrap_or_else(|e| panic!("{e}"));
     // b reads a lagged, a reads b at the same instant: b first.
     assert_eq!(r.order(Phase::Exchange), ["X2.b", "X1.a"]);
@@ -200,7 +201,7 @@ fn a_same_instant_cycle_within_a_phase_needs_a_lag() {
 fn the_checker_and_the_lint_share_one_rule() {
     let t = support::real_ownership();
     assert_eq!(t.problems, vec![], "the real specs are clean");
-    let declarations: Vec<Declaration> = t.specs.values().map(Declaration::from_spec).collect();
+    let declarations: Vec<Declaration> = t.specs.values().map(SystemSpec::declaration).collect();
     let (spec_owners, spec_problems) = single_writer(&declarations, Source::Spec);
     let (code_owners, code_problems) = single_writer(&declarations, Source::Code);
     assert_eq!(spec_owners, t.owners);
@@ -233,5 +234,5 @@ fn system_ids_are_name_derived_and_distinct_for_the_registry() {
         "no two Registry systems share an RNG system_id"
     );
     assert_eq!(system_id("M2.demography"), system_id("M2.demography"));
-    let _ = ownership(&[]);
+    let _ = spec_table(&[]);
 }
