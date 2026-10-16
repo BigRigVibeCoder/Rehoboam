@@ -172,6 +172,7 @@ run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
 run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&
+run "Rust: doctests, incl. typed-ID compile-fail cases (cargo test --doc; SPR-002 T-01)" "pass:compile fail ... ok" cargo test --doc --workspace --locked &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 # Tier 5 — golden vectors
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
