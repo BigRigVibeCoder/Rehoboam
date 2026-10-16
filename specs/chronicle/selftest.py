@@ -42,13 +42,13 @@ ACT_WEIGHTS = [0.25, 0.10, 0.15, 0.05, 0.05, 0.40]
 
 
 def _emit(rnd, state, a, b, act, trust_value, out, max_step):
-    """Append one event with emission-ordered id (day << 24 | seq) and an anchored trust(B, A) snapshot."""
+    """Append one event and an anchored trust(B, A) snapshot. The id is the timeline's event counter, as in
+    rh-events: one counter per timeline, assigned in emission order, so id order is emission order. The id
+    carries no date; the day is tick // MIN_PER_DAY."""
     events, roles, snaps, edges, last_ids = out
     state["tick"] += rnd.randint(0, max_step)
-    day = state["tick"] // MIN_PER_DAY
-    seq = state["day_seq"][day]
-    state["day_seq"][day] += 1
-    eid = (day << 24) | seq
+    eid = state["next_id"]
+    state["next_id"] += 1
     events.append((0, eid, state["tick"], 1, act, None, 0, 100, 0, 0, None, None))
     roles.append((0, eid, a, 0, 0))
     roles.append((0, eid, b, 1, 0))
@@ -62,7 +62,7 @@ def _emit(rnd, state, a, b, act, trust_value, out, max_step):
 def synth_uniform(n_entities=300, n_events=200_000, seed=7):
     rnd = random.Random(seed)
     out = ([], [], [], [], [])
-    state = {"tick": 0, "day_seq": defaultdict(int)}
+    state = {"tick": 0, "next_id": 0}
     for _ in range(n_events):
         act = rnd.choices(ACTS, ACT_WEIGHTS)[0]
         a = rnd.randrange(n_entities)
@@ -90,7 +90,7 @@ def synth_clustered(n_entities=1_000, partners_each=10, n_events=200_000, events
     mean_step = 360 * MIN_PER_DAY / (events_per_actor_year * n_entities)
     trust: dict[tuple[int, int], int] = {}
     out = ([], [], [], [], [])
-    state = {"tick": 0, "day_seq": defaultdict(int)}
+    state = {"tick": 0, "next_id": 0}
     for _ in range(n_events):
         act = rnd.choices(ACTS, ACT_WEIGHTS)[0]
         a = rnd.randrange(n_entities)

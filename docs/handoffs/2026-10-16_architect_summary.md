@@ -13,8 +13,8 @@
 | SPR-005 | Time, phases, `SystemModel`, `AccessSpec`, a parallel scheduler identical at every thread count | Merged (#21) | VER-SPR-005 PASS |
 | SPR-006 | Agenda of timers, lifecycle command queues, event bus, invariants with replayable crash artifacts | Merged (#26) | VER-SPR-006 PASS |
 | SPR-007 | Plane hashes, keyframes (Arrow IPC with zstd), the SQLite journal, the unsynced guard, `resume` | Merged (#25) | VER-SPR-007 PASS |
-| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | PR #28. T-00, the smoke world and `StepCtx::stream` are done (CI green); the rest resumes now that SPR-007 has merged | — |
-| SPR-009 | Benchmarks and the regression gate | Developer building (benches 7 and 8, the gate, the observer); Tester's plan written | — |
+| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | PR #28: every task done, CI green on `29abe04` (PR tier 11 min 28 s). Tester's phase 2 running. The cross-machine check waits for your session | — |
+| SPR-009 | Benchmarks and the regression gate | PR #34. Developer building: benches 7 and 8 and the instruction-count gate, now pinning down count drift from the executable's path; Tester's plan written | — |
 | SPR-010 | `rh-core::fixed` | Merged (#5) | VER-SPR-010 PASS |
 
 Escapes found after a sprint closed: 1 (documentation only) across 8 closed sprints (SPR-001 to SPR-007, SPR-010).
@@ -44,7 +44,8 @@ All are recorded in `docs/decisions-log.md`:
 - item 15 goes into a GOV-003 §6 failure-modes table;
 - Rerun is dropped from P0, and the TUI stub moves to P1a;
 - bench 4's baseline moves to the first P1a field sprint;
-- at most 3–4 agent sessions run at once;
+- at most 3–4 agent sessions run at once (later relaxed: "cap reset, should be good to churn those tokens");
+- Fable sessions take independent reviews, spec drafting and Testers of Opus-developed sprints; a Tester always runs on a different model from its Developer;
 - you open the laptop `adjutant` session when SPR-008 is ready.
 
 ## 4. Waiting on you
@@ -52,6 +53,7 @@ All are recorded in `docs/decisions-log.md`:
 | Item | Recommendation | Confidence |
 |---|---|---|
 | **The laptop:** RUN-001 (BCK-002 A-16) and one `adjutant` session of about 2 hours, for SPR-008 T-02 and SPR-009 T-04 | I will ping you when SPR-008 is ready | — |
+| **The P1a plan, at G0:** D30 to D36 in `docs/decisions_pending.md`. They cover the walking skeleton (SPR-011, as three sprints), rung 0's scope, the 100k claim, moving S5 F1 and M1 F1 to P1b, runnable G1a tests, inheritance without property, and the `T1.minds`/`M7.dynasty` specs | Each has a recommendation; the plan is `CODEX/05_PROJECT/PRJ-002` | 70–80% |
 
 Resolved since the first version of this summary:
 - you confirmed my reading of Laws 2 and 3;
@@ -59,7 +61,7 @@ Resolved since the first version of this summary:
 
 ## 5. Risks
 
-- **The usage limit.** Six agent sessions plus the Architect hit the five-hour limit once (10:03–10:07Z). From now on at most 3–4 sessions are active at once.
+- **The usage limit.** Six agent sessions plus the Architect hit the five-hour limit once (10:03–10:07Z). You later relaxed the 3–4 session cap, and Fable's separate weekly limit now carries reviews and spec drafting.
 - **Tests on small worlds.** DEF-5 escaped two rounds of testing because every keyframe test used one small world. Testers are now asked to vary world size and seed in every property test.
 - **Container loss.** Drafts in a cloud container are lost if it is reclaimed. Working state is committed here.
 
@@ -73,7 +75,14 @@ Resolved since the first version of this summary:
   | SPR-008 | `session_01SoW2LBVGVDsxGFnMPnkoCx` | `session_01MLXhAvqPwGMV9FyKu2uiU6` |
   | SPR-009 | `session_018ggWNPkngHp6tw4r1dimut` | `session_01GwtdHCuGkDRRwPKeF2y8H3` |
 
-  The P1a spec drafter, writing `T1.minds` and `M7.dynasty` for the Architect's review, is `session_0197w1yjvJqAKATkCbw9KanD`.
+  P1a spec sessions:
+
+  | Role | Session | Work |
+  |---|---|---|
+  | Spec drafter: `T1.minds`, `M7.dynasty` | `session_0197w1yjvJqAKATkCbw9KanD` | PR #32 (draft; awaits D36), round 4 |
+  | Spec drafter: skeleton specs (M2 freeze, Registry verbs, channel A, `life_ends`, rung manifests) | `session_012dXsVBVUA3yTBQybqVbxe6` | PR #37 (draft), stacked on #32 |
+  | Spec drafter (Fable): the Registry effect language v0, with the kinship relations | `session_017JVNkiac6bxeP4MpihBfxd` | for SPR-017 |
+  | Independent reviewer (Fable) | `session_0172pYwXgkfpB3tkErgMDHsc` | REV-P1a, rounds 1 and 3 |
 
 - **SPR-008:** its keyframe-assisted bisect must go through `rh_snapshot::resume`, which calls `Replay::check_anchor` (SPR-007 GAP-7, GAP-10). Its journaled input follows the host order: check, journal, submit, one row per input.
 - **BCK-002 A-33** (filed): when non-material journaled inputs reach the engine, count them as accepted inputs, like material ones.

@@ -1,6 +1,8 @@
 # 09 — Verification & Validation Plan
 
 *Status: Draft v1.1 (2026-10-15). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*v1.6 (2026-10-16): V-SCALE-04's end event is in channel A, not the journal, which holds inputs only.*
+*v1.5 (2026-10-16): V-INSP-03 lists `rh-sample`, as `bin/lint_arch.py` allows; V-INSP-05 uses the one engine-crate list of `05.0` §6.*
 *v1.4 (2026-10-16): ADR-0035, the saga engine. New V-SAGA suite (§2.20, V-SAGA-01 to V-SAGA-21), V-INSP-05 (engine purity) and V-HUM-13 (the G3 season); V-R3D-02, 03, 05 and 09 withdrawn; band gate status under ADR-0035 (§3.1): economic-history bands become report-only; gates G1a–G5 re-aimed (§5); the matrix follows the new phases (§6).*
 *v1.3 (2026-10-16): D27 (ADR-0034): V-DET-15, V-COG-09 and V-COG-11 withdrawn; V-DET-04 records push inputs only; new V-LLM-11 for LLM-9.*
 *v1.2 changes (R12 batches 1–3): era-conditioned and literature-sourced bands; band tags for kind, role (calibration / held-out), level and discrimination; CI-based gate with no held-out failures; non-ergodicity and typicality reporting; submodel tournaments (§3.8); V-ERA (§3.6) and V-SCALE (§3.7) suites.*
@@ -371,11 +373,11 @@ Playwright drives the console against the real `rh-server` and against the mock 
 
 | ID | Test | Method | Gate |
 |---|---|---|---|
-| V-INSP-01 | Licences (LIC-1) | cargo-deny, pip-licenses and license-checker on every PR; provenance check for weights and assets | No GPL, AGPL, non-commercial or territorially restricted item in shipped artifacts |
+| V-INSP-01 | Licences (LIC-1) | cargo-deny, pip-licenses and license-checker on every PR; provenance check for weights and assets | Personal-use licence mode (D19; ADR-0021 as amended): the licence ledger (`artifacts/licence_ledger.txt`) lists every dependency and never fails a build. Fails only on an item whose licence forbids the use itself, or on copied code that carries no licence |
 | V-INSP-02 | ADR conformance | Reviewer-agent checklist on every PR (`13` §7) | Signed off |
-| V-INSP-03 | Crate boundaries (EVO-1) | Dependency-graph lint: system crates depend only on `rh-core`, `rh-ids`, `rh-events`, `rh-registry` and contract crates | Zero violations |
+| V-INSP-03 | Crate boundaries (EVO-1) | Dependency-graph lint (`bin/lint_arch.py`): system crates depend only on `rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry` and contract crates (`rh-sample` by the SPR-003 Architect ruling) | Zero violations |
 | V-INSP-04 | Observability (OBS-1) [D] | Headless run with Rerun and the TUI | Per-system timing, invariant counters and sampled agents on the `sim_tick` timeline |
-| V-INSP-05 | Engine purity (EVO-4; ADR-0035 §6) | Dependency-graph lint over the engine crates (`rh-core`, `rh-ids`, `rh-events`, `rh-registry`, `rh-manifest`, `rh-contracts`, `rh-snapshot`, `rh-sys-*`, `rh-sifter`, `rh-server`, `rh-cli`) against one deny-list of media, HTTP-UI and LLM-client crates (e.g. `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`), kept in one place, with a positive control | Zero violations. Planned: BCK-002 A-14 adds the rule to `bin/lint_arch.py` in P1a |
+| V-INSP-05 | Engine purity (EVO-4; ADR-0035 §6) | Dependency-graph lint over the engine crates (`rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry`, `rh-manifest`, `rh-contracts`, `rh-snapshot`, `rh-cli`, `rh-sys-*` (planned), `rh-sifter` (planned), `rh-server` (planned), `rh-minds` (planned), `rh-worldgen` (planned); `05.0` §6) against one deny-list of media, HTTP-UI and LLM-client crates (e.g. `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`), kept in one place, with a positive control | Zero violations. Planned: BCK-002 A-14 adds the rule to `bin/lint_arch.py` in P1a |
 
 ### 2.19 World Stream (V-STR; ADR-0030, `05.10`)
 
@@ -647,7 +649,7 @@ Worlds must be able to pass through eras in one run. These tests check that era 
 | V-SCALE-01 | Invariants and determinism across the range | The same build at N ∈ {1, 10, 60 (`uz_job`), 1k, 10k, 100k, 1M}; 100 years each (1,000 at N ≤ 10k) | 0 invariant violations; identical plane hashes at 1/2/4/N threads; journal replay exact |
 | V-SCALE-02 | No false statistics at small N | Run the certification harness on N = 1, 10 and 60 worlds | Every band reports INSUFFICIENT or a valid result; none passes or fails below its declared minimum |
 | V-SCALE-03 | Cost scales with work | Per-tick wall time against N and active timers | Fixed per-tick overhead ≤ 1 ms; a 1-person world runs 1,000 years at daily cadence in ≤ 10 s |
-| V-SCALE-04 | Extinction is a valid end | Worlds driven to zero population | A journaled end event; chronicle, console and replay stay consistent |
+| V-SCALE-04 | Extinction is a valid end | Worlds driven to zero population | An end event in channel A (the journal holds inputs only); chronicle, console and replay stay consistent |
 | V-SCALE-05 | Agentive catalysts are bounded | `uz_job` with the Adversary under deterministic and scripted-player policies; 64 seeds | No verb outside the stage scope; `spare_life` never violated; the protagonist's renounce/hold-fast outcome varies across seeds (both outcomes occur at least once), which shows it is not forced |
 | V-SCALE-06 | Personal-arc liveness (micro) | `uz_job` 64 seeds × 10 years | ≥ 1 completed personal arc (trial, lament, counsel dispute or restoration) per seed-decade in ≥ 90% of seeds |
 

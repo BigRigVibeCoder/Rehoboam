@@ -1,8 +1,9 @@
--- Rehoboam Chronicle schema v0.2 (DuckDB dialect; the system of record is Parquet with the same columns).
+-- Rehoboam Chronicle schema v0.4 (DuckDB dialect; the system of record is Parquet with the same columns).
 -- Spec: docs/05_architecture/05.2 §4 and §6, 05.4 §2.3, ADR-0007, ADR-0024 (planes), ADR-0025, ADR-0026.
 -- Conventions:
 --   * Timeline-scoped composite keys.
---   * event_id = (day_index << 24) | seq_in_day. EventId order IS emission order (tick, phase, seq); no back-dating.
+--   * event_id: one counter per timeline, from 0, assigned at the scheduler's level merge (rh-events; 05.1 §2 rule 4).
+--     EventId order IS emission order (tick, phase, seq); no back-dating. The id carries no date: day = floor(tick / 1440).
 --   * tick = SimTime: signed BIGINT minutes since the world epoch. Negative values are allowed (founders born before year 0).
 --   * Each table is tagged with its plane: A authoritative, B observation, C narrative. Plane A never reads B or C.
 
@@ -128,12 +129,14 @@ CREATE TABLE IF NOT EXISTS life_interval (        -- plane A: residence, occupat
     valid_to    BIGINT
 );
 
-CREATE TABLE IF NOT EXISTS regional_aggregate (   -- plane A telemetry for commoners
+CREATE TABLE IF NOT EXISTS regional_aggregate (   -- plane A telemetry for commoners (05.2 §4; ADR-0007; DATA-1)
     timeline_id UINTEGER  NOT NULL,
     region_id   USMALLINT NOT NULL,
     month       INTEGER   NOT NULL,            -- signed month index since epoch
     metric_id   USMALLINT NOT NULL,
-    value       DOUBLE    NOT NULL
+    value       BIGINT    NOT NULL             -- fixed point, no float in plane A: raw bits at the Q16_16 scale (value / 2^16),
+                                               -- widened to i64 so counts and money fit. A rh-core::fixed::Q16_16 q stores
+                                               -- i64::from(q.to_bits()); an integer n (a count, or Money in minor units) stores n * 65536
 );
 
 -- ============================================================================================ plane B
