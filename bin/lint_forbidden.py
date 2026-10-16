@@ -11,7 +11,8 @@ reports its metadata). Rules:
     thread-rng        rand::thread_rng, ThreadRng, rand::rng: thread-local, unkeyed RNG.
     std-rng           StdRng, SmallRng, OsRng, from_entropy, from_os_rng, getrandom: unkeyed or
                       entropy-seeded RNG, some with algorithms that change between releases.
-    rand-random       rand::random: thread-local RNG.
+    rand-random       rand::random and rand 0.9's random_range, random_bool, random_ratio and
+                      random_iter: thread-local RNG (DEF-1).
     mul-add           mul_add: fused multiply-add rounds differently from multiply-then-add.
     wall-clock        Instant::now, std::time::{Instant, SystemTime, UNIX_EPOCH} (also inside use
                       groups and globs), SystemTime, Utc::now, Local::now. A bare `Instant` is not
@@ -86,7 +87,10 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "rand-random",
-        re.compile(r"\brand::random\b|\brand::\{[^}]*\brandom\b"),
+        re.compile(
+            r"\brand::random\b|\brand::\{[^}]*\brandom\b"
+            r"|\brandom_(?:range|bool|ratio|iter)\b"
+        ),
         "thread-local RNG; use the keyed RNG (ADR-0006)",
     ),
     Rule(
@@ -300,12 +304,12 @@ def scan_source(source: str, path: str, report: Report) -> None:
         escape = valid.get(finding.line)
         if escape is not None:
             report.escaped.append(
-                f"ESCAPE [{RULE_ID}/{finding.rule}] {where}: `{finding.text}`; "
+                f"ESCAPE [{RULE_ID}/{finding.rule}] `{finding.text}` at {where}; "
                 f"reason: {escape.reason}"
             )
         else:
             report.violations.append(
-                f"VIOLATION [{RULE_ID}/{finding.rule}] {where}: `{finding.text}`; {finding.why}"
+                f"VIOLATION [{RULE_ID}/{finding.rule}] `{finding.text}` at {where}; {finding.why}"
             )
     for escape in escapes:
         where = f"{escape.path}:{escape.line}"

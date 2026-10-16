@@ -1,0 +1,5 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# A plane-A crate depends on rand (DEF-1). Read with cargo metadata --no-deps: nothing is fetched.
+[workspace]
+members = ["rh-core"]
+resolver = "3"

@@ -10,6 +10,7 @@ from lint_arch import (
     EXIT_OK,
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
+    UNKEYED_RNG_CRATES,
     Crate,
     Edge,
     WorkspaceError,
@@ -155,6 +156,59 @@ def test_edges_from_crates_with_invalid_metadata_are_not_judged() -> None:
     assert [rule for rule, _ in found(crates)] == ["metadata", "metadata"]
 
 
+def with_external(base: Crate, *deps: str, dep_kind: str = "normal") -> Crate:
+    """Return ``base`` with third-party dependencies added."""
+    return Crate(
+        base.name, base.plane, base.kind, base.edges, tuple(Edge(d, dep_kind) for d in deps)
+    )
+
+
+@pytest.mark.parametrize("rng", sorted(UNKEYED_RNG_CRATES))
+def test_plane_a_may_not_depend_on_an_unkeyed_rng_crate(rng: str) -> None:
+    """Every crate on the single list is refused in plane A (DEF-1)."""
+    crates = engine(with_external(crate("rh-minds"), rng))
+    assert found(crates) == [("rng-crate", "rh-minds")]
+
+
+def test_the_rng_rule_covers_dev_dependencies_and_rh_ids() -> None:
+    """rh-ids may not take rand either, and a dev-dependency still counts."""
+    crates = engine(with_external(crate("rh-minds"), "rand", dep_kind="dev"))
+    crates = [with_external(c, "getrandom") if c.name == "rh-ids" else c for c in crates]
+    assert sorted(found(crates)) == [("rng-crate", "rh-ids"), ("rng-crate", "rh-minds")]
+
+
+@pytest.mark.parametrize("block", ["rand_core", "rand_chacha"])
+def test_rng_building_blocks_are_allowed_only_in_rh_ids(block: str) -> None:
+    """rand_core and rand_chacha serve the keyed RNG in rh-ids and nowhere else in plane A."""
+    allowed = [with_external(c, block) if c.name == "rh-ids" else c for c in engine()]
+    assert found(allowed) == []
+    assert found(engine(with_external(crate("rh-minds"), block))) == [("rng-crate", "rh-minds")]
+
+
+def test_crates_outside_plane_a_may_use_any_rng() -> None:
+    """The rule guards plane A; a tool or plane-C crate may use rand."""
+    crates = engine(
+        with_external(crate("rh-bench", plane="tool", kind="tool"), "rand"),
+        with_external(crate("rh-sifter", plane="C"), "rand", "fastrand"),
+    )
+    assert found(crates) == []
+
+
+def test_an_alias_does_not_hide_an_rng_crate() -> None:
+    """The metadata names the package, not the alias; `dice = { package = "rand" }` is rand."""
+    document = {
+        "workspace_members": ["path+file:///rh-core#0.0.0"],
+        "packages": [
+            _package(
+                "rh-core",
+                [{"name": "rand", "rename": "dice", "source": "registry+https://x", "kind": None}],
+                {"rehoboam": {"plane": "A", "kind": "core"}},
+            )
+        ],
+    }
+    assert found(crates_from_metadata(document)) == [("rng-crate", "rh-core")]
+
+
 def _package(
     name: str, deps: list[dict[str, object]], meta: dict[str, object] | None
 ) -> dict[str, object]:
@@ -188,6 +242,7 @@ def test_crates_from_metadata_keeps_only_edges_between_workspace_crates() -> Non
     crates = crates_from_metadata(document)
     assert [c.name for c in crates] == ["rh-core", "rh-ids"]
     assert crates[0].edges == (Edge("rh-ids", "dev"), Edge("rh-ids", "normal"))
+    assert crates[0].external == (Edge("libm", "normal"),)
     assert (crates[0].plane, crates[0].kind) == ("A", "core")
     assert crates[1].kind == "7"
 
@@ -214,6 +269,8 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("plane_a_to_b", "V-PLN-01"),
         ("plane_a_to_c", "V-PLN-01"),
         ("missing_metadata", "metadata"),
+        ("plane_a_rng_crate", "rng-crate"),
+        ("rng_building_block_outside_ids", "rng-crate"),
     ],
 )
 def test_main_catches_each_fixture(

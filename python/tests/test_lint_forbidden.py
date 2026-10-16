@@ -106,6 +106,13 @@ def test_raw_identifiers_are_code() -> None:
         ("let r = OsRng;", "std-rng"),
         ("let x: u8 = rand::random();", "rand-random"),
         ("use rand::{random, Rng};", "rand-random"),
+        ("let x = rand::random_range(0..10);", "rand-random"),
+        ("let b = rand::random_bool(0.5);", "rand-random"),
+        ("let b = random_ratio(1, 3);", "rand-random"),
+        ("let n = rand::random_iter::<u8>().take(3).count();", "rand-random"),
+        ("let r = SmallRng::seed_from_u64(1);", "std-rng"),
+        ("let r = Generator::from_os_rng();", "std-rng"),
+        ("getrandom::fill(&mut buf);", "std-rng"),
         ("let y = a.mul_add(b, c);", "mul-add"),
         ("let y = f64::mul_add(a, b, c);", "mul-add"),
         ("let t = Instant::now();", "wall-clock"),
@@ -204,26 +211,52 @@ def test_rust_files_skip_only_the_top_level_target_directory(tmp_path: Path) -> 
     assert found == ["src/lib.rs", "src/target/mod.rs"]
 
 
+# file stem -> (rule, the token the report names); mirrors FORBIDDEN_API_CONTROLS in check_all.sh.
 PLANTED = {
-    "hash_map": "hash-collections",
-    "hash_set": "hash-collections",
-    "thread_rng": "thread-rng",
-    "std_rng": "std-rng",
-    "rand_random": "rand-random",
-    "mul_add": "mul-add",
-    "instant": "wall-clock",
-    "system_time": "wall-clock",
-    "unsafe": "unsafe",
+    "hash_map": ("hash-collections", "HashMap"),
+    "hash_set": ("hash-collections", "HashSet"),
+    "thread_rng": ("thread-rng", "thread_rng"),
+    "thread_rng_type": ("thread-rng", "ThreadRng"),
+    "rand_rng": ("thread-rng", "rand::rng"),
+    "std_rng": ("std-rng", "StdRng"),
+    "small_rng": ("std-rng", "SmallRng"),
+    "os_rng": ("std-rng", "OsRng"),
+    "from_entropy": ("std-rng", "from_entropy"),
+    "from_os_rng": ("std-rng", "from_os_rng"),
+    "getrandom": ("std-rng", "getrandom"),
+    "rand_random": ("rand-random", "rand::random"),
+    "random_range": ("rand-random", "random_range"),
+    "random_bool": ("rand-random", "random_bool"),
+    "random_ratio": ("rand-random", "random_ratio"),
+    "random_iter": ("rand-random", "random_iter"),
+    "mul_add": ("mul-add", "mul_add"),
+    "instant": ("wall-clock", "Instant::now"),
+    "system_time": ("wall-clock", "SystemTime"),
+    "unsafe": ("unsafe", "unsafe"),
 }
 
 
-@pytest.mark.parametrize(("name", "rule"), sorted(PLANTED.items()))
+@pytest.mark.parametrize(("name", "expected"), sorted(PLANTED.items()))
 def test_main_catches_each_planted_file(
-    name: str, rule: str, capsys: pytest.CaptureFixture[str]
+    name: str, expected: tuple[str, str], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Each positive-control file fails the gate with its own rule."""
+    """Each positive-control file holds one API, reported under its own rule with its token."""
+    rule, token = expected
     assert main(["--scan", str(FIXTURES / "planted" / f"{name}.rs")]) == EXIT_VIOLATIONS
-    assert f"VIOLATION [V-DET-19/{rule}]" in capsys.readouterr().out
+    violations = [v for v in capsys.readouterr().out.splitlines() if v.startswith("VIOLATION")]
+    assert len(violations) == 1
+    assert violations[0].startswith(f"VIOLATION [V-DET-19/{rule}] `{token}` at ")
+
+
+def test_check_all_runs_a_control_for_every_planted_file() -> None:
+    """The controls in check_all.sh name every planted file with its rule and token."""
+    script = (REPO / "bin" / "check_all.sh").read_text(encoding="utf-8")
+    listed = script.split('FORBIDDEN_API_CONTROLS="', 1)[1].split('"', 1)[0].split()
+    parsed = {}
+    for spec in listed:
+        name, rule, token = spec.split(":", 2)
+        parsed[name] = (rule, token)
+    assert parsed == PLANTED
 
 
 def test_every_planted_file_is_covered_by_a_test() -> None:
