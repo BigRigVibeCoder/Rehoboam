@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [BCK-001, AGT-001, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.4.0
+version: 1.5.0
 ---
 
 > **BLUF:** The Architect's own work stream, run in parallel with development: operating-model upkeep, audit tooling, gate preparation, and documentation debt.
@@ -48,3 +48,4 @@ version: 1.4.0
 | A-28 | Exact `start_of_day` and `previous_pulse` read lags (`05.1` §2 rule 4): column snapshots taken at the start of the day and at the reader's previous firing. P0 reads all three non-edge lags at the start of the instant (Architect ruling, SPR-005 G-b). That is exact for S5 but not for `previous_pulse` (S6, S7) or for an Hour reader at `start_of_day`. First step, in SPR-006: `Engine::new` refuses those reads with `Unsupported` until this item lands (VER-SPR-005) | Before the first system that declares them runs (P1a: S5, S6, S7) | Open |
 | A-29 | Key `StepCtx::rng` draws by the drawn entity's epoch (ADR-0025), which needs a typed entity key in the draw API instead of an untyped `u64`. P0 draws at epoch 0 (SPR-005; SPR-006 carry-forward) | Before the first material input that touches a system that draws | Open |
 | A-30 | Same-instant conflicts in lifecycle application: timers due at the same (t, phase) fire simultaneously against the same state (SPR-006 G2), so a person can die and act in one slot. When the queue is applied in `(tick, phase, PersonId, seq)` order, a command for a person who died earlier in that application is dropped, with a diagnostic | With the first death command (M2, P1a) | Open |
+| A-31 | A lifecycle command queue that its owner never drains grows silently (VER-SPR-006-TEST GAP-7: 101 commands in 100 days). Add an invariant on each queue's age or length, with the owner's declared pulse as the allowance | With the first real lifecycle command (M2, P1a) | Open |
