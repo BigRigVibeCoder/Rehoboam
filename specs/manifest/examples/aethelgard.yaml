@@ -2,7 +2,7 @@
 # blood-test-detectable hive infection.
 # The horizon is decades, not millennia (R09 §7). Witch-hunt dynamics emerge from base rates.
 manifest_version: 0
-registry_version: "0.1.0"
+registry_version: "0.2.0"
 world:
   id: aethelgard
   display_name: "New Aethelgard Metroplex"

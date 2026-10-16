@@ -691,7 +691,7 @@ mod tests {
     #[test]
     fn registry_v0_loads_every_section() {
         let reg = Registry::load(&registry_path()).unwrap();
-        assert_eq!(reg.registry_version, "0.1.0");
+        assert_eq!(reg.registry_version, "0.2.0");
         assert!(reg.systems.contains_key("M2.demography"));
         assert!(reg.systems.contains_key("S5.daily_life"));
         assert_eq!(

@@ -2,7 +2,7 @@
 # feudal realm with dragons and a father–son succession catalyst.
 # This is the draft's "Caldera of Val-Khor", re-expressed in Registry terms (docs/05_architecture/05.5 §7).
 manifest_version: 0
-registry_version: "0.1.0"
+registry_version: "0.2.0"
 world:
   id: val_khor
   display_name: "The Caldera of Val-Khor"
