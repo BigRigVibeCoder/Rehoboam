@@ -44,11 +44,11 @@ All items below have been validated with executable Python prototypes located in
 
 ### Item 4: Macro-to-Micro Municipal Impulse Bridge (Micropolis 2D Grid)
 * **Prototype:** `docs/red_team/prototypes/prototype_4_micropolis_siege.py`
-* **Vulnerability:** Running millimeter physics or individual villager digestion during a siege would crush engine frame rates.
-* **Architectural Fix:** A clean **Macro-to-Micro Impulse Protocol**:
-  1. Strategic army encirclement downsamples to a simple contract: `ExternalInflow = 0` and `RoadAccess[Gate] = Blocked`.
-  2. Local 2D grid layers (Micropolis cellular automata) handle the municipal decay naturally: granary drops $\rightarrow$ famine riot $\rightarrow$ cellular fire spread $\rightarrow$ internal gate breach.
-  3. Damaged tiles store reverse foreign keys: `Tile.last_mutation_event_id = 4821`.
+* **Vulnerability:** Running millimeter physics or individual villager digestion during a siege would crush engine frame rates. Conversely, if a downstream 2D grid simulation could cause riots or breaches that feed back into the world state, it would violate engine headless purity.
+* **Architectural Fix (Unidirectional Contract):**
+  1. *Plane A Simulates & Decides:* The Rust core simulates famine (`M4`) and siege warfare (`M9`), deterministically emitting authoritative events (e.g. `FAMINE_RIOT`, `GATE_BREACHED`).
+  2. *Micropolis is Pure Receiver:* The 2D tile engine never feeds back into Plane A. It acts strictly as an impulse consumer, visually rendering cellular fire spread, fleeing citizen sprites, and crumbled walls to match the Parquet chronicle.
+  3. *Zero Rust Grid Physics:* The Rust core never knows what a tile or pixel is; the user gets the nostalgic 2D SimCity spectacle purely downstream.
 * **Target Spec:** Downstream 2D Settlement Bridge, `rh-events`.
 
 ---
