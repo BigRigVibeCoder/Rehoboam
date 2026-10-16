@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, ADR-0006, VER-SPR-001]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** Build the fixed-point number types that every threshold quantity in plane A must use (DET-3): `Q8_8`, `Q16_16` and money in i64 minor units, with saturating arithmetic and one documented rounding rule. Found missing from the P0 plan by the SPR-001 audit; no other sprint delivered it. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 2 agent-days.
@@ -17,7 +17,7 @@ version: 1.0.0
 # SPR-010 — rh-core::fixed
 
 - **Roadmap item:** `docs/11` P0.4 (core numerics; DET-3 is a P0 requirement) · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-001. Independent of SPR-002 and SPR-004, so it can run beside them
+- **Depends on:** SPR-001. Independent of SPR-002 and SPR-004, so it can run beside them · **Plan approved by the director 2026-10-16** (C3; the director also merges it)
 - **Binding contracts:** `05.1` §6 item 4 (numerics); `05.5` §2.1 (the effect language: fixed point only, saturating, no floats, guarded division); ADR-0006; GOV-003 §2; `specs/systems/_template.odd.toml` (the `q8_8` and `q16_16` column types)
 - **Requirements covered:** DET-3
 
@@ -66,7 +66,7 @@ version: 1.0.0
 
 | # | Blocker | Filed as | Status |
 |---|---|---|---|
-| B-1 | The director's approval of this spec (C3) | `decisions_pending.md` | Open |
+| B-1 | The director's approval of this spec (C3) | `decisions_pending.md` | **Resolved:** approved 2026-10-16 |
 
 ## Completion
 
