@@ -140,6 +140,9 @@ dependencies = [
 [[package]]
 name = "rh-events"
 version = "0.0.0"
+dependencies = [
+ "rh-ids",
+]
 
 [[package]]
 name = "rh-ids"
