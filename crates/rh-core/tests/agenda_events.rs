@@ -1249,3 +1249,73 @@ fn g1_g2_timers_in_one_slot_fire_together_in_canonical_then_key_order() {
         );
     }
 }
+
+/// DEF-3: the re-drawn time a material input produces, computed independently of `ResampleCtx`
+/// from `rh_ids`' keyed hash with the full layout of `05.1` §6 item 2:
+/// `H(world_seed, branch_salt, system_id, epoch, purpose, entity_id, t_input, k = 0)`, where
+/// `system_id` is the high 32 bits of `h64_bytes(tag("rehoboam/rh-core/system/v1"), id)` and the
+/// re-sample `entity_id` is `h64_words(tag("rehoboam/rh-core/resample-entity/v1"), [kind, raw])`.
+fn expected_redraw(seed: u64, entity: EntityRef, epoch: u32, t_input: i64) -> i64 {
+    let system = rh_ids::rng::h64_bytes(tag("rehoboam/rh-core/system/v1"), b"Y1.twins") >> 32;
+    let key = rh_ids::RngKey {
+        world_seed: seed,
+        branch_salt: BranchSalt::from_raw(0),
+        system: rh_ids::SystemId::from_raw(u32::try_from(system).unwrap()),
+        purpose: rh_ids::PurposeId::of("n"),
+        entity: h64_words(
+            tag("rehoboam/rh-core/resample-entity/v1"),
+            &[u64::from(entity.kind().tag()), entity.raw()],
+        ),
+        epoch,
+        t: t_input,
+    };
+    // `redraw_far`: one minute after the input, plus the draw modulo 100 days.
+    t_input + 1 + (rh_ids::h(&key, 0) % (100 * 1_440)).cast_signed()
+}
+
+#[test]
+fn def3_redraws_equal_the_independent_epoch_keyed_hash() {
+    let stubs = vec![
+        Stub::new("Y1.twins")
+            .purposes_of::<Np>()
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(schedule_twins)
+            .resampling(redraw_far),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs).unwrap();
+    let seed = 0x5eed;
+    let mut e = Engine::new(
+        CALENDAR,
+        seed,
+        BranchSalt::from_raw(0),
+        registered,
+        WorldTables::new(),
+        SimTime::EPOCH,
+    );
+    let twins = [
+        EntityRef::new(rh_ids::EntityKind::Person, 5),
+        EntityRef::new(rh_ids::EntityKind::Household, 5),
+    ];
+    for (epoch, at) in [(1_u32, DAY + 3), (2, 2 * DAY + 11)] {
+        let t = SimTime::from_minutes(at);
+        e.submit_input(
+            t,
+            MaterialInput {
+                scope: twins.into_iter().collect(),
+            },
+        )
+        .unwrap();
+        e.advance_until(t, |_, _| {}).unwrap();
+        for entity in twins {
+            assert_eq!(e.epoch(entity), epoch);
+            let pending = e.agenda().pending_for(entity);
+            assert_eq!(pending.len(), 1);
+            assert_eq!(
+                pending[0].0.time.minutes(),
+                expected_redraw(seed, entity, epoch, at),
+                "{entity} at epoch {epoch}"
+            );
+        }
+    }
+}
