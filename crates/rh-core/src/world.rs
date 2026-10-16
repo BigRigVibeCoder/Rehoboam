@@ -59,9 +59,11 @@ impl WorldTables {
         self.columns.keys().map(String::as_str)
     }
 
-    /// Removes a column, returning it (empty if absent).
-    pub(crate) fn take(&mut self, column: &str) -> Column {
-        self.columns.remove(column).unwrap_or_default()
+    /// Removes a column, returning it, or `None` if the world does not have it. Never creates
+    /// one: columns are materialised only when the engine is built, from the owners' declared
+    /// writes (SPR-005 G-c).
+    pub(crate) fn take(&mut self, column: &str) -> Option<Column> {
+        self.columns.remove(column)
     }
 
     /// A stub state hash: `SplitMix64` words over every column in name order (name bytes, row

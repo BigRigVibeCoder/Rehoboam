@@ -109,7 +109,7 @@ pub enum SimError {
         /// The column.
         column: String,
     },
-    /// A declared column that does not exist in the world.
+    /// A declared column that does not exist in the world: fatal, never created at run time (G-c).
     MissingColumn {
         /// The system.
         system: &'static str,
@@ -145,7 +145,10 @@ impl fmt::Display for SimError {
                 write!(f, "{system} wrote {column}, which it does not own")
             }
             Self::MissingColumn { system, column } => {
-                write!(f, "{system} reads {column}, which the world does not have")
+                write!(
+                    f,
+                    "{system} accesses {column}, which the world does not have (columns are created only from declared writes)"
+                )
             }
             Self::UndeclaredPurpose { system, purpose } => {
                 write!(

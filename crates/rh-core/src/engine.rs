@@ -55,6 +55,10 @@ type JobOutcome = (Owned, Result<(), SimError>);
 
 impl Engine {
     /// An engine whose first instant is the first bound-pulse boundary at or after `start`.
+    ///
+    /// Every column a registered system declares as a write and `tables` lacks is materialised
+    /// here, empty: the only place a column is created (G-c). At run time an access to a column
+    /// the world does not have is a fatal [`SimError::MissingColumn`], never a creation.
     #[must_use]
     pub fn new(
         calendar: Calendar,
@@ -64,9 +68,15 @@ impl Engine {
         tables: WorldTables,
         start: SimTime,
     ) -> Self {
+        let mut tables = tables;
         let mut bound: BTreeSet<Pulse> = BTreeSet::new();
         let mut lagged = BTreeSet::new();
         for e in &registered.entries {
+            for w in &e.access.writes {
+                if tables.get(w.column).is_none() {
+                    tables.insert(w.column, Column::new());
+                }
+            }
             bound.extend(e.bindings.iter().map(|b| b.pulse));
             lagged.extend(
                 e.access
@@ -202,6 +212,22 @@ impl Engine {
         snapshot: &WorldTables,
         jobs: &[Job],
     ) -> Result<(), SimError> {
+        // Every owned column exists (materialised in `new`); check them all before moving any, so a
+        // missing one fails the step without disturbing the tables (G-c).
+        for (i, _) in jobs {
+            let e = &self.registered.entries[*i];
+            if let Some(w) = e
+                .access
+                .writes
+                .iter()
+                .find(|w| self.tables.get(w.column).is_none())
+            {
+                return Err(SimError::MissingColumn {
+                    system: e.id,
+                    column: w.column.to_owned(),
+                });
+            }
+        }
         let mut owned: Vec<Owned> = jobs
             .iter()
             .map(|(i, _)| {
@@ -209,7 +235,7 @@ impl Engine {
                     .access
                     .writes
                     .iter()
-                    .map(|w| (w.column, self.tables.take(w.column)))
+                    .filter_map(|w| self.tables.take(w.column).map(|rows| (w.column, rows)))
                     .collect()
             })
             .collect();
