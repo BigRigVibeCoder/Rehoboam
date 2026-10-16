@@ -304,9 +304,11 @@ impl<'t> PyYamlGrammar<'t> {
                             return Err("found an empty key written ': value' (PyYAML refuses it)"
                                 .to_owned());
                         }
+                        self.single_line_flow_key(in_flow && key_position, start, end)?;
                     }
                     ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => {
                         let close = self.closing_quote(start, *style == ScalarStyle::SingleQuoted);
+                        self.single_line_flow_key(in_flow && key_position, start, close)?;
                         self.tab_ok.push((start, close));
                         self.scalars.push((start, close));
                     }
@@ -322,6 +324,22 @@ impl<'t> PyYamlGrammar<'t> {
     }
 
     /// An empty implicit key sits at a `:` that no `?` indicator precedes.
+    /// An implicit key in a flow collection must fit on one line, as `PyYAML` requires of a simple
+    /// key (SPR-004 DEF-13); an explicit `? key` may span lines.
+    fn single_line_flow_key(&self, flow_key: bool, start: usize, end: usize) -> Result<(), String> {
+        let source = self.text.get(start..end.max(start)).unwrap_or_default();
+        if flow_key && source.contains(['\n', '\r']) {
+            let before = self.text[..start].trim_end_matches([' ', '\t', '\r', '\n']);
+            if !before.ends_with('?') {
+                return Err(format!(
+                    "found a line break inside the implicit flow key '{}' (PyYAML refuses it)",
+                    source.split_whitespace().collect::<Vec<_>>().join(" ")
+                ));
+            }
+        }
+        Ok(())
+    }
+
     fn implicit_empty_key(&self, at: usize) -> bool {
         let bytes = self.text.as_bytes();
         if bytes.get(at) != Some(&b':') {
@@ -1231,6 +1249,10 @@ mod tests {
             "a: {: v}\n",
             "h: {years: 1, label: ?historical}\n",
             "a: {b: ?}\n",
+            "a: {la\n  bel: x}\n",
+            "a: [la\n  bel: x]\n",
+            "a: {\"la\n  bel\": x}\n",
+            "a: {'la\n  bel': x}\n",
         ];
         for t in refused {
             for prefix in [
@@ -1277,6 +1299,18 @@ mod tests {
                 )]),
             ),
             ("- ?x\n", Value::Seq(vec![s("?x")])),
+            (
+                "a: {? la\n  bel: x}\n",
+                m(vec![(s("a"), m(vec![(s("la bel"), s("x"))]))]),
+            ),
+            (
+                "a: {k: la\n  bel}\n",
+                m(vec![(s("a"), m(vec![(s("k"), s("la bel"))]))]),
+            ),
+            (
+                "a: [la\n  bel]\n",
+                m(vec![(s("a"), Value::Seq(vec![s("la bel")]))]),
+            ),
         ];
         for (t, want) in cases {
             assert_eq!(load(t).ok(), Some(want.clone()), "{t:?}");
