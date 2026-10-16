@@ -22,5 +22,5 @@
 - Architect audit: `CODEX/40_VERIFICATION/VER-SPR-NNN.md`
 
 ## Merge route (GOV-005 §6)
-- [ ] Architect merges (C0, C1, additive C2, C3 within tolerance without machinery changes)
-- [ ] Director merges (breaking C2, C3 touching the determinism machinery or out of tolerance, anything touching an ADR)
+- [ ] The Architect merges (every class; GOV-005 §6). Conditions met: CI green; Tester pass (C2/C3); audit `VER-` PASS (C2/C3)
+- [ ] Out-of-tolerance C3 on a golden world: announced to the director with evidence before the merge

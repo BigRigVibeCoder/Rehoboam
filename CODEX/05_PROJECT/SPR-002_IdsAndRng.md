@@ -25,7 +25,7 @@ version: 1.1.0
 
 | Rule | This sprint |
 |---|---|
-| Change class (`docs/13` §4.2) | C3 (determinism machinery: the director approves the spec and the merge) |
+| Change class (`docs/13` §4.2) | C3 (determinism machinery: the director approved the spec; the Architect merges after the Tester and the audit, GOV-005 §6) |
 | Planes touched (ADR-0024) | A (machinery) |
 | Owned columns written | none |
 | RNG purposes | defines the RNG API itself: `H(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)` |

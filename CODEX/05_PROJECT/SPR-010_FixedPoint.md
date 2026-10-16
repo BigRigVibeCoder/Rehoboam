@@ -17,7 +17,7 @@ version: 1.1.0
 # SPR-010 — rh-core::fixed
 
 - **Roadmap item:** `docs/11` P0.4 (core numerics; DET-3 is a P0 requirement) · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-001. Independent of SPR-002 and SPR-004, so it can run beside them · **Plan approved by the director 2026-10-16** (C3; the director also merges it)
+- **Depends on:** SPR-001. Independent of SPR-002 and SPR-004, so it can run beside them · **Plan approved by the director 2026-10-16** (C3; the Architect merges it, GOV-005 §6)
 - **Binding contracts:** `05.1` §6 item 4 (numerics); `05.5` §2.1 (the effect language: fixed point only, saturating, no floats, guarded division); ADR-0006; GOV-003 §2; `specs/systems/_template.odd.toml` (the `q8_8` and `q16_16` column types)
 - **Requirements covered:** DET-3
 
@@ -25,7 +25,7 @@ version: 1.1.0
 
 | Rule | This sprint |
 |---|---|
-| Change class (`docs/13` §4.2) | C3 (determinism machinery: the director approves the spec and the merge) |
+| Change class (`docs/13` §4.2) | C3 (determinism machinery: the director approved the spec; the Architect merges after the Tester and the audit, GOV-005 §6) |
 | Planes touched (ADR-0024) | A (machinery) |
 | Owned columns written | none |
 | RNG purposes | none |
