@@ -9,7 +9,7 @@
 //! | `X1.smoke_weather` | Year/Inputs, Hour/Environment | the Hour pulse; Q16.16 drift |
 //! | `X2.smoke_harvest` | Season/Production, Month/Exchange | a `lagged` read; the `rh-sample` draw (Poisson, on `StepCtx::stream`) |
 //! | `X3.smoke_vital` | Month/Vital | timers scheduled, fired, cancelled and re-sampled; `Settle` sent with a causal edge |
-//! | `X4.smoke_estate` | Day/Activity, Day/Contagion | `Settle` applied in queue order; `INHERITANCE` caused by `DEATH` |
+//! | `X4.smoke_estate` | Day/Activity, Day/Contagion | `Settle` applied in queue order; `INHERITANCE` caused by `X_DEATH` |
 //! | `X5.smoke_polity` | Year/Polity, Month/Polity, Season/Military | two bindings of one system in one phase; `Settle` sent with no cause |
 //! | `X6.smoke_chronicle` | Month/Agenda, Day/Culture, Day/Bookkeeping | a draft-local causal edge (`CENSUS_NOTE` after `CENSUS`) |
 //! | `X7.smoke_market` | Day/Environment, Day/Activity | parallel levels (VER-SPR-008 DEF-2): it shares Environment with X1 and Activity with X4 every day, so those levels hold two jobs; it and X4 send each other commands (`Settle`, `Audit`) |

@@ -3,6 +3,10 @@
 # smoke world's tools read this file (lint_odd.py --overlay, gen_skeletons.py --overlay, the smoke
 # runner's registration). lint_odd.py refuses an overlay id that is not X-prefixed or that the
 # Registry already has. The systems take no parameters.
+#
+# [verbs]: the smoke world's own event kinds (SPR-011 ruling 11: every [[emits]] kind is a Registry
+# verb emitted by its system, and a world declares its own in its overlay). The dummies' death is
+# X_DEATH, never M2.demography's DEATH. Tellability 0: nothing here is a story.
 
 [systems."X1.smoke_weather"]
 fidelity_levels = ["F0"]
@@ -31,3 +35,14 @@ params = {}
 [systems."X7.smoke_market"]
 fidelity_levels = ["F0"]
 params = {}
+
+[verbs]
+FROST       = { act_classes = ["discover"], emitted_by = "X1.smoke_weather", tellability = 0 }
+X_DEATH     = { act_classes = ["death"], emitted_by = "X3.smoke_vital", tellability = 0 }
+CURED       = { act_classes = ["aid"], emitted_by = "X3.smoke_vital", tellability = 0 }
+BIRTH       = { act_classes = ["birth"], emitted_by = "X3.smoke_vital", tellability = 0 }
+INHERITANCE = { act_classes = ["succeed_to"], emitted_by = "X4.smoke_estate", tellability = 0 }
+DECREE      = { act_classes = ["coerce"], emitted_by = "X5.smoke_polity", tellability = 0 }
+CENSUS      = { act_classes = ["discover"], emitted_by = "X6.smoke_chronicle", tellability = 0 }
+CENSUS_NOTE = { act_classes = ["reveal"], emitted_by = "X6.smoke_chronicle", tellability = 0 }
+TRADE       = { act_classes = ["trade"], emitted_by = "X7.smoke_market", tellability = 0 }

@@ -120,7 +120,7 @@ fn every_phase_and_every_pulse_is_bound_and_one_system_binds_a_phase_twice() {
 fn a_run_exercises_timers_commands_events_and_invariants() {
     let r = run(3, 1, 30);
     for kind in [
-        "DEATH",
+        "X_DEATH",
         "CURED",
         "BIRTH",
         "INHERITANCE",
@@ -136,7 +136,7 @@ fn a_run_exercises_timers_commands_events_and_invariants() {
             count(&r.events, kind)
         );
     }
-    let deaths = count(&r.events, "DEATH");
+    let deaths = count(&r.events, "X_DEATH");
     let caused = r
         .events
         .iter()
@@ -155,7 +155,7 @@ fn a_run_exercises_timers_commands_events_and_invariants() {
     let off_day = r
         .events
         .iter()
-        .filter(|e| e.kind == "DEATH" && e.tick % 1_440 != 0)
+        .filter(|e| e.kind == "X_DEATH" && e.tick % 1_440 != 0)
         .count();
     assert!(off_day > 0);
     assert_eq!(r.waiting, 0, "every Settle is applied");

@@ -102,7 +102,7 @@ impl SystemModel for Vital {
                 command: "Settle",
                 target: "X4.smoke_estate",
             }],
-            emits: vec!["DEATH", "CURED", "BIRTH"],
+            emits: vec!["X_DEATH", "CURED", "BIRTH"],
             ..AccessSpec::default()
         }
     }
@@ -116,7 +116,7 @@ impl SystemModel for Vital {
         Self::sample(view, ctx)
     }
 
-    /// A death: the person dies, `DEATH` is emitted, and `Settle` goes to the estate with the
+    /// A death: the person dies, `X_DEATH` is emitted, and `Settle` goes to the estate with the
     /// death as its cause. A timer for a person with no pending death is a bug (a cancelled
     /// timer that fired) and stops the run.
     fn fire(
@@ -139,7 +139,7 @@ impl SystemModel for Vital {
         view.write(PENDING)?[r] = 0;
         view.write(DEATHS)?[0] += 1;
         let death = ctx.emit(
-            EventDraft::new("DEATH")
+            EventDraft::new("X_DEATH")
                 .subject(person_entity(r))
                 .with_payload(vec![r64(r), timer.key.time.minutes()]),
         )?;
