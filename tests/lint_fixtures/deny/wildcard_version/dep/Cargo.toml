@@ -1,0 +1,6 @@
+# Dependency required with a wildcard version by the fixture root.
+[package]
+name = "wildcard-dep"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"

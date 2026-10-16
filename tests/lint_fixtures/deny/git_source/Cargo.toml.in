@@ -1,0 +1,14 @@
+# Positive control for `cargo deny check sources` (crates.io only; see ../../README.md).
+# A template: bin/check_all.sh copies this directory to target/rendered-fixtures/git_source/, makes
+# dep/ a local git repository, writes this file as Cargo.toml with @DEP_GIT_URL@ replaced by its
+# file:// URL, and generates the lockfile (a local fetch, no network). The git source must be rejected.
+[workspace]
+
+[package]
+name = "fixture-git-source-root"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+git-dep = { git = "@DEP_GIT_URL@" }

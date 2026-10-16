@@ -2,16 +2,20 @@
 
 Each fixture plants one violation that a gate must catch. `bin/check_all.sh` runs every gate on the
 real repository (it must pass) and on each fixture (it must FAIL, printing that gate's own diagnostic,
-via `run "<name>" "fail:<text>"`). If a control ever passes, its gate has stopped working.
+via `run "<name>" "fail:<text>"`). If a control ever passes, its gate has stopped working. The licence
+ledger is not a gate (ADR-0021 as amended 2026-10-16, personal-use mode); its control must succeed and
+list the planted licence (`pass:<text>`).
 
 Fixture workspaces carry their own `[workspace]` table and sit under the root `Cargo.toml`
 `exclude`, so they never join the Rehoboam workspace. Nothing here is built except the compile-fail
-case (into `target/lint-fixtures/`). Everything runs offline.
+cases (into `target/lint-fixtures/`). Everything runs offline; the git-source control is rendered into
+`target/rendered-fixtures/` and fetches its dependency from a local `file://` repository.
 
 | Fixture | Gate | Plants | Must fail with |
 |---|---|---|---|
-| `deny/gpl_dependency/` | `cargo deny check licenses` (ADR-0021) | a path dependency licensed `GPL-3.0-only`, publishable | `error[rejected]` |
-| `deny/banned_crate/` | `cargo deny check bans` (`docs/14` licence traps) | a path dependency named `xxhash-rust`, licensed MIT | `error[banned]` |
+| `deny/git_source/` (template) | `cargo deny check sources` (crates.io only) | a dependency from a git repository | `error[source-not-allowed]` |
+| `deny/wildcard_version/` | `cargo deny check bans` (`wildcards = "deny"`) | `version = "*"` in a publishable crate | `error[wildcard]` |
+| `deny/gpl_dependency/` | licence ledger, `cargo deny list` (records, never gates) | a path dependency licensed `GPL-3.0-only` | must succeed and list `GPL-3.0-only` |
 | `arch/system_to_system/` | `bin/lint_arch.py` (V-INSP-03) | system crate → system crate | `VIOLATION [V-INSP-03]` |
 | `arch/system_to_disallowed/` | `bin/lint_arch.py` (V-INSP-03) | system crate → `rh-snapshot` | `VIOLATION [V-INSP-03]` |
 | `arch/plane_a_to_b/` | `bin/lint_arch.py` (V-PLN-01) | plane-A crate → plane-B crate | `VIOLATION [V-PLN-01]` |

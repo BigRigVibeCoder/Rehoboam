@@ -1,0 +1,6 @@
+# Served from a local git repository by bin/check_all.sh (see ../Cargo.toml.in).
+[package]
+name = "git-dep"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
