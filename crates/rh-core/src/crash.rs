@@ -74,7 +74,10 @@ pub struct CrashArtifact {
     pub branch_salt: u64,
     /// The input-journal position: the number of material inputs applied before the failure.
     pub journal_position: u64,
-    /// The last keyframe, `None` until SPR-007.
+    /// The journal's chain head (hex), as the host last set it (SPR-007; `None` in a format-1
+    /// artifact or when the run has no journal).
+    pub journal_head: Option<String>,
+    /// The last keyframe, as `<path>#<state hash, 16 hex digits>`, when the host set one (SPR-007).
     pub last_keyframe: Option<String>,
     /// The failing instant, in `i64` minutes.
     pub tick: i64,
@@ -102,6 +105,11 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
+/// The artifact format [`CrashArtifact::to_json`] writes: 2 since SPR-007 added `journal_head`.
+/// Format 1 (SPR-006: no `format` and no `journal_head` field) is still read, with
+/// `journal_head = None`; any other format is refused.
+pub const ARTIFACT_FORMAT: u64 = 2;
+
 impl CrashArtifact {
     /// `<timeline>_<tick>.json`.
     #[must_use]
@@ -114,7 +122,8 @@ impl CrashArtifact {
     pub fn to_json(&self) -> String {
         let opt = |v: &Option<String>| v.as_deref().map_or_else(|| "null".to_owned(), quote);
         let mut out = String::from("{\n");
-        let fields: [(&str, String); 13] = [
+        let fields: [(&str, String); 15] = [
+            ("format", ARTIFACT_FORMAT.to_string()),
             ("timeline", self.timeline.to_string()),
             ("build", quote(&self.build)),
             ("registry_version", quote(&self.registry_version)),
@@ -122,6 +131,7 @@ impl CrashArtifact {
             ("seed", self.seed.to_string()),
             ("branch_salt", self.branch_salt.to_string()),
             ("journal_position", self.journal_position.to_string()),
+            ("journal_head", opt(&self.journal_head)),
             ("last_keyframe", opt(&self.last_keyframe)),
             ("tick", self.tick.to_string()),
             ("phase", quote(&self.phase)),
@@ -146,16 +156,35 @@ impl CrashArtifact {
         out
     }
 
-    /// Reads an artifact written by [`CrashArtifact::to_json`].
+    /// Reads an artifact written by [`CrashArtifact::to_json`], in format 2, or in format 1
+    /// (SPR-006's field set: no `format` and no `journal_head`, read as `None`).
     ///
     /// # Errors
-    /// [`ParseError`] for anything but that shape: every field present once, with its type.
+    /// [`ParseError`] for anything but those shapes: every field present once, with its type, and
+    /// a `format` other than 2 refused by name.
     pub fn from_json(text: &str) -> Result<Self, ParseError> {
         let mut p = Parser {
             s: text.as_bytes(),
             i: 0,
         };
         let fields = p.object()?;
+        let has = |name: &str| fields.iter().any(|(n, _)| n == name);
+        let format = if has("format") {
+            let f = fields
+                .iter()
+                .find(|(n, _)| n == "format")
+                .map(|(_, v)| v.clone())
+                .ok_or_else(|| ParseError("missing field format".to_owned()))?
+                .uint()?;
+            if f != ARTIFACT_FORMAT {
+                return Err(ParseError(format!(
+                    "artifact format {f}; this build reads formats 1 and {ARTIFACT_FORMAT}"
+                )));
+            }
+            f
+        } else {
+            1
+        };
         let take = |name: &str| -> Result<Value, ParseError> {
             let pos = fields
                 .iter()
@@ -172,6 +201,11 @@ impl CrashArtifact {
             seed: take("seed")?.uint()?,
             branch_salt: take("branch_salt")?.uint()?,
             journal_position: take("journal_position")?.uint()?,
+            journal_head: if format == 1 {
+                None
+            } else {
+                take("journal_head")?.opt_string()?
+            },
             last_keyframe: take("last_keyframe")?.opt_string()?,
             tick: i64::try_from(take("tick")?.int()?)
                 .map_err(|_| ParseError("tick out of range".to_owned()))?,
@@ -181,9 +215,10 @@ impl CrashArtifact {
             error: take("error")?.string()?,
             diagnostics: take("diagnostics")?.strings()?,
         };
-        if fields.len() != 14 {
+        let expected = if format == 1 { 14 } else { 16 };
+        if fields.len() != expected {
             return Err(ParseError(format!(
-                "{} fields where 14 are expected",
+                "{} fields where {expected} are expected (format {format})",
                 fields.len()
             )));
         }
@@ -422,7 +457,8 @@ mod tests {
             seed: u64::MAX,
             branch_salt: 0,
             journal_position: 0,
-            last_keyframe: None,
+            journal_head: Some("00ff".repeat(8)),
+            last_keyframe: Some("keyframes/0_y10.arrow#0123456789abcdef".to_owned()),
             tick: -1_440,
             phase: "Bookkeeping".to_owned(),
             system: "X.stub".to_owned(),
@@ -430,6 +466,34 @@ mod tests {
             error: "invariant \"no-negatives\" violated:\n\trow 3 = -1 \\ \u{1}".to_owned(),
             diagnostics: vec!["t=0 a".to_owned(), "t=1 b ü".to_owned()],
         }
+    }
+
+    /// SPR-007: format 2 carries `journal_head`; a format-1 artifact (SPR-006's field set) still
+    /// reads, with no journal head; another format is refused by name.
+    #[test]
+    fn format_two_round_trips_format_one_reads_and_others_are_refused() {
+        let a = sample();
+        let json = a.to_json();
+        assert!(json.starts_with("{\n  \"format\": 2,\n"));
+        assert_eq!(CrashArtifact::from_json(&json), Ok(a.clone()));
+        let legacy = json
+            .lines()
+            .filter(|l| !l.contains("\"format\"") && !l.contains("\"journal_head\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let read = CrashArtifact::from_json(&legacy).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(read.journal_head, None);
+        assert_eq!(read.last_keyframe, a.last_keyframe);
+        let three = json.replace("\"format\": 2", "\"format\": 3");
+        assert!(
+            matches!(CrashArtifact::from_json(&three), Err(ParseError(m)) if m.contains("format 3"))
+        );
+        let missing_head = json
+            .lines()
+            .filter(|l| !l.contains("\"journal_head\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(CrashArtifact::from_json(&missing_head).is_err());
     }
 
     #[test]

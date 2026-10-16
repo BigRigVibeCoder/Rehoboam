@@ -70,6 +70,7 @@ use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance};
 use crate::phase::Phase;
 use crate::register::{Entry, Registered};
+use crate::state::{EngineState, RestoreError, check_epochs, check_inputs};
 use crate::system::{
     InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx,
 };
@@ -184,6 +185,10 @@ pub struct Engine {
     diagnostics: VecDeque<String>,
     at: (SimTime, Phase),
     crash: Option<CrashArtifact>,
+    /// The journal's chain head (hex) and the last keyframe, as the host last set them; only a
+    /// crash artifact records them (SPR-007).
+    journal_head: Option<String>,
+    last_keyframe: Option<String>,
     /// The error that stopped the run, if any. A poisoned engine never runs again (SPR-005 G-d).
     poisoned: Option<SimError>,
 }
@@ -289,8 +294,126 @@ impl Engine {
             diagnostics: VecDeque::new(),
             at: (start, Phase::Inputs),
             crash: None,
+            journal_head: None,
+            last_keyframe: None,
             poisoned,
         }
+    }
+
+    /// The engine's plane-A state (SPR-007 T-02): what a keyframe holds and `state_hash` covers.
+    /// A poisoned engine still has a state, but a keyframe of it is refused by its writer.
+    #[must_use]
+    pub fn snapshot(&self) -> EngineState {
+        EngineState {
+            cursor: self.cursor,
+            timeline: self.timeline,
+            applied_inputs: self.applied_inputs,
+            tables: self.tables.clone(),
+            agenda: self.agenda.state(),
+            commands: self.commands.state(),
+            epochs: self.epochs.iter().map(|(e, n)| (*e, *n)).collect(),
+            inputs: self
+                .inputs
+                .iter()
+                .map(|(t, list)| (*t, list.clone()))
+                .collect(),
+            events: self.events.state(),
+        }
+    }
+
+    /// Rebuilds an engine from its state, for the registered systems and the history tuple given
+    /// (SPR-007 T-02). Every part must be in the canonical form [`Engine::snapshot`] produces,
+    /// and every name in it (timer owners, command owners, senders and kinds, event emitters and
+    /// kinds) must belong to `registered`; `restore(x).snapshot() == x`.
+    ///
+    /// # Errors
+    /// [`RestoreError`] naming the first part that is not canonical or names something unknown,
+    /// or a declared written column missing from the tables.
+    pub fn restore(
+        calendar: Calendar,
+        world_seed: u64,
+        branch_salt: BranchSalt,
+        registered: Registered,
+        provenance: Provenance,
+        state: EngineState,
+    ) -> Result<Self, RestoreError> {
+        for e in &registered.entries {
+            if let Some(w) = e
+                .access
+                .writes
+                .iter()
+                .find(|w| state.tables.get(w.column).is_none())
+            {
+                return Err(RestoreError::Tables(format!(
+                    "{} writes {}, which the state lacks",
+                    e.id, w.column
+                )));
+            }
+        }
+        let agenda = Agenda::restore(&state.agenda).map_err(RestoreError::Agenda)?;
+        let commands =
+            CommandQueues::from_state(&state.commands).map_err(RestoreError::Commands)?;
+        check_epochs(&state.epochs)?;
+        check_inputs(&state.inputs, state.cursor)?;
+        let events = EventLog::from_state(&state.events).map_err(RestoreError::Events)?;
+        let start = state.cursor.unwrap_or(SimTime::EPOCH);
+        let mut engine = Self::new(
+            calendar,
+            world_seed,
+            branch_salt,
+            registered,
+            state.tables,
+            start,
+        );
+        engine.cursor = state.cursor;
+        engine.at = (start, Phase::Inputs);
+        for (key, timer) in &state.agenda.entries {
+            if !engine.by_system_id.contains_key(&timer.owner) {
+                return Err(RestoreError::TimerOwner(format!(
+                    "timer seq {} names the unregistered system {}",
+                    key.seq, timer.owner
+                )));
+            }
+        }
+        for (owner, queue) in &state.commands.queues {
+            for c in queue {
+                if engine.command_owner.get(c.command.kind) != Some(owner) {
+                    return Err(RestoreError::Commands(format!(
+                        "{} is not the owner of command {}",
+                        owner, c.command.kind
+                    )));
+                }
+                if engine.registered.entries.iter().all(|e| e.id != c.sender) {
+                    return Err(RestoreError::Commands(format!(
+                        "command seq {} names the unregistered sender {}",
+                        c.seq, c.sender
+                    )));
+                }
+            }
+        }
+        for ev in &state.events.events {
+            let declared = ev.emitter == CORE
+                || engine
+                    .registered
+                    .entries
+                    .iter()
+                    .any(|e| e.id == ev.emitter && e.access.emits.contains(&ev.kind));
+            if !declared {
+                return Err(RestoreError::Events(format!(
+                    "event {} ({} by {}) is not declared by a registered system",
+                    ev.id, ev.kind, ev.emitter
+                )));
+            }
+        }
+        engine.agenda = agenda;
+        engine.commands = commands;
+        engine.epochs = state.epochs.into_iter().collect();
+        engine.inputs = state.inputs.into_iter().collect();
+        engine.applied_inputs = state.applied_inputs;
+        engine.timeline = state.timeline;
+        engine.provenance = provenance;
+        engine.events = events;
+        Ok(engine)
     }
 
     /// Sets the number of worker threads (at least 1). Changes speed only, never the result.
@@ -301,6 +424,17 @@ impl Engine {
     /// Sets the build, Registry version and manifest hash a crash artifact records.
     pub fn set_provenance(&mut self, provenance: Provenance) {
         self.provenance = provenance;
+    }
+
+    /// Sets the journal's chain head (hex) a crash artifact records (SPR-007): the host updates
+    /// it as it journals inputs.
+    pub fn set_journal_head(&mut self, head: Option<String>) {
+        self.journal_head = head;
+    }
+
+    /// Sets the last keyframe a crash artifact records, as `<path>#<state hash>` (SPR-007).
+    pub fn set_last_keyframe(&mut self, keyframe: Option<String>) {
+        self.last_keyframe = keyframe;
     }
 
     /// Sets the timeline id (0, the canonical timeline, by default).
@@ -537,7 +671,8 @@ impl Engine {
             seed: self.world_seed,
             branch_salt: self.branch_salt.to_raw(),
             journal_position: self.applied_inputs,
-            last_keyframe: None,
+            journal_head: self.journal_head.clone(),
+            last_keyframe: self.last_keyframe.clone(),
             tick: self.at.0.minutes(),
             phase: self.at.1.name().to_owned(),
             system,

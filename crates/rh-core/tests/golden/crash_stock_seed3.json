@@ -1,4 +1,5 @@
 {
+  "format": 2,
   "timeline": 0,
   "build": "test-build",
   "registry_version": "registry-test",
@@ -6,6 +7,7 @@
   "seed": 3,
   "branch_salt": 0,
   "journal_position": 0,
+  "journal_head": null,
   "last_keyframe": null,
   "tick": 388800,
   "phase": "Bookkeeping",

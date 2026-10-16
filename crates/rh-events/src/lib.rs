@@ -186,7 +186,87 @@ pub struct EventLog {
     running: u64,
 }
 
+/// The serialisable state of an event log (SPR-007 T-02): the events not yet drained, the
+/// counter, the last `(tick, phase)` and the running hash.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EventLogState {
+    /// The held (undrained) events, in id order: the last ids before the counter.
+    pub events: Vec<Event>,
+    /// The id the next event gets.
+    pub next_seq: u64,
+    /// The `(tick, phase)` of the last event appended, if any.
+    pub last: Option<(i64, u8)>,
+    /// The running fold behind [`EventLog::hash`].
+    pub running: u64,
+}
+
 impl EventLog {
+    /// The serialisable state.
+    #[must_use]
+    pub fn state(&self) -> EventLogState {
+        EventLogState {
+            events: self.events.clone(),
+            next_seq: self.next_seq,
+            last: self.last,
+            running: self.running,
+        }
+    }
+
+    /// Rebuilds a log from a state in the form [`EventLog::state`] produces.
+    ///
+    /// # Errors
+    /// A message unless the held events have the ids just below the counter, in order; their
+    /// `(tick, phase)` never decreases; the last one is at `last`; every cause is a smaller id;
+    /// and an empty log (counter 0) has no `last` and a zero running hash.
+    pub fn from_state(state: &EventLogState) -> Result<Self, String> {
+        let held = state.events.len() as u64;
+        if held > state.next_seq {
+            return Err(format!(
+                "{held} events held but the counter is {}",
+                state.next_seq
+            ));
+        }
+        for (k, e) in state.events.iter().enumerate() {
+            let expected = state.next_seq - held + k as u64;
+            if e.id.to_raw() != expected {
+                return Err(format!("event {} where id {expected} is expected", e.id));
+            }
+            if let Some(&cause) = e.causes.iter().find(|c| **c >= e.id) {
+                return Err(format!("event {} names the later cause {cause}", e.id));
+            }
+        }
+        if let Some(w) = state
+            .events
+            .windows(2)
+            .find(|w| (w[0].tick, w[0].phase) > (w[1].tick, w[1].phase))
+        {
+            return Err(format!(
+                "event {} is back-dated against {}",
+                w[1].id, w[0].id
+            ));
+        }
+        if let Some(e) = state.events.last()
+            && state.last != Some((e.tick, e.phase))
+        {
+            return Err(format!(
+                "the last (tick, phase) is not that of event {}",
+                e.id
+            ));
+        }
+        if state.next_seq == 0 && (state.last.is_some() || state.running != 0) {
+            return Err("an empty log has no last event and no running hash".to_owned());
+        }
+        if state.next_seq > 0 && state.last.is_none() {
+            return Err("a log with events has a last (tick, phase)".to_owned());
+        }
+        Ok(Self {
+            events: state.events.clone(),
+            next_seq: state.next_seq,
+            last: state.last,
+            running: state.running,
+        })
+    }
+
     /// An empty log; the first event gets id 0.
     #[must_use]
     pub fn new() -> Self {
@@ -403,5 +483,63 @@ mod tests {
         assert_eq!(fill(Some(20)), never, "monthly");
         assert_eq!(fill(Some(240)), never, "yearly");
         assert_eq!(fill(Some(1)), never, "every event");
+    }
+
+    /// SPR-007 T-02: the state round-trips (before and after a drain), and only the form
+    /// `state()` produces restores.
+    #[test]
+    fn state_round_trips_and_only_the_canonical_form_restores() {
+        use super::EventLogState;
+        let mut log = EventLog::new();
+        assert_eq!(EventLog::from_state(&log.state()), Ok(log.clone()));
+        for i in 0..6_i64 {
+            let d = EventDraft::new("A").with_payload(vec![i]);
+            let d = if i > 0 {
+                d.caused_by(EventId::from_raw(0))
+            } else {
+                d
+            };
+            log.append(i / 2, u8::try_from(i % 2).unwrap_or(0), "X", d)
+                .unwrap_or_else(|e| panic!("{e}"));
+        }
+        let state = log.state();
+        assert_eq!(EventLog::from_state(&state), Ok(log.clone()));
+        let mut drained = log.clone();
+        drained.drain();
+        assert_eq!(EventLog::from_state(&drained.state()), Ok(drained.clone()));
+        let refused = |f: fn(&mut EventLogState)| {
+            let mut s = state.clone();
+            f(&mut s);
+            EventLog::from_state(&s).is_err()
+        };
+        assert!(
+            refused(|s| s.next_seq += 1),
+            "ids not just below the counter"
+        );
+        assert!(refused(|s| s.events.swap(1, 2)), "ids out of order");
+        assert!(
+            refused(|s| {
+                s.events.remove(2);
+            }),
+            "a gap"
+        );
+        assert!(
+            refused(|s| s.last = Some((0, 0))),
+            "last is not the last event's"
+        );
+        assert!(refused(|s| s.events[4].tick = -1), "back-dated");
+        assert!(
+            refused(|s| s.events[1].causes = vec![EventId::from_raw(3)]),
+            "a later cause"
+        );
+        assert!(refused(|s| s.last = None), "events but no last");
+        let empty = EventLogState {
+            running: 1,
+            ..EventLogState::default()
+        };
+        assert!(
+            EventLog::from_state(&empty).is_err(),
+            "an empty log with a running hash"
+        );
     }
 }

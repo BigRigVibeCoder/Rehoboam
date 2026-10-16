@@ -1409,3 +1409,134 @@ fn def5_a_timer_fires_before_any_binding_of_its_phase() {
         );
     }
 }
+
+// --- Engine state: snapshot and restore (SPR-007 T-02) ----------------------------------------
+
+fn life_registered() -> rh_core::register::Registered {
+    let stubs = life_stubs(false);
+    let specs = agreeing_specs(&stubs);
+    register(stubs.into_iter().map(Stub::boxed).collect(), &specs).unwrap_or_else(|e| panic!("{e}"))
+}
+
+fn restore(state: rh_core::state::EngineState) -> Result<Engine, rh_core::state::RestoreError> {
+    Engine::restore(
+        CALENDAR,
+        13,
+        BranchSalt::from_raw(0),
+        life_registered(),
+        rh_core::crash::Provenance::default(),
+        state,
+    )
+}
+
+/// A life world with inputs queued for later, run to `end` without draining its events.
+fn life_run_to(end: SimTime) -> Engine {
+    let mut e = life_engine(13, 48, 3, false, 1);
+    for (day, step) in [(45, 5), (400, 7), (600, 3)] {
+        let scope = (0..48).step_by(step).map(entity).collect();
+        e.submit_input(
+            SimTime::from_minutes(day * DAY + 3),
+            MaterialInput { scope },
+        )
+        .unwrap();
+    }
+    e.advance_until(end, |_, _| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    e
+}
+
+/// The split point: day 50, when timers are pending, events held and two inputs still queued.
+const SPLIT: SimTime = SimTime::from_minutes(50 * DAY + 1);
+/// The end of both runs: two years.
+const TWO_YEARS: SimTime = SimTime::from_minutes(2 * 365 * DAY - 1);
+
+#[test]
+fn t02_restore_of_a_snapshot_continues_exactly_like_the_unbroken_run() {
+    let unbroken = life_run_to(TWO_YEARS).snapshot();
+    let at_one = life_run_to(SPLIT).snapshot();
+    // The snapshot carries every kind of engine-held state.
+    assert!(!at_one.agenda.entries.is_empty(), "pending timers");
+    assert!(!at_one.events.events.is_empty(), "undrained events");
+    assert!(!at_one.epochs.is_empty(), "epochs");
+    assert!(!at_one.inputs.is_empty(), "inputs queued for later");
+    assert!(at_one.applied_inputs > 0);
+    let mut restored = restore(at_one.clone()).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(restored.snapshot(), at_one, "restore(x).snapshot() == x");
+    restored
+        .advance_until(TWO_YEARS, |_, _| {})
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(restored.snapshot(), unbroken);
+}
+
+#[test]
+fn t02_restore_refuses_every_non_canonical_or_unknown_part() {
+    use rh_core::state::{EngineState, RestoreError as R};
+    type Edit = fn(&mut EngineState);
+    type Want = fn(&R) -> bool;
+    let base = life_run_to(SPLIT).snapshot();
+    let cases: [(&str, Edit, Want); 11] = [
+        (
+            "unsorted agenda",
+            |s| s.agenda.entries.swap(0, 1),
+            |e| matches!(e, R::Agenda(_)),
+        ),
+        (
+            "unknown timer owner",
+            |s| s.agenda.entries[0].1.owner = rh_ids::SystemId::from_raw(7),
+            |e| matches!(e, R::TimerOwner(_)),
+        ),
+        (
+            "unsorted epochs",
+            |s| s.epochs.reverse(),
+            |e| matches!(e, R::Epochs(_)),
+        ),
+        (
+            "epoch 0",
+            |s| s.epochs[0].1 = 0,
+            |e| matches!(e, R::Epochs(_)),
+        ),
+        (
+            "empty input list",
+            |s| s.inputs[0].1.clear(),
+            |e| matches!(e, R::Inputs(_)),
+        ),
+        (
+            "input before the cursor",
+            |s| s.inputs[0].0 = SimTime::EPOCH,
+            |e| matches!(e, R::Inputs(_)),
+        ),
+        (
+            "event counter",
+            |s| s.events.next_seq += 1,
+            |e| matches!(e, R::Events(_)),
+        ),
+        (
+            "undeclared event kind",
+            |s| s.events.events[0].kind = "WEDDING",
+            |e| matches!(e, R::Events(_)),
+        ),
+        (
+            "unsorted events",
+            |s| s.events.events.swap(0, 1),
+            |e| matches!(e, R::Events(_)),
+        ),
+        (
+            "missing columns",
+            |s| s.tables = WorldTables::new(),
+            |e| matches!(e, R::Tables(_)),
+        ),
+        (
+            "unsorted inputs",
+            |s| s.inputs.reverse(),
+            |e| matches!(e, R::Inputs(_)),
+        ),
+    ];
+    for (name, edit, want) in cases {
+        let mut s = base.clone();
+        edit(&mut s);
+        match restore(s) {
+            Err(e) => assert!(want(&e), "{name}: refused for another reason: {e}"),
+            Ok(_) => panic!("{name}: accepted"),
+        }
+    }
+}
