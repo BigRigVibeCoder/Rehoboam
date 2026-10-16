@@ -396,7 +396,7 @@ impl Engine {
                 break;
             }
             if let Err(e) = self.run_instant(t) {
-                self.record(format!("t={t} FATAL in {}: {e}", self.at.1));
+                self.record(format!("{t} FATAL in {}: {e}", self.at.1));
                 self.crash = Some(self.artifact(&e));
                 self.poisoned = Some(e.clone());
                 return Err(e);
@@ -612,7 +612,7 @@ impl Engine {
         }
         let pulses: Vec<&str> = fired.iter().map(|p| p.name()).collect();
         self.record(format!(
-            "t={t} pulses=[{}] inputs={} timers_fired={} commands={} events={} agenda={}",
+            "{t} pulses=[{}] inputs={} timers_fired={} commands={} events={} agenda={}",
             pulses.join(","),
             tally.inputs,
             tally.timers,

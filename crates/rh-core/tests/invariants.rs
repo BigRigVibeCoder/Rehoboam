@@ -11,6 +11,9 @@
 //! - **Framework self-test.** Invariants run at every instant, in `Bookkeeping`, after that phase's
 //!   systems: a flag a Bookkeeping system raises at one instant fails at exactly that instant. A
 //!   step error (not an invariant) also leaves an artifact. A stopped engine is poisoned.
+//! - **Committed artifact.** `tests/golden/crash_stock_seed3.json` must equal the run's artifact and
+//!   replay. `RH_CORE_CRASH_ARTIFACT` points the test at another artifact: `bin/check_all.sh`
+//!   plants one with an altered instant, which must fail.
 //!
 //! Refs: SPR-006 T-05, ruling 6; GOV-004 §2, §4; `05.1` §9.
 #![allow(
@@ -348,4 +351,32 @@ fn t05_invariants_run_every_instant_after_the_bookkeeping_systems() {
         (3 * 1_440, "Polity", "F2.fail", None)
     );
     assert_eq!(a.error, "F2.fail: the stub step fails");
+}
+
+/// The committed crash artifact of the stock world at seed 3.
+const CRASH_GOLDEN: &str = "tests/golden/crash_stock_seed3.json";
+
+#[test]
+fn t05_the_committed_crash_artifact_replays() {
+    let mut engine = stock_engine(3, 40, 1);
+    assert!(engine.advance_until(ten_years(), |_, _| {}).is_err());
+    let produced = engine.crash_artifact().unwrap().to_json();
+    let default = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CRASH_GOLDEN);
+    if std::env::var_os("RH_CORE_WRITE_CRASH_GOLDEN").is_some() {
+        std::fs::write(&default, &produced).unwrap();
+    }
+    let path = std::env::var_os("RH_CORE_CRASH_ARTIFACT").map_or(default.clone(), PathBuf::from);
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    let artifact =
+        CrashArtifact::from_json(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    if let Err(e) = stock_engine(artifact.seed, 40, 1).replay(&artifact) {
+        panic!("the crash artifact {} does not replay: {e}", path.display());
+    }
+    if path == default {
+        assert_eq!(
+            text, produced,
+            "{CRASH_GOLDEN} differs from the run: a C3 change of the crash path"
+        );
+    }
+    println!("T-05: crash artifact {} replays", artifact.file_name());
 }

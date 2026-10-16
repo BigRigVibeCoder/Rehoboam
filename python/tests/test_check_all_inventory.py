@@ -69,8 +69,10 @@ REQUIRED_GATES = (
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
     "System specs (lint_odd)",
+    "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
     "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)",
+    "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)",
     "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL",
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
@@ -136,6 +138,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
+    "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants "
+    "and crash replay (SPR-006)",
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
