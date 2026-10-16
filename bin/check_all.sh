@@ -478,9 +478,62 @@ wall_control() {
   case "$1" in
     slower) awk '$1 == "bench" { $3 = sprintf("%.1f", $3 * 0.8) } { print }' "$WALL_RUN" > "$planted" ;;
     machine) awk '$1 == "condition" && $2 == "cpu" { $0 = "condition cpu Another CPU" } { print }' "$WALL_RUN" > "$planted" ;;
+    nan) awk '$1 == "bench" && !done { $3 = "nan"; done = 1 } { print }' "$WALL_RUN" > "$planted" ;;
     *) echo "unknown case $1"; return 1 ;;
   esac
   "$PY" -I bin/wall_trend.py check --trend "$planted" --measured "$WALL_RUN" --gate
+}
+
+# SPR-009 GAP-2 (VER-SPR-009-TEST): on a push, a changed perf baseline needs a commit in before..after
+# whose subject ends in [perf-baseline] and whose body has a Reason: line. perf_push_control <case>
+# builds a scratch repository: the base commit holds a planted baseline, the next commit the tool's
+# output, with a tagged subject and a reason (tagged: passes) or neither (untagged: must FAIL).
+perf_push_control() {
+  local repo="$PERF_FIXTURES/push_$1" subject="SPR-009: re-record the baseline" body="Reason: the control's" c1 c2
+  perf_plant base '$1 == "bench" && !done { $3 = $3 + 7; done = 1 } { print }' || return 1
+  rm -rf "$repo" && mkdir -p "$repo" || return 1
+  local -a g=(git -C "$repo" -c user.name=fixture -c user.email=fixture@localhost -c commit.gpgsign=false)
+  "${g[@]}" init -q && cp "$PERF_FIXTURES/base.txt" "$repo/baseline.txt" && "${g[@]}" add . && "${g[@]}" commit -qm base || return 1
+  c1="$("${g[@]}" rev-parse HEAD)"
+  [ "$1" = tagged ] && subject="$subject [perf-baseline]"
+  [ "$1" = untagged ] && body="no reason line"
+  cp "$PERF_RUN" "$repo/baseline.txt" && "${g[@]}" add . && "${g[@]}" commit -qm "$subject" -m "$body" || return 1
+  c2="$("${g[@]}" rev-parse HEAD)"
+  env -u RH_PR_TITLE -u RH_PR_BODY RH_EVENT=push RH_PUSH_BEFORE="$c1" RH_PUSH_AFTER="$c2" \
+    "$PY" -I bin/perf_gate.py integrity --repo "$repo" --baseline "$repo/baseline.txt" --measured "$PERF_RUN"
+}
+# GAP-2: with no pull-request or push context (a local run, workflow_dispatch) the tag and reason are
+# not checked, and the gate says so instead of the success wording.
+perf_local_control() {
+  perf_plant base '$1 == "bench" && !done { $3 = $3 + 7; done = 1 } { print }' || return 1
+  env -u RH_PR_TITLE -u RH_PR_BODY -u GITHUB_EVENT_NAME RH_EVENT=local "$PY" -I bin/perf_gate.py integrity \
+    --baseline "$PERF_RUN" --measured "$PERF_RUN" --base-file "$PERF_FIXTURES/base.txt"
+}
+
+# SPR-009 T-05: V-PERF-11, the smoke world's heap allocations per steady-state tick (bin/perf_gate.py
+# alloc-*). The budget is the recorded count and any increase fails (ruling 5); counts are exact (R-8).
+ALLOC_BASELINE=crates/rh-bench/baselines/allocations_v1.txt
+ALLOC_RUN=artifacts/perf/allocations.txt
+alloc_repeat() {
+  "$PY" -I bin/perf_gate.py alloc-measure --out artifacts/perf/allocations_run2.txt >/dev/null || return 1
+  cmp "$ALLOC_RUN" artifacts/perf/allocations_run2.txt && echo "identical allocation counts in two runs"
+}
+# A hand-typed allocation baseline (one allocation more), in a [perf-baseline] PR with a reason: must FAIL.
+alloc_typed_control() {
+  mkdir -p "$PERF_FIXTURES" || return 1
+  awk '$1 == "budget" && $3 == "1" && $6 == "allocations" && !done { $7 = $7 + 1; done = 1 } { print }' "$ALLOC_RUN" > "$PERF_FIXTURES/alloc_typed.txt" || return 1
+  RH_PR_TITLE="[perf-baseline] control" RH_PR_BODY="perf-baseline-reason: control" "$PY" -I bin/perf_gate.py integrity \
+    --exact --baseline "$PERF_FIXTURES/alloc_typed.txt" --measured "$ALLOC_RUN" --base-file "$ALLOC_BASELINE"
+}
+
+# SPR-009 T-03: the vitals of a 1,000-year smoke run with the host's timing observer attached; its ladder
+# must equal the golden baseline byte for byte (the observer changes no history; GOV-004 law 2).
+vitals_gate() {
+  local out
+  out="$("$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --vitals --out "$GOLDEN/smoke_vitals_t1.ladder")" || { echo "$out"; return 1; }
+  echo "$out" | grep '^vitals: tip \|^vitals: serial'
+  grep -q '^vitals: tip .* | pace .* ticks/s | serial .* | state ' <<<"$out" || { echo "no vitals line"; return 1; }
+  "$RH_CLI_RELEASE" ladder compare worlds/smoke/baselines/smoke_yearly_1000y.ladder "$GOLDEN/smoke_vitals_t1.ladder"
 }
 
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
@@ -536,6 +589,7 @@ run "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)" pass l
 run "Licence ledger control: the GPL fixture is listed as GPL-3.0-only" "pass:GPL-3.0-only" licence_ledger tests/lint_fixtures/deny/gpl_dependency/Cargo.toml target/rendered-fixtures/licence_ledger_gpl.txt &&
 run "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)" pass "$PY" -I bin/lint_arch.py &&
 run "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL (SPR-009 T-05)" "fail:VIOLATION [global-allocator] rh-tool: src/lib.rs declares a #[global_allocator]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/global_allocator_elsewhere/Cargo.toml &&
+run "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)" "fail:VIOLATION [global-allocator] rh-tool: src/lib.rs declares a #[global_allocator]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/global_allocator_cfg_attr/Cargo.toml &&
 run "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)" "fail:VIOLATION [count-alloc] rh-tool: enables rh-bench/count-alloc" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/count_alloc_enabled/Cargo.toml &&
 run "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL (SPR-009 R-7)" "fail:VIOLATION [count-alloc] rh-sys-x: enables rh-bench/arena-alloc" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/arena_alloc_plane_a/Cargo.toml &&
 run "lint_arch positive control: a test target requiring arena-alloc must FAIL (SPR-009 R-7)" "fail:VIOLATION [count-alloc] rh-bench: a [test] target requires arena-alloc" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/arena_alloc_test_target/Cargo.toml &&
@@ -663,6 +717,9 @@ run "Baseline integrity control: a count 40 instructions off passes inside the b
 run "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must FAIL (SPR-009 ruling 3)" "fail:needs [perf-baseline] in the pull request's title" perf_integrity_control untagged &&
 run "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 ruling 3)" "fail:needs a \`perf-baseline-reason: <why>\` line" perf_integrity_control noreason &&
 run "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason passes (SPR-009 ruling 3)" "pass:equals the tool's output" perf_integrity_control regen &&
+run "Baseline integrity control: a push whose commit ends in [perf-baseline] with a Reason: line passes (SPR-009 GAP-2)" "pass:with the [perf-baseline] tag and a reason" perf_push_control tagged &&
+run "Baseline integrity positive control: a push with no [perf-baseline] commit and reason must FAIL (SPR-009 GAP-2)" "fail:no commit in the range has a subject ending in [perf-baseline]" perf_push_control untagged &&
+run "Baseline integrity control: a local run says the tag and reason are not checked, never the success wording (SPR-009 GAP-2)" "pass:tag and reason not checked here" perf_local_control &&
 run "V-PERF-04 control: a speed-up passes and never re-baselines (docs/08 §9)" "pass:speed-up passed; the baseline is unchanged" perf_speedup_control &&
 run "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline required (SPR-009 ruling 2)" "fail:toolchain changed: re-baseline required" perf_toolchain_control &&
 run "V-PERF-04 positive control: a deliberate 15% slowdown in instructions must FAIL (SPR-009 T-02)" "fail:REGRESSION plane_hashes/state_full/rows_10k" "$PY" -I bin/perf_gate.py gate --features slowdown-control --baseline "$PERF_BASELINE" --out artifacts/perf/instructions_slowdown.txt &&
@@ -670,6 +727,12 @@ run "V-PERF-11 counting allocator self-test: a known pattern is counted exactly 
 run "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, medians and spreads from the samples (SPR-009)" "pass:8 cases on runner" wall_smoke &&
 run "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails (SPR-009)" "fail:wall-clock ALERT above +10% (gating)" wall_control slower &&
 run "T-02b wall-clock control: another CPU model must report machine changed, never compare (RUN-002 §5)" "fail:machine changed: new trend baseline required" wall_control machine &&
+run "T-02b wall-clock positive control: a NaN median must be refused, never compared (SPR-009 DEF-3)" "fail:not a rehoboam/rh-bench/wall/v1 line" wall_control nan &&
+run "V-PERF-11 allocation budget: smoke-world steady-state ticks within the recorded budget at 1 and 4 threads (SPR-009 T-05)" "pass:V-PERF-11 PASS" "$PY" -I bin/perf_gate.py alloc-gate --out "$ALLOC_RUN" &&
+run "V-PERF-11 repeatability: a second run on the same commit gives identical allocation counts (SPR-009 T-05)" "pass:identical allocation counts in two runs" alloc_repeat &&
+run "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output exactly (SPR-009 ruling 3, R-8)" pass "$PY" -I bin/perf_gate.py integrity --exact --baseline "$ALLOC_BASELINE" --measured "$ALLOC_RUN" &&
+run "V-PERF-11 integrity positive control: an allocation baseline one allocation off must FAIL (SPR-009 R-8)" "fail:does not equal the tool's output" alloc_typed_control &&
+run "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must FAIL (SPR-009 T-05)" "fail:OVER BUDGET threads 1 allocations" "$PY" -I bin/perf_gate.py alloc-gate --control --out artifacts/perf/allocations_control.txt &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&
 run "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)" pass doctest_count_gate "$DOCTEST_LOG" &&
 run "Doctest count gate positive control: one typed-ID case missing must FAIL" "fail:crates/rh-ids/src/ids.rs: expected 7 compile-fail doctests, found 6" doctest_count_control &&
@@ -684,6 +747,7 @@ run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERE
 run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads "$GOLDEN_THREADS" --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_tN.ladder" &&
+run "T-03 vitals: run smoke --vitals prints the vitals line, and its 1,000-year ladder equals the golden baseline (SPR-009 ruling 4)" "pass:LADDERS EQUAL" vitals_gate &&
 run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
 run "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)" "fail:LADDERS DIFFER: first differing rung: 500" ladder_compare_control &&
 run "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR (check_baseline; SPR-008 T-04)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&

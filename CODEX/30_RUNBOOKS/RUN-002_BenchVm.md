@@ -9,7 +9,7 @@ tags: [infrastructure, workflow]
 related: [GOV-008, RUN-001, SPR-008, SPR-009]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.2.1
 ---
 
 > **BLUF:** The director's Google Cloud VM `adjutant` is our reference-class machine: 8 cores and 64 GB, like the reference desktop in `docs/08`. It runs the wall-clock benchmarks, a cross-machine determinism check (AMD, against the laptop's Intel), and later the heavy runs (100k to 1M persons, ensembles). It costs about $0.83 per hour while running, so it runs **only on demand** (D6): the Architect asks for a session in advance, the director starts the VM, and it shuts itself down after 30 idle minutes. The director manages the spend. The first session is in SPR-009; regular use starts in P1b.
@@ -43,7 +43,7 @@ Run RUN-001 §1–5 on the VM (system packages, Rust, Cargo tools, Python throug
 1. **Self-hosted runner.** Register a GitHub Actions runner on the VM for this repository, as a service under an unprivileged user, with the label `adjutant`. Self-hosted runners use no GitHub Actions minutes, which matters on the Free plan (GOV-008 §1).
    - Safe because the repository is private. **If the repository ever becomes public, remove the runner first**: a public repository lets anyone's pull request run code on it.
 2. **Jobs wait for the VM.** Workflows for the VM (`runs-on: [self-hosted, adjutant]`) are started by hand (`workflow_dispatch`) or by the Architect. They wait in GitHub's queue until the VM is running.
-3. **Idle shutdown.** A small systemd timer on the VM powers it off after 30 minutes with no runner job and no interactive login. This is the backstop that keeps a forgotten VM from running up the bill.
+3. **Idle shutdown.** A small systemd timer on the VM powers it off after 30 minutes with no runner job and no interactive login. Any login blocks the shutdown, an idle SSH or IAP session included: log out when done. `IDLE_MINUTES` overrides the 30; a value that is not a positive integer is logged and ignored. This is the backstop that keeps a forgotten VM from running up the bill.
 4. **Results** go back as workflow artifacts: the bench report, the hash ladders and the check report.
 
 ### 3.1 Setting it up (SPR-009 T-04; the director, once)

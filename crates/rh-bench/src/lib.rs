@@ -29,3 +29,4 @@ compile_error!("count-alloc and arena-alloc are for separate bench targets: enab
 #[cfg(any(feature = "count-alloc", feature = "arena-alloc"))]
 pub mod alloc_count;
 pub mod fixture;
+pub mod smoke;

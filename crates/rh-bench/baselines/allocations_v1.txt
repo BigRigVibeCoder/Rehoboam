@@ -1,0 +1,49 @@
+# rehoboam/rh-bench/allocations/v1: heap allocations per steady-state tick of the smoke world (SPR-009 T-05).
+# Written by `python -I bin/perf_gate.py alloc-record`, never by hand (SPR-009 ruling 3).
+format rehoboam/rh-bench/allocations/v1
+window smoke seed 1 warm-up 2 years, measured 1 year(s), no inputs
+budget threads 1 ticks 8801 allocations 819476 growths 856 shrinks 0 max_per_tick 282
+budget threads 4 ticks 8801 allocations 828236 growths 856 shrinks 730 max_per_tick 306
+site - | instant setup and inputs | allocations 87969 growths 0
+site Activity | level dispatch | allocations 4883 growths 0
+site Activity | merge | allocations 1058 growths 489
+site Activity | phase start (timers due) | allocations 44735 growths 0
+site Activity | step X4.smoke_estate | allocations 444 growths 0
+site Activity | step X7.smoke_market | allocations 3817 growths 0
+site Agenda | level dispatch | allocations 96 growths 0
+site Agenda | merge | allocations 48 growths 24
+site Agenda | phase start (timers due) | allocations 44029 growths 0
+site Agenda | step X6.smoke_chronicle | allocations 60 growths 0
+site Bookkeeping | after the phase | allocations 26321 growths 0
+site Bookkeeping | between levels | allocations 2555 growths 0
+site Bookkeeping | level dispatch | allocations 2920 growths 0
+site Bookkeeping | phase start (timers due) | allocations 103787 growths 0
+site Contagion | level dispatch | allocations 3052 growths 0
+site Contagion | phase start (timers due) | allocations 44735 growths 0
+site Contagion | step X4.smoke_estate | allocations 365 growths 0
+site Culture | level dispatch | allocations 2920 growths 0
+site Culture | phase start (timers due) | allocations 44735 growths 0
+site Environment | level dispatch | allocations 63213 growths 0
+site Environment | merge | allocations 455 growths 242
+site Environment | phase start (timers due) | allocations 61525 growths 0
+site Environment | step X1.smoke_weather | allocations 8976 growths 0
+site Environment | step X7.smoke_market | allocations 1059 growths 0
+site Exchange | level dispatch | allocations 92 growths 0
+site Exchange | phase start (timers due) | allocations 44029 growths 0
+site Inputs | level dispatch | allocations 7 growths 0
+site Inputs | phase start (timers due) | allocations 44007 growths 0
+site Military | level dispatch | allocations 28 growths 0
+site Military | merge | allocations 4 growths 0
+site Military | phase start (timers due) | allocations 44013 growths 0
+site Military | step X5.smoke_polity | allocations 48 growths 0
+site Polity | level dispatch | allocations 91 growths 0
+site Polity | merge | allocations 2 growths 1
+site Polity | phase start (timers due) | allocations 44030 growths 1
+site Polity | step X5.smoke_polity | allocations 2 growths 0
+site Production | level dispatch | allocations 32 growths 0
+site Production | phase start (timers due) | allocations 44013 growths 0
+site Production | step X2.smoke_harvest | allocations 12 growths 0
+site Vital | level dispatch | allocations 432 growths 0
+site Vital | merge | allocations 224 growths 89
+site Vital | phase start (timers due) | allocations 44239 growths 0
+site Vital | step X3.smoke_vital | allocations 414 growths 10

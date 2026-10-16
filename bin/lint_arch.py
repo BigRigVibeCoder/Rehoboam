@@ -277,7 +277,9 @@ UNSAFE_RELAXED = "deny"
 ALLOCATOR_CRATE = "rh-bench"
 ALLOCATOR_FEATURES = ("arena-alloc", "count-alloc")
 ALLOCATOR_TARGET_DIR = "benches"
-GLOBAL_ALLOCATOR = re.compile(r"#\s*\[\s*global_allocator\s*\]")
+# Anywhere inside an attribute: `#[global_allocator]` and `#[cfg_attr(cond, global_allocator)]`
+# alike (VER-SPR-009-TEST GAP-6).
+GLOBAL_ALLOCATOR = re.compile(r"#\s*!?\s*\[[^\]]*\bglobal_allocator\b")
 ALLOW_UNSAFE = re.compile(r"\ballow\s*\(\s*unsafe_code\b")
 UNSAFE_TOKEN = re.compile(r"\bunsafe\b")
 

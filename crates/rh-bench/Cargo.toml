@@ -47,6 +47,9 @@ float_cmp = "deny"
 rh-core = { version = "0.0.0", path = "../rh-core" }
 rh-ids = { version = "0.0.0", path = "../rh-ids" }
 rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }
+# SPR-009 T-05: the smoke world (its systems, and its spec table through rh-golden's host code).
+rh-golden = { version = "0.0.0", path = "../rh-golden" }
+rh-sys-smoke = { version = "0.0.0", path = "../rh-sys-smoke" }
 
 # SPR-009 ruling 2: exactly pinned, a dev-dependency of the bench targets only. Its runner binary,
 # iai-callgrind-runner, must be the same version (RUN-001 §3; .github/workflows/ci.yml).

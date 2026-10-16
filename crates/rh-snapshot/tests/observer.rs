@@ -359,3 +359,48 @@ fn def_2_every_notice_carries_the_engine_s_instant_phase_and_worker() {
         check_contents(&notices, &instants, threads);
     }
 }
+
+/// Panics at the `nth` notice of one kind, remembering that notice's instant (OBS-1).
+struct PanickingAt {
+    kind: &'static str,
+    nth: usize,
+    seen: AtomicUsize,
+    at: std::sync::atomic::AtomicI64,
+}
+
+impl Observer for PanickingAt {
+    fn notify(&self, notice: &Notice) {
+        if kind(&notice.boundary) == self.kind
+            && self.seen.fetch_add(1, Ordering::SeqCst) + 1 == self.nth
+        {
+            self.at.store(notice.at.minutes(), Ordering::SeqCst);
+            panic!("observer boom at {}", self.kind);
+        }
+    }
+}
+
+/// VER-SPR-009-TEST OBS-1: whichever notice the observer fails on, the crash artifact's tick is
+/// the instant of that notice, `InstantStart` included (the engine records its instant before the
+/// first notice).
+#[test]
+fn obs_1_the_artifact_names_the_failing_instant_at_every_notice_kind() {
+    for threads in [1, 4] {
+        for k in KINDS {
+            let observer = Arc::new(PanickingAt {
+                kind: k,
+                nth: 300,
+                seen: AtomicUsize::new(0),
+                at: std::sync::atomic::AtomicI64::new(-1),
+            });
+            let mut e = world(threads);
+            e.set_observer(Some(observer.clone()));
+            let _err = e.advance_until(SimTime::from_minutes(YEARS * YEAR), |_, _| {});
+            let tick = e.crash_artifact().expect("an artifact").tick;
+            assert_eq!(
+                tick,
+                observer.at.load(Ordering::SeqCst),
+                "{k} at {threads} threads"
+            );
+        }
+    }
+}

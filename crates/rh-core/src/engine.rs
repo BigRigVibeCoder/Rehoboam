@@ -807,6 +807,9 @@ impl Engine {
     }
 
     fn run_instant(&mut self, t: SimTime) -> Result<(), SimError> {
+        // The instant is the current one before its first notice, so a failure there (an observer
+        // panic at InstantStart) names this instant, not the last (VER-SPR-009-TEST OBS-1).
+        self.at = (t, Phase::Inputs);
         self.notify(t, None, Boundary::InstantStart)?;
         let fired: Vec<Pulse> = self
             .calendar

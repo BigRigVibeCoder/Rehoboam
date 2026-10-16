@@ -7,6 +7,12 @@
 # Each busy check touches the marker; when the marker is older than IDLE_MINUTES, the VM powers off.
 set -eu
 IDLE_MINUTES="${IDLE_MINUTES:-30}"
+# VER-SPR-009-TEST GAP-9: a value that is not a positive integer would make `find -mmin` fail or
+# never match, so the VM would never power off. Fall back to 30, and say so in the journal.
+case "$IDLE_MINUTES" in
+  ''|*[!0-9]*|0*) logger -t rehoboam-idle "IDLE_MINUTES='$IDLE_MINUTES' is not a positive integer: using 30"
+                  IDLE_MINUTES=30 ;;
+esac
 MARKER="${REHOBOAM_IDLE_MARKER:-/run/rehoboam-last-busy}"
 if pgrep -f Runner.Worker >/dev/null 2>&1 || [ -n "$(who)" ] || [ ! -e "$MARKER" ]; then
   touch "$MARKER"

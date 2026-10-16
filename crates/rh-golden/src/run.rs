@@ -64,8 +64,11 @@ use rh_snapshot::state::state_digest;
 use rh_snapshot::store::KeyframeStore;
 use rh_sys_smoke::{CALENDAR, OVERLAY, SPECS_DIR, synthetic_inputs};
 
+use std::sync::Arc;
+
 use crate::dump;
 use crate::ladder::{Header, Ladder, Rung, RungKind};
+use crate::vitals::{Timing, Vitals};
 
 /// The world name in ladders.
 pub const WORLD: &str = "smoke";
@@ -136,6 +139,9 @@ pub struct RunArgs {
     /// The floor, in percent, of the share of levels that held two or more jobs (DEF-2): below it,
     /// or with no such level at all, the run fails.
     pub require_parallel: Option<u64>,
+    /// Attach the timing observer and report the vitals (SPR-009 T-03): per-system times, the
+    /// serial fraction and the vitals line. It changes no result.
+    pub vitals: bool,
 }
 
 impl RunArgs {
@@ -158,6 +164,7 @@ impl RunArgs {
             dump: None,
             leak_thread: false,
             require_parallel: None,
+            vitals: false,
         }
     }
 }
@@ -169,6 +176,8 @@ pub struct Outcome {
     pub ladder: Ladder,
     /// The dispatch over every instant the run ran (a resumed run: from its keyframe).
     pub dispatch: DispatchStats,
+    /// The vitals, when the run was asked for them (`--vitals`; SPR-009 T-03).
+    pub vitals: Option<Vitals>,
 }
 
 impl Outcome {
@@ -346,6 +355,14 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     let registered =
         || register(systems(args.leak_thread), &specs).map_err(|e| error("registration")(&e));
     let (mut engine, journal, identity) = start(args, &registered)?;
+    // SPR-009 T-03: the host's clock-free observer; the engine carries no clock (ruling 4).
+    let timing = args.vitals.then(|| Arc::new(Timing::default()));
+    let attach = |e: &mut Engine| {
+        if let Some(t) = &timing {
+            e.set_observer(Some(t.clone()));
+        }
+    };
+    attach(&mut engine);
     let start = engine.snapshot().cursor.unwrap_or(SimTime::EPOCH);
     let mut ladder = Ladder {
         header: Header {
@@ -394,6 +411,7 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         if let Some(inject) = args.inject.as_ref().filter(|_| stop.inject) {
             dispatched = add(dispatched, engine.dispatch_stats());
             engine = perturb(&engine, inject, args, registered()?)?;
+            attach(&mut engine);
         }
         let digest = state_digest(&engine.snapshot());
         if stop.month_end {
@@ -416,6 +434,7 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     Ok(Outcome {
         ladder,
         dispatch: add(dispatched, engine.dispatch_stats()),
+        vitals: timing.and_then(|t| t.vitals()),
     })
 }
 
@@ -655,6 +674,7 @@ mod tests {
                 parallel_levels,
                 max_jobs,
             },
+            vitals: None,
         }
     }
 

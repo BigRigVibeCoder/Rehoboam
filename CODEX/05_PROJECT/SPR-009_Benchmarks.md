@@ -89,27 +89,27 @@ version: 1.7.0
 ### T-01: criterion benches
 - **Deliverable:** Benches 7 and 8 of `08` §9 against the smoke world; bench 4 as a named, empty slot (ruling 1)
 - **Acceptance:** Baselines recorded
-- **Status:** [ ] not started
+- **Status:** [x] done: `crates/rh-bench/benches/` (benches 7 and 8 at 10k rows, on the R-7 arena); bench 4 a `slot` line in `baselines/instructions_v1.txt`
 
 ### T-02: Regression gate
 - **Deliverable:** Two gates. (a) **PR gate on instruction counts** (`iai-callgrind`, valgrind as an outside tool): more than 10% more instructions fails; deterministic to well under 1%, so it does not flake on a hosted runner or a laptop. (b) **Wall-clock benches** (criterion) run in each `adjutant` session (on demand, RUN-002 §4), are tracked as trends, and alert above 10%; they gate only on `adjutant`, once T-04 shows its spread is well under 10%. No automatic re-baseline
 - **Acceptance:** V-PERF-04 positive control on gate (a); a run of gate (a) twice on the same commit gives identical counts
-- **Status:** [ ] not started
+- **Status:** [x] done: (a) `bin/perf_gate.py` gate, repeat, integrity (R-8 band, GAP-2 contexts) and controls; (b) `benches/wall.rs` with `bin/wall_trend.py`, gating only on `adjutant` after T-04
 
 ### T-03: Serial fraction and vitals
 - **Deliverable:** Per-system timings; the vitals line of GOV-006 §1
 - **Acceptance:** Vitals printed by `rh-cli run smoke`
-- **Status:** [ ] not started
+- **Status:** [x] done: `rh-cli run smoke --vitals` (`rh-golden` `vitals.rs`, the host's timing observer); a 1,000-year vitals run equals the golden baseline
 
 ### T-04: Machine ratios and wall-clock baselines
 - **Deliverable:** The `adjutant` runner and its idle shutdown (RUN-002 §3). The benches of T-01 run on `adjutant` in one VM session (RUN-002 §4–5) and on the laptop (RUN-001 §6). `adjutant` becomes the wall-clock baseline machine; its run-to-run spread decides whether a wall-clock gate is possible there. Both machines' ratios to the `08` reference desktop are recorded in `08` as [M]
 - **Acceptance:** Ratios, spreads and run conditions (machine type, CPU model, power profile, temperature) are in `VER-SPR-009`
-- **Status:** [ ] not started
+- **Status:** [ ] blocked: director's machines (procedure and scripts done: `.github/workflows/adjutant.yml`, `bin/bench_session.sh`, `infra/adjutant/`, RUN-002 §3.1)
 
 ### T-05: Allocation budget per tick (RT-2026-10-16)
 - **Deliverable:** A counting global allocator, enabled only in bench builds, that reports heap allocations per steady-state tick of the `smoke` world; buffer growth on capacity doubling counted separately; the budget recorded per bench (default 0 for P0 machinery) and gated like instruction counts
 - **Acceptance:** V-PERF-11 positive control: a fixture system that allocates in its tick fails the gate; two runs on the same commit report identical counts
-- **Status:** [ ] not started
+- **Status:** [x] done: `benches/alloc_budget.rs` and `bin/perf_gate.py alloc-*`; the budget and its allocation sites in `baselines/allocations_v1.txt`; the `vec![0; n]` control fails it
 
 ## Verification assignment (Testers)
 

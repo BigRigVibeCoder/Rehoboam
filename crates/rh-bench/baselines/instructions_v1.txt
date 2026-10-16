@@ -9,8 +9,8 @@ toolchain libc glibc 2.39
 toolchain iai-callgrind 0.16.1
 toolchain bmi2 yes
 slot raster_8x512 bench 4: no baseline until P1a, the first sprint with a spatial field (M1 or M3)
-bench keyframe_write_read/load/rows_10k 33030236
-bench keyframe_write_read/read/rows_10k 30393219
+bench keyframe_write_read/load/rows_10k 33030274
+bench keyframe_write_read/read/rows_10k 30393113
 bench keyframe_write_read/write/rows_10k 66396014
 bench plane_hashes/narrative_dirty_chunk/rows_10k 158779
 bench plane_hashes/narrative_full/rows_10k 4998899

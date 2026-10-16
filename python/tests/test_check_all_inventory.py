@@ -28,11 +28,17 @@ REQUIRED_GATES = (
     "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)",
     "Baseline integrity control: a count 40 instructions off passes inside the band and is "
     "printed (SPR-009 R-8)",
+    "Baseline integrity control: a local run says the tag and reason are not checked, never the "
+    "success wording (SPR-009 GAP-2)",
+    "Baseline integrity control: a push whose commit ends in [perf-baseline] with a Reason: line "
+    "passes (SPR-009 GAP-2)",
     "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason "
     "passes (SPR-009 ruling 3)",
     "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 "
     "ruling 3)",
     "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)",
+    "Baseline integrity positive control: a push with no [perf-baseline] commit and reason must "
+    "FAIL (SPR-009 GAP-2)",
     "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must FAIL "
     "(SPR-009 ruling 3)",
     "Baseline integrity: a changed instruction-count baseline equals the tool's output, in a "
@@ -150,6 +156,10 @@ REQUIRED_GATES = (
     "(RUN-002 §5)",
     "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, medians and spreads from "
     "the samples (SPR-009)",
+    "T-02b wall-clock positive control: a NaN median must be refused, never compared (SPR-009 "
+    "DEF-3)",
+    "T-03 vitals: run smoke --vitals prints the vitals line, and its 1,000-year ladder equals the "
+    "golden baseline (SPR-009 ruling 4)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
@@ -167,7 +177,17 @@ REQUIRED_GATES = (
     "T-02)",
     "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline "
     "required (SPR-009 ruling 2)",
+    "V-PERF-11 allocation budget: smoke-world steady-state ticks within the recorded budget at 1 "
+    "and 4 threads (SPR-009 T-05)",
+    "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output exactly "
+    "(SPR-009 ruling 3, R-8)",
     "V-PERF-11 counting allocator self-test: a known pattern is counted exactly (SPR-009 T-05)",
+    "V-PERF-11 integrity positive control: an allocation baseline one allocation off must FAIL "
+    "(SPR-009 R-8)",
+    "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must "
+    "FAIL (SPR-009 T-05)",
+    "V-PERF-11 repeatability: a second run on the same commit gives identical allocation counts "
+    "(SPR-009 T-05)",
     "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL",
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
@@ -223,6 +243,7 @@ REQUIRED_GATES = (
     "lint_arch control: a bench target requiring arena-alloc, with its allocator in benches/, "
     "passes (SPR-009 R-7)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
+    "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)",
     "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL "
     "(SPR-009 T-05)",
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "

@@ -77,3 +77,21 @@ def test_combine_takes_the_median_of_run_medians_and_the_run_to_run_spread() -> 
     other.conditions["machine"] = "laptop"
     with pytest.raises(TrendError, match="different machines"):
         combine([*runs[:4], other])
+
+
+@pytest.mark.parametrize(
+    "median, spread",
+    [
+        ("nan", "1.0"),
+        ("inf", "1.0"),
+        ("0.0", "1.0"),
+        ("-5", "1"),
+        ("100.0", "nan"),
+        ("100.0", "-1"),
+    ],
+)
+def test_non_finite_or_non_positive_values_are_refused(median: str, spread: str) -> None:
+    """DEF-3: a NaN median makes every comparison false, so a slowdown would pass; refuse it."""
+    text = trend(a=1.0).render().replace("bench a 1.0 1.00 10", f"bench a {median} {spread} 10")
+    with pytest.raises(TrendError, match="not a"):
+        parse(text, "x")

@@ -11,6 +11,10 @@ A tool-plane crate: it measures plane-A code from outside and is never a depende
 
 Bench 4 (`raster_8x512`) is a named, empty slot until P1a (SPR-009 ruling 1): a `slot` line in the baseline.
 
+- The wall-clock bench covers 8 of the instruction-count benches' 10 cases. It has no `observation_dirty_chunk` or `narrative_dirty_chunk`, which run the same Merkle code as `state_dirty_chunk` (VER-SPR-009-TEST GAP-7).
+- `count-alloc` and `arena-alloc` are exclusive (a compile error together; R-7), so `cargo build --all-features` or `cargo test --all-features` on this crate fails by design. Build one bench target's feature at a time (GAP-8).
+- The R-8 band is max(64 instructions, 1e-5 of the count). Between two checkouts and on CI, the residue measured so far is 42 to 48 of those 64 instructions, on the keyframe cases (GAP-10). A residue that grows towards the band is a reason to look before it fails.
+
 ## What the instruction counts model (SPR-009 R-7)
 
 The instruction-count targets run on a deterministic bump arena (`src/alloc_count.rs`, `Arena`) as their global allocator.

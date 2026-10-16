@@ -14,15 +14,18 @@ from perf_gate import (
     OK,
     REBASELINE,
     SLOTS,
+    Base,
     Counts,
     GateError,
     band_problems,
     cmd_integrity,
     compare,
     has_reason,
+    has_tag,
     integrity_problems,
     parse,
     pr_context,
+    push_problems,
 )
 
 TOOLS = {"rustc": "1.97.0 abc", "valgrind": "valgrind-3.22.0"}
@@ -143,6 +146,10 @@ def test_a_pull_request_run_without_a_title_is_an_error(monkeypatch: pytest.Monk
     with pytest.raises(GateError, match="without RH_PR_TITLE"):
         pr_context()
     monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    with pytest.raises(GateError, match="without RH_PUSH_BEFORE"):
+        pr_context()
+    monkeypatch.setenv("RH_PUSH_BEFORE", "a" * 40)
+    monkeypatch.setenv("RH_PUSH_AFTER", "b" * 40)
     assert pr_context() is None
 
 
@@ -159,13 +166,47 @@ def test_a_new_baseline_is_checked_both_ways(
     # cmd_integrity names a baseline by its path in the repository, so the files live under target/.
     tmp_path = perf_gate.ROOT / "target" / "pytest-perf-gate" / tmp_path.name
     tmp_path.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(perf_gate, "base_text", lambda _ref, _path: None)
+    monkeypatch.setattr(perf_gate, "base_text", lambda *_: None)
     monkeypatch.setenv("RH_PR_TITLE", "[perf-baseline] first baseline")
     monkeypatch.setenv("RH_PR_BODY", "perf-baseline-reason: the first baseline")
     tool = _write(tmp_path, "tool.txt", counts(a=1000))
-    assert cmd_integrity(_write(tmp_path, "regen.txt", counts(a=1000)), tool, "x", None) == OK
+    assert cmd_integrity(_write(tmp_path, "regen.txt", counts(a=1000)), tool, Base("x")) == OK
     assert "(new): equals the tool's output" in capsys.readouterr().out
-    assert cmd_integrity(_write(tmp_path, "typed.txt", counts(a=1065)), tool, "x", None) == FAIL
+    assert cmd_integrity(_write(tmp_path, "typed.txt", counts(a=1065)), tool, Base("x")) == FAIL
     assert "INTEGRITY" in capsys.readouterr().out
     monkeypatch.setenv("RH_PR_TITLE", "first baseline")
-    assert cmd_integrity(_write(tmp_path, "untagged.txt", counts(a=1000)), tool, "x", None) == FAIL
+    assert cmd_integrity(_write(tmp_path, "untagged.txt", counts(a=1000)), tool, Base("x")) == FAIL
+
+
+def test_a_push_needs_a_tagged_commit_with_a_reason() -> None:
+    """GAP-2: on a push, a changed baseline needs a [perf-baseline] commit with a Reason: line."""
+    good = ("SPR-009: re-record the baseline [perf-baseline]", "Why:\nReason: the arena\n")
+    assert push_problems([("x", ""), good]) == []
+    assert push_problems([("SPR-009: re-record [perf-baseline]", "no reason")]) != []
+    assert push_problems([("SPR-009: re-record", "Reason: the arena")]) != []
+    assert push_problems([("docs: explain [perf-baseline] use", "Reason: x")]) != []
+    assert has_tag("x [C1] [perf-baseline]")
+    assert has_tag("x [perf-baseline] [C1]")
+    assert not has_tag("x [perf-baseline] y")
+
+
+def test_a_local_run_says_it_did_not_check_the_tag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """GAP-2: no pull-request or push context: the equality is checked, the tag is not, said so."""
+    tmp_path = perf_gate.ROOT / "target" / "pytest-perf-gate" / tmp_path.name
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    for var in ("RH_PR_TITLE", "RH_EVENT", "GITHUB_EVENT_NAME"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(perf_gate, "base_text", lambda *_: None)
+    tool = _write(tmp_path, "tool.txt", counts(a=1000))
+    assert cmd_integrity(_write(tmp_path, "regen.txt", counts(a=1000)), tool, Base("x")) == OK
+    out = capsys.readouterr().out
+    assert "tag and reason not checked here" in out
+    assert "with the [perf-baseline] tag" not in out
+
+
+def test_allocation_baselines_are_exact() -> None:
+    """R-8: allocation counts stay exact; one allocation more is a typed baseline."""
+    assert integrity_problems("a 1\n", "a 1\n", None, exact=True) == []
+    assert integrity_problems("a 2\n", "a 1\n", None, exact=True) != []

@@ -39,6 +39,7 @@ CODEX/05_PROJECT/SPR-009_Benchmarks.md T-02b, T-04.
 
 import argparse
 import json
+import math
 import os
 import platform
 import shutil
@@ -87,6 +88,21 @@ class Trend:
         return "\n".join(lines) + "\n"
 
 
+def bench_values(fields: list[str]) -> tuple[float, float, int]:
+    """A bench line's median, spread and samples.
+
+    VER-SPR-009-TEST DEF-3: a NaN or infinite value, a median that is not positive, a negative
+    spread or fewer than 1 sample is refused: a NaN median would make every comparison false, so
+    a slowdown would pass. A spread of 0 (identical samples) is allowed.
+    """
+    median, spread, samples = float(fields[0]), float(fields[1]), int(fields[2])
+    if not (math.isfinite(median) and math.isfinite(spread)) or median <= 0 or spread < 0:
+        raise ValueError(f"median {fields[0]} and spread {fields[1]} must be finite, median > 0")
+    if samples < 1:
+        raise ValueError(f"{samples} samples")
+    return median, spread, samples
+
+
 def parse(text: str, origin: str) -> Trend:
     """Parses the trend format."""
     trend, seen = Trend(), False
@@ -100,7 +116,7 @@ def parse(text: str, origin: str) -> Trend:
             elif parts[0] == "condition" and len(parts) >= CONDITION_FIELDS:
                 trend.conditions[parts[1]] = " ".join(parts[2:])
             elif parts[0] == "bench" and len(parts) == BENCH_FIELDS:
-                trend.benches[parts[1]] = (float(parts[2]), float(parts[3]), int(parts[4]))
+                trend.benches[parts[1]] = bench_values(parts[2:])
             else:
                 raise ValueError(raw)
         except ValueError as e:

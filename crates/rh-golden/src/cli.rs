@@ -3,7 +3,7 @@
 //!
 //! - `rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T]
 //!   [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]]
-//!   [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT]`: `--years`
+//!   [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]`: `--years`
 //!   is the history's horizon (with `--resume`, the journal's own, unless `--extend`); `--until`
 //!   stops earlier (DEF-1). The summary line reports the dispatch (levels, levels with two or
 //!   more jobs, the most jobs in a level); `--require-parallel` fails the run when no level held
@@ -21,8 +21,11 @@
 use std::path::{Path, PathBuf};
 
 use crate::bisect::{BisectArgs, Process, bisect};
-use crate::ladder::{Ladder, RungKind, compare};
+use rh_snapshot::hash::{Plane, empty_plane_hash};
+
+use crate::ladder::{Ladder, Rung, RungKind, compare};
 use crate::run::{Error, Inject, Outcome, RunArgs, run_reporting};
+use crate::vitals::Vitals;
 
 /// Exit code: success, no divergence.
 pub const OK: u8 = 0;
@@ -86,9 +89,10 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
     let (mut years, mut out, mut journal) = (None, None, None);
     let mut it = words.iter();
     while let Some(flag) = it.next() {
-        if flag == "--extend" || flag == "--leak-thread" {
+        if flag == "--extend" || flag == "--leak-thread" || flag == "--vitals" {
             args.extend |= flag == "--extend";
             args.leak_thread |= flag == "--leak-thread";
+            args.vitals |= flag == "--vitals";
             continue;
         }
         let value = it
@@ -162,7 +166,9 @@ pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
     let result = parse_run(words, repo).and_then(|args| run_reporting(&args).map(|o| (args, o)));
     match result {
         Ok((args, outcome)) => {
-            let Outcome { ladder, dispatch } = &outcome;
+            let Outcome {
+                ladder, dispatch, ..
+            } = &outcome;
             let d = dispatch;
             println!(
                 "dispatch: {} levels, {} with two or more jobs ({}%), at most {} jobs in a level",
@@ -187,6 +193,9 @@ pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
                     return DIFFERENT;
                 }
             }
+            if let (Some(v), Some(r)) = (&outcome.vitals, ladder.rungs.last()) {
+                print_vitals(v, r);
+            }
             match &ladder.failed {
                 None => {
                     println!(
@@ -210,6 +219,30 @@ pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
             TOOL
         }
     }
+}
+
+/// Prints the vitals line and the per-system job times (SPR-009 T-03; GOV-006 §1). Planes B and C
+/// have no tables yet, so their hashes are the empty planes'.
+fn print_vitals(v: &Vitals, last: &Rung) {
+    let hashes = [
+        last.hash,
+        empty_plane_hash(Plane::B),
+        empty_plane_hash(Plane::C),
+    ];
+    println!("{}", v.line(&last.date, hashes));
+    for (system, time) in &v.per_system {
+        println!(
+            "vitals: system {system} {} ms of job time",
+            time.as_millis()
+        );
+    }
+    let permille = v.serial_permille();
+    println!(
+        "vitals: serial fraction {}.{}% over {} instants",
+        permille / 10,
+        permille % 10,
+        v.instants
+    );
 }
 
 /// `ladder compare A B`. Returns the exit code.

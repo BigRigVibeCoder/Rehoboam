@@ -46,12 +46,13 @@ CODEX/05_PROJECT/SPR-009_Benchmarks.md T-01, T-02, rulings 1-3.
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import tomllib
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -81,6 +82,9 @@ BAND_INSTRUCTIONS = 64
 BAND_RELATIVE_DIVISOR = 100_000
 
 PR_TAG = "[perf-baseline]"
+# GAP-2: on a push, the commit that changes a baseline carries this line in its body.
+PUSH_REASON_KEY = "Reason:"
+NO_COMMIT = re.compile(r"^0*$")
 REASON_KEY = "perf-baseline-reason:"
 
 OK, FAIL, USAGE, REBASELINE = 0, 1, 2, 3
@@ -311,35 +315,102 @@ def cmd_same(first: Path, second: Path) -> int:
     return OK
 
 
-def git(*args: str) -> subprocess.CompletedProcess[str]:
-    """Runs git in the repository root."""
-    return subprocess.run(["git", *args], capture_output=True, text=True, cwd=ROOT, check=False)
+def git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Runs git in `repo` (the repository root, or a control's scratch repository)."""
+    return subprocess.run(["git", *args], capture_output=True, text=True, cwd=repo, check=False)
 
 
-def base_text(base_ref: str, path: Path) -> str | None:
+def base_text(base_ref: str, path: Path, repo: Path = ROOT) -> str | None:
     """The baseline at the merge base of HEAD and base_ref, or None if it did not exist there."""
-    merge_base = git("merge-base", "HEAD", base_ref)
+    merge_base = git(repo, "merge-base", "HEAD", base_ref)
     if merge_base.returncode != 0:
         raise GateError(f"no merge base of HEAD and {base_ref}: {merge_base.stderr.strip()}")
-    shown = git("show", f"{merge_base.stdout.strip()}:{path.as_posix()}")
+    shown = git(repo, "show", f"{merge_base.stdout.strip()}:{path.as_posix()}")
     return shown.stdout if shown.returncode == 0 else None
+
+
+@dataclass(frozen=True)
+class Context:
+    """Where the change comes from (GAP-2: never fail open, as SPR-008's MAJ-1).
+
+    `pull_request` carries the title and body; `push` the range before..after; `local` (a
+    developer's run, `workflow_dispatch`) carries nothing, and the tag and reason go unchecked,
+    said so.
+    """
+
+    event: str
+    title: str = ""
+    body: str = ""
+    before: str = ""
+    after: str = ""
+
+
+def change_context() -> Context:
+    """The context from the environment CI sets (RH_EVENT, RH_PR_TITLE, RH_PR_BODY, RH_PUSH_*).
+
+    An explicit RH_PR_TITLE is a pull request (the controls set one). A pull_request event without a
+    title, or a push without its range, is an error, never "no context".
+    """
+    event = os.environ.get("RH_EVENT") or os.environ.get("GITHUB_EVENT_NAME") or "local"
+    # A workflow passes an empty title outside pull_request events: an empty title is no title.
+    title = os.environ.get("RH_PR_TITLE") or None
+    if title is not None:
+        return Context("pull_request", title=title, body=os.environ.get("RH_PR_BODY", ""))
+    if event == "pull_request":
+        raise GateError("a pull_request run without RH_PR_TITLE: the workflow must pass it")
+    if event == "push":
+        before, after = os.environ.get("RH_PUSH_BEFORE", ""), os.environ.get("RH_PUSH_AFTER", "")
+        if not before or not after:
+            raise GateError(
+                "a push run without RH_PUSH_BEFORE and RH_PUSH_AFTER: the workflow must pass them"
+            )
+        return Context("push", before=before, after=after)
+    return Context("local")
 
 
 def pr_context() -> tuple[str, str] | None:
     """The pull request's title and body, or None outside a pull request."""
-    # A workflow passes an empty title outside pull_request events: treat it as no context.
-    title = os.environ.get("RH_PR_TITLE") or None
-    if title is None and os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
-        raise GateError("a pull_request run without RH_PR_TITLE: the workflow must pass it")
-    return None if title is None else (title, os.environ.get("RH_PR_BODY", ""))
+    c = change_context()
+    return (c.title, c.body) if c.event == "pull_request" else None
 
 
-def has_reason(body: str) -> bool:
-    """Whether the body has a `perf-baseline-reason:` line with text after the key."""
+def has_reason(body: str, key: str = REASON_KEY) -> bool:
+    """Whether the body has a `<key>` line (`perf-baseline-reason:`) with text after the key."""
     return any(
-        line.strip().lower().startswith(REASON_KEY) and line.strip()[len(REASON_KEY) :].strip()
+        line.strip().lower().startswith(key.lower()) and line.strip()[len(key) :].strip()
         for line in body.splitlines()
     )
+
+
+def has_tag(subject: str) -> bool:
+    """Whether a commit subject's trailing tag group holds [perf-baseline] (as SPR-008's [C3])."""
+    return re.search(r"\[perf-baseline\](?:\s*\[[^\[\]]+\])*\s*$", subject) is not None
+
+
+def push_problems(commits: Sequence[tuple[str, str]]) -> list[str]:
+    """GAP-2: a push that changes a baseline needs one commit tagged and with a reason.
+
+    The commit's subject ends in [perf-baseline] and its body has a `Reason:` line.
+    """
+    if any(has_tag(subject) and has_reason(body, PUSH_REASON_KEY) for subject, body in commits):
+        return []
+    return [
+        f"a baseline changed in this push, but no commit in the range has a subject ending in "
+        f"{PR_TAG} with a `{PUSH_REASON_KEY} <why>` line in its body"
+    ]
+
+
+def push_commits(repo: Path, before: str, after: str) -> list[tuple[str, str]]:
+    """(subject, body) of every commit in before..after."""
+    done = git(repo, "log", "--format=%s%x1f%b%x1e", f"{before}..{after}")
+    if done.returncode != 0:
+        raise GateError(f"git log {before}..{after} failed: {done.stderr.strip()}")
+    commits = []
+    for record in done.stdout.split("\x1e"):
+        if record.strip():
+            subject, _, body = record.strip("\n").partition("\x1f")
+            commits.append((subject, body))
+    return commits
 
 
 def within_band(tool: int, committed: int) -> bool:
@@ -381,41 +452,96 @@ def band_problems(committed: Counts, measured: Counts) -> list[str]:
     return problems
 
 
-def integrity_problems(committed: str, measured: str, pr: tuple[str, str] | None) -> list[str]:
-    """Why a changed baseline is not acceptable (ruling 3); empty if it is."""
-    problems = band_problems(parse(committed, "the baseline"), parse(measured, "the tool's output"))
-    if pr is None:
-        print("PR title and body not checked: no pull-request context here; CI checks them")
+def tag_problems(context: Context, repo: Path) -> list[str]:
+    """Why the change's tag or reason is missing; local runs say they cannot check."""
+    if context.event == "pull_request":
+        problems = []
+        if PR_TAG not in context.title:
+            problems.append(
+                f"a changed baseline needs {PR_TAG} in the pull request's title: {context.title!r}"
+            )
+        if not has_reason(context.body):
+            problems.append(f"a changed baseline needs a `{REASON_KEY} <why>` line in the PR body")
         return problems
-    title, body = pr
-    if PR_TAG not in title:
-        problems.append(f"a changed baseline needs {PR_TAG} in the pull request's title: {title!r}")
-    if not has_reason(body):
-        problems.append(f"a changed baseline needs a `{REASON_KEY} <why>` line in the PR body")
+    if context.event == "push":
+        return push_problems(push_commits(repo, context.before, context.after))
+    return []
+
+
+def integrity_problems(
+    committed: str, measured: str, pr: tuple[str, str] | None, exact: bool = False
+) -> list[str]:
+    """Why a changed baseline is not acceptable (ruling 3); empty if it is.
+
+    Instruction counts compare within the R-8 band; allocation counts (exact) byte for byte.
+    """
+    if exact:
+        problems = (
+            []
+            if committed == measured
+            else [
+                "the changed allocation baseline does not equal the tool's output: allocation "
+                "counts are exact (R-8); regenerate it with `python -I bin/perf_gate.py "
+                "alloc-record`, never type it"
+            ]
+        )
+    else:
+        problems = band_problems(
+            parse(committed, "the baseline"), parse(measured, "the tool's output")
+        )
+    if pr is not None:
+        problems += tag_problems(Context("pull_request", title=pr[0], body=pr[1]), ROOT)
     return problems
 
 
+def base_for(context: Context, baseline: Path, repo: Path, base_ref: str | None) -> str | None:
+    """The baseline before the change: at the push's `before`, else at the merge base."""
+    path = baseline.resolve().relative_to(repo.resolve())
+    if context.event == "push":
+        shown = git(repo, "show", f"{context.before}:{path.as_posix()}")
+        return shown.stdout if shown.returncode == 0 else None
+    ref = base_ref or os.environ.get("RH_BASELINE_BASE") or "origin/main"
+    return base_text(ref, path, repo)
+
+
+@dataclass(frozen=True)
+class Base:
+    """Where the baseline's previous version comes from: a ref, or a file (the controls)."""
+
+    ref: str | None = None
+    file: Path | None = None
+
+
 def cmd_integrity(
-    baseline: Path, measured: Path, base_ref: str | None, base_file: Path | None
+    baseline: Path, measured: Path, base: Base, *, exact: bool = False, repo: Path = ROOT
 ) -> int:
-    """Ruling 3 for one baseline file."""
+    """Ruling 3 for one baseline file (exact for allocation baselines)."""
+    context = change_context()
+    if context.event == "push" and NO_COMMIT.match(context.before):
+        print(f"{baseline}: not checked: the push has no base (a new branch)")
+        return OK
     committed = baseline.read_text(encoding="utf-8")
-    if base_file is not None:
-        before: str | None = base_file.read_text(encoding="utf-8")
+    if base.file is not None:
+        before: str | None = base.file.read_text(encoding="utf-8")
     else:
-        before = base_text(base_ref or "origin/main", baseline.resolve().relative_to(ROOT))
+        before = base_for(context, baseline, repo, base.ref)
     if before == committed:
         print(f"{baseline}: unchanged from the base; the regression check governs it")
         return OK
     state = "new" if before is None else "changed from the base"
-    problems = integrity_problems(committed, measured.read_text(encoding="utf-8"), pr_context())
+    problems = integrity_problems(committed, measured.read_text(encoding="utf-8"), None, exact)
+    problems += tag_problems(context, repo)
     for p in problems:
         print(f"INTEGRITY {baseline} ({state}): {p}")
     if problems:
         return FAIL
-    print(
-        f"{baseline} ({state}): equals the tool's output, in a {PR_TAG} pull request with a reason"
-    )
+    if context.event == "local":
+        print(
+            f"{baseline} ({state}): equals the tool's output; tag and reason not checked here "
+            "(no pull-request or push context): CI checks them"
+        )
+    else:
+        print(f"{baseline} ({state}): equals the tool's output, with the {PR_TAG} tag and a reason")
     return OK
 
 
@@ -427,6 +553,92 @@ def cmd_record(baseline: Path, features: Sequence[str]) -> int:
         return FAIL
     write(baseline, first)
     print(f"wrote {baseline}: {len(first.benches)} cases; commit it in a {PR_TAG} pull request")
+    return OK
+
+
+# V-PERF-11 (SPR-009 T-05): the smoke world's heap allocations per steady-state tick.
+ALLOC_BASELINE = Path("crates/rh-bench/baselines/allocations_v1.txt")
+ALLOC_FORMAT = "rehoboam/rh-bench/allocations/v1"
+# Gated fields of a `budget` line: any increase fails (ruling 5). Shrinks are reported, not gated.
+ALLOC_GATED = ("allocations", "growths", "max_per_tick")
+
+
+def alloc_measure(control: bool) -> str:
+    """Runs the alloc_budget target and returns its report (the baseline format)."""
+    with tempfile.TemporaryDirectory(prefix="rh-alloc-") as tmp:
+        out = Path(tmp) / "allocations.txt"
+        cmd = ["cargo", "bench", "--locked", "--quiet", "-p", PACKAGE, "--features", "count-alloc"]
+        cmd += ["--bench", "alloc_budget", "--", "--out", str(out)]
+        env = dict(os.environ, RH_ALLOC_CONTROL="1" if control else "0")
+        run = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, env=env, check=False)
+        if run.returncode != 0 or not out.exists():
+            tail = "\n".join((run.stdout + run.stderr).splitlines()[-20:])
+            raise GateError(f"`{' '.join(cmd)}` failed ({run.returncode}):\n{tail}")
+        return out.read_text(encoding="utf-8")
+
+
+def parse_budget(text: str, origin: str) -> tuple[str, dict[str, dict[str, int]]]:
+    """The window line and every `budget threads N field value ...` line of an allocation file."""
+    window, budgets, seen = "", {}, False
+    for raw in text.splitlines():
+        if raw.startswith("format "):
+            seen = raw == f"format {ALLOC_FORMAT}"
+        elif raw.startswith("window "):
+            window = raw
+        elif raw.startswith("budget threads "):
+            words = raw.split()
+            try:
+                budgets[words[2]] = {
+                    k: int(v) for k, v in zip(words[3::2], words[4::2], strict=True)
+                }
+            except ValueError as e:
+                raise GateError(f"{origin}: not a budget line: {raw!r}") from e
+    if not seen or not window or not budgets:
+        raise GateError(f"{origin}: not a {ALLOC_FORMAT} file")
+    return window, budgets
+
+
+def alloc_compare(baseline: str, measured: str) -> tuple[int, list[str]]:
+    """V-PERF-11: any increase over the recorded budget fails; a decrease passes and is kept."""
+    base_window, base = parse_budget(baseline, "the baseline")
+    now_window, now = parse_budget(measured, "this run")
+    if base_window != now_window or set(base) != set(now):
+        return REBASELINE, [
+            f"window changed: re-baseline required ({base_window!r} -> {now_window!r})"
+        ]
+    verdict, lines = OK, []
+    for threads in sorted(base, key=int):
+        if base[threads].get("ticks") != now[threads].get("ticks"):
+            return REBASELINE, [f"window changed: the ticks at {threads} thread(s) differ"]
+        for field_name in ALLOC_GATED:
+            b, n = base[threads][field_name], now[threads][field_name]
+            if n > b:
+                lines.append(f"OVER BUDGET threads {threads} {field_name}: {b} -> {n} (+{n - b})")
+                verdict = FAIL
+            else:
+                word = "below budget (kept)" if n < b else "ok"
+                lines.append(f"{word} threads {threads} {field_name}: {b} -> {n}")
+    return verdict, lines
+
+
+def cmd_alloc_check(baseline: Path, measured: str) -> int:
+    """Prints the allocation comparison and returns its verdict."""
+    verdict, lines = alloc_compare(baseline.read_text(encoding="utf-8"), measured)
+    print("\n".join(lines))
+    word = {OK: "PASS", FAIL: "FAIL", REBASELINE: "RE-BASELINE REQUIRED"}[verdict]
+    print(f"V-PERF-11 {word}: per-tick allocations against {baseline}")
+    return verdict
+
+
+def cmd_alloc_record(baseline: Path) -> int:
+    """Measures twice, requires identical reports, and writes the allocation baseline."""
+    first, second = alloc_measure(control=False), alloc_measure(control=False)
+    if first != second:
+        print("NOT REPRODUCIBLE: two allocation runs differ; nothing written")
+        return FAIL
+    baseline.parent.mkdir(parents=True, exist_ok=True)
+    baseline.write_text(first, encoding="utf-8")
+    print(f"wrote {baseline}; commit it in a {PR_TAG} change with a reason")
     return OK
 
 
@@ -452,25 +664,64 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--measured", type=Path, required=True)
     s.add_argument("--base-ref", default=None, help="default origin/main")
     s.add_argument("--base-file", type=Path, default=None, help="the base revision's baseline")
+    s.add_argument("--repo", type=Path, default=ROOT, help="the git repository (controls)")
+    s.add_argument("--exact", action="store_true", help="allocation baselines: byte for byte")
+    s = sub.add_parser("alloc-measure")
+    s.add_argument("--out", type=Path, required=True)
+    s.add_argument("--control", action="store_true", help="V-PERF-11's allocating system")
+    s = sub.add_parser("alloc-gate")
+    s.add_argument("--out", type=Path, required=True)
+    s.add_argument("--control", action="store_true", help="V-PERF-11's allocating system")
+    s.add_argument("--baseline", type=Path, default=ALLOC_BASELINE)
+    s = sub.add_parser("alloc-check")
+    s.add_argument("--baseline", type=Path, default=ALLOC_BASELINE)
+    s.add_argument("--measured", type=Path, required=True)
+    s = sub.add_parser("alloc-record")
+    s.add_argument("--baseline", type=Path, default=ALLOC_BASELINE)
     return p
+
+
+def dispatch_alloc(a: argparse.Namespace) -> int:
+    """Runs one allocation subcommand (V-PERF-11)."""
+    if a.command == "alloc-record":
+        return cmd_alloc_record(a.baseline)
+    if a.command == "alloc-check":
+        return cmd_alloc_check(a.baseline, a.measured.read_text(encoding="utf-8"))
+    text = alloc_measure(a.control)
+    a.out.parent.mkdir(parents=True, exist_ok=True)
+    a.out.write_text(text, encoding="utf-8")
+    if a.command == "alloc-measure":
+        print(f"wrote {a.out}")
+        return OK
+    return cmd_alloc_check(a.baseline, text)
+
+
+def cmd_measure(a: argparse.Namespace) -> int:
+    """`measure` and `gate`: count, write, and (gate) compare with the baseline."""
+    write(a.out, measure(a.features))
+    if a.command == "gate":
+        return cmd_check(a.baseline, a.out)
+    print(f"wrote {a.out}")
+    return OK
+
+
+HANDLERS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "measure": cmd_measure,
+    "gate": cmd_measure,
+    "check": lambda a: cmd_check(a.baseline, a.measured),
+    "same": lambda a: cmd_same(a.first, a.second),
+    "integrity": lambda a: cmd_integrity(
+        a.baseline, a.measured, Base(a.base_ref, a.base_file), exact=a.exact, repo=a.repo
+    ),
+    "record": lambda a: cmd_record(a.baseline, a.features),
+}
 
 
 def dispatch(a: argparse.Namespace) -> int:
     """Runs one subcommand."""
-    if a.command == "measure":
-        write(a.out, measure(a.features))
-        print(f"wrote {a.out}")
-        return OK
-    if a.command == "gate":
-        write(a.out, measure(a.features))
-        return cmd_check(a.baseline, a.out)
-    if a.command == "check":
-        return cmd_check(a.baseline, a.measured)
-    if a.command == "same":
-        return cmd_same(a.first, a.second)
-    if a.command == "integrity":
-        return cmd_integrity(a.baseline, a.measured, a.base_ref, a.base_file)
-    return cmd_record(a.baseline, a.features)
+    if a.command.startswith("alloc-"):
+        return dispatch_alloc(a)
+    return HANDLERS[a.command](a)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
