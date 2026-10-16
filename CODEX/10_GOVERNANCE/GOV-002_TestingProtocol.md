@@ -9,7 +9,7 @@ tags: [governance, testing]
 related: [GOV-005, GOV-007, ADR-0032, ADR-0006]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** The laws of the director's GOV-002 are kept: proof, not claims; no report means no pass; regression test first; flaky means broken; trace everything. The 17 tiers are mapped onto a headless deterministic simulation, and the five tiers that matter most here are added: determinism, observer invariance, statistical validation with held-out bands, golden vectors, and pre-registered human evaluation. Tests run in three cadences: every PR, nightly, and at gates. `docs/09` is the test catalogue; this document is the policy.
@@ -46,7 +46,7 @@ version: 1.1.0
 | **6. Determinism** | Hash ladders at 1/2/4/N threads; replay from the journal; keyframe round-trip; **stream determinism** (V-STR-01) | Every PR (short worlds); nightly (full length, cross-machine) |
 | **7. Observer invariance** | Viewers and console fuzz leave `state_hash` unchanged (V-DET-06–08); harness isolation (V-PERF-09) | Every PR from P2 |
 | 8. Integration and contract | ICD conformance (V-IF); **SQL-twin equivalence** (V-SIFT-01); stream contracts (V-STR); consumer contract tests of changed contract crates | Every PR |
-| 9. End-to-end | **The complexity ladder:** `solo` on every PR; higher rungs nightly | Every PR / nightly |
+| 9. End-to-end | **The complexity ladder.** PR tier: `solo` end to end, plus 200-year yearly ladders for the other reference worlds; nightly: the full 1,000-year monthly ladders at 1/2/4/N threads × 3 repeats (SPR-011 ruling 16; `docs/13` §4.3) | Every PR / nightly |
 | 10. Performance | Instruction counts (`iai-callgrind`): > 10% more fails (V-PERF-04, PERF-4); heap allocations per steady-state tick above the recorded budget fail (V-PERF-11); criterion wall-clock benches as trends, alerting above 10%. Wall clock gates only on a dedicated machine: on a laptop or a shared runner its noise exceeds 10% (SPR-009) | Every PR (instruction counts); wall clock in each `adjutant` session (on demand, RUN-002) |
 | 11. Mutation | `cargo-mutants` on `rh-core`, the Registry evaluator, RNG and fixed-point primitives; target ≥ 80% kill | Nightly; a regression blocks the next merge to those crates |
 | 12. Fuzz | `cargo-fuzz` on journal, stream, manifest and pattern parsers | Nightly |
