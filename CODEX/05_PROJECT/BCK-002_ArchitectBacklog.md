@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [BCK-001, AGT-001, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.3.0
+version: 1.4.0
 ---
 
 > **BLUF:** The Architect's own work stream, run in parallel with development: operating-model upkeep, audit tooling, gate preparation, and documentation debt.
@@ -45,3 +45,6 @@ version: 1.3.0
 | A-25 | A node-count limit on YAML alias expansion in `rh-manifest`, noted in `05.5` §3 (`VER-SPR-004` GAP-6) | Before manifests can come from outside the expander | Open |
 | A-26 | Move `lint_forbidden`'s `float-api` rule from text to rustdoc JSON, so that it sees a float in a `pub trait` method, behind an associated-type projection, in a macro's type tokens or behind an opaque `impl Trait`. Until then the reviewer reads `rh-sample`'s public items (`VER-SPR-003` GAP-11) | When rustdoc's JSON format is stable, or before `rh-sample`'s public surface grows a trait, macro or `impl Trait` | Open |
 | A-27 | `lint_forbidden` follows an `include!` whose argument is a string literal resolving to a file inside the repository, and scans that file as source; a non-literal path (`concat!`, `env!`) or one outside the repository stays forbidden. Planted controls both ways. ADR-0033 §3 has system crates include their generated skeletons, which the source-include rule (VER-SPR-001 DEF-4) refuses today; SPR-005 uses a counted `LINT-ALLOW` meanwhile | Before the first `rh-sys-*` crate | Open |
+| A-28 | Exact `start_of_day` and `previous_pulse` read lags (`05.1` §2 rule 4): column snapshots taken at the start of the day and at the reader's previous firing. P0 reads all three non-edge lags at the start of the instant (Architect ruling, SPR-005 G-b). That is exact for S5 but not for `previous_pulse` (S6, S7) or for an Hour reader at `start_of_day`. First step, in SPR-006: `Engine::new` refuses those reads with `Unsupported` until this item lands (VER-SPR-005) | Before the first system that declares them runs (P1a: S5, S6, S7) | Open |
+| A-29 | Key `StepCtx::rng` draws by the drawn entity's epoch (ADR-0025), which needs a typed entity key in the draw API instead of an untyped `u64`. P0 draws at epoch 0 (SPR-005; SPR-006 carry-forward) | Before the first material input that touches a system that draws | Open |
+| A-30 | Same-instant conflicts in lifecycle application: timers due at the same (t, phase) fire simultaneously against the same state (SPR-006 G2), so a person can die and act in one slot. When the queue is applied in `(tick, phase, PersonId, seq)` order, a command for a person who died earlier in that application is dropped, with a diagnostic | With the first death command (M2, P1a) | Open |

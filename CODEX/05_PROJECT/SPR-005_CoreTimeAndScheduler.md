@@ -2,14 +2,14 @@
 id: SPR-005
 title: "rh-core: time, pulses, phases, SystemModel, AccessSpec, scheduler"
 type: how-to
-status: PLANNING
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001]
+related: [BCK-001, PRJ-001, VER-SPR-005, VER-SPR-005-TEST]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.1.1
 ---
 
 > **BLUF:** Build the core's time model and the contract every system implements, with a scheduler derived from declared reads and writes. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -93,11 +93,11 @@ version: 1.1.0
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-005` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-005` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class.
 
 **Completion notes (developer, 2026-10-16).** V-DET-01 and V-DET-02 run on a stub world: `WorldTables` is a stub i64-column store and its state hash is a stub SplitMix64 hash, not the chunked Merkle xxh3 of `05.1` §6 item 6 (SPR-007), and `StepCtx` draws use epoch 0 until material inputs exist. They are gating tests of this sprint but count toward G0 only on real hashes (SPR-008; Architect ruling, 2026-10-16).
