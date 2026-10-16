@@ -1,0 +1,13 @@
+[package]
+name = "rh-sample"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[dependencies]
+libm = { version = "=0.2.16", default-features = false }
+zerocopy = { version = "=0.8.27", default-features = false }

@@ -33,7 +33,12 @@ workspace crates, of every dependency kind (normal, build and dev):
                      float < and >, so a float that plane-A code never names could only enter
                      through such a dependency (VER-SPR-010 GAP-3; BCK-002 A-20). A new
                      dependency turns the gate red until it is reviewed and listed.
-                     Dev-dependencies are exempt, as above; the RNG crates are left to rng-crate.
+                     Every such dependency, the RNG building blocks included, is pinned exactly
+                     (`=x.y.z`), and an entry may also require `default-features = false`
+                     (libm does: the portable software routines only), read from cargo
+                     metadata's `req` and `uses_default_features` (VER-SPR-003-TEST GAP-4).
+                     Dev-dependencies are exempt, as above; the RNG crates are otherwise left to
+                     rng-crate.
 
 Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
@@ -44,10 +49,11 @@ Standard library only (GOV-003 §3).
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
 
@@ -88,25 +94,32 @@ UNKEYED_RNG_CRATES = frozenset({"rand", "getrandom", "fastrand", "oorandom", "na
 KEYED_RNG_BUILDING_BLOCKS = frozenset({"rand_core", "rand_chacha"})
 KEYED_RNG_OWNER = "rh-ids"
 # REF: BCK-002 A-20; VER-SPR-010 GAP-3. The reviewed third-party dependencies of plane-A crates:
-# package name -> (the plane-A crates that may use it, or None for any; the review note). The note
-# says whether the crate can return a float to plane A. Keep it alphabetical; adding an entry is a
-# review, and the reviewer names it in the PR.
+# package name -> (the plane-A crates that may use it, or None for any; the review note; whether
+# its default features must be off). The note says whether the crate can return a float to plane A.
+# Keep it alphabetical; adding an entry is a review, and the reviewer names it in the PR.
 ANY_PLANE_A_CRATE = None
+NO_DEFAULT_FEATURES = True
+DEFAULT_FEATURES_ALLOWED = False
+# An exact version requirement: `=x.y.z`, optionally with a pre-release or build suffix.
+EXACT_REQUIREMENT = re.compile(r"=\s*\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?")
 PLANE_A_EXTERNAL_DEPS = MappingProxyType(
     {
         "libm": (
             frozenset({"rh-sample"}),
             "returns f32/f64: the transcendentals of the sampler float zone, the only "
             "plane-A crate allowed float arithmetic (SPR-003 ruling)",
+            NO_DEFAULT_FEATURES,
         ),
         "serde": (
             ANY_PLANE_A_CRATE,
             "no floats of its own: the (de)serialisation traits and derives",
+            DEFAULT_FEATURES_ALLOWED,
         ),
         "toml": (
             frozenset({"rh-registry"}),
             "can return f64 (toml::Value::Float); rh-registry reads only strings, arrays and "
             "tables from the system specs for the ownership lint (SPR-004)",
+            DEFAULT_FEATURES_ALLOWED,
         ),
     }
 )
@@ -128,6 +141,10 @@ class Edge:
 
     target: str
     kind: str  # "normal", "build" or "dev"
+    # Third-party edges only, from cargo metadata (None when the document does not say). They do
+    # not take part in equality or ordering: an edge is its target and kind.
+    req: str | None = field(default=None, compare=False)
+    default_features: bool | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -202,7 +219,13 @@ def _edges(
         name, kind = dep.get("name"), dep.get("kind")
         if not isinstance(name, str):
             raise WorkspaceError(f"a dependency has no name: {dep!r}")
-        edge = Edge(target=name, kind=kind if isinstance(kind, str) else "normal")
+        req, defaults = dep.get("req"), dep.get("uses_default_features")
+        edge = Edge(
+            target=name,
+            kind=kind if isinstance(kind, str) else "normal",
+            req=req if isinstance(req, str) else None,
+            default_features=defaults if isinstance(defaults, bool) else None,
+        )
         # A workspace dependency is a path dependency (no registry or git source) on a member.
         is_member = name in workspace and dep.get("source") is None
         (internal if is_member else external).add(edge)
@@ -334,9 +357,22 @@ def check_external_deps(crate: Crate) -> list[Violation]:
         return []
     found: list[Violation] = []
     for edge in crate.external:
-        # DECISION: dev-dependencies are exempt, as for rng-crate; RNG crates are judged by
-        # rng-crate alone, so one edge is never reported twice. REF: BCK-002 A-20.
-        if edge.kind == "dev" or edge.target in UNKEYED_RNG_CRATES | KEYED_RNG_BUILDING_BLOCKS:
+        if edge.kind == "dev":
+            continue
+        # VER-SPR-003-TEST GAP-4: a loosened requirement could move plane A's results with a
+        # `cargo update`; only an exact pin keeps the reviewed version the built one.
+        if edge.req is not None and not EXACT_REQUIREMENT.fullmatch(edge.req.strip()):
+            found.append(
+                Violation(
+                    "plane-A-external",
+                    crate.name,
+                    f"requires {edge.target}{_via(edge)} as `{edge.req}`; a plane-A third-party "
+                    "dependency is pinned exactly, `=x.y.z` (VER-SPR-003-TEST GAP-4)",
+                )
+            )
+        # DECISION: RNG crates are otherwise judged by rng-crate alone, so one edge is never
+        # reported twice. REF: BCK-002 A-20.
+        if edge.target in UNKEYED_RNG_CRATES | KEYED_RNG_BUILDING_BLOCKS:
             continue
         entry = PLANE_A_EXTERNAL_DEPS.get(edge.target)
         if entry is None:
@@ -351,7 +387,17 @@ def check_external_deps(crate: Crate) -> list[Violation]:
                 )
             )
             continue
-        allowed, _note = entry
+        allowed, _note, no_defaults = entry
+        if no_defaults and edge.default_features:
+            found.append(
+                Violation(
+                    "plane-A-external",
+                    crate.name,
+                    f"uses {edge.target}{_via(edge)} with its default features; plane A takes "
+                    f"{edge.target} with `default-features = false` (PLANE_A_EXTERNAL_DEPS; "
+                    "VER-SPR-003-TEST GAP-4)",
+                )
+            )
         if allowed is not None and crate.name not in allowed:
             users = ", ".join(sorted(allowed))
             found.append(
