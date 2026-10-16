@@ -30,6 +30,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 Slug = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")]
 Unit = Annotated[float, Field(ge=0.0, le=1.0)]
+# The engine stores an integer in at most 64 bits, so no manifest integer may exceed i64
+# (SPR-004 DEF-2, Architect ruling 2026-10-16). Fields with a tighter bound keep their own.
+Int64 = Annotated[int, Field(ge=-(2**63), le=2**63 - 1)]
 
 
 class Strict(BaseModel):
@@ -213,12 +216,12 @@ class CovertOutbreak(Strict):
     seed_infected: Annotated[int, Field(ge=1, le=10_000)]
     seed_region_hint: Literal["capital", "port", "periphery", "random"] = "random"
     channel: Literal["hive"] = "hive"
-    start_day: Annotated[int, Field(ge=0)] = 0
+    start_day: Annotated[Int64, Field(ge=0)] = 0
 
 
 class ClimateShock(Strict):
     kind: Literal["climate_shock"]
-    year: Annotated[int, Field(ge=0)]
+    year: Annotated[Int64, Field(ge=0)]
     severity_sigma: Annotated[float, Field(ge=0.5, le=4.0)]
     duration_years: Annotated[int, Field(ge=1, le=10)] = 1
 
@@ -263,7 +266,7 @@ class Household(Strict):
     head: Slug                                                  # a cast member
     children: Children = Children()
     servants: Annotated[int, Field(ge=0, le=100_000)] = 0
-    holdings: dict[Slug, Annotated[int, Field(ge=0)]] = {}      # Registry goods → quantity
+    holdings: dict[Slug, Annotated[Int64, Field(ge=0)]] = {}      # Registry goods → quantity
 
 
 class OffMapActor(Strict):
@@ -296,7 +299,7 @@ class Presentation(Strict):
 # --------------------------------------------------------------------------- root
 class Manifest(Strict):
     manifest_version: Literal[0]
-    registry_version: Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+$")]
+    registry_version: Annotated[str, Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")]  # ASCII digits (SPR-004 GAP-4)
     world: WorldMeta
     geography: Geography
     peoples: Annotated[list[People], Field(min_length=1)]
