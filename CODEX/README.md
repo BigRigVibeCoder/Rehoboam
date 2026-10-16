@@ -13,7 +13,7 @@
 
 | Area | Holds | Owner |
 |---|---|---|
-| `00_INDEX/` | `MANIFEST.yaml`, **generated** by `../bin/gen_manifest.py`; never edit by hand | Architect (generator) |
+| `00_INDEX/` | `MANIFEST.yaml`, **generated locally** by `../bin/gen_manifest.py`; not committed; never edit by hand | Architect (generator) |
 | `05_PROJECT/` | `PRJ-001` roadmap front page, `BCK-001` development backlog, `BCK-002` architect backlog, `SPR-*` sprints | Architect; director approves priorities |
 | `10_GOVERNANCE/` | `GOV-001`–`GOV-008`: documentation, testing, coding, errors and logging, lifecycle, observability, project management, infrastructure | Director |
 | `30_RUNBOOKS/` | Step-by-step procedures, starting with `RUN-001` (laptop setup) | Architect |
