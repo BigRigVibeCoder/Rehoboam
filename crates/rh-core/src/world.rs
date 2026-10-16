@@ -27,14 +27,32 @@ use crate::system::SimError;
 /// One column: rows of `i64` (stub storage; see the module documentation).
 pub type Column = Vec<i64>;
 
-/// Domain tag of the stub state hash.
-const TAG_STATE_HASH: u64 = rh_ids::rng::tag("rehoboam/rh-core/state-hash/stub/v1");
-
 /// The plane-A tables: columns by `entity.column` name, iterated in name order.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+///
+/// Each column carries a **version**: a number from one counter of the tables, set afresh on
+/// every [`insert`](Self::insert), the only way a column enters or returns to the tables (a
+/// system's written columns come back through it after every step). Equal versions mean the
+/// column has not been replaced since; `rh-snapshot`'s Merkle cache uses that as its column-level
+/// dirty mark (SPR-007 T-01). Versions are bookkeeping, not state: equality compares the columns
+/// only, and the plane hash never reads them.
+#[derive(Clone, Debug, Default)]
 pub struct WorldTables {
-    columns: BTreeMap<String, Column>,
+    columns: BTreeMap<String, (u64, Column)>,
+    next_version: u64,
 }
+
+impl PartialEq for WorldTables {
+    fn eq(&self, other: &Self) -> bool {
+        self.columns.len() == other.columns.len()
+            && self
+                .columns
+                .iter()
+                .zip(&other.columns)
+                .all(|((a, (_, ra)), (b, (_, rb)))| a == b && ra == rb)
+    }
+}
+
+impl Eq for WorldTables {}
 
 impl WorldTables {
     /// Empty tables.
@@ -43,15 +61,24 @@ impl WorldTables {
         Self::default()
     }
 
-    /// Adds or replaces a column (world construction, before the first instant).
+    /// Adds or replaces a column (world construction, and the return of a system's written
+    /// columns after its step). The column gets a new version.
     pub fn insert(&mut self, column: &str, rows: Column) {
-        self.columns.insert(column.to_owned(), rows);
+        let version = self.next_version;
+        self.next_version += 1;
+        self.columns.insert(column.to_owned(), (version, rows));
     }
 
     /// A column, if present.
     #[must_use]
     pub fn get(&self, column: &str) -> Option<&Column> {
-        self.columns.get(column)
+        self.columns.get(column).map(|(_, rows)| rows)
+    }
+
+    /// A column's version, if present (see the type documentation).
+    #[must_use]
+    pub fn version(&self, column: &str) -> Option<u64> {
+        self.columns.get(column).map(|(v, _)| *v)
     }
 
     /// Column names, in order.
@@ -59,28 +86,18 @@ impl WorldTables {
         self.columns.keys().map(String::as_str)
     }
 
+    /// Every column with its version, in name order.
+    pub fn columns(&self) -> impl Iterator<Item = (&str, u64, &[i64])> {
+        self.columns
+            .iter()
+            .map(|(name, (v, rows))| (name.as_str(), *v, rows.as_slice()))
+    }
+
     /// Removes a column, returning it, or `None` if the world does not have it. Never creates
     /// one: columns are materialised only when the engine is built, from the owners' declared
     /// writes (SPR-005 G-c).
     pub(crate) fn take(&mut self, column: &str) -> Option<Column> {
-        self.columns.remove(column)
-    }
-
-    /// A stub state hash: `SplitMix64` words over every column in name order (name bytes, row
-    /// count, rows). Order-sensitive and total. The chunked Merkle xxh3 of `05.1` §6 item 6
-    /// replaces it with the keyframe work (`rh-snapshot`).
-    #[must_use]
-    pub fn state_hash(&self) -> u64 {
-        let mut h = rh_ids::rng::h64_words(TAG_STATE_HASH, &[]);
-        for (name, rows) in &self.columns {
-            let name_hash = rh_ids::rng::h64_bytes(TAG_STATE_HASH, name.as_bytes());
-            h = rh_ids::rng::h64_words(h, &[name_hash, rows.len() as u64]);
-            for chunk in rows.chunks(64) {
-                let words: Vec<u64> = chunk.iter().map(|v| v.cast_unsigned()).collect();
-                h = rh_ids::rng::h64_words(h, &words);
-            }
-        }
-        h
+        self.columns.remove(column).map(|(_, rows)| rows)
     }
 }
 
