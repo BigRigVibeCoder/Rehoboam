@@ -14,7 +14,9 @@
 #       dedupe      = { key = [role vars], bucket_days = N }   at most one emitted match per key per bucket
 #   * firing_budget is REQUIRED: expected completed matches per simulated century per 100k persons. CI fails a
 #     pattern that fires above 3x its budget on the reference ensembles.
-#   * completion_hazard (optional) names a Registry system hazard used for suspense = stakes x P(completion).
+#   * completion_hazard (optional) names a Registry system hazard used for suspense (05.4 §2.3). It requires threatened_role:
+#     the bound role for whom completion is a negative outcome (Dramatis: suspense exists only once a bad outcome is expected).
+#     The pattern's `unless` clauses are its escape routes.
 
 [[pattern]]
 id = "authority_purges_successor"
@@ -99,6 +101,7 @@ selection = "latest"
 on_complete = "clear_binding"
 firing_budget = { per_century_per_100k = 2 }
 completion_hazard = { system = "M5.contagion", hazard = "purge_after_positive" }
+threatened_role = "S"
   [[pattern.clause]]
   bind = "e1"
   act = ["test"]
@@ -148,6 +151,7 @@ selection = "latest"
 on_complete = "clear_binding"
 firing_budget = { per_century_per_100k = 0.2 }
 completion_hazard = { system = "M7.dynasty", hazard = "successor_purge" }
+threatened_role = "S"
   [[pattern.clause]]
   bind = "e1"
   verb = "FAMINE_DECLARED"

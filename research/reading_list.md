@@ -34,10 +34,10 @@ These set the remaining bands and bounds the first engine is judged against, and
 | 6 | ✓ Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3) | V-SF-07 polity lifespans (mean ≈ 220 years) currently rests on memory |
 | 7 | ✓ Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38(4) | Real-wage series for M4 and V-SF-11 (post-plague wages); it also bridges to the industrial era |
 | 8 | Grimm et al. (2005); Fagiolo, Moneta & Windrum (2007) (A15) | The certification method itself |
-| 9 | **Kreminski et al. (2021), Winnow** (B3) and Felt (2019) (B2) | Winnow may already solve the sifter semantics we designed; read it before P2 specs freeze |
+| 9 | ✓ **Kreminski et al. (2021), Winnow** (B3) and Felt (2019) (B2) (R12 §19) | Winnow may already solve the sifter semantics we designed; read it before P2 specs freeze |
 | 10 | Kreminski et al. (2022), "Select the unexpected" (B4) | The significance rarity component |
-| 11 | O'Neill & Riedl (2014), Dramatis; Cheong & Young (2015), Suspenser (B6) | The suspense formula behind auto-pause |
-| 12 | Behrooz, Swanson & Jhala (2015) (B5) | Retrospective story selection from logs |
+| 11 | ✓ O'Neill & Riedl (2014), Dramatis; Cheong & Young (2015), Suspenser, still wanted (B6) | Suspense structure for auto-pause (R12 §20: a gate and escape routes, not a formula) |
+| 12 | ✓ Behrooz, Swanson & Jhala (2015) (B5) | Story selection against a random baseline (R12 §20: the control design) |
 
 ### Batch 3 — before P3 (minds, epistemics, war, contagion, Foresight)
 A12 ✓ (Bracken, Fricker, Lucas & Turkes received: WWII anchors only) plus **pre-modern war: Helmbold 1965 (*OR* 13:857–859), Helmbold 1969 (RAND P-4199) and 1987 (CAA-TP-87-16) on victory against force ratio and casualties, i.e. breakpoints; Hartley & Helmbold 1995 (*NRL* 42:609–633); Willard 1962; Weiss 1966** · B7 Talk of the Town knowledge propagation · B10 "How Johnny can persuade" · B11 Walton argumentation schemes + ELM · B13 Gneiting, Balabdaoui & Raftery (2007) (PIT; one paper is enough) · B16 Balcan et al. (2009) + Covasim.
@@ -113,11 +113,12 @@ Worlds must be able to move from agrarian to modern conditions in one run (ADR-0
 | # | Paper | What we extract | Plan item it changes |
 |---|---|---|---|
 | B1 | ✓ Ryan, J. (2018). *Curating Simulated Storyworlds*. PhD thesis, UC Santa Cruz | Already read in full (shipped inside the Viv repo) | — |
-| B2 | Kreminski, M., Dickinson, M. & Wardrip-Fruin, N. (2019). "Felt: a simple story sifter." *ICIDS 2019* | Pattern semantics and how sifting was used in play | `05.4` §2 DSL |
-| B3 | Kreminski, M. et al. (2021). "Winnow: a domain-specific language for incremental story sifting." *AIIDE 2021* | **The incremental matching semantics and how they handle partial-match explosion.** We chose `selection` / `on_complete` / `dedupe` without reading this; it may already solve the problem differently | `05.4` §2.3 semantics; SIFT-8; the SQL-twin method |
+| B2 ✓ | Kreminski, M., Dickinson, M. & Wardrip-Fruin, N. (2019). "Felt: a simple story sifter." *ICIDS 2019* | Pattern semantics and how sifting was used in play | `05.4` §2 DSL |
+| B3 ✓ | Kreminski, M. et al. (2021). "Winnow: a domain-specific language for incremental story sifting." *AIIDE 2021* | **The incremental matching semantics and how they handle partial-match explosion.** We chose `selection` / `on_complete` / `dedupe` without reading this; it may already solve the problem differently | `05.4` §2.3 semantics; SIFT-8; the SQL-twin method |
 | B4 | Kreminski, M. et al. (2022). "Select the unexpected: a statistical heuristic for story sifting." *ICIDS 2022* | Their rarity/surprise statistic | The significance "rarity" component (`05.4` §3) |
-| B5 | Behrooz, M., Swanson, R. & Jhala, A. (2015). "Remember that time? Telling interesting stories from past interactions." *ICIDS 2015* | Retrospective story selection from simulation logs | Retroactive significance; Chronicle selection |
-| B6 | O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014*; Cheong, Y.-G. & Young, R. M. (2015). "Suspenser." *IEEE TCIAIG* 7(1) | Their suspense formulation, to check against ours (stakes × P(completion)) | `05.4` §2.3 item 8; auto-pause scoring |
+| B5 ✓ | Behrooz, M., Swanson, R. & Jhala, A. (2015). "Remember that time? Telling interesting stories from past interactions." *ICIDS 2015* | Selecting interesting spans from human–agent interaction logs (not simulation logs) by rule rarity; a random-span control (R12 §20) | Retroactive significance; Chronicle selection |
+| B6 (Dramatis ✓; Suspenser wanted) | O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014*; Cheong, Y.-G. & Young, R. M. (2015). "Suspenser." *IEEE TCIAIG* 7(1) | Their suspense formulation, to check against ours (stakes × P(completion)) | `05.4` §2.3 item 8; auto-pause scoring |
+| B17 ✓ (new) | Lessard, J., Friedrich, S., Paré-Chouinard, S. & Kosseim, L. (2026). "Narrative gold digging: sifting and narrating stories from a procedural simulation." *FDG '26* | Improbability and dramatic-situation heuristics against random; human vs LLM narration | The G2 rendering rule, the random-window control, V-HUM-12 (R12 §20) |
 | B7 | Ryan, J., Summerville, A., Mateas, M. & Wardrip-Fruin, N. (2015). "Toward characters who observe, tell, misremember, and lie." *EXAG 2015* | Knowledge propagation, rumour mutation, memory decay in Talk of the Town | Channels, fidelity, `variant_id` (`05.3` §5, ADR-0013) |
 | B8 | Grinblat, J. & Bucklew, C. B. (2017). "Subverting historical cause & effect: generation of mythic biographies in Caves of Qud." *FDG 2017* | Post-hoc rationalisation of history into legend | In-world documents; unreliable chronicles |
 | B9 | Riedl, M. O. & Bulitko, V. (2013). "Interactive narrative: an intelligent systems approach." *AI Magazine* 34(1) | The drama-management taxonomy | ADR-0009 (curation, not intervention) |

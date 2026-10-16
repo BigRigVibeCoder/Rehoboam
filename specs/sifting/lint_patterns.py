@@ -19,7 +19,7 @@ import tomllib
 from pathlib import Path
 
 PATTERN_KEYS = {"id", "version", "tellability", "description", "roles", "clause", "unless", "emit",
-                "selection", "on_complete", "dedupe", "firing_budget", "completion_hazard"}
+                "selection", "on_complete", "dedupe", "firing_budget", "completion_hazard", "threatened_role"}
 SELECTIONS = {"latest", "earliest", "all"}
 ON_COMPLETE = {"clear_binding", "consume", "keep"}
 DEDUPE_KEYS = {"key", "bucket_days"}
@@ -103,6 +103,13 @@ def lint(patterns: dict, reg: dict) -> list[str]:
             sysdef = reg.get("systems", {}).get(hz.get("system"), {})
             if hz.get("hazard") not in sysdef.get("hazards", []):
                 errs.append(f"{pid}.completion_hazard: '{hz.get('system')}.{hz.get('hazard')}' is not a Registry system hazard")
+            tr = p.get("threatened_role")
+            if tr is None:
+                errs.append(f"{pid}: completion_hazard requires threatened_role (the role for whom completion is a negative outcome; 05.4 §2.3)")
+            elif tr not in p.get("roles", {}):
+                errs.append(f"{pid}.threatened_role: '{tr}' is not one of the pattern's roles")
+        elif p.get("threatened_role") is not None:
+            errs.append(f"{pid}: threatened_role without completion_hazard has no effect")
         bound: list[str] = []
         clauses = p.get("clause", [])
         if not clauses:
