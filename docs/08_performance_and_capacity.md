@@ -3,6 +3,7 @@
 *Status: Draft v1.1 (2026-10-15).*
 *v1.1 changes: re-baselined after red-team finding RT-M8. 1M persons now costs ≈ 25–60 ms per normal month and ≈ 60–130 ms per crisis month, with the arithmetic shown; a serial-fraction budget is added; PERF-1 (P3) and PERF-2 are provisional; Foresight at 1M is a batch job; memory, keyframe and storage estimates include the life-course log, bounded T1 belief stores, knowledge fronts and the keyframe LRU; burn-in is split into the liveness gate and certification; speed-ups no longer re-baseline the performance gate automatically.*
 *v1.2 (2026-10-16): the deliberation-consult cost line is removed (ADR-0034, D27).*
+*v1.3 (2026-10-16), ADR-0035: the default saga world is meso (≤ 50k persons, ≤ 2,000 named actors), and MOP-1 is gated there at G1b. The 100k and 1M budgets below stand for the optional scale-up (P3.10, Later). Media costs (images, TTS) are outside the engine and estimated in `05.11` §11.*
 
 **Where the numbers come from**
 - **[M]** Measured in research sandboxes: 4-vCPU Xeon at 2.1 GHz (R01, R03, R10).

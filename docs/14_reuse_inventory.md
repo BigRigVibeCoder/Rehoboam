@@ -2,6 +2,8 @@
 
 *Status: Draft v1.0 (2026-10-15). This answers the director's question: "How much can we bootstrap or cannibalize from GitHub projects that already solve a lot of the problems and tech in the stack?" It extends `07_technology_stack.md` and is governed by ADR-0021 (licence allow-list). **All effort numbers are estimates** made for planning and have roughly ±50% error. This is not legal advice.*
 
+> **ADR-0035 (2026-10-16).** The saga engine adds §S: Kenney CC0 tiles, rot.js, the TTS models for the offline audio exporter (Kokoro-82M, Chatterbox, Qwen3-TTS), image models and reference-conditioning candidates for the graphic chronicle (FLUX.1, SDXL, InstantID, PuLID, IP-Adapter), and the 2D bootstraps (Azgaar's generator, Watabou's city generator). The Godot rows (§P) are kept for history; the 3D client is cut.
+
 > **Personal-use mode (D19, 2026-10-16; ADR-0021 as amended).** Rehoboam is a private experiment that is never distributed. Every "licence trap" and AVOID verdict below that rests only on a licence no longer applies, and the "personal-use mode" options in finding 8 are open: Veloren's world and town generation, watabou's town generator, EbookLib, xxhash-rust and MiniCheck-7B weights. Unlicensed code (Felt, Winnow) is still read, not copied. Licence columns are kept for the ledger and in case the ruling is ever reversed.
 
 **How the facts were checked (2026-10-15)**
@@ -122,10 +124,10 @@ The baseline is the effort to deliver the plan's scope for that subsystem when e
 | Foresight | P3 | 5 | **~15%** | CRN pattern (Starsim), rayon | Prophecy DSL, rollout orchestration, belief-resampled rollouts, validity tests (PIT, Brier/log score, Spiegelhalter Z) |
 | World compiler + calibration harness (M9) | P1, P4 | 12 | **~35%** | pydantic, instructor, llguidance/XGrammar, SALib, pyABC, marimo, Rerun | Intent schema, mapping table, expander, semantic validators, liveness gate, deterministic calibration, background certification, gap reports |
 | LLM gateway + evals | P3 | 10 | **~65%** | llama.cpp, vLLM/SGLang, llguidance/XGrammar, LiteLLM (optional), inspect_ai/promptfoo | Typed job API, journaling, budgets, routing policy, red-team corpus content |
-| Narrative compiler + Annals | P2, P4 | 10 | **~35%** | Templating (bladeink, Tracery/improv patterns), WriteHERE/DOC planning patterns, MiniCheck code, Fountain/EPUB/RSS exporters | Digest, canon gate against the causal chronicle, style cards, NOVEL-20 |
+| Narrative compiler + Annals | P2, P4 | 10 | **~35%** | Templating (bladeink, Tracery/improv patterns), WriteHERE/DOC planning patterns, MiniCheck code, Fountain/EPUB exporters | Digest, canon gate against the causal chronicle, style cards, NOVEL-20 |
 | Console (Time-Machine, inspector, Oracle-2D) | P2 | 14 | **~55%** | deck.gl, sigma/graphology, dagre, cosmos.gl, Mosaic + duckdb-wasm, Perspective, family-chart/topola, Tauri | Time-Machine UX, speed bands, auto-pause, causal inspector semantics, rating tool |
 | Godot client (Diorama, Street, crowds, content) — **art phase 2, optional (ADR-0029)** | P5–P7 | 36 | **~50%** | gdext, Terrain3D, Sky3D, Scatter, road-gen, OpenVAT, impostors, LimboAI, Dialogue Manager, motion matching, CC0 kits + animation library | Frame decoder, crowd LoD policy, rendezvous kitbash, camera director, hydration bubble, wallpaper host |
-| Audio | P4, P6 | 8 | **~65%** | Chatterbox/Pocket/Qwen3-TTS/MOSS-TTSD, Moonshine/whisper, AudioSeal, pyloudnorm, tts-audiobook-tool patterns | Voice bible, systemic audio telemetry, latency masking, RSS packaging |
+| Audio | P2, P3 (ADR-0035) | 8 | **~65%** | Kokoro-82M, Chatterbox/Pocket/Qwen3-TTS/MOSS-TTSD, Moonshine/whisper, AudioSeal, pyloudnorm, tts-audiobook-tool patterns | Voice bible, systemic audio telemetry, MP3 chapter export for the local reader |
 | **Total** | | **~227** | **~38% (≈ 87 pw)** | | **≈ 140 pw** to build |
 
 **Thesis-critical slice (P0–P2 only).** This is the subset that decides G2: core, worldgen, M2–M4, M6, M7, sifter, chronicle, server, console and calibration. Reuse covers about **35–37%**. But the simulation and sifting *logic* inside it (M2–M8, minds, sifter, about 70 pw) is only **~10–15%** covered.
@@ -327,7 +329,7 @@ This is the thinnest area. No usable open code exists for structural-demographic
 | screenplain / fountain-js / rustwell | Fountain parsing and export | MIT [V] / MIT [V·reg] / [V·reg] | 2026-04-28 [V] / npm 1.2.4 (2023) / crate 0.3.1 (2026-04) | DEPEND | afterwriting is MIT but has **no LICENSE file** and has been dormant since 2024-09 [V] | [gh](https://github.com/vilcans/screenplain) |
 | epub-builder | EPUB writer (Rust) | MPL-2.0 [V·reg] | rel 0.8.3, 2026-04-10 | DEPEND | Use this instead of EbookLib | [crates.io](https://crates.io/crates/epub-builder) |
 | EbookLib | EPUB writer (Python) | **AGPL-3.0** [V] | 2026-10-07 [V]; PyPI 0.20 · ★1.8k | AVOID | Licence trap | [gh](https://github.com/aerkalov/ebooklib) |
-| python-feedgen | RSS for the podcast feed | Dual BSD-2-Clause / LGPL-3.0 [V] | 2023-12-25 [V] | DEPEND (under BSD) | — | [gh](https://github.com/lkiesow/python-feedgen) |
+| python-feedgen | Feed writer | Dual BSD-2-Clause / LGPL-3.0 [V] | 2023-12-25 [V] | **Not used** (ADR-0035: audio is exported as local files) | — | [gh](https://github.com/lkiesow/python-feedgen) |
 
 ### O. Console and debugging
 
@@ -409,6 +411,30 @@ Verified with shallow clones (LICENSE + `git log -1`) and the npm and crates.io 
 | Lively; Plash | Wallpaper hosts | GPL-3.0 (separate app) [V]; closed source [V] | 2026-09 / 2025-10 | DEPEND as user-installed apps |
 
 **Effort.** 7–11 pw for the lo-fi Diorama + Street client, against about 18 pw net (36 baseline) for the Godot client plus art content and SPK-1 to SPK-3. About 40% of the lo-fi work carries over if the 3D art phase is chosen later.
+
+### S. The saga chronicle pipeline and 2D tiles (added 2026-10-16, ADR-0035)
+
+Checked on 2026-10-16 with shallow clones (LICENSE at HEAD, `git log -1`). huggingface.co, kenney.nl and the image providers' sites were unreachable from the sandbox, so model-card and vendor facts from them are **not verified**. "Personal-use OK" means allowed under ADR-0021's personal-use mode (D19): Rehoboam is never distributed. This is not legal advice.
+
+| Project | What it gives us | Licence | Last activity | Mode | Personal use | Link |
+|---|---|---|---|---|---|---|
+| **Kenney** 2D packs (e.g. 1-Bit, Micro Roguelike; other pack names **not verified**) | CC0 2D tiles for the P5 diorama and the storyboard fallback panels | CC0 per kenney.nl (**not verified** this session; site unreachable). Archive the licence text on download | **not verified** | DEPEND (assets) | OK | [site](https://kenney.nl) |
+| **rot.js** | Roguelike toolkit: FOV, maps, scheduling ideas | BSD-3-Clause [V] | 2024-11-13 [V] | REFERENCE (one draw call per cell; not our renderer) | OK | [gh](https://github.com/ondras/rot.js) |
+| **Kokoro-82M** (`hexgrad/kokoro`) | CPU narration for the P2 audio chronicle | Code Apache-2.0 [V]; weights Apache-2.0 per its README [V README; model card **not verified**] | 2025-08-06 [V] | DEPEND | OK. It uses espeak-ng (GPL) for some languages: allowed in personal-use mode; keep it out of process anyway | [gh](https://github.com/hexgrad/kokoro) |
+| **Chatterbox** | Character voices (P3); has a CPU path | Code MIT [V]; weights MIT (**not verified**) | 2026-07-21 [V] | DEPEND | OK | [gh](https://github.com/resemble-ai/chatterbox) |
+| **Qwen3-TTS** | Character voices and voice design (P3) | Code Apache-2.0 [V]; weights **not verified** | 2026-03-17 [V] | DEPEND | OK | [gh](https://github.com/QwenLM/Qwen3-TTS) |
+| **FLUX.1 [dev]** | Panel images (P3), through a serverless API | Weights: *FLUX.1 [dev] Non-Commercial License v1.1.1* [V: `model_licenses/LICENSE-FLUX1-dev` in `black-forest-labs/flux`]. Its "Non-Commercial Purpose" includes personal use for private entertainment and hobby projects [V]. Inference code Apache-2.0 [V] | 2025-07-31 [V] | DEPEND (via an API) | OK. Outputs are not Derivatives under the licence [V]. A hosted provider's own terms also apply (**not verified**) | [gh](https://github.com/black-forest-labs/flux) |
+| **FLUX.1 [schnell]** | A faster, permissive alternative for panels | Apache-2.0 [V: `model_licenses/LICENSE-FLUX1-schnell`] | 2025-07-31 [V] | DEPEND (via an API) | OK | [gh](https://github.com/black-forest-labs/flux) |
+| **SDXL 1.0** | Panel images (P3), through a serverless API | Weights: CreativeML Open RAIL++-M [V: `model_licenses/LICENSE-SDXL1.0` in `Stability-AI/generative-models`], with use restrictions in its Attachment A; code MIT [V] | 2025-12-16 [V] | DEPEND (via an API) | OK, within the Attachment A use restrictions | [gh](https://github.com/Stability-AI/generative-models) |
+| **InstantID** | Identity-preserving panels from a reference face (P3 candidate) | Code Apache-2.0 [V]. **Its face models (insightface `antelopev2`) are for non-commercial research only, and its released checkpoints are for research only** [V README] | 2024-07-18 [V] | Candidate (evaluate in P3) | OK (non-commercial research licences are fine in personal-use mode) | [gh](https://github.com/instantX-research/InstantID) |
+| **PuLID** | Identity-preserving panels, including a FLUX variant (P3 candidate) | Code Apache-2.0 [V]; depends on `insightface` [V requirements], whose models are non-commercial research only [V insightface README]; its own checkpoints **not verified** | 2025-08-01 [V] | Candidate (evaluate in P3) | OK | [gh](https://github.com/ToTheBeginning/PuLID) |
+| **IP-Adapter** | Reference-image conditioning (P3 candidate) | Code Apache-2.0 [V]; weights **not verified** | 2024-06-28 [V] | Candidate (evaluate in P3) | OK | [gh](https://github.com/tencent-ailab/IP-Adapter) |
+| insightface | Face analysis models used by InstantID and PuLID | Code MIT; trained models non-commercial research only [V README] | 2026-10-04 [V] | DEPEND (transitively, if a candidate wins) | OK | [gh](https://github.com/deepinsight/insightface) |
+| **Azgaar's Fantasy Map Generator** | Export target: an instant browser map with borders, rivers and relief from our region graph (P2 candidate, WP P2.16) | MIT [V] | 2026-10-14 [V] | DEPEND (as the viewer of our exported file); PORT of ideas for `rh-worldgen` | OK | [gh](https://github.com/Azgaar/Fantasy-Map-Generator) |
+| **Watabou's Medieval Fantasy City Generator** (`TownGeneratorOS`) | Settlement layouts from seeds (P5 candidate, WP P5.12) | **GPL-3.0** [V] | 2019-04-07 [V] (the hosted generator may be newer than this repository: **not verified**) | DEPEND, out of process, presentation only | OK (personal-use mode) | [gh](https://github.com/watabou/TownGeneratorOS) |
+| Serverless image APIs (fal.ai, Replicate, Together AI) | Batch panel rendering (P3; `12` Q24, D29) | Commercial services; terms, model availability and prices **not verified** | — | Service | OK | — |
+
+**Cost note.** About $0.005–0.015 per panel, so $0.10–0.15 per 10-panel chapter. **Estimate, verify at P3** (`05.11` §6).
 
 ## Projects we had missed (new finds)
 

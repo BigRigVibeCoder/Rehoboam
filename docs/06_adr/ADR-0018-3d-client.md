@@ -4,6 +4,8 @@
 
 **Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
+**Amended by ADR-0035 (2026-10-16):** **cut.** The Godot 3D client, its spikes SPK-1 and SPK-3 and every custom 3D asset are permanently out of the plan. This record is kept for history.
+
 ## Context
 
 The 3D modalities need a small runtime that is wallpaper-friendly, plus crowds, procedural towns and a stylised look a small team can produce. Options assessed:

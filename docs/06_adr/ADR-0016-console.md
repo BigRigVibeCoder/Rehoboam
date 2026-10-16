@@ -2,6 +2,8 @@
 
 **Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15) · **Deferred by ADR-0030:** the web console is built after G2; until then the Time-Machine is the `rh-tui` text harness
 
+**Amended by ADR-0035 (2026-10-16):** the engine only engines: `rh-server` is a control and stream endpoint, not a web server. The saga reader (P3, `python/`) and the 2D diorama (P5, `console/`) are separate consumers of the stream.
+
 ## Context
 
 The Time-Machine, the causal inspector, the map and Foresight are dense data visualisation. Godot UI has no mature large-graph or data-visualisation libraries. A Textual TUI can't draw maps or large graphs.

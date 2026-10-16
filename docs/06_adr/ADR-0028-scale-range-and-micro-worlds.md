@@ -3,6 +3,8 @@
 **Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0003 (ledger), ADR-0010 (compiler validators), ADR-0012 (cognition tiers), ADR-0020 (scale-out); extends ADR-0027 \
 **Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
+**Amended by ADR-0035 (2026-10-16):** the default saga world is **meso** (a kingdom of about 10k–50k persons, 200–2,000 named actors); `val_khor` (100k) and 1M are later and optional. Mythic catalysts (awakening, inheritance, prophecy) extend §3 and land in P1b.
+
 ## Context
 
 The director's goal: *"a simulation with one person to 1 million would be the real goal. This engine needs to be scalable and robust. What if we want one guy going through the trials of Job from the Bible?"*

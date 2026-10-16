@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [BCK-001, AGT-001, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** The Architect's own work stream, run in parallel with development: operating-model upkeep, audit tooling, gate preparation, and documentation debt.
@@ -33,3 +33,5 @@ version: 1.0.0
 | A-13 | Set `main` as the default branch on GitHub (director, Settings → General) | Now | **Done** 2026-10-16 |
 | A-15 | Coverage gates (GOV-002 §3: line ≥ 80%, branch ≥ 75%) with `cargo-llvm-cov` in CI; owned by no sprint (`VER-SPR-001` §3) | When SPR-002 lands the first real code | Open |
 | A-16 | Remind the director to run RUN-001 on the laptop (SPR-001 T-00) | Now | Open |
+| A-14 | Add the engine-purity rule to `bin/lint_arch.py` (ADR-0035 §6; EVO-4; V-INSP-05): engine crates (`rh-core`, `rh-ids`, `rh-events`, `rh-registry`, `rh-contracts`, `rh-snapshot`, `rh-sys-*`, `rh-sifter`, `rh-server`, `rh-cli`) may not depend on media, HTTP-UI or LLM-client crates; one deny-list kept in one place (e.g. `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`), with a positive control in `tests/lint_fixtures/` | P1a | Open |
+| A-17 | Write the `T1.minds` and `M7.dynasty` specs, which P1a now needs (ADR-0035; BCK-001 §3) | Before the P1a sprints | Open |
