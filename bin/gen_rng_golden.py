@@ -30,6 +30,10 @@ SplitMix64 scalar hash (T-03)
     Light stream draw ``k`` = ``mix(base + (k + 1) * GAMMA)``, with
     ``base = h64_words(tag("rehoboam/rh-ids/light/v1"), [seed, salt, system, purpose, entity, t])``.
 
+Branch salt (T-04)
+    ``branch_salt(t) = h64_words(tag("rehoboam/rh-ids/salt/v1"), [at1, tl1, at2, tl2, ...])``
+    over the fork steps ``(at, timeline)`` with ``at <= t``, in order.
+
 Usage:  python -I bin/gen_rng_golden.py           (rewrite the golden file)
         python -I bin/gen_rng_golden.py --check   (exit 1 if the committed file differs)
         python -I bin/gen_rng_golden.py --check --golden PATH   (check another file; the positive
@@ -297,6 +301,40 @@ def lines_splitmix() -> list[str]:
     return out
 
 
+TAG_SALT = tag("rehoboam/rh-ids/salt/v1")
+
+
+def branch_salt(steps: list[tuple[int, int]], t: int) -> int:
+    """The salt of the fork steps ``(at, timeline)`` covering ``t`` (steps sorted by ``at``)."""
+    words: list[int] = []
+    for at, timeline in steps:
+        if at > t:
+            break
+        words += [at & MASK64, timeline]
+    return h64_words(TAG_SALT, words)
+
+
+def lines_salt() -> list[str]:
+    """Branch salts of fixed and random lineages, at ticks before, on and after each fork."""
+    lineages: list[list[tuple[int, int]]] = [[], [(100, 1)], [(100, 2)], [(-50, 1), (100, 2)]]
+    lineages += [[(0, 1), (0, 2)], [(-(1 << 63), MASK32)]]
+    pick = _splitmix_sequence(4)
+    for _ in range(8):
+        n = 1 + next(pick) % 5
+        ats = sorted(_signed64(next(pick)) // (1 << 20) for _ in range(n))
+        lineages.append([(at, 1 + next(pick) % MASK32) for at in ats])
+    out = []
+    for steps in lineages:
+        ticks = sorted(
+            {0, *(at for at, _ in steps), *(at - 1 for at, _ in steps if at > -(1 << 63))}
+        )
+        for t in ticks:
+            flat = [x for step in steps for x in step]
+            fields = [len(steps), *flat, t, branch_salt(steps, t)]
+            out.append("salt " + " ".join(map(str, fields)))
+    return out
+
+
 def render() -> str:
     """The whole golden file."""
     header = [
@@ -310,8 +348,9 @@ def render() -> str:
         "#   tag <name, '-' for empty> <u64>",
         "#   purpose <name> <purpose_id>",
         "#   light <world_seed> <branch_salt> <system_id> <purpose_id> <entity_id> <t> <k> <u64>",
+        "#   salt <n> <at1> <timeline1> .. <atn> <timelinen> <t> <branch_salt(t)>",
     ]
-    body = [*lines_chacha(), *lines_h(), *lines_splitmix()]
+    body = [*lines_chacha(), *lines_h(), *lines_splitmix(), *lines_salt()]
     return "\n".join([*header, *body]) + "\n"
 
 

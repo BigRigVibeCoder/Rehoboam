@@ -48,7 +48,7 @@ pub const DOMAIN_H_V1: [u8; 24] = *b"rehoboam/rh-ids/H/v1\0\0\0\0";
 
 /// The `branch_salt(t)` field: the hash of the fork lineage covering `t` (`05.1` §6.9).
 ///
-/// Produced by the salt lineage (`salt` module); the raw constructor exists for tests and tools that
+/// Produced by [`crate::salt::SaltLineage::branch_salt`]; the raw constructor exists for tests and tools that
 /// replay recorded keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BranchSalt(u64);
