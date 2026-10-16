@@ -44,7 +44,7 @@ float a violation:
     pub moisture: f32, // LINT-ALLOW(forbidden-api): f32_field region.soil_moisture
 
 The sampler float zone (SPR-003 Architect ruling, 2026-10-16, item 2). In workspace mode, the
-float rule does not apply to the crate named exactly `rh-sample` (FLOAT_ZONE_CRATE), the vendored
+float rule does not apply to the crate named exactly `rh-sample` (FLOAT_EXEMPT_CRATES), the vendored
 samplers, which compute in f64 with libm and return integers or fixed point. The exemption is by
 that name, which bin/lint_arch.py pins to (A, machinery), so the crate cannot be relabelled out of
 plane A; every other rule still applies to it, and no other crate shares the exemption (a crate
@@ -97,8 +97,10 @@ FLOAT_FIELD_REASON = re.compile(r"f32_field\s+(?P<column>\S+)")
 FLOAT_RULE = "float"
 # Crate directories that never link into the engine: the float rule skips them (DECISION above).
 FLOAT_FREE_DIRS = frozenset({"tests", "benches", "examples"})
-# The one plane-A crate exempt from the float rule, by its pinned name (module docstring; SPR-003).
-FLOAT_ZONE_CRATE = "rh-sample"
+# The plane-A crates exempt from the float rule, by their pinned names (module docstring; SPR-003):
+# exactly one. python/tests/test_lint_forbidden.py asserts the set, so widening it is a reviewed
+# change (VER-SPR-003-TEST GAP-3).
+FLOAT_EXEMPT_CRATES = frozenset({"rh-sample"})
 FLOAT_API_RULE = "float-api"
 # Which float rule a file gets (scan_source): the float rule, the float-api rule, or neither.
 FloatScope = Literal["rule", "zone", "none"]
@@ -686,9 +688,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             crates = plane_a_crate_dirs(args.manifest_path)
             names = ", ".join(name for name, _ in crates)
             scope = f"{len(crates)} crates scanned as plane A ({names})"
-            zone = frozenset(directory for name, directory in crates if name == FLOAT_ZONE_CRATE)
+            zone = frozenset(d for name, d in crates if name in FLOAT_EXEMPT_CRATES)
             if zone:
-                scope += f"; float rule exempts {FLOAT_ZONE_CRATE} only (SPR-003 float zone)"
+                exempt = ", ".join(sorted(n for n, d in crates if d in zone))
+                scope += f"; float rule exempts {exempt} only (SPR-003 float zone)"
             report = scan_paths((directory for _, directory in crates), float_fields, zone)
     except (WorkspaceError, SpecError, OSError, UnicodeDecodeError) as err:
         print(f"lint_forbidden: cannot read the code to scan: {err}", file=sys.stderr)

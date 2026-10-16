@@ -10,10 +10,12 @@ from lint_forbidden import (
     EXIT_OK,
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
+    FLOAT_EXEMPT_CRATES,
     Report,
     declared_float_fields,
     lex,
     main,
+    plane_a_crate_dirs,
     rust_files,
     scan_paths,
     scan_source,
@@ -614,3 +616,38 @@ def test_the_real_float_zone_exposes_no_float() -> None:
         [REPO / "crates" / "rh-sample"], float_exempt=frozenset({REPO / "crates" / "rh-sample"})
     )
     assert report.violations == []
+
+
+# --- The exemption set (VER-SPR-003-TEST GAP-3) -------------------------------------------------
+
+
+def test_the_float_exemption_is_exactly_rh_sample() -> None:
+    """Widening the exemption to another crate is a reviewed change: it must edit this test."""
+    assert frozenset({"rh-sample"}) == FLOAT_EXEMPT_CRATES
+
+
+def test_a_float_in_every_real_plane_a_crate_name_but_rh_sample_is_reported(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A workspace of crates named like each real plane-A crate, each with a float in src/."""
+    real = [name for name, _ in plane_a_crate_dirs(REPO / "Cargo.toml")]
+    assert "rh-sample" in real
+    assert len(real) > 1
+    for name in real:
+        crate = tmp_path / name
+        (crate / "src").mkdir(parents=True)
+        (crate / "Cargo.toml").write_text(
+            f'[package]\nname = "{name}"\nversion = "0.0.0"\nedition = "2024"\n'
+            'publish = false\n\n[package.metadata.rehoboam]\nplane = "A"\nkind = "machinery"\n'
+        )
+        (crate / "src" / "lib.rs").write_text("fn half(x: f64) -> f64 {\n    x\n}\n")
+    members = ", ".join(f'"{name}"' for name in real)
+    (tmp_path / "Cargo.toml").write_text(f'[workspace]\nmembers = [{members}]\nresolver = "3"\n')
+    assert main(["--manifest-path", str(tmp_path / "Cargo.toml")]) == EXIT_VIOLATIONS
+    out = capsys.readouterr().out
+    reported = {
+        line.split(" at ")[1].split("/src/")[0].rsplit("/", 1)[-1]
+        for line in out.splitlines()
+        if line.startswith("VIOLATION [V-DET-19/float]")
+    }
+    assert reported == set(real) - {"rh-sample"}

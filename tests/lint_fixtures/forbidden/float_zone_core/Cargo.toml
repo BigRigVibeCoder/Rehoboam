@@ -1,0 +1,7 @@
+# Positive control for the float zone's reach (SPR-003 ruling item 2; VER-SPR-003-TEST GAP-3;
+# tests/lint_fixtures/README.md); not in the Rehoboam workspace. A float in a plane-A crate named like
+# the real rh-core must be reported: the exemption covers rh-sample only. python/tests checks the same
+# for every real plane-A crate name.
+[workspace]
+members = ["rh-core"]
+resolver = "3"
