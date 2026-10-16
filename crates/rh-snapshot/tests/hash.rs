@@ -260,3 +260,30 @@ fn the_identity_never_reaches_the_hash_or_equality() {
     assert_eq!(state_hash(&a), state_hash(&b));
     assert_eq!(state_hash(&a), state_hash(&c));
 }
+
+/// VER-SPR-007 DEF-2: an unbounded mark on a small table is clamped, not expanded chunk by chunk.
+/// The work runs on a thread with a 10-second bound, so a regression fails instead of hanging.
+#[test]
+fn an_unbounded_row_mark_is_clamped_and_fast() {
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut rows = column(10, 3);
+        let mut cache = MerkleCache::new(Plane::A);
+        cache.update("t", None, rows.as_slice());
+        rows[9] = 0;
+        cache.mark_rows("t", 0..usize::MAX);
+        cache.mark_rows("t", 5..5);
+        cache.mark_rows("t", 100..200);
+        cache.mark_rows("absent", 0..usize::MAX);
+        let root = cache.update("t", None, rows.as_slice());
+        let _ = done.send((
+            root == TableDigest::of("t", rows.as_slice()).root,
+            cache.rehashed_chunks(),
+        ));
+    });
+    let (equal, rehashed) = finished
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+    assert!(equal);
+    assert_eq!(rehashed, 2);
+}
