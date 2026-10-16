@@ -2,31 +2,31 @@
 id: SPR-011
 title: "Walking skeleton: one loop from manifest to replay, on solo, household and hamlet"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-001, PRJ-002, SPR-007, SPR-008, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.3.0
+version: 0.4.0
 ---
 
-> **BLUF:** Close the engine's loop end to end at the lowest fidelity: manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled death timers → events → the Parquet chronicle and World Stream v0 (channel A) → `rh-cli tail` → a trivial sifter pattern → journal replay. It runs on `solo` first, then on `household` and `hamlet`, on one binary, with plane-hash ladders in CI from the first commit. Developer: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET, AGT-003-IF, AGT-003-STAT. **PLANNING: for the director's approval at G0** (C3; `docs/decisions_pending.md` D30 to D32). The Architect has reviewed it and adopts the rulings below as recommendations. The work is about 9 agent-days, three times the GOV-005 bound, so proposed ruling 1 runs it as three sprints (increments A, B, C below).
+> **BLUF:** Close the engine's loop end to end at the lowest fidelity: manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled death timers → events → the Parquet chronicle and World Stream v0 (channel A) → `rh-cli tail` → a trivial sifter pattern → journal replay. It runs on `solo` first, then on `household` and `hamlet`, on one binary, with plane-hash ladders in CI from the first commit. Developer: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET, AGT-003-IF, AGT-003-STAT. **APPROVED by the director at G0** (C3; D30, 2026-10-16; `docs/decisions_pending.md` D30 to D32); the rulings below are binding. The work is about 9 agent-days, three times the GOV-005 bound, so ruling 1 runs it as three sprints: SPR-011 (increment A), SPR-012 (increment B) and SPR-013 (increment C).
 
 # SPR-011 — Walking skeleton (WP P1.0)
 
 - **Roadmap item:** `docs/11` P1.0 · **Phase / rung:** P1a, rungs 0–2
-- **Depends on:** G0 passed (`VER-G0`); SPR-007 merged (2026-10-16); SPR-008 merged; SPR-009 merged for the V-PERF-11 counts in T-13 · **Plan approval:** C3, needs the director (GOV-005 §2); not yet given
+- **Depends on:** G0 passed (`VER-G0`); SPR-007 merged (2026-10-16); SPR-008 merged; SPR-009 merged for the V-PERF-11 counts in T-13 · **Plan approved by the director 2026-10-16** (C3, D30; GOV-005 §2)
 - **Binding contracts:** `05.1` §2, §4, §6, §9; `05.2` §0, §1, §4, §6; `05.5` §3.2; `05.10` §4, §5, §7, §7a; `05.9` IF-0, IF-1, IF-2; `specs/chronicle/schema.sql`; ADR-0006, ADR-0024, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035 §6; `docs/01` §5 principle 8
 - **System spec:** `specs/systems/M2.demography.odd.toml`, rung-0 slice. It is a draft with gaps (Blockers 2 and 3) and must be completed, pass `lint_odd.py` and be marked `frozen` before increment B starts.
 - **Requirements covered:** STR-1 (v0), DET-1, DET-4, DET-5, DET-7 and DET-13 on the new worlds, DATA-1 and DATA-6 (subset), DATA-8 (founders and deaths), SIM-1 (N = 1 to 60), SIM-5 (death draws), SIM-6 (pre-epoch founders), SIM-15, SIFT-3 (one pattern), EVO-4
 
-## Proposed Architect rulings (binding once the plan is approved)
+## Architect rulings (binding since the plan's approval, D30)
 
-Each ruling is needed because a contract is silent or two contracts disagree. Confidence is the Architect's estimate that the recommendation is right. Rulings 1, 2 and 19 change the roadmap or an earlier statement, so the director decides them (D30 to D32). The others are the Architect's. Ruling 5 also serves `T1.minds` and `M7.dynasty` (PR #32): the dead stay readable until `Bookkeeping` of their death instant.
+Each ruling is needed because a contract is silent or two contracts disagree. Confidence is the Architect's estimate that the recommendation is right. Rulings 1, 2 and 19 change the roadmap or an earlier statement, so the director decided them: ruling 1 by D30, ruling 2 by D31 and ruling 19 by D32, all approved 2026-10-16. The others are the Architect's. Ruling 5 also serves `T1.minds` and `M7.dynasty` (PR #32): the dead stay readable until `Bookkeeping` of their death instant.
 
-1. **Size: three sprints, one plan.** P1.0 is about 9 agent-days (increment A ≈ 3, B ≈ 3, C ≈ 3.5). GOV-005 §3 and GOV-007 §3 cap a sprint at about 3. Recommendation: the director approves this one plan; at approval the Architect issues increment A as SPR-011, B as SPR-012 and C as SPR-013, moving tasks and rulings verbatim, each with its own branch, PR, Tester pass and audit. The alternative, one 9-day sprint by exception, gives one huge C3 PR that is hard to audit. **70%.**
+1. **Size: three sprints, one plan.** P1.0 is about 9 agent-days (increment A ≈ 3, B ≈ 3, C ≈ 3.5). GOV-005 §3 and GOV-007 §3 cap a sprint at about 3. Recommendation: the director approves this one plan; at approval the Architect issues increment A as SPR-011, B as SPR-012 and C as SPR-013, moving tasks and rulings verbatim, each with its own branch, PR, Tester pass and audit. The alternative, one 9-day sprint by exception, gives one huge C3 PR that is hard to audit. **70%.** **Approved (D30):** SPR-011 is increment A, the engine prerequisites (the purity lint, the 32-bit probability type, the life-course log plumbing); SPR-012 is increment B, `solo` lives and dies; SPR-013 is increment C, World Stream v0 and the chronicle.
 2. **What P1.0 simulates on each rung.** Ageing and death only; every person is a founder created at world creation; no births. `household` and `hamlet` run the same slice and die out within about a century; births, partnering and kinship come with P1.3. The ladder's rung-0 entries "a household's food" (M3, M4: P1b) and "daily life at `minutes`" (S5 F2: Later, `05.1` §3) are not reachable in P1a. Record this in `docs/11` and PRJ-001 §3 rather than let rung 0 look incomplete. **75%.**
 3. **Systems a manifest names that the build lacks.** `solo`'s template lists M1, M3, M4 and S5, and its `fidelity_profile` names M4 F1 and S5 F2; none is built. The run header (ladder header and the first channel-A segment) lists each named system as `built` or `not_built`. A `not_built` system is skipped, never stubbed with behaviour. `rh-cli run --strict` refuses such a manifest. The built set is part of `engine_build`, so history stays a function of the tuple (DET-1). **70%.**
 4. **A finer probability type.** `rh_core::fixed` has only `Q16_16` probabilities (step 1/65,536). A monthly death probability at e₀ = 70 for a ten-year-old is about 4 × 10⁻⁵, under 3 steps: a 30% rounding error. Add an unsigned probability with 32 fraction bits (working name `Prob32`), with `draw_hits`/`chance` mapped exactly as SPR-010 did (hits iff `draw < bits · 2^32`), golden vectors from `bin/gen_fixed_vectors.py`, and implement BCK-002 A-21 against it. C3 machinery, no hash change. **70%.**
@@ -195,10 +195,10 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 - Same-instant command delivery, BCK-002 A-30 and A-31 (P1.13); exact lags, A-28 (P1.18).
 - Food (P1b); daily life (P1.18, then Later for `minutes`); worlds above 60 persons (P1.14).
 
-## Director approvals this plan needs
-1. **The plan, as C3** (GOV-005 §2), with the C2 changes inside it: the frozen M2 spec (ownership of `person.id` and `life_course.*`), the Registry additions (`DEATH`, `EXTINCTION`, verb `tellability`, system `defaults`), the channel-A segment schema and the `LIFE_ENTRY`/`LIFE_EXIT` kinds, four new crates (`rh-worldgen`, `rh-sys-demography`, `rh-stream`, `rh-sifter`) and one new plane-A dependency (`parquet`).
-2. **The golden-corpus change**, announced before each merge with its evidence, with a veto: `smoke` regenerated (A-29, increment A); `solo` (increment B); `household` and `hamlet` (increment C).
-3. **Rulings that change the roadmap or an earlier statement:** 1 (three sprints), 2 (rung 0 in P1a without food or minute-level daily life), 19 (the 100k claims of ADR-0028 and `docs/12` withdrawn). Ruling 12 is the Architect's: the documents are corrected to match SPR-006's audited code.
+## Director approvals (given at G0, 2026-10-16)
+1. **The plan, as C3** (GOV-005 §2): **approved (D30)**, with the C2 changes inside it: the frozen M2 spec (ownership of `person.id` and `life_course.*`), the Registry additions (`DEATH`, `EXTINCTION`, verb `tellability`, system `defaults`), the channel-A segment schema and the `LIFE_ENTRY`/`LIFE_EXIT` kinds, four new crates (`rh-worldgen`, `rh-sys-demography`, `rh-stream`, `rh-sifter`) and one new plane-A dependency (`parquet`).
+2. **The golden-corpus change**, still announced before each merge with its evidence, with a veto: `smoke` regenerated (A-29, increment A); `solo` (increment B); `household` and `hamlet` (increment C).
+3. **Rulings that change the roadmap or an earlier statement:** 1 (three sprints; approved, D30), 2 (rung 0 in P1a without food or minute-level daily life; approved, D31), 19 (the 100k claims of ADR-0028 and `docs/12` withdrawn; approved, D32). Ruling 12 is the Architect's: the documents are corrected to match SPR-006's audited code.
 
 The other rulings are the Architect's.
 
@@ -220,7 +220,7 @@ The other rulings are the Architect's.
 | 4 | `household.yaml` and `hamlet.yaml` do not exist | BCK-002 A-06 | Open (before increment C) |
 | 5 | `life_ends` and the channel-A segment DDL do not exist | Spec work, Architect | Open (before increment C) |
 | 6 | Contract documents disagree with the code on `EventId` and with the Registry on role codes | Ruling 12 (Architect's consistency fix before G0); P1.9 for roles | Open |
-| 7 | Director approval of the plan and of rulings 1, 2, 19 (D30 to D32) | This document | Open |
+| 7 | Director approval of the plan and of rulings 1, 2, 19 (D30 to D32) | This document | Closed: approved 2026-10-16 |
 
 ## Completion
 

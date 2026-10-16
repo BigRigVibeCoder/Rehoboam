@@ -2,28 +2,28 @@
 id: PRJ-002
 title: "P1a Bloodlines: sprint plan"
 type: reference
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [all]
 tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.3.0
+version: 0.4.0
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
 
-> **BLUF:** PLANNING, for the director's approval at G0 (`docs/decisions_pending.md` D30 to D35). The Architect has reviewed it and adopts its rulings as recommendations. P1a "Bloodlines" as 22 sprints, SPR-011 to SPR-032, each at most about 3 agent-days. The critical path is the dynasty chain: walking skeleton (SPR-011–013) → lifecycle queues (014) → births (015) → M7 (021–022) → the scale run (030) → G1a. Effect language, the event envelope, stream v1 and minds run beside it in two more lanes. 17 of the 22 sprints are C3, so the binding limit is the one-C3-at-a-time merge rule, not agent time. About 20 of the specs these sprints need do not exist yet, `M7.dynasty` and `T1.minds` among them; the three that exist (the M2 rung-0 slice, `S5`, the chronicle schema) each have gaps (§6). Once approved, section 2 replaces BCK-001 §2; sections 3–9 support it. The Architect corrects the inconsistencies of §10 that are within the Architect's authority before G0, and brings the others to the director (D31 to D35).
+> **BLUF:** APPROVED by the director at G0 (D30, 2026-10-16; `docs/decisions_pending.md` D30 to D36); the rulings of §7 are binding. P1a "Bloodlines" as 22 sprints, SPR-011 to SPR-032, each at most about 3 agent-days. The critical path is the dynasty chain: walking skeleton (SPR-011–013) → lifecycle queues (014) → births (015) → M7 (021–022) → the scale run (030) → G1a. Effect language, the event envelope, stream v1 and minds run beside it in two more lanes. 17 of the 22 sprints are C3, so the binding limit is the one-C3-at-a-time merge rule, not agent time. About 20 of the specs these sprints need do not exist yet, `M7.dynasty` and `T1.minds` among them; the three that exist (the M2 rung-0 slice, `S5`, the chronicle schema) each have gaps (§6). Section 2 replaces BCK-001 §2; sections 3–9 support it. §10 marks the inconsistencies the G0 rulings resolve; the Architect corrects the others that are within the Architect's authority.
 
 ## 1. How to read this
 
 - **Class** is the class this plan expects; CI's detection wins (`docs/13` §4.2).
 - **Priority** follows GOV-007 §4: P1 blocks G1a; P2 is needed in P1a but does not block the gate; P3 is proposed for a later phase.
 - **Specs** name each spec the sprint needs and say whether it exists today on `main`.
-- Numbering assumes the proposed rulings in §7 are approved. If P1.0 stays one sprint (SPR-011 ruling 1 rejected), every later number drops by two.
+- Numbering follows the rulings of §7, approved at G0 (D30): P1.0 runs as three sprints, SPR-011 to SPR-013 (SPR-011 ruling 1).
 
-## 2. Next phase: P1a "Bloodlines" (proposed text for BCK-001 §2)
+## 2. Next phase: P1a "Bloodlines" (replaces BCK-001 §2; approved at G0, D30)
 
 Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the templated chronicle reads as a family history (G1a). Rungs 0–2 (`solo`, `household`, `hamlet`) and a dynastic fixture world.
 
@@ -32,7 +32,7 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-011 | P1.0 (A) | Walking skeleton A: engine prerequisites. Engine-purity lint (A-14); a 32-bit probability type and keyed uniform draws (A-21); epoch-keyed draws (A-29); ledger rows and the life-course log; authored numbers into plane A | G0; SPR-007, SPR-008 merged | C3 (machinery; regenerates the `smoke` baseline) | `05.1` §2, §6 (exist); `05.5` §3.2 (exists); probability-type ruling (missing) | P1 |
 | SPR-012 | P1.0 (B) | Walking skeleton B: `solo` lives and dies. M2 schedule in fixed point, `rh-worldgen` stub, `rh-sys-demography` rung-0 slice, `rh-cli run`, the `solo` golden ladder | SPR-011 | C3 (first real system crate; first real golden world) | M2 rung-0 slice (draft, incomplete); Registry `DEATH`, `EXTINCTION`, verb `tellability`, system `defaults` (missing); `solo.yaml` (exists) | P1 |
 | SPR-013 | P1.0 (C) | Walking skeleton C: World Stream v0 and the Parquet chronicle (`rh-stream`), `rh-cli tail`, the `life_ends` pattern and its twin (`rh-sifter` v0), journal replay, rungs 1–2 on the same binary | SPR-012; A-06 | C3 (stream format; two new golden worlds) | `schema.sql` (exists; conflicts on EventId and roles); channel-A segment DDL (missing); `life_ends` (missing); `household.yaml`, `hamlet.yaml` (missing) | P1 |
-| SPR-014 | P1.13 | Lifecycle queues for P1a: same-instant delivery of a command to its owner at a later phase; M2's Day/`Vital` drain of `ScheduleDeath` and `Marry` (REV-P1a MAJ-4); ledger row inserts for births; dead-person drop (A-30); queue-age invariant (A-31); the absent-owner registration rule: `rh-core` drops a declared read or send whose owner is not registered, reports it, and gives the step view the coupling's neutral value, so specs declare every read unconditionally (REV-P1a NEW-4); `rh-contracts` v0 for M2's columns | SPR-013 | C3 (scheduler semantics) with C2 (contract crate) | `05.1` §2 rule 2 (exists; same-instant delivery and the absent-owner rule unstated: one EVO for both) | P1 |
+| SPR-014 | P1.13 | Lifecycle queues for P1a: same-instant delivery of a command to its owner at a later phase; M2's Day/`Vital` drain of `ScheduleDeath` and `Marry` (REV-P1a MAJ-4); ledger row inserts for births; dead-person drop (A-30); queue-age invariant (A-31); the absent-owner registration rule: `rh-core` drops a declared read or send whose owner is not registered, reports it, and gives the step view the coupling's neutral value, so specs declare every read unconditionally (REV-P1a NEW-4), and each spec's `[[reads]]` entry carries that `neutral` value in machine-readable form (D36); readers of `life_course.*` read it `same_instant`, not `lagged` (in `Vital` the scheduler orders M2 before T1; M7 reads in `Polity`), and SPR-015's births write `life_course.birth_tick` and `life_course.sex` at entry (REV-P1a NEW-6, NEW-7; D36); the `rh-core` merge rewrites event-typed command payload fields (`cause_event`, `source_event`) as it rewrites `Command::cause` (REV-SPR-017 N3); `rh-contracts` v0 for M2's columns | SPR-013 | C3 (scheduler semantics) with C2 (contract crate) | `05.1` §2 rule 2 (exists; same-instant delivery, the absent-owner rule and the payload rewrite unstated: one EVO for all three) | P1 |
 | SPR-015 | P1.3 (a) | M2 F1 births: age-specific fertility, partnering (fathers), households and kinship (each birth appends its life-course row with `mother` and `father`, the genealogy every kinship relation walks), `H64(mother, parity)` ids at runtime, marriage intervals | SPR-014 | C3 | M2 F1 births, partnering, households (missing; spec is the rung-0 slice); fertility schedule source (missing); ADR-0026 (exists) | P1 |
 | SPR-016 | P1.3 (b) | M2 F1 mortality: fixed-point `exp` and `ln`, Brass at any (α, β), infant sub-schedule and old-age tail, density modifier (entitlement hook stubbed) | SPR-012 (code); merges after SPR-015 | C3 (machinery and model) | M2 F1 mortality (missing); `exp`/`ln` ruling and reference (missing); `specs/demography/` (exists) | P1 |
 | SPR-017 | P1.15 | Registry effect language v0: the typed, total evaluator in `rh-registry`; succession-law eligibility and ordering; the kinship relations `kin(a, b, n)`, ancestors, descendants and the agnatic and cognatic lines, walked over M2's life-course log so they reach through the dead (REV-P1a NEW-1, NEW-3); verb effects as queued commands; golden test | G0 | C2 (Registry schema); no hash change until a system uses it | `05.5` §2.1 (exists, prose); grammar and golden cases (missing) | P1 |
@@ -147,26 +147,28 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 |---|---|---|
 | `M2.demography` rung-0 completion and freeze; Registry verbs, verb `tellability`, system `defaults`; probability-type ruling | SPR-011, SPR-012 | M2 draft (gaps listed in SPR-011); the rest missing |
 | Channel-A segment DDL (`specs/stream/channel_a_v0.sql`); `life_ends`; `household.yaml`, `hamlet.yaml` (A-06) | SPR-013 | Missing |
-| EVO: same-instant command delivery and the absent-owner registration rule (`05.1` §2 rule 2; REV-P1a NEW-4) | SPR-014 | Missing |
+| EVO: same-instant command delivery, the absent-owner registration rule with a machine-readable `neutral` value on each `[[reads]]` entry, and the merge's rewrite of event-typed payload fields (`05.1` §2 rule 2; REV-P1a NEW-4; D36) | SPR-014 | Missing |
 | M2 F1: fertility, partnering, households, kinship | SPR-015 | Missing |
 | M2 F1 mortality (infant sub-schedule, old-age tail, density modifier); fixed-point `exp`/`ln` ruling and reference | SPR-016 | Missing |
 | Effect-language grammar and golden cases, with the kinship relations (REV-P1a NEW-3) | SPR-017 | Drafting (`05.5` §2.1 is prose) |
 | `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018, SPR-032 | Missing |
 | Population synthesis | SPR-019 | Missing |
 | Role codes reconciled (`schema.sql` vs `[event_roles]`) | SPR-020 | Conflict |
-| `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Drafting: PR #32, round 4; awaits D36 |
-| `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Drafting: PR #32, round 4; awaits D36 |
+| `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Approved (D36): PR #32, round 4; merges before PR #37 |
+| `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Approved (D36): PR #32, round 4; merges before PR #37 |
 | Stream v1 wire format (`rh-protocol`) | SPR-026 | Missing |
 | Family-annals template set | SPR-029 | Missing |
 | Dynastic fixture world; 10k dynastic manifest (extend A-06) | SPR-030 | Missing |
 | Owners or neutral stand-ins for S5's reads | SPR-031 | Missing |
 | `M3.agriculture`, `M4.economy`, `M6.polity`, `S6`/`S7` freeze | P1b | M3, M4, M6 missing; S6, S7 drafts |
 
-## 7. Proposed Architect rulings for the map
+## 7. Architect rulings for the map
+
+Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided the ones that change the roadmap: M-1 (D30), M-4 and M-5 (D33), M-7 (D34) and M-8 (D35).
 
 | # | Ruling | Confidence |
 |---|---|---|
-| M-1 | P1.0 runs as three sprints (SPR-011 ruling 1) | 70% |
+| M-1 | **Approved (D30).** P1.0 runs as three sprints (SPR-011 ruling 1) | 70% |
 | M-2 | P1.3 splits into births (SPR-015) and mortality with fixed-point `exp`/`ln` (SPR-016): two different specs and one is machinery | 75% |
 | M-3 | P1.7 splits into two sprints and P3.2a into three, along their spec sections; each half is still about 3 agent-days | 70% |
 | M-4 | P1.18 (S5 F1) moves to P1b. Its reads of `person.occupation` (M4) and `region.conditions` (M6) have no owner in P1a, so S5 F1 would run on neutral values only (registration reports an unowned read and refuses only sends: REV-P1a MAJ-2). G1a does not gate V-STR-07, and ADR-0031 had placed it in P1b. A director decision: it changes `docs/11` | 70% |
@@ -200,7 +202,7 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 
 - **Plan approvals:** 20 of the 22 sprints are C2 or C3, so the director approves their plans (GOV-005 §2). At ≤ 15 minutes each over 10–14 weeks, that is about 0.4–0.5 h a week, inside the 6 h budget.
 - **Golden-corpus announcements** (veto possible): SPR-011 (`smoke`), SPR-012, SPR-013, SPR-015, SPR-016, SPR-018, SPR-019, SPR-020, SPR-021–SPR-025, SPR-030.
-- **Roadmap decisions** before P1a starts: SPR-011 rulings 1, 2, 12 and 19; map rulings M-4, M-5 and M-7.
+- **Roadmap decisions** before P1a starts: made at G0 (D30 to D36, 2026-10-16).
 - **Rating:** the G1a read of 3 seeds (about 2–4 h), plus rung checkpoints of 15–30 minutes when `solo`, `household`, `hamlet` and the dynastic world first run green (GOV-007 §3.5).
 - **The real constraint** is serial C3 merging: about 17 C3 merges in 10–14 weeks is 1.5 a week, each after a Tester pass and an audit. Any C3 sprint that slips delays the lane behind it.
 
@@ -211,11 +213,11 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 | 1 | `05.2` §1, `05.9` IF-1, `schema.sql`, `specs/chronicle/selftest.py` vs `rh-events` (SPR-006) | Docs say `EventId = (day_index << 24) \| seq_in_day`; the code uses one counter per timeline. `05.9` IF-1 also has `ctx.emit` return an `EventId`; since SPR-006 a step gets a `DraftRef` and ids are assigned at the merge (`05.1` v1.6) |
 | 2 | `schema.sql` `event_role.concrete_role` vs Registry `[event_roles]` | Initiator, target, partner, bystander, instrument vs actor, target, witness, instrument |
 | 3 | `schema.sql` `regional_aggregate.value DOUBLE` | A float column in a plane-A table, against "floats in plane A live in `rh-sample` only" |
-| 4 | `M2.demography.odd.toml` vs Registry `[verbs]` | M2 emits `DEATH`, which is not a Registry verb; `lint_odd.py` does not check emits against verbs. S5's `ENCOUNTER` has the same gap |
-| 5 | `M2.demography.odd.toml` | Owns no `person.id` and no `life_course.*` although `05.0` §6 gives the life-course log to its crate; `INV-M2-01` (conservation) cites V-DET-01 instead of V-INV-01; `era_state = ["medical_level"]` while "none at rung 0" |
-| 6 | Registry `[systems.*]` vs `solo.yaml` | Parameters have bounds but no defaults, and `solo` sets none |
+| 4 | `M2.demography.odd.toml` vs Registry `[verbs]` | **Resolved by PR #37 when it merges (D36);** S5's `ENCOUNTER` stays a draft warning (SPR-011 ruling 11). M2 emits `DEATH`, which is not a Registry verb; `lint_odd.py` does not check emits against verbs. S5's `ENCOUNTER` has the same gap |
+| 5 | `M2.demography.odd.toml` | **Resolved by PR #37 when it merges (D36).** Owns no `person.id` and no `life_course.*` although `05.0` §6 gives the life-course log to its crate; `INV-M2-01` (conservation) cites V-DET-01 instead of V-INV-01; `era_state = ["medical_level"]` while "none at rung 0" |
+| 6 | Registry `[systems.*]` vs `solo.yaml` | **Resolved by PR #37 when it merges (D36).** Parameters have bounds but no defaults, and `solo` sets none |
 | 7 | `docs/11` rung 0 and PRJ-001 §3 vs `05.1` §3 and `docs/11` P1a | Rung 0 includes "a household's food" and "every minute authoritative", but M3 and M4 are P1b and S5 at `minutes` is Later; `solo.yaml` names M4 F1 and S5 F2, which P1a does not build |
-| 8 | BCK-001 §2 (old) vs `docs/11` | The old §2 lists P1.4 and P1.5a (household food) and "rung 1–2 manifests, P1.11" in P1a; `docs/11` puts P1.4, P1.5a and P1.11 in P1b, and BCK-002 A-06 gives the manifests to the Architect |
+| 8 | BCK-001 §2 (old) vs `docs/11` | **Resolved (D30):** §2 replaces BCK-001 §2. The old §2 lists P1.4 and P1.5a (household food) and "rung 1–2 manifests, P1.11" in P1a; `docs/11` puts P1.4, P1.5a and P1.11 in P1b, and BCK-002 A-06 gives the manifests to the Architect |
 | 9 | ADR-0028 Consequences; `docs/12` Q12; `docs/09` V-SCALE-01 | P1.0 at N = 100k (and 1M in V-SCALE-01) predates ADR-0035, which makes 100k and 1M optional and Later |
 | 10 | `docs/09` §1.1 | V-STR cadence says 02, 03 and 05 from P1b; G1a gates them and P1.17 moved to P1a |
 | 11 | `docs/09` V-INV-12 | Method "300 years on `val_khor`", gated at G1a; `val_khor` is optional and Later under ADR-0035 |
