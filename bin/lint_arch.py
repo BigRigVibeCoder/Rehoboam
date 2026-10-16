@@ -22,7 +22,9 @@ workspace crates, of every dependency kind (normal, build and dev):
                      entropy-seeded randomness (rand, getrandom, ...); the RNG building blocks
                      rand_core and rand_chacha are allowed only in rh-ids, which owns the keyed
                      RNG (ADR-0006; DET-2; DEF-1). Crates are matched by package name, so a
-                     `package =` alias does not hide one.
+                     `package =` alias does not hide one. Dev-dependencies are exempt: test code
+                     is not authoritative, and property testing (proptest, GOV-002 tier 3)
+                     needs rand. The forbidden-API gate still scans src/ (V-DET-19).
 
 Other edges to third-party crates are governed by cargo-deny (deny.toml), not by this lint.
 
@@ -263,6 +265,10 @@ def check_rng_crates(crate: Crate) -> list[Violation]:
         return []
     found: list[Violation] = []
     for edge in crate.external:
+        # DECISION: dev-dependencies are exempt. Tests never run inside a simulation, and
+        # proptest (GOV-002 tier 3) depends on rand. REF: VER-SPR-001 carry-over; SPR-010 report.
+        if edge.kind == "dev":
+            continue
         if edge.target in UNKEYED_RNG_CRATES:
             found.append(
                 Violation(

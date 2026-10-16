@@ -232,11 +232,17 @@ def test_plane_a_may_not_depend_on_an_unkeyed_rng_crate(rng: str) -> None:
     assert found(crates) == [("rng-crate", "rh-minds")]
 
 
-def test_the_rng_rule_covers_dev_dependencies_and_rh_ids() -> None:
-    """rh-ids may not take rand either, and a dev-dependency still counts."""
-    crates = engine(with_external(crate("rh-minds"), "rand", dep_kind="dev"))
+def test_the_rng_rule_covers_rh_ids_and_build_dependencies() -> None:
+    """rh-ids may not take rand either, and a build-dependency still counts."""
+    crates = engine(with_external(crate("rh-minds"), "rand", dep_kind="build"))
     crates = [with_external(c, "getrandom") if c.name == "rh-ids" else c for c in crates]
     assert sorted(found(crates)) == [("rng-crate", "rh-ids"), ("rng-crate", "rh-minds")]
+
+
+def test_dev_dependencies_may_use_rand_for_property_tests() -> None:
+    """Test code is not authoritative: proptest and rand are allowed as dev-dependencies."""
+    crates = engine(with_external(crate("rh-minds"), "rand", "rand_chacha", dep_kind="dev"))
+    assert found(crates) == []
 
 
 @pytest.mark.parametrize("block", ["rand_core", "rand_chacha"])
