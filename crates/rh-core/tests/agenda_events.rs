@@ -1547,10 +1547,24 @@ fn t02_restore_refuses_every_non_canonical_or_unknown_part() {
             Err(e) => assert!(want(&e), "{name}: refused for another reason: {e}"),
             Ok(_) => panic!("{name}: accepted"),
         }
-    } // A timer at exactly the cursor is still pending, not late: the boundary restores.
-    let mut at_cursor = base.clone();
-    at_cursor.agenda.entries[0].0.time = at_cursor.cursor.unwrap();
-    // Lowering the earliest entry's time keeps the entries in key order.
-    assert!(at_cursor.agenda.entries.windows(2).all(|w| w[0].0 < w[1].0));
-    restore(at_cursor).unwrap_or_else(|e| panic!("a timer at the cursor: {e}"));
+    }
+    // The other side of GAP-9's boundary. A keyframe is taken between advances, so no phase of
+    // the cursor instant has run: a timer at the cursor is pending in every phase, and restores.
+    let cursor = base.cursor.unwrap();
+    assert!(
+        base.agenda.entries[1].0.time > cursor,
+        "the second timer is later"
+    );
+    for phase in rh_core::Phase::ALL {
+        let mut at_cursor = base.clone();
+        at_cursor.agenda.entries[0].0.time = cursor;
+        at_cursor.agenda.entries[0].0.phase = phase;
+        assert!(at_cursor.agenda.entries.windows(2).all(|w| w[0].0 < w[1].0));
+        restore(at_cursor).unwrap_or_else(|e| panic!("a timer at the cursor in {phase:?}: {e}"));
+    }
+    // A far-future timer is legal too.
+    let mut far = base.clone();
+    let last = far.agenda.entries.len() - 1;
+    far.agenda.entries[last].0.time = SimTime::from_minutes(cursor.minutes() + 1_000 * 525_600);
+    restore(far).unwrap_or_else(|e| panic!("a far-future timer: {e}"));
 }
