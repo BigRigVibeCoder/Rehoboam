@@ -101,3 +101,77 @@ Implementation mutations, all caught by at least the unit tests and the golden o
 ## 7. Reproduction notes
 
 Scratch material (reference implementation, probe plan, 284-case compile matrix, 17-mutation script, gate script) was kept outside the repository. The reference is about 90 lines of Python with no dependency on `bin/gen_rng_golden.py`. The independence claim: ChaCha is checked against RFC 8439 at 20 rounds and then run at 8 rounds, which is the same code path; the 8-round output is confirmed against `rand_chacha` through the 3,000-key comparison, not by an external 8-round vector.
+
+## 8. Re-verification at 4c59386 (layout v2)
+
+Scope: the Architect's request after the Developer changed H from layout v1 to v2 (an explicit `epoch: u32` in `RngKey`, entering K1 as `block = system_id | epoch << 32`) and wrote the layout into `docs/05_architecture/05.1_simulation_core.md` §6 item 2. Tested commit `4c59386` (the branch was rebased onto `main`; the v1 evidence commit is now `6a38cda`). All mutation work ran in throwaway exports.
+
+**BLUF:** layout v2 passes. A reference written from the normative table in 05.1 §6 item 2 alone, before I read `hash.rs` or `bin/gen_rng_golden.py`, agrees with all 227 lines of `rh_ids_v2.txt` and with 5,000 keys of my own, 4,569 of them with a non-zero epoch. The three epoch claims hold. All 17 H and light-stream mutations are caught. DEF-1 and DEF-2 are closed. One new low contract defect (DEF-3): the headline formula without `epoch` survives in nine places, including the first line of the normative item. `bin/check_all.sh` is green with 77 checks.
+
+### 8.1 Independence
+
+The H reference was written from the table only. Two readings were needed and the table settled both: "block counter bits 0–31 / 32–63" is state words 12 and 13, and "stream words 2k (low half), 2k+1 (high half)" is 32-bit words. The table is unambiguous for H; no disagreement with the code.
+
+| Check | Expected | Actual | Verdict |
+|---|---|---|---|
+| `rh_ids_v2.txt` against my reference (H from the table; the other kinds from my v1 reference) | 0 mismatches | 227 lines, 0 mismatches: 40 `h` (13 with epoch ≠ 0; epochs 0, 1, 2 and `u32::MAX` among them), 6 `chacha8`, 20 `light`, 78 `salt`, 19 `child`, 7 `founder`, 5 `immigrant`, 12 `rehash`, 5 `mix`, 6 `h64_words`, 9 `tag`, 5 `purpose` | PASS |
+| 5,000 keys of my own: 3,000 random, 500 swapped system/epoch pairs, 500 adjacent-epoch pairs, edge values for `k`, `t`, `system`, `epoch` | `h`, `RngStream` seek + 2 sequential draws and `LightStream` equal the reference | 0 mismatches; 4,569 keys with a non-zero epoch, 1,448 at epoch 0, 1 or `u32::MAX` | PASS |
+
+The `LightStream` v2 layout (the epoch enters its hash words) is not in the normative table; I took it from the `rng.rs` module docs. That agreement is therefore weaker evidence than the one for H.
+
+### 8.2 Claims
+
+| Claim | Probe | Verdict |
+|---|---|---|
+| Every key field, epoch included, changes the draw | Single-bit flips of all 7 fields (64 bits each, epoch 32) and `k`: each changes the draw and no draw collides with another key's. 16,384 keys over 7 small-value fields: no collisions. | PASS |
+| `(system, epoch)` never aliases another `(system', epoch')` | All 64 pairs of 8 edge values (0, 1, 2, 3, 2³¹−1, 2³¹, 2³²−2, 2³²−1) for each of 8 values of `k`: no draw repeats. Swapped halves `(a,b)` against `(b,a)`: all differ. 96 consecutive epochs (0–63 and the last 32): all distinct. | PASS |
+| `k` and epoch never stand in for each other | Draw `k` at epoch 0 differs from draw 0 at epoch `k` for 10 values of `k` up to `u64::MAX` | PASS |
+| `H`, `RngStream`, `StreamKey` and `SystemKey` paths all carry the epoch; `LightStream` too | Equal draws across paths; changing the epoch changes each | PASS |
+
+### 8.3 Mutations against v2
+
+17 mutations of H and the light streams; each one was caught by at least the golden test, and 16 by my probes, the unit tests or the V-DET-20 harness as well (EM5 by the golden test only, see below).
+
+| Mutation | Caught by |
+|---|---|
+| EM1 epoch dropped from K1; EM2 epoch ORed over the system bits (aliasing); EM3 epoch low bit dropped | unit, golden, V-DET-20, probes |
+| EM4 epoch high half dropped (only epochs ≥ 65,536 change) | golden and probes; **not** V-DET-20 (it uses epochs 0–3, as designed) |
+| EM5 system and epoch halves swapped | **golden only** |
+| MH1 entity, MH3 `t`, MH5 seed bits dropped; MH2 branch salt ignored | unit, golden, V-DET-20, probes |
+| MH4 purpose bit, MH6 system bit dropped; MH7 draw index wraps at 2¹⁶ | golden, V-DET-20, probes |
+| MH8 draw index off by one | unit, golden, probes; **not** V-DET-20 |
+| ML1 entity bit, ML2 salt ignored | golden, V-DET-20 |
+| ML3 epoch ignored, ML4 epoch low bit dropped (light stream) | golden, V-DET-20, probes |
+
+Reading: V-DET-20 does see the planted correlations, including adjacent-epoch pairs (EM1–EM3, ML3, ML4). Properties that are relabellings or uniform shifts (EM5, MH8) are invisible to any statistic and to any property test; only the known-answer vectors catch them, which is why the epoch edge values in the golden file matter. V-DET-20 at v2: PR tier 1.2 s, 4 exceedances of 6,000 (expected 6.0, allowed 15); full sweep 26 s in release, 2 exceedances. Both inside the contract; 2 against an expectation of 6 is plausible (p ≈ 0.06).
+
+### 8.4 DEF-1 and DEF-2
+
+| Defect | Reproduction at `4c59386` | Verdict |
+|---|---|---|
+| DEF-1 doctest error code | All 8 `compile_fail` doctests built individually: stated code equals actual code (the `From` case is now E0308); the 8 twins compile | **Closed** |
+| DEF-2 gate silent on removed cases | Demote all `ids.rs` cases (the v1 reproduction), demote one, demote the `rng.rs` case, delete a case with its twin, add a case without updating the count: all five turn `check_all.sh` red at "Doctest count gate". The unmutated control is green (77 checks). | **Closed** |
+
+Residue (OBS-4): a `compile_fail` case that fails for the *wrong* reason (a typo in the call, counts unchanged) still passes `check_all.sh`. This is the DEF-1 class; stable rustdoc cannot check the code, and the twin only helps when the typo is in both blocks. My out-of-band compile matrix catches it; CI does not.
+
+### 8.5 Contract defect and observations
+
+**DEF-3 (low): the headline formula omits `epoch`.**
+- Clause: `05.1` §6 item 2 (normative).
+- Reproduction: read the first line of item 2: `H(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)`. The sub-bullet and table then say the key also carries `epoch`. Seven-argument forms also stand in `CLAUDE.md` (non-negotiables), `GOV-003` §2, `docs/03` DET-2, `ADR-0006` item 2, `SPR-002` compliance table, and the doc comments of `lib.rs`, `ids.rs` and `hash.rs` (`h`).
+- Expected: one formula, with epoch. Actual: the table is correct and the code matches it, but a reader following `CLAUDE.md` or `GOV-003` builds an epoch-less key.
+- No code defect; the fix is wording (add `epoch` to the formula, or say "plus epoch" where it is quoted).
+
+**OBS-5:** the table gives H's inputs fully, but the `purpose` value is "hashed from the purpose name" with the hash defined only in the crate docs. H itself is fully determined by the table; `PurposeId::of` is not.
+
+### 8.6 Verdict
+
+| Item | Verdict |
+|---|---|
+| Layout v2 (T-02), independent of the code | **PASS** |
+| Epoch claims (every field matters; no aliasing; `k` ≠ epoch) | **PASS** |
+| V-DET-20 at v2 (PR tier and full sweep) | **PASS** |
+| H and light-stream mutations against v2 | **PASS** (17 of 17 caught) |
+| DEF-1, DEF-2 | **Closed** |
+| DEF-3 (headline formula) | **Open, low** |
+| `bin/check_all.sh` | **PASS**, 77 checks |
