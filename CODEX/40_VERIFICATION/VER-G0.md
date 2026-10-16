@@ -9,13 +9,15 @@ tags: [verification, roadmap]
 related: [BCK-001, BCK-002, PRJ-001, SPR-001, SPR-002, SPR-003, SPR-004, SPR-005, SPR-006, SPR-007, SPR-008, SPR-009, SPR-010]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.8.0
+version: 0.9.0
 ---
 
 > **BLUF:** DRAFT tracker; this is not a verdict. G0 closes when SPR-001 to SPR-010 are closed and the seven criteria of `docs/11` pass, and the red-team inbox is folded in with a dispositions record. Status on 2026-10-16:
 > - eight sprints are closed (SPR-001 to SPR-007, SPR-010);
-> - SPR-008 is in progress;
-> - SPR-009 has not started.
+> - SPR-008 is in its last Tester round: every task done, every defect fixed, CI green (PR #28);
+> - SPR-009 is in progress: benches 7 and 8 and the instruction-count gate are built; T-03 and the T-05 smoke parts follow SPR-008's merge (PR #34).
+>
+> The director ruled that G0 passes when SPR-008 and SPR-009 complete (D30–D36, 2026-10-16).
 >
 > The director ruled on the G0 decisions on 2026-10-16 (§3, §4): P0.7 loses the Rerun hooks and the TUI stub, the V-PERF-04 criterion covers benches 7 and 8, and the red-team inbox is disposed of (`docs/red_team/RT-2026-10-16-G0-dispositions.md`).
 
@@ -42,8 +44,8 @@ version: 0.8.0
 | SPR-005 | Time, phases, SystemModel, AccessSpec, scheduler | Closed | `VER-SPR-005` PASS | 0 |
 | SPR-006 | Agenda, lifecycle queues, event bus, invariants | Closed | `VER-SPR-006` PASS | 0 |
 | SPR-007 | Plane hashes, keyframes, journal | Closed | `VER-SPR-007` PASS | 0 |
-| SPR-008 | Golden-run CI, bisect | In progress (T-00 and the smoke world done; the rest resumes on SPR-007) | — | — |
-| SPR-009 | Benchmarks, regression gate | Starts now SPR-007 is merged; merges after SPR-008; T-04 needs `adjutant` and the laptop | — | — |
+| SPR-008 | Golden-run CI, bisect | Final Tester round on PR #28; audit drafted | `VER-SPR-008` draft | — |
+| SPR-009 | Benchmarks, regression gate | In progress (PR #34); merges after SPR-008; T-04 needs `adjutant` and the laptop | — | — |
 | SPR-010 | `rh-core::fixed` | Closed | `VER-SPR-010` PASS | 0 |
 
 The escape-rate count (BCK-002 A-05) stands at 1 escape across 8 closed sprints.
