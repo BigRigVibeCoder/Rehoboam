@@ -32,7 +32,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
 GOLDEN = REPO / "specs" / "registry" / "effect_language_golden_v0.toml"
-LANGUAGE_VERSION = "0.2.0"
+LANGUAGE_VERSION = "0.3.0"
 
 # ----------------------------------------------------------------------------- numeric limits
 I64_MIN = -(1 << 63)
@@ -45,7 +45,10 @@ LINEAGE_HEIGHT_MAX = 3
 EXPRESSION_DEPTH_MAX = 64
 GENEALOGY = ("life_course.person_id", "life_course.mother", "life_course.father")
 AGNATIC_GENEALOGY = ("life_course.person_id", "life_course.father")
-LINEAGE_READS = (*GENEALOGY, "life_course.birth_tick")
+LINEAGE_READS = (*GENEALOGY, "life_course.birth_tick", "person.alive")
+LINEAGE_BOUND = 4096
+TENURES_MAX = 16
+MINUTES_PER_DAY = 1440  # rh_core::time::MINUTES_PER_DAY, an engine constant (minor 6)
 NESTING_MAX = 2
 BOUND_PRODUCT_MAX = 65_536
 DRAW_BITS = 64
@@ -69,7 +72,7 @@ RELATIONS: dict[str, tuple[tuple[str, ...], str, tuple[str, ...], int]] = {
     "kin": (("person", "degree"), "person", GENEALOGY, 256),
     "ancestors": (("person", "generations"), "person", GENEALOGY, 126),
     "descendants": (("person", "generations"), "person", GENEALOGY, 256),
-    "lineage": (("person", "height"), "person", LINEAGE_READS, 1024),
+    "lineage": (("person", "height"), "person", LINEAGE_READS, LINEAGE_BOUND),
     "line": (("person", "person"), "person", GENEALOGY, DESCENT_MAX),
     "line_agnatic": (("person", "person"), "person", AGNATIC_GENEALOGY, DESCENT_MAX),
     "titles": (("person",), "title", ("title.holder",), 16),
@@ -84,6 +87,7 @@ RELATIONS: dict[str, tuple[tuple[str, ...], str, tuple[str, ...], int]] = {
     "claims_on": (("title",), "claim", ("claim.title",), 64),
     "claims_of": (("person",), "claim", ("claim.claimant",), 16),
     "vows_of": (("person",), "vow", ("vow.vower",), 8),
+    "holders_of": (("title", "tenures"), "person", ("tenure.title", "tenure.holder"), TENURES_MAX),
 }
 # Genealogical accessors: name -> (result type, columns read).
 ACCESSORS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -98,6 +102,7 @@ DEGREE_BOUNDS = {
     "degree": KIN_DEGREES_MAX,
     "generations": DESCENT_MAX,
     "height": LINEAGE_HEIGHT_MAX,
+    "tenures": TENURES_MAX,
 }
 # Builtins with fixed signatures: name -> (parameter types, result type).
 FIXED_BUILTINS: dict[str, tuple[tuple[str, ...], str]] = {
@@ -117,7 +122,7 @@ KNOWN_CALLS = (
 
 
 class InvariantError(Exception):
-    """A hard invariant failure at evaluation (a truncated candidates relation)."""
+    """A hard invariant failure at evaluation (a truncated candidates relation, a repeated draw)."""
 
 
 class CompileError(Exception):
@@ -154,16 +159,27 @@ class Et:
     ident: int
 
 
+@dataclass(frozen=True, order=True)
+class EventRef:
+    """An opaque event value (spec §3.1): the verb's own event (``own``) or ``none``."""
+
+    own: bool
+
+
 @dataclass(frozen=True)
 class Cmd:
-    """An emitted lifecycle command in queue form: name, person id, encoded i64 args."""
+    """An emitted lifecycle command in queue form: name, person id, encoded args.
+
+    An event-typed argument is the text ``event`` (the verb's own event, which the merge
+    rewrites) or ``0`` (``none``); every other argument is its ``i64`` encoding.
+    """
 
     name: str
     person: int
-    args: tuple[int, ...]
+    args: tuple[int | str, ...]
 
 
-Value = bool | int | Fx | En | Et | tuple[Any, ...] | list[Any]
+Value = bool | int | Fx | En | Et | EventRef | tuple[Any, ...] | list[Any]
 
 
 def sat(value: int, lo: int, hi: int) -> int:
@@ -323,7 +339,6 @@ class World:
 
     now: int
     days_per_year: int
-    minutes_per_day: int
     tables: dict[str, dict[int, dict[str, Value]]]
     params: dict[str, dict[str, Value]]
     draws: dict[tuple[str, str, int, int], int]
@@ -332,6 +347,25 @@ class World:
     truncated: int = 0
     dropped_actions: int = 0
     neutral_reads: int = 0
+    drawn: set[tuple[str, str, int, int]] = field(default_factory=set)
+    children_index: dict[int, list[int]] | None = None
+
+    def children(self, ident: int) -> list[int]:
+        """The children-by-parent index over the life-course log (the host's derived index)."""
+        if self.children_index is None:
+            index: dict[int, list[int]] = {}
+            for pid, row in self.tables.get("life_course", {}).items():
+                for column in ("mother", "father"):
+                    parent = row.get(column)
+                    if isinstance(parent, Et) and parent.ident:
+                        index.setdefault(parent.ident, []).append(pid)
+            self.children_index = {k: sorted(set(v)) for k, v in index.items()}
+        return self.children_index.get(ident, [])
+
+    def alive(self, ident: int) -> bool:
+        """The ledger's ``person.alive``; a compacted (missing) row is dead. A prelude read."""
+        row = self.row("person", ident)
+        return row is not None and bool(row.get("alive", False))
 
     def row(self, kind: str, ident: int) -> dict[str, Value] | None:
         """Return the row of an entity, or ``None`` if it does not exist."""
@@ -362,6 +396,8 @@ def parse_type(spec: dict[str, Any]) -> str:
         return f"enum:{spec['enum']}"
     if ty == "ref":
         return f"ent:{spec['ref']}"
+    if ty not in ("bool", "int", "q8_8", "q16_16", "event"):
+        raise ValueError(f"unknown golden type {ty}")
     return ty
 
 
@@ -415,10 +451,59 @@ def cell_value(reg: Registry, column: Column, raw: object) -> Value:
     return raw if ty == "int" else Et(ty[4:], raw)
 
 
+def fan_rows(fan: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """The synthetic fan tree of a ``[worlds.<name>.fan]`` table (golden header).
+
+    Person 1 is the root; ids are breadth-first, so the father of ``i`` (``i >= 2``) is
+    ``(i - 2) div fanout + 1`` and mothers are unknown. Every person is male, born one
+    ``generation_days`` before its children (the root at ``-depth`` generations), ascending ids
+    within a generation sharing a birth tick. With ``dead_leaves``, the last generation died a
+    day ago and is compacted: it has life-course rows and no ledger rows.
+    """
+    fanout, depth = int(fan["fanout"]), int(fan["depth"])
+    generation = int(fan.get("generation_days", 10_800)) * MINUTES_PER_DAY
+    dead_leaves = bool(fan.get("dead_leaves", False))
+    persons: list[dict[str, Any]] = []
+    log: list[dict[str, Any]] = []
+    first, size = 1, 1
+    for g in range(depth + 1):
+        for i in range(first, first + size):
+            father = 0 if i == 1 else (i - 2) // fanout + 1
+            birth = -(depth - g) * generation
+            leaf_dead = dead_leaves and g == depth
+            log.append(
+                {
+                    "id": 100_000 + i,
+                    "person_id": i,
+                    "mother": 0,
+                    "father": father,
+                    "birth_tick": birth,
+                    "sex": "male",
+                    "death_cause": "natural" if leaf_dead else "none",
+                }
+            )
+            if not leaf_dead:
+                persons.append(
+                    {
+                        "id": i,
+                        "alive": True,
+                        "sex": "male",
+                        "birth_tick": birth,
+                        "death_tick": 0,
+                        "death_cause": "none",
+                        "mother": 0,
+                        "father": father,
+                    }
+                )
+        first, size = first + size, size * fanout
+    return {"person": persons, "life_course": log}
+
+
 def load_world(reg: Registry, raw: dict[str, Any]) -> World:
     """Build a fixture world from a ``[worlds.<name>]`` table."""
     tables: dict[str, dict[int, dict[str, Value]]] = {}
-    for kind, rows in raw.items():
+    generated = fan_rows(raw["fan"]) if "fan" in raw else {}
+    for kind, rows in [*raw.items(), *generated.items()]:
         if not isinstance(rows, list):
             continue
         tables[kind] = {}
@@ -447,7 +532,6 @@ def load_world(reg: Registry, raw: dict[str, Any]) -> World:
     return World(
         int(raw["now"]),
         int(raw["days_per_year"]),
-        int(raw["minutes_per_day"]),
         tables,
         params,
         draws,
@@ -516,6 +600,7 @@ class Ctx:
     depth: int = 0
     bound_product: int = 1
     draw_sites: set[str] = field(default_factory=set)
+    loop_vars: list[str] = field(default_factory=list)
 
     @property
     def system(self) -> System:
@@ -524,25 +609,32 @@ class Ctx:
             raise CompileError("E_UNKNOWN_NAME", f"system {self.system_name}")
         return self.reg.systems[self.system_name]
 
-    def bind(self, name: str, ty: str) -> None:
-        """Bind a variable; shadowing is ``E_SYNTAX``."""
+    def bind(self, name: str, ty: str, loop: bool = False) -> None:
+        """Bind a variable; shadowing is ``E_SYNTAX``. A loop variable is one a draw must key on."""
         if name in self.scope or name in KEYWORDS:
             raise CompileError("E_SYNTAX", f"variable {name} shadows a name")
         self.scope[name] = ty
+        if loop:
+            self.loop_vars.append(name)
 
     def unbind(self, name: str) -> None:
         """Remove a binding at the end of its construct."""
         del self.scope[name]
+        if self.loop_vars and self.loop_vars[-1] == name:
+            self.loop_vars.pop()
 
     def check_read(self, name: str) -> Column:
-        """Accept a column read by name: it exists, is plane A, and is owned or declared."""
+        """Accept a column read: it exists, is plane A, is owned or declared with a neutral."""
         column = self.reg.columns.get(name)
         if column is None:
             raise CompileError("E_UNKNOWN_NAME", f"column {name}")
         if column.plane != "A":
             raise CompileError("E_PLANE", name)
-        if column.owner != self.base_system and name not in self.system.reads:
-            raise CompileError("E_UNDECLARED_READ", f"{self.system_name} reads {name}")
+        if column.owner != self.base_system:
+            if name not in self.system.reads:
+                raise CompileError("E_UNDECLARED_READ", f"{self.system_name} reads {name}")
+            if name not in self.system.neutral:  # minor 5: static, whatever the world registers
+                raise CompileError("E_NO_NEUTRAL", f"{self.system_name} reads {name}: no neutral")
         return column
 
     @property
@@ -554,17 +646,16 @@ class Ctx:
         """The neutral value of a read whose owner is not registered (NEW-4), or ``None``."""
         if column.owner in self.reg.registered or column.owner == self.base_system:
             return None
-        if name not in self.system.neutral:
-            raise CompileError(
-                "E_NO_NEUTRAL", f"{self.system_name} reads {name} of an absent owner"
-            )
         return cell_value(self.reg, column, self.system.neutral[name])
 
-    def note_draw(self, site: str) -> None:
-        """Every ``(purpose, entity, k)`` call site is unique within a system's programs."""
+    def note_draw(self, site: str, keyed: list[Node]) -> None:
+        """The static draw lint (§4.6): unique sites, and every loop variable in the key."""
         if site in self.draw_sites:
             raise CompileError("E_RNG_REUSE", site)
         self.draw_sites.add(site)
+        for name in self.loop_vars:
+            if not any(mentions(node, name) for node in keyed):
+                raise CompileError("E_RNG_REUSE", f"draw inside a loop over {name} not keyed on it")
 
     def enter(self, bound: int) -> None:
         """Enter a bounded iteration: nesting depth and bound product are budgeted."""
@@ -596,7 +687,7 @@ def unify(ta: str, tb: str) -> str:
     if lit in LITERALS and (
         (lit == "lit_int" and con in NUMERIC)
         or (lit == "lit_dec" and con in FIXED)
-        or (lit == "lit_none" and con.startswith("ent:"))
+        or (lit == "lit_none" and (con.startswith("ent:") or con == "event"))
     ):
         return con
     raise CompileError("E_TYPE", f"{ta} with {tb}")
@@ -613,10 +704,45 @@ def concrete(ty: str) -> str:
     return ty
 
 
+def mentions(node: object, name: str) -> bool:
+    """Whether a variable occurs in a node (the loop-variable rule of the draw lint)."""
+    if isinstance(node, Var):
+        return node.name == name
+    if isinstance(node, Node):
+        return any(mentions(v, name) for v in vars(node).values())
+    if isinstance(node, list):
+        return any(mentions(item, name) for item in node)
+    return False
+
+
+def fold_int(node: Node) -> int | None:
+    """The value of an ``int`` constant expression (literals, the day length), or ``None``."""
+    if isinstance(node, NumLit) and "." not in node.text:
+        return int(node.text)
+    if isinstance(node, Dotted) and node.head == "calendar" and node.tail == "minutes_per_day":
+        return MINUTES_PER_DAY
+    if isinstance(node, Neg):
+        inner = fold_int(node.e)
+        return None if inner is None else sat(-inner, I64_MIN, I64_MAX)
+    if isinstance(node, Bin) and node.op in ARITH_OPS:
+        a, b = fold_int(node.a), fold_int(node.b)
+        if a is None or b is None or (node.op in DIVISION_OPS and b == 0):
+            return None
+        return arith_int(node.op, a, b)
+    return None
+
+
 def require_numeric(ty: str) -> None:
     """``E_TYPE`` unless the type is numeric or a numeric literal."""
     if ty not in NUMERIC and ty not in ("lit_int", "lit_dec"):
         raise CompileError("E_TYPE", f"{ty} is not numeric")
+
+
+def no_event(ty: str) -> str:
+    """``E_TYPE`` for an ``event`` outside an event-typed payload field (spec §3.1)."""
+    if ty == "event":
+        raise CompileError("E_TYPE", "an event has no value outside a payload field")
+    return ty
 
 
 # ----------------------------------------------------------------------------- evaluator context
@@ -703,7 +829,9 @@ class NoneLit(Node):
         return self.ty
 
     def eval(self, ev: Ev) -> Value:
-        """``none`` of the resolved kind."""
+        """``none`` of the resolved kind (an event-typed ``none`` is the absent event)."""
+        if self.ty == "event":
+            return EventRef(own=False)
         return Et(self.ty[4:], 0)
 
 
@@ -767,9 +895,7 @@ class Dotted(Node):
         if self.head == "params":
             return ev.world.params[ev.system_name][self.tail]
         if self.head == "calendar":
-            return (
-                ev.world.days_per_year if self.tail == "days_per_year" else ev.world.minutes_per_day
-            )
+            return ev.world.days_per_year if self.tail == "days_per_year" else MINUTES_PER_DAY
         return En(self.head, self.index)
 
 
@@ -972,7 +1098,7 @@ class Call(Node):
             raise CompileError("E_TYPE", "draw index must be an int or an entity")
         if self.name == "chance":
             self.args[3].resolve(unify(self.args[3].check(cx), "q16_16"))
-        cx.note_draw(f"{purpose.name}/{canon(self.args[1])}/{canon(self.args[2])}")
+        cx.note_draw(f"{purpose.name}/{site_key(self.args[1])}/{site_key(index)}", self.args[1:3])
         return "int" if self.name == "draw" else "bool"
 
     def resolve(self, ty: str) -> None:
@@ -1010,6 +1136,9 @@ class Call(Node):
         k = index.ident if isinstance(index, Et) else index
         assert isinstance(k, int)
         key = (purpose.name, entity.kind, entity.ident, k)
+        if key in ev.world.drawn:  # minor 3: the run-time layer of the reuse rule
+            raise InvariantError(f"E_RNG_REUSE: {key} drawn twice in one step")
+        ev.world.drawn.add(key)
         if key not in ev.world.draws:
             raise KeyError(f"the golden world lists no draw for {key}")
         u = ev.world.draws[key]
@@ -1018,6 +1147,12 @@ class Call(Node):
         p = self.args[3].eval(ev)
         assert isinstance(p, Fx)
         return draw_hits(u, p)
+
+
+def site_key(node: Node) -> str:
+    """A draw key's text for the site lint: a folded constant, or the typed canonical form."""
+    folded = fold_int(node)
+    return f"int:{folded}" if folded is not None else f"{node.ty}:{canon(node)}"
 
 
 def canon(node: object) -> str:
@@ -1139,7 +1274,7 @@ class Agg(Node):
         """Type the aggregate by its kind and bind the variable over its parts."""
         rel_ty = self.rel.check(cx)
         cx.enter(self.rel.bound)
-        cx.bind(self.var, f"ent:{rel_ty[4:]}")
+        cx.bind(self.var, f"ent:{rel_ty[4:]}", loop=True)
         try:
             self.ty = self.check_parts(cx)
         finally:
@@ -1229,7 +1364,7 @@ class Tuple(Node):
         parts = []
         for item in self.items:
             item.check(cx)
-            parts.append(item.finish())
+            parts.append(no_event(item.finish()))
         self.ty = f"tuple({','.join(parts)})"
         return self.ty
 
@@ -1253,10 +1388,10 @@ class ListKey(Node):
             raise CompileError("E_TYPE", "a list key outside an order program")
         rel_ty = self.rel.check(cx)
         cx.enter(self.rel.bound)
-        cx.bind(self.var, f"ent:{rel_ty[4:]}")
+        cx.bind(self.var, f"ent:{rel_ty[4:]}", loop=True)
         try:
             self.body.check(cx)
-            element = self.body.finish()
+            element = no_event(self.body.finish())
         finally:
             cx.unbind(self.var)
             cx.leave(self.rel.bound)
@@ -1368,7 +1503,7 @@ class Bin(Node):
     def check_cmp(self, cx: Ctx) -> str:
         """Comparisons: same type; ordering only on numbers."""
         ty = concrete(unify(self.a.check(cx), self.b.check(cx)))
-        if is_key(ty) or ty.startswith("rel:"):
+        if is_key(ty) or ty.startswith("rel:") or ty == "event":
             raise CompileError("E_TYPE", f"comparison of {ty}")
         if self.op in ORDER_OPS and ty not in NUMERIC:
             raise CompileError("E_TYPE", f"{self.op} on {ty}")
@@ -1474,8 +1609,10 @@ class Action:
         return Cmd(self.name, person.ident, tuple(encode(values[i]) for i in self.order))
 
 
-def encode(v: Value) -> int:
-    """Encode a scalar into ``Command::args`` (``i64``)."""
+def encode(v: Value) -> int | str:
+    """Encode a scalar into ``Command::args`` (``i64``); the verb's own event is ``event`` (§6)."""
+    if isinstance(v, EventRef):
+        return "event" if v.own else 0
     if isinstance(v, bool):
         return int(v)
     if isinstance(v, int):
@@ -1507,7 +1644,7 @@ class Effect:
             return
         rel_ty = self.rel.check(cx)
         cx.enter(self.rel.bound)
-        cx.bind(self.var, f"ent:{rel_ty[4:]}")
+        cx.bind(self.var, f"ent:{rel_ty[4:]}", loop=True)
         try:
             if self.where is not None:
                 self.where.resolve(unify(self.where.check(cx), "bool"))
@@ -1838,14 +1975,7 @@ def parents(world: World, ident: int, agnatic: bool) -> list[int]:
 
 def children_of(world: World, ident: int) -> list[int]:
     """Every person whose mother or father is ``ident`` in the life-course log, ascending."""
-    out: list[int] = []
-    for pid, row in world.tables.get("life_course", {}).items():
-        for column in ("mother", "father"):
-            parent = row.get(column)
-            if isinstance(parent, Et) and parent.ident == ident:
-                out.append(pid)
-                break
-    return sorted(out)
+    return world.children(ident)
 
 
 def ancestors_or_self(world: World, ident: int, depth: int, agnatic: bool) -> set[int]:
@@ -1902,11 +2032,40 @@ def lineage(world: World, p: int, height: int) -> list[int]:
             members.update(by_generation(world, a, DESCENT_MAX, True))
         level = [q for y in level for q in parents(world, y, False)]
     members.discard(p)
+    kept = prune_dead(world, members)
+    if len(kept) > LINEAGE_BOUND:
+        raise InvariantError("E_TRUNCATED: a candidates relation exceeded its bound")
     keyed = []
-    for x in members:
+    for x in kept:
         up, common = up_and_common(world, x, p, False)
         keyed.append(((up, line_key(world, common, x)), x))
     return [x for _, x in sorted(keyed)]
+
+
+def prune_dead(world: World, members: set[int]) -> set[int]:
+    """Drop the dead members with no living descendant among the members (N2, spec §5.2)."""
+    kept: set[int] = set()
+    for x in members:
+        if world.alive(x) or any(
+            z in members and world.alive(z) for z in by_generation(world, x, DESCENT_MAX, True)
+        ):
+            kept.add(x)
+    return kept
+
+
+def holders_of(world: World, title: int, n: int) -> list[int]:
+    """The holders of a title's last ``n`` tenure rows, most recent first, each once (B3)."""
+    rows = world.tables.get("tenure", {})
+    tenures = [
+        row.get("holder")
+        for _, row in sorted(rows.items())
+        if (t := row.get("title")) is not None and isinstance(t, Et) and t.ident == title
+    ]
+    out: list[int] = []
+    for holder in reversed(tenures[-n:]):
+        if isinstance(holder, Et) and holder.ident and holder.ident not in out:
+            out.append(holder.ident)
+    return out
 
 
 def kin_within(world: World, ident: int, degrees: int) -> list[int]:
@@ -2005,11 +2164,10 @@ def relation(world: World, name: str, args: list[Value]) -> list[Et]:
         "claims_on": lambda: rows_where(world, "claim", "title", ids[0]),
         "claims_of": lambda: rows_where(world, "claim", "claimant", ids[0]),
         "vows_of": lambda: rows_where(world, "vow", "vower", ids[0]),
+        "holders_of": lambda: holders_of(world, ids[0], ids[1]),
     }
     found = simple[name]() if ids[0] or name.startswith("line") else []
     if len(found) > bound:
-        if name == "lineage":
-            raise InvariantError("E_TRUNCATED: a candidates relation exceeded its bound")
         world.truncated += 1
         found = found[:bound]
     return [Et(yields, i) for i in found]
@@ -2019,7 +2177,7 @@ def relation(world: World, name: str, args: list[Value]) -> list[Et]:
 def compile_expr(text: str, cx: Ctx, expected: str | None = None) -> Node:
     """Parse, check and resolve an expression program; the kind's result type is a context."""
     node = Parser(text).program()
-    ty = node.check(cx)
+    ty = no_event(node.check(cx))
     if expected is not None:
         node.resolve(unify(ty, expected))
     else:
@@ -2150,11 +2308,11 @@ def system_for_case(reg: Registry, case: dict[str, Any]) -> str:
         return name
     base = reg.systems[name]
     variant = System(
-        reads=base.reads | set(extra_reads or []),
+        reads=base.reads | set(extra_reads or {}),
         sends={**base.sends, **{s["command"]: s["target"] for s in extra_sends or []}},
         rng=base.rng,
         params=base.params,
-        neutral=base.neutral,
+        neutral={**base.neutral, **dict(extra_reads or {})},  # column -> its neutral value
     )
     variant_name = f"{name}@{case['id']}"
     reg.systems[variant_name] = variant
@@ -2176,6 +2334,8 @@ def prepare(golden: Golden, case: dict[str, Any]) -> Run:
     system = system_for_case(reg, case)
     scope: dict[str, str] = {"now": "int"}
     values: dict[str, Value] = {"now": world.now}
+    if case["kind"] == "effects":  # the verb's own event (§7.1), rewritten at the merge (N3)
+        scope["event"], values["event"] = "event", EventRef(own=True)
     for name, raw in case.get("bind", {}).items():
         scope[name], values[name] = parse_binding(raw)
     cx = Ctx(reg, system, scope, allow_key=case["kind"] == "order")
@@ -2211,7 +2371,7 @@ def run_effects(run: Run, case: dict[str, Any]) -> str:
 def succession_line(run: Run, programs: dict[str, str]) -> list[int]:
     """The succession protocol of spec §7.2 for one law."""
     cands = compile_candidates(programs["candidates"], run.cx)
-    run.cx.bind("x", "ent:person")
+    run.cx.bind("x", "ent:person", loop=True)
     eligible = compile_expr(programs["eligible"], run.cx, "bool")
     run.cx.allow_key = True
     order = compile_expr(programs["order"], run.cx)
