@@ -53,6 +53,7 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_kho
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml  # must FAIL
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
+python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
 python -I specs/chronicle/selftest.py
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
 python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference distributions are current (SPR-003)
@@ -65,6 +66,8 @@ python -I specs/systems/lint_odd.py
 python -I bin/gen_skeletons.py --check     # committed rh-core skeletons = lint_odd.py --rust (SPR-005)
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
+cargo nextest run -p rh-snapshot --test hash --test golden --test journal --test guard && cargo nextest run -p rh-core --test unsynced_guard   # plane hashes, input journal, V-DET-10 unsynced guard (SPR-007)
+cargo nextest run -p rh-snapshot --release --test guard   # the unsynced guard is compiled out of release builds (SPR-007)
 cargo build -p rh-cli && python -I bin/manifest_parity.py specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml  # V-WC-04: Rust loader = manifest_v0.py
 target/debug/rh-cli ownership    # single-writer column ownership from specs/systems (SPR-004)
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)

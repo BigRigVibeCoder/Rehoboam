@@ -24,6 +24,9 @@ RUN_NAME = re.compile(r'^\s*run "(?P<name>[^"]*)"')
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
     "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)",
+    "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite (SPR-007 "
+    "ruling 4)",
+    "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
     "CI workflows parse (YAML)",
     "Chronicle SQL-twin equivalence",
     "Clippy float backstop positive control: unnamed float arithmetic in plane A must FAIL "
@@ -41,6 +44,8 @@ REQUIRED_GATES = (
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
+    "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
+    "--check; SPR-007 T-01)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
@@ -49,7 +54,8 @@ REQUIRED_GATES = (
     "Manifest: solo",
     "Manifest: uz_job",
     "Manifest: val_khor",
-    "No FMA contraction: no fp-contract in RUSTFLAGS or .cargo/config (SPR-003 GAP-6)",
+    "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp-contract=off "
+    "(SPR-003 GAP-6; SPR-007 ruling 4)",
     "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)",
     "Ownership lint positive control: unowned write must FAIL",
     "Ownership lint: single writer from specs/systems (SPR-004 T-03)",
@@ -72,6 +78,8 @@ REQUIRED_GATES = (
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
     "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)",
+    "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)",
+    "V-DET-10 unsynced guard: read-only APIs fuzzed on the stub world (SPR-007 T-04)",
     "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)",
     "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL",
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
@@ -83,8 +91,15 @@ REQUIRED_GATES = (
     "Virtual telemetry (S5 prototype)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
+    "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
+    "passes (SPR-007 ruling 4)",
+    "fp-contract guard positive control: CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling "
+    "4)",
     "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL",
+    "fp-contract guard positive control: a .cargo/config.toml CFLAGS with -ffp-contract=fast must "
+    "FAIL (SPR-007 ruling 4)",
     "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL",
+    "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
@@ -138,11 +153,13 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
-    "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants "
-    "and crash replay (SPR-006)",
+    "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
+    "crash replay (SPR-006)",
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
+    "rh-snapshot gates by name: plane hashes, golden vectors, journal, unsynced guard (SPR-007 "
+    "T-01, T-03, T-04)",
     "uv lock --check positive control: drifted lock must FAIL",
 )
 

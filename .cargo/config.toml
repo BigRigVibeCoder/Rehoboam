@@ -1,0 +1,7 @@
+# C dependencies build with -ffp-contract=off: no fused multiply-add contraction in C either
+# (05.1 §6 item 4; SPR-007 Architect ruling 4). Bundled SQLite (libsqlite3-sys) and, with the
+# keyframes, zstd (zstd-sys) compile through the cc crate, which reads CFLAGS. `force` makes a CFLAGS
+# from the environment unable to replace it. The fp-contract guard of bin/check_all.sh accepts exactly
+# this setting, and still fails on any other fp-contract value and on any fp-contract in RUSTFLAGS.
+[env]
+CFLAGS = { value = "-ffp-contract=off", force = true }
