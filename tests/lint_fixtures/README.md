@@ -67,6 +67,7 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `parity/registry_drift_message.toml` | `bin/manifest_parity.py` line comparison (SPR-004 GAP-3) | the Rust side reads a Registry whose M5 `r0` bound is `[1.0, 9.0]`: same verdict and counts, different message | `PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml` |
 | `ownership/unowned_write.access.toml` | `rh-cli ownership` (single writer, 05.1 §2; SPR-004 T-03) | `S5.daily_life` declares a write to `person.alive`, owned by `M2.demography` | `VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns` |
 | `schema/drifted_bound.schema.json` | `rh-cli manifest schema --diff` (SPR-004 T-04) | the reference schema with `Horizon.years` maximum changed to 6000 | `SCHEMA DIFFERENCE $defs.Horizon.properties.years.maximum` |
+| `skeletons/stale/` | `bin/gen_skeletons.py --check --out …` (regenerate-and-diff, GOV-003 §2; SPR-005 T-03) | a copy of `crates/rh-core/tests/generated/` with `M2_demography.rs` hand-edited (`SPEC_VERSION` 0.0.9). After a spec change, regenerate it with `--out tests/lint_fixtures/skeletons/stale` and re-apply the edit | `STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs` |
 
 Since SPR-003 GAP-9, every plane-A crate in the `arch/` and `compile_fail/plane_a_names_plane_*` fixtures declares `[lints] workspace = true` (each fixture root has a `[workspace.lints]` table), so each control fails only for the rule it plants.
 
@@ -74,4 +75,3 @@ Each compile-fail case also passes `bin/lint_arch.py` (its graph has no edge), w
 is the language barrier: plane-A code can reach a plane-B or plane-C type only through a dependency
 edge, and `arch/plane_a_to_b/` and `arch/plane_a_to_c/` show the lint rejects that edge. The unit tests in `python/tests/` check each
 rule in more detail, including the cases a gate must not flag.
-| `skeletons/stale/` | `bin/gen_skeletons.py --check --out …` (regenerate-and-diff, GOV-003 §2; SPR-005 T-03) | a copy of `crates/rh-core/tests/generated/` with `M2_demography.rs` hand-edited (`SPEC_VERSION` 0.0.9). After a spec change, regenerate it with `--out tests/lint_fixtures/skeletons/stale` and re-apply the edit | `STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs` |
