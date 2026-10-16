@@ -13,13 +13,13 @@
 | SPR-005 | Time, phases, `SystemModel`, `AccessSpec`, a parallel scheduler identical at every thread count | Merged (#21) | VER-SPR-005 PASS |
 | SPR-006 | Agenda of timers, lifecycle command queues, event bus, invariants with replayable crash artifacts | Merged (#26) | VER-SPR-006 PASS |
 | SPR-007 | Plane hashes, keyframes (Arrow IPC with zstd), the SQLite journal, the unsynced guard, `resume` | Merged (#25) | VER-SPR-007 PASS |
-| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | PR #28: every task done and every defect fixed, CI green on `6a87616`. Tester's round 3 running. Audit drafted on `arch/SPR-008-audit` (`VER-SPR-008`). The cross-machine check waits for your session | Draft |
+| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | Merging (PR #28). The Tester's round 3 found no open defect. The cross-machine check waits for your session | VER-SPR-008 PASS |
 | SPR-009 | Benchmarks and the regression gate | PR #34 at `46f0f59`: benches 7 and 8, instruction-count gate, DEF-1 (observer panic) and DEF-2 fixed. Tester re-running phase 1. T-03 (vitals) and the T-05 smoke parts finish after SPR-008 merges | — |
 | SPR-010 | `rh-core::fixed` | Merged (#5) | VER-SPR-010 PASS |
 
-Escapes found after a sprint closed: 1 (documentation only) across 8 closed sprints (SPR-001 to SPR-007, SPR-010).
+Escapes found after a sprint closed: 1 (documentation only) across 9 closed sprints (SPR-001 to SPR-008, SPR-010).
 
-**G0** passes when SPR-008 and SPR-009 complete (your ruling on D30–D36). What is left: SPR-008's round 3 and merge, SPR-009's remaining tasks and two Tester passes, then `VER-G0`.
+**G0** passes when SPR-008 and SPR-009 complete (your ruling on D30–D36). What is left: SPR-009's remaining tasks and its Tester passes, the first nightly run on `main`, then `VER-G0`. Your cross-machine session is the last SPR-008 evidence.
 
 **P1a specs on `main`:** `T1.minds` and `M7.dynasty` frozen 0.3.1 (PR #32), M2 rung 0 frozen 0.2.0 with the skeleton specs (PR #37), your G0 rulings applied across the plans and docs (PR #42), and the effect-language review record (PR #43, `REV-SPR-017` CLOSED).
 

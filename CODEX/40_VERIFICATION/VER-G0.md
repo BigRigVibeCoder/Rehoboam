@@ -9,12 +9,11 @@ tags: [verification, roadmap]
 related: [BCK-001, BCK-002, PRJ-001, SPR-001, SPR-002, SPR-003, SPR-004, SPR-005, SPR-006, SPR-007, SPR-008, SPR-009, SPR-010]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.9.0
+version: 0.10.0
 ---
 
 > **BLUF:** DRAFT tracker; this is not a verdict. G0 closes when SPR-001 to SPR-010 are closed and the seven criteria of `docs/11` pass, and the red-team inbox is folded in with a dispositions record. Status on 2026-10-16:
-> - eight sprints are closed (SPR-001 to SPR-007, SPR-010);
-> - SPR-008 is in its last Tester round: every task done, every defect fixed, CI green (PR #28);
+> - nine sprints are closed (SPR-001 to SPR-008, SPR-010);
 > - SPR-009 is in progress: benches 7 and 8 and the instruction-count gate are built; T-03 and the T-05 smoke parts follow SPR-008's merge (PR #34).
 >
 > The director ruled that G0 passes when SPR-008 and SPR-009 complete (D30–D36, 2026-10-16).
@@ -26,10 +25,10 @@ version: 0.9.0
 ## 1. Gate criteria (`docs/11` P0)
 | Criterion | Test | Owning sprint | Status |
 |---|---|---|---|
-| Determinism: identical plane-A hashes at 1, 2, 4 and N threads, 3 repeats, every sim-month for 1,000 years | V-DET-01, V-DET-02 | SPR-008 (with SPR-005 to SPR-007) | Not started |
+| Determinism: identical plane-A hashes at 1, 2, 4 and N threads, 3 repeats, every sim-month for 1,000 years | V-DET-01, V-DET-02 | SPR-008 (with SPR-005 to SPR-007) | Passing in PR CI: 1,000 years yearly at 1 and N threads against the baseline, 7% of levels parallel. Nightly (monthly, 1/2/4/N × 3): first run on `main` pending. Cross-machine: the director's session, pending |
 | Keyframes: write, load, advance 10 years; equal to a continuous run | V-DET-05 | SPR-007 | Passing in `check_all` on the life world (48 to 5,000 rows), also resumed through the journal; on `smoke` with SPR-008 |
 | Samplers: golden vectors bit-equal | V-DET-09 | SPR-003 | Passing in `check_all` and CI (opt-level 0 and 3, GitHub's runner); nightly statistics green |
-| Bisect: names the injected month, table and row | V-DET-11 | SPR-008 | Not started |
+| Bisect: names the injected month, table and row | V-DET-11 | SPR-008 | Passing: 4 random cases per PR, 64 nightly; the Tester's own harness named 66 of 66 plus 8 shapes, and CI's automatic bisect named a planted change |
 | Specs: `val_khor` and `aethelgard` validate, `invalid_draft_style` fails | V-WC-04 | SPR-001 (Python); SPR-004 (Rust parity) | Passing in `check_all`: Python, and Rust parity line for line |
 | Lints: zero violations | V-PLN-01, V-DET-19, V-INSP-03 | SPR-001; SPR-010 (floats); SPR-003 (sampler float zone) | Passing in `check_all` |
 | CI: per-PR CI ≤ 15 min; baselines for benches 7 and 8 (bench 4 moved to the first P1a field sprint: director, 2026-10-16) | V-PERF-04 | SPR-009 | CI: about 1 min today. Baselines: not started |
@@ -44,11 +43,11 @@ version: 0.9.0
 | SPR-005 | Time, phases, SystemModel, AccessSpec, scheduler | Closed | `VER-SPR-005` PASS | 0 |
 | SPR-006 | Agenda, lifecycle queues, event bus, invariants | Closed | `VER-SPR-006` PASS | 0 |
 | SPR-007 | Plane hashes, keyframes, journal | Closed | `VER-SPR-007` PASS | 0 |
-| SPR-008 | Golden-run CI, bisect | Final Tester round on PR #28; audit drafted | `VER-SPR-008` draft | — |
+| SPR-008 | Golden-run CI, bisect | Closed (PR #28) | `VER-SPR-008` PASS | 0 |
 | SPR-009 | Benchmarks, regression gate | In progress (PR #34); merges after SPR-008; T-04 needs `adjutant` and the laptop | — | — |
 | SPR-010 | `rh-core::fixed` | Closed | `VER-SPR-010` PASS | 0 |
 
-The escape-rate count (BCK-002 A-05) stands at 1 escape across 8 closed sprints.
+The escape-rate count (BCK-002 A-05) stands at 1 escape across 9 closed sprints.
 
 ## 3. P0 work packages that no sprint owns (ruled by the director, 2026-10-16)
 Both recommendations were approved. `docs/11` v1.4 drops the Rerun hooks from P0 and moves the TUI stub to P1.17.
