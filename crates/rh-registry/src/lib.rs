@@ -15,7 +15,9 @@
 //! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.5_world_compiler_and_dsl.md` §2.1.
 #![forbid(unsafe_code)]
 
+pub mod manifest;
 pub mod pyfmt;
 pub mod registry;
+pub mod yaml;
 
 pub use registry::{Bounds, Number, Registry, RegistryError};

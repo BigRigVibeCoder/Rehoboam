@@ -1,0 +1,4 @@
+# Parity corpus (SPR-004 V-WC-04): not loadable; PyYAML refuses a second document.
+manifest_version: 0
+---
+manifest_version: 0

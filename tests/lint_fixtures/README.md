@@ -41,6 +41,7 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `clippy/float_unnamed/` (template) | `cargo clippy -p fixture-core -- -D warnings` with the root `[workspace.lints.*]` tables rendered in (SPR-010 GAP-3) | plane-A float arithmetic (`store * store`) on values a dependency returns as `f64`, with no float token for `bin/lint_forbidden.py` to see | `floating-point arithmetic detected` (`clippy::float_arithmetic`). Known limit: no clippy lint catches a float `<`/`>` (or, on this toolchain, `==`) between such values, so the control plants arithmetic |
 | `uv_drift/` | `uv lock --check --offline` (T-02) | a `pyproject.toml` changed after its `uv.lock` was generated | `needs to be updated` |
 | `forbidden/workspace/` | `bin/lint_forbidden.py` (V-DET-19) | HashMap in a plane-A crate, and also in a tool crate (skipped), comments and strings (ignored), plus one reasoned escape (counted) | `VIOLATION [V-DET-19/hash-collections]` |
+| `parity/registry_drift.toml` | `bin/manifest_parity.py` (V-WC-04, SPR-004) | the Rust side reads a Registry whose M5 `r0` bound is widened, so `invalid_draft_style` loses an error | `PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml` |
 
 Each compile-fail case also passes `bin/lint_arch.py` (its graph has no edge), which shows the failure
 is the language barrier: plane-A code can reach a plane-B or plane-C type only through a dependency
