@@ -15,6 +15,8 @@ Refs: SPR-010 GAP-4 (VER-SPR-010-TEST); GOV-002 §1 laws 4 and 9, §4.
 import re
 from pathlib import Path
 
+import check_all_selftest
+
 SCRIPT = Path(__file__).resolve().parents[2] / "bin" / "check_all.sh"
 FIXED_POINT_FIXTURE = (
     Path(__file__).resolve().parents[2] / "tests" / "lint_fixtures" / "compile_fail" / "fixed_point"
@@ -41,6 +43,47 @@ REQUIRED_GATES = (
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
     "T-03)",
+    "Golden baseline control: a local run with no base says the C3 rule was not checked "
+    "(VER-SPR-008 MAJ-1)",
+    "Golden baseline control: a push that changes the baseline in a [C3] commit passes "
+    "(VER-SPR-008 MAJ-1)",
+    "Golden baseline control: a regenerated baseline in a [C3] PR passes (SPR-008 T-04)",
+    "Golden baseline positive control: [C3] outside the title's trailing tag group must FAIL "
+    "(VER-SPR-008 MAJ-1)",
+    "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)",
+    "Golden baseline positive control: a pull_request run with no base must FAIL closed "
+    "(VER-SPR-008 MAJ-1)",
+    "Golden baseline positive control: a push that changes the baseline with no [C3] commit must "
+    "FAIL (VER-SPR-008 MAJ-1)",
+    "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL "
+    "(SPR-008 T-04)",
+    "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR "
+    "(check_baseline; SPR-008 T-04)",
+    "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for "
+    "byte (VER-SPR-008-TEST GAP-6)",
+    "Golden ladder positive control: CRLF line ends must FAIL ladder compare (VER-SPR-008-TEST "
+    "GAP-4)",
+    "Golden ladder positive control: a missing final newline must FAIL ladder compare "
+    "(VER-SPR-008-TEST GAP-4)",
+    "Golden ladder positive control: an injected run never compares equal to a clean one "
+    "(VER-SPR-008 MIN-2)",
+    "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)",
+    "Golden parallel-level positive control: a floor above the run's share of parallel levels "
+    "must FAIL (VER-SPR-008 DEF-2)",
+    "Golden resume control: past the journal's last input with --extend passes, and the header "
+    "names the journal (VER-SPR-008 DEF-1)",
+    "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)",
+    "Golden resume positive control: a --years past the journal's last input must FAIL without "
+    "--extend (VER-SPR-008 DEF-1)",
+    "Golden resume positive control: a --years shorter than the journal's horizon must FAIL "
+    "(VER-SPR-008 DEF-1)",
+    "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% "
+    "(SPR-008 T-02, DEF-2)",
+    "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5% "
+    "(SPR-008 T-02, DEF-2)",
+    "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)",
+    "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
+    "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
     "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)",
     "Golden vectors: M4 basket and price rule",
@@ -71,6 +114,7 @@ REQUIRED_GATES = (
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
     "Required tools present",
     "Rust: bans and sources (cargo deny: crates.io only, no wildcards)",
+    "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)",
     "Rust: build the workspace (cargo build)",
     "Rust: doctests (cargo test --doc)",
     "Rust: format (cargo fmt --check)",
@@ -80,6 +124,9 @@ REQUIRED_GATES = (
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
     "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)",
+    "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 "
+    "ruling 2)",
+    "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)",
     "System specs (lint_odd)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
@@ -101,6 +148,24 @@ REQUIRED_GATES = (
     "(SPR-011 ruling 13)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
+    "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the "
+    "right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)",
+    "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint "
+    "(VER-SPR-008-TEST GAP-7)",
+    "check_all chain positive control: a run line mutated with || true must FAIL the lint "
+    "(VER-SPR-008-TEST GAP-3)",
+    "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; "
+    "VER-SPR-008-TEST GAP-3, GAP-7)",
+    "check_all positive control: the old PWD-joined golden path under an absolute "
+    "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
+    "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the "
+    "tier (VER-SPR-008-TEST GAP-7)",
+    "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier "
+    "(VER-SPR-008-TEST GAP-3)",
+    "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier "
+    "(VER-SPR-008-TEST GAP-7)",
+    "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
+    "GAP-3)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
     "GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
@@ -120,7 +185,9 @@ REQUIRED_GATES = (
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
+    "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",
@@ -152,6 +219,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: system -> system must FAIL",
     "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)",
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
+    "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed and "
+    "passes (SPR-008 T-00)",
     "lint_forbidden float-api positive control: a private float alias in rh-sample must FAIL "
     "(SPR-003 GAP-11)",
     "lint_forbidden float-api positive control: an imported float alias in rh-sample must FAIL "
@@ -173,28 +242,46 @@ REQUIRED_GATES = (
     "GAP-1)",
     "lint_forbidden positive control: a float in a crate named rh-core must FAIL (SPR-003 GAP-3)",
     "lint_forbidden positive control: a float outside rh-sample must FAIL (SPR-003 T-00)",
+    "lint_forbidden positive control: a forbidden API behind a nested include! must FAIL (SPR-008 "
+    "T-00)",
+    "lint_forbidden positive control: a forbidden API in an included skeleton must FAIL (SPR-008 "
+    "T-00)",
+    "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)",
+    "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)",
+    "lint_forbidden positive control: an include! reached through a symlink resolves from the "
+    "link, as rustc does (VER-SPR-008 MIN-3)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
+    "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)",
+    "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
+    "(VER-SPR-008)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "lint_odd applies control: a sender's payload matching [[applies]] field for field passes "
     "(REV-P1a section 7)",
-    "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, "
-    "must FAIL (REV-P1a section 7)",
+    "lint_odd applies positive control: a sender's payload fields differ from [[applies]], "
+    "frozen, must FAIL (REV-P1a section 7)",
     "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 "
     "ruling 11)",
     "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
     "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling "
     "11)",
+    "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
+    "ruling 2)",
+    "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
     "crash replay (SPR-006)",
+    "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
+    "perturbations (SPR-008 T-02, T-03)",
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
     "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard "
     "(SPR-007 T-01..T-04)",
+    "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
+    "small-scale V-DET-01/02 (SPR-008 T-01)",
     "uv lock --check positive control: drifted lock must FAIL",
 )
 
@@ -246,3 +333,34 @@ def test_the_fixed_point_loop_covers_every_compile_fail_crate() -> None:
     on_disk = {p.parent.name for p in FIXED_POINT_FIXTURE.glob("*/Cargo.toml")}
     assert crates == on_disk - {"fixed-ok"}
     assert "-p fixed-ok --target-dir" in script, "the well-typed control must still compile"
+
+
+def test_no_run_line_ends_in_or_true_or_exit() -> None:
+    """GAP-3, GAP-7: `|| true`, `|| :` or `|| exit` on a `run` line would hide its failure."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert check_all_selftest.lint(text) == []
+    for plant in check_all_selftest.PLANTS.values():
+        planted = check_all_selftest.lint(text, plant=plant)
+        assert len(planted) == 1
+        assert plant.removesuffix(" &&").strip() in planted[0]
+    for suffix in (" || true &&", " || : &&", " ||true", " || :", " || exit 0 &&", " || exit"):
+        lines = text.splitlines()
+        first = next(i for i, line in enumerate(lines) if line.startswith("run "))
+        lines[first] = lines[first].removesuffix(" &&") + suffix
+        assert check_all_selftest.lint("\n".join(lines)) != [], suffix
+
+
+def test_the_verdict_fails_when_any_gate_failed_or_the_chain_exits_early() -> None:
+    """GAP-3, GAP-7: hidden failures and early exits still fail the tier; a clean chain passes.
+
+    A failed gate hidden by `|| true` or `|| exit 0`, or an early `exit 0`, must each be FAIL.
+    """
+    assert check_all_selftest.verdict() == 0
+    for mode in ("--or-true", "--or-exit", "--early-exit"):
+        assert check_all_selftest.verdict(mode) == 1, mode
+
+
+def test_the_baseline_push_controls_hold_with_an_absolute_target_dir() -> None:
+    """VER-SPR-008-TEST DEF-3: no `$PWD/$GOLDEN` join; an absolute CARGO_TARGET_DIR works."""
+    assert check_all_selftest.abs_target(plant=False) == 0
+    assert check_all_selftest.abs_target(plant=True) == 1

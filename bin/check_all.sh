@@ -247,6 +247,111 @@ forbidden_api_controls() {
   done
 }
 
+# Golden runs (SPR-008): the release rh-cli, its output directory and the N of "N threads" (at least 2).
+RH_CLI_RELEASE="$TARGET_DIR/release/rh-cli"
+mkdir -p "$TARGET_DIR/golden"
+# Absolute (VER-SPR-008-TEST DEF-3): $CARGO_TARGET_DIR may be absolute or relative, and some controls
+# run from another directory. Never join it to $PWD.
+GOLDEN="$(cd "$TARGET_DIR/golden" && pwd -P)"
+GOLDEN_THREADS=$(( $(nproc 2>/dev/null || echo 2) > 2 ? $(nproc 2>/dev/null || echo 2) : 2 ))
+# DEF-2: the floor of the share of scheduler levels that hold two or more jobs (the smoke world
+# runs at about 7%: Environment and Activity every day; the gate names say 5%, keep them in step).
+PARALLEL_FLOOR=5
+# The ladder-compare control: the 1-thread ladder with rung 500's first table root changed must differ there.
+ladder_compare_control() {
+  local edited="$TARGET_DIR/rendered-fixtures/ladder_one_root.ladder"
+  mkdir -p "$TARGET_DIR/rendered-fixtures" || return 1
+  awk 'BEGIN{r=0} /^rung 500 /{r=1; print; next} r==1 && /^root /{sub(/[0-9a-f]$/, ($NF ~ /0$/ ? "1" : "0")); r=0} {print}' \
+    "$GOLDEN/smoke_yearly_t1.ladder" > "$edited" || return 1
+  "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$edited"
+}
+# The hand-edited baseline control: the committed baseline with one hex digit of rung 1's hash typed over.
+baseline_hand_edited_control() {
+  local edited="$TARGET_DIR/rendered-fixtures/baseline_hand_edited.ladder"
+  mkdir -p "$TARGET_DIR/rendered-fixtures" || return 1
+  awk '/^rung 1 /{n=split($0, w, " "); h=w[5]; c=substr(h,16,1); w[5]=substr(h,1,15) (c=="0" ? "1" : "0"); $0=w[1]; for(i=2;i<=n;i++) $0=$0 " " w[i]} {print}' \
+    worlds/smoke/baselines/smoke_yearly_1000y.ladder > "$edited" || return 1
+  "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed no
+}
+
+# The push form of the C3 rule (VER-SPR-008 MAJ-1): a two-commit repository whose second commit, with
+# subject $1, adds the baseline; the gate runs over before..after there.
+baseline_push_control() {
+  local repo="$TARGET_DIR/rendered-fixtures/baseline_push" ladder="$GOLDEN/smoke_yearly_t1.ladder"
+  local g=(git -C "$repo" -c user.name=check_all -c user.email=check_all@localhost -c commit.gpgsign=false)
+  rm -rf "$repo" && mkdir -p "$repo" || return 1
+  "${g[@]}" init -q && echo x > "$repo/other.txt" && "${g[@]}" add . && "${g[@]}" commit -qm base || return 1
+  local before; before=$("${g[@]}" rev-parse HEAD) || return 1
+  cp worlds/smoke/baselines/smoke_yearly_1000y.ladder "$repo/baseline.ladder" && "${g[@]}" add . && "${g[@]}" commit -qm "$1" || return 1
+  local after; after=$("${g[@]}" rev-parse HEAD) || return 1
+  local py="$PY" script="$PWD/bin/check_baseline.py"
+  [[ "$py" == /* || "$py" != */* ]] || py="$PWD/$py"
+  (cd "$repo" && "$py" -I "$script" --baseline baseline.ladder --recomputed "$ladder" \
+    --event push --before "$before" --after "$after")
+}
+
+# MIN-2: two years clean and two years with the V-DET-11 hook; the ladders (which record the hook in
+# their header) must differ.
+injected_ladder_control() {
+  local dir="$TARGET_DIR/rendered-fixtures/injected"
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  "$RH_CLI_RELEASE" run smoke --years 2 --out "$dir/clean.ladder" >/dev/null || return 1
+  "$RH_CLI_RELEASE" run smoke --years 2 --out "$dir/injected.ladder" --inject 24:harvest.stock:0 >/dev/null || return 1
+  grep -q '^inject 24:harvest.stock:0$' "$dir/injected.ladder" || { echo "no inject line in the header"; return 0; }
+  "$RH_CLI_RELEASE" ladder compare "$dir/clean.ladder" "$dir/injected.ladder"
+}
+
+# GAP-4: the 1-thread golden ladder with CRLF line ends (crlf) or without its final newline
+# (unterminated), compared with itself: the strict parser must refuse it.
+ladder_bytes_control() {
+  local dir="${TARGET_DIR:?}/rendered-fixtures/ladder_bytes"
+  mkdir -p "$dir" || return 1
+  case "$1" in
+    crlf) sed 's/$/\r/' "$GOLDEN/smoke_yearly_t1.ladder" > "$dir/$1.ladder" || return 1 ;;
+    unterminated) head -c -1 "$GOLDEN/smoke_yearly_t1.ladder" > "$dir/$1.ladder" || return 1 ;;
+  esac
+  "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$dir/$1.ladder"
+}
+
+# GAP-6: the nightly compares the yearly cut of its monthly run with the baseline; here the cut
+# of a 3-year monthly run must equal the 3-year yearly run byte for byte.
+ladder_cut_control() {
+  local dir="${TARGET_DIR:?}/rendered-fixtures/ladder_cut"
+  mkdir -p "$dir" || return 1
+  "$RH_CLI_RELEASE" run smoke --years 3 --ladder monthly --out "$dir/monthly.ladder" >/dev/null || return 1
+  "$RH_CLI_RELEASE" run smoke --years 3 --ladder yearly --out "$dir/yearly.ladder" >/dev/null || return 1
+  "$RH_CLI_RELEASE" ladder cut-yearly "$dir/monthly.ladder" "$dir/cut.ladder" || return 1
+  "$RH_CLI_RELEASE" ladder compare "$dir/cut.ladder" "$dir/yearly.ladder" || return 1
+  cmp "$dir/cut.ladder" "$dir/yearly.ladder" && echo "CUT EQUAL: 3 yearly rungs, byte for byte"
+}
+
+# DEF-2: 2 years at 1 and N threads, with the planted thread-identity leak when given
+# --leak-thread, then the 1-versus-N comparison. With the leak the header must say so.
+thread_leak_control() {
+  local dir="${TARGET_DIR:?}/rendered-fixtures/thread_leak"
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  "$RH_CLI_RELEASE" run smoke --years 2 --threads 1 --out "$dir/t1.ladder" "$@" >/dev/null || return 1
+  "$RH_CLI_RELEASE" run smoke --years 2 --threads "$GOLDEN_THREADS" --out "$dir/tN.ladder" "$@" >/dev/null || return 1
+  if [ "$*" = "--leak-thread" ]; then
+    grep -q '^leak thread$' "$dir/t1.ladder" || { echo "no leak line in the header"; return 0; }
+  fi
+  "$RH_CLI_RELEASE" ladder compare "$dir/t1.ladder" "$dir/tN.ladder"
+}
+
+# DEF-1: a 24-year run with keyframes (made once per check_all run), then a run resumed from its
+# year-10 keyframe with --years $1 and any further flags; prints the resumed ladder's header.
+def1_resume() {
+  local dir="${TARGET_DIR:?}/rendered-fixtures/def1" years="$1"; shift
+  # Keyed to this check_all run ($$): keyframes of an earlier run, or of another world, are stale.
+  if [ "$(cat "$dir/run.id" 2>/dev/null)" != "$$" ] || [ ! -f "$dir/kf/year-0010.rhkf" ]; then
+    rm -rf "$dir" && mkdir -p "$dir" && echo "$$" > "$dir/run.id" || return 1
+    "$RH_CLI_RELEASE" run smoke --years 24 --out "$dir/full.ladder" --journal "$dir/journal.sqlite" --keyframes "$dir/kf" >/dev/null || return 1
+  fi
+  "$RH_CLI_RELEASE" run smoke --years "$years" --resume "$dir/kf/year-0010.rhkf" --journal "$dir/journal.sqlite" \
+    --out "$dir/resumed.ladder" "$@" || return 1
+  head -9 "$dir/resumed.ladder"
+}
+
 # Doctests (nextest skips them). The compile-fail cases are acceptance tests (SPR-002 T-01), so the
 # gate counts them per file: a case demoted to plain text, deleted or renamed must turn it red, not
 # just vanish (VER-SPR-002-TEST DEF-2). Each entry is file:compile_fail:compiling, the number of
@@ -304,6 +409,29 @@ fixed_point_compile_controls() {
 
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
 # two `&&` lines splits the chain, and later checks would run after a failure (DEF-2).
+# The verdict (VER-SPR-008-TEST GAP-3, GAP-7), computed in an EXIT trap so that no exit, early or
+# late, ends the tier without one: a gate line ending in `|| true` or `|| exit 0`, or a stray exit,
+# cannot turn failed or unrun gates into a pass. The tier passes only when the chain ran to its end,
+# no gate failed and the chain's last status is 0. bin/check_all_selftest.py runs this code on
+# planted chains; its lint refuses `|| true`, `|| :` and `|| exit` on a run line.
+finish() {
+  local status=$? verdict
+  if [ -n "${chain_done:-}" ] && [ -z "$failed" ] && [ "$status" -eq 0 ]; then
+    verdict="PASS ($n checks)"; status=0
+  elif [ -n "$failed" ]; then
+    verdict="FAIL at \"$failed\" (later checks skipped: fail-fast)"; status=1
+  elif [ -z "${chain_done:-}" ]; then
+    verdict="FAIL (the chain exited early, status $status, after $n checks: later gates unrun)"; status=1
+  else
+    verdict="FAIL (the chain stopped with no gate named)"; status=1
+  fi
+  { echo; echo "## Verdict: $verdict"; } >> "$REPORT"
+  echo "Report: $REPORT"
+  exit "$status"
+}
+chain_done=""
+trap finish EXIT
+
 run "Required tools present" pass require_tools &&
 # Tier 1 — static and contract lints (fastest first)
 run "Document index builds (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
@@ -383,6 +511,14 @@ run "lint_forbidden float-dep positive control: real_bits in rh-snapshot must FA
 run "lint_forbidden float-dep positive control: real_cmp in rh-snapshot must FAIL (SPR-007 GAP-1)" "fail:VIOLATION [V-DET-19/float-dep] \`Real\` at tests/lint_fixtures/forbidden/float_dep/rh-snapshot/src/real_cmp.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_dep/Cargo.toml &&
 run "lint_forbidden float-dep positive control: real_floor in rh-snapshot must FAIL (SPR-007 GAP-1)" "fail:VIOLATION [V-DET-19/float-dep] \`Real\` at tests/lint_fixtures/forbidden/float_dep/rh-snapshot/src/real_floor.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_dep/Cargo.toml &&
 run "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)" "pass:0 violations; 1 escapes; 1 declared f32_field columns" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/float_field/declared.rs --specs tests/lint_fixtures/forbidden/float_field/specs &&
+run "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed and passes (SPR-008 T-00)" "pass:2 files scanned; 0 violations; 0 escapes; 0 declared f32_field columns; 1 literal include! followed" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/clean.rs &&
+run "lint_forbidden positive control: a forbidden API in an included skeleton must FAIL (SPR-008 T-00)" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/include/skeletons/dirty_skeleton.rs:5:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/dirty.rs &&
+run "lint_forbidden positive control: a forbidden API behind a nested include! must FAIL (SPR-008 T-00)" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/include/skeletons/dirty_skeleton.rs:5:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/nested.rs &&
+run "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)" "fail:VIOLATION [V-DET-19/source-include] \`include!(\` at tests/lint_fixtures/forbidden/include/concat.rs:5:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/concat.rs &&
+run "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)" "fail:resolves outside the repository" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/outside.rs &&
+run "lint_forbidden positive control: an include! reached through a symlink resolves from the link, as rustc does (VER-SPR-008 MIN-3)" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/include/symlink/gen.rs:3:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/symlink/link.rs &&
+run "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)" "fail:VIOLATION [V-DET-19/source-include] \`use core::include\` at tests/lint_fixtures/forbidden/include/renamed.rs:3:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/renamed.rs &&
+run "lint_forbidden positive control: include_str! of a file outside the repository must FAIL (VER-SPR-008)" "fail:VIOLATION [V-DET-19/data-include] \`include_str!(\` at tests/lint_fixtures/forbidden/include/data_outside.rs:3:" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/include/data_outside.rs &&
 run "Clippy float backstop positive control: unnamed float arithmetic in plane A must FAIL (SPR-010 GAP-3)" "fail:floating-point arithmetic detected" clippy_control float_unnamed fixture-core &&
 run "Clippy libm-only positive control: std ln in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::ln`' clippy_control std_transcendental rh-sample &&
 run "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::exp`' clippy_control std_transcendental rh-sample &&
@@ -394,6 +530,11 @@ run "lint_odd applies positive control: a sender's payload fields differ from [[
 run "lint_odd applies control: a sender's payload matching [[applies]] field for field passes (REV-P1a section 7)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/match &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
+run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
+run "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 ruling 2)" "fail:overlay system 'S9.smoke_chronicle' must be X-prefixed" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay tests/lint_fixtures/smoke/overlay_not_x.toml &&
+run "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)" "fail:system 'X6.smoke_chronicle' is not in the overlay" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay tests/lint_fixtures/smoke/overlay_missing.toml &&
+run "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 ruling 2)" "pass:SKELETONS: 7 up to date in crates/rh-sys-smoke/src/generated" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check &&
+run "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)" "fail:STALE: tests/lint_fixtures/skeletons/smoke_stale/X3_smoke_vital.rs" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out tests/lint_fixtures/skeletons/smoke_stale --check &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)" "pass:PASS: 1 patterns linted." "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml &&
 run "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)" "fail:ERROR life_ends.e1: UNANCHORED state read" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml &&
@@ -421,6 +562,7 @@ run "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 
 run "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)" "fail:golden vector differs" env RH_SAMPLE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_samplers_v1.txt" cargo nextest run -p rh-sample --locked --test golden --no-capture &&
 run "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes (SPR-005)" "pass:V-DET-01: 600 monthly states equal at 1, 2, 4 and 8 threads" cargo nextest run -p rh-core -p rh-registry --locked --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract --no-capture &&
 run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and crash replay (SPR-006)" "pass:V-DET-12: golden event log of 196 events checked" cargo nextest run -p rh-core -p rh-events --locked --test agenda --test agenda_events --test invariants --lib --no-capture &&
+run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)" "fail:V-DET-12 violated" env RH_CORE_LIFE_GOLDEN="$PWD/tests/lint_fixtures/golden/backdated_life_events.txt" cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_12_golden_event_log &&
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&
@@ -434,7 +576,42 @@ run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [
 run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
 run "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)" "pass:SCHEMA: no unexplained difference" "$RH_CLI" manifest schema --diff specs/manifest/manifest_v0.schema.json &&
 run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERENCE \$defs.Horizon.properties.years.maximum" "$RH_CLI" manifest schema --diff tests/lint_fixtures/schema/drifted_bound.schema.json &&
+run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
+run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
+run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads "$GOLDEN_THREADS" --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_tN.ladder" &&
+run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
+run "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)" "fail:LADDERS DIFFER: first differing rung: 500" ladder_compare_control &&
+run "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR (check_baseline; SPR-008 T-04)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
+run "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)" "fail:BASELINE MISMATCH" baseline_hand_edited_control &&
+run "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL (SPR-008 T-04)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "SPR-008: Golden-run CI" &&
+run "Golden baseline control: a regenerated baseline in a [C3] PR passes (SPR-008 T-04)" "pass:regenerated in a [C3] PR" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "SPR-008: Golden-run CI [C3]" &&
+run "Golden baseline positive control: a pull_request run with no base must FAIL closed (VER-SPR-008 MAJ-1)" "fail:needs its base" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --event pull_request --base-ref "" &&
+run "Golden baseline control: a local run with no base says the C3 rule was not checked (VER-SPR-008 MAJ-1)" "pass:C3 rule not checked (no base ref)" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --event local --base-ref "" &&
+run "Golden baseline positive control: [C3] outside the title's trailing tag group must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "docs: explain the [C3] rule" &&
+run "Golden baseline positive control: a push that changes the baseline with no [C3] commit must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_push_control "feat(SPR-008): regenerate the smoke baseline" &&
+run "Golden baseline control: a push that changes the baseline in a [C3] commit passes (VER-SPR-008 MAJ-1)" "pass:regenerated in a [C3] PR (the commit subjects of" baseline_push_control "feat(SPR-008): regenerate the smoke baseline [C3]" &&
+run "Golden ladder positive control: an injected run never compares equal to a clean one (VER-SPR-008 MIN-2)" "fail:LADDERS DIFFER" injected_ladder_control &&
+run "Golden ladder positive control: CRLF line ends must FAIL ladder compare (VER-SPR-008-TEST GAP-4)" "fail:a carriage return" ladder_bytes_control crlf &&
+run "Golden ladder positive control: a missing final newline must FAIL ladder compare (VER-SPR-008-TEST GAP-4)" "fail:does not end in a newline" ladder_bytes_control unterminated &&
+run "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for byte (VER-SPR-008-TEST GAP-6)" "pass:CUT EQUAL" ladder_cut_control &&
+run "Golden thread-leak positive control: the planted thread-identity leak must FAIL the 1-versus-N comparison (VER-SPR-008 DEF-2)" "fail:LADDERS DIFFER" thread_leak_control --leak-thread &&
+run "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)" "pass:LADDERS EQUAL: 2 rungs" thread_leak_control &&
+run "Golden parallel-level positive control: a floor above the run's share of parallel levels must FAIL (VER-SPR-008 DEF-2)" "fail:PARALLEL LEVELS BELOW THE FLOOR" "$RH_CLI_RELEASE" run smoke --years 2 --threads 1 --require-parallel 50 --out "$TARGET_DIR/rendered-fixtures/parallel_floor.ladder" &&
+run "Golden resume positive control: a --years shorter than the journal's horizon must FAIL (VER-SPR-008 DEF-1)" "fail:disagrees with the journal's horizon" def1_resume 13 &&
+run "Golden resume positive control: a --years past the journal's last input must FAIL without --extend (VER-SPR-008 DEF-1)" "fail:past the journal's last input" def1_resume 30 &&
+run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
+run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
+run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
+run "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST GAP-3)" "pass:Verdict: PASS (2 checks)" "$PY" -I bin/check_all_selftest.py verdict &&
+run "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier (VER-SPR-008-TEST GAP-3)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-true &&
+run "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; VER-SPR-008-TEST GAP-3, GAP-7)" "pass:NO OR-TRUE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh &&
+run "check_all chain positive control: a run line mutated with || true must FAIL the lint (VER-SPR-008-TEST GAP-3)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-true &&
+run "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint (VER-SPR-008-TEST GAP-7)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-exit &&
+run "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-exit &&
+run "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL (the chain exited early" "$PY" -I bin/check_all_selftest.py verdict --early-exit &&
+run "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)" "pass:ABSOLUTE TARGET DIR: both baseline push controls fail and pass for the right reason" "$PY" -I bin/check_all_selftest.py abs-target &&
+run "check_all positive control: the old PWD-joined golden path under an absolute CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)" "fail:a baseline push control behaved wrongly" "$PY" -I bin/check_all_selftest.py abs-target --plant-pwd-join &&
 # Tier 5 — golden vectors
 run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
@@ -451,10 +628,5 @@ run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtu
 run "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip (SPR-011 ruling 13)" "pass:CHANNEL A v0: PASS" "$PY" -I specs/stream/selftest_channel_a.py &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py
 status=$?
-
-{
-  echo
-  if [ $status -eq 0 ]; then echo "## Verdict: PASS ($n checks)"; else echo "## Verdict: FAIL at \"$failed\" (later checks skipped: fail-fast)"; fi
-} >> "$REPORT"
-echo "Report: $REPORT"
-exit $status
+chain_done=1
+exit "$status"

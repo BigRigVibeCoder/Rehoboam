@@ -26,6 +26,15 @@ Run: python -I specs/systems/lint_odd.py            (lints everything; exit 1 on
         DIR: more *.odd.toml specs, linted with the repository's (an id may not repeat), e.g. a world's own
         systems (SPR-008: worlds/smoke/systems); FILE: a Registry overlay whose [systems] and [verbs] entries are
         added to the Registry's (a name may not repeat), e.g. worlds/smoke/registry_overlay.toml
+
+A spec set outside the Registry (SPR-008 ruling 2: the smoke world's dummy systems never enter the real
+Registry) is linted, and its skeletons generated, with
+     python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml
+     python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --rust X1.smoke_weather
+--specs DIR replaces the repository's specs (where --extra-specs adds to them). The overlay's [systems] and
+[verbs] are added to the Registry's for this run only; with --specs, each overlay system id is X-prefixed
+(`X<digits>.<name>`) and every spec in DIR must be one of the overlay's systems, so a dummy spec can never
+stand in for a real one.
 """
 import re
 import sys
@@ -49,7 +58,23 @@ IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_
 SERIES = ("constant", "step", "sine", "ramp", "historical")
 
 
-def load(extra_dirs=(), overlay=None):
+OVERLAY_ID = re.compile(r"^X\d+\.[a-z][a-z0-9_]*$")
+
+
+def replacement_problems(overlay_path, specs):
+    """With --specs (a spec set outside the Registry, SPR-008 ruling 2): every overlay system id is
+    X-prefixed, and every spec is one of the overlay's systems. ``load`` has already refused an overlay
+    entry that repeats a Registry name."""
+    overlay = tomllib.loads(Path(overlay_path).read_text(encoding="utf-8"))
+    ids = set(overlay.get("systems", {}))
+    problems = [f"{overlay_path}: overlay system '{sid}' must be X-prefixed (X<digits>.<snake_name>)"
+                for sid in sorted(ids) if not OVERLAY_ID.match(sid)]
+    problems += [f"{f.name}: system '{sid}' is not in the overlay {overlay_path}; a spec linted with an "
+                 "overlay must be one of its systems" for sid, (f, _) in specs.items() if sid not in ids]
+    return problems
+
+
+def load(extra_dirs=(), overlay=None, specs_dir=SPECS):
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
     if overlay is not None:                       # a world's own systems and verbs (SPR-011 ruling 11)
         over = tomllib.loads(Path(overlay).read_text(encoding="utf-8"))
@@ -62,7 +87,7 @@ def load(extra_dirs=(), overlay=None):
                 raise SystemExit(f"overlay {overlay}: [{sec}] entries already in the Registry: {clash}")
             reg.setdefault(sec, {}).update(over.get(sec, {}))
     specs = {}
-    files = sorted(p for p in SPECS.glob("*.odd.toml") if not p.name.startswith("_"))   # _template is not a spec
+    files = sorted(p for p in Path(specs_dir).glob("*.odd.toml") if not p.name.startswith("_"))   # _template is not a spec
     for d in extra_dirs:
         files += sorted(p for p in Path(d).glob("*.odd.toml") if not p.name.startswith("_"))
     for f in files:
@@ -329,7 +354,8 @@ def brief(sid, specs, reg):
 def rust(sid, specs):
     f, s = specs[sid]
     camel = lambda n: "".join(w.capitalize() for w in n.split("_"))
-    lines = [f"// GENERATED from specs/systems/{f.name} by lint_odd.py --rust. Do not edit; edit the spec.",
+    shown = f.resolve().relative_to(ROOT).as_posix() if f.resolve().is_relative_to(ROOT) else f.name
+    lines = [f"// GENERATED from {shown} by lint_odd.py --rust. Do not edit; edit the spec.",
              f'pub const SYSTEM_ID: &str = "{sid}";',
              f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
              "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
@@ -349,26 +375,50 @@ def rust(sid, specs):
     return "\n".join(lines)
 
 
-def main() -> int:
-    args, extra, overlay = sys.argv[1:], [], None
-    while args[:1] in (["--extra-specs"], ["--overlay"]) and len(args) >= 2:
-        if args[0] == "--extra-specs":
-            extra.append(args[1])
+def parse_args(argv):
+    """Return (specs dir, extra spec dirs, overlay path or None, (mode, id) or None) from ``argv``, or raise
+    ValueError."""
+    specs_dir, extra, overlay, gen = SPECS, [], None, None
+    i = 0
+    while i < len(argv):
+        if argv[i] in ("--specs", "--extra-specs", "--overlay", "--brief", "--rust") and i + 1 < len(argv):
+            flag, value = argv[i], argv[i + 1]
+            if flag == "--specs":
+                specs_dir = Path(value)
+            elif flag == "--extra-specs":
+                extra.append(value)
+            elif flag == "--overlay":
+                overlay = value
+            else:
+                gen = (flag, value)
+            i += 2
         else:
-            overlay = args[1]
-        args = args[2:]
-    reg, specs, req_ids, test_ids, adr_ids = load(extra, overlay)
-    if len(args) == 2 and args[0] in ("--brief", "--rust"):
-        sid = args[1]
+            raise ValueError(f"unknown argument {argv[i]!r}; see the module docstring")
+    return specs_dir, extra, overlay, gen
+
+
+def main() -> int:
+    try:
+        specs_dir, extra, overlay, gen = parse_args(sys.argv[1:])
+    except ValueError as e:
+        print(e)
+        return 2
+    reg, specs, req_ids, test_ids, adr_ids = load(extra, overlay, specs_dir)
+    overlay_errs = []
+    if overlay is not None and specs_dir != SPECS:
+        overlay_errs = replacement_problems(overlay, specs)
+    if gen is not None:
+        sid = gen[1]
         if sid not in specs:
             print(f"no spec for {sid}; have {sorted(specs)}")
             return 1
-        print(brief(sid, specs, reg) if args[0] == "--brief" else rust(sid, specs))
+        if overlay_errs:
+            print("\n".join(overlay_errs))
+            return 1
+        print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
         return 0
-    if args:
-        print(__doc__)
-        return 2
     errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids)
+    errs = overlay_errs + errs
     for w in warns:
         print("WARN ", w)
     for e in errs:

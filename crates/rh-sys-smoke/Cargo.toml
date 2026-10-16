@@ -1,0 +1,26 @@
+[package]
+name = "rh-sys-smoke"
+description = "The smoke world's dummy systems: the golden run's engine exercise (SPR-008)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# SPR-008 ruling 1: the first system crate. Its systems are dummies whose specs live under
+# worlds/smoke/ (X-prefixed ids in a Registry overlay), never in specs/systems or the real Registry.
+[package.metadata.rehoboam]
+plane = "A"
+kind = "system"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }
+rh-events = { version = "0.0.0", path = "../rh-events" }
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
+# Ruling 3: at least one rh-sample draw, so the float zone is inside the golden run.
+rh-sample = { version = "0.0.0", path = "../rh-sample" }
+
+[dev-dependencies]
+rh-registry = { version = "0.0.0", path = "../rh-registry" }
