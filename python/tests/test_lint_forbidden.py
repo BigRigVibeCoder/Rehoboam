@@ -293,6 +293,7 @@ PLANTED = {
     "float_conversion": ("float", "to_f64"),
     "float_escape_reason": ("float", "f64"),
     "float_undeclared_field": ("float", "f32"),
+    "allow_disallowed": ("lint-allow", "allow(clippy::disallowed_methods"),
 }
 
 
@@ -651,3 +652,63 @@ def test_a_float_in_every_real_plane_a_crate_name_but_rh_sample_is_reported(
         if line.startswith("VIOLATION [V-DET-19/float]")
     }
     assert reported == set(real) - {"rh-sample"}
+
+
+# --- Allows of clippy's disallowed lists (VER-SPR-003-TEST GAP-5) -------------------------------
+
+
+def lint_allow_texts(source: str) -> tuple[list[str], list[str]]:
+    """Return the lint-allow violations and escapes of ``source`` scanned as plane-A code."""
+    report = Report(violations=[], escaped=[])
+    scan_source(source, "lib.rs", report)
+    rule = "[V-DET-19/lint-allow]"
+    return (
+        [v for v in report.violations if rule in v],
+        [e for e in report.escaped if rule in e],
+    )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "#[allow(clippy::disallowed_methods)]\nfn f() {}",
+        '#[allow(clippy::disallowed_types, reason = "x")]\nfn f() {}',
+        '#![allow(clippy::float_arithmetic, clippy::disallowed_methods, reason = "x")]',
+        "#[expect(clippy::disallowed_methods)]\nfn f() {}",
+        '#[cfg_attr(test, allow(clippy::disallowed_methods, reason = "x"))]\nfn f() {}',
+        "#[allow(clippy::style)]\nfn f() {}",
+        "#[allow(clippy::all)]\nfn f() {}",
+        "#[allow(\n    clippy::panic,\n    clippy::disallowed_methods,\n)]\nfn f() {}",
+        "#[allow(clippy :: disallowed_methods)]\nfn f() {}",
+    ],
+)
+def test_each_allow_of_the_disallowed_lists_is_reported(source: str) -> None:
+    """Item or crate level, allow or expect, the group or the lint, multi-line or spaced."""
+    violations, _ = lint_allow_texts(source)
+    assert len(violations) == 1
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '#![allow(clippy::float_arithmetic, reason = "the float zone")]',
+        "#[allow(clippy::disallowed_script_idents)]\nfn f() {}",
+        "#[allow(clippy::style_lint_name_that_is_longer)]\nfn f() {}",
+        "// #[allow(clippy::disallowed_methods)]\nfn f() {}",
+        'const S: &str = "allow(clippy::disallowed_methods)";',
+    ],
+)
+def test_other_allows_are_not_reported(source: str) -> None:
+    """Other lints, comments and strings are not an allow of the disallowed lists."""
+    assert lint_allow_texts(source) == ([], [])
+
+
+def test_a_reasoned_escape_counts_the_allow() -> None:
+    """With a LINT-ALLOW and a reason, the allow is excused, counted and printed."""
+    source = (
+        "// LINT-ALLOW(forbidden-api): a vendored kernel needs std exp (ruling pending)\n"
+        '#[allow(clippy::disallowed_methods, reason = "x")]\nfn f() {}'
+    )
+    violations, escaped = lint_allow_texts(source)
+    assert violations == []
+    assert len(escaped) == 1

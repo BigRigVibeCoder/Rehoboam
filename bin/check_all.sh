@@ -131,6 +131,7 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   spaced_path:wall-clock:time::Instant spaced_rand:thread-rng:rand::rng
   float_type:float:f32 float_literal:float:0.5 float_suffix:float:2e-3f64 float_conversion:float:to_f64
   float_escape_reason:float:f64 float_undeclared_field:float:f32
+  allow_disallowed:lint-allow:allow(clippy::disallowed_methods
   path_attr:source-include:#[path include_macro:source-include:include!("
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
