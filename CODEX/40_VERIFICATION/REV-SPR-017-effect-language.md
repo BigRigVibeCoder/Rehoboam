@@ -9,7 +9,7 @@ tags: [verification]
 related: [PRJ-002, REV-P1a, BCK-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF:** Not ready at round 1 (PR #41 head `35aa53a`): **2 blockers, 8 majors, 7 minors.** The reference reproduces all 456 golden cases, its positive control fails as it should, and the 12 succession cases agree with the spec text when checked by hand. The genealogy relations read only the life-course log and reach through the dead. Nothing depends on iteration order. D1 rounding matches `rh-core::fixed` and D9 matches `draw_hits`. The blockers: ticks are written in days where the engine counts minutes, and a 4-degree candidate cut breaks representation. Two choices go to the director at the SPR-017 plan gate: whether collateral heirs must be of the title's blood (M8), and the sex rules (D4). The reviewer expects no objection after one revision round (8/10).
@@ -62,3 +62,13 @@ The reviewer's positions on D1–D13: agree with D1, D3, D6, D7, D9, D10, D11 an
 | m | Purpose names and reads out of step with PR #32 (`succession_tie`, T1's reads, the `OpinionModifier` self-send, S7's `death_cause` read). A five-value `death_cause` enum against PR #37's six. `E_RNG_REUSE` is only syntactic. The sortition key has no title. `E_NO_NEUTRAL` depends on which systems are registered. `calendar.minutes_per_day` is an engine constant | Align with PR #32 at `9d883b5` and PR #37 at `83b9654`. `E_RNG_REUSE` gets both a static lint (the entity kind in k, folded constants, aggregates keyed on the loop variable) and a run-time check per step. Sortition is keyed by title. A machine-readable `neutral` value on `[[reads]]`. `MINUTES_PER_DAY` |
 
 **Follow-through:** PR #41 round 3, and PR #32 round 4g (the tenure log, sortition keyed by title, S7's `death_cause` read). Plan items for SPR-014: the merge rewrites event-typed payload fields, and the machine-readable `neutral` value comes with the absent-owner rule.
+
+## 5. Round 3 (PR #41 head `08deb53`, v0.3.0, 538 cases)
+
+**Verdict:** not ready. **0 blockers, 2 majors, 6 minors.** All 538 cases reproduce. The reviewer checked by hand: the deep world, both N1 cases, the title-blood exclusion, tanistry and the fan counts. The mutants fail as they should: a row-id-keyed log fails 86 cases, short-circuit evaluation 2, stopping at height 2 fails 5, and each pruning mutant fails 1 to 4. B3, N1–N4 and M6 are resolved. The reviewer has no objection to the language itself (grammar, types, semantics, totality), but objects to D14 option (a) until N5 is recorded, and to D19 until N6 is fixed.
+
+| # | Finding | Ruling |
+|---|---|---|
+| N5 | Title blood at world start and under rotas. With a one-row tenure log, a childless holder's death gives an empty line, and seniority and tanistry return only the son. A rota of 9 tenures excludes a cousin whose grandfather held. Genesis founders have no parent links at rung 0 | A worldgen requirement: for a dynastic world, `rh-worldgen` back-fills pre-epoch life-course rows with parent links, and tenure rows for past holders (SPR-019). The spec states this precondition. The window widens to `holders_of(title, 16)`. Pin a one-row-log case and a rota case |
+| N6 | The run-time `E_RNG_REUSE` ledger is scoped to a host step, so evaluating one sortition line twice in a step aborts the run | Scope the ledger to one evaluation of one program for one binding. A repeat evaluation is idempotent. Pin a case |
+| m1–m6 | The D5 guard leaks under uncle–niece marriage. A redraw in a verb whose payload carries an outcome is accepted. Neutral values are untested beyond the type's zero. Enum values named `none` cannot be written. The static lint spans a system's mutually exclusive programs. Assorted text and pins, including that the `neutral` field must exist before SPR-017's loader | `not descends(holder, x)`. A draw in an outcome-carrying verb is rejected. A neutral case that is not zero. Allow a keyword after the dot. Uniqueness within a program and across programs that can run in one step. Fix the text. The `neutral` field becomes a spec prerequisite of SPR-017 |
