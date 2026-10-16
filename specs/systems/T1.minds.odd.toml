@@ -24,6 +24,7 @@
 # SPR-014's registration rule drops a read of an absent owner and applies the coupling's neutral value.
 # Round 4d (from the effect-language spec, PR #41 §5.3): relations by their exact names, kin(p, n) and related(a, b, n);
 # DESPAIR_PACT's opinion effect is a declared self-send (OpinionModifier to T1), with T1's [[applies]].
+# Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
 odd_r = 2
 
 [system]
@@ -31,7 +32,7 @@ id = "T1.minds"
 name = "Minds of named actors (minds v0)"
 spec_version = "0.3.1"
 fidelity = "F1"
-status = "draft"
+status = "frozen"
 crate = "rh-minds"
 adrs = ["ADR-0012", "ADR-0034", "ADR-0035", "ADR-0025", "ADR-0024", "ADR-0009", "ADR-0006", "ADR-0033"]
 requirements = ["COG-1", "COG-3", "SIM-7", "SAGA-11", "SAGA-4", "SAGA-2", "DET-13"]

@@ -23,6 +23,7 @@
 # restated here; the sortition law's draws are the `sortition` purpose.
 # Round 4g (effect-language re-check, B3): title.founder is replaced by an append-only tenure log (tenure.*) that the
 # title's law may read (holders_of(title, 8)); `sortition` is keyed by the title too.
+# Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
 odd_r = 2
 
 [system]
@@ -30,7 +31,7 @@ id = "M7.dynasty"
 name = "Succession and dynasts"
 spec_version = "0.3.1"
 fidelity = "F1"
-status = "draft"
+status = "frozen"
 crate = "rh-sys-dynasty"
 adrs = ["ADR-0027", "ADR-0035", "ADR-0025", "ADR-0026", "ADR-0007", "ADR-0009", "ADR-0006", "ADR-0024"]
 requirements = ["SIM-3", "SIM-9", "SIM-13", "SAGA-13", "DET-13"]
