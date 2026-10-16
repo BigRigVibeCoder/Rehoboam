@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.3.0
+version: 1.4.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -20,6 +20,30 @@ version: 1.3.0
 - **Depends on:** SPR-007 (benches 7 and 8 measure its plane hashes and keyframes) and SPR-008 (T-03 and T-05 run on its `smoke` world). T-04 also needs `adjutant` and the director's laptop (RUN-001, RUN-002). Architect, 2026-10-16: it may start once SPR-007 merges, alongside SPR-008, and merges after it · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** `docs/08` §9; GOV-006
 - **Requirements covered:** PERF-4
+
+## Architect rulings, 2026-10-16 (binding; written before the sprint starts)
+1. **Bench 4 waits on a director decision.** Bench 4 (`raster_8x512`, stencil fields) measures field code that does not exist until the first field system (M1 or M3, P1a). The Architect has recommended to the director that its baseline move to that sprint, so that the G0 criterion reads "benches 7 and 8". Until the director rules, build the harness and benches 7 and 8, and leave bench 4 as a named, empty slot.
+2. **The instruction-count gate (T-02a).**
+   - `iai-callgrind`, exactly pinned, as a dev-dependency of the bench targets only. It never enters a plane-A crate's normal dependency graph, so `PLANE_A_EXTERNAL_DEPS` does not apply.
+   - valgrind is installed in CI from the runner's package manager.
+   - Every baseline file records the valgrind and toolchain versions. When either changes, the gate reports "toolchain changed: re-baseline required" instead of a false pass or fail.
+   - Benches run at sizes that fit the 15-minute PR budget (bench 7: for example 10k rows, full and dirty-chunk; bench 8: for example 10k rows, write and read). The 100k and 1M sizes of `08` §9 are wall-clock trends (T-02b, T-04).
+3. **Baselines are regenerated, never typed** (as SPR-008 ruling 6).
+   - A committed instruction-count or allocation baseline must equal the tool's output.
+   - It may change only in a PR whose title carries `[perf-baseline]` and whose body gives the reason.
+   - A speed-up never re-baselines automatically.
+   - Controls both ways.
+4. **Timing never happens inside plane A** (T-03). `Instant` and `SystemTime` are banned in plane-A crates (GOV-003 §2).
+   - `rh-core` exposes an observer interface that receives phase and level boundary notifications, carrying sim time, phase and binding but no clock.
+   - The host (`rh-cli`, tool plane) reads the clock in its observer and computes per-system times, the serial fraction and the vitals line (GOV-006 §1).
+   - The observer cannot touch plane-A state (the unsynced guard applies). V-DET-07 style: a run with the observer attached hashes equal to one without.
+5. **The allocation budget is measured first (T-05).**
+   - The counting allocator is enabled only in bench builds.
+   - The P0 engine allocates per tick today (per-level buffers, scoped threads), so a budget of 0 would fail on day one. Record the measured per-tick counts on the smoke world as the baseline budget, with the allocation sites listed, and fail on any increase.
+   - Driving the count to 0 (pooled buffers, a persistent thread pool) is BCK-002 A-32, due before benches 1 and 2 (P1a).
+6. **Order and machines.**
+   - This sprint starts once SPR-007 merges and merges after SPR-008, whose `rh-cli run smoke` it uses for T-03 and T-05.
+   - T-04 (the `adjutant` and laptop baselines) needs the director's machines (RUN-001, RUN-002). Build the procedure and scripts. The sprint closes with T-04 marked "blocked: director's machines" if they are not available, and the Architect re-opens it as a follow-up.
 
 ## Compliance (every task)
 
