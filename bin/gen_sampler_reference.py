@@ -49,6 +49,9 @@ PRECISION = 60  # Decimal digits for every computation
 DIGITS = 20  # significant digits written
 MIN_EXPECTED = 20  # smallest expected count per chi-square bin
 MIN_DF = 2  # a case with fewer degrees of freedom tests nothing
+WINDOW_CUTOFF = Decimal("1e-30")  # binomial weights below this, relative to the mode, are dropped
+LARGE_N = 1 << 20  # above this n, the binomial chain runs in floats (binomial_pmf)
+MAX_BINS = 400  # at most this many chi-square bins per case: each holds >= samples / MAX_BINS
 ALPHA = Fraction(1, 1000)  # chi-square critical values are the 99.9% quantiles (as V-DET-20)
 MASK64 = (1 << 64) - 1
 # Samples per statistic, by tier. The nightly tier is 64 times the PR tier.
@@ -56,7 +59,7 @@ TIERS = {"pr": 1 << 16, "nightly": 1 << 22}
 TAIL_TIERS = {"pr": 1 << 20, "nightly": 1 << 26}
 
 # Binomial (n, p bits): BINV and BTPE, both orientations, and every BTPE branch (squeeze and
-# recurrence) are reached.
+# recurrence) are reached; then the extremes.
 BINOMIAL = [
     (5, 58982),
     (20, 32768),
@@ -65,6 +68,12 @@ BINOMIAL = [
     (4000, 64),
     (1000, 49152),
     (5000, 19661),
+    # VER-SPR-003-TEST GAP-8: the largest inputs (n = 2^32 - 1 at p = 2^-16, n·p = 65,536, and at
+    # p = 1/2) and n·p just below and above the BINV/BTPE switch at 10 (655/2^16·1000 = 9.995).
+    (0xFFFF_FFFF, 1),
+    (0xFFFF_FFFF, 32768),
+    (1000, 655),
+    (1000, 656),
 ]
 # Poisson λ bits: inversion (below 10, including the largest value below 10) and PTRS.
 POISSON = [32768, 3 * ONE, 10 * ONE - 1, 10 * ONE, 25 * ONE, 300 * ONE, 5000 * ONE]
@@ -96,24 +105,71 @@ def q(bits: int) -> Fraction:
 # --- Exact distributions ----------------------------------------------------------------------
 
 
-def binomial_pmf(n: int, p_bits: int) -> list[Decimal]:
-    """Return P(X = k) for k = 0..n: p(0) = (c/2^16)^n, p(k+1) = p(k)·(n-k)/(k+1)·b/c.
+@dataclass(frozen=True)
+class Pmf:
+    """P(X = k) for k = start, start + 1, ..., and the mass ``rest`` above the last k."""
 
-    With p = b/2^16 and c = 2^16 - b, every factor is an exact rational; Decimal evaluates the
-    chain at PRECISION digits (relative error below 10^-50 for n = 5000).
+    start: int
+    values: list[Decimal]
+    rest: Decimal
+
+
+def binomial_pmf(n: int, p_bits: int) -> Pmf:
+    """Return (start, P(X = k) for k = start, start + 1, ...) over the window that holds the mass.
+
+    With p = b/2^16 and c = 2^16 - b, the ratios p(k+1)/p(k) = (n-k)/(k+1)·b/c are exact rationals.
+    Starting from weight 1 at the mode ⌊(n+1)p⌋, the chain walks out both ways until a weight falls
+    below WINDOW_CUTOFF (or reaches 0 or n), and the weights are normalised by their sum. The mass
+    left outside is below 10^-28, far under anything a test can see, so this serves n = 2^32 - 1
+    (VER-SPR-003-TEST GAP-8) as well as n = 5.
+
+    The chain runs in 60-digit Decimal up to LARGE_N, and in Python floats above it (up to 10^6
+    steps): only * and /, which IEEE 754 rounds correctly on every platform, so the file is the
+    same everywhere; the relative error stays below 10^-9, far under the statistics' resolution.
     """
-    b, c = p_bits, ONE - p_bits
     with localcontext() as ctx:
         ctx.prec = PRECISION
-        term = (Decimal(c) / ONE) ** n
-        pmf = [term]
-        for k in range(n):
-            term = term * (n - k) * b / ((k + 1) * c)
-            pmf.append(term)
-    return pmf
+        if n <= LARGE_N:
+            return _window(n, p_bits, Decimal(1))
+        return _window(n, p_bits, 1.0)
 
 
-def poisson_pmf(lam_bits: int) -> tuple[list[Decimal], Decimal]:
+def _window[Number: (Decimal, float)](n: int, p_bits: int, one: Number) -> Pmf:
+    """Walk the binomial ratio chain from the mode both ways in ``one``'s arithmetic; normalise.
+
+    Decimal(float) is exact, so the float path loses nothing in the final conversion.
+    """
+    b, c = p_bits, ONE - p_bits
+    mode = (n + 1) * b // ONE
+    cutoff = type(one)(WINDOW_CUTOFF)
+    up: list[Number] = []
+    w, k = one, mode
+    while k < n:
+        w = w * (n - k) * b / ((k + 1) * c)
+        k += 1
+        if w < cutoff:
+            break
+        up.append(w)
+    down: list[Number] = []
+    w, k = one, mode
+    while k > 0:
+        w = w * k * c / ((n - k + 1) * b)
+        k -= 1
+        if w < cutoff:
+            break
+        down.append(w)
+    weights = down[::-1]
+    weights.append(one)
+    weights.extend(up)
+    # A plain left-to-right sum: Python 3.12's sum() compensates float rounding, older versions
+    # do not, and the file must not depend on the interpreter's version.
+    total = one - one
+    for x in weights:
+        total += x
+    return Pmf(mode - len(down), [Decimal(x / total) for x in weights], Decimal(0))
+
+
+def poisson_pmf(lam_bits: int) -> Pmf:
     """Return P(X = k) for k = 0..K, K past the mean by 40 sd, and the mass above K.
 
     p(0) = e^-λ (Decimal's exp is correctly rounded), p(k) = p(k-1)·λ/k with λ = bits/2^16 exact.
@@ -128,7 +184,7 @@ def poisson_pmf(lam_bits: int) -> tuple[list[Decimal], Decimal]:
             term = term * lam / k
             pmf.append(term)
         rest = Decimal(1) - sum(pmf, Decimal(0))
-    return pmf, rest if rest > 0 else Decimal(0)
+    return Pmf(0, pmf, rest if rest > 0 else Decimal(0))
 
 
 def chi2_survival_even(df: int, x: Decimal) -> Decimal:
@@ -163,19 +219,22 @@ class Bin:
     prob: Decimal
 
 
-def bins(pmf: Sequence[Decimal], rest: Decimal, samples: int) -> list[Bin]:
-    """Merge the pmf into bins of expected count >= MIN_EXPECTED; the last bin is open above.
+def bins(pmf: Pmf, samples: int) -> list[Bin]:
+    """Merge the pmf of k = start, ... into bins of expected count >= MIN_EXPECTED (and MAX_BINS).
 
-    The number of bins is made odd (df = bins - 1 even) by merging the last two if needed.
+    The first bin starts at 0 (holding any mass below ``pmf.start``, here none or negligible) and
+    the last is open above (holding ``pmf.rest``). The number of bins is made odd (df = bins - 1
+    even) by merging the last two if needed.
     """
     out: list[Bin] = []
     lo, mass = 0, Decimal(0)
-    for k, p in enumerate(pmf):
+    least = max(MIN_EXPECTED, samples // MAX_BINS)
+    for k, p in enumerate(pmf.values, pmf.start):
         mass += p
-        if mass * samples >= MIN_EXPECTED:
+        if mass * samples >= least:
             out.append(Bin(lo, k, mass))
             lo, mass = k + 1, Decimal(0)
-    tail = mass + rest
+    tail = mass + pmf.rest
     last = out.pop()
     out.append(Bin(last.lo, 0xFFFF_FFFF, last.prob + tail))
     if len(out) % 2 == 0:
@@ -269,12 +328,10 @@ def table_hash() -> int:
 # --- Rendering ----------------------------------------------------------------------------------
 
 
-def chi2_block(
-    tier: str, dist: str, params: str, pmf: list[Decimal], rest: Decimal
-) -> Iterator[str]:
+def chi2_block(tier: str, dist: str, params: str, pmf: Pmf) -> Iterator[str]:
     """One chi-square case: its header line, then its bins."""
     samples = TIERS[tier]
-    merged = bins(pmf, rest, samples)
+    merged = bins(pmf, samples)
     df = len(merged) - 1
     if df < MIN_DF:
         raise SystemExit(f"gen_sampler_reference: {dist} {params} has {df} degrees of freedom")
@@ -305,10 +362,9 @@ def render() -> str:
     poisson = {lam: poisson_pmf(lam) for lam in POISSON}
     for tier in TIERS:
         for n, p in BINOMIAL:
-            lines += chi2_block(tier, "binomial", f"{n} {p}", binomial[n, p], Decimal(0))
+            lines += chi2_block(tier, "binomial", f"{n} {p}", binomial[n, p])
         for lam in POISSON:
-            pmf, rest = poisson[lam]
-            lines += chi2_block(tier, "poisson", f"{lam}", pmf, rest)
+            lines += chi2_block(tier, "poisson", f"{lam}", poisson[lam])
         for lam in POISSON:
             lines.append(moments_line(tier, "poisson", f"{lam}", poisson_moments(q(lam))))
         for k, theta in GAMMA:
