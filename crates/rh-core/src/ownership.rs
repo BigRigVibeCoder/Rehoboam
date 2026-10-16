@@ -15,6 +15,7 @@
 //! | [`single_writer`] | no column has two writers; a read names the writer; a read naming a declared system names a column it writes |
 //! | [`plane_leak`] | a plane-A reader never reads a plane-B or plane-C column |
 //! | [`check_access`] | one access declaration against the specs: writes only owned columns, reads only declared ones, no plane leak |
+//! | [`duplicates`] | a declaration lists no column twice (its own error, not a conflict with itself) |
 //! | [`system_plane`] | a system's plane from the planes of the columns it owns |
 //!
 //! REF: `docs/05_architecture/05.1_simulation_core.md` §2 rule 1; ADR-0024; ADR-0033 §2;
@@ -26,7 +27,7 @@ use std::fmt;
 /// One broken ownership rule.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Violation {
-    /// The rule: `single-writer`, `undeclared-read`, `plane`, `registry`, `spec`, `system-id`,
+    /// The rule: `single-writer`, `duplicate`, `undeclared-read`, `plane`, `registry`, `spec`, `system-id`,
     /// `rng-purpose`, `phase-order` or `schedule-cycle`.
     pub rule: &'static str,
     /// The system that breaks it.
@@ -86,6 +87,36 @@ pub struct Declaration {
     pub reads: Vec<(String, String)>,
 }
 
+/// `duplicate`: a declaration that lists the same written column, or the same read column, twice.
+/// Its own error, never a single-writer conflict of a system with itself (Tester DEF-2). Shared by
+/// [`single_writer`] and [`check_access`], so the lint and registration give the same verdict on
+/// the same declaration (Tester DEF-3).
+#[must_use]
+pub fn duplicates<'a>(
+    system: &str,
+    reads: impl Iterator<Item = &'a str>,
+    writes: impl Iterator<Item = &'a str>,
+) -> Vec<Violation> {
+    let mut out = Vec::new();
+    for (what, columns) in [
+        ("write to", writes.collect::<Vec<_>>()),
+        ("read of", reads.collect()),
+    ] {
+        let mut seen = BTreeSet::new();
+        let mut reported = BTreeSet::new();
+        for c in columns {
+            if !seen.insert(c) && reported.insert(c) {
+                out.push(Violation {
+                    rule: "duplicate",
+                    system: system.to_owned(),
+                    message: format!("declares a {what} {c} twice"),
+                });
+            }
+        }
+    }
+    out
+}
+
 /// The single-writer rule over a set of declarations (`05.1` §2 rule 1):
 ///
 /// - no column has two writers (the first declaration, in the given order, keeps it);
@@ -102,8 +133,16 @@ pub fn single_writer(
     let mut owners: BTreeMap<String, Owner> = BTreeMap::new();
     let mut problems = Vec::new();
     for d in declarations {
+        problems.extend(duplicates(
+            &d.system,
+            d.reads.iter().map(|(c, _)| c.as_str()),
+            d.writes.iter().map(|(c, _)| c.as_str()),
+        ));
         for (column, plane) in &d.writes {
             if let Some(first) = owners.get(column) {
+                if first.system == d.system {
+                    continue; // declared twice: reported by `duplicates`
+                }
                 problems.push(Violation {
                     rule: "single-writer",
                     system: d.system.clone(),
@@ -133,7 +172,11 @@ pub fn single_writer(
     }
     let declared: BTreeSet<&str> = declarations.iter().map(|d| d.system.as_str()).collect();
     for d in declarations {
+        let mut seen = BTreeSet::new();
         for (column, owner) in &d.reads {
+            if !seen.insert(column.as_str()) {
+                continue; // declared twice: reported by `duplicates`
+            }
             let message = match owners.get(column) {
                 Some(o) if &o.system != owner => Some(format!(
                     "reads {column} from {owner}, but {} owns it",
@@ -212,6 +255,7 @@ pub struct SpecTable {
 /// owners and the system's own spec entry (`None`: the system has no spec):
 ///
 /// - `registry`: the system has a spec (ADR-0033);
+/// - `duplicate`: it lists no column twice ([`duplicates`]);
 /// - `single-writer`: it writes only columns its spec owns;
 /// - `undeclared-read`: it reads only columns it owns or lists in `[[reads]]`;
 /// - `plane`: a plane-A system reads no plane-B/C column.
@@ -234,8 +278,20 @@ pub fn check_access(
             "has no system spec in specs/systems (ADR-0033)".to_owned(),
         )];
     };
-    let mut out = Vec::new();
-    for col in writes {
+    let mut out = duplicates(
+        system,
+        reads.iter().map(String::as_str),
+        writes.iter().map(String::as_str),
+    );
+    // Each column once: a repeated one is the `duplicate` above, not a second line of the same fact.
+    let unique = |cols: &'_ [String]| -> Vec<String> {
+        let mut seen = BTreeSet::new();
+        cols.iter()
+            .filter(|c| seen.insert(c.as_str()))
+            .cloned()
+            .collect()
+    };
+    for col in &unique(writes) {
         match owners.get(col) {
             Some(o) if o.system == system => {}
             Some(o) => out.push(v(
@@ -252,7 +308,7 @@ pub fn check_access(
         }
     }
     let declared: BTreeSet<&str> = spec.reads.iter().map(String::as_str).collect();
-    for col in reads {
+    for col in &unique(reads) {
         let own = spec.owns.iter().any(|(c, _)| c == col);
         if !own && !declared.contains(col.as_str()) {
             out.push(v(

@@ -24,7 +24,7 @@ use serde::Deserialize;
 // The single-writer and plane rules live in rh-core, which this crate depends on (SPR-005,
 // Architect ruling on ruling 3); they are re-exported so the lint's API is unchanged.
 pub use rh_core::ownership::{
-    Declaration, Owner, Source, Violation, plane_leak, single_writer, system_plane,
+    Declaration, Owner, Source, Violation, duplicates, plane_leak, single_writer, system_plane,
 };
 
 /// One owned column, from `[[owns]]` (other ODD fields are not needed here).
