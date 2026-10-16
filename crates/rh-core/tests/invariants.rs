@@ -484,3 +484,63 @@ fn def2_an_artifact_after_material_inputs_records_them_and_replay_requires_the_j
     assert!(plain.advance_until(ten_years(), |_, _| {}).is_err());
     assert_eq!(plain.crash_artifact().unwrap().journal_position, 0);
 }
+
+fn lag_engine(lag: rh_core::access::Lag, pulse: Pulse) -> Engine {
+    let stubs = vec![
+        Stub::new("L1.w")
+            .writes("w.x")
+            .at(Pulse::Day, Phase::Production),
+        Stub::new("L2.r")
+            .reads("w.x", "L1.w", lag)
+            .at(pulse, Phase::Polity),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("registration accepts every lag: {e}"));
+    Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        WorldTables::new(),
+        SimTime::EPOCH,
+    )
+}
+
+#[test]
+fn a28_lags_p0_cannot_run_exactly_are_refused_by_the_engine() {
+    use rh_core::access::Lag;
+    for (lag, pulse, name) in [
+        (Lag::PreviousPulse, Pulse::Day, "previous_pulse"),
+        (Lag::PreviousPulse, Pulse::Month, "previous_pulse"),
+        (Lag::StartOfDay, Pulse::Hour, "start_of_day"),
+    ] {
+        let mut e = lag_engine(lag, pulse);
+        let expected = SimError::Unsupported {
+            system: "L2.r",
+            column: "w.x",
+            lag: name,
+        };
+        assert_eq!(e.poisoned(), Some(&expected), "{name} on {pulse}");
+        assert_eq!(
+            e.advance_until(ten_years(), |_, _| {}).err(),
+            Some(expected),
+            "nothing runs"
+        );
+        assert!(e.crash_artifact().is_none(), "refused before any instant");
+    }
+    // The lags P0 runs exactly: lagged anywhere, start_of_day on a Day (or coarser) pulse.
+    for (lag, pulse) in [
+        (Lag::Lagged, Pulse::Hour),
+        (Lag::StartOfDay, Pulse::Day),
+        (Lag::StartOfDay, Pulse::Month),
+        (Lag::SameInstant, Pulse::Hour),
+    ] {
+        let mut e = lag_engine(lag, pulse);
+        assert_eq!(e.poisoned(), None, "{lag} on {pulse}");
+        assert!(
+            e.advance_until(SimTime::from_minutes(3 * 1_440), |_, _| {})
+                .is_ok()
+        );
+    }
+}

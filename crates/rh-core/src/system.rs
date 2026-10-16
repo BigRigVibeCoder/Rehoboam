@@ -176,6 +176,18 @@ pub enum SimError {
         /// What was found.
         detail: String,
     },
+    /// A declared read whose lag the engine cannot yet honour exactly: `previous_pulse`, or
+    /// `start_of_day` by a system bound to an Hour pulse (P0 reads both at the start of the
+    /// instant; exact semantics are BCK-002 A-28). Registration accepts the system; the engine
+    /// refuses to run it, so no system runs on the approximation unawares.
+    Unsupported {
+        /// The system.
+        system: &'static str,
+        /// The column read.
+        column: &'static str,
+        /// The lag's spec name.
+        lag: &'static str,
+    },
     /// A step panicked: caught at dispatch and turned into this fatal error (GOV-004 §2; SPR-006
     /// DEF-1), so the run stops with a crash artifact instead of unwinding.
     Panic {
@@ -232,6 +244,14 @@ impl fmt::Display for SimError {
                 detail,
             } => write!(f, "invariant {name} of {system} violated: {detail}"),
             Self::Panic { system, message } => write!(f, "{system} panicked: {message}"),
+            Self::Unsupported {
+                system,
+                column,
+                lag,
+            } => write!(
+                f,
+                "{system} reads {column} at lag {lag}, which the engine cannot yet run exactly (BCK-002 A-28)"
+            ),
             Self::Event { system, message } | Self::System { system, message } => {
                 write!(f, "{system}: {message}")
             }
