@@ -12,6 +12,10 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     spec's system, and every verb the Registry gives to a system with a spec is in that spec's [[emits]].
     A warning on a draft spec, an error on a frozen one,
   - parameter defaults (SPR-011 ruling 8): a [[params]] `default` equals the Registry's `defaults` entry, both ways,
+  - lifecycle commands (PR #32; REV-P1a §7): each [[applies]] of a spec names a command, its payload fields and its
+    senders (`from`); every sender's [[commands]] entry for it carries a `payload` with the same field names in the same
+    order, `from` lists exactly the specs that send it, and a command sent to a spec that declares [[applies]] must be
+    one of them. A warning on a draft spec, an error on a frozen one,
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
@@ -73,6 +77,48 @@ def load(extra_dirs=(), overlay=None):
     test_ids = set(re.findall(r"^\| (V-[A-Z0-9]+-\d+[a-z]?) \|", plan09, re.M))
     adr_ids = {p.name[:8] for p in (ROOT / "docs" / "06_adr").glob("ADR-*.md")}
     return reg, specs, req_ids, test_ids, adr_ids
+
+
+def payload_fields(text):
+    """Field names of a payload written `{ name: Type, name: Type }` (types may hold `|` and `or`, never commas)."""
+    inner = str(text).strip()
+    if not (inner.startswith("{") and inner.endswith("}")):
+        return None
+    return [f.split(":")[0].strip() for f in inner[1:-1].split(",") if f.strip()]
+
+
+def lint_applies(specs, errs, warns):
+    """[[applies]] against the senders' [[commands]] (PR #32; REV-P1a §7)."""
+    for tid, (tf, ts) in specs.items():
+        strict = errs if ts.get("system", {}).get("status") == "frozen" else warns
+        applies = {a.get("command"): a for a in ts.get("applies", [])}
+        senders = {}                              # command -> [(sender id, its [[commands]] entry)]
+        for sid, (sf, ss) in specs.items():
+            for c in ss.get("commands", []):
+                if c.get("target") == tid:
+                    senders.setdefault(c.get("command"), []).append((sid, c))
+        if not applies:
+            continue
+        for cmd in sorted(set(senders) - set(applies)):
+            strict.append(f"{tf.name}: {', '.join(s for s, _ in senders[cmd])} send {cmd}, which [[applies]] does not declare")
+        for cmd, a in sorted(applies.items()):
+            want = payload_fields(a.get("payload"))
+            if not want:
+                errs.append(f"{tf.name}: [[applies]] {cmd} needs payload = \"{{ field: Type, ... }}\"")
+                continue
+            declared, actual = set(a.get("from", [])), {s for s, _ in senders.get(cmd, [])}
+            for s in sorted(declared - actual):
+                (strict if s in specs else warns).append(f"{tf.name}: [[applies]] {cmd} lists {s} in from, but {s} does not send it")
+            for s in sorted(actual - declared):
+                strict.append(f"{tf.name}: {s} sends {cmd}, but [[applies]] {cmd} does not list it in from")
+            for s, c in senders.get(cmd, []):
+                got = payload_fields(c.get("payload")) if "payload" in c else None
+                sp = errs if specs[s][1].get("system", {}).get("status") == "frozen" else warns
+                if got is None:
+                    sp.append(f"{specs[s][0].name}: [[commands]] {cmd} to {tid} needs payload = \"{{ {', '.join(want)} }}\" ({tid}'s [[applies]])")
+                elif got != want:
+                    (sp if sp is errs else strict).append(
+                        f"{specs[s][0].name}: [[commands]] {cmd} to {tid} has payload fields {got}, but [[applies]] declares {want}")
 
 
 def lint(reg, specs, req_ids, test_ids, adr_ids):
@@ -254,6 +300,7 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
         for c in s.get("couplings", []):
             if c.get("system") not in reg.get("systems", {}) and c.get("system") not in ("S1.culture", "S2.technology", "S3.migration"):
                 errs.append(f"{p}: coupling to unknown system {c.get('system')}")
+    lint_applies(specs, errs, warns)
     return errs, warns
 
 
