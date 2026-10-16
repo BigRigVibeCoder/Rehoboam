@@ -60,3 +60,28 @@ All items below have been validated with executable Python prototypes located in
   1. *Strict Priority Tiers:* `BLOOD_OATH (Tier 1) > FEALTY_OATH (Tier 2) > CHIVALRIC_DUTY (Tier 3) > CONTRACT (Tier 4)`.
   2. *Tragic Renunciation Protocol:* When collision occurs, dominant tier executes; subordinate tier triggers formal renunciation with deterministic costs (`Honor -= 40`, `Stress += 60`, `Reputation = 'Oathbreaker'`).
 * **Target Spec:** `S7.vows`.
+
+---
+
+## Batch 02 (2026-10-16): SOTA Science Upgrades (For Gate G0)
+
+Full technical analysis in `docs/red_team/RT-2026-10-16-sota-science-analysis.md`.
+
+### Item 6: The Deterministic "Reflection Tree" (Park et al. 2023 Adaptation)
+* **Source:** `upload/Park2023Generative.pdf` (§4.1–§4.3, Figure 7).
+* **The Insight:** Park et al.'s primary innovation is **not** the LLM, but the hierarchical memory architecture: raw perceptions ($I \in [1, 100]$) fold into abstract reflections when $\sum I \ge 150$.
+* **Plane A Implementation:** Implement symbolic reflection trees in `T1.minds` without LLMs. When importance crosses threshold, cluster folds into a compact `OpinionKnot` or `Vow`, and raw events are evicted from RAM to cold Parquet disk, preserving $O(1)$ agent memory footprint across centuries.
+* **Target Spec:** `T1.minds` (P1a).
+
+### Item 7: Narrative Unexpectedness Metric $\mathcal{U}$ (Kreminski et al. 2022)
+* **Source:** `research/reading_list.md` (§10, B4: Kreminski et al. 2022, "Select the Unexpected").
+* **The Insight:** Replace ad-hoc drama heuristics with Bayesian information gain: $\mathcal{U}(e) = -\log_2 P(e \mid S_t)$.
+* **Plane A/B Implementation:** Low-probability actions (e.g. an honorable knight slaying their king) yield high bit-values of unexpectedness. Sagas are ranked by maximizing $\sum \mathcal{U}(e_i) \cdot \Delta t^\gamma$, mathematically isolating epic tragedies from mundane peasant events.
+* **Target Spec:** `rh-sifter` (P2).
+
+### Item 8: The Relic Corruption Tensor & Attractor Basin
+* **Source:** Dynamical systems modeling for `specs/systems/S6.artifacts.odd.toml`.
+* **The Insight:** Define `artifact.influence_profile` as a target corruption attractor vector $\vec{\Psi}_{\text{relic}}$ with monthly coupling rate $\kappa$.
+* **Plane A Implementation:** Bearer's personality vector $\vec{M}$ experiences exponential decay toward $\vec{\Psi}$ over possession time: $\vec{M}(t+1) = \vec{M}(t) + \kappa \cdot (\vec{\Psi} - \vec{M}(t))$. Creates continuous, emergent Ring-corruption driving vow conflict and mental breaks.
+* **Target Spec:** `S6.artifacts` (P1a/P1b).
+
