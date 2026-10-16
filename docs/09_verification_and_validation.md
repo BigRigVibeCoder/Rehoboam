@@ -373,7 +373,7 @@ Playwright drives the console against the real `rh-server` and against the mock 
 
 | ID | Test | Method | Gate |
 |---|---|---|---|
-| V-INSP-01 | Licences (LIC-1) | cargo-deny, pip-licenses and license-checker on every PR; provenance check for weights and assets | No GPL, AGPL, non-commercial or territorially restricted item in shipped artifacts |
+| V-INSP-01 | Licences (LIC-1) | cargo-deny, pip-licenses and license-checker on every PR; provenance check for weights and assets | Personal-use licence mode (D19; ADR-0021 as amended): the licence ledger (`artifacts/licence_ledger.txt`) lists every dependency and never fails a build. Fails only on an item whose licence forbids the use itself, or on copied code that carries no licence |
 | V-INSP-02 | ADR conformance | Reviewer-agent checklist on every PR (`13` §7) | Signed off |
 | V-INSP-03 | Crate boundaries (EVO-1) | Dependency-graph lint (`bin/lint_arch.py`): system crates depend only on `rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry` and contract crates (`rh-sample` by the SPR-003 Architect ruling) | Zero violations |
 | V-INSP-04 | Observability (OBS-1) [D] | Headless run with Rerun and the TUI | Per-system timing, invariant counters and sampled agents on the `sim_tick` timeline |

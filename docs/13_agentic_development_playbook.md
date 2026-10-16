@@ -45,7 +45,7 @@ Every task an agent receives uses this template. It is stored in `backlog/wp/<id
 ## 3. Repository conventions (summarised in `CLAUDE.md`)
 
 - **Crate boundaries are law.**
-  - System crates (`rh-sys-*`) depend only on `rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry` and `rh-contracts` (`rh-sample`, the vendored samplers, by the SPR-003 Architect ruling of 2026-10-16).
+  - System crates (`rh-sys-*`) depend only on `rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry` and the contract crates (`rh-contracts` and any `rh-contract-*`, as `bin/lint_arch.py` allows) (`rh-sample`, the vendored samplers, by the SPR-003 Architect ruling of 2026-10-16).
   - Systems never import each other. They communicate through owned tables (read via contract crates), lifecycle commands and events (§4.1).
   - `rh-worldgen` (world generation and settlement plans) is an allowed dependency of `rh-server` (`rh-godot` is cut, ADR-0035). It follows the same determinism rules as authoritative code.
   - **The engine only engines (ADR-0035 §6; EVO-4).** Engine crates (`rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry`, `rh-manifest`, `rh-contracts`, `rh-snapshot`, `rh-cli`, `rh-sys-*` (planned), `rh-sifter` (planned), `rh-server` (planned), `rh-minds` (planned), `rh-worldgen` (planned)) contain no presentation, web UI, audio, image, TTS or LLM code and may not depend on media, HTTP-UI or LLM-client crates. One deny-list, kept in one place: for example `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`. **Planned rule** (V-INSP-05): BCK-002 A-14 adds it to `bin/lint_arch.py` in P1a, next to V-INSP-03. Presentation tools live in `python/`; only the P5 diorama lives in `console/`.
