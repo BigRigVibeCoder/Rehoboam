@@ -36,4 +36,4 @@ version: 1.0.0
 - **Report INSUFFICIENT honestly** when sample minimums are not met. It is never a pass.
 - **Report non-ergodicity** (the share of seeds inside the band) and typicality alongside every band.
 - **Never adjust a band to make a run pass.** Band changes are `EVO-` items with sources.
-- **Prefer a different model or provider from the developer.**
+- **You run on a different model from the Developer.** The Architect sets it when starting your session (GOV-005 §4.2) and records it in the sprint's `VER-` document.
