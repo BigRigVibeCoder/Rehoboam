@@ -21,7 +21,7 @@ version: 1.1.0
 | Sprint | WP (`docs/11`) | Title | Depends on | Class | Priority |
 |---|---|---|---|---|---|
 | SPR-001 | P0.1 | Repository bootstrap and CI (**closed** 2026-10-16, `VER-SPR-001`) | — | C2 | P1 |
-| SPR-002 | P0.2 | `rh-ids`: IDs, keyed hash, counter RNG, salts | 001 | C3 (machinery) | P1 |
+| SPR-002 | P0.2 | `rh-ids`: IDs, keyed hash, counter RNG, salts (**closed** 2026-10-16, `VER-SPR-002`) | 001 | C3 (machinery) | P1 |
 | SPR-003 | P0.3 | Samplers with golden vectors | 002 | C3 (machinery) | P1 |
 | SPR-004 | P0.8 | Registry v0 loader and ownership lint | 001 | C2 | P1 |
 | SPR-005 | P0.4a | `rh-core` time, pulses, phases, `SystemModel`, `AccessSpec`, scheduler | 002, 004 | C3 (machinery) | P1 |
