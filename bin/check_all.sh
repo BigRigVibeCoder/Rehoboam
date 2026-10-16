@@ -69,6 +69,18 @@ require_tools() {
 }
 
 run "Required tools present" pass require_tools &&
+# Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, each of which
+# must be caught by its own rule (tests/lint_fixtures/README.md).
+forbidden_api_controls() {
+  local spec file rule
+  for spec in hash_map:hash-collections hash_set:hash-collections thread_rng:thread-rng std_rng:std-rng \
+      rand_random:rand-random mul_add:mul-add instant:wall-clock system_time:wall-clock unsafe:unsafe; do
+    file="${spec%%:*}"; rule="${spec#*:}"
+    run "Forbidden-API positive control: $file must FAIL" "fail:VIOLATION [V-DET-19/$rule]" \
+      "$PY" -I bin/lint_forbidden.py --scan "tests/lint_fixtures/forbidden/planted/$file.rs" || return 1
+  done
+}
+
 # Tier 1 — static and contract lints (fastest first)
 run "Document index is current (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
 run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pyproject.toml --no-cache . &&
@@ -78,6 +90,17 @@ run "Rust: format (cargo fmt --check)" pass cargo fmt --all --check &&
 run "Rust: licences, bans, sources (cargo deny; ADR-0021)" pass cargo deny --color never --locked check bans licenses sources &&
 run "cargo deny positive control: GPL dependency must FAIL" "fail:error[rejected]" cargo deny --color never --offline --locked --manifest-path tests/lint_fixtures/deny/gpl_dependency/Cargo.toml check licenses &&
 run "cargo deny positive control: xxhash-rust must FAIL" "fail:error[banned]" cargo deny --color never --offline --locked --manifest-path tests/lint_fixtures/deny/banned_crate/Cargo.toml check bans &&
+run "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)" pass "$PY" -I bin/lint_arch.py &&
+run "lint_arch positive control: system -> system must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_system/Cargo.toml &&
+run "lint_arch positive control: system -> rh-snapshot must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_disallowed/Cargo.toml &&
+run "lint_arch positive control: plane A -> plane B must FAIL" "fail:VIOLATION [V-PLN-01]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_b/Cargo.toml &&
+run "lint_arch positive control: plane A -> plane C must FAIL" "fail:VIOLATION [V-PLN-01]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_c/Cargo.toml &&
+run "lint_arch positive control: missing plane/kind must FAIL" "fail:VIOLATION [metadata]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/missing_metadata/Cargo.toml &&
+run "V-PLN-01 compile-fail fixture has a clean dependency graph" pass "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_b/Cargo.toml &&
+run "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL" 'fail:unlinked crate `fixture_observation`' cargo check --offline --locked --quiet --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_b/Cargo.toml --target-dir target/lint-fixtures &&
+run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
+forbidden_api_controls &&
+run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&

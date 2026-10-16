@@ -1,0 +1,12 @@
+[package]
+name = "rh-contracts"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "contract"
+
+[dependencies]
+rh-sifter = { path = "../rh-sifter" }

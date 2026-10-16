@@ -4,7 +4,8 @@
 # Every crate declares its plane (ADR-0024) and kind in [package.metadata.rehoboam]:
 #   plane = "A" (authoritative) | "B" (observation) | "C" (narrative) | "tool" (hosts and tools)
 #   kind  = "core" | "machinery" | "contract" | "system" | "tool"
-# The architecture lints (SPR-001 T-04) read them to enforce the crate-boundary law (docs/13 §3).
+# bin/lint_arch.py reads them to enforce the crate-boundary law (docs/13 §3; V-INSP-03, V-PLN-01), and
+# bin/lint_forbidden.py scans every plane-A crate for forbidden APIs (V-DET-19).
 
 [workspace]
 resolver = "3"
@@ -33,3 +34,6 @@ todo = "deny"
 unimplemented = "deny"
 dbg_macro = "deny"
 allow_attributes_without_reason = "deny"
+# Second line of defence behind bin/lint_forbidden.py (V-DET-19); the lists live in clippy.toml.
+disallowed_types = "deny"
+disallowed_methods = "deny"

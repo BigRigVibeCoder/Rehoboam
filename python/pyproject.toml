@@ -96,5 +96,6 @@ ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["python/tests"]
-pythonpath = ["bin"]
+# Relative to this file (pytest resolves ini paths against the config file); testpaths against the rootdir.
+pythonpath = ["../bin"]
 addopts = ["-ra", "--strict-markers", "-p", "no:cacheprovider"]
