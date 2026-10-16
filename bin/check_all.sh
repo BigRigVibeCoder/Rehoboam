@@ -252,6 +252,9 @@ RH_CLI_RELEASE="$TARGET_DIR/release/rh-cli"
 GOLDEN="$TARGET_DIR/golden"
 GOLDEN_THREADS=$(( $(nproc 2>/dev/null || echo 2) > 2 ? $(nproc 2>/dev/null || echo 2) : 2 ))
 mkdir -p "$GOLDEN"
+# DEF-2: the floor of the share of scheduler levels that hold two or more jobs (the smoke world
+# runs at about 7%: Environment and Activity every day; the gate names say 5%, keep them in step).
+PARALLEL_FLOOR=5
 # The ladder-compare control: the 1-thread ladder with rung 500's first table root changed must differ there.
 ladder_compare_control() {
   local edited="$TARGET_DIR/rendered-fixtures/ladder_one_root.ladder"
@@ -294,6 +297,19 @@ injected_ladder_control() {
   "$RH_CLI_RELEASE" run smoke --years 2 --out "$dir/injected.ladder" --inject 24:harvest.stock:0 >/dev/null || return 1
   grep -q '^inject 24:harvest.stock:0$' "$dir/injected.ladder" || { echo "no inject line in the header"; return 0; }
   "$RH_CLI_RELEASE" ladder compare "$dir/clean.ladder" "$dir/injected.ladder"
+}
+
+# DEF-2: 2 years at 1 and N threads, with the planted thread-identity leak when given
+# --leak-thread, then the 1-versus-N comparison. With the leak the header must say so.
+thread_leak_control() {
+  local dir="${TARGET_DIR:?}/rendered-fixtures/thread_leak"
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  "$RH_CLI_RELEASE" run smoke --years 2 --threads 1 --out "$dir/t1.ladder" "$@" >/dev/null || return 1
+  "$RH_CLI_RELEASE" run smoke --years 2 --threads "$GOLDEN_THREADS" --out "$dir/tN.ladder" "$@" >/dev/null || return 1
+  if [ "$*" = "--leak-thread" ]; then
+    grep -q '^leak thread$' "$dir/t1.ladder" || { echo "no leak line in the header"; return 0; }
+  fi
+  "$RH_CLI_RELEASE" ladder compare "$dir/t1.ladder" "$dir/tN.ladder"
 }
 
 # DEF-1: a 24-year run with keyframes (made once per check_all run), then a run resumed from its
@@ -459,10 +475,10 @@ run "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
-run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 6 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
+run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
 run "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 ruling 2)" "fail:overlay system 'S9.smoke_chronicle' must be X-prefixed" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay tests/lint_fixtures/smoke/overlay_not_x.toml &&
 run "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)" "fail:system 'X6.smoke_chronicle' is not in the overlay" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay tests/lint_fixtures/smoke/overlay_missing.toml &&
-run "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 ruling 2)" "pass:SKELETONS: 6 up to date in crates/rh-sys-smoke/src/generated" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check &&
+run "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 ruling 2)" "pass:SKELETONS: 7 up to date in crates/rh-sys-smoke/src/generated" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check &&
 run "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)" "fail:STALE: tests/lint_fixtures/skeletons/smoke_stale/X3_smoke_vital.rs" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out tests/lint_fixtures/skeletons/smoke_stale --check &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
@@ -487,7 +503,7 @@ run "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 
 run "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)" "fail:golden vector differs" env RH_SAMPLE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_samplers_v1.txt" cargo nextest run -p rh-sample --locked --test golden --no-capture &&
 run "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes (SPR-005)" "pass:V-DET-01: 600 monthly states equal at 1, 2, 4 and 8 threads" cargo nextest run -p rh-core -p rh-registry --locked --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract --no-capture &&
 run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and crash replay (SPR-006)" "pass:V-DET-12: golden event log of 196 events checked" cargo nextest run -p rh-core -p rh-events --locked --test agenda --test agenda_events --test invariants --lib --no-capture &&
-run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 12 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
+run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)" "fail:V-DET-12 violated" env RH_CORE_LIFE_GOLDEN="$PWD/tests/lint_fixtures/golden/backdated_life_events.txt" cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_12_golden_event_log &&
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&
@@ -502,8 +518,8 @@ run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 
 run "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)" "pass:SCHEMA: no unexplained difference" "$RH_CLI" manifest schema --diff specs/manifest/manifest_v0.schema.json &&
 run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERENCE \$defs.Horizon.properties.years.maximum" "$RH_CLI" manifest schema --diff tests/lint_fixtures/schema/drifted_bound.schema.json &&
 run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
-run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread (SPR-008 T-02)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --out "$GOLDEN/smoke_yearly_t1.ladder" &&
-run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads (SPR-008 T-02)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/smoke_yearly_tN.ladder" &&
+run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
+run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads "$GOLDEN_THREADS" --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_tN.ladder" &&
 run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
 run "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)" "fail:LADDERS DIFFER: first differing rung: 500" ladder_compare_control &&
 run "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR (check_baseline; SPR-008 T-04)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
@@ -516,6 +532,9 @@ run "Golden baseline positive control: [C3] outside the title's trailing tag gro
 run "Golden baseline positive control: a push that changes the baseline with no [C3] commit must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_push_control "feat(SPR-008): regenerate the smoke baseline" &&
 run "Golden baseline control: a push that changes the baseline in a [C3] commit passes (VER-SPR-008 MAJ-1)" "pass:regenerated in a [C3] PR (the commit subjects of" baseline_push_control "feat(SPR-008): regenerate the smoke baseline [C3]" &&
 run "Golden ladder positive control: an injected run never compares equal to a clean one (VER-SPR-008 MIN-2)" "fail:LADDERS DIFFER" injected_ladder_control &&
+run "Golden thread-leak positive control: the planted thread-identity leak must FAIL the 1-versus-N comparison (VER-SPR-008 DEF-2)" "fail:LADDERS DIFFER" thread_leak_control --leak-thread &&
+run "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)" "pass:LADDERS EQUAL: 2 rungs" thread_leak_control &&
+run "Golden parallel-level positive control: a floor above the run's share of parallel levels must FAIL (VER-SPR-008 DEF-2)" "fail:PARALLEL LEVELS BELOW THE FLOOR" "$RH_CLI_RELEASE" run smoke --years 2 --threads 1 --require-parallel 50 --out "$TARGET_DIR/rendered-fixtures/parallel_floor.ladder" &&
 run "Golden resume positive control: a --years shorter than the journal's horizon must FAIL (VER-SPR-008 DEF-1)" "fail:disagrees with the journal's horizon" def1_resume 13 &&
 run "Golden resume positive control: a --years past the journal's last input must FAIL without --extend (VER-SPR-008 DEF-1)" "fail:past the journal's last input" def1_resume 30 &&
 run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&

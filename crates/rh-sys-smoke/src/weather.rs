@@ -11,6 +11,8 @@ use rh_core::fixed::Q16_16;
 use rh_core::system::{InvariantResult, PulseBinding, SimError, StepCtx, SystemModel};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
+use rh_events::EventDraft;
+use rh_ids::EntityRef;
 
 use crate::common::{REGIONS, check, degrees, fixed, from_skeleton, purposes, region};
 
@@ -23,14 +25,18 @@ const MIN: i16 = -40;
 const MAX: i16 = 60;
 const HOURS_MAX: i64 = 24 * 366;
 
+/// The temperature (degrees) whose downward crossing is a `FROST` event.
+const FROST_LINE: i16 = 8;
+
 /// The weather system.
 pub struct Weather;
 
 impl Weather {
-    fn drift(view: &mut SystemView<'_>, ctx: &StepCtx<'_>) -> Result<(), SimError> {
+    fn drift(view: &mut SystemView<'_>, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
         let mean = Q16_16::from_int(10);
         let (lo, hi) = (Q16_16::from_int(MIN), Q16_16::from_int(MAX));
         let temps = view.write(TEMP)?;
+        let mut frost = Vec::new();
         for (r, bits) in temps.iter_mut().enumerate().take(REGIONS) {
             let t = fixed(SYSTEM_ID, *bits)?;
             let u = ctx.rng(&RngPurpose::DriftStep, region(r), 0)?;
@@ -38,7 +44,21 @@ impl Weather {
             let step = Q16_16::from_bits(i32::try_from(u % 129).unwrap_or(0) * 256 - 64 * 256);
             let pull = Q16_16::from_bits(t.saturating_sub(mean).to_bits() / 64);
             let next = t.saturating_add(step).saturating_sub(pull);
-            *bits = i64::from(next.max(lo).min(hi).to_bits());
+            let next = next.max(lo).min(hi);
+            // FROST: the temperature falls through FROST_LINE, about 2.5 standard deviations
+            // below the mean of the drift's stationary spread (about 0.8 degrees).
+            let line = Q16_16::from_int(FROST_LINE);
+            if t >= line && next < line {
+                frost.push(r);
+            }
+            *bits = i64::from(next.to_bits());
+        }
+        for r in frost {
+            ctx.emit(
+                EventDraft::new("FROST")
+                    .subject(EntityRef::region(region(r)))
+                    .with_payload(vec![crate::common::r64(r)]),
+            )?;
         }
         view.write(HOURS)?[0] += 1;
         Ok(())
@@ -56,6 +76,7 @@ impl SystemModel for Weather {
                     plane: Plane::A,
                 })
                 .to_vec(),
+            emits: vec!["FROST"],
             ..AccessSpec::default()
         }
     }

@@ -16,7 +16,7 @@ adrs = ["ADR-0006", "ADR-0024", "ADR-0025", "ADR-0033"]
 requirements = ["DET-4", "DET-5"]
 
 [purpose]
-statement = "Applies the Settle commands queued for it in (tick, phase, PersonId, seq) order, emitting INHERITANCE caused by the death that triggered it, and keeps a daily gossip count over the living. It is the smoke world's lifecycle-command owner and its Activity and Contagion phases."
+statement = "Applies the Settle commands queued for it in (tick, phase, PersonId, seq) order, emitting INHERITANCE caused by the death that triggered it and sending some estates to the market for audit, and keeps a daily gossip count over the living. It is the smoke world's lifecycle-command owner and its Activity and Contagion phases, and shares the Activity level with the market (DEF-2)."
 role = "substrate"
 patterns = []
 not_yet = ["Not a model: a dummy system that exercises the engine for the golden run"]
@@ -46,6 +46,10 @@ fixed_point = false
 [[emits]]
 kind = "INHERITANCE"
 when = "a Settle command is applied"
+[[commands]]
+target = "X7.smoke_market"
+command = "Audit"
+why = "a settled estate is audited by the market (DEF-2: the Activity siblings exchange commands)"
 [[reads]]
 column = "person.alive"
 owner = "X3.smoke_vital"
@@ -78,6 +82,10 @@ when = "always"
 purpose = "gossip_noise"
 key = ["world", "day"]
 use = "a keyed coin added to the gossip parity"
+[[rng]]
+purpose = "settle_fee"
+key = ["person", "day"]
+use = "the fee of a settlement, and whether it is audited"
 
 [design]
 basic_principles = "n/a: a dummy system of the smoke world (SPR-008); it exists to exercise the engine, not to model anything"
@@ -103,7 +111,7 @@ drivers = []
 
 [[submodels]]
 name = "settle"
-summary = "for each queued command in order: heirs[row] += 1, order := order x 31 + PersonId; emit INHERITANCE caused by the command's cause"
+summary = "for each queued command in order: heirs[row] += 1 + (u mod 2), order := order x 31 + PersonId; emit INHERITANCE caused by the command's cause; with chance 1/4 send Audit to the market"
 earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
 [[submodels]]
 name = "gossip"

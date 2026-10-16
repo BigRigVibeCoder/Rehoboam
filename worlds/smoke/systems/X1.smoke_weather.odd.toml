@@ -36,6 +36,9 @@ plane = "A"
 meaning = "Hours elapsed in the current year (one row)"
 fixed_point = false
 
+[[emits]]
+kind = "FROST"
+when = "a region's temperature falls through 8 degrees"
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"
@@ -92,7 +95,7 @@ summary = "hours := 0 at each year boundary"
 earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
 [[submodels]]
 name = "drift"
-summary = "temp += (u mod 129 - 64)/256 degrees - (temp - 10)/64, clamped to [-40, 60]; hours += 1"
+summary = "temp += (u mod 129 - 64)/256 degrees - (temp - 10)/64, clamped to [-40, 60]; hours += 1; emit FROST when a region falls through 8 degrees"
 earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
 
 [[invariants]]

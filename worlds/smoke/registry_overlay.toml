@@ -27,3 +27,7 @@ params = {}
 [systems."X6.smoke_chronicle"]
 fidelity_levels = ["F0"]
 params = {}
+
+[systems."X7.smoke_market"]
+fidelity_levels = ["F0"]
+params = {}

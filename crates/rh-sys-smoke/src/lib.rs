@@ -1,7 +1,7 @@
 //! `rh-sys-smoke`: the smoke world, the golden run's exercise of the whole engine (SPR-008 T-01).
 //!
 //! Plane A, kind `system`: the first system crate, under the same dependency rules as every other
-//! (`bin/lint_arch.py`). Its six systems are **dummies**: they model nothing, and exist so that a
+//! (`bin/lint_arch.py`). Its seven systems are **dummies**: they model nothing, and exist so that a
 //! 1,000-year run touches every part of the engine that determinism depends on (ruling 3):
 //!
 //! | System | Pulses and phases | Exercises |
@@ -12,6 +12,7 @@
 //! | `X4.smoke_estate` | Day/Activity, Day/Contagion | `Settle` applied in queue order; `INHERITANCE` caused by `DEATH` |
 //! | `X5.smoke_polity` | Year/Polity, Month/Polity, Season/Military | two bindings of one system in one phase; `Settle` sent with no cause |
 //! | `X6.smoke_chronicle` | Month/Agenda, Day/Culture, Day/Bookkeeping | a draft-local causal edge (`CENSUS_NOTE` after `CENSUS`) |
+//! | `X7.smoke_market` | Day/Environment, Day/Activity | parallel levels (VER-SPR-008 DEF-2): it shares Environment with X1 and Activity with X4 every day, so those levels hold two jobs; it and X4 send each other commands (`Settle`, `Audit`) |
 //!
 //! Every phase of `05.1` §4.2 and every pulse is bound; reads are `same_instant` and `lagged`
 //! (the other lags are BCK-002 A-28); every system has an invariant; every number is an integer or
@@ -33,6 +34,7 @@ mod chronicle;
 mod common;
 mod estate;
 mod harvest;
+mod market;
 mod polity;
 mod vital;
 mod weather;
@@ -51,6 +53,7 @@ pub use chronicle::Chronicle;
 pub use common::{PERSONS, REGIONS, person, person_entity};
 pub use estate::Estate;
 pub use harvest::Harvest;
+pub use market::Market;
 pub use polity::Polity;
 pub use vital::Vital;
 pub use weather::Weather;
@@ -63,7 +66,7 @@ pub const SPECS_DIR: &str = "worlds/smoke/systems";
 /// See [`SPECS_DIR`].
 pub const OVERLAY: &str = "worlds/smoke/registry_overlay.toml";
 
-/// The six dummy systems, unregistered.
+/// The seven dummy systems, unregistered.
 #[must_use]
 pub fn systems() -> Vec<Box<dyn SystemModel>> {
     vec![
@@ -73,6 +76,7 @@ pub fn systems() -> Vec<Box<dyn SystemModel>> {
         Box::new(Estate),
         Box::new(Polity),
         Box::new(Chronicle),
+        Box::new(Market),
     ]
 }
 
@@ -96,6 +100,9 @@ pub fn initial_tables() -> WorldTables {
         ("chronicle.census", vec![0]),
         ("chronicle.days", vec![0]),
         ("chronicle.closed", vec![0]),
+        ("market.price", vec![common::degrees(100); REGIONS]),
+        ("market.ticks", vec![0]),
+        ("market.audits", vec![0]),
     ] {
         t.insert(column, rows);
     }

@@ -17,7 +17,7 @@ TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 cargo build --release --locked -p rh-cli
 work="$TARGET_DIR/golden/regen"
 mkdir -p worlds/smoke/baselines "$work"
-"$TARGET_DIR/release/rh-cli" run smoke --years 1000 --threads 1 --ladder yearly \
+"$TARGET_DIR/release/rh-cli" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel 5 \
   --out worlds/smoke/baselines/smoke_yearly_1000y.ladder --journal "$work/journal.sqlite"
 echo "Regenerated worlds/smoke/baselines/smoke_yearly_1000y.ladder."
 echo "Commit it in the [C3] PR, with [C3] at the end of the commit subject, e.g.:"

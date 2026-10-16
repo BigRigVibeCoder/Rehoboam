@@ -9,12 +9,14 @@ pub const SCHEDULE: &[(Pulse, Phase)] = &[
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {
     GossipNoise = 1,  // key: (world, day)
+    SettleFee = 2,  // key: (person, day)
 }
 impl RngPurpose {
     /// The purpose's name in the spec's `[[rng]]` table.
     pub const fn name(self) -> &'static str {
         match self {
             Self::GossipNoise => "gossip_noise",
+            Self::SettleFee => "settle_fee",
         }
     }
 }

@@ -29,6 +29,15 @@
 //!   (through `Engine::snapshot` and `Engine::restore`, the journal untouched), then take the
 //!   rung. The perturbed run may later break an invariant; the ladder then ends in `failed`.
 //! - `dump`: at the end of month `month`, write the whole plane-A state ([`crate::dump`]).
+//! - `leak_thread`: `X7.smoke_market` runs inside [`crate::leak::Leaky`], which hashes a
+//!   per-thread step counter into `market.ticks`, and the ladder's header says `leak thread`. The
+//!   1-versus-N ladder comparison must fail on it (VER-SPR-008 DEF-2's planted control).
+//!
+//! **Dispatch evidence** (DEF-2): [`run_reporting`] also returns the scheduler's
+//! [`DispatchStats`] over the run (levels, levels with two or more jobs, the most jobs in a
+//! level). They go in the run's summary, never in the ladder: they do not depend on the thread
+//! count, but they describe the dispatch, not the history. `require_parallel` makes the run fail
+//! when no level held two jobs or the share of such levels is below the floor.
 //!
 //! REF: `CODEX/05_PROJECT/SPR-008_GoldenRunCI.md` T-02, T-03, rulings 3, 4 and 7; `05.1` §6;
 //! ADR-0025 item 3; SPR-007 T-02, T-03 (the journal position counts accepted inputs).
@@ -38,9 +47,10 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use rh_core::crash::Provenance;
-use rh_core::engine::Engine;
+use rh_core::engine::{DispatchStats, Engine};
 use rh_core::ownership::SpecTable;
 use rh_core::register::register;
+use rh_core::system::SystemModel;
 use rh_core::time::{Pulse, SimTime};
 use rh_ids::BranchSalt;
 use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
@@ -121,6 +131,11 @@ pub struct RunArgs {
     pub inject: Option<Inject>,
     /// `(month, path)`: dump the state at the end of that month.
     pub dump: Option<(u64, PathBuf)>,
+    /// The planted thread-identity leak (DEF-2 control).
+    pub leak_thread: bool,
+    /// The floor, in percent, of the share of levels that held two or more jobs (DEF-2): below it,
+    /// or with no such level at all, the run fails.
+    pub require_parallel: Option<u64>,
 }
 
 impl RunArgs {
@@ -141,8 +156,70 @@ impl RunArgs {
             resume: None,
             inject: None,
             dump: None,
+            leak_thread: false,
+            require_parallel: None,
         }
     }
+}
+
+/// What a run leaves: its ladder and what the scheduler dispatched.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Outcome {
+    /// The ladder, as written.
+    pub ladder: Ladder,
+    /// The dispatch over every instant the run ran (a resumed run: from its keyframe).
+    pub dispatch: DispatchStats,
+}
+
+impl Outcome {
+    /// The share of levels that held two or more jobs, in whole percent (rounded down).
+    #[must_use]
+    pub const fn parallel_percent(&self) -> u64 {
+        match self.dispatch.levels {
+            0 => 0,
+            n => self.dispatch.parallel_levels * 100 / n,
+        }
+    }
+
+    /// `Err` naming the shortfall when the run's parallel levels fall short of `floor` percent, or
+    /// when no level held two or more jobs (DEF-2).
+    ///
+    /// # Errors
+    /// The message to print.
+    pub fn check_parallel(&self, floor: u64) -> Result<(), String> {
+        let d = self.dispatch;
+        if d.parallel_levels == 0 || d.max_jobs < 2 {
+            return Err(format!(
+                "PARALLEL LEVELS MISSING: no level held two or more jobs ({} levels), so a \
+                 thread-count comparison is vacuous (VER-SPR-008 DEF-2)",
+                d.levels
+            ));
+        }
+        if self.parallel_percent() < floor {
+            return Err(format!(
+                "PARALLEL LEVELS BELOW THE FLOOR: {} of {} levels ({}%) held two or more jobs; \
+                 the floor is {floor}% (VER-SPR-008 DEF-2)",
+                d.parallel_levels,
+                d.levels,
+                self.parallel_percent()
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// The smoke world's systems; with `leak`, `X7.smoke_market` inside [`crate::leak::Leaky`].
+fn systems(leak: bool) -> Vec<Box<dyn SystemModel>> {
+    rh_sys_smoke::systems()
+        .into_iter()
+        .map(|s| {
+            if leak && s.descriptor().id == "X7.smoke_market" {
+                Box::new(crate::leak::Leaky(s)) as Box<dyn SystemModel>
+            } else {
+                s
+            }
+        })
+        .collect()
 }
 
 /// The provenance every smoke keyframe and journal carries. It never enters a ladder.
@@ -257,10 +334,18 @@ fn stops(args: &RunArgs) -> BTreeMap<SimTime, Stop> {
 /// # Errors
 /// [`Error`] if the world, the journal, a keyframe or a file cannot be set up or written.
 pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
+    run_reporting(args).map(|o| o.ladder)
+}
+
+/// [`run`], with the dispatch evidence.
+///
+/// # Errors
+/// As [`run`].
+pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     let specs = spec_table(&args.repo)?;
     let registered =
-        || register(rh_sys_smoke::systems(), &specs).map_err(|e| error("registration")(&e));
-    let (mut engine, journal, identity) = start(args, &specs, &registered)?;
+        || register(systems(args.leak_thread), &specs).map_err(|e| error("registration")(&e));
+    let (mut engine, journal, identity) = start(args, &registered)?;
     let start = engine.snapshot().cursor.unwrap_or(SimTime::EPOCH);
     let mut ladder = Ladder {
         header: Header {
@@ -275,6 +360,7 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
                 .inject
                 .as_ref()
                 .map(|i| format!("{}:{}:{}", i.month, i.table, i.row)),
+            leak: args.leak_thread,
         },
         rungs: Vec::new(),
         failed: None,
@@ -287,6 +373,8 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
         keyframe(&engine, j, dir, 0)?;
     }
     let mut months: Vec<u8> = Vec::new();
+    // A perturbation restores the engine, which starts its count again: keep the earlier part.
+    let mut dispatched = DispatchStats::default();
     // A resumed run starts after its keyframe's own instant: the stops it has nothing to run up
     // to are the keyframe's state, which the continuous run already took its rung at.
     let resumed = args.resume.is_some();
@@ -304,6 +392,7 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
         }
         drop(engine.drain_events());
         if let Some(inject) = args.inject.as_ref().filter(|_| stop.inject) {
+            dispatched = add(dispatched, engine.dispatch_stats());
             engine = perturb(&engine, inject, args, registered()?)?;
         }
         let digest = state_digest(&engine.snapshot());
@@ -324,7 +413,22 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
         }
     }
     std::fs::write(&args.out, ladder.render()).map_err(|e| error("ladder")(&e))?;
-    Ok(ladder)
+    Ok(Outcome {
+        ladder,
+        dispatch: add(dispatched, engine.dispatch_stats()),
+    })
+}
+
+const fn add(a: DispatchStats, b: DispatchStats) -> DispatchStats {
+    DispatchStats {
+        levels: a.levels + b.levels,
+        parallel_levels: a.parallel_levels + b.parallel_levels,
+        max_jobs: if a.max_jobs > b.max_jobs {
+            a.max_jobs
+        } else {
+            b.max_jobs
+        },
+    }
 }
 
 type Started = (Engine, Option<Journal>, Option<JournalPosition>);
@@ -334,7 +438,6 @@ type Started = (Engine, Option<Journal>, Option<JournalPosition>);
 /// order; a resumed run checks the journal's horizon (DEF-1) and resumes through it.
 fn start(
     args: &RunArgs,
-    specs: &SpecTable,
     registered: &dyn Fn() -> Result<rh_core::register::Registered, Error>,
 ) -> Result<Started, Error> {
     if args.until.is_some_and(|u| u < 0 || u > args.years) {
@@ -367,8 +470,14 @@ fn start(
     }
     let mut journal = Journal::create(&args.journal, &journal_key(args.seed))
         .map_err(|e| error("journal")(&e))?;
-    let mut engine =
-        rh_sys_smoke::engine(specs, args.seed, 1).map_err(|e| error("registration")(&e))?;
+    let mut engine = Engine::new(
+        CALENDAR,
+        args.seed,
+        BranchSalt::from_raw(0),
+        registered()?,
+        rh_sys_smoke::initial_tables(),
+        SimTime::EPOCH,
+    );
     engine.set_provenance(provenance());
     engine.set_threads(args.threads);
     for (at, entity) in synthetic_inputs(args.years) {
@@ -518,4 +627,48 @@ fn perturb(
     .map_err(|e| error("inject")(&e))?;
     restored.set_threads(args.threads);
     Ok(restored)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn outcome(levels: u64, parallel_levels: u64, max_jobs: usize) -> Outcome {
+        Outcome {
+            ladder: Ladder {
+                header: Header {
+                    world: WORLD.to_owned(),
+                    seed: 1,
+                    years: 1,
+                    rung: RungKind::Yearly,
+                    hash: LAYOUT.to_owned(),
+                    journal: None,
+                    until: None,
+                    inject: None,
+                    leak: false,
+                },
+                rungs: Vec::new(),
+                failed: None,
+            },
+            dispatch: DispatchStats {
+                levels,
+                parallel_levels,
+                max_jobs,
+            },
+        }
+    }
+
+    #[test]
+    fn the_parallel_gate_fails_with_no_parallel_level_or_below_the_floor() {
+        let none = outcome(1_000, 0, 1).check_parallel(0);
+        assert!(none.is_err_and(|m| m.starts_with("PARALLEL LEVELS MISSING")));
+        let low = outcome(1_000, 40, 2);
+        assert_eq!(low.parallel_percent(), 4);
+        assert!(
+            low.check_parallel(5)
+                .is_err_and(|m| m.starts_with("PARALLEL LEVELS BELOW THE FLOOR"))
+        );
+        assert_eq!(outcome(1_000, 70, 2).check_parallel(5), Ok(()));
+        assert_eq!(outcome(0, 0, 0).parallel_percent(), 0);
+    }
 }

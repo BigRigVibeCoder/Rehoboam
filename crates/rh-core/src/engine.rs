@@ -198,6 +198,22 @@ pub struct Engine {
     last_keyframe: Option<String>,
     /// The error that stopped the run, if any. A poisoned engine never runs again (SPR-005 G-d).
     poisoned: Option<SimError>,
+    /// How many levels ran and how many of them held more than one job (SPR-008 DEF-2). An
+    /// observation of the scheduler, never part of the state, a keyframe or a hash.
+    dispatch: DispatchStats,
+}
+
+/// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
+/// evidence that a thread-count comparison exercises parallel levels at all. It depends on the
+/// schedule and the instants run, never on the thread count, and is not part of the state.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DispatchStats {
+    /// Levels run (timer-pass and binding levels, each split level counted once).
+    pub levels: u64,
+    /// Levels that held two or more jobs: the ones several threads can share.
+    pub parallel_levels: u64,
+    /// The most jobs any level held.
+    pub max_jobs: usize,
 }
 
 /// One system's work in one pass: its due timers, or one firing binding.
@@ -304,6 +320,7 @@ impl Engine {
             journal_head: None,
             last_keyframe: None,
             poisoned,
+            dispatch: DispatchStats::default(),
         }
     }
 
@@ -536,6 +553,12 @@ impl Engine {
     #[must_use]
     pub fn crash_artifact(&self) -> Option<&CrashArtifact> {
         self.crash.as_ref()
+    }
+
+    /// What the scheduler has dispatched so far (SPR-008 DEF-2).
+    #[must_use]
+    pub const fn dispatch_stats(&self) -> DispatchStats {
+        self.dispatch
     }
 
     /// The last diagnostic records, oldest first.
@@ -952,6 +975,11 @@ impl Engine {
         jobs: &[Job],
         tally: &mut Tally,
     ) -> Result<(), SimError> {
+        self.dispatch.levels += 1;
+        if jobs.len() > 1 {
+            self.dispatch.parallel_levels += 1;
+        }
+        self.dispatch.max_jobs = self.dispatch.max_jobs.max(jobs.len());
         // Every owned column exists (materialised in `new`); check them all before moving any, so a
         // missing one fails the step without disturbing the tables (SPR-005 G-c).
         for job in jobs {

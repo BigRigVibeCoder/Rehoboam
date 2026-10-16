@@ -7,7 +7,8 @@
     reason = "generated skeleton items (Params) a parameterless system does not use"
 )]
 
-use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, Lag, Plane};
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
+use rh_core::command::Command;
 use rh_core::system::{InvariantResult, PulseBinding, SimError, StepCtx, SystemModel};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
@@ -17,7 +18,7 @@ use rh_ids::EntityRef;
 use crate::common::{PERSONS, WORLD, check, fail, from_skeleton, purposes, row};
 
 include!("generated/X4_smoke_estate.rs");
-purposes!(GossipNoise);
+purposes!(GossipNoise, SettleFee);
 
 const HEIRS: &str = "estate.heirs";
 const ORDER: &str = "estate.order";
@@ -42,7 +43,9 @@ impl Estate {
                 q.command.args.first().copied().unwrap_or(-1),
                 PERSONS,
             )?;
-            view.write(HEIRS)?[r] += 1;
+            // DEF-2: the Activity siblings both draw, write, emit and send commands.
+            let fee = ctx.rng(&RngPurpose::SettleFee, q.command.person, q.seq)?;
+            view.write(HEIRS)?[r] += 1 + i64::from(fee % 2 == 1);
             let order = &mut view.write(ORDER)?[0];
             *order = order
                 .wrapping_mul(31)
@@ -51,7 +54,15 @@ impl Estate {
             if let Some(cause) = q.cause {
                 e = e.caused_by(cause);
             }
-            ctx.emit(e)?;
+            let inheritance = ctx.emit(e)?;
+            if (fee >> 8) % 4 == 0 {
+                ctx.submit(Command {
+                    kind: "Audit",
+                    person: q.command.person,
+                    args: vec![crate::common::r64(r)],
+                    cause: Some(inheritance),
+                })?;
+            }
         }
         Ok(())
     }
@@ -81,8 +92,11 @@ impl SystemModel for Estate {
                 })
                 .to_vec(),
             applies: vec!["Settle"],
+            sends: vec![CommandSend {
+                command: "Audit",
+                target: "X7.smoke_market",
+            }],
             emits: vec!["INHERITANCE"],
-            ..AccessSpec::default()
         }
     }
 

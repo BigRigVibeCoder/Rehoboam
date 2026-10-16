@@ -3,8 +3,12 @@
 //!
 //! - `rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T]
 //!   [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]]
-//!   [--dump M:F] [--inject M:TABLE:ROW]`: `--years` is the history's horizon (with `--resume`,
-//!   the journal's own, unless `--extend`); `--until` stops earlier (DEF-1).
+//!   [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT]`: `--years`
+//!   is the history's horizon (with `--resume`, the journal's own, unless `--extend`); `--until`
+//!   stops earlier (DEF-1). The summary line reports the dispatch (levels, levels with two or
+//!   more jobs, the most jobs in a level); `--require-parallel` fails the run when no level held
+//!   two jobs or their share is below PERCENT, and `--leak-thread` plants the thread-identity leak
+//!   (DEF-2).
 //!   exit 0 when the run reaches the horizon, 1 when the simulation fails (the ladder ends in
 //!   `failed`), 2 on a tool error.
 //! - `rh-cli ladder compare A B`: exit 0 when equal, 1 when they differ (the first differing rung
@@ -17,7 +21,7 @@ use std::path::{Path, PathBuf};
 
 use crate::bisect::{BisectArgs, Process, bisect};
 use crate::ladder::{Ladder, RungKind, compare};
-use crate::run::{Error, Inject, RunArgs, run};
+use crate::run::{Error, Inject, Outcome, RunArgs, run_reporting};
 
 /// Exit code: success, no divergence.
 pub const OK: u8 = 0;
@@ -59,8 +63,14 @@ pub fn to_argv(args: &RunArgs, repo: bool) -> Vec<String> {
     if let Some(i) = &args.inject {
         push("--inject", format!("{}:{}:{}", i.month, i.table, i.row));
     }
+    if let Some(p) = args.require_parallel {
+        push("--require-parallel", p.to_string());
+    }
     if args.extend {
         v.push("--extend".to_owned());
+    }
+    if args.leak_thread {
+        v.push("--leak-thread".to_owned());
     }
     v
 }
@@ -75,8 +85,9 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
     let (mut years, mut out, mut journal) = (None, None, None);
     let mut it = words.iter();
     while let Some(flag) = it.next() {
-        if flag == "--extend" {
-            args.extend = true;
+        if flag == "--extend" || flag == "--leak-thread" {
+            args.extend |= flag == "--extend";
+            args.leak_thread |= flag == "--leak-thread";
             continue;
         }
         let value = it
@@ -94,6 +105,7 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
                 );
             }
             "--repo" => args.repo = PathBuf::from(value),
+            "--require-parallel" => args.require_parallel = Some(number("--require-parallel")?),
             "--seed" => args.seed = number("--seed")?,
             "--years" => {
                 years = Some(
@@ -146,15 +158,34 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
 /// `run smoke`: runs and reports. Returns the exit code.
 #[must_use]
 pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
-    let result = parse_run(words, repo).and_then(|args| run(&args).map(|l| (args, l)));
+    let result = parse_run(words, repo).and_then(|args| run_reporting(&args).map(|o| (args, o)));
     match result {
-        Ok((args, ladder)) => {
+        Ok((args, outcome)) => {
+            let Outcome { ladder, dispatch } = &outcome;
+            let d = dispatch;
+            println!(
+                "dispatch: {} levels, {} with two or more jobs ({}%), at most {} jobs in a level",
+                d.levels,
+                d.parallel_levels,
+                outcome.parallel_percent(),
+                d.max_jobs
+            );
             let last = ladder.rungs.last().map_or_else(String::new, |r| {
                 format!(
                     "; last rung {} at {}, state hash {:016x}",
                     r.index, r.date, r.hash
                 )
             });
+            let parallel = args
+                .require_parallel
+                .map_or(Ok(()), |floor| outcome.check_parallel(floor));
+            match (&ladder.failed, parallel) {
+                (Some(_), _) | (None, Ok(())) => {}
+                (None, Err(message)) => {
+                    println!("smoke: {message}");
+                    return DIFFERENT;
+                }
+            }
             match &ladder.failed {
                 None => {
                     println!(

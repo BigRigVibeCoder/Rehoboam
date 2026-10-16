@@ -1,6 +1,6 @@
 # The smoke world: golden runs, baselines and the bisect (SPR-008)
 
-> **BLUF:** `smoke` is a world of six dummy systems that touches every part of the engine determinism depends on. CI runs it for 1,000 sim-years on every PR and compares its plane-A hash ladder with the committed baseline. The nightly tier runs it monthly at 1, 2, 4 and N threads, three times each. Any divergence is bisected to its month, table, row and column.
+> **BLUF:** `smoke` is a world of seven dummy systems that touches every part of the engine determinism depends on, with two parallel scheduler levels every day. CI runs it for 1,000 sim-years on every PR and compares its plane-A hash ladder with the committed baseline. The nightly tier runs it monthly at 1, 2, 4 and N threads, three times each. Any divergence is bisected to its month, table, row and column.
 
 ## What is here
 
@@ -34,7 +34,7 @@ target/release/rh-cli ladder compare a.ladder worlds/smoke/baselines/smoke_yearl
 
 | Tier | What | Where |
 |---|---|---|
-| PR (`bin/check_all.sh`) | 1,000 years, yearly, at 1 thread and at N. The two ladders must be identical and must equal the baseline. About 1 minute per run on a GitHub runner. | `Golden …` gates |
+| PR (`bin/check_all.sh`) | 1,000 years, yearly, at 1 thread and at N, each with at least 5% parallel levels. The two ladders must be identical and must equal the baseline. About 1 minute per run on a GitHub runner. | `Golden …` gates |
 | PR, on a golden failure | `bin/golden_bisect_ci.sh`: builds the base revision and bisects it against the head. The report goes into the job's `check-report` artifact (`artifacts/bisect_report.txt`). | `ci.yml` |
 | Nightly | 1,000 years, monthly, at 1, 2, 4 and N threads × 3 repeats, all identical (V-DET-01, V-DET-02: the G0 criterion), then V-DET-11 on 64 injected perturbations. The monthly ladder is uploaded as `golden-nightly-ladder`. | `bin/golden_nightly.sh`, `nightly.yml` |
 
@@ -52,6 +52,15 @@ target/release/rh-cli ladder compare a.ladder worlds/smoke/baselines/smoke_yearl
 ## What the golden run covers
 
 The full engine loop, every phase and pulse, timers, lifecycle commands, events and material inputs through the journal (`crates/rh-sys-smoke/src/lib.rs` lists them per system). From the float zone (`rh-sample`) it covers **Poisson**, on both paths: inversion (mean 5, three regions) and PTRS (mean 12, one region; logs, `lgamma` and a variable number of draws; VER-SPR-008 MIN-1). The binomial, normal, gamma and beta samplers are not in the golden run; their golden vectors (V-DET-09) cover them.
+
+## Parallel levels (VER-SPR-008 DEF-2)
+
+A thread-count comparison only means something if some scheduler level holds two or more jobs, so that N threads actually split it. Every day, `X7.smoke_market` shares the Environment level with `X1.smoke_weather` and the Activity level with `X4.smoke_estate` (which exchanges `Settle` and `Audit` commands with it). That is 730 two-job levels a year, about 7% of the 10,319 levels the scheduler runs.
+
+- **Evidence:** `rh-cli run smoke` prints a `dispatch:` line before its summary: levels run, levels with two or more jobs and their share, and the most jobs in a level. These figures describe the dispatch, not the history, so they are not in the ladder. They do not depend on the thread count.
+- **Gate:** `--require-parallel 5` fails the run when no level holds two jobs or when the share is below 5%. The PR golden runs and the nightly runs use it.
+- **Control:** `--leak-thread` (a test hook, like `--inject`) wraps X7 so that it adds a per-thread step counter to `market.ticks`. Its ladder header says `leak thread`. In `bin/check_all.sh`, the 1-versus-N comparison must FAIL with the leak and pass without it.
+- **Daily, not hourly:** the engine spawns scoped threads for every level that holds two jobs. With X7 sharing the Hour pulse, a 100-year run at 4 threads took 150 s (about 25 minutes for 1,000 years). Daily, it takes 23 s. A persistent worker pool would remove that cost (to be filed as a backlog item).
 
 ## The bisect
 

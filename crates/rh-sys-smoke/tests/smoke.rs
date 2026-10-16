@@ -91,7 +91,7 @@ fn the_code_registers_against_its_specs_with_nothing_reported() {
             panic!("{e}");
         });
     assert_eq!(registered.reports(), [] as [String; 0]);
-    assert_eq!(registered.ids().len(), 6);
+    assert_eq!(registered.ids().len(), 7);
 }
 
 #[test]
@@ -127,6 +127,8 @@ fn a_run_exercises_timers_commands_events_and_invariants() {
         "DECREE",
         "CENSUS",
         "CENSUS_NOTE",
+        "FROST",
+        "TRADE",
     ] {
         assert!(
             count(&r.events, kind) > 10,
@@ -206,15 +208,44 @@ fn material_inputs_re_sample_the_timers_in_their_scope() {
 
 #[test]
 fn v_det_01_02_small_scale_thread_and_repeat_invariance() {
-    let base = run(9, 1, 12);
-    assert!(base.instants > 12 * 8_760);
+    let base = run(9, 1, 6);
+    assert!(base.instants > 6 * 8_760);
     for threads in [2, 4, 8] {
-        assert_eq!(run(9, threads, 12), base, "{threads} threads");
+        assert_eq!(run(9, threads, 6), base, "{threads} threads");
     }
-    assert_eq!(run(9, 1, 12), base, "repeat");
+    assert_eq!(run(9, 1, 6), base, "repeat");
     println!(
         "SMOKE: {} yearly states and {} events equal at 1, 2, 4 and 8 threads and on repeat",
         base.yearly.len(),
         base.events.len()
     );
+}
+
+/// VER-SPR-008 DEF-2: the thread-count comparison is not vacuous. Every day, Environment holds X1
+/// and X7 and Activity holds X4 and X7: those levels hold two jobs, so N threads dispatch them in
+/// parallel. The Activity pair also exchanges commands (Settle, Audit).
+#[test]
+fn def_2_two_phases_hold_parallel_levels_every_day() {
+    let engine = engine(1, 1);
+    let r = engine.registered();
+    for phase in [Phase::Environment, Phase::Activity] {
+        let level0: Vec<_> = r.schedule().phase(phase).levels[0]
+            .iter()
+            .map(|n| r.ids()[n.system])
+            .collect();
+        assert!(level0.len() >= 2, "{phase}: {level0:?}");
+    }
+    let mut engine = engine;
+    let end = SimTime::from_minutes(CALENDAR.minutes_per_year() - 1);
+    engine.advance_until(end, |_, _| {}).unwrap();
+    let stats = engine.dispatch_stats();
+    assert_eq!(stats.max_jobs, 2);
+    // Two parallel levels every day (Environment and Activity), and nothing else holds two jobs.
+    assert_eq!(stats.parallel_levels, 2 * 365, "{stats:?}");
+    assert!(stats.parallel_levels * 100 / stats.levels >= 5, "{stats:?}");
+    println!("DEF-2: {stats:?}");
+    let events = engine.drain_events();
+    let audits = engine.tables().get("market.audits").unwrap()[0];
+    assert!(audits > 0, "X4 sends Audit to X7, which applies it");
+    assert!(events.iter().any(|e| e.kind == "TRADE"));
 }

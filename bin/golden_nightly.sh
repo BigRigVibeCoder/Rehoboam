@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The nightly golden tier (SPR-008 ruling 5; docs/09 V-DET-01, V-DET-02, V-DET-11; the G0 criterion):
 # the smoke world for 1,000 sim-years with a monthly ladder at 1, 2, 4 and N threads, three repeats
-# each, every ladder byte-identical to the first; then V-DET-11 on 64 injected perturbations.
+# each, every ladder byte-identical to the first, each run with at least 5% of its scheduler levels
+# holding two or more jobs (VER-SPR-008 DEF-2); then V-DET-11 on 64 injected perturbations.
 # The first ladder is kept as artifacts/nightly/smoke_monthly_1000y.ladder: the reference for the
 # cross-machine check (bin/cross_machine.sh; worlds/smoke/README.md).
 #
@@ -20,7 +21,7 @@ reference=""
 for threads in 1 2 4 "$n"; do
   for repeat in 1 2 3; do
     ladder="$work/smoke_monthly_t${threads}_r${repeat}.ladder"
-    "$cli" run smoke --years 1000 --threads "$threads" --ladder monthly --out "$ladder"
+    "$cli" run smoke --years 1000 --threads "$threads" --ladder monthly --require-parallel 5 --out "$ladder"
     if [ -z "$reference" ]; then
       reference="$ladder"
       cp "$ladder" "$out/smoke_monthly_1000y.ladder"

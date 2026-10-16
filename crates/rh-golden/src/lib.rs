@@ -7,6 +7,7 @@
 //! - [`dump`]: a whole plane-A state as text, for the bisect's row-level step.
 //! - [`bisect`]: bisect v0, which names the first divergent month, table, row and column between
 //!   two builds (T-03, ruling 7; V-DET-11).
+//! - [`leak`]: the planted thread-identity leak behind `--leak-thread` (DEF-2 control).
 //! - [`cli`]: the command-line form `rh-cli` exposes and spawned builds read.
 //!
 //! The baselines are ladders this crate writes, never typed; `bin/check_baseline.py` gates them
@@ -19,4 +20,5 @@ pub mod bisect;
 pub mod cli;
 pub mod dump;
 pub mod ladder;
+pub mod leak;
 pub mod run;

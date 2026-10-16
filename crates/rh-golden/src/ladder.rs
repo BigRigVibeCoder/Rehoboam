@@ -32,6 +32,8 @@
 //!   `inject <month>:<table>:<row>` after `hash`, so an injected ladder can never pass as a
 //!   clean one: it differs from every baseline byte for byte, and [`compare`] reports it
 //!   (VER-SPR-008 MIN-2). A clean run has no such line.
+//! - **Leak.** A run with the planted thread-identity leak (`--leak-thread`, the DEF-2 control)
+//!   adds `leak thread` after the other header lines, for the same reason.
 //! - **Rungs.** One per year end (`yearly`) or month end (`monthly`), from the first. A rung is
 //!   its 1-based index, the tick of the instant it closes (the last minute of the year or the
 //!   month), the date of that instant as `YYYY-MM` (the year counts from 0), and the plane-A
@@ -109,6 +111,8 @@ pub struct Header {
     pub until: Option<i64>,
     /// The V-DET-11 perturbation `month:table:row`, if the run was perturbed.
     pub inject: Option<String>,
+    /// Whether the run carried the planted thread-identity leak (DEF-2 control).
+    pub leak: bool,
 }
 
 /// One rung: the state at the end of a year or a month.
@@ -178,6 +182,9 @@ impl Ladder {
         if let Some(inject) = &h.inject {
             let _ = writeln!(out, "inject {inject}");
         }
+        if h.leak {
+            out.push_str("leak thread\n");
+        }
         for r in &self.rungs {
             out.push_str(&render_rung(r));
         }
@@ -224,6 +231,7 @@ impl Ladder {
         let journal_line = optional("journal ");
         let until_line = optional("until ");
         let inject_line = optional("inject ");
+        let leak = optional("leak thread").is_some_and(|(_, rest)| rest.is_empty());
         let journal = match journal_line {
             None => None,
             Some((n, j)) => {
@@ -246,6 +254,7 @@ impl Ladder {
             journal,
             until,
             inject: inject_line.map(|(_, v)| v),
+            leak,
         };
         let mut rungs: Vec<Rung> = Vec::new();
         let mut failed = None;
@@ -429,6 +438,9 @@ pub fn compare(a: &Ladder, b: &Ladder) -> Option<Difference> {
     if a.failed != b.failed {
         return Some(Difference::Failure);
     }
+    if ha.leak != hb.leak {
+        return Some(Difference::Header { field: "leak" });
+    }
     (ha.inject != hb.inject).then(|| Difference::Inject {
         a: ha.inject.clone(),
         b: hb.inject.clone(),
@@ -466,6 +478,7 @@ mod tests {
                 journal: Some((8, "0123456789abcdef0123456789abcdef".to_owned())),
                 until: None,
                 inject: None,
+                leak: false,
             },
             rungs: (1..=2)
                 .map(|i| Rung {
@@ -530,6 +543,20 @@ mod tests {
             })
         ));
         assert_ne!(clean.render(), injected.render());
+    }
+
+    #[test]
+    fn a_leaked_ladder_says_so_and_never_compares_equal_to_a_clean_one() {
+        let clean = ladder();
+        let mut leaked = ladder();
+        leaked.header.leak = true;
+        let text = leaked.render();
+        assert!(text.contains("\nleak thread\nrung 1 "), "{text}");
+        assert_eq!(Ladder::parse(&text), Ok(leaked.clone()));
+        assert_eq!(
+            compare(&clean, &leaked),
+            Some(Difference::Header { field: "leak" })
+        );
     }
 
     #[test]
