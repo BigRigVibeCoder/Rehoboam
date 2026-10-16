@@ -9,6 +9,8 @@
 
 pub mod hash;
 pub mod ids;
+pub mod rng;
 
 pub use hash::{BranchSalt, PurposeId, RngKey, StreamKey, SystemKey, h};
 pub use ids::{EntityKey, EventId, MatchId, PersonId, RegionId, SystemId, TimelineId};
+pub use rng::{LightStream, Purpose, PurposeRegistry, RngStream};
