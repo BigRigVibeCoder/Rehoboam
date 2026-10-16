@@ -235,7 +235,7 @@ They run under the V-PERF suite in `09`.
 | 1 | `bench/ledger_month_1M` | Per-person hazard pass, keyed draws and pop aggregation on a synthetic 1M world | P1a |
 | 2 | `bench/timers_lifecycle_1M` | Scheduled outcomes at normal and crisis loads: sampling, heap, ordered lifecycle application | P1a |
 | 3 | `bench/serial_fraction` | An instrumented tick: serial vs parallel wall time per phase. Fails above 20% | P1a |
-| 4 | `bench/raster_8x512` | Stencil fields | P0 |
+| 4 | `bench/raster_8x512` | Stencil fields | P1a: the first sprint that builds a spatial field, M1 or M3 (director, G0 rulings) |
 | 5 | `bench/agenda_5k` | Snapshot scoring, keyed-permutation application, invalidation and re-score | P1b |
 | 6 | `bench/sifter_throughput` | 50 patterns with declared match semantics on a clustered synthetic 10M-event chronicle | P2 |
 | 7 | `bench/plane_hashes` | `state_hash`, `observation_hash` and `narrative_hash`: full and dirty-chunk | P0 |

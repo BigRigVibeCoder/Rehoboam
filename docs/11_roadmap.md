@@ -1,6 +1,7 @@
 # 11 — Roadmap: Phases, Gates and Work Packages
 
-*Status: Draft v1.3 (2026-10-16). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*Status: Draft v1.4 (2026-10-16). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*v1.4 (2026-10-16): G0 rulings by the director. P0.7 loses the Rerun logging hooks (a Rerun view, if wanted, is a downstream consumer of the World Stream) and the Textual TUI stub, which moves to P1.17. The G0 CI criterion records baselines for benches 7 and 8; bench 4's baseline moves to the first P1a sprint that builds a spatial field (M1 or M3).*
 *v1.3 (2026-10-16): **ADR-0035, the saga engine** (ratified by the director the same day). New phases: P1a "Bloodlines", P1b "Legends", P2 "Sagas & audio v0", P3 "The illustrated saga", P4 "Deeper worlds", P5 "2D diorama", then Later / optional. Minds v0 and M7 move into P1a; artifacts, vows, mythic catalysts and secrets v0 are new in P1b; the economy and polity drop to low fidelity until P4; the audio chronicle moves to P2 as an offline exporter, played in a local reader (nothing served or published), and the graphic chronicle is new in P3; the cinematic event envelope joins P1.9 and stress and mental breaks join minds v0. Moved WPs keep their IDs and say where they came from. Custom 3D, Godot and VR WPs are marked **Cut (ADR-0035)**, not deleted.*
 *v1.2 (2026-10-16): D27 (ADR-0034): WP P3.12 (deliberation-consult A/B) withdrawn; journals hold push inputs only; LLM-9 joins the gateway.*
 *v1.1 changes: P1 split into P1a and P1b and P3 into P3a and P3b; a review-hours budget sized to one human reviewer; numeric thresholds for every gate, fixed before its phase starts; rating windows for G2 and G3b; WPs aligned with ADR-0024–0026.*
@@ -118,7 +119,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 | P0.4 | `rh-core` skeleton | `SimTime` (i64 minutes, signed epoch), calendar, pulses, phase order, the `SystemModel` trait, `AccessSpec` conflict checker, derived scheduler (topological order, declared lags), agenda heap for decisions and timers, lifecycle command queues, event bus with `EventDraft`, invariant framework; fixed-point and money types (`rh-core::fixed`, SPR-010) |
 | P0.5 | Snapshot and hash | Three plane hashes (chunked Merkle xxh3 with dirty tracking), Arrow IPC keyframe write/read, SQLite journal (push inputs), unsynced guard |
 | P0.6 | Golden-run CI | A `smoke` world with dummy systems; hash ladder at thread counts 1/2/4/N; divergence bisect tool v0 (`13` §4.5); nightly cross-platform matrix |
-| P0.7 | Benchmark harness | criterion benches and the regression gate (> 10% slowdown fails; no automatic re-baseline, `08` §9); serial-fraction instrumentation; Rerun logging hooks; Textual TUI stub |
+| P0.7 | Benchmark harness | criterion benches and the regression gate (> 10% slowdown fails; no automatic re-baseline, `08` §9); serial-fraction instrumentation. (Rerun logging hooks dropped from P0 and the Textual TUI stub moved to P1.17: director, G0 rulings) |
 | P0.8 | Registry v0 | TOML loader, JSON Schema generation, manifest v0 loader (from `specs/manifest`), column-ownership declarations and their lint |
 
 **Gate G0**
@@ -128,7 +129,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 - **Bisect** (V-DET-11): the divergence bisect tool names the injected month, table and row.
 - **Specs** (V-WC-04): `val_khor.yaml` and `aethelgard.yaml` validate and `invalid_draft_style.yaml` fails.
 - **Lints** (V-PLN-01, V-DET-19, V-INSP-03): zero violations.
-- **CI** (V-PERF-04): per-PR CI runs in ≤ 15 min, and baselines are recorded for benches 4, 7 and 8 (`08` §9).
+- **CI** (V-PERF-04): per-PR CI runs in ≤ 15 min, and baselines are recorded for benches 7 and 8 (`08` §9). Bench 4's baseline moves to the first P1a sprint that builds a spatial field, M1 or M3 (director, G0 rulings).
 
 ---
 
@@ -184,7 +185,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 | P1.13 | Scheduled outcomes and lifecycle queues | Intra-pulse outcome times as agenda timers; lifecycle commands applied in `(phase, PersonId)` order; no back-dating (ADR-0025); `rh-contracts` v0 for the M1/M2/M7 and minds columns |
 | P1.14 | Determinism and performance at scale | Golden runs on the M1/M2/M7 world (1,000 years); CRN pairing test (ADR-0026); meso benches (≤ 50k persons, ≤ 2,000 named actors) and `bench/serial_fraction`. The synthetic 1M benches move to Later with P3.10 |
 | P1.15 | Registry effect language v0 (moved from P1b) | The typed, total evaluator in `rh-registry` (`05.5` §2.1); succession-law eligibility and ordering; verb effects as queued commands; a golden test |
-| P1.17 | World Stream v1 (moved from P1b; ADR-0030, `05.10`) | Channels A and C, `seq` and segments (the Parquet chronicle as the stream at rest), the live edge over a socket, viewer cursors, `stream.subscribe` / `stream.status`, the materializer (keyframe + replay), tip and scheduled inputs, the pace command, `rh-cli tail` filters (significance, place, person, pattern, regional digest). Gate: V-STR-01–03, V-STR-05, V-PERF-09 |
+| P1.17 | World Stream v1 (moved from P1b; ADR-0030, `05.10`) | Channels A and C, `seq` and segments (the Parquet chronicle as the stream at rest), the live edge over a socket, viewer cursors, `stream.subscribe` / `stream.status`, the materializer (keyframe + replay), tip and scheduled inputs, the pace command, `rh-cli tail` filters (significance, place, person, pattern, regional digest); the Textual TUI stub, a read-only status view over the stream (moved from P0.7). Gate: V-STR-01–03, V-STR-05, V-PERF-09 |
 | P1.18 | `S5.daily_life` F1: virtual telemetry (moved from P1b; ADR-0031) | The activity function over the life-course log and regional conditions; `rh-cli where <person> <date>` and `rh-cli who <place> <date>`; `DECISION_TRACE` records for named minds. Gate: V-STR-07; `specs/stream/selftest_virtual_telemetry.py` behaviour reproduced in Rust |
 
 **Gate G1a: a dynasty lives, dies and inherits deterministically, and the templated chronicle reads as a family history.**
