@@ -32,7 +32,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
 GOLDEN = REPO / "specs" / "registry" / "effect_language_golden_v0.toml"
-LANGUAGE_VERSION = "0.4.0"
+LANGUAGE_VERSION = "0.5.0"
 
 # ----------------------------------------------------------------------------- numeric limits
 I64_MIN = -(1 << 63)
@@ -601,9 +601,10 @@ class Ctx:
     bound_product: int = 1
     draw_sites: set[str] = field(default_factory=set)
     loop_vars: list[str] = field(default_factory=list)
-    outcome_payload: bool = (
-        False  # the verb's event carries a drawn outcome: the program draws nothing
-    )
+    # The verb's event carries a drawn outcome, so the program draws nothing (minor 2); an effects
+    # program's draws must key on an entity of its event (r4-2).
+    outcome_payload: bool = False
+    verb_program: bool = False
 
     @property
     def system(self) -> System:
@@ -1094,6 +1095,10 @@ class Call(Node):
             raise CompileError("E_RNG_PURPOSE", purpose.name)
         if cx.outcome_payload:  # minor 2: the host drew the outcome; a draw here would re-roll it
             raise CompileError("E_RNG_REUSE", "a verb with an outcome payload draws nothing")
+        if cx.verb_program and not any(
+            mentions(node, name) for node in self.args[1:3] for name in ("actor", "target")
+        ):  # r4-2: two events of one verb at one instant must draw independently
+            raise CompileError("E_RNG_REUSE", "a verb's draw must key on its actor or target")
         self.args[1].resolve(concrete(self.args[1].check(cx)))
         if not self.args[1].ty.startswith("ent:"):
             raise CompileError("E_TYPE", "draw entity")
@@ -1142,7 +1147,7 @@ class Call(Node):
         assert isinstance(k, int)
         key = (purpose.name, entity.kind, entity.ident, k)
         if key in ev.world.drawn:  # minor 3: the run-time layer of the reuse rule
-            raise InvariantError(f"E_RNG_REUSE: {key} drawn twice in one step")
+            raise InvariantError(f"E_RNG_REUSE: {key} drawn twice in one evaluation")
         ev.world.drawn.add(key)
         if key not in ev.world.draws:
             raise KeyError(f"the golden world lists no draw for {key}")
@@ -2343,6 +2348,7 @@ class Run:
         old = self.cx
         self.cx = Ctx(old.reg, old.system_name, dict(old.scope), old.allow_key)
         self.cx.outcome_payload = old.outcome_payload
+        self.cx.verb_program = old.verb_program
 
 
 def prepare(golden: Golden, case: dict[str, Any]) -> Run:
@@ -2362,6 +2368,7 @@ def prepare(golden: Golden, case: dict[str, Any]) -> Run:
     for name, raw in payload.items():
         scope[name], values[name] = parse_binding(raw)
     cx = Ctx(reg, system, scope, allow_key=case["kind"] == "order", outcome_payload=bool(payload))
+    cx.verb_program = case["kind"] == "effects"
     # Parameters are read as the system they belong to, so a variant system shares them.
     base = system.split("@")[0]
     ev = Ev(reg, world, base, values)
@@ -2396,9 +2403,20 @@ def run_candidates(run: Run, case: dict[str, Any]) -> str:
 def run_effects(run: Run, case: dict[str, Any]) -> str:
     """Evaluate an ``effects`` case."""
     node = compile_effects(str(case["text"]), run.cx)
-    commands = evaluate(node, run.ev)
-    assert isinstance(commands, list)
-    return render_commands(commands)
+    events = case.get("events")
+    if not events:
+        commands = evaluate(node, run.ev)
+        assert isinstance(commands, list)
+        return render_commands(commands)
+    # r4-2: several events of one verb at one instant, each evaluated once; verb programs share
+    # the system's draw ledger across the step, so a key repeated between events is the invariant.
+    run.ev.world.drawn = set()
+    out: list[Cmd] = []
+    for event in events:
+        for name, raw in event.items():
+            run.ev.vars[name] = parse_binding(raw)[1]
+        out.extend(node.eval(run.ev))
+    return render_commands(out)
 
 
 def succession_line(run: Run, programs: dict[str, str]) -> list[int]:

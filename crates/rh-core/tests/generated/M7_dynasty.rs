@@ -1,6 +1,6 @@
 // GENERATED from specs/systems/M7.dynasty.odd.toml by lint_odd.py --rust. Do not edit; edit the spec.
 pub const SYSTEM_ID: &str = "M7.dynasty";
-pub const SPEC_VERSION: &str = "0.3.1";
+pub const SPEC_VERSION: &str = "0.3.2";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Polity),
     (Pulse::Month, Phase::Polity),

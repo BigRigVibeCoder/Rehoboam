@@ -13,7 +13,7 @@
 #   line:[ids]      the law's line by the succession protocol of §7.2              (kind = "succession")
 #   error:E_CODE    a rejected program (§10)
 #   invariant:E_TRUNCATED   a hard invariant failure at evaluation (a candidates relation above its bound)
-#   invariant:E_RNG_REUSE   a hard invariant failure at evaluation (one (purpose, entity, k) drawn twice in a step)
+#   invariant:E_RNG_REUSE   a hard invariant failure at evaluation (one (purpose, entity, k) drawn twice in one evaluation)
 # A case may pin the evaluator's diagnostics with `missing_reads`, `neutral_reads`, `dropped_actions` or `truncated`
 # (default: not checked). Ticks are SimTime minutes (B1); a day is rh_core::time::MINUTES_PER_DAY = 1440, an
 # engine constant (minor 6), so no world states it.
@@ -23,7 +23,9 @@
 # event-typed field renders as 0. A verb's payload fields (`success` of MURDER_ATTEMPT, N4) come through `payload`
 # (a table name -> value), bound like variables; a program of a verb with a payload draws nothing (minor 2).
 # `evaluations = N` evaluates the case N times in the same world, as one step would: the results must be equal
-# (the run-time draw ledger is per evaluation, N6).
+# (the run-time draw ledger is per evaluation, N6). `events = [{...}, ...]` evaluates an effects program once per
+# event binding at one instant, sharing the ledger across them (verb programs are never re-evaluated, r4-2); a
+# draw in an effects program must key on `actor` or `target`, so distinct events draw independently.
 # `extra_reads` (a table column -> neutral value) and `extra_sends` give a case a variant of its declaring
 # system (§7.4), used to show what a spec change would accept (open question Q7 of the spec).
 # A world may be generated instead of listed: `[worlds.<name>.fan]` with `fanout`, `depth`, optional
@@ -33,17 +35,17 @@
 # day ago and is compacted: life-course rows only). The Rust test builds the same rows from the same table.
 
 language = "effect_language_v0"
-version = "0.4.0"
+version = "0.5.0"
 spec = "specs/registry/effect_language_v0.md"
 
 # ============================================================================= the Registry slice (§7.4)
 [registry]
-effect_language_version = "0.4.0"
+effect_language_version = "0.5.0"
 
 # Every enum declares its default: the value a missing read yields (minor 2); it is not the first value by position.
 [registry.enums]
 sex               = { values = ["male", "female"], default = "male" }
-death_cause       = { values = ["none", "natural", "murder", "battle", "execution", "accident"], default = "none" }   # PR #37 at 83b9654: person.death_cause and life_course.death_cause share it (minor 2)
+death_cause       = { values = ["none", "natural", "murder", "battle", "execution", "accident"], default = "none" }   # M2 0.2.0 (frozen): person.death_cause and life_course.death_cause share it (minor 2)
 vocations         = { values = ["none", "holy_orders", "mercenary", "household"], default = "none" }
 title_tiers       = { values = ["sovereign", "major", "minor"], default = "minor" }
 office_kinds      = { values = ["chancellor", "marshal", "steward", "spymaster", "chaplain"], default = "chancellor" }
@@ -58,7 +60,7 @@ overlays          = { values = ["paranoia", "filial_piety", "despair", "hubris",
 region_conditions = { values = ["normal", "famine", "siege", "war"], default = "normal" }
 
 [registry.entities]
-kinds = ["person", "life_course", "tenure", "title", "office", "claim", "house", "polity", "artifact", "vow", "region", "mind"]
+kinds = ["person", "life_course", "tenure", "title", "office", "claim", "house", "household", "polity", "artifact", "vow", "region", "mind"]   # household: M4's (P1b), a command parameter kind only
 keys = { life_course = "person_id" }   # the log's rows are keyed by person_id, not by their row id (M7)
 
 # Columns as the system specs declare them ([[owns]]), with language types: bool | int | q8_8 | q16_16 |
@@ -122,14 +124,14 @@ keys = { life_course = "person_id" }   # the log's rows are keyed by person_id, 
 "knowledge.knows"    = { entity = "knowledge", type = "bool", plane = "A", owner = "T1.minds" }
 "pin.flag"           = { entity = "person", type = "bool", plane = "B", owner = "console" }   # a plane-B column (ADR-0024)
 
-# The declaring systems: reads, sends, RNG purposes and parameter bounds from their specs (PR #32 at 9d883b5,
-# minor 1) and the Registry. `neutral` is the machine-readable `neutral` field of each `[[reads]]` entry (minor 5):
+# The declaring systems: reads, sends, RNG purposes and parameter bounds from the frozen specs on main (M7 0.3.2,
+# T1 0.3.1, M2 0.2.0; minor 1, r4-5) and the Registry. `neutral` is the machine-readable `neutral` field of each `[[reads]]` entry (minor 5):
 # every read of a column another system owns carries one, whatever the world registers, and the checker rejects
 # a program's read without one (E_NO_NEUTRAL); the evaluator substitutes it only when the owner is absent (NEW-4).
 [registry.systems."M2.demography"]
 reads = []
 sends = []
-rng = ["death_hazard"]
+rng = ["death_time"]
 params = { e0 = [20.0, 85.0] }
 
 [registry.systems."M7.dynasty"]
@@ -142,17 +144,17 @@ sends = [
   { command = "OpinionModifier", target = "T1.minds" },
   { command = "TransferHoldings", target = "M4.economy" },   # property inheritance, P1b: M4 is absent in the P1a world
 ]
-rng = ["exit_murder", "exit_deposition", "exit_day", "murder_culprit", "arbitration_tie", "regrant_tie", "sortition", "interregnum_delay", "vocation"]   # M7 at 9d883b5: sortition keyed (candidate, k = the title, t)
+rng = ["exit_murder", "exit_deposition", "exit_day", "murder_culprit", "arbitration_tie", "regrant_tie", "sortition", "interregnum_delay", "vocation"]   # M7 0.3.2: sortition keyed (candidate, k = the title, t)
 params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], predecessor_deposed_hr = [1.3, 2.0], exec_constraint_hr = [0.3, 1.0], majority_age = [12.0, 21.0], arb_legal_weight = [0.0, 1.0], arb_claim_weight = [0.0, 1.0], arb_military_weight = [0.0, 1.0], arb_treasury_weight = [0.0, 1.0], contest_margin = [0.0, 1.0], interregnum_max_days = [7, 730], dormancy_degrees = [1, 6], vocation_holy_orders = [0.0, 0.6], vocation_mercenary = [0.0, 0.6] }
 
 [registry.systems."T1.minds"]
-# Exactly the reads and sends T1 declares at 9d883b5 (minor 1), restricted to the columns this slice carries.
+# Exactly the reads and sends T1 0.3.1 declares (minor 1, r4-3), restricted to the columns this slice carries.
 reads = ["person.alive", "person.death_tick", "person.birth_tick", "person.sex", "person.mother", "person.father", "life_course.person_id", "life_course.mother", "life_course.father", "person.spouse", "title.holder", "title.liege", "title.tier", "title.regent", "office.holder", "office.title", "claim.claimant", "claim.title", "claim.status", "vow.vower", "vow.conflict", "artifact.bearer", "artifact.location"]
 neutral = { "person.alive" = false, "person.death_tick" = 0, "person.birth_tick" = 0, "person.sex" = "male", "person.mother" = 0, "person.father" = 0, "life_course.person_id" = 0, "life_course.mother" = 0, "life_course.father" = 0, "person.spouse" = 0, "title.holder" = 0, "title.liege" = 0, "title.tier" = "minor", "title.regent" = 0, "office.holder" = 0, "office.title" = 0, "claim.claimant" = 0, "claim.title" = 0, "claim.status" = "void", "vow.vower" = 0, "vow.conflict" = "0.0", "artifact.bearer" = 0, "artifact.location" = 0 }
 sends = [
   { command = "Marry", target = "M2.demography" },
   { command = "ScheduleDeath", target = "M2.demography" },
-  { command = "OpinionModifier", target = "T1.minds" },   # the DESPAIR_PACT self-send, declared at 9d883b5 (Q6 closed)
+  { command = "OpinionModifier", target = "T1.minds" },   # the DESPAIR_PACT self-send (Q6 closed)
   { command = "PetitionSeat", target = "M7.dynasty" },
   { command = "PressClaim", target = "M7.dynasty" },
   { command = "RenounceClaim", target = "M7.dynasty" },
@@ -161,8 +163,9 @@ sends = [
   { command = "Transfer", target = "S6.artifacts" },
   { command = "Search", target = "S6.artifacts" },
   { command = "Destroy", target = "S6.artifacts" },
+  { command = "BurnHoldings", target = "M4.economy" },   # HOLDINGS_BURNED (P1b): T1 0.3.1 declares it; M4 is absent in the P1a world
 ]
-rng = ["trait_draw", "poll_jitter", "iaus_select", "action_order", "break_delay", "break_act", "break_outcome", "attack_outcome"]   # PR #32 head 9d883b5
+rng = ["trait_draw", "poll_jitter", "iaus_select", "action_order", "break_delay", "break_act", "break_outcome", "attack_outcome"]
 params = { stress_threshold = [50.0, 95.0], stress_decay = [0.0, 10.0], vow_conflict_gain = [0.0, 20.0], break_delay_max_days = [1, 90], grief_gain = [0.0, 60.0], grief_instant_cap = [5.0, 60.0], loyalty_conflict_gain = [0.0, 20.0], dissonance_gain = [0.0, 30.0], break_refractory_days = [30, 1825], attempt_success = [0.05, 0.6], trait_sd = [15.0, 50.0], iaus_top_k = [1, 5], interrupt_daily_cap = [1, 4], thought_cap = [0.0, 50.0], thought_decay = [0.0, 10.0], marriage_min_age = [12.0, 20.0] }
 
 [registry.systems."S6.artifacts"]
@@ -195,18 +198,18 @@ params = { tiny = [0.000001, 1.0] }   # a lower bound that rounds to 0 bits in q
 # Command signatures (§7.3, the new [commands] section): owner, the name of the queue-key person, parameters.
 # A parameter of type `event` (cause_event, source_event) takes the verb's own `event` or `none`, nothing else (N3).
 [registry.commands]
-# ScheduleDeath and Marry are M2's [[applies]] payloads at PR #37 head 83b9654 (M6): the lint checks them in both directions.
+# ScheduleDeath and Marry are M2 0.2.0's [[applies]] payloads (M6): the lint checks them in both directions.
 ScheduleDeath    = { owner = "M2.demography", person = "victim", params = [{ name = "tick", type = "int" }, { name = "cause", type = "enum", enum = "death_cause" }, { name = "culprit", type = "ref", ref = "person" }, { name = "cause_event", type = "event" }] }
 Marry            = { owner = "M2.demography", person = "a", params = [{ name = "b", type = "ref", ref = "person" }, { name = "tick", type = "int" }] }
 Promote          = { owner = "T1.minds", person = "person", params = [] }
 Demote           = { owner = "T1.minds", person = "person", params = [] }
-OpinionModifier  = { owner = "T1.minds", person = "holder", params = [{ name = "about", type = "ref", ref = "person" }, { name = "kind", type = "enum", enum = "opinion_modifiers" }, { name = "magnitude", type = "q8_8" }, { name = "source_event", type = "event" }] }   # T1's and M7's payload at PR #32 head 9d883b5
+OpinionModifier  = { owner = "T1.minds", person = "holder", params = [{ name = "about", type = "ref", ref = "person" }, { name = "kind", type = "enum", enum = "opinion_modifiers" }, { name = "magnitude", type = "q8_8" }, { name = "source_event", type = "event" }] }   # T1's and M7's payload
 AgendaGoal       = { owner = "T1.minds", person = "holder", params = [{ name = "vow", type = "ref", ref = "vow" }, { name = "kind", type = "enum", enum = "vow_kinds" }, { name = "target", type = "int" }, { name = "priority", type = "q8_8" }] }
 ClearGoal        = { owner = "T1.minds", person = "holder", params = [{ name = "vow", type = "ref", ref = "vow" }] }
-ApplyThought     = { owner = "T1.minds", person = "holder", params = [{ name = "overlay", type = "enum", enum = "overlays" }, { name = "delta", type = "q8_8" }, { name = "source_event", type = "event" }] }   # T1's [[applies]] at 9d883b5 (M6)
+ApplyThought     = { owner = "T1.minds", person = "holder", params = [{ name = "overlay", type = "enum", enum = "overlays" }, { name = "delta", type = "q8_8" }, { name = "source_event", type = "event" }] }   # T1's [[applies]] (M6)
 ApplyInfluence   = { owner = "T1.minds", person = "bearer", params = [{ name = "overlay", type = "enum", enum = "overlays" }, { name = "delta", type = "q16_16" }] }
 TransferHoldings = { owner = "M4.economy", person = "heir", params = [] }
-BurnHoldings     = { owner = "M4.economy", person = "owner", params = [] }
+BurnHoldings     = { owner = "M4.economy", person = "actor", params = [{ name = "household", type = "ref", ref = "household" }, { name = "cause_event", type = "event" }] }   # T1 0.3.1's [[commands]] payload { actor, household, cause_event } (r4-3)
 PetitionSeat     = { owner = "M7.dynasty", person = "person", params = [{ name = "target", type = "int" }] }
 PressClaim       = { owner = "M7.dynasty", person = "claimant", params = [{ name = "claim", type = "ref", ref = "claim" }] }
 RenounceClaim    = { owner = "M7.dynasty", person = "claimant", params = [{ name = "claim", type = "ref", ref = "claim" }] }
@@ -269,7 +272,7 @@ candidates = 'court(title)'
 eligible   = 'person.alive(x) and x != holder'
 order      = 'draw(sortition, x, title)'
 
-[registry.programs.succession_laws.sortition_lots_then_age]   # a data-only variant using the same draw site: laws never run in one step for one title (minor 5)
+[registry.programs.succession_laws.sortition_lots_then_age]   # a data-only variant using the same draw site: two laws never run in one step for one title (minor 5)
 candidates = 'court(title)'
 eligible   = 'person.alive(x) and x != holder'
 order      = '(draw(sortition, x, title), life_course.birth_tick(x))'
@@ -390,6 +393,9 @@ e0 = "32.0"
 "sortition/person:7/12"  = "18446744073709551615"
 "sortition/person:7/13"  = "1"
 "sortition/person:7/25"  = "9223372036854775807"    # 2^63 - 1: u / 2^64 < 0.5 hits
+"break_outcome/person:5/0"  = "0"                   # T1's break_outcome for the two-event cases (r4-2)
+"break_outcome/person:9/5"  = "0"
+"break_outcome/person:16/5" = "18446744073709551615"
 "sortition/person:19/1"  = "281474976710655"      # 2^48 - 1: the last draw that hits Q16_16::EPSILON
 "sortition/person:19/2"  = "281474976710656"      # 2^48: the first that misses it
 "sortition/person:19/7"  = "12345"
@@ -4870,12 +4876,20 @@ text = 'TransferHoldings(person: heir)'
 expect = "effects:[]"
 dropped_actions = 1
 [[case]]
-id = "effects_burn_holdings_needs_a_t1_send"   # HOLDINGS_BURNED (P1b): T1 declares no send to M4 at 9d883b5, so the program is rejected until it does (minor 1)
+id = "effects_burn_holdings_needs_a_household_accessor"   # HOLDINGS_BURNED (P1b): T1 0.3.1 declares the send with { actor, household, cause_event }, but no v0 accessor yields a person's household (M4's table, P1b); the program waits for it (Q14)
 kind = "effects"
 system = "T1.minds"
 bind = { actor = "person:16" }
-text = 'BurnHoldings(person: actor)'
-expect = "error:E_UNDECLARED_COMMAND"
+text = 'BurnHoldings(person: actor, household: household_of(actor), cause_event: event)'
+expect = "error:E_UNKNOWN_NAME"
+[[case]]
+id = "effects_burn_holdings_is_dropped_while_m4_is_absent"   # the declared send compiles with no household and is dropped at registration (NEW-4)
+kind = "effects"
+system = "T1.minds"
+bind = { actor = "person:16" }
+text = 'BurnHoldings(person: actor, household: none, cause_event: event)'
+expect = "effects:[]"
+dropped_actions = 1
 [[case]]
 id = "effects_marry"   # Marry {a, b, tick} as M2's [[applies]] declares it (M6)
 kind = "effects"
@@ -4884,7 +4898,7 @@ bind = { actor = "person:9", target = "person:5" }
 text = 'Marry(person: actor, b: target, tick: now)'
 expect = "effects:[Marry(person=9, args=[5, 0])]"
 [[case]]
-id = "effects_despair_pact_self_send"   # T1's OpinionModifier self-send, declared at 9d883b5 (Q6 closed); source_event is this verb's event
+id = "effects_despair_pact_self_send"   # T1's OpinionModifier self-send (Q6 closed); source_event is this verb's event
 kind = "effects"
 system = "T1.minds"
 bind = { actor = "person:9", target = "person:7" }
@@ -5659,3 +5673,29 @@ kind = "expr"
 system = "M7.dynasty"
 text = 'ordinal(sex.none)'
 expect = "error:E_UNKNOWN_NAME"
+
+# ============================================================================= round 5 (PR #41)
+# ----------------------------------------------------------------------------- verb programs and the step (r4-2)
+[[case]]
+id = "verb_draw_must_key_on_actor_or_target"   # keyed on neither: two events of this verb at one instant would share a draw
+kind = "effects"
+system = "T1.minds"
+bind = { actor = "person:9", target = "person:5", instrument = "artifact:400" }
+text = 'when chance(break_outcome, instrument, 0, 0.5): Resign(person: actor, office: none)'
+expect = "error:E_RNG_REUSE"
+[[case]]
+id = "verb_two_events_same_key_at_one_instant"   # keyed on the target only: two attempts on Edmund at one instant repeat the key across the step's ledger
+kind = "effects"
+system = "T1.minds"
+bind = { actor = "person:9", target = "person:5" }
+events = [{ actor = "person:9", target = "person:5" }, { actor = "person:16", target = "person:5" }]
+text = 'when chance(break_outcome, target, 0, 0.5): Resign(person: actor, office: none)'
+expect = "invariant:E_RNG_REUSE"
+[[case]]
+id = "verb_two_events_keyed_by_actor"   # keyed (actor, target): independent draws; Jorund hits, Ragnar misses
+kind = "effects"
+system = "T1.minds"
+bind = { actor = "person:9", target = "person:5" }
+events = [{ actor = "person:9", target = "person:5" }, { actor = "person:16", target = "person:5" }]
+text = 'when chance(break_outcome, actor, target, 0.5): Resign(person: actor, office: none)'
+expect = "effects:[Resign(person=9, args=[0])]"
