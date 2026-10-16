@@ -18,10 +18,11 @@
 //! `u <= p`, `p = 0` would hit for the one draw `d = 0`. The comparison uses the draw's top 16 bits
 //! (the high bits of `d`), the convention for counter-based generators.
 //!
-//! The draw comes from the keyed RNG (ADR-0006: `H(world_seed, branch_salt(t), system_id,
-//! purpose, entity_id, t, k)`), which SPR-002 builds in `rh-ids`. Until it lands, `UniformDraw`
-//! is the placeholder interface: anything that yields uniform `u64` draws. This module does not
-//! depend on `rh-ids` and never creates randomness itself.
+//! The draw comes from the keyed RNG (ADR-0006: `H(world_seed, branch_salt(t), system_id, epoch,
+//! purpose, entity_id, t, k)`), built in `rh-ids` by SPR-002. `UniformDraw` is the interface:
+//! anything that yields uniform `u64` draws. Implementing it for `rh_ids::RngStream` needs a crate
+//! edge and waits for the first sprint that draws against a probability (BCK-002 A-21). This
+//! module does not depend on `rh-ids` and never creates randomness itself.
 //!
 //! REF: `CODEX/05_PROJECT/SPR-010_FixedPoint.md` T-03; ADR-0006; `05.1` §6 items 2, 4.
 
@@ -29,8 +30,9 @@ use super::q::Q16_16;
 
 /// A source of uniform `u64` draws: every value equally likely, draws independent.
 ///
-/// Placeholder until SPR-002's keyed RNG (`rh-ids`) exists; that RNG will implement it, keyed by
-/// `(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)` with `k` advancing per draw.
+/// SPR-002's keyed RNG (`rh-ids`) will implement it (BCK-002 A-21), keyed by
+/// `(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)` with `k` advancing per
+/// draw.
 /// Plane A must never implement it with an unkeyed RNG (V-DET-19).
 pub trait UniformDraw {
     /// Returns the next uniform draw.
@@ -63,7 +65,7 @@ pub fn chance<D: UniformDraw + ?Sized>(source: &mut D, p: Q16_16) -> bool {
 mod tests {
     use super::{Q16_16, UniformDraw, chance, draw_hits};
 
-    /// A fixed sequence of draws: the placeholder's test double.
+    /// A fixed sequence of draws: the trait's test double.
     struct Fixed(Vec<u64>);
 
     impl UniformDraw for Fixed {

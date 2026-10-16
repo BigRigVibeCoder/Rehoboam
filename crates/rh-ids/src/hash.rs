@@ -196,7 +196,7 @@ pub(crate) fn word_pos(k: u64) -> u128 {
     u128::from(k) * 2
 }
 
-/// `H(world_seed, branch_salt, system_id, purpose, entity_id, t, k)`.
+/// `H(world_seed, branch_salt, system_id, epoch, purpose, entity_id, t, k)`.
 ///
 /// A pure function of its arguments: it does not depend on any other draw or on call order.
 /// Systems that draw many values for one key use [`crate::rng::RngStream`], which gives the

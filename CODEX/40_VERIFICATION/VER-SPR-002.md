@@ -46,7 +46,7 @@ version: 1.0.0
 | Light-stream v2 layout is not in the normative table (the Tester verified it against crate docs only) | Accepted for now: it is not the canonical H, and the golden file pins it. It becomes normative if a system adopts light streams | — |
 | OBS-4: a compile-fail doctest that fails for the wrong reason still passes | Known rustdoc limit (codes unchecked). Mitigated by the compiling twins and the per-file counts | — |
 
-**Escapes found later:** none so far.
+**Escapes found later:** one. DEF-3's sweep missed the doc comment on `rh_ids::hash::h`, which still gave the formula without `epoch`; found in the SPR-010 audit and fixed there (`VER-SPR-010` §3). Documentation only; the code and the golden vectors were already layout v2.
 
 ## 4. Acceptance criteria
 | Task | Criterion | Met |
@@ -70,4 +70,4 @@ version: 1.0.0
 |---|---|
 | Verdict | **PASS** |
 | Merge route | The Architect merges (GOV-005 §6); no golden world exists, so no out-of-tolerance announcement applies |
-| Escapes found later | — |
+| Escapes found later | 1 (documentation only; `VER-SPR-010` §3) |

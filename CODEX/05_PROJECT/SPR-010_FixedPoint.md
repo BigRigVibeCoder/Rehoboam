@@ -2,14 +2,14 @@
 id: SPR-010
 title: "rh-core::fixed: fixed-point and money types"
 type: how-to
-status: PLANNING
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001, ADR-0006, VER-SPR-001]
+related: [BCK-001, PRJ-001, ADR-0006, VER-SPR-001, VER-SPR-010, VER-SPR-010-TEST]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** Build the fixed-point number types that every threshold quantity in plane A must use (DET-3): `Q8_8`, `Q16_16` and money in i64 minor units, with saturating arithmetic and one documented rounding rule. Found missing from the P0 plan by the SPR-001 audit; no other sprint delivered it. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 2 agent-days.
@@ -49,7 +49,7 @@ version: 1.1.0
 ### T-03: Thresholds and draws
 - **Deliverable:** A comparison of a uniform RNG draw (a `u64` from SPR-002's API, or a placeholder trait until SPR-002 lands) against a `Q16_16` probability, with a documented exact mapping
 - **Acceptance:** Exhaustive test over the edge cases (probability 0, 1, the smallest step); frequency test against the exact probability
-- **Status:** [x] done: `crates/rh-core/src/fixed/draw.rs` (`draw_hits`, `chance`, the placeholder trait `UniformDraw`; mapping: hit iff `draw / 2^64 < p`); tests in `tests/fixed_draws.rs` and `draw` golden vectors. Swap `UniformDraw` for SPR-002's keyed RNG when it lands
+- **Status:** [x] done: `crates/rh-core/src/fixed/draw.rs` (`draw_hits`, `chance`, the trait `UniformDraw`; mapping: hit iff `draw / 2^64 < p`); tests in `tests/fixed_draws.rs` and `draw` golden vectors. SPR-002 has landed; implementing `UniformDraw` for `rh_ids::RngStream` needs a crate edge and goes to the first sprint that draws against a probability (BCK-002 A-21)
 
 ### T-04: The float gate
 - **Deliverable:** `bin/lint_forbidden.py` gains the V-DET-19 float rule for plane A: `f32`/`f64` only in items marked as declared float fields (`f32_field` in the system spec), with the same escape syntax and a positive control
@@ -70,9 +70,9 @@ version: 1.1.0
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-010` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-010` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class.
