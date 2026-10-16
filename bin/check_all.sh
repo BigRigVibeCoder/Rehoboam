@@ -442,6 +442,7 @@ run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruli
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
 # Tier 6/8 — determinism-style and contract prototypes
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
+run "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip (SPR-011 ruling 13)" "pass:CHANNEL A v0: PASS" "$PY" -I specs/stream/selftest_channel_a.py &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py
 status=$?
 
