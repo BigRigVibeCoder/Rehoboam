@@ -120,6 +120,17 @@ fn t01_pop_order_is_key_order_with_ties_and_cancellation() {
             }
             assert_eq!(a.len(), model.len());
             assert_eq!(a.peek(), model.keys().next().copied());
+            for kind in &EntityKind::ALL[..3] {
+                for raw in 0..3 {
+                    let e = EntityRef::new(*kind, raw);
+                    let expected: Vec<_> = model
+                        .iter()
+                        .filter(|(k, _)| k.entity == e)
+                        .map(|(k, t)| (*k, *t))
+                        .collect();
+                    assert_eq!(a.pending_for(e), expected, "case {case}: the entity index");
+                }
+            }
         }
         let rest: Vec<_> = std::iter::from_fn(|| a.pop()).collect();
         let expected: Vec<_> = model.into_iter().collect();

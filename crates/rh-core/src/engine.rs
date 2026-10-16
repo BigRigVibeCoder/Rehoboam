@@ -634,13 +634,13 @@ impl Engine {
                     message: format!("the epoch of {entity} overflowed"),
                 })?;
             }
-            let touched: Vec<TimerEntry> = self
-                .agenda
-                .pending()
-                .into_iter()
-                .filter(|(k, _)| input.scope.contains(&k.entity))
+            let mut touched: Vec<TimerEntry> = input
+                .scope
+                .iter()
+                .flat_map(|&entity| self.agenda.pending_for(entity))
                 .map(|(key, timer)| TimerEntry { key, timer })
                 .collect();
+            touched.sort_unstable();
             for entry in touched {
                 self.resample(t, entry)?;
             }

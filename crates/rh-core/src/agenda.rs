@@ -146,6 +146,9 @@ pub struct Agenda {
     entries: BTreeMap<u64, (AgendaKey, Timer)>,
     tombstones: BTreeSet<u64>,
     next_seq: u64,
+    /// The pending (not tombstoned) timers of each entity, in key order: derived state, rebuilt by
+    /// `restore`, never serialised.
+    by_entity: BTreeMap<EntityRef, BTreeSet<AgendaKey>>,
 }
 
 impl Agenda {
@@ -173,6 +176,7 @@ impl Agenda {
         };
         self.heap.push(Reverse(key));
         self.entries.insert(seq, (key, timer));
+        self.by_entity.entry(entity).or_default().insert(key);
         TimerId(seq)
     }
 
@@ -184,6 +188,7 @@ impl Agenda {
         match self.entries.get(&id.0) {
             Some(&entry) if !self.tombstones.contains(&id.0) => {
                 self.tombstones.insert(id.0);
+                self.unindex(&entry.0);
                 self.normalize();
                 Ok(entry)
             }
@@ -217,6 +222,7 @@ impl Agenda {
     pub fn pop(&mut self) -> Option<(AgendaKey, Timer)> {
         let Reverse(key) = self.heap.pop()?;
         let entry = self.entries.remove(&key.seq);
+        self.unindex(&key);
         self.normalize();
         entry
     }
@@ -263,9 +269,12 @@ impl Agenda {
     /// The pending timers about `entity`, in key order.
     #[must_use]
     pub fn pending_for(&self, entity: EntityRef) -> Vec<(AgendaKey, Timer)> {
-        let mut out = self.pending();
-        out.retain(|(k, _)| k.entity == entity);
-        out
+        self.by_entity
+            .get(&entity)
+            .into_iter()
+            .flatten()
+            .filter_map(|k| self.entries.get(&k.seq).copied())
+            .collect()
     }
 
     /// The serialisable state (ruling 7).
@@ -304,6 +313,7 @@ impl Agenda {
                 )));
             }
             agenda.heap.push(Reverse(key));
+            agenda.by_entity.entry(key.entity).or_default().insert(key);
         }
         for id in &state.tombstones {
             if !agenda.entries.contains_key(&id.0) || !agenda.tombstones.insert(id.0) {
@@ -311,9 +321,22 @@ impl Agenda {
                     "tombstone {id} names no entry or appears twice"
                 )));
             }
+            if let Some(&(key, _)) = agenda.entries.get(&id.0) {
+                agenda.unindex(&key);
+            }
         }
         agenda.normalize();
         Ok(agenda)
+    }
+
+    /// Removes a key from the entity index.
+    fn unindex(&mut self, key: &AgendaKey) {
+        if let Some(keys) = self.by_entity.get_mut(&key.entity) {
+            keys.remove(key);
+            if keys.is_empty() {
+                self.by_entity.remove(&key.entity);
+            }
+        }
     }
 
     /// Drops tombstoned entries from the top of the heap.
