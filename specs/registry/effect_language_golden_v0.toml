@@ -20,8 +20,10 @@
 # Variable bindings are "kind:id" strings (an entity), integers or booleans; `now` comes from the world. An
 # effects case binds `event` implicitly: the verb's own event, of the opaque type `event` (§3.1, N3), rendered
 # as the text `event` inside `args` because the rh-core merge rewrites event-typed payload fields; `none` in an
-# event-typed field renders as 0. A verb's payload fields (`success` of MURDER_ATTEMPT, N4) are bound like any
-# other variable.
+# event-typed field renders as 0. A verb's payload fields (`success` of MURDER_ATTEMPT, N4) come through `payload`
+# (a table name -> value), bound like variables; a program of a verb with a payload draws nothing (minor 2).
+# `evaluations = N` evaluates the case N times in the same world, as one step would: the results must be equal
+# (the run-time draw ledger is per evaluation, N6).
 # `extra_reads` (a table column -> neutral value) and `extra_sends` give a case a variant of its declaring
 # system (§7.4), used to show what a spec change would accept (open question Q7 of the spec).
 # A world may be generated instead of listed: `[worlds.<name>.fan]` with `fanout`, `depth`, optional
@@ -31,12 +33,12 @@
 # day ago and is compacted: life-course rows only). The Rust test builds the same rows from the same table.
 
 language = "effect_language_v0"
-version = "0.3.0"
+version = "0.4.0"
 spec = "specs/registry/effect_language_v0.md"
 
 # ============================================================================= the Registry slice (§7.4)
 [registry]
-effect_language_version = "0.3.0"
+effect_language_version = "0.4.0"
 
 # Every enum declares its default: the value a missing read yields (minor 2); it is not the first value by position.
 [registry.enums]
@@ -220,28 +222,29 @@ systems = ["M2.demography", "M7.dynasty", "T1.minds", "S6.artifacts", "S7.vows"]
 
 # ----------------------------------------------------------------------------- the laws (spec §8)
 # Lineage laws (B2, M8): candidates are the lineage of the holder (the descendants of its ancestors up to height 3,
-# the dead without a living line pruned, N2); `common(x, holder) != x` keeps the holder's ancestors out (D5, N1);
-# the title-blood rule (B3) keeps a collateral only if it descends from the holder or from one of the title's last
-# eight holders (`holders_of(title, 8)`, the tenure log); siblings order by birth tick, ties by person_id (the
-# host's final tie-break), so twins' keys are equal.
+# the dead without a living line pruned, N2); `not descends(holder, x)` keeps the holder's ancestors out (D5, N1;
+# round 4 minor 1: the `common` form leaked under uncle-niece marriage); the title-blood rule (B3, N5) keeps a
+# collateral only if it descends from the holder or from one of the title's last sixteen holders
+# (`holders_of(title, 16)`, the tenure log, which worldgen back-fills); siblings order by birth tick, ties by
+# person_id (the host's final tie-break), so twins' keys are equal.
 [registry.programs.succession_laws.primogeniture]
 candidates = 'lineage(holder, 3)'
-eligible   = 'person.alive(x) and x != holder and common(x, holder) != x and (descends(x, holder) or any(h in holders_of(title, 8): descends(x, h)))'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
 order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.primogeniture_open]   # the unrestricted variant (no title-blood rule): for the director (D14)
 candidates = 'lineage(holder, 3)'
-eligible   = 'person.alive(x) and x != holder and common(x, holder) != x'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x)'
 order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.ultimogeniture]
 candidates = 'lineage(holder, 3)'
-eligible   = 'person.alive(x) and x != holder and common(x, holder) != x and (descends(x, holder) or any(h in holders_of(title, 8): descends(x, h)))'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
 order      = '(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.seniority]
 candidates = 'lineage(holder, 3)'
-eligible   = 'person.alive(x) and x != holder and common(x, holder) != x and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and (descends(x, holder) or any(h in holders_of(title, 8): descends(x, h)))'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
 order      = '(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), life_course.birth_tick(x))'
 
 [registry.programs.succession_laws.partition]
@@ -256,7 +259,7 @@ order      = '(min(t in titles(x): ordinal(title.tier(t)) else 3), life_course.b
 
 [registry.programs.succession_laws.tanistry]
 candidates = 'lineage(holder, 3)'
-eligible   = 'person.alive(x) and x != holder and common(x, holder) != x and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and (descends(x, holder) or any(h in holders_of(title, 8): descends(x, h))) and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year)) * calendar.minutes_per_day'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h))) and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year)) * calendar.minutes_per_day'
 order      = 'life_course.birth_tick(x)'
 
 # sortition: 05.5 §2.1's rng_permutation(purpose = "sortition") is this order plus the host's PersonId tie-break: ascending
@@ -266,20 +269,25 @@ candidates = 'court(title)'
 eligible   = 'person.alive(x) and x != holder'
 order      = 'draw(sortition, x, title)'
 
+[registry.programs.succession_laws.sortition_lots_then_age]   # a data-only variant using the same draw site: laws never run in one step for one title (minor 5)
+candidates = 'court(title)'
+eligible   = 'person.alive(x) and x != holder'
+order      = '(draw(sortition, x, title), life_course.birth_tick(x))'
+
 # Data-only extensions (§8): variants are Registry edits, not code.
 [registry.programs.succession_laws.absolute_primogeniture]
 candidates = 'lineage(holder, 3)'
-eligible   = 'person.alive(x) and x != holder and common(x, holder) != x and (descends(x, holder) or any(h in holders_of(title, 8): descends(x, h)))'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
 order      = '(up(x, holder), [life_course.birth_tick(y) for y in line(common(x, holder), x)])'
 
 [registry.programs.succession_laws.agnatic_primogeniture]
 candidates = 'lineage(holder, 3)'
-eligible   = 'person.alive(x) and x != holder and common(x, holder) != x and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and (descends(x, holder) or any(h in holders_of(title, 8): descends(x, h)))'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
 order      = '(up_agnatic(x, holder), [life_course.birth_tick(y) for y in line_agnatic(common_agnatic(x, holder), x)])'
 
 [registry.programs.succession_laws.primogeniture_lay]   # open question Q1: holy orders excluded by the law itself
 candidates = 'lineage(holder, 3)'
-eligible   = 'person.alive(x) and x != holder and common(x, holder) != x and (descends(x, holder) or any(h in holders_of(title, 8): descends(x, h))) and person.vocation(x) != vocations.holy_orders'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h))) and person.vocation(x) != vocations.holy_orders'
 order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
 
 # ============================================================================= the fixture world
@@ -1451,6 +1459,395 @@ id = 718
 title = 700
 holder = 9
 start = -7200000
+end = 9223372036854775807
+
+# ============================================================================= the rota world (N5)
+# A seniority rota: Gest (1, dead) held seat 800, then his sons Arn (2, dead) and Brand (3, dead) and their sons in
+# turn, nine tenures in two generations; the third son Clas (4, dead) never held. The son of Clas, Ketil (9), is a
+# first cousin of the holder Hord (7, the son of Brand, murdered now) whose only holder ancestor is his grandfather
+# Gest, the ninth most recent holder: out of an eight-tenure window, inside sixteen. The cousins Ask (5) and Birk
+# (6) are the sons of Arn; the brother Dag (8) and the son Eyvind (10) live. Ages in days before now.
+[worlds.rota]
+now = 0
+days_per_year = 360
+
+[[worlds.rota.person]]
+id = 7
+alive = false
+sex = "male"
+birth_tick = -56160000
+death_tick = 0
+death_cause = "murder"
+mother = 0
+father = 3
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+[[worlds.rota.person]]
+id = 5
+alive = true
+sex = "male"
+birth_tick = -57600000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 2
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+[[worlds.rota.person]]
+id = 6
+alive = true
+sex = "male"
+birth_tick = -54720000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 2
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+[[worlds.rota.person]]
+id = 8
+alive = true
+sex = "male"
+birth_tick = -53280000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 3
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+[[worlds.rota.person]]
+id = 9
+alive = true
+sex = "male"
+birth_tick = -51840000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 4
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+[[worlds.rota.person]]
+id = 10
+alive = true
+sex = "male"
+birth_tick = -14400000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 7
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+
+[[worlds.rota.life_course]]
+id = 1001
+person_id = 1
+mother = 0
+father = 0
+birth_tick = -144000000
+sex = "male"
+death_cause = "natural"
+[[worlds.rota.life_course]]
+id = 1002
+person_id = 2
+mother = 0
+father = 1
+birth_tick = -100800000
+sex = "male"
+death_cause = "natural"
+[[worlds.rota.life_course]]
+id = 1003
+person_id = 3
+mother = 0
+father = 1
+birth_tick = -97920000
+sex = "male"
+death_cause = "natural"
+[[worlds.rota.life_course]]
+id = 1004
+person_id = 4
+mother = 0
+father = 1
+birth_tick = -95040000
+sex = "male"
+death_cause = "natural"
+[[worlds.rota.life_course]]
+id = 1005
+person_id = 5
+mother = 0
+father = 2
+birth_tick = -57600000
+sex = "male"
+death_cause = "none"
+[[worlds.rota.life_course]]
+id = 1007
+person_id = 7
+mother = 0
+father = 3
+birth_tick = -56160000
+sex = "male"
+death_cause = "murder"
+[[worlds.rota.life_course]]
+id = 1006
+person_id = 6
+mother = 0
+father = 2
+birth_tick = -54720000
+sex = "male"
+death_cause = "none"
+[[worlds.rota.life_course]]
+id = 1008
+person_id = 8
+mother = 0
+father = 3
+birth_tick = -53280000
+sex = "male"
+death_cause = "none"
+[[worlds.rota.life_course]]
+id = 1009
+person_id = 9
+mother = 0
+father = 4
+birth_tick = -51840000
+sex = "male"
+death_cause = "none"
+[[worlds.rota.life_course]]
+id = 1010
+person_id = 10
+mother = 0
+father = 7
+birth_tick = -14400000
+sex = "male"
+death_cause = "none"
+
+[[worlds.rota.title]]
+id = 800
+tier = "sovereign"
+liege = 0
+polity = 1
+law = "seniority"
+holder = 7
+state = "held"
+held_since = 0
+regent = 0
+
+# Nine tenures, oldest first.
+[[worlds.rota.tenure]]
+id = 810
+title = 800
+holder = 1
+start = -129600000
+end = -89280000
+[[worlds.rota.tenure]]
+id = 811
+title = 800
+holder = 2
+start = -89280000
+end = -79200000
+[[worlds.rota.tenure]]
+id = 812
+title = 800
+holder = 3
+start = -79200000
+end = -69120000
+[[worlds.rota.tenure]]
+id = 813
+title = 800
+holder = 5
+start = -69120000
+end = -59040000
+[[worlds.rota.tenure]]
+id = 814
+title = 800
+holder = 7
+start = -59040000
+end = -48960000
+[[worlds.rota.tenure]]
+id = 815
+title = 800
+holder = 6
+start = -48960000
+end = -38880000
+[[worlds.rota.tenure]]
+id = 816
+title = 800
+holder = 8
+start = -38880000
+end = -28800000
+[[worlds.rota.tenure]]
+id = 817
+title = 800
+holder = 5
+start = -28800000
+end = -18720000
+[[worlds.rota.tenure]]
+id = 818
+title = 800
+holder = 7
+start = -18720000
+end = 9223372036854775807
+
+# ============================================================================= the uncle-niece world (round 4, minor 1)
+# Olaf (35, dead) held seat 900, then his son Paal (30, dead), then the son of Paal, Runar (31, murdered now). Paal
+# married Signy (34), the daughter of his brother Torvald (32): the mother of Runar is his first cousin, and Torvald
+# is both his uncle and his maternal grandfather. The son of Runar is Ulrik (33). Under the `common` guard Torvald
+# passed (common(32, 31) is Olaf, found father-first at height 2) although Runar descends from him;
+# `not descends(holder, x)` excludes him.
+[worlds.niece]
+now = 0
+days_per_year = 360
+
+[[worlds.niece.person]]
+id = 31
+alive = false
+sex = "male"
+birth_tick = -28800000
+death_tick = 0
+death_cause = "murder"
+mother = 34
+father = 30
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+[[worlds.niece.person]]
+id = 32
+alive = true
+sex = "male"
+birth_tick = -83520000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 35
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+[[worlds.niece.person]]
+id = 34
+alive = true
+sex = "female"
+birth_tick = -54720000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 32
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+[[worlds.niece.person]]
+id = 33
+alive = true
+sex = "male"
+birth_tick = -2880000
+death_tick = 0
+death_cause = "none"
+mother = 0
+father = 31
+spouse = 0
+house = 0
+vocation = "none"
+named = true
+residence = 1
+
+[[worlds.niece.life_course]]
+id = 1035
+person_id = 35
+mother = 0
+father = 0
+birth_tick = -129600000
+sex = "male"
+death_cause = "natural"
+[[worlds.niece.life_course]]
+id = 1030
+person_id = 30
+mother = 0
+father = 35
+birth_tick = -86400000
+sex = "male"
+death_cause = "natural"
+[[worlds.niece.life_course]]
+id = 1032
+person_id = 32
+mother = 0
+father = 35
+birth_tick = -83520000
+sex = "male"
+death_cause = "none"
+[[worlds.niece.life_course]]
+id = 1034
+person_id = 34
+mother = 0
+father = 32
+birth_tick = -54720000
+sex = "female"
+death_cause = "none"
+[[worlds.niece.life_course]]
+id = 1031
+person_id = 31
+mother = 34
+father = 30
+birth_tick = -28800000
+sex = "male"
+death_cause = "murder"
+[[worlds.niece.life_course]]
+id = 1033
+person_id = 33
+mother = 0
+father = 31
+birth_tick = -2880000
+sex = "male"
+death_cause = "none"
+
+[[worlds.niece.title]]
+id = 900
+tier = "sovereign"
+liege = 0
+polity = 1
+law = "primogeniture"
+holder = 31
+state = "held"
+held_since = 0
+regent = 0
+
+[[worlds.niece.tenure]]
+id = 910
+title = 900
+holder = 35
+start = -115200000
+end = -72000000
+[[worlds.niece.tenure]]
+id = 911
+title = 900
+holder = 30
+start = -72000000
+end = -21600000
+[[worlds.niece.tenure]]
+id = 912
+title = 900
+holder = 31
+start = -21600000
 end = 9223372036854775807
 
 # ============================================================================= the fan worlds (N2)
@@ -4290,23 +4687,26 @@ expect = "effects:[]"
 id = "effects_murder_attempt_hits"   # N4: `success` is the attempt event's outcome, drawn by T1 (break_outcome or attack_outcome); the program draws nothing
 kind = "effects"
 system = "T1.minds"
-bind = { actor = "person:9", target = "person:5", success = true }
+bind = { actor = "person:9", target = "person:5" }
+payload = { success = true }
 text = 'when success: ScheduleDeath(person: target, tick: now + calendar.minutes_per_day, cause: death_cause.murder, culprit: actor, cause_event: event)'
 expect = "effects:[ScheduleDeath(person=5, args=[1440, 2, 9, event])]"
 [[case]]
 id = "effects_murder_attempt_misses"
 kind = "effects"
 system = "T1.minds"
-bind = { actor = "person:16", target = "person:5", success = false }
+bind = { actor = "person:16", target = "person:5" }
+payload = { success = false }
 text = 'when success: ScheduleDeath(person: target, tick: now + calendar.minutes_per_day, cause: death_cause.murder, culprit: actor, cause_event: event)'
 expect = "effects:[]"
 [[case]]
-id = "effects_murder_attempt_must_not_draw"   # the outcome is the event's; a second draw in the program would re-roll it (N4)
+id = "effects_murder_attempt_must_not_draw"   # the outcome is the event's; a draw in the program would re-roll it: rejected (N4, minor 2)
 kind = "effects"
 system = "T1.minds"
-bind = { actor = "person:9", target = "person:5", success = true }
+bind = { actor = "person:9", target = "person:5" }
+payload = { success = true }
 text = 'when success and chance(attack_outcome, actor, target, params.attempt_success): ScheduleDeath(person: target, tick: now + calendar.minutes_per_day, cause: death_cause.murder, culprit: actor, cause_event: event)'
-expect = "effects:[ScheduleDeath(person=5, args=[1440, 2, 9, event])]"
+expect = "error:E_RNG_REUSE"
 [[case]]
 id = "effects_fled_resigns_each_office"
 kind = "effects"
@@ -5120,3 +5520,142 @@ system = "X.fixture"
 bind = { title = "title:100" }
 text = 'title.holder(title)'
 expect = "error:E_NO_NEUTRAL"
+
+# ============================================================================= round 4 (PR #41)
+# ----------------------------------------------------------------------------- the tenure-log precondition and the sixteen-tenure window (N5)
+[[case]]
+id = "one_row_log_childless_holder_gives_an_empty_line"   # 103: one tenure row (Freya, childless): no candidate is of the blood; the failure mode of the precondition (§5.3)
+kind = "succession"
+law = "primogeniture"
+system = "M7.dynasty"
+bind = { holder = "person:6", title = "title:103" }
+text = 'worldgen must back-fill the tenure log (SPR-019); with one row the blood rule has nothing to anchor a collateral to'
+expect = "line:[]"
+[[case]]
+id = "one_row_log_open_variant_has_a_line"   # the same holder under the unrestricted variant: the lines of her brothers, the elder Cedric (dead, represented) first
+kind = "succession"
+law = "primogeniture_open"
+system = "M7.dynasty"
+bind = { holder = "person:6", title = "title:103" }
+text = 'the line of Cedric (the elder brother, dead) through Halvard, Ingrid and Jorund, then Edmund and his line'
+expect = "line:[10, 18, 14, 26, 12, 9, 24, 16, 27, 20, 8, 21, 5, 19, 17]"
+[[case]]
+id = "rota_cousin_is_of_the_blood_within_sixteen"   # Ketil (9): only his grandfather held, nine tenures ago
+kind = "expr"
+world = "rota"
+system = "M7.dynasty"
+bind = { x = "person:9", title = "title:800" }
+text = 'any(h in holders_of(title, 16): descends(x, h))'
+expect = "bool:true"
+[[case]]
+id = "rota_cousin_is_outside_an_eight_tenure_window"
+kind = "expr"
+world = "rota"
+system = "M7.dynasty"
+bind = { x = "person:9", title = "title:800" }
+text = 'any(h in holders_of(title, 8): descends(x, h))'
+expect = "bool:false"
+[[case]]
+id = "rota_holders_of_sixteen"   # each holder once, at its most recent tenure
+kind = "candidates"
+world = "rota"
+system = "M7.dynasty"
+bind = { title = "title:800" }
+text = 'holders_of(title, 16)'
+expect = "relation:[7, 5, 8, 6, 3, 2, 1]"
+[[case]]
+id = "rota_succession_seniority_includes_the_cousin"   # generation 0 relative to Hord by age: Ask, Birk, Dag, Ketil; then his son Eyvind
+kind = "succession"
+law = "seniority"
+world = "rota"
+system = "M7.dynasty"
+bind = { holder = "person:7", title = "title:800" }
+text = 'Ask (5), Birk (6), Dag (8), Ketil (9) at count - up = 0 by birth tick, then Eyvind (10)'
+expect = "line:[5, 6, 8, 9, 10]"
+
+# ----------------------------------------------------------------------------- the run-time draw ledger is per evaluation (N6)
+[[case]]
+id = "succession_sortition_evaluated_twice_in_one_step"   # idempotent: the same draws, the same line, no invariant
+kind = "succession"
+law = "sortition"
+system = "M7.dynasty"
+evaluations = 2
+bind = { holder = "person:7", title = "title:100" }
+text = 'the court of 100 by ascending draw keyed (candidate, title), twice'
+expect = "line:[19, 11, 6, 16, 5, 9]"
+[[case]]
+id = "succession_sortition_variant_shares_the_site"   # minor 5: the data-only variant uses the same draw site; laws are exclusive per title
+kind = "succession"
+law = "sortition_lots_then_age"
+system = "M7.dynasty"
+bind = { holder = "person:7", title = "title:100" }
+text = 'the same draws, then birth tick (never reached: the draws are distinct)'
+expect = "line:[19, 11, 6, 16, 5, 9]"
+
+# ----------------------------------------------------------------------------- the guard under uncle-niece marriage (round 4, minor 1)
+[[case]]
+id = "niece_common_guard_leaks"   # Torvald (32) is the grandfather of Runar, yet common(32, 31) is Olaf: the v0.3.0 guard let him in
+kind = "expr"
+world = "niece"
+system = "M7.dynasty"
+bind = { x = "person:32", holder = "person:31" }
+text = 'common(x, holder) != x'
+expect = "bool:true"
+[[case]]
+id = "niece_descends_guard_holds"
+kind = "expr"
+world = "niece"
+system = "M7.dynasty"
+bind = { x = "person:32", holder = "person:31" }
+text = 'not descends(holder, x)'
+expect = "bool:false"
+[[case]]
+id = "niece_succession_primogeniture"   # Ulrik only: Signy and Torvald are ancestors of Runar, Paal and Olaf are dead
+kind = "succession"
+law = "primogeniture"
+world = "niece"
+system = "M7.dynasty"
+bind = { holder = "person:31", title = "title:900" }
+text = 'the son Ulrik (33); the mother and the uncle-grandfather are ancestors of the holder'
+expect = "line:[33]"
+
+# ----------------------------------------------------------------------------- a neutral value that is not the zero or default of the type (round 4, minor 3)
+[[case]]
+id = "neutral_fixed_value_is_the_declared_one"   # S6 with a variant read of exec_constraint (M6 absent), neutral 0.5: 128 q8_8 bits, not 0
+kind = "expr"
+system = "S6.artifacts"
+extra_reads = { "polity.exec_constraint" = "0.5" }
+bind = { p = "polity:1" }
+text = 'polity.exec_constraint(p)'
+expect = "q8_8:128"
+neutral_reads = 1
+[[case]]
+id = "neutral_enum_value_is_the_declared_one"   # the world says famine, the enum default is normal, the declared neutral is siege
+kind = "expr"
+system = "S6.artifacts"
+extra_reads = { "region.conditions" = "siege" }
+bind = { r = "region:1" }
+text = 'region.conditions(r)'
+expect = "enum:region_conditions.siege"
+neutral_reads = 1
+
+# ----------------------------------------------------------------------------- a keyword after the dot (round 4, minor 4)
+[[case]]
+id = "enum_value_named_none_parses"
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:10" }
+text = 'person.vocation(x) == vocations.none'
+expect = "bool:true"
+[[case]]
+id = "death_cause_none_is_ordinal_zero"
+kind = "expr"
+system = "M7.dynasty"
+text = 'ordinal(death_cause.none)'
+expect = "int:0"
+[[case]]
+id = "keyword_after_dot_must_be_a_value_of_the_enum"
+kind = "expr"
+system = "M7.dynasty"
+text = 'ordinal(sex.none)'
+expect = "error:E_UNKNOWN_NAME"

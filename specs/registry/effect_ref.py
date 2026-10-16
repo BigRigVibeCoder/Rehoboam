@@ -32,7 +32,7 @@ from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
 GOLDEN = REPO / "specs" / "registry" / "effect_language_golden_v0.toml"
-LANGUAGE_VERSION = "0.3.0"
+LANGUAGE_VERSION = "0.4.0"
 
 # ----------------------------------------------------------------------------- numeric limits
 I64_MIN = -(1 << 63)
@@ -601,6 +601,9 @@ class Ctx:
     bound_product: int = 1
     draw_sites: set[str] = field(default_factory=set)
     loop_vars: list[str] = field(default_factory=list)
+    outcome_payload: bool = (
+        False  # the verb's event carries a drawn outcome: the program draws nothing
+    )
 
     @property
     def system(self) -> System:
@@ -1089,6 +1092,8 @@ class Call(Node):
             raise CompileError("E_CONST", "purpose must be an identifier")
         if purpose.name not in cx.system.rng:
             raise CompileError("E_RNG_PURPOSE", purpose.name)
+        if cx.outcome_payload:  # minor 2: the host drew the outcome; a draw here would re-roll it
+            raise CompileError("E_RNG_REUSE", "a verb with an outcome payload draws nothing")
         self.args[1].resolve(concrete(self.args[1].check(cx)))
         if not self.args[1].ty.startswith("ent:"):
             raise CompileError("E_TYPE", "draw entity")
@@ -1734,6 +1739,13 @@ class Parser:
             raise CompileError("E_SYNTAX", f"expected a name, found {token.text!r}")
         return token.text
 
+    def dotted_tail(self) -> str:
+        """The name after a dot: an identifier or a keyword (``death_cause.none``, minor 4)."""
+        token = self.take()
+        if token.kind not in ("ident", "kw"):
+            raise CompileError("E_SYNTAX", f"expected a name after '.', found {token.text!r}")
+        return token.text
+
     def end(self) -> None:
         """Fail unless every token was consumed."""
         if self.peek().kind != "eof":
@@ -1897,7 +1909,7 @@ class Parser:
         """A variable, dotted name, column read, call, relation or aggregate."""
         name = self.ident()
         if self.accept("."):
-            tail = self.ident()
+            tail = self.dotted_tail()
             if self.accept("("):
                 arg = self.expr()
                 self.expect(")")
@@ -2321,10 +2333,16 @@ def system_for_case(reg: Registry, case: dict[str, Any]) -> str:
 
 @dataclass
 class Run:
-    """One case's compiled context."""
+    """One case's compile-time and run-time contexts."""
 
     cx: Ctx
     ev: Ev
+
+    def fresh(self) -> None:
+        """A new compile-time context for a repeated evaluation (the site lint is per compile)."""
+        old = self.cx
+        self.cx = Ctx(old.reg, old.system_name, dict(old.scope), old.allow_key)
+        self.cx.outcome_payload = old.outcome_payload
 
 
 def prepare(golden: Golden, case: dict[str, Any]) -> Run:
@@ -2338,20 +2356,33 @@ def prepare(golden: Golden, case: dict[str, Any]) -> Run:
         scope["event"], values["event"] = "event", EventRef(own=True)
     for name, raw in case.get("bind", {}).items():
         scope[name], values[name] = parse_binding(raw)
-    cx = Ctx(reg, system, scope, allow_key=case["kind"] == "order")
+    payload = case.get(
+        "payload", {}
+    )  # the verb's event payload fields (§7.1): bound like variables
+    for name, raw in payload.items():
+        scope[name], values[name] = parse_binding(raw)
+    cx = Ctx(reg, system, scope, allow_key=case["kind"] == "order", outcome_payload=bool(payload))
     # Parameters are read as the system they belong to, so a variant system shares them.
     base = system.split("@")[0]
     ev = Ev(reg, world, base, values)
     return Run(cx, ev)
 
 
+def evaluate(node: Node | Effects, ev: Ev) -> Value | list[Cmd]:
+    """One evaluation of one program for one binding: the draw ledger of §4.6 starts empty (N6)."""
+    ev.world.drawn = set()
+    return node.eval(ev)
+
+
 def run_expr(run: Run, case: dict[str, Any]) -> str:
     """Evaluate an ``expr`` or ``order`` case."""
     wanted = case.get("result")
     node = compile_expr(str(case["text"]), run.cx, str(wanted) if wanted else None)
+    value = evaluate(node, run.ev)
+    assert not isinstance(value, list) or case["kind"] == "order"
     if case["kind"] == "order":
-        return "key:" + render_key(node.eval(run.ev))
-    return render_scalar(node.eval(run.ev))
+        return "key:" + render_key(value)
+    return render_scalar(value)
 
 
 def run_candidates(run: Run, case: dict[str, Any]) -> str:
@@ -2365,7 +2396,9 @@ def run_candidates(run: Run, case: dict[str, Any]) -> str:
 def run_effects(run: Run, case: dict[str, Any]) -> str:
     """Evaluate an ``effects`` case."""
     node = compile_effects(str(case["text"]), run.cx)
-    return render_commands(node.eval(run.ev))
+    commands = evaluate(node, run.ev)
+    assert isinstance(commands, list)
+    return render_commands(commands)
 
 
 def succession_line(run: Run, programs: dict[str, str]) -> list[int]:
@@ -2381,8 +2414,8 @@ def succession_line(run: Run, programs: dict[str, str]) -> list[int]:
     assert isinstance(elements, list)
     for x in elements:
         run.ev.vars["x"] = x
-        if eligible.eval(run.ev):
-            keyed.append((key_form(order.eval(run.ev)), x.ident))
+        if evaluate(eligible, run.ev):
+            keyed.append((key_form(evaluate(order, run.ev)), x.ident))
     run.ev.vars.pop("x", None)
     return [ident for _, ident in sorted(keyed)]
 
@@ -2409,10 +2442,14 @@ def run_case(golden: Golden, case: dict[str, Any]) -> tuple[str, dict[str, int]]
     """Run one case; return the rendered result (or ``error:CODE``) and the diagnostics."""
     run = prepare(golden, case)
     try:
-        if case["kind"] == "succession":
-            text = run_succession(run, case, golden)
-        else:
-            text = RUNNERS[str(case["kind"])](run, case)
+        texts: list[str] = []
+        for _ in range(int(case.get("evaluations", 1))):  # N6: repeated in one step, same result
+            run.fresh()
+            if case["kind"] == "succession":
+                texts.append(run_succession(run, case, golden))
+            else:
+                texts.append(RUNNERS[str(case["kind"])](run, case))
+        text = texts[0] if len(set(texts)) == 1 else "error:NOT_IDEMPOTENT"
     except CompileError as error:
         return f"error:{error.code}", {}
     except InvariantError as error:
