@@ -6,6 +6,7 @@
 //!
 //! - [`hash`]: the three plane hashes, chunked Merkle XXH3-64 with dirty tracking (T-01).
 //! - [`journal`]: the `SQLite` (WAL) input journal of push inputs and its hard-failing replay (T-03).
+//! - [`state`]: `state_hash` over all plane-A state, world columns and engine tables (T-02).
 //! - [`guard`]: the unsynced guard, a plane-A hash check around every read-only call in debug builds (T-04).
 //!
 //! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.2_world_model_and_data.md`;
@@ -17,5 +18,7 @@
 pub mod guard;
 pub mod hash;
 pub mod journal;
+pub mod state;
 
-pub use hash::{Plane, state_hash};
+pub use hash::{Plane, tables_hash};
+pub use state::state_hash;

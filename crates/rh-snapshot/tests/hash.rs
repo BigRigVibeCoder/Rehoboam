@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use rh_core::world::WorldTables;
 use rh_snapshot::hash::{
     CHUNK_ROWS, Divergence, HashError, MerkleCache, Plane, PlaneDigest, TableDigest,
-    empty_plane_hash, plane_hash, state_hash,
+    empty_plane_hash, plane_hash, tables_hash,
 };
 
 /// A deterministic column of `n` rows.
@@ -58,27 +58,27 @@ fn a_one_row_change_alters_exactly_one_chunk() {
 fn the_state_hash_sees_every_column_and_ignores_versions() {
     let a = world(3000);
     let mut b = world(3000);
-    assert_eq!(state_hash(&a), state_hash(&b));
+    assert_eq!(tables_hash(&a), tables_hash(&b));
     // Re-inserting the same rows changes the version, not the state.
     let rows = b.get("pop.count").unwrap().clone();
     b.insert("pop.count", rows);
     assert_ne!(a.version("pop.count"), b.version("pop.count"));
-    assert_eq!(state_hash(&a), state_hash(&b));
+    assert_eq!(tables_hash(&a), tables_hash(&b));
     // A changed value, a renamed column, a moved value, a dropped row: all change the hash.
     let mut c = world(3000);
     let mut rows = c.get("agenda.due").unwrap().clone();
     rows[999] += 1;
     c.insert("agenda.due", rows);
-    assert_ne!(state_hash(&a), state_hash(&c));
+    assert_ne!(tables_hash(&a), tables_hash(&c));
     let mut d = world(3000);
     let rows = d.get("agenda.due").unwrap().clone();
     d.insert("agenda.duf", rows);
-    assert_ne!(state_hash(&world(3000)), state_hash(&d));
+    assert_ne!(tables_hash(&world(3000)), tables_hash(&d));
     let mut e = world(3000);
     let mut rows = e.get("pop.count").unwrap().clone();
     rows.pop();
     e.insert("pop.count", rows);
-    assert_ne!(state_hash(&a), state_hash(&e));
+    assert_ne!(tables_hash(&a), tables_hash(&e));
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn the_cache_rehashes_only_new_versions_and_matches_a_full_recomputation() {
     let mut w = world(4 * CHUNK_ROWS);
     let mut cache = MerkleCache::new(Plane::A);
     let h0 = cache.update_world(&w);
-    assert_eq!(h0, state_hash(&w));
+    assert_eq!(h0, tables_hash(&w));
     let first = cache.rehashed_chunks();
     assert_eq!(first, 4 + 4 + 2);
     // Nothing changed: nothing is re-hashed.
@@ -98,18 +98,18 @@ fn the_cache_rehashes_only_new_versions_and_matches_a_full_recomputation() {
     w.insert("ledger.wealth", rows);
     let h1 = cache.update_world(&w);
     assert_eq!(cache.rehashed_chunks(), first + 4);
-    assert_eq!(h1, state_hash(&w));
+    assert_eq!(h1, tables_hash(&w));
     assert!(cache.verify(&w));
     // Growth, shrinkage and removal.
     w.insert("pop.count", column(4 * CHUNK_ROWS + 1, 2));
-    assert_eq!(cache.update_world(&w), state_hash(&w));
+    assert_eq!(cache.update_world(&w), tables_hash(&w));
     w.insert("pop.count", column(CHUNK_ROWS - 3, 2));
-    assert_eq!(cache.update_world(&w), state_hash(&w));
+    assert_eq!(cache.update_world(&w), tables_hash(&w));
     let mut smaller = WorldTables::new();
     for name in ["ledger.wealth", "pop.count"] {
         smaller.insert(name, w.get(name).unwrap().clone());
     }
-    assert_eq!(cache.update_world(&smaller), state_hash(&smaller));
+    assert_eq!(cache.update_world(&smaller), tables_hash(&smaller));
     assert!(cache.verify(&smaller));
 }
 
@@ -146,7 +146,7 @@ fn planes_b_and_c_hash_empty_and_synthetic_table_sets() {
     }
     assert_ne!(empty_plane_hash(Plane::B), empty_plane_hash(Plane::C));
     assert_ne!(empty_plane_hash(Plane::A), empty_plane_hash(Plane::B));
-    assert_eq!(state_hash(&WorldTables::new()), empty_plane_hash(Plane::A));
+    assert_eq!(tables_hash(&WorldTables::new()), empty_plane_hash(Plane::A));
 
     // Synthetic plane-B tables: a pins table and a facts ledger with variable-length rows.
     let pins: Vec<Vec<u8>> = (0..3000u32).map(|i| i.to_le_bytes().to_vec()).collect();
@@ -239,12 +239,12 @@ fn p1_stale_cache_across_clones() {
     w2.insert("pop.count", column(3000, 200));
     assert_eq!(w1.version("pop.count"), w2.version("pop.count"));
     assert_ne!(w1.identity(), w2.identity());
-    assert_eq!(cache.update_world(&w1), state_hash(&w1));
-    assert_eq!(cache.update_world(&w2), state_hash(&w2));
-    assert_ne!(state_hash(&w1), state_hash(&w2));
+    assert_eq!(cache.update_world(&w1), tables_hash(&w1));
+    assert_eq!(cache.update_world(&w2), tables_hash(&w2));
+    assert_ne!(tables_hash(&w1), tables_hash(&w2));
     assert!(cache.verify(&w2));
     // And back: the first world again is re-hashed in full, not served from w2's digest.
-    assert_eq!(cache.update_world(&w1), state_hash(&w1));
+    assert_eq!(cache.update_world(&w1), tables_hash(&w1));
 }
 
 /// Identities are bookkeeping: equal tables of different instances hash equal and compare equal.
@@ -257,8 +257,8 @@ fn the_identity_never_reaches_the_hash_or_equality() {
     assert_ne!(a.identity(), c.identity());
     assert_eq!(a, b);
     assert_eq!(a, c);
-    assert_eq!(state_hash(&a), state_hash(&b));
-    assert_eq!(state_hash(&a), state_hash(&c));
+    assert_eq!(tables_hash(&a), tables_hash(&b));
+    assert_eq!(tables_hash(&a), tables_hash(&c));
 }
 
 /// VER-SPR-007 DEF-2: an unbounded mark on a small table is clamped, not expanded chunk by chunk.

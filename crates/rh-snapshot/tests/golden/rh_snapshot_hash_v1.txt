@@ -7,6 +7,8 @@
 #   bytes <name> <rows> <root> <chunks..>   row i = (i mod 7) bytes of value i mod 256
 #   (GAMMA = 0x9e3779b97f4a7c15; names are UTF-8)
 #   plane <A|B|C> <t> (<name> <salt> <rows>)*t <plane hash>  (tables are columns)
+#   engine_table <name> <rows> <root> <chunks..>  the synthetic engine state's tables
+#   engine <plane hash>   its state_hash: the synthetic world columns and engine tables
 xxh3_64 0 2d06800538d394c2
 xxh3_64 1 e12ef9d2eb86ceeb
 xxh3_64 2 71470e6b39ce0012
@@ -560,3 +562,12 @@ plane C 0 549b025fe7108880
 plane A 3 agenda.due 3 1000 ledger.wealth 1 3000 pop.count 2 3000 6bc94fc991135cde
 plane B 2 Z 9 1 a 9 1 95e7cdb91dcdcb6d
 plane C 2 matches 11 2049 visibility 12 0 0ffb5de057e69a3f
+engine_table rh-core/agenda.meta 1 737bb65857a8fa05 5adf1930780f451b
+engine_table rh-core/agenda.timers 3 3ac8a1a0d2565ba9 246d8d871457df5f
+engine_table rh-core/engine.commands 2 379fc9bf905e8142 a0d5b0e1c72ed6bf
+engine_table rh-core/engine.epochs 2 4790c864c29427aa 01ac743f99d8764a
+engine_table rh-core/engine.inputs 3 e50a608abda78189 86c0f68341160b6a
+engine_table rh-core/engine.meta 1 5c0512c39e5f5d73 2d197aaa9c682058
+engine_table rh-core/events.held 2 2293276c893846c1 50e24fddeb21b451
+engine_table rh-core/events.meta 1 1e07edcff2ba0af0 6c72c055589c094a
+engine 012b5f53176759d1

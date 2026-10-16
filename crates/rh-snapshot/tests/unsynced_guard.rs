@@ -24,7 +24,7 @@ use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
 use rh_ids::BranchSalt;
 use rh_snapshot::guard::read_only;
-use rh_snapshot::hash::{MerkleCache, Plane, PlaneDigest, state_hash};
+use rh_snapshot::hash::{MerkleCache, Plane, PlaneDigest, tables_hash};
 use support::{Stub, agreeing_specs};
 
 const CALENDAR: Calendar = Calendar::new(DaysPerYear::D365, SeasonsPerYear::Four);
@@ -100,8 +100,8 @@ fn next(state: &mut u64) -> u64 {
 /// One randomly chosen read-only call on the tables, under the guard.
 fn fuzz_tables(tables: &WorldTables, cache: &mut MerkleCache, pick: u64) {
     let ok = match pick % 6 {
-        0 => read_only("state_hash", tables, |t| {
-            let _ = state_hash(t);
+        0 => read_only("tables_hash", tables, |t| {
+            let _ = tables_hash(t);
         }),
         1 => read_only("digest", tables, |t| {
             let _ = PlaneDigest::of_world(t);
@@ -137,7 +137,7 @@ fn v_det_10_read_only_apis_never_change_plane_a() {
             for _ in 0..3 {
                 fuzz_tables(tables, &mut cache, next(&mut rng));
             }
-            hashes.push(state_hash(tables));
+            hashes.push(tables_hash(tables));
         })
         .unwrap();
     // The engine's own read-only APIs, under the guard with the engine as the state.
@@ -148,13 +148,13 @@ fn v_det_10_read_only_apis_never_change_plane_a() {
     read_only("accesses", e, |e| e.registered().accesses().len()).unwrap();
     read_only("tables", e, |e| e.tables().names().count()).unwrap();
     // The cache, updated at random instants of the run, catches up by column versions alone.
-    assert_eq!(cache.update_world(e.tables()), state_hash(e.tables()));
+    assert_eq!(cache.update_world(e.tables()), tables_hash(e.tables()));
     assert!(cache.verify(e.tables()));
     // The guarded run equals an unguarded one, instant for instant.
     let mut plain = engine();
     let mut plain_hashes = Vec::new();
     plain
-        .advance_until(end, |_, tables| plain_hashes.push(state_hash(tables)))
+        .advance_until(end, |_, tables| plain_hashes.push(tables_hash(tables)))
         .unwrap();
     assert_eq!(hashes, plain_hashes);
     assert_eq!(hashes.len(), 3 * 365);

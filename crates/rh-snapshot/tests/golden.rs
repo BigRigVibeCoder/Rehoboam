@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use rh_core::world::WorldTables;
-use rh_snapshot::hash::{Plane, PlaneDigest, TableDigest, plane_hash, state_hash, xxh3, xxh3_128};
+use rh_snapshot::hash::{Plane, PlaneDigest, TableDigest, plane_hash, tables_hash, xxh3, xxh3_128};
 
 const GOLDEN: &str = include_str!("golden/rh_snapshot_hash_v1.txt");
 const GAMMA: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -96,15 +96,31 @@ fn every_golden_line_reproduces() {
                     expected
                 );
                 if plane == Plane::A {
-                    // The same tables as world columns: `state_hash` is this plane hash.
+                    // The same tables as world columns: their `tables_hash` is this plane hash.
                     let mut world = WorldTables::new();
                     for k in 0..t {
                         let rows =
                             column(f[4 + 3 * k].parse().unwrap(), f[5 + 3 * k].parse().unwrap());
                         world.insert(f[3 + 3 * k], rows);
                     }
-                    assert_eq!(state_hash(&world), expected, "{line}");
+                    assert_eq!(tables_hash(&world), expected, "{line}");
                 }
+            }
+            "engine_table" => {
+                let tables = rh_snapshot::state::engine_tables(&synthetic_state());
+                let (_, rows) = tables
+                    .iter()
+                    .find(|(n, _)| *n == f[1])
+                    .unwrap_or_else(|| panic!("no engine table {}", f[1]));
+                assert_eq!(rows.len(), f[2].parse::<usize>().unwrap(), "{line}");
+                check_table(line, &TableDigest::of(f[1], rows.as_slice()), &f[3..]);
+            }
+            "engine" => {
+                assert_eq!(
+                    rh_snapshot::state_hash(&synthetic_state()),
+                    hex64(f[1]),
+                    "{line}"
+                );
             }
             other => panic!("unknown golden record {other:?}"),
         }
@@ -115,4 +131,137 @@ fn every_golden_line_reproduces() {
     assert_eq!(counts.get("column"), Some(&7));
     assert_eq!(counts.get("bytes"), Some(&4));
     assert_eq!(counts.get("plane"), Some(&6));
+    assert_eq!(counts.get("engine_table"), Some(&8));
+    assert_eq!(counts.get("engine"), Some(&1));
+}
+
+/// The synthetic engine state of `bin/gen_hash_golden.py` (`SYNTHETIC_STATE`, `SYNTHETIC_WORLD`),
+/// built with the Rust types: every engine table has rows.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one literal state, kept side by side with the Python reference's"
+)]
+fn synthetic_state() -> rh_core::state::EngineState {
+    use rh_core::agenda::{AgendaKey, AgendaState, Timer, TimerId};
+    use rh_core::command::{Command, CommandQueuesState, QueuedCommand};
+    use rh_core::engine::MaterialInput;
+    use rh_core::phase::Phase;
+    use rh_core::time::SimTime;
+    use rh_events::{DraftRef, Event, EventLogState};
+    use rh_ids::{EntityKind, EntityRef, EventId, PersonId, PurposeId, SystemId, TimelineId};
+    const DAY: i64 = 1_440;
+    let e = EntityRef::new;
+    let t = SimTime::from_minutes;
+    let timer = |time, phase: usize, entity, seq, owner, purpose, kind, payload| {
+        (
+            AgendaKey {
+                time: t(time),
+                phase: Phase::ALL[phase],
+                entity,
+                seq,
+            },
+            Timer {
+                owner: SystemId::from_raw(owner),
+                purpose: PurposeId::from_raw(purpose),
+                kind,
+                payload,
+            },
+        )
+    };
+    let command = |person, seq, sender, cause, args: Vec<i64>, draft| QueuedCommand {
+        tick: t(DAY),
+        phase: Phase::ALL[3],
+        seq,
+        sender,
+        cause,
+        command: Command {
+            kind: "Inherit",
+            person: PersonId::from_raw(person),
+            args,
+            cause: draft,
+        },
+    };
+    let mut world = WorldTables::new();
+    world.insert("pop.count", column(21, 5));
+    world.insert("vital.alive", column(22, 1030));
+    rh_core::state::EngineState {
+        cursor: Some(t(40 * DAY + 7)),
+        timeline: TimelineId::from_raw(3),
+        applied_inputs: 2,
+        tables: world,
+        agenda: AgendaState {
+            entries: vec![
+                timer(100, 4, e(EntityKind::Person, 7), 2, 11, 0xABC, 1, -5),
+                timer(100, 4, e(EntityKind::Person, 9), 0, 11, 0xABC, 2, 7),
+                timer(250, 1, e(EntityKind::Household, 3), 5, 12, 0xDEF, 3, 0),
+            ],
+            next_seq: 6,
+            tombstones: vec![TimerId::from_raw(5)],
+        },
+        commands: CommandQueuesState {
+            queues: vec![(
+                "X2.estate",
+                vec![
+                    command(
+                        7,
+                        4,
+                        "X1.vital",
+                        Some(EventId::from_raw(12)),
+                        vec![1, -2],
+                        Some(DraftRef(0)),
+                    ),
+                    command(8, 8, "X5.war", None, vec![], None),
+                ],
+            )],
+            next_seq: 9,
+        },
+        epochs: vec![
+            (e(EntityKind::Person, 7), 1),
+            (e(EntityKind::Household, 3), 2),
+        ],
+        inputs: vec![
+            (
+                t(45 * DAY + 3),
+                vec![
+                    MaterialInput {
+                        scope: [e(EntityKind::Person, 1), e(EntityKind::Person, 6)].into(),
+                    },
+                    MaterialInput::default(),
+                ],
+            ),
+            (
+                t(400 * DAY),
+                vec![MaterialInput {
+                    scope: [e(EntityKind::Region, 2)].into(),
+                }],
+            ),
+        ],
+        events: EventLogState {
+            events: vec![
+                Event {
+                    id: EventId::from_raw(18),
+                    tick: 57_600,
+                    phase: 4,
+                    emitter: "X1.vital",
+                    kind: "DEATH",
+                    subjects: vec![e(EntityKind::Person, 7)],
+                    causes: vec![EventId::from_raw(3)],
+                    payload: vec![1],
+                },
+                Event {
+                    id: EventId::from_raw(19),
+                    tick: 57_603,
+                    phase: 9,
+                    emitter: "X4.census",
+                    kind: "CENSUS",
+                    subjects: vec![],
+                    causes: vec![],
+                    payload: vec![-1, 40],
+                },
+            ],
+            next_seq: 20,
+            last: Some((57_603, 9)),
+            running: 0x1234_5678_9ABC_DEF0,
+        },
+    }
 }

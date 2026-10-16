@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use rh_core::world::WorldTables;
 use rh_snapshot::guard::{GUARD_ENABLED, PlaneAState, read_only};
-use rh_snapshot::hash::{MerkleCache, Plane, PlaneDigest, state_hash};
+use rh_snapshot::hash::{MerkleCache, Plane, PlaneDigest, tables_hash};
 
 fn world() -> WorldTables {
     let mut w = WorldTables::new();
@@ -27,7 +27,7 @@ struct Leaky {
 
 impl PlaneAState for Leaky {
     fn plane_a_hash(&self) -> u64 {
-        state_hash(&self.tables.lock().unwrap())
+        tables_hash(&self.tables.lock().unwrap())
     }
 }
 
@@ -53,8 +53,8 @@ fn the_guard_is_on_exactly_in_debug_builds() {
 #[test]
 fn read_only_calls_pass_the_guard() {
     let w = world();
-    let h = state_hash(&w);
-    assert_eq!(read_only("state_hash", &w, state_hash), Ok(h));
+    let h = tables_hash(&w);
+    assert_eq!(read_only("tables_hash", &w, tables_hash), Ok(h));
     let digest = read_only("digest", &w, PlaneDigest::of_world).unwrap();
     assert_eq!(digest.hash, h);
     let mut cache = MerkleCache::new(Plane::A);

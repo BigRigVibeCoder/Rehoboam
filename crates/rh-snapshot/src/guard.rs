@@ -19,7 +19,8 @@ use std::fmt;
 use rh_core::engine::Engine;
 use rh_core::world::WorldTables;
 
-use crate::hash::state_hash;
+use crate::hash::tables_hash;
+use crate::state::state_hash;
 
 /// Whether this build checks read-only calls (debug builds) or compiles the check out (release).
 pub const GUARD_ENABLED: bool = cfg!(debug_assertions);
@@ -30,15 +31,17 @@ pub trait PlaneAState {
     fn plane_a_hash(&self) -> u64;
 }
 
+/// Bare tables: their [`tables_hash`].
 impl PlaneAState for WorldTables {
     fn plane_a_hash(&self) -> u64 {
-        state_hash(self)
+        tables_hash(self)
     }
 }
 
+/// An engine: `state_hash` of its snapshot, the engine-held tables included (VER-SPR-007 GAP-4).
 impl PlaneAState for Engine {
     fn plane_a_hash(&self) -> u64 {
-        state_hash(self.tables())
+        state_hash(&self.snapshot())
     }
 }
 
