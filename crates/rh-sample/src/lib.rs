@@ -31,11 +31,13 @@
     reason = "rh-sample is plane A's float zone (SPR-003 Architect ruling, 2026-10-16): samplers \
               compute in f64, in a fixed order with libm, and return integers or fixed point"
 )]
-// T-00 lands the zone's edges before the samplers that use them (T-01 to T-04 remove this).
-#![allow(dead_code, reason = "T-00: the samplers of T-01 to T-04 use these")]
+// The zone's edges land before every sampler that uses them; T-04 removes this.
+#![allow(dead_code, reason = "SPR-003: the samplers of T-02 to T-04 use these")]
 
+mod binomial;
 mod convert;
 mod error;
 mod uniform;
 
+pub use binomial::Binomial;
 pub use error::SampleError;
