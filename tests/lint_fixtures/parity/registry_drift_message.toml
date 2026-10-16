@@ -374,30 +374,30 @@ weather                   = { type = "enum", args = ["event"], values = ["clear"
 
 # Concrete verbs (subset). Systems emit these. The world compiler maps setting verbs onto them.
 [verbs]
-FAMINE_DECLARED = { act_classes = ["death"], emitted_by = "M4.economy", aggregate = true }
-ISSUE_DECREE    = { act_classes = ["coerce"], emitted_by = "M6.polity" }
-ARREST          = { act_classes = ["coerce", "harm"], emitted_by = "rh-minds" }
-PURGE           = { act_classes = ["purge", "harm"], emitted_by = "rh-minds" }
-REVENGE         = { act_classes = ["harm"], emitted_by = "rh-minds", references = ["harm"] }
-BLOOD_TEST      = { act_classes = ["test"], emitted_by = "M5.contagion" }
-RAID_LIVESTOCK  = { act_classes = ["raid", "harm"], emitted_by = "S4.ecology" }
-SUCCEED         = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty" }
-INCITE_RAID     = { act_classes = ["harm", "raid"], emitted_by = "agents" }     # an agent moves an off-map actor to raid
-CALL_FIRE       = { act_classes = ["harm"], emitted_by = "agents" }
-RAISE_WIND      = { act_classes = ["harm"], emitted_by = "agents" }
-AFFLICT         = { act_classes = ["harm"], emitted_by = "agents" }
-COUNSEL         = { act_classes = ["counsel"], emitted_by = "rh-minds" }
-LAMENT          = { act_classes = ["lament"], emitted_by = "rh-minds" }
-RENOUNCE_FAITH  = { act_classes = ["renounce"], emitted_by = "rh-minds" }
-RESTORE         = { act_classes = ["restore", "aid"], emitted_by = "rh-minds" }
-ARTIFACT_FORGED    = { act_classes = ["forge"], emitted_by = "S6.artifacts" }
-ARTIFACT_PASSED    = { act_classes = ["pass"], emitted_by = "S6.artifacts" }      # mode: inheritance | theft | gift | trade | loss
-ARTIFACT_USED      = { act_classes = ["use"], emitted_by = "S6.artifacts" }       # the artifact is the instrument of an act
-ARTIFACT_FOUND     = { act_classes = ["discover"], emitted_by = "S6.artifacts" }
-ARTIFACT_DESTROYED = { act_classes = ["destroy"], emitted_by = "S6.artifacts" }
-BEARER_CORRUPTED   = { act_classes = ["corrupt"], emitted_by = "S6.artifacts" }
-VOW_SWORN          = { act_classes = ["promise"], emitted_by = "S7.vows" }
-VOW_FULFILLED      = { act_classes = ["fulfil"], emitted_by = "S7.vows" }
-VOW_BROKEN         = { act_classes = ["betray"], emitted_by = "S7.vows" }
-VOW_VOIDED         = { act_classes = ["lapse"], emitted_by = "S7.vows" }
-MENTAL_BREAK       = { act_classes = ["renounce"], emitted_by = "T1.minds" }   # the break; its act is a separate event from [mental_breaks]
+FAMINE_DECLARED = { act_classes = ["death"], emitted_by = "M4.economy", aggregate = true, tellability = 224 }
+ISSUE_DECREE    = { act_classes = ["coerce"], emitted_by = "M6.polity", tellability = 96 }
+ARREST          = { act_classes = ["coerce", "harm"], emitted_by = "rh-minds", tellability = 128 }
+PURGE           = { act_classes = ["purge", "harm"], emitted_by = "rh-minds", tellability = 192 }
+REVENGE         = { act_classes = ["harm"], emitted_by = "rh-minds", references = ["harm"], tellability = 176 }
+BLOOD_TEST      = { act_classes = ["test"], emitted_by = "M5.contagion", tellability = 64 }
+RAID_LIVESTOCK  = { act_classes = ["raid", "harm"], emitted_by = "S4.ecology", tellability = 112 }
+SUCCEED         = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty", tellability = 192 }
+INCITE_RAID     = { act_classes = ["harm", "raid"], emitted_by = "agents", tellability = 160 }     # an agent moves an off-map actor to raid
+CALL_FIRE       = { act_classes = ["harm"], emitted_by = "agents", tellability = 160 }
+RAISE_WIND      = { act_classes = ["harm"], emitted_by = "agents", tellability = 160 }
+AFFLICT         = { act_classes = ["harm"], emitted_by = "agents", tellability = 160 }
+COUNSEL         = { act_classes = ["counsel"], emitted_by = "rh-minds", tellability = 80 }
+LAMENT          = { act_classes = ["lament"], emitted_by = "rh-minds", tellability = 96 }
+RENOUNCE_FAITH  = { act_classes = ["renounce"], emitted_by = "rh-minds", tellability = 192 }
+RESTORE         = { act_classes = ["restore", "aid"], emitted_by = "rh-minds", tellability = 176 }
+ARTIFACT_FORGED    = { act_classes = ["forge"], emitted_by = "S6.artifacts", tellability = 176 }
+ARTIFACT_PASSED    = { act_classes = ["pass"], emitted_by = "S6.artifacts", tellability = 128 }      # mode: inheritance | theft | gift | trade | loss
+ARTIFACT_USED      = { act_classes = ["use"], emitted_by = "S6.artifacts", tellability = 112 }       # the artifact is the instrument of an act
+ARTIFACT_FOUND     = { act_classes = ["discover"], emitted_by = "S6.artifacts", tellability = 160 }
+ARTIFACT_DESTROYED = { act_classes = ["destroy"], emitted_by = "S6.artifacts", tellability = 192 }
+BEARER_CORRUPTED   = { act_classes = ["corrupt"], emitted_by = "S6.artifacts", tellability = 176 }
+VOW_SWORN          = { act_classes = ["promise"], emitted_by = "S7.vows", tellability = 144 }
+VOW_FULFILLED      = { act_classes = ["fulfil"], emitted_by = "S7.vows", tellability = 192 }
+VOW_BROKEN         = { act_classes = ["betray"], emitted_by = "S7.vows", tellability = 192 }
+VOW_VOIDED         = { act_classes = ["lapse"], emitted_by = "S7.vows", tellability = 96 }
+MENTAL_BREAK       = { act_classes = ["renounce"], emitted_by = "T1.minds", tellability = 160 }   # the break; its act is a separate event from [mental_breaks]

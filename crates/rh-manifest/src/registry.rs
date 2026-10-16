@@ -125,6 +125,10 @@ pub struct SystemDef {
     /// Parameters a manifest may set, each with its bounds.
     #[serde(default)]
     pub params: BTreeMap<String, Bounds>,
+    /// The value a parameter takes when the manifest sets none (SPR-011 ruling 8). Each key is
+    /// one of `params` and each value lies inside its bounds ([`Registry::problems`]).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub defaults: BTreeMap<String, Number>,
 }
 
 /// An archetype of being: `[archetypes.apex_predator]`.
@@ -253,6 +257,9 @@ pub struct Verb {
     /// Act classes of past events it may reference (contingent unlocking).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub references: Vec<String>,
+    /// The Registry's prior of how worth telling one event of the verb is, 0..=255, copied into
+    /// the plane-A event row (SPR-011 ruling 11). Required: a verb without it does not load.
+    pub tellability: u8,
 }
 
 /// The Mechanics Registry: every section of `registry_v0.toml`.
@@ -516,6 +523,18 @@ impl Registry {
             }
         }
         for (sid, s) in &self.systems {
+            for (p, v) in &s.defaults {
+                match s.params.get(p) {
+                    None => out.push(format!(
+                        "systems.{sid}.defaults.{p}: not a parameter of the system"
+                    )),
+                    Some(b) if !b.contains(v.as_f64()) => out.push(format!(
+                        "systems.{sid}.defaults.{p}: default {v} outside bounds [{}, {}]",
+                        b.lo, b.hi
+                    )),
+                    Some(_) => {}
+                }
+            }
             if s.fidelity_levels.is_empty() {
                 out.push(format!("systems.{sid}: no fidelity levels"));
             }
@@ -700,6 +719,60 @@ mod tests {
         );
         assert!(reg.verbs["REVENGE"].references.contains(&"harm".to_owned()));
         assert!(reg.verbs["FAMINE_DECLARED"].aggregate);
+        // SPR-011 rulings 8 and 11.
+        assert_eq!(reg.verbs["DEATH"].tellability, 128);
+        assert_eq!(reg.verbs["EXTINCTION"].tellability, 255);
+        assert_eq!(reg.verbs["DEATH"].emitted_by, "M2.demography");
+        let m2 = &reg.systems["M2.demography"].defaults;
+        assert_eq!(m2["e0"], Number::Float(30.0));
+        assert_eq!(m2["brass_beta"], Number::Float(1.0));
+    }
+
+    /// SPR-011 rulings 8 and 11: a default names a parameter and lies inside its bounds; every
+    /// verb carries a tellability in 0..=255.
+    #[test]
+    fn defaults_and_tellability_are_checked() {
+        let base = "registry_version = \"0.1.0\"\n[act_classes]\nids = [\"death\"]\n\
+            [systems.\"M1.x\"]\nfidelity_levels = [\"F1\"]\nparams = { a = [1.0, 2.0] }\n";
+        let ok = format!("{base}defaults = {{ a = 1.5 }}\n");
+        assert_eq!(
+            Registry::from_toml(&ok).unwrap().systems["M1.x"]
+                .defaults
+                .len(),
+            1
+        );
+        let bad = format!("{base}defaults = {{ a = 3.0, b = 1.0 }}\n");
+        let Err(RegistryError::Inconsistent(p)) = Registry::from_toml(&bad) else {
+            panic!("accepted")
+        };
+        assert_eq!(
+            p,
+            [
+                "systems.M1.x.defaults.a: default 3.0 outside bounds [1.0, 2.0]",
+                "systems.M1.x.defaults.b: not a parameter of the system",
+            ]
+        );
+        let verb = |tail: &str| {
+            format!(
+                "{base}[verbs]\nDEATH = {{ act_classes = [\"death\"], emitted_by = \"M1.x\"{tail} }}\n"
+            )
+        };
+        assert_eq!(
+            Registry::from_toml(&verb(", tellability = 255"))
+                .unwrap()
+                .verbs["DEATH"]
+                .tellability,
+            255
+        );
+        for tail in ["", ", tellability = 256", ", tellability = -1"] {
+            assert!(
+                matches!(
+                    Registry::from_toml(&verb(tail)),
+                    Err(RegistryError::Parse(_))
+                ),
+                "accepted a verb with{tail:?}"
+            );
+        }
     }
 
     /// Sections the loader has no type for load generically, and every system entry loads
@@ -808,7 +881,7 @@ mod tests {
             [systems.\"M1.x\"]\nfidelity_levels = [\"F9\"]\nparams = { a = [2.0, 1.0], b = [0.0, inf] }\n\
             [goods]\nids = [\"grain\", \"grain\"]\n\
             [act_classes]\nids = [\"harm\"]\n\
-            [verbs]\nX = { act_classes = [\"bless\"], emitted_by = \"M1.x\" }\n";
+            [verbs]\nX = { act_classes = [\"bless\"], emitted_by = \"M1.x\", tellability = 0 }\n";
         let Err(RegistryError::Inconsistent(p)) = Registry::from_toml(text) else {
             panic!("accepted")
         };
