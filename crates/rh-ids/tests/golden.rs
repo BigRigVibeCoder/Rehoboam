@@ -11,7 +11,9 @@
 use rand_chacha::ChaCha8Rng;
 use rand_core::{Rng, SeedableRng};
 use rh_ids::rng::{h64_bytes, h64_words, mix, tag};
-use rh_ids::{BranchSalt, LightStream, PurposeId, RngKey, SystemId, h};
+use rh_ids::{
+    BranchSalt, ForkPolicy, LightStream, PurposeId, RngKey, SaltLineage, SystemId, TimelineId, h,
+};
 
 const GOLDEN: &str = "tests/golden/rh_ids_v1.txt";
 
@@ -122,5 +124,26 @@ fn rng_key(f: &[String]) -> RngKey {
         purpose: PurposeId::from_raw(int(&f[3])),
         entity: int(&f[4]),
         t: int(&f[5]),
+    }
+}
+
+#[test]
+fn branch_salts_match_the_reference() {
+    for f in lines("salt") {
+        let n: usize = int(&f[0]);
+        let mut lineage = SaltLineage::canonical();
+        for step in 0..n {
+            let at: i64 = int(&f[1 + 2 * step]);
+            let timeline = TimelineId::from_raw(int(&f[2 + 2 * step]));
+            lineage = lineage
+                .fork(at, timeline, ForkPolicy::ROLLOUT)
+                .expect("valid lineage");
+        }
+        let t: i64 = int(&f[1 + 2 * n]);
+        assert_eq!(
+            lineage.branch_salt(t).to_raw(),
+            int::<u64>(&f[2 + 2 * n]),
+            "salt line {f:?}"
+        );
     }
 }

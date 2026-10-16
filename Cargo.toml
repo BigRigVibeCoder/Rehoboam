@@ -37,3 +37,14 @@ allow_attributes_without_reason = "deny"
 # Second line of defence behind bin/lint_forbidden.py (V-DET-19); the lists live in clippy.toml.
 disallowed_types = "deny"
 disallowed_methods = "deny"
+
+# SPR-002: rh-ids's ChaCha8 code is generic and is instantiated in rh-ids itself, so it runs at
+# rh-ids's opt-level; unoptimised, the V-DET-16/V-DET-20 tests in the PR tier take minutes. This
+# changes speed only: debug assertions and overflow checks stay on, and the code is integer-only,
+# so its outputs are bit-identical at every opt-level.
+[profile.dev.package.rh-ids]
+opt-level = 3
+[profile.dev.package.rand_chacha]
+opt-level = 3
+[profile.dev.package.ppv-lite86]
+opt-level = 3
