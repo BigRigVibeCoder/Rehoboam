@@ -50,6 +50,7 @@ REQUIRED_GATES = (
     "Manifest: uz_job",
     "Manifest: val_khor",
     "No FMA contraction: no fp-contract in RUSTFLAGS or .cargo/config (SPR-003 GAP-6)",
+    "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)",
     "Ownership lint positive control: unowned write must FAIL",
     "Ownership lint: single writer from specs/systems (SPR-004 T-03)",
     "Python: format (ruff format --check)",
