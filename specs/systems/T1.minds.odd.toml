@@ -472,6 +472,22 @@ command = "OpinionModifier"
 payload = "{ holder, about, kind, magnitude, source_event }"
 from = ["M7.dynasty", "S7.vows", "T1.minds"]
 [[applies]]
+command = "AgendaGoal"
+payload = "{ vow, holder, kind, target, priority }"
+from = ["S7.vows"]
+[[applies]]
+command = "ClearGoal"
+payload = "{ vow, holder }"
+from = ["S7.vows"]
+[[applies]]
+command = "ApplyThought"
+payload = "{ holder, overlay, delta, source_event }"
+from = ["S7.vows"]
+[[applies]]
+command = "ApplyInfluence"
+payload = "{ bearer, overlay, delta }"
+from = ["S6.artifacts"]
+[[applies]]
 command = "Promote"
 payload = "{ person }"
 from = ["M7.dynasty"]
@@ -793,7 +809,7 @@ summary = "For each actor changed in this binding: if adult (age >= marriage_min
 earns_its_place_by = ["V-SAGA-16"]
 [[submodels]]
 name = "apply_commands"
-summary = "AgendaGoal{vow, holder, kind, target, priority}: upsert the goal row; ClearGoal: delete the goal row (goals are agenda entries, not history; the vow keeps the history). OpinionModifier{holder, about, kind, magnitude?, source_event}: add a row expiring after the kind's months. ApplyInfluence{bearer, overlay, delta} and ApplyThought{holder, overlay, delta, source_event}: thought.magnitude := min(thought_cap, magnitude + delta x 100) (delta in overlay points, 0..1). An interrupt (re-evaluation at t + 1 day, within interrupt_daily_cap) follows a new goal or a new KIN_HARMED_BY or PASSED_OVER modifier"
+summary = "AgendaGoal{vow, holder, kind, target, priority}: upsert the goal row; ClearGoal{vow, holder}: delete the goal row (goals are agenda entries, not history; the vow keeps the history). OpinionModifier{holder, about, kind, magnitude?, source_event}: add a row expiring after the kind's months. ApplyInfluence{bearer, overlay, delta} and ApplyThought{holder, overlay, delta, source_event}: thought.magnitude := min(thought_cap, magnitude + delta x 100) (delta in overlay points, 0..1). An interrupt (re-evaluation at t + 1 day, within interrupt_daily_cap) follows a new goal or a new KIN_HARMED_BY or PASSED_OVER modifier"
 earns_its_place_by = ["V-SAGA-13", "V-SAGA-03"]
 [[submodels]]
 name = "promote"
