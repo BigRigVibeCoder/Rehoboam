@@ -380,6 +380,11 @@ fn expect_compares_a_run_with_the_journal() {
         r.expect(&ordered[1]),
         Err(JournalError::Missing { .. })
     ));
+    // OBS-1: a run input that sorts before the journal's next one is extra, not mismatched.
+    let mut early = ordered[0].clone();
+    early.tick = SimTime::from_minutes(early.tick.minutes() - 1);
+    let mut r = Replay::open(&path, &key(), 0).unwrap();
+    assert!(matches!(r.expect(&early), Err(JournalError::Extra { .. })));
     // A different payload at the same place.
     let mut changed = ordered[0].clone();
     changed.payload.push(0);
