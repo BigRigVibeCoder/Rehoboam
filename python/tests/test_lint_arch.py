@@ -56,11 +56,11 @@ def engine(*extra: Crate) -> list[Crate]:
 def test_a_clean_layout_passes() -> None:
     """Allowed edges of every kind produce no violation."""
     crates = engine(
-        crate("rh-contracts-economy", kind="contract"),
+        crate("rh-contract-economy", kind="contract"),
         crate(
             "rh-sys-economy",
             kind="system",
-            deps=("rh-core", "rh-ids", "rh-events", "rh-registry", "rh-contracts-economy"),
+            deps=("rh-core", "rh-ids", "rh-events", "rh-registry", "rh-contract-economy"),
         ),
         crate("rh-sifter", plane="C", deps=("rh-events", "rh-snapshot")),
         crate("rh-observe", plane="B", deps=("rh-core",)),
@@ -136,12 +136,74 @@ def test_values_outside_the_vocabularies_are_reported(plane: str, kind: str) -> 
 
 
 @pytest.mark.parametrize(
-    ("plane", "kind"),
-    [("B", "core"), ("C", "contract"), ("tool", "machinery"), ("A", "tool"), ("B", "tool")],
+    ("name", "plane", "kind"),
+    [
+        ("rh-new", "B", "core"),
+        ("rh-contract-new", "C", "contract"),
+        ("rh-new", "tool", "machinery"),
+        ("rh-new", "A", "tool"),
+        ("rh-new", "B", "tool"),
+    ],
 )
-def test_inconsistent_plane_and_kind_are_reported(plane: str, kind: str) -> None:
+def test_inconsistent_plane_and_kind_are_reported(name: str, plane: str, kind: str) -> None:
     """Core, contract and system crates are plane A; plane tool goes with kind tool."""
-    assert found(engine(crate("rh-new", plane=plane, kind=kind))) == [("metadata", "rh-new")]
+    assert found(engine(crate(name, plane=plane, kind=kind))) == [("metadata", name)]
+
+
+PINNED = {
+    "rh-ids": ("A", "machinery"),
+    "rh-core": ("A", "core"),
+    "rh-events": ("A", "machinery"),
+    "rh-registry": ("A", "machinery"),
+    "rh-contracts": ("A", "contract"),
+    "rh-snapshot": ("A", "machinery"),
+    "rh-cli": ("tool", "tool"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(PINNED))
+def test_each_pinned_crate_must_keep_its_labels(name: str) -> None:
+    """The seven SPR-001 crates cannot be relabelled, even to another valid combination."""
+    relabel = ("A", "core") if PINNED[name] != ("A", "core") else ("A", "machinery")
+    crates = [crate(name, *relabel) if c.name == name else c for c in engine()]
+    assert ("metadata", name) in found(crates)
+
+
+def test_a_relabelled_crate_does_not_open_an_edge() -> None:
+    """rh-snapshot declared as a contract crate: reported, and the system edge is still judged."""
+    crates = [
+        crate("rh-snapshot", kind="contract") if c.name == "rh-snapshot" else c for c in engine()
+    ]
+    crates.append(crate("rh-sys-war", kind="system", deps=("rh-snapshot",)))
+    # Two label problems (the pin, and kind "contract" outside rh-contract-*), plus the edge.
+    assert sorted(found(crates)) == [
+        ("V-INSP-03", "rh-sys-war"),
+        ("metadata", "rh-snapshot"),
+        ("metadata", "rh-snapshot"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("plane", "kind"), [("A", "machinery"), ("A", "contract"), ("B", "system")]
+)
+def test_system_named_crates_are_plane_a_systems(plane: str, kind: str) -> None:
+    """rh-sys-* must be declared (A, system)."""
+    assert ("metadata", "rh-sys-war") in found(engine(crate("rh-sys-war", plane, kind)))
+
+
+@pytest.mark.parametrize(
+    ("name", "ok"),
+    [
+        ("rh-contracts", True),
+        ("rh-contract-economy", True),
+        ("rh-shadow", False),
+        ("rh-contractor", False),
+    ],
+)
+def test_kind_contract_belongs_to_contract_named_crates(name: str, ok: bool) -> None:
+    """Only rh-contracts and rh-contract-* may declare kind contract."""
+    crates = [c for c in engine() if c.name != name] + [crate(name, kind="contract")]
+    assert (found(crates) == []) is ok
 
 
 @pytest.mark.parametrize(("name", "kind"), [("rh-sys-war", "machinery"), ("rh-war", "system")])

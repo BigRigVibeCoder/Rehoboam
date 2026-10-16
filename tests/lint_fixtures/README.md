@@ -21,6 +21,8 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source co
 | `arch/plane_a_to_b/` | `bin/lint_arch.py` (V-PLN-01) | plane-A crate → plane-B crate | `VIOLATION [V-PLN-01]` |
 | `arch/plane_a_to_c/` | `bin/lint_arch.py` (V-PLN-01) | plane-A crate → plane-C crate | `VIOLATION [V-PLN-01]` |
 | `arch/missing_metadata/` | `bin/lint_arch.py` | a crate with no `[package.metadata.rehoboam]` | `VIOLATION [metadata]` |
+| `arch/relabelled_snapshot/` | `bin/lint_arch.py` (pinned labels) | rh-snapshot declared `kind = "contract"` so a system may depend on it | `VIOLATION [metadata] rh-snapshot` (and V-INSP-03 for the edge) |
+| `arch/contract_name/` | `bin/lint_arch.py` (contract naming) | `rh-shadow` declares `kind = "contract"` | `VIOLATION [metadata] rh-shadow` |
 | `arch/plane_a_rng_crate/` | `bin/lint_arch.py` (rng-crate, DEF-1) | plane-A crate → `rand` (a registry dependency, read without fetching) | `VIOLATION [rng-crate]` |
 | `arch/rng_building_block_outside_ids/` | `bin/lint_arch.py` (rng-crate, DEF-1) | `rand_chacha` in rh-core (allowed in rh-ids only) | `VIOLATION [rng-crate] rh-core` |
 | `compile_fail/plane_a_names_plane_b/` | `cargo check` (V-PLN-01, compile-fail) | plane-A code naming a plane-B type without a dependency edge | ``unlinked crate `fixture_observation` `` |
