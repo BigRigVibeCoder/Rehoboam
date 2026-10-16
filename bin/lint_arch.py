@@ -174,6 +174,18 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
     }
 )
 
+# REF: VER-SPR-007-TEST GAP-1 (Architect ruling, 2026-10-16). The API tokens through which a
+# reviewed dependency can hand plane A a float without plane-A code naming a float type (a matched
+# `ValueRef::Real(x)` and `x.to_bits()`, a comparison of two `Real`s). bin/lint_forbidden.py refuses
+# them, as it refuses a float, in the source of the crates PLANE_A_EXTERNAL_DEPS allows to use the
+# dependency; the "no floats" claim of a review note rests on this list. Keys are entries of
+# PLANE_A_EXTERNAL_DEPS (python/tests checks it). Keep it alphabetical.
+FLOAT_YIELDING_APIS = MappingProxyType(
+    {
+        "rusqlite": ("Real", "as_f64", "as_f64_or_null"),
+    }
+)
+
 # Rule clippy-config: the file names clippy reads, the one allowed place, and the lint fixtures that
 # plant a crate-local config on purpose (paths relative to the workspace root). Keep this list tiny.
 CLIPPY_CONFIG_NAMES = frozenset({"clippy.toml", ".clippy.toml"})

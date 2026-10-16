@@ -148,6 +148,11 @@ REQUIRED_GATES = (
     "(SPR-003 GAP-1)",
     "lint_forbidden float-api positive control: reexport in rh-sample's public API must FAIL "
     "(SPR-003 GAP-1)",
+    "lint_forbidden float-dep positive control: accessor in rh-snapshot must FAIL (SPR-007 GAP-1)",
+    "lint_forbidden float-dep positive control: real_bits in rh-snapshot must FAIL (SPR-007 GAP-1)",
+    "lint_forbidden float-dep positive control: real_cmp in rh-snapshot must FAIL (SPR-007 GAP-1)",
+    "lint_forbidden float-dep positive control: real_floor in rh-snapshot must FAIL (SPR-007 "
+    "GAP-1)",
     "lint_forbidden positive control: a float in a crate named rh-core must FAIL (SPR-003 GAP-3)",
     "lint_forbidden positive control: a float outside rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",

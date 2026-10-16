@@ -31,6 +31,15 @@ reports its metadata). Rules:
                       T-04; DET-3). Threshold quantities are fixed point (rh_core::fixed); floats
                       are allowed only for declared float fields (below).
 
+    float-dep         A float-yielding API of a reviewed dependency, named in bin/lint_arch.py's
+                      FLOAT_YIELDING_APIS beside its PLANE_A_EXTERNAL_DEPS entry (rusqlite:
+                      `Real`, `as_f64`, `as_f64_or_null`), in a crate that entry allows to use the
+                      dependency: `match v { ValueRef::Real(x) => x.to_bits(), .. }` hands plane A
+                      a float without naming a float type (VER-SPR-007-TEST GAP-1). Checked where
+                      the float rule applies (not tests/, benches/, examples/), and excused only
+                      as a float is, by an f32_field escape. Workspace mode only: --scan has no
+                      crate context.
+
 Paths match with any whitespace or comments around `::` (`std :: time :: Instant :: now()`, as
 in macro bodies), and are reported with it removed (DEF-4).
 
@@ -97,6 +106,7 @@ Standard library only (GOV-003 §3).
 
 import argparse
 import bisect
+import importlib.util
 import json
 import re
 import subprocess
@@ -117,6 +127,10 @@ IDENT_CHAR = re.compile(r"[A-Za-z0-9_]")
 RAW_STRING_START = re.compile(r'(?:b|c)?r(?P<hashes>#*)"')
 FLOAT_FIELD_REASON = re.compile(r"f32_field\s+(?P<column>\S+)")
 FLOAT_RULE = "float"
+# VER-SPR-007-TEST GAP-1: a float-yielding API of a reviewed dependency (bin/lint_arch.py
+# FLOAT_YIELDING_APIS), refused like a float, in the crates allowed to use that dependency.
+FLOAT_DEP_RULE = "float-dep"
+LINT_ARCH = Path(__file__).resolve().with_name("lint_arch.py")
 # Crate directories that never link into the engine: the float rule skips them (DECISION above).
 FLOAT_FREE_DIRS = frozenset({"tests", "benches", "examples"})
 # The plane-A crates exempt from the float rule, by their pinned names (module docstring; SPR-003):
@@ -126,6 +140,16 @@ FLOAT_EXEMPT_CRATES = frozenset({"rh-sample"})
 FLOAT_API_RULE = "float-api"
 # Which float rule a file gets (scan_source): the float rule, the float-api rule, or neither.
 FloatScope = Literal["rule", "zone", "none"]
+
+
+@dataclass(frozen=True)
+class FloatScan:
+    """A file's float checks: its scope, and the float-yielding dependency APIs (GAP-1)."""
+
+    scope: FloatScope = "rule"
+    deps: tuple[tuple[str, re.Pattern[str]], ...] = ()
+
+
 FLOAT_API_WHY = (
     "the float zone's public API never exposes f32, f64 or libm (SPR-003 ruling item 4): return "
     "integers or rh_core::fixed values; no escape excuses this"
@@ -506,7 +530,7 @@ def scan_source(
     report: Report,
     float_fields: frozenset[str] = frozenset(),
     *,
-    floats: FloatScope = "rule",
+    floats: "FloatScope | FloatScan" = "rule",
 ) -> None:
     """Scan one file's text and add its violations and excused findings to ``report``.
 
@@ -518,12 +542,17 @@ def scan_source(
             one of them excuses a float.
         floats: Which float rule applies to this file: ``"rule"`` the float rule (plane-A code);
             ``"zone"`` the float-api rule instead (the float zone's src/); ``"none"`` neither
-            (tests/, benches/ and examples/; see the module DECISION).
+            (tests/, benches/ and examples/; see the module DECISION). A :class:`FloatScan` adds
+            the float-yielding dependency APIs the file's crate may reach, checked under ``"rule"``.
     """
+    scan = floats if isinstance(floats, FloatScan) else FloatScan(floats)
+    floats, dep_floats = scan.scope, scan.deps
     lexed = lex(source)
     findings = [
         f for f in find_forbidden(lexed.code, path) if floats == "rule" or f.rule != FLOAT_RULE
     ]
+    if floats == "rule":
+        findings += find_float_dep(lexed.code, path, dep_floats)
     if floats == "zone":
         findings += find_float_api(lexed.code, path)
     escapes = find_escapes(lexed, path)
@@ -533,7 +562,7 @@ def scan_source(
         where = f"{finding.path}:{finding.line}:{finding.column}"
         escape = valid.get(finding.line)
         problem = None
-        if escape is not None and finding.rule == FLOAT_RULE:
+        if escape is not None and finding.rule in (FLOAT_RULE, FLOAT_DEP_RULE):
             problem = _float_escape_problem(escape, float_fields)
         elif escape is not None and finding.rule == FLOAT_API_RULE:
             problem = FLOAT_API_WHY
@@ -560,6 +589,58 @@ def scan_source(
                 f"forbidden API on line {escape.covers}; remove it"
             )
     report.files += 1
+
+
+def find_float_dep(
+    code: str, path: str, dep_floats: Sequence[tuple[str, re.Pattern[str]]]
+) -> list[Finding]:
+    """Return the float-yielding dependency APIs named in ``code`` (VER-SPR-007-TEST GAP-1)."""
+    starts = [0, *(i + 1 for i, ch in enumerate(code) if ch == "\n")]
+    found = []
+    for dependency, pattern in dep_floats:
+        for match in pattern.finditer(code):
+            line = bisect.bisect_right(starts, match.start())
+            found.append(
+                Finding(
+                    FLOAT_DEP_RULE,
+                    path,
+                    line,
+                    match.start() - starts[line - 1] + 1,
+                    match.group(0),
+                    f"a float-yielding API of {dependency} (bin/lint_arch.py FLOAT_YIELDING_APIS): "
+                    "plane A never takes a float from a dependency, named or not; read integers, "
+                    "text or blobs, or escape a declared f32_field",
+                )
+            )
+    return found
+
+
+def float_yielding_apis() -> dict[str, tuple[frozenset[str] | None, re.Pattern[str]]]:
+    """Return, per dependency in lint_arch's FLOAT_YIELDING_APIS, its allowed crates and pattern.
+
+    The lists live in ``bin/lint_arch.py`` beside ``PLANE_A_EXTERNAL_DEPS`` (one review, one place);
+    the module is loaded by path, since ``python -I`` does not put ``bin/`` on the import path.
+
+    Raises:
+        WorkspaceError: bin/lint_arch.py cannot be loaded or lacks the lists.
+    """
+    spec = importlib.util.spec_from_file_location("rh_lint_arch", LINT_ARCH)
+    if spec is None or spec.loader is None:
+        raise WorkspaceError(f"cannot load {LINT_ARCH}")
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        apis = dict(module.FLOAT_YIELDING_APIS)
+        deps = module.PLANE_A_EXTERNAL_DEPS
+        return {
+            dep: (
+                deps[dep][0],
+                re.compile(r"\b(?:" + "|".join(re.escape(t) for t in tokens) + r")\b"),
+            )
+            for dep, tokens in sorted(apis.items())
+        }
+    except (AttributeError, KeyError, OSError, SyntaxError) as err:
+        raise WorkspaceError(f"{LINT_ARCH}: no usable FLOAT_YIELDING_APIS: {err!r}") from err
 
 
 def rust_files(roots: Iterable[Path]) -> list[Path]:
@@ -600,6 +681,7 @@ def scan_paths(
     paths: Iterable[Path],
     float_fields: frozenset[str] = frozenset(),
     float_exempt: frozenset[Path] = frozenset(),
+    dep_floats: dict[Path, list[tuple[str, re.Pattern[str]]]] | None = None,
 ) -> Report:
     """Scan every ``.rs`` file under ``paths`` as plane-A code.
 
@@ -608,6 +690,7 @@ def scan_paths(
         float_fields: The columns the system specs declare ``f32_field``.
         float_exempt: Roots among ``paths`` whose files the float rule skips entirely (the float
             zone crate's directory); every other rule still applies to them.
+        dep_floats: Per root, the float-yielding dependency APIs its crate may reach.
 
     Raises:
         OSError: A file cannot be read.
@@ -615,15 +698,23 @@ def scan_paths(
     """
     report = Report(violations=[], escaped=[])
     scopes: dict[Path, FloatScope] = {}
+    deps_of: dict[Path, list[tuple[str, re.Pattern[str]]]] = {}
     for root in paths:
         for file in rust_files([root]):
             if not float_rule_applies(file, root):
                 scopes.setdefault(file, "none")
             else:
                 scopes.setdefault(file, "zone" if root in float_exempt else "rule")
+            deps_of.setdefault(file, (dep_floats or {}).get(root, []))
     for file in sorted(scopes):
         source = file.read_text(encoding="utf-8")
-        scan_source(source, display(file), report, float_fields, floats=scopes[file])
+        scan_source(
+            source,
+            display(file),
+            report,
+            float_fields,
+            floats=FloatScan(scopes[file], tuple(deps_of[file])),
+        )
     return report
 
 
@@ -729,11 +820,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             crates = plane_a_crate_dirs(args.manifest_path)
             names = ", ".join(name for name, _ in crates)
             scope = f"{len(crates)} crates scanned as plane A ({names})"
+            apis = float_yielding_apis()
+            dep_floats = {
+                directory: [
+                    (dep, pattern)
+                    for dep, (users, pattern) in apis.items()
+                    if users is None or name in users
+                ]
+                for name, directory in crates
+            }
+            listed = sorted(
+                f"{dep} in {', '.join(sorted(users)) if users else 'every crate'}"
+                for dep, (users, _) in apis.items()
+            )
+            scope += f"; float-yielding APIs refused: {'; '.join(listed) or 'none'}"
+            # The float-zone note stays last: controls match it together with the file count.
             zone = frozenset(d for name, d in crates if name in FLOAT_EXEMPT_CRATES)
             if zone:
                 exempt = ", ".join(sorted(n for n, d in crates if d in zone))
                 scope += f"; float rule exempts {exempt} only (SPR-003 float zone)"
-            report = scan_paths((directory for _, directory in crates), float_fields, zone)
+            report = scan_paths(
+                [directory for _, directory in crates], float_fields, zone, dep_floats
+            )
     except (WorkspaceError, SpecError, OSError, UnicodeDecodeError) as err:
         print(f"lint_forbidden: cannot read the code to scan: {err}", file=sys.stderr)
         return EXIT_UNREADABLE

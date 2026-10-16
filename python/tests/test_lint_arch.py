@@ -11,6 +11,7 @@ from lint_arch import (
     EXIT_OK,
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
+    FLOAT_YIELDING_APIS,
     PLANE_A_EXTERNAL_DEPS,
     UNKEYED_RNG_CRATES,
     Crate,
@@ -712,3 +713,12 @@ def test_the_repository_has_one_clippy_config_and_the_allowed_fixture() -> None:
     assert check_clippy_configs(REPO) == []
     fixture = REPO / "tests" / "lint_fixtures" / "clippy_config" / "crate_local"
     assert [v.crate for v in check_clippy_configs(fixture)] == ["crates/rh-sample/clippy.toml"]
+
+
+def test_float_yielding_apis_name_reviewed_dependencies() -> None:
+    """VER-SPR-007-TEST GAP-1: every list belongs to a reviewed dependency, sorted and non-empty."""
+    assert set(FLOAT_YIELDING_APIS) <= set(PLANE_A_EXTERNAL_DEPS)
+    assert list(FLOAT_YIELDING_APIS) == sorted(FLOAT_YIELDING_APIS)
+    for name, tokens in FLOAT_YIELDING_APIS.items():
+        assert tokens and len(set(tokens)) == len(tokens), name
+    assert set(FLOAT_YIELDING_APIS["rusqlite"]) == {"Real", "as_f64", "as_f64_or_null"}
