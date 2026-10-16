@@ -19,4 +19,9 @@ rh-events = { version = "0.0.0", path = "../rh-events" }
 rh-ids = { version = "0.0.0", path = "../rh-ids" }
 twox-hash = { version = "=2.1.5", default-features = false, features = ["xxhash3_64", "xxhash3_128"] }
 rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
+# SPR-007 ruling 2: keyframes as Arrow IPC with zstd; integer, text and binary columns only.
+arrow-array = { version = "=60.0.0", default-features = false }
+arrow-buffer = { version = "=60.0.0", default-features = false }
+arrow-ipc = { version = "=60.0.0", default-features = false, features = ["zstd"] }
+arrow-schema = { version = "=60.0.0", default-features = false }
 
