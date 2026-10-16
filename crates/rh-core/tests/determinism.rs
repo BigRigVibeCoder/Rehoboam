@@ -504,3 +504,49 @@ fn the_reported_error_is_the_same_at_every_thread_count() {
     assert_eq!(seen[0].0, "X1.a: first");
     assert!(seen.iter().all(|s| s == &seen[0]), "{seen:?}");
 }
+
+/// G-c: columns are materialised only when the engine is built, from the owners' declared writes;
+/// a run-time read of a column the world does not have is fatal, never a creation.
+#[test]
+fn columns_come_only_from_declared_writes() {
+    fn reads_ghost(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        v.read("ghost.x").map(|_| ())
+    }
+    let w = Stub::new("X1.w").writes("w.x").at(Pulse::Day, Phase::Vital);
+    let r = Stub::new("X2.r")
+        .writes("r.x")
+        .reads("ghost.x", "X9.ghost", Lag::Lagged)
+        .at(Pulse::Day, Phase::Polity)
+        .stepping(reads_ghost);
+    let t = agreeing_specs(&[w.clone(), r.clone()]);
+    let reg = register(vec![w.boxed(), r.boxed()], &t).unwrap();
+    let mut engine = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        reg,
+        WorldTables::new(),
+        SimTime::EPOCH,
+    );
+    let names: Vec<&str> = engine.tables().names().collect();
+    assert_eq!(
+        names,
+        ["r.x", "w.x"],
+        "the declared writes, empty; nothing else"
+    );
+    assert!(engine.tables().get("w.x").unwrap().is_empty());
+    let err = engine.advance_until(SimTime::EPOCH, |_, _| {}).unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "X2.r accesses ghost.x, which the world does not have (columns are created only from declared writes)"
+    );
+    assert!(
+        engine.tables().get("ghost.x").is_none(),
+        "nothing was created"
+    );
+}
