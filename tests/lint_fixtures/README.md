@@ -18,6 +18,8 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source co
 | `deny/gpl_dependency/` | licence ledger, `cargo deny list` (records, never gates) | a path dependency licensed `GPL-3.0-only` | must succeed and list `GPL-3.0-only` |
 | `arch/system_to_system/` | `bin/lint_arch.py` (V-INSP-03) | system crate → system crate | `VIOLATION [V-INSP-03]` |
 | `arch/system_to_disallowed/` | `bin/lint_arch.py` (V-INSP-03) | system crate → `rh-snapshot` | `VIOLATION [V-INSP-03]` |
+| `arch/system_build_dependency/` | `bin/lint_arch.py` (V-INSP-03, DEF-5) | system crate → `rh-snapshot` as a build-dependency | `VIOLATION [V-INSP-03] … (as a build-dependency)` |
+| `arch/system_package_alias/` | `bin/lint_arch.py` (V-INSP-03, DEF-5) | system crate → `rh-snapshot` under the alias `rh-core` (`package = "rh-snapshot"`) | `VIOLATION [V-INSP-03] rh-sys-a: depends on rh-snapshot` |
 | `arch/plane_a_to_b/` | `bin/lint_arch.py` (V-PLN-01) | plane-A crate → plane-B crate | `VIOLATION [V-PLN-01]` |
 | `arch/plane_a_to_c/` | `bin/lint_arch.py` (V-PLN-01) | plane-A crate → plane-C crate | `VIOLATION [V-PLN-01]` |
 | `arch/missing_metadata/` | `bin/lint_arch.py` | a crate with no `[package.metadata.rehoboam]` | `VIOLATION [metadata]` |
