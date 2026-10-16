@@ -84,25 +84,25 @@ fixed_point = false
 # compacted at Bookkeeping of a death instant (SPR-011 ruling 5), so kinship through the dead walks these life-course
 # columns, never person.mother/father. PR #37's M2 freeze completes the rest of life_course.*; the two merge.
 [[owns]]
-column = "life_course.id"
+column = "life_course.person_id"
 entity = "life_course"
 type = "u64"
 plane = "A"
-meaning = "PersonId of everyone ever born, immigrated or founded (one entry each, V-DATA-04); never removed"
+meaning = "PersonId of the person the row records; unique in the log"
 fixed_point = false
 [[owns]]
 column = "life_course.mother"
 entity = "life_course"
 type = "u64"
 plane = "A"
-meaning = "PersonId of the mother, or 0 for a founder or immigrant without one; written once at birth; kept after death"
+meaning = "As person.mother at entry; 0 for founders and immigrants without one"
 fixed_point = false
 [[owns]]
 column = "life_course.father"
 entity = "life_course"
 type = "u64"
 plane = "A"
-meaning = "PersonId of the father, or 0; written once at birth; kept after death"
+meaning = "As person.father at entry; 0 when unknown, for founders and immigrants without one"
 fixed_point = false
 
 # Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4): one payload per command, which every sender uses.

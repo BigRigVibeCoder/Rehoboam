@@ -494,7 +494,7 @@ owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
 [[reads]]
-column = "life_course.id"
+column = "life_course.person_id"
 owner = "M2.demography"
 lag = "lagged"
 use = "identity"
