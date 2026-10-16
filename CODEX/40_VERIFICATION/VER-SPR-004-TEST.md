@@ -208,3 +208,43 @@ Verdict and counts agree on 3,404 of 3,420 (3,330 of 3,414 before). The 16 diver
 ### 8.4 Next step
 
 DEF-9 and DEF-10 need a Developer fix and fixtures (non-ASCII header, one per form). After that, the items to repeat are `fuzz.py` (expect 0 verdict differences apart from the explicit tags) and `cases7`/`cases8`/`cases9`/`cases10`.
+
+## 9. Re-verification at 58aa4d8
+
+Tested commit: `58aa4d8` (on top of `926d06b`). The harness of the earlier rounds ran unchanged against `rh-cli`. New probe sets: `cases12` (232 cases: 22 forms in sequence, mapping and block context, each with no prefix, a 2-, 3- and 4-byte prefix line, and a non-ASCII quoted key on the same line before the form), `cases13` (20 cases: BOM, CRLF, CR, 500 four-byte characters, combining marks, a ZWJ sequence, non-ASCII after the form), and `fuzz2` (1,500 mutations that insert non-ASCII text, YAML line-break characters and the `?`, `:` and tab forms). On a clean checkout of the head `bin/check_all.sh` is green with 102 checks.
+
+### 9.1 Verdict per item
+
+| # | Item | Verdict | Basis |
+|---|---|---|---|
+| 1 | DEF-9 (`?` in flow scalars, empty keys, after non-ASCII text) | **FIXED** | `cases12`: 232 of 232 agree with the reference on verdict, counts and every line (148 load errors, 68 schema errors, 16 valid, so the set is not vacuous). Prefixes of 2, 3 and 4 bytes, a non-ASCII quoted key on the same line before the form, a non-ASCII character after the form, and BOM, CRLF, CR, 500 four-byte characters, combining marks and a ZWJ sequence (`cases13`, 20 of 20) all behave. `cases7` to `cases10` (119 cases, rerun): 0 differences. Tabs: all 28 placements still agree. |
+| 2 | DEF-10 (`?` at the start of a scalar) | **FIXED; my §8 claim was wrong for block context** | I checked the Developer's correction against PyYAML directly. Block value `a: ?x` is the string `?x` (no error); so are `?x: 1` (key) and `- ?x` (sequence item); `a: ? x` and `a: ?` are scanner errors; in flow, `{a: ?x}`, `{a: x?}`, `{a: ??x}`, `{a: ?:x}`, `{a: ?}` are parser errors, `{?x: 1}` is `{'x': 1}`, and `[?x]`, `[? x]` and `[?]` read a one-entry mapping. My `epoch_label: ?x` probe sat inside the flow mapping `calendar`, which is the flow-value case. Rust now matches PyYAML in all of these contexts (`cases12`, `cases8`, 0 differences). Retract the block-context part of DEF-10. |
+| 3 | DEF-8 residual | **FIXED** | A `[[reads]]` entry whose named owner has a spec that does not declare the column: `VIOLATION [single-writer] S7.vows: reads person.ghost, which M2.demography's spec does not declare in [[owns]]`. An owner with no spec stays a NOTE (exit 0). A real column with the wrong owner, with an owner that has no spec, and with an unknown owner system, all give a violation. 42 of 43 ownership probes pass; the 43rd (a non-UTF-8 spec) is refused with exit 3, which is right. |
+| 4 | Regression | **PASS, one new class (DEF-11)** | Below. |
+
+### 9.2 New defect
+
+**DEF-11 (low-medium): the YAML 1.1 line-break characters U+0085 (NEL), U+2028 and U+2029 are ordinary text in Rust and line breaks in PyYAML.** Clause: the GAP-1 ruling (both validators keep YAML 1.1); V-WC-04.
+- Reproduction: `sed $'s/  seed: 1$/  seed: 1\xe2\x80\xa8/' specs/manifest/examples/solo.yaml > f.yaml` (LS after `seed: 1`; the same with `\xe2\x80\xa9` and `\xc2\x85`).
+- Expected: `PY f.yaml` gives `VALID`; Rust must too.
+- Actual: `RS f.yaml` gives `LOAD ERROR: YAML syntax error: mapping values are not allowed ...`, because the character is part of the scalar `1<LS>` and the next line's key is read as inside it. The reverse also occurs: the character in the middle of a plain scalar (`display_name: Solo<LS>world`) is a PyYAML scanner error (it breaks the line, leaving a key without a colon) and a valid string in Rust; the character inside a comment ends the comment in PyYAML (the rest of the comment becomes text and gives `SCHEMA INVALID`) and is ignored by Rust (`VALID`). Inside a double-quoted scalar both read the file.
+- Extent: all 102 verdict differences in `fuzz2` (1,500 cases) contain at least one of the three characters; no case without them differs. 5 of the 6 message-only differences contain one as well. In the shipped examples none appears. The risk is prose pasted from a word processor or a web page, which does contain U+2028 and U+0085 from time to time.
+- Fix options: either have the reader normalise NEL, LS and PS to `\n` before parsing (PyYAML's reader treats them as breaks everywhere), or refuse them with a `LOAD ERROR` so the manifest does not silently mean something else. Then add one fixture per character in each of the four positions above to `tests/manifest_parity/`.
+
+### 9.3 Regression
+
+| Set | Cases | Verdict or count differs | Message differs only | Agree on every line |
+|---|---|---|---|---|
+| `cases1` | 315 | 4 (`!!set`, `!!binary`, `!!timestamp`, `!!int abc`: DEF-3, deferred; the last crashes the reference) | 0 | 311 |
+| `cases2` | 210 | 0 | 1 (list shown as `[...]`) | 209 |
+| `cases4` (bounds sweep from the current schema) | 1,293 | 0 | 0 | 1,293 |
+| `cases5`, `cases6` (very large numbers) | 102 | 0 | 0 | 102 |
+| `fuzz` (ASCII mutations) | 1,500 | 0 (was 12) | 1 (a date shown as `date(...)`) | 1,499 |
+| **Original total** | **3,420** | **4** (was 16) | **2** (was 3) | **3,414** (was 3,401) |
+| `fuzz2` (non-ASCII, line-break and `?` mutations) | 1,500 | 102 (all DEF-11) | 6 (5 DEF-11, 1 a dict shown as `{...}`) | 1,392 |
+
+Verdict and counts agree on 3,416 of the 3,420 original manifests. The 4 remaining are the explicit YAML tags of DEF-3, deferred. New sets: `cases7` 63, `cases8` 33, `cases9` 11, `cases10` 12, `cases12` 232, `cases13` 20: 0 differences in any. `cases11` (64 key forms): unchanged from §8 (datetime-key location text, and invalid dates that crash the reference). Registry variants (113): 52 differ by design (GAP-5), unchanged; Registry round trip 35 of 35 sections with 0 differences.
+
+### 9.4 Next step
+
+DEF-11 needs a Developer decision (normalise or refuse) and fixtures. After that, repeat `fuzz2` (expect 0 verdict differences) and `cases12`. DEF-3, DEF-6/GAP-2 and GAP-6 stay deferred as ruled.
