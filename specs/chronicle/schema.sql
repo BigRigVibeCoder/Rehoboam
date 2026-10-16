@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS life_course (          -- plane A
     timeline_id UINTEGER  NOT NULL,
     person_id   UBIGINT   NOT NULL,            -- H64(mother_id, parity) | H64(seed,"founder",k) | H64(seed,"immigrant",origin,t,k)
     origin      UTINYINT  NOT NULL,            -- 0 born, 1 founder, 2 immigrant
+    sex         UTINYINT  NOT NULL,            -- 0 male, 1 female, as at entry (M2 life_course.sex; REV-P1a NEW-7)
     mother_id   UBIGINT,
     father_id   UBIGINT,                       -- social father as recorded by the sim
     birth_tick  BIGINT    NOT NULL,            -- may be negative for founders
