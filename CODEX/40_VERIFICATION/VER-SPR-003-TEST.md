@@ -305,3 +305,58 @@ Clippy reads the configuration file nearest the crate being checked, not the roo
 ### 9.8 Not run in this pass
 
 The sampler statistics, determinism builds and conversion checks (no code change since `743ce83`; section 8.1 holds); a `~/.config/clippy` or `CLIPPY_CONF_DIR` environment override (local to a machine, like `~/.cargo/config.toml`); rustdoc-JSON ground truth for `float-api`.
+
+## 10. Re-verification at `e6e03d25df14f6663d3e2dd1ef9ac7ad2e366a5b` (126 checks, CI run 38877580167)
+
+**BLUF:** GAP-12 and GAP-11b are fixed against their reproductions and against every evasion I tried except one contrived route, and the regression of the 13 mutations is clean. The clean copy is 126 PASS, 0 FAIL. **One hole is left in `clippy-config` (GAP-13):** the walker skips directories named `target`, `.git`, `.venv` and `node_modules` at any depth and does not follow symlinks, so a plane-A crate directory that is a symlink into `node_modules/` carries its own `clippy.toml` (minus `f64::ln`) past the rule, and `x.ln()` then passes all 126 checks. It needs a committed `node_modules/` directory and a symlink, so it is deliberate, not accidental; the fix is small.
+
+Method as before: `git archive` of `e6e03d2`, a fresh copy and target directory per mutation, the whole `bin/check_all.sh` tier each time.
+
+### 10.1 Regression of the 13 mutations
+
+| IDs | Result at `e6e03d2` |
+|---|---|
+| B06, B09, B10, B11 | red, `lint_forbidden` |
+| C07, C08 and its six spellings (`0.2`, `^0.2.16`, `~0.2.16`, `>=0.2.16`, `=0.2`, `0.2.16`), C09 | red, `lint_arch` |
+| D02, D03, D05 | red, pytest |
+| E02 | red, the "float in a crate named `rh-core`" control |
+| B05 (`libm::fma`) | green, by ruling |
+| Sections 8 and 9 reproductions H01 (`[lints.clippy]` override), H03 (target-specific `libm`), H04 (`features = ["arch"]`) | still red, `lint_arch` |
+
+### 10.2 GAP-12: the `clippy-config` rule
+
+| Mutation (each with `x.ln()` in `rh-sample`) | Result |
+|---|---|
+| K01 / L09b: `crates/rh-sample/clippy.toml` = the root list minus `f64::ln` and `f64::exp` | red, `lint_arch` (`clippy-config`). Was green in section 9. |
+| K02 / L09c: `crates/rh-sample/.clippy.toml` | red, `lint_arch` |
+| K03: `crates/rh-sample/src/clippy.toml` (clippy would not read it, the rule flags it anyway) | red, `lint_arch` |
+| K04: `crates/rh-sample/clippy.toml` as a symlink to `../../clippy-alt` | red, `lint_arch` (a symlinked file is listed under its own name) |
+| K05: `.cargo/config.toml` `[env] CLIPPY_CONF_DIR = { value = "conf", relative = true }` with `conf/clippy.toml` minus `ln` | red, `lint_arch` (the file in `conf/` is flagged) |
+| K06: the same `[env]` pointing at `node_modules/c/clippy.toml` (a directory the walker skips) | red, but **at the existing "std `ln` in `rh-sample` must FAIL" clippy control**, not at `clippy-config`: the `[env]` entry applies to the control's clippy run too, the stripped list lets the planted `ln` through, and the control stops failing. This proves clippy honours the variable. |
+| K07: the same pointing at `target/c/` | red, at the same control |
+| K09: the allow-listed fixture's `clippy.toml` reached by a symlink named `clippy.toml` from the real crate | red, `lint_arch` |
+| K10: the real crate moved into the allow-listed fixture directory (`tests/lint_fixtures/clippy_config/crate_local/crates/rh-sample`) and reached by a directory symlink, with a local `clippy.toml` | red, at "a crate-local clippy.toml must FAIL" (the fixture's own control), because replacing the fixture's contents breaks it. I did not isolate whether `clippy-config` alone passes it: the allow-list is by exact path, so the real crate there would be exempt; the fixture control is what stopped it. |
+| **K08: `crates/rh-sample` is a symlink to `node_modules/rh-sample`, which holds the crate, a `clippy.toml` minus `f64::ln`, and `x.ln()`** | **green: 126 of 126 checks pass (GAP-13)** |
+
+`CLIPPY_CONF_DIR` in the process environment is rejected by the rule and its pytest, as designed. Set through `.cargo/config.toml` `[env]` it is not visible to the rule (the lint process does not inherit cargo's `[env]`); it is stopped by the clippy control (K06, K07) and by the flagged file (K05), not by `clippy-config`. That works today because the control runs under the same cargo configuration; a control that ran with another working directory would lose it.
+
+### 10.3 GAP-11b: `use` renames
+
+| Mutation | Result |
+|---|---|
+| M01 / A03: `use core::primitive::f64 as Fl;` then `pub fn leak() -> Fl` | red, `lint_forbidden` (`float-api`). Was green in section 9. |
+| A04: the rename, then `type G = Fl;` | red |
+| M02: nested `use core::primitive::{f64 as Fl, f32 as Gl};` | red |
+| M03: `use core::primitive::*;` then `-> f64` | red (the bare name is in the signature) |
+| M04: `use core::primitive as pr;` then `-> pr::f64` | red |
+| M05: `type Fl = ::core::primitive::f64;` | red |
+| A05: trait method `fn get(&self) -> f64;` | green, a documented residual |
+| M06 | not a trial: my snippet named no float; ignore |
+
+### 10.4 New gap
+
+**GAP-13: `clippy-config` does not see a config that clippy reads through a symlinked crate directory or a skipped directory.** The walker prunes `target`, `.git`, `.venv` and `node_modules` at every depth and uses `os.walk` without following links, while clippy looks in the crate's manifest directory exactly as cargo resolved it. Reproduction: K08. Recommendation: mirror what clippy does instead of crawling the tree. For every workspace member, look for `clippy.toml` and `.clippy.toml` in its manifest directory and in each ancestor up to the root, with plain `Path.exists()` (which follows symlinks), and prune only `target/` and `.git/` at the root in the crawl; the allow-list stays. 85%. Accepted as residual is also reasonable given the route needs a committed `node_modules/` and a symlinked member.
+
+### 10.5 Not run in this pass
+
+The sampler statistics, determinism builds and conversion checks (no code change since `743ce83`; section 8.1 holds); `CLIPPY_CONF_DIR` or a `clippy.toml` above the repository root (local to a machine); a `float-api` ground truth from rustdoc JSON.
