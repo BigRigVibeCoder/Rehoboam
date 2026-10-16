@@ -1,0 +1,6 @@
+# Positive control for the V-DET-19 float rule (SPR-010 T-04; tests/lint_fixtures/README.md); not in the
+# Rehoboam workspace. fixture-sys is a plane-A system crate with a float threshold in src/ (must FAIL)
+# and a float statistic in tests/ (exempt from the float rule, so never reported).
+[workspace]
+members = ["fixture-sys"]
+resolver = "3"

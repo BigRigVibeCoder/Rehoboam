@@ -54,7 +54,7 @@ version: 1.1.0
 ### T-04: The float gate
 - **Deliverable:** `bin/lint_forbidden.py` gains the V-DET-19 float rule for plane A: `f32`/`f64` only in items marked as declared float fields (`f32_field` in the system spec), with the same escape syntax and a positive control
 - **Acceptance:** A float threshold planted in a plane-A fixture fails `bin/check_all.sh`
-- **Status:** [ ] not started
+- **Status:** [x] done: rule `float` in `bin/lint_forbidden.py`; a float is excused only by `// LINT-ALLOW(forbidden-api): f32_field <entity.column>` naming a column a spec declares `f32_field`; crates' `tests/`, `benches/`, `examples/` are exempt from this rule only (DECISION in the script). Controls: `tests/lint_fixtures/forbidden/planted/float_*.rs`, `forbidden/float_workspace/` (must FAIL), `forbidden/float_field/` (must pass)
 
 ## Verification assignment (Testers)
 

@@ -11,9 +11,11 @@ from lint_forbidden import (
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
     Report,
+    declared_float_fields,
     lex,
     main,
     rust_files,
+    scan_paths,
     scan_source,
 )
 
@@ -123,14 +125,14 @@ def test_raw_identifiers_are_code() -> None:
         ("let x: u8 = rand::random();", "rand-random"),
         ("use rand::{random, Rng};", "rand-random"),
         ("let x = rand::random_range(0..10);", "rand-random"),
-        ("let b = rand::random_bool(0.5);", "rand-random"),
+        ("let b = rand::random_bool(p);", "rand-random"),
         ("let b = random_ratio(1, 3);", "rand-random"),
         ("let n = rand::random_iter::<u8>().take(3).count();", "rand-random"),
         ("let r = SmallRng::seed_from_u64(1);", "std-rng"),
         ("let r = Generator::from_os_rng();", "std-rng"),
         ("getrandom::fill(&mut buf);", "std-rng"),
         ("let y = a.mul_add(b, c);", "mul-add"),
-        ("let y = f64::mul_add(a, b, c);", "mul-add"),
+        ("let y = Real::mul_add(a, b, c);", "mul-add"),
         ("let t = Instant::now();", "wall-clock"),
         ("use std::time::Instant;", "wall-clock"),
         ("use std::time::*;", "wall-clock"),
@@ -283,6 +285,12 @@ PLANTED = {
     "spaced_rand": ("thread-rng", "rand::rng"),
     "path_attr": ("source-include", "#[path"),
     "include_macro": ("source-include", "include!("),
+    "float_type": ("float", "f32"),
+    "float_literal": ("float", "0.5"),
+    "float_suffix": ("float", "2e-3f64"),
+    "float_conversion": ("float", "to_f64"),
+    "float_escape_reason": ("float", "f64"),
+    "float_undeclared_field": ("float", "f32"),
 }
 
 
@@ -337,3 +345,153 @@ def test_main_reports_an_unreadable_file(tmp_path: Path) -> None:
     bad = tmp_path / "bad.rs"
     bad.write_bytes(b"\xff\xfe unsafe")
     assert main(["--scan", str(bad)]) == EXIT_UNREADABLE
+
+
+# --- The float rule (SPR-010 T-04; DET-3) --------------------------------------------------------
+
+FIELDS = frozenset({"region.soil_moisture"})
+
+
+def float_texts(source: str, fields: frozenset[str] = frozenset()) -> list[str]:
+    """Return the matched text of every float violation in a snippet."""
+    report = Report(violations=[], escaped=[])
+    scan_source(source, "snippet.rs", report, fields)
+    return [
+        v.split("`")[1] for v in report.violations if v.startswith("VIOLATION [V-DET-19/float]")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("snippet", "texts"),
+    [
+        ("let x: f32 = y;", ["f32"]),
+        ("fn f(a: f64) -> f64 { a }", ["f64", "f64"]),
+        ("let m = f64::MAX;", ["f64"]),
+        ("let r = n as f64;", ["f64"]),
+        ("let r = n.to_f64();", ["to_f64"]),
+        ("let q = Q::from_f32(v);", ["from_f32"]),
+        ("let p = 0.5;", ["0.5"]),
+        ("if hunger > 1.25 { }", ["1.25"]),
+        ("let e = 1e-3;", ["1e-3"]),
+        ("let e = 2E9;", ["2E9"]),
+        ("let s = 3f32;", ["3f32"]),
+        ("let s = 1_000.5_f64;", ["1_000.5_f64"]),
+        ("let t = 1.;", ["1."]),
+        ("let range = 0.0..1.0;", ["0.0", "1.0"]),
+        ("let r = 0..=2.5e1;", ["2.5e1"]),
+    ],
+)
+def test_each_float_form_is_caught(snippet: str, texts: list[str]) -> None:
+    """Float types, conversions named after them, and float literals are all findings."""
+    assert float_texts(snippet + "\n") == texts
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "let x = t.0.1;",
+        "for i in 0..5 {}",
+        "let m = 1.max(2);",
+        "let h = 0x1e5;",
+        "let b = 0b1010_1010;",
+        "let n = 1_000_u32;",
+        "struct F { f32_field: u8 }",
+        "let buf64 = [0u8; 64];",
+        "let q = Q16_16::from_ratio(1, 2);",
+        'let s = "0.5 f64";',
+        "// a rate of 0.5 as f64",
+    ],
+)
+def test_float_near_misses_are_not_flagged(snippet: str) -> None:
+    """Tuple indices, ranges, method calls on integers, hex and identifiers are not floats."""
+    assert scan(snippet + "\n").violations == []
+
+
+def test_a_declared_float_field_escape_excuses_the_float() -> None:
+    """`f32_field <column>` naming a declared column excuses the float and is counted."""
+    source = "pub moisture: f32, // LINT-ALLOW(forbidden-api): f32_field region.soil_moisture\n"
+    report = Report(violations=[], escaped=[])
+    scan_source(source, "snippet.rs", report, FIELDS)
+    assert report.violations == []
+    assert len(report.escaped) == 1
+    assert report.escaped[0].startswith("ESCAPE [V-DET-19/float] `f32`")
+
+
+@pytest.mark.parametrize(
+    ("reason", "message"),
+    [
+        ("needed for the heuristic", "the escape must read `f32_field <entity.column>`"),
+        ("f32_field region.fertility", "`region.fertility` is not a column any system spec"),
+        ("f32_field", "the escape must read `f32_field <entity.column>`"),
+    ],
+)
+def test_any_other_escape_leaves_the_float_a_violation(reason: str, message: str) -> None:
+    """A generic reason, an undeclared column, or a missing column never excuses a float."""
+    report = Report(violations=[], escaped=[])
+    scan_source(f"let x: f32 = y; // LINT-ALLOW(forbidden-api): {reason}\n", "s.rs", report, FIELDS)
+    assert len(report.violations) == 1
+    assert message in report.violations[0]
+    assert report.escaped == []
+
+
+def test_a_generic_escape_still_excuses_other_rules() -> None:
+    """Only floats need the f32_field form; other rules keep the plain escape."""
+    source = "let y = a.mul_add(b, c); // LINT-ALLOW(forbidden-api): a reviewed exception\n"
+    assert scan(source).violations == []
+
+
+def test_the_float_rule_skips_tests_benches_and_examples(tmp_path: Path) -> None:
+    """Only a crate's top-level tests/, benches/ and examples/ are exempt, and only from floats."""
+    for rel in ["src/lib.rs", "src/tests/mod.rs", "tests/a.rs", "benches/b.rs", "examples/c.rs"]:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("let x: f64 = 0.5; let m: HashMap<u8, u8>;\n")
+    report = scan_paths([tmp_path])
+    floats = sorted({v.split(" at ")[1].split(":")[0] for v in report.violations if "/float]" in v})
+    maps = [v for v in report.violations if "/hash-collections]" in v]
+    root = tmp_path.as_posix()
+    assert [f.removeprefix(root + "/") for f in floats] == ["src/lib.rs", "src/tests/mod.rs"]
+    assert len(maps) == 5
+
+
+def test_a_file_given_directly_is_always_checked_for_floats(tmp_path: Path) -> None:
+    """--scan of a file applies the float rule whatever directory the file is in."""
+    planted = tmp_path / "tests" / "planted.rs"
+    planted.parent.mkdir()
+    planted.write_text("let x: f32 = y;\n")
+    assert len(scan_paths([planted]).violations) == 1
+
+
+def test_declared_float_fields_reads_only_f32_field_columns(tmp_path: Path) -> None:
+    """Columns of other types, and the template, declare no float field."""
+    (tmp_path / "M1.a.odd.toml").write_text(
+        '[[owns]]\ncolumn = "region.moisture"\ntype = "f32_field"\n'
+        '[[owns]]\ncolumn = "region.fertility"\ntype = "q16_16"\n'
+    )
+    (tmp_path / "_template.odd.toml").write_text('[[owns]]\ncolumn = "x.y"\ntype = "f32_field"\n')
+    (tmp_path / "notes.toml").write_text('[[owns]]\ncolumn = "z.w"\ntype = "f32_field"\n')
+    assert declared_float_fields(tmp_path) == frozenset({"region.moisture"})
+
+
+def test_the_float_field_fixture_passes_with_its_specs(capsys: pytest.CaptureFixture[str]) -> None:
+    """The negative control: a declared f32_field escape is accepted and counted."""
+    fixture = FIXTURES / "float_field"
+    args = ["--scan", str(fixture / "declared.rs"), "--specs", str(fixture / "specs")]
+    assert main(args) == EXIT_OK
+    assert "0 violations; 1 escapes; 1 declared f32_field columns" in capsys.readouterr().out
+
+
+def test_the_float_workspace_reports_src_and_not_tests(capsys: pytest.CaptureFixture[str]) -> None:
+    """A float threshold in a plane-A crate's src/ fails; its tests/ statistic is exempt."""
+    assert main(["--manifest-path", str(FIXTURES / "float_workspace" / "Cargo.toml")]) == 1
+    out = capsys.readouterr().out
+    violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
+    assert len(violations) == 3
+    assert all("fixture-sys/src/lib.rs" in v for v in violations)
+
+
+def test_an_unreadable_spec_is_an_error(tmp_path: Path) -> None:
+    """A spec that does not parse, or a missing spec directory, is exit 2, never a pass."""
+    (tmp_path / "M1.bad.odd.toml").write_text("[[owns]\n")
+    assert main(["--scan", str(FIXTURES / "planted" / "unsafe.rs"), "--specs", str(tmp_path)]) == 2
+    missing = tmp_path / "missing"
+    assert main(["--scan", str(FIXTURES / "planted" / "unsafe.rs"), "--specs", str(missing)]) == 2

@@ -114,6 +114,8 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   random_ratio:rand-random:random_ratio random_iter:rand-random:random_iter mul_add:mul-add:mul_add
   instant:wall-clock:Instant::now system_time:wall-clock:SystemTime unsafe:unsafe:unsafe
   spaced_path:wall-clock:time::Instant spaced_rand:thread-rng:rand::rng
+  float_type:float:f32 float_literal:float:0.5 float_suffix:float:2e-3f64 float_conversion:float:to_f64
+  float_escape_reason:float:f64 float_undeclared_field:float:f32
   path_attr:source-include:#[path include_macro:source-include:include!("
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
@@ -217,6 +219,8 @@ fixed_point_compile_controls &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
+run "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)" "fail:VIOLATION [V-DET-19/float] \`f32\` at tests/lint_fixtures/forbidden/float_workspace/fixture-sys/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_workspace/Cargo.toml &&
+run "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)" "pass:0 violations; 1 escapes; 1 declared f32_field columns" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/float_field/declared.rs --specs tests/lint_fixtures/forbidden/float_field/specs &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
