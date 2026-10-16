@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.1
+version: 1.1.0
 ---
 
 > **BLUF:** Make every state reproducible and checkable: three plane hashes, Arrow keyframes and the SQLite input journal. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -17,7 +17,7 @@ version: 1.0.1
 # SPR-007 — Plane hashes, keyframes and the input journal
 
 - **Roadmap item:** `docs/11` P0.5 · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-005 · **Plan approved by the director 2026-10-16** (P0 batch)
+- **Depends on:** SPR-005; T-02 also on SPR-006, because a keyframe holds the pending timers (Architect, 2026-10-16: T-01, T-03 and T-04 may run alongside SPR-006; T-02 and the merge follow it) · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** ADR-0006, ADR-0024 (plane hashes), ADR-0007; `05.9` IF-2 (journal record)
 - **Requirements covered:** DET-1, DET-7, DET-11
 
