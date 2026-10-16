@@ -1,4 +1,4 @@
-# Reference world 0, the first rung of the complexity ladder (director's ruling D4, 2026-10-16):
+# Reference world solo, rung 0 of the complexity ladder (director's ruling D4, 2026-10-16):
 # one person on a tiny map. It tests the engine end to end with the least possible world:
 #   life course (ageing, illness, death), a household's food (harvest, stores, hunger),
 #   daily life at minute resolution (every minute of Ada's life is authoritative, ADR-0031),
