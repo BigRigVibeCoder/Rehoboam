@@ -9,7 +9,7 @@ tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.2.0
+version: 0.3.0
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
@@ -32,10 +32,10 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-011 | P1.0 (A) | Walking skeleton A: engine prerequisites. Engine-purity lint (A-14); a 32-bit probability type and keyed uniform draws (A-21); epoch-keyed draws (A-29); ledger rows and the life-course log; authored numbers into plane A | G0; SPR-007, SPR-008 merged | C3 (machinery; regenerates the `smoke` baseline) | `05.1` §2, §6 (exist); `05.5` §3.2 (exists); probability-type ruling (missing) | P1 |
 | SPR-012 | P1.0 (B) | Walking skeleton B: `solo` lives and dies. M2 schedule in fixed point, `rh-worldgen` stub, `rh-sys-demography` rung-0 slice, `rh-cli run`, the `solo` golden ladder | SPR-011 | C3 (first real system crate; first real golden world) | M2 rung-0 slice (draft, incomplete); Registry `DEATH`, `EXTINCTION`, verb `tellability`, system `defaults` (missing); `solo.yaml` (exists) | P1 |
 | SPR-013 | P1.0 (C) | Walking skeleton C: World Stream v0 and the Parquet chronicle (`rh-stream`), `rh-cli tail`, the `life_ends` pattern and its twin (`rh-sifter` v0), journal replay, rungs 1–2 on the same binary | SPR-012; A-06 | C3 (stream format; two new golden worlds) | `schema.sql` (exists; conflicts on EventId and roles); channel-A segment DDL (missing); `life_ends` (missing); `household.yaml`, `hamlet.yaml` (missing) | P1 |
-| SPR-014 | P1.13 | Lifecycle queues for P1a: same-instant delivery of a command to its owner at a later phase; M2's Day/`Vital` drain of `ScheduleDeath` and `Marry` (REV-P1a MAJ-4); ledger row inserts for births; dead-person drop (A-30); queue-age invariant (A-31); `rh-contracts` v0 for M2's columns | SPR-013 | C3 (scheduler semantics) with C2 (contract crate) | `05.1` §2 rule 2 (exists; same-instant delivery unstated: EVO needed) | P1 |
-| SPR-015 | P1.3 (a) | M2 F1 births: age-specific fertility, partnering (fathers), households and kinship, `H64(mother, parity)` ids at runtime, marriage intervals | SPR-014 | C3 | M2 F1 births, partnering, households (missing; spec is the rung-0 slice); fertility schedule source (missing); ADR-0026 (exists) | P1 |
+| SPR-014 | P1.13 | Lifecycle queues for P1a: same-instant delivery of a command to its owner at a later phase; M2's Day/`Vital` drain of `ScheduleDeath` and `Marry` (REV-P1a MAJ-4); ledger row inserts for births; dead-person drop (A-30); queue-age invariant (A-31); the absent-owner registration rule: `rh-core` drops a declared read or send whose owner is not registered, reports it, and gives the step view the coupling's neutral value, so specs declare every read unconditionally (REV-P1a NEW-4); `rh-contracts` v0 for M2's columns | SPR-013 | C3 (scheduler semantics) with C2 (contract crate) | `05.1` §2 rule 2 (exists; same-instant delivery and the absent-owner rule unstated: one EVO for both) | P1 |
+| SPR-015 | P1.3 (a) | M2 F1 births: age-specific fertility, partnering (fathers), households and kinship (each birth appends its life-course row with `mother` and `father`, the genealogy every kinship relation walks), `H64(mother, parity)` ids at runtime, marriage intervals | SPR-014 | C3 | M2 F1 births, partnering, households (missing; spec is the rung-0 slice); fertility schedule source (missing); ADR-0026 (exists) | P1 |
 | SPR-016 | P1.3 (b) | M2 F1 mortality: fixed-point `exp` and `ln`, Brass at any (α, β), infant sub-schedule and old-age tail, density modifier (entitlement hook stubbed) | SPR-012 (code); merges after SPR-015 | C3 (machinery and model) | M2 F1 mortality (missing); `exp`/`ln` ruling and reference (missing); `specs/demography/` (exists) | P1 |
-| SPR-017 | P1.15 | Registry effect language v0: the typed, total evaluator in `rh-registry`; succession-law eligibility and ordering; verb effects as queued commands; golden test | G0 | C2 (Registry schema); no hash change until a system uses it | `05.5` §2.1 (exists, prose); grammar and golden cases (missing) | P1 |
+| SPR-017 | P1.15 | Registry effect language v0: the typed, total evaluator in `rh-registry`; succession-law eligibility and ordering; the kinship relations `kin(a, b, n)`, ancestors, descendants and the agnatic and cognatic lines, walked over M2's life-course log so they reach through the dead (REV-P1a NEW-1, NEW-3); verb effects as queued commands; golden test | G0 | C2 (Registry schema); no hash change until a system uses it | `05.5` §2.1 (exists, prose); grammar and golden cases (missing) | P1 |
 | SPR-018 | P1.1a + S3 F0 | Worldgen-lite: regions, a few settlements, routes and the region graph from a heightmap template; `S3.migration` F0 (residence at genesis and birth, no moves); bench 4 baseline | SPR-013; SPR-015 for residence at birth | C3 (genesis changes every rung's golden) | `M1.regions` F0 (missing); worldgen-lite (missing); `S3.migration` F0 (missing); Registry heightmap templates (exist) | P1 |
 | SPR-019 | P1.2 | Population synthesis: IPF from manifest marginals; founders with pre-epoch births and genealogical kin; great houses with 3-generation genealogies | SPR-015, SPR-018 | C3 | population synthesis (missing); `M7.dynasty` houses and titles (missing; drafting) | P1 |
 | SPR-020 | P1.9 | Event envelope and Chronicle Writer: `EventDraft` roles, anchored snapshots, typed and motive edges; `event_role`, `event_snapshot`, `causal_edge` tables; DuckDB views; provenance of change; typed `[event_roles]` and `[motive_edges]` (A-24, part) | SPR-013 | C2 (event schema) with C3 (the event-log hash is in `state_hash`) | `05.2` §4.1a (exists); `schema.sql` (exists; role codes conflict with the Registry) | P1 |
@@ -147,15 +147,15 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 |---|---|---|
 | `M2.demography` rung-0 completion and freeze; Registry verbs, verb `tellability`, system `defaults`; probability-type ruling | SPR-011, SPR-012 | M2 draft (gaps listed in SPR-011); the rest missing |
 | Channel-A segment DDL (`specs/stream/channel_a_v0.sql`); `life_ends`; `household.yaml`, `hamlet.yaml` (A-06) | SPR-013 | Missing |
-| EVO: same-instant command delivery (`05.1` §2 rule 2) | SPR-014 | Missing |
+| EVO: same-instant command delivery and the absent-owner registration rule (`05.1` §2 rule 2; REV-P1a NEW-4) | SPR-014 | Missing |
 | M2 F1: fertility, partnering, households, kinship | SPR-015 | Missing |
 | M2 F1 mortality (infant sub-schedule, old-age tail, density modifier); fixed-point `exp`/`ln` ruling and reference | SPR-016 | Missing |
-| Effect-language grammar and golden cases | SPR-017 | Missing (`05.5` §2.1 is prose) |
+| Effect-language grammar and golden cases, with the kinship relations (REV-P1a NEW-3) | SPR-017 | Drafting (`05.5` §2.1 is prose) |
 | `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018, SPR-032 | Missing |
 | Population synthesis | SPR-019 | Missing |
 | Role codes reconciled (`schema.sql` vs `[event_roles]`) | SPR-020 | Conflict |
-| `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Missing; drafting (A-17) |
-| `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Missing; drafting (A-17) |
+| `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Drafting: PR #32, round 4; awaits D36 |
+| `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Drafting: PR #32, round 4; awaits D36 |
 | Stream v1 wire format (`rh-protocol`) | SPR-026 | Missing |
 | Family-annals template set | SPR-029 | Missing |
 | Dynastic fixture world; 10k dynastic manifest (extend A-06) | SPR-030 | Missing |
