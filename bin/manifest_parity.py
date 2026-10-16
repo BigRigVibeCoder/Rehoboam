@@ -6,10 +6,15 @@ Runs ``specs/manifest/manifest_v0.py validate`` (the reference) and ``rh-cli man
     verdict   VALID, INVALID, SCHEMA INVALID, or a load error (the reference crashes: exit 1);
     exit      the process exit code;
     errors    the error count (Registry errors, or Pydantic's validation-error count);
-    warnings  the warning count (Registry-checked manifests only).
+    warnings  the warning count (Registry-checked manifests only);
+    lines     for exits 0 and 1, every ``[ERROR]``/``[WARNING]`` line (path and message) in
+              order; for exit 2, every ``(loc, type)`` pair in order (SPR-004 GAP-3 ruling).
 
 Any difference is a ``PARITY MISMATCH`` and the gate fails. Where the two disagree the Python
 reference wins (CLAUDE.md; SPR-004), so a mismatch is a Rust bug until shown otherwise.
+
+A manifest ``NAME.yaml`` with a ``NAME.registry.toml`` beside it is validated against that
+Registry on both sides (a corpus case that needs a Registry the real one cannot provide).
 
 Usage:  python -I bin/manifest_parity.py [--rust-bin target/debug/rh-cli]
                                           [--rust-registry PATH] MANIFEST [MANIFEST ...]
@@ -36,6 +41,8 @@ EXIT_UNRUNNABLE = 2
 
 CHECKED = re.compile(r"^(VALID|INVALID): .* \((\d+) errors, (\d+) warnings\)", re.MULTILINE)
 SCHEMA = re.compile(r"^(\d+) validation errors? for Manifest$", re.MULTILINE)
+ISSUE = re.compile(r"^\[(?:ERROR|WARNING)\] .*$", re.MULTILINE)
+ERROR_TYPE = re.compile(r"\[type=([a-z_]+)")
 
 
 @dataclass(frozen=True)
@@ -46,6 +53,7 @@ class Result:
     exit_code: int
     errors: int
     warnings: int
+    lines: tuple[str, ...] = ()
 
     def render(self) -> str:
         """Return the result on one line."""
@@ -53,6 +61,24 @@ class Result:
             f"{self.verdict} (exit {self.exit_code}, {self.errors} errors, "
             f"{self.warnings} warnings)"
         )
+
+
+def schema_pairs(output: str) -> tuple[str, ...]:
+    """Return Pydantic's ``loc | type`` pairs, in order, from a SCHEMA INVALID report.
+
+    A location line has no indent; the message under it is indented two spaces and ends with
+    ``[type=...]``; a root error has a message and no location line.
+    """
+    pairs: list[str] = []
+    loc = ""
+    for line in output.splitlines()[2:]:
+        if not line.startswith(" "):
+            loc = line
+        elif line.startswith("  ") and not line.startswith("   "):
+            kind = ERROR_TYPE.search(line)
+            pairs.append(f"{loc} | {kind[1] if kind else '?'}")
+            loc = ""
+    return tuple(pairs)
 
 
 def parse(output: str, exit_code: int) -> Result:
@@ -63,15 +89,18 @@ def parse(output: str, exit_code: int) -> Result:
         exit_code: Its exit code.
 
     Returns:
-        The verdict and counts. Output with neither a verdict line nor a schema count is a load
-        error (the reference raises an uncaught exception; the Rust loader prints LOAD ERROR).
+        The verdict, counts and comparable lines. Output with neither a verdict line nor a
+        schema count is a load error (the reference raises an uncaught exception; the Rust
+        loader prints LOAD ERROR).
     """
     checked = CHECKED.search(output)
     if checked:
-        return Result(checked[1], exit_code, int(checked[2]), int(checked[3]))
+        issues = tuple(ISSUE.findall(output))
+        return Result(checked[1], exit_code, int(checked[2]), int(checked[3]), issues)
     schema = SCHEMA.search(output)
     if schema and "SCHEMA INVALID" in output:
-        return Result("SCHEMA INVALID", exit_code, int(schema[1]), 0)
+        start = output.index("SCHEMA INVALID")
+        return Result("SCHEMA INVALID", exit_code, int(schema[1]), 0, schema_pairs(output[start:]))
     return Result("LOAD ERROR", exit_code, 1, 0)
 
 
@@ -85,12 +114,49 @@ def run(command: Sequence[str]) -> Result:
     return parse(done.stdout + done.stderr, done.returncode)
 
 
+def first_difference(python: Result, rust: Result) -> str:
+    """Name the first line on which the two reports differ."""
+    for i, (p, r) in enumerate(zip(python.lines, rust.lines, strict=False)):
+        if p != r:
+            return f"line {i + 1}: python {p!r}; rust {r!r}"
+    if len(python.lines) != len(rust.lines):
+        return f"python has {len(python.lines)} lines, rust {len(rust.lines)}"
+    return "verdict or counts"
+
+
+def compare(manifest: Path, rust_bin: Path, rust_registry: Path | None) -> bool:
+    """Validate one manifest on both sides, print the outcome, and return whether they agree."""
+    beside = manifest.with_name(manifest.name.removesuffix(".yaml") + ".registry.toml")
+    registry = beside if beside.is_file() else REGISTRY
+    python = run(
+        [
+            sys.executable,
+            "-I",
+            str(REFERENCE),
+            "validate",
+            str(manifest),
+            "--registry",
+            str(registry),
+        ]
+    )
+    rust_reg = rust_registry or registry
+    rust = run([str(rust_bin), "manifest", "validate", str(manifest), "--registry", str(rust_reg)])
+    if python == rust:
+        print(f"AGREE           {manifest}: {python.render()}")
+        return True
+    print(
+        f"PARITY MISMATCH {manifest}: python {python.render()}; rust {rust.render()}; "
+        f"{first_difference(python, rust)}"
+    )
+    return False
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Compare the two validators on every manifest given; return the exit code."""
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(description="V-WC-04 parity gate (see the module docstring).")
     ap.add_argument("manifests", nargs="+", type=Path)
     ap.add_argument("--rust-bin", type=Path, default=ROOT / "target" / "debug" / "rh-cli")
-    ap.add_argument("--rust-registry", type=Path, default=REGISTRY)
+    ap.add_argument("--rust-registry", type=Path, default=None)
     args = ap.parse_args(argv)
     if not args.rust_bin.is_file():
         print(f"cannot run the Rust loader: {args.rust_bin} not built (cargo build -p rh-cli)")
@@ -98,30 +164,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     mismatches = 0
     for manifest in args.manifests:
         try:
-            python = run([sys.executable, "-I", str(REFERENCE), "validate", str(manifest)])
-            rust = run(
-                [
-                    str(args.rust_bin),
-                    "manifest",
-                    "validate",
-                    str(manifest),
-                    "--registry",
-                    str(args.rust_registry),
-                ]
-            )
+            agree = compare(manifest, args.rust_bin, args.rust_registry)
         except OSError as e:
             print(f"cannot run a validator on {manifest}: {e}")
             return EXIT_UNRUNNABLE
-        if python == rust:
-            print(f"AGREE           {manifest}: {python.render()}")
-        else:
-            mismatches += 1
-            print(f"PARITY MISMATCH {manifest}: python {python.render()}; rust {rust.render()}")
+        mismatches += 0 if agree else 1
     total = len(args.manifests)
     if mismatches:
         print(f"PARITY: {mismatches} of {total} manifests disagree (V-WC-04)")
         return EXIT_MISMATCH
-    print(f"PARITY: all {total} manifests agree (V-WC-04)")
+    print(f"PARITY: all {total} manifests agree, line for line (V-WC-04)")
     return EXIT_OK
 
 
