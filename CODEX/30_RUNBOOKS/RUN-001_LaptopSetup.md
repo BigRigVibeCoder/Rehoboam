@@ -9,7 +9,7 @@ tags: [infrastructure, workflow]
 related: [GOV-008, SPR-001, GOV-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** Six steps take the director's laptop from a clean Ubuntu 24.04 to running `bin/check_all.sh` green: system packages, Rust, the Cargo tools, Python through `uv` (Ubuntu blocks `pip` into the system Python), a first check run, and benchmark hygiene. Phase 1 needs no GPU. About 20–30 minutes, mostly compiling the Cargo tools.
@@ -61,7 +61,7 @@ bin/check_all.sh                   # finds python/.venv/bin/python automatically
 less artifacts/check_report.md
 bin/install_hooks.sh               # from now on, every git push runs bin/check_all.sh first
 ```
-Expect `Verdict: PASS (44 checks)`. The first run compiles the workspace; later runs take under a minute. If a check fails, the report shows the first failure's output; file it as a `DEF-` only after the run is reproducible.
+Expect `Verdict: PASS (71 checks)`. The first run compiles the workspace; later runs take under a minute. If a check fails, the report shows the first failure's output; file it as a `DEF-` only after the run is reproducible.
 
 ## 6. Benchmark hygiene (laptop-specific)
 - **Plug in to AC power** and select the performance profile: `powerprofilesctl set performance`.

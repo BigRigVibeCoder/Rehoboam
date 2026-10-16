@@ -239,7 +239,7 @@ The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hard
 
 | ID | Test | Method | Gate |
 |---|---|---|---|
-| V-PLN-01 | No B/C reads from plane A | Dependency-graph lint: no crate on the plane-A path (`rh-core`, `rh-contracts`, `rh-sys-*`, `rh-minds`) depends on a plane-B or plane-C crate or type. `trybuild` compile-fail tests: a test system that tries to read each plane-B and plane-C table must not compile | Any edge or compiling read fails CI |
+| V-PLN-01 | No B/C reads from plane A | Dependency-graph lint: no crate on the plane-A path (`rh-core`, `rh-contracts`, `rh-sys-*`, `rh-minds`) depends on a plane-B or plane-C crate or type. Compile-fail tests: a test system that tries to read each plane-B and plane-C table must not compile (since SPR-001: `cargo check` fixture workspaces for plane B and plane C; `trybuild` per table once plane-B and plane-C tables exist) | Any edge or compiling read fails CI |
 | V-PLN-02 | Plane tags | Every table, column and Registry attribute carries a plane tag. Schema check: no plane-A table holds a plane-B or plane-C reference (`MatchId`, pin or rating IDs) | Zero violations (`05.1` §9) |
 | V-PLN-03 | Observation-only APIs | Call every observation API (pins, facts-ledger writes, `bubble.*`, `entity.*`, `sift.rate`) many times, in random order, between pulses | `state_hash` unchanged; `observation_hash` changes |
 | V-PLN-04 | Re-sift | Re-sift a recorded timeline with another pattern-library version and recompute significance | `state_hash` ladder and plane-A segments unchanged; `narrative_hash` changes and is reproducible from (events, versions) |

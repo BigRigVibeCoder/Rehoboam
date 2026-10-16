@@ -1,7 +1,7 @@
 # CLAUDE.md: guidance for AI agents working on Rehoboam
 
 ## Project state
-This repository is in the **planning phase**. There is no engine code yet. The plan lives in `docs/`, the evidence in `research/`, and executable contracts in `specs/`.
+P0 (foundations) is under way. SPR-001 created the Cargo workspace (stub crates in `crates/`), the Python tooling (`python/`), the architecture lints and CI. The plan lives in `docs/`, the evidence in `research/`, and executable contracts in `specs/`.
 
 ## Operating model (ADR-0032)
 Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and backlogs (`CODEX/05_PROJECT/`), governance (`CODEX/10_GOVERNANCE/`), and the generated index (`CODEX/00_INDEX/MANIFEST.yaml`). Start each session with `AGENTS.md`. Run `bin/check_all.sh` before asking for an audit; no report, no pass. Be direct: no flattery, no softened bad news; bring the director decisions with a recommendation and a confidence rating, not open questions.
@@ -29,12 +29,12 @@ Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and b
 - **Licences: personal-use mode** (ADR-0021 as amended, D19, 2026-10-16). Rehoboam is a private experiment that is never distributed, so any licence may be used. Two limits remain: no licence whose terms forbid the use itself, and no copying of unlicensed code. The repository stays private. `bin/check_all.sh` keeps a licence ledger (`artifacts/licence_ledger.txt`) that never fails a build; crates come from crates.io only, with no wildcard versions.
 
 ## Checks to run after any change
-All of them, fail-fast, with a report: `bin/check_all.sh`. It uses `python/.venv` (create it with `uv sync --frozen --project python`; `PYTHON` overrides) and needs cargo-nextest and cargo-deny (RUN-001). Each gate also runs on a planted violation that must FAIL (`tests/lint_fixtures/`). Individually:
+All of them, fail-fast, with a report: `bin/check_all.sh`. It uses `python/.venv` (create it with `uv sync --frozen --project python`; `PYTHON` overrides) and needs uv, cargo-nextest and cargo-deny (RUN-001). Each gate also runs on a planted violation that must FAIL (`tests/lint_fixtures/`). Individually:
 ```bash
 # Rust: workspace in crates/, toolchain pinned in rust-toolchain.toml
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo deny --locked check bans licenses sources   # ADR-0021 allow-list; xxhash-rust banned
+cargo deny --locked check bans sources            # crates.io only, no wildcards (licences: ledger only, ADR-0021 amended)
 cargo nextest run --workspace --locked
 # Architecture lints: stdlib Python
 python -I bin/lint_arch.py        # crate boundaries (V-INSP-03) and plane isolation (V-PLN-01)
