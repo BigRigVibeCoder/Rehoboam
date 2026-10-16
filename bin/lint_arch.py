@@ -128,8 +128,46 @@ ANY_FEATURES = None
 NO_FEATURES: frozenset[str] = frozenset()
 # An exact version requirement: `=x.y.z`, optionally with a pre-release or build suffix.
 EXACT_REQUIREMENT = re.compile(r"=\s*\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?")
+# The review note shared by the four Arrow crates of the keyframe format (SPR-007 T-02).
+ARROW_NOTE = (
+    "Arrow can hand plane A floats (Float16/32/64 arrays, types and builders; half::f16). The "
+    "keyframe format stores only Utf8 and Binary columns: every row is the canonical integer "
+    "encoding the state hash reads, and the P0 tables hold no float; the float-yielding names "
+    "are refused by FLOAT_YIELDING_APIS. Exact pin, no default features. Transitive crates reach "
+    "plane A only through this API: ahash and hashbrown (Arrow-internal maps, never iterated by "
+    "plane-A code), getrandom (ahash's runtime seeding: no keyframe byte depends on it, and the "
+    "state hash is checked on every read), arrow-data, arrow-select, arrow-cmp, chrono (temporal "
+    "types, unused), half, flatbuffers, num-*, zstd. cargo-deny bans non-crates.io sources and "
+    "wildcards across the whole graph"
+)
 PLANE_A_EXTERNAL_DEPS = MappingProxyType(
     {
+        "arrow-array": (
+            frozenset({"rh-snapshot"}),
+            ARROW_NOTE,
+            NO_DEFAULT_FEATURES,
+            NO_FEATURES,
+        ),
+        "arrow-buffer": (
+            frozenset({"rh-snapshot"}),
+            ARROW_NOTE,
+            NO_DEFAULT_FEATURES,
+            NO_FEATURES,
+        ),
+        "arrow-ipc": (
+            frozenset({"rh-snapshot"}),
+            ARROW_NOTE
+            + "; feature zstd only, whose C build (zstd-sys) takes CFLAGS=-ffp-contract=off from "
+            ".cargo/config.toml (SPR-007 ruling 4; check_all checks the cc output)",
+            NO_DEFAULT_FEATURES,
+            frozenset({"zstd"}),
+        ),
+        "arrow-schema": (
+            frozenset({"rh-snapshot"}),
+            ARROW_NOTE,
+            NO_DEFAULT_FEATURES,
+            NO_FEATURES,
+        ),
         "libm": (
             frozenset({"rh-sample"}),
             "returns f32/f64: the transcendentals of the sampler float zone, the only "
@@ -182,6 +220,21 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
 # PLANE_A_EXTERNAL_DEPS (python/tests checks it). Keep it alphabetical.
 FLOAT_YIELDING_APIS = MappingProxyType(
     {
+        # Each Arrow name under the crate that exports it, so a use is reported once; arrow-ipc
+        # exports no float of its own (it reads and writes the arrays above). SPR-007 T-02.
+        "arrow-array": (
+            "Float16Array",
+            "Float16Builder",
+            "Float16Type",
+            "Float32Array",
+            "Float32Builder",
+            "Float32Type",
+            "Float64Array",
+            "Float64Builder",
+            "Float64Type",
+        ),
+        "arrow-buffer": ("f16", "half"),
+        "arrow-schema": ("Float16", "Float32", "Float64"),
         "rusqlite": ("Real", "as_f64", "as_f64_or_null"),
     }
 )

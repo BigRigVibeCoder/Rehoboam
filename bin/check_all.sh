@@ -189,7 +189,7 @@ fp_contract_compiler_vars_ok_control() {
 # The C dependencies really were built with it (SPR-007 ruling 4): the repository's .cargo/config.toml
 # sets CFLAGS to exactly $FP_CONTRACT_OK, and the cc build-script output of every C-building crate
 # (each `output` file under <target dir>/{debug,release}/build/<crate>-*/) records CFLAGS = Some(that).
-C_BUILD_CRATES="libsqlite3-sys"
+C_BUILD_CRATES="libsqlite3-sys zstd-sys"
 c_fp_contract_check() {
   local dir="$1" crate out found bad=0
   grep -qxF "CFLAGS = { value = \"$FP_CONTRACT_OK\", force = true }" .cargo/config.toml ||
@@ -378,6 +378,7 @@ run "lint_forbidden float-api positive control: field in rh-sample's public API 
 run "lint_forbidden float-api positive control: reexport in rh-sample's public API must FAIL (SPR-003 GAP-1)" "fail:VIOLATION [V-DET-19/float-api] \`libm\` at tests/lint_fixtures/forbidden/float_api/rh-sample/src/reexport.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_api/Cargo.toml &&
 run "lint_forbidden float-api positive control: impl_from in rh-sample's public API must FAIL (SPR-003 GAP-1)" "fail:VIOLATION [V-DET-19/float-api] \`f64\` at tests/lint_fixtures/forbidden/float_api/rh-sample/src/impl_from.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_api/Cargo.toml &&
 run "lint_forbidden float-dep positive control: accessor in rh-snapshot must FAIL (SPR-007 GAP-1)" "fail:VIOLATION [V-DET-19/float-dep] \`as_f64_or_null\` at tests/lint_fixtures/forbidden/float_dep/rh-snapshot/src/accessor.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_dep/Cargo.toml &&
+run "lint_forbidden float-dep positive control: arrow_float in rh-snapshot must FAIL (SPR-007 T-02)" "fail:VIOLATION [V-DET-19/float-dep] \`Float64Array\` at tests/lint_fixtures/forbidden/float_dep/rh-snapshot/src/arrow_float.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_dep/Cargo.toml &&
 run "lint_forbidden float-dep positive control: real_bits in rh-snapshot must FAIL (SPR-007 GAP-1)" "fail:VIOLATION [V-DET-19/float-dep] \`Real\` at tests/lint_fixtures/forbidden/float_dep/rh-snapshot/src/real_bits.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_dep/Cargo.toml &&
 run "lint_forbidden float-dep positive control: real_cmp in rh-snapshot must FAIL (SPR-007 GAP-1)" "fail:VIOLATION [V-DET-19/float-dep] \`Real\` at tests/lint_fixtures/forbidden/float_dep/rh-snapshot/src/real_cmp.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_dep/Cargo.toml &&
 run "lint_forbidden float-dep positive control: real_floor in rh-snapshot must FAIL (SPR-007 GAP-1)" "fail:VIOLATION [V-DET-19/float-dep] \`Real\` at tests/lint_fixtures/forbidden/float_dep/rh-snapshot/src/real_floor.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_dep/Cargo.toml &&
@@ -398,10 +399,11 @@ run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
 run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&
-run "rh-snapshot gates by name: plane hashes, golden vectors, journal, unsynced guard (SPR-007 T-01, T-03, T-04)" "pass:every_golden_line_reproduces" cargo nextest run -p rh-snapshot --locked --test hash --test golden --test journal --test guard --test stub_world --status-level pass &&
+run "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard (SPR-007 T-01..T-04)" "pass:every_golden_line_reproduces" cargo nextest run -p rh-snapshot --locked --test hash --test golden --test journal --test keyframe --test guard --test stub_world --status-level pass &&
+run "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 T-02)" "pass:V-DET-05: two keyframes loaded and advanced 10 years, 120 monthly hashes equal" cargo nextest run -p rh-snapshot --locked --test keyframe --no-capture v_det_05 &&
 run "V-DET-10 unsynced guard: read-only APIs fuzzed on the stub world (SPR-007 T-04)" "pass:v_det_10_read_only_apis_never_change_plane_a" cargo nextest run -p rh-snapshot --locked --test unsynced_guard --status-level pass &&
 run "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)" "pass:release_builds_compile_the_guard_out" cargo nextest run -p rh-snapshot --locked --release --test guard --status-level pass &&
-run "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite (SPR-007 ruling 4)" "pass:CFLAGS = Some(-ffp-contract=off)" c_fp_contract_check "$TARGET_DIR" &&
+run "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite and zstd (SPR-007 ruling 4)" "pass:CFLAGS = Some(-ffp-contract=off)" c_fp_contract_check "$TARGET_DIR" &&
 run "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)" "fail:did not get CFLAGS = -ffp-contract=off" c_fp_contract_control &&
 run "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)" "pass:V-DET-20: 1000 pairs" cargo nextest run -p rh-ids --locked --test fork_trees --test stream_independence --no-capture &&
 run "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the exact distributions (SPR-003)" "pass:V-DET-09: 136 golden vectors" cargo nextest run -p rh-sample --locked --test golden --test stats --no-capture &&

@@ -805,6 +805,6 @@ def test_the_float_dep_fixture_reports_each_plant_and_not_tests(
     """Every planted file of float_dep/ is reported; its tests/ file is not."""
     assert main(["--manifest-path", str(FLOAT_DEP / "Cargo.toml")]) == EXIT_VIOLATIONS
     out = capsys.readouterr().out
-    for name in ("accessor.rs", "real_bits.rs", "real_cmp.rs", "real_floor.rs"):
+    for name in ("accessor.rs", "arrow_float.rs", "real_bits.rs", "real_cmp.rs", "real_floor.rs"):
         assert "float-dep] `" in out and f"rh-snapshot/src/{name}" in out, name
     assert "tests/allowed.rs" not in out
