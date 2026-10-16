@@ -1,6 +1,7 @@
 # 09 — Verification & Validation Plan
 
 *Status: Draft v1.1 (2026-10-15). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*v1.5 (2026-10-16): V-INSP-03 lists `rh-sample`, as `bin/lint_arch.py` allows; V-INSP-05 uses the one engine-crate list of `05.0` §6.*
 *v1.4 (2026-10-16): ADR-0035, the saga engine. New V-SAGA suite (§2.20, V-SAGA-01 to V-SAGA-21), V-INSP-05 (engine purity) and V-HUM-13 (the G3 season); V-R3D-02, 03, 05 and 09 withdrawn; band gate status under ADR-0035 (§3.1): economic-history bands become report-only; gates G1a–G5 re-aimed (§5); the matrix follows the new phases (§6).*
 *v1.3 (2026-10-16): D27 (ADR-0034): V-DET-15, V-COG-09 and V-COG-11 withdrawn; V-DET-04 records push inputs only; new V-LLM-11 for LLM-9.*
 *v1.2 changes (R12 batches 1–3): era-conditioned and literature-sourced bands; band tags for kind, role (calibration / held-out), level and discrimination; CI-based gate with no held-out failures; non-ergodicity and typicality reporting; submodel tournaments (§3.8); V-ERA (§3.6) and V-SCALE (§3.7) suites.*
@@ -373,9 +374,9 @@ Playwright drives the console against the real `rh-server` and against the mock 
 |---|---|---|---|
 | V-INSP-01 | Licences (LIC-1) | cargo-deny, pip-licenses and license-checker on every PR; provenance check for weights and assets | No GPL, AGPL, non-commercial or territorially restricted item in shipped artifacts |
 | V-INSP-02 | ADR conformance | Reviewer-agent checklist on every PR (`13` §7) | Signed off |
-| V-INSP-03 | Crate boundaries (EVO-1) | Dependency-graph lint: system crates depend only on `rh-core`, `rh-ids`, `rh-events`, `rh-registry` and contract crates | Zero violations |
+| V-INSP-03 | Crate boundaries (EVO-1) | Dependency-graph lint (`bin/lint_arch.py`): system crates depend only on `rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry` and contract crates (`rh-sample` by the SPR-003 Architect ruling) | Zero violations |
 | V-INSP-04 | Observability (OBS-1) [D] | Headless run with Rerun and the TUI | Per-system timing, invariant counters and sampled agents on the `sim_tick` timeline |
-| V-INSP-05 | Engine purity (EVO-4; ADR-0035 §6) | Dependency-graph lint over the engine crates (`rh-core`, `rh-ids`, `rh-events`, `rh-registry`, `rh-manifest`, `rh-contracts`, `rh-snapshot`, `rh-sys-*`, `rh-sifter`, `rh-server`, `rh-cli`) against one deny-list of media, HTTP-UI and LLM-client crates (e.g. `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`), kept in one place, with a positive control | Zero violations. Planned: BCK-002 A-14 adds the rule to `bin/lint_arch.py` in P1a |
+| V-INSP-05 | Engine purity (EVO-4; ADR-0035 §6) | Dependency-graph lint over the engine crates (`rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry`, `rh-manifest`, `rh-contracts`, `rh-snapshot`, `rh-cli`, `rh-sys-*` (planned), `rh-sifter` (planned), `rh-server` (planned), `rh-minds` (planned), `rh-worldgen` (planned); `05.0` §6) against one deny-list of media, HTTP-UI and LLM-client crates (e.g. `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`), kept in one place, with a positive control | Zero violations. Planned: BCK-002 A-14 adds the rule to `bin/lint_arch.py` in P1a |
 
 ### 2.19 World Stream (V-STR; ADR-0030, `05.10`)
 
