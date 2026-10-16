@@ -343,7 +343,7 @@ Population also acts *directly* on the elites (more surviving younger sons) and 
 
 **Numbers.**
 - **England 1500–1650.**
-  - Population about 2M to over 5M; grain prices +600 %; real wages down to about 50 %.
+  - Population about 2M to over 5M; grain prices +600 %; real wages down to about 50 %. *(§18: on Allen's basket-deflated series, half-century means in London fell only 17–18%; about −50% holds only for trough years, and Phelps Brown–Hopkins puts the 15th-century peak 20% too high.)*
   - Elasticities: prices 2.24 and real wages −1.78 with respect to population (pp. 87–91).
   - Gentry families roughly tripled; enrolments rose 400 % (pp. 113–124).
   - Subsidy assessments fell to 3 % of their real value (p. 98).
@@ -543,7 +543,7 @@ Read: Ch. 1 (theory), Ch. 2 (Plantagenet England) and Ch. 10 (general patterns);
 - Fiscal crisis is a weak predictor: Rome had none before its civil war (p. 306).
 
 **Era-dependence.**
-- The inverse link between population and real wages "holds only before the Industrial Revolution" (p. 304).
+- The inverse link between population and real wages "holds only before the Industrial Revolution" (p. 304). *(§18: England broke it from the 17th century, before industrialisation, through productivity and trade. The break follows state, not a date.)*
 - Carrying capacity rises with technology. For example, English yields doubled in the 17th century, so a crisis came without a population collapse. This is why N/K, not N, is the right variable.
 - The chronology stops in 1870 for Western Europe and 1922 for Russia. The book is silent on whether the cycles persist after industrialisation.
 
@@ -698,9 +698,95 @@ The evidence that ODD helps rests on its authors' own assessment.
   - Taagepera 1978/1979, for the duration definition;
   - a source on small-polity survival. Abramson (2017), *International Organization* 71(1), on European polities from 1100 to 1790, is a candidate; the citation is from memory and needs checking.
 
+## 17. Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4), 859–886. doi:10.1017/S0022050711002178; Alfani, G., Mocarelli, L. & Strangio, D. (2017). "Italy." In Alfani & Ó Gráda (eds.), *Famine in European History*, CUP, pp. 25–47
+
+**England (Campbell & Ó Gráda).**
+- **Data.** About 30,000 demesne yield observations, 1268–1480, plus thinner farm accounts for 1750–1850 (p. 862).
+- **Shortfalls, 1268–1480.** A composite harvest fell ≥ 20% below trend about one year in nine (net of seed). Wheat alone did so "at least once every six years" (p. 865).
+- **Back-to-back failures.** Net falls of a fifth or more in consecutive years came "about once every three or four decades", and three in a row once in two or three centuries (p. 868). Shallow shortfalls barely cluster, but deep ones cluster strongly (back-to-back ratio to independence 1.1–1.35 at < 90% of trend, 2.4–6.7 at < 70%; Table 2). Yield autocorrelation is "small and never statistically significant" (p. 867).
+- **Variability fell with technology.** Detrended yield CV: wheat 0.165 → 0.125 → 0.071 (1268–1467 → 1750–1850 → 1884–1939); composite 0.111 → 0.097 → 0.050 (Table 3).
+- **Demand elasticity.** Medieval wheat 0.55–0.73 by method; 0.23–0.35 for 1750–1850; other estimates 0.18–0.87 (Table 4; pp. 875–876). The famous schedule (10–50% shortfall → ×1.3 to ×5.5) is **Davenant's, not King's**, and implies ε ≈ 0.40 (fn. 47–48).
+- **Same shock, different famine.**
+  - 1315–17 was the worst: the lowest real wage ever, collapsed credit, land sold for food, crime, flight to towns, postponed marriages.
+  - 1349–51 brought three bad harvests in a row, but "famine on this occasion had been forestalled by plague" (p. 872).
+  - 1437/38 was mitigated by low population. About 30–40% of households were at bare subsistence before 1350, under a fifth by 1437 (fn. 38–39).
+- **Why England became famine-free by 1800** (pp. 878–881): cheaper storage and larger carry-overs, arbitrage, poor relief (about 1% of national income by 1700, 2% by 1800), lower yield variability, and a flat population. Mean year-on-year price swings fell from about 25% to 13% before canals or railways (p. 879). Shortfalls then caused riots rather than deaths (p. 881). The last crisis with excess mortality was 1740–42.
+
+**Italy (Alfani, Mocarelli & Strangio).**
+- **Detector** (p. 28): normal deaths are the trimmed mean of years t−6…t−2. A crisis is +50% (small), +100% (medium) or +300% (major), tested on candidate windows across 10–186 communities.
+- **Frequency** (Table 2.2; *derived*): the expected famine crises per community-century were 3.6 (any) / 2.1 (medium or worse) / 0.27 (major) in the 17th century, and 1.2 / 0.4 / 0.03 in the 18th. In the worst famines, 1590–93 and 1648–49, 73–79% of communities were in crisis.
+- **Prices:** the peak year was ×4.0 at worst (Modena 1527–29). The median across markets in the three worst famines was ×2.0–3.2, and in 18th-century famines ×1.3–1.6 (Table 2.5, *derived*).
+- **Triggers:** "as a rule" back-to-back failures under high population pressure, often with war or sieges (pp. 43–45).
+- **Grain provisioning authorities** (*annona*, *abbondanza*) controlled contado flows, set reference prices and organised crisis imports. Genoa opened the Baltic route in 1590–93. Riots followed a "suspicion of injustice", not hunger alone (pp. 41–46).
+- **Maize** was a Boserupian second staple from the 17th century (p. 47).
+
+**What this corrected.**
+- **The old V-SF-03 band was a plague band.** It required "≥ 1 event of ≥ 10% loss per century" and was cited to Black Death web pages. No famine source supports it: England's worst post-1600 famine cost about 3% (1727–29).
+- **"Two bad harvests send grain ×3–5"** (`05.1` §8, R09) is the extreme tail; ×1.5–2 is typical.
+- **`food_price_elasticity`** [0.2, 0.6] → **[0.18, 0.9]**, declared structural. Market integration acts through trade and storage, never by lowering ε, or it would be counted twice.
+- **`harvest_sigma`**: the lower bound falls to 0.04 (industrial composites). Temperate worlds should stay at or below 0.19. The 0.35 upper bound is now an explicit, unsourced allowance for arid zones.
+- **`autocorr`** [0, 0.6] → **[0, 0.2]**, with new multi-year anomaly regimes for the deep-tail clustering. The example manifests drop from 0.30–0.35 to 0.1.
+- **R09's claim that ε = 0.25–0.4 reproduces the schedule** holds only near 0.40; 0.25 is 1.4–3× too steep (now a golden vector in `specs/economy/selftest_economy.py`).
+
+**Deltas applied.**
+- **`09`:** V-SF-03 becomes a family:
+  - 03, the crisis detector with minimum settlement sizes;
+  - 03a, harvest shortfalls (identity);
+  - 03b, price response and amplitude;
+  - 03c–03e, held-out: triggers, entitlement, general-famine frequency (soft).
+- **New tests:** V-ERA-09 (famine fades with buffering, not dates), and §3.8 tournaments for the M3 yield process and M4 famine mortality.
+- **`05.1`:**
+  - M3 gets a two-season crop portfolio at F1;
+  - M4 gets competitive storage and entitlement-driven famine mortality;
+  - provisioning and poor relief are endogenous M6 institutions acting through M4 commands;
+  - a per-settlement annual death aggregate is added.
+- **Registry:** new M3 crop-correlation and anomaly-regime parameters; M4 `grain_carryover_cost` and `poor_relief_share`; institutions `grain_provisioning_authority` and `poor_relief`; technologies `seed_selection` and `second_staple`.
+- **ADR-0027** lists `market_integration` and `commons_share` in the era-state table.
+
+**Still missing.**
+- The Alfani & Ó Gráda (2017) *Introduction*: Europe-wide famine frequency, so V-SF-03e stays soft.
+- A plague source, for a separate plague band.
+- The age pattern of famine deaths.
+
+## 18. Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38, 411–447. doi:10.1006/exeh.2001.0775
+
+**Method.**
+- **Wages and prices:** building craftsmen and labourers in about 20 European cities, converted to grams of silver (pp. 413–418).
+- **The basket** (Table 3, p. 421) is one adult male's year at the "respectability" poverty line: 182 kg bread, 52 l pulses, 26 kg meat, butter, cheese, eggs, 182 l beer, soap, linen, candles, lamp oil and 5 MBTU of fuel. It totals 414.899 g of silver at Strasbourg 1745–54 prices, 1,941 kcal/day and 80 g protein. The South substitutes oil for butter and wine for beer (p. 422).
+- **Welfare ratio** WR = 250 × day wage ÷ (3.15 × basket cost): a family of four, plus 5% rent (p. 427).
+
+**Findings.**
+- **The divergence was made in 1500–1750.** On the continent real wages fell by about half (craftsmen −39 to −59%), while the north-western leaders "maintained (not increased)" theirs. Nothing much changed anywhere until 1870 (pp. 411–413, 430, 435).
+- **England:** population grew sevenfold over 1500–1850 with flat real wages (p. 433). On this basket deflator, London's half-century means fell only 17–18% in the 16th century. About −50% appears only in trough years, and the Phelps Brown–Hopkins index puts the 15th-century peak 20% too high (p. 423).
+- **After the Black Death:** labourers went from about 0.75 of the line (p. 430) to 1.07–1.24 in 1350–99 and 1.3–1.65 in the 15th century. The rise took 50–70 years, with a dip during the shock itself (Figs. 8, 10).
+- **The WR = 1 line is not subsistence.** A bread-only diet costs about 0.44 of it (p. 431, *derived*).
+
+**What this corrected.**
+- **V-SF-11** keeps the sign but becomes a lagged test (years +10 to +50 against −25 to −1, the shock years excluded). The ≥ 20% threshold is labelled as ours. A held-out magnitude band, V-SF-11c, is added.
+- **V-SF-14 and R12 §8:** "real wages about −50%" holds for trough decades, not half-century means. The band now names the deflator. The −75% end is a Phelps Brown–Hopkins reading.
+- **Population and wages:** the inverse link broke in England from the 17th century, through productivity and trade, before industrialisation. ADR-0027's "Malthusian escape" now depends on productivity and `market_integration`, not on energy alone.
+- **The wage elasticity cannot come from one good.** A one-good Cobb–Douglas gives −(1 − α) ∈ [−0.6, −0.2], against the −0.86 to −1.78 observed (§8), so the food relative price must carry the rest (`05.1` M4).
+- **`subsistence_kg_grain`** [180, 320] per person is confirmed as a calorie floor (Allen implies 193–278). It is not Allen's line, which costs about 2.3× as much in silver.
+- **Unsupported claims:** "rents fall after the plague" is not in Allen, and neither are the ≥ 20% threshold and wage stickiness.
+
+**Deltas applied.**
+- **Registry:** `baskets.allen2001`, with golden vectors in `specs/economy/selftest_economy.py`; goods `animal_products`, `oil`, `wine`, `fuel`, `lighting`; M4 parameters `days_worked`, `rent_share`, adult-equivalent weights and `skill_premium`.
+- **`09`:**
+  - the welfare-ratio conventions WR_A, WR_h and WR_kcal;
+  - bands V-SF-10b (Malthusian wage pressure and escape), V-SF-20 (welfare-ratio levels), V-SF-20b (subsistence floor coupling, an identity at any N) and V-SF-21 (regional price dispersion, soft);
+  - V-ERA-08, the E2 divergence hindcast (held-out);
+  - an M4 wage-formation tournament.
+- **`11`:** E2 gains its hindcast.
+
+**Caveats.**
+- The tables start in 1500, so pre-1500 levels are read from figures.
+- Prices are institutional, and some skill premia are imposed by assumption.
+- Allen reports no population or mortality series.
+- There are two misprints: the egg price (0.010 should be about 0.10) and "meat 6.0%" (the 6.0% is beans).
+
 ---
 
-## Did the reading pay off? (ledger after three batches, 20 sources)
+## Did the reading pay off? (ledger after four batches, 24 sources)
 
 | Source | Effect on the plan |
 |---|---|
@@ -720,10 +806,14 @@ The evidence that ODD helps rests on its authors' own assessment.
 | Grimm 2005; Fagiolo 2007 | **Major for validation.** Held-out bands; CI-based gate; submodel tournaments; non-ergodicity reporting |
 | ODD 2010, 2020 | The system-spec template for agents |
 | Nigro (ed.) 2020 (misfiled as Alfani) | Qualitative drivers only |
+| Arbesman 2011 | The held-out band V-SF-07 would have failed real history; corrected. The mean applies only to empires |
+| Campbell & Ó Gráda 2011 | **Major.** V-SF-03 was a plague band; the famine band family; M3/M4 bounds corrected; Davenant golden vector; storage and entitlement mechanics |
+| Alfani, Mocarelli & Strangio 2017 | The crisis detector and famine frequencies; provisioning institutions; "×3–5" corrected |
+| Allen 2001 | **Major.** Lagged post-plague wage test; English −50% corrected; the welfare-ratio basket (golden vectors); the E2 hindcast |
 
 **Totals.**
-- 17 of 20 sources changed the design or the validation.
-- About 30 specific claims were corrected or found unsourced.
-- Three runnable or ready artefacts came out of it: the Brass golden vectors, the heavy-tail recipe and the ODD-R template.
+- 21 of 24 sources changed the design or the validation.
+- About 45 specific claims were corrected or found unsourced. Batch 4 found the two most expensive kinds of error: a **held-out** band that would have failed real history (V-SF-07), and a band that tested the wrong phenomenon (V-SF-03: plague, not famine).
+- Four runnable or ready artefacts came out of it: the Brass golden vectors, the M4 golden vectors (basket and price rule), the heavy-tail recipe and the ODD-R template.
 
-**Returns are now diminishing.** The remaining Tier-A items will mostly refine bands. The story-detection papers (Winnow and the others) are the last reading likely to change the design before the walking skeleton starts producing its own evidence.
+**Are returns diminishing?** Not yet for the bands. Batch 4 found a held-out band that would have failed and a band testing the wrong phenomenon, so the remaining Tier-A items are still worth reading: Alfani 2021, the famine Introduction, Coale & Demeny, Helmbold. The story-detection papers (Winnow and the others) are the last reading likely to change the *design* before the walking skeleton starts producing its own evidence.

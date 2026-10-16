@@ -458,7 +458,7 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
   | Pack | Adds | Earliest start | Key sources |
   |---|---|---|---|
   | E1 Agrarian (baseline) | Everything in P1–P3 | — | Reading list Tier A |
-  | E2 Early modern | Gunpowder and fortification, print, the fiscal-military state (excise taxes and funded debt raise revenue capacity), absolutism and early parliaments, overseas trade, policing | After G3b | Tilly 1990; Dincecco 2009; Goldstone 1991 (Ch. 3 §C) |
+  | E2 Early modern | Gunpowder and fortification, print, the fiscal-military state (excise taxes and funded debt raise revenue capacity), absolutism and early parliaments, overseas trade, policing | After G3b | Tilly 1990; Dincecco 2009; Goldstone 1991 (Ch. 3 §C); Allen 2001 (hindcast V-ERA-08: the 1500–1750 wage divergence) |
   | E3 Industrial transition | Fossil energy, factories absorbing surplus labour, rail, steam shipping and fertiliser decoupling local grain prices from local population, telegraph, the mortality decline then the fertility decline (elite birth limitation first), urbanisation, office growth, franchise extension and power sharing | After E2 | Allen 2009; Wrigley 2010; Lee 2003; Galor & Weil 2000; Acemoglu & Robinson 2000; Goldstone 1991 (pp. 288–338, 460–461) |
   | E4 Modern | Electrification, mass politics and media, modern medicine, industrial and total war, coups and assassination | After E3 | Archigos; Powell & Thyne 2011; Goldstone et al. 2010; Turchin 2016; Braumoeller 2019 |
   | E5 Contemporary and beyond | Digital communication, contemporary demography; speculative and fantasy frontiers as declared Registry paths | After E4 | Per world |

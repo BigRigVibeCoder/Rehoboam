@@ -260,7 +260,7 @@
           "type": "number"
         },
         "autocorr": {
-          "default": 0.35,
+          "default": 0.1,
           "title": "Autocorr",
           "type": "number"
         },

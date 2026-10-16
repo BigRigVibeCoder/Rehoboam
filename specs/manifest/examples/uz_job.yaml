@@ -17,7 +17,7 @@ geography:
   raster_resolution: 256
   region_count: 4                # Job's tents and pastures; the friends' towns of Teman, Shuah and Naamah
   heightmap_template: desert_fringe
-  climate: {zone: arid, harvest_sigma: 0.25, autocorr: 0.3, spatial_share: 0.8, volcanic_rate: 0.0}
+  climate: {zone: arid, harvest_sigma: 0.25, autocorr: 0.1, spatial_share: 0.8, volcanic_rate: 0.0}
   ecology: {livestock_kg_per_capita: 0, wild_prey_tonnes: 0}
 peoples:
   - archetype: human

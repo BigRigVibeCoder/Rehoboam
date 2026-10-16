@@ -30,10 +30,12 @@ The inputs are a small **era-state vector** of plane-A variables, each owned by 
 | Variable | Owner | Scope | Drives (examples) |
 |---|---|---|---|
 | `tech[k]` adoption share per technology | `S2.technology` | region | Yields, IFR, battle lethality, logistics range, channel latency |
-| `energy_per_capita` (organic vs fossil) | `M4.economy` | region | Productivity ceiling; Malthusian escape |
+| `energy_per_capita` (organic vs fossil) | `M4.economy` | region | Productivity ceiling; Malthusian escape, together with productivity growth and `market_integration` (north-west Europe held its real wages from the 17th century inside an organic economy; Allen 2001, R12 §18) |
 | `urban_share` | `S3.migration` | region | Fertility, contagion contact, mobilisation |
 | `literacy` / human capital | `S1.culture` | region × class | Fertility (quantity–quality), elite credentials, belief diffusion |
-| `fiscal_capacity` | `M6.polity` | polity | War finance, state breakdown risk |
+| `market_integration` (measured as price convergence across regions) | `M4.economy` | region | Price dispersion, famine buffering through trade and storage, the wage divergence (R12 §17–18) |
+| `commons_share` | `M4.economy` | region | Inequality (commons kept Ginis lower; R12 §13) |
+| `fiscal_capacity` | `M6.polity` | polity | War finance, state breakdown risk, famine relief and provisioning |
 | `exec_constraint` (elite bargaining, parliaments, courts) | `M6.polity` | polity | Ruler hazards, deposition, coups |
 | `succession_institutionalisation` | `M7.dynasty` | polity | Regicide, heir conflict, minority crises |
 | `franchise` (share of adults with a political voice) | `M6.polity` | polity | Regime type, mass mobilisation channels |

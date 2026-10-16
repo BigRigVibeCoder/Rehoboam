@@ -30,9 +30,9 @@ These set the remaining bands and bounds the first engine is judged against, and
 | 2 | Brass (1971) + **Coale & Demeny West tables** (A4) | M2 mortality golden vectors and e₀ bounds |
 | 3 | Carbone & Gittleman (2002) (A11) | The energetics validator constant |
 | 4 | Milanovic, Lindert & Williamson (2011); Alfani (2021) (A13) | The inequality band |
-| 5 | Alfani & Ó Gráda (2017), Introduction (A14); **new:** Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4) | Famine frequency (V-SF-03); harvest-to-price coupling in M3/M4 |
-| 6 | **New:** Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3) | V-SF-07 polity lifespans (mean ≈ 220 years) currently rests on memory |
-| 7 | **New:** Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38(4) | Real-wage series for M4 and V-SF-11 (post-plague wages); it also bridges to the industrial era |
+| 5 | Alfani & Ó Gráda (2017), Introduction (A14; **still wanted**: the Italy chapter arrived instead ✓); ✓ Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4) | Famine frequency (V-SF-03); harvest-to-price coupling in M3/M4 |
+| 6 | ✓ Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3) | V-SF-07 polity lifespans (mean ≈ 220 years) currently rests on memory |
+| 7 | ✓ Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38(4) | Real-wage series for M4 and V-SF-11 (post-plague wages); it also bridges to the industrial era |
 | 8 | Grimm et al. (2005); Fagiolo, Moneta & Windrum (2007) (A15) | The certification method itself |
 | 9 | **Kreminski et al. (2021), Winnow** (B3) and Felt (2019) (B2) | Winnow may already solve the sifter semantics we designed; read it before P2 specs freeze |
 | 10 | Kreminski et al. (2022), "Select the unexpected" (B4) | The significance rarity component |
@@ -81,9 +81,12 @@ These matter most. The G2 thesis gate is judged against stylized-fact bands, and
 | A11 | Carbone, C. & Gittleman, J. L. (2002). "A common rule for the scaling of carnivore density." *Science* 295 | The prey-to-predator ratio (the plan uses 0.009 kg per kg) and its scatter | The energetics validator; `S4.ecology` bounds |
 | A12 | Lanchester/Helmbold fits: Bracken, J. (1995). *Naval Research Logistics* 42(4) (Ardennes); Fricker, R. D. (1998). *NRL* 45(1); Lucas, T. W. & Turkes, T. (2004). *NRL* 51(1) (Kursk and Ardennes); plus any Helmbold attrition-rate report you can find (1960s–1990s) | Fitted exponents and the attrition coefficients that make "Helmbold" defensible; their uncertainty | M8 `helmbold_w` bounds `[0.2, 1.0]`, `breakpoint` |
 | A13 | Milanovic, B., Lindert, P. & Williamson, J. (2011). "Pre-industrial inequality." *Economic Journal* 121; Alfani, G. (2021). "Economic inequality in preindustrial times: Europe and beyond." *J. Economic Literature* 59(1) | Gini ranges and the inequality-possibility frontier for agrarian societies | The wealth-inequality band (M4) |
-| A14 | Alfani, G. & Ó Gráda, C. (eds.) (2017). *Famine in European History*. CUP. **Introduction** + one chapter | Famine frequency and mortality per century | The famine-frequency band (M3/M4) |
+| A14 (chapter ✓; Introduction wanted) | Alfani, G. & Ó Gráda, C. (eds.) (2017). *Famine in European History*. CUP. **Introduction** + one chapter | Famine frequency and mortality per century | The famine-frequency band (M3/M4) |
 | A15 | Grimm, V. et al. (2005). "Pattern-oriented modeling of agent-based complex systems." *Science* 310; Fagiolo, G., Moneta, A. & Windrum, P. (2007). "A critical guide to empirical validation of agent-based models." *Computational Economics* 30 | Method: multiple weak patterns vs one strong one; validation pitfalls | Certification design (identity vs emergent band tags) |
 | A16 | Grimm, V. et al. (2020). "The ODD protocol … second update." *JASSS* 23(2) | A documentation standard for each simulation system | Possibly adopt ODD for the M1–M8 system specs |
+| A14a ✓ | Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4) | Shortfall frequencies, yield CVs, demand elasticity, why England became famine-free | The V-SF-03 family; M3/M4 bounds (R12 §17) |
+| A17 ✓ | Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3) | 41 empire lifetimes | V-SF-07 (R12 §16) |
+| A18 ✓ | Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38 | Welfare ratios and the basket, 1500–1913 | V-SF-10b, 11, 11c, 20; V-ERA-08 (R12 §18) |
 
 ## Tier A-M: modern-era anchors (before the first era pack; ADR-0027)
 

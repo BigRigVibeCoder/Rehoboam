@@ -14,7 +14,7 @@ geography:
   raster_resolution: 1024
   region_count: 600
   heightmap_template: caldera_with_passes
-  climate: {zone: temperate_continental, harvest_sigma: 0.2, autocorr: 0.35, spatial_share: 0.6, volcanic_rate: 0.004}
+  climate: {zone: temperate_continental, harvest_sigma: 0.2, autocorr: 0.1, spatial_share: 0.6, volcanic_rate: 0.004}
   ecology: {livestock_kg_per_capita: 150, wild_prey_tonnes: 4000}
 peoples:
   - archetype: human

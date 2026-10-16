@@ -83,7 +83,7 @@ class WorldMeta(Strict):
 class Climate(Strict):
     zone: Slug                        # Registry `climate_zones`
     harvest_sigma: float = 0.2
-    autocorr: float = 0.35
+    autocorr: float = 0.1
     spatial_share: float = 0.6
     volcanic_rate: float = 0.004
 

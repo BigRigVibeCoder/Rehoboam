@@ -36,28 +36,26 @@ Naming: `<reading-list ID>_<first author>_<year>_<short title>.<ext>`. IDs match
 | `B6a_oneill_riedl_2014_dramatis.pdf` | O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014* | Suspense and auto-pause (`05.4`) | R12 §20 |
 | `B17_lessard_et_al_2026_narrative_gold_digging.pdf` | Lessard, J., Friedrich, S., Paré-Chouinard, S. & Kosseim, L. (2026). "Narrative gold digging: sifting and narrating stories from a procedural simulation" | Sifting heuristics vs narration; the G2 protocol | R12 §20 |
 
-**Still wanted** (in priority order; exact citations so they can be found):
+**Still wanted** (in priority order; exact citations so they can be found; "verify" marks a citation recalled from memory):
 
-*Closes Tier A: each fills a validation band that currently rests on memory.*
-0. **Alfani, G. (2021). "Economic inequality in preindustrial times: Europe and beyond." *Journal of Economic Literature* 59(1), 3–44.** The file uploaded under this name was a different item (see A13x). It feeds the wealth-inequality and post-plague levelling bands (V-SF-17, V-SF-11b).
-1. Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3), 127–129. Feeds V-SF-07, polity lifespans.
-2. Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38(4), 411–447. Feeds the real-wage series, V-SF-11 (post-plague wages) and M4.
-3. Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4), 859–886. Also the Introduction of Alfani, G. & Ó Gráda, C. (eds.) (2017), *Famine in European History*, CUP. Together they feed V-SF-03 (mortality crises) and M3 → M4.
-4. Coale, A. J. & Demeny, P. (1983). *Regional Model Life Tables and Stable Populations*, 2nd ed., Academic Press. Only the **West** tables and the introduction are needed. They give M2 an infant sub-schedule and sex differences, which Brass lacks.
+*Pre-modern bands (each one currently soft or resting on a single source):*
+0. **Alfani, G. (2021). "Economic inequality in preindustrial times: Europe and beyond." *Journal of Economic Literature* 59(1), 3–44.** The file uploaded under this name was a different item (see A13x). It feeds V-SF-17 and V-SF-11b.
+1. **Alfani, G. & Ó Gráda, C. (2017). "Introduction." In *Famine in European History*, CUP.** The Italy chapter arrived (A14b); the Introduction carries the Europe-wide famine frequency that V-SF-03e needs.
+2. Coale, A. J. & Demeny, P. (1983). *Regional Model Life Tables and Stable Populations*, 2nd ed., Academic Press. Only the **West** tables and the introduction. They give M2 an infant sub-schedule and sex differences, which Brass lacks.
+3. A plague source for a separate plague-crisis band (V-SF-03 now counts plague crises but has no band for them). Candidate: Alfani, G. (2013). "Plague in seventeenth-century Europe and the decline of Italy: an epidemiological hypothesis." *European Review of Economic History* 17(4) (verify).
+4. Taagepera, R. (1978). "Size and duration of empires: growth-decline curves, 3000 to 600 B.C." *Social Science Research* 7, 180–196; and (1979) "… 600 B.C. to 600 A.D." *Social Science History* 3, 115–138. They define the "duration" behind V-SF-07.
+5. A source on small-polity survival, so that V-SF-07's mean can be gated below empire scale. Candidate: Abramson, S. F. (2017). "The economic origins of the territorial state." *International Organization* 71(1) (verify).
 
 *For M8 (P3a), pre-modern battles; WWII anchors are in hand:*
 
-5. The CAA historical battle database CDB90 and its CHASE report (Helmbold & Khan 1986, as cited by Lucas & Turkes 2004). These cover battle outcomes against casualties and are needed for breakpoints.
-6. Helmbold, R. L. (1965), *Operations Research* 13, 857–859; Helmbold (1969), RAND P-4199; Helmbold (1987), CAA-TP-87-16; Hartley, D. S. & Helmbold, R. L. (1995), *Naval Research Logistics* 42, 609–633.
+6. The CAA historical battle database CDB90 and its CHASE report (Helmbold & Khan 1986, as cited by Lucas & Turkes 2004). These cover battle outcomes against casualties and are needed for breakpoints.
+7. Helmbold, R. L. (1965), *Operations Research* 13, 857–859; Helmbold (1969), RAND P-4199; Helmbold (1987), CAA-TP-87-16; Hartley, D. S. & Helmbold, R. L. (1995), *Naval Research Logistics* 42, 609–633.
 
 *Story detection (the thesis gate G2):*
 
-7. Kreminski, M., Dickinson, M. & Wardrip-Fruin, N. (2019). "Felt: a simple story sifter." *ICIDS 2019*.
-8. Kreminski, M. et al. (2021). "Winnow: a domain-specific language for incremental story sifting." *AIIDE 2021*.
-9. Kreminski, M. et al. (2022). "Select the unexpected: a statistical heuristic for story sifting." *ICIDS 2022*.
-10. O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014*; and Cheong, Y.-G. & Young, R. M. (2015). "Suspenser." *IEEE TCIAIG* 7(1).
-11. Behrooz, M., Swanson, R. & Jhala, A. (2015). "Remember that time? Telling interesting stories from past interactions." *ICIDS 2015*.
+8. Kreminski, M. et al. (2022). "Select the unexpected: a statistical heuristic for story sifting." *ICIDS 2022*.
+9. Cheong, Y.-G. & Young, R. M. (2015). "Suspenser: a story generation system for suspense." *IEEE TCIAIG* 7(1). (Dramatis arrived; this is its companion.)
 
-*Optional:* Cirillo, P. & Taleb, N. N. (2016), *Physica A* 452. Clauset (2018) already covers the war tail.
+*Optional:* Cirillo, P. & Taleb, N. N. (2016), *Physica A* 452 (Clauset 2018 already covers the war tail); McCloskey, D. N. & Nash, J. (1984), "Corn at interest: the extent and cost of grain storage in medieval England", *American Economic Review* 74(1) (sets `grain_carryover_cost`; verify).
 
 Add new files with the naming rule above, or drop them in the repository root and they will be filed.
