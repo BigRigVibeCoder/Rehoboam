@@ -2,6 +2,7 @@
 
 *Status: Draft v1.1 (2026-10-15). Style: ISO/IEC/IEEE 29148-lite.*
 *v1.1 changes: aligned with the v1.1 architecture (`05.x`) and ADR-0024–0026 (three planes, scheduled outcomes and material inputs, genealogical IDs). New DET-12–15, SIM-12, DATA-8–9, SIFT-8, ORA-7–9, R3D-7–9 and AUD-4. EVO-1 and EVO-3 rewritten. DET-6 binds at P2. Stale wording removed (leases, decrees, pins as retention, pre-batched consults, single burn-in). Phases aligned with the P1a/P1b and P3a/P3b split of `11`; PERF-1 (1M) and PERF-2 follow the re-baselined `08`. §3 now points to the requirement → test matrix in `09` §6.*
+*v1.2 (2026-10-16): D27 (ADR-0034): DET-15 and COG-8 withdrawn; DET-7 is push inputs only; new LLM-9 (LLMs never decide; the engine never waits on a model).*
 
 **Reading the tables**
 - **Verification method:** **T** = Test (automated), **A** = Analysis, **D** = Demonstration, **I** = Inspection.
@@ -61,7 +62,7 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | DET-4 | The state hash (chunked Merkle xxh3-64) shall be identical across 1, 2, 4 and N threads and across repeated runs. It is recorded every sim-month in CI and debug builds and every sim-year (configurable) in release builds. Per-table Merkle roots shall support a **divergence-bisect tool** that reports the first divergent month, table and row. | T | P0 | MOP-2 |
 | DET-5 | **Golden-run CI** shall replay reference worlds and compare state hashes each sim-year: on every PR (`smoke` for 1,000 years, the other reference worlds for 200 years) and at full length nightly. Golden baselines cover plane A only. | T | P0 | MOE-4, ADR-0024 |
 | DET-6 | **Observer invariance:** viewing, pinning, inspecting, scrubbing, drop-in, rendering, hydration, console use and LLM facade activity shall not change `state_hash` unless a material input is journaled. Binding from P2 through console fuzzing; extended at P5 (passive crowds) and P6 (live hydration). | T | P2 | D4, ADR-0024, RT-C1 |
-| DET-7 | Every nondeterministic input shall be appended to the **input journal** with tick, sequence, class (push or pull), dependency scope and producer (IF-2): manifest, settings, console mode, player actions and speech acts, Oracle verbs, accepted LLM outputs, and deliberation answers including journaled fallbacks. | T | P0 | DET-1 |
+| DET-7 | Every nondeterministic input shall be appended to the **input journal** with tick, sequence, class (push, the only class; ADR-0034), dependency scope and producer (IF-2): manifest, settings, console mode, player actions and speech acts, Oracle verbs, and accepted LLM translations of them (whisper frames, speech acts, manifests). | T | P0 | DET-1 |
 | DET-8 | The engine shall write **permanent keyframes** every 10 sim-years (configurable) and maintain a lazy LRU cache of yearly keyframes near the cursor. Each keyframe records the engine build that wrote it. | T | P2 | MOP-4 |
 | DET-9 | The engine shall support **forking**: a new `timeline_id` from `(parent, tick)` that extends the salt lineage, with chronicle segments before the fork shared by reference. | T | P2 | SN-4 |
 | DET-10 | Saves shall be versioned under **"frozen past, migrated future"**. Each world shall record the content-addressed engine build of every segment of its history, and those builds shall be archived. A new engine build shall **never re-simulate archived history**: the past is read from the chronicle or replayed with its archived build, and the head is migrated forward through an explicit, logged **migration keyframe**. Keyframes shall not be thinned below what an archived build can regenerate. | T | P2 | MOE-4, `05.2` §7 |
@@ -69,7 +70,7 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | DET-12 | **Three planes.** All state shall belong to exactly one plane: **A** authoritative (ledger, life-course log, regions, polities, markets, named actors, beliefs, agenda and timers, chronicle events; `state_hash`); **B** observation (pins, facts ledger, hydrated presentation, view caches; `observation_hash`); or **C** narrative (sift matches, significance, retention and visibility tiers, ratings, chronicles and prose; `narrative_hash`). Plane-A code shall never read B or C, enforced by a crate-dependency lint. Only journaled material inputs enter A. Nothing in B or C may change which events A emits, the EventIds it assigns, the rows it retains, the actors it schedules or promotes to T1, or any A value. In particular, pinning never promotes a person to T1. | T/I | P0/P2 | ADR-0024, RT-C1, D4 |
 | DET-13 | **No back-dating.** No event shall be emitted with a tick earlier than the current instant. `EventId` order shall equal emission order `(tick, phase, seq)`. An outcome sampled for a later instant (death, birth, illness onset, migration, marriage) shall be a plane-A **timer** that fires at its own tick in every mode, watched or not. | T | P1a | ADR-0025, RT-C2 |
 | DET-14 | **Acting in the past forks.** A material input at a tick before the timeline head shall create a fork at that tick and apply there; the canonical timeline is never rewritten. Passive drop-in (seek, inspect, watch) shall be read-only. Each material input shall declare a dependency scope (person, household, settlement or region); pending timers in that scope are cancelled and re-sampled in the `Inputs` phase, and at equal ticks inputs apply before timers. | T | P2 | ADR-0025, IF-1 |
-| DET-15 | **Pull inputs.** A deliberation-consult answer shall be a pull input keyed `(actor, decision_type, t, menu_hash)` and applied at `t + D`, where D is a fixed sim-time delay per decision type. If no answer has arrived by `t + D`, the simulation stalls; a configurable timeout applies the deterministic fallback, and the fallback is journaled. Replay shall **hard-fail** on a missing, extra or mismatched pull input. | T | P3b | `05.3` §8, RT-M2 |
+| DET-15 | **Withdrawn (ADR-0034).** Was: pull inputs, i.e. deliberation-consult answers keyed `(actor, decision_type, t, menu_hash)` and applied at `t + D`. Retired by D27: the journal holds push inputs only, and the engine never waits on a model. | — | — | ADR-0034, D27 |
 
 ### 2.3 Chronicle and data (DATA)
 
@@ -121,7 +122,7 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | COG-5 | Information shall propagate through typed **channels** (witness, testimony, document, crowd, whisper, hive), each with latency, fidelity, trust and reach. | T | P3a | DR-M8, DR-m9 |
 | COG-6 | The masses shall hold **pop-level** belief shares and morale distributions per (region × class × faith). | T | P3a | R04 |
 | COG-7 | Hive mimics shall carry cover-maintenance and exposure-risk utility. Hive-only knowledge used in action shall emit **impossible-knowledge** events. | T | P3a | DR-M16 |
-| COG-8 | An optional **deliberation consult** (off by default) shall let an LLM choose a named actor's action only from a simulation-generated legal-action menu. The answer is a pull input (DET-15): validated, journaled and applied at `t + D`. Foresight rollouts and MAX-speed runs use the declared fallback policy and are labelled as such. | T | P3b | R04, RT-M2 |
+| COG-8 | **Withdrawn (ADR-0034).** Was: an optional deliberation consult, in which an LLM chose a named actor's action from a legal-action menu. Retired by D27; it may return only as a research experiment after G3b, through a new ADR. Named actors decide through COG-3. | — | — | ADR-0034, D27 |
 
 ### 2.6 LLM platform (LLM)
 
@@ -135,6 +136,7 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | LLM-6 | Player free text that influences state shall be parsed into closed-schema frames by a tool-less model. The parser's output shall never contain numeric state deltas. | T | P3b | DR-M7 |
 | LLM-7 | A red-team corpus (injections, master-key tokens, persuasion-taxonomy prompts) shall run in CI against every LLM job that consumes player text. | T | P3b | R04 |
 | LLM-8 | Each job type shall define a local and a cloud model path. The world must remain fully usable offline, with degraded narration. | D | P4 | R05 |
+| LLM-9 | No LLM output shall choose an action, outcome or parameter of the simulation. LLM outputs reach plane A only as translated push inputs (whisper frames, speech acts, manifests), schema-validated and journaled; the engine never waits on a model (ADR-0034). | T | P3b | D27, ADR-0034 |
 
 ### 2.7 World compiler (WC)
 

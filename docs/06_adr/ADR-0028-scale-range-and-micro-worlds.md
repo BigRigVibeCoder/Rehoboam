@@ -1,6 +1,7 @@
 # ADR-0028 — One engine from one person to one million: scale profiles and micro worlds
 
-**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0003 (ledger), ADR-0010 (compiler validators), ADR-0012 (cognition tiers), ADR-0020 (scale-out); extends ADR-0027
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0003 (ledger), ADR-0010 (compiler validators), ADR-0012 (cognition tiers), ADR-0020 (scale-out); extends ADR-0027 \
+**Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
 ## Context
 
@@ -32,13 +33,14 @@ The compiler derives a **scale profile** from the manifest: **micro** ≤ 1k per
 |---|---|---|---|
 | Agenda and pulse cadence | Daily; hourly inside scenes | Weekly / monthly | Monthly; daily for active systems |
 | Named minds (T1) | **Everyone**. Protagonists can be flagged `deep`: larger belief store, emotion appraisal, richer theory of mind | Notable persons, up to 5k | 1–5k |
-| Deliberation consults (`05.3` §8) | **On by default** for `deep` minds; cheap at this scale | Opt-in | Opt-in, capped |
 | Economy | **Household holdings** (herds, land, servants, goods) | Holdings plus regional markets | Regional markets plus holdings for named households |
 | The outside world | Off-map compartments and **off-map actors** that enter (raiders, caravans, envoys) | Off-map compartments | Off-map compartments |
 | Validation | Invariants, determinism, life-course plausibility, **personal-arc liveness**, human rating | Stylized facts where N suffices; INSUFFICIENT otherwise | Full certification |
 | Default pattern packs | Personal: `trial_of_faith`, `grief_and_lament`, `temptation`, `counsel_dispute`, `restoration`, `betrayal_by_friends` | Mixed | Dynastic, polity, war, plague |
 | Default narrative forms | Biography, drama (dialogue), diary, novel | Chronicle, saga | Annals, chronicle, history |
 | Default view | Lo-fi room, camp or house view with a dialogue panel | Settlement view | World map |
+
+Deliberation consults, formerly on by default for `deep` minds, are retired by ADR-0034: every decision, a `deep` mind's included, comes from the simulation.
 
 ### 3. Agentive catalysts: adversaries with permission scopes
 Some stories are driven by an agent who *intervenes*, such as the Adversary in Job, a curse, or a trickster god. This is modelled the way the Oracle is (ADR-0024, `05.3` §6):
@@ -79,8 +81,8 @@ A new **V-SCALE** suite (`09`):
 - **Registry:** a template `pastoral_household`, adversary verbs, attributes `faith(actor, deity)` and `integrity(actor)`, and the personal pattern packs.
 - **M4 gains household holdings at F1** (also needed for wealth inequality at 1M).
 - **rh-minds gains the `deep` flag** (P3a).
-- **Roadmap.** The walking skeleton (WP P1.0) runs at N = 1 and N = 100k from its first week. The Job world becomes watchable at the end of P3b, once minds, persuasion and consults exist. It becomes inhabitable in the lo-fi Street view.
-- **Cheap micro worlds make LLM-heavy features affordable,** such as consults for every decision of a protagonist, and many Foresight rollouts. That gives a good test bed for cognition quality before 1M scale.
+- **Roadmap.** The walking skeleton (WP P1.0) runs at N = 1 and N = 100k from its first week. The Job world becomes watchable at the end of P3b, once minds and persuasion exist. It becomes inhabitable in the lo-fi Street view.
+- **Cheap micro worlds make expensive features affordable,** such as `deep` minds, rich narration (dialogue, per-scene prose) and many Foresight rollouts. That gives a good test bed for cognition quality before 1M scale.
 
 ## Revisit when
 

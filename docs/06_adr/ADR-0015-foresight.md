@@ -1,6 +1,7 @@
 # ADR-0015 — Foresight = Monte-Carlo forked rollouts with common random numbers
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15) \
+**Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
 ## Context
 
@@ -57,4 +58,4 @@ R11 §H; R03 §4 (common random numbers implied by keyed RNG); R10 §R4.
    - **(c) Scoring.** Brier and log score with bootstrap CIs, plus a Spiegelhalter calibration test (Z). In Oracle mode these also measure the information lost to belief resampling.
    - The **reliability diagram** stays on the Foresight screen as a display.
 7. **Scale.** Default N = 256, truncated at the predicate's horizon. At 1M persons Foresight is a batch job (minutes on a cluster node). Interactive Foresight targets 100k-class worlds.
-8. **Deliberation consults.** Rollouts use the declared fallback policy and are labelled as such (ADR-0011 v1.1).
+8. **No model in rollouts.** No simulation step calls a model, so rollouts need no fallback policy (ADR-0034; deliberation consults retired).

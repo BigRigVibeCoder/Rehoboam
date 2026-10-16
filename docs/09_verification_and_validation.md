@@ -1,6 +1,7 @@
 # 09 — Verification & Validation Plan
 
 *Status: Draft v1.1 (2026-10-15). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*v1.3 (2026-10-16): D27 (ADR-0034): V-DET-15, V-COG-09 and V-COG-11 withdrawn; V-DET-04 records push inputs only; new V-LLM-11 for LLM-9.*
 *v1.2 changes (R12 batches 1–3): era-conditioned and literature-sourced bands; band tags for kind, role (calibration / held-out), level and discrimination; CI-based gate with no held-out failures; non-ergodicity and typicality reporting; submodel tournaments (§3.8); V-ERA (§3.6) and V-SCALE (§3.7) suites.*
 *v1.1 changes: test IDs for every suite and a full requirement → test matrix (§6). New suites V-PLN, V-DATA, V-COG, V-ORA, V-TM, V-WC, V-R3D and V-AUD. DET-6 console fuzz from P2. TOST equivalence replaces KS tests (§1.2). Certification statistics with a red-noise null, Clauset tail fits and censoring (§3.1). Foresight validity tests replace per-decile calibration (§3.3). A pre-registered G2 protocol (§3.4.1).*
 
@@ -91,7 +92,7 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | V-DET-01 | Thread-count invariance | Run reference worlds at 1, 2, 4 and N threads for 50 sim-years; compare monthly hashes | All equal |
 | V-DET-02 | Repeat invariance | Same binary, 3 runs | All equal |
 | V-DET-03 | Cross-platform (level 2 goal) | Nightly runs on Linux x86-64, Windows x86-64, macOS ARM; compare yearly hashes | Report. Becomes a gate once achieved |
-| V-DET-04 | Replay | Record a session with inputs (Oracle actions, forks, speech acts, pull inputs), then replay from the journal alone | Final and monthly hashes equal; no gateway call during replay |
+| V-DET-04 | Replay | Record a session with inputs (Oracle actions, forks, speech acts), then replay from the journal alone | Final and monthly hashes equal; no gateway call during replay |
 | V-DET-05 | Keyframe round-trip | Write a keyframe, load it, advance 10 years; compare against a continuous run. Check the permanent 10-year cadence and the yearly LRU cache | Equal |
 | V-DET-06 | **Console fuzz (DET-6, from P2)** | Run A headless. Run B on the same seed while a fuzzer drives random sequences of non-material console and JSON-RPC calls throughout: `entity.*` inspections (which write facts and pins), `chronicle.*` and `sift.*` queries, ratings, scrub, `timeline.seek` (drop-in, then return to the head), pause and resume at random ticks, speed-band changes, Foresight jobs. Journaled inputs are excluded | `state_hash` equal every month; plane-A Parquet segments byte-identical; EventIds identical. `observation_hash` must change (positive control) |
 | V-DET-07 | Observer invariance with passive crowds (P5) | Run B with the Diorama attached: camera director, T2c crowds, Spectacle | As V-DET-06 |
@@ -102,7 +103,7 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | V-DET-12 | No back-dating (DET-13) | Property test over random small worlds | Every emitted event's tick ≥ the current instant; EventIds strictly increase in emission order `(tick, phase, seq)`; sampled outcomes sit in the agenda as timers until they fire |
 | V-DET-13 | Acting in the past (DET-14) | Seek to t < head and apply a material input | `apply_input` returns `PastInput`; the Timeline Manager forks at t; the canonical timeline's journal and hashes are unchanged; the fork replays to the same hashes |
 | V-DET-14 | Material-input scope (DET-14) | Apply a scoped input; compare pending timers with a run without it | Only timers inside the scope are re-sampled, keyed by `epoch`; timers outside keep their ticks; at equal ticks the input applies first |
-| V-DET-15 | Pull inputs (DET-15) | Replay with a pull input deleted, duplicated or with a changed `menu_hash`; run live with a withheld answer | Each replay hard-fails with its specific error. The live run stalls at t + D; the timeout fallback is journaled and replays identically |
+| V-DET-15 | **Withdrawn (ADR-0034).** Was: pull inputs (DET-15) | — | — |
 | V-DET-16 | Branch salts (DET-2) | Property test over random fork trees | No two rollouts share a salt; `resample_on_fork` purposes re-draw after a fork and others are shared; a what-if fork without overrides matches its parent's hashes |
 | V-DET-17 | CRN survival (ADR-0026) | Paired intervention rollouts over 10 years | Correlation of per-person death times across the pair ≥ 0.9 for unaffected lineages |
 | V-DET-18 | Journal completeness (DET-1, DET-7) | Rebuild a session from `(engine_build, registry_version, manifest_hash, seed, input_journal)` only, on a clean machine; audit every journal record | Hashes equal; every record has tick, seq, class, scope and producer |
@@ -218,6 +219,7 @@ The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hard
 | V-LLM-08 | No numeric deltas (LLM-6) | Schema audit of parser outputs | No numeric state fields |
 | V-LLM-09 | Claim check (LLM-5) | Inject unsupported claims into realised lines | Regenerated at most twice, then the template fallback |
 | V-LLM-10 | Offline play (LLM-8) | A full play test with the network disabled | Every job kind falls back locally; the world stays usable with degraded narration |
+| V-LLM-11 | LLMs never decide (LLM-9; ADR-0034) | Static check of the gateway's job registry against IF-2: every job kind is registered as translator, narrator or QA (`05.6` §0), and only translator outputs map to a journaled input kind. Then replay a recorded session with the gateway disabled | Every job kind has exactly one role; no narrator or QA output has a path into plane A; no input kind carries an action, outcome or parameter chosen by a model; hashes equal (V-DET-04) |
 
 ### 2.9 Narrative QA (V-NAR)
 
@@ -273,9 +275,9 @@ The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hard
 | V-COG-06 | Channels (COG-5) | Fixture social graphs, one per channel | Latency, fidelity, trust and reach as declared; the hive channel has latency 0, fidelity 1 and full reach |
 | V-COG-07 | Pop beliefs (COG-6) | Long run with proposition templates | Shares stay in [0, 1] per pop; templates below ε for longer than τ are collected |
 | V-COG-08 | Hive and mimics (COG-7) | Scenario fixtures on `aethelgard` | Every use of hive-only knowledge in action emits an impossible-knowledge event; mimic cover behaviour responds to local risk |
-| V-COG-09 | Deliberation consults (COG-8) | A gateway stub returns in-menu, out-of-menu and late answers | Out-of-menu answers rejected; in-menu answers applied at t + D (V-DET-15); rollouts and MAX runs use the fallback policy and are labelled |
+| V-COG-09 | **Withdrawn (ADR-0034).** Was: deliberation consults (COG-8) | — | — |
 | V-COG-10 | Motivation edges | Audit utility decisions | Each records its top contributors and margin as `motivated_by` edges |
-| V-COG-11 | Consult A/B [H] (WP P3.12) | Opt-in consults against the utility argmax, blind, on MOE-1 | Reported. Consults stay opt-in unless they win |
+| V-COG-11 | **Withdrawn (ADR-0034).** Was: the consult A/B [H] (WP P3.12) | — | — |
 
 ### 2.13 Oracle and persuasion (V-ORA)
 
@@ -646,7 +648,7 @@ Each phase ends with:
 | G1b | V-SF on the P1-applicable bands (MOP-5); V-COUP-01 (truncated) and V-COUP-04; V-PERF-01, V-PERF-07; [H] you read the run reports of 3 seeds |
 | G2 | The pre-registered protocol (§3.4.1): V-HUM-01, V-HUM-02, V-HUM-03, V-HUM-09; MOP-3 and MOP-4 (V-TM-03, V-TM-04); V-PERF-03 at 100k; V-SIFT-01, V-SIFT-03, V-SIFT-04; V-DET-06; V-GOLD-04 |
 | G3a | V-COUP-01 (full chain), V-COUP-02, V-COUP-03, V-COUP-05; V-SF on all applicable bands; V-DATA-12, V-PERF-08 |
-| G3b | MOE-1 ≥ 6 under the G2 protocol (V-HUM-01); V-HUM-07; V-FOR-01–V-FOR-03; V-ORA-07, V-ORA-08; V-LLM-02, V-LLM-03; V-PERF-01–V-PERF-03, V-PERF-06 at 1M; V-HUM-10 |
+| G3b | MOE-1 ≥ 6 under the G2 protocol (V-HUM-01); V-HUM-07; V-FOR-01–V-FOR-03; V-ORA-07, V-ORA-08; V-LLM-02, V-LLM-03, V-LLM-11; V-PERF-01–V-PERF-03, V-PERF-06 at 1M; V-HUM-10 |
 | G4 | V-NAR-01, V-NAR-02, V-NAR-08; V-HUM-05; V-WC-01, V-WC-02, V-WC-13; V-LLM-10; V-PERF-07; SPK-3 (V-R3D-03) reported |
 | G5 | V-R3D-01–V-R3D-03; V-DET-07; V-HYD-10 and V-SF for `M4.economy` F2 (WP P5.0); V-HUM-06 |
 | G6 | V-DET-08; V-HYD-01, V-HYD-02, V-HYD-05; V-LLM-01; V-HUM-04; V-AUD-05 |
@@ -654,7 +656,7 @@ Each phase ends with:
 
 ## 6. Requirement → test matrix
 
-Every requirement in `03` maps to at least one test ID. Phases are those of `03`.
+Every requirement in `03` maps to at least one test ID, except withdrawn ones. Phases are those of `03`.
 
 ### 6.1 System requirements
 
@@ -690,7 +692,7 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | DET-12 | Three planes | P0/P2 | V-PLN-01–V-PLN-06, V-ORA-09, V-HYD-09 |
 | DET-13 | No back-dating | P1a | V-DET-12, V-HYD-04, V-SIFT-01 |
 | DET-14 | Acting in the past forks; input scope | P2 | V-DET-13, V-DET-14, V-TM-04, V-TM-05 |
-| DET-15 | Pull inputs | P3b | V-DET-15, V-COG-09 |
+| DET-15 | Pull inputs. **Withdrawn (ADR-0034)** | — | None (V-DET-15, V-COG-09 withdrawn) |
 | DATA-1 | Typed store and plane assignment | P1a–P3a | V-DATA-10, V-PLN-02 |
 | DATA-2 | Causal edge kinds | P1b | V-DATA-09 |
 | DATA-3 | Anchored snapshots and intervals | P1b | V-DATA-08 |
@@ -715,7 +717,7 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | COG-5 | Channels | P3a | V-COG-06, V-DATA-06 |
 | COG-6 | Pop-level beliefs | P3a | V-COG-07 |
 | COG-7 | Hive and mimics | P3a | V-COG-08, V-COUP-03 |
-| COG-8 | Deliberation consult | P3b | V-COG-09, V-COG-11, V-DET-15 |
+| COG-8 | Deliberation consult. **Withdrawn (ADR-0034)** | — | None (V-COG-09, V-COG-11, V-DET-15 withdrawn) |
 | LLM-1 | Gateway | P3b | V-LLM-05 |
 | LLM-2 | Journaled outputs, no re-query | P3b | V-LLM-06, V-DET-04 |
 | LLM-3 | Constrained decoding | P3b | V-LLM-04, V-LLM-07 |
@@ -724,6 +726,7 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | LLM-6 | Closed-schema parsing | P3b | V-LLM-02, V-LLM-08 |
 | LLM-7 | Red-team corpus | P3b | V-LLM-03 |
 | LLM-8 | Offline use | P4 | V-LLM-10 |
+| LLM-9 | LLMs never decide; the engine never waits on a model | P3b | V-LLM-11, V-LLM-06 |
 | WC-1 | Mechanics Registry | P0 | V-WC-11, V-WC-10 |
 | WC-2 | Hand-authored manifests, flavour asset | P1b | V-WC-12, V-WC-08, V-WC-04 |
 | WC-3 | Compile pipeline, liveness, certification | P4 | V-WC-01, V-WC-04, V-WC-05, V-WC-06, V-WC-07, V-SF-13, V-PERF-07 |

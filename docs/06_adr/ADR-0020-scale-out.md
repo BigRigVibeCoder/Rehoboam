@@ -1,6 +1,7 @@
 # ADR-0020 — Single writer per timeline; scale out with timelines
 
-**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15) \
+**Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
 ## Context
 
@@ -47,6 +48,6 @@ R10 §5 (SpatialOS); R03 §6; R01.
 **Changes:**
 1. **Every fork is a timeline with a unique salt lineage.** Rollouts, what-ifs and ensemble seeds never collide, however many workers run them. What-if A/B keeps the parent salt. Rollouts extend it and re-draw `resample_on_fork` timers.
 2. **Rollout workers** run the same binary as separate processes. Each is stateless apart from its keyframe input. Parquet segments before the fork are shared by reference.
-3. **No rollout waits on an LLM.** Rollouts use the declared fallback policy for deliberation consults.
+3. **No rollout waits on an LLM.** No simulation step calls a model (ADR-0034), so this holds by construction.
 4. **Implicit individuals** are recommended above ~5M people and required above ~10M (ADR-0003).
 5. **"Single writer" has two levels.** There is one writer per timeline (this ADR), and inside it one owning system per column (ADR-0022 v1.1).

@@ -14,7 +14,7 @@ Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and b
 5. `docs/14_reuse_inventory.md` before writing anything from scratch: check whether a permissive project already solves it (PORT or DEPEND)
 
 ## Non-negotiables (from ADRs; changing them needs director approval)
-- **The simulation decides; LLMs describe.** LLM output enters state only as a journaled, schema-validated input (ADR-0006, ADR-0011).
+- **The simulation decides; LLMs describe.** LLM output enters state only as a journaled, schema-validated input (ADR-0006, ADR-0011, ADR-0034); LLMs never choose actions and the engine never waits on a model.
 - **Determinism.**
   - History = f(engine_build, registry_version, manifest_hash, seed, input_journal).
   - Use keyed counter-based RNG only: `H(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)`.

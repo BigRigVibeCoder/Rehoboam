@@ -1,6 +1,7 @@
 # ADR-0006 — Determinism contract
 
-**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15) \
+**Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
 ## Context
 
@@ -59,10 +60,9 @@ R03 §4, §Recommendations 4; R01 §4; R10 §R4; R04 §4.
 4. **Three plane hashes (ADR-0024).** `state_hash` (A), `observation_hash` (B) and `narrative_hash` (C) are separate. Each is a **chunked Merkle xxh3-64 with dirty tracking**, taken monthly in CI and debug builds and yearly (configurable) in release builds. Golden baselines cover `state_hash` only.
 5. **Divergence bisect tool.** Per-table Merkle roots let a tool report the first divergent month, table and row between two runs.
 6. **Plane isolation.** A lint forbids plane-A crates from depending on plane-B or plane-C crates. Read-only consumers get immutable frames. The runtime unsynced-guard hash check runs in debug and CI builds only. Observer invariance (DET-6) is tested from P2 by console fuzzing of pins, facts and inspections.
-7. **Push and pull inputs.**
-   - **Push inputs** (player actions and speech acts, Oracle verbs, settings) apply at their tick.
-   - **Pull inputs** (deliberation answers) are keyed `(actor, decision_type, t, menu_hash)` and apply at `t + D`.
-   - **Replay hard-fails** on a missing, extra or mismatched input. There is no silent fallback. A fallback taken at a consult timeout is itself journaled.
+7. **Push inputs only** (ADR-0034).
+   - **Push inputs** (player actions and speech acts, Oracle verbs, settings, and LLM translations of a person's own act) apply at their tick. They are the only input class; pull inputs are retired.
+   - **Replay hard-fails** on a missing, extra or mismatched input. There is no silent fallback.
 8. **No back-dating (ADR-0025).** No event is emitted with a tick earlier than the current instant. `EventId` order = emission order = `(tick, phase, seq)`. Material inputs declare a dependency scope. Timers in that scope are cancelled and re-sampled. The key includes each entity's `epoch`, a derived plane-A counter of the material inputs that have touched it.
 9. **Acting in the past forks.** `apply_input` with `tick < now` is refused (`PastInput`). The Timeline Manager forks at that tick first. Seek and drop-in are read-only.
 10. **Golden runs.** On every PR, `smoke` runs 1,000 years and the other reference worlds 200 years. All run full length nightly. Hashes are compared every sim-year. Level 1 means bit-exact on the same binary, **OS family** and architecture.

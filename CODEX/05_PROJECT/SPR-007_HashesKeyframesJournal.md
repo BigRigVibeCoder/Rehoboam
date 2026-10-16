@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.0.1
 ---
 
 > **BLUF:** Make every state reproducible and checkable: three plane hashes, Arrow keyframes and the SQLite input journal. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -47,7 +47,7 @@ version: 1.0.0
 - **Status:** [ ] not started
 
 ### T-03: Input journal
-- **Deliverable:** SQLite (WAL) journal of push and pull inputs per IF-2, with tick, seq, class and scope
+- **Deliverable:** SQLite (WAL) journal of push inputs (pull inputs retired, ADR-0034) per IF-2, with tick, seq, class and scope
 - **Acceptance:** Round-trip; a replay reads only the journal
 - **Status:** [ ] not started
 

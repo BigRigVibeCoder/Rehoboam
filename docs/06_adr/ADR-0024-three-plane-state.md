@@ -1,6 +1,7 @@
 # ADR-0024 — Three-plane state model: authoritative, observation and narrative
 
-**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0006, ADR-0007, ADR-0008
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0006, ADR-0007, ADR-0008 \
+**Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
 ## Context
 
@@ -33,7 +34,7 @@ Rules:
    - which rows A retains;
    - which actors A schedules;
    - any A value.
-2. **The only path from B or C into A is a journaled material input**, such as a player action, a player speech act, an Oracle verb or an accepted LLM choice.
+2. **The only path from B or C into A is a journaled material input**, such as a player action, a player speech act or an Oracle verb. An LLM can only translate such an act; it never chooses one (ADR-0034).
 3. **T1 (named-actor) membership comes only from simulation criteria or journaled inputs.** The simulation criteria are: office, great-house rank, material involvement, Registry-declared notability, and promotion by a journaled input. Pinning does **not** promote a person to T1.
 4. **No presentation components on authoritative entities.** Authoritative iteration over `bevy_ecs` entities is sorted by `PersonId`, never by archetype order.
 5. **No lazy catch-up of authoritative state.** Everything in A advances on the simulation's own schedule.

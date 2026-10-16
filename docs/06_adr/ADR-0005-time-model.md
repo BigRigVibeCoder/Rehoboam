@@ -1,6 +1,7 @@
 # ADR-0005 — Integer sim-time, pulses, event-driven agenda, speed bands
 
-**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15) \
+**Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
 ## Context
 
@@ -51,10 +52,10 @@ R03 §5; R01 §R5.
 2. **Calendar.** 12 months. `days_per_year` is 360 or 365. Seasons are 2 or 4.
 3. **Scheduled outcomes (ADR-0025).** At each pulse, systems sample the intra-pulse times of births, deaths, illness onset, migrations and marriages for everyone, watched or not. Each becomes a **timer** in the agenda and fires at its own tick in every mode. The agenda holds **decisions and timers**, keyed by `(time, phase, entity_id, seq)`.
 4. **No back-dating.** No event is emitted with a tick earlier than the current instant. `EventId` order = emission order = `(tick, phase, seq)`.
-5. **Phase order** (05.1 §4.2). `Inputs` comes first: journaled push inputs and due pull inputs apply, and timers in each input's dependency scope are cancelled and re-sampled. `Vital` fires due timers. `Agenda` runs named-actor decisions. `Bookkeeping` takes the plane hashes.
+5. **Phase order** (05.1 §4.2). `Inputs` comes first: journaled push inputs apply, and timers in each input's dependency scope are cancelled and re-sampled. `Vital` fires due timers. `Agenda` runs named-actor decisions. `Bookkeeping` takes the plane hashes.
 6. **Agenda semantics (RT-M1).**
    - An interrupt schedules re-evaluation at the **next instant at the earliest** (t + 1 day by default), with a per-actor daily cap.
    - **Simultaneous deliberation, ordered action.** Due decisions are scored in parallel against a snapshot taken at the start of the `Agenda` phase. Actions apply in a keyed permutation order `H(seed, salt, t, entity_id)`. An invalidated action re-scores once, then defers to the next poll.
 7. **Bubble only at Live.** T3/T4 hydration exists only at Live speed (street clock 20–60:1). Faster bands collapse the bubble. Speed bands change only the publish cadence and how far `advance_until` goes per wall interval.
 8. **Run-until** stops on a date, a predicate over aggregates, or `next_match(salience ≥ θ)`.
-9. **Speed and deliberation consults.** Speed never changes the simulation *for a given journal*. With consults enabled, a missing answer **stalls** the run at t + D. On timeout the fallback applies and is journaled, so replay is exact. MAX-speed runs and Foresight rollouts use the declared fallback policy and are labelled (05.3 §8).
+9. **Speed never changes the simulation** *for a given journal*. No step waits on a model, so nothing can stall a run, and MAX-speed runs and Foresight rollouts need no fallback policy (ADR-0034; deliberation consults retired).

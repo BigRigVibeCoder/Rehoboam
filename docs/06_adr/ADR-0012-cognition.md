@@ -1,6 +1,7 @@
 # ADR-0012 — Generic psych core + overlays; event-driven IAUS + HTN
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15) \
+**Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
 ## Context
 
@@ -29,7 +30,7 @@ The draft's PsychState mixed timescales, and its vocabulary only made sense in o
 
 ## Revisit when
 
-- The deliberation-consult evaluation shows LLM choices measurably improve MOE-1 at an acceptable cost.
+- Model-chosen actions may return only as a research experiment after G3b, outside the roadmap, through a new ADR (ADR-0034).
 
 ## Evidence
 
@@ -40,14 +41,10 @@ R04 §1–2, §4.1; R03 §6.
 *Triggered by the red-team review (RT-C1, RT-M1, RT-M2). Sources of truth: ADR-0024, ADR-0025, 05.1 §4.3, 05.3 §1, §3, §8.*
 
 **Corrected inline:**
-- "pivotal-consult" → **deliberation consult** (Revisit when).
+- "pivotal-consult" → **deliberation consult** (Revisit when). Since retired by ADR-0034.
 
 **Changes:**
-1. **Deliberation consults** (optional, T1 only, off by default).
-   - The simulation builds a **legal-action menu (enum)** and a utility ranking. The LLM picks only from that menu.
-   - The answer is a **pull input applied at t + D**. During deliberation the actor takes no other decision of that type.
-   - A missing answer **stalls** the run at t + D. On timeout the **utility-argmax fallback** applies and is journaled.
-   - Consults are **capped per simulated year** (default ≤ 20 per world). MAX-speed runs and Foresight rollouts use the declared fallback policy.
+1. **Deliberation consults: retired by ADR-0034 (D27).** Named actors decide only through IAUS and HTN. No LLM chooses an action, and no decision waits on a model.
 2. **Same-instant semantics: simultaneous deliberation, ordered action** (RT-M1).
    - All due decisions are scored in parallel against a snapshot taken at the start of the `Agenda` phase.
    - **Response curves are fixed-point lookup tables**, so threshold comparisons are platform-independent.
