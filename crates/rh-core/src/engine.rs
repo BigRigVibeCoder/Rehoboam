@@ -122,6 +122,13 @@ pub enum ReplayError {
     Tuple(&'static str),
     /// The run reached the instant without failing.
     NoFailure,
+    /// The run applied material inputs before it failed (the artifact's journal position is
+    /// non-zero), and replay needs that journal, which P0 cannot supply (SPR-006 DEF-2; SPR-007
+    /// wires the journal in).
+    JournalRequired {
+        /// The artifact's journal position: the number of material inputs applied.
+        position: u64,
+    },
     /// The run failed differently.
     Mismatch {
         /// The artifact replayed.
@@ -136,6 +143,10 @@ impl fmt::Display for ReplayError {
         match self {
             Self::Tuple(field) => write!(f, "the engine differs from the artifact in {field}"),
             Self::NoFailure => f.write_str("the replay reached the instant without failing"),
+            Self::JournalRequired { position } => write!(
+                f,
+                "the run applied {position} material inputs before it failed; replaying it needs the input journal (SPR-007)"
+            ),
             Self::Mismatch { expected, got } => write!(
                 f,
                 "the replay failed at {} in {} with \"{}\", not at {} in {} with \"{}\"",
@@ -165,6 +176,8 @@ pub struct Engine {
     by_system_id: BTreeMap<SystemId, usize>,
     epochs: BTreeMap<EntityRef, u32>,
     inputs: BTreeMap<SimTime, Vec<MaterialInput>>,
+    /// The number of material inputs applied: the journal position a crash artifact records.
+    applied_inputs: u64,
     timeline: TimelineId,
     provenance: Provenance,
     diagnostics: VecDeque<String>,
@@ -262,6 +275,7 @@ impl Engine {
             by_system_id,
             epochs: BTreeMap::new(),
             inputs: BTreeMap::new(),
+            applied_inputs: 0,
             timeline: TimelineId::from_raw(0),
             provenance: Provenance::default(),
             diagnostics: VecDeque::new(),
@@ -414,7 +428,9 @@ impl Engine {
     /// the failing instant and checks that the same failure recurs there (GOV-004 §4).
     ///
     /// # Errors
-    /// [`ReplayError`] if the tuple differs, the run does not fail, or it fails differently.
+    /// [`ReplayError`] if the tuple differs, the run does not fail, or it fails differently;
+    /// [`ReplayError::JournalRequired`] if the run had applied material inputs (a non-zero journal
+    /// position), which cannot be replayed without the input journal (SPR-007).
     pub fn replay(&mut self, artifact: &CrashArtifact) -> Result<(), ReplayError> {
         let checks: [(&'static str, bool); 6] = [
             ("timeline", artifact.timeline == self.timeline.to_raw()),
@@ -437,7 +453,9 @@ impl Engine {
             return Err(ReplayError::Tuple(field));
         }
         if artifact.journal_position != 0 {
-            return Err(ReplayError::Tuple("journal_position"));
+            return Err(ReplayError::JournalRequired {
+                position: artifact.journal_position,
+            });
         }
         if self
             .advance_until(SimTime::from_minutes(artifact.tick), |_, _| {})
@@ -508,7 +526,7 @@ impl Engine {
             manifest_hash: self.provenance.manifest_hash.clone(),
             seed: self.world_seed,
             branch_salt: self.branch_salt.to_raw(),
-            journal_position: 0,
+            journal_position: self.applied_inputs,
             last_keyframe: None,
             tick: self.at.0.minutes(),
             phase: self.at.1.name().to_owned(),
@@ -631,6 +649,8 @@ impl Engine {
     fn apply_inputs(&mut self, t: SimTime) -> Result<usize, SimError> {
         let inputs = self.inputs.remove(&t).unwrap_or_default();
         for input in &inputs {
+            // Counted before it takes effect: an input that fails is part of the history.
+            self.applied_inputs += 1;
             for &entity in &input.scope {
                 let epoch = self.epochs.entry(entity).or_insert(0);
                 *epoch = epoch.checked_add(1).ok_or_else(|| SimError::System {

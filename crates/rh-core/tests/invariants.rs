@@ -11,6 +11,11 @@
 //! - **Framework self-test.** Invariants run at every instant, in `Bookkeeping`, after that phase's
 //!   systems: a flag a Bookkeeping system raises at one instant fails at exactly that instant. A
 //!   step error (not an invariant) also leaves an artifact. A stopped engine is poisoned.
+//! - **Inputs and the journal (DEF-2).** An artifact from a run that applied material inputs
+//!   records their number as the journal position, and replay refuses it explicitly until SPR-007
+//!   supplies the journal.
+//! - **Panics (DEF-1).** A panicking step stops the run with `SimError::Panic` and an artifact that
+//!   replays, at 1 and 4 threads.
 //! - **Committed artifact.** `tests/golden/crash_stock_seed3.json` must equal the run's artifact and
 //!   replay. `RH_CORE_CRASH_ARTIFACT` points the test at another artifact: `bin/check_all.sh`
 //!   plants one with an altered instant, which must fail.
@@ -28,7 +33,7 @@ mod support;
 use std::path::PathBuf;
 
 use rh_core::crash::{CRASH_DIR, CrashArtifact, Provenance};
-use rh_core::engine::{Engine, ReplayError};
+use rh_core::engine::{Engine, MaterialInput, ReplayError};
 use rh_core::register::register;
 use rh_core::system::{InvariantResult, PulseBinding, SimError, SpecPurpose, StepCtx};
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
@@ -448,4 +453,34 @@ fn def1_a_panicking_step_poisons_the_engine_with_a_crash_artifact() {
             );
         }
     }
+}
+
+#[test]
+fn def2_an_artifact_after_material_inputs_records_them_and_replay_requires_the_journal() {
+    let mut engine = stock_engine(3, 40, 1);
+    let scope: std::collections::BTreeSet<_> = [rh_ids::EntityRef::region(RegionId::from_raw(2))]
+        .into_iter()
+        .collect();
+    for at in [1_440, 2 * 1_440 + 5] {
+        engine
+            .submit_input(
+                SimTime::from_minutes(at),
+                MaterialInput {
+                    scope: scope.clone(),
+                },
+            )
+            .unwrap();
+    }
+    assert!(engine.advance_until(ten_years(), |_, _| {}).is_err());
+    let a = engine.crash_artifact().unwrap().clone();
+    assert_eq!(a.journal_position, 2, "two material inputs were applied");
+    assert_eq!(
+        stock_engine(3, 40, 1).replay(&a),
+        Err(ReplayError::JournalRequired { position: 2 }),
+        "no journal can be supplied before SPR-007: an explicit refusal, not NoFailure"
+    );
+    // Without inputs the position is 0 and the artifact replays (t05 tests above).
+    let mut plain = stock_engine(3, 40, 1);
+    assert!(plain.advance_until(ten_years(), |_, _| {}).is_err());
+    assert_eq!(plain.crash_artifact().unwrap().journal_position, 0);
 }

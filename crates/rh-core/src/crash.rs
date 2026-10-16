@@ -5,7 +5,8 @@
 //! engine builds a [`CrashArtifact`] with:
 //! - the history tuple: build, Registry version, manifest hash, seed (with the branch salt and the
 //!   timeline, which a replay also needs);
-//! - the input-journal position (0 until SPR-007's journal);
+//! - the input-journal position: the number of material inputs applied before the failure
+//!   (replay refuses a non-zero one until SPR-007 supplies the journal; DEF-2);
 //! - the last keyframe (`none` until SPR-007) and the failing instant and phase;
 //! - the failing invariant or error;
 //! - the last diagnostic records (at most [`DIAGNOSTIC_RECORDS`]).
@@ -71,7 +72,7 @@ pub struct CrashArtifact {
     pub seed: u64,
     /// The branch salt of the timeline.
     pub branch_salt: u64,
-    /// The input-journal position (0 until SPR-007).
+    /// The input-journal position: the number of material inputs applied before the failure.
     pub journal_position: u64,
     /// The last keyframe, `None` until SPR-007.
     pub last_keyframe: Option<String>,
