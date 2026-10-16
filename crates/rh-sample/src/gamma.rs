@@ -31,8 +31,10 @@
 //! A sample reads the stream sequentially from its current position. `k < 1`: **one draw** for
 //! the boost's `u`, then as for `k + 1`. `k ≥ 1`: each attempt takes the standard normal's draws
 //! (about 1.02, see `normal`) and, unless `v ≤ 0`, **one draw** for `u`; the acceptance rate is above
-//! 0.95 for every `k ≥ 1`, so about 2.1 draws per sample. The count is deterministic given the
-//! stream and does not depend on `θ`.
+//! 0.95 for every `k ≥ 1`, so about 2.0 to 2.1 draws per sample (3.1 for `k < 1`; measured in
+//! VER-SPR-003-TEST §2.2, confirmed here). The count is deterministic given the stream and does
+//! not depend on `θ`; it does depend on `k`, so each sample takes its own keyed stream or draw
+//! offset (`05.1` §6 item 3).
 //!
 //! REF: SPR-003 T-04; ADR-0006 item 3; `05.1` §6 item 3; `docs/14` (`rand_distr`: PORT).
 
