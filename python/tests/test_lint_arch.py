@@ -306,7 +306,7 @@ def test_the_external_rule_skips_dev_dependencies_tools_and_rng_crates() -> None
 
 def test_every_reviewed_entry_has_a_note() -> None:
     """The list is a review record: every entry says whether it can return a float."""
-    for name, (allowed, note, _no_defaults) in PLANE_A_EXTERNAL_DEPS.items():
+    for name, (allowed, note, _no_defaults, _features) in PLANE_A_EXTERNAL_DEPS.items():
         assert note.strip(), name
         assert allowed is None or allowed, name
 
@@ -401,6 +401,8 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("plane_a_sample_third_party", "plane-A-external"),
         ("plane_a_own_lints", "lints"),
         ("plane_a_no_workspace_lints", "lints"),
+        ("plane_a_libm_features", "plane-A-external"),
+        ("plane_a_libm_target_edge", "plane-A-external"),
         ("relabelled_sample", "metadata"),
     ],
 )
@@ -578,3 +580,61 @@ def test_every_real_crate_takes_the_workspace_lints() -> None:
     assert {c.name: c.lints for c in crates if c.plane == "A"} == {
         c.name: ("workspace",) for c in crates if c.plane == "A"
     }
+
+
+# --- Every dependency entry, and features (VER-SPR-003-TEST GAP-10) -------------------------------
+
+
+def libm_entry(**fields: object) -> dict[str, object]:
+    """Return a cargo-metadata dependency entry for libm, reviewed-clean unless overridden."""
+    entry: dict[str, object] = {
+        "name": "libm",
+        "source": "registry+https://x",
+        "kind": None,
+        "req": "=0.2.16",
+        "uses_default_features": False,
+        "features": [],
+        "target": None,
+    }
+    entry.update(fields)
+    return entry
+
+
+def sample_with(*entries: dict[str, object]) -> list[tuple[str, str]]:
+    """Return (rule, crate) for rh-sample declared with these dependency entries."""
+    package = _package(
+        "rh-sample", list(entries), {"rehoboam": {"plane": "A", "kind": "machinery"}}
+    )
+    document = {"workspace_members": [package["id"]], "packages": [package]}
+    return found(crates_from_metadata(document))
+
+
+def test_the_reviewed_libm_entry_passes() -> None:
+    """Pinned, no default features, no features: the real declaration."""
+    assert sample_with(libm_entry()) == []
+
+
+def test_a_second_target_specific_entry_is_judged_on_its_own() -> None:
+    """Two libm entries: the loose, default-features one under [target.…] is reported twice."""
+    loose = libm_entry(req="^0.2", uses_default_features=True, target="cfg(unix)")
+    assert sample_with(libm_entry(), loose) == [("plane-A-external", "rh-sample")] * 2
+    assert sample_with(loose, libm_entry()) == [("plane-A-external", "rh-sample")] * 2
+
+
+@pytest.mark.parametrize("features", [["arch"], ["force-soft-floats"], ["unstable", "arch"]])
+def test_libm_may_enable_no_feature(features: list[str]) -> None:
+    """Its review allows none: `arch` would swap in architecture-specific routines."""
+    assert sample_with(libm_entry(features=features)) == [("plane-A-external", "rh-sample")]
+
+
+def test_crates_reviewed_for_any_feature_may_enable_some() -> None:
+    """The serde entry allows any feature (it carries no floats of its own)."""
+    serde = libm_entry(name="serde", req="=1.0.0", uses_default_features=True, features=["derive"])
+    assert sample_with(serde) == []
+
+
+def test_every_entry_of_the_reviewed_list_names_its_features() -> None:
+    """None (any) or a set; libm's is empty."""
+    for name, (_users, _note, _no_defaults, features) in PLANE_A_EXTERNAL_DEPS.items():
+        assert features is None or isinstance(features, frozenset), name
+    assert PLANE_A_EXTERNAL_DEPS["libm"][3] == frozenset()
