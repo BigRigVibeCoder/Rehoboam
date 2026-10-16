@@ -10,7 +10,8 @@
 
 use rand_chacha::ChaCha8Rng;
 use rand_core::{Rng, SeedableRng};
-use rh_ids::{BranchSalt, PurposeId, RngKey, SystemId, h};
+use rh_ids::rng::{h64_bytes, h64_words, mix, tag};
+use rh_ids::{BranchSalt, LightStream, PurposeId, RngKey, SystemId, h};
 
 const GOLDEN: &str = "tests/golden/rh_ids_v1.txt";
 
@@ -59,14 +60,67 @@ fn chacha8_blocks_match_the_reference() {
 #[test]
 fn h_matches_the_reference() {
     for f in lines("h") {
-        let key = RngKey {
-            world_seed: int(&f[0]),
-            branch_salt: BranchSalt::from_raw(int(&f[1])),
-            system: SystemId::from_raw(int(&f[2])),
-            purpose: PurposeId::from_raw(int(&f[3])),
-            entity: int(&f[4]),
-            t: int(&f[5]),
-        };
+        let key = rng_key(&f);
         assert_eq!(h(&key, int(&f[6])), int::<u64>(&f[7]), "h line {f:?}");
+    }
+}
+
+#[test]
+fn splitmix_mix_matches_the_reference() {
+    for f in lines("mix") {
+        assert_eq!(mix(int(&f[0])), int::<u64>(&f[1]), "mix line {f:?}");
+    }
+}
+
+#[test]
+fn h64_words_matches_the_reference() {
+    for f in lines("h64_words") {
+        let n: usize = int(&f[1]);
+        let words: Vec<u64> = f[2..2 + n].iter().map(|w| int(w)).collect();
+        assert_eq!(
+            h64_words(int(&f[0]), &words),
+            int::<u64>(&f[2 + n]),
+            "line {f:?}"
+        );
+    }
+}
+
+#[test]
+fn tags_and_purpose_ids_match_the_reference() {
+    for f in lines("tag") {
+        let name = if f[0] == "-" { "" } else { f[0].as_str() };
+        assert_eq!(tag(name), int::<u64>(&f[1]), "tag line {f:?}");
+        assert_eq!(h64_bytes(0, name.as_bytes()), int::<u64>(&f[1]));
+    }
+    for f in lines("purpose") {
+        assert_eq!(
+            PurposeId::of(&f[0]).to_raw(),
+            int::<u64>(&f[1]),
+            "purpose line {f:?}"
+        );
+    }
+}
+
+#[test]
+fn light_streams_match_the_reference() {
+    for f in lines("light") {
+        let key = rng_key(&f);
+        assert_eq!(
+            LightStream::new(&key).draw(int(&f[6])),
+            int::<u64>(&f[7]),
+            "light line {f:?}"
+        );
+    }
+}
+
+/// The six key fields at the start of an `h` or `light` line.
+fn rng_key(f: &[String]) -> RngKey {
+    RngKey {
+        world_seed: int(&f[0]),
+        branch_salt: BranchSalt::from_raw(int(&f[1])),
+        system: SystemId::from_raw(int(&f[2])),
+        purpose: PurposeId::from_raw(int(&f[3])),
+        entity: int(&f[4]),
+        t: int(&f[5]),
     }
 }

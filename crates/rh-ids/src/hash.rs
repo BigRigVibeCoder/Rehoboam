@@ -69,7 +69,7 @@ impl BranchSalt {
 
 /// The `purpose` field: a stable 64-bit identifier of an RNG purpose name.
 ///
-/// Derived from the purpose name alone, so adding a purpose never shifts the
+/// Derived from the purpose name alone ([`PurposeId::of`], [`crate::rng::Purpose`]), so adding a purpose never shifts the
 /// draws of another.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PurposeId(u64);
@@ -183,8 +183,8 @@ pub(crate) fn word_pos(k: u64) -> u128 {
 /// `H(world_seed, branch_salt, system_id, purpose, entity_id, t, k)`.
 ///
 /// A pure function of its arguments: it does not depend on any other draw or on call order.
-/// Systems that draw many values for one key use [`StreamKey`] directly, which gives the
-/// same values without re-deriving the key (`rng` module).
+/// Systems that draw many values for one key use [`crate::rng::RngStream`], which gives the
+/// same values without re-deriving the key.
 #[must_use]
 pub fn h(key: &RngKey, k: u64) -> u64 {
     StreamKey::of(key).draw(key.t, k)

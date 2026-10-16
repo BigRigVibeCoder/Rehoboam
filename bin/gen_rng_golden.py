@@ -21,6 +21,15 @@ H (T-02)
     under ``K2`` with nonce ``t``; ``H(..., t, k)`` is the u64 made of stream words ``2k`` (low)
     and ``2k + 1`` (high).
 
+SplitMix64 scalar hash (T-03)
+    ``mix`` is the SplitMix64 output function, ``GAMMA = 0x9e3779b97f4a7c15``.
+    ``h64_words(domain, w[0..n])``: ``h = mix(domain ^ n)``; then ``h = mix((h + GAMMA) ^ w)``.
+    ``h64_bytes(domain, b)``: the same over 8-byte little-endian chunks (last zero-padded), with
+    ``n`` the byte length. ``tag(name) = h64_bytes(0, name)``.
+    ``purpose_id(name) = h64_bytes(tag("rehoboam/rh-ids/purpose/v1"), name)``.
+    Light stream draw ``k`` = ``mix(base + (k + 1) * GAMMA)``, with
+    ``base = h64_words(tag("rehoboam/rh-ids/light/v1"), [seed, salt, system, purpose, entity, t])``.
+
 Usage:  python -I bin/gen_rng_golden.py           (rewrite the golden file)
         python -I bin/gen_rng_golden.py --check   (exit 1 if the committed file differs)
         python -I bin/gen_rng_golden.py --check --golden PATH   (check another file; the positive
@@ -136,6 +145,59 @@ def h(key: RngKey, k: int) -> int:
     return stream_u64(stream_key(world_seed, salt, system, purpose, entity), t, k)
 
 
+GAMMA = 0x9E37_79B9_7F4A_7C15
+MIX_MUL_1 = 0xBF58_476D_1CE4_E5B9
+MIX_MUL_2 = 0x94D0_49BB_1331_11EB
+WORD_BYTES = 8
+# The first output of SplitMix64 from state 0 (REF: Vigna, splitmix64.c reference sequence).
+KAT_SPLITMIX64_SEED0 = 0xE220_A839_7B1D_CDAF
+
+
+def mix(z: int) -> int:
+    """The SplitMix64 output function (Steele, Lea and Flood 2014)."""
+    z &= MASK64
+    z = ((z ^ (z >> 30)) * MIX_MUL_1) & MASK64
+    z = ((z ^ (z >> 27)) * MIX_MUL_2) & MASK64
+    return z ^ (z >> 31)
+
+
+def h64_words(domain: int, words: list[int]) -> int:
+    """The SplitMix64 scalar hash of 64-bit words under a domain tag."""
+    acc = mix(domain ^ len(words))
+    for w in words:
+        acc = mix(((acc + GAMMA) & MASK64) ^ (w & MASK64))
+    return acc
+
+
+def h64_bytes(domain: int, data: bytes) -> int:
+    """The SplitMix64 scalar hash of bytes (8-byte little-endian chunks, zero-padded)."""
+    acc = mix(domain ^ len(data))
+    for start in range(0, len(data), WORD_BYTES):
+        chunk = data[start : start + WORD_BYTES].ljust(WORD_BYTES, b"\x00")
+        acc = mix(((acc + GAMMA) & MASK64) ^ int.from_bytes(chunk, "little"))
+    return acc
+
+
+def tag(name: str) -> int:
+    """A domain tag from an ASCII name."""
+    return h64_bytes(0, name.encode("ascii"))
+
+
+TAG_PURPOSE = tag("rehoboam/rh-ids/purpose/v1")
+TAG_LIGHT = tag("rehoboam/rh-ids/light/v1")
+
+
+def purpose_id(name: str) -> int:
+    """The stable identifier of an RNG purpose name."""
+    return h64_bytes(TAG_PURPOSE, name.encode("ascii"))
+
+
+def light(key: RngKey, k: int) -> int:
+    """Draw ``k`` of the light (SplitMix64) stream of ``key``."""
+    base = h64_words(TAG_LIGHT, [x & MASK64 for x in key])
+    return mix((base + (k + 1) * GAMMA) & MASK64)
+
+
 def self_test() -> list[str]:
     """Check the ChaCha core against published vectors; return the failures."""
     failures = []
@@ -143,6 +205,8 @@ def self_test() -> list[str]:
         failures.append("ChaCha20 all-zero block differs from RFC 8439 A.1 #1")
     if chacha_block(bytes(KEY_BYTES), 0, 0, CHACHA8_ROUNDS).hex() != KAT_CHACHA8_ZERO:
         failures.append("ChaCha8 all-zero block differs from Strombergson TC1")
+    if mix(GAMMA) != KAT_SPLITMIX64_SEED0:
+        failures.append("SplitMix64 first output from state 0 differs from the reference")
     return failures
 
 
@@ -205,6 +269,34 @@ def lines_h() -> list[str]:
     ]
 
 
+def _varied_keys(seed: int, count: int) -> list[tuple[RngKey, int]]:
+    pick = _splitmix_sequence(seed)
+    out = []
+    for _ in range(count):
+        s, b, y, p, e, t = (next(pick) for _ in range(6))
+        out.append(((s, b, y & MASK32, p, e, _signed64(t)), next(pick) % 1000))
+    return out
+
+
+def lines_splitmix() -> list[str]:
+    """Scalar hashes, tags, purpose identifiers and light-stream draws."""
+    out = [f"mix {z} {mix(z)}" for z in (0, 1, GAMMA, MASK64, 0x0123_4567_89AB_CDEF)]
+    word_cases: list[tuple[int, list[int]]] = [(0, []), (0, [0]), (1, [0]), (0, [0, 0])]
+    word_cases += [(7, [1, 2, 3]), (MASK64, [MASK64] * 5)]
+    for domain, words in word_cases:
+        fields = [domain, len(words), *words, h64_words(domain, words)]
+        out.append("h64_words " + " ".join(map(str, fields)))
+    names = ["", "a", "death_time", "activity_block", "encounter_outcome", "exactly8", "nine_char"]
+    names += ["rehoboam/rh-ids/purpose/v1", "rehoboam/rh-ids/light/v1"]
+    out += [f"tag {n or '-'} {tag(n)}" for n in names]
+    purposes = ["death_time", "activity_block", "encounter_outcome", "birth_interval", "x"]
+    out += [f"purpose {n} {purpose_id(n)}" for n in purposes]
+    keys: list[tuple[RngKey, int]] = [((0, 0, 0, 0, 0, 0), 0), ((0, 0, 0, 0, 0, -1), MASK64)]
+    keys += _varied_keys(3, 16)
+    out += [f"light {' '.join(map(str, key))} {k} {light(key, k)}" for key, k in keys]
+    return out
+
+
 def render() -> str:
     """The whole golden file."""
     header = [
@@ -213,8 +305,14 @@ def render() -> str:
         "# Decimal integers; t is signed. Formats:",
         "#   chacha8 <key hex> <block counter> <nonce> <64-byte block hex>",
         "#   h <world_seed> <branch_salt> <system_id> <purpose_id> <entity_id> <t> <k> <u64>",
+        "#   mix <z> <u64>",
+        "#   h64_words <domain> <n> <w1> .. <wn> <u64>",
+        "#   tag <name, '-' for empty> <u64>",
+        "#   purpose <name> <purpose_id>",
+        "#   light <world_seed> <branch_salt> <system_id> <purpose_id> <entity_id> <t> <k> <u64>",
     ]
-    return "\n".join([*header, *lines_chacha(), *lines_h()]) + "\n"
+    body = [*lines_chacha(), *lines_h(), *lines_splitmix()]
+    return "\n".join([*header, *body]) + "\n"
 
 
 def main(argv: list[str] | None = None) -> int:
