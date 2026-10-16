@@ -9,6 +9,6 @@ File names say what a case exercises: `valid_*` must be VALID, `registry_*` reac
 These inputs are outside the manifest language (`docs/05_architecture/05.5` §3) and are deliberately not in the corpus:
 
 - **Explicit `!!binary`, `!!set` and `!!timestamp` tags (SPR-004 DEF-3, deferred).** PyYAML constructs them; the Rust loader refuses them with a LOAD ERROR, which fails closed. The expander never emits them.
-- **Unindented continuation lines (GAP-8, deferred).** A flow collection or quoted scalar continued on a line at its parent key's column (`a: [1,` then `2]`). PyYAML reads it; the Rust loader refuses it (YAML 1.2 indentation), which fails closed. The expander indents its YAML.
+- **Unindented continuation lines (GAP-8 / DEF-12, deferred; BCK-002 A-23).** A flow collection or quoted scalar continued on a line at its parent key's column (`a: [1,` then `2]`). PyYAML reads it; the Rust loader refuses it (YAML 1.2 indentation), which fails closed. The expander indents its YAML.
 - **LS or PS inside a folded (`>`) block scalar (DEF-11 ruling).** The Rust loader refuses it with a LOAD ERROR; PyYAML keeps the character.
 - **Alias expansion beyond a few thousand nodes (GAP-6, deferred).** Neither validator limits it; manifest input is trusted today.
