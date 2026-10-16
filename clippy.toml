@@ -1,0 +1,6 @@
+# Clippy configuration for the whole workspace (GOV-003 §2).
+
+# GOV-003 §2: unwrap/expect/panic are denied in library code, not in tests.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

@@ -1,0 +1,6 @@
+# Pinned Rust toolchain (GOV-008 §4). Bump only in a dedicated C2 change: a new rustc can change
+# clippy findings, and codegen changes must be checked against the golden hashes (docs/13 §4.2).
+[toolchain]
+channel = "1.97.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

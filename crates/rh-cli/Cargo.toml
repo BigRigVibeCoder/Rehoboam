@@ -1,0 +1,14 @@
+[package]
+name = "rh-cli"
+description = "Headless command-line tools around the engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.rehoboam]
+plane = "tool"
+kind = "tool"
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "rh-ids"
+description = "Typed IDs, the keyed hash H and the counter-based RNG"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints]
+workspace = true

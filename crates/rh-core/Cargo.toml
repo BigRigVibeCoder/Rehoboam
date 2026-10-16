@@ -1,0 +1,14 @@
+[package]
+name = "rh-core"
+description = "World, tables, scheduler, RNG context, time and invariants"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "core"
+
+[lints]
+workspace = true
