@@ -966,6 +966,42 @@ impl Replay {
         self.chains.get(n).copied()
     }
 
+    /// Checks a keyframe's journal anchor against this journal (VER-SPR-007-TEST GAP-7): the
+    /// journal holds at least `anchor.inputs` inputs of the anchor's timeline, and its chain after
+    /// that many is `anchor.head`. Call it wherever a keyframe is loaded together with a journal,
+    /// before replaying the journal from the keyframe. It catches a journal whose tail was
+    /// truncated together with a forged count and head (which [`Replay::open`] alone cannot: the
+    /// file is self-consistent), and one re-grown with other inputs after such a truncation.
+    ///
+    /// # Errors
+    /// [`JournalError::Mismatched`] for another timeline or another chain at the anchor;
+    /// [`JournalError::Missing`] if the journal is shorter than the anchor.
+    pub fn check_anchor(&self, anchor: &JournalPosition) -> Result<(), JournalError> {
+        if anchor.timeline_id != self.timeline_id {
+            return Err(JournalError::Mismatched {
+                timeline_id: self.timeline_id,
+                seq: anchor.inputs,
+                reason: format!("the anchor is timeline {}'s", anchor.timeline_id),
+            });
+        }
+        let at = usize::try_from(anchor.inputs).unwrap_or(usize::MAX);
+        match self.chain_after(at) {
+            None => Err(JournalError::Missing {
+                timeline_id: self.timeline_id,
+                seq: self.position.inputs,
+                reason: "the journal ends before the keyframe's anchor: inputs were removed",
+            }),
+            Some(head) if head != anchor.head => Err(JournalError::Mismatched {
+                timeline_id: self.timeline_id,
+                seq: anchor.inputs,
+                reason: "the journal's chain at the keyframe's anchor differs: the inputs before \
+                         the keyframe are not the ones it was taken after"
+                    .to_owned(),
+            }),
+            Some(_) => Ok(()),
+        }
+    }
+
     /// Opens `path` read-only and loads `timeline_id`'s inputs, checking the history key, the
     /// input count, the `seq` sequence, every payload hash, every row digest and the chain up to
     /// the timeline's head.

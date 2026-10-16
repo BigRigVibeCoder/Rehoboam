@@ -518,6 +518,9 @@ impl Decoder<'_> {
             r.end()?;
             entries.push((key, timer));
         }
+        // Rows are in key order; the agenda's tombstones are in id (seq) order, which differs
+        // once a later-inserted timer fires earlier.
+        tombstones.sort_unstable();
         Ok((entries, tombstones))
     }
 

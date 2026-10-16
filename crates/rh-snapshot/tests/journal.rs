@@ -16,8 +16,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use rh_core::time::SimTime;
 use rh_snapshot::hash::xxh3_128;
 use rh_snapshot::journal::{
-    ConsoleMode, HistoryKey, InputClass, InputKind, Journal, JournalError, JournaledInput,
-    NewInput, Producer, Replay, Scope, chain_genesis, chain_next, row_digest,
+    ConsoleMode, HistoryKey, InputClass, InputKind, Journal, JournalError, JournalPosition,
+    JournaledInput, NewInput, Producer, Replay, Scope, chain_genesis, chain_next, row_digest,
 };
 use rusqlite::Connection;
 
@@ -706,4 +706,69 @@ fn a_scope_is_the_entity_of_the_same_kind_and_id() {
         Some(EntityRef::new(EntityKind::Household, 7))
     );
     assert_eq!(Scope::of_entity(EntityRef::WORLD), None);
+}
+
+/// VER-SPR-007-TEST GAP-7: `Replay::check_anchor` checks a keyframe's anchor against the journal.
+/// A tail truncated together with a forged count and head opens cleanly (the file is
+/// self-consistent) but fails the anchor; so does one re-grown with other inputs to the same
+/// count.
+#[test]
+fn gap_7_check_anchor_catches_a_truncated_and_reforged_journal() {
+    let dir = fresh_dir("anchor");
+    let (path, _) = written(&dir);
+    let replay = Replay::open(&path, &key(), 0).unwrap();
+    let anchor = replay.position();
+    assert_eq!(anchor.inputs, 12);
+    replay.check_anchor(&anchor).unwrap();
+    // An anchor partway along the journal holds too.
+    let mid = JournalPosition {
+        timeline_id: 0,
+        inputs: 5,
+        head: replay.chain_after(5).unwrap(),
+    };
+    replay.check_anchor(&mid).unwrap();
+    // Another timeline's anchor, or another head at the same count, does not.
+    let other = JournalPosition {
+        timeline_id: 1,
+        ..anchor
+    };
+    assert!(matches!(
+        replay.check_anchor(&other),
+        Err(JournalError::Mismatched { .. })
+    ));
+    let mut bent = anchor;
+    bent.head[0] ^= 1;
+    assert!(matches!(
+        replay.check_anchor(&bent),
+        Err(JournalError::Mismatched { .. })
+    ));
+    drop(replay);
+    // Truncate the last two inputs and reforge the count and head to match: it opens, it fails
+    // the keyframe's anchor.
+    tamper(
+        &path,
+        "DELETE FROM inputs WHERE seq >= 10; \
+         UPDATE timelines SET input_count = 10, \
+           head_chain = (SELECT chain FROM inputs WHERE timeline_id = 0 AND seq = 9) \
+         WHERE timeline_id = 0;",
+    );
+    let truncated = Replay::open(&path, &key(), 0).unwrap();
+    assert_eq!(truncated.position().inputs, 10);
+    assert!(matches!(
+        truncated.check_anchor(&anchor),
+        Err(JournalError::Missing { .. })
+    ));
+    drop(truncated);
+    // Re-grow it to twelve with other inputs: the count matches, the chain does not.
+    let mut j = Journal::open(&path, &key()).unwrap();
+    for input in inputs().into_iter().take(2) {
+        j.append(input).unwrap();
+    }
+    drop(j);
+    let regrown = Replay::open(&path, &key(), 0).unwrap();
+    assert_eq!(regrown.position().inputs, 12);
+    assert!(matches!(
+        regrown.check_anchor(&anchor),
+        Err(JournalError::Mismatched { .. })
+    ));
 }

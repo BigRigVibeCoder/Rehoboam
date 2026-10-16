@@ -28,7 +28,7 @@ use core::fmt;
 use rh_events::EventLogState;
 use rh_ids::{EntityRef, TimelineId};
 
-use crate::agenda::{AgendaError, AgendaState};
+use crate::agenda::{AgendaError, AgendaKey, AgendaState, Timer};
 use crate::command::CommandQueuesState;
 use crate::engine::MaterialInput;
 use crate::time::SimTime;
@@ -75,6 +75,8 @@ pub enum RestoreError {
     Tables(String),
     /// A timer names an owner that is not registered.
     TimerOwner(String),
+    /// A pending timer is dated before the cursor (VER-SPR-007-TEST GAP-9): it should have fired.
+    TimerTime(String),
 }
 
 impl fmt::Display for RestoreError {
@@ -86,6 +88,7 @@ impl fmt::Display for RestoreError {
             Self::Inputs(m) => write!(f, "restore: queued inputs: {m}"),
             Self::Events(m) => write!(f, "restore: event log: {m}"),
             Self::Tables(m) => write!(f, "restore: tables: {m}"),
+            Self::TimerTime(m) => write!(f, "restore: agenda timers: {m}"),
             Self::TimerOwner(m) => write!(f, "restore: agenda: {m}"),
         }
     }
@@ -111,6 +114,27 @@ pub(crate) fn check_epochs(epochs: &[(EntityRef, u32)]) -> Result<(), RestoreErr
 
 /// Checks the canonical form of the queued inputs: instants strictly increasing, none before the
 /// cursor, no empty list.
+/// A pending timer must not be dated before the cursor: one that was due has fired (or, cancelled,
+/// was dropped when its instant ran), so an earlier entry is a forged or corrupt state
+/// (VER-SPR-007-TEST GAP-9), refused as queued inputs are. `entries` are in key order, so the
+/// first is the earliest.
+pub(crate) fn check_timers(
+    entries: &[(AgendaKey, Timer)],
+    cursor: Option<SimTime>,
+) -> Result<(), RestoreError> {
+    match (entries.first(), cursor) {
+        (Some((key, _)), Some(c)) if key.time < c => Err(RestoreError::TimerTime(format!(
+            "a timer at {} is before the cursor {c}",
+            key.time
+        ))),
+        (Some((key, _)), None) => Err(RestoreError::TimerTime(format!(
+            "a timer at {} after time has run out",
+            key.time
+        ))),
+        _ => Ok(()),
+    }
+}
+
 pub(crate) fn check_inputs(
     inputs: &[(SimTime, Vec<MaterialInput>)],
     cursor: Option<SimTime>,
