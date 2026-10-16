@@ -722,3 +722,9 @@ def test_float_yielding_apis_name_reviewed_dependencies() -> None:
     for name, tokens in FLOAT_YIELDING_APIS.items():
         assert tokens and len(set(tokens)) == len(tokens), name
     assert set(FLOAT_YIELDING_APIS["rusqlite"]) == {"Real", "as_f64", "as_f64_or_null"}
+    arrow = {
+        token
+        for name in ("arrow-array", "arrow-buffer", "arrow-schema")
+        for token in FLOAT_YIELDING_APIS[name]
+    }
+    assert {"Float64", "Float64Array", "Float32Type", "Float64Builder", "f16", "half"} <= arrow

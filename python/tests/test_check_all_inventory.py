@@ -24,8 +24,8 @@ RUN_NAME = re.compile(r'^\s*run "(?P<name>[^"]*)"')
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
     "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)",
-    "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite (SPR-007 "
-    "ruling 4)",
+    "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite and zstd "
+    "(SPR-007 ruling 4)",
     "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
     "CI workflows parse (YAML)",
     "Chronicle SQL-twin equivalence",
@@ -76,6 +76,8 @@ REQUIRED_GATES = (
     "Sifting patterns (lint_patterns)",
     "System specs (lint_odd)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
+    "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
+    "T-02)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
     "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)",
     "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)",
@@ -155,6 +157,8 @@ REQUIRED_GATES = (
     "lint_forbidden float-api positive control: reexport in rh-sample's public API must FAIL "
     "(SPR-003 GAP-1)",
     "lint_forbidden float-dep positive control: accessor in rh-snapshot must FAIL (SPR-007 GAP-1)",
+    "lint_forbidden float-dep positive control: arrow_float in rh-snapshot must FAIL (SPR-007 "
+    "T-02)",
     "lint_forbidden float-dep positive control: real_bits in rh-snapshot must FAIL (SPR-007 GAP-1)",
     "lint_forbidden float-dep positive control: real_cmp in rh-snapshot must FAIL (SPR-007 GAP-1)",
     "lint_forbidden float-dep positive control: real_floor in rh-snapshot must FAIL (SPR-007 "
@@ -171,8 +175,8 @@ REQUIRED_GATES = (
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
-    "rh-snapshot gates by name: plane hashes, golden vectors, journal, unsynced guard (SPR-007 "
-    "T-01, T-03, T-04)",
+    "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard "
+    "(SPR-007 T-01..T-04)",
     "uv lock --check positive control: drifted lock must FAIL",
 )
 
