@@ -102,14 +102,21 @@ git_source_control() {
   cargo deny --color never --offline --locked --manifest-path "$dst/Cargo.toml" check sources
 }
 
-# Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, each of which
-# must be caught by its own rule (tests/lint_fixtures/README.md).
+# Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, holding exactly
+# that API, which must be reported under its own rule with its own token (tests/lint_fixtures/README.md).
+# Each entry is file:rule:token; a token may itself contain "::".
+FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collections:HashSet
+  thread_rng:thread-rng:thread_rng thread_rng_type:thread-rng:ThreadRng rand_rng:thread-rng:rand::rng
+  std_rng:std-rng:StdRng small_rng:std-rng:SmallRng os_rng:std-rng:OsRng from_entropy:std-rng:from_entropy
+  from_os_rng:std-rng:from_os_rng getrandom:std-rng:getrandom rand_random:rand-random:rand::random
+  random_range:rand-random:random_range random_bool:rand-random:random_bool
+  random_ratio:rand-random:random_ratio random_iter:rand-random:random_iter mul_add:mul-add:mul_add
+  instant:wall-clock:Instant::now system_time:wall-clock:SystemTime unsafe:unsafe:unsafe"
 forbidden_api_controls() {
-  local spec file rule
-  for spec in hash_map:hash-collections hash_set:hash-collections thread_rng:thread-rng std_rng:std-rng \
-      rand_random:rand-random mul_add:mul-add instant:wall-clock system_time:wall-clock unsafe:unsafe; do
-    file="${spec%%:*}"; rule="${spec#*:}"
-    run "Forbidden-API positive control: $file must FAIL" "fail:VIOLATION [V-DET-19/$rule]" \
+  local spec file rest rule token tick='`'
+  for spec in $FORBIDDEN_API_CONTROLS; do
+    file="${spec%%:*}"; rest="${spec#*:}"; rule="${rest%%:*}"; token="${rest#*:}"
+    run "Forbidden-API positive control: $file must FAIL" "fail:VIOLATION [V-DET-19/$rule] ${tick}${token}${tick}" \
       "$PY" -I bin/lint_forbidden.py --scan "tests/lint_fixtures/forbidden/planted/$file.rs" || return 1
   done
 }
@@ -135,11 +142,13 @@ run "lint_arch positive control: system -> rh-snapshot must FAIL" "fail:VIOLATIO
 run "lint_arch positive control: plane A -> plane B must FAIL" "fail:VIOLATION [V-PLN-01]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_b/Cargo.toml &&
 run "lint_arch positive control: plane A -> plane C must FAIL" "fail:VIOLATION [V-PLN-01]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_c/Cargo.toml &&
 run "lint_arch positive control: missing plane/kind must FAIL" "fail:VIOLATION [metadata]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/missing_metadata/Cargo.toml &&
+run "lint_arch positive control: plane A -> rand must FAIL" "fail:VIOLATION [rng-crate] rh-core: plane-A crate depends on rand;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_rng_crate/Cargo.toml &&
+run "lint_arch positive control: rand_chacha outside rh-ids must FAIL" "fail:VIOLATION [rng-crate] rh-core: depends on rand_chacha;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/rng_building_block_outside_ids/Cargo.toml &&
 run "V-PLN-01 compile-fail fixture has a clean dependency graph" pass "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_b/Cargo.toml &&
 run "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL" 'fail:unlinked crate `fixture_observation`' cargo check --offline --locked --quiet --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_b/Cargo.toml --target-dir target/lint-fixtures &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
 forbidden_api_controls &&
-run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
+run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&

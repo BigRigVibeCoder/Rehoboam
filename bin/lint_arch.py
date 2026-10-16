@@ -15,8 +15,13 @@ workspace crates, of every dependency kind (normal, build and dev):
     plane-A-closure  A plane-A crate depends only on plane-A workspace crates. A tool crate is not
                      scanned by the forbidden-API gate and may itself reach planes B and C, so an
                      edge to one would launder both past the checks.
+    rng-crate        A plane-A crate never depends on a crate that provides unkeyed or
+                     entropy-seeded randomness (rand, getrandom, ...); the RNG building blocks
+                     rand_core and rand_chacha are allowed only in rh-ids, which owns the keyed
+                     RNG (ADR-0006; DET-2; DEF-1). Crates are matched by package name, so a
+                     `package =` alias does not hide one.
 
-Edges to third-party crates are governed by cargo-deny (deny.toml), not by this lint.
+Other edges to third-party crates are governed by cargo-deny (deny.toml), not by this lint.
 
 Usage:  python -I bin/lint_arch.py [--manifest-path Cargo.toml]
 Exit:   0 clean, 1 violations, 2 the workspace could not be read.
@@ -39,6 +44,12 @@ SYSTEM_ALLOWED_DEPS = frozenset({"rh-core", "rh-ids", "rh-events", "rh-registry"
 PLANE_A_KINDS = frozenset({"core", "contract", "system"})
 SYSTEM_CRATE_PREFIX = "rh-sys-"
 OBSERVATION_AND_NARRATIVE = frozenset({"B", "C"})
+# REF: ADR-0006 (keyed RNG only); DET-2; V-DET-19; DEF-1 (rand 0.9's thread-local functions passed
+# every text gate). The single list of crates whose purpose is unkeyed or entropy-seeded randomness.
+UNKEYED_RNG_CRATES = frozenset({"rand", "getrandom", "fastrand", "oorandom", "nanorand"})
+# Building blocks of the keyed RNG (ChaCha8, SPR-002), allowed only in the crate that owns it.
+KEYED_RNG_BUILDING_BLOCKS = frozenset({"rand_core", "rand_chacha"})
+KEYED_RNG_OWNER = "rh-ids"
 
 EXIT_OK = 0
 EXIT_VIOLATIONS = 1
@@ -53,7 +64,7 @@ class WorkspaceError(Exception):
 
 @dataclass(frozen=True, order=True)
 class Edge:
-    """A dependency of one workspace crate on another."""
+    """A dependency of a workspace crate, named by the target's package name (never its alias)."""
 
     target: str
     kind: str  # "normal", "build" or "dev"
@@ -61,12 +72,17 @@ class Edge:
 
 @dataclass(frozen=True)
 class Crate:
-    """A workspace crate with its declared plane, kind and workspace-internal edges."""
+    """A workspace crate: its declared plane and kind, and its dependency edges.
+
+    ``edges`` go to other workspace crates; ``external`` to everything else (registry, git, or a
+    path outside the workspace).
+    """
 
     name: str
     plane: str | None
     kind: str | None
     edges: tuple[Edge, ...]
+    external: tuple[Edge, ...] = ()
 
     @property
     def declared_ok(self) -> bool:
@@ -111,17 +127,26 @@ def _declared(package: dict[str, object], key: str) -> str | None:
     return value if isinstance(value, str) else repr(value)
 
 
-def _workspace_edges(package: dict[str, object], workspace: frozenset[str]) -> tuple[Edge, ...]:
-    """Return the package's dependencies on other workspace crates, sorted."""
-    edges: set[Edge] = set()
+def _edges(
+    package: dict[str, object], workspace: frozenset[str]
+) -> tuple[tuple[Edge, ...], tuple[Edge, ...]]:
+    """Return the package's (workspace, external) dependency edges, each sorted.
+
+    ``name`` in cargo metadata is the dependency's package name; an alias (``package =``) appears
+    only as ``rename``, which is ignored, so an alias cannot disguise a crate.
+    """
+    internal: set[Edge] = set()
+    external: set[Edge] = set()
     for raw in _as_list(package.get("dependencies", []), "dependencies"):
         dep = _as_dict(raw, "a dependency")
-        name = dep.get("name")
+        name, kind = dep.get("name"), dep.get("kind")
+        if not isinstance(name, str):
+            raise WorkspaceError(f"a dependency has no name: {dep!r}")
+        edge = Edge(target=name, kind=kind if isinstance(kind, str) else "normal")
         # A workspace dependency is a path dependency (no registry or git source) on a member.
-        if isinstance(name, str) and name in workspace and dep.get("source") is None:
-            kind = dep.get("kind")
-            edges.add(Edge(target=name, kind=kind if isinstance(kind, str) else "normal"))
-    return tuple(sorted(edges))
+        is_member = name in workspace and dep.get("source") is None
+        (internal if is_member else external).add(edge)
+    return tuple(sorted(internal)), tuple(sorted(external))
 
 
 def crates_from_metadata(document: object) -> list[Crate]:
@@ -141,15 +166,18 @@ def crates_from_metadata(document: object) -> list[Crate]:
     packages = [_as_dict(p, "a package") for p in _as_list(root.get("packages"), "packages")]
     in_workspace = [p for p in packages if p.get("id") in members]
     names = frozenset(str(p.get("name")) for p in in_workspace)
-    crates = [
-        Crate(
-            name=str(p.get("name")),
-            plane=_declared(p, "plane"),
-            kind=_declared(p, "kind"),
-            edges=_workspace_edges(p, names),
+    crates = []
+    for package in in_workspace:
+        internal, external = _edges(package, names)
+        crates.append(
+            Crate(
+                name=str(package.get("name")),
+                plane=_declared(package, "plane"),
+                kind=_declared(package, "kind"),
+                edges=internal,
+                external=external,
+            )
         )
-        for p in in_workspace
-    ]
     return sorted(crates, key=lambda crate: crate.name)
 
 
@@ -170,10 +198,42 @@ def check_metadata(crate: Crate) -> list[Violation]:
     return [Violation("metadata", crate.name, f"{p}; {METADATA_HINT}") for p in problems]
 
 
+def _via(edge: Edge) -> str:
+    """Return the phrase naming a non-normal dependency kind, or nothing for a normal one."""
+    return "" if edge.kind == "normal" else f" (as a {edge.kind}-dependency)"
+
+
+def check_rng_crates(crate: Crate) -> list[Violation]:
+    """Check a plane-A crate's external edges against the RNG-crate rule (DEF-1)."""
+    if crate.plane != "A":
+        return []
+    found: list[Violation] = []
+    for edge in crate.external:
+        if edge.target in UNKEYED_RNG_CRATES:
+            found.append(
+                Violation(
+                    "rng-crate",
+                    crate.name,
+                    f"plane-A crate depends on {edge.target}{_via(edge)}; the only RNG in plane A "
+                    f"is the keyed one in {KEYED_RNG_OWNER} (ADR-0006)",
+                )
+            )
+        elif edge.target in KEYED_RNG_BUILDING_BLOCKS and crate.name != KEYED_RNG_OWNER:
+            found.append(
+                Violation(
+                    "rng-crate",
+                    crate.name,
+                    f"depends on {edge.target}{_via(edge)}; RNG building blocks are allowed only "
+                    f"in {KEYED_RNG_OWNER}, which owns the keyed RNG (SPR-002)",
+                )
+            )
+    return found
+
+
 def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:
     """Check one workspace edge against V-INSP-03, V-PLN-01 and the plane-A closure."""
     found: list[Violation] = []
-    via = "" if edge.kind == "normal" else f" (as a {edge.kind}-dependency)"
+    via = _via(edge)
     if source.kind == "system" and target.kind == "system":
         found.append(
             Violation(
@@ -225,6 +285,7 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     """
     by_name = {crate.name: crate for crate in crates}
     violations = [v for crate in crates for v in check_metadata(crate)]
+    violations += [v for crate in crates if crate.declared_ok for v in check_rng_crates(crate)]
     for crate in crates:
         for edge in crate.edges:
             target = by_name.get(edge.target)
@@ -264,12 +325,18 @@ def load_metadata(manifest_path: Path) -> object:
 
 
 def describe(crate: Crate) -> str:
-    """Return one forensic line per crate: its declaration and its workspace edges."""
-    edges = ", ".join(
-        edge.target if edge.kind == "normal" else f"{edge.target} ({edge.kind})"
-        for edge in crate.edges
+    """Return one forensic line per crate: its declaration and its edges."""
+
+    def names(edges: tuple[Edge, ...]) -> str:
+        listed = ", ".join(
+            e.target if e.kind == "normal" else f"{e.target} ({e.kind})" for e in edges
+        )
+        return listed or "(none)"
+
+    return (
+        f"  {crate.name}: plane={crate.plane} kind={crate.kind} -> {names(crate.edges)}; "
+        f"external: {names(crate.external)}"
     )
-    return f"  {crate.name}: plane={crate.plane} kind={crate.kind} -> {edges or '(none)'}"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
