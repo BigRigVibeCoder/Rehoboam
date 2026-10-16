@@ -12,7 +12,7 @@ updated: 2026-10-16
 version: 0.4.0
 ---
 
-> **BLUF:** Not ready at round 1 (PR #41 head `35aa53a`): **2 blockers, 8 majors, 7 minors.** The reference reproduces all 456 golden cases, its positive control fails as it should, and the 12 succession cases agree with the spec text when checked by hand. The genealogy relations read only the life-course log and reach through the dead. Nothing depends on iteration order. D1 rounding matches `rh-core::fixed` and D9 matches `draw_hits`. The blockers: ticks are written in days where the engine counts minutes, and a 4-degree candidate cut breaks representation. Two choices go to the director at the SPR-017 plan gate: whether collateral heirs must be of the title's blood (M8), and the sex rules (D4). The reviewer expects no objection after one revision round (8/10).
+> **BLUF:** Ready for the director at the SPR-017 plan gate after four rounds (PR #41 round 4, `f0ed64e`, v0.4.0, 554 cases): **0 blockers, 0 majors**, and the reviewer does not object to approval, including D14 (title blood over the last 16 holders; worldgen back-fills pre-epoch history, SPR-019), D4 (sex rules) and D12 (bounds). Round 1 found 2 blockers (ticks in days; a candidate cut that broke representation) and 8 majors. Round 2 found the title-blood rule bounded by a fixed founder. Round 3 found the world-start precondition and an over-wide run-time check. All were fixed as ruled. A round 5 tidies four minors (§6). Every review ran in a session on a different model from the drafter's.
 
 # REV-SPR-017: the effect language v0, round 1
 
