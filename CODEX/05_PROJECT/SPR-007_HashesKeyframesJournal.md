@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.3.0
 ---
 
 > **BLUF:** Make every state reproducible and checkable: three plane hashes, Arrow keyframes and the SQLite input journal. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -63,22 +63,22 @@ version: 1.2.0
 ### T-01: Plane hashes
 - **Deliverable:** Chunked Merkle hashes with dirty tracking, one per plane; the hash function licence-checked (`docs/14` xxhash note)
 - **Acceptance:** Hash stable across runs; a one-row change alters exactly one chunk
-- **Status:** [ ] not started
+- **Status:** [x] done (`965116d`, `b1c5608`, DEF-1 `7517673`, DEF-2 `4a54af8`, `e5dc2cb`: `rh-snapshot::hash`, layout `rehoboam/rh-snapshot/hash/v1`, `MerkleCache`; `tests/hash.rs`, `tests/golden.rs` against `bin/gen_hash_golden.py`, `tests/stub_world.rs` with the stub-world golden `tests/golden/stub_world_hashes.txt`)
 
 ### T-02: Keyframes
 - **Deliverable:** Arrow IPC write/read of plane-A tables plus pending timers; zstd
 - **Acceptance:** V-DET-05: load, advance 10 years, equal to a continuous run
-- **Status:** [ ] not started
+- **Status:** [x] done (`1abe93f`, `16bef5b`, `f8a0b32`, `cd639a6`, `2ef968e`: `Engine::snapshot`/`Engine::restore`, crash artifact format 2, `rh-snapshot::state` (engine tables in `state_hash`), `rh-snapshot::keyframe` (format `rehoboam/rh-snapshot/keyframe/v1`), `rh-snapshot::store::KeyframeStore`, `journal::Scope::entity`; `tests/keyframe.rs` (V-DET-05 at two cuts × 120 monthly hashes, cadence and LRU, refusals, converged-run event hash), `rh-core/tests/agenda_events.rs` (restore continues the unbroken run; non-canonical parts refused), `rh-core/tests/invariants.rs`)
 
 ### T-03: Input journal
 - **Deliverable:** SQLite (WAL) journal of push inputs (pull inputs retired, ADR-0034) per IF-2, with tick, seq, class and scope
 - **Acceptance:** Round-trip; a replay reads only the journal
-- **Status:** [ ] not started
+- **Status:** [x] done (`b63b151`, GAP-3 `4127373`, OBS-1 `8fd3969`, `d6e21fa`, GAP-5 `b7be162`: `rh-snapshot::journal`, schema `rehoboam/rh-snapshot/journal/v2`, row digests and a chain per timeline; `tests/journal.rs`)
 
 ### T-04: Unsynced guard
 - **Deliverable:** Debug-build check that read-only APIs never mutate state
 - **Acceptance:** V-DET-10: an injected write trips the guard
-- **Status:** [ ] not started
+- **Status:** [x] done (`4855ef1`, GAP-4 `16bef5b`: `rh-snapshot::guard::read_only`, debug builds only; `tests/guard.rs` (injected-write control, release build compiles it out), `tests/unsynced_guard.rs` (read-only APIs fuzzed on the stub world))
 
 ## Verification assignment (Testers)
 
@@ -91,6 +91,20 @@ version: 1.2.0
 | # | Blocker | Filed as | Status |
 |---|---|---|---|
 | — | None | — | — |
+
+## Carried and ruled (Architect, 2026-10-16)
+
+| Item | What | Resolution | Commit |
+|---|---|---|---|
+| T-02 deviation 1 | Engine tables are named `rh-core/…`; `rh-core/engine.meta` and `rh-core/events.held` are added beyond the ruled list | Accepted: a collision with an `entity.column` world table is impossible, and both are plane-A state | `16bef5b` |
+| T-02 deviation 2 | The keyframe header is the reserved table `rehoboam:keyframe`, not Arrow schema metadata (a hash map); one `(table Utf8, row Binary)` schema of canonical row bytes | Accepted for P0: Arrow is a container, and the keyframe uses the hash's own encoding; typed batches come with typed columns (`05.2` §6) | `f8a0b32`, `cd639a6` |
+| T-02 deviation 3 | Integrity envelope: 8 magic bytes and the XXH3-128 of the Arrow bytes, checked before Arrow parses (Arrow 60's IPC reader panics on some corrupt input) | Accepted: it catches corruption, not forgery; the history check and the state hash bind a keyframe to its run | `f8a0b32` |
+| T-02 deviation 4 | `KeyframeStore` LRU capacity defaults to 8 (`05.2` names no number) | Accepted until P1 measures keyframe sizes | `f8a0b32` |
+| VER-SPR-007 OBS-5 | `MerkleCache::update`: a table that shrinks and regrows to the same count between updates needs `mark_rows` | Documented on `update` | `f8a0b32` |
+| VER-SPR-007 GAP-4 | The unsynced guard must see engine-held state, not only `WorldTables` | The `Engine` guard state is `state_hash(&engine.snapshot())`; `tests/keyframe.rs` `the_guard_sees_engine_held_state` | `16bef5b`, `f8a0b32` |
+| SPR-006 DEF-6 | The crash artifact keeps exactly the last 1000 diagnostic records | Test `the_crash_artifact_keeps_exactly_the_last_1000_diagnostic_records` (fails at 1001) | `1abe93f` |
+| SPR-006 GAP-6 | Restore accepts only the canonical form, everywhere | `Agenda::restore`, `CommandQueues::from_state`, `EventLog::from_state`, epochs and inputs checked; `Engine::restore` validates names against `Registered`; 11 refused cases in `agenda_events.rs` | `1abe93f` |
+| SPR-006 event hash | `rh-core/events.meta` carries the running event-log hash (SPR-006 G4), so a converged run that emitted different events still changes `state_hash` | Test `a_converged_run_that_emitted_a_different_event_hashes_differently`; a mutant dropping the running hash fails it | `2ef968e` |
 
 ## Completion
 
