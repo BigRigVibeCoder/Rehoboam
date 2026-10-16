@@ -1,6 +1,23 @@
 # ADR-0021 — Licence allow-list and provenance
 
-**Status:** Proposed · **Date:** 2026-10-15
+**Status:** Accepted, amended to **personal-use mode** (director, D19, 2026-10-16) · **Date:** 2026-10-15
+
+## Amendment 2026-10-16: personal-use mode (D19)
+
+The director ruled that Rehoboam is a **private experiment that will never be distributed**: not sold, not published, not shared outside the director's own machines. Licence obligations such as GPL source release or non-commercial terms bind distribution or commercial use, neither of which happens here.
+
+**In force from 2026-10-16:**
+1. **Any licence may be used**, in any crate, tool, model weight or asset, including GPL, AGPL, LGPL, BSL, non-commercial and research-only licences.
+2. **Two limits remain:**
+   - a licence whose terms forbid the use itself (for example, a territorial exclusion that covers where the director lives) is not used;
+   - code with **no licence** is read for ideas, not copied (no licence grants no permission).
+3. **The licence ledger.** `bin/check_all.sh` writes every Rust dependency's licence to `artifacts/licence_ledger.txt`. It never fails a build. It exists so that, if the director ever changes this ruling, the cost of replacing restricted components can be read off at once.
+4. **The repository stays private.** It already holds copyrighted research papers.
+5. **Supply-chain checks stay blocking:** crates come from crates.io only and never with wildcard versions (`cargo deny check bans sources`). These protect the build, not a licence.
+
+**The trade-off, recorded:** if the ruling is ever reversed, every restricted component in authoritative code (`rh-core`, `rh-sys-*`, `rh-worldgen`, `rh-sifter`) must be replaced or the engine relicensed. Replacing authoritative code changes history hashes, so golden runs and saved worlds would need re-recording (`docs/14`). The ledger keeps that cost visible.
+
+The original decision below is kept as history; it governs only if D19 is reversed.
 
 ## Context
 

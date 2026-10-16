@@ -471,10 +471,10 @@ entries:
     path: "docs/06_adr/ADR-0021-licence-policy.md"
     title: "ADR-0021 — Licence allow-list and provenance"
     type: "inferred"
-    status: "Proposed"
+    status: "Accepted, amended to"
     area: "docs"
     tags: []
-    summary: "The draft's \"cannibalisation\" list included GPL code (Micropolis, Watabou), AGPL code (df-storyteller, AgentTorch, FLAME GPU 2), anti-commercial code (Ceptre), unlicensed code (Felt, Winnow), and non-commercial weights (…"
+    summary: "The director ruled that Rehoboam is a private experiment that will never be distributed: not sold, not published, not shared outside the director's own machines. Licence obligations such as GPL source release or non-comm…"
   - id: "ADR-0022"
     path: "docs/06_adr/ADR-0022-agentic-development.md"
     title: "ADR-0022 — Spec-first, contract-tested, agent-sized work packages"
@@ -770,7 +770,7 @@ entries:
     status: "Draft v1"
     area: "docs"
     tags: []
-    summary: "How the facts were checked (2026-10-15)"
+    summary: "> Personal-use mode (D19, 2026-10-16; ADR-0021 as amended). Rehoboam is a private experiment that is never distributed. Every \"licence trap\" and AVOID verdict below that rests only on a licence no longer applies, and the…"
   - id: "DOC-DECISIONS-LOG"
     path: "docs/decisions-log.md"
     title: "Decisions Log"
