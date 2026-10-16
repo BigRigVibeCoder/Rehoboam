@@ -1,6 +1,6 @@
 # ADR-0029 — Lo-fi glyph client first; 3D becomes a later art phase
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Defers:** ADR-0018 (Godot 3D client) to art phase 2 · **Amends:** `05.7`, `11` (P5–P7) · **Amended by:** ADR-0030 (no graphical view before G2: the P1.0 glyph view becomes an ASCII map in `rh-tui`, and the P3 Diorama preview is dropped; P5–P7 are unchanged)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Defers:** ADR-0018 (Godot 3D client) to art phase 2 · **Amends:** `05.7`, `11` (P5–P7) · **Amended by:** ADR-0030 (no graphical view before G2: the P1.0 glyph view becomes an ASCII map in `rh-tui`, and the P3 Diorama preview is dropped; P5–P7 are unchanged)
 
 ## Context
 

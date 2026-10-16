@@ -1,6 +1,6 @@
 # ADR-0028 — One engine from one person to one million: scale profiles and micro worlds
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amends:** ADR-0003 (ledger), ADR-0010 (compiler validators), ADR-0012 (cognition tiers), ADR-0020 (scale-out); extends ADR-0027
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0003 (ledger), ADR-0010 (compiler validators), ADR-0012 (cognition tiers), ADR-0020 (scale-out); extends ADR-0027
 
 ## Context
 

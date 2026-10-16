@@ -1,6 +1,6 @@
 # ADR-0027 — Era-generic mechanisms: eras are state, not templates
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amends:** ADR-0010 (templates and horizons), ADR-0012 (cognition), ADR-0022 (work packaging); extends `05.1` §3
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0010 (templates and horizons), ADR-0012 (cognition), ADR-0022 (work packaging); extends `05.1` §3
 
 ## Context
 

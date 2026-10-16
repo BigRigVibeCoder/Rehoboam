@@ -1,6 +1,6 @@
 # ADR-0031 — Fidelity by zoom: the World Language, virtual telemetry everywhere, authoritative daily life where you declare it
 
-**Status:** Proposed · **Date:** 2026-10-16 · **Extends:** ADR-0030 (World Stream), ADR-0028 (scale profiles), ADR-0006 (keyed RNG) · **Amends:** `05.1` (new system S5), `05.2` §3.5 (schedules), `05.10`
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-16 · **Extends:** ADR-0030 (World Stream), ADR-0028 (scale profiles), ADR-0006 (keyed RNG) · **Amends:** `05.1` (new system S5), `05.2` §3.5 (schedules), `05.10`
 
 ## Context
 
@@ -85,6 +85,13 @@ The same function can run at three **activity resolutions**. A resolution is a w
 | Region, years | SimCity with persistent individuals | Events, markets, migrations, life courses |
 | Settlement, days | Dwarf Fortress fortress mode | Virtual telemetry; authoritative in focus regions |
 | A person, hours | The Sims | Virtual telemetry plus named-mind decision traces; minute-level only where declared |
+
+### 5. Amendment at acceptance (director, 2026-10-16)
+The director accepts about 1.5 hours per simulated year for 1M persons at `minutes` resolution as a batch run.
+- **`minutes` is allowed at any scale.** The manifest validator now warns with the estimate instead of rejecting it.
+- **The estimate assumes simple activity updates.** Richer Sims-like agents (needs, choosing among objects, pathing, conversations) may cost 10–100× more. PERF-6 records the agent richness alongside each measurement.
+- **Defaults are unchanged (D25):** micro worlds `blocks`, larger worlds `life_course` plus focus regions. The first test world, `solo`, runs at `minutes`.
+- **Only consequential encounters become stream events** (ties formed, infections, crimes), not every co-presence. Otherwise the stream at 1M and `minutes` would grow by millions of records per simulated day.
 
 ## Alternatives considered
 

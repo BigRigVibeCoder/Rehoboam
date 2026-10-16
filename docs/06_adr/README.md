@@ -2,7 +2,7 @@
 
 Format: *Status · Context · Decision · Alternatives considered · Consequences · Revisit when · Evidence.*
 Statuses: **Proposed**, which awaits your sign-off; **Accepted**; **Superseded by ADR-xxxx**.
-All ADRs below are **Proposed** until you review them. ADRs that sit on a critical path carry a ★.
+ADRs that sit on a critical path carry a ★. **The 19 ★ ADRs were Accepted by the director on 2026-10-16** (decisions log, rulings D1, D2 and D24). The other 12 remain **Proposed** and are reviewed when their phase starts (D23).
 
 **v1.1 amendments (2026-10-15).** After the red-team review, ADRs 0002–0018, 0020, 0022 and 0023 end with an *Amendment v1.1* section. Each amendment lists any text corrected inline, then the changes, with references to ADR-0024–0026 and the 05.x architecture docs, which are the source of truth. ADR-0024, 0025 and 0026 are new. ADRs 0001, 0019 and 0021 are unchanged. Like the ADRs, the amendments are **Proposed** until you approve them. Record the approval in `docs/decisions-log.md`.
 

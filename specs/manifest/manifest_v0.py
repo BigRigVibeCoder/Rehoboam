@@ -444,12 +444,13 @@ def validate_against_registry(m: Manifest, reg: dict) -> list[Issue]:
         warn("peoples", f"{humans:,} persons: above the 1M target range (ADR-0028); expect batch-speed runs (docs/08)")
 
     # activity resolution (ADR-0031): cost scales with persons x resolution; estimates at ~1e8 updates/s
+    # 'minutes' is allowed at any scale (director, 2026-10-16: ~1.5 h per sim-year at 1M is acceptable); the estimate assumes
+    # simple activity updates, and richer Sims-like agents (needs, object choice, pathing) may cost 10-100x more.
     res = m.world.activity_resolution
-    if res == "minutes" and humans > 10_000:
-        err("world.activity_resolution", f"'minutes' for {humans:,} persons is about {humans / 1000 * 5 / 60:.0f} min per sim-year; "
-                                         "use focus regions instead (ADR-0031)")
-    elif res == "minutes" and humans > 1_000:
-        warn("world.activity_resolution", f"'minutes' for {humans:,} persons: about {humans / 1000 * 5:.0f} s per sim-year")
+    if res == "minutes" and humans > 1_000:
+        lo_h = humans / 1000 * 5 / 3600
+        warn("world.activity_resolution", f"'minutes' for {humans:,} persons: about {lo_h:.2f} h per sim-year with simple activity "
+                                          f"updates, up to {lo_h * 100:.0f} h with Sims-like agents; a batch run (ADR-0031)")
     if res == "blocks" and humans > 100_000:
         warn("world.activity_resolution", f"'blocks' for {humans:,} persons: about {humans / 1000 * 0.06 * 1000 / 3600:.1f} h per "
                                           "simulated millennium, above PERF-1; consider focus regions (ADR-0031)")

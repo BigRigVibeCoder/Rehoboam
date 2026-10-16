@@ -4,6 +4,13 @@ A running log of director rulings, phase-gate outcomes and approved ADR changes.
 
 | Date | Decision | By | Evidence / links |
 |---|---|---|---|
+| 2026-10-16 | **Accepted:** ADR-0030 v2, the World Stream (D1). | Director | `decisions_pending.md` D1 |
+| 2026-10-16 | **Accepted:** the 18 critical-path ADRs: 0001–0003, 0005–0010, 0020, 0022, 0024–0030 (D2). | Director | D2; `06_adr/README.md` |
+| 2026-10-16 | **Accepted:** ADR-0031, fidelity by zoom, with the default activity resolutions (D24, D25). About 1.5 h per simulated year at 1M persons and `minutes` resolution is acceptable as a batch run, so `minutes` is allowed at any scale (validator warning, PERF-6). | Director | D24, D25; ADR-0031 §5 |
+| 2026-10-16 | **First reference world: a minimal test world** (D4). `solo` is one person on a tiny map; complexity is added one rung at a time: household → hamlet → village → `val_khor` → 1M. | Director | D4; `11` complexity ladder; `specs/manifest/examples/solo.yaml` |
+| 2026-10-16 | **Operating system: Linux** (D5). CI on Linux; the cross-platform matrix is optional. | Director | D5; `12` Q★3 |
+| 2026-10-16 | **Compute: an 8-core desktop, local first, then the cloud** once local testing is complete (D6). RAM, GPU and cloud budget are still open (needed before P3). | Director | D6; `12` Q★4 |
+| 2026-10-16 | **G2 defaults accepted for now** (D8–D12: the MOE-2 confidence-bound rule, pre-registration, template-only rating, "your taste", the rating window), to be revisited before P2. | Director | D8–D12 |
 | 2026-10-16 | **Proposed:** fidelity by zoom (ADR-0031). The World Language (Registry vocabulary + typed event grammar + Arrow/Parquet container + generative core); `S5.daily_life` with virtual telemetry for anyone, any day; authoritative daily life by activity resolution per world or focus region, never by viewing. | Systems design, at the director's request | ADR-0031; STR-6, STR-7; V-STR-06–08; `specs/stream/` |
 | 2026-10-16 | **Proposed** (from the director's direction, v2): the engine is headless and **streams its world** (the World Stream). Viewing is a buffer event: each viewer reads the stream with its own cursor at its own rate. Interaction is a tip event: actions land at the tip, or at a scheduled future tick, and acting at a past moment is a fork. Pace is the director's setting; no viewer can slow the engine. Phase 1 has no GUI (`rh-cli tail`, then `rh-tui`). | Director; systems design | ADR-0030 v2; `05.10`; STR-1–5; V-STR; PERF-5 |
 | 2026-10-15 | **Proposed** (needs your ruling): adopt ODD-R as the mandatory spec format for every simulation system and fidelity level. | Systems design | `docs/templates/system_spec_odd_r.md`; R12 §15 |

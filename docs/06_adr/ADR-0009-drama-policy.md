@@ -1,6 +1,6 @@
 # ADR-0009 — Curation, not intervention
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context
 

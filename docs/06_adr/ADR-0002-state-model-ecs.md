@@ -1,6 +1,6 @@
 # ADR-0002 — State model: SoA tables + pinned `bevy_ecs` for named actors + SocialGraph store
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context
 

@@ -156,8 +156,21 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
    - fantasy variants (dragons).
 
    All three share the same Malthusian, pastoral-agrarian, dynastic substrate. E1 has the best data we have verified (R12) and the smallest mechanism set. Lo-fi art suits it naturally.
-3. **Walking skeleton first (WP P1.0), then fidelity, one system at a time.** Every later WP deepens one system (F0 → F1 → F2) while the whole loop stays green: world → ledger → events → **World Stream** → sifter → text viewer (`rh-cli tail`, later `rh-tui`), at N = 1 and N = 100k. Until G2 every view is text (ADR-0030); viewers read the stream at their own pace, actions land at the tip, and the engine never waits for a viewer (PERF-5).
-4. **The engine proves itself before it widens.** Scale is proven early, because it is cheap (N = 1 … 1M from P1). Eras are proven late, because they are expensive (packs after G3b).
+3. **The complexity ladder (director's ruling D4, 2026-10-16).** Start with the simplest world that exercises the whole engine, and add one kind of complexity per rung. A rung is climbed only when everything on the one below is green: determinism, the World Stream tests, invariants and its own checks.
+
+   | Rung | World | What it adds | What it proves |
+   |---|---|---|---|
+   | 0 | **`solo`**: one person (Ada), a 64×64 valley, 80 years | Life course, a household's food, daily life at `minutes`, the World Stream, replay, forks, virtual telemetry | The engine loop end to end, with nothing hiding bugs |
+   | 1 | `household`: about 5 people | Births, kinship, inheritance, shared stores | Demography and identity (ADR-0026) |
+   | 2 | `hamlet`: about 60 (`uz_job` sits here) | Neighbours, encounters at `blocks`, named minds, off-map actors | Cognition and encounters; personal-arc stories |
+   | 3 | `village`: about 1k | Markets, prices, a local lord | M4 markets; the first statistical bands |
+   | 4 | `val_khor`: about 100k | Polities, succession, war, secular cycles | Certification (`09` §3.1); the G2 thesis worlds |
+   | 5 | 1M | Scale | PERF-1/PERF-2 at 1M (P3b) |
+
+   Rungs 0–2 run in P1a, rung 3 in P1b, rung 4 by G1b. The same binary runs every rung; only the manifest changes (ADR-0028).
+
+4. **Walking skeleton first (WP P1.0), then fidelity, one system at a time.** Every later WP deepens one system (F0 → F1 → F2) while the whole loop stays green: world → ledger → events → **World Stream** → sifter → text viewer (`rh-cli tail`, later `rh-tui`), at N = 1 and N = 100k. Until G2 every view is text (ADR-0030); viewers read the stream at their own pace, actions land at the tip, and the engine never waits for a viewer (PERF-5).
+5. **The engine proves itself before it widens.** Scale is proven early, because it is cheap (N = 1 … 1M from P1). Eras are proven late, because they are expensive (packs after G3b).
 
 ## P1a — Core time, ledger and demography (≈ 8–12 weeks)
 
@@ -165,7 +178,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 
 | WP | Work package | Output |
 |---|---|---|
-| **P1.0** | **Walking skeleton (first 2–3 weeks)** | The thinnest end-to-end loop at F0. Manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled outcomes → events → chronicle (Parquet) → a trivial sifter pattern → World Stream v0 (channel A) and `rh-cli tail`, the text view of the stream (ADR-0030, `05.10`) → journal replay. Runs **at N = 1, 60 (`uz_job` skeleton) and 100k** on the same binary, with plane hashes in CI from day one. Every later WP must keep this loop green |
+| **P1.0** | **Walking skeleton (first 2–3 weeks)** | The thinnest end-to-end loop at F0. Manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled outcomes → events → chronicle (Parquet) → a trivial sifter pattern → World Stream v0 (channel A) and `rh-cli tail`, the text view of the stream (ADR-0030, `05.10`) → journal replay. Runs first on **`solo`** (rung 0 of the complexity ladder below: one person, one tiny valley, every minute authoritative), then at N = 60 (`uz_job` skeleton) and 100k on the same binary, with plane hashes in CI from day one. Every later WP must keep this loop green |
 | P1.1 | `rh-worldgen` v1 | Azgaar-style world generation: Voronoi, heightmap templates, climate, rivers, biomes, cultures, burgs, states, Urquhart routes |
 | P1.2 | Population synthesis | Iterative proportional fitting from manifest marginals → ledger. Founders are `H64(seed, "founder", k)`, with pre-epoch births. Great houses with 3-generation genealogies |
 | P1.3 | M2 Demography F1 | Age-specific hazards (Brass relational logit on the Brass General Standard, fixed-point odds form, golden vectors in `specs/demography/`), density modifiers (the entitlement hook is stubbed until P1.5), binomial draws, births by age-specific fertility, **minimal partnering (fathers)**, households (minimal), genealogical IDs `H64(mother, parity)`, life-course log; dead rows leave the ledger at once |
@@ -200,7 +213,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P1.7 | M7 Succession & dynasts F1 | Succession-law enum; competing ruler-exit hazards (murder, deposition, battle, natural) as functions of institutional state, calibrated to Eisner, Blaydes & Chaney and Kokkonen & Sundell (R12); feud stock after a regicide; regencies, claims, great-house dormancy (SIM-9). Named-actor tier (T1) with a minimal mind (traits, needs, opinions), IAUS for core decisions, and same-instant agenda semantics (`05.1` §4.3) |
 | P1.9 | Event emission and Chronicle Writer | Typed events, roles, anchored snapshots, causal edges (contingent / motivated_by), Parquet segments including the life-course log, DuckDB read-only views |
 | P1.10 | M9 Validation harness | Stylized-fact bands (identity vs emergent tags), cycle and phase statistics on N/K (the spectral test is report-only, R12 §12), Clauset tail fits, censoring-aware lifespans, 32-seed ensembles, Morris screening, auto-generated run report |
-| P1.11 | Reference manifests | `val_khor` (no dragons yet), `delta_republic`, and the sealed **held-out manifest** for G2: hand-authored, hash committed, never run before G2 (V-HUM-09) |
+| P1.11 | Reference manifests | The complexity ladder's worlds (`solo` exists; `household`, `hamlet`, `village` are authored as their rungs start), `val_khor` (no dragons yet), `delta_republic`, and the sealed **held-out manifest** for G2: hand-authored, hash committed, never run before G2 (V-HUM-09) |
 | P1.12 | Python wheel | `rh-py` with the liveness-gate and certification APIs (`05.5` §4.2); marimo calibration notebooks |
 | P1.15 | Registry effect language v0 | The typed, total evaluator in `rh-registry` (`05.5` §2.1); succession-law eligibility and ordering; verb effects as queued commands; a golden test |
 | P1.16 | Era-state hooks (ADR-0027) | The era-state vector in the contract crates; every era-sensitive parameter of M2, M4, M6, M7 declared as a Registry function of it (agrarian range calibrated only); the era-label classifier (plane C); a lint that fails if a mechanic reads the label. About 1–2 weeks, mostly interface work |

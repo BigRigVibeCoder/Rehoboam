@@ -1,6 +1,6 @@
 # ADR-0008 — Custom incremental sifter + SQL twins; LLM non-authoritative
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15), v1.2 (2026-10-16, prior art: Felt and Winnow read)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15), v1.2 (2026-10-16, prior art: Felt and Winnow read)
 
 ## Context
 

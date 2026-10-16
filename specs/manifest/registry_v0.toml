@@ -178,7 +178,8 @@ ids = ["paranoia", "filial_piety", "despair", "hubris", "corruption", "dragon_sy
 
 [pattern_packs]
 ids = ["succession", "revenge", "famine", "reversal", "irony", "elite_feud", "dragon_age", "covert_infiltration", "plague_era", "witch_hunt",
-       "trial_of_faith", "grief_and_lament", "temptation", "counsel_dispute", "restoration", "betrayal_by_friends"]
+       "trial_of_faith", "grief_and_lament", "temptation", "counsel_dispute", "restoration", "betrayal_by_friends",
+       "solitary_life"]   # rung-0 smoke patterns: hard season, hunger, recovery, injury, death
 
 [style_cards]
 ids = ["mythic_chronicle", "deep_time", "saga", "historian", "ensemble_space_opera", "noir_city", "wisdom_dialogue"]
@@ -192,6 +193,11 @@ modern = false
 [templates.merchant_republic]
 default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "M6.polity", "M7.dynasty"]
 horizon_years = [50, 3000]
+modern = false
+
+[templates.test_solo]   # rung 0 of the complexity ladder (D4): one person on a tiny map, for testing the engine end to end
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "S5.daily_life"]
+horizon_years = [1, 120]
 modern = false
 
 [templates.pastoral_household]   # micro scale (ADR-0028): one household and its neighbours

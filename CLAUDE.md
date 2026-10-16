@@ -27,6 +27,7 @@ This repository is in the **planning phase**. There is no engine code yet. The p
 
 ## Checks to run after touching `specs/`
 ```bash
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml  # must FAIL

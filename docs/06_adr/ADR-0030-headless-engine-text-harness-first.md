@@ -1,6 +1,6 @@
 # ADR-0030 — Headless engine and the World Stream: viewers read a buffer, actions land at the tip; text only until G2
 
-**Status:** Proposed (director's direction, 2026-10-16; v2 the same day) · **Date:** 2026-10-16 · **Amends:** ADR-0016 (web console moves after G2), ADR-0029 (no graphical view before G2), ADR-0005 (the street bubble follows the viewer's playback rate), `05.7`, `05.9`, `09`, `11` (P1.0, P1.17, P2.7) · **Spec:** `05.10`
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-16 · **Amends:** ADR-0016 (web console moves after G2), ADR-0029 (no graphical view before G2), ADR-0005 (the street bubble follows the viewer's playback rate), `05.7`, `05.9`, `09`, `11` (P1.0, P1.17, P2.7) · **Spec:** `05.10`
 
 ## Context
 

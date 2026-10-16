@@ -1,6 +1,6 @@
 # ADR-0001 — Rust core, Python orchestration, TypeScript console
 
-**Status:** Proposed · **Date:** 2026-10-15
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15
 
 ## Context
 

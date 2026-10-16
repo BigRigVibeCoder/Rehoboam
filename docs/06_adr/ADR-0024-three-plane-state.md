@@ -1,6 +1,6 @@
 # ADR-0024 — Three-plane state model: authoritative, observation and narrative
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amends:** ADR-0006, ADR-0007, ADR-0008
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0006, ADR-0007, ADR-0008
 
 ## Context
 

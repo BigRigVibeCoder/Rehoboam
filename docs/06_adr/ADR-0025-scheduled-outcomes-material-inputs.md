@@ -1,6 +1,6 @@
 # ADR-0025 — Scheduled outcomes for everyone; material-input semantics; no back-dating
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Supersedes:** the lease and lookahead-decree mechanism in 05.2 §3.2 (v1.0)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Supersedes:** the lease and lookahead-decree mechanism in 05.2 §3.2 (v1.0)
 
 ## Context
 

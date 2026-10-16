@@ -1,54 +1,78 @@
 # Your decisions, in one place
 
-*Updated 2026-10-16. This is the single list of everything waiting on you. Full reasoning is in [`12_open_questions.md`](12_open_questions.md) (Q-numbers) and [`06_adr/`](06_adr/README.md) (ADRs). Rulings are recorded in [`decisions-log.md`](decisions-log.md).*
+*Updated 2026-10-16, after your rulings. Full reasoning is in [`12_open_questions.md`](12_open_questions.md) and [`06_adr/`](06_adr/README.md). Every ruling is recorded in [`decisions-log.md`](decisions-log.md).*
 
-**How to answer:** reply in chat with "accept all recommendations", or with the IDs you want to change, for example "D1 yes, D8 keep 80%, D5 Windows". Anything you don't answer keeps its default, and work proceeds on it.
+**How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
-## A. Shapes the engine (answer before P0 starts)
+## Still waiting on you (3)
 
-| ID | Decision | Recommendation (default) | If you choose otherwise | Where |
-|---|---|---|---|---|
-| **D1** | **World Stream** (ADR-0030 v2). The engine streams its world; viewing is a buffer event at your own cursor; actions land at the tip; pace is your setting; no GUI in phase 1 | **Accept.** It is your design, checked against the determinism, plane and no-back-dating rules | — | [ADR-0030](06_adr/ADR-0030-headless-engine-text-harness-first.md), [05.10](05_architecture/05.10_world_stream.md) |
-| **D2** | **Approve the 18 critical-path ADRs** (★): 0001–0003, 0005–0010, 0020, 0022, 0024–0030 | **Approve as proposed** | Name any you want reopened; that ADR then needs a revision before P0 | [ADR index](06_adr/README.md); Q★1 |
-| **D3** | **Review hours per week** you can give agent output | **≤ 6 h/week** outside rating windows | More hours allow more parallel workstreams and shorten every phase; fewer lengthen them | Q★16 |
-| **D4** | **First reference world** | **Feudal, no dragons in P1** (`val_khor`); dragons and the hive arrive in P3a | Modern first means less calibration data and a weaker thesis test | Q★2 |
-| **D5** | **Your operating system** for development and play | *No good default. Please tell me.* Assumed: Linux or macOS for development, CI on all three | Decides packaging and later wallpaper hosting; phase 1 is terminal-only, so it matters less now | Q★3 |
-| **D6** | **Your compute**: desktop spec, GPU, cloud budget ceiling | *Please tell me.* Assumed: a strong 8-core desktop and $50–200/month of cloud | Sizes CI runners, 1M-scale targets and local model choices | Q★4 |
-| **D7** | **ODD-R** as the required spec format for every simulation system | **Adopt** | Specs stay free-form; agents and reviewers lose a checklist | [template](templates/system_spec_odd_r.md); decisions log |
-| **D24** | **Fidelity by zoom** (ADR-0031). The World Language; **virtual telemetry**, meaning anyone's whereabouts on any day of history, computed and never stored; authoritative daily life where you declare it | **Accept** | Either store movement (≈ 11 GB per sim-year at 1M) or have no street-level history at all | [ADR-0031](06_adr/ADR-0031-fidelity-by-zoom-virtual-telemetry.md) |
-| **D25** | **Default activity resolution**: micro worlds `blocks` (daily life counts); meso and macro `life_course` plus focus regions you name | **Accept** | `blocks` everywhere at 100k costs ≈ 1.5 h per millennium, against the 2-minute budget; `minutes` is for micro worlds only | ADR-0031 §3 |
+### D3 — How many hours a week can you spend checking the AI's work?
 
-## B. The thesis gate, G2 (fix before P2 starts)
+**In plain words.** The engine is built by AI coding agents, and you are the only human checking their work. A typical week of checking looks like this:
+- **Approving plans** before a piece is built. Each is a one-page description such as "the population system: what it controls, what it reads, how it is tested". About 15 minutes each.
+- **Looking at results**: run the test world, read the stream, say "that looks right" or "that's wrong".
+- **Answering questions** when the agents hit a real choice.
 
-| ID | Decision | Recommendation (default) | If you choose otherwise | Where |
-|---|---|---|---|---|
-| **D8** | **MOE-2 pass rule**: the chronicle A/B test of the coupled engine against a coupling-ablated one | **40 blind pairs; pass when the lower 80% confidence bound is above 50%; 80% stays as the target you see reported** | Keeping "≥ 80% of 20 pairs" means a good engine (true preference 70%) fails 3 times in 4 | Q21; `09` V-HUM-02 |
-| **D9** | **Commit to the pre-registered G2 protocol**: frozen build, sealed held-out world, blind rating, fixed decision rule | **Yes** | Without it, a gate you both build and rate drifts toward "pass" | Q18; `09` §3.4.1 |
-| **D10** | **Rate template text only** at G2 (no LLM prose in rated items) | **Yes** (already the default) | G2 would measure the narrator's prose, not the history | Q20 |
-| **D11** | **G2 measures your taste**, stated explicitly | **Yes**; an outside reader panel is optional, after P4 | An outside panel now costs 24+ readers' time | Q22 |
-| **D12** | **Rating time**: about 35–45 hours over a 3–5 week window after P2, and again after P3b | **Yes**, at about 8–10 h/week in the window | The thesis test date moves with this window | Q6 |
+Everything else (tests passing, formatting, routine fixes) is checked automatically and merges without you.
 
-## C. Can wait (defaults apply until you say otherwise)
+**Why it matters.** Your hours set how many agents can work at once, and so how fast the project moves:
+
+| Your hours per week | Agents working in parallel | Effect on the schedule |
+|---|---|---|
+| About 3 | 1–2 | Slower: phases take roughly 1.5× longer |
+| **About 6 (default)** | 2–3 | As planned in `11_roadmap.md` |
+| About 10–12 | 4–5 | Faster: phases roughly a third shorter |
+
+**What I need:** a number, even a rough one. If you say nothing, I assume about 6.
+
+### D7 — Use a standard fill-in-the-blanks form for describing each simulation system?
+
+**In plain words.** Before an agent builds a piece of the simulation (population, economy, war), it writes a description of that piece. Scientists who build simulations like ours use a standard form called **ODD** (Overview, Design concepts, Details), so that anyone can understand or rebuild a model. "ODD-R" is that form adapted to Rehoboam ([template](templates/system_spec_odd_r.md)). It makes every description answer the same questions:
+- what the system controls, and what it is allowed to read;
+- when it runs, and in what order;
+- what randomness it uses;
+- every setting, with its allowed range and the source of that range;
+- how it is tested, and against which historical facts.
+
+**Why I recommend it.** Agents produce consistent descriptions; you review the same layout every time; and the usual failures (vague timing, undocumented settings) get caught before code is written. A 2010 review of 54 published models found exactly those failures in most of them.
+
+**The cost.** Each description is 2–3 pages instead of 1.
+
+**What I need:** yes or no. **Default: yes.**
+
+### D6 (the rest) — Memory, graphics card and cloud budget
+
+You answered "8-core desktop, local first, cloud later". I read your "* core" as 8-core; correct me if not. Phase 1 needs no graphics card (no GUI, no AI language models). Before P3 I need:
+- the desktop's RAM;
+- its graphics card;
+- a monthly cloud budget ceiling for when you move to the cloud.
+
+**Default until then:** 32–64 GB RAM, no GPU assumptions.
+
+## Decided on 2026-10-16
+
+| ID | Ruling |
+|---|---|
+| D1 | World Stream (ADR-0030): **accepted** |
+| D2 | The 18 critical-path ADRs: **accepted** |
+| D4 | First world: **a minimal test world**, `solo` (one person, tiny map); then add complexity one rung at a time (`11` complexity ladder) |
+| D5 | **Linux** |
+| D6 | **8-core desktop**, local first, cloud after local testing (RAM, GPU and budget still open; see above) |
+| D8–D12 | G2 thesis-gate defaults **accepted for now**; revisit before P2 |
+| D24, D25 | Fidelity by zoom (ADR-0031) and its default resolutions: **accepted**. Minute-level daily life is allowed at any scale as a batch run (≈ 1.5 h per sim-year at 1M) |
+
+## Defaults in force (no action needed; change any time)
 
 | ID | Decision | Default | Where |
 |---|---|---|---|
 | D13 | Calendar | 360-day year, configurable per world | Q5 |
-| D14 | LLM "deliberation" for named actors | Off until an A/B test shows it helps. At MAX speed it never stalls the engine; a late answer uses its journaled fallback | Q7 |
-| D15 | May frontier LLM APIs see world data for synthesis? | Yes, never anything identifying you; local fallback always available | Q8 |
+| D14 | AI "deliberation" for named characters | Off until an A/B test shows it helps; never stalls the engine | Q7 |
+| D15 | May cloud AI services see world data, to write prose? | Yes, never anything identifying you; a local fallback always exists | Q8 |
 | D16 | How atrocities are narrated | "Historian" register: consequences, not gratuitous detail | Q9 |
 | D17 | Oracle death | Rebirth with heavy loss; permadeath as a hard mode | Q10 |
-| D18 | Foresight cost in Cultivator mode | Free (it is the analysis mode); it costs Foresight in Oracle mode | Q11 |
-| D19 | Ever distribute it? | Keep the option open: strict licences in core crates | Q13, Q17 |
+| D18 | Foresight cost in Cultivator mode | Free; it costs Foresight in Oracle mode | Q11 |
+| D19 | Ever distribute it? | Keep the option open: strict licences in core code | Q13, Q17 |
 | D20 | Multiplayer | Out of scope; worlds are shared as manifest + seed + journal | Q14 |
-| D21 | Science-fiction frontiers, and when per-era art starts | Decide after the first era pack; art packs after P5 | Q★19 |
-| D22 | Suspense pauses in Oracle mode | Off until they can use the Oracle's beliefs, not hidden truth | Q23 |
-| D23 | The 12 non-critical-path ADRs (0004, 0011–0019, 0021, 0023) | Approve as proposed when their phase starts | [ADR index](06_adr/README.md) |
-
-**Already decided** (for reference):
-- scale 1 → 1M (ADR-0028);
-- era order E2 → E3 → E4, provisional;
-- lo-fi first (ADR-0029);
-- success is a creative engine plus a world to inhabit;
-- the workforce is you plus AI agents.
-
-See [`decisions-log.md`](decisions-log.md).
+| D21 | Science-fiction frontiers; when per-era art starts | Decide after the first era pack; art packs after P5 | Q★19 |
+| D22 | Suspense pauses in Oracle mode | Off until they can use the Oracle's beliefs | Q23 |
+| D23 | The 12 non-critical-path ADRs | Approve as proposed when their phase starts | [ADR index](06_adr/README.md) |

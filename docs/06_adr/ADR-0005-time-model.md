@@ -1,6 +1,6 @@
 # ADR-0005 — Integer sim-time, pulses, event-driven agenda, speed bands
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
 ## Context
 

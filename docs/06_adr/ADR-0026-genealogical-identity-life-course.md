@@ -1,6 +1,6 @@
 # ADR-0026 — Genealogical content-addressed identity; life-course log for every person; signed time
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amends:** ADR-0003
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Amends:** ADR-0003
 
 ## Context
 

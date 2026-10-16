@@ -202,6 +202,7 @@ The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hard
 | V-PERF-07 | Compiler path | `bench/liveness_gate_100k`; certification wall time | Liveness gate ≤ 90 s wall at 100k on 8 cores (target 60 s); certification ≤ 30 min wall (target 20 min) |
 | V-PERF-08 | Belief stores | `bench/belief_store_5k` | Memory and update cost within `08` §5; ≤ 600 MB at 5k actors (G3a) |
 | V-PERF-09 | Harness isolation (PERF-5; ADR-0030) | `bench/harness_load_100k`: MAX-speed run headless, then the same seed with 4 harnesses attached (`rh-tui` subscribed to frames and the chronicle feed, a live hydration bubble, a control-plane query fuzzer at the maximum rate, and one consumer that stops reading) | Throughput ≥ 95% of headless; engine RSS growth ≤ the in-memory live-edge segment; `state_hash` ladder identical; the stalled consumer later resumes from sealed segments with nothing missing, and never back-pressures the engine |
+| V-PERF-10 | High-fidelity daily life (PERF-6) | `bench/solo_80y_minutes`; `bench/minutes_1M_day` from P6 | `solo`: 80 years ≤ 1 min. 1M: ≤ 15 s per sim-day (provisional; recorded with the agent richness used) |
 
 ### 2.8 LLM-facing verification (V-LLM)
 
@@ -768,6 +769,7 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | PERF-3 | Sifter overhead | P2/P3b | V-PERF-03, V-SIFT-10 |
 | PERF-4 | Benchmark regression gate | P0 | V-PERF-04 |
 | PERF-5 | Harness isolation | P2 | V-PERF-09 |
+| PERF-6 | High-fidelity daily life | P1a/P6 | V-PERF-10 |
 | STR-1 | World Stream, deterministic | P1.0/P1b | V-STR-01 |
 | STR-2 | Stream fidelity, no hidden state | P1b | V-STR-02 |
 | STR-3 | Viewing is a buffer event | P1b | V-STR-03, V-STR-05, V-PERF-09 |
