@@ -313,6 +313,7 @@ when = "The last living member of a house dies"
 [[commands]]
 target = "M2.demography"
 command = "ScheduleDeath"
+payload = "{ victim, tick, cause, culprit, cause_event }"
 why = "A sovereign's background murder, with M2's declared payload ScheduleDeath {victim = the ruler, tick = the drawn day's start, cause = murder, culprit = the murder_culprit draw or 0, cause_event = 0 (a hazard draw has no inciting event)}; every death goes through M2's single death path (05.1 §2 rule 2)"
 [[commands]]
 target = "T1.minds"

@@ -418,10 +418,12 @@ when = "IAUS chooses the reconcile option, or a party dies (the death path)"
 [[commands]]
 target = "M2.demography"
 command = "Marry"
+payload = "{ a, b, tick }"
 why = "The marry decision proposes, with M2's declared payload Marry {a, b, tick = the next day start}; M2 owns marriages (P1.3) and writes person.spouse when it applies the command"
 [[commands]]
 target = "M2.demography"
 command = "ScheduleDeath"
+payload = "{ victim, tick, cause, culprit, cause_event }"
 why = "A successful MURDER_ATTEMPT kills only through the single death path (05.1 §2 rule 2), with M2's declared payload ScheduleDeath {victim, tick = the next day start, cause = murder, culprit = the actor, cause_event = the MURDER_ATTEMPT}"
 [[commands]]
 target = "M7.dynasty"
