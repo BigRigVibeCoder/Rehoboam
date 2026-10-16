@@ -10,7 +10,7 @@
 1. [`docs/00_executive_summary.md`](docs/00_executive_summary.md): the plan on two pages.
 2. [`docs/01_vision_and_intent.md`](docs/01_vision_and_intent.md): your intent restated, the definition of success, MOEs and principles.
 3. [`docs/02_design_review_of_draft.md`](docs/02_design_review_of_draft.md): a red-team review of the original drafts.
-4. [`docs/12_open_questions.md`](docs/12_open_questions.md): **the decisions needed from you**.
+4. [`docs/decisions_pending.md`](docs/decisions_pending.md): **every decision waiting on you, on one page** (full reasoning in [`docs/12_open_questions.md`](docs/12_open_questions.md)).
 
 ## Repository map
 | Path | Contents |

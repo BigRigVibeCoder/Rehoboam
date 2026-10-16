@@ -33,6 +33,7 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | Suite | Section | Covers | Cadence |
 |---|---|---|---|
 | **V-DET** Determinism | §2.1 | DET-* | Every PR; cross-platform nightly |
+| **V-STR** World Stream | §2.19 | STR-*, PERF-5 | Every PR from P1.0 (01); P1b (02, 03, 05); P2 (04) |
 | **V-INV** Invariants and properties | §2.2 | SIM-*, EVO-1, EVO-2 | Every PR; soak nightly |
 | **V-GOLD** Golden worlds and save compatibility | §2.3 | DET-5, DET-10, EVO-1 | Every PR; full length nightly; every release |
 | **V-SIFT** Sifter | §2.4 | SIFT-*, TM-2 | Every PR; budgets nightly |
@@ -200,7 +201,7 @@ The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hard
 | V-PERF-06 | Foresight throughput | `bench/foresight_256x25y_100k`; `bench/foresight_64x50y_1M` nightly on a cluster node | `08` §3 targets; batch Foresight at 1M (N = 64 × 50 years) ≤ 60 min on the desktop (G3b) |
 | V-PERF-07 | Compiler path | `bench/liveness_gate_100k`; certification wall time | Liveness gate ≤ 90 s wall at 100k on 8 cores (target 60 s); certification ≤ 30 min wall (target 20 min) |
 | V-PERF-08 | Belief stores | `bench/belief_store_5k` | Memory and update cost within `08` §5; ≤ 600 MB at 5k actors (G3a) |
-| V-PERF-09 | Harness isolation (PERF-5; ADR-0030) | `bench/harness_load_100k`: MAX-speed run headless, then the same seed with 4 harnesses attached (`rh-tui` subscribed to frames and the chronicle feed, a live hydration bubble, a control-plane query fuzzer at the maximum rate, and one consumer that stops reading) | Throughput ≥ 95% of headless; engine RSS growth ≤ the snapshot ring size; `state_hash` ladder identical; the stalled consumer is coalesced, never back-pressured |
+| V-PERF-09 | Harness isolation (PERF-5; ADR-0030) | `bench/harness_load_100k`: MAX-speed run headless, then the same seed with 4 harnesses attached (`rh-tui` subscribed to frames and the chronicle feed, a live hydration bubble, a control-plane query fuzzer at the maximum rate, and one consumer that stops reading) | Throughput ≥ 95% of headless; engine RSS growth ≤ the in-memory live-edge segment; `state_hash` ladder identical; the stalled consumer later resumes from sealed segments with nothing missing, and never back-pressures the engine |
 
 ### 2.8 LLM-facing verification (V-LLM)
 
@@ -367,6 +368,16 @@ Playwright drives the console against the real `rh-server` and against the mock 
 | V-INSP-02 | ADR conformance | Reviewer-agent checklist on every PR (`13` §7) | Signed off |
 | V-INSP-03 | Crate boundaries (EVO-1) | Dependency-graph lint: system crates depend only on `rh-core`, `rh-ids`, `rh-events`, `rh-registry` and contract crates | Zero violations |
 | V-INSP-04 | Observability (OBS-1) [D] | Headless run with Rerun and the TUI | Per-system timing, invariant counters and sampled agents on the `sim_tick` timeline |
+
+### 2.19 World Stream (V-STR; ADR-0030, `05.10`)
+
+| ID | Test | Method | Gate |
+|---|---|---|---|
+| V-STR-01 | Stream determinism (STR-1) | Run the same seed and journal twice, at MAX and at 1 yr/s, and with 1 and 8 threads; hash channel A segment by segment | Byte-identical channel-A streams |
+| V-STR-02 | Fidelity and no hidden state (STR-2) | At 50 random ticks per run, rebuild the state with the materializer (nearest keyframe + replay) and compare `state_hash`; plus a lint that every plane-A write goes through the event API or the replayed step functions | Equal hashes at every sampled tick; lint clean |
+| V-STR-03 | Cursor independence (STR-3) | Viewers at 1×, at 100×, rewinding, and one stalled for 10 minutes, all attached during a MAX run | Channel A unchanged (V-STR-01 hash); throughput per V-PERF-09 |
+| V-STR-04 | Tip semantics (STR-4) | A scripted viewer 10 sim-years behind issues an action, a scheduled action for a future tick, and an action aimed at a past tick | The first lands at the then-current tip and is journaled with that tick; the second lands exactly on its tick; the third is refused unless issued as a fork; replay reproduces all |
+| V-STR-05 | Live edge and catch-up (STR-3) | A viewer falls behind the in-memory edge, reads sealed segments, then jumps to live | `seq` contiguous throughout: no gaps, no duplicates |
 
 ## 3. Validation (fit for purpose)
 
@@ -754,6 +765,11 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | PERF-3 | Sifter overhead | P2/P3b | V-PERF-03, V-SIFT-10 |
 | PERF-4 | Benchmark regression gate | P0 | V-PERF-04 |
 | PERF-5 | Harness isolation | P2 | V-PERF-09 |
+| STR-1 | World Stream, deterministic | P1.0/P1b | V-STR-01 |
+| STR-2 | Stream fidelity, no hidden state | P1b | V-STR-02 |
+| STR-3 | Viewing is a buffer event | P1b | V-STR-03, V-STR-05, V-PERF-09 |
+| STR-4 | Interaction is a tip event | P2 | V-STR-04, V-DET-13 |
+| STR-5 | Pace is the director's setting | P2 | V-STR-03, V-TM-03 |
 | EVO-1 | Ownership and change scope | P0 | V-INV-03, V-INV-04, V-INSP-03, V-GOLD-03, V-WC-10 |
 | EVO-2 | Crate deliverables | P1a | V-INV-06, V-INV-07 |
 | EVO-3 | Fidelity levels | P1b/P5 | V-HYD-10, V-HYD-11, V-SF-01–V-SF-12 |

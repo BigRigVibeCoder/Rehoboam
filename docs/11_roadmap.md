@@ -156,7 +156,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
    - fantasy variants (dragons).
 
    All three share the same Malthusian, pastoral-agrarian, dynastic substrate. E1 has the best data we have verified (R12) and the smallest mechanism set. Lo-fi art suits it naturally.
-3. **Walking skeleton first (WP P1.0), then fidelity, one system at a time.** Every later WP deepens one system (F0 → F1 → F2) while the whole loop stays green: world → ledger → events → chronicle → sifter → text harness (`rh-tui`), at N = 1 and N = 100k. Until G2 every view is text (ADR-0030); the engine never waits for a viewer (PERF-5).
+3. **Walking skeleton first (WP P1.0), then fidelity, one system at a time.** Every later WP deepens one system (F0 → F1 → F2) while the whole loop stays green: world → ledger → events → **World Stream** → sifter → text viewer (`rh-cli tail`, later `rh-tui`), at N = 1 and N = 100k. Until G2 every view is text (ADR-0030); viewers read the stream at their own pace, actions land at the tip, and the engine never waits for a viewer (PERF-5).
 4. **The engine proves itself before it widens.** Scale is proven early, because it is cheap (N = 1 … 1M from P1). Eras are proven late, because they are expensive (packs after G3b).
 
 ## P1a — Core time, ledger and demography (≈ 8–12 weeks)
@@ -165,7 +165,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 
 | WP | Work package | Output |
 |---|---|---|
-| **P1.0** | **Walking skeleton (first 2–3 weeks)** | The thinnest end-to-end loop at F0. Manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled outcomes → events → chronicle (Parquet) → a trivial sifter pattern → `rh-tui` text harness (chronicle feed, ASCII map, keyboard scrub; ADR-0030) → journal replay. Runs **at N = 1, 60 (`uz_job` skeleton) and 100k** on the same binary, with plane hashes in CI from day one. Every later WP must keep this loop green |
+| **P1.0** | **Walking skeleton (first 2–3 weeks)** | The thinnest end-to-end loop at F0. Manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled outcomes → events → chronicle (Parquet) → a trivial sifter pattern → World Stream v0 (channel A) and `rh-cli tail`, the text view of the stream (ADR-0030, `05.10`) → journal replay. Runs **at N = 1, 60 (`uz_job` skeleton) and 100k** on the same binary, with plane hashes in CI from day one. Every later WP must keep this loop green |
 | P1.1 | `rh-worldgen` v1 | Azgaar-style world generation: Voronoi, heightmap templates, climate, rivers, biomes, cultures, burgs, states, Urquhart routes |
 | P1.2 | Population synthesis | Iterative proportional fitting from manifest marginals → ledger. Founders are `H64(seed, "founder", k)`, with pre-epoch births. Great houses with 3-generation genealogies |
 | P1.3 | M2 Demography F1 | Age-specific hazards (Brass relational logit on the Brass General Standard, fixed-point odds form, golden vectors in `specs/demography/`), density modifiers (the entitlement hook is stubbed until P1.5), binomial draws, births by age-specific fertility, **minimal partnering (fathers)**, households (minimal), genealogical IDs `H64(mother, parity)`, life-course log; dead rows leave the ledger at once |
@@ -204,6 +204,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P1.12 | Python wheel | `rh-py` with the liveness-gate and certification APIs (`05.5` §4.2); marimo calibration notebooks |
 | P1.15 | Registry effect language v0 | The typed, total evaluator in `rh-registry` (`05.5` §2.1); succession-law eligibility and ordering; verb effects as queued commands; a golden test |
 | P1.16 | Era-state hooks (ADR-0027) | The era-state vector in the contract crates; every era-sensitive parameter of M2, M4, M6, M7 declared as a Registry function of it (agrarian range calibrated only); the era-label classifier (plane C); a lint that fails if a mechanic reads the label. About 1–2 weeks, mostly interface work |
+| P1.17 | World Stream v1 (ADR-0030, `05.10`) | Channels A and C, `seq` and segments (the Parquet chronicle as the stream at rest), the live edge over a socket, viewer cursors, `stream.subscribe` / `stream.status`, the materializer (keyframe + replay), tip and scheduled inputs, the pace command, `rh-cli tail` filters (significance, place, person, pattern, regional digest). Gate: V-STR-01–03, V-STR-05, V-PERF-09 |
 
 **Gate G1b** (the v1.0 G1)
 - **MOP-1** (V-PERF-01): 1,000 years at 100k in ≤ 2 min on 8 cores.
@@ -231,7 +232,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P2.4 | Pattern packs v1 | Succession, revenge, famine, reversal, irony, elite feud: about 25 patterns, each with a firing-rate budget. Bad-run metric (MOE-6) wired into the liveness gate |
 | P2.5 | Significance v1 | Components, per-era recompute, bounded hindsight retention, per-timeline visibility sidecar (plane C), rarity base rates |
 | P2.6 | `rh-server` v1 | Timelines (run, pause, read-only seek, fork); keyframe service (10-year permanent keyframes, yearly LRU with a RAM tier, capture at auto-pause); JSON-RPC control plane; Arrow data endpoints |
-| P2.7 | Time-Machine harness v1 (text; ADR-0030) | `rh-tui`: Time-Machine (speed bands, run-until, overview and detail lanes as text), ASCII map, causal inspector as an ancestor tree, person/place views, Annals, rating form. Cultivator mode only; Oracle mode arrives with P3.7. The web console (deck.gl map, Sigma.js graph; ADR-0016) is built after G2, alongside P5, against the same interfaces |
+| P2.7 | Time-Machine harness v1 (text; ADR-0030) | `rh-tui` over the World Stream: status line (tip, pace, cursor, lag), Watch and Play styles, Time-Machine (speed bands, run-until, overview and detail lanes as text), ASCII map, causal inspector as an ancestor tree, person/place views, Annals, rating form. Cultivator mode only; Oracle mode arrives with P3.7. The web console (deck.gl map, Sigma.js graph; ADR-0016) is built after G2, alongside P5, against the same interfaces |
 | P2.8 | Annals and Chronicle (templated) | Template engine over matches and edges; provenance links |
 | P2.9 | Branching | What-if forks with override inputs; material-input dependency scopes with timer cancel and re-sample; acting in the past forks (ADR-0025); timeline diff view |
 | P2.10 | Facts ledger v1 | Pins and `facts_ledger` (plane B, `05.2` §3.3), written on `entity.*` display; MOE-3 re-open probe (DATA-7) |
