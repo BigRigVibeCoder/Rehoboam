@@ -1319,3 +1319,91 @@ fn def3_redraws_equal_the_independent_epoch_keyed_hash() {
         }
     }
 }
+
+/// DEF-5: a timer due at a Day boundary in Vital, whose `fire` writes `t.v`, and a reader bound
+/// to (Day, Vital) that reads `t.v` at `same_instant`. D1 (the timer pass runs before the binding
+/// pass) means the reader sees the write of the same instant.
+const D1_TICK: i64 = 3 * DAY;
+
+fn d1_schedule(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now() == SimTime::EPOCH {
+        c.schedule(
+            &Np::N,
+            spec_at(SimTime::from_minutes(D1_TICK), Phase::Vital),
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "it must have the FireFn signature"
+)]
+fn d1_fire(
+    _: &Stub,
+    _: &TimerEntry,
+    v: &mut SystemView<'_>,
+    _: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    v.write("t.v")?[0] = 1;
+    Ok(())
+}
+
+fn d1_read(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now().minutes() == D1_TICK {
+        let seen = v.read("t.v")?[0];
+        v.write("r.seen")?[0] = seen;
+    }
+    Ok(())
+}
+
+#[test]
+fn def5_a_timer_fires_before_any_binding_of_its_phase() {
+    use rh_core::access::Lag::SameInstant;
+    for threads in [1, 4] {
+        let stubs = vec![
+            Stub::new("D1.timer")
+                .purposes_of::<Np>()
+                .writes("t.v")
+                .at(Pulse::Day, Phase::Vital)
+                .stepping(d1_schedule)
+                .firing(d1_fire),
+            Stub::new("D2.reader")
+                .reads("t.v", "D1.timer", SameInstant)
+                .writes("r.seen")
+                .at(Pulse::Day, Phase::Vital)
+                .stepping(d1_read),
+        ];
+        let specs = agreeing_specs(&stubs);
+        let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs).unwrap();
+        let mut tables = WorldTables::new();
+        tables.insert("t.v", vec![0]);
+        tables.insert("r.seen", vec![-1]);
+        let mut e = Engine::new(
+            CALENDAR,
+            1,
+            BranchSalt::from_raw(0),
+            registered,
+            tables,
+            SimTime::EPOCH,
+        );
+        e.set_threads(threads);
+        e.advance_until(SimTime::from_minutes(D1_TICK), |_, _| {})
+            .unwrap();
+        assert_eq!(
+            e.tables().get("r.seen").unwrap()[0],
+            1,
+            "{threads} threads: the binding at ({D1_TICK}, Vital) sees the timer's write (D1)"
+        );
+    }
+}
