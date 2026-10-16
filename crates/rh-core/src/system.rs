@@ -24,6 +24,9 @@
 //!   default to a loud error, so a system that schedules timers must implement them;
 //! - the step context's output buffers ([`StepCtx::schedule`], [`StepCtx::cancel`],
 //!   [`StepCtx::submit`], [`StepCtx::emit`]) and its command inbox ([`StepCtx::take_commands`]).
+//!
+//! SPR-008 adds [`StepCtx::stream`], the keyed stream an `rh-sample` sampler call takes (`05.1`
+//! §6 item 3), with the same key as [`StepCtx::rng`] (Architect ruling, 2026-10-16).
 //!   Nothing a step buffers is visible until the engine merges the buffers of a whole scheduler
 //!   level in canonical order (SPR-006 ruling 1).
 //!
@@ -31,10 +34,12 @@
 //! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-03, T-06, rulings 1 and 2;
 //! `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-02–T-05, rulings 1–5.
 
+use core::cell::RefCell;
 use core::fmt;
+use std::collections::BTreeSet;
 
 use rh_events::{DraftRef, EventDraft};
-use rh_ids::{EntityKey, EntityRef, PurposeId, SystemId, SystemKey};
+use rh_ids::{EntityKey, EntityRef, PurposeId, RngStream, SystemId, SystemKey};
 
 use crate::access::AccessSpec;
 use crate::agenda::{Agenda, TimerEntry, TimerId};
@@ -136,6 +141,19 @@ pub enum SimError {
         /// The purpose name.
         purpose: &'static str,
     },
+    /// A second keyed stream for one `(purpose, entity)` in one step, or a stream and an
+    /// [`StepCtx::rng`] draw for the same pair (`05.1` §6 item 3: each sampler call takes its own
+    /// stream; SPR-008). A system that needs two samples per entity declares two purposes.
+    StreamReuse {
+        /// The system.
+        system: &'static str,
+        /// The purpose name.
+        purpose: &'static str,
+        /// The entity key (`EntityKey::entity_key`).
+        entity: u64,
+        /// What the step had already taken for the pair: `"stream"` or `"rng"`.
+        taken: &'static str,
+    },
     /// A timer the agenda refuses: in the past, in a phase the system is not bound in, or a
     /// cancellation of a timer that is not the system's pending timer (SPR-006 T-02).
     Timer {
@@ -229,6 +247,15 @@ impl fmt::Display for SimError {
                     "{system} drew under RNG purpose {purpose}, which it did not register"
                 )
             }
+            Self::StreamReuse {
+                system,
+                purpose,
+                entity,
+                taken,
+            } => write!(
+                f,
+                "{system} asked for a stream of purpose {purpose} for entity {entity}, which this step already used as a {taken} (05.1 §6 item 3: one stream per sampler call; declare another purpose)"
+            ),
             Self::Timer { system, message } => write!(f, "{system}: timer refused: {message}"),
             Self::UndeclaredCommand { system, command } => write!(
                 f,
@@ -327,6 +354,24 @@ pub struct StepCtx<'a> {
     phase: Phase,
     inbox: Vec<QueuedCommand>,
     pub(crate) out: Outbox,
+    /// The `(purpose, entity)` pairs this step has drawn from, and how (05.1 §6 item 3).
+    taken: RefCell<BTreeSet<(u64, u64, Taken)>>,
+}
+
+/// How a step used a `(purpose, entity)` pair: through [`StepCtx::rng`] or [`StepCtx::stream`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Taken {
+    Rng,
+    Stream,
+}
+
+impl Taken {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Rng => "rng",
+            Self::Stream => "stream",
+        }
+    }
 }
 
 impl<'a> StepCtx<'a> {
@@ -343,6 +388,7 @@ impl<'a> StepCtx<'a> {
             phase,
             inbox,
             out: Outbox::default(),
+            taken: RefCell::new(BTreeSet::new()),
         }
     }
 
@@ -371,6 +417,12 @@ impl<'a> StepCtx<'a> {
     ///
     /// # Errors
     /// [`SimError::UndeclaredPurpose`] if `purpose` is not one the system registered.
+    ///
+    /// Any number of draws `k` may be taken for one pair, but not from a pair this step has
+    /// handed out as a [`StepCtx::stream`].
+    ///
+    /// # Errors
+    /// [`SimError::StreamReuse`] if this step took the pair as a stream.
     pub fn rng<P: SpecPurpose>(
         &self,
         purpose: &P,
@@ -378,8 +430,64 @@ impl<'a> StepCtx<'a> {
         k: u64,
     ) -> Result<u64, SimError> {
         let id = self.purpose_id(purpose)?;
-        let stream = self.info.key.stream_key(id, entity.entity_key());
+        let entity = entity.entity_key();
+        self.take(purpose.name(), id, entity, Taken::Rng)?;
+        let stream = self.info.key.stream_key(id, entity);
         Ok(stream.draw(self.t.minutes(), k))
+    }
+
+    /// The keyed stream of `purpose` for `entity` at the current instant, positioned at draw 0:
+    /// what an `rh-sample` sampler call takes (`05.1` §6 item 3). Its key is [`StepCtx::rng`]'s,
+    /// so `stream(p, e)?.draw(k) == rng(p, e, k)?`.
+    ///
+    /// One sampler call, one stream: within one step a pair is handed out as a stream at most
+    /// once, and never alongside [`StepCtx::rng`] draws for the same pair, because how many draws
+    /// a sampler consumes depends on its parameters. A system that needs two samples per entity
+    /// declares two purposes.
+    ///
+    /// # Errors
+    /// [`SimError::UndeclaredPurpose`] if `purpose` is not one the system registered;
+    /// [`SimError::StreamReuse`] if this step already took the pair, as a stream or by `rng`.
+    pub fn stream<P: SpecPurpose>(
+        &self,
+        purpose: &P,
+        entity: impl EntityKey,
+    ) -> Result<RngStream, SimError> {
+        let id = self.purpose_id(purpose)?;
+        let entity = entity.entity_key();
+        self.take(purpose.name(), id, entity, Taken::Stream)?;
+        let key = self.info.key.stream_key(id, entity);
+        Ok(RngStream::from_stream_key(&key, self.t.minutes()))
+    }
+
+    /// Records that this step uses `(id, entity)` as `how`, refusing a second use that the
+    /// call-site rule forbids: a stream after anything, or a draw after a stream.
+    fn take(
+        &self,
+        purpose: &'static str,
+        id: PurposeId,
+        entity: u64,
+        how: Taken,
+    ) -> Result<(), SimError> {
+        let mut taken = self.taken.borrow_mut();
+        let pair = (id.to_raw(), entity);
+        let earlier = [Taken::Stream, Taken::Rng]
+            .into_iter()
+            .find(|&t| taken.contains(&(pair.0, pair.1, t)));
+        match (earlier, how) {
+            (Some(Taken::Stream), _) | (Some(Taken::Rng), Taken::Stream) => {
+                Err(SimError::StreamReuse {
+                    system: self.info.system,
+                    purpose,
+                    entity,
+                    taken: earlier.map_or("", Taken::name),
+                })
+            }
+            _ => {
+                taken.insert((pair.0, pair.1, how));
+                Ok(())
+            }
+        }
     }
 
     fn purpose_id<P: SpecPurpose>(&self, purpose: &P) -> Result<PurposeId, SimError> {

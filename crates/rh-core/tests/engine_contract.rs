@@ -11,9 +11,13 @@
 //! - (d) within a level, ties go coarser pulse first; and (DEF-7) a same-instant dependency between
 //!   bindings of different pulses always holds, across up to three pulses;
 //! - the serial oracle: a plain serial reference computes order, lags and draws for a tiny world,
-//!   and the engine must match it month by month at 1 and 4 threads.
+//!   and the engine must match it month by month at 1 and 4 threads;
+//! - (SPR-008) `StepCtx::stream` has `StepCtx::rng`'s key: its draw `k` equals `rh_ids::h` with
+//!   draw index `k`; a step gets one stream per `(purpose, entity)`, and never a stream and `rng`
+//!   draws for the same pair, in either order (`05.1` §6 item 3).
 //!
-//! Refs: SPR-005 T-05, DEF-6; `05.1` §2 rules 4 and 6, §6 item 2.
+//! Refs: SPR-005 T-05, DEF-6; `05.1` §2 rules 4 and 6, §6 items 2 and 3; SPR-008 (Architect ruling
+//! on `StepCtx::stream`).
 #![allow(
     clippy::expect_used,
     clippy::unwrap_used,
@@ -51,6 +55,11 @@ impl SpecPurpose for Draw {
 
 /// `H(seed, salt, system_id(system), 0, "noise", row, t, 0)`, computed without `StepCtx`.
 fn independent_draw(system: &str, row: u16, t: SimTime) -> u64 {
+    independent_draw_k(system, row, t, 0)
+}
+
+/// `H(seed, salt, system_id(system), 0, "noise", row, t, k)`, computed without `StepCtx`.
+fn independent_draw_k(system: &str, row: u16, t: SimTime, k: u64) -> u64 {
     h(
         &RngKey {
             world_seed: SEED,
@@ -61,7 +70,7 @@ fn independent_draw(system: &str, row: u16, t: SimTime) -> u64 {
             epoch: 0,
             t: t.minutes(),
         },
-        0,
+        k,
     )
 }
 
@@ -500,4 +509,146 @@ fn edges_across_three_pulses_run_in_dependency_order() {
     for col in ["h.c", "d.c", "m.c"] {
         assert_eq!(e.tables().get(col).unwrap(), &vec![43_200], "{col}");
     }
+}
+
+/// SPR-008: a stream's draw `k` is `rng`'s draw `k` (the same key), and it starts at draw 0.
+#[test]
+fn a_stream_has_the_key_of_rng() {
+    fn record(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let mut s = c.stream(&Draw::Noise, RegionId::from_raw(3))?;
+        let mut out: Vec<i64> = (0..3).map(|_| s.next_u64().cast_signed()).collect();
+        out.push(s.draw(9).cast_signed());
+        v.write("d.x")?.extend(out);
+        Ok(())
+    }
+    let s = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .writes("d.x")
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(record);
+    let t = SimTime::from_minutes(1_440);
+    let mut e = engine(vec![s], t, 1);
+    e.advance_until(t, |_, _| {}).unwrap();
+    let expected: Vec<i64> = [0, 1, 2, 9]
+        .map(|k| independent_draw_k("X1.d", 3, t, k).cast_signed())
+        .to_vec();
+    assert_eq!(e.tables().get("d.x").unwrap(), &expected);
+}
+
+/// SPR-008 (`05.1` §6 item 3): one stream per `(purpose, entity)` per step, never alongside
+/// `rng` for the same pair; another entity is a different pair. Each refusal names the system,
+/// the purpose and the entity.
+#[test]
+fn a_step_takes_one_stream_per_pair_and_never_mixes_it_with_rng() {
+    type Use = fn(&StepCtx<'_>) -> Result<(), SimError>;
+    let cases: [(&str, Use, Option<&str>); 5] = [
+        (
+            "stream twice",
+            |c| {
+                c.stream(&Draw::Noise, RegionId::from_raw(3))
+                    .and_then(|_| c.stream(&Draw::Noise, RegionId::from_raw(3)))
+                    .map(|_| ())
+            },
+            Some("stream"),
+        ),
+        (
+            "rng then stream",
+            |c| {
+                c.rng(&Draw::Noise, RegionId::from_raw(3), 0)
+                    .and_then(|_| c.stream(&Draw::Noise, RegionId::from_raw(3)))
+                    .map(|_| ())
+            },
+            Some("rng"),
+        ),
+        (
+            "stream then rng",
+            |c| {
+                c.stream(&Draw::Noise, RegionId::from_raw(3))
+                    .and_then(|_| c.rng(&Draw::Noise, RegionId::from_raw(3), 0))
+                    .map(|_| ())
+            },
+            Some("stream"),
+        ),
+        (
+            "two entities",
+            |c| {
+                c.stream(&Draw::Noise, RegionId::from_raw(3))
+                    .and_then(|_| c.stream(&Draw::Noise, RegionId::from_raw(4)))
+                    .map(|_| ())
+            },
+            None,
+        ),
+        (
+            "rng twice",
+            |c| {
+                c.rng(&Draw::Noise, RegionId::from_raw(3), 0)
+                    .and_then(|_| c.rng(&Draw::Noise, RegionId::from_raw(3), 1))
+                    .map(|_| ())
+            },
+            None,
+        ),
+    ];
+    thread_local! {
+        static USE: std::cell::Cell<Option<Use>> = const { std::cell::Cell::new(None) };
+    }
+    fn step(
+        _: &Stub,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        USE.with(|u| u.get().expect("a use is set"))(c)
+    }
+    for (name, f, refused) in cases {
+        USE.with(|u| u.set(Some(f)));
+        let s = Stub::new("X1.d")
+            .purposes_of::<Draw>()
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(step);
+        let t = SimTime::from_minutes(1_440);
+        let mut e = engine(vec![s], t, 1);
+        let got = e.advance_until(t, |_, _| {});
+        match refused {
+            None => assert_eq!(got, Ok(()), "{name}"),
+            Some(taken) => assert_eq!(
+                got,
+                Err(SimError::StreamReuse {
+                    system: "X1.d",
+                    purpose: "noise",
+                    entity: 3,
+                    taken,
+                }),
+                "{name}"
+            ),
+        }
+    }
+}
+
+/// A new step starts with no pair taken: the same pair's stream in the next step is allowed.
+#[test]
+fn the_taken_pairs_reset_with_each_step() {
+    fn step(
+        _: &Stub,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        c.stream(&Draw::Noise, RegionId::from_raw(3)).map(|_| ())
+    }
+    let s = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .at(Pulse::Day, Phase::Vital)
+        .at(Pulse::Day, Phase::Agenda)
+        .stepping(step);
+    let t = SimTime::from_minutes(1_440);
+    let mut e = engine(vec![s], t, 1);
+    assert_eq!(
+        e.advance_until(SimTime::from_minutes(3 * 1_440), |_, _| {}),
+        Ok(())
+    );
 }

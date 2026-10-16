@@ -701,6 +701,7 @@ impl Engine {
             | SimError::UnownedWrite { system, .. }
             | SimError::MissingColumn { system, .. }
             | SimError::UndeclaredPurpose { system, .. }
+            | SimError::StreamReuse { system, .. }
             | SimError::Timer { system, .. }
             | SimError::UndeclaredCommand { system, .. }
             | SimError::UndeclaredEvent { system, .. }

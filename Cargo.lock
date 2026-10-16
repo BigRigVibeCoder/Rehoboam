@@ -665,6 +665,7 @@ dependencies = [
  "rh-events",
  "rh-ids",
  "rh-registry",
+ "rh-sample",
 ]
 
 [[package]]

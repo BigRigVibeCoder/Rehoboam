@@ -7,7 +7,7 @@
 //! | System | Pulses and phases | Exercises |
 //! |---|---|---|
 //! | `X1.smoke_weather` | Year/Inputs, Hour/Environment | the Hour pulse; Q16.16 drift |
-//! | `X2.smoke_harvest` | Season/Production, Month/Exchange | a `lagged` read |
+//! | `X2.smoke_harvest` | Season/Production, Month/Exchange | a `lagged` read; the `rh-sample` draw (Poisson, on `StepCtx::stream`) |
 //! | `X3.smoke_vital` | Month/Vital | timers scheduled, fired, cancelled and re-sampled; `Settle` sent with a causal edge |
 //! | `X4.smoke_estate` | Day/Activity, Day/Contagion | `Settle` applied in queue order; `INHERITANCE` caused by `DEATH` |
 //! | `X5.smoke_polity` | Year/Polity, Month/Polity, Season/Military | two bindings of one system in one phase; `Settle` sent with no cause |

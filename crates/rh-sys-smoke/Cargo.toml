@@ -19,6 +19,8 @@ workspace = true
 rh-core = { version = "0.0.0", path = "../rh-core" }
 rh-events = { version = "0.0.0", path = "../rh-events" }
 rh-ids = { version = "0.0.0", path = "../rh-ids" }
+# Ruling 3: at least one rh-sample draw, so the float zone is inside the golden run.
+rh-sample = { version = "0.0.0", path = "../rh-sample" }
 
 [dev-dependencies]
 rh-registry = { version = "0.0.0", path = "../rh-registry" }
