@@ -9,7 +9,7 @@ tags: [infrastructure, workflow]
 related: [GOV-008, SPR-001, GOV-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** Six steps take the director's laptop from a clean Ubuntu 24.04 to running `bin/check_all.sh` green: system packages, Rust, the Cargo tools, Python through `uv` (Ubuntu blocks `pip` into the system Python), a first check run, and benchmark hygiene. Phase 1 needs no GPU. About 20–30 minutes, mostly compiling the Cargo tools.
@@ -51,14 +51,13 @@ cargo install --locked cargo-nextest cargo-deny
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 cd ~/Rehoboam                      # your clone
-uv venv .venv --python 3.12
-uv pip install --python .venv/bin/python pydantic pyyaml duckdb
+uv sync --frozen --project python  # creates python/.venv from the committed python/uv.lock
 ```
-SPR-001 replaces the last line with `pyproject.toml` and a committed `uv.lock`.
+`python/.python-version` selects Python 3.12, which Ubuntu 24.04 ships; uv downloads it if it is missing. Run the same command after every pull that changes `python/uv.lock`. To change a dependency, edit `python/pyproject.toml`, run `uv lock --project python`, and commit both files.
 
 ## 5. First check run
 ```bash
-bin/check_all.sh                   # finds .venv/bin/python automatically
+bin/check_all.sh                   # finds python/.venv/bin/python automatically
 less artifacts/check_report.md
 ```
 Expect `Verdict: PASS (12 checks)`. If a check fails, the report shows the first failure's output; file it as a `DEF-` only after the run is reproducible.

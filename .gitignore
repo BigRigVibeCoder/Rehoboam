@@ -9,3 +9,8 @@ artifacts/
 target/
 .venv/
 python/.venv/
+
+# Python tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
