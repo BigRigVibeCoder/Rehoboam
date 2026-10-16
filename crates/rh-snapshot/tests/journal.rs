@@ -17,7 +17,7 @@ use rh_core::time::SimTime;
 use rh_snapshot::hash::xxh3_128;
 use rh_snapshot::journal::{
     ConsoleMode, HistoryKey, InputClass, InputKind, Journal, JournalError, JournaledInput,
-    NewInput, Producer, Replay, Scope,
+    NewInput, Producer, Replay, Scope, chain_genesis, chain_next, row_digest,
 };
 use rusqlite::Connection;
 
@@ -284,7 +284,7 @@ fn an_extra_input_hard_fails() {
         &path,
         "INSERT INTO inputs SELECT timeline_id, 12, tick, class, kind, kind_arg, scope, scope_id, \
          producer, job_id, model_id, weights_hash, provider_version, prompt_hash, payload, \
-         payload_hash FROM inputs WHERE seq = 0",
+         payload_hash, row_digest, chain FROM inputs WHERE seq = 0",
     );
     assert!(matches!(
         Replay::open(&path, &key(), 0),
@@ -474,4 +474,118 @@ fn sqlite_stores_no_real_values() {
         )
         .unwrap();
     assert_eq!(strict, 3);
+}
+
+/// VER-SPR-007-TEST GAP-3: every field edit the decoder accepts is caught by the row digest, and
+/// a dropped last row is caught by the chain head even with the count lowered to match.
+#[test]
+fn the_row_digest_and_the_chain_catch_every_silent_tamper() {
+    for (name, sql) in [
+        ("tick", "UPDATE inputs SET tick = tick + 1 WHERE seq = 3"),
+        ("scope", "UPDATE inputs SET scope_id = 4 WHERE seq = 3"),
+        (
+            "scope-kind",
+            "UPDATE inputs SET scope = 'household' WHERE seq = 3",
+        ),
+        (
+            "kind",
+            "UPDATE inputs SET kind = 'oracle_ward' WHERE seq = 3",
+        ),
+        ("verb", "UPDATE inputs SET kind_arg = 'GIVE' WHERE seq = 8"),
+        (
+            "producer",
+            "UPDATE inputs SET producer = 'system' WHERE seq = 3",
+        ),
+        (
+            "model",
+            "UPDATE inputs SET model_id = 'other' WHERE seq = 5",
+        ),
+        (
+            "payload-and-hash",
+            "UPDATE inputs SET payload = X'00', \
+            payload_hash = X'a6cd5e9392000f6ac44bdff4074eecdb' WHERE seq = 3",
+        ),
+        (
+            "digest",
+            "UPDATE inputs SET row_digest = zeroblob(16) WHERE seq = 3",
+        ),
+        (
+            "chain",
+            "UPDATE inputs SET chain = zeroblob(16) WHERE seq = 3",
+        ),
+    ] {
+        let dir = fresh_dir(name);
+        let (path, _) = written(&dir);
+        tamper(&path, sql);
+        let err = Replay::open(&path, &key(), 0).unwrap_err();
+        assert!(
+            matches!(err, JournalError::Mismatched { .. }),
+            "{name}: {err}"
+        );
+    }
+    // The last row dropped together with the count: the head no longer matches.
+    let dir = fresh_dir("drop-last");
+    let (path, _) = written(&dir);
+    tamper(
+        &path,
+        "DELETE FROM inputs WHERE seq = 11; UPDATE timelines SET input_count = 11",
+    );
+    let err = Replay::open(&path, &key(), 0).unwrap_err();
+    assert!(
+        matches!(err, JournalError::Missing { seq: 11, .. }),
+        "{err}"
+    );
+    // The head itself altered.
+    let dir = fresh_dir("head");
+    let (path, _) = written(&dir);
+    tamper(&path, "UPDATE timelines SET head_chain = zeroblob(16)");
+    assert!(matches!(
+        Replay::open(&path, &key(), 0),
+        Err(JournalError::Missing { .. })
+    ));
+}
+
+#[test]
+fn the_journal_position_is_the_count_and_the_chain_head() {
+    let dir = fresh_dir("position");
+    let path = dir.join("j.sqlite");
+    let mut j = Journal::create(&path, &key()).unwrap();
+    let empty = j.position(0).unwrap();
+    assert_eq!((empty.inputs, empty.head), (0, chain_genesis(0)));
+    assert_ne!(chain_genesis(0), chain_genesis(1));
+    let mut head = chain_genesis(0);
+    let mut records = Vec::new();
+    for input in inputs() {
+        let r = j.append(input).unwrap();
+        head = chain_next(&head, &row_digest(&r));
+        records.push(r);
+        let p = j.position(0).unwrap();
+        assert_eq!(p.inputs as usize, records.len());
+        assert_eq!(p.head, head);
+    }
+    drop(j);
+    let replay = Replay::open(&path, &key(), 0).unwrap();
+    assert_eq!(replay.position().head, head);
+    assert_eq!(replay.position().inputs, 12);
+    assert_eq!(replay.chain_after(0), Some(chain_genesis(0)));
+    assert_eq!(replay.chain_after(12), Some(head));
+    assert_eq!(replay.chain_after(13), None);
+    // Every field enters the digest: changing any one changes it.
+    let r = records[5].clone();
+    let base = row_digest(&r);
+    let mut t = r.clone();
+    t.tick = SimTime::from_minutes(t.tick.minutes() + 1);
+    assert_ne!(row_digest(&t), base);
+    let mut t = r.clone();
+    t.seq += 1;
+    assert_ne!(row_digest(&t), base);
+    let mut t = r.clone();
+    t.timeline_id = 1;
+    assert_ne!(row_digest(&t), base);
+    let mut t = r.clone();
+    t.payload_hash[0] ^= 1;
+    assert_ne!(row_digest(&t), base);
+    let mut t = r;
+    t.scope = Scope::Household(u64::MAX);
+    assert_ne!(row_digest(&t), base);
 }

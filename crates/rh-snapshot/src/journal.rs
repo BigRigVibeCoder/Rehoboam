@@ -24,8 +24,21 @@
 //! Every table is `STRICT`, with only `INTEGER`, `TEXT` and `BLOB` columns, so `SQLite` can store no
 //! `REAL` and its floating point never reaches plane A (ruling 3). `u64` values (the world seed,
 //! entity ids) are stored as their two's-complement `i64`. Writes use WAL with `synchronous=FULL`.
-//! Each append is one transaction that also advances the timeline's input count, so a truncated
-//! or padded journal is detected.
+//! Each append is one transaction that also advances the timeline's input count and its chain, so
+//! a truncated, padded or edited journal is detected.
+//!
+//! # Integrity (VER-SPR-007-TEST GAP-3)
+//!
+//! Every row stores a **row digest**, `XXH3-128(D_ROW || fields)` over all its IF-2 fields
+//! ([`row_digest`]), and a **chain** value. Per timeline, `chain(-1) = XXH3-128(D_CHAIN ||
+//! u32(timeline_id))` and `chain(n) = XXH3-128(D_CHAIN || chain(n-1) || row_digest(n))` in seq order;
+//! the timeline's row keeps the head, `chain(count-1)`. Replay recomputes both and hard-fails on any
+//! difference, so an edited tick, scope or kind, or a last row dropped together with the count, no
+//! longer replays silently. [`JournalPosition`] (count and head) is what a keyframe and a crash
+//! artifact record as their journal position (T-02). The tags are `D_ROW =
+//! "rehoboam/rh-snapshot/journal/v2/row"` and `D_CHAIN = ".../journal/v2/chain"`. This is
+//! integrity against accident and naive edits, not a signature: a writer who recomputes every
+//! digest can forge a journal.
 //!
 //! # Replay
 //!
@@ -53,7 +66,12 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, params};
 use crate::hash::xxh3_128;
 
 /// The journal schema's version, stored in the file.
-pub const SCHEMA: &str = "rehoboam/rh-snapshot/journal/v1";
+pub const SCHEMA: &str = "rehoboam/rh-snapshot/journal/v2";
+
+/// Domain tag of a row digest.
+const D_ROW: &[u8] = b"rehoboam/rh-snapshot/journal/v2/row";
+/// Domain tag of the chain (its genesis and every link).
+const D_CHAIN: &[u8] = b"rehoboam/rh-snapshot/journal/v2/chain";
 
 const DDL: &str = "
 CREATE TABLE history (
@@ -66,7 +84,8 @@ CREATE TABLE history (
 ) STRICT;
 CREATE TABLE timelines (
     timeline_id INTEGER PRIMARY KEY CHECK (timeline_id BETWEEN 0 AND 4294967295),
-    input_count INTEGER NOT NULL CHECK (input_count >= 0)
+    input_count INTEGER NOT NULL CHECK (input_count >= 0),
+    head_chain BLOB NOT NULL CHECK (length(head_chain) = 16)
 ) STRICT;
 CREATE TABLE inputs (
     timeline_id INTEGER NOT NULL REFERENCES timelines (timeline_id),
@@ -85,6 +104,8 @@ CREATE TABLE inputs (
     prompt_hash BLOB,
     payload BLOB NOT NULL,
     payload_hash BLOB NOT NULL CHECK (length(payload_hash) = 16),
+    row_digest BLOB NOT NULL CHECK (length(row_digest) = 16),
+    chain BLOB NOT NULL CHECK (length(chain) = 16),
     PRIMARY KEY (timeline_id, seq)
 ) STRICT;
 ";
@@ -464,14 +485,17 @@ impl Journal {
     pub fn append(&mut self, input: NewInput) -> Result<JournaledInput, JournalError> {
         validate_producer(&input.producer)?;
         let tx = self.conn.transaction()?;
-        let count: Option<i64> = tx
+        let head: Option<(i64, Vec<u8>)> = tx
             .query_row(
-                "SELECT input_count FROM timelines WHERE timeline_id = ?1",
+                "SELECT input_count, head_chain FROM timelines WHERE timeline_id = ?1",
                 [i64::from(input.timeline_id)],
-                |r| r.get(0),
+                |r| Ok((r.get(0)?, r.get(1)?)),
             )
             .optional()?;
-        let count = count.unwrap_or(0);
+        let (count, head) = match head {
+            Some((count, head)) => (count, chain_bytes(&head, input.timeline_id, count)?),
+            None => (0, chain_genesis(input.timeline_id)),
+        };
         let seq = u32::try_from(count)
             .map_err(|_| JournalError::Rejected("the timeline has 2^32 inputs".to_owned()))?;
         let record = JournaledInput {
@@ -485,15 +509,51 @@ impl Journal {
             producer: input.producer,
             payload: input.payload,
         };
+        let digest = row_digest(&record);
+        let chain = chain_next(&head, &digest);
         tx.execute(
-            "INSERT INTO timelines (timeline_id, input_count) VALUES (?1, ?2) \
-             ON CONFLICT (timeline_id) DO UPDATE SET input_count = excluded.input_count",
-            params![i64::from(record.timeline_id), count + 1],
+            "INSERT INTO timelines (timeline_id, input_count, head_chain) VALUES (?1, ?2, ?3) \
+             ON CONFLICT (timeline_id) DO UPDATE SET input_count = excluded.input_count, \
+             head_chain = excluded.head_chain",
+            params![i64::from(record.timeline_id), count + 1, chain.as_slice()],
         )?;
-        insert(&tx, &record)?;
+        insert(&tx, &record, &digest, &chain)?;
         tx.commit()?;
         Ok(record)
     }
+}
+
+impl Journal {
+    /// The timeline's journal position: its input count and chain head.
+    ///
+    /// # Errors
+    /// [`JournalError::Sqlite`] on I/O failure; [`JournalError::Mismatched`] for a malformed head.
+    pub fn position(&self, timeline_id: u32) -> Result<JournalPosition, JournalError> {
+        position_of(&self.conn, timeline_id)
+    }
+}
+
+fn position_of(conn: &Connection, timeline_id: u32) -> Result<JournalPosition, JournalError> {
+    let row: Option<(i64, Vec<u8>)> = conn
+        .query_row(
+            "SELECT input_count, head_chain FROM timelines WHERE timeline_id = ?1",
+            [i64::from(timeline_id)],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let (count, head) = match row {
+        Some((count, head)) => (count, chain_bytes(&head, timeline_id, count)?),
+        None => (0, chain_genesis(timeline_id)),
+    };
+    Ok(JournalPosition {
+        timeline_id,
+        inputs: u32::try_from(count).map_err(|_| JournalError::Mismatched {
+            timeline_id,
+            seq: u32::MAX,
+            reason: format!("input count {count}"),
+        })?,
+        head,
+    })
 }
 
 fn set_write_pragmas(conn: &Connection) -> Result<(), JournalError> {
@@ -521,33 +581,138 @@ fn validate_producer(p: &Producer) -> Result<(), JournalError> {
     Ok(())
 }
 
-fn insert(tx: &Transaction<'_>, r: &JournaledInput) -> Result<(), JournalError> {
-    let (kind, kind_arg) = r.kind.encode();
-    let (scope, scope_id) = r.scope.encode();
-    let (producer, job_id, model_id, weights_hash, provider_version, prompt_hash) =
-        match &r.producer {
-            Producer::Player => ("player", None, None, None, None, None),
-            Producer::System => ("system", None, None, None, None, None),
-            Producer::LlmJob {
-                job_id,
-                model_id,
-                weights_hash,
-                provider_version,
-                prompt_hash,
-            } => (
-                "llm_job",
-                Some(job_id.as_str()),
-                Some(model_id.as_str()),
-                weights_hash.as_deref(),
-                provider_version.as_deref(),
-                Some(prompt_hash.as_slice()),
-            ),
-        };
+/// The record's fields as the journal stores them: kind and argument, scope and id, producer.
+type Encoded<'a> = (
+    (&'static str, Option<&'a str>),
+    (&'static str, Option<i64>),
+    (
+        &'static str,
+        Option<&'a str>,
+        Option<&'a str>,
+        Option<&'a [u8]>,
+        Option<&'a str>,
+        Option<&'a [u8]>,
+    ),
+);
+
+fn encode(r: &JournaledInput) -> Encoded<'_> {
+    let producer = match &r.producer {
+        Producer::Player => ("player", None, None, None, None, None),
+        Producer::System => ("system", None, None, None, None, None),
+        Producer::LlmJob {
+            job_id,
+            model_id,
+            weights_hash,
+            provider_version,
+            prompt_hash,
+        } => (
+            "llm_job",
+            Some(job_id.as_str()),
+            Some(model_id.as_str()),
+            weights_hash.as_deref(),
+            provider_version.as_deref(),
+            Some(prompt_hash.as_slice()),
+        ),
+    };
+    (r.kind.encode(), r.scope.encode(), producer)
+}
+
+fn put_bytes(out: &mut Vec<u8>, b: &[u8]) {
+    let len = u32::try_from(b.len()).unwrap_or(u32::MAX);
+    out.extend_from_slice(&len.to_le_bytes());
+    out.extend_from_slice(b);
+}
+
+fn put_opt(out: &mut Vec<u8>, b: Option<&[u8]>) {
+    match b {
+        None => out.push(0),
+        Some(b) => {
+            out.push(1);
+            put_bytes(out, b);
+        }
+    }
+}
+
+/// A row's digest: `XXH3-128(D_ROW || ...)` over every IF-2 field in record order, little-endian
+/// integers, `u32` length-prefixed strings and blobs, and `u8` 0 or 1 before each optional field:
+/// `u32 timeline_id, i64 tick, u32 seq, class, kind, kind_arg?, scope, scope_id? (i64), producer,
+/// job_id?, model_id?, weights_hash?, provider_version?, prompt_hash?, payload_hash` (the payload
+/// enters through its hash).
+#[must_use]
+pub fn row_digest(r: &JournaledInput) -> [u8; 16] {
+    let ((kind, kind_arg), (scope, scope_id), producer) = encode(r);
+    let (producer, job_id, model_id, weights_hash, provider_version, prompt_hash) = producer;
+    let mut b = Vec::with_capacity(160);
+    b.extend_from_slice(D_ROW);
+    b.extend_from_slice(&r.timeline_id.to_le_bytes());
+    b.extend_from_slice(&r.tick.minutes().to_le_bytes());
+    b.extend_from_slice(&r.seq.to_le_bytes());
+    put_bytes(&mut b, b"push");
+    put_bytes(&mut b, kind.as_bytes());
+    put_opt(&mut b, kind_arg.map(str::as_bytes));
+    put_bytes(&mut b, scope.as_bytes());
+    let id = scope_id.map(i64::to_le_bytes);
+    put_opt(&mut b, id.as_ref().map(<[u8; 8]>::as_slice));
+    put_bytes(&mut b, producer.as_bytes());
+    put_opt(&mut b, job_id.map(str::as_bytes));
+    put_opt(&mut b, model_id.map(str::as_bytes));
+    put_opt(&mut b, weights_hash);
+    put_opt(&mut b, provider_version.map(str::as_bytes));
+    put_opt(&mut b, prompt_hash);
+    b.extend_from_slice(&r.payload_hash);
+    xxh3_128(&b)
+}
+
+/// The chain value before a timeline's first input.
+#[must_use]
+pub fn chain_genesis(timeline_id: u32) -> [u8; 16] {
+    let mut b = D_CHAIN.to_vec();
+    b.extend_from_slice(&timeline_id.to_le_bytes());
+    xxh3_128(&b)
+}
+
+/// The next chain value: `XXH3-128(D_CHAIN || previous || row digest)`.
+#[must_use]
+pub fn chain_next(previous: &[u8; 16], digest: &[u8; 16]) -> [u8; 16] {
+    let mut b = D_CHAIN.to_vec();
+    b.extend_from_slice(previous);
+    b.extend_from_slice(digest);
+    xxh3_128(&b)
+}
+
+fn chain_bytes(b: &[u8], timeline_id: u32, at: i64) -> Result<[u8; 16], JournalError> {
+    b.try_into().map_err(|_| JournalError::Mismatched {
+        timeline_id,
+        seq: u32::try_from(at).unwrap_or(u32::MAX),
+        reason: "a chain value is not 16 bytes".to_owned(),
+    })
+}
+
+/// Where a timeline's journal stands: its input count and its chain head (`chain(count - 1)`, or
+/// the genesis value for an empty timeline). A keyframe and a crash artifact record it (T-02).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct JournalPosition {
+    /// The timeline.
+    pub timeline_id: u32,
+    /// The number of inputs journaled.
+    pub inputs: u32,
+    /// The chain head after them.
+    pub head: [u8; 16],
+}
+
+fn insert(
+    tx: &Transaction<'_>,
+    r: &JournaledInput,
+    digest: &[u8; 16],
+    chain: &[u8; 16],
+) -> Result<(), JournalError> {
+    let ((kind, kind_arg), (scope, scope_id), producer) = encode(r);
+    let (producer, job_id, model_id, weights_hash, provider_version, prompt_hash) = producer;
     tx.execute(
         "INSERT INTO inputs (timeline_id, seq, tick, class, kind, kind_arg, scope, scope_id, \
          producer, job_id, model_id, weights_hash, provider_version, prompt_hash, payload, \
-         payload_hash) VALUES (?1, ?2, ?3, 'push', ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, \
-         ?14, ?15)",
+         payload_hash, row_digest, chain) VALUES (?1, ?2, ?3, 'push', ?4, ?5, ?6, ?7, ?8, ?9, \
+         ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         params![
             i64::from(r.timeline_id),
             i64::from(r.seq),
@@ -564,6 +729,8 @@ fn insert(tx: &Transaction<'_>, r: &JournaledInput) -> Result<(), JournalError> 
             prompt_hash,
             r.payload,
             r.payload_hash.as_slice(),
+            digest.as_slice(),
+            chain.as_slice(),
         ],
     )?;
     Ok(())
@@ -679,11 +846,73 @@ pub struct Replay {
     inputs: Vec<JournaledInput>,
     next: usize,
     last_tick: Option<SimTime>,
+    /// `chains[n]` is the chain value after the first `n` inputs in seq order (`chains[0]` is the
+    /// genesis value).
+    chains: Vec<[u8; 16]>,
+    position: JournalPosition,
+}
+
+/// Recomputes every row digest and the chain of `inputs` (seq order) against the stored values and
+/// the timeline's head; returns the chain values from the genesis on.
+fn verify_chain(
+    conn: &Connection,
+    timeline_id: u32,
+    inputs: &[JournaledInput],
+    position: &JournalPosition,
+) -> Result<Vec<[u8; 16]>, JournalError> {
+    let mut stmt =
+        conn.prepare("SELECT row_digest, chain FROM inputs WHERE timeline_id = ?1 ORDER BY seq")?;
+    let stored = stmt
+        .query_map([i64::from(timeline_id)], |r| {
+            Ok((r.get::<_, Vec<u8>>(0)?, r.get::<_, Vec<u8>>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut chains = vec![chain_genesis(timeline_id)];
+    for (input, (digest, chain)) in inputs.iter().zip(&stored) {
+        let bad = |reason: &str| JournalError::Mismatched {
+            timeline_id,
+            seq: input.seq,
+            reason: reason.to_owned(),
+        };
+        let expected = row_digest(input);
+        if digest.as_slice() != expected {
+            return Err(bad("the row digest does not match the row's fields"));
+        }
+        let previous = chains.last().copied().unwrap_or_default();
+        let next = chain_next(&previous, &expected);
+        if chain.as_slice() != next {
+            return Err(bad("the chain breaks at this row"));
+        }
+        chains.push(next);
+    }
+    if chains.last() != Some(&position.head) {
+        return Err(JournalError::Missing {
+            timeline_id,
+            seq: position.inputs,
+            reason: "the timeline's head chain does not match its last row: inputs were removed \
+                     or the head was altered",
+        });
+    }
+    Ok(chains)
 }
 
 impl Replay {
+    /// The journal position the replay was opened at (the timeline's count and chain head).
+    #[must_use]
+    pub fn position(&self) -> JournalPosition {
+        self.position
+    }
+
+    /// The chain value after the first `n` inputs in seq order, `None` past the end: the journal
+    /// position a keyframe taken after `n` journaled inputs records.
+    #[must_use]
+    pub fn chain_after(&self, n: usize) -> Option<[u8; 16]> {
+        self.chains.get(n).copied()
+    }
+
     /// Opens `path` read-only and loads `timeline_id`'s inputs, checking the history key, the
-    /// input count, the `seq` sequence and every payload hash.
+    /// input count, the `seq` sequence, every payload hash, every row digest and the chain up to
+    /// the timeline's head.
     ///
     /// # Errors
     /// [`JournalError::HistoryMismatch`], [`JournalError::Missing`], [`JournalError::Extra`],
@@ -694,14 +923,8 @@ impl Replay {
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
         check_key(&conn, key)?;
-        let count: i64 = conn
-            .query_row(
-                "SELECT input_count FROM timelines WHERE timeline_id = ?1",
-                [i64::from(timeline_id)],
-                |r| r.get(0),
-            )
-            .optional()?
-            .unwrap_or(0);
+        let position = position_of(&conn, timeline_id)?;
+        let count = i64::from(position.inputs);
         let mut stmt = conn.prepare(
             "SELECT seq, tick, class, kind, kind_arg, scope, scope_id, producer, job_id, \
              model_id, weights_hash, provider_version, prompt_hash, payload, payload_hash \
@@ -750,12 +973,15 @@ impl Replay {
                 reason: "fewer rows than the timeline's input count",
             });
         }
+        let chains = verify_chain(&conn, timeline_id, &inputs, &position)?;
         inputs.sort_by_key(|i| (i.tick, i.seq));
         Ok(Self {
             timeline_id,
             inputs,
             next: 0,
             last_tick: None,
+            chains,
+            position,
         })
     }
 
