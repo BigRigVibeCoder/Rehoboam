@@ -1,0 +1,7 @@
+# V-PLN-01 compile-fail positive control, plane C (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# fixture-core (plane A) names a type from fixture-narrative (plane C) without a dependency edge.
+# `cargo check` must fail to resolve it: the only way to reach the type is an edge, and
+# bin/lint_arch.py rejects every plane-A -> plane-C edge (tests/lint_fixtures/arch/plane_a_to_c).
+[workspace]
+members = ["fixture-core", "fixture-narrative"]
+resolver = "3"

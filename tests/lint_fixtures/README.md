@@ -28,10 +28,11 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source co
 | `arch/plane_a_rng_crate/` | `bin/lint_arch.py` (rng-crate, DEF-1) | plane-A crate → `rand` (a registry dependency, read without fetching) | `VIOLATION [rng-crate]` |
 | `arch/rng_building_block_outside_ids/` | `bin/lint_arch.py` (rng-crate, DEF-1) | `rand_chacha` in rh-core (allowed in rh-ids only) | `VIOLATION [rng-crate] rh-core` |
 | `compile_fail/plane_a_names_plane_b/` | `cargo check` (V-PLN-01, compile-fail) | plane-A code naming a plane-B type without a dependency edge | ``unlinked crate `fixture_observation` `` |
+| `compile_fail/plane_a_names_plane_c/` | `cargo check` (V-PLN-01, compile-fail) | plane-A code naming a plane-C type without a dependency edge | ``unlinked crate `fixture_narrative` `` |
 | `forbidden/planted/<api>.rs` | `bin/lint_forbidden.py --scan` (V-DET-19) | exactly one forbidden API per file (24 files): HashMap, HashSet, thread_rng, ThreadRng, rand::rng, StdRng, SmallRng, OsRng, from_entropy, from_os_rng, getrandom, rand::random, random_range, random_bool, random_ratio, random_iter, mul_add, Instant::now, SystemTime, unsafe; paths spaced around `::` (`std :: time :: Instant :: now()` in a macro body, `rand :: rng()`); `#[path]` and `include!` (DEF-4) | ``VIOLATION [V-DET-19/<rule>] `<token>` `` |
 | `forbidden/workspace/` | `bin/lint_forbidden.py` (V-DET-19) | HashMap in a plane-A crate, and also in a tool crate (skipped), comments and strings (ignored), plus one reasoned escape (counted) | `VIOLATION [V-DET-19/hash-collections]` |
 
-The compile-fail case also passes `bin/lint_arch.py` (its graph has no edge), which shows the failure
-is the language barrier: plane-A code can reach a plane-B type only through a dependency edge, and
-`arch/plane_a_to_b/` shows the lint rejects that edge. The unit tests in `python/tests/` check each
+Each compile-fail case also passes `bin/lint_arch.py` (its graph has no edge), which shows the failure
+is the language barrier: plane-A code can reach a plane-B or plane-C type only through a dependency
+edge, and `arch/plane_a_to_b/` and `arch/plane_a_to_c/` show the lint rejects that edge. The unit tests in `python/tests/` check each
 rule in more detail, including the cases a gate must not flag.
