@@ -289,12 +289,36 @@ impl Agenda {
         }
     }
 
-    /// Rebuilds an agenda from its state.
+    /// Rebuilds an agenda from its state, which must be in the canonical form [`Agenda::state`]
+    /// produces, so that `restore(x).state() == x` and a keyframe's hash of `x` is the agenda's
+    /// (SPR-006 GAP-6, ruled for SPR-007 T-02).
     ///
     /// # Errors
-    /// [`AgendaError::BadState`] if two entries share a `seq`, a `seq` is not below the counter, or
-    /// a tombstone names no entry.
+    /// [`AgendaError::BadState`] unless: the entries are in strictly increasing key order; every
+    /// `seq` is below the counter and appears once; the tombstones are strictly increasing and
+    /// each names an entry; and the first entry (the heap's top) is not tombstoned, since
+    /// cancelling the top drops it at once.
     pub fn restore(state: &AgendaState) -> Result<Self, AgendaError> {
+        let bad = |m: String| Err(AgendaError::BadState(m));
+        if let Some(&[(a, _), (b, _)]) = state.entries.windows(2).find(|w| w[0].0 >= w[1].0) {
+            return bad(format!(
+                "entries are not in strictly increasing key order at seq {} then {}",
+                a.seq, b.seq
+            ));
+        }
+        if let Some(&[a, b]) = state.tombstones.windows(2).find(|w| w[0] >= w[1]) {
+            return bad(format!(
+                "tombstones are not strictly increasing at {a} then {b}"
+            ));
+        }
+        if let (Some(&(top, _)), Some(_)) = (state.entries.first(), state.tombstones.first())
+            && state.tombstones.binary_search(&top.id()).is_ok()
+        {
+            return bad(format!(
+                "the first entry, seq {}, is tombstoned; state() never holds a cancelled top",
+                top.seq
+            ));
+        }
         let mut agenda = Self {
             next_seq: state.next_seq,
             ..Self::default()
@@ -326,6 +350,9 @@ impl Agenda {
             }
         }
         agenda.normalize();
+        if agenda.state() != *state {
+            return bad("the state is not in the canonical form state() produces".to_owned());
+        }
         Ok(agenda)
     }
 
@@ -439,8 +466,63 @@ mod tests {
         let mut bad = state.clone();
         bad.next_seq = 3;
         assert!(Agenda::restore(&bad).is_err());
-        let mut bad = state;
+        let mut bad = state.clone();
         bad.tombstones.push(TimerId::from_raw(99));
         assert!(Agenda::restore(&bad).is_err());
+        // GAP-6: only the canonical form is accepted.
+        let mut bad = state.clone();
+        bad.entries.swap(0, 1);
+        assert!(Agenda::restore(&bad).is_err(), "unsorted entries");
+        let mut bad = state.clone();
+        bad.entries.push(bad.entries[0]);
+        assert!(Agenda::restore(&bad).is_err(), "a repeated entry");
+        let mut bad = state.clone();
+        bad.tombstones.reverse();
+        assert!(Agenda::restore(&bad).is_err(), "unsorted tombstones");
+        let mut bad = state.clone();
+        bad.tombstones.push(bad.tombstones[0]);
+        assert!(Agenda::restore(&bad).is_err(), "a repeated tombstone");
+        let mut bad = state.clone();
+        let top = bad.entries[0].0.id();
+        bad.tombstones.insert(0, top);
+        assert!(Agenda::restore(&bad).is_err(), "a tombstoned top");
+    }
+
+    /// GAP-6: `restore(x).state() == x` for agendas built by random inserts, cancels and pops.
+    #[test]
+    fn restore_of_state_is_the_identity_on_random_agendas() {
+        let mut z: u64 = 0x5EED_AA06;
+        let mut next = move || {
+            z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut x = z;
+            x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            x ^ (x >> 31)
+        };
+        for _ in 0..200 {
+            let mut a = Agenda::new();
+            let mut ids = Vec::new();
+            for _ in 0..(next() % 40) {
+                match next() % 4 {
+                    0 | 1 => ids.push(a.insert(
+                        SimTime::from_minutes((next() % 50).cast_signed()),
+                        Phase::ALL[usize::try_from(next() % 4).unwrap_or(0)],
+                        person(next() % 5),
+                        timer(u32::try_from(next() % 7).unwrap_or(0)),
+                    )),
+                    2 if !ids.is_empty() => {
+                        let id = ids[usize::try_from(next()).unwrap_or(0) % ids.len()];
+                        let _ = a.cancel(id);
+                    }
+                    _ => {
+                        let _ = a.pop();
+                    }
+                }
+            }
+            let state = a.state();
+            let b = Agenda::restore(&state).unwrap_or_else(|e| panic!("{e}"));
+            assert_eq!(b.state(), state);
+            assert_eq!(b.pending(), a.pending());
+        }
     }
 }

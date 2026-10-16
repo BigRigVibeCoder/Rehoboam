@@ -682,3 +682,67 @@ fn def4_panics_in_invariants_and_resample_timer_poison_with_an_artifact() {
         (at.minutes(), "Inputs", "R1.timer", 1)
     );
 }
+
+fn fail_on_day_1500(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let day = c.now().minutes() / 1_440;
+    v.write("tick.n")?[0] = day;
+    if day == 1_500 {
+        return Err(SimError::System {
+            system: "X1.ticker",
+            message: "day 1500".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+/// GOV-004 §4's cap (SPR-006 DEF-6, carried into SPR-007 T-02): a run of 1,500 instants keeps
+/// exactly the last 1,000 diagnostic records in its crash artifact, the FATAL one last.
+#[test]
+fn the_crash_artifact_keeps_exactly_the_last_1000_diagnostic_records() {
+    let stubs = vec![
+        Stub::new("X1.ticker")
+            .writes("tick.n")
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(fail_on_day_1500),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut w = WorldTables::new();
+    w.insert("tick.n", vec![0]);
+    let mut engine = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        w,
+        SimTime::EPOCH,
+    );
+    let err = engine
+        .advance_until(SimTime::from_minutes(2_000 * 1_440), |_, _| {})
+        .unwrap_err();
+    assert_eq!(err.to_string(), "X1.ticker: day 1500");
+    let a = engine.crash_artifact().unwrap();
+    assert_eq!(a.diagnostics.len(), 1_000);
+    assert!(
+        a.diagnostics.last().unwrap().contains("FATAL"),
+        "{:?}",
+        a.diagnostics.last()
+    );
+    assert_eq!(
+        a.diagnostics.iter().filter(|d| d.contains("FATAL")).count(),
+        1
+    );
+    // The oldest kept record is day 501's: the records of days 501 to 1499, then day 1500's FATAL.
+    assert!(
+        a.diagnostics[0].starts_with(&format!("t={}min pulses=[Day]", 501 * 1_440)),
+        "{:?}",
+        a.diagnostics[0]
+    );
+    assert_eq!(engine.diagnostics().len(), 1_000);
+}

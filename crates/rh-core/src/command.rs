@@ -70,6 +70,16 @@ impl QueuedCommand {
     }
 }
 
+/// The serialisable state of the queues (SPR-007 T-02): each owner with its commands, owners in
+/// increasing name order and each queue in key order, and the merge counter.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CommandQueuesState {
+    /// `(owner, commands)`, owners strictly increasing, every queue non-empty and in key order.
+    pub queues: Vec<(&'static str, Vec<QueuedCommand>)>,
+    /// The next merge `seq`.
+    pub next_seq: u64,
+}
+
 /// The queues of every owner: owner id to its commands in key order.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CommandQueues {
@@ -126,6 +136,64 @@ impl CommandQueues {
         for c in commands {
             q.insert(c.key(), c);
         }
+    }
+
+    /// The serialisable state, in canonical form.
+    #[must_use]
+    pub fn state(&self) -> CommandQueuesState {
+        CommandQueuesState {
+            queues: self
+                .queues
+                .iter()
+                .filter(|(_, q)| !q.is_empty())
+                .map(|(owner, q)| (*owner, q.values().cloned().collect()))
+                .collect(),
+            next_seq: self.next_seq,
+        }
+    }
+
+    /// Rebuilds the queues from a state in the canonical form [`CommandQueues::state`] produces
+    /// (SPR-006 GAP-6, ruled for SPR-007 T-02).
+    ///
+    /// # Errors
+    /// A message unless the owners are strictly increasing, every queue is non-empty and strictly
+    /// increasing in key order, and every `seq` is below the counter and appears once.
+    pub fn from_state(state: &CommandQueuesState) -> Result<Self, String> {
+        if let Some(w) = state.queues.windows(2).find(|w| w[0].0 >= w[1].0) {
+            return Err(format!(
+                "command owners are not strictly increasing: {} then {}",
+                w[0].0, w[1].0
+            ));
+        }
+        let mut seen = std::collections::BTreeSet::new();
+        let mut queues = BTreeMap::new();
+        for (owner, commands) in &state.queues {
+            if commands.is_empty() {
+                return Err(format!("the queue of {owner} is empty"));
+            }
+            if let Some(w) = commands.windows(2).find(|w| w[0].key() >= w[1].key()) {
+                return Err(format!(
+                    "the queue of {owner} is not in strictly increasing key order at seq {} then {}",
+                    w[0].seq, w[1].seq
+                ));
+            }
+            for c in commands {
+                if c.seq >= state.next_seq || !seen.insert(c.seq) {
+                    return Err(format!(
+                        "command seq {} is repeated or not below the counter {}",
+                        c.seq, state.next_seq
+                    ));
+                }
+            }
+            queues.insert(
+                *owner,
+                commands.iter().map(|c| (c.key(), c.clone())).collect(),
+            );
+        }
+        Ok(Self {
+            queues,
+            next_seq: state.next_seq,
+        })
     }
 
     /// The number of commands waiting for `owner`.
@@ -198,5 +266,39 @@ mod tests {
         );
         assert_eq!(q.waiting("M2"), 0);
         assert_eq!(q.len(), 1, "S1's queue is untouched");
+    }
+
+    /// SPR-007 T-02 (SPR-006 GAP-6): the state round-trips, and only the canonical form restores.
+    #[test]
+    fn state_round_trips_and_only_the_canonical_form_restores() {
+        use super::CommandQueuesState;
+        let mut q = CommandQueues::new();
+        let t = SimTime::from_minutes;
+        q.push("M2", t(1), Phase::Vital, "M5", None, cmd(9));
+        q.push("M2", t(0), Phase::Vital, "M5", None, cmd(3));
+        q.push("S1", t(0), Phase::Activity, "S5", None, cmd(1));
+        q.push("A0", t(2), Phase::Agenda, "S5", None, cmd(4));
+        let state = q.state();
+        assert_eq!(CommandQueues::from_state(&state), Ok(q.clone()));
+        assert_eq!(
+            state.queues.iter().map(|(o, _)| *o).collect::<Vec<_>>(),
+            ["A0", "M2", "S1"]
+        );
+        let refused = |f: fn(&mut CommandQueuesState)| {
+            let mut s = state.clone();
+            f(&mut s);
+            CommandQueues::from_state(&s).is_err()
+        };
+        assert!(refused(|s| s.queues.swap(0, 1)), "unsorted owners");
+        assert!(refused(|s| s.queues[1].1.reverse()), "an unsorted queue");
+        assert!(refused(|s| s.queues[0].1.clear()), "an empty queue");
+        assert!(refused(|s| s.next_seq = 2), "a seq not below the counter");
+        assert!(
+            refused(|s| {
+                let dup = s.queues[1].1[0].clone();
+                s.queues[2].1.push(dup);
+            }),
+            "a repeated seq"
+        );
     }
 }

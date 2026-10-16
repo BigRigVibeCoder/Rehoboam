@@ -85,6 +85,24 @@ impl Registered {
         self.entries.iter().map(|e| e.id).collect()
     }
 
+    /// The registered name equal to `name`, as the `&'static str` the engine's state uses: a
+    /// system id, a command kind a system applies or sends, an event kind a system emits, or the
+    /// core's own name (SPR-007 T-02: a keyframe's strings resolve through this, and an unknown
+    /// name is refused).
+    #[must_use]
+    pub fn intern(&self, name: &str) -> Option<&'static str> {
+        if name == crate::engine::CORE {
+            return Some(crate::engine::CORE);
+        }
+        self.entries.iter().find_map(|e| {
+            std::iter::once(e.id)
+                .chain(e.access.applies.iter().copied())
+                .chain(e.access.sends.iter().map(|c| c.command))
+                .chain(e.access.emits.iter().copied())
+                .find(|n| *n == name)
+        })
+    }
+
     /// The derived schedule.
     #[must_use]
     pub fn schedule(&self) -> &Schedule {
