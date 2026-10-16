@@ -93,14 +93,25 @@ impl Registered {
         &self.reports
     }
 
-    /// The canonical order of one phase, as system ids.
+    /// The canonical order of one phase's bindings, as `(system id, pulse)`.
+    #[must_use]
+    pub fn bindings(&self, phase: crate::phase::Phase) -> Vec<(&'static str, crate::time::Pulse)> {
+        self.schedule
+            .phase(phase)
+            .order
+            .iter()
+            .map(|n| (self.entries[n.system].id, n.pulse))
+            .collect()
+    }
+
+    /// The canonical order of one phase, as system ids (one per binding).
     #[must_use]
     pub fn order(&self, phase: crate::phase::Phase) -> Vec<&'static str> {
         self.schedule
             .phase(phase)
             .order
             .iter()
-            .map(|&i| self.entries[i].id)
+            .map(|n| self.entries[n.system].id)
             .collect()
     }
 

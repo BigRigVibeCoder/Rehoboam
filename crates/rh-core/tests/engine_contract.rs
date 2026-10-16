@@ -8,7 +8,8 @@
 //! - (b) `StepCtx::rng` keys on the current instant: a draw equals `rh_ids::h` computed directly;
 //! - (c) when several systems of one level fail, the canonical-first error is reported at 1, 2, 4
 //!   and 8 threads;
-//! - (d) within a phase, the coarsest firing pulse's bindings run first;
+//! - (d) within a level, ties go coarser pulse first; and (DEF-7) a same-instant dependency between
+//!   bindings of different pulses always holds, across up to three pulses;
 //! - the serial oracle: a plain serial reference computes order, lags and draws for a tiny world,
 //!   and the engine must match it month by month at 1 and 4 threads.
 //!
@@ -340,11 +341,12 @@ fn the_canonical_first_error_wins_at_every_thread_count() {
     }
 }
 
-/// (d) Within a phase the coarsest firing pulse's bindings run first (`05.1` §2 rule 4): at a
-/// month start, A's Month step and B's Month step both run before A's Day step.
+/// (d) Ties within a level go coarser pulse first (`05.1` §2 rule 4). A (Month and Day) and B
+/// (Month) are independent, so at a month start all three bindings share level 0, in the order
+/// A/Month, B/Month, A/Day. A/Day and B/Month both fail: B's error is reported, and A/Day never ran.
 #[test]
-fn within_a_phase_the_coarsest_pulse_runs_first() {
-    fn log(
+fn on_a_tie_the_coarser_pulse_runs_first() {
+    fn a_step(
         _: &Stub,
         b: PulseBinding,
         v: &mut SystemView<'_>,
@@ -352,38 +354,150 @@ fn within_a_phase_the_coarsest_pulse_runs_first() {
     ) -> Result<(), SimError> {
         v.write("a.log")?
             .push(if b.pulse == Pulse::Month { 30 } else { 1 });
+        if b.pulse == Pulse::Day {
+            return Err(SimError::System {
+                system: "X1.a",
+                message: "day step".to_owned(),
+            });
+        }
         Ok(())
     }
-    fn seen(
+    fn b_step(
+        _: &Stub,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        Err(SimError::System {
+            system: "X2.b",
+            message: "month step".to_owned(),
+        })
+    }
+    for threads in [1, 4] {
+        let a = Stub::new("X1.a")
+            .writes("a.log")
+            .at(Pulse::Month, Phase::Vital)
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(a_step);
+        let b = Stub::new("X2.b")
+            .writes("b.x")
+            .at(Pulse::Month, Phase::Vital)
+            .stepping(b_step);
+        let mut e = engine(vec![a, b], SimTime::EPOCH, threads);
+        assert_eq!(
+            e.registered().bindings(Phase::Vital),
+            [
+                ("X1.a", Pulse::Month),
+                ("X2.b", Pulse::Month),
+                ("X1.a", Pulse::Day)
+            ]
+        );
+        let err = e.advance_until(SimTime::EPOCH, |_, _| {}).unwrap_err();
+        assert_eq!(err.to_string(), "X2.b: month step", "{threads} threads");
+        assert_eq!(
+            e.tables().get("a.log").unwrap(),
+            &vec![30],
+            "{threads} threads: A/Day did not run"
+        );
+    }
+}
+
+fn mark_now(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let col = if v.write("w.c").is_ok() { "w.c" } else { "h.c" };
+    *v.write(col)? = vec![c.now().minutes()];
+    Ok(())
+}
+
+/// DEF-7, the Tester's case: W (Day) writes `w.c`, R (Month) reads it at `same_instant`, both in
+/// Vital. The dependency is the law, so at a month start R runs after W and sees this instant's
+/// write, not the previous day's.
+#[test]
+fn a_coarser_reader_sees_a_finer_writer_of_the_same_instant() {
+    fn copy(
         _: &Stub,
         _: PulseBinding,
         v: &mut SystemView<'_>,
         _: &mut StepCtx<'_>,
     ) -> Result<(), SimError> {
-        let len = i64::try_from(v.read("a.log")?.len()).unwrap();
-        v.write("b.seen")?.push(len);
+        let seen = v.read("w.c")?[0];
+        v.write("r.seen")?.push(seen);
         Ok(())
     }
-    let a = Stub::new("X1.a")
-        .writes("a.log")
-        .at(Pulse::Month, Phase::Vital)
+    for threads in [1, 4] {
+        let w = Stub::new("X1.w")
+            .writes("w.c")
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(mark_now);
+        let r = Stub::new("X2.r")
+            .writes("r.seen")
+            .reads("w.c", "X1.w", Lag::SameInstant)
+            .at(Pulse::Month, Phase::Vital)
+            .stepping(copy);
+        let mut e = engine(vec![w, r], SimTime::EPOCH, threads);
+        assert_eq!(
+            e.registered().bindings(Phase::Vital),
+            [("X1.w", Pulse::Day), ("X2.r", Pulse::Month)]
+        );
+        e.advance_until(SimTime::from_minutes(43_200), |_, _| {})
+            .unwrap();
+        assert_eq!(
+            e.tables().get("r.seen").unwrap(),
+            &vec![0, 43_200],
+            "{threads} threads"
+        );
+    }
+}
+
+/// DEF-7: edges across three pulses in one phase, Hour -> Day -> Month. At a month start the three
+/// bindings run in dependency order, finest first, and the month value is this instant's.
+#[test]
+fn edges_across_three_pulses_run_in_dependency_order() {
+    fn relay(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        _: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let (from, to) = if v.write("d.c").is_ok() {
+            ("h.c", "d.c")
+        } else {
+            ("d.c", "m.c")
+        };
+        let seen = v.read(from)?[0];
+        *v.write(to)? = vec![seen];
+        Ok(())
+    }
+    let hour = Stub::new("X1.hour")
+        .writes("h.c")
+        .at(Pulse::Hour, Phase::Vital)
+        .stepping(mark_now);
+    let day = Stub::new("X2.day")
+        .writes("d.c")
+        .reads("h.c", "X1.hour", Lag::SameInstant)
         .at(Pulse::Day, Phase::Vital)
-        .stepping(log);
-    let b = Stub::new("X2.b")
-        .writes("b.seen")
-        .reads("a.log", "X1.a", Lag::SameInstant)
+        .stepping(relay);
+    let month = Stub::new("X3.month")
+        .writes("m.c")
+        .reads("d.c", "X2.day", Lag::SameInstant)
         .at(Pulse::Month, Phase::Vital)
-        .stepping(seen);
-    let mut e = engine(vec![a, b], SimTime::EPOCH, 1);
-    e.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
+        .stepping(relay);
+    let mut e = engine(vec![month, day, hour], SimTime::EPOCH, 2);
     assert_eq!(
-        e.tables().get("a.log").unwrap(),
-        &vec![30, 1],
-        "Month, then Day"
+        e.registered().bindings(Phase::Vital),
+        [
+            ("X1.hour", Pulse::Hour),
+            ("X2.day", Pulse::Day),
+            ("X3.month", Pulse::Month)
+        ]
     );
-    assert_eq!(
-        e.tables().get("b.seen").unwrap(),
-        &vec![1],
-        "B ran after A's Month step, before its Day step"
-    );
+    e.advance_until(SimTime::from_minutes(43_200), |_, _| {})
+        .unwrap();
+    for col in ["h.c", "d.c", "m.c"] {
+        assert_eq!(e.tables().get(col).unwrap(), &vec![43_200], "{col}");
+    }
 }

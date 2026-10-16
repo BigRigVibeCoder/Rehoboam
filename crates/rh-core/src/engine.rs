@@ -4,12 +4,11 @@
 //! At each instant where a bound pulse fires, the engine:
 //! 1. records the start-of-instant value of every column some system reads with a lag;
 //! 2. runs the phases in `05.1` §4.2 order;
-//! 3. within a phase, takes the firing pulses coarsest first (Year, Season, Month, Day, Hour) and,
-//!    for each, runs the systems bound to it level by level in the derived schedule (`05.1` §2
-//!    rule 4): with one thread a level's systems run in id order; with several they are spread
-//!    over the threads, their owned columns moved to the thread and back. Every system of a level
-//!    runs before an error is reported. A system bound in one phase to several firing pulses steps
-//!    once per binding.
+//! 3. within a phase, runs the firing bindings level by level in the derived schedule (`05.1` §2
+//!    rule 4: dependency levels over every binding, ties coarser pulse first, then id): with one
+//!    thread a level's bindings run in order; with several they are spread over the threads, each
+//!    system's owned columns moved to its thread and back. Two bindings of one system in a level
+//!    run in turn. Every binding of a level runs before an error is reported.
 //!
 //! The thread count changes scheduling only, never the result: `tests/determinism.rs` runs the
 //! stub world at 1, 2, 4 and 8 threads and compares monthly state hashes (V-DET-01), and repeats a
@@ -198,26 +197,33 @@ impl Engine {
                 snapshot.insert(c, rows.clone());
             }
         }
-        // Within a phase, the coarsest firing pulse's bindings run first (Year, Season, Month, Day,
-        // Hour; `05.1` §2 rule 4), and within one pulse the canonical order: its levels, each in id
-        // order. Restricting the levels to one pulse's systems keeps them in dependency order.
+        // Within a phase, the firing bindings run level by level in the derived schedule (`05.1`
+        // §2 rule 4): the levels come from the dependency graph over every binding, and each level
+        // is sorted coarser pulse first, then by id. A level is split wherever a system's second
+        // binding appears, so that one system's bindings never run at once (they share its
+        // columns); the split depends on the schedule only, never on the thread count.
         for phase in Phase::ALL {
             let plan = self.registered.schedule().phase(phase).clone();
-            for &pulse in &fired {
-                let binding = PulseBinding { pulse, phase };
-                let groups: Vec<Vec<Job>> = plan
-                    .levels
-                    .iter()
-                    .map(|level| {
-                        level
-                            .iter()
-                            .filter(|&&i| self.registered.entries[i].bindings.contains(&binding))
-                            .map(|&i| (i, binding))
-                            .collect::<Vec<Job>>()
-                    })
-                    .filter(|jobs| !jobs.is_empty())
-                    .collect();
-                for jobs in groups {
+            for level in &plan.levels {
+                let mut groups: Vec<Vec<Job>> = vec![Vec::new()];
+                for n in level.iter().filter(|n| fired.contains(&n.pulse)) {
+                    let repeats = groups
+                        .last()
+                        .is_some_and(|g| g.iter().any(|(i, _)| *i == n.system));
+                    if repeats {
+                        groups.push(Vec::new());
+                    }
+                    if let Some(g) = groups.last_mut() {
+                        g.push((
+                            n.system,
+                            PulseBinding {
+                                pulse: n.pulse,
+                                phase,
+                            },
+                        ));
+                    }
+                }
+                for jobs in groups.into_iter().filter(|g| !g.is_empty()) {
                     self.run_level(t, &snapshot, &jobs)?;
                 }
             }
