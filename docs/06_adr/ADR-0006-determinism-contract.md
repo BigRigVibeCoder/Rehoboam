@@ -18,7 +18,7 @@ Measured hazards:
 ## Decision
 
 1. `history = f(engine_build, registry_version, manifest_hash, seed, input_journal)`.
-2. **Keyed counter-based RNG** for every draw: `H(seed, branch_salt(t), system, purpose, entity, t, k)`, using Philox or ChaCha8 streams with SplitMix64/xxh3 for scalar hashes.
+2. **Keyed counter-based RNG** for every draw: `H(seed, branch_salt(t), system, purpose, entity, t, k)`, using Philox or ChaCha8 streams with SplitMix64/xxh3 for scalar hashes. Byte layout: `05.1` §6 item 2.
 3. **Vendored samplers**, each checked against golden vectors.
 4. **Integer or fixed-point values** for every quantity that crosses a threshold. `libm` only. No FMA contraction and no fast-math.
 5. **No hash-map iteration** in authoritative code. Rayon only with fixed chunking and chunk-ordered reductions.
