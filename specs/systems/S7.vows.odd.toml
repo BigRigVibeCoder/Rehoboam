@@ -138,6 +138,11 @@ owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
 [[reads]]
+column = "life_course.death_cause"
+owner = "M2.demography"
+lag = "lagged"
+use = "identity"
+[[reads]]
 column = "artifact.bearer"
 owner = "S6.artifacts"
 lag = "same_instant"
