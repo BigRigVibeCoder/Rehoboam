@@ -58,7 +58,7 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
     **65%.**
 17. **Extinction.** When `apply_death` empties the ledger, M2 emits `EXTINCTION` once, caused by that `DEATH` (a draft-local cause). The run continues to its requested end, taking hashes as usual (V-SCALE-04). `09`'s phrase "a journaled end event" is read as a channel-A event, not a journal row: the journal holds inputs only. **65%.**
 18. **The rung-1 and rung-2 manifests (BCK-002 A-06).** `household.yaml`: one household, a couple and three children, template `pastoral_household`, M2 defaults. `hamlet.yaml`: `uz_job`'s people (population 60, the cast, Job's household with children and servants, e₀ = 30) without the agent, the wager catalyst, the off-map raiders and the overlays, none of which P1a simulates. `uz_job` stays the P1b micro-catalyst world (V-SCALE-05). **70%.**
-19. **Scale claims for P1.0.** ADR-0028 ("P1.0 runs at N = 1 and N = 100k from its first week") and `docs/12` Q12 ("1, 60 and 100k") predate ADR-0035's meso default and P1.2's population synthesis. Withdraw the 100k claim. V-SCALE-01 in P1.0 covers N ∈ {1, 5, 60}; 10k comes with P1.14. **80%.**
+19. **Scale claims for P1.0.** ADR-0028 ("P1.0 runs at N = 1 and N = 100k from its first week") and `docs/12` Q12 ("1, 60 and 100k") predate ADR-0035's meso default and P1.2's population synthesis. Withdraw the 100k claim. V-SCALE-01 in P1.0 covers N ∈ {1, 5, 60}; 10k comes with P1.14. **80%.** **Approved (D32).** ADR-0028, `docs/12` Q12 and `docs/09` V-SCALE-01 record it.
 
 ## P0 carry-forwards this sprint inherits (BCK-002, open items)
 
@@ -106,7 +106,7 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 | Fixed-point quantities | Probabilities (`Prob32`, ruling 4); K, O(x) and l(x) at the widths the M2 spec states; e₀ and β compiled from the manifest (ruling 9) |
 | Determinism lints (GOV-003 §2, §6) | Must pass. New: the engine-purity rule (T-00); pinned labels for `rh-worldgen`, `rh-stream`, `rh-sifter`, `rh-sys-demography`; `parquet` in `PLANE_A_EXTERNAL_DEPS` |
 | Tests that gate this sprint | V-INSP-05, V-DET-01, V-DET-02, V-DET-04, V-DET-05, V-DET-12, V-DET-14, V-DET-18 (subset), V-DET-19, V-INV-01 (subset), V-INV-02 (nightly), V-INV-08, V-INV-11, V-DATA-04 (subset), V-DATA-05, V-DATA-10 (subset), V-STR-01, V-SIFT-01, V-SIFT-05, V-PLN-01, V-SCALE-01, V-SCALE-04, V-GOLD-01, V-WC-04 (new manifests), plus `bin/check_all.sh` |
-| Docs updated in the same sprint | `bin/check_all.sh` and `CLAUDE.md` checks; `05.0` §6 (new crates); `05.2` §1, `05.9` IF-0 and IF-1, `05.10` §4–5, `schema.sql` (rulings 12, 13); `docs/09` rows (V-SCALE-01's N set, V-STR cadence); the M2 brief. (`docs/11` rung 0, ruling 2, was corrected at G0, D31) |
+| Docs updated in the same sprint | `bin/check_all.sh` and `CLAUDE.md` checks; `05.0` §6 (new crates); `05.2` §1, `05.9` IF-0 and IF-1, `05.10` §4–5, `schema.sql` (rulings 12, 13); the M2 brief. (`docs/11` rung 0 and the `docs/09` rows for V-SCALE-01's N set and the V-STR cadence were corrected at G0: D31, D32, D34) |
 
 ## Tasks
 

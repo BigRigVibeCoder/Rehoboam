@@ -126,18 +126,20 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 
 ## 5. What each sprint gives Gate G1a
 
+The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a variants for tests that need systems or worlds P1a does not build (D34; ruling M-7).
+
 | G1a criterion (`docs/11`) | Tests | Delivered by |
 |---|---|---|
 | Determinism on `smoke`, rungs 0–2 and a dynastic fixture world | V-DET-01, V-DET-02, V-DET-12 | SPR-011–013 (rungs 0–2); SPR-030 (fixture) |
-| Invariants over a 1,000-year soak | V-INV-01, -02, -03, -11, -12 | SPR-012, SPR-013 (01, 02, 11); SPR-021 (03, with succession); SPR-019, SPR-022 (12; ruling M-7) |
-| Identity and life course | V-DATA-04, V-DATA-05 | SPR-012 (founders); SPR-015 (births); SPR-018 (residence) |
+| Invariants over a 1,000-year soak | V-INV-01, -02, -03, -11, -12 | SPR-012, SPR-013 (01, 02, 11); SPR-021 (03, with succession); SPR-019, SPR-022 (12); 03 and 12 in their P1a variants (D34) |
+| Identity and life course | V-DATA-04 (P1a variant, D34), V-DATA-05 | SPR-012 (founders); SPR-015 (births); SPR-018 (residence) |
 | CRN pairing | V-DET-17 | SPR-030 |
 | Demography bands | V-SF-01, V-SF-02, V-SF-02b | SPR-016 with SPR-028 |
 | Isolation | V-SF-22 for M2, M7, `T1.minds` | SPR-028 |
 | Minds | V-COG-03, V-COG-04 | SPR-024 |
 | Succession | V-SF-06, V-SF-06b reported; V-SAGA-19 | SPR-022 with SPR-028; SPR-021 |
-| Stream | V-STR-01–03, V-STR-05, V-PERF-09 | SPR-013 (01); SPR-026 (03, 05); SPR-027 (02); SPR-030 (V-PERF-09, P1a variant: ruling M-7) |
-| Envelope and stress (in `09` §5's G1a list, not `11`'s) | V-SAGA-15, V-SAGA-16 | SPR-020; SPR-025 |
+| Stream | V-STR-01–03, V-STR-05, V-PERF-09 | SPR-013 (01); SPR-026 (03, 05); SPR-027 (02); SPR-030 (V-PERF-09, P1a variant: D34) |
+| Envelope and stress | V-SAGA-15; V-SAGA-16's stress-accounting identity (its break band is reported at G1a and gates G1b: D34) | SPR-020; SPR-025 |
 | Performance: 10k persons, ≤ 500 named actors, 1,000 years in ≤ 60 s on 8 cores | (G1a default) | SPR-030 |
 | [H] the family history of 3 seeds | — | SPR-029, then the director |
 
@@ -174,7 +176,7 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 | M-4 | **Approved (D33).** P1.18 (S5 F1) moves to P1b. Its reads of `person.occupation` (M4) and `region.conditions` (M6) have no owner in P1a, so S5 F1 would run on neutral values only (registration reports an unowned read and refuses only sends: REV-P1a MAJ-2). G1a does not gate V-STR-07, and ADR-0031 had placed it in P1b. A director decision: it changes `docs/11` | 70% |
 | M-5 | **Approved (D33).** P1.8 (M1 F1) moves to P1b with fugitives, its first consumer. P1a needs only M1 F0, inside worldgen-lite | 60% |
 | M-6 | `S3.migration` F0 (residence at genesis and at birth, no moves) enters P1a inside SPR-018, so V-DATA-04 has residence intervals at G1a | 65% |
-| M-7 | G1a's tests are made runnable before P1a starts (`docs/11`: numbers before the phase). V-INV-12 runs on the dynastic fixture world, not `val_khor` (optional under ADR-0035). V-DATA-04 at G1a checks identity, parents, death and residence; occupation waits for M4 (P1b). V-INV-03 at G1a kills through M2, M7 and agenda actions; M5 and M8 are P4. V-PERF-09 gets a P1a variant: the 10k dynastic world, `rh-cli tail`, the TUI stub and a stalled consumer, with no hydration bubble and no 100k world. V-SAGA-16: its stress-accounting identity gates G1a, and its break band (0.5–5 per 100 named-actor-years, declared on the kingdom ensemble) is reported at G1a and gates G1b (REV-P1a MAJ-8). The G1a lists of `docs/11` and `docs/09` §5 become one list. A director decision | 75% |
+| M-7 | **Approved (D34).** G1a's tests are made runnable before P1a starts (`docs/11`: numbers before the phase). V-INV-12 runs on the dynastic fixture world, not `val_khor` (optional under ADR-0035). V-DATA-04 at G1a checks identity, parents, death and residence; occupation waits for M4 (P1b). V-INV-03 at G1a kills through M2, M7 and agenda actions; M5 and M8 are P4. V-PERF-09 gets a P1a variant: the 10k dynastic world, `rh-cli tail`, the TUI stub and a stalled consumer, with no hydration bubble and no 100k world. V-SAGA-16: its stress-accounting identity gates G1a, and its break band (0.5–5 per 100 named-actor-years, declared on the kingdom ensemble) is reported at G1a and gates G1b (REV-P1a MAJ-8). The G1a lists of `docs/11` and `docs/09` §5 become one list. A director decision | 75% |
 | M-8 | **Approved (D35).** Inheritance in P1a is titles and claims only. Property inheritance waits for M4 F0 holdings (P1b), although P1.7's text says "titles and property" | 70% |
 | M-9 | The rung-1 and rung-2 manifests are BCK-002 A-06 (Architect), not P1.11, which is a P1b WP | 85% |
 | M-10 | BCK-002 A-15 (coverage gates, owned by no sprint since SPR-002) joins SPR-028, the P1a tools sprint | 60% |
@@ -218,12 +220,12 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 | 6 | Registry `[systems.*]` vs `solo.yaml` | **Resolved by PR #37 when it merges (D36).** Parameters have bounds but no defaults, and `solo` sets none |
 | 7 | `docs/11` rung 0 and PRJ-001 §3 vs `05.1` §3 and `docs/11` P1a | **Resolved (D31);** `solo.yaml`'s unbuilt systems by SPR-011 ruling 3. Rung 0 includes "a household's food" and "every minute authoritative", but M3 and M4 are P1b and S5 at `minutes` is Later; `solo.yaml` names M4 F1 and S5 F2, which P1a does not build |
 | 8 | BCK-001 §2 (old) vs `docs/11` | **Resolved (D30):** §2 replaces BCK-001 §2. The old §2 lists P1.4 and P1.5a (household food) and "rung 1–2 manifests, P1.11" in P1a; `docs/11` puts P1.4, P1.5a and P1.11 in P1b, and BCK-002 A-06 gives the manifests to the Architect |
-| 9 | ADR-0028 Consequences; `docs/12` Q12; `docs/09` V-SCALE-01 | P1.0 at N = 100k (and 1M in V-SCALE-01) predates ADR-0035, which makes 100k and 1M optional and Later |
-| 10 | `docs/09` §1.1 | V-STR cadence says 02, 03 and 05 from P1b; G1a gates them and P1.17 moved to P1a |
-| 11 | `docs/09` V-INV-12 | Method "300 years on `val_khor`", gated at G1a; `val_khor` is optional and Later under ADR-0035 |
-| 12 | `docs/09` V-PERF-09 | Needs a 100k world, `rh-tui` and a hydration bubble; G1a gates it, but none exists in P1a |
-| 13 | `docs/09` V-DATA-04, V-INV-03 | Occupation intervals (M4, P1b) and deaths by M5 and M8 (P4) cannot exist at G1a |
-| 14 | `docs/11` G1a vs `docs/09` §5 G1a | The two test lists differ: `09` adds V-SAGA-15 and V-SAGA-16 and omits V-DET-01/02/12, V-INV-01/11, V-DATA-04/05, V-SF-06 |
+| 9 | ADR-0028 Consequences; `docs/12` Q12; `docs/09` V-SCALE-01 | **Resolved (D32).** P1.0 at N = 100k (and 1M in V-SCALE-01) predates ADR-0035, which makes 100k and 1M optional and Later |
+| 10 | `docs/09` §1.1 | **Resolved (D34).** V-STR cadence says 02, 03 and 05 from P1b; G1a gates them and P1.17 moved to P1a |
+| 11 | `docs/09` V-INV-12 | **Resolved (D34):** P1a variant. Method "300 years on `val_khor`", gated at G1a; `val_khor` is optional and Later under ADR-0035 |
+| 12 | `docs/09` V-PERF-09 | **Resolved (D34):** P1a variant. Needs a 100k world, `rh-tui` and a hydration bubble; G1a gates it, but none exists in P1a |
+| 13 | `docs/09` V-DATA-04, V-INV-03 | **Resolved (D34):** P1a variants. Occupation intervals (M4, P1b) and deaths by M5 and M8 (P4) cannot exist at G1a |
+| 14 | `docs/11` G1a vs `docs/09` §5 G1a | **Resolved (D34):** one list in both. The two test lists differed: `09` adds V-SAGA-15 and V-SAGA-16 and omits V-DET-01/02/12, V-INV-01/11, V-DATA-04/05, V-SF-06 |
 | 15 | `docs/11` P1.7 | **Resolved (D35).** "Titles and property inherited"; property belongs to M4 (P1b) |
 | 16 | `S5.daily_life.odd.toml` vs `docs/11` P1a | **Resolved (D33):** S5 F1 is in P1b. S5 F1 reads M4 and M6 columns, both P1b; registration refuses a read without an owner |
 | 17 | Engine-crate lists in `docs/13` §3, `05.0` §6, ADR-0035 §6, BCK-002 A-14, `docs/09` V-INSP-05 | They differ (`rh-sample`, `rh-manifest`, `rh-minds`, `rh-worldgen` are in some and not others); `docs/09` V-INSP-03 also omits `rh-sample`, which `bin/lint_arch.py` allows |
