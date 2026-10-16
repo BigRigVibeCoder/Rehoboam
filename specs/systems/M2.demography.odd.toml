@@ -2,6 +2,7 @@
 # ageing and death of founders, no births. Births, partnering and kinship arrive with P1.3.
 # 0.2.0 (SPR-011 rulings 4-8, 11, 17): owns person.id and the life-course log; emits DEATH and EXTINCTION; parameter
 # defaults; the rung-0 mortality algorithm stated exactly ([algorithm.mortality_rung0]); death_time is resample_on_fork.
+# Amended ruling 7 (Architect, 2026-10-16): a death fires at the start of a keyed day (a Day-pulse instant), not a keyed minute.
 # Still a draft until the director approves D30; it is frozen before SPR-012 (increment B) builds against it.
 # lint_odd.py checks this file against the Registry, the other specs and the test catalogue.
 odd_r = 2
@@ -245,7 +246,7 @@ when = "apply_death leaves no ledger row with alive = 1: emitted once, right aft
 
 [scales]
 spatial = "person"
-temporal = "Month pulse; intra-month death times as timers at minute resolution"
+temporal = "Month pulse; intra-month death times as timers at the start of a keyed day (the Day-pulse instant; amended ruling 7)"
 extent = "every living person in the ledger (on the map; there is no off-map ledger at rung 0)"
 restart = "Owned columns (ledger and life-course log) plus the pending death timers in the agenda restore the system exactly. K is a pure function of the compiled e0 and is recomputed at construction, never stored"
 
@@ -260,19 +261,19 @@ phase = "Vital"
 steps = [
   "ageing: nothing stored; age is derived from birth_tick",
   "apply_death: due death timers fire in the phase's timer pass, before the pulse steps (05.1 §2 rule 4); none is due at a Month pulse instant (INV-M2-03)",
-  "mortality: one Bernoulli per living person on this month's probability; a hit becomes a death timer at a keyed minute inside the month",
+  "mortality: one Bernoulli per living person on this month's probability; a hit becomes a death timer at the start of a keyed day inside the month, never the Month-pulse instant",
 ]
 when = "always"
 
 [[rng]]
 purpose = "death_time"
 key = ["person", "month"]
-use = "Whether a person dies this month, and at which minute (rung 0: [algorithm.mortality_rung0] S9)"
+use = "Whether a person dies this month, and on which day: the death fires at the start of that day, the Day-pulse instant, so systems reacting to a death in the same instant (M7 succession, T1 grief) run their Day bindings at it (amended SPR-011 ruling 7; minute-level death times wait for BCK-002 A-35). [algorithm.mortality_rung0] S9"
 # SPR-011 ruling 7 and the RNG-purpose rule of 05.1 §6 item 9: a vital timer is re-drawn after a fork or a scoped input.
 resample_on_fork = true
 draws = [
   "k = 0: the monthly Bernoulli on the month's Prob32 probability; exactly one draw per living person per month, whatever the probability (CRN)",
-  "k = 1: only on a hit, the minute of death inside the month",
+  "k = 1: only on a hit, the day of death: one of the month's day starts after the Month-pulse instant (S9); in a re-sample, one of the day starts after the input's instant (S11)",
 ]
 # Stream key: (world_seed, branch_salt(t), system_id(M2.demography), epoch of the person (BCK-002 A-29), purpose death_time,
 # entity person.id, t = the Month pulse instant, k). A re-sample draws through rh-core's ResampleCtx instead: the same purpose,
@@ -287,7 +288,7 @@ learning = "n/a: no agents that choose"
 prediction = "n/a: no agents that choose"
 sensing = "n/a at rung 0: reads no other system and no era state. Era-state medical level shifts alpha from P1.3 (05.1 §3.1)"
 interaction = "None at rung 0: deaths are independent across persons. From P1.3: ScheduleDeath and Marry commands applied through apply_death and the marriage path"
-stochasticity = "Keyed counter-based RNG only (ADR-0006): one Bernoulli draw per person-month (k = 0) and one minute draw per death (k = 1); no Poisson or batched draws (V-INV-08)"
+stochasticity = "Keyed counter-based RNG only (ADR-0006): one Bernoulli draw per person-month (k = 0) and one day draw per death (k = 1); no Poisson or batched draws (V-INV-08)"
 collectives = "n/a at rung 0: households have no owner yet (P1.1a, P1.3); the manifest's households only shape who the founders are"
 observation = "The life-course log (LIFE_ENTRY, LIFE_EXIT records) and DEATH and EXTINCTION events in channel A; monthly living count and deaths in STEP_DIGEST"
 era_state = []    # rung 0 reads no era state; medical_level (S2.technology) moves alpha from P1.3, when S2 has an owner
@@ -309,9 +310,9 @@ steps = [
   "S6 Schedule. L_i = L_i(K) for i = 0..70: 71 u64 values, the whole rung-0 schedule.",
   "S7 Survivors at an age in minutes. Y = minutes per year of the world calendar: 518400 (360 days) or 525600 (365 days). Grid ages in minutes A_i = h_i Y / 2 (exact, Y is even; A_70 = 100 Y). For an age x (i64 minutes, x >= 0; a negative age is an error): if x >= A_70 then l(x) = 0; otherwise, for the unique i with A_i <= x < A_(i+1), l(x) = L_i + rhe((L_(i+1) - L_i) (x - A_i) / (A_(i+1) - A_i)), all i64 (|L_(i+1) - L_i| <= 2^32 and x - A_i < 2^21, so the product is < 2^53). l(x) is in [0, 2^32] and non-increasing in x.",
   "S8 Monthly probability. At the Month pulse instant t_m, with D = t_(m+1) - t_m the month's length in minutes from the calendar (43200 for 360 days; 40320 to 44640 for 365), a living person with birth tick b has x = t_m - b. q = 2^32 if l(x) = 0, else q = rhe(2^32 (l(x) - l(x + D)) / l(x)) (numerator u128). q is a Prob32 (05.1 §6 item 4) with bits in [0, 2^32]. q = 2^32 (certain death) iff l(x + D) = 0, that is iff x + D >= 100 Y: the old-age tail is P1.3.",
-  "S9 Draws. Stream key as [[rng]] death_time with t = t_m. k = 0: draw d0 (u64); the person dies this month iff d0 hits q (Prob32 mapping: q = 2^32, or d0 < q 2^32). Exactly one k = 0 draw per living person per month, whatever q. k = 1, only on a hit: draw d1; offset = 1 + floor(d1 (D - 1) / 2^64) (u128 product, floor); the death instant is tau = t_m + offset, in [t_m + 1, t_m + D - 1]: uniform over the month's minutes other than the pulse instant. (Design simplification: the hazard is flat within a month; the within-month shape is below the schedule's resolution.)",
-  "S10 Timer. On a hit M2 inserts one agenda timer at (tau, Vital): owner M2, purpose death_time, kind 1 (DEATH_TIMER), payload b (the birth tick, which S11 needs), about the person. Persons are visited in ascending person.id, so the agenda's insertion order is PersonId order.",
-  "S11 Re-sample (resample_on_fork; ADR-0025 item 3). A material input at instant t_in that scopes the person, while the timer is pending (t_in <= tau: a timer due at t_in itself is still pending in the Inputs phase, ADR-0025 item 4), cancels it, and resample_timer re-draws through ResampleCtx (purpose death_time, the epoch after the input, t = t_in): t_end = the first month start after t_in (the pending month's end); x0 = t_in - b, x1 = t_end - b; q' = 2^32 if l(x0) = 0, else rhe(2^32 (l(x0) - l(x1)) / l(x0)). k = 0: d0 hits q'? On a miss, or when t_end - t_in < 2, the timer is dropped (None). On a hit, k = 1: tau' = t_in + 1 + floor(d1 (t_end - t_in - 1) / 2^64), in [t_in + 1, t_end - 1]. A person without a pending timer is not re-drawn before the next Month pulse (rh-core re-samples pending timers only; see the PR's open questions).",
+  "S9 Draws (amended SPR-011 ruling 7: deaths fire at day starts). Stream key as [[rng]] death_time with t = t_m. k = 0: draw d0 (u64); the person dies this month iff d0 hits q (Prob32 mapping: q = 2^32, or d0 < q 2^32). Exactly one k = 0 draw per living person per month, whatever q. k = 1, only on a hit: n = D / 1440, the month's length in days (30; 28 to 31 for 365 days), so the candidate instants are the n - 1 day starts t_m + 1440 j for j = 1..n-1 (the Month-pulse instant t_m itself is excluded: a timer must be strictly after the current instant and phase); draw d1; j = 1 + floor(d1 (n - 1) / 2^64) (u128 product, floor); the death instant is tau = t_m + 1440 j: uniform over the month's day starts other than the pulse instant. The probability q still covers the whole month [t_m, t_m + D): a death that would fall on the first day moves to a later day start (design simplification: the hazard is flat within a month, below the schedule's resolution; BCK-002 A-35 brings minute-level times).",
+  "S10 Timer. On a hit M2 inserts one agenda timer at (tau, Vital), a Day-pulse instant: owner M2, purpose death_time, kind 1 (DEATH_TIMER), payload b (the birth tick, which S11 needs), about the person. Persons are visited in ascending person.id, so the agenda's insertion order is PersonId order.",
+  "S11 Re-sample (resample_on_fork; ADR-0025 item 3). A material input at instant t_in that scopes the person, while the timer is pending (t_in <= tau: a timer due at t_in itself is still pending in the Inputs phase, ADR-0025 item 4), cancels it, and resample_timer re-draws through ResampleCtx (purpose death_time, the epoch after the input, t = t_in): t_end = the first month start after t_in (the pending month's end); x0 = t_in - b, x1 = t_end - b; q' = 2^32 if l(x0) = 0, else rhe(2^32 (l(x0) - l(x1)) / l(x0)). k = 0: d0 hits q'? The candidate instants are the day starts strictly after t_in and before t_end: s_1 < ... < s_c. On a miss, or when c = 0 (the input fell on the month's last day, so every candidate day has passed), the timer is dropped (None): the person lives to the next Month pulse, where the monthly draw applies again. On a hit with c >= 1, k = 1: j = floor(d1 c / 2^64) (u128 product, floor) and tau' = s_(j+1). A person without a pending timer is not re-drawn before the next Month pulse (rh-core re-samples pending timers only; see the PR's open questions).",
   "S12 apply_death(person, cause), in fire at the timer's instant (Vital): person.alive := 0; person.death_tick := now; person.death_cause := cause (natural for an M2 timer); on the person's open life_course row: exit_kind := death, exit_tick := now, death_cause := cause (each written once; rh-core refuses a second write, ruling 5); emit DEATH (target = person; no actor; payload [cause code]); then, if no ledger row has alive = 1, emit EXTINCTION with the DEATH as its cause. The dead row stays readable until rh-core's compaction at the start of Bookkeeping of this instant.",
 ]
 # Check values of this algorithm (from the exact reference; selftest_m2_rung0.py asserts them). K is in units of 2^-32.
@@ -371,7 +372,7 @@ source = "Turchin & Nefedov 2009; R12 §12"
 
 [[submodels]]
 name = "mortality"
-summary = "[algorithm.mortality_rung0] S1-S10: K from e0 by fixed-point bisection (40 steps) on the trapezoid e0 of the standard grid; l linear between grid ages in minutes of age; monthly q = 1 - l(x + D) / l(x) as Prob32; one keyed Bernoulli per living person per month (k = 0); on a hit a death timer at a keyed minute inside the month (k = 1), never at the pulse instant"
+summary = "[algorithm.mortality_rung0] S1-S10: K from e0 by fixed-point bisection (40 steps) on the trapezoid e0 of the standard grid; l linear between grid ages in minutes of age; monthly q = 1 - l(x + D) / l(x) as Prob32; one keyed Bernoulli per living person per month (k = 0); on a hit a death timer at the start of a keyed day inside the month (k = 1), never at the Month-pulse instant"
 earns_its_place_by = ["V-SF-02", "V-SF-02b", "V-INV-08"]
 [[submodels]]
 name = "apply_death"
@@ -388,7 +389,7 @@ statement = "Life-course consistency: every ledger row has exactly one life_cour
 test = "V-DATA-04"
 [[invariants]]
 id = "INV-M2-03"
-statement = "Death timers stay inside their month: every pending M2 timer drawn at the Month pulse t_m lies in [t_m + 1, t_(m+1) - 1], so none is pending at a Month pulse instant and none fires at one"
+statement = "Death timers stay inside their month, on day starts: every pending M2 timer drawn at the Month pulse t_m (or re-drawn in its month) lies on a day start in [t_m + 1440, t_(m+1) - 1440], so none is pending at a Month pulse instant and none fires at one"
 test = "V-DET-12"
 [[invariants]]
 id = "INV-M2-04"

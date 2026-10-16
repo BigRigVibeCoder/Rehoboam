@@ -13,8 +13,9 @@ bit. T-05's ``bin/gen_m2_reference.py`` ports it to generate the golden vectors.
   4. Brass (1971) Table 19 (beta = 1) is reproduced within 1 per 10,000 at the e0 each alpha
      implies;
   5. V-SF-02's q(15) in [0.35, 0.55] holds exactly for e0 in the Q16_16 interval [E_LO, E_HI];
-  6. monthly probabilities lie in [0, 2^32], are 2^32 exactly when the month reaches age 100, and
-     the minute of death lies inside the month, never at the pulse instant.
+  6. monthly probabilities lie in [0, 2^32], are 2^32 exactly when the month reaches age 100; the
+     day of death (amended ruling 7) is a day start inside the month, never the pulse instant, and
+     a re-sampled death lies on a day start after the input, or is dropped when none is left.
 
 Run: python -I specs/demography/selftest_m2_rung0.py
 """
@@ -39,7 +40,8 @@ STEPS = 40  # bisection iterations: 2^40 halves to 1
 SCALE = 10_000  # four-digit standard survivors
 Q16 = 1 << 16
 MINUTES_360 = 360 * 1440
-MONTH_360 = 30 * 1440
+DAY = 1440  # minutes per day; deaths fire at day starts (amended SPR-011 ruling 7)
+MONTH_360 = 30 * DAY
 GRID_POINTS = 71
 STANDARD_E0 = Fraction(4345915, 100000)  # the trapezoid e0 of the four-digit standard, in years
 E0_GRID_TOL = Fraction(1, 1 << 30)  # S3 rounds each L_i, so e0(K = 1) is within 2^-30 years of it
@@ -125,9 +127,17 @@ def hits(draw: int, q: int) -> bool:
     return q == ONE or draw < q << 32
 
 
-def death_minute(t_m: int, month: int, draw: int) -> int:
-    """Return S9's death instant: t_m + 1 + floor(draw (D - 1) / 2^64)."""
-    return t_m + 1 + ((draw * (month - 1)) >> 64)
+def death_day(t_m: int, month: int, draw: int) -> int:
+    """Return S9's death instant: the day start t_m + 1440 j, j = 1 + floor(draw (n - 1) / 2^64)."""
+    n = month // DAY
+    return t_m + DAY * (1 + ((draw * (n - 1)) >> 64))
+
+
+def resample_day(t_in: int, t_end: int, draw: int) -> int | None:
+    """Return S11's re-drawn death instant, or None when no day start is left after ``t_in``."""
+    first = (t_in // DAY + 1) * DAY  # the first day start strictly after t_in
+    c = (t_end - first) // DAY if first < t_end else 0
+    return None if c == 0 else first + DAY * ((draw * c) >> 64)
 
 
 def check_values() -> bool:
@@ -210,7 +220,7 @@ def check_band() -> bool:
 
 
 def check_months() -> bool:
-    """Check 6: Prob32 range, certain death at 100, minutes inside the month."""
+    """Check 6: Prob32 range, certain death at 100, death days inside the month."""
     lx = survivors(solve_k(q16("30")))
     top = 100 * MINUTES_360
     ok = True
@@ -218,12 +228,19 @@ def check_months() -> bool:
         q = month_q(lx, x, MONTH_360, MINUTES_360)
         ok &= 0 <= q <= ONE and (q == ONE) == (x + MONTH_360 >= top)
     for d in (0, 1, (1 << 63), (1 << 64) - 1):
-        tau = death_minute(0, MONTH_360, d)
-        ok &= 1 <= tau <= MONTH_360 - 1
+        tau = death_day(0, MONTH_360, d)
+        ok &= tau % DAY == 0 and DAY <= tau <= MONTH_360 - DAY
+        ok &= death_day(0, 28 * DAY, d) <= 27 * DAY  # a 28-day month of the 365-day calendar
+        for t_in in (0, 5, DAY, 13 * DAY + 7, MONTH_360 - DAY - 1):
+            r = resample_day(t_in, MONTH_360, d)
+            ok &= r is not None and r % DAY == 0 and t_in < r < MONTH_360
+        ok &= resample_day(MONTH_360 - DAY, MONTH_360, d) is None  # the last day: none left
+        ok &= resample_day(MONTH_360 - 1, MONTH_360, d) is None
+    ok &= death_day(0, MONTH_360, 0) == DAY and death_day(0, MONTH_360, (1 << 64) - 1) == 29 * DAY
     ok &= hits((1 << 64) - 1, ONE) and not hits(0, 0) and hits(0, 1) and not hits(1 << 32, 1)
     q10 = month_q(survivors(solve_k(q16("70"))), 10 * MINUTES_360, MONTH_360, MINUTES_360)
     print(
-        f"   months: q in [0, 2^32], certain iff the month reaches 100; e0 70, age 10: "
+        f"   months: q in [0, 2^32], certain iff the month reaches 100; days 1..29; e0 70, age 10: "
         f"q = {q10} / 2^32 = {q10 / ONE:.3e}"
     )
     return ok
