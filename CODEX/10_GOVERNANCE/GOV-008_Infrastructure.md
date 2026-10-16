@@ -9,10 +9,10 @@ tags: [governance, infrastructure]
 related: [GOV-007, ADR-0030, ADR-0021, RUN-001, RUN-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.3.0
 ---
 
-> **BLUF:** Development and play happen on the director's Linux laptop, a ThinkPad P51 with 4 cores and 32 GB (D5, D6; set up by RUN-001). There is no deployed service: the engine runs headless on localhost and viewers attach to it. CI's PR tier runs on GitHub-hosted Linux runners; nightly and benchmark runs use the director's Google Cloud VM `adjutant` (8 cores, 64 GB; RUN-002), our reference-class machine. Coding agents run in cloud sessions. Performance targets stay quoted on the reference desktop of `docs/08`; the laptop is a development machine, not the yardstick. The move to the cloud comes after local testing is complete, on x86-64 Linux instances, and is planned in this document when it happens.
+> **BLUF:** Development and play happen on the director's Linux laptop, a ThinkPad P51 with 4 cores and 32 GB (D5, D6; set up by RUN-001). There is no deployed service: the engine runs headless on localhost and viewers attach to it. CI's PR tier runs on GitHub-hosted Linux runners; benchmarks and heavy runs use the director's Google Cloud VM `adjutant` (8 cores, 64 GB; RUN-002), our reference-class machine, **on demand only**: it is started when needed and shut down when not simulating. Coding agents run in cloud sessions. Performance targets stay quoted on the reference desktop of `docs/08`; the laptop is a development machine, not the yardstick. The move to the cloud comes after local testing is complete, on x86-64 Linux instances, and is planned in this document when it happens.
 
 # GOV-008 — Infrastructure and operations
 
@@ -22,12 +22,12 @@ version: 1.2.0
 |---|---|---|
 | Operating system | Linux (development, play, CI) | D5 |
 | Development machine | ThinkPad P51 laptop: i7-7820HQ (4 cores / 8 threads, 2017), 32 GB, Quadro M2200 4 GB (Maxwell), 512 GB NVMe with 153 GB free, Ubuntu 24.04. Setup: RUN-001 | D6; Q-INFRA-3 |
-| Benchmark and heavy-run machine | Google Cloud VM `adjutant`: `c3d-standard-16` (8 AMD Genoa cores, 64 GB DDR5), 100 GB SSD, Ubuntu 24.04; about $0.83/h while running. Runs only on a schedule or on demand and stops itself. Setup and rules: RUN-002 | Director, 2026-10-16 |
+| Benchmark and heavy-run machine | Google Cloud VM `adjutant`: `c3d-standard-16` (8 AMD Genoa cores, 64 GB DDR5), 100 GB SSD, Ubuntu 24.04; about $0.83/h while running. **On demand only** (D6): the director starts it when the Architect asks for a session (what for, roughly how long), and it shuts itself down after 30 idle minutes. Setup and rules: RUN-002 | Director, 2026-10-16 |
 | Performance yardstick | The reference desktop of `docs/08` (8 fast cores, 64 GB). `adjutant` is the closest match and carries the wall-clock benchmarks; SPR-009 measures its ratio to the reference. The laptop is roughly 3× slower than the reference (an estimate). Targets are not lowered to fit either machine | `08` |
 | Coding agents | Cloud sessions, not the laptop. They cannot reach the VM; they use it only through GitHub Actions | Q-INFRA-2 (director) |
 | GPU | None needed in phase 1 (no GUI, no LLMs). The M2200 is not used for LLMs: 4 GB is too small and driver 580 is the last branch for Maxwell. LLM work (P3 onward) goes to cloud APIs or a later machine | D6 |
-| Cloud | `adjutant` from SPR-008 for nightly runs and benchmarks. The full move (play and development in the cloud) comes after local testing is complete, on x86-64 Linux. Monthly ceiling: D6 (default $50 through P1a) | D6 |
-| CI | GitHub Actions. **PR tier:** GitHub-hosted Ubuntu runners. **Nightly and benchmarks:** a self-hosted runner on `adjutant` (from SPR-008; no Actions minutes used). Cross-machine determinism compares the laptop (Intel), `adjutant` (AMD) and a hosted runner. No runner on the laptop: it would compete with development and its timings are noisy | This document; RUN-002 |
+| Cloud | `adjutant` on demand for benchmarks and heavy runs (from SPR-009). The director manages the spend; there is no ceiling in this document (D6). The full move (play and development in the cloud) comes after local testing is complete, on x86-64 Linux | D6 |
+| CI | GitHub Actions. **PR tier and the light nightly run:** GitHub-hosted Ubuntu runners, within the Free plan's minutes. **Benchmarks and heavy runs:** a self-hosted runner on `adjutant` (from SPR-009); jobs for it wait in GitHub's queue until the director starts the VM. Cross-machine determinism compares a hosted runner with the laptop (Intel) and, in each VM session, `adjutant` (AMD). No runner on the laptop: it would compete with development and its timings are noisy | This document; RUN-002 |
 | GitHub plan | **Free** (director, Q-INFRA-1). A private repository on Free has no protected branches or required checks, and about 2,000 Actions minutes a month. So: the Architect enforces "no green `check_report.md`, no merge" by hand (`docs/13` §4.4); the PR tier stays lean; nightly work runs on `adjutant`. Revisit if a merge ever lands red | Q-INFRA-1 |
 | Repository | One monorepo: `BigRigVibeCoder/Rehoboam` (private while it holds copyrighted papers) | — |
 | Network exposure | localhost only in phase 1; no service listens on a public interface | ADR-0030 |

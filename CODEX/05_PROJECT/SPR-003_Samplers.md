@@ -17,7 +17,7 @@ version: 1.0.0
 # SPR-003 — Samplers with golden vectors
 
 - **Roadmap item:** `docs/11` P0.3 · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-002
+- **Depends on:** SPR-002 · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** ADR-0006; `docs/14` (vendored rand_distr: BTPE, ZIGNOR)
 - **Requirements covered:** DET-3
 

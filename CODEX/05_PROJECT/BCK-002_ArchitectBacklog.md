@@ -30,4 +30,4 @@ version: 1.0.0
 | A-10 | Cloud adaptation table in GOV-008 | When the director starts the full cloud move | Deferred |
 | A-11 | Enforce "no green report, no merge" by hand (GitHub Free: no required checks) | Every merge | Ongoing |
 | A-12 | Tell the director in advance when an `adjutant` session is needed, what for and for how long (D6) | As needed | Ongoing |
-| A-13 | Set `main` as the default branch on GitHub (director, Settings → General) | Now | Open |
+| A-13 | Set `main` as the default branch on GitHub (director, Settings → General) | Now | **Done** 2026-10-16 |

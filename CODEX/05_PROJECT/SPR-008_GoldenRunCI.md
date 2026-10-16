@@ -17,7 +17,7 @@ version: 1.1.0
 # SPR-008 — Golden-run CI, the smoke world and the bisect tool
 
 - **Roadmap item:** `docs/11` P0.6 · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-006, SPR-007
+- **Depends on:** SPR-006, SPR-007 · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** `docs/13` §4.3–4.5; ADR-0006
 - **Requirements covered:** DET-4, DET-5
 
@@ -42,7 +42,7 @@ version: 1.1.0
 - **Status:** [ ] not started
 
 ### T-02: Hash ladders in CI
-- **Deliverable:** Yearly ladders on PRs (shorter horizons); monthly full length nightly; a cross-machine check nightly: `adjutant` (AMD Zen 4, self-hosted runner, RUN-002 §3) against a GitHub-hosted Ubuntu runner, with the director's laptop (Intel) on demand; different CPU vendors replace the cross-platform matrix per D5 (GOV-008 §1). Includes the `adjutant` runner and its instance schedule (RUN-002 §3)
+- **Deliverable:** Yearly ladders on PRs (shorter horizons); monthly full length nightly; a cross-machine check nightly between a GitHub-hosted Ubuntu runner and the director's laptop (Intel), and on `adjutant` (AMD) in each VM session (RUN-002 §4); different CPU vendors replace the cross-platform matrix per D5 (GOV-008 §1)
 - **Acceptance:** V-DET-01/02 green
 - **Status:** [ ] not started
 

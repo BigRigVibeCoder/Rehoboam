@@ -30,6 +30,8 @@ version: 1.0.0
 | SPR-008 | P0.6 | Golden-run CI, the `smoke` world, bisect tool | 006, 007 | C3 (machinery) | P1 |
 | SPR-009 | P0.7 | Benchmark harness and regression gate | 005 | C1 | P2 |
 
+**Approvals:** SPR-001 approved 2026-10-16; SPR-002 to SPR-009 approved as a batch on 2026-10-16. The director still merges the C3 sprints that change the determinism machinery (GOV-005 §6).
+
 **Gate G0** is assembled by the Architect as `VER-G0` once SPR-001 to SPR-009 are closed.
 
 ## 2. Next phase: P1a (sketched; written up as sprints at G0)

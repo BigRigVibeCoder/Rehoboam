@@ -11,7 +11,7 @@
 - **Reference desktop:** 8 performance cores at ~4.5 GHz (the 1M estimates are quoted for 8–16 cores), 64 GB dual-channel RAM, RTX 4070/4090-class GPU.
 - **Reference cluster node:** 64+ cores, plus GPU nodes for LLM and TTS.
 - **Development laptop (D6, 2026-10-16):** ThinkPad P51, 4 cores / 8 threads at 2.9–3.9 GHz (2017), 32 GB. Expect roughly **3× the reference desktop's wall times** (an estimate from core count and clock; SPR-009 measures it). Budgets here stay quoted on the reference desktop; the laptop checks correctness and instruction-count regressions, not these wall-clock targets (GOV-008 §1).
-- **Benchmark VM `adjutant` (2026-10-16):** Google Cloud `c3d-standard-16`, 8 AMD Genoa cores, 64 GB. The closest match to the reference desktop; it carries the wall-clock benchmarks (RUN-002). Its ratio to the reference is measured in SPR-009.
+- **Benchmark VM `adjutant` (2026-10-16):** Google Cloud `c3d-standard-16`, 8 AMD Genoa cores, 64 GB. The closest match to the reference desktop; it carries the wall-clock benchmarks, on demand only (RUN-002). Its ratio to the reference is measured in SPR-009.
 
 ---
 

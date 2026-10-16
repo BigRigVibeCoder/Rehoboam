@@ -17,7 +17,7 @@ version: 1.0.0
 # SPR-004 — Registry v0 loader and ownership lint
 
 - **Roadmap item:** `docs/11` P0.8 · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-001
+- **Depends on:** SPR-001 · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** `specs/manifest/registry_v0.toml`, `specs/manifest/manifest_v0.py` (reference behaviour), `specs/systems/*.odd.toml` (ADR-0033); ADR-0010
 - **Requirements covered:** WC-3, SIM-11
 
