@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, SPR-002, SPR-010, ADR-0006]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.2
+version: 1.1.3
 ---
 
 > **BLUF:** Vendor the distribution samplers the systems need, so that every draw is bit-identical across releases and machines. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -62,32 +62,32 @@ SPR-010's float gate allows a float only in a declared `f32_field` column. ADR-0
   - `rh-sample` relabelled out of plane A.
 
   A float in `rh-sample` passes `lint_forbidden`.
-- **Status:** [x] done (9f703d2): `crates/rh-sample`; `bin/lint_arch.py` pin and system allow-list; `bin/lint_forbidden.py` exemption by the pinned name; the `std` transcendental list in `clippy.toml`; controls in `tests/lint_fixtures/{arch/relabelled_sample,arch/system_to_sample,forbidden/float_zone*,clippy/std_transcendental}`; docs `05.0` §6, `05.1` §6 item 3, `docs/13` §3, `docs/09` V-DET-19
+- **Status:** [x] done (697aae0): `crates/rh-sample`; `bin/lint_arch.py` pin and system allow-list; `bin/lint_forbidden.py` exemption by the pinned name; the `std` transcendental list in `clippy.toml`; controls in `tests/lint_fixtures/{arch/relabelled_sample,arch/system_to_sample,forbidden/float_zone*,clippy/std_transcendental}`; docs `05.0` §6, `05.1` §6 item 3, `docs/13` §3, `docs/09` V-DET-19
 
 ### T-01: Binomial
 - **Deliverable:** BTPE plus inversion for small n·p
 - **Acceptance:** Golden vectors; chi-square sanity against the exact distribution
-- **Status:** [x] done (2e284da): `crates/rh-sample/src/binomial.rs`; χ² against the exact pmf in `tests/stats.rs`, golden vectors in `tests/golden.rs` (T-05 commit)
+- **Status:** [x] done (370f408): `crates/rh-sample/src/binomial.rs`; χ² against the exact pmf in `tests/stats.rs`, golden vectors in `tests/golden.rs` (T-05 commit)
 
 ### T-02: Poisson
 - **Deliverable:** PTRS (Hörmann 1993), written from the paper because `rand_distr`'s Poisson is not PTRS
 - **Acceptance:** Golden vectors; moment tests
-- **Status:** [x] done (890d94b): `crates/rh-sample/src/poisson.rs`; moments and χ² in `tests/stats.rs`, golden vectors (T-05 commit)
+- **Status:** [x] done (b19207d): `crates/rh-sample/src/poisson.rs`; moments and χ² in `tests/stats.rs`, golden vectors (T-05 commit)
 
 ### T-03: Normal
 - **Deliverable:** Ziggurat
 - **Acceptance:** Golden vectors; tail test
-- **Status:** [x] done (91c5d11): `crates/rh-sample/src/normal.rs`, `ziggurat_tables.rs`; tail and moment tests in `tests/stats.rs`, golden vectors (T-05 commit)
+- **Status:** [x] done (baea254): `crates/rh-sample/src/normal.rs`, `ziggurat_tables.rs`; tail and moment tests in `tests/stats.rs`, golden vectors (T-05 commit)
 
 ### T-04: Beta and Gamma
 - **Deliverable:** Marsaglia–Tsang Gamma; Beta from two Gammas
 - **Acceptance:** Golden vectors; moment tests
-- **Status:** [x] done (59e748e): `crates/rh-sample/src/{gamma,beta}.rs`; moment tests in `tests/stats.rs`, golden vectors (T-05 commit)
+- **Status:** [x] done (be28bcc): `crates/rh-sample/src/{gamma,beta}.rs`; moment tests in `tests/stats.rs`, golden vectors (T-05 commit)
 
 ### T-05: No floating-point drift
 - **Deliverable:** Fixed operation order; no fused multiply-add; `libm` for every transcendental; documented
 - **Acceptance:** V-DET-19 passes. The golden vectors are identical on GitHub's runner and in the developer's container (a second Linux machine), and at opt-level 0 and 3
-- **Status:** [x] done (T-05 commit): fixed order, no FMA and `libm` only, documented in `crates/rh-sample/src/lib.rs`; golden vectors checked at opt-level 0 and 3 by `bin/check_all.sh`, and on GitHub's runner by CI
+- **Status:** [x] done (62651da): fixed order, no FMA and `libm` only, documented in `crates/rh-sample/src/lib.rs`; golden vectors checked at opt-level 0 and 3 by `bin/check_all.sh`, and on GitHub's runner by CI
 
 ## Verification assignment (Testers)
 
