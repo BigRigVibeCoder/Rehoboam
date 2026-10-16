@@ -42,7 +42,7 @@ version: 1.1.0
 - **Status:** [x] done: `crates/rh-core/src/fixed/`; controls in `tests/lint_fixtures/compile_fail/fixed_point/`, run by `bin/check_all.sh`. No float conversion exists under any feature
 
 ### T-02: Arithmetic and rounding
-- **Deliverable:** Saturating add, subtract and multiply; division only through a checked function that returns `Option` (the effect language's "guarded division"); one rounding rule for multiply and divide, documented with a `DECISION:` comment (round half to even is the default proposal); comparisons and ordering
+- **Deliverable:** Saturating add, subtract and multiply; division only through a checked function that returns `Option` (the effect language's "guarded division"): `None` only for a zero divisor, while an overflowing quotient saturates (`MIN / -1` is `MAX`; Architect ruling on GAP-1, 2026-10-16); one rounding rule for multiply and divide, documented with a `DECISION:` comment (round half to even is the default proposal); comparisons and ordering
 - **Acceptance:** Property tests: saturation at both bounds, commutativity and the identity elements, monotone ordering, rounding matches an exact rational reference (Python `fractions`, run as a golden-vector generator); golden vectors committed
 - **Status:** [x] done: `crates/rh-core/src/fixed/{arith,money,round}.rs`; `bin/gen_fixed_vectors.py` writes `crates/rh-core/tests/golden/fixed_vectors.txt` (replayed by `tests/fixed_golden.rs`; `--check` in `bin/check_all.sh`); properties in `tests/fixed_properties.rs`
 

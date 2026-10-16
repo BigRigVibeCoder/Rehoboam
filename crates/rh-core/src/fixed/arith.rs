@@ -7,7 +7,9 @@
 //! non-constant without a guard").
 //!
 //! DECISION: `checked_div` returns `None` only for a zero divisor; an overflowing quotient
-//! saturates like every other result. ALTERNATIVES CONSIDERED: `None` on overflow too, which would
+//! saturates like every other result: `MIN / -ONE` is `MAX` (pinned by a golden row; ruled by the
+//! Architect on the Tester's GAP-1, 2026-10-16). `Money::checked_div_int` follows the same rule
+//! (`MIN / -1` is `MAX`). ALTERNATIVES CONSIDERED: `None` on overflow too, which would
 //! make callers handle two different failures where the effect language defines only one (the
 //! guard) and saturation everywhere else.
 //!

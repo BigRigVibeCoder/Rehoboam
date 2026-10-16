@@ -189,11 +189,26 @@ def draw_vectors(rng: SplitMix64) -> list[str]:
     return lines
 
 
+def overflow_vectors(_rng: SplitMix64) -> list[str]:
+    """Return the overflowing quotients, pinned whatever the edge sets become (SPR-010 GAP-1).
+
+    ``checked_div`` and ``checked_div_int`` return None only for a zero divisor; an overflowing
+    quotient (``MIN / -1``) saturates to ``MAX`` like every other result.
+    """
+    lines = ["# Overflowing quotients saturate; None is only for a zero divisor (SPR-010 GAP-1)."]
+    for kind in (Q8, Q16):
+        div = kind.clamp(kind.nearest(kind.value(kind.lo) / kind.value(-(1 << kind.frac))))
+        lines.append(f"{kind.name}.div {kind.lo} {-(1 << kind.frac)} {div}")
+    lines.append(f"money.div_int {MONEY.lo} -1 {MONEY.clamp(round(Fraction(MONEY.lo, -1)))}")
+    return lines
+
+
 SECTIONS: tuple[Callable[[SplitMix64], list[str]], ...] = (
     lambda rng: q_vectors(Q8, Q16, rng),
     lambda rng: q_vectors(Q16, Q8, rng),
     money_vectors,
     draw_vectors,
+    overflow_vectors,
 )
 
 
@@ -209,6 +224,11 @@ def render() -> str:
     return "\n".join([*header, *body]) + "\n"
 
 
+def vector_count(text: str) -> int:
+    """Return the number of vectors (non-comment lines) in the file text."""
+    return sum(1 for line in text.splitlines() if line and not line.startswith("#"))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Write the vector file, or with ``--check`` verify that it is current."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0] if __doc__ else None)
@@ -220,11 +240,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if current != text:
             print(f"gen_fixed_vectors: {OUTPUT} is stale; run python -I bin/gen_fixed_vectors.py")
             return 1
-        print(f"gen_fixed_vectors: current ({text.count(chr(10)) - 3} vectors)")
+        print(f"gen_fixed_vectors: current ({vector_count(text)} vectors)")
         return 0
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(text, encoding="utf-8")
-    print(f"gen_fixed_vectors: wrote {OUTPUT} ({text.count(chr(10)) - 3} vectors)")
+    print(f"gen_fixed_vectors: wrote {OUTPUT} ({vector_count(text)} vectors)")
     return 0
 
 
