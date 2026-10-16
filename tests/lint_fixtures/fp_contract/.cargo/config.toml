@@ -1,0 +1,6 @@
+# Positive control for the fp-contract guard of bin/check_all.sh (VER-SPR-003-TEST GAP-6;
+# tests/lint_fixtures/README.md). Never used by a build: cargo reads .cargo/config from the current
+# directory upward, and no check runs from here. This config would let LLVM fuse a * b + c into an
+# FMA, which ADR-0006 item 4 forbids; the guard must refuse it.
+[build]
+rustflags = ["-C", "llvm-args=-fp-contract=fast"]
