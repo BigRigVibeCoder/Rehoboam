@@ -42,6 +42,7 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `uv_drift/` | `uv lock --check --offline` (T-02) | a `pyproject.toml` changed after its `uv.lock` was generated | `needs to be updated` |
 | `forbidden/workspace/` | `bin/lint_forbidden.py` (V-DET-19) | HashMap in a plane-A crate, and also in a tool crate (skipped), comments and strings (ignored), plus one reasoned escape (counted) | `VIOLATION [V-DET-19/hash-collections]` |
 | `parity/registry_drift.toml` | `bin/manifest_parity.py` (V-WC-04, SPR-004) | the Rust side reads a Registry whose M5 `r0` bound is widened, so `invalid_draft_style` loses an error | `PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml` |
+| `ownership/unowned_write.access.toml` | `rh-cli ownership` (single writer, 05.1 §2; SPR-004 T-03) | `S5.daily_life` declares a write to `person.alive`, owned by `M2.demography` | `VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns` |
 
 Each compile-fail case also passes `bin/lint_arch.py` (its graph has no edge), which shows the failure
 is the language barrier: plane-A code can reach a plane-B or plane-C type only through a dependency

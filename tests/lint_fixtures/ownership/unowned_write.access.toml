@@ -1,0 +1,7 @@
+# Positive control for the ownership lint (SPR-004 T-03; 05.1 §2 single writer): S5.daily_life
+# declares a write to person.alive, which M2.demography owns. `rh-cli ownership` must FAIL with
+# VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns.
+[[access]]
+system = "S5.daily_life"
+reads = ["person.birth_tick", "person.alive"]
+writes = ["encounter_log.day_index", "person.alive"]

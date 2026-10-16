@@ -44,6 +44,8 @@ REQUIRED_GATES = (
     "Manifest: solo",
     "Manifest: uz_job",
     "Manifest: val_khor",
+    "Ownership lint positive control: unowned write must FAIL",
+    "Ownership lint: single writer from specs/systems (SPR-004 T-03)",
     "Python: format (ruff format --check)",
     "Python: lint (ruff check)",
     "Python: types (mypy --strict)",
