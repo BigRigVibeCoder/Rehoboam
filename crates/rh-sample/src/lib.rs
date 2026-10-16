@@ -14,7 +14,8 @@
 //! 3. **No fused multiply-add.** `mul_add` is forbidden (V-DET-19), and rustc never contracts
 //!    `a * b + c` into an FMA on its own: Rust has no fast-math and no `-ffp-contract=fast` mode.
 //!    Every expression is evaluated in its written order, so the operation order is fixed by the
-//!    source.
+//!    source. `libm::fma`, a correctly rounded software FMA, is allowed (Architect, on
+//!    VER-SPR-003-TEST GAP-5): the ban is on contraction and `mul_add`. No sampler uses it.
 //! 4. **Floats never leave the crate.** The public API takes and returns integers or
 //!    `rh_core::fixed` values. An internal `f64` becomes fixed point from its exact value, rounded
 //!    half to even (the `rh_core::fixed` rule), without an `as` cast (`convert`).

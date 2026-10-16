@@ -21,6 +21,11 @@ reports its metadata). Rules:
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
+    lint-allow        allow(...) or expect(...) of clippy::disallowed_methods, disallowed_types, or
+                      the groups that hold them (style, all), also inside cfg_attr: it would
+                      silence clippy's half of these rules (the std transcendentals, HashMap,
+                      Instant, mul_add) without a trace. Escaping it with a reason is how it is
+                      counted and printed (VER-SPR-003-TEST GAP-5).
     float             f32 and f64 (the types, `as f64`, `f64::MAX`), conversions named after them
                       (to_f64, from_f32, as_f64), and float literals (0.5, 1e-3, 2f32, 1.) (SPR-010
                       T-04; DET-3). Threshold quantities are fixed point (rh_core::fixed); floats
@@ -193,6 +198,16 @@ RULES: tuple[Rule, ...] = (
         _rx(r"#\s*!?\s*\[\s*path\b|\bcfg_attr\s*\([^)]*\bpath\s*=|\binclude\s*!\s*[(\[{]"),
         "pulls in source from a file this gate may never scan; keep plane-A code in its own "
         "crate's files, or escape with a reason (DEF-4)",
+    ),
+    Rule(
+        "lint-allow",
+        _rx(
+            r"\b(?:allow|expect)\s*\([^)]*?"
+            r"\bclippy::(?:disallowed_methods|disallowed_types|style|all)\b"
+        ),
+        "silences clippy's disallowed_methods/disallowed_types (clippy.toml: the std "
+        "transcendentals, HashMap, Instant, mul_add); escape it with a reason so review sees it "
+        "(VER-SPR-003-TEST GAP-5)",
     ),
     Rule(
         FLOAT_RULE,
