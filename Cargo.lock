@@ -553,6 +553,7 @@ dependencies = [
 name = "rh-cli"
 version = "0.0.0"
 dependencies = [
+ "rh-golden",
  "rh-manifest",
  "rh-registry",
  "serde_json",
@@ -575,6 +576,17 @@ name = "rh-events"
 version = "0.0.0"
 dependencies = [
  "rh-ids",
+]
+
+[[package]]
+name = "rh-golden"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-ids",
+ "rh-registry",
+ "rh-snapshot",
+ "rh-sys-smoke",
 ]
 
 [[package]]
@@ -630,6 +642,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rh-sys-smoke"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-registry",
+ "rh-sample",
+]
+
+[[package]]
 name = "rusqlite"
 version = "0.40.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -656,17 +679,6 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
-
-[[package]]
-name = "rh-sys-smoke"
-version = "0.0.0"
-dependencies = [
- "rh-core",
- "rh-events",
- "rh-ids",
- "rh-registry",
- "rh-sample",
-]
 
 [[package]]
 name = "saphyr-parser"

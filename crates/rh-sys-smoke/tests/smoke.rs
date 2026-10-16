@@ -27,7 +27,7 @@ use rh_core::time::SimTime;
 use rh_core::{Phase, Pulse};
 use rh_events::Event;
 use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
-use rh_sys_smoke::{CALENDAR, OVERLAY, SPECS_DIR, synthetic_inputs};
+use rh_sys_smoke::{CALENDAR, OVERLAY, SPECS_DIR, material, synthetic_inputs};
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -57,8 +57,8 @@ struct Run {
 
 fn run(seed: u64, threads: usize, years: i64) -> Run {
     let mut engine = engine(seed, threads);
-    for (at, input) in synthetic_inputs(years) {
-        engine.submit_input(at, input).expect("input");
+    for (at, entity) in synthetic_inputs(years) {
+        engine.submit_input(at, material(entity)).expect("input");
     }
     let mut events = Vec::new();
     let mut yearly = Vec::new();
@@ -158,13 +158,20 @@ fn a_run_exercises_timers_commands_events_and_invariants() {
     assert!(off_day > 0);
     assert_eq!(r.waiting, 0, "every Settle is applied");
     assert!(r.agenda > 0, "death timers are pending at the end");
-    assert_eq!(synthetic_inputs(30).len(), 4);
+    assert_eq!(synthetic_inputs(30).len(), 4 * 8);
 }
 
 #[test]
 fn material_inputs_re_sample_the_timers_in_their_scope() {
     let years = 8;
-    let (at, input) = synthetic_inputs(years).remove(0);
+    let inputs = synthetic_inputs(years);
+    let at = inputs[0].0;
+    let scope: BTreeSet<_> = inputs
+        .iter()
+        .filter(|(t, _)| *t == at)
+        .map(|(_, e)| *e)
+        .collect();
+    assert_eq!(scope.len(), 8);
     let mut with = engine(5, 1);
     let mut without = engine(5, 1);
     let before = at.checked_add_minutes(-1).unwrap();
@@ -180,20 +187,19 @@ fn material_inputs_re_sample_the_timers_in_their_scope() {
     assert_eq!(pending(&with), pending(&without));
     let scoped: Vec<_> = pending(&with)
         .into_iter()
-        .filter(|(e, _)| input.scope.contains(e))
+        .filter(|(e, _)| scope.contains(e))
         .collect();
     assert!(!scoped.is_empty(), "the input's scope has pending timers");
-    with.submit_input(at, input.clone()).unwrap();
+    for &e in &scope {
+        with.submit_input(at, material(e)).unwrap();
+    }
     with.advance_until(at, |_, _| {}).unwrap();
     without.advance_until(at, |_, _| {}).unwrap();
     let (a, b) = (pending(&with), pending(&without));
     let moved: Vec<_> = b.difference(&a).collect();
     assert!(!moved.is_empty(), "the scope's timers are re-drawn");
-    assert!(
-        moved.iter().all(|(e, _)| input.scope.contains(e)),
-        "{moved:?}"
-    );
-    for e in &input.scope {
+    assert!(moved.iter().all(|(e, _)| scope.contains(e)), "{moved:?}");
+    for e in &scope {
         assert_eq!(with.epoch(*e), 1);
     }
 }
@@ -211,14 +217,4 @@ fn v_det_01_02_small_scale_thread_and_repeat_invariance() {
         base.yearly.len(),
         base.events.len()
     );
-}
-
-/// T-01 acceptance: 1,000 sim-years headless, every invariant holding (nightly tier; the PR tier
-/// runs the golden ladder instead).
-#[test]
-#[ignore = "1,000 sim-years: nightly tier"]
-fn t01_runs_a_thousand_years_headless() {
-    let r = run(1, 1, 1_000);
-    assert_eq!(r.yearly.len(), 1_000);
-    assert!(count(&r.events, "DEATH") > 1_000);
 }

@@ -16,7 +16,7 @@
 //! Every phase of `05.1` §4.2 and every pulse is bound; reads are `same_instant` and `lagged`
 //! (the other lags are BCK-002 A-28); every system has an invariant; every number is an integer or
 //! Q16.16 bits, every draw is keyed. The material inputs that re-sample the timers come from
-//! [`synthetic_inputs`].
+//! [`synthetic_inputs`]; the golden runner (`rh-golden`) journals each before submitting it.
 //!
 //! The dummy systems never enter the real Registry (ruling 2). Their specs are
 //! `worlds/smoke/systems/*.odd.toml`, their ids are in `worlds/smoke/registry_overlay.toml`, and
@@ -45,7 +45,7 @@ use rh_core::register::{RegistrationError, register};
 use rh_core::system::SystemModel;
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_core::world::WorldTables;
-use rh_ids::BranchSalt;
+use rh_ids::{BranchSalt, EntityRef};
 
 pub use chronicle::Chronicle;
 pub use common::{PERSONS, REGIONS, person, person_entity};
@@ -124,22 +124,34 @@ pub fn engine(specs: &SpecTable, seed: u64, threads: usize) -> Result<Engine, Re
 /// Years between two synthetic material inputs.
 pub const INPUT_EVERY_YEARS: i64 = 7;
 
-/// The synthetic material inputs of a run of `years` (ruling 3): one every
-/// [`INPUT_EVERY_YEARS`] years, on day 100 at 06:07 (between pulse boundaries, so the input's
-/// instant is its own), whose scope is eight persons chosen by the year. Each cancels and
-/// re-samples the pending death timers of its scope (ADR-0025 item 3). A pure function of
-/// `years`: the same run gets the same inputs.
+/// The synthetic material inputs of a run of `years` (ruling 3), as `(instant, entity)` pairs in
+/// submission order: every [`INPUT_EVERY_YEARS`] years, on day 100 at 06:07 (between pulse
+/// boundaries, so the input's instant is its own), eight persons chosen by the year, in entity
+/// order. Each is one material input whose scope is that person: it cancels and re-samples the
+/// person's pending death timers (ADR-0025 item 3). One pair is one journal row (SPR-007: a
+/// journaled input has one entity in its scope, and each row becomes one engine input). A pure
+/// function of `years`, and a run of fewer years gets a prefix of a longer run's inputs.
 #[must_use]
-pub fn synthetic_inputs(years: i64) -> Vec<(SimTime, MaterialInput)> {
+pub fn synthetic_inputs(years: i64) -> Vec<(SimTime, EntityRef)> {
     (1..=years / INPUT_EVERY_YEARS)
-        .map(|k| {
+        .flat_map(|k| {
             let year = k * INPUT_EVERY_YEARS;
             let minutes = year * CALENDAR.minutes_per_year() + 99 * 1_440 + 6 * 60 + 7;
             let first = usize::try_from(year).unwrap_or(0) % PERSONS;
-            let scope: BTreeSet<_> = (0..8)
+            let scope: BTreeSet<EntityRef> = (0..8)
                 .map(|i| person_entity((first + i * 5) % PERSONS))
                 .collect();
-            (SimTime::from_minutes(minutes), MaterialInput { scope })
+            scope
+                .into_iter()
+                .map(move |e| (SimTime::from_minutes(minutes), e))
         })
         .collect()
+}
+
+/// The engine input of one synthetic input: a material input whose scope is `entity`.
+#[must_use]
+pub fn material(entity: EntityRef) -> MaterialInput {
+    MaterialInput {
+        scope: BTreeSet::from([entity]),
+    }
 }
