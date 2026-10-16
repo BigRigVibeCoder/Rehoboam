@@ -26,12 +26,22 @@ jobs:
   check-all:
     name: PR tier (bin/check_all.sh)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
+      # SPR-008 T-04: the golden baseline may change only in a PR whose title carries [C3]
+      # (bin/check_baseline.py). Passed through the environment, never interpolated into a script.
+      RH_PR_TITLE: ${{ github.event.pull_request.title }}
+      RH_BASELINE_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
     steps:
       - uses: actions/checkout@v5
+
+      - name: The base branch, for the baseline gate and the bisect (SPR-008)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
@@ -59,7 +69,13 @@ jobs:
       - name: bin/check_all.sh
         run: bin/check_all.sh
 
-      - name: Upload the check report and the licence ledger
+      # docs/13 §4.5: on a golden-run mismatch, the bisect runs automatically (base revision
+      # against this head) and its report is attached below (SPR-008 ruling 7).
+      - name: Divergence bisect on a golden mismatch (SPR-008 T-03)
+        if: failure()
+        run: bin/golden_bisect_ci.sh
+
+      - name: Upload the check report, the licence ledger, the golden ladders and any bisect report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -67,4 +83,7 @@ jobs:
           path: |
             artifacts/check_report.md
             artifacts/licence_ledger.txt
+            artifacts/bisect_report.txt
+            target/golden/smoke_yearly_t1.ladder
+            target/golden/smoke_yearly_tN.ladder
           if-no-files-found: warn

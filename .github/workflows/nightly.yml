@@ -1,7 +1,9 @@
 # The nightly tier: tests too slow for the PR tier, marked #[ignore] in the code (SPR-002 T-06;
 # GOV-002; docs/13 §4.3). Today that is the V-DET-20 full sweep (10^6 draws per stream, docs/09) and
 # the rh-sample statistics against the exact distributions at 64 times the PR samples (SPR-003, V-DET-09);
-# SPR-008 adds the long golden-run hash ladders to this file.
+# SPR-008 adds the golden tier: the smoke world's monthly hash ladders for 1,000 sim-years at 1, 2,
+# 4 and N threads x 3 repeats (V-DET-01, V-DET-02; the G0 criterion), V-DET-11 on 64 injected
+# perturbations, and the monthly ladder uploaded as the cross-machine reference (ruling 8).
 #
 # Same toolchain, cache and tool installs as ci.yml. A daily run on GitHub Free spends a few
 # minutes of the monthly allowance; run it by hand with workflow_dispatch.
@@ -44,3 +46,36 @@ jobs:
 
       - name: Ignored tests (V-DET-20 full sweep; rh-sample statistics, nightly tier)
         run: cargo nextest run --workspace --locked --run-ignored ignored-only --no-fail-fast --no-capture
+
+  golden:
+    name: Nightly golden tier (smoke, 1,000 years, monthly; SPR-008)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo-nextest (prebuilt binary)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9
+
+      - name: V-DET-01/02 monthly ladders at 1, 2, 4 and N threads x 3; V-DET-11 x 64
+        run: bin/golden_nightly.sh
+
+      - name: Upload the monthly ladder (the cross-machine reference)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-nightly-ladder
+          path: artifacts/nightly/smoke_monthly_1000y.ladder
+          if-no-files-found: warn

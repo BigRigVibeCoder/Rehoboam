@@ -67,7 +67,11 @@ python -I bin/gen_skeletons.py --check     # committed rh-core skeletons = lint_
 python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml   # the smoke world's dummy specs, outside the real Registry (SPR-008)
 python -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check
 cargo nextest run -p rh-sys-smoke --locked --test smoke   # smoke world: registration against its specs, coverage, small-scale V-DET-01/02 (SPR-008 T-01)
-cargo nextest run -p rh-sys-smoke --release --run-ignored only --test smoke   # 1,000 sim-years headless (nightly)
+cargo build --release -p rh-cli && target/release/rh-cli run smoke --years 1000 --ladder yearly --out target/golden/smoke.ladder   # the golden run: 1,000 sim-years, plane-A hash ladder (SPR-008 T-02)
+python -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed target/golden/smoke.ladder   # baseline = recomputation; changed only in a [C3] PR (T-04)
+cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
+bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), V-DET-11 x 64
+bin/regen_baseline.sh            # only in a [C3] PR's final commit: regenerate the golden baseline (never type it)
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
 cargo nextest run -p rh-snapshot --test hash --test golden --test journal --test keyframe --test guard --test unsynced_guard --test stub_world   # plane hashes, input journal, V-DET-05 keyframes, V-DET-10 unsynced guard, stub-world hash golden (SPR-007)
