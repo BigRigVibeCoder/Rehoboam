@@ -1,6 +1,6 @@
 // GENERATED from specs/systems/M7.dynasty.odd.toml by lint_odd.py --rust. Do not edit; edit the spec.
 pub const SYSTEM_ID: &str = "M7.dynasty";
-pub const SPEC_VERSION: &str = "0.2.0";
+pub const SPEC_VERSION: &str = "0.3.0";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Polity),
     (Pulse::Month, Phase::Polity),
@@ -14,9 +14,10 @@ pub enum RngPurpose {
     ExitDeposition = 2,  // key: (ruler, month)
     ExitDay = 3,  // key: (ruler, month)
     MurderCulprit = 4,  // key: (ruler, month)
-    SuccessionTie = 5,  // key: (title, tick)
-    InterregnumDelay = 6,  // key: (title, tick)
-    Vocation = 7,  // key: (person)
+    ArbitrationTie = 5,  // key: (title, tick)
+    RegrantTie = 6,  // key: (title, tick)
+    InterregnumDelay = 7,  // key: (title, tick)
+    Vocation = 8,  // key: (person)
 }
 impl RngPurpose {
     /// The purpose's name in the spec's `[[rng]]` table.
@@ -26,7 +27,8 @@ impl RngPurpose {
             Self::ExitDeposition => "exit_deposition",
             Self::ExitDay => "exit_day",
             Self::MurderCulprit => "murder_culprit",
-            Self::SuccessionTie => "succession_tie",
+            Self::ArbitrationTie => "arbitration_tie",
+            Self::RegrantTie => "regrant_tie",
             Self::InterregnumDelay => "interregnum_delay",
             Self::Vocation => "vocation",
         }

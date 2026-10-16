@@ -8,12 +8,18 @@
 # Bookkeeping), so M7 reads person.death_cause and person.death_tick of the dead row at Polity; a read of a dead row after
 # that instant is a bug; every death takes effect as an M2 death timer in Vital (BCK-002 A-30);
 # filial_piety_mean removed; S6/S7 lag fixes and regalia at the seat are BCK-002 A-34, outside this spec.
+# Round 3 rulings (Architect, on the independent review REV-P1a): BLK-1 deaths fire at day-start instants in P1a, so the
+# death instant is a day boundary and M7 arbitrates inside its Day/Polity binding in that instant (no self-timer);
+# minute-level death times wait for BCK-002 A-35. MAJ-1 no previous_pulse read (A-28 is P1b). MAJ-2 access() declares a
+# read only when its owner is registered; otherwise the coupling's neutral value applies. MAJ-3 exit probabilities are
+# Prob32 (SPR-011 ruling 4), linear in h. MAJ-4 ScheduleDeath carries M2's declared payload. MAJ-5 an on_birth step sets
+# the newborn's house. Minor findings: RNG key mapping, enumeration order, separate tie purposes, derived values labelled.
 odd_r = 2
 
 [system]
 id = "M7.dynasty"
 name = "Succession and dynasts"
-spec_version = "0.2.0"
+spec_version = "0.3.0"
 fidelity = "F1"
 status = "draft"
 crate = "rh-sys-dynasty"
@@ -25,7 +31,7 @@ statement = "Keep houses, landed titles (seats), court offices and claims; decid
 role = "stylized_fact_producer"
 patterns = [
   { test = "V-SAGA-19", pattern = "Every titleholder death ends its instant with SUCCEED or INTERREGNUM_CRISIS; no title is without a holder across a tick boundary unless a declared interregnum holds it", kind = "identity", role = "sole" },
-  { test = "V-SF-06", pattern = "Ruler murders per 1,000 ruler-years inside the band of the world's institutional state; violent share of ruler deaths 15–30%", kind = "identity", role = "sole" },
+  { test = "V-SF-06", pattern = "Ruler murders per 1,000 ruler-years inside the band of the realm's institutional window, mapped at F1 as: primogeniture or ultimogeniture -> institutionalised hereditary monarchy (1–5); elective, tanistry, seniority, partition, sortition -> weak or contested succession (6–25); the consolidating window (7–12) has no F1 mapping (it needs succession_institutionalisation, SIM-14). The violent share of ruler deaths (15–30%) counts battle and execution, which have no mechanism before M8: at F1 the murder share of ruler deaths is reported (Eisner: 14.6%), and the violent-share sub-band is reported, not gated, until M8", kind = "identity", role = "sole" },
   { test = "V-SF-06b", pattern = "Share of reigns ending in domestic deposition (murder or non-lethal deposition) by succession law; primogeniture vs elective HR inside [0.17, 0.63]", kind = "identity", role = "sole" },
   { test = "V-SF-06d", pattern = "A murdered predecessor raises the odds of the next ruler's murder: OR 1.5–4 (identity in isolation through predecessor_killed_or; coupled, minds' revenge adds to it)", kind = "identity", role = "contributing" },
   { test = "V-SF-06c", pattern = "Mean completed reign longer under constrained rulers (17–22 years) than unconstrained (8–15): a HELD-OUT prediction from K&S's parliament effect and M2's mortality, never tuned to", kind = "emergent", role = "contributing" },
@@ -34,6 +40,8 @@ patterns = [
   { test = "V-INV-03", pattern = "Every titleholder death, whatever its cause, reaches succession through the one death path", kind = "identity", role = "contributing" },
 ]
 not_yet = [
+  "Minute-level death times: in P1a every death fires at a day-start instant (round 3, BLK-1), so the death instant, on_death and arbitration share one day boundary; minute resolution waits for an engine mechanism for same-instant reactions (BCK-002 A-35)",
+  "murder_culprit makes a living claimant a murderer by a draw, with no decision by its mind and no knowledge path (allowed at F1 under the principle-8 reading: a system's mechanics); coupled with T1 the same person may also attempt a murder through MURDER_ATTEMPT. From P1b the culprit's knowledge row must exist (V-SAGA-18)",
   "Battle deaths of rulers (M8, P4) and civil war after a failed interregnum (V-COUP-01 truncates at the INTERREGNUM_CRISIS or regency until M8)",
   "Treasury size and military proximity: at F1 arbitration uses who holds the title's steward and marshal offices as proxies; M4's treasury (P1b) and M8's armies (P4) replace them",
   "Executive constraint is held at the manifest's reference value until M6-lite (P1.6a); V-SF-06c and V-ERA-03 cannot be evaluated before then (G1b)",
@@ -73,7 +81,7 @@ column = "person.house"
 entity = "person"
 type = "u64"
 plane = "A"
-meaning = "HouseId of the person, or 0. Set at birth from the parent the house's law follows (the father under agnatic and cognatic laws at F1), or by the manifest for founders"
+meaning = "HouseId of the person, or 0. Set by on_birth in the birth instant from the parent the house follows (the father; the mother when the father is 0 or houseless), or by the manifest for founders"
 fixed_point = false
 [[owns]]
 column = "person.vocation"
@@ -287,7 +295,7 @@ when = "The last living member of a house dies"
 [[commands]]
 target = "M2.demography"
 command = "ScheduleDeath"
-why = "A sovereign's background murder: {ruler, tick, cause = murder, culprit, cause = the hazard draw}; every death goes through M2's single death path (05.1 §2 rule 2)"
+why = "A sovereign's background murder, with M2's declared payload ScheduleDeath {victim = the ruler, tick = the drawn day's start, cause = murder, culprit = the murder_culprit draw or 0, cause_event = 0 (a hazard draw has no inciting event)}; every death goes through M2's single death path (05.1 §2 rule 2)"
 [[commands]]
 target = "T1.minds"
 command = "Promote"
@@ -306,6 +314,10 @@ command = "TransferHoldings"
 why = "Property inheritance through the death path by the house's [inheritance_rules] id (P1b, when M4 F0 lands)"
 
 # ----------------------------------------------------------------------------- reads
+# Round 3 (MAJ-2): access() declares a read only when the world registers the column's owner; for an absent owner the
+# coupling's stated neutral value applies (M6: exec_constraint = 0, so m_ec = 1; S7: no active vow). M2 is read at
+# same_instant (M2 binds only Vital, earlier than every M7 binding), so births and deaths of this instant are visible.
+# No read is previous_pulse (MAJ-1: Engine::new refuses it until BCK-002 A-28).
 [[reads]]
 column = "person.alive"
 owner = "M2.demography"
@@ -324,49 +336,49 @@ use = "identity"
 [[reads]]
 column = "person.birth_tick"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "person.sex"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "person.mother"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "person.father"
 owner = "M2.demography"
-lag = "lagged"
+lag = "same_instant"
 use = "identity"
 [[reads]]
 column = "person.named"
 owner = "T1.minds"
-lag = "previous_pulse"
+lag = "lagged"
 use = "identity"
 [[reads]]
 column = "vow.vower"
 owner = "S7.vows"
-lag = "previous_pulse"
+lag = "lagged"
 use = "identity"
 [[reads]]
 column = "vow.status"
 owner = "S7.vows"
-lag = "previous_pulse"
+lag = "lagged"
 use = "identity"
 [[reads]]
 column = "polity.exec_constraint"
 owner = "M6.polity"
-lag = "previous_pulse"
+lag = "lagged"
 use = "rate"
 
 [scales]
 spatial = "houses, titles (sovereign, major, minor seats), offices and claims; a realm is a sovereign title and its vassal titles"
-temporal = "Day pulse at the instants of deaths, deposition and interregnum timers and queued commands; Month pulse for the sovereigns' exit hazards (sampled for the following month); Year pulse for regrants, vocations and dormancy"
+temporal = "Day pulse (every day start; in P1a every birth and death fires at a day start, round 3 BLK-1): births, deaths, arbitration, deposition, interregnum and regency timers, queued commands; Month pulse for the sovereigns' exit hazards (drawn on the first day for days 2 to the last of the same month); Year pulse for regrants, vocations and dormancy"
 extent = "every house and title of the manifest: typically 1 to 20 houses, 5 to 200 titles; persons of great houses only for dormancy and vocations"
-restart = "Owned columns plus M7's pending timers (arbitration, deposition, interregnum resolution, regency end) restore the system exactly"
+restart = "Owned columns plus M7's pending timers (deposition, interregnum resolution, regency end) restore the system exactly"
 
 [[fidelity_ladder]]
 level = "F0"
@@ -378,21 +390,25 @@ representation = "Succession-law enum, competing exit hazards of sovereigns at t
 status = "target"
 
 # ----------------------------------------------------------------------------- schedule
+# The death instant is a day boundary (round 3, BLK-1): M2's death timers fire in the timer pass of (day start, Vital),
+# and this Day/Polity binding runs later in the same instant, so on_death arbitrates there and then. The binding runs at
+# every day start (rh-core runs every binding whose pulse fires; a `when` clause is documentation) and does work only
+# where a birth or death happened in this instant's Vital slot or an M7 timer is due.
 [[schedule]]
 pulse = "Day"
 phase = "Polity"
-steps = ["on_death: for each titleholder, regent, office holder, claimant or house member who died this instant, update the title, regency, office, claim and house, and schedule arbitration", "arbitrate: fire due arbitration and interregnum-resolution timers: name the successor or declare the interregnum", "exit: fire due deposition timers: depose the ruler and arbitrate in the same step", "regency: fire due regency-end timers"]
-when = "only at instants where a death timer fired in Vital or an M7 timer is due in Polity"
+steps = ["on_birth: set the house of each person born this instant, and send Promote for a newborn who meets the naming criteria", "on_death: for each titleholder, regent, office holder, claimant or house member who died this instant, update the title, regency, office, claim and house, and arbitrate each vacated title in the same step", "arbitrate: fire due interregnum-resolution timers: name the successor (or, still contested, draw one)", "exit: fire due deposition timers: depose the ruler and arbitrate in the same step", "regency: fire due regency-end timers"]
+when = "every day start; work only at a birth or death of this instant or a due M7 timer"
 [[schedule]]
 pulse = "Month"
 phase = "Polity"
-steps = ["exit_hazards: for each sovereign, draw whether it is murdered or deposed during the following month"]
-when = "always"
+steps = ["exit_hazards: for each sovereign, draw whether it is murdered or deposed on day 2 to the last of this month"]
+when = "always (the first day of each month)"
 [[schedule]]
 pulse = "Day"
 phase = "Agenda"
 steps = ["apply_commands: apply PressClaim, PetitionSeat, RenounceClaim and Resign from T1.minds"]
-when = "only at instants with queued M7 commands"
+when = "every day start; work only with queued M7 commands"
 [[schedule]]
 pulse = "Year"
 phase = "Polity"
@@ -400,34 +416,42 @@ steps = ["regrant: grant titles held in demesne and vacant offices to petitioner
 when = "always"
 
 # ----------------------------------------------------------------------------- RNG
+# Mapping onto H (05.1 §6 item 2; MIN-1): StepCtx::rng(purpose, entity, k) supplies the world seed, branch salt, system id,
+# the entity's epoch and the instant t itself; each purpose below names its entity and k. Each draw is one u64 from its own
+# keyed stream. Enumeration before a draw is in ascending id (MIN-2): candidates and claimants by PersonId, claims by
+# ClaimId, titles by TitleId; tied scores are listed in ascending PersonId before a tie draw.
 [[rng]]
 purpose = "exit_murder"
 key = ["ruler", "month"]
-use = "Whether a sovereign is murdered in the following month: p = 1 - exp(-h_m/12), in fixed point"
+use = "entity = the ruler, k = 0, t = the month's first instant: hits iff draw < p_m (Prob32 draw_hits, SPR-011 ruling 4)"
 [[rng]]
 purpose = "exit_deposition"
 key = ["ruler", "month"]
-use = "Whether a sovereign is deposed in the following month: p = 1 - exp(-h_d/12)"
+use = "entity = the ruler, k = 0, t = the month's first instant: hits iff draw < p_d (Prob32)"
 [[rng]]
 purpose = "exit_day"
 key = ["ruler", "month"]
-use = "The day of the following month on which a drawn murder or deposition happens (day 2 to the last; if both were drawn, the earlier day wins and the other is dropped)"
+use = "entity = the ruler, t = the month's first instant; k = 0 the murder's day, k = 1 the deposition's day, each uniform on days 2 to the last of the month (draw mod n). If both hit, the earlier day wins (murder on a tie) and the other is dropped"
 [[rng]]
 purpose = "murder_culprit"
 key = ["ruler", "month"]
-use = "The culprit of a background murder: uniform among the living claimants of the title, or none (an unnamed court faction) when there are none"
+use = "entity = the ruler, k = 0, t = the month's first instant: the culprit of a background murder, uniform (draw mod n) over the title's living claimants in ascending PersonId, or none (an unnamed court faction) when there are none"
 [[rng]]
-purpose = "succession_tie"
+purpose = "arbitration_tie"
 key = ["title", "tick"]
-use = "Ties in arbitration and regrant scores; at an interregnum's resolution, the winner among candidates still inside contest_margin, weighted by score"
+use = "entity = the title, k = 0, t = the arbitration instant: an exact score tie in on_death, exit or an interregnum resolution, and the score-weighted pick of a still-contested interregnum resolution; candidates in ascending PersonId"
+[[rng]]
+purpose = "regrant_tie"
+key = ["title", "tick"]
+use = "entity = the title or office, k = 0, t = the year's first instant: an exact score tie in the yearly regrant (separate from arbitration_tie, which an interregnum resolution can draw at the same instant)"
 [[rng]]
 purpose = "interregnum_delay"
 key = ["title", "tick"]
-use = "Days from an INTERREGNUM_CRISIS to its resolution, uniform on 1..interregnum_max_days"
+use = "entity = the title, k = 0, t = the crisis instant: days to the resolution, 1 + draw mod interregnum_max_days; the timer is at that day's start, Polity"
 [[rng]]
 purpose = "vocation"
 key = ["person"]
-use = "A later child's vocation at majority: holy_orders with vocation_holy_orders, mercenary with vocation_mercenary, else household; one draw per life"
+use = "entity = the person, k = 0, t = the year's first instant in which it reaches majority_age (so one draw per life): holy_orders if draw < vocation_holy_orders, else mercenary if draw < vocation_holy_orders + vocation_mercenary, else household (Prob32 thresholds)"
 
 # ----------------------------------------------------------------------------- design concepts
 [design]
@@ -437,7 +461,7 @@ adaptation = "n/a: M7 has no agents; claimants, petitioners and feuding houses d
 objectives = "n/a"
 learning = "n/a"
 prediction = "n/a"
-sensing = "Deaths and their causes at the death instant; genealogy, sex and age at the start of the instant; named status and active vows at the previous pulse; executive constraint at the previous pulse (held at reference until M6-lite)"
+sensing = "Births, deaths and their causes at the same instant (M2 binds only Vital); named status, active vows and executive constraint at the start of the instant (lagged), each only when its owner is registered (else the neutral value)"
 interaction = "Lifecycle commands only: ScheduleDeath to M2 (background murders), Promote, Demote and OpinionModifier to T1.minds, TransferHoldings to M4 (P1b); PressClaim, PetitionSeat, RenounceClaim and Resign applied from T1.minds. S6 and S7 read title.holder (regalia, CLAIM_TITLE vows)"
 stochasticity = "Keyed RNG only: monthly exit draws and their day, culprit, ties, interregnum delay, vocation. Arbitration itself is deterministic given its inputs"
 collectives = "Houses (SIM-9 great houses), realms (a sovereign title with its vassal titles) and courts (the named holders of a realm's seats and offices)"
@@ -456,11 +480,11 @@ drivers = []
 [[params]]
 name = "murder_hazard_base"
 meaning = "Murder hazard per ruler-year of a sovereign at the reference institutional state (elective law, no assembly, no murdered predecessor). Coupled with T1.minds, it is the background part: recalibrated against V-SF-06 so background plus minds' foreground murders hit the band"
-source = "Eisner 2011, Table 2 and Figs 1–2 (R12 §1): century rates 0.0019–0.025, pooled 0.010"
+source = "Eisner 2011, Table 2 and Figs 1–2 (R12 §1): century rates 0.0019–0.025, pooled 0.010. The pooled rate is a mixture over laws and feud states, not the reference-state hazard itself; the bounds are sourced, a point value is a calibration choice"
 [[params]]
 name = "deposition_hazard_ref"
 meaning = "Non-lethal deposition hazard per ruler-year at the reference state (forced abdication, overthrow survived); K&S's deposition minus the murders M7 draws separately"
-source = "Kokkonen & Sundell 2014, Table 1, p. 445 (R12 §2): 0.040 per ruler-year deposed under election, less Eisner's pooled murder rate 0.010"
+source = "Derived design value inside the K&S bounds (MIN-4): Kokkonen & Sundell 2014, Table 1, p. 445 (R12 §2) give 0.040 deposed per ruler-year under election; subtracting Eisner's pooled, all-law murder rate 0.010 gives about 0.03. The subtraction mixes an election-only rate with a pooled one, and K&S also count death in civil war, which has no mechanism before M8; the bounds [0.01, 0.05] are sourced, the point value is not"
 [[params]]
 name = "primogeniture_hr"
 meaning = "Multiplier on both exit hazards under primogeniture (and, by analogy, ultimogeniture) relative to election"
@@ -525,19 +549,23 @@ source = "design value (RT-2026-10-16 item 12); prototype 7's 0.35 is illustrati
 # ----------------------------------------------------------------------------- submodels
 [[submodels]]
 name = "exit_hazards"
-summary = "On the first day of each month, for each sovereign title with a living adult or regency holder: law multiplier L = primogeniture_hr (primogeniture, ultimogeniture), seniority_hr (seniority), 1 (elective, tanistry, partition, sortition); m_ec = 1 + (exec_constraint_hr - 1) x polity.exec_constraint; h_m = murder_hazard_base x L x m_ec x (predecessor_killed_or if predecessor_exit = murdered); h_d = deposition_hazard_ref x L x m_ec x (predecessor_deposed_hr if predecessor_exit in {murdered, deposed}); draw exit_murder and exit_deposition against 1 - exp(-h/12) and the day by exit_day. A murder sends ScheduleDeath{ruler, that day, murder, culprit by murder_culprit}; a deposition schedules M7's deposition timer at (that day, Polity) and stores it in exit_timer. Outcomes lie one month ahead because M2 applies the command at its next binding, the first day of that month (day 1 is excluded); the hazard per ruler-year is unchanged"
+summary = "On the first day of each month, for each sovereign title (ascending TitleId) with a living holder: law multiplier L = primogeniture_hr (primogeniture, ultimogeniture), seniority_hr (seniority), 1 (elective, tanistry, partition, sortition); m_ec = 1 + (exec_constraint_hr - 1) x exec_constraint (1 when M6 is not registered); h_m = murder_hazard_base x L x m_ec x (predecessor_killed_or if predecessor_exit = murdered); h_d = deposition_hazard_ref x L x m_ec x (predecessor_deposed_hr if predecessor_exit in {murdered, deposed}). Widths (MAJ-3): every factor is a Q16_16 parameter or column; h is their product computed exactly in u128 from the Q16_16 bits; the window probability is p = h x n / D, n = the days in the window (days 2 to the last: days_in_month - 1), D = days_per_year, rounded down once to Prob32 (32 fraction bits, SPR-011 ruling 4). p = h x n / D is linear in h, not 1 - exp(-h x n / D): it overstates by at most x²/2 for x = h n / D (about h²/288 for a 30-day month), a relative excess of at most x/2, under 0.05% at the reference h = 0.01 and about 1.1% at the Registry's upper corner (h near 0.27); no transcendental is needed. At the lower corner (h = 6 x 10^-5 a year) p is about 2 x 10^4 Prob32 steps, so no hazard rounds to zero. Draws: exit_murder and exit_deposition against p_m and p_d; exit_day for the day; murder wins a tie of days. A murder sends ScheduleDeath {victim = ruler, tick = that day's start, cause = murder, culprit = murder_culprit, cause_event = 0}; M2 drains it at its next Day/Vital binding (SPR-014) and the death fires at tick, in Vital, before this binding. A deposition schedules M7's deposition timer at (that day's start, Polity) and stores it in exit_timer"
 earns_its_place_by = ["V-SF-06", "V-SF-06b", "V-SF-06d", "V-ERA-03"]
 [[submodels]]
+name = "on_birth"
+summary = "MAJ-5: for each person born this instant (birth_tick = now; births are M2 timers in this instant's Vital slot): person.house := the father's house, else the mother's, else 0. A newborn of a ruling house who is first or second in the line of one of its titles meets the naming criteria at once: Promote. Other relations are not stored: T1.minds derives kinship from M2's mother, father and spouse columns when it reads them"
+earns_its_place_by = ["V-INV-12"]
+[[submodels]]
 name = "on_death"
-summary = "At Polity of a death instant (every death is an M2 timer in the Vital slot): for each title whose holder died: predecessor_exit := murdered, other_violent or natural from person.death_cause (the instant's dead are the rows with alive = 0 and death_tick = now, readable until Bookkeeping of this instant, SPR-011 ruling 5; a read of a dead row after this instant is a bug); holder := 0; state := awaiting; cancel exit_timer; schedule the arbitration timer at (now, Polity) of this same instant (SAGA-13). A dead regent: the next regent by rule (REGENCY_ENDED, REGENCY_BEGUN). A dead office holder: office.holder := 0. A dead claimant: claim.status := void. A house whose last living member died: HOUSE_EXTINCT. Property: TransferHoldings to M4 (P1b)"
+summary = "In the death instant's Day/Polity binding (every death is an M2 timer in the timer pass of this day start's Vital slot; round 3, BLK-1). The dead are the rows with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5); a read of a dead row after this instant is a bug. For each title whose holder died (ascending TitleId): predecessor_exit := murdered, other_violent or natural from person.death_cause; holder := 0; state := awaiting; cancel exit_timer; then run arbitrate on it in this same step (SAGA-13), so awaiting never leaves the step. A dead regent: the next regent by rule (REGENCY_ENDED, REGENCY_BEGUN). A dead office holder: office.holder := 0. A dead claimant: claim.status := void. A house whose last living member died: HOUSE_EXTINCT. Property: TransferHoldings to M4 (P1b)"
 earns_its_place_by = ["V-SAGA-19", "V-INV-03"]
 [[submodels]]
 name = "arbitrate"
-summary = "Candidates: the legal heir by the title's law (effect-language eligibility and order over kin(n), P1.15; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims, and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer after interregnum_delay days; at resolution, re-arbitrate with the same rule, and if still contested pick by succession_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest adult kin in the law's order, else the steward): REGENCY_BEGUN and a regency-end timer at majority"
+summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (effect-language eligibility and order over kin(n), P1.15; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims, and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest adult kin in the law's order, else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
 earns_its_place_by = ["V-SAGA-19", "V-SF-06b"]
 [[submodels]]
 name = "exit"
-summary = "A deposition timer fires: if the ruler is alive and still holds the title, emit DEPOSED (actor = the leading pressed claimant, if any), give the ruler a claim (CLAIM_CREATED) and a DEPOSED_BY modifier about the deposer, predecessor_exit := deposed, state := awaiting, and run arbitrate in the same step with the deposed excluded"
+summary = "A deposition timer fires at a day start: if the ruler is alive and still holds the title, emit DEPOSED (actor = the leading pressed claimant, if any: the highest arbitration score, ties in ascending PersonId), give the ruler a claim (CLAIM_CREATED) and a DEPOSED_BY modifier about the deposer, predecessor_exit := deposed, state := awaiting, and run arbitrate in the same step with the deposed excluded"
 earns_its_place_by = ["V-SF-06b", "V-SAGA-19"]
 [[submodels]]
 name = "regency"
@@ -549,7 +577,7 @@ summary = "PressClaim{claim}: pressed := true, CLAIM_PRESSED, CLAIM_PRESSED_BY m
 earns_its_place_by = ["V-SAGA-19", "V-SF-06b"]
 [[submodels]]
 name = "regrant"
-summary = "Yearly: each title held in demesne by its liege's holder (a second title of the same holder below its own tier) and each vacant office goes to the best candidate: petitioners for it, then the holder's kin within dormancy_degrees who hold no seat or office (persons in holy orders only for chaplain), scored by the arbitration score without the legal term, ties by succession_tie; SEAT_GRANTED and a GRANTED_BY modifier; the liege keeps the seat when no candidate exists. Seats are never created (finite seats)"
+summary = "Yearly: each title held in demesne by its liege's holder (a second title of the same holder below its own tier) and each vacant office goes to the best candidate: petitioners for it, then the holder's kin within dormancy_degrees who hold no seat or office (persons in holy orders only for chaplain), scored by the arbitration score without the legal term, ties by regrant_tie, candidates in ascending PersonId; SEAT_GRANTED and a GRANTED_BY modifier; the liege keeps the seat when no candidate exists. Seats are never created (finite seats)"
 earns_its_place_by = ["V-INV-12"]
 [[submodels]]
 name = "vocation"
@@ -563,7 +591,7 @@ earns_its_place_by = ["V-INV-12"]
 # ----------------------------------------------------------------------------- invariants
 [[invariants]]
 id = "INV-M7-01"
-statement = "At every tick boundary every title is held by a living holder or is in a declared interregnum; awaiting never survives a tick boundary; a holder holds each title at most once"
+statement = "At every tick boundary every title is held by a living holder or is in a declared interregnum; awaiting never leaves the step that set it (on_death or exit arbitrate in-step); a holder holds each title at most once"
 test = "V-SAGA-19"
 [[invariants]]
 id = "INV-M7-02"
@@ -575,7 +603,7 @@ statement = "Every interregnum ends within interregnum_max_days with SUCCEED"
 test = "V-SAGA-19"
 [[invariants]]
 id = "INV-M7-04"
-statement = "Realised hazards stay in their bounds: h_m in [murder_hazard_base x min(L) x exec_constraint_hr, murder_hazard_base x max(L) x predecessor_killed_or], likewise h_d"
+statement = "Realised hazards stay in their bounds: h_m in [murder_hazard_base x min(L) x exec_constraint_hr, murder_hazard_base x max(L) x predecessor_killed_or], likewise h_d; every window probability is a Prob32 greater than 0 for every h greater than 0 in the Registry bounds"
 test = "V-SF-22"
 [[invariants]]
 id = "INV-M7-05"
@@ -594,8 +622,8 @@ test = "V-INV-04"
 [[couplings]]
 system = "M6.polity"
 direction = "in"
-via = "executive constraint (an assembly, landed military elite) lowers both exit hazards of the polity's sovereign; held at the manifest's reference value until M6-lite (P1.6a)"
-lag = "previous pulse"
+via = "executive constraint (an assembly, landed military elite) lowers both exit hazards of the polity's sovereign. Until M6-lite (P1.6a) no P1a world registers M6, so access() does not declare the read and the neutral value applies: exec_constraint = 0, m_ec = 1 (round 3, MAJ-2)"
+lag = "start of instant (lagged)"
 column = "polity.exec_constraint"
 form = "m_ec = 1 + (exec_constraint_hr - 1) x exec_constraint, multiplying h_m and h_d"
 neutral = "exec_constraint = 0, the reference institutional state (no assembly): m_ec = 1"
@@ -611,8 +639,8 @@ lag = "same instant for deaths; start of instant for genealogy"
 [[couplings]]
 system = "M2.demography"
 direction = "out"
-via = "ScheduleDeath for background murders (cause murder, culprit)"
-lag = "applied at M2's next binding (the first day of the following month), so draws are made one month ahead"
+via = "ScheduleDeath {victim, tick, cause, culprit, cause_event} for background murders, the payload M2 declares it applies (round 3, MAJ-4)"
+lag = "drained at M2's next Day/Vital binding (SPR-014); the death fires at its tick, a day start in the same month"
 [[couplings]]
 system = "T1.minds"
 direction = "in"
@@ -626,8 +654,8 @@ lag = "applied at the next tick boundary"
 [[couplings]]
 system = "S7.vows"
 direction = "in"
-via = "an active vow keeps its vower named (dormancy criterion; P1b)"
-lag = "previous pulse"
+via = "an active vow keeps its vower named (dormancy criterion; P1b). In a world that does not register S7 the read is not declared and the neutral applies: no active vow"
+lag = "start of instant (lagged)"
 [[couplings]]
 system = "S7.vows"
 direction = "out"
