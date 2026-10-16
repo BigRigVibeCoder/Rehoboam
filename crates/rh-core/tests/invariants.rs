@@ -380,3 +380,72 @@ fn t05_the_committed_crash_artifact_replays() {
     }
     println!("T-05: crash artifact {} replays", artifact.file_name());
 }
+
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "it must have the StepFn signature"
+)]
+fn panic_step(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    assert!(c.now() < SimTime::from_minutes(2 * 1_440), "boom at day 2");
+    Ok(())
+}
+
+/// Four independent systems in one level, so at 4 threads the panic happens on a worker.
+fn panic_engine(threads: usize) -> Engine {
+    let stubs = vec![
+        Stub::new("P1.a").at(Pulse::Day, Phase::Polity),
+        Stub::new("P2.boom")
+            .at(Pulse::Day, Phase::Polity)
+            .stepping(panic_step),
+        Stub::new("P3.c").at(Pulse::Day, Phase::Polity),
+        Stub::new("P4.d").at(Pulse::Day, Phase::Polity),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs).unwrap();
+    let mut e = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        WorldTables::new(),
+        SimTime::EPOCH,
+    );
+    e.set_threads(threads);
+    e
+}
+
+#[test]
+fn def1_a_panicking_step_poisons_the_engine_with_a_crash_artifact() {
+    for threads in [1, 4] {
+        let mut e = panic_engine(threads);
+        let err = e.advance_until(ten_years(), |_, _| {}).unwrap_err();
+        assert!(
+            matches!(&err, SimError::Panic { system: "P2.boom", message } if message == "boom at day 2"),
+            "{threads} threads: {err}"
+        );
+        assert_eq!(e.poisoned(), Some(&err));
+        let a = e.crash_artifact().unwrap();
+        assert_eq!(
+            (
+                a.tick,
+                a.phase.as_str(),
+                a.system.as_str(),
+                a.invariant.as_deref()
+            ),
+            (2 * 1_440, "Polity", "P2.boom", None)
+        );
+        assert_eq!(a.error, "P2.boom panicked: boom at day 2");
+        for replay_threads in [1, 4] {
+            assert_eq!(
+                panic_engine(replay_threads).replay(a),
+                Ok(()),
+                "the panic replays"
+            );
+        }
+    }
+}

@@ -36,7 +36,8 @@
 //! by the entity's new epoch and the input's instant. P0 has no input journal (SPR-007), so an
 //! input carries only its scope.
 //!
-//! **Crash artifacts** (GOV-004 §4; ruling 6). When an instant fails, the engine keeps a
+//! **Crash artifacts** (GOV-004 §4; ruling 6). When an instant fails (a step error, a violated
+//! invariant, or a step that panics, which dispatch catches as [`SimError::Panic`]), the engine keeps a
 //! [`CrashArtifact`] ([`Engine::crash_artifact`]); the host writes it. [`Engine::replay`] runs a
 //! fresh engine built from the artifact's tuple to the failing instant and checks that the same
 //! failure recurs.
@@ -56,7 +57,9 @@
 //! `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-01–T-05, rulings 1–6.
 
 use core::fmt;
+use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::panic::AssertUnwindSafe;
 
 use rh_events::{Event, EventLog};
 use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
@@ -495,6 +498,7 @@ impl Engine {
             | SimError::UndeclaredCommand { system, .. }
             | SimError::UndeclaredEvent { system, .. }
             | SimError::Event { system, .. }
+            | SimError::Panic { system, .. }
             | SimError::System { system, .. } => ((*system).to_owned(), None),
         };
         CrashArtifact {
@@ -776,7 +780,7 @@ impl Engine {
             let agenda = &self.agenda;
             let entries = &self.registered.entries;
             let key = |e: &Entry| SystemKey::new(self.world_seed, self.branch_salt, e.system_id, 0);
-            let run = |job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| -> JobOutcome {
+            let step = |job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| -> JobOutcome {
                 let e = &entries[job.index];
                 let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
                 let info = JobInfo {
@@ -802,6 +806,22 @@ impl Engine {
                     untaken,
                     out,
                 }
+            };
+            // A panic in a step becomes a poisoning `SimError::Panic` with a crash artifact
+            // (GOV-004 §2; SPR-006 DEF-1), caught on the thread that ran the step. The panicking
+            // job's columns and inbox are lost; the engine never runs again.
+            let run = |job: &Job, input: (Owned, Vec<QueuedCommand>)| -> JobOutcome {
+                std::panic::catch_unwind(AssertUnwindSafe(|| step(job, input))).unwrap_or_else(
+                    |payload| JobOutcome {
+                        owned: Owned::new(),
+                        result: Err(SimError::Panic {
+                            system: entries[job.index].id,
+                            message: panic_message(payload.as_ref()),
+                        }),
+                        untaken: Vec::new(),
+                        out: Outbox::default(),
+                    },
+                )
             };
             dispatch(self.threads, jobs, inputs, run)
         };
@@ -922,11 +942,21 @@ fn dispatch<I: Send, O: Send>(
             .into_iter()
             .flat_map(|h| match h.join() {
                 Ok(v) => v,
-                // A panic in a system step is a violated invariant: re-raise it.
+                // INVARIANT: `run` catches every step's panic, so a worker never unwinds; if one
+                // somehow does, re-raise it rather than lose it.
                 Err(payload) => std::panic::resume_unwind(payload),
             })
             .collect()
     });
     done.sort_by_key(|(k, _)| *k);
     done.into_iter().map(|(_, o)| o).collect()
+}
+
+/// The text of a panic payload (`&str` or `String`; anything else is named as such).
+fn panic_message(payload: &(dyn Any + Send)) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .map(|s| (*s).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a panic with a non-text payload".to_owned())
 }
