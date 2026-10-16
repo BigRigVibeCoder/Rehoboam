@@ -64,6 +64,7 @@ use std::panic::AssertUnwindSafe;
 use rh_events::{Event, EventLog};
 use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
 
+use crate::access::Lag;
 use crate::agenda::{Agenda, Timer, TimerEntry};
 use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance};
@@ -225,6 +226,12 @@ impl Engine {
     /// Every column a registered system declares as a write and `tables` lacks is materialised
     /// here, empty: the only place a column is created (SPR-005 G-c). At run time an access to a
     /// column the world does not have is a fatal [`SimError::MissingColumn`], never a creation.
+    ///
+    /// A system that declares a `previous_pulse` read, or a `start_of_day` read while bound to an
+    /// Hour pulse, leaves the engine poisoned from the start with [`SimError::Unsupported`] (the
+    /// first such read in id order): P0 reads those lags at the start of the instant, which is not
+    /// their meaning (BCK-002 A-28). [`Engine::advance_until`] returns that error and runs
+    /// nothing.
     #[must_use]
     pub fn new(
         calendar: Calendar,
@@ -258,6 +265,7 @@ impl Engine {
             }
             by_system_id.insert(e.system_id, i);
         }
+        let poisoned = unsupported_lag(&registered.entries);
         Self {
             calendar,
             world_seed,
@@ -281,7 +289,7 @@ impl Engine {
             diagnostics: VecDeque::new(),
             at: (start, Phase::Inputs),
             crash: None,
-            poisoned: None,
+            poisoned,
         }
     }
 
@@ -517,6 +525,7 @@ impl Engine {
             | SimError::UndeclaredEvent { system, .. }
             | SimError::Event { system, .. }
             | SimError::Panic { system, .. }
+            | SimError::Unsupported { system, .. }
             | SimError::System { system, .. } => ((*system).to_owned(), None),
         };
         CrashArtifact {
@@ -979,4 +988,25 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
         .map(|s| (*s).to_owned())
         .or_else(|| payload.downcast_ref::<String>().cloned())
         .unwrap_or_else(|| "a panic with a non-text payload".to_owned())
+}
+
+/// The first declared read, in id order, whose lag P0 cannot run exactly (BCK-002 A-28):
+/// `previous_pulse`, or `start_of_day` by a system bound to an Hour pulse.
+fn unsupported_lag(entries: &[Entry]) -> Option<SimError> {
+    entries.iter().find_map(|e| {
+        let hourly = e.bindings.iter().any(|b| b.pulse == Pulse::Hour);
+        e.access
+            .reads
+            .iter()
+            .find(|r| match r.lag {
+                Lag::PreviousPulse => true,
+                Lag::StartOfDay => hourly,
+                Lag::SameInstant | Lag::Lagged => false,
+            })
+            .map(|r| SimError::Unsupported {
+                system: e.id,
+                column: r.column,
+                lag: r.lag.name(),
+            })
+    })
 }

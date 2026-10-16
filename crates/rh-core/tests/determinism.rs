@@ -161,7 +161,7 @@ fn culture(
 }
 
 fn stubs() -> Vec<Stub> {
-    use Lag::{Lagged, PreviousPulse, SameInstant, StartOfDay};
+    use Lag::{Lagged, SameInstant, StartOfDay};
     let s = |id| Stub::new(id).purposes_of::<Draw>();
     vec![
         s("X1.climate")
@@ -189,7 +189,7 @@ fn stubs() -> Vec<Stub> {
             .at(Pulse::Month, Phase::Exchange)
             .stepping(tax),
         s("X6.trade")
-            .reads("wages.w", "X4.wages", PreviousPulse)
+            .reads("wages.w", "X4.wages", Lagged)
             .writes("trade.v")
             .at(Pulse::Month, Phase::Exchange)
             .stepping(trade),
@@ -328,8 +328,10 @@ fn v_det_02_repeat_invariance() {
     println!("V-DET-02: 3 runs of {} monthly hashes equal", runs[0].len());
 }
 
-/// The lagged read really sees the start of the instant: X6 (trade) reads wages at
-/// `previous_pulse`, and wages changes in the same phase. A run where trade instead saw the
+/// The lagged read really sees the start of the instant: X6 (trade) reads wages at `lagged`
+/// (it declared `previous_pulse`, which the engine refuses to run until BCK-002 A-28; in P0 both
+/// read the start-of-instant value, so the hashes are unchanged), and wages changes in the same
+/// phase. A run where trade instead saw the
 /// current value would differ; we check the first month by hand.
 #[test]
 fn a_lagged_read_sees_the_start_of_the_instant() {
