@@ -21,6 +21,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use rh_core::engine::Engine;
+use rh_core::state::EngineState;
 use rh_core::ownership::SpecTable;
 use rh_core::time::SimTime;
 use rh_core::{Phase, Pulse};
@@ -46,7 +47,9 @@ fn engine(seed: u64, threads: usize) -> Engine {
 #[derive(Debug, PartialEq, Eq)]
 struct Run {
     events: Vec<Event>,
-    yearly: Vec<u64>,
+    /// The whole engine state at the end of every year (hash-agnostic: a system crate's tests
+    /// never depend on rh-snapshot, V-INSP-03; the hash ladder is rh-cli's).
+    yearly: Vec<EngineState>,
     agenda: usize,
     waiting: usize,
     instants: usize,
@@ -66,7 +69,7 @@ fn run(seed: u64, threads: usize, years: i64) -> Run {
             .advance_until(end, |_, _| instants += 1)
             .unwrap_or_else(|e| panic!("{e}"));
         events.extend(engine.drain_events());
-        yearly.push(engine.tables().state_hash());
+        yearly.push(engine.snapshot());
     }
     Run {
         events,
@@ -204,7 +207,7 @@ fn v_det_01_02_small_scale_thread_and_repeat_invariance() {
     }
     assert_eq!(run(9, 1, 12), base, "repeat");
     println!(
-        "SMOKE: {} yearly hashes and {} events equal at 1, 2, 4 and 8 threads and on repeat",
+        "SMOKE: {} yearly states and {} events equal at 1, 2, 4 and 8 threads and on repeat",
         base.yearly.len(),
         base.events.len()
     );
