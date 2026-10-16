@@ -12,7 +12,9 @@
 //! The Arrow IPC file is zstd level 3 (`05.2` §6: "Arrow IPC + zstd-3"), with a fixed schema of two
 //! non-null columns, `table: Utf8` and `row: Binary`. Every plane-A table of the
 //! [`EngineState`], world columns and engine tables alike, is stored as its rows in their
-//! canonical encoding, the same bytes `state_hash` hashes ([`crate::hash`], [`crate::state`]), in
+//! canonical encoding, the same bytes `state_hash` hashes ([`crate::hash`], [`crate::state`]); the
+//! carried tables ([`crate::state::CARRIED_TABLES`], the undrained events) are stored too, so a load
+//! restores them, though `state_hash` does not cover them. Rows go in
 //! record batches of at most [`BATCH_ROWS`] rows. A world column's row is its `i64`, 8 bytes
 //! little-endian.
 //!

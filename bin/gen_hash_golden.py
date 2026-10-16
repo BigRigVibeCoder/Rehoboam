@@ -541,11 +541,21 @@ def engine_rows(st: State) -> TableRows:
     }
 
 
+# The engine tables a keyframe carries that state_hash does not cover (state.rs CARRIED_TABLES).
+CARRIED_TABLES = frozenset({"rh-core/events.held"})
+
+
 def state_hash(world: list[tuple[str, int, int]], st: State) -> tuple[TableRows, int]:
     """The plane-A hash of synthetic world columns ``(name, salt, rows)`` plus engine tables."""
     tables: TableRows = {name: column_rows(salt, n) for name, salt, n in world}
     tables.update(engine_rows(st))
-    roots = [(name, table_digest(name, rows)[1]) for name, rows in sorted(tables.items())]
+    # Carried tables (undrained events) are in a keyframe but outside state_hash: draining is the
+    # host's, not history (Architect ruling, VER-SPR-007-TEST round 2 GAP-6).
+    roots = [
+        (name, table_digest(name, rows)[1])
+        for name, rows in sorted(tables.items())
+        if name not in CARRIED_TABLES
+    ]
     return tables, plane_hash("A", sorted(roots, key=lambda r: r[0].encode()))
 
 
@@ -780,7 +790,8 @@ def render() -> str:
         "#   (GAMMA = 0x9e3779b97f4a7c15; names are UTF-8)",
         "#   plane <A|B|C> <t> (<name> <salt> <rows>)*t <plane hash>  (tables are columns)",
         "#   engine_table <name> <rows> <root> <chunks..>  the synthetic engine state's tables",
-        "#   engine <plane hash>   its state_hash: the synthetic world columns and engine tables",
+        "#   engine <plane hash>   its state_hash: the synthetic world columns and engine tables,",
+        "#   rh-core/events.held excepted (a carried table: in a keyframe, outside the hash)",
     ]
     return (
         "\n".join([*header, *lines_xxh3(), *lines_tables(), *lines_planes(), *lines_engine()])
