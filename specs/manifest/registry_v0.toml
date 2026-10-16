@@ -69,7 +69,19 @@ hazards = ["regicide", "deposition", "successor_purge", "succession_crisis", "ex
 #   deposition: Kokkonen & Sundell 2014 elective baseline ≈ 0.015–0.04/yr; Blaydes & Chaney 2013 unconstrained 0.013–0.05/yr.
 #   law multipliers vs elective (Cox HR): primogeniture 0.25–0.37 (CI 0.17–0.63); agnatic seniority ≈ 2 (CI 1.17–5.6).
 #   feud stock: a murdered predecessor multiplies the murder odds by ≈ 2.6–3.0 (Eisner) and deposition by ≈ 1.56–1.8 (K&S).
-params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], filial_piety_mean = [0.0, 1.0] }
+# M7 F1 (specs/systems/M7.dynasty.odd.toml, draft):
+#   deposition_hazard_ref is the NON-LETHAL part of K&S's deposition (theirs includes domestic murder, which M7 draws
+#     from murder_hazard_base): about 0.040 - 0.010 = 0.03 per ruler-year at election, inside the bounds.
+#   predecessor_deposed_hr: K&S "predecessor deposed" HR 1.56–1.80 (p. 447; R12 §2), on the deposition hazard.
+#   exec_constraint_hr: K&S parliament HR 0.50 between countries, not significant within them (R12 §2); the multiplier is
+#     1 + (exec_constraint_hr - 1) x exec_constraint. Deliberately NOT derived from Blaydes & Chaney 2013, the source of
+#     the held-out band V-SF-06c, so that band stays an independent prediction.
+#   majority_age (years): design value; no source read (medieval royal majorities varied, roughly 12–21).
+#   arb_*_weight, contest_margin, interregnum_max_days: immediate-succession arbitration (SAGA-13), design values.
+#   dormancy_degrees: SIM-9's N, design value. vocation_*: shares of later children who enter holy orders or a mercenary
+#     company at majority (RT-2026-10-16 item 12); design values: prototype 7's 0.40 / 0.35 are illustrative, not sourced.
+#   filial_piety_mean: legacy; no M7 F1 mechanism reads it (filial piety is a derived overlay of T1.minds, 05.3 §2).
+params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], filial_piety_mean = [0.0, 1.0], predecessor_deposed_hr = [1.3, 2.0], exec_constraint_hr = [0.3, 1.0], majority_age = [12.0, 21.0], arb_legal_weight = [0.0, 1.0], arb_claim_weight = [0.0, 1.0], arb_military_weight = [0.0, 1.0], arb_treasury_weight = [0.0, 1.0], contest_margin = [0.0, 1.0], interregnum_max_days = [7, 730], dormancy_degrees = [1, 6], vocation_holy_orders = [0.0, 0.6], vocation_mercenary = [0.0, 0.6] }
 
 [systems."M8.war"]
 fidelity_levels = ["F0", "F1"]
@@ -92,7 +104,8 @@ params = { metabolism_multiplier = [0.1, 10.0] }
 
 [systems."T1.minds"]
 fidelity_levels = ["F1", "F2"]
-# The minds of named actors (T1), crate rh-minds (05.3). Registry id added by ADR-0035; no spec yet (BCK-001 §3).
+# The minds of named actors (T1), crate rh-minds (05.3). Registry id added by ADR-0035; spec
+#   specs/systems/T1.minds.odd.toml (draft).
 #   F1 = minds v0 (P1a): HEXACO traits, ambition, relationships and opinion modifiers, IAUS for a few decision types,
 #        and secrets v0 knowledge rows (P1b). F2 = the full psychological core, HTN, beliefs, channels and memory (P4).
 #   It owns traits, overlays, opinions, the agenda's goals and knowledge rows; S6 and S7 change them only through
@@ -102,7 +115,13 @@ fidelity_levels = ["F1", "F2"]
 #   stress_decay points per month. Crossing stress_threshold is a deterministic state transition that schedules the
 #   break outcome as a timer, at a keyed delay of at most break_delay_max_days; the act comes from [mental_breaks] and
 #   stress drops by its relief (points). All values are design values (V-SAGA-16).
-params = { stress_threshold = [50.0, 95.0], stress_decay = [0.0, 10.0], vow_conflict_gain = [0.0, 20.0], break_delay_max_days = [1, 90] }
+# Damping (RT-2026-10-16 item 1; mechanics, no lock, no fiat cap): grief stress per death is grief_gain x the
+#   relationship's closeness ([relation_kinds]); the grief one actor takes in one instant saturates at
+#   grief_instant_cap; after a break the actor is refractory for break_refractory_days (no new break is scheduled).
+# Units: stress, gains and caps in points on the 0-100 scale; thought_cap and thought_decay in trait points (-100..100)
+#   (per month for the decay); *_days in days; marriage_min_age in years; attempt_success a probability per attempt;
+#   trait_sd in trait points. Every value is a design value with no empirical band (the spec says what settles each).
+params = { stress_threshold = [50.0, 95.0], stress_decay = [0.0, 10.0], vow_conflict_gain = [0.0, 20.0], break_delay_max_days = [1, 90], grief_gain = [0.0, 60.0], grief_instant_cap = [5.0, 60.0], loyalty_conflict_gain = [0.0, 20.0], dissonance_gain = [0.0, 30.0], break_refractory_days = [30, 1825], attempt_success = [0.05, 0.6], trait_sd = [15.0, 50.0], iaus_top_k = [1, 5], interrupt_daily_cap = [1, 4], thought_cap = [0.0, 50.0], thought_decay = [0.0, 10.0], marriage_min_age = [12.0, 20.0] }
 
 [systems."S6.artifacts"]
 fidelity_levels = ["F1", "F2"]
@@ -146,6 +165,15 @@ ids = ["feudal_monarchy", "oligarchic_council", "theocracy", "municipal_democrac
 
 [succession_laws]
 ids = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", "tanistry", "sortition"]
+
+[title_tiers]      # M7.dynasty F1: landed titles (seats). Only sovereign titles carry the calibrated ruler-exit hazards (R12 §1–3)
+ids = ["sovereign", "major", "minor"]
+
+[office_kinds]     # M7.dynasty F1: court offices of a title. steward and marshal are the F1 proxies for treasury control and
+ids = ["chancellor", "marshal", "steward", "spymaster", "chaplain"]   # military proximity in succession arbitration (SAGA-13)
+
+[vocations]        # M7.dynasty F1: careers of later children of great houses, who stay in the ledger (RT-2026-10-16 item 12)
+ids = ["none", "holy_orders", "mercenary", "household"]
 
 [institutions]
 ids = ["testing_mandate", "quarantine_law", "standing_army", "guild_charter", "inquisition",
@@ -197,7 +225,8 @@ ids = ["heavy_plough", "crop_rotation", "seed_selection", "second_staple", "prin
 ids = ["harm", "aid", "promise", "betray", "coerce", "conceal", "reveal", "infect_convert", "succeed_to", "depose",
        "flee", "accuse", "purge", "marry", "birth", "death", "discover", "test", "rebel", "trade", "raid", "bond",
        "counsel", "lament", "renounce", "restore",
-       "forge", "pass", "destroy", "corrupt", "fulfil", "lapse", "use"]   # saga acts (ADR-0035): artifacts and vows
+       "forge", "pass", "destroy", "corrupt", "fulfil", "lapse", "use",   # saga acts (ADR-0035): artifacts and vows
+       "claim"]   # assert a right to a title (M7.dynasty F1: claims created and pressed)
 
 [roles]
 ids = ["authority", "successor", "kin", "ally", "rival", "subordinate", "member", "host", "guest", "investigator", "suspect", "any"]
@@ -224,10 +253,62 @@ ids = ["actor", "target", "witness", "instrument"]   # instrument: the S6 artifa
 ids = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]
 
 [mental_breaks]        # T1.minds (ADR-0035): volatile acts a stressed named actor may commit; relief is the stress removed
-ASSASSINATION_ATTEMPT = { act_classes = ["harm"], relief = 60.0 }          # relief in stress points (0-100 scale)
-FLIGHT                = { act_classes = ["flee"], relief = 50.0 }          # the actor becomes a fugitive (SAGA-14)
-BURN_HOLDINGS         = { act_classes = ["harm", "destroy"], relief = 50.0 }
-PACT_OF_DESPAIR       = { act_classes = ["bond", "renounce"], relief = 40.0 }
+# verb: the event the act emits. needs: what makes the act available (T1.minds spec, submodel break_act): "stressor" a
+#   person the actor's stress points at; "seat" the actor holds a title; "kin" a living named relation; "holdings" a
+#   registered M4 (P1b). weights: trait affinities, weight = clamp(1 + sum(w x trait/100), 0.1, 2.0) (design values).
+# Authored for the saga register (docs/01 principle 9): no rule in plane A filters an outcome for its tone.
+ASSASSINATION_ATTEMPT = { act_classes = ["harm"], relief = 60.0, verb = "MURDER_ATTEMPT", needs = ["stressor"], weights = { agreeableness = -1.0, honesty_humility = -0.5 } }   # relief in stress points (0-100 scale)
+FLIGHT                = { act_classes = ["flee"], relief = 50.0, verb = "FLED", needs = [], weights = { emotionality = 1.0, conscientiousness = -0.5 } }   # the actor becomes a fugitive (SAGA-14)
+BURN_HOLDINGS         = { act_classes = ["harm", "destroy"], relief = 50.0, verb = "HOLDINGS_BURNED", needs = ["seat", "holdings"], weights = { conscientiousness = -1.0, agreeableness = -0.5 } }
+PACT_OF_DESPAIR       = { act_classes = ["bond", "renounce"], relief = 40.0, verb = "DESPAIR_PACT", needs = ["kin"], weights = { extraversion = 0.5, openness = 0.5 } }
+
+[relation_kinds]       # T1.minds F1: the relation edges of a named actor; closeness scales grief (design values; RT-2026-10-16 item 1)
+parent      = { closeness = 1.0 }
+child       = { closeness = 1.0 }
+spouse      = { closeness = 1.0 }
+sibling     = { closeness = 0.6 }
+grandparent = { closeness = 0.4 }
+grandchild  = { closeness = 0.5 }
+kin_other   = { closeness = 0.2 }      # uncle, aunt, nephew, niece, first cousin
+liege       = { closeness = 0.2 }
+vassal      = { closeness = 0.1 }
+
+[opinion_modifiers]    # T1.minds F1 (CK3 style; 05.3 §2): magnitude on the -100..100 opinion scale, constant until it expires after `months`
+KIN_HARMED_BY     = { magnitude = -60.0, months = 600 }   # the holder knows the target harmed the holder's kin (P1b knowledge)
+PASSED_OVER       = { magnitude = -30.0, months = 240 }   # a succession went to the target over the holder's claim or right
+DEPOSED_BY        = { magnitude = -60.0, months = 600 }
+CLAIM_PRESSED_BY  = { magnitude = -30.0, months = 120 }
+FEUD_WITH         = { magnitude = -40.0, months = 240 }
+MARRIED_TO        = { magnitude = 30.0,  months = 600 }
+GRANTED_BY        = { magnitude = 20.0,  months = 240 }
+DESPAIR_PACT_WITH = { magnitude = 30.0,  months = 240 }
+VOW_BROKEN_BY     = { magnitude = 0.0,   months = 240 }   # the magnitude comes with S7's command (broken_vow_opinion)
+VOW_FULFILLED_BY  = { magnitude = 20.0,  months = 240 }
+
+[act_dissonance]       # T1.minds F1 (value conflict): an act of this class costs its actor dissonance_gain x max(0, trait)/100 stress
+harm    = { trait = "agreeableness" }
+coerce  = { trait = "agreeableness" }
+betray  = { trait = "honesty_humility" }
+conceal = { trait = "honesty_humility" }
+claim   = { trait = "honesty_humility" }
+
+[overlay_traits]       # T1.minds F1: trait points per overlay point when an ApplyInfluence or ApplyThought becomes a bounded thought
+# that IAUS reads; the trait columns never change (RT-2026-10-16 item 8). Design values.
+corruption   = { honesty_humility = -100.0 }
+hubris       = { honesty_humility = -50.0, extraversion = 50.0 }
+paranoia     = { agreeableness = -50.0, emotionality = 50.0 }
+despair      = { extraversion = -50.0, emotionality = 50.0 }
+filial_piety = { conscientiousness = 50.0, agreeableness = 50.0 }
+
+[decision_types]       # T1.minds F1: event-driven IAUS (05.3 §3; COG-3). poll_months: the CK3-style polling interval (design values).
+# considerations: the inputs the type's fixed-point response curves read (the curve tables land with the effect language,
+#   P1.15). phase: a type is enabled in a world only when the owners of its commands are registered (SPR-006 ruling 5).
+marry       = { poll_months = 12, phase = "P1a", considerations = ["age", "age_gap", "partner_tier", "opinion", "ambition", "stress"] }
+seek_office = { poll_months = 6,  phase = "P1a", considerations = ["ambition", "seat_tier", "kin_distance_to_granter", "opinion_of_granter", "stress"] }
+press_claim = { poll_months = 12, phase = "P1a", considerations = ["ambition", "claim_kind", "opinion_of_holder", "honesty_humility", "holder_is_minor", "stress"] }
+feud        = { poll_months = 6,  phase = "P1a", considerations = ["opinion", "agreeableness", "kin_harmed", "rival_claim", "stress"] }
+swear_vow   = { poll_months = 1,  phase = "P1b", considerations = ["kin_harmed", "closeness", "conscientiousness", "honesty_humility", "active_vows"] }
+pursue_goal = { poll_months = 3,  phase = "P1b", considerations = ["goal_priority", "target_reachable", "ambition", "stress"] }
 
 [contaminants]         # physical marks on an artifact or a cell, as bitflags in this order (S6; envelope); plane A
 ids = ["blood", "ash", "poison", "mud", "salt_water", "soot", "wine"]
@@ -398,3 +479,18 @@ VOW_FULFILLED      = { act_classes = ["fulfil"], emitted_by = "S7.vows" }
 VOW_BROKEN         = { act_classes = ["betray"], emitted_by = "S7.vows" }
 VOW_VOIDED         = { act_classes = ["lapse"], emitted_by = "S7.vows" }
 MENTAL_BREAK       = { act_classes = ["renounce"], emitted_by = "T1.minds" }   # the break; its act is a separate event from [mental_breaks]
+MURDER_ATTEMPT     = { act_classes = ["harm"], emitted_by = "T1.minds", references = ["harm", "depose", "claim"] }   # a break act or a feud attack; success is a ScheduleDeath to M2
+FLED               = { act_classes = ["flee"], emitted_by = "T1.minds" }
+HOLDINGS_BURNED    = { act_classes = ["harm", "destroy"], emitted_by = "T1.minds" }
+DESPAIR_PACT       = { act_classes = ["bond", "renounce"], emitted_by = "T1.minds" }
+FEUD_DECLARED      = { act_classes = ["accuse"], emitted_by = "T1.minds", references = ["harm", "depose", "claim", "succeed_to"] }
+FEUD_ENDED         = { act_classes = ["restore"], emitted_by = "T1.minds" }
+INTERREGNUM_CRISIS = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty" }   # arbitration found no clear successor (SAGA-13)
+DEPOSED            = { act_classes = ["depose"], emitted_by = "M7.dynasty", references = ["claim"] }
+REGENCY_BEGUN      = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty" }
+REGENCY_ENDED      = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty" }
+CLAIM_CREATED      = { act_classes = ["claim"], emitted_by = "M7.dynasty", references = ["succeed_to", "depose"] }
+CLAIM_PRESSED      = { act_classes = ["claim"], emitted_by = "M7.dynasty" }
+CLAIM_RENOUNCED    = { act_classes = ["renounce"], emitted_by = "M7.dynasty" }
+SEAT_GRANTED       = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty" }   # a re-grant of a seat or an office (finite seats)
+HOUSE_EXTINCT      = { act_classes = ["lapse"], emitted_by = "M7.dynasty" }
