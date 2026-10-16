@@ -19,9 +19,11 @@
 # re-promotion reuses the kept mind; traits are drawn once. Minor findings: RNG key mapping, enumeration order, separate
 # outcome purposes, grief_instant_cap below stress_threshold by its bounds, decision types gated by `requires`.
 # Round 4 rulings (REV-P1a §7): NEW-1 derived kinship walks M2's life-course columns (the dead stay in it), read at same_instant (round 4c, NEW-6),
-# through the effect language's kin(n) (SPR-017), so grandparents through a dead parent and cousins are reached; the
+# through the effect language's kin(p, n) (SPR-017), so grandparents through a dead parent and cousins are reached; the
 # living spouse stays person.spouse. NEW-3 claim_rank reads M7's claim.rank column. NEW-4 every read is declared, and
 # SPR-014's registration rule drops a read of an absent owner and applies the coupling's neutral value.
+# Round 4d (from the effect-language spec, PR #41 §5.3): relations by their exact names, kin(p, n) and related(a, b, n);
+# DESPAIR_PACT's opinion effect is a declared self-send (OpinionModifier to T1), with T1's [[applies]].
 odd_r = 2
 
 [system]
@@ -426,6 +428,11 @@ command = "ScheduleDeath"
 payload = "{ victim, tick, cause, culprit, cause_event }"
 why = "A successful MURDER_ATTEMPT kills only through the single death path (05.1 §2 rule 2), with M2's declared payload ScheduleDeath {victim, tick = the next day start, cause = murder, culprit = the actor, cause_event = the MURDER_ATTEMPT}"
 [[commands]]
+target = "T1.minds"
+command = "OpinionModifier"
+payload = "{ holder, about, kind, magnitude, source_event }"
+why = "A self-send (round 4d): DESPAIR_PACT's opinion effect, the DESPAIR_PACT_WITH modifiers both ways, is a command from minds to minds, applied at the next tick boundary like any other OpinionModifier"
+[[commands]]
 target = "M7.dynasty"
 command = "PetitionSeat"
 why = "The seek_office decision asks for a vacant office or a seat held in demesne; M7 grants by its rule"
@@ -458,9 +465,24 @@ target = "S6.artifacts"
 command = "Destroy"
 why = "pursue_goal for DESTROY_RELIC (P1b)"
 
+# ----------------------------------------------------------------------------- lifecycle commands applied
+# For PR #37's [[applies]] lint (round 4d). Each payload is the one every sender uses.
+[[applies]]
+command = "OpinionModifier"
+payload = "{ holder, about, kind, magnitude, source_event }"
+from = ["M7.dynasty", "S7.vows", "T1.minds"]
+[[applies]]
+command = "Promote"
+payload = "{ person }"
+from = ["M7.dynasty"]
+[[applies]]
+command = "Demote"
+payload = "{ person }"
+from = ["M7.dynasty"]
+
 # ----------------------------------------------------------------------------- reads
 # Round 4 (NEW-4): the reads below are declared unconditionally (round 4, NEW-4); the rh-core registration rule that SPR-014 adds drops and reports a read whose owner the world does not register, and gives the view the coupling's neutral value
-# Kinship walks life_course.mother/father through kin(n) (SPR-017), read at same_instant (round 4c, NEW-6: the log is append-only and written only by M2 in Vital, so same_instant is exact and avoids P0's per-instant clone of a lagged column) (round 4, NEW-1). minds rebuilds a
+# Kinship walks life_course.mother/father through kin(p, n) (SPR-017), read at same_instant (round 4c, NEW-6: the log is append-only and written only by M2 in Vital, so same_instant is exact and avoids P0's per-instant clone of a lagged column) (round 4, NEW-1). minds rebuilds a
 # children-by-parent index over those columns at restore and on each birth: derived state, outside the plane-A hash and
 # the keyframe. Neutral values (S7: vow conflict 0, so s_vow = 0, and no goals; S6: rumour_reach 0, so the
 # seek consideration is as at R = 0). M2 is read at same_instant (M2 binds only Vital and precedes minds there).
@@ -763,7 +785,7 @@ source = "design value; canonical minimums of 12 and 14 are the lower end (not y
 # ----------------------------------------------------------------------------- submodels (ODD 7)
 [[submodels]]
 name = "grief"
-summary = "In the Day/Vital binding of a death instant (a day start; round 3, BLK-1). The dead are the persons with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5; a read of a dead row after it is a bug), in ascending PersonId. For each dead d, the grievers are the named actors kin to d, derived through kin(2), the effect-language relation (SPR-017) over M2's life_course.mother and life_course.father (so a grandparent is reached through a dead parent; round 4, NEW-1), plus the living spouse from person.spouse, (parents, children, spouse, siblings, grandparents, grandchildren; kin_other: uncles, aunts, nephews, nieces, first cousins), plus the holders of unended liege or vassal rows with b = d; a pair related in several ways counts its closest kind once. For each griever a: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; rows with b = d get ended_at := now. A child born after its parent's promotion is grieved like any other: kinship is read, not stored (MAJ-5); A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). The deaths are M2's death timers in this Vital slot: every death, however caused, takes effect there (BCK-002 A-30)"
+summary = "In the Day/Vital binding of a death instant (a day start; round 3, BLK-1). The dead are the persons with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5; a read of a dead row after it is a bug), in ascending PersonId. For each dead d, the grievers are the named actors kin to d, derived through kin(d, 2), the effect-language relation (SPR-017, PR #41 §5.3) over M2's life_course.mother and life_course.father (so a grandparent is reached through a dead parent; round 4, NEW-1), plus the living spouse from person.spouse, (parents, children, spouse, siblings, grandparents, grandchildren; kin_other: uncles, aunts, nephews, nieces, first cousins), plus the holders of unended liege or vassal rows with b = d; a pair related in several ways counts its closest kind once. For each griever a: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; rows with b = d get ended_at := now. A child born after its parent's promotion is grieved like any other: kinship is read, not stored (MAJ-5); A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). The deaths are M2's death timers in this Vital slot: every death, however caused, takes effect there (BCK-002 A-30)"
 earns_its_place_by = ["V-SAGA-16", "V-SAGA-16b"]
 [[submodels]]
 name = "threshold"
@@ -779,7 +801,7 @@ summary = "First Promote{person}: person.named := true; traits and ambition from
 earns_its_place_by = ["V-INV-12", "V-SAGA-16"]
 [[submodels]]
 name = "break_act"
-summary = "When a break timer fires for actor a: the available acts are the [mental_breaks] entries whose needs a meets (stressor: the target of a's highest-conflict vow (P1b), else the culprit of a's most recent known kin harm (P1b), else a's active feud enemy with the lowest opinion; seat: a holds a title; kin: a living named relation; holdings: M4 registered). FLIGHT needs nothing, so the set is never empty. Weight of act k = clamp(1 + sum over traits of w_k,t x trait_t/100, 0.1, 2.0); the break_act draw picks one. Emit MENTAL_BREAK (motive edge to the crossing's cause) and the act's verb; apply its effects: MURDER_ATTEMPT on the stressor, break_outcome against attempt_success, success sends ScheduleDeath {victim = stressor, tick = the next day start, cause = murder, culprit = a, cause_event = the MURDER_ATTEMPT}; FLED sends Resign for each office of a (P1b: fugitive status via S3); HOLDINGS_BURNED destroys a's household stocks (M4, P1b); DESPAIR_PACT adds DESPAIR_PACT_WITH modifiers both ways with the stressed relation and sends RenounceClaim for a's claims. Then stress := max(0, stress - relief); stress_relieved += the applied amount; break_state := refractory; refractory_until := now + break_refractory_days; a refractory-end timer is scheduled"
+summary = "When a break timer fires for actor a: the available acts are the [mental_breaks] entries whose needs a meets (stressor: the target of a's highest-conflict vow (P1b), else the culprit of a's most recent known kin harm (P1b), else a's active feud enemy with the lowest opinion; seat: a holds a title; kin: a living named relation; holdings: M4 registered). FLIGHT needs nothing, so the set is never empty. Weight of act k = clamp(1 + sum over traits of w_k,t x trait_t/100, 0.1, 2.0); the break_act draw picks one. Emit MENTAL_BREAK (motive edge to the crossing's cause) and the act's verb; apply its effects: MURDER_ATTEMPT on the stressor, break_outcome against attempt_success, success sends ScheduleDeath {victim = stressor, tick = the next day start, cause = murder, culprit = a, cause_event = the MURDER_ATTEMPT}; FLED sends Resign for each office of a (P1b: fugitive status via S3); HOLDINGS_BURNED destroys a's household stocks (M4, P1b); DESPAIR_PACT adds DESPAIR_PACT_WITH modifiers both ways with the stressed relation (an OpinionModifier self-send, applied at the next tick boundary) and sends RenounceClaim for a's claims. Then stress := max(0, stress - relief); stress_relieved += the applied amount; break_state := refractory; refractory_until := now + break_refractory_days; a refractory-end timer is scheduled"
 earns_its_place_by = ["V-SAGA-16"]
 [[submodels]]
 name = "refractory_end"

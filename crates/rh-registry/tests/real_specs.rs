@@ -108,6 +108,7 @@ skeleton!(
         MurderCulprit,
         ArbitrationTie,
         RegrantTie,
+        Sortition,
         InterregnumDelay,
         Vocation
     ]
