@@ -1,0 +1,51 @@
+# Reference world, rung 2 of the complexity ladder (docs/11; BCK-002 A-06; SPR-011 ruling 18): a hamlet of 60.
+# uz_job's people (the population of 60, the cast, Job's household with its children and servants, e0 = 30) without what
+# P1a does not simulate: the Adversary agent, the wager catalyst, the off-map raiders, the despair overlay, and the
+# household's holdings (food and economy are P1b). In P1a it runs the same slice as solo (SPR-011 ruling 2): 60 founders
+# age and die, with no births, and the hamlet dies out within about a century (V-SCALE-04). uz_job stays the P1b
+# micro-catalyst world (V-SCALE-05). The cast's flags and initial attributes are kept for T1.minds (P1a, after P1.0);
+# P1.0 reads only sex and age.
+manifest_version: 0
+registry_version: "0.1.0"
+world:
+  id: hamlet
+  display_name: "A hamlet in Uz"
+  template: pastoral_household
+  seed: 42
+  calendar: {days_per_year: 360, months: 12, seasons: 4, epoch_label: "Days of Job"}
+  horizon: {years: 150, label: historical}
+  fidelity_profile: {M2.demography: F1}
+geography:
+  raster_resolution: 256
+  region_count: 4                # Job's tents and pastures; the friends' towns of Teman, Shuah and Naamah (no regions until P1.1a)
+  heightmap_template: desert_fringe
+  climate: {zone: arid, harvest_sigma: 0.25, autocorr: 0.1, spatial_share: 0.8, volcanic_rate: 0.0}
+  ecology: {livestock_kg_per_capita: 0, wild_prey_tonnes: 0}
+peoples:
+  - archetype: human
+    population: 60
+    class_shares: {commoner: 0.80, burgher: 0.05, elite: 0.15}
+    cultures:
+      - {id: uzites, name: "People of Uz", naming_seed: "ancient Semitic pastoral names, desert places", value_bias: {tradition: 0.5, benevolence: 0.4}}
+    faiths:
+      - {id: el_shaddai, name: "Worship of El Shaddai", doctrine_tags: [monotheism, divine_justice]}
+cast:
+  - {id: job, name: "Job", sex: male, age_years: 50, household: job_house, flags: [protagonist, deep], initial: {faith: 0.95, integrity: 0.95}}
+  - {id: job_wife, name: "Job's wife", sex: female, age_years: 45, household: job_house, flags: [deep], initial: {faith: 0.8}}
+  - {id: eliphaz, name: "Eliphaz the Temanite", sex: male, age_years: 70, flags: [deep], initial: {faith: 0.9}}
+  - {id: bildad, name: "Bildad the Shuhite", sex: male, age_years: 65, flags: [deep], initial: {faith: 0.9}}
+  - {id: zophar, name: "Zophar the Naamathite", sex: male, age_years: 60, flags: [deep], initial: {faith: 0.9}}
+  - {id: elihu, name: "Elihu son of Barachel", sex: male, age_years: 25, flags: [deep], initial: {faith: 0.85}}
+households:
+  - id: job_house
+    head: job
+    children: {sons: 7, daughters: 3}
+    servants: 30
+systems:
+  M2.demography: {e0: 30}        # uz_job's value, equal to the Registry default; tfr dropped: no births in P1a
+narrative:
+  pattern_packs: [solitary_life]  # life_ends (SPR-011 ruling 14); uz_job's packs wait for T1.minds and the catalyst
+  default_style_card: historian
+presentation:
+  era_art: lofi_ancient
+  palette: ochre_and_ash

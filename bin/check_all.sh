@@ -399,6 +399,8 @@ run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/
 run "Manifest: val_khor" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml &&
 run "Manifest: aethelgard" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml &&
 run "Manifest: uz_job" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml &&
+run "Manifest: household (rung 1; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml &&
+run "Manifest: hamlet (rung 2; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml &&
 run "Manifest: invalid_draft_style must FAIL" fail "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml &&
 run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-targets --locked --quiet -- -D warnings &&
 # Tier 2 — unit tests

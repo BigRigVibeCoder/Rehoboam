@@ -53,6 +53,8 @@ REQUIRED_GATES = (
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
     "Manifest: aethelgard",
+    "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
+    "Manifest: household (rung 1; SPR-011 ruling 18)",
     "Manifest: invalid_draft_style must FAIL",
     "Manifest: solo",
     "Manifest: uz_job",
