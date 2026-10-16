@@ -12,6 +12,7 @@
 //! REF: `CODEX/05_PROJECT/SPR-010_FixedPoint.md`; `05.1` §6 item 4; `05.5` §2.1; ADR-0006;
 //! GOV-003 §2.
 
+mod arith;
 mod money;
 mod q;
 mod round;
