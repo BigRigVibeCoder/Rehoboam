@@ -248,3 +248,39 @@ Verdict and counts agree on 3,416 of the 3,420 original manifests. The 4 remaini
 ### 9.4 Next step
 
 DEF-11 needs a Developer decision (normalise or refuse) and fixtures. After that, repeat `fuzz2` (expect 0 verdict differences) and `cases12`. DEF-3, DEF-6/GAP-2 and GAP-6 stay deferred as ruled.
+
+## 10. Re-verification at 3559bf5
+
+Tested commit: `3559bf5` (on top of `086387b`). PR #6 conflicts with `main`, so CI did not run on it; `bin/check_all.sh` was run locally on a clean checkout of the head: **PASS, 102 checks** (including the 49 `tests/manifest_parity` fixtures, 15 of them new per-character, per-position line-break fixtures). New probe sets: `cases14` (103 cases: NEL, LS and PS in 34 positions each, including after a value, after a key, before a key, on a blank line, in a plain scalar and a plain key, in a comment, in double- and single-quoted scalars (also at the end, escaped, and several in a row), in flow mappings and sequences, in `|` and `>` scalars, after `-`, `---` and an anchor, at the start and end of the file, mixed with CRLF), `cases15` (10) and `cases16` (11) (the same constructs written with an ordinary newline, to separate what is new from what is not). `fuzz2` and `cases12` were rerun.
+
+### 10.1 Verdict
+
+| Item | Verdict | Basis |
+|---|---|---|
+| DEF-11 (NEL, LS, PS as YAML 1.1 line breaks) | **FIXED** | After a value, after or before a key, on a blank line, in a plain scalar, in a plain key, in a comment (also at the end of a line comment), in `\|` and `>` scalars, after `-`, `---` and an anchor, at the start and end of the file, mixed with CRLF, and `mixed_all`: 76 of 76 positions agree with the reference on verdict, counts and every line, for each of the three characters. `cases12` (232 cases) still 0 differences. `fuzz2`: verdict differences fell from 102 to 41, and none of the 41 is a line-break character read as text. |
+| Local `check_all.sh` | **PASS** | 102 checks. |
+
+### 10.2 What remains in `fuzz2` and `cases14`: two grammar differences that do not depend on the fix
+
+The 41 `fuzz2` differences, and the 27 `cases14` differences, all fall into two classes. Both reproduce with an ordinary newline (`cases15`, `cases16`) and on the earlier heads `5f3939d` and `58aa4d8` (same results), so DEF-11 did not cause them; making NEL, LS and PS real line breaks only lets a fuzzer reach them more often.
+
+**DEF-12 (medium-low): a flow collection or a quoted scalar that continues on a line indented no more than its parent key is a load error in Rust and valid in PyYAML.** Clause: V-WC-04; the GAP-1 ruling (YAML 1.1 as PyYAML reads it).
+- Reproduction (ordinary newline, no special character): in `specs/manifest/examples/solo.yaml` replace `display_name: "Solo test world"` with `display_name: "Solo<newline>world"` (continuation at column 0), or `systems: {}` with `systems: {<newline>}`, or `{years: 80, label: historical}` with `{years: 80,<newline>label: historical}`.
+- Expected: `PY` gives `VALID`. Actual: `RS` gives `LOAD ERROR: YAML syntax error: invalid indentation in quoted scalar` or `invalid indentation`. A continuation indented by 4 (`"Solo<newline>    world"`) agrees. A single-quoted scalar, a flow mapping and a flow sequence behave the same; `institutions: [<newline>  standing_army<newline>]` agrees. 6 of 10 `cases15` forms differ.
+- Extent: 25 of the 41 `fuzz2` differences and 27 of 103 `cases14` cases (the quoted-scalar and flow positions of each character). A multi-line flow mapping with its closing brace at column 0 is a plausible way to write a long `systems` or `fidelity_profile` block.
+- Fix: relax the indentation check for continuation lines of flow collections and quoted scalars (PyYAML does not enforce it), or refuse the form in both validators; the reference is the contract, so relaxing is the consistent choice.
+
+**DEF-13 (low): a line break inside a plain scalar that is an implicit key of a flow mapping is accepted by Rust and refused by PyYAML.** Clause: V-WC-04.
+- Reproduction (ordinary newline): replace `{years: 80, label: historical}` with `{years: 80, la<newline>   bel: historical}`.
+- Expected: `PY` stops with `ParserError: while parsing a flow mapping` (exit 1), so `RS` must give a `LOAD ERROR`. Actual: `RS` reads the key as `la bel` and gives `SCHEMA INVALID` (exit 2). The same with a quoted key (`"la<newline>   bel"`), a key broken after its first letters, and a key spanning two breaks; 7 of 11 `cases16` forms differ. Values and sequence items with a line break (`label: histor<newline>   ical`, `[protag<newline>   onist]`) agree, and so do multi-line keys in block mappings.
+- Extent: 16 of the 41 `fuzz2` differences. Low, because a key split across lines in a flow mapping is a typing accident, and the manifest is invalid either way (the key is unknown); it only changes the exit code and the message.
+
+The remaining `fuzz2` message-only difference is cosmetic (a dict shown as `{...}` in a union-tag message).
+
+### 10.3 Regression
+
+The 3,420 original manifests and the 1,500 ASCII fuzz cases were not rerun on this head: `3559bf5` changes only line-break handling in `yaml.rs` and its fixtures, and the 102-check run includes the 49-fixture parity gate. The earlier sets that exercise this code were rerun: `cases12` 232 and `cases14` 103 (above), `cases15` and `cases16` on three heads. If the Architect wants the full 3,420 and 1,500 repeated after the DEF-12 and DEF-13 fixes, I will run them then.
+
+### 10.4 Next step
+
+DEF-11 is closed. DEF-12 and DEF-13 are not regressions and do not block G0 on their own, but DEF-12 is the one a hand-written manifest can hit (a multi-line flow mapping with a closing brace at the left margin). Suggested: fix DEF-12 with a fixture per construct, decide DEF-13 (fix or accept as a known divergence in `tests/manifest_parity/README.md`), then repeat `cases14` to `cases16` and `fuzz2` (expect 0 verdict differences, apart from the explicit tags of DEF-3).
