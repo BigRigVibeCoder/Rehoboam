@@ -201,6 +201,32 @@ fn a_replay_reads_only_the_journal_file() {
     assert!(conn.execute("DELETE FROM inputs", []).is_err());
 }
 
+/// The writer's own connection runs WAL with synchronous=FULL, after create and after open (the
+/// pragmas are per connection; a second connection would not see a dropped `synchronous`).
+#[test]
+fn the_writer_connection_is_wal_and_synchronous_full() {
+    let dir = fresh_dir("durability");
+    let path = dir.join("j.sqlite");
+    let j = Journal::create(&path, &key()).unwrap();
+    assert_eq!(j.durability().unwrap(), ("wal".to_owned(), 2));
+    drop(j);
+    let j = Journal::open(&path, &key()).unwrap();
+    assert_eq!(j.durability().unwrap(), ("wal".to_owned(), 2));
+}
+
+/// Where WAL cannot be set the writer refuses. An in-memory database is the portable case:
+/// `SQLite` answers `memory` to `PRAGMA journal_mode = WAL` there.
+#[test]
+fn the_writer_refuses_without_wal() {
+    let err = Journal::create(std::path::Path::new(":memory:"), &key())
+        .err()
+        .expect("an in-memory journal must be refused");
+    assert!(
+        matches!(&err, JournalError::Schema(m) if m.contains("WAL unavailable (got memory)")),
+        "{err}"
+    );
+}
+
 #[test]
 fn the_writer_uses_wal_and_creates_a_journal_once() {
     let dir = fresh_dir("wal");
