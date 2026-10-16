@@ -16,7 +16,7 @@ pub enum RngPurpose {
     MurderCulprit = 4,  // key: (ruler, month)
     ArbitrationTie = 5,  // key: (title, tick)
     RegrantTie = 6,  // key: (title, tick)
-    Sortition = 7,  // key: (person, tick)
+    Sortition = 7,  // key: (person, title, tick)
     InterregnumDelay = 8,  // key: (title, tick)
     Vocation = 9,  // key: (person)
 }

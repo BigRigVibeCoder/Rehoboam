@@ -21,6 +21,8 @@
 # Round 4d (from the effect-language spec, PR #41 §5.3): relations by their exact names, kin(p, n) and related(a, b, n);
 # the legal heir is "by the title's law (the effect language's succession laws, SPR-017)", the candidate set is not
 # restated here; the sortition law's draws are the `sortition` purpose.
+# Round 4g (effect-language re-check, B3): title.founder is replaced by an append-only tenure log (tenure.*) that the
+# title's law may read (holders_of(title, 8)); `sortition` is keyed by the title too.
 odd_r = 2
 
 [system]
@@ -112,11 +114,32 @@ plane = "A"
 meaning = "TitleId = H64(seed, \"title\", k) from the manifest; the set of titles is fixed at world creation (finite seats)"
 fixed_point = false
 [[owns]]
-column = "title.founder"
-entity = "title"
+column = "tenure.title"
+entity = "tenure"
 type = "u64"
 plane = "A"
-meaning = "PersonId of the title's first holder. Set for every title at world creation (rh-worldgen, initial values only, as for the other title columns), or by M7 when a title is created (F1 creates none); never written again. The title's law may read it: the effect language's title-blood rule descends(x, title.founder(title)) keeps collateral heirs to the founder's blood (PR #41; the director chooses that default or the unrestricted variant at the SPR-017 gate)"
+meaning = "TitleId of the tenure. The tenure log is append-only, one row per change of holder, never compacted (ADR-0007): SUCCEED, a regrant, an interregnum's resolution and a reversion in demesne each append a row and close the previous one; rh-worldgen writes each title's initial holder's row at world creation (initial values, SPR-011 ruling 10). It is the reign list the chronicle and the V-SAGA tests read, and the title's law may read it (round 4g: the title-blood rule descends from the holder or from one of holders_of(title, 8))"
+fixed_point = false
+[[owns]]
+column = "tenure.holder"
+entity = "tenure"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the holder for this tenure"
+fixed_point = false
+[[owns]]
+column = "tenure.start"
+entity = "tenure"
+type = "i64"
+plane = "A"
+meaning = "SimTime the holder took the title"
+fixed_point = false
+[[owns]]
+column = "tenure.end"
+entity = "tenure"
+type = "i64"
+plane = "A"
+meaning = "SimTime the tenure ended; i64::MAX while held; written once, when the tenure ends (death, deposition, a holder leaving by regrant or reversion)"
 fixed_point = false
 [[owns]]
 column = "title.tier"
@@ -505,8 +528,8 @@ key = ["title", "tick"]
 use = "entity = the title or office, k = 0, t = the year's first instant: an exact score tie in the yearly regrant (separate from arbitration_tie, which an interregnum resolution can draw at the same instant)"
 [[rng]]
 purpose = "sortition"
-key = ["person", "tick"]
-use = "entity = the candidate, k = 0, t = the arbitration instant: under the sortition law the effect language's rng_permutation(purpose = \"sortition\") (05.5 §2.1; SPR-017) orders the eligible candidates by ascending draw, ties in ascending PersonId; one draw per candidate per arbitration"
+key = ["person", "title", "tick"]
+use = "entity = the candidate, k = the title's TitleId (so titles vacated in one step with overlapping candidates get independent orders; round 4g), t = the arbitration instant: under the sortition law the effect language's rng_permutation(purpose = \"sortition\") (05.5 §2.1; SPR-017) orders the eligible candidates by ascending draw, ties in ascending PersonId; one draw per candidate per arbitration"
 [[rng]]
 purpose = "interregnum_delay"
 key = ["title", "tick"]
@@ -624,7 +647,7 @@ summary = "In the death instant's Day/Polity binding (every death is an M2 timer
 earns_its_place_by = ["V-SAGA-19", "V-INV-03"]
 [[submodels]]
 name = "arbitrate"
-summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (the effect language's succession laws, SPR-017, which may read title.founder for the title-blood rule; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims (each claim.rank is recomputed here), and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees through kin(holder, dormancy_degrees) over the life-course columns); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest living adult kin in the law's order through kin(p, n), else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
+summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (the effect language's succession laws, SPR-017, which may read the tenure log, e.g. holders_of(title, 8) for the title-blood rule; every holder change below appends a tenure row and closes the previous one; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims (each claim.rank is recomputed here), and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees through kin(holder, dormancy_degrees) over the life-course columns); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest living adult kin in the law's order through kin(p, n), else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
 earns_its_place_by = ["V-SAGA-19", "V-SF-06b"]
 [[submodels]]
 name = "exit"
@@ -655,6 +678,10 @@ earns_its_place_by = ["V-INV-12"]
 [[invariants]]
 id = "INV-M7-01"
 statement = "At every tick boundary every title is held by a living holder or is in a declared interregnum; awaiting never leaves the step that set it (on_death or exit arbitrate in-step); a holder holds each title at most once"
+test = "V-SAGA-19"
+[[invariants]]
+id = "INV-M7-08"
+statement = "Exactly one open tenure row (end = i64::MAX) per held title, and its holder is title.holder; a title in interregnum has none; tenure rows are never removed and each end is written once"
 test = "V-SAGA-19"
 [[invariants]]
 id = "INV-M7-02"
