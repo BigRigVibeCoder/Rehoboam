@@ -1,0 +1,35 @@
+# Security advisories for Rust dependencies (SPR-001 T-05; ADR-0021; GOV-002 §1 law 8).
+# Kept out of the PR tier on purpose: a newly published advisory can turn this check red with no
+# change in the repository, and a gate that changes colour by itself is flaky. A failure here opens
+# a DEF- (or an EVO- to replace the crate); it does not block unrelated merges.
+# Scheduled runs use the default branch.
+name: advisories
+
+on:
+  schedule:
+    - cron: "17 5 * * *"  # daily, 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-deny-advisories:
+    name: cargo deny check advisories
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: cargo-deny (prebuilt binary)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20
+
+      - name: cargo deny check advisories
+        run: cargo deny --color never --locked check advisories

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Runs the PR tier before every push (SPR-001 T-05). Installed by bin/install_hooks.sh.
+# It checks the working tree as it is; the report counts uncommitted files, so commit first.
+# `git push --no-verify` skips it, but the Architect still requires a green report (docs/13 §4.4).
+set -u
+root="$(git rev-parse --show-toplevel)" || exit 1
+echo "pre-push: running bin/check_all.sh (report: artifacts/check_report.md)" >&2
+if ! "$root/bin/check_all.sh"; then
+  echo "pre-push: check_all.sh failed; push aborted. See $root/artifacts/check_report.md" >&2
+  exit 1
+fi

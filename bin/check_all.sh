@@ -7,7 +7,7 @@
 # `uv sync --frozen --project python` (RUN-001 §2-4). A missing tool fails the first check by name;
 # nothing is ever skipped silently.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || { echo "check_all.sh: cannot enter the repository root" >&2; exit 2; }
 if [ -n "${PYTHON:-}" ]; then PY="$PYTHON"; elif [ -x python/.venv/bin/python ]; then PY=python/.venv/bin/python; else PY="$(command -v python3 || command -v python)"; fi
 REPORT="artifacts/check_report.md"
 mkdir -p artifacts
@@ -20,6 +20,10 @@ dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   echo "- **Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "- **Commit:** ${commit} (${dirty} uncommitted files) · **Branch:** ${branch}"
   echo "- **Python:** $(${PY} --version 2>&1)"
+  # On GitHub Actions the checkout is detached; name the run so the report can be traced to it.
+  if [ "${GITHUB_ACTIONS:-}" = true ]; then
+    echo "- **CI run:** ${GITHUB_SERVER_URL:-}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-} (${GITHUB_EVENT_NAME:-} on ${GITHUB_REF:-}, head ${GITHUB_SHA:-})"
+  fi
   echo
   echo "| # | Check | Result | Seconds |"
   echo "|---|---|---|---|"
@@ -32,7 +36,8 @@ n=0; failed=""
 run() {
   local name="$1" expect="$2"; shift 2
   n=$((n+1))
-  local t0=$(date +%s) out rc
+  local t0 out rc
+  t0=$(date +%s)
   out="$("$@" 2>&1)"; rc=$?
   local dt=$(( $(date +%s) - t0 ))
   local ok=0
@@ -83,6 +88,7 @@ forbidden_api_controls() {
 
 # Tier 1 — static and contract lints (fastest first)
 run "Document index is current (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
+run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml &&
 run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pyproject.toml --no-cache . &&
 run "Python: format (ruff format --check)" pass "$PY" -I -m ruff format --config python/pyproject.toml --no-cache --check . &&
 run "Python: types (mypy --strict)" pass "$PY" -I -m mypy --config-file python/pyproject.toml &&

@@ -44,6 +44,8 @@ worlds/                  reference manifests and golden baselines (changed only 
 docs/ research/ CODEX/   plan, evidence, operations
 bin/                     check_all.sh, gen_manifest.py, architecture lints, developer scripts
 tests/lint_fixtures/     planted violations: positive controls for the gates (SPR-001)
+.github/workflows/       CI: ci.yml (PR tier, bin/check_all.sh), advisories.yml (scheduled)
+.githooks/               pre-push hook running bin/check_all.sh (bin/install_hooks.sh)
 artifacts/               reports, crash artifacts (git-ignored)
 ```
 
