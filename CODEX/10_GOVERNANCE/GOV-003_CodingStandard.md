@@ -34,7 +34,7 @@ version: 1.1.0
 | **No `HashMap`/`HashSet` iteration** in authoritative code; use `BTreeMap`, `IndexMap` with a deterministic insertion order, or sorted vectors | Architecture lint |
 | **No float-order-dependent reductions** in authoritative code: fixed point, or ordered reductions with a declared order | Lint plus review |
 | **Fixed point** (`q8_8`, `q16_16`, `i64` minutes) for any quantity that crosses a threshold; floats only for declared fields | Spec (`.odd.toml` `fixed_point`) plus lint |
-| **Keyed RNG only:** `H(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)`. Each purpose is declared in the system spec; no thread-local or global RNG | Lint against the spec's `[[rng]]` |
+| **Keyed RNG only:** `H(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)`. Each purpose is declared in the system spec; no thread-local or global RNG | Lint against the spec's `[[rng]]` |
 | **No wall-clock reads** (`Instant::now`, `SystemTime`) in plane A | Lint |
 | **Single writer:** a system writes only columns its spec owns; others are requested through lifecycle commands | `AccessSpec` checker against the Registry |
 | **Plane isolation:** plane-A crates never depend on plane-B or plane-C crates | Dependency-graph lint |

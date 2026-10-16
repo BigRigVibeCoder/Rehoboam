@@ -1,6 +1,6 @@
 //! The keyed hash `H` (SPR-002 T-02).
 //!
-//! `u = H(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)` (ADR-0006 v1.1 item 2),
+//! `u = H(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)` (ADR-0006 v1.1 item 2),
 //! plus the entity's `epoch` (ADR-0025: the re-sample key carries the count of material inputs that
 //! have touched the entity), built on `ChaCha8` "with stream and position": the key fields select a
 //! `ChaCha8` stream, `k` is the position in it.

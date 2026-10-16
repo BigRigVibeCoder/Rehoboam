@@ -185,7 +185,7 @@ typed_id! {
 /// a raw value; the RNG purpose, which declares its entity kind (`[[rng]] key` in the system spec),
 /// keeps their draws apart.
 pub trait EntityKey {
-    /// The value used as `entity_id` in `H(world_seed, branch_salt(t), system_id, purpose,
+    /// The value used as `entity_id` in `H(world_seed, branch_salt(t), system_id, epoch, purpose,
     /// entity_id, t, k)`.
     fn entity_key(self) -> u64;
 }

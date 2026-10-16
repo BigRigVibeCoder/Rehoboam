@@ -17,7 +17,7 @@ Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and b
 - **The simulation decides; LLMs describe.** LLM output enters state only as a journaled, schema-validated input (ADR-0006, ADR-0011, ADR-0034); LLMs never choose actions and the engine never waits on a model.
 - **Determinism.**
   - History = f(engine_build, registry_version, manifest_hash, seed, input_journal).
-  - Use keyed counter-based RNG only: `H(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)`.
+  - Use keyed counter-based RNG only: `H(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)`.
   - Threshold quantities must be fixed-point.
   - No HashMap iteration and no float-order-dependent reductions in authoritative code.
 - **Three planes (ADR-0024).** Plane A (authoritative) never reads plane B (observation: pins, facts ledger, hydrated views) or plane C (narrative: sift matches, significance, visibility). The only way into plane A is a journaled material input.

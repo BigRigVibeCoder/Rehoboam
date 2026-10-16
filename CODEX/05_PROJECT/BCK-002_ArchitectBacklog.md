@@ -35,3 +35,5 @@ version: 1.1.0
 | A-16 | Remind the director to run RUN-001 on the laptop (SPR-001 T-00) | Now | Open |
 | A-14 | Add the engine-purity rule to `bin/lint_arch.py` (ADR-0035 §6; EVO-4; V-INSP-05): engine crates (`rh-core`, `rh-ids`, `rh-events`, `rh-registry`, `rh-contracts`, `rh-snapshot`, `rh-sys-*`, `rh-sifter`, `rh-server`, `rh-cli`) may not depend on media, HTTP-UI or LLM-client crates; one deny-list kept in one place (e.g. `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`), with a positive control in `tests/lint_fixtures/` | P1a | Open |
 | A-17 | Write the `T1.minds` and `M7.dynasty` specs, which P1a now needs (ADR-0035; BCK-001 §3) | Before the P1a sprints | Open |
+| A-18 | SPR-005: systems declare RNG purposes from their specs; check `[[rng]]` against the code (`VER-SPR-002` GAP-3) | SPR-005 | Open |
+| A-19 | Timeline Manager (P2.6): test that timeline ids are unique, since salt uniqueness depends on it (`VER-SPR-002` GAP-4) | P2.6 | Open |
