@@ -33,6 +33,8 @@ REQUIRED_GATES = (
     "(SPR-010 GAP-3)",
     "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 T-00)",
     "Clippy libm-only positive control: std ln in rh-sample must FAIL (SPR-003 T-00)",
+    "DEF-3 forged keyframes: no bit flip in the Arrow body panics, aborts or loads another state "
+    "(SPR-007 T-02)",
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",

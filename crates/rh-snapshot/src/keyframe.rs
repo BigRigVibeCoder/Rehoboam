@@ -41,6 +41,10 @@
 //! ([`Engine::restore`], canonical form only) and checks the restored engine's hash once more.
 //! A keyframe of a poisoned engine is refused.
 //!
+//! Loading never trusts the Arrow body (VER-SPR-007-TEST round 2 DEF-3): its IPC metadata is
+//! validated first ([`crate::ipc_guard`]), a panic inside Arrow is caught and refused, and every
+//! keyframe is read back when it is written.
+//!
 //! The keyframe's [`JournalPosition`] is the anchor that catches a journal truncated together with
 //! a forged count and head (`crate::journal`, GAP-5).
 //!
@@ -66,6 +70,7 @@ use rh_core::world::WorldTables;
 use rh_ids::BranchSalt;
 
 use crate::hash::{LAYOUT, xxh3_128};
+use crate::ipc_guard::MAX_VALUES_BYTES;
 use crate::journal::JournalPosition;
 use crate::state::{DecodeError, decode_engine_tables, engine_tables, state_hash};
 
@@ -143,6 +148,14 @@ pub enum KeyframeError {
     Decode(DecodeError),
     /// The decoded state is not one the engine restores.
     Restore(RestoreError),
+    /// The Arrow IPC metadata is not a keyframe's (schema, offsets or declared sizes), refused
+    /// before Arrow decodes anything (DEF-3 layer 1).
+    Ipc(String),
+    /// Arrow panicked while decoding; the panic was caught (DEF-3 layer 2).
+    Panicked(String),
+    /// A keyframe just written does not read back to the state it was written from (DEF-3
+    /// layer 3).
+    ReadBack(String),
     /// The state's hash differs from the stored one.
     HashMismatch {
         /// The hash in the header.
@@ -160,6 +173,11 @@ impl fmt::Display for KeyframeError {
             Self::Poisoned(e) => write!(f, "keyframe: the engine is poisoned ({e})"),
             Self::History(field) => write!(f, "keyframe: belongs to another history ({field})"),
             Self::Decode(e) => write!(f, "keyframe: {e}"),
+            Self::Ipc(m) => write!(f, "keyframe: the Arrow IPC metadata is refused: {m}"),
+            Self::Panicked(m) => write!(f, "keyframe: Arrow panicked while decoding: {m}"),
+            Self::ReadBack(m) => {
+                write!(f, "keyframe: the written keyframe does not read back: {m}")
+            }
             Self::Restore(e) => write!(f, "keyframe: {e}"),
             Self::HashMismatch { stored, computed } => write!(
                 f,
@@ -208,7 +226,8 @@ fn all_tables(state: &EngineState) -> BTreeMap<String, Vec<Vec<u8>>> {
 /// # Errors
 /// [`KeyframeError::Poisoned`] for a poisoned engine; [`KeyframeError::Format`] if the journal
 /// position is another timeline's or a table name holds a tab or newline;
-/// [`KeyframeError::Arrow`] if Arrow fails.
+/// [`KeyframeError::Arrow`] if Arrow fails; [`KeyframeError::ReadBack`] if the written bytes do not
+/// read back to exactly this state and header (DEF-3 layer 3).
 pub fn write_keyframe(
     engine: &Engine,
     history: &History,
@@ -243,14 +262,51 @@ pub fn write_keyframe(
     let all = std::iter::once((HEADER_TABLE, &header_rows))
         .chain(tables.iter().map(|(n, r)| (n.as_str(), r)));
     for (name, rows) in all {
-        for chunk in rows.chunks(BATCH_ROWS) {
+        for chunk in batches(name, rows)? {
             let names: ArrayRef = Arc::new(StringArray::from(vec![name; chunk.len()]));
             let values: ArrayRef = Arc::new(BinaryArray::from_iter_values(chunk.iter()));
             writer.write(&RecordBatch::try_new(schema.clone(), vec![names, values])?)?;
         }
     }
     writer.finish()?;
-    Ok((seal_keyframe(&writer.into_inner()?), header))
+    let bytes = seal_keyframe(&writer.into_inner()?);
+    // DEF-3 layer 3: a keyframe that does not read back to exactly this state is never handed
+    // to the host, so a buggy writer is caught where it writes, not years later at a load.
+    match read_keyframe(&bytes, engine.registered()) {
+        Ok((read, read_header)) if read == state && read_header == header => Ok((bytes, header)),
+        Ok(_) => Err(KeyframeError::ReadBack(
+            "it decodes to another state or header".to_owned(),
+        )),
+        Err(e) => Err(KeyframeError::ReadBack(e.to_string())),
+    }
+}
+
+/// A table's rows split into record batches of at most [`BATCH_ROWS`] rows and at most
+/// [`MAX_VALUES_BYTES`] bytes of rows or of repeated names, the bounds the loader checks
+/// ([`crate::ipc_guard`]).
+fn batches<'r>(name: &str, rows: &'r [Vec<u8>]) -> Result<Vec<&'r [Vec<u8>]>, KeyframeError> {
+    let mut out = Vec::new();
+    let (mut start, mut bytes) = (0, 0_usize);
+    for (k, row) in rows.iter().enumerate() {
+        if row.len().max(name.len()) > MAX_VALUES_BYTES {
+            return Err(KeyframeError::Format(format!(
+                "a row of table {name} has {} bytes",
+                row.len()
+            )));
+        }
+        let full = k - start == BATCH_ROWS
+            || bytes + row.len() > MAX_VALUES_BYTES
+            || (k - start + 1) * name.len() > MAX_VALUES_BYTES;
+        if full {
+            out.push(&rows[start..k]);
+            (start, bytes) = (k, 0);
+        }
+        bytes += row.len();
+    }
+    if start < rows.len() {
+        out.push(&rows[start..]);
+    }
+    Ok(out)
 }
 
 /// Wraps Arrow IPC bytes in the keyframe envelope: [`KEYFRAME_MAGIC`], then their XXH3-128.
@@ -333,30 +389,28 @@ fn unhex16(text: &str) -> Option<[u8; 16]> {
 /// that the state hashes to the stored hash.
 ///
 /// # Errors
-/// [`KeyframeError::Arrow`], [`KeyframeError::Format`], [`KeyframeError::Decode`] or
+/// [`KeyframeError::Format`] (envelope, header), [`KeyframeError::Ipc`] (the IPC metadata is not a
+/// keyframe's, checked before Arrow decodes: [`crate::ipc_guard`]), [`KeyframeError::Panicked`]
+/// (Arrow panicked, caught), [`KeyframeError::Arrow`], [`KeyframeError::Decode`] or
 /// [`KeyframeError::HashMismatch`].
 pub fn read_keyframe(
     bytes: &[u8],
     registered: &Registered,
 ) -> Result<(EngineState, KeyframeHeader), KeyframeError> {
-    let reader = FileReader::try_new(Cursor::new(unseal_keyframe(bytes)?), None)?;
-    let mut lines: Vec<Vec<u8>> = Vec::new();
-    let mut tables: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
-    for batch in reader {
-        let batch = batch?;
-        let (names, rows) = columns(&batch)?;
-        for k in 0..batch.num_rows() {
-            let row = rows.value(k).to_vec();
-            if names.value(k) == HEADER_TABLE {
-                lines.push(row);
-            } else {
-                tables
-                    .entry(names.value(k).to_owned())
-                    .or_default()
-                    .push(row);
-            }
-        }
-    }
+    let arrow = unseal_keyframe(bytes)?;
+    crate::ipc_guard::check(arrow)?;
+    // DEF-3 layer 2: a panic inside Arrow on a body that passed layer 1 is caught and refused.
+    // An allocation failure aborts instead and cannot be caught: layer 1's size bounds are what
+    // prevent those.
+    let decoded = std::panic::catch_unwind(|| decode_rows(arrow)).map_err(|panic| {
+        let what = panic
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| panic.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        KeyframeError::Panicked(what)
+    })?;
+    let (lines, mut tables) = decoded?;
     let (header, expected) = parse_header(&lines)?;
     for (name, count) in &expected {
         let got = tables.get(name).map_or(0, Vec::len);
@@ -463,6 +517,31 @@ fn parse_header(
         }
     }
     Ok((header, expected))
+}
+
+/// The header lines and the tables' rows of an Arrow IPC keyframe body.
+type Decoded = (Vec<Vec<u8>>, BTreeMap<String, Vec<Vec<u8>>>);
+
+fn decode_rows(arrow: &[u8]) -> Result<Decoded, KeyframeError> {
+    let reader = FileReader::try_new(Cursor::new(arrow), None)?;
+    let mut lines: Vec<Vec<u8>> = Vec::new();
+    let mut tables: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
+    for batch in reader {
+        let batch = batch?;
+        let (names, rows) = columns(&batch)?;
+        for k in 0..batch.num_rows() {
+            let row = rows.value(k).to_vec();
+            if names.value(k) == HEADER_TABLE {
+                lines.push(row);
+            } else {
+                tables
+                    .entry(names.value(k).to_owned())
+                    .or_default()
+                    .push(row);
+            }
+        }
+    }
+    Ok((lines, tables))
 }
 
 fn columns(batch: &RecordBatch) -> Result<(&StringArray, &BinaryArray), KeyframeError> {

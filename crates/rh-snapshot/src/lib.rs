@@ -19,6 +19,7 @@
 
 pub mod guard;
 pub mod hash;
+pub mod ipc_guard;
 pub mod journal;
 pub mod keyframe;
 pub mod state;
