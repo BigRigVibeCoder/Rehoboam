@@ -104,4 +104,14 @@ Full technical dossiers in `docs/red_team/PHILOSOPHY_AND_BACKLOG.md` and `docs/r
   4. *The Dynastic Nobility Thermostat:* Cadet-branch pruning holding active named actors to a bounded equilibrium of $N \in [150, 400]$, preventing the Dwarf Fortress/CK2 noble explosion.
 * **Target Specs:** `M14.court_politics`, `M7.dynasty`, `S6.artifacts`, Downstream Narrative Compiler.
 
+### Architect's intake notes on batch 03 (2026-10-16)
+These are not dispositions; those come at G0. They list where batch 03 conflicts with ratified contracts, so the G0 fold starts from them.
 
+| # | Item | Conflict or open point | Contract |
+|---|---|---|---|
+| N1 | Item 10, Case 6 | Sifting is plane C, not plane B. Plane B is observation (pins, facts ledger, hydrated views) | ADR-0024; `05.2` §0 |
+| N2 | Item 10, frontier 2 (domain tokens) | The example puts adjectives and an architectural accent in `registry_v0.toml`. The Registry holds mechanics only, and presentation stays out of plane A (Law 1 itself; visual DNA is a plane-C function). G0 question: is a domain a plane-A attribute with a mechanical effect, or a plane-C derivation? Either way, the presentation tables live in plane C | ADR-0010; ADR-0035; D28 |
+| N3 | Item 10, frontier 4 (thermostat) | (a) Demotion changes fidelity going forward only; a named actor's recorded history is never compacted. (b) A controller that holds N in a target band is a regulative governor of the kind Case 4 rejects. The band should emerge from mechanics (inheritance law, holy orders, mortality) and be checked as a test expectation, not enforced. (c) T1 promotion already uses simulation criteria only (office, great-house rank, material involvement, Registry notability); what is missing is the matching demotion rule when the criteria lapse | ADR-0007; `05.2` §1 (named actor, T1) |
+| N4 | Item 9, charter | The charter's status line reads "Ratified". The decisions log records the director ratifying Law 1 ("the engine only engines", D28) but not the charter, Laws 2 to 5 or the backlog. They are recorded as proposed until the director rules | `docs/decisions-log.md` D28 |
+| N5 | Item 9, RT-ACT-007 to 009 | Red-team audits of sprints are welcome; any defect goes to the Architect immediately (`README.md`). Status at intake: SPR-002 is merged (VER-SPR-002, PASS); SPR-010 and SPR-004 are in their final round | GOV-005 §6 |
+| N6 | Items 9 and 10 | Figures such as the "~35-byte" event envelope, "< 15 ms over 1M rows" and "N in [150, 400]" are not measured. They are evidence for proposals, not measurements of Rehoboam; RT-ACT-012 and RT-ACT-010 would measure them. The cinematic envelope (roles, anchored snapshots, motive edges) is larger than 35 bytes | `README.md` (prototypes); `05.2` §4.1a |
