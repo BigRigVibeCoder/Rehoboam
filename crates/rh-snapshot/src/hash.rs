@@ -420,12 +420,19 @@ impl MerkleCache {
     }
 
     /// Marks the chunks holding `rows` of `table` dirty, for the next [`update`](Self::update).
+    ///
+    /// The range is clamped to the rows the cache holds for the table: rows past them are new,
+    /// and [`update`](Self::update) hashes them when it sees the larger row count. An empty or
+    /// fully out-of-range span marks nothing (VER-SPR-007 DEF-2: `0..usize::MAX` once inserted
+    /// ~1.8e16 chunk indices).
     pub fn mark_rows(&mut self, table: &str, rows: std::ops::Range<usize>) {
-        if let Some(c) = self.tables.get_mut(table)
-            && !rows.is_empty()
-        {
+        let Some(c) = self.tables.get_mut(table) else {
+            return;
+        };
+        let end = rows.end.min(c.digest.rows);
+        if rows.start < end {
             c.dirty
-                .extend((rows.start / CHUNK_ROWS)..=((rows.end - 1) / CHUNK_ROWS));
+                .extend((rows.start / CHUNK_ROWS)..=((end - 1) / CHUNK_ROWS));
         }
     }
 
