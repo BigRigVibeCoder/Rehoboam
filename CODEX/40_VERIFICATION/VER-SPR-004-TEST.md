@@ -284,3 +284,20 @@ The 3,420 original manifests and the 1,500 ASCII fuzz cases were not rerun on th
 ### 10.4 Next step
 
 DEF-11 is closed. DEF-12 and DEF-13 are not regressions and do not block G0 on their own, but DEF-12 is the one a hand-written manifest can hit (a multi-line flow mapping with a closing brace at the left margin). Suggested: fix DEF-12 with a fixture per construct, decide DEF-13 (fix or accept as a known divergence in `tests/manifest_parity/README.md`), then repeat `cases14` to `cases16` and `fuzz2` (expect 0 verdict differences, apart from the explicit tags of DEF-3).
+
+### 10.5 Out of contract by the Architect's ruling (fail closed): confirmed, and counted apart from defects
+
+Both behave as the Architect described, on `3559bf5` (the head has not changed since §10.1; the explicit refusal text is already in that commit). Neither is counted as a defect.
+
+| Form | Python reference | Rust loader | Probe |
+|---|---|---|---|
+| **(a)** U+2028 or U+2029 inside a folded block scalar (`>`, `>-`) | `VALID` | `LOAD ERROR: a line separator (U+2028) or paragraph separator (U+2029) inside a folded block scalar ...` (exit 1) | `display_name: >` followed by an indented `Solo<LS>    world`; the same with PS, at the end of the scalar, and with `>-`: 8 of 8 differ as described. U+0085 (NEL) in a folded scalar, and LS, PS and NEL in a literal `\|` scalar, agree (`VALID` in both). |
+| **(b) = SPR-004 GAP-8**, the DEF-12 of §10.2 | `a: "x<newline>y"` `VALID`; `a: [1,<newline>2]` reads as a list | `LOAD ERROR: invalid indentation in quoted scalar` / `invalid indentation` (exit 1) | `display_name: "x<newline>y"` with `y"` at column 0, and `display_name: [a,<newline>b]`: both differ as described. A continuation indented by 4 agrees. |
+
+Accounting of the differences they cause, so that they are not read as defects:
+- **(b) is what DEF-12 describes**; with the ruling, DEF-12 is superseded by GAP-8 (the Rust loader fails closed, the reference accepts). It accounts for 25 of the 41 `fuzz2` verdict differences at `3559bf5` and 27 of the 103 `cases14` cases (the quoted-scalar and flow positions); in those 27 the only difference is the unindented continuation, whichever of NEL, LS, PS or a plain newline starts it.
+- **(a) causes none of the `fuzz2` or `cases14` differences.** The `cases14` folded-scalar probe put the continuation at column 0, so both validators refuse it; the 8 differing forms above come from the indented probe written for this section. Those forms are in no committed fixture or probe set except this one, so the corpus does not pin (a); suggest one `load_error_linebreak_ls_folded.yaml` fixture, with the reference side noted as accepted.
+- **DEF-13 is not covered by the ruling**: 16 of the 41 `fuzz2` differences. It stays open (Rust accepts what PyYAML refuses; the manifest is invalid either way).
+- Net count after the ruling: of 41 `fuzz2` verdict differences, 25 are GAP-8, 16 are DEF-13, 0 are unexplained; of 103 `cases14` cases, 76 agree and 27 are GAP-8.
+
+Residual risk of GAP-8, for the record: a manifest that a hand-writer lays out with a closing brace or a quoted continuation at the left margin is accepted by `manifest_v0.py` and refused by `rh-cli`. The failure is loud (a load error naming the line), not silent.
