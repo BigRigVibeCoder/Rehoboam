@@ -969,3 +969,78 @@ fn v_det_12_golden_event_log() {
         lines.len()
     );
 }
+
+/// A system that schedules a timer and keeps the trait's default `fire` (D7).
+struct NoFire;
+
+impl rh_core::system::SystemModel for NoFire {
+    fn descriptor(&self) -> rh_core::system::SystemDescriptor {
+        rh_core::system::SystemDescriptor {
+            id: "Y9.nofire",
+            fidelity: "F1",
+            spec_version: "0.0.0",
+        }
+    }
+    fn access(&self) -> rh_core::access::AccessSpec {
+        rh_core::access::AccessSpec::default()
+    }
+    fn schedule(&self) -> Vec<PulseBinding> {
+        vec![PulseBinding {
+            pulse: Pulse::Day,
+            phase: Phase::Vital,
+        }]
+    }
+    fn rng_purposes(&self) -> Vec<&'static str> {
+        Np::names()
+    }
+    fn params_schema(&self) -> rh_core::system::ParamSchema {
+        rh_core::system::ParamSchema::default()
+    }
+    fn step(
+        &self,
+        _: PulseBinding,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        if c.now() == SimTime::EPOCH {
+            c.schedule(
+                &Np::N,
+                spec_at(SimTime::from_minutes(DAY / 2), Phase::Vital),
+            )?;
+        }
+        Ok(())
+    }
+    fn invariants(&self, _: &WorldTables) -> Vec<rh_core::system::InvariantResult> {
+        Vec::new()
+    }
+    fn declared_aggregates(&self) -> Vec<rh_core::system::AggregateSpec> {
+        Vec::new()
+    }
+}
+
+#[test]
+fn d7_the_default_fire_is_a_sim_error_that_poisons_the_engine() {
+    let stub = Stub::new("Y9.nofire")
+        .purposes_of::<Np>()
+        .at(Pulse::Day, Phase::Vital);
+    let specs = agreeing_specs(&[stub]);
+    let registered = register(vec![Box::new(NoFire)], &specs).unwrap_or_else(|e| panic!("{e}"));
+    let mut e = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        WorldTables::new(),
+        SimTime::EPOCH,
+    );
+    let err = e
+        .advance_until(SimTime::from_minutes(3 * DAY), |_, _| {})
+        .unwrap_err();
+    assert!(
+        matches!(&err, SimError::System { system: "Y9.nofire", message } if message.contains("does not implement SystemModel::fire")),
+        "{err}"
+    );
+    assert_eq!(e.poisoned(), Some(&err));
+    let a = e.crash_artifact().unwrap();
+    assert_eq!((a.tick, a.phase.as_str()), (DAY / 2, "Vital"));
+}
