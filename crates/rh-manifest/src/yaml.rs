@@ -145,15 +145,25 @@ pub fn load(text: &str) -> Result<Value, YamlError> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut builder = Builder::default();
     let mut grammar = PyYamlGrammar::new(text);
+    // saphyr's Marker::index counts characters, not bytes (its doc comment says bytes; every
+    // `mark.index +=` in its scanner adds a character count). The grammar checks index the text by
+    // byte, so every position is converted here, once (SPR-004 DEF-9).
+    let byte_at: Vec<usize> = text
+        .char_indices()
+        .map(|(b, _)| b)
+        .chain(std::iter::once(text.len()))
+        .collect();
+    let to_byte = |chars: usize| byte_at.get(chars).copied().unwrap_or(text.len());
     let mut documents = 0usize;
     for item in Parser::new_from_str(text) {
         let (event, span) = item.map_err(|e| yerr(format!("YAML syntax error: {e}")))?;
         let at = || format!("line {}, column {}", span.start.line(), span.start.col());
+        let in_flow = grammar.in_flow();
         grammar
             .event(
                 &event,
-                span.start.index(),
-                span.end.index(),
+                to_byte(span.start.index()),
+                to_byte(span.end.index()),
                 builder.key_position(),
             )
             .map_err(|m| yerr(format!("{m} ({})", at())))?;
@@ -168,8 +178,16 @@ pub fn load(text: &str) -> Result<Value, YamlError> {
                 }
             }
             Event::Scalar(text, style, anchor, tag) => {
-                let value = scalar(&text, style, tag.as_deref())
-                    .map_err(|m| yerr(format!("{m} ({})", at())))?;
+                let value = if in_flow
+                    && style == ScalarStyle::Plain
+                    && tag.is_none()
+                    && text.starts_with('?')
+                {
+                    flow_key_indicator(&text[1..], builder.position())
+                } else {
+                    scalar(&text, style, tag.as_deref())
+                }
+                .map_err(|m| yerr(format!("{m} ({})", at())))?;
                 builder
                     .value(value, anchor)
                     .map_err(|m| yerr(format!("{m} ({})", at())))?;
@@ -216,6 +234,11 @@ struct PyYamlGrammar<'t> {
 }
 
 impl<'t> PyYamlGrammar<'t> {
+    /// Whether the innermost open collection is a flow collection.
+    fn in_flow(&self) -> bool {
+        self.flow.last().copied().unwrap_or(false)
+    }
+
     fn new(text: &'t str) -> Self {
         PyYamlGrammar {
             text,
@@ -235,8 +258,10 @@ impl<'t> PyYamlGrammar<'t> {
         let bytes = self.text.as_bytes();
         match event {
             Event::SequenceStart(..) | Event::MappingStart(..) => {
-                self.flow
-                    .push(matches!(bytes.get(start), Some(b'[' | b'{')));
+                // Inside a flow collection everything is flow, including the zero-width
+                // single-pair mapping of `[k: v]`.
+                let flow = self.in_flow() || matches!(bytes.get(start), Some(b'[' | b'{'));
+                self.flow.push(flow);
             }
             Event::SequenceEnd | Event::MappingEnd => {
                 self.flow.pop();
@@ -329,6 +354,34 @@ impl<'t> PyYamlGrammar<'t> {
     }
 }
 
+/// Where a value lands in the collection being built.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Position {
+    Key,
+    MapValue,
+    SeqItem,
+    Root,
+}
+
+/// A plain scalar `?rest` inside a flow collection. `PyYAML` reads a `?` there as the explicit-key
+/// indicator, whatever follows it (SPR-004 DEF-10): in key position the key is `rest`; as a flow
+/// sequence item it is the one-pair mapping `{rest: null}`; in value position it is refused.
+fn flow_key_indicator(rest: &str, position: Position) -> Result<Value, String> {
+    let key = resolve_plain(rest.trim_start())?;
+    match position {
+        Position::Key => Ok(key),
+        Position::SeqItem => {
+            if matches!(key, Value::Seq(_) | Value::Map(_)) {
+                return Err("found unhashable key".to_owned());
+            }
+            Ok(Value::Map(vec![(key, Value::Null)]))
+        }
+        Position::MapValue | Position::Root => Err(format!(
+            "found '?{rest}' in a flow mapping value: '?' starts a key there (PyYAML refuses it)"
+        )),
+    }
+}
+
 /// A collection under construction. A mapping holds its pairs, a pending key, and its merge
 /// sources (`<<`), which are applied when it closes.
 enum Frame {
@@ -356,6 +409,16 @@ impl Builder {
     /// Whether the next value is a mapping key.
     fn key_position(&self) -> bool {
         matches!(self.stack.last(), Some((Frame::Map(_, None, _), _)))
+    }
+
+    /// Where the next value goes.
+    fn position(&self) -> Position {
+        match self.stack.last() {
+            Some((Frame::Map(_, None, _), _)) => Position::Key,
+            Some((Frame::Map(..), _)) => Position::MapValue,
+            Some((Frame::Seq(..), _)) => Position::SeqItem,
+            None => Position::Root,
+        }
     }
 
     fn open(&mut self, frame: Frame) {
@@ -883,6 +946,76 @@ mod tests {
             "tab after a quoted scalar"
         );
         assert_eq!(load("\u{feff}a: 1\n").ok(), load("a: 1\n").ok());
+    }
+
+    /// DEF-9: every refusal still fires after multi-byte text (the parser's positions count
+    /// characters); DEF-10: a `?` that starts a flow plain scalar is `PyYAML`'s key indicator.
+    #[test]
+    fn refusals_survive_non_ascii_text_and_flow_key_indicators_follow_pyyaml() {
+        let refused = [
+            "a:\tx\n",
+            "a: {b: c?d}\n",
+            "a: [c?d]\n",
+            ": v\n",
+            "a:\n  : v\n",
+            "a: {: v}\n",
+            "h: {years: 1, label: ?historical}\n",
+            "a: {b: ?}\n",
+        ];
+        for t in refused {
+            for prefix in [
+                "",
+                "# \u{e9}\n",
+                "z: \u{1f409} \u{e9}t\u{e9}\n",
+                "q: '\u{4e16}\u{754c}'\n",
+            ] {
+                let doc = format!("{prefix}{t}");
+                assert!(load(&doc).is_err(), "accepted {doc:?}");
+            }
+        }
+        let s = |x: &str| Value::Str(x.to_owned());
+        let m = |pairs: Vec<(Value, Value)>| Value::Map(pairs);
+        let cases = [
+            ("a: ?x\n", m(vec![(s("a"), s("?x"))])),
+            (
+                "a: [?x, y]\n",
+                m(vec![(
+                    s("a"),
+                    Value::Seq(vec![m(vec![(s("x"), Value::Null)]), s("y")]),
+                )]),
+            ),
+            (
+                "a: {?x: 1}\n",
+                m(vec![(s("a"), m(vec![(s("x"), Value::Int(1))]))]),
+            ),
+            (
+                "a: {?x}\n",
+                m(vec![(s("a"), m(vec![(s("x"), Value::Null)]))]),
+            ),
+            (
+                "a: [?x: 1]\n",
+                m(vec![(
+                    s("a"),
+                    Value::Seq(vec![m(vec![(s("x"), Value::Int(1))])]),
+                )]),
+            ),
+            (
+                "a: [?]\n",
+                m(vec![(
+                    s("a"),
+                    Value::Seq(vec![m(vec![(Value::Null, Value::Null)])]),
+                )]),
+            ),
+            ("- ?x\n", Value::Seq(vec![s("?x")])),
+        ];
+        for (t, want) in cases {
+            assert_eq!(load(t).ok(), Some(want.clone()), "{t:?}");
+            assert_eq!(
+                load(&format!("# \u{e9}\u{e9}\n{t}")).ok(),
+                Some(want),
+                "after non-ASCII: {t:?}"
+            );
+        }
     }
 
     #[test]
