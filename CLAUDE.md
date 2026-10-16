@@ -62,6 +62,7 @@ python -I specs/demography/selftest_brass.py
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
 python -I specs/systems/lint_odd.py
+python -I bin/gen_skeletons.py --check     # committed rh-core skeletons = lint_odd.py --rust (SPR-005)
 cargo build -p rh-cli && python -I bin/manifest_parity.py specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml  # V-WC-04: Rust loader = manifest_v0.py
 target/debug/rh-cli ownership    # single-writer column ownership from specs/systems (SPR-004)
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)

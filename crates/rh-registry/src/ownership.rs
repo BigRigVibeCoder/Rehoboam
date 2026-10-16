@@ -63,6 +63,12 @@ struct SpecHeader {
     id: String,
 }
 
+/// One keyed RNG purpose, from `[[rng]]` (SPR-005 T-06; ruling 2).
+#[derive(Debug, Deserialize)]
+struct DeclaredRng {
+    purpose: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct SpecFile {
     system: SpecHeader,
@@ -70,6 +76,8 @@ struct SpecFile {
     owns: Vec<OwnedColumn>,
     #[serde(default)]
     reads: Vec<DeclaredRead>,
+    #[serde(default)]
+    rng: Vec<DeclaredRng>,
 }
 
 /// The ownership-relevant part of one system spec.
@@ -83,6 +91,9 @@ pub struct SystemSpec {
     pub owns: Vec<OwnedColumn>,
     /// Columns it declares it reads.
     pub reads: Vec<DeclaredRead>,
+    /// Its keyed RNG purposes (`[[rng]] purpose`), in spec order. Registration in `rh-core`
+    /// checks a system's purposes against them (SPR-005 T-06).
+    pub rng: Vec<String>,
 }
 
 impl SystemSpec {
@@ -98,17 +109,14 @@ impl SystemSpec {
             id: f.system.id,
             owns: f.owns,
             reads: f.reads,
+            rng: f.rng.into_iter().map(|r| r.purpose).collect(),
         })
     }
 
     /// The plane of the system: `A` when it owns any plane-A column (or owns nothing).
     #[must_use]
     pub fn plane(&self) -> &str {
-        if self.owns.is_empty() || self.owns.iter().any(|o| o.plane == "A") {
-            "A"
-        } else {
-            self.owns[0].plane.as_str()
-        }
+        system_plane(self.owns.iter().map(|o| o.plane.as_str()))
     }
 }
 
@@ -196,6 +204,26 @@ impl AccessSpec {
     }
 }
 
+impl Declaration {
+    /// The declaration a spec implies: it writes what it owns and reads what it lists.
+    #[must_use]
+    pub fn from_spec(spec: &SystemSpec) -> Self {
+        Declaration {
+            system: spec.id.clone(),
+            writes: spec
+                .owns
+                .iter()
+                .map(|o| (o.column.clone(), o.plane.clone()))
+                .collect(),
+            reads: spec
+                .reads
+                .iter()
+                .map(|r| (r.column.clone(), r.owner.clone()))
+                .collect(),
+        }
+    }
+}
+
 /// One broken ownership rule.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Violation {
@@ -215,6 +243,134 @@ impl fmt::Display for Violation {
             self.rule, self.system, self.message
         )
     }
+}
+
+/// The plane of a system from the planes of the columns it owns: `A` when it owns a plane-A
+/// column or nothing, else the plane of its first column. The one definition shared by the spec
+/// lint and `rh-core`'s registration checker (SPR-005 ruling 3).
+#[must_use]
+pub fn system_plane<'a>(mut owned_planes: impl Iterator<Item = &'a str> + Clone) -> &'a str {
+    if owned_planes.clone().next().is_none() || owned_planes.clone().any(|p| p == "A") {
+        "A"
+    } else {
+        owned_planes.next().unwrap_or("A")
+    }
+}
+
+/// Where a [`Declaration`] comes from: the messages name the right thing to fix.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    /// `specs/systems/*.odd.toml` (the lint).
+    Spec,
+    /// The `AccessSpec` a system registers in code (`rh-core`, SPR-005 T-04).
+    Code,
+}
+
+/// One system's access as the single-writer rule sees it: the columns it writes (with their
+/// planes) and the columns it reads (with the owner it names).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Declaration {
+    /// The system.
+    pub system: String,
+    /// `(column, plane)` for every column written (owned).
+    pub writes: Vec<(String, String)>,
+    /// `(column, named owner)` for every column read.
+    pub reads: Vec<(String, String)>,
+}
+
+/// The single-writer rule over a set of declarations (`05.1` §2 rule 1; SPR-005 ruling 3):
+///
+/// - no column has two writers (the first declaration, in the given order, keeps it);
+/// - a read names the system that writes the column;
+/// - a read naming a declared system names a column that system writes.
+///
+/// A read whose named owner is not among the declarations is left to the caller (reported, not
+/// refused). Returns the owner table and the violations. The spec lint ([`Ownership::build`])
+/// and `rh-core`'s registration checker both call this function, so the rule has one definition.
+#[must_use]
+pub fn single_writer(
+    declarations: &[Declaration],
+    source: Source,
+) -> (BTreeMap<String, Owner>, Vec<Violation>) {
+    let mut owners: BTreeMap<String, Owner> = BTreeMap::new();
+    let mut problems = Vec::new();
+    for d in declarations {
+        for (column, plane) in &d.writes {
+            if let Some(first) = owners.get(column) {
+                problems.push(Violation {
+                    rule: "single-writer",
+                    system: d.system.clone(),
+                    message: match source {
+                        Source::Spec => {
+                            format!(
+                                "owns {column}, which {} already owns (05.1 §2)",
+                                first.system
+                            )
+                        }
+                        Source::Code => format!(
+                            "writes {column}, which {} also writes (05.1 §2)",
+                            first.system
+                        ),
+                    },
+                });
+            } else {
+                owners.insert(
+                    column.clone(),
+                    Owner {
+                        system: d.system.clone(),
+                        plane: plane.clone(),
+                    },
+                );
+            }
+        }
+    }
+    let declared: BTreeSet<&str> = declarations.iter().map(|d| d.system.as_str()).collect();
+    for d in declarations {
+        for (column, owner) in &d.reads {
+            let message = match owners.get(column) {
+                Some(o) if &o.system != owner => Some(format!(
+                    "reads {column} from {owner}, but {} owns it",
+                    o.system
+                )),
+                None if declared.contains(owner.as_str()) => Some(match source {
+                    Source::Spec => {
+                        format!("reads {column}, which {owner}'s spec does not declare in [[owns]]")
+                    }
+                    Source::Code => {
+                        format!("reads {column}, which {owner} does not declare as a write")
+                    }
+                }),
+                _ => None,
+            };
+            if let Some(message) = message {
+                problems.push(Violation {
+                    rule: "single-writer",
+                    system: d.system.clone(),
+                    message,
+                });
+            }
+        }
+    }
+    (owners, problems)
+}
+
+/// The plane rule (ADR-0024): a plane-A reader never reads a plane-B or plane-C column. Shared by
+/// [`Ownership::check`] and `rh-core`'s registration checker.
+#[must_use]
+pub fn plane_leak(
+    reader: &str,
+    reader_plane: &str,
+    column: &str,
+    owner: &Owner,
+) -> Option<Violation> {
+    (reader_plane == "A" && (owner.plane == "B" || owner.plane == "C")).then(|| Violation {
+        rule: "plane",
+        system: reader.to_owned(),
+        message: format!(
+            "a plane-A system reads plane-{} column {column} (ADR-0024)",
+            owner.plane
+        ),
+    })
 }
 
 /// The owner of one column.
@@ -242,7 +398,6 @@ impl Ownership {
     /// system ids (from `rh-manifest`'s Registry, or [`registry_system_ids`]).
     #[must_use]
     pub fn build(specs: &[SystemSpec], system_ids: &BTreeSet<String>) -> Self {
-        let mut owners: BTreeMap<String, Owner> = BTreeMap::new();
         let mut problems = Vec::new();
         let mut by_id = BTreeMap::new();
         for s in specs {
@@ -283,51 +438,14 @@ impl Ownership {
                         message: format!("owns {} with unknown type '{}'", o.column, o.ty),
                     });
                 }
-                if let Some(first) = owners.get(&o.column) {
-                    problems.push(Violation {
-                        rule: "single-writer",
-                        system: s.id.clone(),
-                        message: format!(
-                            "owns {}, which {} already owns (05.1 §2)",
-                            o.column, first.system
-                        ),
-                    });
-                } else {
-                    owners.insert(
-                        o.column.clone(),
-                        Owner {
-                            system: s.id.clone(),
-                            plane: o.plane.clone(),
-                        },
-                    );
-                }
             }
         }
-        // A declared read names its owner; it must be the system whose spec owns the column. If
-        // the named owner has a spec, that spec must declare the column (DEF-8, as lint_odd.py);
-        // an owner without a spec yet is reported by `unresolved_reads`, not refused.
-        for s in specs {
-            for r in &s.reads {
-                let message = match owners.get(&r.column) {
-                    Some(o) if o.system != r.owner => Some(format!(
-                        "reads {} from {}, but {} owns it",
-                        r.column, r.owner, o.system
-                    )),
-                    None if by_id.contains_key(&r.owner) => Some(format!(
-                        "reads {}, which {}'s spec does not declare in [[owns]]",
-                        r.column, r.owner
-                    )),
-                    _ => None,
-                };
-                if let Some(message) = message {
-                    problems.push(Violation {
-                        rule: "single-writer",
-                        system: s.id.clone(),
-                        message,
-                    });
-                }
-            }
-        }
+        // Two owners, and reads that name the wrong owner or a column the named owner's spec does
+        // not declare (DEF-8): the shared single-writer rule. An owner without a spec yet is
+        // reported by `unresolved_reads`, not refused.
+        let declarations: Vec<Declaration> = specs.iter().map(Declaration::from_spec).collect();
+        let (owners, rule_problems) = single_writer(&declarations, Source::Spec);
+        problems.extend(rule_problems);
         Ownership {
             owners,
             specs: by_id,
@@ -372,17 +490,10 @@ impl Ownership {
                     format!("reads {col}, which its spec does not list in [[reads]]"),
                 ));
             }
-            if spec.plane() == "A"
-                && let Some(o) = self.owners.get(col)
-                && (o.plane == "B" || o.plane == "C")
+            if let Some(o) = self.owners.get(col)
+                && let Some(leak) = plane_leak(&access.system, spec.plane(), col, o)
             {
-                out.push(v(
-                    "plane",
-                    format!(
-                        "a plane-A system reads plane-{} column {col} (ADR-0024)",
-                        o.plane
-                    ),
-                ));
+                out.push(leak);
             }
         }
         out
@@ -488,6 +599,7 @@ mod tests {
                     owner: "M1.regions".to_owned(),
                 })
                 .collect(),
+            rng: vec![],
         };
         let t = Ownership::build(
             &[

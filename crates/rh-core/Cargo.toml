@@ -12,3 +12,9 @@ kind = "core"
 
 [lints]
 workspace = true
+
+# SPR-005: the keyed RNG for StepCtx::rng (rh-ids), and the single-writer rule and spec tables
+# shared with the ownership lint (rh-registry; SPR-005 ruling 3). Both are plane-A workspace crates.
+[dependencies]
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
+rh-registry = { version = "0.0.0", path = "../rh-registry" }

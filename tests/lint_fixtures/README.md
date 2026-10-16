@@ -74,3 +74,4 @@ Each compile-fail case also passes `bin/lint_arch.py` (its graph has no edge), w
 is the language barrier: plane-A code can reach a plane-B or plane-C type only through a dependency
 edge, and `arch/plane_a_to_b/` and `arch/plane_a_to_c/` show the lint rejects that edge. The unit tests in `python/tests/` check each
 rule in more detail, including the cases a gate must not flag.
+| `skeletons/stale/` | `bin/gen_skeletons.py --check --out …` (regenerate-and-diff, GOV-003 §2; SPR-005 T-03) | a copy of `crates/rh-core/tests/generated/` with `M2_demography.rs` hand-edited (`SPEC_VERSION` 0.0.9). After a spec change, regenerate it with `--out tests/lint_fixtures/skeletons/stale` and re-apply the edit | `STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs` |
