@@ -69,7 +69,10 @@
 //! let id: MatchId = MatchId::from_raw(3_u64);
 //! ```
 //!
-//! ```compile_fail,E0277
+//! The only `From` an identifier has is the reflexive `From<T> for T`, so converting another
+//! identifier is a type mismatch (E0308), not a missing impl:
+//!
+//! ```compile_fail,E0308
 //! use rh_ids::{PersonId, TimelineId};
 //! let id: TimelineId = TimelineId::from(PersonId::from_raw(1));
 //! ```
