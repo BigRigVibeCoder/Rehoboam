@@ -49,7 +49,7 @@ version: 1.0.0
 ### T-03: Ownership lint
 - **Deliverable:** Column ownership from `specs/systems/*.odd.toml` checked against each system's `AccessSpec` (stub until SPR-005)
 - **Acceptance:** A test system writing an unowned column is rejected
-- **Status:** [ ] not started
+- **Status:** [x] done (`rh-registry::ownership`, `rh-cli ownership`; positive control `tests/lint_fixtures/ownership/`)
 
 ### T-04: Schema generation
 - **Deliverable:** JSON Schema emitted from the Rust types; diffed against `manifest_v0.schema.json`

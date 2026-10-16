@@ -16,6 +16,7 @@
 #![forbid(unsafe_code)]
 
 pub mod manifest;
+pub mod ownership;
 pub mod pyfmt;
 pub mod registry;
 pub mod yaml;
