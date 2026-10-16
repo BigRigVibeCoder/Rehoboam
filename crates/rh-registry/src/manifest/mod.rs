@@ -13,6 +13,7 @@
 
 pub mod check;
 pub mod coerce;
+pub mod schema;
 pub mod types;
 
 use std::fmt::Write as _;

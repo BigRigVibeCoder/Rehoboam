@@ -12,11 +12,12 @@
 //! Messages follow Pydantic's wording but are not guaranteed identical.
 
 use super::types::{
-    ActivityResolution, Agent, Calendar, CastMember, Catalyst, Children, ClassShares, Climate,
-    CreatureParams, CreaturePeople, Culture, DynasticTensionInitial, Dynasty, Ecology, Faith,
-    Focus, FocusResolution, Geography, Horizon, HorizonLabel, Household, HumanPeople, Manifest,
-    Milestone, Narrative, OffMapActor, OrderedMap, OverlayEffect, People, Polity, Presentation,
-    Trajectory, WagerStage, WorldMeta,
+    ActivityResolution, Agent, Artifact, Calendar, CastMember, Catalyst, Children, ClassShares,
+    Climate, ClimateShock, CovertOutbreak, CreatureParams, CreaturePeople, Culture,
+    DynasticTension, DynasticTensionInitial, Dynasty, Ecology, Faith, Focus, FocusResolution,
+    Geography, Horizon, HorizonLabel, Household, HumanPeople, Manifest, Milestone, Narrative,
+    OffMapActor, OrderedMap, OverlayEffect, People, Polity, Presentation, Trajectory, Wager,
+    WagerStage, WorldMeta,
 };
 use crate::yaml::Value;
 use std::fmt;
@@ -1181,10 +1182,10 @@ fn dynastic_tension(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> 
     let polity = o.req(cx, "polity", slug);
     let initial = o.req(cx, "initial", tension_initial);
     o.finish(cx).then_some(())?;
-    Some(Catalyst::DynasticTension {
+    Some(Catalyst::DynasticTension(DynasticTension {
         polity: polity?,
         initial: initial?,
-    })
+    }))
 }
 
 fn artifact(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
@@ -1195,12 +1196,12 @@ fn artifact(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
     let holder_role = o.req(cx, "holder_role", slug);
     let effects = o.req(cx, "effects", |cx, v, l| list(cx, v, l, 1, overlay_effect));
     o.finish(cx).then_some(())?;
-    Some(Catalyst::Artifact {
+    Some(Catalyst::Artifact(Artifact {
         name: name?,
         polity: polity?,
         holder_role: holder_role?,
         effects: effects?,
-    })
+    }))
 }
 
 fn covert_outbreak(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
@@ -1228,12 +1229,12 @@ fn covert_outbreak(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
         |cx, v, l| int(cx, v, l, Some(0), None),
     );
     o.finish(cx).then_some(())?;
-    Some(Catalyst::CovertOutbreak {
+    Some(Catalyst::CovertOutbreak(CovertOutbreak {
         seed_infected: seed_infected?,
         seed_region_hint: hint?,
         channel: channel?,
         start_day: start_day?,
-    })
+    }))
 }
 
 fn climate_shock(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
@@ -1250,11 +1251,11 @@ fn climate_shock(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
         |cx, v, l| int64(cx, v, l, Some(1), Some(10)),
     );
     o.finish(cx).then_some(())?;
-    Some(Catalyst::ClimateShock {
+    Some(Catalyst::ClimateShock(ClimateShock {
         year: year?,
         severity_sigma: severity_sigma?,
         duration_years: duration_years?,
-    })
+    }))
 }
 
 fn wager(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
@@ -1264,11 +1265,11 @@ fn wager(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Catalyst> {
     let protagonist = o.req(cx, "protagonist", slug);
     let stages = o.req(cx, "stages", |cx, v, l| list(cx, v, l, 1, wager_stage));
     o.finish(cx).then_some(())?;
-    Some(Catalyst::Wager {
+    Some(Catalyst::Wager(Wager {
         agent: agent?,
         protagonist: protagonist?,
         stages: stages?,
-    })
+    }))
 }
 
 fn cast_member(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<CastMember> {
