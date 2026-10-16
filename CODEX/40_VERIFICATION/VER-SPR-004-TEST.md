@@ -158,3 +158,53 @@ CLAUDE.md and SPR-004 say the reference wins, which would make these Rust defect
 - A second spec file for one system, the same column twice in one spec and a system missing from the Registry each give a cascade of messages (up to 30 lines); the verdict is right and the first line names the cause.
 - Warnings for `M5.contagion`, `S4.ecology` and `M3.agriculture` live in `check.rs` by system id, exactly as in the reference; they are not Registry data. That is the reference's design, noted for the day a second creature system appears.
 - `bin/check_all.sh` needs `python/.venv` (RUN-001) and `cargo-nextest`/`cargo-deny` on `PATH`; with neither it stops at "Required tools present" in under a second, which is the intended behaviour.
+
+## 8. Re-verification at 5f3939d
+
+Tested commit: `5f3939d` (the rebased sprint branch, on `main` 8283f5e). The black-box harness of the first round ran unchanged against `rh-cli` (`diff.py`, `cases1..6.py`, `fuzz.py`, `regmut.py`, `own.py`, `regdump.py`), plus five new probe sets for the open items: `cases7` (63 tab, `?` and empty-key placements), `cases8` (33 `?` and empty-key forms), `cases9` and `cases10` (those forms in a nested context), `cases11` (64 non-string and datetime keys). The reference is the changed one (`Int64` bounds, `[0-9]` version pattern). On a clean checkout of the head `bin/check_all.sh` is green with 102 checks.
+
+### 8.1 Verdict per item
+
+| # | Item | Verdict | Basis |
+|---|---|---|---|
+| 1 | DEF-1 BOM | **FIXED** | `yaml_bom`, with and without a non-ASCII character after it, agrees with the reference (VALID); the shipped corpus has `valid_bom.yaml`. |
+| 2 | DEF-2 (a) floats beyond i64, (b) integers beyond 2^127, (c) error kinds | **FIXED** | Boundary sweep from the new schema (1,293 cases), the power-of-ten sweep (78) and the float sweep from `9.0e+18` to `1.0e+308` (24): 0 verdict differences and 0 message differences. Integers of 2^127 and above now give `SCHEMA INVALID`/`VALID` as Python does; the `int_parsing_size` kind matches. |
+| 3 | DEF-4 keys | **FIXED, one cosmetic remainder that does not matter** | Integer, float, boolean, null, date, sexagesimal and dotted keys: kind and location text agree (64 cases). Datetime keys with a time part (`2020-01-01 10:00:00: x`, ISO forms with `T`, `Z`, offsets) agree on verdict, count and kind, but the location text differs: Python prints the repr ``datetime.datetime(2020, 1, 1, 10, 0)``, Rust prints the source text. It does not matter for users, because the manifest is invalid either way and the message still names the key. It would matter for the parity oracle only if such a key were added to `tests/manifest_parity/`; do not add one, or normalise the loc. Invalid dates (`2020-02-30`) crash the reference with `ValueError` and give `SCHEMA INVALID` in Rust: a reference crash, no action. |
+| 4 | DEF-5 | **FIXED** | `harvest_sigma = [0.04, 0.35, 99.0]` and `horizon_years = [50, 3000, 9]` are refused (exit 3). Registry round trip: 35 of 35 sections, 0 differences against `tomllib`; S6, S7 and T1 params intact. |
+| 5 | DEF-7 | **FIXED** | From `/tmp` and from an empty directory, `manifest validate`, `ownership` and `manifest schema --diff` find the repository's Registry and specs. |
+| 6 | DEF-8 | **FIXED** (one residual, not on the list) | Plane `D` and `b` give `VIOLATION [plane]`; a wrong `owner` gives `VIOLATION [single-writer] ... reads person.alive from S6.artifacts, but M2.demography owns it`; an unknown column type gives `VIOLATION [spec]`. 41 of 43 ownership probes behave; of the other two, one is my own wrong expectation (a non-UTF-8 spec is refused with exit 3, which is right), the other is the residual: a `[[reads]]` entry that names a real owner which does not declare the column (`person.ghost` from M2) is accepted by the Rust lint, and `lint_odd.py` still catches it. Observation, not a defect. |
+| 7 | GAP-1 | **NOT CLOSED: DEF-9 (medium), DEF-10 (low)** | See 8.2. Tabs are closed. The `?` and empty-key refusals are bypassed by any non-ASCII character earlier in the file. |
+| 8 | GAP-3 | **FIXED** | The parity gate now prints line-level `PARITY MISMATCH` and agrees line for line on the clean head (29 manifests). All mutations that were green are now red: `CARBONE_RATIO` 0.009 to 0.0091 and to 0.012, a changed error message, a changed warning text, a changed error path, and a warning promoted to an error. Removing each of the 53 `err()`/`warn()` sites in turn: 53 of 53 turn the shipped gate red (49 of 53 before). Unmodified code agrees. |
+| 9 | GAP-4, GAP-7 | **FIXED** | `registry_version: "٠.١.٠"` now agrees (both reject; the shipped corpus has `schema_unicode_version.yaml`). The ownership summary reads `0 access declarations from code (derived from specs until SPR-005: 4; from files: 0)`. |
+| 11 | `lint_arch` controls for `rh-manifest` | **PASS** | Both shipped controls are in `check_all.sh` and green. Independently, a plane-A crate (`rh-core`, and `rh-registry`) depending on `rh-manifest` gives `VIOLATION [plane-A-closure]` as a normal, dev-, build-, renamed (`package = "rh-manifest"`), target-specific and optional dependency. The pin: `rh-manifest` declared as plane `A`, plane `B`, kind `machinery`, or with its metadata removed gives `VIOLATION [metadata]`. The allowed edge `rh-manifest` to `rh-core` passes, and the clean workspace reports 8 crates, 0 violations. `lint_forbidden` scans 6 crates as plane A, 0 violations. |
+
+### 8.2 New defects
+
+**DEF-9 (medium): the PyYAML refusals for `?` in flow scalars and for empty keys only work in files that are pure ASCII up to the offending form.** Clause: GAP-1 ruling (Rust refuses the forms PyYAML refuses); V-WC-04.
+- Reproduction: `{ printf '# \xc3\xa9\n'; sed 's/  raster_resolution: 64/  : raster_resolution: 64/' specs/manifest/examples/solo.yaml; } > f.yaml`
+- Expected: `PY f.yaml` stops with `ParserError ... expected <block end>, but found ':'` (exit 1), so `RS f.yaml` must give `LOAD ERROR: found an empty key written ': value'` (exit 1), as it does for the same file without the first line.
+- Actual: `RS f.yaml` reads the file and gives `SCHEMA INVALID` (exit 2). The same happens for `{years: 80, label: his?t}` (expected `LOAD ERROR: found '?' inside the plain scalar`). With a non-ASCII character anywhere before the form, the check is silent; with the character after the form, it fires. Tabs are not affected.
+- Likely cause (read from `yaml.rs` lines 150-155, 235, 250): `span.start.index()` from the parser is passed as a position into `self.text.as_bytes()` (`bytes.get(start)` decides whether a collection is a flow collection, and `implicit_empty_key(start)` looks at the text). If the parser's index counts characters, every multi-byte character before the form shifts the position, `flow` is pushed `false`, and `in_flow` is wrong. I did not step through it.
+- Impact: all four shipped example manifests (`val_khor`, `aethelgard`, `uz_job`, `invalid_draft_style`) contain non-ASCII text, so real manifests are in the affected class. The shipped corpus does not catch it because its only non-ASCII fixtures (`valid_bom.yaml`, `schema_unicode_version.yaml`) do not contain these forms. 12 of the 1,500 fuzz cases still differ for this reason (fz0045, 0068, 0366, 0451, 0636, 0737, 0846, 0906, 0945, 1046, 1084, 1213). Add one non-ASCII fixture per form to `tests/manifest_parity/`.
+
+**DEF-10 (low): a plain scalar that starts with `?` is accepted.** Clause: GAP-1 ruling.
+- Reproduction: in `solo.yaml` replace `epoch_label: "Test era"` with `epoch_label: ?x` (block), or `label: historical` with `label: ?historical` inside the horizon flow mapping, or `flags: [protagonist]` with `flags: [?protagonist]`.
+- Expected: `PY` stops with a ParserError in the first two (`?` cannot start a plain scalar there) and reads the flow-sequence case as a one-pair mapping `{protagonist: null}`; `RS` should refuse the first two (exit 1) and give `string_type` for the third.
+- Actual: `RS` reads the first as the string `?x` (VALID, exit 0), the second as a schema error, and the third as a string (kind `string_pattern_mismatch` instead of `string_type`). A bare `?` and `?:x` behave the same. Mid-scalar `?` (`histo?rical`, `x?y`, trailing `x?`) is correct in ASCII files.
+
+### 8.3 Regression
+
+| Set | Cases | Verdict or count differs | Message differs only | Agree on every line |
+|---|---|---|---|---|
+| `cases1` (YAML 1.1, coercion, structure) | 315 | 4 (`!!set`, `!!binary`, `!!timestamp`; `!!int abc`, which crashes the reference) | 0 | 311 |
+| `cases2` (every semantic check) | 210 | 0 | 1 (list shown as `[...]`) | 209 |
+| `cases4` (bounds sweep from the changed schema) | 1,293 | 0 | 0 | 1,293 |
+| `cases5`, `cases6` (very large numbers) | 78 + 24 | 0 | 0 | 102 |
+| `fuzz` (1,500 mutation cases) | 1,500 | 12 (DEF-9) | 2 (a date shown as `date(...)`; `[?x]`, DEF-10) | 1,486 |
+| **Original total** | **3,420** (was 3,414; the reference schema gained 6 boundary cases) | **16** (was 84) | **3** (was 82) | **3,401** (was 3,248) |
+
+Verdict and counts agree on 3,404 of 3,420 (3,330 of 3,414 before). The 16 divergences by class: 4 explicit YAML tags (DEF-3, deferred; one of them is a reference crash) and 12 the DEF-9 bypass. The 3 message-only differences: the Python repr of a list or date inside a tag message (2, cosmetic) and DEF-10 (1). New probe sets: `cases7` 63 cases, 2 verdict differences (DEF-10: leading `?`); all 28 tab placements agree, including a tab after a quoted scalar before a comment, after a flow comma, before `]`, after an anchor, a tag, `---` or `|`, and inside plain, single- and double-quoted scalars. `cases8`: 33 cases, 5 differences (DEF-10 and leading `?`, all in ASCII files). Registry variants (113): 52 differ by design (GAP-5, now documented in 05.5 §3.1), 2 fewer than before because the 3-element bounds are refused. `regmut`: DEF-5 closed; `artifact_kinds`, `vow_kinds` and `mental_breaks` still load with typos (DEF-6, deferred).
+
+### 8.4 Next step
+
+DEF-9 and DEF-10 need a Developer fix and fixtures (non-ASCII header, one per form). After that, the items to repeat are `fuzz.py` (expect 0 verdict differences apart from the explicit tags) and `cases7`/`cases8`/`cases9`/`cases10`.
