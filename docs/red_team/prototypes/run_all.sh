@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Runs all 5 Red Team Fidelity & Edge-Case Prototypes in sequence.
+# Runs all 9 Red Team Fidelity & Edge-Case Prototypes in sequence.
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON="${PYTHON:-python3}"
 
 echo "================================================================================"
-echo "RUNNING REHOBOAM RED TEAM PROTOTYPE SUITE (5/5)"
+echo "RUNNING REHOBOAM RED TEAM PROTOTYPE SUITE (9/9)"
 echo "================================================================================"
 
 echo -e "\n>>> 1. TANTRUM SPIRAL & INSTITUTIONAL CIRCUIT BREAKERS <<<"
