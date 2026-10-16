@@ -784,6 +784,44 @@ The evidence that ODD helps rests on its authors' own assessment.
 - Allen reports no population or mortality series.
 - There are two misprints: the egg price (0.010 should be about 0.10) and "meat 6.0%" (the 6.0% is beans).
 
+## 20. O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014*, 944–950; Behrooz, M., Swanson, R. & Jhala, A. (2015). "Remember that time? Telling interesting stories from past interactions." *ICIDS 2015*; Lessard, J., Friedrich, S., Paré-Chouinard, S. & Kosseim, L. (2026). "Narrative gold digging: sifting and narrating stories from a procedural simulation." *FDG '26*. doi:10.1145/3815598.3815687
+
+**All three are weak evidence, and we weight them accordingly.**
+
+**Dramatis.**
+- Suspense is the cost of the reader's most likely *escape plan*, searched only once a negative outcome is expected. It uses **perceived**, not actual, likelihood, and compares stories by the area under the suspense curve (pp. 945–947).
+- **Validation:** 3 hand-built story pairs, 32 readers, ordinal agreement 3/3 (chance 0.125). With the memory model removed, plan length alone matched the readers wherever they agreed (p. 948, *derived*).
+- **What we take:** structure, not a formula. Suspense needs a threatened party, and its escape routes are the pattern's cancellation paths.
+
+**Behrooz et al.**
+- Mined rare sequential rules from 15 logs of human–agent rummy games: interaction logs, not simulation logs.
+- **Pilot:** 11 raters, 8 items, 70% preference for system spans over random equal-length spans, both rendered with the same templates. Inter-rater α = 0.32.
+- One item significantly favoured the random span. The paper reports it as a win: its "5 of 8 significant" is really 4 for the system and 1 against (Table 7, *derived*).
+- **What we take:** the control design. Equal length, same story, same template narration, randomised order.
+
+**Lessard et al.**
+- **Setup:** two heuristics, world-improbability and Polti "dramatic situations", were used to pick 6 stories from a social simulation. Each story was written up twice, once by a human author and once by GPT-4, and rated by 24 readers (12 per story and writer; only "enjoyed reading" is analysed; no statistics).
+- **Results, read from Fig. 4:**
+  - The **random control was the favourite** story.
+  - The writer explained about **51%** of cell-mean variance against **29%** for the story. The narration gap was about 0.6 points on a 5-point scale.
+  - The same events ranked **3rd and 12th of 12** under the two writers (§6.1.4).
+- **Their warnings** (p. 6):
+  - improbability selected ever-longer chains and inexplicable outliers;
+  - world rarity is not narrative surprise;
+  - situations become "cookie-cutter";
+  - designers like their own worlds far more than naive readers do (p. 7).
+
+**What this corrected.**
+- **"Suspense = stakes × P(completion)"** (`05.4`) is in none of the sources. The structure that Dramatis supports goes into `05.4` §2.3 as a hypothesis to test at G2: a threatened-role gate, escape routes, no suspense once the outcome is near-certain, and none in Oracle mode until it is belief-based (Q23).
+- **The suspense rate limit was inconsistent:** ≤ 1 per decade in `05.4` against ≤ 2 in ADR-0008, TM-2 and R-23. At ≤ 2, suspense pauses alone would break MOE-1's 10-per-century budget. All four now say ≤ 1.
+- **"A random baseline is too easy to beat"** (`01`) is contradicted by both selection studies. It is kept out of the gate but added as a non-gating selection check (V-HUM-11).
+- **G2 never fixed the rendering.** It is now template-only, hashed and length-matched for every rated item, control and MOE-2 chronicle (`09` §3.4.1; R-29; Q20).
+- **MOE-2 was under-powered.** "≥ 80% of 20 pairs" passes only 24% of the time at a true 70% preference. It now uses 40 pairs and a confidence-bound rule (Proposed, Q21; R-30).
+- **G2's power was never stated.** It is now: 10 seeds detect about 0.27 rating points, under assumptions to be recomputed from the pilot.
+- **G2 measures the director's taste** and now says so (Q22).
+- **New P4 test:** V-HUM-12, a story × narration factorial, before any claim that the Narrative Compiler adds value beyond selection.
+- **The reading list overstated two papers.** It called Dramatis "the suspense formula behind auto-pause" and Behrooz "retrospective selection from simulation logs"; the Behrooz logs are interaction logs.
+
 ---
 
 ## Did the reading pay off? (ledger after four batches, 24 sources)

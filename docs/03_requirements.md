@@ -139,7 +139,7 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | ID | Requirement | Ver. | Phase | Trace |
 |---|---|---|---|---|
 | TM-1 | Time controls shall be bands of **sim-time per wall-second** (Live, 1 h/s, 1 d/s, 1 wk/s, 1 mo/s, 1 yr/s, 1 decade/s, MAX) plus **run-until** (date, predicate, or next match above a salience threshold). | D/T | P2 | DR-M1 |
-| TM-2 | Auto-pause shall trigger on pattern completion, or on open partial matches whose completion is high-stakes (suspense), using thresholds you set. A rate limiter shall cap suspense auto-pauses (default ≤ 2 per simulated decade). | T | P2 | SN-1 |
+| TM-2 | Auto-pause shall trigger on pattern completion, or on open partial matches whose completion is high-stakes (suspense), using thresholds you set. A rate limiter shall cap suspense auto-pauses (default ≤ 1 per simulated decade). | T | P2 | SN-1 |
 | TM-3 | The timeline shall scrub over chronicle and aggregates without re-simulation (MOP-3). "Drop in" shall seek through keyframe plus replay (MOP-4) and is read-only (DET-14). | T | P2 | SN-4 |
 | TM-4 | The **causal inspector** shall show, for any event, its typed ancestors and descendants, the anchored state values it was evaluated on, and its significance components. In Oracle mode it shows only what the Oracle knows (ORA-9). | D | P2 | SN-2 |
 | TM-5 | The map shall show regions, polities, routes, fields and armies at any tick, with level-of-detail aggregation. | D | P2 | SN-1 |

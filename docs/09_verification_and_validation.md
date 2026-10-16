@@ -488,7 +488,7 @@ Per-decile reliability with about 20 prophecies per bucket cannot pass even for 
 | ID | Activity | Protocol | Gate |
 |---|---|---|---|
 | V-HUM-01 | **Story-yield sessions** (MOE-1) | At G2, run under the pre-registered protocol (§3.4.1). At G3b, the same protocol with fresh held-out seeds | Pause budget ≤ 10 per century. P2: median ≥ 3 events rated ≥ 4 per century, precision ≥ 0.5. P3: ≥ 6, precision ≥ 0.7 |
-| V-HUM-02 | **Chronicle A/B** (MOE-2) | ≥ 20 blind pairs on the G2 held-out seeds: the chronicle of a run against the chronicle of the coupling-ablated run (§3.4.1) with the same engine, manifest, seed and sifter | ≥ 80% preference for the coupled run |
+| V-HUM-02 | **Chronicle A/B** (MOE-2) | ≥ 40 blind pairs (4 per seed) on the G2 seeds: the chronicle of a run against the chronicle of the coupling-ablated run (§3.4.1) with the same engine, manifest, seed and sifter. Both chronicles come from the frozen template pipeline (no LLM text), and their lengths are within ±20% (the longer is cut at an arc boundary) | **Proposed rule (Q21):** the lower bound of the two-sided 80% Clopper–Pearson interval is > 0.5 (≥ 25 of 40); the point estimate is reported against the `01` target of 80%. Under the old rule (≥ 16 of 20), a true 70% preference passes only 24% of the time, and a true 80% only 63% (R12 §20) |
 | V-HUM-03 | **Bad-run audit** (MOE-6) | Automated: seeds with fewer than N = 2 completed arcs per century (complete matches from ≥ 2 pattern packs), 32 seeds per manifest | < 10% (point estimate). The Clopper–Pearson 95% interval is reported: with 32 seeds, even 0 bad runs gives an upper bound of about 11%. A borderline result is resolved by adding seeds |
 | V-HUM-04 | **Interrogation sessions** (MOE-3; P2 text, P6 voice) | Interrogate 20 random people per session; log contradictions | 0 hard, < 1 soft per 20 |
 | V-HUM-05 | **Narrative read** (P4) | Blind: Rehoboam saga against an ungrounded LLM saga on the same premise; rate on HANNA criteria plus "would keep reading" | 10 pairs. Rehoboam preferred on coherence and on surprise in ≥ 7 of 10 each, and on engagement in ≥ 5 of 10 (no regression) |
@@ -497,13 +497,15 @@ Per-decile reliability with about 20 prophecies per bucket cannot pass even for 
 | V-HUM-08 | **Full-vision acceptance** (P7) | Scenarios OS-1 to OS-11 (`04`) | Accepted |
 | V-HUM-09 | **G2 thesis gate** | §3.4.1 | §3.4.1 decision rule |
 | V-HUM-10 | **Personal preference model** | §3.5 | Spearman ρ ≥ 0.4 by P3 |
+| V-HUM-11 | **Random-window control** (selection check; reported, not gating) | Per G2 seed, 6 control items: windows with the same simulated span and event count as a randomly chosen treatment pause, drawn from the same seed and century with `H(preregistration_hash, "g2-rand", seed, i)`, rendered by the same templates and interleaved blind (the control design of Behrooz et al. 2015) | Per-seed difference, treatment-pause mean − control mean, with the lower bound of the 80% t-interval (detects about 0.37 points). A non-positive bound points the iterate cycle at patterns and significance rather than couplings |
+| V-HUM-12 | **Story × narration factorial** (P4, before any claim that the Narrative Compiler adds value) | 2 × 2 within rater: a top-significance arc vs a random arc of matched span from the same seed, × the template Chronicle vs a Narrative Compiler excerpt of matched length. 20 items per cell in Latin-square order, rated on the G2 item plus HANNA engagement | Reports the story effect, the narration effect and their interaction. Lessard et al. (2026) found narration explained more of the ratings than the story did (R12 §20) |
 
 #### 3.4.1 G2 thesis gate: pre-registered protocol (V-HUM-09)
 
 G2 tests the core thesis (S1): unforgiving, coupled systems produce history you want to follow, so the world is worth inhabiting. If it fails, no 3D work starts (`11`). The evaluator is also the person who tuned the engine, so the protocol is **pre-registered**.
 
 **Pre-registration**
-1. The protocol is filled in and frozen before the first evaluation run: engine build, Registry version, held-out manifest hash, seed list, pause thresholds, preference-model hash, presentation-order seed and analysis-script hash. The filled-in instance is committed and its hash recorded in `docs/decisions-log.md`. It is not edited afterwards. Any deviation is logged and reported with the result.
+1. The protocol is filled in and frozen before the first evaluation run: engine build, Registry version, held-out manifest hash, seed list, pause thresholds, preference-model hash, **rendering version** (hash of the annals and rating-card templates), presentation-order seed and analysis-script hash. The filled-in instance is committed and its hash recorded in `docs/decisions-log.md`. It is not edited afterwards. Any deviation is logged and reported with the result.
 2. **Held-out material.** Seeds are derived as `H(preregistration_hash, "g2", i)` after freezing, so none can have been used in tuning. Certification (§3.1) is also run on the held-out manifest, as an independent prediction test. One **held-out manifest**, hand-authored during P1 and sealed (hash committed, never run), is opened only for G2.
 3. **Seeds.** 10 seeds: 7 on the tuned reference manifests (`val_khor`, `delta_republic`) and 3 on the held-out manifest.
 4. **Personal preference model** (§3.5). Frozen before the run, with its weights hash in the pre-registration. Results are reported both **without** it (default pause thresholds; the primary analysis) and **with** it.
@@ -516,7 +518,10 @@ G2 tests the core thesis (S1): unforgiving, coupled systems produce history you 
 - **Horizon.** 2 simulated centuries per seed and arm, after the standard spin-up.
 - **Pause budget.** ≤ 10 auto-pauses per simulated century, per arm and per selection rule. The candidate pool (completed matches and suspense partials) is ranked by default salience ("without") and by the frozen model ("with"). The union is rated.
 - **Rating.** You rate each item 1–5 on "I want to know what happens next" in the rating tool (TM-6), with the causal inspector and the previous decade's annals available. Treatment and baseline items from the same seed are interleaved in keyed random order with arm labels hidden. Ratings are locked before any arm is revealed.
-- **Effort.** About 40–60 items, or 3–4 hours of rating, per seed; about 30–40 hours in total, spread over several sessions.
+- **Rendering held constant.** Every rated item, control and MOE-2 chronicle uses the frozen template pipeline only, with item text capped at a fixed length. LLM polish and LLM match explanations are off. The rating view hides significance and suspense scores. Narration alone can move identical events from 3rd to 12th of 12 (Lessard et al. 2026, R12 §20), so a comparison whose rendering differs between arms measures narration, not history.
+- **Random-window control** (V-HUM-11; reported, not gating): 6 control items per seed, interleaved blind. The coupling ablation tests whether coupled systems make better material; this control tests whether the sifter picks well.
+- **Whose taste.** G2 measures **your** taste (S1: stories *you* want to read). Designers rate their own worlds higher than naive readers do (Lessard et al. 2026), so the absolute bar (≥ 2.5) does not generalise to other readers. The paired difference is robust to it. An external reader panel is optional and comes later (Q22).
+- **Effort.** About 40–60 items, or 3–4 hours of rating, per seed, plus about 6 control items (+3–6 hours in total); about 35–45 hours in total, spread over several sessions.
 - **Intra-rater reliability.** A random 10% of items are re-presented, blind, at least 7 days later. Agreement is measured with linearly weighted Cohen's κ.
 - **No interim looks.** The analysis runs once, after all ratings are locked.
 
@@ -526,6 +531,8 @@ G2 tests the core thesis (S1): unforgiving, coupled systems produce history you 
 - **Treatment vs baseline:** per-seed paired difference d = treatment mean − baseline mean; lower bound of the two-sided 80% t-interval of mean d. A Wilcoxon signed-rank test is reported alongside.
 - **Pause count and precision:** auto-pauses per century, and the fraction rated ≥ 3, per arm.
 - **Arc-signature diversity:** the share of treatment items rated ≥ 4 whose match belongs to each pattern family (Registry pattern pack), pooled over seeds.
+- **By pause type:** MOE-1 precision and mean rating are reported separately for suspense partials and completed matches, because the rating item is forward-looking.
+- **Power statement** (frozen with the protocol): with 10 seeds and one-sided α = 0.10, 80% power needs a standardised seed-level effect of ≈ 0.71. With item SD ≈ 1, ≈ 25 items per arm per seed and between-seed heterogeneity ≈ 0.25 (all assumptions; recompute from the rating-tool pilot before freezing), that is ≈ 0.27 rating points. Smaller true effects will tend to read as "iterate".
 - **MOE-1:** items rated ≥ 4 per century, median over seeds. **MOE-2:** V-HUM-02 on the same seeds. **MOE-6:** completed arcs per century per seed, and the bad-run rate with a Clopper–Pearson 95% interval, on the 10 rated seeds and on the 32-seed automated ensemble.
 
 **Decision rule**
@@ -534,12 +541,12 @@ G2 tests the core thesis (S1): unforgiving, coupled systems produce history you 
 |---|---|
 | **Pass criterion** | The lower 80% bound of the mean treatment rating is ≥ 2.5 on the 1–5 scale, **and** the lower 80% bound of the paired difference (treatment − coupling-ablated) is > 0. Both under the primary analysis |
 | **Diversity guard** | No single pattern family accounts for more than 40% of treatment items rated ≥ 4 |
-| **Validity** | κ ≥ 0.4; blinding intact; no deviation from the frozen protocol that touches seeds, manifests, thresholds or analysis. If validity fails, the run is void and repeated: it is neither a pass nor a fail |
+| **Validity** | κ ≥ 0.4; blinding intact (after each session you guess the arm of 20 random rated items, and the exact 95% CI of your accuracy must include 0.5); no deviation from the frozen protocol that touches seeds, manifests, thresholds or analysis. If validity fails, the run is void and repeated: it is neither a pass nor a fail |
 
 G2 is **go** when all of the following hold:
 1. the pass criterion;
 2. the diversity guard;
-3. the P2 targets of `01`: MOE-1 (≥ 3 per century rated ≥ 4, precision ≥ 0.5, within the pause budget), MOE-2 (≥ 80%) and MOE-6 (< 10%, point estimate);
+3. the P2 targets of `01`: MOE-1 (≥ 3 per century rated ≥ 4, precision ≥ 0.5, within the pause budget), MOE-2 (the V-HUM-02 rule) and MOE-6 (< 10%, point estimate);
 4. the verification gates binding at P2 (§5, §6).
 
 Otherwise G2 is **iterate** (`11` P2: couplings, contingent unlocking, patterns). After 3 failed cycles the `11` pivot criterion applies.

@@ -62,4 +62,4 @@ R02 §1, §8, §R3; R10 §2, §R3.
 6. **Precision@K on clustered fixtures.** Twin and budget tests run on clustered chronicles (repeated interaction among partners), not uniform random ones. CI reports precision@K against your labelled story-worthy set. An LLM-proposed pattern must report precision@K against its SQL twin before review.
 7. **Typed anchored attributes.** Reads are `attr(args)@eN`, declared and typed in the Registry `[attributes]`. A bare or undeclared read is a compile error. The pattern linter enforces a closed key set.
 8. **Re-sifting history is a feature.** Any timeline can be re-sifted with any pattern-library version without touching plane A. Pattern iteration never churns golden baselines.
-9. **Auto-pause.** Suspense auto-pauses are rate-limited (e.g. ≤ 2 per simulated decade). A sifter that lags triggers a pause, then a seek back to the match tick.
+9. **Auto-pause.** Suspense auto-pauses are rate-limited (≤ 1 per simulated decade by default, so that all auto-pauses together stay within MOE-1's ≤ 10 per century; `05.4` §2.3). A sifter that lags triggers a pause, then a seek back to the match tick.
