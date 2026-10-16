@@ -506,10 +506,24 @@ impl<'a> StepCtx<'a> {
     }
 }
 
+/// Domain tag of [`resample_entity_id`].
+pub const TAG_RESAMPLE_ENTITY: u64 = rh_ids::rng::tag("rehoboam/rh-core/resample-entity/v1");
+
+/// The `entity_id` of a re-sample draw: `h64_words(tag("rehoboam/rh-core/resample-entity/v1"),
+/// [kind tag, raw id])`, a function of the whole typed key (SPR-006 G3), so `Person:5` and
+/// `Household:5` never share a stream. Part of the determinism contract: changing it is C3.
+#[must_use]
+pub fn resample_entity_id(entity: EntityRef) -> u64 {
+    rh_ids::rng::h64_words(
+        TAG_RESAMPLE_ENTITY,
+        &[u64::from(entity.kind().tag()), entity.raw()],
+    )
+}
+
 /// The context of one re-sample (ADR-0025 item 3): draws keyed by
-/// `H(world_seed, branch_salt, system_id, epoch, purpose, entity, t_input, k)`, where `epoch`
-/// counts the material inputs that have touched the entity, `purpose` is the timer's own and
-/// `t_input` the input's instant.
+/// `H(world_seed, branch_salt, system_id, epoch, purpose, resample_entity_id(entity), t_input, k)`,
+/// where `epoch` counts the material inputs that have touched the entity, `purpose` is the timer's
+/// own and `t_input` the input's instant.
 pub struct ResampleCtx {
     pub(crate) key: SystemKey,
     pub(crate) purpose: PurposeId,
@@ -531,11 +545,12 @@ impl ResampleCtx {
         self.epoch
     }
 
-    /// Draw `k` of the re-sample stream.
+    /// Draw `k` of the re-sample stream. Its `entity_id` is [`resample_entity_id`] of the
+    /// timer's entity, so entities of different kinds with the same raw id draw apart.
     #[must_use]
     pub fn draw(&self, k: u64) -> u64 {
         self.key
-            .stream_key(self.purpose, self.entity.raw())
+            .stream_key(self.purpose, resample_entity_id(self.entity))
             .draw(self.t_input.minutes(), k)
     }
 }
