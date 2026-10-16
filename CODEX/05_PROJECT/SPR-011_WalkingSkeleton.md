@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-001, PRJ-002, SPR-007, SPR-008, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF:** Close the engine's loop end to end at the lowest fidelity: manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled death timers → events → the Parquet chronicle and World Stream v0 (channel A) → `rh-cli tail` → a trivial sifter pattern → journal replay. It runs on `solo` first, then on `household` and `hamlet`, on one binary, with plane-hash ladders in CI from the first commit. Developer: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET, AGT-003-IF, AGT-003-STAT. **PLANNING: for the director's approval at G0** (C3; `docs/decisions_pending.md` D30 to D32). The Architect has reviewed it and adopts the rulings below as recommendations. The work is about 9 agent-days, three times the GOV-005 bound, so proposed ruling 1 runs it as three sprints (increments A, B, C below).
@@ -128,8 +128,8 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 - **Status:** [ ] not started
 
 #### T-03: Ledger rows and the life-course log (ruling 5)
-- **Deliverable:** In `rh-core`: the ledger exists when `person.id` is registered. All `person.*` columns stay aligned and sorted by `person.id`. A compaction pass at the start of `Bookkeeping` removes every row with `person.alive = 0` from all `person.*` columns. `life_course.*` columns are append-only, and a row's exit fields are written once (a core check refuses anything else). Core invariants: alignment, order, and one open life-course entry per ledger row.
-- **Acceptance:** V-INV-01 subset as property tests on random small worlds: alignment; order; the living count equals the open entries; a closed entry is absent from the ledger. A death applied in `Vital` is gone before `Bookkeeping` hashes the same instant. V-DET-05: keyframe round-trip with a compaction inside the window. V-DET-01/02 on a stub world with deaths. The smoke ladder is unchanged.
+- **Deliverable:** In `rh-core`: the ledger exists when `person.id` is registered. All `person.*` columns stay aligned and sorted by `person.id`. A compaction pass at the start of `Bookkeeping` removes every row with `person.alive = 0` from all `person.*` columns. `life_course.*` columns are append-only, and a row's exit fields are written once (a core check refuses anything else). Core invariants: alignment, order, and one open life-course entry per ledger row. Compaction removes rows from `person.*` columns that other systems own (`person.named` for T1, `person.house` and `person.vocation` for M7): this is a core-only exemption from single-writer ownership, and no `SystemModel` can obtain it. The life-course log keeps `mother` and `father` for everyone who ever entered, so kinship stays readable through the dead (REV-P1a NEW-1).
+- **Acceptance:** V-INV-01 subset as property tests on random small worlds: alignment; order; the living count equals the open entries; a closed entry is absent from the ledger. A death applied in `Vital` is gone before `Bookkeeping` hashes the same instant. V-DET-05: keyframe round-trip with a compaction inside the window. V-DET-01/02 on a stub world with deaths. The smoke ladder is unchanged. V-INV-04 positive control (REV-P1a MIN-9): a test system that removes a ledger row, or writes a `person.*` column it does not own, is refused at registration or at the step with a named error, while the core compaction of the same rows passes.
 - **Status:** [ ] not started
 
 #### T-04: Authored numbers into plane A (`05.5` §3.2; rulings 8, 9)
