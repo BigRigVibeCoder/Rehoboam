@@ -9,7 +9,7 @@ tags: [governance, workflow]
 related: [GOV-007, GOV-002, ADR-0032, ADR-0033]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** Every piece of work follows one loop: conversation → spec → sprint → verification → audit → merge by change class. Specs come before code. One agent works on one branch per sprint, with one commit per task. Merges follow the change classes in `docs/13` §4.2: routine work merges on green tests plus independent audits; the director approves only contract, determinism-machinery and out-of-tolerance changes. Adapted from `agentic_architect` GOV-005.
@@ -55,9 +55,28 @@ version: 1.0.0
 | Defect fix | `fix/DEF-NNN-short-name` |
 | Architect sprint | `arch/SPR-NNN-ARCH-short-name` |
 
+- **`main` is the only long-lived branch.** Everything else branches from `main` and returns to it through one pull request.
 - **One agent per branch, one branch per sprint.** No per-task branches.
 - **Commits** follow `type(SPR-NNN): T-NN description`, then a body with `Why:`, `What:`, `Refs:` (CODEX and `docs` IDs) and the attribution lines the harness requires. One commit per task.
 - **Branches are short-lived** and are deleted after merge.
+- **Cloud sessions.** A cloud agent session is started on its sprint branch (§4.2). The one exception is the Architect's planning session, whose platform-named branch is merged like any other branch.
+
+### 4.1 Pull requests
+- **One pull request per sprint**, from the sprint branch into `main`, opened as a draft by the Developer when the first task lands. CI runs on every push to it.
+- **The title** is `SPR-NNN: <title> [C<n>]`. **The body** links the `SPR-` document, carries its compliance table, and ends with the check report verdict.
+- **Ready for review** only when `bin/check_all.sh` passes and the Developer's report is attached. The Tester's `VER` evidence and the Architect's audit (`VER-SPR-NNN`) are committed to the sprint branch before merge.
+- **Merge method: rebase and merge.** It keeps one commit per task on a straight `main`, which the divergence bisect tool (`docs/13` §4.5) needs.
+- **One merge at a time.** The Architect merges, then updates the next waiting branch from `main` and lets CI re-run before merging it. At most one C3 pull request is open for merge at a time.
+- **Who presses merge:** §6.
+
+### 4.2 Agent sessions per sprint
+| Session | Model | Branch | Does |
+|---|---|---|---|
+| Architect | the default model | its own | Plans, starts the other sessions, audits, merges |
+| Developer (`AGT-002-*`) | the default model | `sprint/SPR-NNN-…` | Implements the tasks; opens the draft pull request |
+| Tester (`AGT-003-*`) | **a different model** from the Developer (BCK-002 A-02) | the same sprint branch, test files only, after the Developer marks the PR ready | Writes contract tests from the spec first, then runs them; files `DEF-` items |
+
+Sprints with no dependency between them run in parallel sessions. The Architect starts sessions only for sprints whose `SPR-` is `ACTIVE` (§2: C2/C3 specs need the director's approval first).
 
 ## 5. Verification and audit
 
@@ -73,8 +92,8 @@ version: 1.0.0
 
 ## 6. Merge
 
-- **All merges go through the merge queue** (`docs/13` §4.4).
-- **Route by class:**
+- **All merges follow `docs/13` §4.4.** On GitHub Free there is no merge queue and no enforced required checks, so its fallback applies: **no green check report, no merge**, kept by the Architect and the director.
+- **Route by class** ("auto-merge" means the Architect merges on the conditions listed; "needs the director" means the director merges, or tells the Architect to):
   - **C0/C1** auto-merge on green CI, a Tester pass and the Architect's audit.
   - **C2** additive changes auto-merge; breaking changes need the director.
   - **C3** within tolerance auto-merges; out of tolerance, or touching the determinism machinery or the golden-world corpus, needs the director.

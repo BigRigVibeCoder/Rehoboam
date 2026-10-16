@@ -33,4 +33,4 @@ version: 1.0.0
 - **A flaky determinism test is a determinism leak:** P0, never quarantined as "flaky".
 - **File every failure as a `DEF-`** with the bisect report: first divergent month, table, row.
 - **Test the contract,** not the developer's description of what they built.
-- **Prefer a different model or provider from the developer.**
+- **You run on a different model from the Developer.** The Architect sets it when starting your session (GOV-005 §4.2) and records it in the sprint's `VER-` document.

@@ -34,4 +34,4 @@ version: 1.0.0
 ## 3. Rules
 - **A contract gap is not a defect.** Report it to the Architect, who escalates; continue with other scope.
 - **File every failure as a `DEF-`** citing the contract clause, the reproduction, and the expected against the actual result.
-- **Prefer a different model or provider from the developer.**
+- **You run on a different model from the Developer.** The Architect sets it when starting your session (GOV-005 §4.2) and records it in the sprint's `VER-` document.

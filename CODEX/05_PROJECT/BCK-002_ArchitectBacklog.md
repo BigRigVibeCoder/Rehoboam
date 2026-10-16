@@ -19,7 +19,7 @@ version: 1.0.0
 | # | Item | When | Status |
 |---|---|---|---|
 | A-01 | Set up CODEX, governance, agent docs, templates, generated manifest, `bin/check_all.sh` | Now | **Done** (SPR-000-ARCH) |
-| A-02 | Configure tester and auditor model diversity (a different model or provider from the developers) and record it in each AGT boot doc | Before SPR-002 | Open |
+| A-02 | Configure tester and auditor model diversity (a different model or provider from the developers) and record it in each AGT boot doc | Before SPR-002 | **Done**: GOV-005 §4.2; AGT-001, AGT-003-* |
 | A-03 | Wire `bin/check_all.sh` into CI as the PR tier (with SPR-001) | SPR-001 | In progress |
 | A-04 | Seal the held-out bands: commit hashes of their definitions, with AGT-003-STAT as custodian | Before P1b tuning | Open |
 | A-05 | Escape-rate tracking in VER documents; report it at G0 | From SPR-002 | Open |
@@ -29,4 +29,5 @@ version: 1.0.0
 | A-09 | Prepare `VER-G0` | End of P0 | Open |
 | A-10 | Cloud adaptation table in GOV-008 | When the director starts the full cloud move | Deferred |
 | A-11 | Enforce "no green report, no merge" by hand (GitHub Free: no required checks) | Every merge | Ongoing |
-| A-12 | Report `adjutant` spend against the D6 ceiling | Each gate | Open |
+| A-12 | Tell the director in advance when an `adjutant` session is needed, what for and for how long (D6) | As needed | Ongoing |
+| A-13 | Set `main` as the default branch on GitHub (director, Settings → General) | Now | Open |
