@@ -91,11 +91,11 @@ version: 1.2.0
 
 ## Developer notes (AGT-002-CORE, 2026-10-16)
 
-Decisions taken in the sprint, for the audit (none changes a binding ruling):
+Decisions taken in the sprint. **Architect ruling, 2026-10-16: D1–D8 accepted** (D5 at 70%, to be revisited if a real system needs shared event kinds; D7 on condition that the default is a `SimError` that poisons the engine, not a panic, which it is; D3 is an engine API, documented in `05.1` §2 next to the merge rule).
 
 | # | Decision | Why | Confidence |
 |---|---|---|---|
-| D1 | Within a phase, due timers run in a **timer pass** before the pulse passes (canonical order restricted to the timers' owners; each owner takes its timers in key order) | A timer fires at its own tick, often between pulse boundaries; one pass keeps the canonical order of SPR-005 | high |
+| D1 | Within a phase, due timers run in a **timer pass** before the firing bindings (canonical order; each owner once, at the level of its first binding in the phase, taking its timers in key order; restated over bindings after SPR-005 DEF-7) | A timer fires at its own tick, often between pulse boundaries; one pass keeps the canonical order of SPR-005 | high |
 | D2 | Within one system's buffers the merge takes cancellations, timers, events, then commands | A command can then carry the `EventId` of the event that caused it (the death path of `05.1` §2 rule 2) | high |
 | D3 | `DraftRef`: a step names its own earlier event drafts; the merge resolves them to `EventId`s (draft-local causes, a command's cause) | A step cannot know an id before the merge (ruling 1), yet consequences must cite their cause (ruling 4) | medium: a mechanism the spec does not list (ADR-0033 §5); it is the smallest that makes causal edges usable |
 | D4 | Queue key `(tick, phase, PersonId, seq)`; the owner receives its whole queue the next time it runs; untaken commands stay queued | Ruling 5's `(phase, PersonId)`, led by the submitting instant (a queue spans instants) and closed by the merge counter (unique keys) | high |
@@ -108,8 +108,8 @@ Carried forward:
 
 | Item | To | Why |
 |---|---|---|
-| `StepCtx::rng` still draws at epoch 0; only re-sample draws carry the entity's epoch | SPR-007 or the first input-driven system | `EntityKey` is an untyped `u64`; keying every draw by epoch needs a kind-tagged key in `StepCtx::rng` |
-| A keyframe must hold the command queues, the entity epochs, the queued inputs and the event counter, not only the agenda | SPR-007 | All are plane-A state between instants (ruling 7 names the agenda) |
+| `StepCtx::rng` still draws at epoch 0; only re-sample draws carry the entity's epoch | BCK-002 A-29 (Architect), due before the first material input that touches a drawing system | `EntityKey` is an untyped `u64`; keying every draw by epoch needs a kind-tagged key in `StepCtx::rng` |
+| A keyframe must hold the command queues, the entity epochs, the queued inputs and the event counter, not only the agenda | SPR-007 (passed on by the Architect) | All are plane-A state between instants (ruling 7 names the agenda) |
 | Material-input scopes are explicit entity sets; the host expands a household, settlement or region | the input journal (SPR-007) and the ledger | `rh-core` has no membership tables yet |
 | `EventLog::hash` is a stub fold, not yet part of a combined state hash | SPR-007 | Merkle hashes replace both stubs |
 
