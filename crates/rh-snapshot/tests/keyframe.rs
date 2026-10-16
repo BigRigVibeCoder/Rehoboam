@@ -55,6 +55,12 @@ fn history() -> History {
     }
 }
 
+/// The journal position after the inputs `e` has applied (these tests have no journal file, so
+/// the head is the genesis value).
+fn anchor(e: &Engine) -> JournalPosition {
+    position(u32::try_from(e.snapshot().applied_inputs).unwrap())
+}
+
 fn position(inputs: u32) -> JournalPosition {
     JournalPosition {
         timeline_id: 0,
@@ -108,7 +114,7 @@ fn a_keyframe_round_trips_the_whole_plane_a_state() {
     assert!(!state.agenda.entries.is_empty(), "pending timers");
     assert!(!state.events.events.is_empty(), "held events");
     assert!(!state.inputs.is_empty() && !state.epochs.is_empty());
-    let (bytes, header) = write_keyframe(&engine, &history(), position(1)).unwrap();
+    let (bytes, header) = write_keyframe(&engine, anchor(&engine)).unwrap();
     assert_eq!(header.state_hash, state_hash(&state));
     assert_eq!(&bytes[..8], b"RHKF\0v1\n", "the envelope's magic");
     assert_eq!(
@@ -139,7 +145,7 @@ fn v_det_05_a_loaded_keyframe_advances_ten_years_like_the_continuous_run() {
     for cut in [50 * DAY + 1, YEAR - 1] {
         let end = cut + 10 * YEAR;
         let mut continuous = run_to(life(), cut);
-        let (bytes, _) = write_keyframe(&continuous, &history(), position(1)).unwrap();
+        let (bytes, _) = write_keyframe(&continuous, anchor(&continuous)).unwrap();
         let expected = monthly(&mut continuous, end);
         let mut loaded = load(&bytes).unwrap();
         let got = monthly(&mut loaded, end);
@@ -168,7 +174,7 @@ fn v_det_05_the_permanent_cadence_and_the_yearly_lru() {
             Admission::Permanent => assert_eq!(year % 10, 0),
             Admission::Cached { evicted: gone } => evicted.extend(gone),
         }
-        let (bytes, _) = write_keyframe(&e, &history(), position(1)).unwrap();
+        let (bytes, _) = write_keyframe(&e, anchor(&e)).unwrap();
         frames.insert(year, bytes);
         for gone in &evicted {
             frames.remove(gone);
@@ -245,7 +251,7 @@ fn rewrite_with(
 #[test]
 fn every_wrong_keyframe_is_refused() {
     let engine = run_to(life(), 50 * DAY + 1);
-    let (bytes, _) = write_keyframe(&engine, &history(), position(1)).unwrap();
+    let (bytes, _) = write_keyframe(&engine, anchor(&engine)).unwrap();
     // The faithful rewrite still loads: the edits below are what the checks catch.
     assert!(load(&rewrite(&bytes, |_| {})).is_ok());
     // The same rows, uncompressed: not the keyframe's IPC layout, refused before Arrow decodes.
@@ -315,9 +321,112 @@ fn every_wrong_keyframe_is_refused() {
     let mut wrong = position(1);
     wrong.timeline_id = 4;
     assert!(matches!(
-        write_keyframe(&engine, &history(), wrong),
-        Err(KeyframeError::Format(_))
+        write_keyframe(&engine, wrong),
+        Err(KeyframeError::Anchor(_))
     ));
+}
+
+/// Rewrites one header line `key<TAB>value` of a keyframe.
+fn with_header(bytes: &[u8], key: &'static str, value: &'static str) -> Vec<u8> {
+    rewrite(bytes, |pairs| {
+        let prefix = format!("{key}\t");
+        let line = pairs
+            .iter_mut()
+            .find(|p| p.0 == "rehoboam:keyframe" && p.1.starts_with(prefix.as_bytes()))
+            .unwrap();
+        line.1 = format!("{prefix}{value}").into_bytes();
+    })
+}
+
+/// VER-SPR-007-TEST DEF-4: the keyframe's history tuple is the engine's own. The writer takes no
+/// history from its caller, so an engine of seed 99 and salt 5 cannot be stamped as seed 13 and
+/// salt 0 (or the reverse), and the loader refuses a keyframe whose tuple differs from the one
+/// the caller expects.
+#[test]
+fn def_4_the_history_tuple_comes_from_the_engine() {
+    let engine = run_to(life(), 50 * DAY + 1);
+    let (bytes, header) = write_keyframe(&engine, anchor(&engine)).unwrap();
+    assert_eq!(header.history, history());
+    let mut other = life_engine(99, 48, 3, false, 1);
+    other.set_provenance(history().provenance);
+    let other = run_to(other, 50 * DAY + 1);
+    let (other_bytes, other_header) = write_keyframe(&other, anchor(&other)).unwrap();
+    assert_eq!(other_header.history.world_seed, 99);
+    // The seed-99 keyframe is refused under the seed-13 history, and loads under its own.
+    assert!(matches!(
+        load(&other_bytes),
+        Err(KeyframeError::History("world_seed"))
+    ));
+    let mut expected = history();
+    expected.world_seed = 99;
+    let (mut loaded, _) =
+        load_engine(&other_bytes, CALENDAR, life_registered(), &expected).unwrap();
+    // And the loaded engine draws as the original does: equal a year on, instant by instant.
+    let mut original = other;
+    let end = 50 * DAY + YEAR;
+    assert_eq!(monthly(&mut loaded, end), monthly(&mut original, end));
+    assert_eq!(
+        state_hash(&loaded.snapshot()),
+        state_hash(&original.snapshot())
+    );
+    // The seed-13 keyframe still loads under the seed-13 history.
+    assert!(load(&bytes).is_ok());
+}
+
+/// VER-SPR-007-TEST GAP-8: each of the five history fields is checked on load.
+#[test]
+fn gap_8_every_history_field_is_checked_on_load() {
+    type Edit = fn(&mut History);
+    let engine = run_to(life(), 50 * DAY + 1);
+    let (bytes, _) = write_keyframe(&engine, anchor(&engine)).unwrap();
+    let edits: [(&str, Edit); 5] = [
+        ("build", |h| h.provenance.build.push('x')),
+        ("registry_version", |h| {
+            h.provenance.registry_version.push('x');
+        }),
+        ("manifest_hash", |h| h.provenance.manifest_hash.push('x')),
+        ("world_seed", |h| h.world_seed ^= 1),
+        ("branch_salt", |h| h.branch_salt ^= 1),
+    ];
+    for (field, edit) in edits {
+        let mut expected = history();
+        edit(&mut expected);
+        match load_engine(&bytes, CALENDAR, life_registered(), &expected) {
+            Err(KeyframeError::History(f)) => assert_eq!(f, field),
+            Err(e) => panic!("{field}: refused for another reason: {e}"),
+            Ok(_) => panic!("{field}: accepted"),
+        }
+    }
+    assert!(load(&bytes).is_ok());
+}
+
+/// VER-SPR-007-TEST GAP-7: the journal anchor must count exactly the inputs the engine applied
+/// (`rh-core/engine.meta`, inside `state_hash`), on write and on load, so an edited count or an
+/// anchor past what was applied is refused without the journal.
+#[test]
+fn gap_7_the_journal_anchor_counts_exactly_the_applied_inputs() {
+    let engine = run_to(life(), 50 * DAY + 1);
+    assert_eq!(engine.snapshot().applied_inputs, 1);
+    // The writer refuses an anchor of 99 (or 0) over one applied input.
+    for inputs in [0, 2, 99] {
+        assert!(matches!(
+            write_keyframe(&engine, position(inputs)),
+            Err(KeyframeError::Anchor(_))
+        ));
+    }
+    let (bytes, _) = write_keyframe(&engine, position(1)).unwrap();
+    // The loader refuses a header edited to another count.
+    for forged in ["999", "0", "2"] {
+        assert!(
+            matches!(
+                load(&with_header(&bytes, "journal_inputs", forged)),
+                Err(KeyframeError::Anchor(_))
+            ),
+            "journal_inputs {forged}"
+        );
+    }
+    // The faithful header still loads.
+    assert!(load(&with_header(&bytes, "journal_inputs", "1")).is_ok());
 }
 
 #[test]
@@ -351,7 +460,7 @@ fn a_poisoned_engine_has_no_keyframe() {
             .is_err()
     );
     assert!(matches!(
-        write_keyframe(&e, &history(), position(0)),
+        write_keyframe(&e, anchor(&e)),
         Err(KeyframeError::Poisoned(_))
     ));
 }
@@ -361,7 +470,7 @@ fn a_poisoned_engine_has_no_keyframe() {
 #[test]
 fn the_guard_sees_engine_held_state() {
     let engine = run_to(life(), 50 * DAY + 1);
-    let (bytes, _) = write_keyframe(&engine, &history(), position(1)).unwrap();
+    let (bytes, _) = write_keyframe(&engine, anchor(&engine)).unwrap();
     let mut state = read_keyframe(&bytes, &life_registered()).unwrap().0;
     let tables_only = rh_snapshot::tables_hash(&state.tables);
     state.agenda.entries.pop();
@@ -458,7 +567,7 @@ fn a_converged_run_that_emitted_a_different_event_hashes_differently() {
         state_hash(&s2),
         "the running event-log hash is in state_hash"
     );
-    let (bytes, _) = write_keyframe(&one, &history(), position(0)).unwrap();
+    let (bytes, _) = write_keyframe(&one, anchor(&one)).unwrap();
     let (read, _) = read_keyframe(&bytes, one.registered()).unwrap();
     assert_eq!(read.events.running, s1.events.running);
     assert_eq!(state_hash(&read), state_hash(&s1));
@@ -537,7 +646,7 @@ fn a_keyframe_keeps_the_held_events_outside_the_hash() {
     let engine = run_to(life(), 50 * DAY + 1);
     let state = engine.snapshot();
     assert!(!state.events.events.is_empty(), "events are held");
-    let (bytes, header) = write_keyframe(&engine, &history(), position(1)).unwrap();
+    let (bytes, header) = write_keyframe(&engine, anchor(&engine)).unwrap();
     let mut loaded = load(&bytes).unwrap();
     assert_eq!(loaded.snapshot().events.events, state.events.events);
     assert_eq!(state_hash(&loaded.snapshot()), header.state_hash);
@@ -575,7 +684,7 @@ struct Sweep {
 /// Ports the Tester's `ver/forge.py` sweep in-process: an abort would end the test process.
 fn forge_sweep(stride: usize) -> Sweep {
     let engine = run_to(life(), 50 * DAY + 1);
-    let (bytes, header) = write_keyframe(&engine, &history(), position(1)).unwrap();
+    let (bytes, header) = write_keyframe(&engine, anchor(&engine)).unwrap();
     let body = unseal_keyframe(&bytes).unwrap().to_vec();
     let quiet = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
@@ -622,4 +731,39 @@ fn def_3_full_sweep_every_bit_of_the_arrow_body() {
     let sweep = forge_sweep(1);
     println!("DEF-3 full: {sweep:?}");
     assert_sweep(&sweep, 90_000);
+}
+
+/// The engine tables decode tombstones in id order even when the tombstoned timers' key order
+/// differs (found by the DEF-3 read-back on write: the seed-99 life world at day 50 has
+/// tombstones 5 and 7 with timer 7 due first, and a decoder that kept row order produced a state
+/// that hashed differently and that `Engine::restore` refused).
+#[test]
+fn tombstones_decode_in_id_order_whatever_their_key_order() {
+    let mut e = life_engine(99, 48, 3, false, 1);
+    e.set_provenance(history().provenance);
+    let e = run_to(e, 50 * DAY + 1);
+    let s = e.snapshot();
+    let in_key_order: Vec<u64> = s
+        .agenda
+        .entries
+        .iter()
+        .map(|(k, _)| k.seq)
+        .filter(|seq| {
+            s.agenda
+                .tombstones
+                .contains(&rh_core::agenda::TimerId::from_raw(*seq))
+        })
+        .collect();
+    assert!(
+        in_key_order.windows(2).any(|w| w[0] > w[1]),
+        "the case needs tombstones out of key order: {in_key_order:?}"
+    );
+    let tables = engine_tables(&s)
+        .into_iter()
+        .map(|(n, r)| (n.to_owned(), r))
+        .collect();
+    let decoded = decode_engine_tables(&tables, &life_registered(), s.tables.clone()).unwrap();
+    assert_eq!(decoded, s);
+    assert_eq!(state_hash(&decoded), state_hash(&s));
+    assert!(write_keyframe(&e, anchor(&e)).is_ok());
 }

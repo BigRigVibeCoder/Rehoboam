@@ -1474,7 +1474,7 @@ fn t02_restore_refuses_every_non_canonical_or_unknown_part() {
     type Edit = fn(&mut EngineState);
     type Want = fn(&R) -> bool;
     let base = life_run_to(SPLIT).snapshot();
-    let cases: [(&str, Edit, Want); 11] = [
+    let cases: [(&str, Edit, Want); 12] = [
         (
             "unsorted agenda",
             |s| s.agenda.entries.swap(0, 1),
@@ -1530,6 +1530,15 @@ fn t02_restore_refuses_every_non_canonical_or_unknown_part() {
             |s| s.inputs.reverse(),
             |e| matches!(e, R::Inputs(_)),
         ),
+        (
+            // GAP-9: the earliest pending timer moved to just before the cursor.
+            "timer before the cursor",
+            |s| {
+                let cursor = s.cursor.unwrap();
+                s.agenda.entries[0].0.time = SimTime::from_minutes(cursor.minutes() - 1);
+            },
+            |e| matches!(e, R::TimerTime(_)),
+        ),
     ];
     for (name, edit, want) in cases {
         let mut s = base.clone();
@@ -1538,5 +1547,10 @@ fn t02_restore_refuses_every_non_canonical_or_unknown_part() {
             Err(e) => assert!(want(&e), "{name}: refused for another reason: {e}"),
             Ok(_) => panic!("{name}: accepted"),
         }
-    }
+    } // A timer at exactly the cursor is still pending, not late: the boundary restores.
+    let mut at_cursor = base.clone();
+    at_cursor.agenda.entries[0].0.time = at_cursor.cursor.unwrap();
+    // Lowering the earliest entry's time keeps the entries in key order.
+    assert!(at_cursor.agenda.entries.windows(2).all(|w| w[0].0 < w[1].0));
+    restore(at_cursor).unwrap_or_else(|e| panic!("a timer at the cursor: {e}"));
 }

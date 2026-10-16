@@ -70,7 +70,7 @@ use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance};
 use crate::phase::Phase;
 use crate::register::{Entry, Registered};
-use crate::state::{EngineState, RestoreError, check_epochs, check_inputs};
+use crate::state::{EngineState, RestoreError, check_epochs, check_inputs, check_timers};
 use crate::system::{
     InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx,
 };
@@ -355,6 +355,7 @@ impl Engine {
             CommandQueues::from_state(&state.commands).map_err(RestoreError::Commands)?;
         check_epochs(&state.epochs)?;
         check_inputs(&state.inputs, state.cursor)?;
+        check_timers(&state.agenda.entries, state.cursor)?;
         let events = EventLog::from_state(&state.events).map_err(RestoreError::Events)?;
         let start = state.cursor.unwrap_or(SimTime::EPOCH);
         let mut engine = Self::new(
@@ -440,6 +441,25 @@ impl Engine {
     /// Sets the timeline id (0, the canonical timeline, by default).
     pub fn set_timeline(&mut self, timeline: TimelineId) {
         self.timeline = timeline;
+    }
+
+    /// The world seed this engine draws with (VER-SPR-007-TEST DEF-4: a keyframe takes its history
+    /// tuple from the engine, never from the caller).
+    #[must_use]
+    pub const fn world_seed(&self) -> u64 {
+        self.world_seed
+    }
+
+    /// The branch salt this engine draws with.
+    #[must_use]
+    pub const fn branch_salt(&self) -> BranchSalt {
+        self.branch_salt
+    }
+
+    /// The build, Registry version and manifest hash this engine runs under.
+    #[must_use]
+    pub const fn provenance(&self) -> &Provenance {
+        &self.provenance
     }
 
     /// The tables.

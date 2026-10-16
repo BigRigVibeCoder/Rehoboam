@@ -148,6 +148,9 @@ pub enum KeyframeError {
     Decode(DecodeError),
     /// The decoded state is not one the engine restores.
     Restore(RestoreError),
+    /// The journal anchor disagrees with the state: another timeline, or a count other than the
+    /// material inputs applied (VER-SPR-007-TEST GAP-7).
+    Anchor(String),
     /// The Arrow IPC metadata is not a keyframe's (schema, offsets or declared sizes), refused
     /// before Arrow decodes anything (DEF-3 layer 1).
     Ipc(String),
@@ -173,6 +176,7 @@ impl fmt::Display for KeyframeError {
             Self::Poisoned(e) => write!(f, "keyframe: the engine is poisoned ({e})"),
             Self::History(field) => write!(f, "keyframe: belongs to another history ({field})"),
             Self::Decode(e) => write!(f, "keyframe: {e}"),
+            Self::Anchor(m) => write!(f, "keyframe: the journal anchor is wrong: {m}"),
             Self::Ipc(m) => write!(f, "keyframe: the Arrow IPC metadata is refused: {m}"),
             Self::Panicked(m) => write!(f, "keyframe: Arrow panicked while decoding: {m}"),
             Self::ReadBack(m) => {
@@ -220,32 +224,42 @@ fn all_tables(state: &EngineState) -> BTreeMap<String, Vec<Vec<u8>>> {
     tables
 }
 
-/// Writes a keyframe of `engine` for `history` at journal position `journal`, and returns its
-/// bytes and header.
+/// Writes a keyframe of `engine` at journal position `journal`, and returns its bytes and header.
+///
+/// The history tuple is the engine's own ([`Engine::provenance`], [`Engine::world_seed`],
+/// [`Engine::branch_salt`]): a caller cannot stamp a keyframe with another history
+/// (VER-SPR-007-TEST DEF-4). The journal position must be the engine's timeline and count exactly
+/// the material inputs the engine has applied (GAP-7).
 ///
 /// # Errors
-/// [`KeyframeError::Poisoned`] for a poisoned engine; [`KeyframeError::Format`] if the journal
-/// position is another timeline's or a table name holds a tab or newline;
+/// [`KeyframeError::Poisoned`] for a poisoned engine; [`KeyframeError::Anchor`] if the journal
+/// position is another timeline's or counts other than the applied inputs;
+/// [`KeyframeError::Format`] if a table name holds a tab or newline;
 /// [`KeyframeError::Arrow`] if Arrow fails; [`KeyframeError::ReadBack`] if the written bytes do not
 /// read back to exactly this state and header (DEF-3 layer 3).
 pub fn write_keyframe(
     engine: &Engine,
-    history: &History,
     journal: JournalPosition,
 ) -> Result<(Vec<u8>, KeyframeHeader), KeyframeError> {
     if let Some(e) = engine.poisoned() {
         return Err(KeyframeError::Poisoned(e.to_string()));
     }
     let state = engine.snapshot();
+    check_anchor(&journal, &state)?;
+    let history = History {
+        provenance: engine.provenance().clone(),
+        world_seed: engine.world_seed(),
+        branch_salt: engine.branch_salt().to_raw(),
+    };
     if journal.timeline_id != state.timeline.to_raw() {
-        return Err(KeyframeError::Format(format!(
+        return Err(KeyframeError::Anchor(format!(
             "the journal position is timeline {}'s, the engine runs timeline {}",
             journal.timeline_id,
             state.timeline.to_raw()
         )));
     }
     let header = KeyframeHeader {
-        history: history.clone(),
+        history,
         journal,
         state_hash: state_hash(&state),
     };
@@ -307,6 +321,28 @@ fn batches<'r>(name: &str, rows: &'r [Vec<u8>]) -> Result<Vec<&'r [Vec<u8>]>, Ke
         out.push(&rows[start..]);
     }
     Ok(out)
+}
+
+/// The keyframe's journal anchor agrees with the state it is taken of: the same timeline, and a
+/// count equal to the material inputs applied (`rh-core/engine.meta`, which `state_hash` covers),
+/// so a header edited to another count, or an anchor past what was applied, is refused even
+/// without the journal (VER-SPR-007-TEST GAP-7). [`crate::journal::Replay::check_anchor`] checks
+/// the anchor against the journal itself.
+fn check_anchor(journal: &JournalPosition, state: &EngineState) -> Result<(), KeyframeError> {
+    if journal.timeline_id != state.timeline.to_raw() {
+        return Err(KeyframeError::Anchor(format!(
+            "the journal position is timeline {}'s, the engine runs timeline {}",
+            journal.timeline_id,
+            state.timeline.to_raw()
+        )));
+    }
+    if u64::from(journal.inputs) != state.applied_inputs {
+        return Err(KeyframeError::Anchor(format!(
+            "the journal position counts {} inputs, the engine has applied {}",
+            journal.inputs, state.applied_inputs
+        )));
+    }
+    Ok(())
 }
 
 /// Wraps Arrow IPC bytes in the keyframe envelope: [`KEYFRAME_MAGIC`], then their XXH3-128.
@@ -450,6 +486,7 @@ pub fn read_keyframe(
             computed,
         });
     }
+    check_anchor(&header.journal, &state)?;
     Ok((state, header))
 }
 
