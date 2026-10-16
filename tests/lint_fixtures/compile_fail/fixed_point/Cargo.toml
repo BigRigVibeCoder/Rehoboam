@@ -1,0 +1,7 @@
+# T-01 compile-fail positive controls for rh-core::fixed (SPR-010; tests/lint_fixtures/README.md); not in
+# the Rehoboam workspace. Each crate but fixed-ok is plane-A code that breaks one rule of the fixed-point
+# types and must fail `cargo check -p <crate>` with its own error: no implicit mixing of Q8_8, Q16_16 and
+# Money, and no conversion from or to a float. fixed-ok uses the same API correctly and must compile.
+[workspace]
+members = ["fixed-ok", "mix-q8-q16", "mix-money-q16", "float-from", "float-into", "float-cast"]
+resolver = "3"

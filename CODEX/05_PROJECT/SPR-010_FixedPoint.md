@@ -39,7 +39,7 @@ version: 1.1.0
 ### T-01: The types
 - **Deliverable:** `Q8_8` (i16 storage) and `Q16_16` (i32 storage) newtypes and `Money` (i64 minor units) in `rh-core::fixed`; constructors from integers and from exact ratios; no conversion from or to `f32`/`f64` in plane A (a test-only or tool-only conversion is allowed behind a feature that plane-A crates may not enable)
 - **Acceptance:** Compile-fail tests: no implicit mixing of the three types, and no float conversion from a plane-A crate
-- **Status:** [ ] not started
+- **Status:** [x] done: `crates/rh-core/src/fixed/`; controls in `tests/lint_fixtures/compile_fail/fixed_point/`, run by `bin/check_all.sh`. No float conversion exists under any feature
 
 ### T-02: Arithmetic and rounding
 - **Deliverable:** Saturating add, subtract and multiply; division only through a checked function that returns `Option` (the effect language's "guarded division"); one rounding rule for multiply and divide, documented with a `DECISION:` comment (round half to even is the default proposal); comparisons and ordering

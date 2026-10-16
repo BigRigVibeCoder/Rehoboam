@@ -162,6 +162,24 @@ doctest_count_control() {
   doctest_count_gate "$planted"
 }
 
+# T-01 compile-fail controls for rh-core::fixed (SPR-010): plane-A code that mixes Q8_8, Q16_16 and Money,
+# or converts one from or to a float, must not compile, each with its own error; fixed-ok must compile.
+# Each entry is crate|expected text.
+FIXED_POINT_COMPILE_FAIL='mix-q8-q16|expected `Q8_8`, found `Q16_16`
+mix-money-q16|expected `Money`, found `Q16_16`
+float-from|expected `Q16_16`, found `f64`
+float-into|the trait bound `f64: From<Q16_16>` is not satisfied
+float-cast|non-primitive cast: `Money` as `f64`'
+fixed_point_compile_controls() {
+  local fixture=tests/lint_fixtures/compile_fail/fixed_point/Cargo.toml crate text
+  run "rh-core::fixed compile control: well-typed plane-A use compiles" pass \
+    cargo check --offline --locked --quiet --manifest-path "$fixture" -p fixed-ok --target-dir target/lint-fixtures || return 1
+  while IFS='|' read -r crate text; do
+    run "rh-core::fixed compile-fail control: $crate must FAIL" "fail:$text" \
+      cargo check --offline --locked --quiet --manifest-path "$fixture" -p "$crate" --target-dir target/lint-fixtures || return 1
+  done <<<"$FIXED_POINT_COMPILE_FAIL"
+}
+
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
 # two `&&` lines splits the chain, and later checks would run after a failure (DEF-2).
 run "Required tools present" pass require_tools &&
@@ -195,6 +213,7 @@ run "V-PLN-01 compile-fail fixture has a clean dependency graph" pass "$PY" -I b
 run "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL" 'fail:unlinked crate `fixture_observation`' cargo check --offline --locked --quiet --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_b/Cargo.toml --target-dir target/lint-fixtures &&
 run "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph" pass "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_c/Cargo.toml &&
 run "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL" 'fail:unlinked crate `fixture_narrative`' cargo check --offline --locked --quiet --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_c/Cargo.toml --target-dir target/lint-fixtures &&
+fixed_point_compile_controls &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&

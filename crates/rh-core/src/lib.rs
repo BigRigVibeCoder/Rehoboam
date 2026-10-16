@@ -5,13 +5,8 @@
 //!
 //! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.1_simulation_core.md`.
 //!
-//! Stub created by SPR-001 (repository bootstrap). SPR-005 fills it.
+//! Created by SPR-001 (repository bootstrap); SPR-005 fills the world and the scheduler.
+//! SPR-010 adds `fixed`: the fixed-point and money types (DET-3).
 #![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    /// Placeholder so the PR tier has a test to run in every crate; replaced by real tests
-    /// when the crate gains code.
-    #[test]
-    fn stub_crate_builds() {}
-}
+pub mod fixed;
