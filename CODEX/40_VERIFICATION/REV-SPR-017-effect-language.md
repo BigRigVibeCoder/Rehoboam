@@ -2,14 +2,14 @@
 id: REV-SPR-017
 title: "Independent review of the Registry effect language v0 spec (PR #41)"
 type: record
-status: DRAFT
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, REV-P1a, BCK-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.3.0
+version: 0.4.0
 ---
 
 > **BLUF:** Not ready at round 1 (PR #41 head `35aa53a`): **2 blockers, 8 majors, 7 minors.** The reference reproduces all 456 golden cases, its positive control fails as it should, and the 12 succession cases agree with the spec text when checked by hand. The genealogy relations read only the life-course log and reach through the dead. Nothing depends on iteration order. D1 rounding matches `rh-core::fixed` and D9 matches `draw_hits`. The blockers: ticks are written in days where the engine counts minutes, and a 4-degree candidate cut breaks representation. Two choices go to the director at the SPR-017 plan gate: whether collateral heirs must be of the title's blood (M8), and the sex rules (D4). The reviewer expects no objection after one revision round (8/10).
@@ -72,3 +72,28 @@ The reviewer's positions on D1–D13: agree with D1, D3, D6, D7, D9, D10, D11 an
 | N5 | Title blood at world start and under rotas. With a one-row tenure log, a childless holder's death gives an empty line, and seniority and tanistry return only the son. A rota of 9 tenures excludes a cousin whose grandfather held. Genesis founders have no parent links at rung 0 | A worldgen requirement: for a dynastic world, `rh-worldgen` back-fills pre-epoch life-course rows with parent links, and tenure rows for past holders (SPR-019). The spec states this precondition. The window widens to `holders_of(title, 16)`. Pin a one-row-log case and a rota case |
 | N6 | The run-time `E_RNG_REUSE` ledger is scoped to a host step, so evaluating one sortition line twice in a step aborts the run | Scope the ledger to one evaluation of one program for one binding. A repeat evaluation is idempotent. Pin a case |
 | m1–m6 | The D5 guard leaks under uncle–niece marriage. A redraw in a verb whose payload carries an outcome is accepted. Neutral values are untested beyond the type's zero. Enum values named `none` cannot be written. The static lint spans a system's mutually exclusive programs. Assorted text and pins, including that the `neutral` field must exist before SPR-017's loader | `not descends(holder, x)`. A draw in an outcome-carrying verb is rejected. A neutral case that is not zero. Allow a keyword after the dot. Uniqueness within a program and across programs that can run in one step. Fix the text. The `neutral` field becomes a spec prerequisite of SPR-017 |
+
+## 6. Round 4 (PR #41 head `f0ed64e`, v0.4.0, 554 cases)
+
+**Verdict: ready for the plan gate. 0 blockers, 0 majors, 4 minors and some nits.** All 554 cases reproduce, and five lines check out by hand: the rota, the niece case, the one-row log, the open variant and the sortition repeat. Every standing mutant fails at least one case:
+
+| Mutant | Cases failed |
+|---|---|
+| Life-course log keyed by row id | 91 |
+| Short-circuit evaluation | 2 |
+| Lineage stopped at height 2 | 5 |
+| Pruning variants | 1–4 |
+| Absent-owner read returns zero | 2 |
+| Ascendant guard removed | 3 |
+| Blood rule removed | 9 |
+| Sortition keyed with `k = 0` | 2 |
+
+N5, N6 and m1–m3 are resolved; m4 and m5 are partly resolved (r4-1, r4-2). The spec agrees with the frozen M7, T1 and M2 on `main`. **The reviewer has no objection to the director approving the spec, including D14 (a), D4 and D12, at the SPR-017 plan gate (85%).**
+
+| # | Finding | Ruling |
+|---|---|---|
+| r4-1 | The grammar's `enum_lit` excludes keywords after the dot | Allow a keyword after the dot |
+| r4-2 | "Programs that can run in the same step" is undefined, so two events of one drawing verb at one instant could share a draw | Verb programs are evaluated once per event, so their run-time ledger spans one system's verb evaluations in a step, and a drawing verb keys on an entity of its event. Pinned both ways |
+| r4-3 | The golden T1 slice omits frozen T1's `BurnHoldings` send to M4, and the language cannot read a household | Align the slice. The program waits for an M4 accessor (P1b) |
+| r4-4 | Frozen M7 says `holders_of(title, 8)` in three places, and M2's `[initialization]` predates the back-fill | M7 amended to 16 (0.3.2, frozen; Architect, within the approved scope). M2 is amended with SPR-019 |
+| r4-5 | Stale wording and pins | Fixed in round 5 |
