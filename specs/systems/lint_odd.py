@@ -1,0 +1,243 @@
+"""ODD-R v2 linter, brief generator and code-skeleton generator (ADR-0033).
+
+System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec on its own and against
+  - the Registry (system exists, fidelity levels, parameter set equal both ways, era-state variables),
+  - every other spec (single writer per column; read set resolves to an owner that declares the column),
+  - the plan (requirement IDs exist in docs/03, test IDs in docs/09, phases in 05.1 §4.2, ADR files exist),
+  - the plane rules (a plane-A system never reads plane-B or plane-C columns),
+and it generates what people and code need from the same source:
+  --brief <id>   one-page summary for the director
+  --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
+
+Run: python -I specs/systems/lint_odd.py            (lints everything; exit 1 on any error)
+     python -I specs/systems/lint_odd.py --brief S5.daily_life
+"""
+import re
+import sys
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+SPECS = Path(__file__).resolve().parent
+REGISTRY = ROOT / "specs" / "manifest" / "registry_v0.toml"
+PHASES = ["Inputs", "Environment", "Production", "Exchange", "Vital", "Activity", "Contagion", "Polity",
+          "Military", "Agenda", "Culture", "Bookkeeping"]                  # 05.1 §4.2 (5a Activity, ADR-0031)
+PULSES = ["Year", "Season", "Month", "Day", "Hour"]
+REQUIRED = ["system", "purpose", "scales", "schedule", "rng", "design", "initialization", "input_data",
+            "params", "submodels", "invariants", "verification"]
+DESIGN_KEYS = ["basic_principles", "emergence", "adaptation", "objectives", "learning", "prediction", "sensing",
+               "interaction", "stochasticity", "collectives", "observation", "era_state", "scale_behaviour"]
+TYPES = {"i64", "u64", "i32", "u32", "u16", "u8", "bool", "enum", "q8_8", "q16_16", "f32_field"}
+SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def load():
+    reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
+    specs = {}
+    for f in sorted(p for p in SPECS.glob("*.odd.toml") if not p.name.startswith("_")):   # _template is not a spec
+        s = tomllib.loads(f.read_text(encoding="utf-8"))
+        specs[s.get("system", {}).get("id", f.stem)] = (f, s)
+    plan03 = (ROOT / "docs" / "03_requirements.md").read_text(encoding="utf-8")
+    plan09 = (ROOT / "docs" / "09_verification_and_validation.md").read_text(encoding="utf-8")
+    req_ids = set(re.findall(r"^\| ([A-Z][A-Z0-9]*-\d+) \|", plan03, re.M))
+    test_ids = set(re.findall(r"^\| (V-[A-Z0-9]+-\d+[a-z]?) \|", plan09, re.M))
+    adr_ids = {p.name[:8] for p in (ROOT / "docs" / "06_adr").glob("ADR-*.md")}
+    return reg, specs, req_ids, test_ids, adr_ids
+
+
+def lint(reg, specs, req_ids, test_ids, adr_ids):
+    errs, warns = [], []
+    owners = {}                                   # column -> (system, plane)
+    for sid, (f, s) in specs.items():
+        for o in s.get("owns", []):
+            col = o.get("column")
+            if col in owners:
+                errs.append(f"{sid}: column '{col}' is also owned by {owners[col][0]} (single writer, 05.1 §2)")
+            owners[col] = (sid, o.get("plane"))
+    for sid, (f, s) in specs.items():
+        p = f"{f.name}"
+        if s.get("odd_r") != 2:
+            errs.append(f"{p}: odd_r must be 2")
+        for sec in REQUIRED:
+            if sec not in s:
+                errs.append(f"{p}: missing section [{sec}] (write 'n/a: <reason>' fields rather than omitting)")
+        sysdef = reg.get("systems", {}).get(sid)
+        if sysdef is None:
+            errs.append(f"{p}: system '{sid}' is not in the Registry")
+            sysdef = {}
+        hdr = s.get("system", {})
+        if sysdef and hdr.get("fidelity") not in sysdef.get("fidelity_levels", []):
+            errs.append(f"{p}: fidelity {hdr.get('fidelity')} not among Registry levels {sysdef.get('fidelity_levels')}")
+        for a in hdr.get("adrs", []):
+            if a not in adr_ids:
+                errs.append(f"{p}: {a} does not exist in docs/06_adr")
+        for r in hdr.get("requirements", []):
+            if r not in req_ids:
+                errs.append(f"{p}: requirement {r} not found in docs/03")
+        # purpose and patterns
+        for pat in s.get("purpose", {}).get("patterns", []):
+            if pat.get("test") not in test_ids:
+                errs.append(f"{p}: pattern test {pat.get('test')} not found in docs/09")
+            if pat.get("kind") not in ("identity", "emergent"):
+                errs.append(f"{p}: pattern {pat.get('test')} kind must be identity or emergent")
+        # owned columns
+        planes = set()
+        for o in s.get("owns", []):
+            if o.get("type") not in TYPES:
+                errs.append(f"{p}: owned column {o.get('column')} has unknown type '{o.get('type')}'")
+            if o.get("plane") not in ("A", "B", "C"):
+                errs.append(f"{p}: owned column {o.get('column')} needs plane A, B or C")
+            planes.add(o.get("plane"))
+            if o.get("type") in ("q8_8", "q16_16") and not o.get("fixed_point", False):
+                errs.append(f"{p}: {o.get('column')} is fixed-point by type; set fixed_point = true")
+        # reads resolve to owners; plane rule
+        for r in s.get("reads", []):
+            col, owner = r.get("column"), r.get("owner")
+            if col in owners:
+                if owners[col][0] != owner:
+                    errs.append(f"{p}: reads {col} from {owner}, but {owners[col][0]} owns it")
+                if "A" in planes and owners[col][1] in ("B", "C"):
+                    errs.append(f"{p}: a plane-A system reads plane-{owners[col][1]} column {col} (ADR-0024)")
+            elif owner in specs:
+                errs.append(f"{p}: reads {col}, which {owner}'s spec does not declare in [[owns]]")
+            elif owner not in reg.get("systems", {}) and owner not in ("S1.culture", "S2.technology", "S3.migration"):
+                errs.append(f"{p}: reads {col} from unknown system {owner}")
+            else:
+                warns.append(f"{p}: reads {col} from {owner}, which has no spec yet")
+            if r.get("lag") not in ("same_instant", "start_of_day", "previous_pulse", "lagged"):
+                errs.append(f"{p}: read {col} needs lag same_instant | start_of_day | previous_pulse | lagged")
+        # schedule
+        for sc in s.get("schedule", []):
+            if sc.get("pulse") not in PULSES:
+                errs.append(f"{p}: unknown pulse {sc.get('pulse')}")
+            if sc.get("phase") not in PHASES:
+                errs.append(f"{p}: unknown phase {sc.get('phase')} (05.1 §4.2)")
+            if not sc.get("steps"):
+                errs.append(f"{p}: schedule entry without steps")
+        step_names = {st.split(":")[0].strip() for sc in s.get("schedule", []) for st in sc.get("steps", [])}
+        sub_names = {sm.get("name") for sm in s.get("submodels", [])}
+        for n in sub_names - step_names:
+            errs.append(f"{p}: submodel '{n}' is not named in any schedule step (ODD: same names in §3 and §7)")
+        # rng
+        seen = set()
+        for g in s.get("rng", []):
+            pu = g.get("purpose", "")
+            if not SNAKE.match(pu):
+                errs.append(f"{p}: RNG purpose '{pu}' must be snake_case")
+            if pu in seen:
+                errs.append(f"{p}: duplicate RNG purpose '{pu}'")
+            seen.add(pu)
+            if not g.get("key"):
+                errs.append(f"{p}: RNG purpose '{pu}' needs a key (ADR-0006 keyed counter-based RNG)")
+        # design concepts
+        d = s.get("design", {})
+        for k in DESIGN_KEYS:
+            if k not in d:
+                errs.append(f"{p}: design concept '{k}' missing (write 'n/a: <reason>')")
+        for v in d.get("era_state", []):
+            if v not in reg.get("era_state", {}):
+                errs.append(f"{p}: era-state variable '{v}' is not in the Registry [era_state]")
+        # parameters: equal sets both ways
+        spec_params = {x.get("name") for x in s.get("params", [])}
+        reg_params = set(sysdef.get("params", {}))
+        for n in sorted(spec_params - reg_params):
+            errs.append(f"{p}: parameter '{n}' is not declared in the Registry for {sid}")
+        for n in sorted(reg_params - spec_params):
+            errs.append(f"{p}: Registry parameter '{n}' is undocumented in the spec")
+        for x in s.get("params", []):
+            if not x.get("source"):
+                errs.append(f"{p}: parameter '{x.get('name')}' needs a source (a reference or 'design value')")
+        # submodels earn their place
+        for sm in s.get("submodels", []):
+            ep = sm.get("earns_its_place_by", [])
+            if not ep:
+                errs.append(f"{p}: submodel '{sm.get('name')}' must name the tests or bands that justify it")
+            for t in ep:
+                if t not in test_ids:
+                    errs.append(f"{p}: submodel '{sm.get('name')}' cites {t}, not found in docs/09")
+        # invariants and verification
+        for inv in s.get("invariants", []):
+            if inv.get("test") not in test_ids:
+                errs.append(f"{p}: invariant {inv.get('id')} cites test {inv.get('test')}, not found in docs/09")
+        for t in s.get("verification", {}).get("tests", []):
+            if t not in test_ids:
+                errs.append(f"{p}: verification test {t} not found in docs/09")
+        proto = s.get("verification", {}).get("prototype")
+        if proto and not (ROOT / proto).exists():
+            errs.append(f"{p}: prototype {proto} does not exist")
+        for c in s.get("couplings", []):
+            if c.get("system") not in reg.get("systems", {}) and c.get("system") not in ("S1.culture", "S2.technology", "S3.migration"):
+                errs.append(f"{p}: coupling to unknown system {c.get('system')}")
+    return errs, warns
+
+
+def brief(sid, specs, reg):
+    f, s = specs[sid]
+    h, pu, d = s["system"], s["purpose"], s["design"]
+    out = [f"# {h['id']} — {h['name']} (fidelity {h['fidelity']}, spec {h['spec_version']}, {h['status']})", "",
+           f"**What it does.** {pu['statement']}", "",
+           "**What it owns:** " + (", ".join(o["column"] for o in s.get("owns", [])) or "nothing (pure function)"),
+           "**What it reads:** " + ", ".join(f"{r['column']} ({r['owner']})" for r in s.get("reads", [])),
+           "**What it emits:** " + (", ".join(e["kind"] for e in s.get("emits", [])) or "no events"),
+           "**When it runs:** " + "; ".join(f"{x['pulse']} pulse, {x['phase']} phase" for x in s["schedule"]),
+           "**Randomness:** " + ", ".join(f"{g['purpose']} keyed by ({', '.join(g['key'])})" for g in s["rng"]),
+           "**Era-state it reads:** " + (", ".join(d.get("era_state", [])) or "none"), "",
+           "**Settings (Registry bounds):**"]
+    regp = reg["systems"][sid].get("params", {})
+    for x in s["params"]:
+        lo, hi = regp.get(x["name"], ["?", "?"])
+        out.append(f"- `{x['name']}` [{lo}, {hi}]: {x['meaning']} — source: {x['source']}")
+    out += ["", "**How we know it works:** " + ", ".join(s["verification"]["tests"]),
+            "**Not reproduced yet:** " + ("; ".join(pu.get("not_yet", [])) or "nothing listed")]
+    return "\n".join(out)
+
+
+def rust(sid, specs):
+    f, s = specs[sid]
+    camel = lambda n: "".join(w.capitalize() for w in n.split("_"))
+    lines = [f"// GENERATED from specs/systems/{f.name} by lint_odd.py --rust. Do not edit; edit the spec.",
+             f'pub const SYSTEM_ID: &str = "{sid}";',
+             f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
+             "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
+    lines += [f"    (Pulse::{x['pulse']}, Phase::{x['phase']})," for x in s["schedule"]]
+    lines += ["];", "#[repr(u32)]", "pub enum RngPurpose {"]
+    lines += [f"    {camel(g['purpose'])} = {i + 1},  // key: ({', '.join(g['key'])})" for i, g in enumerate(s["rng"])]
+    lines += ["}", "pub struct Params {"]
+    lines += [f"    pub {x['name']}: Fixed,  // bounds checked against the Registry at load" for x in s["params"]]
+    lines += ["}"]
+    return "\n".join(lines)
+
+
+def main() -> int:
+    reg, specs, req_ids, test_ids, adr_ids = load()
+    if len(sys.argv) == 3 and sys.argv[1] in ("--brief", "--rust"):
+        sid = sys.argv[2]
+        if sid not in specs:
+            print(f"no spec for {sid}; have {sorted(specs)}")
+            return 1
+        print(brief(sid, specs, reg) if sys.argv[1] == "--brief" else rust(sid, specs))
+        return 0
+    errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids)
+    for w in warns:
+        print("WARN ", w)
+    for e in errs:
+        print("ERROR", e)
+    # self-check: a broken spec (wrong fidelity, a column M2 already owns, an unregistered parameter, a bad RNG
+    # purpose, missing sections) must be rejected
+    bad = (Path("bad.odd.toml"), {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F9"},
+           "owns": [{"column": "person.alive", "type": "bool", "plane": "A"}],
+           "params": [{"name": "nonsense", "source": ""}], "rng": [{"purpose": "Bad Name"}]})
+    probe = {"M2.demography": specs["M2.demography"], "S5.daily_life": bad} if "M2.demography" in specs else {"S5.daily_life": bad}
+    b_errs, _ = lint(reg, probe, req_ids, test_ids, adr_ids)
+    caught = [e for e in b_errs if "bad.odd.toml" in e or "also owned" in e]
+    for needle in ("not among Registry levels", "snake_case", "not declared in the Registry", "missing section"):
+        assert any(needle in e for e in caught), (needle, caught)
+    if "M2.demography" in specs:
+        assert any("also owned" in e for e in caught), caught
+    print(f"  self-check (broken spec rejected): {len(caught)} errors, e.g. {caught[0]}")
+    print(f"{'PASS' if not errs else 'FAIL'}: {len(specs)} system specs linted ({len(warns)} warnings)")
+    return 1 if errs else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

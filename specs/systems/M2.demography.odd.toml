@@ -1,0 +1,146 @@
+# ODD-R v2 system spec (ADR-0033). Partial: the slice rung 0 (`solo`) needs. Births arrive with rung 1.
+odd_r = 2
+
+[system]
+id = "M2.demography"
+name = "Demography"
+spec_version = "0.1.0"
+fidelity = "F1"
+status = "draft"
+crate = "rh-sys-demography"
+adrs = ["ADR-0003", "ADR-0025", "ADR-0026"]
+requirements = ["DATA-8"]
+
+[purpose]
+statement = "Age every person, schedule deaths (and later births and marriages) as timers, and keep the life-course log."
+role = "substrate"
+patterns = [
+  { test = "V-SF-02", pattern = "Child mortality to age 15 in the agrarian band", kind = "identity", role = "sole" },
+  { test = "V-SF-02b", pattern = "Adult mortality shape on the Brass General Standard", kind = "identity", role = "sole" },
+]
+not_yet = ["Births, marriage and fertility (rung 1)", "Famine mortality coupling (M4 entitlement; V-SF-20b)"]
+
+[[owns]]
+column = "person.birth_tick"
+entity = "person"
+type = "i64"
+plane = "A"
+meaning = "Signed sim-time of birth (ADR-0026)"
+fixed_point = false
+[[owns]]
+column = "person.sex"
+entity = "person"
+type = "enum"
+plane = "A"
+meaning = "male | female"
+fixed_point = false
+[[owns]]
+column = "person.alive"
+entity = "person"
+type = "bool"
+plane = "A"
+meaning = "Living flag; the dead leave the live ledger through the lifecycle queue"
+fixed_point = false
+[[owns]]
+column = "person.death_tick"
+entity = "person"
+type = "i64"
+plane = "A"
+meaning = "Scheduled death time (a timer until it fires)"
+fixed_point = false
+
+[[emits]]
+kind = "DEATH"
+when = "The death timer fires"
+
+[scales]
+spatial = "person"
+temporal = "Month pulse; intra-month death times as timers"
+extent = "every living person on the map"
+restart = "Owned columns plus pending death timers restore the system exactly"
+
+[[fidelity_ladder]]
+level = "F1"
+representation = "Per-person Brass relational-logit hazards (specs/demography)"
+status = "target"
+
+[[schedule]]
+pulse = "Month"
+phase = "Vital"
+steps = ["ageing: nothing stored; age is derived from birth_tick", "mortality: sample this month's death times as timers", "fire due death timers"]
+when = "always"
+
+[[rng]]
+purpose = "death_time"
+key = ["person", "month"]
+use = "Intra-month death time from the Brass hazard"
+
+[design]
+basic_principles = "Brass relational logit on the General Standard (Brass 1971; R12 §9)"
+emergence = "Age structure and life expectancy emerge from per-person hazards"
+adaptation = "n/a"
+objectives = "n/a"
+learning = "n/a"
+prediction = "n/a"
+sensing = "Era-state medical level (later); none at rung 0"
+interaction = "None at rung 0"
+stochasticity = "Keyed RNG only"
+collectives = "Households (rung 1)"
+observation = "Life-course log; DEATH events in channel A"
+era_state = ["medical_level"]
+scale_behaviour = "Identical at every N; statistical bands report INSUFFICIENT below their sample minimums"
+
+[initialization]
+state = "Cast and generated persons from the manifest with birth_tick from age_years"
+from_manifest = ["peoples", "cast", "households"]
+
+[input_data]
+drivers = []
+
+[[params]]
+name = "e0"
+meaning = "Life expectancy at birth, a convenience converted to brass_alpha at beta = 1"
+source = "R12 §9"
+[[params]]
+name = "brass_alpha"
+meaning = "Level of mortality on the logit scale"
+source = "Brass 1971; observed -1.36 to 0.55"
+[[params]]
+name = "brass_beta"
+meaning = "Slope (shape) of mortality on the logit scale"
+source = "Brass 1971; observed 0.64 to 1.64"
+[[params]]
+name = "tfr"
+meaning = "Total fertility rate (rung 1)"
+source = "design range"
+[[params]]
+name = "eps_f"
+meaning = "Fertility response to food entitlement (rung 1)"
+source = "R09"
+[[params]]
+name = "eps_m"
+meaning = "Mortality response to food entitlement"
+source = "R09"
+[[params]]
+name = "elite_fertility_mult"
+meaning = "Elite fertility multiplier (M6 coupling)"
+source = "Turchin & Nefedov 2009; R12 §12"
+
+[[submodels]]
+name = "mortality"
+summary = "Monthly hazard from the Brass life table at the person's age; the death time inside the month is a keyed draw"
+earns_its_place_by = ["V-SF-02", "V-SF-02b"]
+
+[[invariants]]
+id = "INV-M2-01"
+statement = "People are conserved: births - deaths = change in the living population, every month"
+test = "V-DET-01"
+
+[[couplings]]
+system = "S5.daily_life"
+via = "S5 reads birth_tick, sex and alive at the start of each day"
+lag = "start of day"
+
+[verification]
+tests = ["V-SF-02", "V-SF-02b", "V-DET-01"]
+prototype = "specs/demography/selftest_brass.py"

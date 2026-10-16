@@ -1,0 +1,110 @@
+# ODD-R v2 system spec TEMPLATE (ADR-0033). Copy to specs/systems/<SYS.id>.odd.toml and fill EVERY field.
+# Exhaustive is the goal: agents maintain it, lint_odd.py checks it, the director reads the generated brief.
+# Unknown or not-applicable fields are written as "n/a: <reason>", never omitted.
+odd_r = 2
+
+[system]
+id = "<SYS.id as in the Registry, e.g. M4.economy>"
+name = "<plain name>"
+spec_version = "0.1.0"
+fidelity = "<F0|F1|F2: a level the Registry declares for this system>"
+status = "draft"                           # draft | frozen (frozen = the sprint is building against it)
+crate = "rh-sys-<name>"
+adrs = []                                  # e.g. ["ADR-0027"]
+requirements = []                          # IDs from docs/03
+
+[purpose]                                  # ODD 1
+statement = "<what the system is for, in <= 3 sentences, no mechanism>"
+role = "<substrate | drama_coupling | stylized_fact_producer>"
+patterns = []                              # [{ test = "V-SF-..", pattern = "..", kind = "identity|emergent", role = "sole|contributing" }]
+not_yet = []                               # patterns known NOT to be reproduced yet
+
+[[owns]]                                   # ODD 2: every column this system writes (single writer)
+column = "<entity.column>"
+entity = "<person|household|settlement|region|polity|market|...>"
+type = "<i64|u64|i32|u32|u16|u8|bool|enum|q8_8|q16_16|f32_field>"
+plane = "<A|B|C>"
+meaning = "<units and meaning>"
+fixed_point = false                        # true for q8_8/q16_16 and anything that crosses a threshold
+
+[[emits]]                                  # events into channel A of the World Stream
+kind = "<EVENT_KIND>"
+when = "<condition>"
+
+[[commands]]                               # lifecycle commands to other owners (never write their columns)
+target = "<SYS.id>"
+command = "<CommandName>"
+why = "<reason>"
+
+[[reads]]                                  # read set, through contract accessors only
+column = "<entity.column>"
+owner = "<SYS.id>"
+lag = "<same_instant|start_of_day|previous_pulse|lagged>"
+
+[scales]
+spatial = ""
+temporal = ""
+extent = ""
+restart = "<what a keyframe must hold to restore this system exactly>"
+
+[[fidelity_ladder]]
+level = "<F0|F1|F2>"
+representation = ""
+status = "<target|available|n/a>"
+
+[[schedule]]                               # ODD 3 (05.1 §4.2 phases)
+pulse = "<Year|Season|Month|Day|Hour>"
+phase = "<Inputs|Environment|Production|Exchange|Vital|Activity|Contagion|Polity|Military|Agenda|Culture|Bookkeeping>"
+steps = ["<step_name>: <what it does>"]    # step names must match [[submodels]] names
+when = "<always | active regions only | ...>"
+
+[[rng]]                                    # ODD 4.9: keyed purposes (ADR-0006)
+purpose = "<snake_case>"
+key = ["<entity>", "<time unit>"]
+use = ""
+
+[design]                                   # ODD 4: one line each; "n/a: <reason>" where it does not apply
+basic_principles = ""
+emergence = ""
+adaptation = ""
+objectives = ""
+learning = ""
+prediction = ""
+sensing = ""
+interaction = ""
+stochasticity = ""
+collectives = ""
+observation = ""
+era_state = []                             # Registry [era_state] variables read (ADR-0027)
+scale_behaviour = ""                       # micro / meso / macro (ADR-0028)
+
+[initialization]                           # ODD 5
+state = ""
+from_manifest = []
+
+[input_data]                               # ODD 6: time-varying external drivers (not parameters)
+drivers = []
+
+[[params]]                                 # ODD 7.0: exactly the Registry's parameter set for this system
+name = "<registry param>"
+meaning = ""
+source = "<R12 §n | paper, page | design value>"
+
+[[submodels]]                              # ODD 7: one per step; each must earn its place (ADR-0033 §5)
+name = "<step_name>"
+summary = "<equations or algorithm, in the effect language where possible>"
+earns_its_place_by = []                    # test or band IDs from docs/09
+
+[[invariants]]
+id = "INV-<SYS>-01"
+statement = ""
+test = "<V-.. ID>"
+
+[[couplings]]                              # ODD-R 8
+system = "<SYS.id>"
+via = ""
+lag = ""
+
+[verification]                             # ODD-R 9
+tests = []
+prototype = ""                             # optional path to an executable prototype

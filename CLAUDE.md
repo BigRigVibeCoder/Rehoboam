@@ -35,6 +35,7 @@ python -I specs/chronicle/selftest.py
 python -I specs/demography/selftest_brass.py
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
+python -I specs/systems/lint_odd.py
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
 ```
 

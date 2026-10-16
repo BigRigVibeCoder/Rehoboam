@@ -1,6 +1,6 @@
 # ADR-0032 — Adopt the Agentic Architect operating model, adapted for a deterministic simulation
 
-**Status:** Proposed (director's suggestion, 2026-10-16) · **Date:** 2026-10-16 · **Source:** [BigRigVibeCoder/agentic_architect](https://github.com/BigRigVibeCoder/agentic_architect) (read in full at commit `f3677c4`) · **Amends:** `13` (playbook), `11` (roadmap mechanics), `09` (testing regime), `decisions_pending.md` D3
+**Status:** Accepted (director, 2026-10-16: "make it our own") · **Date:** 2026-10-16 · **Source:** [BigRigVibeCoder/agentic_architect](https://github.com/BigRigVibeCoder/agentic_architect) (read in full at commit `f3677c4`) · **Amends:** `13` (playbook), `11` (roadmap mechanics), `09` (testing regime), `decisions_pending.md` D3
 
 ## Context
 

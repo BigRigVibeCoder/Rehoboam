@@ -1,4 +1,6 @@
 # ODD-R system spec: `<SYS.id>` <name>, fidelity F<n>, model semver <x.y.z>
+
+> **ODD-R v2 (ADR-0033): the canonical spec is now `specs/systems/<id>.odd.toml`**, checked by `specs/systems/lint_odd.py` (template: `specs/systems/_template.odd.toml`). This Markdown form remains as the optional narrative companion for rationale and derivations. It may explain the data but never contradict it.
 <!-- ODD-R adapts ODD (Grimm et al. 2010, 2020; A16) to the SystemModel contract (05.1 §2).
      Rules: keep elements 1-7 in this order and numbering; 8-10 are Rehoboam additions.
      Describe what step() does, not what you believe the model does. Same process names in §3, §7 and code.

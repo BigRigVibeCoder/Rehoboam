@@ -1,0 +1,159 @@
+# ODD-R v2 system spec (ADR-0033): the canonical, machine-checked description of one simulation system.
+# Agents write and maintain this exhaustively; specs/systems/lint_odd.py checks it against the Registry, the
+# other system specs and the test catalogue; the director reads the generated one-page brief (--brief).
+# Sections follow ODD (Grimm et al. 2010, 2020) as adapted in docs/templates/system_spec_odd_r.md.
+odd_r = 2
+
+[system]                                   # header
+id = "S5.daily_life"
+name = "Daily life"
+spec_version = "0.1.0"
+fidelity = "F2"                            # this spec describes F1 (virtual telemetry) and F2 (authoritative)
+status = "draft"                           # draft | frozen
+crate = "rh-sys-daily-life"
+adrs = ["ADR-0031", "ADR-0030", "ADR-0025", "ADR-0024"]
+requirements = ["STR-6", "STR-7", "PERF-6"]
+
+[purpose]                                  # ODD 1: purpose and patterns
+statement = "Say where every person is, doing what, in every block of every day, and (at F2) which encounters happen and what they cause."
+role = "substrate"                         # substrate | drama_coupling | stylized_fact_producer
+patterns = [
+  { test = "V-STR-07", pattern = "Any person-day is computable from the life-course log and seed alone, without replay", kind = "identity", role = "sole" },
+  { test = "V-STR-06", pattern = "In focus regions, the viewer's activity equals the engine's", kind = "identity", role = "sole" },
+  { test = "V-STR-08", pattern = "Raising activity resolution changes what counts, not how it looks", kind = "identity", role = "sole" },
+]
+not_yet = ["Time-use shares by occupation and season against survey data (no band yet; needs a time-use source)"]
+
+[[owns]]                                   # ODD 2: owned state (single writer). S5 stores nothing at F1.
+column = "encounter_log.day_index"
+entity = "settlement"
+type = "u32"
+plane = "A"
+meaning = "Index of the last day whose encounters were resolved per focus settlement (F2 only); the restart cursor"
+fixed_point = false
+
+[[emits]]                                  # events this system emits into channel A of the World Stream
+kind = "ENCOUNTER"
+when = "F2 only: a consequential encounter (tie formed, contact for M5, crime)"
+
+[[commands]]                               # lifecycle commands to other owners (05.1 §2 single-writer rule)
+target = "S1.culture"
+command = "TieDelta"
+why = "Encounters form or strengthen ties; the social graph's owner applies them"
+
+[[reads]]
+column = "person.birth_tick"
+owner = "M2.demography"
+lag = "start_of_day"
+[[reads]]
+column = "person.sex"
+owner = "M2.demography"
+lag = "start_of_day"
+[[reads]]
+column = "person.alive"
+owner = "M2.demography"
+lag = "start_of_day"
+[[reads]]
+column = "person.residence"
+owner = "S3.migration"
+lag = "start_of_day"
+[[reads]]
+column = "person.occupation"
+owner = "M4.economy"
+lag = "start_of_day"
+[[reads]]
+column = "region.conditions"
+owner = "M6.polity"
+lag = "start_of_day"
+
+[scales]
+spatial = "raster cell (64-4096 per side); settlement for focus regions"
+temporal = "activity blocks (blocks_per_day) at blocks; minutes at minutes"
+extent = "every living person; authoritative only in focus regions or worlds at blocks/minutes"
+restart = "F1 stores nothing. F2 restores from encounter_log.day_index plus the keyframe"
+
+[[fidelity_ladder]]
+level = "F1"
+representation = "activity(person, day) as a pure function; output is plane B (shown, not consequential)"
+status = "target"
+[[fidelity_ladder]]
+level = "F2"
+representation = "the same function, authoritative in declared regions; encounters resolved in a second phase"
+status = "target"
+
+[[schedule]]                               # ODD 3: process overview and scheduling (05.1 §4.2)
+pulse = "Day"
+phase = "Activity"
+steps = ["positions: activity(person, day) for every person in authoritative regions", "encounters: group by (cell, block); resolve consequential encounters; emit ENCOUNTER; issue TieDelta"]
+when = "always at F1 for queries; at F2 only in authoritative regions"
+
+[[rng]]                                    # ODD 4.9: keyed randomness purposes (ADR-0006)
+purpose = "activity_block"
+key = ["person", "day", "block"]
+use = "choose the activity and place for one block"
+[[rng]]
+purpose = "encounter_outcome"
+key = ["cell", "day", "block", "person_a", "person_b"]
+use = "whether a co-presence becomes a consequential encounter, and which kind"
+
+[design]                                   # ODD 4: design concepts (one line each)
+basic_principles = "Schedule templates (day pattern -> tour -> trip, after ActivitySim) keyed by occupation, age, sex, season"
+emergence = "Who meets whom, and therefore ties and contact networks, emerges from schedules and places"
+adaptation = "None at F1/F2: activity is a function of state, not a decision"
+objectives = "n/a: no agent objective in S5"
+learning = "n/a"
+prediction = "n/a"
+sensing = "Regional conditions (curfew, siege, plague) from the step digest, at start of day"
+interaction = "Co-presence in a cell and block; consequences only through ENCOUNTER events and TieDelta commands"
+stochasticity = "Keyed RNG only (purposes above); no draw depends on call order"
+collectives = "Households move together for household activities"
+observation = "Virtual telemetry: telemetry.where / telemetry.who (05.9 IF-0)"
+era_state = []                             # ODD 4.12: era-state variables read (none yet)
+scale_behaviour = "micro: blocks by default, minutes allowed; meso/macro: life_course plus focus regions"
+
+[initialization]                           # ODD 5
+state = "Nothing to initialise at F1. F2: encounter_log.day_index = the first simulated day"
+from_manifest = ["world.activity_resolution", "world.focus"]
+
+[input_data]                               # ODD 6 (time-varying external drivers)
+drivers = []
+
+[[params]]                                 # ODD 7.0: must equal the Registry's parameter set for this system
+name = "blocks_per_day"
+meaning = "Activity blocks per day at 'blocks' resolution"
+source = "design value; ActivitySim day patterns use 3-10 tours; 15 blocks gives 1-1.5 h blocks"
+[[params]]
+name = "encounter_tie_rate"
+meaning = "Probability that a co-presence block forms or strengthens a tie"
+source = "design value; to be calibrated against network degree at G1b"
+
+[[submodels]]                              # ODD 7: one entry per process named in schedule.steps
+name = "positions"
+summary = "For each block, sample an activity from the template's Markov chain with H(seed, S5, activity_block, person, day, block); place = home, workplace or market by activity"
+earns_its_place_by = ["V-STR-07"]
+[[submodels]]
+name = "encounters"
+summary = "Group persons by (cell, block); for each pair, a keyed draw with encounter_tie_rate decides a consequential encounter"
+earns_its_place_by = ["V-STR-06", "V-STR-08"]
+
+[[invariants]]
+id = "INV-S5-01"
+statement = "activity(person, day) reads only start-of-day life-course state, regional conditions and the keyed RNG"
+test = "V-STR-07"
+[[invariants]]
+id = "INV-S5-02"
+statement = "Changing a region's activity resolution leaves its displayed activity unchanged up to the first encounter event"
+test = "V-STR-08"
+
+[[couplings]]                              # ODD-R 8
+system = "M5.contagion"
+via = "ENCOUNTER events give contact counts per cell and day"
+lag = "same day, later phase (Contagion)"
+[[couplings]]
+system = "S1.culture"
+via = "TieDelta lifecycle commands"
+lag = "applied at the next tick boundary"
+
+[verification]                             # ODD-R 9
+tests = ["V-STR-06", "V-STR-07", "V-STR-08", "V-PERF-10"]
+prototype = "specs/stream/selftest_virtual_telemetry.py"

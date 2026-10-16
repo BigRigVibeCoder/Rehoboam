@@ -40,3 +40,4 @@ ADRs that sit on a critical path carry a ★. **The 19 ★ ADRs were Accepted by
 | [0030](ADR-0030-headless-engine-text-harness-first.md) | Headless engine and the World Stream: viewers read a buffer, actions land at the tip; text only until G2 | ★ |
 | [0031](ADR-0031-fidelity-by-zoom-virtual-telemetry.md) | Fidelity by zoom: the World Language, virtual telemetry everywhere, authoritative daily life where you declare it | ★ |
 | [0032](ADR-0032-agentic-operating-model.md) | Adopt the Agentic Architect operating model, adapted for a deterministic simulation | ★ |
+| [0033](ADR-0033-specs-as-data.md) | Specs as data: exhaustive, machine-checked system specs (ODD-R v2) | ★ |
