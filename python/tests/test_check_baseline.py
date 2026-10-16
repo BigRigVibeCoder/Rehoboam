@@ -1,10 +1,14 @@
 """Unit tests for bin/check_baseline.py: a golden baseline is regenerated, never typed.
 
-The C3 rule fails closed.
+The C3 rule fails closed. `main()` takes its defaults from the environment (`RH_EVENT`,
+`RH_BASELINE_BASE`, `RH_PUSH_BEFORE`, `RH_PUSH_AFTER`, `RH_PR_TITLE`), which CI sets for the real
+gate, so every test starts from an empty one (`_isolated_environment`) and sets exactly what it
+means; `test_the_environment_supplies_the_defaults` covers the variables on purpose.
 
 Refs: SPR-008 T-04, ruling 6; VER-SPR-008 MAJ-1; docs/13 §4.4.
 """
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -21,6 +25,13 @@ from check_baseline import (
 
 LADDER = "rehoboam-ladder v1\nworld smoke\nrung 1 9 0000-12 00000000000000aa 00000000000000bb\n"
 UNCHANGED = C3Rule(changed=False, marked=False, where="base")
+
+
+@pytest.fixture(autouse=True)
+def _isolated_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear every RH_* variable and GITHUB_ACTIONS: CI's gate settings must not leak in."""
+    for name in [n for n in os.environ if n.startswith("RH_")] + ["GITHUB_ACTIONS"]:
+        monkeypatch.delenv(name, raising=False)
 
 
 def write(path: Path, text: str) -> Path:
@@ -198,3 +209,27 @@ def test_a_pull_request_reads_changed_from_git_against_the_base_ref(
     assert main([*common, "--title", "SPR-008: no mark"]) == EXIT_FAIL
     assert main([*common, "--title", "SPR-008: golden CI [C3]"]) == EXIT_OK
     assert main([*common[:-1], "no-such-ref", "--title", "x [C3]"]) == EXIT_UNREADABLE
+
+
+def test_the_environment_supplies_the_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CI's form: event, base, title and push range come from RH_* when no flag is given."""
+    repo, before, after = repo_with_baseline(tmp_path, "regenerate")
+    monkeypatch.chdir(repo)
+    run = write(repo / "t1.ladder", LADDER)
+    args = ["--baseline", "base.ladder", "--recomputed", str(run)]
+    monkeypatch.setenv("RH_EVENT", "pull_request")
+    monkeypatch.setenv("RH_BASELINE_BASE", before)
+    monkeypatch.setenv("RH_PR_TITLE", "SPR-008: no mark")
+    assert main(args) == EXIT_FAIL
+    monkeypatch.setenv("RH_PR_TITLE", "SPR-008: golden CI [C3]")
+    assert main(args) == EXIT_OK
+    monkeypatch.setenv("RH_BASELINE_BASE", "")
+    assert main(args) == EXIT_UNREADABLE
+    monkeypatch.setenv("RH_EVENT", "push")
+    monkeypatch.setenv("RH_PUSH_BEFORE", before)
+    monkeypatch.setenv("RH_PUSH_AFTER", after)
+    assert main(args) == EXIT_FAIL
+    # A flag still wins over the environment.
+    assert main([*args, "--event", "local", "--base-ref", ""]) == EXIT_OK
