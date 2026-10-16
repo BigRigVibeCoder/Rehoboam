@@ -1121,3 +1121,26 @@ fn g3_resample_draws_key_on_the_entity_kind_too() {
         "the entity_id layout"
     );
 }
+
+#[test]
+fn g4_the_event_hash_does_not_depend_on_the_drain_cadence() {
+    let month = CALENDAR.minutes_per_year() / 12;
+    let end = SimTime::from_minutes(2 * CALENDAR.minutes_per_year() - 1);
+    let hash_with = |drain_every: Option<i64>| -> u64 {
+        let mut e = life_engine(7, 48, 4, false, 2);
+        if let Some(step) = drain_every {
+            let mut t = step - 1;
+            while t < end.minutes() {
+                e.advance_until(SimTime::from_minutes(t), |_, _| {})
+                    .unwrap();
+                e.drain_events();
+                t += step;
+            }
+        }
+        e.advance_until(end, |_, _| {}).unwrap();
+        e.events().hash()
+    };
+    let never = hash_with(None);
+    assert_eq!(hash_with(Some(month)), never, "drained monthly");
+    assert_eq!(hash_with(Some(12 * month)), never, "drained yearly");
+}

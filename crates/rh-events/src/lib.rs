@@ -20,7 +20,8 @@
 //! `rh-core` and does not name its types.
 //!
 //! The log is in memory; the World Stream writer (ADR-0030) and the chronicle drain it later.
-//! [`EventLog::hash`] folds every event in id order, so event order is part of the hash contract.
+//! [`EventLog::hash`] is a running fold of every event in id order that draining does not reset,
+//! so event order is part of the hash contract and the drain cadence is not.
 //!
 //! REF: `docs/05_architecture/05.0_overview.md` §6; ADR-0007; ADR-0025 item 2;
 //! `docs/09` V-DET-12; `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-04, rulings 1 and 4.
@@ -181,6 +182,8 @@ pub struct EventLog {
     events: Vec<Event>,
     next_seq: u64,
     last: Option<(i64, u8)>,
+    /// The running fold of every appended event's digest, in id order (kept across drains).
+    running: u64,
 }
 
 impl EventLog {
@@ -248,7 +251,7 @@ impl EventLog {
                 id,
             });
         }
-        self.events.push(Event {
+        let event = Event {
             id,
             tick,
             phase,
@@ -257,38 +260,46 @@ impl EventLog {
             subjects: draft.subjects,
             causes: draft.causes,
             payload: draft.payload,
-        });
+        };
+        self.running = rh_ids::rng::h64_words(TAG_EVENT_HASH, &[self.running, event.digest()]);
+        self.events.push(event);
         self.next_seq += 1;
         self.last = Some((tick, phase));
         Ok(id)
     }
 
-    /// A hash of the held events in id order (every field) and of the counter: order-sensitive.
-    /// A stub fold until the chunked Merkle hashes of `05.1` §6 item 6 (SPR-007).
+    /// The hash of every event ever appended, in id order, and of the counter: a running fold
+    /// that [`EventLog::drain`] does not reset, so it is a function of the event sequence alone,
+    /// whatever the drain cadence (SPR-006 G4). A stub until the chunked Merkle hashes of `05.1`
+    /// §6 item 6 (SPR-007).
     #[must_use]
     pub fn hash(&self) -> u64 {
+        rh_ids::rng::h64_words(TAG_EVENT_HASH, &[self.next_seq, self.running])
+    }
+}
+
+impl Event {
+    /// A digest of every field of the event: what the running log hash folds in.
+    #[must_use]
+    pub fn digest(&self) -> u64 {
         use rh_ids::rng::{h64_bytes, h64_words};
-        let mut h = h64_words(TAG_EVENT_HASH, &[self.next_seq]);
-        for e in &self.events {
-            let mut words = vec![
-                e.id.to_raw(),
-                e.tick.cast_unsigned(),
-                u64::from(e.phase),
-                h64_bytes(TAG_EVENT_HASH, e.emitter.as_bytes()),
-                h64_bytes(TAG_EVENT_HASH, e.kind.as_bytes()),
-                e.subjects.len() as u64,
-            ];
-            for s in &e.subjects {
-                words.push(u64::from(s.kind().tag()));
-                words.push(s.raw());
-            }
-            words.push(e.causes.len() as u64);
-            words.extend(e.causes.iter().map(|c| c.to_raw()));
-            words.push(e.payload.len() as u64);
-            words.extend(e.payload.iter().map(|v| v.cast_unsigned()));
-            h = h64_words(h, &words);
+        let mut words = vec![
+            self.id.to_raw(),
+            self.tick.cast_unsigned(),
+            u64::from(self.phase),
+            h64_bytes(TAG_EVENT_HASH, self.emitter.as_bytes()),
+            h64_bytes(TAG_EVENT_HASH, self.kind.as_bytes()),
+            self.subjects.len() as u64,
+        ];
+        for s in &self.subjects {
+            words.push(u64::from(s.kind().tag()));
+            words.push(s.raw());
         }
-        h
+        words.push(self.causes.len() as u64);
+        words.extend(self.causes.iter().map(|c| c.to_raw()));
+        words.push(self.payload.len() as u64);
+        words.extend(self.payload.iter().map(|v| v.cast_unsigned()));
+        h64_words(TAG_EVENT_HASH, &words)
     }
 }
 
@@ -362,9 +373,35 @@ mod tests {
         log.append(5, 1, "X", EventDraft::new("A").with_payload(vec![1]))
             .unwrap_or_else(|e| panic!("{e}"));
         assert_ne!(log.hash(), h0);
+        let h1 = log.hash();
         assert_eq!(log.drain().len(), 1);
         assert!(log.events().is_empty());
+        assert_eq!(log.hash(), h1, "draining does not change the hash");
         assert_eq!(log.next_id(), EventId::from_raw(1));
         assert!(log.append(4, 1, "X", EventDraft::new("A")).is_err());
+    }
+
+    #[test]
+    fn the_hash_ignores_the_drain_cadence() {
+        let fill = |drain_every: Option<u64>| -> u64 {
+            let mut log = EventLog::new();
+            for i in 0..240_i64 {
+                log.append(
+                    i / 4,
+                    u8::try_from(i % 4).unwrap_or(0),
+                    "X",
+                    EventDraft::new("A").with_payload(vec![i]),
+                )
+                .unwrap_or_else(|e| panic!("{e}"));
+                if drain_every.is_some_and(|n| (i + 1).cast_unsigned() % n == 0) {
+                    log.drain();
+                }
+            }
+            log.hash()
+        };
+        let never = fill(None);
+        assert_eq!(fill(Some(20)), never, "monthly");
+        assert_eq!(fill(Some(240)), never, "yearly");
+        assert_eq!(fill(Some(1)), never, "every event");
     }
 }
