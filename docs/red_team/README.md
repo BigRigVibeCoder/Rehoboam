@@ -17,7 +17,8 @@ This keeps in-flight sprints from building on specs that change underneath them.
 
 | Path | What |
 |---|---|
-| `inbox.md` | Batched design proposals awaiting the next gate: batches 01 to 04, with the Architect's intake notes, disposed of at G0 |
+| `inbox.md` | Batched design proposals: batches 01 to 04 were disposed of at G0; batch 05 awaits G1a. Each batch has the Architect's intake notes |
+| `RT-2026-10-16-demography-inequality-science.md` | A science dossier on pre-industrial demography, inequality and empire lifespans (batch 05): a proposal, not evidence, until its sources are read |
 | `RT-2026-10-16-G0-dispositions.md` | The G0 dispositions of batches 01 to 04, with the director's rulings on Laws 2 and 3 and item 15 (2026-10-16) |
 | `DISPOSITION_LEDGER.md` | The red team's own ledger of its findings and their status. The authoritative record of decisions is `docs/decisions-log.md` |
 | `PHILOSOPHY_AND_BACKLOG.md` | The red team's operating charter (approved as its working rules, 2026-10-16), its autopsies of seven earlier engines, and its action backlog `RT-ACT-001` to `RT-ACT-014` (batch 03) |

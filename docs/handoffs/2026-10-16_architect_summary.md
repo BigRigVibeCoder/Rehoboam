@@ -46,9 +46,11 @@ All are recorded in `docs/decisions-log.md`:
 
 | Item | Recommendation | Confidence |
 |---|---|---|
-| **My reading of Laws 2 and 3**, written beside them in `docs/01` §5: world creation is the root of the causal graph; "event" means a simulated cause (a system's mechanics, a timer, a journaled input) rather than an event record for every write; Law 3 is a rule for authoring the Registry's break acts, never a runtime filter on outcomes (ADR-0009) | Keep it. Without it, Law 2 would forbid the initial world and require an event for every column write, and Law 3 could be read as a hidden director | 85% |
-| **The red team's demography dossier** (`28b44ac` on `arch/red-team-batch-04`; Alfani, Coale and Demeny, Taagepera). Held under the intake rule, because I believe parts are mistaken: the Coale–Demeny level labels do not match the published levels; the Weibull parameters and the 85% fracture risk have no source; "Gini clamped to [0.65, 0.85]" would be a global controller | Take it in as a proposal with intake notes, not as evidence; the real action is acquiring Coale and Demeny (1983) and Taagepera's papers, which are on the "still wanted" list | 80% |
 | **The laptop:** RUN-001 (BCK-002 A-16) and one `adjutant` session of about 2 hours, for SPR-008 T-02 and SPR-009 T-04 | I will ping you when SPR-008 is ready | — |
+
+Resolved since the first version of this summary:
+- you confirmed my reading of Laws 2 and 3;
+- you took the demography dossier in as a proposal (red-team batch 05, intake notes N13 to N17).
 
 ## 5. Risks
 
