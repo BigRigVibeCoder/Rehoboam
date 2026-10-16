@@ -118,6 +118,28 @@ clippy_control() {
   cargo clippy --offline --locked --quiet --manifest-path "$dst/Cargo.toml" -p "$2" --target-dir target/lint-fixtures -- -D warnings
 }
 
+# The fp-contract guard (ADR-0006 item 4: no FMA contraction; VER-SPR-003-TEST GAP-6). rustc never fuses
+# a * b + c by default, but -C llvm-args=-fp-contract=fast would, and no golden vector can see the
+# 1-ulp effect. fp_contract_guard <root> fails if any *RUSTFLAGS* variable (RUSTFLAGS,
+# CARGO_ENCODED_RUSTFLAGS, CARGO_BUILD_RUSTFLAGS, CARGO_TARGET_*_RUSTFLAGS) or any .cargo/config or
+# .cargo/config.toml under <root> (target/, .git/ and the lint fixtures excluded) mentions fp-contract.
+fp_contract_guard() {
+  local root="$1" bad=0 var file
+  for var in $(compgen -v | grep RUSTFLAGS); do
+    if grep -q -- 'fp-contract' <<<"${!var}"; then echo "$var sets fp-contract: ${!var}"; bad=1; fi
+  done
+  while IFS= read -r file; do
+    if grep -q -- 'fp-contract' "$file"; then echo "$file sets fp-contract"; bad=1; fi
+  done < <(find "$root" \( -path "$root/target" -o -path "$root/.git" -o -path "$root/tests/lint_fixtures" \) -prune \
+             -o -type f \( -path '*/.cargo/config' -o -path '*/.cargo/config.toml' \) -print)
+  [ $bad -eq 0 ] && echo "no fp-contract in any RUSTFLAGS variable or .cargo/config under $root"
+  return $bad
+}
+# Its environment control: the guard with RUSTFLAGS set as a contracting build would set it.
+fp_contract_env_control() {
+  RUSTFLAGS="-C llvm-args=-fp-contract=fast" fp_contract_guard .
+}
+
 # Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, holding exactly
 # that API, which must be reported under its own rule with its own token (tests/lint_fixtures/README.md).
 # Each entry is file:rule:token; a token may itself contain "::".
@@ -204,6 +226,9 @@ run "Required tools present" pass require_tools &&
 # Tier 1 — static and contract lints (fastest first)
 run "Document index builds (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
 run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml .github/workflows/nightly.yml &&
+run "No FMA contraction: no fp-contract in RUSTFLAGS or .cargo/config (SPR-003 GAP-6)" pass fp_contract_guard . &&
+run "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL" "fail:RUSTFLAGS sets fp-contract" fp_contract_env_control &&
+run "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL" "fail:.cargo/config.toml sets fp-contract" fp_contract_guard tests/lint_fixtures/fp_contract &&
 run "Python: uv.lock matches pyproject.toml (uv lock --check)" pass uv lock --check --offline --project python &&
 run "uv lock --check positive control: drifted lock must FAIL" "fail:needs to be updated" uv lock --check --offline --project tests/lint_fixtures/uv_drift &&
 run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pyproject.toml --no-cache . &&
