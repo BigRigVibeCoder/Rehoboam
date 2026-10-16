@@ -118,6 +118,13 @@ type = "enum"
 plane = "A"
 meaning = "As person.sex at entry"
 fixed_point = false
+[[owns]]
+column = "life_course.death_cause"
+entity = "life_course"
+type = "enum"
+plane = "A"
+meaning = "As person.death_cause (none | natural | murder | battle | execution | accident); none unless exit_kind = death; written once with exit_kind"
+fixed_point = false
 
 # Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4): one payload per command, which every sender uses.
 # For P1.13 (SPR-014): M2 then gains a Day/Vital binding that drains its queue each day start (not yet in [[schedule]]:
