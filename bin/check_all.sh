@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # The PR tier of GOV-002, fail-fast, with a forensic report (GOV-002 §4, §6: no report means no pass).
 # Every sprint adds its own checks here in the same sprint that creates them.
-# Usage: bin/check_all.sh            (uses $PYTHON; else .venv/bin/python; else python3)
+# Usage: bin/check_all.sh            (uses $PYTHON; else python/.venv/bin/python; else python3)
 #        PYTHON=/path/to/python bin/check_all.sh
-# Needs the Rust toolchain from rust-toolchain.toml and cargo-nextest (RUN-001 §2-3). A missing tool
-# fails the first check by name; nothing is ever skipped silently.
+# Needs the Rust toolchain from rust-toolchain.toml, cargo-nextest, and the uv environment from
+# `uv sync --frozen --project python` (RUN-001 §2-4). A missing tool fails the first check by name;
+# nothing is ever skipped silently.
 set -u
 cd "$(dirname "$0")/.."
-if [ -n "${PYTHON:-}" ]; then PY="$PYTHON"; elif [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY="$(command -v python3 || command -v python)"; fi
+if [ -n "${PYTHON:-}" ]; then PY="$PYTHON"; elif [ -x python/.venv/bin/python ]; then PY=python/.venv/bin/python; else PY="$(command -v python3 || command -v python)"; fi
 REPORT="artifacts/check_report.md"
 mkdir -p artifacts
 commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -50,6 +51,10 @@ require_tools() {
   local missing=""
   command -v cargo >/dev/null 2>&1 || missing="$missing cargo(RUN-001 §2)"
   cargo nextest --version >/dev/null 2>&1 || missing="$missing cargo-nextest(RUN-001 §3)"
+  local mod
+  for mod in ruff mypy pytest pydantic yaml duckdb; do
+    "$PY" -I -c "import $mod" >/dev/null 2>&1 || missing="$missing python:$mod(RUN-001 §4)"
+  done
   if [ -n "$missing" ]; then echo "Missing tools:$missing"; return 1; fi
   echo "All required tools present."
 }
@@ -57,6 +62,9 @@ require_tools() {
 run "Required tools present" pass require_tools &&
 # Tier 1 — static and contract lints (fastest first)
 run "Document index is current (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
+run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pyproject.toml --no-cache . &&
+run "Python: format (ruff format --check)" pass "$PY" -I -m ruff format --config python/pyproject.toml --no-cache --check . &&
+run "Python: types (mypy --strict)" pass "$PY" -I -m mypy --config-file python/pyproject.toml &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
@@ -67,6 +75,7 @@ run "Manifest: invalid_draft_style must FAIL" fail "$PY" -I specs/manifest/manif
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
 run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&
+run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 # Tier 5 — golden vectors
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&

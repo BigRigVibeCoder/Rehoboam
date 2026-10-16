@@ -1,0 +1,100 @@
+# Python tooling for Rehoboam (SPR-001 T-02; GOV-003 §3; GOV-008 §4).
+#
+# One uv project holds the interpreter's dependencies for every Python check in bin/check_all.sh.
+#   Set up or refresh:  uv sync --frozen --project python      (creates python/.venv)
+#   Change a dependency: edit this file, run `uv lock --project python`, commit both files.
+# The [tool.*] sections below are written for the repository root as the working directory:
+# bin/check_all.sh runs ruff, mypy and pytest from there with --config/-c python/pyproject.toml.
+
+[project]
+name = "rehoboam-tools"
+version = "0.0.0"
+description = "Python tooling around the Rehoboam engine: spec checks and repository lints"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Used by the spec prototypes under specs/ (manifest validator, chronicle SQL twin).
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    "duckdb>=1.5",   # GOV-008 §4
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16",
+    "mypy>=2.0",
+    "pytest>=8.3",
+]
+
+[tool.uv]
+# DECISION: a virtual project (dependencies only, nothing to build) until the first Python package
+# lands (rehoboam_compiler et al., 05.0 §6). ALTERNATIVES CONSIDERED: an empty package with a build
+# backend, which would add a build dependency for no code. REF: GOV-008 §2.
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+# DEBT (SPR-001): the planning-phase prototypes predate this configuration and do not pass it; they
+# are excluded by exact path so that every new Python file is checked. Remove an entry when its file
+# is brought up to GOV-003 §3.
+extend-exclude = [
+    "bin/gen_manifest.py",
+    "specs/chronicle/selftest.py",
+    "specs/demography/selftest_brass.py",
+    "specs/economy/selftest_economy.py",
+    "specs/manifest/manifest_v0.py",
+    "specs/sifting/lint_patterns.py",
+    "specs/stream/compress_probe.py",
+    "specs/stream/selftest_virtual_telemetry.py",
+    "specs/systems/lint_odd.py",
+]
+
+[tool.ruff.format]
+# Ruff can also format Python examples inside Markdown; docs are prose, not checked code.
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# GOV-003 §1, §3: types everywhere (ANN), Google-style docstrings (D), complexity <= 10 (C90),
+# plus correctness and modernisation rule sets.
+select = ["E", "W", "F", "I", "B", "UP", "N", "ANN", "D", "C90", "SIM", "RUF", "PL", "PTH"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+# Tests compare against literal expectations by design.
+"python/tests/**" = ["PLR2004"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["bin", "python", "specs"]
+# bin/ holds stdlib-only scripts that the tests import as top-level modules.
+mypy_path = "bin"
+exclude = ['^python/\.venv/']
+
+[[tool.mypy.overrides]]
+# DEBT (SPR-001): the same prototypes as ruff's extend-exclude, by module name. They are still parsed
+# (a syntax error fails), but their type errors are not reported. Any other file under bin/, python/
+# or specs/ is checked strictly. Remove a module when its file is brought up to GOV-003 §3.
+module = [
+    "gen_manifest",
+    "selftest",
+    "selftest_brass",
+    "selftest_economy",
+    "manifest_v0",
+    "lint_patterns",
+    "compress_probe",
+    "selftest_virtual_telemetry",
+    "lint_odd",
+]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
+pythonpath = ["bin"]
+addopts = ["-ra", "--strict-markers", "-p", "no:cacheprovider"]
