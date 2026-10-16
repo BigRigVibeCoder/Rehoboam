@@ -68,6 +68,7 @@ cargo nextest run -p rh-core -p rh-registry --test determinism --test registrati
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
 cargo nextest run -p rh-snapshot --test hash --test golden --test journal --test keyframe --test guard --test unsynced_guard --test stub_world   # plane hashes, input journal, V-DET-05 keyframes, V-DET-10 unsynced guard, stub-world hash golden (SPR-007)
 cargo nextest run -p rh-snapshot --release --test guard   # the unsynced guard is compiled out of release builds (SPR-007)
+cargo nextest run -p rh-snapshot --run-ignored only --test keyframe   # DEF-3 full sweep: every bit of a keyframe's Arrow body flipped, nightly tier (SPR-007)
 cargo build -p rh-cli && python -I bin/manifest_parity.py specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml  # V-WC-04: Rust loader = manifest_v0.py
 target/debug/rh-cli ownership    # single-writer column ownership from specs/systems (SPR-004)
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)

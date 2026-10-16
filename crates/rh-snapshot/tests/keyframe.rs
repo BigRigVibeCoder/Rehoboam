@@ -23,8 +23,9 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use arrow_array::{Array, ArrayRef, BinaryArray, RecordBatch, StringArray};
+use arrow_ipc::CompressionType;
 use arrow_ipc::reader::FileReader;
-use arrow_ipc::writer::FileWriter;
+use arrow_ipc::writer::{FileWriter, IpcWriteOptions};
 use life::{CALENDAR, DAY, entity, life_engine, life_engine_with, life_registered};
 use rh_core::crash::Provenance;
 use rh_core::engine::{Engine, MaterialInput};
@@ -193,8 +194,21 @@ fn v_det_05_the_permanent_cadence_and_the_yearly_lru() {
     assert_eq!(state_hash(&seeked.snapshot()), year_hashes[17]);
 }
 
-/// Rewrites a keyframe with `edit` applied to its batches' (table, row) pairs.
+/// Rewrites a keyframe with `edit` applied to its batches' (table, row) pairs, zstd-compressed
+/// as `write_keyframe` writes (the loader refuses any other IPC layout, DEF-3).
 fn rewrite(bytes: &[u8], edit: impl Fn(&mut Vec<(String, Vec<u8>)>)) -> Vec<u8> {
+    let zstd = IpcWriteOptions::default()
+        .try_with_compression(Some(CompressionType::ZSTD))
+        .unwrap();
+    rewrite_with(bytes, zstd, edit)
+}
+
+/// [`rewrite`] with explicit Arrow write options.
+fn rewrite_with(
+    bytes: &[u8],
+    options: IpcWriteOptions,
+    edit: impl Fn(&mut Vec<(String, Vec<u8>)>),
+) -> Vec<u8> {
     let reader = FileReader::try_new(Cursor::new(unseal_keyframe(bytes).unwrap()), None).unwrap();
     let schema = reader.schema();
     let mut pairs = Vec::new();
@@ -215,7 +229,7 @@ fn rewrite(bytes: &[u8], edit: impl Fn(&mut Vec<(String, Vec<u8>)>)) -> Vec<u8> 
         }
     }
     edit(&mut pairs);
-    let mut w = FileWriter::try_new(Vec::new(), &schema).unwrap();
+    let mut w = FileWriter::try_new_with_options(Vec::new(), &schema, options).unwrap();
     let names: ArrayRef = Arc::new(StringArray::from_iter_values(
         pairs.iter().map(|p| p.0.as_str()),
     ));
@@ -234,6 +248,9 @@ fn every_wrong_keyframe_is_refused() {
     let (bytes, _) = write_keyframe(&engine, &history(), position(1)).unwrap();
     // The faithful rewrite still loads: the edits below are what the checks catch.
     assert!(load(&rewrite(&bytes, |_| {})).is_ok());
+    // The same rows, uncompressed: not the keyframe's IPC layout, refused before Arrow decodes.
+    let plain = rewrite_with(&bytes, IpcWriteOptions::default(), |_| {});
+    assert!(matches!(load(&plain), Err(KeyframeError::Ipc(_))));
     // A lost pending timer (and the header's count lowered to match) no longer hashes equal.
     let lost = rewrite(&bytes, |pairs| {
         let k = pairs
@@ -538,4 +555,71 @@ fn a_keyframe_keeps_the_held_events_outside_the_hash() {
         p.1[last] ^= 1;
     });
     assert!(load(&altered).is_err());
+}
+
+/// What a sweep of forged keyframes did.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Sweep {
+    cases: usize,
+    /// Loaded, and hashing equal to the original (a flip Arrow ignores, such as padding).
+    accepted_equal: usize,
+    refused: usize,
+    /// Loaded with another state: must never happen.
+    accepted_other: usize,
+    /// The loader panicked (caught here or mapped to `KeyframeError::Panicked`): must never happen.
+    panicked: usize,
+}
+
+/// DEF-3 (VER-SPR-007-TEST round 2): flips every bit of every `stride`-th byte of the Arrow body
+/// of a day-50 keyframe, re-seals the envelope so the digest matches, and loads each forgery.
+/// Ports the Tester's `ver/forge.py` sweep in-process: an abort would end the test process.
+fn forge_sweep(stride: usize) -> Sweep {
+    let engine = run_to(life(), 50 * DAY + 1);
+    let (bytes, header) = write_keyframe(&engine, &history(), position(1)).unwrap();
+    let body = unseal_keyframe(&bytes).unwrap().to_vec();
+    let quiet = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let mut sweep = Sweep::default();
+    for k in (0..body.len()).step_by(stride) {
+        for bit in 0..8 {
+            let mut forged = body.clone();
+            forged[k] ^= 1 << bit;
+            let sealed = seal_keyframe(&forged);
+            sweep.cases += 1;
+            match std::panic::catch_unwind(|| load(&sealed)) {
+                Ok(Ok(e)) if state_hash(&e.snapshot()) == header.state_hash => {
+                    sweep.accepted_equal += 1;
+                }
+                Ok(Ok(_)) => sweep.accepted_other += 1,
+                Ok(Err(KeyframeError::Panicked(_))) | Err(_) => sweep.panicked += 1,
+                Ok(Err(_)) => sweep.refused += 1,
+            }
+        }
+    }
+    std::panic::set_hook(quiet);
+    sweep
+}
+
+fn assert_sweep(sweep: &Sweep, min_cases: usize) {
+    assert_eq!(sweep.panicked, 0, "{sweep:?}");
+    assert_eq!(sweep.accepted_other, 0, "{sweep:?}");
+    assert!(sweep.cases >= min_cases, "{sweep:?}");
+    assert!(sweep.refused > sweep.cases / 2, "{sweep:?}");
+}
+
+/// PR tier: every bit of every 29th byte of the Arrow body.
+#[test]
+fn def_3_no_forged_arrow_body_panics_or_aborts_the_loader() {
+    let sweep = forge_sweep(29);
+    println!("DEF-3: {sweep:?}");
+    assert_sweep(&sweep, 3_000);
+}
+
+/// Nightly tier: every bit of every byte (about 94,000 loads, a few minutes in a debug build).
+#[test]
+#[ignore = "nightly tier: the full DEF-3 sweep"]
+fn def_3_full_sweep_every_bit_of_the_arrow_body() {
+    let sweep = forge_sweep(1);
+    println!("DEF-3 full: {sweep:?}");
+    assert_sweep(&sweep, 90_000);
 }
