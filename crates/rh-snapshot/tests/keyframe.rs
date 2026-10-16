@@ -14,6 +14,8 @@
 mod life;
 mod support;
 
+use support::Stub;
+
 /// The keyframe envelope's length: 8 bytes of magic, 16 of digest.
 const ENVELOPE_LEN: usize = 24;
 
@@ -23,7 +25,7 @@ use std::sync::Arc;
 use arrow_array::{Array, ArrayRef, BinaryArray, RecordBatch, StringArray};
 use arrow_ipc::reader::FileReader;
 use arrow_ipc::writer::FileWriter;
-use life::{CALENDAR, DAY, entity, life_engine, life_registered};
+use life::{CALENDAR, DAY, entity, life_engine, life_engine_with, life_registered};
 use rh_core::crash::Provenance;
 use rh_core::engine::{Engine, MaterialInput};
 use rh_core::time::SimTime;
@@ -361,4 +363,86 @@ fn the_guard_sees_engine_held_state() {
     .unwrap();
     assert_eq!(rh_snapshot::tables_hash(fewer.tables()), tables_only);
     assert_ne!(fewer.plane_a_hash(), engine.plane_a_hash());
+}
+
+/// The note system's step: one `NOTE` event at the month boundaries of days 180..211, carrying
+/// `payload`. It writes nothing, so it changes no table.
+fn note_step(
+    payload: i64,
+    c: &mut rh_core::system::StepCtx<'_>,
+) -> Result<(), rh_core::system::SimError> {
+    if (180 * DAY..211 * DAY).contains(&c.now().minutes()) {
+        c.emit(rh_events::EventDraft::new("NOTE").with_payload(vec![payload]))?;
+    }
+    Ok(())
+}
+
+fn note_one(
+    _: &Stub,
+    _: rh_core::system::PulseBinding,
+    _: &mut rh_core::world::SystemView<'_>,
+    c: &mut rh_core::system::StepCtx<'_>,
+) -> Result<(), rh_core::system::SimError> {
+    note_step(1, c)
+}
+
+fn note_two(
+    _: &Stub,
+    _: rh_core::system::PulseBinding,
+    _: &mut rh_core::world::SystemView<'_>,
+    c: &mut rh_core::system::StepCtx<'_>,
+) -> Result<(), rh_core::system::SimError> {
+    note_step(2, c)
+}
+
+/// The life world run to the end of year 1 with the note system stepping `step`, every event
+/// drained, so no held event differs.
+fn noted_year(step: support::StepFn) -> Engine {
+    let note = Stub::new("X6.note")
+        .emits("NOTE")
+        .at(rh_core::Pulse::Month, rh_core::Phase::Agenda)
+        .stepping(step);
+    let mut e = life_engine_with(vec![note], SEED, 48, 3, false, 1);
+    e.advance_until(SimTime::from_minutes(YEAR), |_, _| {})
+        .unwrap_or_else(|err| panic!("{err}"));
+    let notes: Vec<_> = e
+        .drain_events()
+        .into_iter()
+        .filter(|ev| ev.kind == "NOTE")
+        .collect();
+    assert!(!notes.is_empty(), "the note was emitted mid-year");
+    e
+}
+
+/// Architect clarification on T-02 (2026-10-16): `rh-core/events.meta` carries the running
+/// event-log hash (SPR-006 G4), so a transient divergence that emitted different events and then
+/// converged still changes `state_hash`, drained or not, and a keyframe keeps that difference.
+#[test]
+fn a_converged_run_that_emitted_a_different_event_hashes_differently() {
+    let one = noted_year(note_one);
+    let two = noted_year(note_two);
+    let (s1, s2) = (one.snapshot(), two.snapshot());
+    assert_eq!(s1.tables, s2.tables, "the tables converged");
+    assert!(
+        s1.events.events.is_empty() && s2.events.events.is_empty(),
+        "nothing held"
+    );
+    assert_eq!(
+        s1.events.next_seq, s2.events.next_seq,
+        "the same number of events"
+    );
+    assert_eq!(
+        rh_snapshot::tables_hash(&s1.tables),
+        rh_snapshot::tables_hash(&s2.tables)
+    );
+    assert_ne!(s1.events.running, s2.events.running);
+    assert_ne!(
+        state_hash(&s1),
+        state_hash(&s2),
+        "the running event-log hash is in state_hash"
+    );
+    let (bytes, _) = write_keyframe(&one, &history(), position(0)).unwrap();
+    let (read, _) = read_keyframe(&bytes, one.registered()).unwrap();
+    assert_eq!(read.events.running, s1.events.running);
+    assert_eq!(state_hash(&read), state_hash(&s1));
 }

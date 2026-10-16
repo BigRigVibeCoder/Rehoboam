@@ -293,7 +293,20 @@ pub fn life_stubs(observer: bool) -> Vec<Stub> {
 }
 
 pub fn life_engine(seed: u64, rows: usize, rate: i64, observer: bool, threads: usize) -> Engine {
-    let stubs = life_stubs(observer);
+    life_engine_with(Vec::new(), seed, rows, rate, observer, threads)
+}
+
+/// The life world with `extra` systems registered beside its own.
+pub fn life_engine_with(
+    extra: Vec<Stub>,
+    seed: u64,
+    rows: usize,
+    rate: i64,
+    observer: bool,
+    threads: usize,
+) -> Engine {
+    let mut stubs = life_stubs(observer);
+    stubs.extend(extra);
     let specs = agreeing_specs(&stubs);
     let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
         .unwrap_or_else(|e| panic!("{e}"));
