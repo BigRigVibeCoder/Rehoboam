@@ -45,32 +45,32 @@ version: 1.1.0
 ### T-01: SimTime and calendar
 - **Deliverable:** `SimTime` as i64 minutes with a signed epoch; 360/365-day calendars; pulses Year to Hour
 - **Acceptance:** Property tests on calendar arithmetic
-- **Status:** [ ] not started
+- **Status:** [x] done (`0dd7d04`: `rh-core::time`; `tests/time_properties.rs`)
 
 ### T-02: Phase order
 - **Deliverable:** The 12 phases of `05.1` §4.2, including 5a Activity, as a fixed enum
 - **Acceptance:** Snapshot test of the phase table
-- **Status:** [ ] not started
+- **Status:** [x] done (`724b094`: `rh-core::phase`; `tests/phase_table.rs` pins the snapshot, `05.1` §4.2 and `lint_odd.py`)
 
 ### T-03: SystemModel trait
 - **Deliverable:** The trait from `05.1` §2; generated skeleton modules from `lint_odd.py --rust` compile against it
 - **Acceptance:** The S5 and M2 skeletons compile
-- **Status:** [ ] not started
+- **Status:** [x] done (`a9bfe22`, `7a0d402`: `rh-core::system`, `access`, `world`; skeletons in `crates/rh-core/tests/generated/`, compiled by `rh-registry/tests/real_specs.rs`; gate `bin/gen_skeletons.py --check` with a stale control)
 
 ### T-04: AccessSpec and conflict checker
 - **Deliverable:** Declared reads and owned writes; conflicting writers rejected at registration
 - **Acceptance:** Two systems writing one column fail registration
-- **Status:** [ ] not started
+- **Status:** [x] done (`038e63d`, `92c7c62`, `7a0d402`: `rh-core::register`, `rh-core::ownership`; `tests/registration.rs`; `system_id` in `05.1` §6 item 2 with golden values)
 
 ### T-05: Derived scheduler
 - **Deliverable:** Topological order within a phase from read/write sets; declared lags for back-edges
 - **Acceptance:** Order is identical across runs and thread counts
-- **Status:** [ ] not started
+- **Status:** [x] done (`d5dc3d2`, `5b898f8`: `rh-core::schedule`, `rh-core::engine`; `tests/determinism.rs` V-DET-01/02 on a stub world; order defined in `05.1` §2 rule 4)
 
 ### T-06: RNG purposes from the specs
 - **Deliverable:** registration checks a system's RNG purposes against its spec's `[[rng]]` table (ruling 2)
 - **Acceptance:** a system that draws under an undeclared purpose fails registration, and a spec purpose with no code use is reported
-- **Status:** [ ] not started
+- **Status:** [x] done (`0d34c2b`: purpose check in `rh-core::register`; `rh-registry/tests/real_specs.rs`)
 
 ## Verification assignment (Testers)
 
@@ -84,6 +84,13 @@ version: 1.1.0
 |---|---|---|---|
 | — | None | — | — |
 
+## Carried forward
+
+| Item | To | Why |
+|---|---|---|
+| Lifecycle commands and event types in `AccessSpec` | SPR-006 (queues and the event bus) | T-04's deliverable is reads and owned writes; commands and events join `AccessSpec` with the queues that carry them (Architect ruling, 2026-10-16) |
+| The `include!` of generated skeletons is a counted `LINT-ALLOW` | BCK-002 A-27 | `lint_forbidden` should follow a literal in-repository `include!` and scan the file; due before the first rh-sys-* crate |
+
 ## Completion
 
 - [ ] All tasks meet their acceptance criteria.
@@ -92,3 +99,5 @@ version: 1.1.0
 - [ ] Architect audit `VER-SPR-005` is PASS.
 - [ ] No open DEF- against this sprint.
 - [ ] Merge route matches the CI-detected change class.
+
+**Completion notes (developer, 2026-10-16).** V-DET-01 and V-DET-02 run on a stub world: `WorldTables` is a stub i64-column store and its state hash is a stub SplitMix64 hash, not the chunked Merkle xxh3 of `05.1` §6 item 6 (SPR-007), and `StepCtx` draws use epoch 0 until material inputs exist. They are gating tests of this sprint but count toward G0 only on real hashes (SPR-008; Architect ruling, 2026-10-16).
