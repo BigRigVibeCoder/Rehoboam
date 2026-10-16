@@ -37,6 +37,13 @@ allow_attributes_without_reason = "deny"
 # Second line of defence behind bin/lint_forbidden.py (V-DET-19); the lists live in clippy.toml.
 disallowed_types = "deny"
 disallowed_methods = "deny"
+# Backstop for floats that reach plane A without a float token, which bin/lint_forbidden.py cannot see
+# (SPR-010 GAP-3, Architect ruling 2026-10-16): arithmetic on a value a dependency returns as f64.
+# float_cmp covers ==/!= where clippy can judge it. No clippy lint covers float < and >. A crate that
+# genuinely needs floats (a tool crate, or a declared f32_field kernel) opts out at the use site with
+# #[allow(clippy::float_arithmetic, reason = "...")]; today none does.
+float_arithmetic = "deny"
+float_cmp = "deny"
 
 # SPR-002: rh-ids's ChaCha8 code is generic and is instantiated in rh-ids itself, so it runs at
 # rh-ids's opt-level; unoptimised, the V-DET-16/V-DET-20 tests in the PR tier take minutes. This
