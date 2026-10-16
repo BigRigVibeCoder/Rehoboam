@@ -3,12 +3,16 @@
 # dormancy and vocation rules are design values. V-SF-06c is a HELD-OUT band (09 §3.1): nothing here is tuned to it,
 # and its source (Blaydes & Chaney 2013) is deliberately not used to set any parameter.
 # lint_odd.py checks this file against the Registry, the other specs and the test catalogue.
+# Round 1 rulings (Architect, PR #32): decisions 1-20 accepted; V-SF-06c is held-out (predict, never calibrate);
+# deaths of the instant come from M2's instant_death accessor (no person.death_cause column: the dead leave the ledger
+# at once, and AccessSpec has no event reads); every death takes effect as an M2 death timer in Vital (BCK-002 A-30);
+# filial_piety_mean removed; S6/S7 lag fixes and regalia at the seat are BCK-002 A-34, outside this spec.
 odd_r = 2
 
 [system]
 id = "M7.dynasty"
 name = "Succession and dynasts"
-spec_version = "0.1.0"
+spec_version = "0.2.0"
 fidelity = "F1"
 status = "draft"
 crate = "rh-sys-dynasty"
@@ -307,10 +311,20 @@ owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
 [[reads]]
-column = "person.death_cause"
+column = "instant_death.person"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "instant_death.cause"
 owner = "M2.demography"
 lag = "same_instant"
 use = "mode"
+[[reads]]
+column = "instant_death.tick"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
 [[reads]]
 column = "person.birth_tick"
 owner = "M2.demography"
@@ -519,7 +533,7 @@ summary = "On the first day of each month, for each sovereign title with a livin
 earns_its_place_by = ["V-SF-06", "V-SF-06b", "V-SF-06d", "V-ERA-03"]
 [[submodels]]
 name = "on_death"
-summary = "At Polity of a death instant (every death is an M2 timer in the Vital slot): for each title whose holder died: predecessor_exit := murdered, other_violent or natural from person.death_cause; holder := 0; state := awaiting; cancel exit_timer; schedule the arbitration timer at (now, Polity) of this same instant (SAGA-13). A dead regent: the next regent by rule (REGENCY_ENDED, REGENCY_BEGUN). A dead office holder: office.holder := 0. A dead claimant: claim.status := void. A house whose last living member died: HOUSE_EXTINCT. Property: TransferHoldings to M4 (P1b)"
+summary = "At Polity of a death instant (every death is an M2 timer in the Vital slot): for each title whose holder died: predecessor_exit := murdered, other_violent or natural from instant_death.cause (the instant's deaths are M2's instant_death rows with tick = now; Architect round 1, Q4); holder := 0; state := awaiting; cancel exit_timer; schedule the arbitration timer at (now, Polity) of this same instant (SAGA-13). A dead regent: the next regent by rule (REGENCY_ENDED, REGENCY_BEGUN). A dead office holder: office.holder := 0. A dead claimant: claim.status := void. A house whose last living member died: HOUSE_EXTINCT. Property: TransferHoldings to M4 (P1b)"
 earns_its_place_by = ["V-SAGA-19", "V-INV-03"]
 [[submodels]]
 name = "arbitrate"
@@ -596,7 +610,7 @@ source = "Kokkonen & Sundell 2014, p. 447 (R12 §2); deliberately not Blaydes & 
 [[couplings]]
 system = "M2.demography"
 direction = "in"
-via = "the death path: a titleholder's death in the Vital slot starts arbitration later in the same instant; death_cause sets the feud stock (a mode: it switches the predecessor multipliers on or off); genealogy, sex and age define the lines; natural death of rulers is M2's Brass hazard"
+via = "the death path: a titleholder's death in the Vital slot starts arbitration later in the same instant; instant_death.cause sets the feud stock (a mode: it switches the predecessor multipliers on or off); genealogy, sex and age define the lines; natural death of rulers is M2's Brass hazard"
 lag = "same instant for deaths; start of instant for genealogy"
 [[couplings]]
 system = "M2.demography"
@@ -638,7 +652,7 @@ lag = "applied at the next tick boundary"
 [isolation]
 forcing = [
   { input = "polity.exec_constraint", series = "step", note = "0 (reference) for 500 years, then 1 (an assembly) for 500 years, on the same seeds; also constants 0 and 1" },
-  { input = "person.death_cause", series = "historical:fixture_regicides", note = "M2 live; scripted runs of consecutive murdered predecessors to exercise the feud stock, plus the fixture deaths of V-SAGA-19 (every titleholder through each death cause)" },
+  { input = "instant_death.cause", series = "historical:fixture_regicides", note = "M2 live; scripted runs of consecutive murdered predecessors to exercise the feud stock, plus the fixture deaths of V-SAGA-19 (every titleholder through each death cause)" },
 ]
 horizon = "1,000 sim-years on the dynastic fixture world of G1a (a few great houses, 1 to 4 realms, each law in turn; M6 held at neutral; M2 live; T1.minds stubbed: no petitions, no pressed claims, no foreground murders), 32 seeds"
 expect = "INV-M7-01 to 07 with 0 violations; murders per 1,000 ruler-years at the reference state equal 1000 x murder_hazard_base x L within Poisson error and inside the V-SF-06 band of the matching institutional state; deposition shares by law inside V-SF-06b (reported at G1a, gated at G1b); the predecessor-murdered OR recovers predecessor_killed_or (V-SF-06d, logistic CI); after the step to exec_constraint = 1 both rates fall by exec_constraint_hr and reigns lengthen (V-SF-06c computed but sealed: reported only once the held-out evaluation runs); the named-actor count stays bounded with no count rule and is reported against population; no house is resurrected and no title is created"

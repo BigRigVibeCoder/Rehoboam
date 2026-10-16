@@ -1,6 +1,6 @@
 // GENERATED from specs/systems/T1.minds.odd.toml by lint_odd.py --rust. Do not edit; edit the spec.
 pub const SYSTEM_ID: &str = "T1.minds";
-pub const SPEC_VERSION: &str = "0.1.0";
+pub const SPEC_VERSION: &str = "0.2.0";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Vital),
     (Pulse::Day, Phase::Agenda),
