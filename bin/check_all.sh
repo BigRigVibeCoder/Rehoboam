@@ -125,6 +125,43 @@ forbidden_api_controls() {
   done
 }
 
+# Doctests (nextest skips them). The compile-fail cases are acceptance tests (SPR-002 T-01), so the
+# gate counts them per file: a case demoted to plain text, deleted or renamed must turn it red, not
+# just vanish (VER-SPR-002-TEST DEF-2). Each entry is file:compile_fail:compiling, the number of
+# `compile_fail` doctests and of compiling doctests (the twins that show each case fails for its
+# stated reason). Update an entry in the same commit that adds or removes a case.
+DOCTEST_EXPECT="crates/rh-ids/src/ids.rs:7:7 crates/rh-ids/src/rng.rs:1:1"
+DOCTEST_LOG=target/doctests.txt
+doctests_run() {
+  mkdir -p target && rm -f "$DOCTEST_LOG" || return 1
+  cargo test --doc --workspace --locked > "$DOCTEST_LOG" 2>&1
+  local rc=$?
+  cat "$DOCTEST_LOG"
+  return $rc
+}
+# doctest_count_gate <cargo test --doc output>: fails on any file whose counts differ from DOCTEST_EXPECT.
+doctest_count_gate() {
+  local log="$1" spec file rest want_cf want_ok got_cf got_ok bad=0
+  [ -s "$log" ] || { echo "no doctest output at $log"; return 1; }
+  for spec in $DOCTEST_EXPECT; do
+    file="${spec%%:*}"; rest="${spec#*:}"; want_cf="${rest%%:*}"; want_ok="${rest#*:}"
+    got_cf=$(grep -F -- "test $file - " "$log" | grep -cF -- " - compile fail ... ok")
+    got_ok=$(grep -F -- "test $file - " "$log" | grep -F -- ") ... ok" | grep -cvF -- "compile fail")
+    if [ "$got_cf" -ne "$want_cf" ]; then echo "$file: expected $want_cf compile-fail doctests, found $got_cf"; bad=1; fi
+    if [ "$got_ok" -ne "$want_ok" ]; then echo "$file: expected $want_ok compiling doctests, found $got_ok"; bad=1; fi
+    [ "$bad" -eq 0 ] && echo "$file: $got_cf compile-fail and $got_ok compiling doctests, as expected"
+  done
+  return $bad
+}
+# The positive control: the real doctest output with one typed-ID compile-fail line removed.
+doctest_count_control() {
+  local planted=target/rendered-fixtures/doctests_one_missing.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  awk '!done && /^test crates\/rh-ids\/src\/ids\.rs - .* - compile fail \.\.\. ok$/ { done = 1; next } { print }' \
+    "$DOCTEST_LOG" > "$planted" || return 1
+  doctest_count_gate "$planted"
+}
+
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
 # two `&&` lines splits the chain, and later checks would run after a failure (DEF-2).
 run "Required tools present" pass require_tools &&
@@ -173,7 +210,9 @@ run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
 run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&
 run "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)" "pass:V-DET-20: 1000 pairs" cargo nextest run -p rh-ids --locked --test fork_trees --test stream_independence --no-capture &&
-run "Rust: doctests, incl. typed-ID compile-fail cases (cargo test --doc; SPR-002 T-01)" "pass:compile fail ... ok" cargo test --doc --workspace --locked &&
+run "Rust: doctests (cargo test --doc)" pass doctests_run &&
+run "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)" pass doctest_count_gate "$DOCTEST_LOG" &&
+run "Doctest count gate positive control: one typed-ID case missing must FAIL" "fail:crates/rh-ids/src/ids.rs: expected 7 compile-fail doctests, found 6" doctest_count_control &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 # Tier 5 — golden vectors
 run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&

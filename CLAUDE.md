@@ -36,7 +36,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo deny --locked check bans sources            # crates.io only, no wildcards (licences: ledger only, ADR-0021 amended)
 cargo nextest run --workspace --locked
-cargo test --doc --workspace --locked             # doctests: rh-ids typed-ID compile-fail cases (SPR-002)
+cargo test --doc --workspace --locked             # doctests: rh-ids compile-fail cases, counted per file by check_all (SPR-002)
 cargo nextest run -p rh-ids --run-ignored only --test stream_independence   # V-DET-20 full sweep, 10^6 draws (nightly)
 # Architecture lints: stdlib Python
 python -I bin/lint_arch.py        # crate boundaries (V-INSP-03) and plane isolation (V-PLN-01)
