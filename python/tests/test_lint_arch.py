@@ -10,6 +10,7 @@ from lint_arch import (
     EXIT_OK,
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
+    PLANE_A_EXTERNAL_DEPS,
     UNKEYED_RNG_CRATES,
     Crate,
     Edge,
@@ -262,6 +263,47 @@ def test_crates_outside_plane_a_may_use_any_rng() -> None:
     assert found(crates) == []
 
 
+def test_plane_a_may_not_take_an_unreviewed_third_party_crate() -> None:
+    """A dependency missing from the reviewed list is refused until it is reviewed (A-20)."""
+    crates = engine(with_external(crate("rh-minds"), "itoa"))
+    assert found(crates) == [("plane-A-external", "rh-minds")]
+
+
+def test_a_reviewed_crate_is_allowed_where_the_list_allows_it() -> None:
+    """Any plane-A crate may use serde; only rh-registry toml; only rh-sample libm."""
+    crates = engine(
+        with_external(crate("rh-minds"), "serde"),
+        with_external(crate("rh-sample"), "libm"),
+    )
+    crates = [with_external(c, "serde", "toml") if c.name == "rh-registry" else c for c in crates]
+    assert found(crates) == []
+
+
+@pytest.mark.parametrize("dep", ["libm", "toml"])
+def test_a_scoped_crate_is_refused_elsewhere_in_plane_a(dep: str) -> None:
+    """The float-bearing crates stay where they were reviewed (the sampler float zone; SPR-004)."""
+    assert found(engine(with_external(crate("rh-minds"), dep))) == [
+        ("plane-A-external", "rh-minds")
+    ]
+
+
+def test_the_external_rule_skips_dev_dependencies_tools_and_rng_crates() -> None:
+    """Tests may use anything; tool crates are not plane A; RNG crates are rng-crate's alone."""
+    crates = engine(
+        with_external(crate("rh-minds"), "itoa", dep_kind="dev"),
+        with_external(crate("rh-bench", plane="tool", kind="tool"), "itoa"),
+        with_external(crate("rh-dice"), "rand"),
+    )
+    assert found(crates) == [("rng-crate", "rh-dice")]
+
+
+def test_every_reviewed_entry_has_a_note() -> None:
+    """The list is a review record: every entry says whether it can return a float."""
+    for name, (allowed, note) in PLANE_A_EXTERNAL_DEPS.items():
+        assert note.strip(), name
+        assert allowed is None or allowed, name
+
+
 def test_an_alias_does_not_hide_an_rng_crate() -> None:
     """The metadata names the package, not the alias; `dice = { package = "rand" }` is rand."""
     document = {
@@ -343,6 +385,8 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("contract_name", "metadata"),
         ("plane_a_rng_crate", "rng-crate"),
         ("rng_building_block_outside_ids", "rng-crate"),
+        ("plane_a_unlisted_dep", "plane-A-external"),
+        ("plane_a_scoped_dep_outside", "plane-A-external"),
     ],
 )
 def test_main_catches_each_fixture(
