@@ -24,6 +24,18 @@ $PYTHON "$DIR/prototype_4_micropolis_siege.py"
 echo -e "\n>>> 5. VOW COLLISION & MORAL DILEMMA BENCHMARK <<<"
 $PYTHON "$DIR/prototype_5_vow_collision.py"
 
+echo -e "\n>>> 6. BARNES PRIORITY-FLOOD HYDROLOGY & RIVERS <<<"
+$PYTHON "$DIR/prototype_6_priority_flood_hydrology.py"
+
+echo -e "\n>>> 7. THE DYNASTIC NOBILITY THERMOSTAT (RT-ACT-010) <<<"
+$PYTHON "$DIR/prototype_7_nobility_thermostat.py"
+
+echo -e "\n>>> 8. SQL CAUSAL DAG SIFTER & KREMINSKI UNEXPECTEDNESS (RT-ACT-012) <<<"
+$PYTHON "$DIR/prototype_8_causal_sifter_sql.py"
+
+echo -e "\n>>> 9. THE 4-BEAT COMIC STORYBOARD COMPILER (RT-ACT-011) <<<"
+$PYTHON "$DIR/prototype_9_comic_beat_compiler.py"
+
 echo -e "\n================================================================================"
-echo "ALL 5 PROTOTYPES COMPLETED SUCCESSFULLY."
+echo "ALL 9 PROTOTYPES COMPLETED SUCCESSFULLY."
 echo "================================================================================"

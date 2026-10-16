@@ -15,8 +15,13 @@ This keeps in-flight sprints from building on specs that change underneath them.
 
 | Path | What |
 |---|---|
-| `inbox.md` | Batched design proposals awaiting the next gate (next: **G0**, end of P0) |
+| `inbox.md` | Batched design proposals awaiting the next gate (next: **G0**, end of P0; Batches 01, 02, 03, 04) |
+| `DISPOSITION_LEDGER.md` | Master living ledger tracking all 28 findings, Architect dispositions, and phase revisit hooks |
+| `PHILOSOPHY_AND_BACKLOG.md` | Red Team Operating Charter, 5 Immutable Laws, 14-item Action Backlog (`RT-ACT-001`–`014`) |
+| `RT-2026-10-16-simulation-bug-autopsy-and-code-theft.md` | Deep autopsy of 10 simulation bugs across 7 engines, 10 "still wanted" papers, and open code |
+| `RT-2026-10-16-bleeding-edge-frontiers.md` | Bleeding-edge frontiers: Versu practices, Qud domains, Wildermyth grammar, Nobility Thermostat |
+| `RT-2026-10-16-sota-science-analysis.md` | Mathematical formulations for Park reflection trees, Kreminski unexpectedness, Relic tensors |
+| `RT-2026-10-16-fidelity-gaps.md` | The red team's report on its initial five fidelity prototypes (Batch 01) |
 | `RT-2026-10-16-external.md` | Dispositions of the first external review (folded in, closed) |
-| `RT-2026-10-16-fidelity-gaps.md` | The red team's report on its five fidelity prototypes (batch 01, for G0) |
-| `handoffs/` | The director's and red team's directives as received, kept for the record (the decisions themselves are in ADR-0034, ADR-0035 and `docs/decisions-log.md`) |
-| `prototypes/` | The red team's illustrative Python prototypes (stdlib only; `run_all.sh`). They demonstrate failure modes and proposed fixes with hand-set parameters. They are evidence for a proposal, not measurements of Rehoboam |
+| `handoffs/` | Historical directives and handoff dossiers kept for auditability |
+| `prototypes/` | Nine executable stdlib Python prototypes (`run_all.sh` 9/9 passing) demonstrating engine failure modes and mathematical fixes |
