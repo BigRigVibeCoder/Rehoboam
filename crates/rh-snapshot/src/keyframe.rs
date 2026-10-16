@@ -434,11 +434,15 @@ pub fn read_keyframe(
     registered: &Registered,
 ) -> Result<(EngineState, KeyframeHeader), KeyframeError> {
     let arrow = unseal_keyframe(bytes)?;
-    crate::ipc_guard::check(arrow)?;
-    // DEF-3 layer 2: a panic inside Arrow on a body that passed layer 1 is caught and refused.
+    // DEF-3 layer 2: a panic in the guard (layer 1, DEF-3b) or inside Arrow on a body that passed
+    // it is caught and refused, so the no-panic claim never rests on the guard being bug-free.
     // An allocation failure aborts instead and cannot be caught: layer 1's size bounds are what
     // prevent those.
-    let decoded = std::panic::catch_unwind(|| decode_rows(arrow)).map_err(|panic| {
+    let decoded = std::panic::catch_unwind(|| {
+        crate::ipc_guard::check(arrow)?;
+        decode_rows(arrow)
+    })
+    .map_err(|panic| {
         let what = panic
             .downcast_ref::<&str>()
             .map(|s| (*s).to_owned())

@@ -75,6 +75,8 @@ fn le_i32(bytes: &[u8], at: usize) -> Option<i32> {
 /// [`KeyframeError::Ipc`] naming the first check that fails.
 pub fn check(arrow: &[u8]) -> Result<(), KeyframeError> {
     let n = arrow.len();
+    // n >= 16 makes `arrow[..6]`, `arrow[n - 6..]` and `n - 10` safe; `footer_start` below is
+    // in [8, n - 10], so `arrow[footer_start..n - 10]` and `arrow[..footer_start]` are too.
     if n < 2 * MAGIC.len() + 4 || &arrow[..6] != MAGIC || &arrow[n - 6..] != MAGIC {
         return Err(refuse("not an Arrow IPC file"));
     }
@@ -145,12 +147,31 @@ fn check_block(
     body_len: i64,
 ) -> Result<(), KeyframeError> {
     let at = format!("the block at {offset}");
-    if offset < 8 || offset % 8 != 0 || meta_len % 8 != 0 || meta_len <= 8 || body_len % 8 != 0 {
+    // Signs first: a negative multiple of 8 passes the alignment test (DEF-3b), and a negative
+    // body length would make the span below shorter than the metadata.
+    if offset < 8 || meta_len <= 8 || body_len < 0 {
+        return Err(refuse(format!(
+            "{at}: offset, metadata length or body length out of range"
+        )));
+    }
+    if offset % 8 != 0 || meta_len % 8 != 0 || body_len % 8 != 0 {
         return Err(refuse(format!("{at} is misaligned")));
     }
-    let block = span(file, offset, i64::from(meta_len).saturating_add(body_len))
-        .ok_or_else(|| refuse(format!("{at} is outside the file")))?;
-    let (meta, body) = block.split_at(usize::try_from(meta_len).unwrap_or(usize::MAX));
+    let meta_len =
+        usize::try_from(meta_len).map_err(|_| refuse(format!("{at}: metadata length")))?;
+    let block = span(
+        file,
+        offset,
+        i64::try_from(meta_len)
+            .unwrap_or(i64::MAX)
+            .saturating_add(body_len),
+    )
+    .ok_or_else(|| refuse(format!("{at} is outside the file")))?;
+    let (meta, body) = block
+        .split_at_checked(meta_len)
+        .ok_or_else(|| refuse(format!("{at}: the metadata is outside the block")))?;
+    // From here meta.len() == meta_len > 8, so `meta[..4]`, `meta.len() - 8` and
+    // `meta[8..8 + fb_len]` (fb_len <= meta.len() - 8) are in bounds.
     if meta[..4] != CONTINUATION {
         return Err(refuse(format!("{at} has no continuation marker")));
     }

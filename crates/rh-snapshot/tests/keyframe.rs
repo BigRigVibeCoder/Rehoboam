@@ -767,3 +767,108 @@ fn tombstones_decode_in_id_order_whatever_their_key_order() {
     assert_eq!(state_hash(&decoded), state_hash(&s));
     assert!(write_keyframe(&e, anchor(&e)).is_ok());
 }
+
+/// The byte offset of a flatbuffer struct inside `base`, from the reference the verified accessor
+/// hands out (structs in a vector are read in place).
+fn offset_in<T>(base: &[u8], item: &T) -> usize {
+    std::ptr::from_ref(item) as usize - base.as_ptr() as usize
+}
+
+/// Writes `value` little-endian into `width` bytes at `at`.
+fn patch(bytes: &mut [u8], at: usize, width: usize, value: i64) {
+    bytes[at..at + width].copy_from_slice(&value.to_le_bytes()[..width]);
+}
+
+/// DEF-3b (Architect review of b9c3ede): multi-byte forgeries a bit-flip sweep cannot reach. Every
+/// footer block's `offset`, `metaDataLength` and `bodyLength`, and every buffer `offset` and
+/// `length` of the first block's message, set to 0, -1, -8, the extremes, the true value +- 8 and
+/// the file length; each forgery re-sealed and loaded. Refused or equal state, never a panic.
+#[test]
+fn def_3b_forged_block_and_buffer_fields_are_refused_without_a_panic() {
+    let engine = run_to(life(), 50 * DAY + 1);
+    let (bytes, header) = write_keyframe(&engine, anchor(&engine)).unwrap();
+    let body = unseal_keyframe(&bytes).unwrap().to_vec();
+    let n = body.len();
+    let footer_len =
+        usize::try_from(i32::from_le_bytes(body[n - 10..n - 6].try_into().unwrap())).unwrap();
+    let footer_start = n - 10 - footer_len;
+    let footer = arrow_ipc::root_as_footer(&body[footer_start..n - 10]).unwrap();
+    let blocks = footer.recordBatches().unwrap();
+    // (byte position in the body, width, true value) of every field to forge.
+    let mut fields: Vec<(usize, usize, i64)> = Vec::new();
+    for block in blocks {
+        let at = offset_in(&body, block);
+        fields.push((at, 8, block.offset()));
+        fields.push((at + 8, 4, i64::from(block.metaDataLength())));
+        fields.push((at + 16, 8, block.bodyLength()));
+    }
+    let first = blocks.get(0);
+    let meta_at = usize::try_from(first.offset()).unwrap() + 8;
+    let fb_len = usize::try_from(i32::from_le_bytes(
+        body[meta_at - 4..meta_at].try_into().unwrap(),
+    ))
+    .unwrap();
+    let message = arrow_ipc::root_as_message(&body[meta_at..meta_at + fb_len]).unwrap();
+    let buffers = message.header_as_record_batch().unwrap().buffers().unwrap();
+    assert_eq!(buffers.len(), 6);
+    for buffer in buffers {
+        let at = offset_in(&body, buffer);
+        fields.push((at, 8, buffer.offset()));
+        fields.push((at + 8, 8, buffer.length()));
+    }
+    // The located fields really are the ones the accessors read.
+    for &(at, width, value) in &fields {
+        let mut raw = [0_u8; 8];
+        raw[..width].copy_from_slice(&body[at..at + width]);
+        let read = if width == 4 {
+            i64::from(i32::from_le_bytes(raw[..4].try_into().unwrap()))
+        } else {
+            i64::from_le_bytes(raw)
+        };
+        assert_eq!(read, value, "field at {at}");
+    }
+    let file_len = i64::try_from(n).unwrap();
+    let quiet = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let mut sweep = Sweep::default();
+    for &(at, width, value) in &fields {
+        let (min, max) = if width == 4 {
+            (i64::from(i32::MIN), i64::from(i32::MAX))
+        } else {
+            (i64::MIN, i64::MAX)
+        };
+        for forged in [
+            0,
+            -1,
+            -8,
+            -16,
+            -256,
+            min,
+            max,
+            value + 8,
+            value - 8,
+            file_len,
+        ] {
+            if forged == value {
+                continue;
+            }
+            let mut f = body.clone();
+            patch(&mut f, at, width, forged);
+            let sealed = seal_keyframe(&f);
+            sweep.cases += 1;
+            match std::panic::catch_unwind(|| load(&sealed)) {
+                Ok(Ok(e)) if state_hash(&e.snapshot()) == header.state_hash => {
+                    sweep.accepted_equal += 1;
+                }
+                Ok(Ok(_)) => sweep.accepted_other += 1,
+                Ok(Err(KeyframeError::Panicked(_))) | Err(_) => sweep.panicked += 1,
+                Ok(Err(_)) => sweep.refused += 1,
+            }
+        }
+    }
+    std::panic::set_hook(quiet);
+    println!("DEF-3b: {} fields, {sweep:?}", fields.len());
+    assert_eq!(sweep.panicked, 0, "{sweep:?}");
+    assert_eq!(sweep.accepted_other, 0, "{sweep:?}");
+    assert!(sweep.cases > 300, "{sweep:?}");
+}
