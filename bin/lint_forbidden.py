@@ -21,6 +21,15 @@ reports its metadata). Rules:
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
+                      One form is followed instead of forbidden (BCK-002 A-27; SPR-008 T-00): an
+                      include! whose only argument is a plain string literal ("..." or r"...",
+                      no escapes) naming an existing file inside the repository, resolved from the
+                      including file's directory as rustc resolves it. The gate then scans that
+                      file as source, under the including file's float scope, and reports its
+                      findings at the included file's own lines (nested includes are followed the
+                      same way). Generated skeletons come in this way (ADR-0033 §3). A non-literal
+                      argument (concat!, env!, a macro parameter), a path outside the repository
+                      (symlinks resolved), or a missing file stays a violation.
     lint-allow        allow(...) or expect(...) of clippy::disallowed_methods, disallowed_types, or
                       the groups that hold them (style, all), also inside cfg_attr: it would
                       silence clippy's half of these rules (the std transcendentals, HashMap,
@@ -113,7 +122,7 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
@@ -172,6 +181,11 @@ FLOAT_API_TOKEN = re.compile(r"\b(?:f32|f64|libm)\b")
 USE_ITEM = re.compile(r"\buse\b[^;]*;")
 FLOAT_TYPE_TOKEN = re.compile(r"\b(?:f32|f64)\b")
 DEFAULT_SPECS = Path(__file__).resolve().parents[1] / "specs" / "systems"
+# The repository a followed include! must stay inside (BCK-002 A-27).
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_INCLUDE_RULE = "source-include"
+INCLUDE_MACRO = re.compile(r"\binclude\s*!\s*(?P<open>[(\[{])")
+CLOSING = {"(": ")", "[": "]", "{": "}"}
 
 
 def _rx(pattern: str) -> re.Pattern[str]:
@@ -243,7 +257,8 @@ RULES: tuple[Rule, ...] = (
         "source-include",
         _rx(r"#\s*!?\s*\[\s*path\b|\bcfg_attr\s*\([^)]*\bpath\s*=|\binclude\s*!\s*[(\[{]"),
         "pulls in source from a file this gate may never scan; keep plane-A code in its own "
-        "crate's files, or escape with a reason (DEF-4)",
+        "crate's files, include! a plain string literal naming a file inside the repository "
+        "(followed and scanned; BCK-002 A-27), or escape with a reason (DEF-4)",
     ),
     Rule(
         "lint-allow",
@@ -310,6 +325,10 @@ class Report:
     violations: list[str]
     escaped: list[str]
     files: int = 0
+    includes: int = 0  # literal in-repository include! invocations followed (BCK-002 A-27)
+    scanned: set[tuple[Path, FloatScan]] = field(default_factory=set)  # (file, float scan) read
+    repo: Path = REPO_ROOT  # a followed include! must resolve inside this directory
+    including: list[Path] = field(default_factory=list)  # the include! chain being scanned
 
 
 # --- Lexing -----------------------------------------------------------------------------------
@@ -524,9 +543,121 @@ def find_float_api(code: str, path: str) -> list[Finding]:
     return sorted(found, key=lambda f: (f.line, f.column))
 
 
+@dataclass(frozen=True)
+class Include:
+    """One include! invocation: where it starts and its path, if that is a plain literal."""
+
+    start: int
+    literal: str | None  # None: the argument is not one plain string literal (concat!, $file, ...)
+
+
+def _skip_trivia(source: str, i: int) -> int:
+    """Return the first index at or after ``i`` that is neither whitespace nor a comment."""
+    while i < len(source):
+        if source[i].isspace():
+            i += 1
+            continue
+        end = _comment_end(source, i)
+        if end is None:
+            return i
+        i = end
+    return i
+
+
+def _plain_string(source: str, i: int) -> tuple[str, int] | None:
+    """Return (value, end) of a "..." or r#"..."# literal at ``i`` that holds no escape, or None.
+
+    A byte or C string is not a path include! accepts, and an escape could spell a path that the
+    text does not show, so neither counts as plain.
+    """
+    if source.startswith('"', i):
+        end = _quoted_end(source, i + 1, '"')
+        body = source[i + 1 : end - 1]
+        if end > len(source) or source[end - 1] != '"' or "\\" in body:
+            return None
+        return body, end
+    raw = RAW_STRING_START.match(source, i)
+    if raw is None or source[i] != "r":
+        return None
+    closing = '"' + raw.group("hashes")
+    end = source.find(closing, raw.end())
+    return None if end < 0 else (source[raw.end() : end], end + len(closing))
+
+
+def find_includes(source: str, code: str) -> list[Include]:
+    """Return every include! in a file, with its path where the argument is one plain literal.
+
+    ``code`` is ``lex(source).code``: the macro is found there (never inside a comment or a
+    string), and its argument is read from ``source`` at the same offsets.
+    """
+    found: list[Include] = []
+    for match in INCLUDE_MACRO.finditer(code):
+        literal = None
+        plain = _plain_string(source, _skip_trivia(source, match.end()))
+        if plain is not None:
+            close = _skip_trivia(source, plain[1])
+            if source.startswith(CLOSING[match.group("open")], close):
+                literal = plain[0]
+        found.append(Include(match.start(), literal))
+    return found
+
+
+def resolve_include(literal: str, file: Path | None, repo: Path) -> tuple[Path | None, str]:
+    """Resolve an include! literal from the including file; return (file, "") or (None, why).
+
+    The path is taken from the including file's directory, as rustc takes it, and every symlink
+    is resolved before the repository check.
+    """
+    if file is None:
+        return None, f"`{literal}` cannot be resolved: the including file's location is unknown"
+    target = (file.resolve().parent / literal).resolve()
+    if not target.is_relative_to(repo.resolve()):
+        return None, (
+            f"`{literal}` resolves outside the repository ({target}); only a file inside it is "
+            "followed and scanned (BCK-002 A-27)"
+        )
+    if not target.is_file():
+        return None, f"`{literal}` names no file ({display(target)}), so it cannot be scanned"
+    return target, ""
+
+
+def _line_column(code: str, offset: int) -> tuple[int, int]:
+    """Return the 1-based line and column of ``offset`` in ``code``."""
+    line_start = code.rfind("\n", 0, offset) + 1
+    return code.count("\n", 0, offset) + 1, offset - line_start + 1
+
+
+def _follow_includes(
+    lexed: Lexed, source: str, findings: list[Finding], file: Path | None, repo: Path
+) -> tuple[list[Finding], list[Path]]:
+    """Drop the source-include findings of followable include!s; return the rest and the targets.
+
+    A literal include! that cannot be followed keeps its finding, with the reason it was not
+    followed in place of the rule's general one.
+    """
+    literals = {
+        _line_column(lexed.code, inc.start): inc.literal
+        for inc in find_includes(source, lexed.code)
+        if inc.literal is not None
+    }
+    kept: list[Finding] = []
+    targets: list[Path] = []
+    for finding in findings:
+        literal = literals.get((finding.line, finding.column))
+        if finding.rule != SOURCE_INCLUDE_RULE or literal is None:
+            kept.append(finding)
+            continue
+        target, why = resolve_include(literal, file, repo)
+        if target is None:
+            kept.append(replace(finding, why=why))
+        else:
+            targets.append(target)
+    return kept, targets
+
+
 def scan_source(
     source: str,
-    path: str,
+    path: str | Path,
     report: Report,
     float_fields: frozenset[str] = frozenset(),
     *,
@@ -536,7 +667,9 @@ def scan_source(
 
     Args:
         source: The text of a ``.rs`` file.
-        path: The path reported for its findings.
+        path: The file on disk (reported relative to the working directory, and the place a
+            literal include! is resolved from), or a name to report for a snippet (whose every
+            include! stays a violation, since there is nothing to resolve it from).
         report: Where violations and excused findings are added.
         float_fields: The columns the system specs declare ``f32_field``; only an escape naming
             one of them excuses a float.
@@ -544,18 +677,40 @@ def scan_source(
             ``"zone"`` the float-api rule instead (the float zone's src/); ``"none"`` neither
             (tests/, benches/ and examples/; see the module DECISION). A :class:`FloatScan` adds
             the float-yielding dependency APIs the file's crate may reach, checked under ``"rule"``.
+            A file reached through a literal include! is scanned with the including file's
+            :class:`FloatScan`.
+
+    Raises:
+        OSError: An included file cannot be read.
+        UnicodeDecodeError: An included file is not UTF-8.
     """
     scan = floats if isinstance(floats, FloatScan) else FloatScan(floats)
     floats, dep_floats = scan.scope, scan.deps
+    file = path.resolve() if isinstance(path, Path) else None
+    name = display(path) if isinstance(path, Path) else path
+    if file is not None:
+        if (file, scan) in report.scanned:
+            return  # reached twice (directly and through an include!, or by two includes)
+        report.scanned.add((file, scan))
     lexed = lex(source)
     findings = [
-        f for f in find_forbidden(lexed.code, path) if floats == "rule" or f.rule != FLOAT_RULE
+        f for f in find_forbidden(lexed.code, name) if floats == "rule" or f.rule != FLOAT_RULE
     ]
     if floats == "rule":
-        findings += find_float_dep(lexed.code, path, dep_floats)
+        findings += find_float_dep(lexed.code, name, dep_floats)
+    findings, targets = _follow_includes(lexed, source, findings, file, report.repo)
     if floats == "zone":
-        findings += find_float_api(lexed.code, path)
-    escapes = find_escapes(lexed, path)
+        findings += find_float_api(lexed.code, name)
+    _report_findings(findings, find_escapes(lexed, name), float_fields, report)
+    report.files += 1
+    if file is not None:
+        _scan_includes(file, targets, report, float_fields, scan)
+
+
+def _report_findings(
+    findings: list[Finding], escapes: list[Escape], float_fields: frozenset[str], report: Report
+) -> None:
+    """Add each finding to ``report`` as a violation or an excused escape, and check escapes."""
     valid = {e.covers: e for e in escapes if e.reason}
     covered_lines = {f.line for f in findings}
     for finding in findings:
@@ -588,7 +743,28 @@ def scan_source(
                 f"VIOLATION [{RULE_ID}/escape] {where}: LINT-ALLOW(forbidden-api) covers no "
                 f"forbidden API on line {escape.covers}; remove it"
             )
-    report.files += 1
+
+
+def _scan_includes(
+    file: Path,
+    targets: list[Path],
+    report: Report,
+    float_fields: frozenset[str],
+    floats: FloatScan,
+) -> None:
+    """Scan the files that ``file`` includes, under its float checks; a cycle is a violation."""
+    report.including.append(file)
+    for target in targets:
+        report.includes += 1
+        if target in report.including:
+            report.violations.append(
+                f"VIOLATION [{RULE_ID}/{SOURCE_INCLUDE_RULE}] {display(file)}: include! of "
+                f"{display(target)} includes itself, directly or through another include!"
+            )
+            continue
+        text = target.read_text(encoding="utf-8")
+        scan_source(text, target, report, float_fields, floats=floats)
+    report.including.pop()
 
 
 def find_float_dep(
@@ -682,6 +858,7 @@ def scan_paths(
     float_fields: frozenset[str] = frozenset(),
     float_exempt: frozenset[Path] = frozenset(),
     dep_floats: dict[Path, list[tuple[str, re.Pattern[str]]]] | None = None,
+    repo: Path = REPO_ROOT,
 ) -> Report:
     """Scan every ``.rs`` file under ``paths`` as plane-A code.
 
@@ -691,12 +868,13 @@ def scan_paths(
         float_exempt: Roots among ``paths`` whose files the float rule skips entirely (the float
             zone crate's directory); every other rule still applies to them.
         dep_floats: Per root, the float-yielding dependency APIs its crate may reach.
+        repo: The directory a followed include! must resolve inside (the repository).
 
     Raises:
         OSError: A file cannot be read.
         UnicodeDecodeError: A file is not UTF-8.
     """
-    report = Report(violations=[], escaped=[])
+    report = Report(violations=[], escaped=[], repo=repo)
     scopes: dict[Path, FloatScope] = {}
     deps_of: dict[Path, list[tuple[str, re.Pattern[str]]]] = {}
     for root in paths:
@@ -710,7 +888,7 @@ def scan_paths(
         source = file.read_text(encoding="utf-8")
         scan_source(
             source,
-            display(file),
+            file,
             report,
             float_fields,
             floats=FloatScan(scopes[file], tuple(deps_of[file])),
@@ -850,7 +1028,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         f"lint_forbidden: {scope}; {report.files} files scanned; "
         f"{len(report.violations)} violations; {len(report.escaped)} escapes; "
-        f"{len(float_fields)} declared f32_field columns"
+        f"{len(float_fields)} declared f32_field columns; "
+        f"{report.includes} literal include! followed (BCK-002 A-27)"
     )
     return EXIT_VIOLATIONS if report.violations else EXIT_OK
 

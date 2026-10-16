@@ -146,6 +146,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: system -> system must FAIL",
     "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)",
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
+    "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed and "
+    "passes (SPR-008 T-00)",
     "lint_forbidden float-api positive control: a private float alias in rh-sample must FAIL "
     "(SPR-003 GAP-11)",
     "lint_forbidden float-api positive control: an imported float alias in rh-sample must FAIL "
@@ -167,7 +169,13 @@ REQUIRED_GATES = (
     "GAP-1)",
     "lint_forbidden positive control: a float in a crate named rh-core must FAIL (SPR-003 GAP-3)",
     "lint_forbidden positive control: a float outside rh-sample must FAIL (SPR-003 T-00)",
+    "lint_forbidden positive control: a forbidden API behind a nested include! must FAIL (SPR-008 "
+    "T-00)",
+    "lint_forbidden positive control: a forbidden API in an included skeleton must FAIL (SPR-008 "
+    "T-00)",
+    "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
+    "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "

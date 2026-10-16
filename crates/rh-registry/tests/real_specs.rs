@@ -7,9 +7,10 @@
 //! - T-03: the generated skeletons (`crates/rh-core/tests/generated/*.rs`, the unedited output of
 //!   `lint_odd.py --rust <id>`, kept so by `bin/gen_skeletons.py --check`) compile against
 //!   rh-core's `SystemModel` contract. Each module below brings `Fixed`, `Phase` and `Pulse` into
-//!   scope, `include!`s its skeleton and implements `SpecPurpose` for the generated `RngPurpose`
-//!   with the generated `name()`: the only way a system names a purpose (ruling 2). Only the variant
-//!   list (`SpecPurpose::ALL`) is written by hand, and registration checks it against the spec.
+//!   scope, `include!`s its skeleton with a string literal (which `bin/lint_forbidden.py` follows
+//!   and scans, BCK-002 A-27) and implements `SpecPurpose` for the generated `RngPurpose` with the
+//!   generated `name()`: the only way a system names a purpose (ruling 2). Only the variant list
+//!   (`SpecPurpose::ALL`) is written by hand, and registration checks it against the spec.
 //!   Acceptance: the S5 and M2 skeletons compile, and so do S6 and S7.
 //! - T-06: a purpose not in the spec fails registration; a spec purpose with no code use is
 //!   reported.
@@ -50,43 +51,48 @@ fn real_ownership() -> Ownership {
     Ownership::build(&specs, &ids)
 }
 
-macro_rules! skeleton {
-    ($module:ident, $file:literal, [$($variant:ident),* $(,)?]) => {
-        #[allow(dead_code, reason = "generated items a stub does not use")]
-        mod $module {
-            use rh_core::{Fixed, Phase, Pulse};
-            include!($file); // LINT-ALLOW(forbidden-api): the unedited lint_odd.py --rust skeleton (crates/rh-core/tests/generated/), kept identical by bin/gen_skeletons.py --check
-
-            impl rh_core::system::SpecPurpose for RngPurpose {
-                const ALL: &'static [Self] = &[$(Self::$variant),*];
-                fn name(&self) -> &'static str {
-                    RngPurpose::name(*self) // the generated name (lint_odd.py --rust)
-                }
+/// Implements `SpecPurpose` for the generated `RngPurpose` of the module it is invoked in. The
+/// module itself `include!`s its skeleton with a string literal, which `bin/lint_forbidden.py`
+/// follows and scans as source (BCK-002 A-27; SPR-008 T-00): a macro parameter there would not
+/// be followed.
+macro_rules! purposes {
+    ($($variant:ident),* $(,)?) => {
+        impl rh_core::system::SpecPurpose for RngPurpose {
+            const ALL: &'static [Self] = &[$(Self::$variant),*];
+            fn name(&self) -> &'static str {
+                RngPurpose::name(*self) // the generated name (lint_odd.py --rust)
             }
         }
     };
 }
 
-skeleton!(
-    s5,
-    "../../rh-core/tests/generated/S5_daily_life.rs",
-    [ActivityBlock, EncounterOutcome]
-);
-skeleton!(
-    m2,
-    "../../rh-core/tests/generated/M2_demography.rs",
-    [DeathTime]
-);
-skeleton!(
-    s6,
-    "../../rh-core/tests/generated/S6_artifacts.rs",
-    [LossOnDeath, TheftOutcome, SearchFind]
-);
-skeleton!(
-    s7,
-    "../../rh-core/tests/generated/S7_vows.rs",
-    [GrudgeForm, BreakMode]
-);
+#[allow(dead_code, reason = "generated items a stub does not use")]
+mod s5 {
+    use rh_core::{Fixed, Phase, Pulse};
+    include!("../../rh-core/tests/generated/S5_daily_life.rs");
+    purposes!(ActivityBlock, EncounterOutcome);
+}
+
+#[allow(dead_code, reason = "generated items a stub does not use")]
+mod m2 {
+    use rh_core::{Fixed, Phase, Pulse};
+    include!("../../rh-core/tests/generated/M2_demography.rs");
+    purposes!(DeathTime);
+}
+
+#[allow(dead_code, reason = "generated items a stub does not use")]
+mod s6 {
+    use rh_core::{Fixed, Phase, Pulse};
+    include!("../../rh-core/tests/generated/S6_artifacts.rs");
+    purposes!(LossOnDeath, TheftOutcome, SearchFind);
+}
+
+#[allow(dead_code, reason = "generated items a stub does not use")]
+mod s7 {
+    use rh_core::{Fixed, Phase, Pulse};
+    include!("../../rh-core/tests/generated/S7_vows.rs");
+    purposes!(GrudgeForm, BreakMode);
+}
 
 /// A system built on a skeleton: everything the spec fixes comes from the generated module.
 struct OnSkeleton {
