@@ -11,8 +11,13 @@
 //! and Python's dict semantics for repeated keys (the last value wins, at the first position;
 //! `1`, `1.0` and `true` are the same key). Anything `PyYAML`'s safe loader refuses is a load error.
 //!
-//! Known deviation: integers whose magnitude needs more than 127 bits are a load error here,
-//! while Python would hold them as big integers.
+//! Integers beyond 127 bits are kept as [`Value::BigInt`] (sign and text): every manifest integer
+//! field is bounded to 64 bits (DEF-2 ruling), so only the sign matters to validation.
+//!
+//! Where `PyYAML` is stricter than the YAML specification, this loader follows `PyYAML` (GAP-1
+//! ruling): a tab outside quoted scalars, block scalars and comments, a `?` inside a plain scalar
+//! in a flow collection, and an empty implicit key (`: value`) are load errors. A leading UTF-8
+//! byte order mark is skipped, as `PyYAML` does (DEF-1).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -28,6 +33,13 @@ pub enum Value {
     Bool(bool),
     /// An integer (decimal, `0b`, `0x`, leading-zero octal or sexagesimal).
     Int(i128),
+    /// An integer too large for `i128`: its sign and its text. Python holds it exactly.
+    BigInt {
+        /// Whether it is negative.
+        negative: bool,
+        /// The scalar as written.
+        text: String,
+    },
     /// A float.
     Float(f64),
     /// A string.
@@ -48,7 +60,7 @@ impl Value {
         match self {
             Value::Null => "NoneType",
             Value::Bool(_) => "bool",
-            Value::Int(_) => "int",
+            Value::Int(_) | Value::BigInt { .. } => "int",
             Value::Float(_) => "float",
             Value::Str(_) => "str",
             Value::Timestamp(_) => "date",
@@ -93,6 +105,7 @@ impl fmt::Display for Value {
             Value::Bool(true) => f.write_str("True"),
             Value::Bool(false) => f.write_str("False"),
             Value::Int(i) => write!(f, "{i}"),
+            Value::BigInt { text, .. } => f.write_str(text),
             Value::Float(x) => f.write_str(&crate::pyfmt::float_repr(*x)),
             Value::Str(s) => f.write_str(s),
             Value::Timestamp(s) => write!(f, "date({s})"),
@@ -129,11 +142,21 @@ fn yerr(message: impl Into<String>) -> YamlError {
 /// A syntax error, more than one document, an unknown tag, an unhashable or recursive key, or a
 /// value `PyYAML`'s constructor rejects.
 pub fn load(text: &str) -> Result<Value, YamlError> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let mut builder = Builder::default();
+    let mut grammar = PyYamlGrammar::new(text);
     let mut documents = 0usize;
     for item in Parser::new_from_str(text) {
         let (event, span) = item.map_err(|e| yerr(format!("YAML syntax error: {e}")))?;
         let at = || format!("line {}, column {}", span.start.line(), span.start.col());
+        grammar
+            .event(
+                &event,
+                span.start.index(),
+                span.end.index(),
+                builder.key_position(),
+            )
+            .map_err(|m| yerr(format!("{m} ({})", at())))?;
         match event {
             Event::DocumentStart(_) => {
                 documents += 1;
@@ -177,7 +200,133 @@ pub fn load(text: &str) -> Result<Value, YamlError> {
             Event::StreamStart | Event::StreamEnd | Event::DocumentEnd | Event::Nothing => {}
         }
     }
+    grammar.tabs().map_err(yerr)?;
     Ok(builder.root.unwrap_or(Value::Null))
+}
+
+/// The three places where `PyYAML` refuses what the YAML specification allows (GAP-1).
+struct PyYamlGrammar<'t> {
+    text: &'t str,
+    /// For each open collection: whether it is a flow collection (`[` or `{`).
+    flow: Vec<bool>,
+    /// Byte ranges where a tab is allowed: quoted and block scalars.
+    tab_ok: Vec<(usize, usize)>,
+    /// Byte ranges of every scalar, so that a `#` inside one does not start a comment.
+    scalars: Vec<(usize, usize)>,
+}
+
+impl<'t> PyYamlGrammar<'t> {
+    fn new(text: &'t str) -> Self {
+        PyYamlGrammar {
+            text,
+            flow: Vec::new(),
+            tab_ok: Vec::new(),
+            scalars: Vec::new(),
+        }
+    }
+
+    fn event(
+        &mut self,
+        event: &Event<'_>,
+        start: usize,
+        end: usize,
+        key_position: bool,
+    ) -> Result<(), String> {
+        let bytes = self.text.as_bytes();
+        match event {
+            Event::SequenceStart(..) | Event::MappingStart(..) => {
+                self.flow
+                    .push(matches!(bytes.get(start), Some(b'[' | b'{')));
+            }
+            Event::SequenceEnd | Event::MappingEnd => {
+                self.flow.pop();
+            }
+            Event::Scalar(value, style, ..) => {
+                let in_flow = self.flow.last().copied().unwrap_or(false);
+                match style {
+                    ScalarStyle::Plain => {
+                        let end = end.max(start);
+                        self.scalars.push((start, end));
+                        if in_flow && value.chars().skip(1).any(|c| c == '?') {
+                            return Err(format!(
+                                "found '?' inside the plain scalar '{value}' in a flow collection (PyYAML refuses it)"
+                            ));
+                        }
+                        if key_position
+                            && value.is_empty()
+                            && start == end
+                            && self.implicit_empty_key(start)
+                        {
+                            return Err("found an empty key written ': value' (PyYAML refuses it)"
+                                .to_owned());
+                        }
+                    }
+                    ScalarStyle::SingleQuoted | ScalarStyle::DoubleQuoted => {
+                        let close = self.closing_quote(start, *style == ScalarStyle::SingleQuoted);
+                        self.tab_ok.push((start, close));
+                        self.scalars.push((start, close));
+                    }
+                    _ => {
+                        self.tab_ok.push((start, end));
+                        self.scalars.push((start, end));
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// An empty implicit key sits at a `:` that no `?` indicator precedes.
+    fn implicit_empty_key(&self, at: usize) -> bool {
+        let bytes = self.text.as_bytes();
+        if bytes.get(at) != Some(&b':') {
+            return false;
+        }
+        let before = self.text[..at].trim_end_matches([' ', '\t', '\r', '\n']);
+        !before.ends_with('?')
+    }
+
+    /// The byte index just past the closing quote of a quoted scalar starting at `start`.
+    fn closing_quote(&self, start: usize, single: bool) -> usize {
+        let bytes = self.text.as_bytes();
+        let quote = if single { b'\'' } else { b'"' };
+        let mut i = start + 1;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'\\' if !single => i += 2,
+                c if c == quote && single && bytes.get(i + 1) == Some(&quote) => i += 2,
+                c if c == quote => return i + 1,
+                _ => i += 1,
+            }
+        }
+        bytes.len()
+    }
+
+    /// A tab is allowed only inside quoted and block scalars and in comments.
+    fn tabs(&self) -> Result<(), String> {
+        let inside =
+            |ranges: &[(usize, usize)], i: usize| ranges.iter().any(|&(a, b)| a <= i && i < b);
+        let mut line_start = 0;
+        for line in self.text.split_inclusive('\n') {
+            let mut comment = false;
+            for (off, c) in line.char_indices() {
+                let i = line_start + off;
+                if c == '#' && !comment && !inside(&self.scalars, i) {
+                    let prev = line[..off].chars().last();
+                    comment = prev.is_none_or(|p| p == ' ' || p == '\t');
+                }
+                if c == '\t' && !comment && !inside(&self.tab_ok, i) {
+                    let line_no = self.text[..i].matches('\n').count() + 1;
+                    return Err(format!(
+                        "found a tab outside a quoted or block scalar or a comment (line {line_no}; PyYAML refuses it)"
+                    ));
+                }
+            }
+            line_start += line.len();
+        }
+        Ok(())
+    }
 }
 
 /// A collection under construction. A mapping holds its pairs, a pending key, and its merge
@@ -204,6 +353,11 @@ struct Builder {
 }
 
 impl Builder {
+    /// Whether the next value is a mapping key.
+    fn key_position(&self) -> bool {
+        matches!(self.stack.last(), Some((Frame::Map(_, None, _), _)))
+    }
+
     fn open(&mut self, frame: Frame) {
         self.stack.push((frame, Vec::new()));
     }
@@ -333,7 +487,7 @@ fn scalar(text: &str, style: ScalarStyle, tag: Option<&Tag>) -> Result<Value, St
             "bool" => bool_value(text)
                 .map(Value::Bool)
                 .ok_or_else(|| format!("invalid boolean '{text}'")),
-            "int" => int_value(text).map(Value::Int),
+            "int" => int_value(text),
             "float" => float_value(text).map(Value::Float),
             _ => Err(format!(
                 "could not determine a constructor for the tag '{t}'"
@@ -356,7 +510,7 @@ fn resolve_plain(s: &str) -> Result<Value, String> {
         return float_value(s).map(Value::Float);
     }
     if is_int(s) {
-        return int_value(s).map(Value::Int);
+        return int_value(s);
     }
     if s == "<<" {
         return Ok(Value::Str(MERGE_KEY.to_owned()));
@@ -550,35 +704,40 @@ fn is_timestamp(s: &str) -> bool {
         && rest.as_bytes()[..2].iter().all(u8::is_ascii_digit)
 }
 
-/// `PyYAML`'s `construct_yaml_int`.
-fn int_value(text: &str) -> Result<i128, String> {
+/// `PyYAML`'s `construct_yaml_int`; magnitudes beyond `i128` become [`Value::BigInt`].
+fn int_value(text: &str) -> Result<Value, String> {
     let cleaned: String = text.chars().filter(|&c| c != '_').collect();
     let (neg, body) = unsign(&cleaned);
-    let too_big = || format!("integer '{text}' is too large for this loader (more than 127 bits)");
-    let magnitude: i128 = if body == "0" {
-        0
+    let big = || Value::BigInt {
+        negative: neg,
+        text: text.to_owned(),
+    };
+    let parsed: Option<i128> = if body == "0" {
+        Some(0)
     } else if let Some(bin) = body.strip_prefix("0b") {
-        i128::from_str_radix(bin, 2).map_err(|_| too_big())?
+        i128::from_str_radix(bin, 2).ok()
     } else if let Some(hex) = body.strip_prefix("0x") {
-        i128::from_str_radix(hex, 16).map_err(|_| too_big())?
+        i128::from_str_radix(hex, 16).ok()
     } else if body.starts_with('0') {
-        i128::from_str_radix(body, 8).map_err(|_| format!("invalid octal integer '{text}'"))?
+        i128::from_str_radix(body, 8).ok()
     } else if body.contains(':') {
-        let mut v: i128 = 0;
+        let mut v: Option<i128> = Some(0);
         for part in body.split(':') {
             let p: i128 = part
                 .parse()
                 .map_err(|_| format!("invalid integer '{text}'"))?;
             v = v
-                .checked_mul(60)
-                .and_then(|v| v.checked_add(p))
-                .ok_or_else(too_big)?;
+                .and_then(|v| v.checked_mul(60))
+                .and_then(|v| v.checked_add(p));
         }
         v
     } else {
-        body.parse().map_err(|_| too_big())?
+        body.parse().ok()
     };
-    Ok(if neg { -magnitude } else { magnitude })
+    Ok(match parsed {
+        Some(m) => Value::Int(if neg { -m } else { m }),
+        None => big(),
+    })
 }
 
 /// `PyYAML`'s `construct_yaml_float`.
@@ -665,6 +824,75 @@ mod tests {
             (Value::Str("y".into()), Value::Int(3)),
         ]);
         assert_eq!(m[1].1, want);
+    }
+
+    /// GAP-1 and DEF-1: accept and refuse exactly as `PyYAML` 6 does (observed 2026-10-16).
+    #[test]
+    fn pyyaml_strictness_is_reproduced() {
+        let refused = [
+            "a:\tx\n",
+            "a:\t{b: 1}\n",
+            "a: {b:\t1}\n",
+            "a: [1,\t2]\n",
+            "a: x\ty\n",
+            "a: x\t\n",
+            "a: x\t# c\n",
+            "a:\n\tb: 1\n",
+            "a: 1\n\t\nb: 2\n",
+            "\t# c\na: 1\n",
+            "a:\n  -\tx\n",
+            "a: \tx\n",
+            "a: x\n  \ty\n",
+            "a: 1\t\n",
+            "a: 'x'\t# c\n",
+            "a: {b: c?d}\n",
+            "a: [c?d]\n",
+            ": v\n",
+            "a:\n  : v\n",
+            "a: {: v}\n",
+        ];
+        let accepted = [
+            "a: x # c\tc\n",
+            "a: 'x\ty'\n",
+            "a: \"x\ty\"\n",
+            "a: |\n  x\ty\n",
+            "a: >\n  x\ty\n",
+            "a: 'x\n  \ty'\n",
+            "a: c?d\n",
+            "a: ?x\n",
+            "a: {b: c:d}\n",
+            "a: [c:d]\n",
+            "a: c:d\n",
+            "a: [http://x]\n",
+            "? \n: v\n",
+            "~: v\n",
+            "'': v\n",
+            "a: {? b: c}\n",
+            "a: b#c\n",
+            "a: [b c, d]\n",
+            "a: 'it''s'\t# fine? no\n",
+        ];
+        for t in refused {
+            assert!(load(t).is_err(), "accepted {t:?}");
+        }
+        for t in &accepted[..accepted.len() - 1] {
+            assert!(load(t).is_ok(), "refused {t:?}: {:?}", load(t));
+        }
+        assert!(
+            load(accepted[accepted.len() - 1]).is_err(),
+            "tab after a quoted scalar"
+        );
+        assert_eq!(load("\u{feff}a: 1\n").ok(), load("a: 1\n").ok());
+    }
+
+    #[test]
+    fn integers_beyond_i128_are_kept_with_their_sign() {
+        let v = one("-100000000000000000000000000000000000000000");
+        assert!(matches!(v, Value::BigInt { negative: true, .. }), "{v:?}");
+        assert_eq!(
+            one("170141183460469231731687303715884105727"),
+            Value::Int(i128::MAX)
+        );
     }
 
     #[test]
