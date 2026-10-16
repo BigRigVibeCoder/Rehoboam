@@ -48,6 +48,36 @@ type = "i64"
 plane = "A"
 meaning = "Scheduled death time (a timer until it fires)"
 fixed_point = false
+# Proposed with the T1.minds and M7.dynasty specs (draft, 2026-10-16): the genealogy and death-cause columns those
+# specs read, from the ledger of 05.1 §5 (mother, father) and P1.3 (partnering and marriage). Written at rung 1 (P1.3).
+[[owns]]
+column = "person.mother"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the mother, or 0 for a founder or immigrant without one (ADR-0026); set at birth, never changed"
+fixed_point = false
+[[owns]]
+column = "person.father"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the father, or 0 when unknown or for a founder or immigrant without one; set at birth, never changed"
+fixed_point = false
+[[owns]]
+column = "person.spouse"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the living spouse, or 0; set when a Marry command is applied (rung 1), cleared on the spouse's death"
+fixed_point = false
+[[owns]]
+column = "person.death_cause"
+entity = "person"
+type = "enum"
+plane = "A"
+meaning = "natural | murder | battle | execution | accident: the cause the death path records; natural for an M2 hazard death, otherwise the cause carried by the ScheduleDeath command (M7, T1.minds; M8 later). Read by M7's feud stock"
+fixed_point = false
 
 [[emits]]
 kind = "DEATH"
