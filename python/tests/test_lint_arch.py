@@ -16,6 +16,7 @@ from lint_arch import (
     Crate,
     Edge,
     WorkspaceError,
+    check_clippy_configs,
     check_workspace,
     crates_from_metadata,
     load_metadata,
@@ -638,3 +639,44 @@ def test_every_entry_of_the_reviewed_list_names_its_features() -> None:
     for name, (_users, _note, _no_defaults, features) in PLANE_A_EXTERNAL_DEPS.items():
         assert features is None or isinstance(features, frozenset), name
     assert PLANE_A_EXTERNAL_DEPS["libm"][3] == frozenset()
+
+
+# --- One clippy configuration (VER-SPR-003-TEST GAP-12) -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "crates/rh-sample/clippy.toml",
+        "crates/rh-sample/.clippy.toml",
+        ".clippy.toml",
+        "a/b/clippy.toml",
+    ],
+)
+def test_any_clippy_config_but_the_root_one_is_reported(tmp_path: Path, path: str) -> None:
+    """Clippy reads the nearest config, so any other one replaces the root's lists below it."""
+    (tmp_path / "clippy.toml").write_text("")
+    (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / path).write_text("")
+    assert [(v.rule, v.crate) for v in check_clippy_configs(tmp_path)] == [("clippy-config", path)]
+
+
+def test_build_output_and_environments_are_skipped(tmp_path: Path) -> None:
+    """target/, .git/ and virtual environments hold copies that no build reads as config."""
+    for skipped in ("target/rendered/clippy.toml", ".git/x/clippy.toml", ".venv/lib/clippy.toml"):
+        (tmp_path / skipped).parent.mkdir(parents=True)
+        (tmp_path / skipped).write_text("")
+    assert check_clippy_configs(tmp_path) == []
+
+
+def test_clippy_conf_dir_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The environment can point clippy at another configuration as well."""
+    monkeypatch.setenv("CLIPPY_CONF_DIR", str(tmp_path))
+    assert [v.crate for v in check_clippy_configs(tmp_path)] == ["CLIPPY_CONF_DIR"]
+
+
+def test_the_repository_has_one_clippy_config_and_the_allowed_fixture() -> None:
+    """The root clippy.toml, and the one planted fixture the rule allows by path."""
+    assert check_clippy_configs(REPO) == []
+    fixture = REPO / "tests" / "lint_fixtures" / "clippy_config" / "crate_local"
+    assert [v.crate for v in check_clippy_configs(fixture)] == ["crates/rh-sample/clippy.toml"]
