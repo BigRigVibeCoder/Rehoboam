@@ -589,7 +589,7 @@ summary = "On the first day of each month, for each sovereign title (ascending T
 earns_its_place_by = ["V-SF-06", "V-SF-06b", "V-SF-06d", "V-ERA-03"]
 [[submodels]]
 name = "on_birth"
-summary = "MAJ-5: for each person born this instant (birth_tick = now; births are M2 timers in this instant's Vital slot; the newborn's parents are read from person.mother and person.father at the same instant): a house_member row with the father's house, else the mother's (looked up in house_member, which keeps the dead), else no row. The newborn's kinship needs no step: it is the life-course columns, which kin(n) walks from the next instant on (round 4, NEW-1). A newborn of a ruling house who is first or second in the line of one of its titles meets the naming criteria at once: Promote. Other relations are not stored: T1.minds derives kinship from M2's mother, father and spouse columns when it reads them"
+summary = "MAJ-5: for each person born this instant (birth_tick = now; births are M2 timers in this instant's Vital slot; the newborn's parents are read from person.mother and person.father at the same instant): a house_member row with the father's house, else the mother's (looked up in house_member, which keeps the dead), else no row. The newborn's kinship needs no step: it is the life-course columns, which kin(n) walks from the next instant on (round 4, NEW-1). A newborn of a ruling house who is first or second in the line of one of its titles meets the naming criteria at once: Promote. Other relations are not stored: T1.minds derives kinship from M2's life-course columns (life_course.mother and life_course.father) through kin(n), plus person.spouse for the living spouse, when it reads them"
 earns_its_place_by = ["V-INV-12"]
 [[submodels]]
 name = "on_death"
