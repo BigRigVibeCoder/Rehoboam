@@ -175,8 +175,6 @@ def test_each_forbidden_api_is_caught_by_its_rule(snippet: str, rule: str) -> No
         "use std::time::Duration;",
         "use rand_chacha::ChaCha8Rng;",
         "let rngs = 3;",
-        'let s = include_str!("table.csv");',
-        'let b = include_bytes!("golden.bin");',
         "fn path() -> u8 { 0 }",
         "let path = 1;",
     ],
@@ -808,3 +806,214 @@ def test_the_float_dep_fixture_reports_each_plant_and_not_tests(
     for name in ("accessor.rs", "arrow_float.rs", "real_bits.rs", "real_cmp.rs", "real_floor.rs"):
         assert "float-dep] `" in out and f"rh-snapshot/src/{name}" in out, name
     assert "tests/allowed.rs" not in out
+
+
+# --- Literal include! is followed (BCK-002 A-27; SPR-008 T-00) ---------------------------------
+
+
+def scan_file(path: Path, repo: Path) -> Report:
+    """Scan one file on disk as plane-A code, resolving its include!s inside ``repo``."""
+    report = Report(violations=[], escaped=[], repo=repo)
+    scan_source(path.read_text(encoding="utf-8"), path, report)
+    return report
+
+
+def write(path: Path, text: str) -> Path:
+    """Write ``text`` to ``path``, creating its directory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    [
+        'include!("gen/skel.rs");',
+        'include! { r"gen/skel.rs" }',
+        'include![r#"gen/skel.rs"#];',
+        'include!( /* the skeleton */ "gen/skel.rs" );',
+        'std::include!("gen/skel.rs");',
+    ],
+)
+def test_a_literal_include_is_followed_and_its_target_scanned(
+    tmp_path: Path, invocation: str
+) -> None:
+    """The include! itself is no finding; the included file's forbidden API is, at its own line."""
+    write(tmp_path / "src" / "gen" / "skel.rs", "fn a() {}\nlet t = Instant::now();\n")
+    report = scan_file(write(tmp_path / "src" / "lib.rs", invocation + "\n"), tmp_path)
+    (violation,) = report.violations
+    assert "[V-DET-19/wall-clock]" in violation and "skel.rs:2:" in violation
+    assert (report.files, report.includes) == (2, 1)
+
+
+def test_a_clean_included_file_passes(tmp_path: Path) -> None:
+    """A literal include! of a clean file leaves nothing to report."""
+    write(tmp_path / "gen.rs", "pub const X: u8 = 1;\n")
+    report = scan_file(write(tmp_path / "lib.rs", 'include!("gen.rs");\n'), tmp_path)
+    assert (report.violations, report.escaped, report.includes) == ([], [], 1)
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    [
+        'include!(concat!("gen", ".rs"));',
+        'include!(concat!(env!("OUT_DIR"), "/gen.rs"));',
+        "include!($file);",
+        'include!("gen\\x2ers");',
+        'include!(b"gen.rs");',
+        'include!("gen.rs" "x");',
+    ],
+)
+def test_a_non_literal_include_stays_forbidden(tmp_path: Path, invocation: str) -> None:
+    """Only one plain string literal is followed; anything else is the source-include finding."""
+    write(tmp_path / "gen.rs", "pub const X: u8 = 1;\n")
+    report = scan_file(write(tmp_path / "lib.rs", invocation + "\n"), tmp_path)
+    assert [v.split("]")[0] for v in report.violations] == ["VIOLATION [V-DET-19/source-include"]
+    assert report.includes == 0
+
+
+def test_an_include_outside_the_repository_stays_forbidden(tmp_path: Path) -> None:
+    """A path that leaves the repository is not followed, even when the file exists."""
+    write(tmp_path / "outside.rs", "pub const X: u8 = 1;\n")
+    repo = tmp_path / "repo"
+    report = scan_file(write(repo / "lib.rs", 'include!("../outside.rs");\n'), repo)
+    (violation,) = report.violations
+    assert "[V-DET-19/source-include]" in violation and "outside the repository" in violation
+
+
+def test_a_symlink_out_of_the_repository_stays_forbidden(tmp_path: Path) -> None:
+    """The repository check is made on the resolved path, after following symlinks."""
+    target = write(tmp_path / "outside.rs", "let t = Instant::now();\n")
+    repo = tmp_path / "repo"
+    (repo / "gen.rs").parent.mkdir(parents=True)
+    (repo / "gen.rs").symlink_to(target)
+    report = scan_file(write(repo / "lib.rs", 'include!("gen.rs");\n'), repo)
+    (violation,) = report.violations
+    assert "outside the repository" in violation
+
+
+def test_an_include_of_a_missing_file_stays_forbidden(tmp_path: Path) -> None:
+    """A literal that names no file cannot be scanned, so it is a violation."""
+    report = scan_file(write(tmp_path / "lib.rs", 'include!("gone.rs");\n'), tmp_path)
+    (violation,) = report.violations
+    assert "names no file" in violation
+
+
+def test_an_include_in_a_snippet_without_a_file_stays_forbidden() -> None:
+    """With no file on disk there is nothing to resolve from."""
+    assert rules_hit('include!("gen.rs");\n') == ["source-include"]
+
+
+def test_a_nested_include_resolves_from_the_included_file(tmp_path: Path) -> None:
+    """An include! inside an included file is followed from that file's own directory."""
+    write(tmp_path / "gen" / "inner" / "deep.rs", "unsafe { x }\n")
+    write(tmp_path / "gen" / "outer.rs", 'include!("inner/deep.rs");\n')
+    report = scan_file(write(tmp_path / "lib.rs", 'include!("gen/outer.rs");\n'), tmp_path)
+    (violation,) = report.violations
+    assert "[V-DET-19/unsafe]" in violation and "deep.rs:1:" in violation
+    assert report.includes == 2
+
+
+def test_an_include_cycle_is_a_violation_not_a_hang(tmp_path: Path) -> None:
+    """A file that includes itself, directly or through another, is reported once."""
+    write(tmp_path / "a.rs", 'include!("b.rs");\n')
+    write(tmp_path / "b.rs", 'include!("a.rs");\n')
+    report = scan_file(tmp_path / "a.rs", tmp_path)
+    assert len(report.violations) == 1 and "includes itself" in report.violations[0]
+
+
+def test_the_included_file_keeps_the_includers_float_scope(tmp_path: Path) -> None:
+    """A float in a file that src/ includes is a float violation, as if written in src/."""
+    write(tmp_path / "gen.rs", "pub const X: f32 = 0.0;\n")
+    report = scan_file(write(tmp_path / "lib.rs", 'include!("gen.rs");\n'), tmp_path)
+    assert {v.split("]")[0].split("/")[1] for v in report.violations} == {"float"}
+
+
+def test_an_escape_on_a_followed_include_covers_nothing(tmp_path: Path) -> None:
+    """A followed include! is no finding, so a leftover escape on it must go."""
+    write(tmp_path / "gen.rs", "pub const X: u8 = 1;\n")
+    source = 'include!("gen.rs"); // LINT-ALLOW(forbidden-api): no longer needed\n'
+    report = scan_file(write(tmp_path / "lib.rs", source), tmp_path)
+    (violation,) = report.violations
+    assert "[V-DET-19/escape]" in violation and "covers no forbidden API" in violation
+
+
+def test_a_file_reached_twice_is_scanned_once(tmp_path: Path) -> None:
+    """A file scanned directly and through an include! reports its findings once."""
+    write(tmp_path / "src" / "gen.rs", "unsafe { x }\n")
+    write(tmp_path / "src" / "lib.rs", 'include!("gen.rs");\n')
+    report = scan_paths([tmp_path / "src"], repo=tmp_path)
+    assert len(report.violations) == 1
+
+
+def test_the_real_workspace_follows_the_real_specs_skeleton_includes() -> None:
+    """rh-registry's real_specs.rs brings in its four skeletons by literal include!, scanned."""
+    crates = plane_a_crate_dirs(REPO / "Cargo.toml")
+    report = scan_paths(directory for _, directory in crates)
+    generated = REPO / "crates" / "rh-core" / "tests" / "generated"
+    for stem in ("S5_daily_life", "M2_demography", "S6_artifacts", "S7_vows"):
+        target = (generated / f"{stem}.rs").resolve()
+        assert any(f == target and scan.scope == "none" for f, scan in report.scanned), stem
+    assert report.includes >= 4
+    assert not any("real_specs.rs" in line for line in report.escaped)
+
+
+# --- The include macro renamed, and data includes (VER-SPR-008 audit) --------------------------
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "use core::include as inc;",
+        "use std::include;",
+        "use core::{include as inc, line};",
+    ],
+)
+def test_a_use_of_the_include_macro_is_forbidden(snippet: str) -> None:
+    """A renamed include! (`inc!("/abs/outside.rs")`) would hide an include from the gate."""
+    assert rules_hit(snippet + "\n") == ["source-include"]
+
+
+def test_a_module_named_like_include_data_is_not_flagged() -> None:
+    """`include_str` and `include_bytes` are other names; a `use` of them is no include!."""
+    assert rules_hit("use crate::include_helpers::x;\n") == []
+
+
+def test_an_in_repository_data_include_is_allowed_and_not_scanned(tmp_path: Path) -> None:
+    """include_str!/include_bytes! of a file inside the repository: allowed; it is data."""
+    write(tmp_path / "golden" / "table.csv", "HashMap,unsafe\n")
+    source = (
+        'let s = include_str!("golden/table.csv");\nlet b = include_bytes!("golden/table.csv");\n'
+    )
+    report = scan_file(write(tmp_path / "lib.rs", source), tmp_path)
+    assert (report.violations, report.includes) == ([], 0)
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    [
+        'include_str!("../outside.txt")',
+        'include_bytes!("/etc/hostname")',
+        'include_str!(concat!(env!("OUT_DIR"), "/x"))',
+        'include_bytes!("missing.bin")',
+    ],
+)
+def test_a_data_include_outside_or_unresolvable_is_forbidden(
+    tmp_path: Path, invocation: str
+) -> None:
+    """Outside the repository, missing, or not a plain literal: a data-include violation."""
+    write(tmp_path / "outside.txt", "x")
+    repo = tmp_path / "repo"
+    report = scan_file(write(repo / "lib.rs", f"let x = {invocation};\n"), repo)
+    assert [v.split("]")[0] for v in report.violations] == ["VIOLATION [V-DET-19/data-include"]
+
+
+def test_an_include_resolves_from_the_symlink_not_its_target(tmp_path: Path) -> None:
+    """An include joins the literal to the symlinked file's own directory (VER-SPR-008 MIN-3)."""
+    write(tmp_path / "gen.rs", "let t = Instant::now();\n")
+    write(tmp_path / "real" / "gen.rs", "pub const X: u8 = 1;\n")
+    write(tmp_path / "real" / "inner.rs", 'include!("gen.rs");\n')
+    (tmp_path / "link.rs").symlink_to(tmp_path / "real" / "inner.rs")
+    report = scan_file(tmp_path / "link.rs", tmp_path)
+    (violation,) = report.violations
+    assert "[V-DET-19/wall-clock]" in violation, "the compiled include is ./gen.rs, not real/gen.rs"

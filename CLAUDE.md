@@ -51,6 +51,9 @@ python -I bin/gen_manifest.py --check
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelgard.yaml
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml   # rung 1 (BCK-002 A-06)
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml      # rung 2 (BCK-002 A-06)
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml  # must FAIL
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
@@ -60,10 +63,20 @@ python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference d
 cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sampler golden vectors at opt-level 3 (SPR-003 T-05)
 cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)
 python -I specs/demography/selftest_brass.py
+python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
+python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
 python -I specs/systems/lint_odd.py
 python -I bin/gen_skeletons.py --check     # committed rh-core skeletons = lint_odd.py --rust (SPR-005)
+python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml   # the smoke world's dummy specs, outside the real Registry (SPR-008)
+python -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check
+cargo nextest run -p rh-sys-smoke --locked --test smoke   # smoke world: registration against its specs, coverage, small-scale V-DET-01/02 (SPR-008 T-01)
+cargo build --release -p rh-cli && target/release/rh-cli run smoke --years 1000 --ladder yearly --require-parallel 5 --out target/golden/smoke.ladder   # the golden run: 1,000 sim-years, plane-A hash ladder, at least 5% parallel levels (SPR-008 T-02, DEF-2)
+python -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed target/golden/smoke.ladder   # baseline = recomputation; changed only in a [C3] PR (T-04)
+cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
+python -I bin/check_all_selftest.py verdict --or-true   # must FAIL: check_all's own verdict fails a gate hidden by || true (VER-SPR-008-TEST GAP-3)
+bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), the yearly cut = the baseline (GAP-6), V-DET-11 x 64
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
 cargo nextest run -p rh-snapshot --test hash --test golden --test journal --test keyframe --test guard --test unsynced_guard --test stub_world   # plane hashes, input journal, V-DET-05 keyframes, V-DET-10 unsynced guard, stub-world hash golden (SPR-007)
@@ -80,7 +93,10 @@ python -I bin/perf_gate.py record   # regenerate the baseline (never by hand); o
 cargo nextest run -p rh-snapshot --locked --test observer   # observer invariance: a host observer changes no hash (SPR-009 ruling 4)
 RH_WALL_ROWS=100000,1000000 cargo bench -p rh-bench --bench wall && python -I bin/wall_trend.py summarize --machine <adjutant|laptop> --out artifacts/perf/wall.txt   # T-02b wall-clock trends (gate only on adjutant)
 cargo bench -p rh-bench --features count-alloc --bench alloc_budget   # V-PERF-11 counting allocator (SPR-009 T-05)
+python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml   # life_ends (SPR-011)
 ```
+
+Not a check: `bin/regen_baseline.sh` regenerates the smoke golden baseline, only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`).
 
 ## Conventions
 - Docs are Markdown, and diagrams are Mermaid.

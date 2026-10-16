@@ -1,8 +1,9 @@
--- Rehoboam Chronicle schema v0.2 (DuckDB dialect; the system of record is Parquet with the same columns).
+-- Rehoboam Chronicle schema v0.4 (DuckDB dialect; the system of record is Parquet with the same columns).
 -- Spec: docs/05_architecture/05.2 §4 and §6, 05.4 §2.3, ADR-0007, ADR-0024 (planes), ADR-0025, ADR-0026.
 -- Conventions:
 --   * Timeline-scoped composite keys.
---   * event_id = (day_index << 24) | seq_in_day. EventId order IS emission order (tick, phase, seq); no back-dating.
+--   * event_id: one counter per timeline, from 0, assigned at the scheduler's level merge (rh-events; 05.1 §2 rule 4).
+--     EventId order IS emission order (tick, phase, seq); no back-dating. The id carries no date: day = floor(tick / 1440).
 --   * tick = SimTime: signed BIGINT minutes since the world epoch. Negative values are allowed (founders born before year 0).
 --   * Each table is tagged with its plane: A authoritative, B observation, C narrative. Plane A never reads B or C.
 
@@ -12,7 +13,8 @@ CREATE TABLE IF NOT EXISTS event (                -- plane A
     event_id      UBIGINT   NOT NULL,
     tick          BIGINT    NOT NULL,          -- SimTime (i64 minutes); always the emission tick
     verb_id       USMALLINT NOT NULL,          -- FK Registry verbs
-    act_classes   UINTEGER  NOT NULL,          -- bitset over Registry act classes
+    act_classes   UBIGINT   NOT NULL,          -- bitset: bit i = Registry [act_classes].ids[i]; 64 classes at most (the
+                                               -- Registry has 34; more than 64 is a C2 change of this column)
     place_id      UINTEGER,
     magnitude     INTEGER   DEFAULT 0,
     tellability   UTINYINT  NOT NULL,          -- Registry prior (0..255), NOT the retroactive significance (plane C)
@@ -110,6 +112,7 @@ CREATE TABLE IF NOT EXISTS life_course (          -- plane A
     timeline_id UINTEGER  NOT NULL,
     person_id   UBIGINT   NOT NULL,            -- H64(mother_id, parity) | H64(seed,"founder",k) | H64(seed,"immigrant",origin,t,k)
     origin      UTINYINT  NOT NULL,            -- 0 born, 1 founder, 2 immigrant
+    sex         UTINYINT  NOT NULL,            -- 0 male, 1 female, as at entry (M2 life_course.sex; REV-P1a NEW-7)
     mother_id   UBIGINT,
     father_id   UBIGINT,                       -- social father as recorded by the sim
     birth_tick  BIGINT    NOT NULL,            -- may be negative for founders
@@ -128,12 +131,14 @@ CREATE TABLE IF NOT EXISTS life_interval (        -- plane A: residence, occupat
     valid_to    BIGINT
 );
 
-CREATE TABLE IF NOT EXISTS regional_aggregate (   -- plane A telemetry for commoners
+CREATE TABLE IF NOT EXISTS regional_aggregate (   -- plane A telemetry for commoners (05.2 §4; ADR-0007; DATA-1)
     timeline_id UINTEGER  NOT NULL,
     region_id   USMALLINT NOT NULL,
     month       INTEGER   NOT NULL,            -- signed month index since epoch
     metric_id   USMALLINT NOT NULL,
-    value       DOUBLE    NOT NULL
+    value       BIGINT    NOT NULL             -- fixed point, no float in plane A: raw bits at the Q16_16 scale (value / 2^16),
+                                               -- widened to i64 so counts and money fit. A rh-core::fixed::Q16_16 q stores
+                                               -- i64::from(q.to_bits()); an integer n (a count, or Money in minor units) stores n * 65536
 );
 
 -- ============================================================================================ plane B

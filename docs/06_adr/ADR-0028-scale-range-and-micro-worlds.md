@@ -84,6 +84,7 @@ A new **V-SCALE** suite (`09`):
 - **M4 gains household holdings at F1** (also needed for wealth inequality at 1M).
 - **rh-minds gains the `deep` flag** (P3a).
 - **Roadmap.** The walking skeleton (WP P1.0) runs at N = 1 and N = 100k from its first week. The Job world becomes watchable at the end of P3b, once minds and persuasion exist. It becomes inhabitable in the lo-fi Street view.
+- **Amended 2026-10-16 (D32; ADR-0035):** the claim that P1.0 runs at N = 100k is withdrawn. P1.0 validates N = 1, 5 and 60 (`solo`, `household`, `hamlet`); the 10k target is P1.14's (SPR-030); 100k and 1M are optional and Later (P3.10).
 - **Cheap micro worlds make expensive features affordable,** such as `deep` minds, rich narration (dialogue, per-scene prose) and many Foresight rollouts. That gives a good test bed for cognition quality before 1M scale.
 
 ## Revisit when

@@ -833,6 +833,7 @@ dependencies = [
 name = "rh-cli"
 version = "0.0.0"
 dependencies = [
+ "rh-golden",
  "rh-manifest",
  "rh-registry",
  "serde_json",
@@ -855,6 +856,17 @@ name = "rh-events"
 version = "0.0.0"
 dependencies = [
  "rh-ids",
+]
+
+[[package]]
+name = "rh-golden"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-ids",
+ "rh-registry",
+ "rh-snapshot",
+ "rh-sys-smoke",
 ]
 
 [[package]]
@@ -907,6 +919,17 @@ dependencies = [
  "rh-ids",
  "rusqlite",
  "twox-hash",
+]
+
+[[package]]
+name = "rh-sys-smoke"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-registry",
+ "rh-sample",
 ]
 
 [[package]]

@@ -210,9 +210,36 @@ pub struct Engine {
     last_keyframe: Option<String>,
     /// The error that stopped the run, if any. A poisoned engine never runs again (SPR-005 G-d).
     poisoned: Option<SimError>,
+    /// How many levels ran and how many of them held more than one job (SPR-008 DEF-2). An
+    /// observation of the scheduler, never part of the state, a keyframe or a hash.
+    dispatch: DispatchStats,
     /// The host's observer, if attached (SPR-009 ruling 4): notices only, never state, so it is
     /// not part of [`EngineState`] and never changes a result.
     observer: Option<Arc<dyn Observer>>,
+}
+
+/// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
+/// evidence that a thread-count comparison exercises parallel levels at all. It depends on the
+/// schedule and the instants run, never on the thread count, and is not part of the state.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DispatchStats {
+    /// Levels run (timer-pass and binding levels, each split level counted once).
+    pub levels: u64,
+    /// Levels that held two or more jobs: the ones several threads can share.
+    pub parallel_levels: u64,
+    /// The most jobs any level held.
+    pub max_jobs: usize,
+}
+
+impl DispatchStats {
+    /// Counts one level of `jobs` jobs.
+    fn record(&mut self, jobs: usize) {
+        self.levels += 1;
+        if jobs > 1 {
+            self.parallel_levels += 1;
+        }
+        self.max_jobs = self.max_jobs.max(jobs);
+    }
 }
 
 /// One system's work in one pass: its due timers, or one firing binding.
@@ -319,6 +346,7 @@ impl Engine {
             journal_head: None,
             last_keyframe: None,
             poisoned,
+            dispatch: DispatchStats::default(),
             observer: None,
         }
     }
@@ -580,6 +608,12 @@ impl Engine {
         self.crash.as_ref()
     }
 
+    /// What the scheduler has dispatched so far (SPR-008 DEF-2).
+    #[must_use]
+    pub const fn dispatch_stats(&self) -> DispatchStats {
+        self.dispatch
+    }
+
     /// The last diagnostic records, oldest first.
     #[must_use]
     pub fn diagnostics(&self) -> Vec<String> {
@@ -743,6 +777,7 @@ impl Engine {
             | SimError::UnownedWrite { system, .. }
             | SimError::MissingColumn { system, .. }
             | SimError::UndeclaredPurpose { system, .. }
+            | SimError::StreamReuse { system, .. }
             | SimError::Timer { system, .. }
             | SimError::UndeclaredCommand { system, .. }
             | SimError::UndeclaredEvent { system, .. }
@@ -995,22 +1030,8 @@ impl Engine {
         jobs: &[Job],
         tally: &mut Tally,
     ) -> Result<(), SimError> {
-        // Every owned column exists (materialised in `new`); check them all before moving any, so a
-        // missing one fails the step without disturbing the tables (SPR-005 G-c).
-        for job in jobs {
-            let e = &self.registered.entries[job.index];
-            if let Some(w) = e
-                .access
-                .writes
-                .iter()
-                .find(|w| self.tables.get(w.column).is_none())
-            {
-                return Err(SimError::MissingColumn {
-                    system: e.id,
-                    column: w.column.to_owned(),
-                });
-            }
-        }
+        self.dispatch.record(jobs.len());
+        self.check_owned_columns(jobs)?;
         let inputs: Vec<(Owned, Vec<QueuedCommand>)> = jobs
             .iter()
             .map(|job| {
@@ -1055,15 +1076,15 @@ impl Engine {
                     agenda,
                 };
                 let mut ctx = StepCtx::new(info, t, phase, inbox);
-                let result = match &job.work {
+                // A failed JobStart skips the step; the instant is lost either way.
+                let result = started.and_then(|()| match &job.work {
                     Work::Timers(timers) => timers.iter().try_for_each(|timer| {
                         guard(e.id, || e.model.fire(timer, &mut view, &mut ctx))
                     }),
                     Work::Step(binding) => {
                         guard(e.id, || e.model.step(*binding, &mut view, &mut ctx))
                     }
-                };
-                let result = started.and(result);
+                });
                 let (untaken, out) = ctx.finish();
                 let ended =
                     observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobEnd(job_ref))));
@@ -1097,6 +1118,26 @@ impl Engine {
         self.notify(t, Some(phase), Boundary::LevelMerge)?;
         for (job, out) in jobs.iter().zip(outboxes) {
             self.merge(t, phase, job.index, out, tally)?;
+        }
+        Ok(())
+    }
+
+    /// Every column the level's jobs own exists (materialised in `new`). Checked for all before any
+    /// is moved, so a missing one fails the step without disturbing the tables (SPR-005 G-c).
+    fn check_owned_columns(&self, jobs: &[Job]) -> Result<(), SimError> {
+        for job in jobs {
+            let e = &self.registered.entries[job.index];
+            if let Some(w) = e
+                .access
+                .writes
+                .iter()
+                .find(|w| self.tables.get(w.column).is_none())
+            {
+                return Err(SimError::MissingColumn {
+                    system: e.id,
+                    column: w.column.to_owned(),
+                });
+            }
         }
         Ok(())
     }

@@ -9,10 +9,10 @@ tags: [backlog, project-management]
 related: [PRJ-001, BCK-002, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.3.0
+version: 1.4.0
 ---
 
-> **BLUF:** The development backlog, rolling wave. P0 is planned in full as SPR-001 to SPR-010 and is unchanged by ADR-0035 (the saga engine). P1a "Bloodlines" is sketched as items. Later phases are listed by their `docs/11` work packages. Priorities follow GOV-007 §4. The Architect re-plans at every gate.
+> **BLUF:** The development backlog, rolling wave. P0 is planned in full as SPR-001 to SPR-010 and is unchanged by ADR-0035 (the saga engine). P1a "Bloodlines" is planned in `PRJ-002`, approved by the director at G0 (D30). Later phases are listed by their `docs/11` work packages. Priorities follow GOV-007 §4. The Architect re-plans at every gate.
 
 # BCK-001 — Development backlog
 
@@ -37,13 +37,13 @@ version: 1.3.0
 
 **Gate G0** is assembled by the Architect as `VER-G0` once SPR-001 to SPR-010 are closed.
 
-## 2. Next phase: P1a "Bloodlines" (planned; awaiting the director at G0)
+## 2. Next phase: P1a "Bloodlines" (approved at G0, D30)
 
-The proposed plan is `PRJ-002` (22 sprints, SPR-011 to SPR-032), with the walking skeleton written up in full as `SPR-011` (to be issued as SPR-011, -012 and -013 under its ruling 1). The director decides at G0 (`docs/decisions_pending.md` D30 to D35). Once approved, `PRJ-002` §2 replaces this section.
+The plan is `PRJ-002`, approved by the director at G0 (D30, 2026-10-16; `docs/decisions_pending.md` D30 to D36). Its §2 is the sprint list and replaces this section. The walking skeleton is written up in full as `SPR-011`, issued as SPR-011 (engine prerequisites), SPR-012 (`solo` lives and dies) and SPR-013 (World Stream v0 and the chronicle) under its ruling 1.
 
 Corrections to the earlier sketch here:
 - **Household food** (P1.4, P1.5a) and **the rung manifests as P1.11** were listed in P1a. `docs/11` puts P1.4, P1.5a and P1.11 in P1b, and the rung-1 and rung-2 manifests are BCK-002 A-06 (Architect).
-- **`S5.daily_life` F1 (P1.18)** reads M4 and M6 columns that have no owner in P1a; `PRJ-002` ruling M-4 proposes moving it to P1b.
+- **`S5.daily_life` F1 (P1.18)** reads M4 and M6 columns that have no owner in P1a, so it moves to P1b with M1 F1 (P1.8) (D33; `PRJ-002` rulings M-4, M-5).
 
 ## 3. Specs to write before their sprints (warnings from `lint_odd.py`)
 
@@ -52,9 +52,9 @@ Corrections to the earlier sketch here:
 | `T1.minds` (traits, opinions, agenda goals, stress, secrets v0 knowledge rows) | P1a (minds v0; S6 and S7 read it) | no spec; Registry id added by ADR-0035. **Must include:** the lifecycle commands it accepts (`ApplyInfluence` from S6; `AgendaGoal`, `ClearGoal`, `OpinionModifier`, `ApplyThought` from S7); the rule that a vow's weight never enters a survival decision (V-SAGA-09); **stress and mental breaks** (SAGA-11, V-SAGA-16): `mind.stress` as `q8_8` on a 0–100 scale, crossing the threshold as a deterministic transition that schedules the break timer, its rate read of `vow.conflict` (owned by S7) as a bounded, sourced in-coupling with a neutral value, break thresholds and the break table from the Registry, breaks as scheduled timers with keyed RNG; and the `emotion@e` snapshot attributes of the event envelope; **secrets v0 and the information horizon** (P1b; SAGA-4, V-SAGA-11, V-SAGA-18): knowledge records held by `{actor, accomplices, witnesses}`, spread only by scheduled outcomes (discovery timer with evidence and patrol hazards, alarm, eyewitness flight, news at travel speed, testimony, confession), and every reaction referencing its knowledge-acquisition event |
 | `M7.dynasty` (titles, succession, claims) | P1a (moved up) | no spec. **Must include:** **immediate succession** (SAGA-13, V-SAGA-19): a titleholder's death schedules succession arbitration in the same instant, at a later phase (legal heir, claims, military proximity, treasury control), emitting a succession or an interregnum-crisis event; an `[isolation]` forcing of the institutional state it reads from M6 (constant at the reference state in P1a, then step and ramp); and `title.holder`, which S6 reads |
 | `S3.migration` (residence, travel) | P1a (S5 and S6 read it); P1b (fugitives) | no spec. **Must include** for P1b: **fugitives** (SAGA-14, V-SAGA-20): the `fugitive` status (set by a lifecycle command from `T1.minds` after a crime or a break) and flight as scheduled moves along the M1 route graph toward a border, sanctuary or ally, with an interception hazard per segment; tile paths only in focus regions and micro worlds |
-| `M4.economy` (occupation, holdings, food) | P1a (`solo`'s food); P1b (F0 stores for the kingdom) | no spec. **Must include** (RT-2026-10-16; ADR-0035): at F0, food and wealth are household and lord stores and holdings (barn, herds, goods), with tribute and rents in kind; **no markets, prices or wages until F1 (P4)**; **stocks of mundane props** (tools, weapons, poisons) drawn through simulated acquisition events, so every prop has provenance (SAGA-12, V-SAGA-17); `household.head`, which S6 reads; the entitlement hook into M2; `[isolation]` forcing of its rate reads (harvest, population). The F1 price rule's `data_range` and sourced `beyond_range` move with F1 to P4 |
+| `M4.economy` (occupation, holdings, food) | P1b (F0 stores for the kingdom; `solo`'s food, moved from P1a by D31; property inheritance, D35) | no spec. **Must include** (RT-2026-10-16; ADR-0035): at F0, food and wealth are household and lord stores and holdings (barn, herds, goods), with tribute and rents in kind; **no markets, prices or wages until F1 (P4)**; **stocks of mundane props** (tools, weapons, poisons) drawn through simulated acquisition events, so every prop has provenance (SAGA-12, V-SAGA-17); `household.head`, which S6 reads; the entitlement hook into M2; `[isolation]` forcing of its rate reads (harvest, population). The F1 price rule's `data_range` and sourced `beyond_range` move with F1 to P4 |
 | `M6.polity` (regional conditions, institutional state) | P1b (polity-lite; S5, S7 and M7 read it; stub for rungs 0–2) | no spec. At P1b: legitimacy, unrest and a revolt hazard only (no Ψ) |
-| `M3.agriculture` | P1a (`solo`'s harvest); P1b (kingdom) | no spec. **Must include** (RT-2026-10-16): at the micro profile (F1), the harvest is the yield of the household's own fields, field by field, not a regional soil grid; at F0, a regional annual anomaly; `[isolation]` forcing of its rate reads (weather, labour) |
+| `M3.agriculture` | P1b (kingdom; `solo`'s harvest, moved from P1a by D31) | no spec. **Must include** (RT-2026-10-16): at the micro profile (F1), the harvest is the yield of the household's own fields, field by field, not a regional soil grid; at F0, a regional annual anomaly; `[isolation]` forcing of its rate reads (weather, labour) |
 | `S6.artifacts` | P1b | **draft spec exists** (`specs/systems/S6.artifacts.odd.toml`), with the red team's provenance rules (SAGA-12, SAGA-15: origin event, unbroken bearer chain, physical state with stored causes). Before freezing: the coupling rules (its rate read of the bearer's Honesty-Humility has a bounded, sourced in-coupling with a neutral value; design values allowed while draft); the `[isolation]` forcing (a bearer line with H stepped from 0 to −80 to +80); and **micro behaviour** (V-SAGA-13: a relic's rumour raises the seeking rate of ambitious actors inside its reach, CRN-paired against outside it) |
 | `S7.vows` | P1b | **draft spec exists** (`specs/systems/S7.vows.odd.toml`). Before freezing: the coupling rules (its rate read of the vower's conscientiousness has a bounded, sourced in-coupling); the `[isolation]` forcing (conscientiousness constant at −80, 0, +80; regional conditions stepped normal → famine → war → normal); and **micro behaviour** (V-SAGA-13: a witnessed kin murder by a known culprit leads to `AVENGE_KIN` at a rate inside its declared range; V-SAGA-09: survival responses unchanged by an active vow) |
 

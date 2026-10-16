@@ -76,6 +76,8 @@ A prototype run by the red team found five ways the plan could still produce eve
 
 ### 6. The engine only engines (ratified 2026-10-16)
 - **No presentation code in the engine.** The Rust engine crates (`rh-core`, `rh-ids`, `rh-events`, `rh-registry`, `rh-contracts`, `rh-snapshot`, `rh-sys-*`, `rh-sifter`, `rh-server`, `rh-cli`) contain no presentation, web UI, audio, image, TTS or LLM code. The engine never waits for media and never knows what an image or an audio file is.
+
+  *Note (2026-10-16, consistency pass, PRJ-002 §10 item 17): this list omits two built engine crates, `rh-sample` (plane A, SPR-003) and `rh-manifest` (tool plane, SPR-004), and the planned `rh-minds` and `rh-worldgen`. The decision is unchanged; the full list is in `05.0` §6.*
 - **Outputs:** the World Stream only: channel A (events) and channel C (sift matches and significance) as Arrow/Parquet segments. The sealed segments are the chronicle (`05.10`).
 - **Inputs:** journaled inputs through the one local control interface (IF-0, ADR-0030). It carries tip actions and forks. It is a control and stream endpoint, not a presentation server, and it stays.
 - **Presentation is downstream.** Every presentation tool is a separate, offline consumer that reads the sealed chronicle or tails the stream, and never calls back into the engine: the storyboard and comic generator, the map export, the offline audio exporter, and the local Web Graphic Novel / Storyboard Reader live in `python/`; only the P5 web diorama lives in `console/`. The LLM gateway is outside the engine too (ADR-0034).
