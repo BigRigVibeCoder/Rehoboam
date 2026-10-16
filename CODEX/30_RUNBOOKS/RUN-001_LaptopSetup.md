@@ -9,7 +9,7 @@ tags: [infrastructure, workflow]
 related: [GOV-008, SPR-001, GOV-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.2.1
 ---
 
 > **BLUF:** Six steps take the director's laptop from a clean Ubuntu 24.04 to running `bin/check_all.sh` green: system packages, Rust, the Cargo tools, Python through `uv` (Ubuntu blocks `pip` into the system Python), a first check run, and benchmark hygiene. Phase 1 needs no GPU. About 20–30 minutes, mostly compiling the Cargo tools.
@@ -68,4 +68,5 @@ Expect `Verdict: PASS (71 checks)`. The first run compiles the workspace; later 
 ## 6. Benchmark hygiene (laptop-specific)
 - **Plug in to AC power** and select the performance profile: `powerprofilesctl set performance`.
 - **Close heavy applications** during benchmark runs; keep the vents clear. Sustained all-core loads throttle a mobile CPU.
+- **A session (SPR-009 T-04):** on AC power with the performance profile, run `bin/bench_session.sh laptop`. It refuses to run otherwise, then records the run conditions, 5 separate wall-clock runs of benches 7 and 8 and their run-to-run spread, and the instruction counts, under `artifacts/perf/session_laptop_<time>/`.
 - **Wall-clock timings on this laptop vary by more than 10% between runs.** The per-PR performance gate therefore uses **instruction counts** (deterministic, via `iai-callgrind`), and wall-clock benchmarks run nightly on the VM `adjutant` with repeated samples (GOV-002 tier 10, SPR-009, RUN-002).

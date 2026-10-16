@@ -383,7 +383,7 @@ wall_control() {
 run "Required tools present" pass require_tools &&
 # Tier 1 — static and contract lints (fastest first)
 run "Document index builds (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
-run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml .github/workflows/nightly.yml &&
+run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml .github/workflows/nightly.yml .github/workflows/adjutant.yml &&
 run "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp-contract=off (SPR-003 GAP-6; SPR-007 ruling 4)" pass fp_contract_guard . &&
 run "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL" "fail:RUSTFLAGS sets fp-contract" fp_contract_env_control &&
 run "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL" "fail:.cargo/config.toml sets fp-contract" fp_contract_guard tests/lint_fixtures/fp_contract &&
