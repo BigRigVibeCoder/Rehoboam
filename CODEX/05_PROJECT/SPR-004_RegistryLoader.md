@@ -39,12 +39,12 @@ version: 1.0.0
 ### T-01: Registry loader
 - **Deliverable:** `rh-registry` parses `registry_v0.toml` into typed structures, with bounds
 - **Acceptance:** Round-trip test; every Registry section loads
-- **Status:** [x] done (`rh-registry::registry`; round-trip and section tests)
+- **Status:** [x] done (`rh-manifest::registry`, moved from `rh-registry` by ruling A; round-trip and section tests)
 
 ### T-02: Manifest loader
 - **Deliverable:** Typed manifest loading with the same errors as `manifest_v0.py`
 - **Acceptance:** Parity test on all example manifests (same verdicts and error counts)
-- **Status:** [x] done (`rh-registry::manifest`, `rh-cli manifest validate`; parity on 5 examples + 16-file corpus, `bin/manifest_parity.py`)
+- **Status:** [x] done (`rh-manifest::manifest`, `rh-cli manifest validate`; parity on 5 examples + 16-file corpus, `bin/manifest_parity.py`)
 
 ### T-03: Ownership lint
 - **Deliverable:** Column ownership from `specs/systems/*.odd.toml` checked against each system's `AccessSpec` (stub until SPR-005)
@@ -54,7 +54,7 @@ version: 1.0.0
 ### T-04: Schema generation
 - **Deliverable:** JSON Schema emitted from the Rust types; diffed against `manifest_v0.schema.json`
 - **Acceptance:** No unexplained schema difference
-- **Status:** [x] done (`rh-registry::manifest::schema`, `rh-cli manifest schema --diff`; 0 differences after normalising annotations)
+- **Status:** [x] done (`rh-manifest::manifest::schema`, `rh-cli manifest schema --diff`; 0 differences after normalising annotations)
 
 ## Verification assignment (Testers)
 

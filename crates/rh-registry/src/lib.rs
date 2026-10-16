@@ -1,24 +1,18 @@
-//! `rh-registry`: the Mechanics Registry loader and its validation.
+//! `rh-registry`: the plane-A side of the Mechanics Registry.
 //!
-//! Plane A, machinery. Mechanics come only from the Registry; manifests carry no free-string
-//! semantics (ADR-0010).
+//! Plane A, machinery, float-free. Mechanics come only from the Registry; manifests carry no
+//! free-string semantics (ADR-0010).
 //!
-//! - [`registry`]: the Registry v0, typed and bounds-checked (SPR-004 T-01).
-//! - [`manifest`]: typed manifest loading with the same verdicts and error counts as the Python
-//!   reference `specs/manifest/manifest_v0.py` (T-02, V-WC-04), and the JSON Schema emitted from
-//!   the Rust types (T-04).
 //! - [`ownership`]: single-writer column ownership from `specs/systems/*.odd.toml`, checked
-//!   against each system's access declaration (T-03; the declaration is a stub until SPR-005).
+//!   against each system's access declaration (SPR-004 T-03; the declaration is a stub until
+//!   SPR-005). It takes the Registry's system ids as input.
 //!
-//! Loading happens before a world starts; nothing here runs inside a tick.
+//! The load-time front end (YAML, the float view of the Registry, manifest validation) is the tool
+//! crate `rh-manifest` (SPR-004 ruling A). This crate later becomes the fixed-point Registry the
+//! engine reads, plus the effect-language evaluator (05.5 §2.1); authored numbers enter it only as
+//! fixed point (05.5 §3.2).
 //!
 //! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.5_world_compiler_and_dsl.md` §2.1.
 #![forbid(unsafe_code)]
 
-pub mod manifest;
 pub mod ownership;
-pub mod pyfmt;
-pub mod registry;
-pub mod yaml;
-
-pub use registry::{Bounds, Number, Registry, RegistryError};

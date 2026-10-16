@@ -115,6 +115,7 @@ dependencies = [
 name = "rh-cli"
 version = "0.0.0"
 dependencies = [
+ "rh-manifest",
  "rh-registry",
  "serde_json",
 ]
@@ -140,13 +141,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "rh-registry"
+name = "rh-manifest"
 version = "0.0.0"
 dependencies = [
  "saphyr-parser",
  "schemars",
  "serde",
  "serde_json",
+ "toml",
+]
+
+[[package]]
+name = "rh-registry"
+version = "0.0.0"
+dependencies = [
+ "serde",
  "toml",
 ]
 

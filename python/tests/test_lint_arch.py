@@ -41,7 +41,7 @@ def found(crates: list[Crate]) -> list[tuple[str, str]]:
 
 
 def engine(*extra: Crate) -> list[Crate]:
-    """Return the SPR-001 workspace's crates plus ``extra``."""
+    """Return the workspace's crates (SPR-001, plus rh-manifest from SPR-004) and ``extra``."""
     return [
         crate("rh-ids"),
         crate("rh-core", kind="core", deps=("rh-ids",)),
@@ -50,6 +50,7 @@ def engine(*extra: Crate) -> list[Crate]:
         crate("rh-contracts", kind="contract"),
         crate("rh-snapshot"),
         crate("rh-cli", plane="tool", kind="tool", deps=("rh-core", "rh-snapshot")),
+        crate("rh-manifest", plane="tool", kind="tool"),
         *extra,
     ]
 
@@ -159,12 +160,13 @@ PINNED = {
     "rh-contracts": ("A", "contract"),
     "rh-snapshot": ("A", "machinery"),
     "rh-cli": ("tool", "tool"),
+    "rh-manifest": ("tool", "tool"),
 }
 
 
 @pytest.mark.parametrize("name", sorted(PINNED))
 def test_each_pinned_crate_must_keep_its_labels(name: str) -> None:
-    """The seven SPR-001 crates cannot be relabelled, even to another valid combination."""
+    """The SPR-001 crates and rh-manifest cannot be relabelled, even to another valid one."""
     relabel = ("A", "core") if PINNED[name] != ("A", "core") else ("A", "machinery")
     crates = [crate(name, *relabel) if c.name == name else c for c in engine()]
     assert ("metadata", name) in found(crates)

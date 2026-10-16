@@ -1,0 +1,24 @@
+[package]
+name = "rh-manifest"
+description = "Load-time front end: YAML 1.1 reader, float view of the Registry, manifest validation and JSON Schema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# Tool plane (SPR-004 ruling A, 2026-10-16): load-time validation reproduces the reference's float
+# checks, so it cannot live in plane A. bin/lint_arch.py pins this crate to (tool, tool), and no
+# plane-A crate may depend on it (plane-A closure).
+[package.metadata.rehoboam]
+plane = "tool"
+kind = "tool"
+
+[lints]
+workspace = true
+
+[dependencies]
+saphyr-parser = "=0.2.2"
+schemars = "=1.2.3"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+toml = "=1.1.8"

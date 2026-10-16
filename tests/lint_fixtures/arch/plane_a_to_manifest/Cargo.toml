@@ -1,0 +1,5 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# SPR-004: plane-A rh-registry depends on the tool crate rh-manifest; the plane-A closure must refuse it.
+[workspace]
+members = ["rh-registry", "rh-manifest"]
+resolver = "3"
