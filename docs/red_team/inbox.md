@@ -122,3 +122,42 @@ The charter (N4) is approved as the red team's internal working rules; Laws 2 an
 | N4 | Item 9, charter | The charter's status line reads "Ratified". The decisions log records the director ratifying Law 1 ("the engine only engines", D28) but not the charter, Laws 2 to 5 or the backlog. They are recorded as proposed until the director rules | `docs/decisions-log.md` D28 |
 | N5 | Item 9, RT-ACT-007 to 009 | Red-team audits of sprints are welcome; any defect goes to the Architect immediately (`README.md`). Status at intake: SPR-002 is merged (VER-SPR-002, PASS); SPR-010 and SPR-004 are in their final round | GOV-005 §6 |
 | N6 | Items 9 and 10 | Figures such as the "~35-byte" event envelope, "< 15 ms over 1M rows" and "N in [150, 400]" are not measured. They are evidence for proposals, not measurements of Rehoboam; RT-ACT-012 and RT-ACT-010 would measure them. The cinematic envelope (roles, anchored snapshots, motive edges) is larger than 35 bytes | `README.md` (prototypes); `05.2` §4.1a |
+
+---
+
+## Batch 04 (2026-10-16): The 10 Fallen Bugs Autopsy & 4 New Live Prototypes (For Gate G0)
+
+Full technical analysis in `docs/red_team/RT-2026-10-16-simulation-bug-autopsy-and-code-theft.md`. All 4 items validated with executable prototypes in `docs/red_team/prototypes/` (`run_all.sh` 9/9 passing).
+
+### Item 11: Priority-Flood Monotonic Hydrology & Natural Borders
+* **Prototype:** `docs/red_team/prototypes/prototype_6_priority_flood_hydrology.py`
+* **Vulnerability:** World-generators (Azgaar, DF) suffer from depression pit sinks, lake overflows, and river looping where rivers flow uphill or terminate in dry fields.
+* **Architectural Fix:** Adopt Barnes, Lehman, & Mulla (2014) Priority-Flood algorithm. Uses an $O(N \log N)$ min-heap priority queue flooding inward from the ocean boundary, raising all depression sinks to spill elevation and computing monotonic D8 flow accumulation. 100% of river trunks reach the ocean; rivers form immutable natural borders for polities.
+* **Target Spec:** `M1.topography`, `M1.hydrology`.
+
+### Item 12: The Feudal Nobility Thermostat (Bounded Active Figures)
+* **Prototype:** `docs/red_team/prototypes/prototype_7_nobility_thermostat.py`
+* **Vulnerability:** Unconstrained noble reproduction causes exponential explosion ($N_0(1+r)^t$), ballooning to 2,500+ nobles by Year 208 and 900,000+ by Year 500, causing catastrophic CPU tick lag and save-file bloat.
+* **Architectural Fix:** Enforce feudal seat capacity:
+  1. Only primary heirs inherit landed seats (Tier 1 Active).
+  2. Spares / 2nd-born act as active rivals/claimants.
+  3. 3rd-born and distant cadet lines undergo downward social mobility (Holy Orders, Mercenary companies, or M2 burgher cohort pools).
+  4. Bounds active historical nobles permanently to $[150, 350]$ across 500 simulated years.
+* **Target Spec:** `M7.dynasty`, `M2.demography`.
+
+### Item 13: Sub-Millisecond Recursive SQL CTE Causal DAG Sifter
+* **Prototype:** `docs/red_team/prototypes/prototype_8_causal_sifter_sql.py`
+* **Vulnerability:** Felt/Winnow graph isomorphism algorithms suffer from exponential combinatorial search times $O(V^k)$ over $10^5$ events.
+* **Architectural Fix:** Columnar Parquet/SQLite events with indexed `cause_event_id` foreign keys. Backward causal DAG traversal executes via recursive SQL Common Table Expressions (CTEs) in **0.197 ms** across 100,000 events, isolating the 52.5-bit Kreminski unexpectedness revenge saga while filtering 99.995% of background peasant noise.
+* **Target Spec:** `rh-sifter`, `specs/sifting/`.
+
+### Item 14: 4-Beat Wildermyth Comic Storyboard Compiler
+* **Prototype:** `docs/red_team/prototypes/prototype_9_comic_beat_compiler.py`
+* **Vulnerability:** Raw simulation event logs are emotionally dry; unconstrained LLM generation hallucinates slapstick and loses visual character continuity.
+* **Architectural Fix:** Compiles sifted Parquet causal envelopes into an authoritative 4-beat comic layout (Establishing Wide $\rightarrow$ Inciting Hook $\rightarrow$ Action Climax $\rightarrow$ Tragic Consequence) with structured InstantID visual anchor prompts ensuring 100% character face/costume consistency across decades.
+* **Target Spec:** Downstream Graphic Novel Reader, Plane C.
+
+### Item 15: The 10 Fallen Bugs Immunity Protocol
+* **Vulnerability:** Dwarf Fortress pet-door pathing storms, item clutter, CDDA nested container recursion freezes, and RimWorld GC pauses.
+* **Architectural Fix:** Codify 10 permanent engineering invariants in `GOV-008` & `CLAUDE.md`: zero unowned map debris, flat non-recursive item slots (`[Option<ItemId>; 6]`), zero heap allocation in tick loops, monthly climate zones, and static road graph Dijkstra caching.
+* **Target Spec:** `GOV-008`, `CLAUDE.md`.
