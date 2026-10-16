@@ -18,7 +18,3 @@ workspace = true
 [dependencies]
 rh-ids = { version = "0.0.0", path = "../rh-ids" }
 
-# Tests that register systems against the real specs load them with rh-registry's spec reader.
-# A dev-dependency only: the library never depends on rh-registry.
-[dev-dependencies]
-rh-registry = { version = "0.0.0", path = "../rh-registry" }

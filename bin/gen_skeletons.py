@@ -3,9 +3,9 @@
 ``specs/systems/lint_odd.py --rust <id>`` turns each system spec into a Rust skeleton (system id,
 schedule, RNG-purpose enum, parameter struct; ADR-0033 §3). The skeletons are committed under
 ``crates/rh-core/tests/generated/<id with dots as underscores>.rs`` and compiled by
-``crates/rh-core/tests/skeletons.rs`` against the ``SystemModel`` contract. Generated code is never
-hand-edited (GOV-003 §2): ``--check`` regenerates every skeleton and fails on any difference, so a
-spec change that is not regenerated, or a hand edit, turns the PR tier red.
+``crates/rh-registry/tests/real_specs.rs`` against rh-core's ``SystemModel`` contract. Generated
+code is never hand-edited (GOV-003 §2): ``--check`` regenerates every skeleton and fails on any
+difference, so a spec change that is not regenerated, or a hand edit, turns the PR tier red.
 
 Usage:  python -I bin/gen_skeletons.py           write every skeleton
         python -I bin/gen_skeletons.py --check   compare; exit 1 and print STALE/MISSING/EXTRA

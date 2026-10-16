@@ -268,3 +268,95 @@ pub fn check_access(
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        Declaration, Owner, Source, SpecEntry, check_access, plane_leak, single_writer,
+        system_plane,
+    };
+
+    fn decl(system: &str, writes: &[(&str, &str)], reads: &[(&str, &str)]) -> Declaration {
+        let pairs = |v: &[(&str, &str)]| -> Vec<(String, String)> {
+            v.iter()
+                .map(|(a, b)| ((*a).to_owned(), (*b).to_owned()))
+                .collect()
+        };
+        Declaration {
+            system: system.to_owned(),
+            writes: pairs(writes),
+            reads: pairs(reads),
+        }
+    }
+
+    #[test]
+    fn two_writers_and_wrong_owners_are_found_with_source_specific_messages() {
+        let d = [
+            decl("A", &[("x.a", "A")], &[]),
+            decl("B", &[("x.a", "A")], &[("x.a", "C"), ("x.b", "A")]),
+            decl("C", &[], &[]),
+        ];
+        let (owners, spec) = single_writer(&d, Source::Spec);
+        let (_, code) = single_writer(&d, Source::Code);
+        assert_eq!(owners["x.a"].system, "A");
+        let msgs = |v: &[super::Violation]| v.iter().map(|x| x.message.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            msgs(&spec),
+            [
+                "owns x.a, which A already owns (05.1 §2)",
+                "reads x.a from C, but A owns it",
+                "reads x.b, which A's spec does not declare in [[owns]]",
+            ]
+        );
+        assert_eq!(
+            msgs(&code),
+            [
+                "writes x.a, which A also writes (05.1 §2)",
+                "reads x.a from C, but A owns it",
+                "reads x.b, which A does not declare as a write",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_access_check_and_the_plane_rule() {
+        let (owners, _) = single_writer(
+            &[
+                decl("A", &[("x.a", "A")], &[]),
+                decl("P", &[("pins.p", "B")], &[]),
+            ],
+            Source::Spec,
+        );
+        let entry = SpecEntry {
+            owns: vec![("y.b".to_owned(), "A".to_owned())],
+            reads: vec!["pins.p".to_owned()],
+            rng: vec![],
+        };
+        let found = check_access(
+            &owners,
+            Some(&entry),
+            "Y",
+            &["pins.p".to_owned(), "x.a".to_owned()],
+            &["y.b".to_owned(), "x.a".to_owned()],
+        );
+        let rules: Vec<&str> = found.iter().map(|v| v.rule).collect();
+        // y.b: no spec in the table owns it; x.a: A owns it; pins.p: plane B; x.a read undeclared.
+        assert_eq!(
+            rules,
+            ["single-writer", "single-writer", "plane", "undeclared-read"]
+        );
+        assert_eq!(
+            check_access(&owners, None, "Z", &[], &[])[0].rule,
+            "registry"
+        );
+        let b = Owner {
+            system: "P".to_owned(),
+            plane: "B".to_owned(),
+        };
+        assert!(plane_leak("Y", "A", "pins.p", &b).is_some());
+        assert!(plane_leak("Y", "B", "pins.p", &b).is_none());
+        assert_eq!(system_plane([].into_iter()), "A");
+        assert_eq!(system_plane(["B", "A"].into_iter()), "A");
+        assert_eq!(system_plane(["C"].into_iter()), "C");
+    }
+}
