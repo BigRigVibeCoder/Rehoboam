@@ -55,12 +55,13 @@ uv sync --frozen --project python  # creates python/.venv from the committed pyt
 ```
 `python/.python-version` selects Python 3.12, which Ubuntu 24.04 ships; uv downloads it if it is missing. Run the same command after every pull that changes `python/uv.lock`. To change a dependency, edit `python/pyproject.toml`, run `uv lock --project python`, and commit both files.
 
-## 5. First check run
+## 5. First check run, and the pre-push hook
 ```bash
 bin/check_all.sh                   # finds python/.venv/bin/python automatically
 less artifacts/check_report.md
+bin/install_hooks.sh               # from now on, every git push runs bin/check_all.sh first
 ```
-Expect `Verdict: PASS (12 checks)`. If a check fails, the report shows the first failure's output; file it as a `DEF-` only after the run is reproducible.
+Expect `Verdict: PASS (44 checks)`. The first run compiles the workspace; later runs take under a minute. If a check fails, the report shows the first failure's output; file it as a `DEF-` only after the run is reproducible.
 
 ## 6. Benchmark hygiene (laptop-specific)
 - **Plug in to AC power** and select the performance profile: `powerprofilesctl set performance`.

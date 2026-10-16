@@ -1,0 +1,64 @@
+# The PR tier on GitHub-hosted runners (SPR-001 T-05; GOV-008 §1; docs/13 §4.3).
+# It runs bin/check_all.sh, the same script developers run locally, and always uploads its report.
+#
+# The plan is GitHub Free (Q-INFRA-1): this workflow reports but cannot block a merge, and there is
+# no merge queue. The Architect enforces "no green check_report.md, no merge" by hand (docs/13 §4.4).
+# Minutes are limited (about 2,000 a month), so the tools are installed as prebuilt binaries and
+# superseded runs on the same ref are cancelled.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-all:
+    name: PR tier (bin/check_all.sh)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo-nextest and cargo-deny (prebuilt binaries)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9,cargo-deny@0.20
+
+      - name: uv and Python 3.12
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Python environment from the lock (RUN-001 §4)
+        run: uv sync --frozen --project python
+
+      - name: bin/check_all.sh
+        run: bin/check_all.sh
+
+      - name: Upload the check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: check-report
+          path: artifacts/check_report.md
+          if-no-files-found: error
