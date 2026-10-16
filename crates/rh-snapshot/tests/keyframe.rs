@@ -1147,3 +1147,68 @@ fn gap_10_a_keyframe_resumes_through_the_journal_like_the_continuous_run() {
     assert!(differ > 0, "the double-applied input changes the world");
     assert_ne!(state_hash(&wrong.snapshot()), state_hash(&final_state));
 }
+
+/// GAP-11 (Tester round 2b): pins the guard's uncompressed-size bounds (`ipc_guard::check_buffer`).
+/// For each buffer of the first batch that carries a compression prefix, the declared uncompressed
+/// length is forged to its bound + 1, to `ZSTD_MAX_RATIO` times the compressed bytes + 1, to
+/// 2^40, to `i64::MAX` and to -2, and every forgery must be refused as `KeyframeError::Ipc` before
+/// Arrow decodes. If a bound regresses, Arrow allocates the declared size and the allocation
+/// aborts the test process: nextest reports that as a failed test, so a regression cannot pass
+/// silently.
+#[test]
+fn gap_11_every_forged_uncompressed_length_is_refused_before_arrow_allocates() {
+    use rh_snapshot::ipc_guard::{MAX_VALUES_BYTES, ZSTD_MAX_RATIO};
+    let engine = run_to(life(), 50 * DAY + 1);
+    let (bytes, _) = write_keyframe(&engine, anchor(&engine)).unwrap();
+    let body = unseal_keyframe(&bytes).unwrap().to_vec();
+    let n = body.len();
+    let footer_len =
+        usize::try_from(i32::from_le_bytes(body[n - 10..n - 6].try_into().unwrap())).unwrap();
+    let footer = arrow_ipc::root_as_footer(&body[n - 10 - footer_len..n - 10]).unwrap();
+    let block = footer.recordBatches().unwrap().get(0);
+    let meta_at = usize::try_from(block.offset()).unwrap() + 8;
+    let fb_len = usize::try_from(i32::from_le_bytes(
+        body[meta_at - 4..meta_at].try_into().unwrap(),
+    ))
+    .unwrap();
+    let body_at =
+        usize::try_from(block.offset()).unwrap() + usize::try_from(block.metaDataLength()).unwrap();
+    let message = arrow_ipc::root_as_message(&body[meta_at..meta_at + fb_len]).unwrap();
+    let batch = message.header_as_record_batch().unwrap();
+    let rows = usize::try_from(batch.length()).unwrap();
+    let mut cases = 0;
+    for (k, buffer) in batch.buffers().unwrap().iter().enumerate() {
+        let len = usize::try_from(buffer.length()).unwrap();
+        if len == 0 {
+            continue; // No prefix: an empty buffer (a validity bitmap with no nulls).
+        }
+        let at = body_at + usize::try_from(buffer.offset()).unwrap();
+        let bound = match k % 3 {
+            0 => rows / 8 + 64,
+            1 => 4 * (rows + 1),
+            _ => MAX_VALUES_BYTES,
+        };
+        let ratio = (len - 8) * ZSTD_MAX_RATIO;
+        let forged = [
+            i64::try_from(bound + 1).unwrap(),
+            i64::try_from(ratio + 1).unwrap(),
+            1 << 40,
+            i64::MAX,
+            -2,
+        ];
+        for value in forged {
+            let mut f = body.clone();
+            patch(&mut f, at, 8, value);
+            match load(&seal_keyframe(&f)) {
+                Err(KeyframeError::Ipc(_)) => cases += 1,
+                Err(e) => panic!("buffer {k} declaring {value}: refused late: {e}"),
+                Ok(_) => panic!("buffer {k} declaring {value}: accepted"),
+            }
+        }
+    }
+    println!("GAP-11: {cases} forged uncompressed lengths refused before decoding");
+    assert!(
+        cases >= 20,
+        "at least four prefixed buffers forged five ways: {cases}"
+    );
+}
