@@ -140,15 +140,20 @@ pub fn derive(systems: &[SchedulerInput<'_>]) -> Result<Schedule, Vec<Violation>
         match order_phase(&nodes, &phase_edges) {
             Ok(p) => phases.push(p),
             Err(stuck) => {
-                let ids: Vec<&str> = stuck.iter().map(|&i| systems[i].id).collect();
-                problems.push(violation(
-                    systems[stuck[0]].id,
-                    "schedule-cycle",
-                    format!(
-                        "in phase {phase}, {} read each other's columns at same_instant in a cycle; declare a lag on one read (05.1 §2 rule 4)",
-                        ids.join(", ")
-                    ),
-                ));
+                // Name only the systems on a cycle: each strongly connected component of more than
+                // one system (an edge never joins a system to itself). Systems merely downstream of
+                // a cycle are stuck too, but they are not part of it (Tester DEF-1).
+                for component in cycles(&stuck, &phase_edges) {
+                    let ids: Vec<&str> = component.iter().map(|&i| systems[i].id).collect();
+                    problems.push(violation(
+                        systems[component[0]].id,
+                        "schedule-cycle",
+                        format!(
+                            "in phase {phase}, {} read each other's columns at same_instant in a cycle; declare a lag on one read (05.1 §2 rule 4)",
+                            ids.join(", ")
+                        ),
+                    ));
+                }
                 phases.push(PhaseSchedule::default());
             }
         }
@@ -211,4 +216,41 @@ fn order_phase(
     }
     let order = levels.concat();
     Ok(PhaseSchedule { order, levels })
+}
+
+/// The cycles among `stuck` (the nodes Kahn's algorithm could not order): the strongly connected
+/// components with more than one node, each sorted, in order of their smallest node. Two nodes are
+/// in one component when each reaches the other; the graphs are a phase's systems, so the
+/// quadratic reachability is cheap.
+fn cycles(stuck: &[usize], edges: &BTreeSet<(usize, usize)>) -> Vec<Vec<usize>> {
+    let nodes: BTreeSet<usize> = stuck.iter().copied().collect();
+    let reach = |from: usize| -> BTreeSet<usize> {
+        let mut seen = BTreeSet::new();
+        let mut todo = vec![from];
+        while let Some(n) = todo.pop() {
+            for &(w, r) in edges.range((n, 0)..=(n, usize::MAX)) {
+                debug_assert_eq!(w, n);
+                if nodes.contains(&r) && seen.insert(r) {
+                    todo.push(r);
+                }
+            }
+        }
+        seen
+    };
+    let reaches: BTreeMap<usize, BTreeSet<usize>> = nodes.iter().map(|&n| (n, reach(n))).collect();
+    let mut placed = BTreeSet::new();
+    let mut out = Vec::new();
+    for &n in &nodes {
+        if placed.contains(&n) || !reaches[&n].contains(&n) {
+            continue;
+        }
+        let component: Vec<usize> = nodes
+            .iter()
+            .copied()
+            .filter(|m| reaches[&n].contains(m) && reaches[m].contains(&n))
+            .collect();
+        placed.extend(component.iter().copied());
+        out.push(component);
+    }
+    out
 }

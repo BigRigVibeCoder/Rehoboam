@@ -253,3 +253,45 @@ fn the_order_is_levels_then_id_not_the_smallest_ready_id() {
     ];
     assert_ne!(r.order(Phase::Production), kahn);
 }
+
+/// Tester DEF-1: only the systems on a cycle are named, not those downstream of it, and two
+/// separate cycles are two violations.
+#[test]
+fn a_cycle_names_only_its_members() {
+    use Lag::SameInstant;
+    let at = |s: Stub| s.at(Pulse::Day, Phase::Exchange);
+    let stubs = vec![
+        at(Stub::new("X1.a")
+            .writes("a.x")
+            .reads("b.x", "X2.b", SameInstant)),
+        at(Stub::new("X2.b")
+            .writes("b.x")
+            .reads("a.x", "X1.a", SameInstant)),
+        at(Stub::new("X3.c")
+            .writes("c.x")
+            .reads("a.x", "X1.a", SameInstant)),
+        at(Stub::new("X4.d")
+            .writes("d.x")
+            .reads("c.x", "X3.c", SameInstant)),
+        at(Stub::new("X5.e")
+            .writes("e.x")
+            .reads("f.x", "X6.f", SameInstant)),
+        at(Stub::new("X6.f")
+            .writes("f.x")
+            .reads("e.x", "X5.e", SameInstant)),
+    ];
+    let e = refused(stubs.clone(), &stubs);
+    let cycles: Vec<String> = e
+        .violations
+        .iter()
+        .filter(|v| v.rule == "schedule-cycle")
+        .map(|v| v.message.clone())
+        .collect();
+    assert_eq!(
+        cycles,
+        [
+            "in phase Exchange, X1.a, X2.b read each other's columns at same_instant in a cycle; declare a lag on one read (05.1 §2 rule 4)",
+            "in phase Exchange, X5.e, X6.f read each other's columns at same_instant in a cycle; declare a lag on one read (05.1 §2 rule 4)",
+        ]
+    );
+}
