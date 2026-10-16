@@ -6,7 +6,7 @@ status: PLANNING
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001]
+related: [BCK-001, PRJ-001, RUN-002, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
 version: 1.1.0
@@ -42,7 +42,7 @@ version: 1.1.0
 - **Status:** [ ] not started
 
 ### T-02: Hash ladders in CI
-- **Deliverable:** Yearly ladders on PRs (shorter horizons); monthly full length nightly; a cross-machine check nightly between the director's laptop and a GitHub-hosted Ubuntu runner (different CPU generation; replaces the cross-platform matrix per D5; GOV-008 §1). The laptop's thread ladder tops out at 8 threads
+- **Deliverable:** Yearly ladders on PRs (shorter horizons); monthly full length nightly; a cross-machine check nightly: `adjutant` (AMD Zen 4, self-hosted runner, RUN-002 §3) against a GitHub-hosted Ubuntu runner, with the director's laptop (Intel) on demand; different CPU vendors replace the cross-platform matrix per D5 (GOV-008 §1). Includes the `adjutant` runner and its instance schedule (RUN-002 §3)
 - **Acceptance:** V-DET-01/02 green
 - **Status:** [ ] not started
 

@@ -23,7 +23,7 @@ version: 1.0.0
 | CPU | Intel i7-7820HQ, 4 cores / 8 threads, 2.9–3.9 GHz (2017) | Thread ladder runs at 1/2/4/8. Roughly 3× slower than the reference desktop in `08` (an estimate; SPR-009 measures it) |
 | RAM | 32 GB (about 18 GiB free in normal use) | Enough for P0–P2 and single 1M runs; not for many parallel 1M rollouts |
 | GPU | Quadro M2200, 4 GB, Maxwell; driver 580 | Not needed in phase 1. Driver 580 is the last branch for Maxwell, and 4 GB is too small for the planned local LLMs; LLM work goes to the cloud or a later machine |
-| Disk | 512 GB NVMe | Keep ≥ 100 GB free: Rust build directories grow to 10–30 GB; a 100k world is 6–18 GB per 1,000 years |
+| Disk | 512 GB NVMe, 153 GB free (2026-10-16) | Keep ≥ 100 GB free: Rust build directories grow to 10–30 GB; a 100k world is 6–18 GB per 1,000 years |
 
 ## 1. System packages
 ```bash
@@ -66,4 +66,4 @@ Expect `Verdict: PASS (12 checks)`. If a check fails, the report shows the first
 ## 6. Benchmark hygiene (laptop-specific)
 - **Plug in to AC power** and select the performance profile: `powerprofilesctl set performance`.
 - **Close heavy applications** during benchmark runs; keep the vents clear. Sustained all-core loads throttle a mobile CPU.
-- **Wall-clock timings on this laptop vary by more than 10% between runs.** The per-PR performance gate therefore uses **instruction counts** (deterministic, via `iai-callgrind`), and wall-clock benchmarks run nightly with repeated samples (GOV-002 tier 10, SPR-009).
+- **Wall-clock timings on this laptop vary by more than 10% between runs.** The per-PR performance gate therefore uses **instruction counts** (deterministic, via `iai-callgrind`), and wall-clock benchmarks run nightly on the VM `adjutant` with repeated samples (GOV-002 tier 10, SPR-009, RUN-002).

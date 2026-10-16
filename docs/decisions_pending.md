@@ -4,7 +4,10 @@
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
-## Still waiting on you (4 for SPR-001, 1 on LLMs, 1 for later)
+## Still waiting on you (2, neither blocks P0)
+
+### D6 (the rest) — Monthly ceiling for Google Cloud spend
+The VM `adjutant` (RUN-002) runs nightly from SPR-008: about one hour a night, roughly $25 a month in compute, plus its disk, which you already pay for. **Recommendation (confidence: medium, until SPR-009 measures real run times):** a ceiling of **$50 a month through P1a**; the Architect reports spend at each gate. **Default:** $50.
 
 ### D27 — What are LLMs for? (asked 2026-10-16; not urgent: nothing before P3b uses one)
 The plan has 19 LLM roles. Only one of them decides anything: the **deliberation consult** (COG-8, ADR-0011 §amendment, `05.3` §8), where an LLM picks a named character's action from a menu. That role contradicts three other commitments: "LLMs describe, never decide" (`01` V2, PRJ-001), "nothing slows the engine" (ADR-0030; a missing consult answer stalls the run), and the G2 thesis that the *systems* make the history. ADR-0028 also turns it on by default for deep minds, against ADR-0011 and D14.
@@ -14,28 +17,15 @@ The plan has 19 LLM roles. Only one of them decides anything: the **deliberation
 - **Cut** the deliberation consult from the roadmap (COG-8, P3.12, the ADR-0028 default), and keep it only as a possible experiment after G3b. The engine then never waits on a model, and every decision comes from the simulation.
 On a yes, one page (`05.6` §0) states the roles, and the conflicts above are fixed in the same change.
 
-
-### SPR-001 approval (C2)
-SPR-001 (`CODEX/05_PROJECT/SPR-001_RepoBootstrap.md`) creates the repository's contracts: layout, lints, CI. As a C2 change it needs your yes before the developer agent starts. **Default:** none; work waits for you.
-
-### Q-INFRA-1 — Which GitHub plan is the account on?
-The repository is private. On GitHub's **Free** plan, a private repository cannot have protected branches or required checks, so CI can report a failure but cannot block the merge. **Pro** (a few dollars a month) allows required checks. GitHub's **merge queue** on a private repository needs Enterprise Cloud, which this project does not need: `docs/13` §4.4 now has a fallback (branches must be up to date, merges one at a time). Private repositories also get a monthly allowance of Actions minutes (about 2,000 on Free, 3,000 on Pro; check your billing page), which the PR tier fits but nightly 1,000-year runs may not.
-**Default:** proceed on whatever plan you have. On Free, the Architect enforces "no green report, no merge" by hand. Upgrading to Pro is recommended before SPR-002.
-
-### Q-INFRA-2 — Where do the coding agents run?
-Either Claude Code on your laptop, or cloud sessions like this one. Cloud sessions leave the laptop free and cool, and the laptop then only runs your checks and the nightly cross-machine comparison. Agents on the laptop compete with you for 4 cores and heat it up.
-**Default:** cloud sessions for agents; the laptop for your checks, watching the stream, and the nightly cross-machine run.
-
-### Q-INFRA-3 — How much free disk space does the laptop have?
-Rust build folders grow to 10–30 GB, and a 100k-person world is 6–18 GB per 1,000 years. **Default:** keep at least 100 GB free; tell me if you have less.
-
-### D6 (the rest, needed before P3) — Cloud budget
-Answered 2026-10-16: the machine is a ThinkPad P51 laptop (4 cores, 32 GB, Quadro M2200 4 GB). Its graphics card is too small and too old for local AI language models, so LLM work in P3 and later goes to cloud services or a later machine. Still open: a monthly cloud budget ceiling. **Default:** none needed until P3.
-
 ## Decided on 2026-10-16
 
 | ID | Ruling |
 |---|---|
+| SPR-001 | **Approved** (C2): repository bootstrap and CI |
+| Q-INFRA-1 | GitHub **Free**: no required checks on a private repository, so the Architect enforces "no green report, no merge" by hand |
+| Q-INFRA-2 | Coding agents run **in the cloud** |
+| Q-INFRA-3 | The laptop has **153 GB free** (enough; keep ≥ 100 GB) |
+| VM | Your Google Cloud VM `adjutant` (8 cores, 64 GB) is the **benchmark and nightly-run machine** from SPR-008 (RUN-002) |
 | D1 | World Stream (ADR-0030): **accepted** |
 | D2 | The 18 critical-path ADRs: **accepted** |
 | D4 | First world: **a minimal test world**, `solo` (one person, tiny map); then add complexity one rung at a time (`11` complexity ladder) |

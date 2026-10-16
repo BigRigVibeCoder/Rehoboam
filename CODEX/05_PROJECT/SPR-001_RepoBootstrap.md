@@ -2,7 +2,7 @@
 id: SPR-001
 title: "Repository bootstrap and CI"
 type: how-to
-status: PLANNING
+status: ACTIVE
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -17,7 +17,7 @@ version: 1.1.0
 # SPR-001 — Repository bootstrap and CI
 
 - **Roadmap item:** `docs/11` P0.1 · **Phase:** P0 (gate G0)
-- **Depends on:** none (the laptop set up per RUN-001; the GitHub plan answer Q-INFRA-1 for T-05)
+- **Depends on:** none. **Approved by the director 2026-10-16 (C2).** GitHub plan: Free (Q-INFRA-1)
 - **Binding contracts:** `docs/05_architecture/05.0` §6 (crate layout); GOV-003; GOV-008 §1–2, §4; `docs/13` §3–4; RUN-001
 - **Requirements covered:** EVO-1, LIC-1
 
@@ -76,7 +76,7 @@ version: 1.1.0
 
 | # | Blocker | Filed as | Status |
 |---|---|---|---|
-| B-1 | Required checks and the merge queue depend on the GitHub plan for a private repository (Q-INFRA-1). T-01 to T-04 do not wait on it | `decisions_pending.md` | Open |
+| B-1 | Required checks and the merge queue depend on the GitHub plan for a private repository (Q-INFRA-1) | `decisions_pending.md` | **Resolved:** Free. CI reports; the Architect enforces "no green report, no merge" by hand (`docs/13` §4.4) |
 
 ## Completion
 

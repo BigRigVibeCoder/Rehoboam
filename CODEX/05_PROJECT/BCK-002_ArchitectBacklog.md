@@ -20,11 +20,13 @@ version: 1.0.0
 |---|---|---|---|
 | A-01 | Set up CODEX, governance, agent docs, templates, generated manifest, `bin/check_all.sh` | Now | **Done** (SPR-000-ARCH) |
 | A-02 | Configure tester and auditor model diversity (a different model or provider from the developers) and record it in each AGT boot doc | Before SPR-002 | Open |
-| A-03 | Wire `bin/check_all.sh` into CI as the PR tier (with SPR-001) | SPR-001 | Open |
+| A-03 | Wire `bin/check_all.sh` into CI as the PR tier (with SPR-001) | SPR-001 | In progress |
 | A-04 | Seal the held-out bands: commit hashes of their definitions, with AGT-003-STAT as custodian | Before P1b tuning | Open |
 | A-05 | Escape-rate tracking in VER documents; report it at G0 | From SPR-002 | Open |
 | A-06 | Write the rung 1–3 manifests (`household`, `hamlet` from `uz_job`, `village`) | P1a | Open |
 | A-07 | Add frontmatter to `docs/` files as they change; split `docs/09` (about 108 KB) when it next changes substantially | Rolling | Open |
 | A-08 | Turn `docs/13` into the Rehoboam engineering supplement: remove what GOV-005/007 now cover | With A-07 | Open |
 | A-09 | Prepare `VER-G0` | End of P0 | Open |
-| A-10 | Cloud adaptation table in GOV-008 | When the director starts the cloud move | Deferred |
+| A-10 | Cloud adaptation table in GOV-008 | When the director starts the full cloud move | Deferred |
+| A-11 | Enforce "no green report, no merge" by hand (GitHub Free: no required checks) | Every merge | Ongoing |
+| A-12 | Report `adjutant` spend against the D6 ceiling | Each gate | Open |
