@@ -21,6 +21,10 @@ reports its metadata). Rules:
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
+    float             f32 and f64 (the types, `as f64`, `f64::MAX`), conversions named after them
+                      (to_f64, from_f32, as_f64), and float literals (0.5, 1e-3, 2f32, 1.) (SPR-010
+                      T-04; DET-3). Threshold quantities are fixed point (rh_core::fixed); floats
+                      are allowed only for declared float fields (below).
 
 Paths match with any whitespace or comments around `::` (`std :: time :: Instant :: now()`, as
 in macro bodies), and are reported with it removed (DEF-4).
@@ -32,15 +36,24 @@ Escape, counted and printed so review sees every one:
 on the offending line, or alone on the line directly above it. An escape without a reason, or one
 that covers no finding, is itself a violation.
 
-TODO(SPR-003/SPR-005, fixed-point types): V-DET-19 also forbids float types in threshold positions
-(DET-3). Text cannot tell a threshold from a declared float field, so this gate does not pretend to;
-the check arrives with the fixed-point types in rh-core as a type-level rule. Until then it is an
-audit item.
+Declared float fields (05.1 §6 item 4: floats only in fields and continuous dynamics; GOV-003 §2).
+A float finding is excused only by an escape whose reason starts with `f32_field <entity.column>`,
+naming a column that a system spec declares with `type = "f32_field"` in an `[[owns]]` entry of
+specs/systems/*.odd.toml (or of --specs DIR). Any other reason, or an undeclared column, leaves the
+float a violation:
+    pub moisture: f32, // LINT-ALLOW(forbidden-api): f32_field region.soil_moisture
 
-Usage:  python -I bin/lint_forbidden.py [--manifest-path Cargo.toml]
+DECISION (SPR-010 T-04): the float rule does not apply to files under a crate's tests/, benches/ or
+examples/ directories. They never link into the engine, so they hold no threshold position, and a
+statistical test may legitimately compute in floats. Every other rule still applies there, and the
+float rule applies to all of src/ (unit-test modules included) and build.rs. ALTERNATIVES
+CONSIDERED: scanning tests too (every statistical test would need an f32_field escape that names no
+field), or skipping #[cfg(test)] modules (text cannot find their extent reliably).
+
+Usage:  python -I bin/lint_forbidden.py [--manifest-path Cargo.toml] [--specs DIR]
         python -I bin/lint_forbidden.py --scan PATH [PATH ...]   (scan these files or directories
                                                                   as plane A; used by fixtures)
-Exit:   0 clean, 1 violations, 2 the workspace or a file could not be read.
+Exit:   0 clean, 1 violations, 2 the workspace, a file or a system spec could not be read.
 Standard library only (GOV-003 §3).
 """
 
@@ -50,6 +63,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +76,11 @@ EXIT_UNREADABLE = 2
 ESCAPE_PATTERN = re.compile(r"LINT-ALLOW\(forbidden-api\)(?P<colon>:?)(?P<reason>.*)")
 IDENT_CHAR = re.compile(r"[A-Za-z0-9_]")
 RAW_STRING_START = re.compile(r'(?:b|c)?r(?P<hashes>#*)"')
+FLOAT_FIELD_REASON = re.compile(r"f32_field\s+(?P<column>\S+)")
+FLOAT_RULE = "float"
+# Crate directories that never link into the engine: the float rule skips them (DECISION above).
+FLOAT_FREE_DIRS = frozenset({"tests", "benches", "examples"})
+DEFAULT_SPECS = Path(__file__).resolve().parents[1] / "specs" / "systems"
 
 
 def _rx(pattern: str) -> re.Pattern[str]:
@@ -134,6 +153,21 @@ RULES: tuple[Rule, ...] = (
         _rx(r"#\s*!?\s*\[\s*path\b|\bcfg_attr\s*\([^)]*\bpath\s*=|\binclude\s*!\s*[(\[{]"),
         "pulls in source from a file this gate may never scan; keep plane-A code in its own "
         "crate's files, or escape with a reason (DEF-4)",
+    ),
+    Rule(
+        FLOAT_RULE,
+        re.compile(
+            r"\bf(?:32|64)\b"  # the types: f32, `as f64`, f64::MAX
+            r"|\b\w+_f(?:32|64)\b"  # conversions named after them: to_f64, from_f32, as_f64
+            r"|(?:(?<![\w.])|(?<=\.\.))\d[\d_]*"  # a number not after `.` (t.0.1), but after `..`
+            r"(?:(?:\.\d[\d_]*)?(?:[eE][+-]?[\d_]+)?_?f(?:32|64)\b"  # 2f32, 1.5_f64
+            r"|\.\d[\d_]*(?:[eE][+-]?[\d_]+)?"  # 0.5, 1.25e3 (not a range 0..5)
+            r"|[eE][+-]?\d[\d_]*"  # 1e-3 (not hex 0x1e5)
+            r"|\.(?![.\w]))"  # 1. (not 1..2, not 1.max(2))
+        ),
+        "float in plane A; threshold quantities are fixed point (rh_core::fixed: Q8_8, Q16_16, "
+        "Money; DET-3). A declared float field needs `// LINT-ALLOW(forbidden-api): f32_field "
+        "<entity.column>` naming a column a system spec declares f32_field",
     ),
 )
 
@@ -329,24 +363,61 @@ def find_escapes(lexed: Lexed, path: str) -> list[Escape]:
     return escapes
 
 
-def scan_source(source: str, path: str, report: Report) -> None:
-    """Scan one file's text and add its violations and excused findings to ``report``."""
+def _float_escape_problem(escape: Escape, float_fields: frozenset[str]) -> str | None:
+    """Return why an escape cannot excuse a float, or None if it names a declared float field."""
+    match = FLOAT_FIELD_REASON.match(escape.reason)
+    if match is None:
+        return (
+            f"only a declared float field may hold a float: the escape must read `f32_field "
+            f"<entity.column>`, not `{escape.reason}`"
+        )
+    if match.group("column") not in float_fields:
+        return (
+            f"`{match.group('column')}` is not a column any system spec declares "
+            '`type = "f32_field"` (specs/systems/*.odd.toml)'
+        )
+    return None
+
+
+def scan_source(
+    source: str,
+    path: str,
+    report: Report,
+    float_fields: frozenset[str] = frozenset(),
+    *,
+    floats: bool = True,
+) -> None:
+    """Scan one file's text and add its violations and excused findings to ``report``.
+
+    Args:
+        source: The text of a ``.rs`` file.
+        path: The path reported for its findings.
+        report: Where violations and excused findings are added.
+        float_fields: The columns the system specs declare ``f32_field``; only an escape naming
+            one of them excuses a float.
+        floats: Whether the float rule applies to this file (not under tests/, benches/ or
+            examples/; see the module DECISION).
+    """
     lexed = lex(source)
-    findings = find_forbidden(lexed.code, path)
+    findings = [f for f in find_forbidden(lexed.code, path) if floats or f.rule != FLOAT_RULE]
     escapes = find_escapes(lexed, path)
     valid = {e.covers: e for e in escapes if e.reason}
     covered_lines = {f.line for f in findings}
     for finding in findings:
         where = f"{finding.path}:{finding.line}:{finding.column}"
         escape = valid.get(finding.line)
-        if escape is not None:
+        problem = None
+        if escape is not None and finding.rule == FLOAT_RULE:
+            problem = _float_escape_problem(escape, float_fields)
+        if escape is not None and problem is None:
             report.escaped.append(
                 f"ESCAPE [{RULE_ID}/{finding.rule}] `{finding.text}` at {where}; "
                 f"reason: {escape.reason}"
             )
         else:
+            why = finding.why if problem is None else problem
             report.violations.append(
-                f"VIOLATION [{RULE_ID}/{finding.rule}] `{finding.text}` at {where}; {finding.why}"
+                f"VIOLATION [{RULE_ID}/{finding.rule}] `{finding.text}` at {where}; {why}"
             )
     for escape in escapes:
         where = f"{escape.path}:{escape.line}"
@@ -386,7 +457,18 @@ def display(path: Path) -> str:
         return str(path)
 
 
-def scan_paths(paths: Iterable[Path]) -> Report:
+def float_rule_applies(file: Path, root: Path) -> bool:
+    """Return whether the float rule applies to ``file`` found under ``root``.
+
+    A root given as a file is always checked; under a directory, the float rule skips the
+    top-level tests/, benches/ and examples/ (the module DECISION).
+    """
+    if root.is_file():
+        return True
+    return file.relative_to(root).parts[0] not in FLOAT_FREE_DIRS
+
+
+def scan_paths(paths: Iterable[Path], float_fields: frozenset[str] = frozenset()) -> Report:
     """Scan every ``.rs`` file under ``paths`` as plane-A code.
 
     Raises:
@@ -394,9 +476,43 @@ def scan_paths(paths: Iterable[Path]) -> Report:
         UnicodeDecodeError: A file is not UTF-8.
     """
     report = Report(violations=[], escaped=[])
-    for file in rust_files(paths):
-        scan_source(file.read_text(encoding="utf-8"), display(file), report)
+    floats: dict[Path, bool] = {}
+    for root in paths:
+        for file in rust_files([root]):
+            floats.setdefault(file, float_rule_applies(file, root))
+    for file in sorted(floats):
+        source = file.read_text(encoding="utf-8")
+        scan_source(source, display(file), report, float_fields, floats=floats[file])
     return report
+
+
+class SpecError(Exception):
+    """A system spec could not be read or parsed."""
+
+
+def declared_float_fields(specs: Path) -> frozenset[str]:
+    """Return every column declared ``type = "f32_field"`` in the system specs under ``specs``.
+
+    Reads each ``*.odd.toml`` except the template (``_*``) and collects its ``[[owns]]`` entries.
+
+    Raises:
+        SpecError: The directory is missing, or a spec cannot be read or parsed.
+    """
+    if not specs.is_dir():
+        raise SpecError(f"no system-spec directory at {specs}")
+    columns: set[str] = set()
+    for spec in sorted(specs.glob("*.odd.toml")):
+        if spec.name.startswith("_"):
+            continue
+        try:
+            document = tomllib.loads(spec.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
+            raise SpecError(f"{spec}: {err}") from err
+        owns = document.get("owns", [])
+        for entry in owns if isinstance(owns, list) else []:
+            if isinstance(entry, dict) and entry.get("type") == "f32_field":
+                columns.add(str(entry.get("column")))
+    return frozenset(columns)
 
 
 # --- Workspace --------------------------------------------------------------------------------
@@ -455,24 +571,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="workspace Cargo.toml whose plane-A crates are scanned (default: the repository's)",
     )
     parser.add_argument("--scan", type=Path, nargs="+", help="scan these paths as plane A instead")
+    parser.add_argument(
+        "--specs",
+        type=Path,
+        default=DEFAULT_SPECS,
+        help="directory of *.odd.toml system specs that declare f32_field columns "
+        "(default: the repository's specs/systems)",
+    )
     args = parser.parse_args(argv)
     try:
+        float_fields = declared_float_fields(args.specs)
         if args.scan:
             scope = f"{len(args.scan)} path(s) given with --scan"
-            report = scan_paths(args.scan)
+            report = scan_paths(args.scan, float_fields)
         else:
             crates = plane_a_crate_dirs(args.manifest_path)
             names = ", ".join(name for name, _ in crates)
             scope = f"{len(crates)} crates scanned as plane A ({names})"
-            report = scan_paths(directory for _, directory in crates)
-    except (WorkspaceError, OSError, UnicodeDecodeError) as err:
+            report = scan_paths((directory for _, directory in crates), float_fields)
+    except (WorkspaceError, SpecError, OSError, UnicodeDecodeError) as err:
         print(f"lint_forbidden: cannot read the code to scan: {err}", file=sys.stderr)
         return EXIT_UNREADABLE
     for line in [*report.escaped, *report.violations]:
         print(line)
     print(
         f"lint_forbidden: {scope}; {report.files} files scanned; "
-        f"{len(report.violations)} violations; {len(report.escaped)} escapes"
+        f"{len(report.violations)} violations; {len(report.escaped)} escapes; "
+        f"{len(float_fields)} declared f32_field columns"
     )
     return EXIT_VIOLATIONS if report.violations else EXIT_OK
 

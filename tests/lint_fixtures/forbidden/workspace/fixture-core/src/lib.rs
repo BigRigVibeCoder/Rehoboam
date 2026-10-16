@@ -10,7 +10,7 @@ pub fn lookup(map: &std::collections::HashMap<u32, u32>, key: u32) -> Option<u32
     map.get(&key).copied()
 }
 
-pub fn fused(a: f64, b: f64, c: f64) -> f64 {
+pub fn fused<T: Fused>(a: T, b: T, c: T) -> T {
     a.mul_add(b, c) // LINT-ALLOW(forbidden-api): fixture for a counted escape with a reason
 }
 

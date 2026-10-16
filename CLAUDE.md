@@ -40,7 +40,7 @@ cargo test --doc --workspace --locked             # doctests: rh-ids compile-fai
 cargo nextest run -p rh-ids --run-ignored only --test stream_independence   # V-DET-20 full sweep, 10^6 draws (nightly)
 # Architecture lints: stdlib Python
 python -I bin/lint_arch.py        # crate boundaries (V-INSP-03) and plane isolation (V-PLN-01)
-python -I bin/lint_forbidden.py   # forbidden APIs in plane-A crates (V-DET-19)
+python -I bin/lint_forbidden.py   # forbidden APIs in plane-A crates (V-DET-19), floats outside declared f32_field columns included
 # Python: configuration in python/pyproject.toml, run from the repository root
 python -m ruff check --config python/pyproject.toml .
 python -m mypy --config-file python/pyproject.toml
@@ -53,6 +53,7 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelg
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml  # must FAIL
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I specs/chronicle/selftest.py
+python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
 python -I specs/demography/selftest_brass.py
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
