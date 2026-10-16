@@ -77,6 +77,7 @@ REQUIRED_GATES = (
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
+    "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)",
     "System specs (lint_odd)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
@@ -178,6 +179,7 @@ REQUIRED_GATES = (
     "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
     "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling "
     "11)",
+    "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "

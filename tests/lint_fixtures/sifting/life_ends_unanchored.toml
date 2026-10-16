@@ -1,0 +1,16 @@
+# Planted positive control for lint_patterns.py (V-SIFT-05; SPR-011 T-11): life_ends with an UNANCHORED state read. Never a contract.
+
+[[pattern]]
+id = "life_ends"
+version = 1
+tellability = 0.5           # design value: DEATH's Registry tellability, 128 of 255 (registry_v0.toml [verbs])
+description = "A person dies. One clause: every DEATH completes one match, binding the deceased as A."
+roles = { A = "any" }
+selection = "latest"        # declared, never implicit (05.4 §2.3); with one clause no partial is ever open
+on_complete = "clear_binding"
+firing_budget = { per_century_per_100k = 333333 }
+  [[pattern.clause]]
+  bind = "e1"
+  verb = "DEATH"
+  where = ["grief(A) >= 0.5"]           # M2.demography; the deceased is the event's target (SPR-011 ruling 11)
+  target = "A"

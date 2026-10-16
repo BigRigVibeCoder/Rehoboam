@@ -80,6 +80,7 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `odd_emits/frozen/` | `specs/systems/lint_odd.py --extra-specs` (SPR-011 ruling 11) | a frozen spec emitting a kind that is not a Registry verb, and another system's verb | `ERROR M1.regions.odd.toml: emits NOT_A_VERB, which is not a Registry verb` |
 | `odd_emits/draft/` | `specs/systems/lint_odd.py --extra-specs` (SPR-011 ruling 11) | the same emits on a draft spec | must succeed and warn `emits SUCCEED, which the Registry gives to M7.dynasty` |
 | `odd_emits/overlay/`, `odd_emits/overlay.toml` | `specs/systems/lint_odd.py --extra-specs --overlay` (SPR-011 ruling 11) | a frozen spec emitting a kind only a world's Registry overlay declares | must succeed (`PASS: 7 system specs linted`) |
+| `sifting/life_ends_unanchored.toml` | `specs/sifting/lint_patterns.py` (V-SIFT-05; SPR-011 ruling 14) | `life_ends` with a `where` read that is not anchored to a bound event | `ERROR life_ends.e1: UNANCHORED state read` |
 
 Since SPR-003 GAP-9, every plane-A crate in the `arch/` and `compile_fail/plane_a_names_plane_*` fixtures declares `[lints] workspace = true` (each fixture root has a `[workspace.lints]` table), so each control fails only for the rule it plants.
 
