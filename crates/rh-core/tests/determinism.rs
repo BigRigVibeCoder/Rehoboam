@@ -286,13 +286,17 @@ fn the_derived_order_is_identical_across_registrations() {
         .phase(Phase::Exchange)
         .levels
         .iter()
-        .map(|l| l.iter().map(|&i| base.ids()[i]).collect())
+        .map(|l| l.iter().map(|n| base.ids()[n.system]).collect())
         .collect();
     assert_eq!(
         levels,
         [vec!["X3.market", "X5.tax", "X6.trade"], vec!["X4.wages"]]
     );
-    assert_eq!(base.order(Phase::Culture), ["X8.culture"]);
+    // X8 is bound in Culture at two pulses: two bindings, the coarser first (05.1 §2 rule 4).
+    assert_eq!(
+        base.bindings(Phase::Culture),
+        [("X8.culture", Pulse::Year), ("X8.culture", Pulse::Season)]
+    );
 }
 
 /// V-DET-01: thread-count invariance, monthly hashes over 50 sim-years.
