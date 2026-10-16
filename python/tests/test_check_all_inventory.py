@@ -112,6 +112,8 @@ REQUIRED_GATES = (
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
     "lint_forbidden float-api positive control: a private float alias in rh-sample must FAIL "
     "(SPR-003 GAP-11)",
+    "lint_forbidden float-api positive control: an imported float alias in rh-sample must FAIL "
+    "(SPR-003 GAP-11b)",
     "lint_forbidden float-api positive control: field in rh-sample's public API must FAIL "
     "(SPR-003 GAP-1)",
     "lint_forbidden float-api positive control: fn_return in rh-sample's public API must FAIL "
