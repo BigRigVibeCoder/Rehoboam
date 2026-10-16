@@ -243,9 +243,16 @@ def rust(sid, specs):
              f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
              "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
     lines += [f"    (Pulse::{x['pulse']}, Phase::{x['phase']})," for x in s["schedule"]]
-    lines += ["];", "#[repr(u32)]", "pub enum RngPurpose {"]
+    # DECISION: the enum carries the spec's purpose names, so code never maps variants to names by
+    # hand (registration checks the names against [[rng]], SPR-005 T-06). An empty enum takes no
+    # #[repr]: Rust refuses a representation for a zero-variant enum. REF: SPR-005 ruling 2.
+    lines += ["];"] + (["#[repr(u32)]"] if s["rng"] else [])
+    lines += ["#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]", "pub enum RngPurpose {"]
     lines += [f"    {camel(g['purpose'])} = {i + 1},  // key: ({', '.join(g['key'])})" for i, g in enumerate(s["rng"])]
-    lines += ["}", "pub struct Params {"]
+    lines += ["}", "impl RngPurpose {", "    /// The purpose's name in the spec's `[[rng]]` table.",
+              "    pub const fn name(self) -> &'static str {", "        match self {"]
+    lines += [f'            Self::{camel(g["purpose"])} => "{g["purpose"]}",' for g in s["rng"]]
+    lines += ["        }", "    }", "}", "pub struct Params {"]
     lines += [f"    pub {x['name']}: Fixed,  // bounds checked against the Registry at load" for x in s["params"]]
     lines += ["}"]
     return "\n".join(lines)
