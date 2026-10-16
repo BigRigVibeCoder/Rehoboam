@@ -40,12 +40,31 @@ fn self_test() -> Snapshot {
     snapshot().since(before)
 }
 
+/// A zero-filled buffer (`vec![0; n]`), which `Vec` takes from `alloc_zeroed`, then freed: an
+/// uncounted `alloc_zeroed` would under-count engine code that zero-fills (VER-SPR-009-TEST).
+const KNOWN_ZEROED: Snapshot = Snapshot {
+    allocations: 1,
+    growths: 0,
+    shrinks: 0,
+    deallocations: 1,
+};
+
+fn zeroed_test() -> Snapshot {
+    let before = snapshot();
+    let z: Vec<u64> = vec![0; black_box(64)];
+    drop(black_box(z));
+    snapshot().since(before)
+}
+
 fn main() -> ExitCode {
     let got = self_test();
-    if got != KNOWN {
-        println!("counter self-test FAILED: expected {KNOWN:?}, counted {got:?}");
+    let zeroed = zeroed_test();
+    if got != KNOWN || zeroed != KNOWN_ZEROED {
+        println!(
+            "counter self-test FAILED: expected {KNOWN:?} and {KNOWN_ZEROED:?} (zeroed), counted {got:?} and {zeroed:?}"
+        );
         return ExitCode::FAILURE;
     }
-    println!("counter self-test: {got:?} as expected");
+    println!("counter self-test: {got:?} and {zeroed:?} (zeroed) as expected");
     ExitCode::SUCCESS
 }

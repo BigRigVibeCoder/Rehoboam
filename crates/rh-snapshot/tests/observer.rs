@@ -297,3 +297,65 @@ fn def_1_the_failing_instant_is_the_same_at_one_and_four_threads() {
         assert_eq!(ticks[0], ticks[1], "{k}");
     }
 }
+
+/// DEF-2 (VER-SPR-009-TEST): the content of every notice, checked against what the run itself
+/// says, independently of the engine's notify code:
+/// - every notice's `at` is the instant `advance_until` reports to its callback;
+/// - instant notices carry no phase; phases open and close in `Phase::ALL` order, and every notice
+///   between a phase's start and end carries that phase;
+/// - a job notice carries its level's instant and phase, and comes from worker
+///   `index % min(threads, jobs)`; every other notice from worker 0.
+fn check_contents(notices: &[Notice], instants: &[SimTime], threads: usize) {
+    let mut instant = instants.iter();
+    let (mut at, mut phases, mut phase) = (None::<SimTime>, Vec::new(), None::<rh_core::Phase>);
+    let mut level_jobs = 0;
+    for n in notices {
+        match n.boundary {
+            Boundary::InstantStart => {
+                at = instant.next().copied();
+                phases.clear();
+                assert_eq!(n.phase, None);
+            }
+            Boundary::InstantEnd => {
+                assert_eq!(n.phase, None);
+                assert_eq!(phases, rh_core::Phase::ALL.to_vec(), "phases at {at:?}");
+            }
+            Boundary::PhaseStart => {
+                phase = n.phase;
+                phases.push(n.phase.expect("PhaseStart carries its phase"));
+            }
+            Boundary::LevelStart { jobs, .. } => level_jobs = jobs,
+            _ => {}
+        }
+        assert_eq!(Some(n.at), at, "{n:?}: not the engine's instant");
+        if !matches!(n.boundary, Boundary::InstantStart | Boundary::InstantEnd) {
+            assert_eq!(n.phase, phase, "{n:?}: not the current phase");
+        }
+        match n.boundary {
+            Boundary::JobStart(job) | Boundary::JobEnd(job) => {
+                assert_eq!(n.worker, job.index % threads.min(level_jobs), "{n:?}");
+            }
+            _ => assert_eq!(n.worker, 0, "{n:?}: an engine-thread notice off worker 0"),
+        }
+    }
+    assert_eq!(instant.next(), None, "instants without notices");
+}
+
+#[test]
+fn def_2_every_notice_carries_the_engine_s_instant_phase_and_worker() {
+    for threads in [1, 2, 4] {
+        let recorder = Arc::new(Recorder::default());
+        let mut e = world(threads);
+        e.set_observer(Some(recorder.clone()));
+        let mut instants = Vec::new();
+        e.advance_until(SimTime::from_minutes(YEAR), |t, _| instants.push(t))
+            .unwrap();
+        let notices = recorder.0.lock().unwrap();
+        assert!(instants.len() > 300);
+        assert!(
+            notices.iter().any(|n| n.worker > 0) || threads == 1,
+            "jobs spread over workers at {threads} threads"
+        );
+        check_contents(&notices, &instants, threads);
+    }
+}
