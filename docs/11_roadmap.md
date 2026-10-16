@@ -199,6 +199,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 - **Succession** (V-SF-06, V-SF-06b): reported at the reference institutional state; gated at G1b, once M6-lite supplies the state. **Immediate succession** (V-SAGA-19): every titleholder death ends its instant with a successor or a declared interregnum.
 - **Envelope** (V-SAGA-15): channel A holds only simulated envelope fields, within the per-event byte budget. P1a variant: the bytes are measured on the 10k dynastic world over 100 years.
 - **Stress** (V-SAGA-16): the stress-accounting identity holds exactly, and each threshold crossing schedules exactly one break timer. The break frequency is reported here and gated at G1b, on the kingdom ensemble.
+- **Grief cascade** (V-SAGA-16b): on the `T1.minds` isolation fixture court, a murdered sovereign does not start a runaway chain of grief, breaks and deaths; the chain's branching ratio stays inside the bound `T1.minds` declares.
 - **Stream** (V-STR-01–V-STR-03, V-STR-05, V-PERF-09). P1a variant: V-PERF-09 runs on the 10k dynastic world with `rh-cli tail`, the TUI stub and a stalled consumer; no hydration bubble and no 100k world.
 - **Performance:** 1,000 years of a 10k-person dynastic world with ≤ 500 named actors in ≤ 60 s on 8 cores (default; fixed before P1a); serial share reported.
 - **[H] You read the templated family history of 3 seeds.** Pass: "this reads as a family history" for ≥ 2 of 3.
