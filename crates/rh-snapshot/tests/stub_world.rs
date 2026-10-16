@@ -154,7 +154,7 @@ fn culture(
 }
 
 fn stubs() -> Vec<Stub> {
-    use Lag::{Lagged, PreviousPulse, SameInstant, StartOfDay};
+    use Lag::{Lagged, SameInstant, StartOfDay};
     let s = |id| Stub::new(id).purposes_of::<Draw>();
     vec![
         s("X1.climate")
@@ -182,7 +182,7 @@ fn stubs() -> Vec<Stub> {
             .at(Pulse::Month, Phase::Exchange)
             .stepping(tax),
         s("X6.trade")
-            .reads("wages.w", "X4.wages", PreviousPulse)
+            .reads("wages.w", "X4.wages", Lagged) // SPR-006: as in rh-core's determinism.rs
             .writes("trade.v")
             .at(Pulse::Month, Phase::Exchange)
             .stepping(trade),

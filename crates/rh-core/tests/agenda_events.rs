@@ -347,12 +347,14 @@ fn life_engine(seed: u64, rows: usize, rate: i64, observer: bool, threads: usize
     engine
 }
 
-/// Everything a run leaves: all events, the agenda's state, the table hash, commands waiting.
+/// Everything a run leaves: all events, the agenda's state, the tables, commands waiting. The
+/// tables are compared whole: rh-core's tests stay hash-agnostic (SPR-007; the plane hash lives in
+/// rh-snapshot).
 #[derive(Debug, PartialEq, Eq)]
 struct RunResult {
     events: Vec<Event>,
     agenda: AgendaState,
-    state_hash: u64,
+    tables: WorldTables,
     waiting: usize,
 }
 
@@ -371,7 +373,7 @@ fn run(mut engine: Engine, years: i64) -> RunResult {
     RunResult {
         events,
         agenda: engine.agenda().state(),
-        state_hash: engine.tables().state_hash(),
+        tables: engine.tables().clone(),
         waiting: engine.commands().len(),
     }
 }
