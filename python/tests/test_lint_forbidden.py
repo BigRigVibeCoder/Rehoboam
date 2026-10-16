@@ -175,8 +175,6 @@ def test_each_forbidden_api_is_caught_by_its_rule(snippet: str, rule: str) -> No
         "use std::time::Duration;",
         "use rand_chacha::ChaCha8Rng;",
         "let rngs = 3;",
-        'let s = include_str!("table.csv");',
-        'let b = include_bytes!("golden.bin");',
         "fn path() -> u8 { 0 }",
         "let path = 1;",
     ],
@@ -958,3 +956,64 @@ def test_the_real_workspace_follows_the_real_specs_skeleton_includes() -> None:
         assert any(f == target and scan.scope == "none" for f, scan in report.scanned), stem
     assert report.includes >= 4
     assert not any("real_specs.rs" in line for line in report.escaped)
+
+
+# --- The include macro renamed, and data includes (VER-SPR-008 audit) --------------------------
+
+
+@pytest.mark.parametrize(
+    "snippet",
+    [
+        "use core::include as inc;",
+        "use std::include;",
+        "use core::{include as inc, line};",
+    ],
+)
+def test_a_use_of_the_include_macro_is_forbidden(snippet: str) -> None:
+    """A renamed include! (`inc!("/abs/outside.rs")`) would hide an include from the gate."""
+    assert rules_hit(snippet + "\n") == ["source-include"]
+
+
+def test_a_module_named_like_include_data_is_not_flagged() -> None:
+    """`include_str` and `include_bytes` are other names; a `use` of them is no include!."""
+    assert rules_hit("use crate::include_helpers::x;\n") == []
+
+
+def test_an_in_repository_data_include_is_allowed_and_not_scanned(tmp_path: Path) -> None:
+    """include_str!/include_bytes! of a file inside the repository: allowed; it is data."""
+    write(tmp_path / "golden" / "table.csv", "HashMap,unsafe\n")
+    source = (
+        'let s = include_str!("golden/table.csv");\nlet b = include_bytes!("golden/table.csv");\n'
+    )
+    report = scan_file(write(tmp_path / "lib.rs", source), tmp_path)
+    assert (report.violations, report.includes) == ([], 0)
+
+
+@pytest.mark.parametrize(
+    "invocation",
+    [
+        'include_str!("../outside.txt")',
+        'include_bytes!("/etc/hostname")',
+        'include_str!(concat!(env!("OUT_DIR"), "/x"))',
+        'include_bytes!("missing.bin")',
+    ],
+)
+def test_a_data_include_outside_or_unresolvable_is_forbidden(
+    tmp_path: Path, invocation: str
+) -> None:
+    """Outside the repository, missing, or not a plain literal: a data-include violation."""
+    write(tmp_path / "outside.txt", "x")
+    repo = tmp_path / "repo"
+    report = scan_file(write(repo / "lib.rs", f"let x = {invocation};\n"), repo)
+    assert [v.split("]")[0] for v in report.violations] == ["VIOLATION [V-DET-19/data-include"]
+
+
+def test_an_include_resolves_from_the_symlink_not_its_target(tmp_path: Path) -> None:
+    """An include joins the literal to the symlinked file's own directory (VER-SPR-008 MIN-3)."""
+    write(tmp_path / "gen.rs", "let t = Instant::now();\n")
+    write(tmp_path / "real" / "gen.rs", "pub const X: u8 = 1;\n")
+    write(tmp_path / "real" / "inner.rs", 'include!("gen.rs");\n')
+    (tmp_path / "link.rs").symlink_to(tmp_path / "real" / "inner.rs")
+    report = scan_file(tmp_path / "link.rs", tmp_path)
+    (violation,) = report.violations
+    assert "[V-DET-19/wall-clock]" in violation, "the compiled include is ./gen.rs, not real/gen.rs"

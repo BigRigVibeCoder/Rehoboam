@@ -29,7 +29,15 @@ reports its metadata). Rules:
                       findings at the included file's own lines (nested includes are followed the
                       same way). Generated skeletons come in this way (ADR-0033 §3). A non-literal
                       argument (concat!, env!, a macro parameter), a path outside the repository
-                      (symlinks resolved), or a missing file stays a violation.
+                      (symlinks resolved), or a missing file stays a violation. The path is joined
+                      to the directory of the including file as it was reached, not of its
+                      symlink target, as rustc joins it (VER-SPR-008 MIN-3). Any `use` that names
+                      the include macro (`use core::include as inc;`) is a violation too: a
+                      renamed macro would hide an include from this gate.
+    data-include      include_str!(...) and include_bytes!(...): allowed only with one plain string
+                      literal naming an existing file inside the repository (the same resolution as
+                      include!; the file is data and is not scanned). Any other argument, or a path
+                      outside the repository, is a violation (VER-SPR-008).
     lint-allow        allow(...) or expect(...) of clippy::disallowed_methods, disallowed_types, or
                       the groups that hold them (style, all), also inside cfg_attr: it would
                       silence clippy's half of these rules (the std transcendentals, HashMap,
@@ -184,7 +192,9 @@ DEFAULT_SPECS = Path(__file__).resolve().parents[1] / "specs" / "systems"
 # The repository a followed include! must stay inside (BCK-002 A-27).
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_INCLUDE_RULE = "source-include"
+DATA_INCLUDE_RULE = "data-include"
 INCLUDE_MACRO = re.compile(r"\binclude\s*!\s*(?P<open>[(\[{])")
+DATA_INCLUDE_MACRO = re.compile(r"\binclude_(?:str|bytes)\s*!\s*(?P<open>[(\[{])")
 CLOSING = {"(": ")", "[": "]", "{": "}"}
 
 
@@ -255,10 +265,19 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "source-include",
-        _rx(r"#\s*!?\s*\[\s*path\b|\bcfg_attr\s*\([^)]*\bpath\s*=|\binclude\s*!\s*[(\[{]"),
+        _rx(
+            r"#\s*!?\s*\[\s*path\b|\bcfg_attr\s*\([^)]*\bpath\s*=|\binclude\s*!\s*[(\[{]"
+            r"|\buse\b[^;]*\binclude\b"
+        ),
         "pulls in source from a file this gate may never scan; keep plane-A code in its own "
         "crate's files, include! a plain string literal naming a file inside the repository "
         "(followed and scanned; BCK-002 A-27), or escape with a reason (DEF-4)",
+    ),
+    Rule(
+        "data-include",
+        _rx(r"\binclude_(?:str|bytes)\s*!\s*[(\[{]"),
+        "include_str!/include_bytes! of a file this gate cannot place: use one plain string "
+        "literal naming a file inside the repository (VER-SPR-008)",
     ),
     Rule(
         "lint-allow",
@@ -584,14 +603,15 @@ def _plain_string(source: str, i: int) -> tuple[str, int] | None:
     return None if end < 0 else (source[raw.end() : end], end + len(closing))
 
 
-def find_includes(source: str, code: str) -> list[Include]:
-    """Return every include! in a file, with its path where the argument is one plain literal.
+def find_includes(source: str, code: str, macro: re.Pattern[str] = INCLUDE_MACRO) -> list[Include]:
+    """Return every ``macro`` call in a file (include! by default), with its literal path.
 
-    ``code`` is ``lex(source).code``: the macro is found there (never inside a comment or a
-    string), and its argument is read from ``source`` at the same offsets.
+    The path is set where the argument is one plain string literal. ``code`` is
+    ``lex(source).code``: the macro is found there (never inside a comment or a string), and its
+    argument is read from ``source`` at the same offsets.
     """
     found: list[Include] = []
-    for match in INCLUDE_MACRO.finditer(code):
+    for match in macro.finditer(code):
         literal = None
         plain = _plain_string(source, _skip_trivia(source, match.end()))
         if plain is not None:
@@ -603,14 +623,17 @@ def find_includes(source: str, code: str) -> list[Include]:
 
 
 def resolve_include(literal: str, file: Path | None, repo: Path) -> tuple[Path | None, str]:
-    """Resolve an include! literal from the including file; return (file, "") or (None, why).
+    """Resolve an include! literal from the including file; return (path, "") or (None, why).
 
-    The path is taken from the including file's directory, as rustc takes it, and every symlink
-    is resolved before the repository check.
+    The literal is joined to the directory of ``file`` as it was reached (a symlinked file's own
+    directory, not its target's), as rustc joins it (VER-SPR-008 MIN-3). The joined path is
+    returned as joined, so a nested include resolves from it in turn; every symlink is resolved
+    for the repository and file checks.
     """
     if file is None:
         return None, f"`{literal}` cannot be resolved: the including file's location is unknown"
-    target = (file.resolve().parent / literal).resolve()
+    joined = file.absolute().parent / literal
+    target = joined.resolve()
     if not target.is_relative_to(repo.resolve()):
         return None, (
             f"`{literal}` resolves outside the repository ({target}); only a file inside it is "
@@ -618,7 +641,7 @@ def resolve_include(literal: str, file: Path | None, repo: Path) -> tuple[Path |
         )
     if not target.is_file():
         return None, f"`{literal}` names no file ({display(target)}), so it cannot be scanned"
-    return target, ""
+    return joined, ""
 
 
 def _line_column(code: str, offset: int) -> tuple[int, int]:
@@ -636,22 +659,27 @@ def _follow_includes(
     followed in place of the rule's general one.
     """
     literals = {
-        _line_column(lexed.code, inc.start): inc.literal
-        for inc in find_includes(source, lexed.code)
+        (rule, *_line_column(lexed.code, inc.start)): inc.literal
+        for rule, macro in (
+            (SOURCE_INCLUDE_RULE, INCLUDE_MACRO),
+            (DATA_INCLUDE_RULE, DATA_INCLUDE_MACRO),
+        )
+        for inc in find_includes(source, lexed.code, macro)
         if inc.literal is not None
     }
     kept: list[Finding] = []
     targets: list[Path] = []
     for finding in findings:
-        literal = literals.get((finding.line, finding.column))
-        if finding.rule != SOURCE_INCLUDE_RULE or literal is None:
+        literal = literals.get((finding.rule, finding.line, finding.column))
+        if literal is None:
             kept.append(finding)
             continue
         target, why = resolve_include(literal, file, repo)
         if target is None:
             kept.append(replace(finding, why=why))
-        else:
+        elif finding.rule == SOURCE_INCLUDE_RULE:
             targets.append(target)
+        # A data include of an in-repository file is allowed and not scanned: it is not source.
     return kept, targets
 
 
@@ -698,7 +726,9 @@ def scan_source(
     ]
     if floats == "rule":
         findings += find_float_dep(lexed.code, name, dep_floats)
-    findings, targets = _follow_includes(lexed, source, findings, file, report.repo)
+    # Includes resolve from the file as it was reached, not from its symlink target (MIN-3).
+    reached = path if isinstance(path, Path) else None
+    findings, targets = _follow_includes(lexed, source, findings, reached, report.repo)
     if floats == "zone":
         findings += find_float_api(lexed.code, name)
     _report_findings(findings, find_escapes(lexed, name), float_fields, report)
@@ -753,10 +783,10 @@ def _scan_includes(
     floats: FloatScan,
 ) -> None:
     """Scan the files that ``file`` includes, under its float checks; a cycle is a violation."""
-    report.including.append(file)
+    report.including.append(file.resolve())
     for target in targets:
         report.includes += 1
-        if target in report.including:
+        if target.resolve() in report.including:
             report.violations.append(
                 f"VIOLATION [{RULE_ID}/{SOURCE_INCLUDE_RULE}] {display(file)}: include! of "
                 f"{display(target)} includes itself, directly or through another include!"
