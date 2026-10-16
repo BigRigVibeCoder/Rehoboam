@@ -1315,16 +1315,16 @@ fn guard<T>(
 
 /// Delivers one notice to the host's observer under the same discipline as system code: a panic
 /// becomes a fatal [`SimError::Observer`] naming the notice (SPR-009 DEF-1), never an unwind out of
-/// [`Engine::advance_until`].
+/// [`Engine::advance_until`]. The text never names the worker, so it is the same at every thread
+/// count; a job notice's [`JobRef`] already names the job by its index in the level.
 fn observe(observer: &dyn Observer, notice: &Notice) -> Result<(), SimError> {
     std::panic::catch_unwind(AssertUnwindSafe(|| observer.notify(notice))).map_err(|payload| {
         SimError::Observer {
             notice: format!(
-                "{:?} at {} in {} on worker {}",
+                "{:?} at {} in {}",
                 notice.boundary,
                 notice.at,
-                notice.phase.map_or("no phase", Phase::name),
-                notice.worker
+                notice.phase.map_or("no phase", Phase::name)
             ),
             message: panic_message(payload.as_ref()),
         }

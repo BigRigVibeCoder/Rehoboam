@@ -2,13 +2,28 @@
 # The PR tier of GOV-002, fail-fast, with a forensic report (GOV-002 §4, §6: no report means no pass).
 # Every sprint adds its own checks here in the same sprint that creates them.
 # Usage: bin/check_all.sh            (uses $PYTHON; else python/.venv/bin/python; else python3)
+#        bin/check_all.sh --part core|golden   (one part only; no flag runs both)
 #        PYTHON=/path/to/python bin/check_all.sh
+# The chain has two parts (SPR-009 review 2; BCK-002 A-38): `core` (lints, builds, workspace and
+# by-name tests, Python, specs) and `golden` (release builds, golden runs with the vitals observer,
+# performance gates). CI runs them as two parallel jobs so the PR tier fits its 15 minutes
+# (V-PERF-04); every gate still runs on every PR, and a local run with no flag runs both.
 # Needs the Rust toolchain from rust-toolchain.toml, cargo-nextest, cargo-deny, valgrind,
 # iai-callgrind-runner (SPR-009), uv, and the uv environment from `uv sync --frozen --project python` (RUN-001 §2-4). A missing tool fails the
 # first check by name; nothing is ever skipped silently.
 set -u
 cd "$(dirname "$0")/.." || { echo "check_all.sh: cannot enter the repository root" >&2; exit 2; }
 if [ -n "${PYTHON:-}" ]; then PY="$PYTHON"; elif [ -x python/.venv/bin/python ]; then PY=python/.venv/bin/python; else PY="$(command -v python3 || command -v python)"; fi
+PART=""
+case "${1:-}" in
+  "") ;;
+  --part)
+    case "${2:-}" in
+      core|golden) PART="$2" ;;
+      *) echo "check_all.sh: --part takes core or golden" >&2; exit 2 ;;
+    esac ;;
+  *) echo "usage: bin/check_all.sh [--part core|golden]" >&2; exit 2 ;;
+esac
 REPORT="artifacts/check_report.md"
 # Built binaries live under $CARGO_TARGET_DIR when it is set (SPR-005 Tester OBS); never assume target/.
 TARGET_DIR="${CARGO_TARGET_DIR:-target}"
@@ -23,6 +38,7 @@ dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   echo "- **Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "- **Commit:** ${commit} (${dirty} uncommitted files) · **Branch:** ${branch}"
   echo "- **Python:** $(${PY} --version 2>&1)"
+  echo "- **Part:** ${PART:-all (core and golden)}"
   # On GitHub Actions the checkout is detached; name the run so the report can be traced to it.
   if [ "${GITHUB_ACTIONS:-}" = true ]; then
     echo "- **CI run:** ${GITHUB_SERVER_URL:-}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-} (${GITHUB_EVENT_NAME:-} on ${GITHUB_REF:-}, head ${GITHUB_SHA:-})"
@@ -38,6 +54,8 @@ n=0; failed=""
 #   must fail AND print <text>, so a control that fails for the wrong reason (a crash, a missing
 #   lockfile) is caught. pass:<text> is the same for a command that must succeed and print <text>.
 run() {
+  # A gate of the part this run leaves out (--part) is neither run nor counted; `part` says so.
+  if [ -n "${PART:-}" ] && [ "${current_part:-}" != "$PART" ]; then return 0; fi
   local name="$1" expect="$2"; shift 2
   n=$((n+1))
   local t0 out rc
@@ -61,8 +79,20 @@ run() {
   fi
 }
 
+# part <name>: the chain's gates from here to the next `part` belong to part <name> (core or golden).
+# Each gate belongs to exactly one part (test_check_all_inventory.py); --part runs one of them.
+part() {
+  current_part="$1"
+  if [ -n "${PART:-}" ] && [ "$1" != "$PART" ]; then
+    echo "SKIP  part $1: its gates run with --part $1 (in CI, a parallel job)"
+    echo "| - | part $1: not run here (--part $PART); its gates run in their own job | SKIP | 0 |" >> "$REPORT"
+  fi
+  return 0
+}
+
 # Every tool the tier needs, checked up front so a missing one is named rather than mistaken for a
 # failing check (RUN-001 says how to install each).
+# require_tools <part>: valgrind and iai-callgrind-runner serve only the golden part's perf gates.
 require_tools() {
   local missing=""
   command -v cargo >/dev/null 2>&1 || missing="$missing cargo(RUN-001 §2)"
@@ -70,8 +100,10 @@ require_tools() {
   cargo clippy --version >/dev/null 2>&1 || missing="$missing clippy(RUN-001 §2)"
   cargo nextest --version >/dev/null 2>&1 || missing="$missing cargo-nextest(RUN-001 §3)"
   cargo deny --version >/dev/null 2>&1 || missing="$missing cargo-deny(RUN-001 §3)"
-  command -v valgrind >/dev/null 2>&1 || missing="$missing valgrind(RUN-001 §1)"
-  command -v iai-callgrind-runner >/dev/null 2>&1 || missing="$missing iai-callgrind-runner(RUN-001 §3)"
+  if [ "$1" = golden ]; then
+    command -v valgrind >/dev/null 2>&1 || missing="$missing valgrind(RUN-001 §1)"
+    command -v iai-callgrind-runner >/dev/null 2>&1 || missing="$missing iai-callgrind-runner(RUN-001 §3)"
+  fi
   command -v uv >/dev/null 2>&1 || missing="$missing uv(RUN-001 §4)"
   local mod
   for mod in ruff mypy pytest pydantic yaml duckdb; do
@@ -441,10 +473,11 @@ perf_toolchain_control() {
 #             a reason: must FAIL
 #   inband    one count 40 off: inside the band, passes and is printed (R-8)
 #   untagged  regenerated (= the tool's output), in a PR without [perf-baseline]: must FAIL
+#   midtag    regenerated, [perf-baseline] mid-title, outside the trailing tag group: must FAIL
 #   noreason  regenerated, [perf-baseline], no reason line: must FAIL
 #   regen     regenerated, [perf-baseline], with a reason: passes
 perf_integrity_control() {
-  local title="[perf-baseline] control" body="perf-baseline-reason: the control's" baseline="$PERF_RUN"
+  local title="SPR-009: control [perf-baseline]" body="perf-baseline-reason: the control's" baseline="$PERF_RUN"
   perf_plant base '$1 == "bench" && !done { $3 = $3 + 7; done = 1 } { print }' || return 1
   case "$1" in
     typed) perf_plant typed '$1 == "bench" && $2 == "plane_hashes/state_full/rows_10k" { $3 = $3 + 65 } { print }' || return 1
@@ -452,6 +485,7 @@ perf_integrity_control() {
     inband) perf_plant inband '$1 == "bench" && $2 == "plane_hashes/state_full/rows_10k" { $3 = $3 + 40 } { print }' || return 1
            baseline="$PERF_FIXTURES/inband.txt" ;;
     untagged) title="perf: control" ;;
+    midtag) title="docs: explain the [perf-baseline] rule" ;;
     noreason) body="no reason given" ;;
     regen) ;;
     *) echo "unknown case $1"; return 1 ;;
@@ -506,7 +540,8 @@ perf_push_control() {
 # not checked, and the gate says so instead of the success wording.
 perf_local_control() {
   perf_plant base '$1 == "bench" && !done { $3 = $3 + 7; done = 1 } { print }' || return 1
-  env -u RH_PR_TITLE -u RH_PR_BODY -u GITHUB_EVENT_NAME RH_EVENT=local "$PY" -I bin/perf_gate.py integrity \
+  # workflow_dispatch, not "local": inside Actions an event the gate does not know is an error.
+  env -u RH_PR_TITLE -u RH_PR_BODY -u GITHUB_EVENT_NAME RH_EVENT=workflow_dispatch "$PY" -I bin/perf_gate.py integrity \
     --baseline "$PERF_RUN" --measured "$PERF_RUN" --base-file "$PERF_FIXTURES/base.txt"
 }
 
@@ -522,18 +557,58 @@ alloc_repeat() {
 alloc_typed_control() {
   mkdir -p "$PERF_FIXTURES" || return 1
   awk '$1 == "budget" && $3 == "1" && $6 == "allocations" && !done { $7 = $7 + 1; done = 1 } { print }' "$ALLOC_RUN" > "$PERF_FIXTURES/alloc_typed.txt" || return 1
-  RH_PR_TITLE="[perf-baseline] control" RH_PR_BODY="perf-baseline-reason: control" "$PY" -I bin/perf_gate.py integrity \
+  RH_PR_TITLE="SPR-009: control [perf-baseline]" RH_PR_BODY="perf-baseline-reason: control" "$PY" -I bin/perf_gate.py integrity \
     --exact --baseline "$PERF_FIXTURES/alloc_typed.txt" --measured "$ALLOC_RUN" --base-file "$ALLOC_BASELINE"
 }
+# Review 7: an allocation baseline recorded under another rustc must report re-baseline required (exit 3),
+# never OVER BUDGET or a pass.
+alloc_toolchain_control() {
+  mkdir -p "$PERF_FIXTURES" || return 1
+  awk '$1 == "toolchain" && $2 == "rustc" { $0 = "toolchain rustc 1.96.0 0000000000000000000000000000000000000000" } { print }' \
+    "$ALLOC_RUN" > "$PERF_FIXTURES/alloc_toolchain.txt" || return 1
+  "$PY" -I bin/perf_gate.py alloc-check --baseline "$PERF_FIXTURES/alloc_toolchain.txt" --measured "$ALLOC_RUN"
+}
 
-# SPR-009 T-03: the vitals of a 1,000-year smoke run with the host's timing observer attached; its ladder
-# must equal the golden baseline byte for byte (the observer changes no history; GOV-004 law 2).
-vitals_gate() {
+# SPR-009 T-03, folded into the N-thread golden run (review 2c): the 1,000-year run at N threads with
+# the host's timing observer attached prints the vitals line; its ladder then goes through the same
+# gates as the 1-thread run (= the golden baseline, = the 1-thread ladder), so the observer changes
+# no history at N threads (GOV-004 law 2; review finding 7).
+golden_vitals_run() {
   local out
-  out="$("$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --vitals --out "$GOLDEN/smoke_vitals_t1.ladder")" || { echo "$out"; return 1; }
-  echo "$out" | grep '^vitals: tip \|^vitals: serial'
+  out="$("$RH_CLI_RELEASE" run smoke --years 1000 --threads "$GOLDEN_THREADS" --ladder yearly \
+    --require-parallel "$PARALLEL_FLOOR" --vitals --out "$GOLDEN/smoke_yearly_tN.ladder")" || { echo "$out"; return 1; }
+  echo "$out" | grep -v '^vitals: system '
   grep -q '^vitals: tip .* | pace .* ticks/s | serial .* | state ' <<<"$out" || { echo "no vitals line"; return 1; }
-  "$RH_CLI_RELEASE" ladder compare worlds/smoke/baselines/smoke_yearly_1000y.ladder "$GOLDEN/smoke_vitals_t1.ladder"
+}
+
+# The debug workspace run leaves out the test binaries a by-name gate runs (review 2a): each is run
+# once, by the gate that checks its output. Entries are nextest binary IDs: <crate>::<test target>,
+# or <crate> for its library's unit tests (`--lib`). rh-golden::golden runs in release only (golden
+# part). test_check_all_inventory.py proves every entry is run by a by-name gate.
+BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-snapshot::keyframe
+  rh-snapshot::guard rh-snapshot::stub_world rh-snapshot::unsynced_guard rh-snapshot::observer
+  rh-ids::fork_trees rh-ids::stream_independence rh-sample::golden rh-sample::stats
+  rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
+  rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
+  rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
+  rh-sys-smoke::smoke rh-golden::golden"
+workspace_tests() {
+  local id filter=""
+  for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
+  echo "left to the by-name gates: $filter"
+  cargo nextest run --workspace --locked --no-fail-fast --status-level fail -E "not ($filter)"
+}
+# Its control: a typo in an entry must fail, never silently exclude nothing.
+workspace_tests_typo_control() {
+  BY_NAME_TESTS="rh-snapshot::no_such_test" workspace_tests
+}
+
+# SPR-009 review 1: the Python suite with hostile CI variables set must still pass (conftest.py clears
+# every RH_* and GITHUB_* variable before each test).
+pytest_hostile_env() {
+  RH_EVENT=pull_request RH_PR_TITLE='x [perf-baseline] [C3]' RH_PR_BODY='perf-baseline-reason: hostile' \
+    GITHUB_EVENT_NAME=push GITHUB_ACTIONS=true RH_PUSH_BEFORE=garbage RH_PUSH_AFTER=garbage \
+    RH_BASELINE_BASE=origin/no-such-branch "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q
 }
 
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
@@ -546,7 +621,7 @@ vitals_gate() {
 finish() {
   local status=$? verdict
   if [ -n "${chain_done:-}" ] && [ -z "$failed" ] && [ "$status" -eq 0 ]; then
-    verdict="PASS ($n checks)"; status=0
+    verdict="PASS ($n checks${PART:+, part $PART})"; status=0
   elif [ -n "$failed" ]; then
     verdict="FAIL at \"$failed\" (later checks skipped: fail-fast)"; status=1
   elif [ -z "${chain_done:-}" ]; then
@@ -561,7 +636,8 @@ finish() {
 chain_done=""
 trap finish EXIT
 
-run "Required tools present" pass require_tools &&
+part core &&
+run "Required tools present (core part)" pass require_tools core &&
 # Tier 1 — static and contract lints (fastest first)
 run "Document index builds (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
 run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml .github/workflows/nightly.yml .github/workflows/adjutant.yml &&
@@ -690,7 +766,8 @@ run "Rust: lint rh-bench with the arena, the instruction-count targets included 
 run "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 R-7)" "fail:count-alloc and arena-alloc are for separate bench targets" cargo check -p rh-bench --lib --features count-alloc,arena-alloc --locked --quiet &&
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
-run "Rust: unit tests (cargo nextest)" pass cargo nextest run --workspace --locked --no-fail-fast --status-level fail &&
+run "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)" "pass:left to the by-name gates" workspace_tests &&
+run "Workspace tests positive control: a by-name entry that names no test binary must FAIL (SPR-009 review 2a)" "fail:no binary IDs matched" workspace_tests_typo_control &&
 run "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard (SPR-007 T-01..T-04)" "pass:every_golden_line_reproduces" cargo nextest run -p rh-snapshot --locked --test hash --test golden --test journal --test keyframe --test guard --test stub_world --status-level pass &&
 run "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 T-02)" "pass:V-DET-05: two keyframes loaded and advanced 10 years, 120 monthly hashes equal" cargo nextest run -p rh-snapshot --locked --test keyframe --no-capture v_det_05 &&
 run "DEF-3 forged keyframes: no bit flip in the Arrow body panics, aborts or loads another state (SPR-007 T-02)" "pass:accepted_other: 0, panicked: 0 }" cargo nextest run -p rh-snapshot --locked --test keyframe --no-capture def_3_no_forged &&
@@ -708,6 +785,47 @@ run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-1
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)" "fail:V-DET-12 violated" env RH_CORE_LIFE_GOLDEN="$PWD/tests/lint_fixtures/golden/backdated_life_events.txt" cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_12_golden_event_log &&
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
+run "Rust: doctests (cargo test --doc)" pass doctests_run &&
+run "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)" pass doctest_count_gate "$DOCTEST_LOG" &&
+run "Doctest count gate positive control: one typed-ID case missing must FAIL" "fail:crates/rh-ids/src/ids.rs: expected 7 compile-fail doctests, found 6" doctest_count_control &&
+run "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)" "pass:PARITY: all" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml &&
+run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift.toml specs/manifest/examples/invalid_draft_style.yaml &&
+run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
+run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
+run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" "$RH_CLI" ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
+run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
+run "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)" "pass:SCHEMA: no unexplained difference" "$RH_CLI" manifest schema --diff specs/manifest/manifest_v0.schema.json &&
+run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERENCE \$defs.Horizon.properties.years.maximum" "$RH_CLI" manifest schema --diff tests/lint_fixtures/schema/drifted_bound.schema.json &&
+run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
+run "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, GITHUB_EVENT_NAME, RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)" pass pytest_hostile_env &&
+run "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST GAP-3)" "pass:Verdict: PASS (2 checks)" "$PY" -I bin/check_all_selftest.py verdict &&
+run "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier (VER-SPR-008-TEST GAP-3)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-true &&
+run "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; VER-SPR-008-TEST GAP-3, GAP-7)" "pass:NO OR-TRUE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh &&
+run "check_all chain positive control: a run line mutated with || true must FAIL the lint (VER-SPR-008-TEST GAP-3)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-true &&
+run "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint (VER-SPR-008-TEST GAP-7)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-exit &&
+run "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-exit &&
+run "check_all verdict per part: --part core passes while only a golden-part gate fails (check_all_selftest; SPR-009 review 2b)" "pass:Verdict: PASS (1 checks, part core)" "$PY" -I bin/check_all_selftest.py verdict --part-core &&
+run "check_all verdict per part positive control: --part golden fails at its failing gate (SPR-009 review 2b)" 'fail:Verdict: FAIL at "planted failing golden gate"' "$PY" -I bin/check_all_selftest.py verdict --part-golden &&
+run "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL (the chain exited early" "$PY" -I bin/check_all_selftest.py verdict --early-exit &&
+run "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)" "pass:ABSOLUTE TARGET DIR: both baseline push controls fail and pass for the right reason" "$PY" -I bin/check_all_selftest.py abs-target &&
+run "check_all positive control: the old PWD-joined golden path under an absolute CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)" "fail:a baseline push control behaved wrongly" "$PY" -I bin/check_all_selftest.py abs-target --plant-pwd-join &&
+# Tier 5 — golden vectors
+run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&
+run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
+run "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden --check; SPR-007 T-01)" "pass:OK:" "$PY" -I bin/gen_hash_golden.py --check &&
+run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:" hash_golden_control &&
+run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
+run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
+run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
+run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
+run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
+run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
+# Tier 6/8 — determinism-style and contract prototypes
+run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
+run "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip (SPR-011 ruling 13)" "pass:CHANNEL A v0: PASS" "$PY" -I specs/stream/selftest_channel_a.py &&
+run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py &&
+part golden &&
+run "Required tools present (golden part)" pass require_tools golden &&
 # Tier 10 — performance: instruction counts (SPR-009 T-02a; GOV-002 tier 10)
 run "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 T-02a)" "pass:V-PERF-04 PASS" "$PY" -I bin/perf_gate.py gate --baseline "$PERF_BASELINE" --out "$PERF_RUN" &&
 run "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 T-02)" "pass:identical counts in two runs" sh -c '"$1" -I bin/perf_gate.py measure --out artifacts/perf/instructions_run2.txt && "$1" -I bin/perf_gate.py same "$2" artifacts/perf/instructions_run2.txt' sh "$PY" "$PERF_RUN" &&
@@ -715,6 +833,7 @@ run "Baseline integrity: a changed instruction-count baseline equals the tool's 
 run "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)" "fail:plane_hashes/state_full/rows_10k: the baseline's" perf_integrity_control typed &&
 run "Baseline integrity control: a count 40 instructions off passes inside the band and is printed (SPR-009 R-8)" "pass:within band plane_hashes/state_full/rows_10k" perf_integrity_control inband &&
 run "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must FAIL (SPR-009 ruling 3)" "fail:needs [perf-baseline] in the pull request's title" perf_integrity_control untagged &&
+run "Baseline integrity positive control: [perf-baseline] outside the title's trailing tag group must FAIL (SPR-009 review 5)" "fail:needs [perf-baseline] in the pull request's title" perf_integrity_control midtag &&
 run "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 ruling 3)" "fail:needs a \`perf-baseline-reason: <why>\` line" perf_integrity_control noreason &&
 run "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason passes (SPR-009 ruling 3)" "pass:equals the tool's output" perf_integrity_control regen &&
 run "Baseline integrity control: a push whose commit ends in [perf-baseline] with a Reason: line passes (SPR-009 GAP-2)" "pass:with the [perf-baseline] tag and a reason" perf_push_control tagged &&
@@ -732,22 +851,12 @@ run "V-PERF-11 allocation budget: smoke-world steady-state ticks within the reco
 run "V-PERF-11 repeatability: a second run on the same commit gives identical allocation counts (SPR-009 T-05)" "pass:identical allocation counts in two runs" alloc_repeat &&
 run "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output exactly (SPR-009 ruling 3, R-8)" pass "$PY" -I bin/perf_gate.py integrity --exact --baseline "$ALLOC_BASELINE" --measured "$ALLOC_RUN" &&
 run "V-PERF-11 integrity positive control: an allocation baseline one allocation off must FAIL (SPR-009 R-8)" "fail:does not equal the tool's output" alloc_typed_control &&
+run "V-PERF-11 toolchain control: an allocation baseline from another rustc must report re-baseline required (SPR-009 review 7)" "fail:toolchain changed: re-baseline required" alloc_toolchain_control &&
 run "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must FAIL (SPR-009 T-05)" "fail:OVER BUDGET threads 1 allocations" "$PY" -I bin/perf_gate.py alloc-gate --control --out artifacts/perf/allocations_control.txt &&
-run "Rust: doctests (cargo test --doc)" pass doctests_run &&
-run "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)" pass doctest_count_gate "$DOCTEST_LOG" &&
-run "Doctest count gate positive control: one typed-ID case missing must FAIL" "fail:crates/rh-ids/src/ids.rs: expected 7 compile-fail doctests, found 6" doctest_count_control &&
-run "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)" "pass:PARITY: all" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml &&
-run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift.toml specs/manifest/examples/invalid_draft_style.yaml &&
-run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
-run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
-run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" "$RH_CLI" ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
-run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
-run "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)" "pass:SCHEMA: no unexplained difference" "$RH_CLI" manifest schema --diff specs/manifest/manifest_v0.schema.json &&
-run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERENCE \$defs.Horizon.properties.years.maximum" "$RH_CLI" manifest schema --diff tests/lint_fixtures/schema/drifted_bound.schema.json &&
+# Golden runs (SPR-008)
 run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
-run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads "$GOLDEN_THREADS" --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_tN.ladder" &&
-run "T-03 vitals: run smoke --vitals prints the vitals line, and its 1,000-year ladder equals the golden baseline (SPR-009 ruling 4)" "pass:LADDERS EQUAL" vitals_gate &&
+run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" golden_vitals_run &&
 run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
 run "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)" "fail:LADDERS DIFFER: first differing rung: 500" ladder_compare_control &&
 run "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR (check_baseline; SPR-008 T-04)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
@@ -770,32 +879,7 @@ run "Golden resume positive control: a --years shorter than the journal's horizo
 run "Golden resume positive control: a --years past the journal's last input must FAIL without --extend (VER-SPR-008 DEF-1)" "fail:past the journal's last input" def1_resume 30 &&
 run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
 run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
-run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture &&
-run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
-run "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST GAP-3)" "pass:Verdict: PASS (2 checks)" "$PY" -I bin/check_all_selftest.py verdict &&
-run "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier (VER-SPR-008-TEST GAP-3)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-true &&
-run "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; VER-SPR-008-TEST GAP-3, GAP-7)" "pass:NO OR-TRUE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh &&
-run "check_all chain positive control: a run line mutated with || true must FAIL the lint (VER-SPR-008-TEST GAP-3)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-true &&
-run "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint (VER-SPR-008-TEST GAP-7)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-exit &&
-run "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-exit &&
-run "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL (the chain exited early" "$PY" -I bin/check_all_selftest.py verdict --early-exit &&
-run "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)" "pass:ABSOLUTE TARGET DIR: both baseline push controls fail and pass for the right reason" "$PY" -I bin/check_all_selftest.py abs-target &&
-run "check_all positive control: the old PWD-joined golden path under an absolute CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)" "fail:a baseline push control behaved wrongly" "$PY" -I bin/check_all_selftest.py abs-target --plant-pwd-join &&
-# Tier 5 — golden vectors
-run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&
-run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
-run "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden --check; SPR-007 T-01)" "pass:OK:" "$PY" -I bin/gen_hash_golden.py --check &&
-run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:" hash_golden_control &&
-run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
-run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
-run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
-run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
-run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
-run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
-# Tier 6/8 — determinism-style and contract prototypes
-run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
-run "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip (SPR-011 ruling 13)" "pass:CHANNEL A v0: PASS" "$PY" -I specs/stream/selftest_channel_a.py &&
-run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py
+run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture
 status=$?
 chain_done=1
 exit "$status"

@@ -30,7 +30,7 @@ Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and b
 - **Licences: personal-use mode** (ADR-0021 as amended, D19, 2026-10-16). Rehoboam is a private experiment that is never distributed, so any licence may be used. Two limits remain: no licence whose terms forbid the use itself, and no copying of unlicensed code. The repository stays private. `bin/check_all.sh` keeps a licence ledger (`artifacts/licence_ledger.txt`) that never fails a build; crates come from crates.io only, with no wildcard versions.
 
 ## Checks to run after any change
-All of them, fail-fast, with a report: `bin/check_all.sh`. It uses `python/.venv` (create it with `uv sync --frozen --project python`; `PYTHON` overrides) and needs uv, cargo-nextest, cargo-deny, valgrind and iai-callgrind-runner (RUN-001). Each gate also runs on a planted violation that must FAIL (`tests/lint_fixtures/`). Individually:
+All of them, fail-fast, with a report: `bin/check_all.sh` (CI runs its two parts, `--part core` and `--part golden`, as parallel jobs; no flag runs both). It uses `python/.venv` (create it with `uv sync --frozen --project python`; `PYTHON` overrides) and needs uv, cargo-nextest, cargo-deny, valgrind and iai-callgrind-runner (RUN-001). Each gate also runs on a planted violation that must FAIL (`tests/lint_fixtures/`). Individually:
 ```bash
 # Rust: workspace in crates/, toolchain pinned in rust-toolchain.toml
 cargo fmt --all --check
@@ -94,7 +94,7 @@ cargo nextest run -p rh-snapshot --locked --test observer   # observer invarianc
 RH_WALL_ROWS=100000,1000000 cargo bench -p rh-bench --bench wall && python -I bin/wall_trend.py summarize --machine <adjutant|laptop> --out artifacts/perf/wall.txt   # T-02b wall-clock trends (gate only on adjutant)
 python -I bin/perf_gate.py alloc-gate --out artifacts/perf/allocations.txt   # V-PERF-11: smoke-world allocations per steady-state tick within the recorded budget (SPR-009 T-05)
 python -I bin/perf_gate.py alloc-record   # regenerate the allocation baseline (exact counts; never by hand)
-target/release/rh-cli run smoke --years 1000 --threads 1 --vitals --out target/golden/smoke_vitals_t1.ladder   # T-03 vitals line; the ladder equals the golden baseline
+target/release/rh-cli run smoke --years 1000 --threads 4 --vitals --out target/golden/smoke_yearly_tN.ladder   # T-03 vitals line, on the N-thread golden run; its ladder equals the golden baseline
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml   # life_ends (SPR-011)
 ```
 

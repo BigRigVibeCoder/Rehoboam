@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.7.0
+version: 1.8.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -67,6 +67,20 @@ version: 1.7.0
     - **Controls:** a count typed 65 off fails; one 40 off passes and is printed.
 11. **R-9, BMI2 on the toolchain lines** (70%). zstd chooses its BMI2 path at run time, so a host without BMI2 reports "toolchain changed: re-baseline required".
 
+## Review of c29787c, fixed (Architect, 2026-10-16)
+1. **Test isolation (blocker).** `python/tests/conftest.py` clears every `RH_*` and `GITHUB_*` variable before each test; `bin/check_all.sh` runs the suite once more with hostile CI values set.
+2. **The PR tier fits V-PERF-04's 15 minutes** (acceptance: at most 12 minutes of CI wall time).
+   - **Dedupe:** the debug workspace run leaves out the test binaries a by-name gate runs (`BY_NAME_TESTS`; rh-golden's `golden` runs in release only). An inventory test proves each binary runs once.
+   - **Two parts:** `bin/check_all.sh --part core|golden`, two parallel CI jobs. With no flag, both parts run. Each gate belongs to exactly one part, and the verdict works per part (self-test controls).
+   - **Vitals:** folded into the N-thread golden run. Its ladder must equal the baseline and the 1-thread ladder, so the vitals check now covers N threads.
+3. **ci.yml concurrency:** a push gets its own group (its SHA), so GitHub's single pending run per group can no longer drop a push's range.
+4. **lint_arch** skips a `target` directory only below the crate, never one above the checkout.
+5. **The PR tag check** uses the title's trailing tag group, as `[C3]` does; a mid-title tag fails (control).
+6. **Unknown events:** inside Actions, any event other than `pull_request`, `push` or `workflow_dispatch` is an error. ci.yml passes the real event name.
+7. **`allocations_v1.txt` carries toolchain lines** (rustc, LLVM, host, libc). A change reports "re-baseline required" (exit 3; control). The baseline was re-recorded by the tool.
+8. **The observer crash text no longer names the worker,** so it is the same at every thread count (test).
+9. **README notes:** perf-baseline PRs merge by merge commit or rebase, never squash; the counter cannot see C-library allocations; what "serial %" measures at 1 thread.
+
 ## Deviations (Developer)
 - **Instruction counts run on a deterministic arena, not on glibc's malloc** (R-7). Instruction counts measure computation, with allocation at a constant cost; V-PERF-11 counts allocations.
 - **Baseline integrity is equality within a band, not byte for byte** (R-8). The executable's path still moves a count by up to 48 instructions in 66 million across checkouts.
@@ -99,7 +113,7 @@ version: 1.7.0
 ### T-03: Serial fraction and vitals
 - **Deliverable:** Per-system timings; the vitals line of GOV-006 §1
 - **Acceptance:** Vitals printed by `rh-cli run smoke`
-- **Status:** [x] done: `rh-cli run smoke --vitals` (`rh-golden` `vitals.rs`, the host's timing observer); a 1,000-year vitals run equals the golden baseline
+- **Status:** [x] done: `rh-cli run smoke --vitals` (`rh-golden` `vitals.rs`, the host's timing observer); the 1,000-year N-thread golden run carries the observer, and its ladder equals the golden baseline
 
 ### T-04: Machine ratios and wall-clock baselines
 - **Deliverable:** The `adjutant` runner and its idle shutdown (RUN-002 §3). The benches of T-01 run on `adjutant` in one VM session (RUN-002 §4–5) and on the laptop (RUN-001 §6). `adjutant` becomes the wall-clock baseline machine; its run-to-run spread decides whether a wall-clock gate is possible there. Both machines' ratios to the `08` reference desktop are recorded in `08` as [M]

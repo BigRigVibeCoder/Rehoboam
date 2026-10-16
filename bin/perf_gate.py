@@ -82,6 +82,8 @@ BAND_INSTRUCTIONS = 64
 BAND_RELATIVE_DIVISOR = 100_000
 
 PR_TAG = "[perf-baseline]"
+# The events ci.yml runs on; inside Actions any other is an error (workflow_dispatch is "local").
+ACTIONS_EVENTS = ("pull_request", "push", "workflow_dispatch")
 # GAP-2: on a push, the commit that changes a baseline carries this line in its body.
 PUSH_REASON_KEY = "Reason:"
 NO_COMMIT = re.compile(r"^0*$")
@@ -352,6 +354,13 @@ def change_context() -> Context:
     title, or a push without its range, is an error, never "no context".
     """
     event = os.environ.get("RH_EVENT") or os.environ.get("GITHUB_EVENT_NAME") or "local"
+    # Inside Actions the workflow passes the real event name: one it does not know is an error,
+    # never a silent "local" that skips the tag and reason.
+    if os.environ.get("GITHUB_ACTIONS") == "true" and event not in ACTIONS_EVENTS:
+        raise GateError(
+            f"event {event!r} inside GitHub Actions: the gate knows only "
+            f"{', '.join(ACTIONS_EVENTS)}; ci.yml must pass the real event name as RH_EVENT"
+        )
     # A workflow passes an empty title outside pull_request events: an empty title is no title.
     title = os.environ.get("RH_PR_TITLE") or None
     if title is not None:
@@ -456,9 +465,10 @@ def tag_problems(context: Context, repo: Path) -> list[str]:
     """Why the change's tag or reason is missing; local runs say they cannot check."""
     if context.event == "pull_request":
         problems = []
-        if PR_TAG not in context.title:
+        if not has_tag(context.title):
             problems.append(
-                f"a changed baseline needs {PR_TAG} in the pull request's title: {context.title!r}"
+                f"a changed baseline needs {PR_TAG} in the pull request's title, in its trailing "
+                f"tag group: {context.title!r}"
             )
         if not has_reason(context.body):
             problems.append(f"a changed baseline needs a `{REASON_KEY} <why>` line in the PR body")
@@ -561,6 +571,30 @@ ALLOC_BASELINE = Path("crates/rh-bench/baselines/allocations_v1.txt")
 ALLOC_FORMAT = "rehoboam/rh-bench/allocations/v1"
 # Gated fields of a `budget` line: any increase fails (ruling 5). Shrinks are reported, not gated.
 ALLOC_GATED = ("allocations", "growths", "max_per_tick")
+# The toolchain an allocation count depends on (review 7): another compiler or C library may
+# allocate differently, so a change asks for a re-baseline (exit 3), as R-9 does for instructions.
+ALLOC_TOOLCHAIN = ("rustc", "llvm", "host", "libc")
+
+
+def with_toolchain(report: str) -> str:
+    """The alloc_budget report with this host's toolchain lines after its format line."""
+    tools = toolchain()
+    lines = report.splitlines(keepends=True)
+    at = next((i + 1 for i, line in enumerate(lines) if line.startswith("format ")), None)
+    if at is None:
+        raise GateError(f"the alloc_budget report has no format line (not a {ALLOC_FORMAT} file)")
+    added = [f"toolchain {name} {tools[name]}\n" for name in ALLOC_TOOLCHAIN]
+    return "".join(lines[:at] + added + lines[at:])
+
+
+def alloc_toolchain(text: str) -> dict[str, str]:
+    """The `toolchain <name> <value>` lines of an allocation file."""
+    found = {}
+    for raw in text.splitlines():
+        if raw.startswith("toolchain "):
+            _, name, value = [*raw.split(" ", 2), ""][:3]
+            found[name] = value
+    return found
 
 
 def alloc_measure(control: bool) -> str:
@@ -574,7 +608,7 @@ def alloc_measure(control: bool) -> str:
         if run.returncode != 0 or not out.exists():
             tail = "\n".join((run.stdout + run.stderr).splitlines()[-20:])
             raise GateError(f"`{' '.join(cmd)}` failed ({run.returncode}):\n{tail}")
-        return out.read_text(encoding="utf-8")
+        return with_toolchain(out.read_text(encoding="utf-8"))
 
 
 def parse_budget(text: str, origin: str) -> tuple[str, dict[str, dict[str, int]]]:
@@ -602,6 +636,16 @@ def alloc_compare(baseline: str, measured: str) -> tuple[int, list[str]]:
     """V-PERF-11: any increase over the recorded budget fails; a decrease passes and is kept."""
     base_window, base = parse_budget(baseline, "the baseline")
     now_window, now = parse_budget(measured, "this run")
+    base_tools, now_tools = alloc_toolchain(baseline), alloc_toolchain(measured)
+    if base_tools != now_tools:
+        return REBASELINE, [
+            "toolchain changed: re-baseline required (SPR-009 review 7, as R-9)",
+            *(
+                f"  {n}: {base_tools.get(n, '(none)')} -> {now_tools.get(n, '(none)')}"
+                for n in sorted(set(base_tools) | set(now_tools))
+                if base_tools.get(n) != now_tools.get(n)
+            ),
+        ]
     if base_window != now_window or set(base) != set(now):
         return REBASELINE, [
             f"window changed: re-baseline required ({base_window!r} -> {now_window!r})"

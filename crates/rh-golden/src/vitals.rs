@@ -4,8 +4,8 @@
 //! Timing never happens inside plane A. The engine sends notices at instant, phase, level and job
 //! boundaries (`rh_core::observe`) and carries no clock; [`Timing`] is the host's observer, in the
 //! tool plane, and reads the clock when a notice arrives. Attaching it changes no result:
-//! `bin/check_all.sh` runs `run smoke --vitals` for 1,000 years and compares its ladder with the
-//! golden baseline byte for byte.
+//! `bin/check_all.sh` runs its N-thread golden run (1,000 years) with `--vitals` and compares that
+//! ladder with the golden baseline and the 1-thread ladder byte for byte.
 //!
 //! - **Per-system time:** the wall time between each job's `JobStart` and `JobEnd`, summed per
 //!   system (on several threads, jobs of one level overlap; each is its own system's time).

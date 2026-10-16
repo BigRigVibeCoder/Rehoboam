@@ -17,11 +17,14 @@ from pathlib import Path
 
 import check_all_selftest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "bin" / "check_all.sh"
+REPO = Path(__file__).resolve().parents[2]
+SCRIPT = REPO / "bin" / "check_all.sh"
 FIXED_POINT_FIXTURE = (
     Path(__file__).resolve().parents[2] / "tests" / "lint_fixtures" / "compile_fail" / "fixed_point"
 )
 RUN_NAME = re.compile(r'^\s*run "(?P<name>[^"]*)"')
+NEXTEST_PACKAGE = re.compile(r"-p (\S+)")
+NEXTEST_TARGET = re.compile(r"--test (\S+)")
 
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
@@ -34,6 +37,8 @@ REQUIRED_GATES = (
     "passes (SPR-009 GAP-2)",
     "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason "
     "passes (SPR-009 ruling 3)",
+    "Baseline integrity positive control: [perf-baseline] outside the title's trailing tag group "
+    "must FAIL (SPR-009 review 5)",
     "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 "
     "ruling 3)",
     "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)",
@@ -96,8 +101,8 @@ REQUIRED_GATES = (
     "(VER-SPR-008 DEF-1)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% "
     "(SPR-008 T-02, DEF-2)",
-    "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5% "
-    "(SPR-008 T-02, DEF-2)",
+    "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, "
+    "with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)",
     "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)",
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
@@ -130,8 +135,11 @@ REQUIRED_GATES = (
     "Python: lint (ruff check)",
     "Python: types (mypy --strict)",
     "Python: unit tests (pytest)",
+    "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, GITHUB_EVENT_NAME, "
+    "RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
-    "Required tools present",
+    "Required tools present (core part)",
+    "Required tools present (golden part)",
     "Rust: bans and sources (cargo deny: crates.io only, no wildcards)",
     "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)",
     "Rust: build the workspace (cargo build)",
@@ -141,7 +149,7 @@ REQUIRED_GATES = (
     "Rust: lint rh-bench with the arena, the instruction-count targets included (cargo clippy -D "
     "warnings; SPR-009 R-7)",
     "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)",
-    "Rust: unit tests (cargo nextest)",
+    "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)",
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
@@ -158,8 +166,6 @@ REQUIRED_GATES = (
     "the samples (SPR-009)",
     "T-02b wall-clock positive control: a NaN median must be refused, never compared (SPR-009 "
     "DEF-3)",
-    "T-03 vitals: run smoke --vitals prints the vitals line, and its 1,000-year ladder equals the "
-    "golden baseline (SPR-009 ruling 4)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
@@ -188,6 +194,8 @@ REQUIRED_GATES = (
     "FAIL (SPR-009 T-05)",
     "V-PERF-11 repeatability: a second run on the same commit gives identical allocation counts "
     "(SPR-009 T-05)",
+    "V-PERF-11 toolchain control: an allocation baseline from another rustc must report "
+    "re-baseline required (SPR-009 review 7)",
     "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL",
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
@@ -196,6 +204,8 @@ REQUIRED_GATES = (
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
     "Virtual telemetry (S5 prototype)",
+    "Workspace tests positive control: a by-name entry that names no test binary must FAIL "
+    "(SPR-009 review 2a)",
     "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip "
     "(SPR-011 ruling 13)",
     "cargo deny positive control: git source must FAIL",
@@ -210,6 +220,10 @@ REQUIRED_GATES = (
     "VER-SPR-008-TEST GAP-3, GAP-7)",
     "check_all positive control: the old PWD-joined golden path under an absolute "
     "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
+    "check_all verdict per part positive control: --part golden fails at its failing gate "
+    "(SPR-009 review 2b)",
+    "check_all verdict per part: --part core passes while only a golden-part gate fails "
+    "(check_all_selftest; SPR-009 review 2b)",
     "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the "
     "tier (VER-SPR-008-TEST GAP-7)",
     "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier "
@@ -365,7 +379,7 @@ REQUIRED_CHAIN_FUNCTIONS = (
 def _chain_lines() -> list[str]:
     """Return the non-comment lines from the first top-level `run` to `status=$?`."""
     lines = SCRIPT.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, line in enumerate(lines) if line.startswith("run "))
+    start = next(i for i, line in enumerate(lines) if line.startswith(("run ", "part ")))
     end = lines.index("status=$?")
     return [line for line in lines[start:end] if not line.lstrip().startswith("#")]
 
@@ -433,3 +447,57 @@ def test_the_baseline_push_controls_hold_with_an_absolute_target_dir() -> None:
     """VER-SPR-008-TEST DEF-3: no `$PWD/$GOLDEN` join; an absolute CARGO_TARGET_DIR works."""
     assert check_all_selftest.abs_target(plant=False) == 0
     assert check_all_selftest.abs_target(plant=True) == 1
+
+
+def test_the_chain_has_two_parts_and_every_gate_belongs_to_exactly_one() -> None:
+    """SPR-009 review 2b: `part core` opens the chain and `part golden` follows it, once each.
+
+    Every `run` line comes after `part core`, so it belongs to the part whose marker is the last
+    one above it: exactly one part. `--part` runs one, no flag both.
+    """
+    lines = [line.strip() for line in _chain_lines() if line.strip()]
+    assert lines[0] == "part core &&"
+    assert [line for line in lines if line.startswith("part ")] == [
+        "part core &&",
+        "part golden &&",
+    ]
+    golden = lines.index("part golden &&")
+    names = [m.group("name") for line in lines if (m := RUN_NAME.match(line))]
+    in_golden = {m.group("name") for line in lines[golden:] if (m := RUN_NAME.match(line))}
+    assert len(names) == len(set(names)), "a gate name appears twice"
+    # The golden runs and the perf gates are the golden part; the debug tests and Python the core.
+    assert {n for n in names if n.startswith(("Golden run:", "V-PERF-04 instruction"))} <= in_golden
+    assert {
+        n for n in names if n.startswith(("Rust: unit tests", "Python: unit tests"))
+    }.isdisjoint(in_golden)
+
+
+def _by_name_test_binaries(*, release: bool) -> set[str]:
+    """Nextest binary IDs the by-name gates run (with or without --release lines)."""
+    found = set()
+    for line in _chain_lines():
+        if "cargo nextest run -p" not in line or ("--release" in line and not release):
+            continue
+        for package in NEXTEST_PACKAGE.findall(line):
+            tests = NEXTEST_TARGET.findall(line)
+            found |= {
+                f"{package}::{test}"
+                for test in tests
+                if (REPO / "crates" / package / "tests" / f"{test}.rs").exists()
+            }
+            if "--lib" in line:
+                found.add(package)
+    return found
+
+
+def test_the_workspace_run_leaves_out_exactly_the_by_name_binaries() -> None:
+    """Review 2a: each test binary runs once, in the workspace run or in its by-name gate.
+
+    Every entry of BY_NAME_TESTS is run by a by-name gate (else it would run nowhere), and every
+    binary a debug by-name gate runs is an entry (else it would run twice).
+    """
+    script = SCRIPT.read_text(encoding="utf-8")
+    listed = set(script.split('BY_NAME_TESTS="', 1)[1].split('"', 1)[0].split())
+    assert sorted(listed - _by_name_test_binaries(release=True)) == []
+    assert sorted(_by_name_test_binaries(release=False) - listed) == []
+    assert '-E "not ($filter)"' in script

@@ -26,7 +26,13 @@ The instruction-count targets run on a deterministic bump arena (`src/alloc_coun
 ## Baselines
 
 They are regenerated, never typed (SPR-009 ruling 3).
-- **Commands:** `python -I bin/perf_gate.py record` writes `baselines/instructions_v1.txt`; `bin/wall_trend.py record` writes a machine's trend file.
+- **Commands:** `python -I bin/perf_gate.py record` writes `baselines/instructions_v1.txt`; `python -I bin/perf_gate.py alloc-record` writes `baselines/allocations_v1.txt`; `bin/wall_trend.py record` writes a machine's trend file.
 - **Equality:** a changed baseline must equal CI's recomputation, toolchain lines exactly and each count within max(64 instructions, 1e-5) (R-8). The tool's path still moves a count by up to 48 instructions in 66 million.
-- **Where it may change:** only in a PR titled `[perf-baseline]` whose body has a `perf-baseline-reason:` line.
-- **Toolchain:** the toolchain lines (rustc, LLVM, host, valgrind, libc, iai-callgrind, the CPU's BMI2) must match, or the gate reports "toolchain changed: re-baseline required".
+- **Where it may change:** only in a PR whose title ends in `[perf-baseline]` (its trailing tag group, as `[C3]`) and whose body has a `perf-baseline-reason:` line.
+- **Toolchain:** the toolchain lines (rustc, LLVM, host, valgrind, libc, iai-callgrind, the CPU's BMI2) must match, or the gate reports "toolchain changed: re-baseline required". The allocation baseline carries rustc, LLVM, host and libc lines, with the same rule (exit 3), and its counts must equal the tool's output exactly.
+- **Merging:** a PR that changes a perf baseline merges by merge commit or rebase, **never squash**. On the push to `main`, the integrity gate looks in before..after for a commit whose subject ends in `[perf-baseline]` and whose body has a `Reason:` line; a squash merge replaces that commit with one titled by GitHub, and the push run fails.
+
+## What the counts do not see
+
+- **C-library allocations.** The counting allocator is Rust's `#[global_allocator]`; the C code linked in (zstd, bundled SQLite) calls the C library's `malloc` directly, and the counter never sees it. None of that code runs on the tick path: zstd runs when a keyframe is written or read, SQLite when the input journal is written or read, and the measured window holds neither.
+- **"serial %" at 1 thread.** The vitals line's serial fraction is the share of wall time spent outside a parallel level (a level holding two or more jobs, from `LevelStart` to `LevelMerge`). At 1 thread such a level still exists, and its jobs run one after another on the one worker, so the figure says how much of the run the schedule could spread over threads. It is not a measured speed-up: that needs runs at several thread counts.

@@ -1,6 +1,10 @@
 # rehoboam/rh-bench/allocations/v1: heap allocations per steady-state tick of the smoke world (SPR-009 T-05).
 # Written by `python -I bin/perf_gate.py alloc-record`, never by hand (SPR-009 ruling 3).
 format rehoboam/rh-bench/allocations/v1
+toolchain rustc 1.97.0 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+toolchain llvm 22.1.6
+toolchain host x86_64-unknown-linux-gnu
+toolchain libc glibc 2.39
 window smoke seed 1 warm-up 2 years, measured 1 year(s), no inputs
 budget threads 1 ticks 8801 allocations 819476 growths 856 shrinks 0 max_per_tick 282
 budget threads 4 ticks 8801 allocations 828236 growths 856 shrinks 730 max_per_tick 306

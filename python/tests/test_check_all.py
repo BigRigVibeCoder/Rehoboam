@@ -16,7 +16,7 @@ FUNCTION_DEFINITION = re.compile(r"^\s*[A-Za-z_][A-Za-z0-9_]*\s*\(\)\s*\{")
 def _chain() -> list[str]:
     """Return the logical lines from the first top-level `run` to `status=$?`, without comments."""
     lines = SCRIPT.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, line in enumerate(lines) if line.startswith("run "))
+    start = next(i for i, line in enumerate(lines) if line.startswith(("run ", "part ")))
     end = lines.index("status=$?")
     logical: list[str] = []
     pending = ""

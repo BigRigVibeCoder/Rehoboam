@@ -755,10 +755,17 @@ def check_unsafe_lints(crate: Crate, inherited: dict[str, object]) -> list[Viola
 
 
 def _sources(crate: Crate) -> list[Path]:
-    """Every .rs file of the crate, outside any target directory."""
-    if crate.directory is None:
+    """Every .rs file of the crate, outside any target directory inside the crate.
+
+    The test looks at the path below the crate's directory only: a checkout under a directory
+    named `target` must still be scanned (SPR-009 review 4).
+    """
+    directory = crate.directory
+    if directory is None:
         return []
-    return sorted(p for p in crate.directory.rglob("*.rs") if "target" not in p.parts)
+    return sorted(
+        p for p in directory.rglob("*.rs") if "target" not in p.relative_to(directory).parts
+    )
 
 
 def check_allocator_sources(crate: Crate) -> list[Violation]:

@@ -17,6 +17,7 @@ from perf_gate import (
     Base,
     Counts,
     GateError,
+    alloc_compare,
     band_problems,
     cmd_integrity,
     compare,
@@ -106,11 +107,14 @@ def test_integrity_both_ways() -> None:
     """Ruling 3: typed fails, untagged fails, no reason fails, regenerated with both passes."""
     tool = counts(a=1000).render()
     typed = counts(a=1065).render()
-    good = ("[perf-baseline] rows batched", "perf-baseline-reason: batching")
+    good = ("perf: rows batched [perf-baseline]", "perf-baseline-reason: batching")
     assert integrity_problems(typed, tool, good)[0].startswith("a: the baseline's 1065 is +65")
     assert integrity_problems(tool, tool, ("rows batched", good[1])) == [
-        "a changed baseline needs [perf-baseline] in the pull request's title: 'rows batched'"
+        "a changed baseline needs [perf-baseline] in the pull request's title, in its trailing "
+        "tag group: 'rows batched'"
     ]
+    mid = ("docs: explain the [perf-baseline] rule", good[1])
+    assert len(integrity_problems(tool, tool, mid)) == 1
     assert len(integrity_problems(tool, tool, (good[0], ""))) == 1
     assert integrity_problems(tool, tool, good) == []
 
@@ -167,7 +171,7 @@ def test_a_new_baseline_is_checked_both_ways(
     tmp_path = perf_gate.ROOT / "target" / "pytest-perf-gate" / tmp_path.name
     tmp_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(perf_gate, "base_text", lambda *_: None)
-    monkeypatch.setenv("RH_PR_TITLE", "[perf-baseline] first baseline")
+    monkeypatch.setenv("RH_PR_TITLE", "perf: first baseline [C1] [perf-baseline]")
     monkeypatch.setenv("RH_PR_BODY", "perf-baseline-reason: the first baseline")
     tool = _write(tmp_path, "tool.txt", counts(a=1000))
     assert cmd_integrity(_write(tmp_path, "regen.txt", counts(a=1000)), tool, Base("x")) == OK
@@ -210,3 +214,40 @@ def test_allocation_baselines_are_exact() -> None:
     """R-8: allocation counts stay exact; one allocation more is a typed baseline."""
     assert integrity_problems("a 1\n", "a 1\n", None, exact=True) == []
     assert integrity_problems("a 2\n", "a 1\n", None, exact=True) != []
+
+
+@pytest.mark.parametrize("event", ["local", "schedule", "pull_request_target"])
+def test_an_unknown_event_inside_actions_is_an_error(
+    monkeypatch: pytest.MonkeyPatch, event: str
+) -> None:
+    """Review 6: inside Actions only pull_request, push and workflow_dispatch are known."""
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("RH_EVENT", event)
+    with pytest.raises(GateError, match="inside GitHub Actions"):
+        pr_context()
+    monkeypatch.setenv("RH_EVENT", "workflow_dispatch")
+    assert pr_context() is None
+    monkeypatch.delenv("GITHUB_ACTIONS")
+    monkeypatch.setenv("RH_EVENT", event)
+    assert pr_context() is None
+
+
+ALLOC = (
+    "format rehoboam/rh-bench/allocations/v1\n"
+    "toolchain rustc 1.97.0 abc\ntoolchain libc glibc 2.39\n"
+    "window smoke\nbudget threads 1 ticks 10 allocations 100 growths 5 shrinks 0 max_per_tick 9\n"
+)
+
+
+def test_an_allocation_toolchain_change_asks_for_a_re_baseline() -> None:
+    """Review 7: another rustc reports re-baseline (exit 3), not OVER BUDGET or a pass."""
+    assert alloc_compare(ALLOC, ALLOC)[0] == OK
+    over = ALLOC.replace("allocations 100", "allocations 101")
+    assert alloc_compare(ALLOC, over)[0] == FAIL
+    other = over.replace("1.97.0 abc", "1.98.0 def")
+    verdict, lines = alloc_compare(ALLOC, other)
+    assert verdict == REBASELINE
+    assert lines == [
+        "toolchain changed: re-baseline required (SPR-009 review 7, as R-9)",
+        "  rustc: 1.97.0 abc -> 1.98.0 def",
+    ]

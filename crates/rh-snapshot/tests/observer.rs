@@ -281,7 +281,8 @@ fn def_1_a_panicking_observer_poisons_the_engine_at_every_notice_kind() {
 #[test]
 fn def_1_the_failing_instant_is_the_same_at_one_and_four_threads() {
     for k in ["JobStart", "JobEnd", "LevelMerge"] {
-        let ticks: Vec<i64> = [1, 4]
+        // The tick and the error's text: the text names the notice, never the worker (review 8).
+        let outcomes: Vec<(i64, String)> = [1, 4]
             .into_iter()
             .map(|threads| {
                 let mut e = world(threads);
@@ -290,11 +291,17 @@ fn def_1_the_failing_instant_is_the_same_at_one_and_four_threads() {
                     nth: 500,
                     seen: AtomicUsize::new(0),
                 })));
-                let _err = e.advance_until(SimTime::from_minutes(YEARS * YEAR), |_, _| {});
-                e.crash_artifact().expect("an artifact").tick
+                let err = e
+                    .advance_until(SimTime::from_minutes(YEARS * YEAR), |_, _| {})
+                    .expect_err("the observer panics");
+                (
+                    e.crash_artifact().expect("an artifact").tick,
+                    err.to_string(),
+                )
             })
             .collect();
-        assert_eq!(ticks[0], ticks[1], "{k}");
+        assert_eq!(outcomes[0], outcomes[1], "{k}");
+        assert!(!outcomes[0].1.contains("worker"), "{}", outcomes[0].1);
     }
 }
 

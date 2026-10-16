@@ -23,17 +23,28 @@ permissions:
 # Only pull_request runs are cancelled by a newer one (VER-SPR-008-TEST GAP-8). A push run on main
 # checks the baseline over its own before..after range; cancelling it would let the next push's
 # range skip the cancelled commits, so a baseline change in them would never be checked against
-# the C3 rule. Pushes queue instead. The push trigger is main only, so a push that opens a new
-# branch (no previous commit) never runs here.
+# the C3 or [perf-baseline] rule. Queueing is not enough either: GitHub keeps at most ONE pending
+# run per concurrency group and a newer one replaces it, even with cancel-in-progress false, so of
+# three quick pushes the middle one's range would never run (SPR-009 review 3). Each push therefore
+# gets its own group (its SHA); pull requests share one per ref, and a newer push cancels the older
+# run. The push trigger is main only, so a push that opens a new branch never runs here.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check-all:
-    name: PR tier (bin/check_all.sh)
+    # Two parallel jobs, one per part of the chain (SPR-009 review 2b; BCK-002 A-38), so the tier
+    # fits V-PERF-04's 15 minutes on a slow runner: `core` (lints, builds, workspace and by-name
+    # tests, Python, specs) and `golden` (release builds, golden runs with the vitals observer,
+    # performance gates). Every gate runs on every PR, in exactly one of them.
+    name: PR tier (bin/check_all.sh --part ${{ matrix.part }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [core, golden]
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
@@ -41,7 +52,9 @@ jobs:
       # a PR whose title carries [C3], or on a push a commit in before..after whose subject does.
       # The rule fails closed (VER-SPR-008 MAJ-1). Passed through the environment, never
       # interpolated into a script.
-      RH_EVENT: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && github.event_name || 'local' }}
+      # The real event name (pull_request, push or workflow_dispatch): inside Actions, bin/perf_gate.py
+      # refuses an event it does not know rather than treat it as local (SPR-009 review 6).
+      RH_EVENT: ${{ github.event_name }}
       RH_PR_TITLE: ${{ github.event.pull_request.title }}
       RH_BASELINE_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
       RH_PUSH_BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
@@ -67,6 +80,9 @@ jobs:
           rustup show active-toolchain
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          # One cache per part: they build different profiles and targets.
+          key: ${{ matrix.part }}
 
       - name: cargo-nextest, cargo-deny and iai-callgrind-runner (prebuilt binaries)
         uses: taiki-e/install-action@v2
@@ -75,6 +91,7 @@ jobs:
           tool: cargo-nextest@0.9,cargo-deny@0.20,iai-callgrind-runner@0.16.1
 
       - name: valgrind from the runner's package manager (SPR-009 ruling 2)
+        if: matrix.part == 'golden'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq valgrind
@@ -96,10 +113,11 @@ jobs:
         # reason in its body (SPR-009 ruling 3). Passed through the environment, never interpolated.
         env:
           RH_PR_BODY: ${{ github.event.pull_request.body }}
-        run: bin/check_all.sh
+          CHECK_PART: ${{ matrix.part }}
+        run: bin/check_all.sh --part "$CHECK_PART"
 
       - name: Instruction counts of this run and their difference from the baseline (SPR-009 R-8)
-        if: always()
+        if: always() && matrix.part == 'golden'
         run: |
           cat artifacts/perf/instructions.txt || echo "no instruction counts: the tier stopped before the gate"
           diff crates/rh-bench/baselines/instructions_v1.txt artifacts/perf/instructions.txt && echo "identical to the baseline" || true
@@ -107,14 +125,14 @@ jobs:
       # docs/13 §4.5: on a golden-run mismatch, the bisect runs automatically (base revision
       # against this head) and its report is attached below (SPR-008 ruling 7).
       - name: Divergence bisect on a golden mismatch (SPR-008 T-03)
-        if: failure()
+        if: failure() && matrix.part == 'golden'
         run: bin/golden_bisect_ci.sh
 
       - name: Upload the check report, the licence ledger, the golden ladders, any bisect report and the perf counts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: check-report
+          name: check-report-${{ matrix.part }}
           path: |
             artifacts/check_report.md
             artifacts/licence_ledger.txt
