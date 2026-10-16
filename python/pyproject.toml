@@ -48,6 +48,8 @@ extend-exclude = [
     "specs/stream/compress_probe.py",
     "specs/stream/selftest_virtual_telemetry.py",
     "specs/systems/lint_odd.py",
+    # Red-team prototypes: illustrative evidence for design proposals, not product code (docs/red_team/).
+    "docs/red_team/prototypes",
 ]
 
 [tool.ruff.format]
@@ -91,6 +93,11 @@ module = [
     "compress_probe",
     "selftest_virtual_telemetry",
     "lint_odd",
+    "prototype_1_tantrum_spiral",
+    "prototype_2_story_sifter_motifs",
+    "prototype_3_epistemic_ghost_king",
+    "prototype_4_micropolis_siege",
+    "prototype_5_vow_collision",
 ]
 ignore_errors = true
 
