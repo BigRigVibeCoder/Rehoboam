@@ -13,9 +13,11 @@ Runs ``specs/manifest/manifest_v0.py validate`` (the reference) and ``rh-cli man
 Any difference is a ``PARITY MISMATCH`` and the gate fails. Where the two disagree the Python
 reference wins (CLAUDE.md; SPR-004), so a mismatch is a Rust bug until shown otherwise.
 
-A manifest whose first lines hold ``# parity-divergence: PYTHON-VERDICT / RUST-VERDICT`` is an
-accepted divergence (an out-of-contract form ruled so, 05.5 §3): it passes only if the two
-verdicts are exactly those, so the divergence stays pinned rather than ignored.
+A ruled divergence (an out-of-contract form ruled so, 05.5 §3) is declared in one of a fixture's
+first five lines: ``# parity-divergence: PYTHON-VERDICT / RUST-VERDICT "rust diagnostic"``. It
+passes only if both verdicts are exactly those and the Rust output contains the diagnostic, so
+a different Rust refusal cannot pass. The header is honoured only for fixtures under
+``tests/manifest_parity/``, and two equal verdicts are not a divergence (SPR-004 DEF-15).
 
 A manifest ``NAME.yaml`` with a ``NAME.registry.toml`` beside it is validated against that
 Registry on both sides (a corpus case that needs a Registry the real one cannot provide).
@@ -33,7 +35,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,8 +49,43 @@ CHECKED = re.compile(r"^(VALID|INVALID): .* \((\d+) errors, (\d+) warnings\)", r
 SCHEMA = re.compile(r"^(\d+) validation errors? for Manifest$", re.MULTILINE)
 ISSUE = re.compile(r"^\[(?:ERROR|WARNING)\] .*$", re.MULTILINE)
 ERROR_TYPE = re.compile(r"\[type=([a-z_]+)")
+CORPUS = ROOT / "tests" / "manifest_parity"
+VERDICTS = ("VALID", "INVALID", "SCHEMA INVALID", "LOAD ERROR")
+DIVERGENCE = re.compile(r'^# parity-divergence: (.+?) / (.+?) "(.+)"\s*$')
+HEADER_LINES = 5
 RULED: list[Path] = []  # accepted divergences seen in this run
-DIVERGENCE = re.compile(r"^# parity-divergence: (.+?) / (.+?)\s*$", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class Divergence:
+    """A ruled divergence declared by a corpus fixture."""
+
+    python: str
+    rust: str
+    diagnostic: str
+
+
+def declared_divergence(manifest: Path, text: str) -> Divergence | str | None:
+    """Read a fixture's ``# parity-divergence:`` header (SPR-004 DEF-15).
+
+    Returns:
+        None without a header (or outside ``tests/manifest_parity/``, where a header is not
+        honoured); the Divergence; or an error message for a malformed header.
+    """
+    if not manifest.resolve().is_relative_to(CORPUS.resolve()):
+        return None
+    for line in text.splitlines()[:HEADER_LINES]:
+        if not line.startswith("# parity-divergence:"):
+            continue
+        m = DIVERGENCE.match(line)
+        if not m:
+            return 'malformed header: need PYTHON-VERDICT / RUST-VERDICT "rust diagnostic"'
+        if m[1] not in VERDICTS or m[2] not in VERDICTS:
+            return f"unknown verdict in header (one of {', '.join(VERDICTS)})"
+        if m[1] == m[2]:
+            return "equal verdicts are not a divergence"
+        return Divergence(m[1], m[2], m[3])
+    return None
 
 
 @dataclass(frozen=True)
@@ -60,6 +97,7 @@ class Result:
     errors: int
     warnings: int
     lines: tuple[str, ...] = ()
+    output: str = field(default="", compare=False)
 
     def render(self) -> str:
         """Return the result on one line."""
@@ -102,12 +140,19 @@ def parse(output: str, exit_code: int) -> Result:
     checked = CHECKED.search(output)
     if checked:
         issues = tuple(ISSUE.findall(output))
-        return Result(checked[1], exit_code, int(checked[2]), int(checked[3]), issues)
+        return Result(checked[1], exit_code, int(checked[2]), int(checked[3]), issues, output)
     schema = SCHEMA.search(output)
     if schema and "SCHEMA INVALID" in output:
         start = output.index("SCHEMA INVALID")
-        return Result("SCHEMA INVALID", exit_code, int(schema[1]), 0, schema_pairs(output[start:]))
-    return Result("LOAD ERROR", exit_code, 1, 0)
+        pairs = schema_pairs(output[start:])
+        return Result("SCHEMA INVALID", exit_code, int(schema[1]), 0, pairs, output)
+    return Result("LOAD ERROR", exit_code, 1, 0, (), output)
+
+
+def divergence_holds(declared: Divergence, python: Result, rust: Result) -> bool:
+    """Whether both verdicts are the declared ones and Rust said the declared diagnostic."""
+    verdicts = (python.verdict, rust.verdict) == (declared.python, declared.rust)
+    return verdicts and declared.diagnostic in rust.output
 
 
 def run(command: Sequence[str]) -> Result:
@@ -147,15 +192,19 @@ def compare(manifest: Path, rust_bin: Path, rust_registry: Path | None) -> bool:
     )
     rust_reg = rust_registry or registry
     rust = run([str(rust_bin), "manifest", "validate", str(manifest), "--registry", str(rust_reg)])
-    declared = DIVERGENCE.search(manifest.read_text(encoding="utf-8")[:2000])
-    if declared:
-        if (python.verdict, rust.verdict) == (declared[1], declared[2]):
+    declared = declared_divergence(manifest, manifest.read_text(encoding="utf-8"))
+    if isinstance(declared, str):
+        print(f"PARITY MISMATCH {manifest}: parity-divergence header: {declared}")
+        return False
+    if declared is not None:
+        if divergence_holds(declared, python, rust):
             print(f"DIVERGE (ruled) {manifest}: python {python.verdict}; rust {rust.verdict}")
             RULED.append(manifest)
             return True
         print(
-            f"PARITY MISMATCH {manifest}: declared divergence {declared[1]} / {declared[2]}, "
-            f"got python {python.verdict}; rust {rust.verdict}"
+            f"PARITY MISMATCH {manifest}: declared divergence {declared.python} / "
+            f"{declared.rust} {declared.diagnostic!r}; got python {python.verdict}; "
+            f"rust {rust.verdict} {rust.output.strip()[-160:]!r}"
         )
         return False
     if python == rust:
