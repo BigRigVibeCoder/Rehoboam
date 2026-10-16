@@ -4,9 +4,11 @@
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
-## Still waiting on you
+## Still waiting on you (1)
 
-Nothing is waiting on you.
+### SPR-010 — Fixed-point types (approve the plan?)
+The SPR-001 audit found that no P0 sprint builds the fixed-point number types that requirement DET-3 needs (`Q8_8`, `Q16_16`, money in whole minor units, all saturating). Every threshold in the simulation, such as a death probability or a price, must use them. SPR-010 (`CODEX/05_PROJECT/SPR-010_FixedPoint.md`) is a small sprint (about 2 agent-days) that depends only on SPR-001, so it can run beside SPR-002 and SPR-004. It is determinism machinery (C3): you approve the plan and, later, the merge.
+**Recommendation (confidence: high):** approve. **Default:** it waits.
 
 ## Decided on 2026-10-16
 
