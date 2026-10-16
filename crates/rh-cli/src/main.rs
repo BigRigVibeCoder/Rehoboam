@@ -25,8 +25,13 @@ use rh_manifest::manifest;
 use rh_registry::ownership::{self, AccessSpec, Ownership};
 
 const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]";
-const DEFAULT_SPECS: &str = "specs/systems";
-const DEFAULT_REGISTRY: &str = "specs/manifest/registry_v0.toml";
+/// The defaults are found from the source tree, not the working directory, as the reference finds
+/// its Registry next to itself (SPR-004 DEF-7).
+const DEFAULT_SPECS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../specs/systems");
+const DEFAULT_REGISTRY: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../specs/manifest/registry_v0.toml"
+);
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -106,9 +111,6 @@ fn ownership(args: &[&str]) -> ExitCode {
     let system_ids = reg.systems.keys().cloned().collect();
     let table = Ownership::build(&specs, &system_ids);
     let mut accesses: Vec<AccessSpec> = Vec::new();
-    if files.is_empty() {
-        accesses.extend(table.specs.values().map(AccessSpec::from_spec));
-    }
     for f in &files {
         match std::fs::read_to_string(f)
             .map_err(|e| e.to_string())
@@ -121,6 +123,17 @@ fn ownership(args: &[&str]) -> ExitCode {
             }
         }
     }
+    let from_files = accesses.len();
+    // Until SPR-005 no system declares its access in code: without files, each spec's own
+    // declaration is checked (writes = owns), which exercises the two-owner and Registry rules.
+    let derived = if files.is_empty() {
+        table.specs.len()
+    } else {
+        0
+    };
+    if files.is_empty() {
+        accesses.extend(table.specs.values().map(AccessSpec::from_spec));
+    }
     let mut violations = table.problems.clone();
     for a in &accesses {
         violations.extend(table.check(a));
@@ -132,10 +145,10 @@ fn ownership(args: &[&str]) -> ExitCode {
         println!("{v}");
     }
     println!(
-        "OWNERSHIP: {} columns owned by {} systems; {} access declarations checked; {} violations",
+        "OWNERSHIP: {} columns owned by {} systems; 0 access declarations from code (derived from \
+         specs until SPR-005: {derived}; from files: {from_files}); {} violations",
         table.owners.len(),
         table.specs.len(),
-        accesses.len(),
         violations.len()
     );
     if violations.is_empty() {
