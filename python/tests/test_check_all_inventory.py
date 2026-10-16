@@ -98,6 +98,8 @@ REQUIRED_GATES = (
     "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL",
     "fp-contract guard positive control: a .cargo/config.toml CFLAGS with -ffp-contract=fast must "
     "FAIL (SPR-007 ruling 4)",
+    "fp-contract guard positive control: a .cargo/config.toml CFLAGS without force = true must "
+    "FAIL (SPR-007 ruling 4)",
     "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL",
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",

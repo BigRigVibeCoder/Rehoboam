@@ -17,7 +17,7 @@ Chunk
     ``R = 1024`` rows; chunk ``c`` covers rows ``[c*R, min((c+1)*R, n))``.
     ``chunk(c) = XXH3(D_CHUNK || u64(c) || u64(m) || (u32(len(row)) || row)*)``
 Table root
-    ``XXH3(D_TABLE || u64(n) || u64(k) || u64(chunk(0)) .. u64(chunk(k-1)))``
+    ``XXH3(D_TABLE || u32(len(name)) || name || u64(n) || u64(k) || u64(chunk(0)) ..)``
 Plane hash
     ``XXH3(D_PLANE || u8(plane letter) || u64(t) || (u32(len(name)) || name || u64(root))*)``
     over the tables in strictly increasing byte order of their names.
@@ -410,11 +410,13 @@ def chunk_hash(rows: list[bytes], chunk: int) -> int:
     return xxh3_64(D_CHUNK + _u64(chunk) + _u64(len(part)) + body)
 
 
-def table_digest(rows: list[bytes]) -> tuple[list[int], int]:
-    """Layout level 3: the chunk hashes and the root of a table given as encoded rows."""
+def table_digest(name: str, rows: list[bytes]) -> tuple[list[int], int]:
+    """Layout level 3: the chunk hashes and the root of table ``name`` given as encoded rows."""
     chunks = [chunk_hash(rows, c) for c in range(-(-len(rows) // CHUNK_ROWS))]
     body = b"".join(_u64(c) for c in chunks)
-    root = xxh3_64(D_TABLE + _u64(len(rows)) + _u64(len(chunks)) + body)
+    encoded = name.encode()
+    header = D_TABLE + _u32(len(encoded)) + encoded + _u64(len(rows)) + _u64(len(chunks))
+    root = xxh3_64(header + body)
     return chunks, root
 
 
@@ -463,6 +465,8 @@ COLUMN_CASES = [
     (0xFFFF_FFFF_FFFF_FFFF, 2048),
 ]
 BYTES_CASES = [0, 1, 1024, 1500]
+# Table names of the column and bytes vectors, cycled; one is non-ASCII (its UTF-8 length counts).
+TABLE_NAMES = ["pop.count", "ledger.wealth", "région.sol", "t"]
 # Plane vectors: (plane, [(name, column salt, rows)]), names given in byte order.
 PLANE_CASES: list[tuple[str, list[tuple[str, int, int]]]] = [
     ("A", []),
@@ -487,14 +491,16 @@ def lines_xxh3() -> list[str]:
 def lines_tables() -> list[str]:
     """``column`` and ``bytes`` table vectors: root, then every chunk hash."""
     out = []
-    for salt, n in COLUMN_CASES:
-        chunks, root = table_digest(column_rows(salt, n))
+    for k, (salt, n) in enumerate(COLUMN_CASES):
+        name = TABLE_NAMES[k % len(TABLE_NAMES)]
+        chunks, root = table_digest(name, column_rows(salt, n))
         hexes = [f"{root:016x}", *(f"{c:016x}" for c in chunks)]
-        out.append(" ".join(["column", str(salt), str(n), *hexes]))
-    for n in BYTES_CASES:
-        chunks, root = table_digest(bytes_rows(n))
+        out.append(" ".join(["column", name, str(salt), str(n), *hexes]))
+    for k, n in enumerate(BYTES_CASES):
+        name = TABLE_NAMES[k % len(TABLE_NAMES)]
+        chunks, root = table_digest(name, bytes_rows(n))
         hexes = [f"{root:016x}", *(f"{c:016x}" for c in chunks)]
-        out.append(" ".join(["bytes", str(n), *hexes]))
+        out.append(" ".join(["bytes", name, str(n), *hexes]))
     return out
 
 
@@ -502,7 +508,7 @@ def lines_planes() -> list[str]:
     """``plane`` vectors over synthetic columns."""
     out = []
     for plane, tables in PLANE_CASES:
-        roots = [(name, table_digest(column_rows(salt, n))[1]) for name, salt, n in tables]
+        roots = [(name, table_digest(name, column_rows(salt, n))[1]) for name, salt, n in tables]
         fields = [f"{name} {salt} {n}" for name, salt, n in tables]
         h = plane_hash(plane, roots)
         out.append(" ".join(["plane", plane, str(len(tables)), *fields, f"{h:016x}"]))
@@ -517,8 +523,9 @@ def render() -> str:
         "# Hashes are lowercase hex; XXH3-128 is high half first. Formats:",
         "#   xxh3_64 <len> <hash of input(len)>     input byte j = (131 j + len) mod 256",
         "#   xxh3_128 <len> <hash of input(len)>",
-        "#   column <salt> <rows> <root> <chunks..> row i = ((i + 1) * 0x9e3779b97f4a7c15) ^ salt",
-        "#   bytes <rows> <root> <chunks..>         row i = (i mod 7) bytes of value i mod 256",
+        "#   column <name> <salt> <rows> <root> <chunks..>  row i = ((i + 1) * GAMMA) ^ salt",
+        "#   bytes <name> <rows> <root> <chunks..>   row i = (i mod 7) bytes of value i mod 256",
+        "#   (GAMMA = 0x9e3779b97f4a7c15; names are UTF-8)",
         "#   plane <A|B|C> <t> (<name> <salt> <rows>)*t <plane hash>  (tables are columns)",
     ]
     return "\n".join([*header, *lines_xxh3(), *lines_tables(), *lines_planes()]) + "\n"

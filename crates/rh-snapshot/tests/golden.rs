@@ -71,12 +71,12 @@ fn every_golden_line_reproduces() {
                 assert_eq!(xxh3_128(&data), expected, "{line}");
             }
             "column" => {
-                let rows = column(f[1].parse().unwrap(), f[2].parse().unwrap());
-                check_table(line, &TableDigest::of(rows.as_slice()), &f[3..]);
+                let rows = column(f[2].parse().unwrap(), f[3].parse().unwrap());
+                check_table(line, &TableDigest::of(f[1], rows.as_slice()), &f[4..]);
             }
             "bytes" => {
-                let rows = bytes_rows(f[1].parse().unwrap());
-                check_table(line, &TableDigest::of(rows.as_slice()), &f[2..]);
+                let rows = bytes_rows(f[2].parse().unwrap());
+                check_table(line, &TableDigest::of(f[1], rows.as_slice()), &f[3..]);
             }
             "plane" => {
                 let plane = plane_of(f[1]);
@@ -85,7 +85,7 @@ fn every_golden_line_reproduces() {
                 for k in 0..t {
                     let name = f[3 + 3 * k];
                     let rows = column(f[4 + 3 * k].parse().unwrap(), f[5 + 3 * k].parse().unwrap());
-                    tables.insert(name.to_owned(), TableDigest::of(rows.as_slice()));
+                    tables.insert(name.to_owned(), TableDigest::of(name, rows.as_slice()));
                 }
                 let expected = hex64(f[3 + 3 * t]);
                 let roots: Vec<(&str, u64)> =
