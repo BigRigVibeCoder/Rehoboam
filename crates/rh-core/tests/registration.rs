@@ -115,8 +115,8 @@ fn a_plane_a_system_reading_a_plane_b_column_is_refused() {
         .filter(|v| v.rule == "plane")
         .map(ToString::to_string)
         .collect();
-    // Both the lint's check and the code rule name the leak.
-    assert_eq!(plane.len(), 2, "{e}");
+    // The lint's check and the code rule both find the leak; it is reported once (Tester DEF-2).
+    assert_eq!(plane.len(), 1, "{e}");
     assert!(plane.iter().all(|m| m == "VIOLATION [plane] X2.reader: a plane-A system reads plane-B column region.pins (ADR-0024)"));
 }
 
@@ -292,6 +292,38 @@ fn a_cycle_names_only_its_members() {
         [
             "in phase Exchange, X1.a, X2.b read each other's columns at same_instant in a cycle; declare a lag on one read (05.1 §2 rule 4)",
             "in phase Exchange, X5.e, X6.f read each other's columns at same_instant in a cycle; declare a lag on one read (05.1 §2 rule 4)",
+        ]
+    );
+}
+
+/// Tester DEF-2: a duplicate id is its own error, and a column declared twice is its own error;
+/// neither is a single-writer conflict of a system with itself.
+#[test]
+fn duplicates_are_their_own_errors_never_a_conflict_with_oneself() {
+    let a = Stub::new("A.a").writes("a.c").at(Pulse::Day, Phase::Vital);
+    let e = refused(vec![a.clone(), a.clone()], std::slice::from_ref(&a));
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        ["VIOLATION [registry] A.a: is registered twice"]
+    );
+    let twice = a
+        .clone()
+        .writes("a.c")
+        .reads("b.c", "B.b", Lag::Lagged)
+        .reads("b.c", "B.b", Lag::Lagged);
+    let b = Stub::new("B.b").writes("b.c");
+    let e = refused(vec![twice.clone(), b.clone()], &[twice, b]);
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [duplicate] A.a: declares a write to a.c twice",
+            "VIOLATION [duplicate] A.a: declares a read of b.c twice",
         ]
     );
 }

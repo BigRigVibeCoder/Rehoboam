@@ -169,10 +169,13 @@ pub fn register(
     let mut violations = Vec::new();
     let mut reports = Vec::new();
 
-    // Identity: one registration per id; distinct RNG system ids.
+    // Identity: one registration per id; distinct RNG system ids. A second registration of an id
+    // is its own error and takes no further part, so it is never reported as conflicting with its
+    // first registration (Tester DEF-2).
     let mut seen_ids: BTreeMap<SystemId, &str> = BTreeMap::new();
-    for (i, e) in entries.iter().enumerate() {
-        if i > 0 && entries[i - 1].id == e.id {
+    let mut kept: Vec<Entry> = Vec::with_capacity(entries.len());
+    for e in entries {
+        if kept.last().is_some_and(|k| k.id == e.id) {
             violations.push(violation(
                 e.id,
                 "registry",
@@ -187,7 +190,9 @@ pub fn register(
                 format!("hashes to the RNG system_id of {other} ({})", e.system_id),
             ));
         }
+        kept.push(e);
     }
+    let entries = kept;
 
     // Each declaration against the specs: the lint's own check.
     for e in &entries {
@@ -232,6 +237,7 @@ pub fn register(
         .collect();
     let derived = schedule::derive(&inputs);
     drop(inputs);
+    let violations = once_each(violations);
     match derived {
         Ok(schedule) if violations.is_empty() => Ok(Registered {
             entries,
@@ -243,13 +249,24 @@ pub fn register(
             reports,
         }),
         Err(schedule_problems) => {
+            let mut violations = violations;
             violations.extend(schedule_problems);
             Err(RegistrationError {
-                violations,
+                violations: once_each(violations),
                 reports,
             })
         }
     }
+}
+
+/// Each violation once, in first-seen order (Tester DEF-2). The lint's check and the shared rules
+/// can find the same fact (a plane leak, a column declared twice); the report names it once.
+fn once_each(violations: Vec<Violation>) -> Vec<Violation> {
+    let mut seen = BTreeSet::new();
+    violations
+        .into_iter()
+        .filter(|v| seen.insert(v.clone()))
+        .collect()
 }
 
 /// T-06: every purpose a system draws under is in its spec's `[[rng]]` table, once; a spec
