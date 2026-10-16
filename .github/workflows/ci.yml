@@ -7,9 +7,13 @@
 # superseded runs on the same ref are cancelled.
 name: ci
 
+# Pushes to main and every pull request; not every branch push as well, which would run each
+# pull request twice and spend Free-plan minutes (GOV-005 §4.1: every sprint opens a draft PR early).
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
