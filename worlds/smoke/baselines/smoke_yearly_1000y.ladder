@@ -4,6 +4,7 @@ seed 1
 years 1000
 rung yearly
 hash rehoboam/rh-snapshot/hash/v1
+journal 1136 d9c497e0d5d2cbb16bfc5bd51f0eaafb
 rung 1 525599 0000-12 9d7b2d7f8f1535df 88feb6aa0b8250ce
 root chronicle.census 6c194c0f8e932c8d
 root chronicle.closed 304f769a8940d222
