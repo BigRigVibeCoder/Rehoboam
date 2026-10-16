@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.8.0
+version: 1.9.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -80,6 +80,14 @@ version: 1.8.0
 7. **`allocations_v1.txt` carries toolchain lines** (rustc, LLVM, host, libc). A change reports "re-baseline required" (exit 3; control). The baseline was re-recorded by the tool.
 8. **The observer crash text no longer names the worker,** so it is the same at every thread count (test).
 9. **README notes:** perf-baseline PRs merge by merge commit or rebase, never squash; the counter cannot see C-library allocations; what "serial %" measures at 1 thread.
+
+## VER-SPR-009-TEST phase 2, fixed (Architect, 2026-10-16)
+- **DEF-6:** the vitals pace divides sim-minutes by minutes per year in one ratio, never truncated to whole years first (a 1-year run printed 0.0). Test.
+- **GAP-13:** `Timing` takes an injected clock (`Timing::with_clock`; the default reads `Instant`). Fake-clock tests over scripted notices at one and two workers kill mutants V1–V4, V6 and V7.
+- **GAP-15:** unit tests cover `alloc_compare`'s growths, max per tick, window and tick branches (A2–A5).
+- **G3 and D4:** tests cover a push with an all-zero `before` ("not checked: the push has no base") and `wall_trend` refusing 0 samples.
+- **GAP-18:** the core part runs ruff, mypy, pytest and the hostile-CI pytest before any Rust build. An inventory test keeps that order.
+- **GAP-17:** `worlds/smoke/README.md`: never squash-merge a C3 PR, because the push rule needs the tag at the end of a commit subject.
 
 ## Deviations (Developer)
 - **Instruction counts run on a deterministic arena, not on glibc's malloc** (R-7). Instruction counts measure computation, with allocation at a constant cost; V-PERF-11 counts allocations.

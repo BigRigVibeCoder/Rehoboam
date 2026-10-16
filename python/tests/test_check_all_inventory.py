@@ -501,3 +501,18 @@ def test_the_workspace_run_leaves_out_exactly_the_by_name_binaries() -> None:
     assert sorted(listed - _by_name_test_binaries(release=True)) == []
     assert sorted(_by_name_test_binaries(release=False) - listed) == []
     assert '-E "not ($filter)"' in script
+
+
+def test_the_python_checks_run_before_any_rust_build() -> None:
+    """GAP-18: the Python checks come before the first cargo build or clippy run.
+
+    ruff, mypy, pytest and the hostile-CI pytest lead the core part, so a Python failure shows in
+    about a minute.
+    """
+    names = [m.group("name") for line in _chain_lines() if (m := RUN_NAME.match(line))]
+    python = [i for i, n in enumerate(names) if n.startswith("Python: ")]
+    rust_builds = [
+        i for i, n in enumerate(names) if n.startswith(("Rust: lint", "Rust: build", "Rust: unit"))
+    ]
+    assert len(python) == 6
+    assert max(python) < min(rust_builds)

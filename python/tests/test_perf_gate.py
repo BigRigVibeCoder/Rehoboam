@@ -251,3 +251,51 @@ def test_an_allocation_toolchain_change_asks_for_a_re_baseline() -> None:
         "toolchain changed: re-baseline required (SPR-009 review 7, as R-9)",
         "  rustc: 1.97.0 abc -> 1.98.0 def",
     ]
+
+
+@pytest.mark.parametrize("field_name", ["growths", "max_per_tick"])
+def test_each_gated_allocation_field_fails_on_any_increase(field_name: str) -> None:
+    """GAP-15: growths and the most in a tick are gated like allocations; a decrease is kept."""
+    value = {"growths": 5, "max_per_tick": 9}[field_name]
+    more = ALLOC.replace(f"{field_name} {value}", f"{field_name} {value + 1}")
+    verdict, lines = alloc_compare(ALLOC, more)
+    assert verdict == FAIL
+    assert f"OVER BUDGET threads 1 {field_name}: {value} -> {value + 1} (+1)" in lines
+    fewer = ALLOC.replace(f"{field_name} {value}", f"{field_name} {value - 1}")
+    verdict, lines = alloc_compare(ALLOC, fewer)
+    assert verdict == OK
+    assert f"below budget (kept) threads 1 {field_name}: {value} -> {value - 1}" in lines
+
+
+def test_shrinks_are_reported_not_gated() -> None:
+    """Ruling 5: shrinks are not a gated field."""
+    assert alloc_compare(ALLOC, ALLOC.replace("shrinks 0", "shrinks 50"))[0] == OK
+
+
+def test_a_changed_window_or_tick_count_asks_for_a_re_baseline() -> None:
+    """GAP-15: another window, other thread counts or other ticks: exit 3, not a verdict."""
+    window = ALLOC.replace("window smoke", "window smoke seed 2")
+    verdict, lines = alloc_compare(ALLOC, window)
+    assert verdict == REBASELINE
+    assert lines[0].startswith("window changed: re-baseline required")
+    threads = ALLOC.replace("budget threads 1 ", "budget threads 4 ")
+    assert alloc_compare(ALLOC, threads)[0] == REBASELINE
+    ticks = ALLOC.replace("ticks 10", "ticks 11").replace("allocations 100", "allocations 999")
+    verdict, lines = alloc_compare(ALLOC, ticks)
+    assert verdict == REBASELINE
+    assert lines == ["window changed: the ticks at 1 thread(s) differ"]
+
+
+def test_a_push_with_no_base_says_it_did_not_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """G3: a push whose before is all zeros (a new branch) has no base: said so, never a pass."""
+    tmp_path = perf_gate.ROOT / "target" / "pytest-perf-gate" / tmp_path.name
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("RH_EVENT", "push")
+    monkeypatch.setenv("RH_PUSH_BEFORE", "0" * 40)
+    monkeypatch.setenv("RH_PUSH_AFTER", "b" * 40)
+    tool = _write(tmp_path, "tool.txt", counts(a=1000))
+    typed = _write(tmp_path, "typed.txt", counts(a=1065))
+    assert cmd_integrity(typed, tool, Base("x")) == OK
+    assert "not checked: the push has no base (a new branch)" in capsys.readouterr().out

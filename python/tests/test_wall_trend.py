@@ -95,3 +95,11 @@ def test_non_finite_or_non_positive_values_are_refused(median: str, spread: str)
     text = trend(a=1.0).render().replace("bench a 1.0 1.00 10", f"bench a {median} {spread} 10")
     with pytest.raises(TrendError, match="not a"):
         parse(text, "x")
+
+
+def test_zero_samples_are_refused_and_a_zero_spread_is_allowed() -> None:
+    """D4: a bench line with 0 samples is refused; identical samples (spread 0) are not."""
+    with pytest.raises(TrendError, match="not a"):
+        parse(trend(a=1.0).render().replace("bench a 1.0 1.00 10", "bench a 1.0 1.00 0"), "x")
+    same = trend(a=1.0).render().replace("bench a 1.0 1.00 10", "bench a 1.0 0.00 10")
+    assert parse(same, "x").benches["a"] == (1.0, 0.0, 10)

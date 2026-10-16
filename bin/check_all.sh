@@ -638,7 +638,8 @@ trap finish EXIT
 
 part core &&
 run "Required tools present (core part)" pass require_tools core &&
-# Tier 1 — static and contract lints (fastest first)
+# Tier 1 — static and contract lints, fastest first. The Python checks (ruff, mypy, pytest, the
+# hostile-CI pytest) run before any Rust build, so a Python failure shows in about a minute (GAP-18).
 run "Document index builds (gen_manifest --check)" pass "$PY" -I bin/gen_manifest.py --check &&
 run "CI workflows parse (YAML)" pass "$PY" -I -c 'import sys, yaml; [yaml.safe_load(open(f, encoding="utf-8")) for f in sys.argv[1:]]' .github/workflows/ci.yml .github/workflows/advisories.yml .github/workflows/nightly.yml .github/workflows/adjutant.yml &&
 run "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp-contract=off (SPR-003 GAP-6; SPR-007 ruling 4)" pass fp_contract_guard . &&
@@ -657,6 +658,8 @@ run "uv lock --check positive control: drifted lock must FAIL" "fail:needs to be
 run "Python: lint (ruff check)" pass "$PY" -I -m ruff check --config python/pyproject.toml --no-cache . &&
 run "Python: format (ruff format --check)" pass "$PY" -I -m ruff format --config python/pyproject.toml --no-cache --check . &&
 run "Python: types (mypy --strict)" pass "$PY" -I -m mypy --config-file python/pyproject.toml &&
+run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
+run "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, GITHUB_EVENT_NAME, RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)" pass pytest_hostile_env &&
 run "Rust: format (cargo fmt --check)" pass cargo fmt --all --check &&
 run "Rust: bans and sources (cargo deny: crates.io only, no wildcards)" pass cargo deny --color never --locked check bans sources &&
 run "cargo deny positive control: git source must FAIL" "fail:error[source-not-allowed]" git_source_control &&
@@ -796,8 +799,6 @@ run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [
 run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
 run "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)" "pass:SCHEMA: no unexplained difference" "$RH_CLI" manifest schema --diff specs/manifest/manifest_v0.schema.json &&
 run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERENCE \$defs.Horizon.properties.years.maximum" "$RH_CLI" manifest schema --diff tests/lint_fixtures/schema/drifted_bound.schema.json &&
-run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
-run "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, GITHUB_EVENT_NAME, RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)" pass pytest_hostile_env &&
 run "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST GAP-3)" "pass:Verdict: PASS (2 checks)" "$PY" -I bin/check_all_selftest.py verdict &&
 run "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier (VER-SPR-008-TEST GAP-3)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-true &&
 run "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; VER-SPR-008-TEST GAP-3, GAP-7)" "pass:NO OR-TRUE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh &&
