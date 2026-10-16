@@ -49,7 +49,7 @@ version: 1.1.0
 ### T-03: Thresholds and draws
 - **Deliverable:** A comparison of a uniform RNG draw (a `u64` from SPR-002's API, or a placeholder trait until SPR-002 lands) against a `Q16_16` probability, with a documented exact mapping
 - **Acceptance:** Exhaustive test over the edge cases (probability 0, 1, the smallest step); frequency test against the exact probability
-- **Status:** [ ] not started
+- **Status:** [x] done: `crates/rh-core/src/fixed/draw.rs` (`draw_hits`, `chance`, the placeholder trait `UniformDraw`; mapping: hit iff `draw / 2^64 < p`); tests in `tests/fixed_draws.rs` and `draw` golden vectors. Swap `UniformDraw` for SPR-002's keyed RNG when it lands
 
 ### T-04: The float gate
 - **Deliverable:** `bin/lint_forbidden.py` gains the V-DET-19 float rule for plane A: `f32`/`f64` only in items marked as declared float fields (`f32_field` in the system spec), with the same escape syntax and a positive control

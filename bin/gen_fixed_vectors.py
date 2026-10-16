@@ -174,10 +174,26 @@ def money_vectors(rng: SplitMix64) -> list[str]:
     return lines
 
 
+def draw_vectors(rng: SplitMix64) -> list[str]:
+    """Return the draw-against-probability vectors: hit iff ``draw / 2^64 < p``, exactly (T-03)."""
+    probabilities = [*Q16.edges(), *(rng.signed(18) for _ in range(32))]
+    lines: list[str] = []
+    for p in probabilities:
+        block = max(0, min(p, 1 << 16)) << 48  # the first draw that misses, for 0 < p < 1
+        draws = {0, 1, (1 << 48) - 1, 1 << 48, MASK64 - 1, MASK64}
+        draws |= {rng.next_u64() for _ in range(8)}
+        draws |= {d for d in (block - 1, block, block + 1) if 0 <= d <= MASK64}
+        for d in sorted(draws):
+            hit = Fraction(d, 1 << 64) < Q16.value(p)
+            lines.append(f"draw {d} {p} {int(hit)}")
+    return lines
+
+
 SECTIONS: tuple[Callable[[SplitMix64], list[str]], ...] = (
     lambda rng: q_vectors(Q8, Q16, rng),
     lambda rng: q_vectors(Q16, Q8, rng),
     money_vectors,
+    draw_vectors,
 )
 
 
