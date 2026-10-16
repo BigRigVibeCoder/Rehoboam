@@ -26,6 +26,7 @@ Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and b
 - **No physical compaction of named-actor history.** Hide low-salience events with the visibility sidecar instead (ADR-0007).
 - **Sifting patterns must anchor every state read** (`attr@eN`) and declare their match semantics and firing budget. Use `specs/sifting/lint_patterns.py`.
 - **Mechanics come only from the Registry.** No free-string semantics in manifests (ADR-0010).
+- **Floats in plane A live in `rh-sample` only** (SPR-003 Architect ruling): the samplers compute in `f64` with `libm` (never `std` transcendentals, never `mul_add`) and return integers or `rh_core::fixed` values.
 - **Licences: personal-use mode** (ADR-0021 as amended, D19, 2026-10-16). Rehoboam is a private experiment that is never distributed, so any licence may be used. Two limits remain: no licence whose terms forbid the use itself, and no copying of unlicensed code. The repository stays private. `bin/check_all.sh` keeps a licence ledger (`artifacts/licence_ledger.txt`) that never fails a build; crates come from crates.io only, with no wildcard versions.
 
 ## Checks to run after any change
@@ -54,6 +55,9 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I specs/chronicle/selftest.py
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
+python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference distributions are current (SPR-003)
+cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sampler golden vectors at opt-level 3 (SPR-003 T-05)
+cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)
 python -I specs/demography/selftest_brass.py
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py

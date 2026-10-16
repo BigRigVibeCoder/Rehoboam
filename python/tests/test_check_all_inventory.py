@@ -61,9 +61,12 @@ REQUIRED_GATES = (
     "Rust: format (cargo fmt --check)",
     "Rust: lint (cargo clippy -D warnings)",
     "Rust: unit tests (cargo nextest)",
+    "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
     "System specs (lint_odd)",
+    "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
+    "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)",
     "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL",
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
@@ -75,6 +78,7 @@ REQUIRED_GATES = (
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",
+    "gen_sampler_reference positive control: stale reference must FAIL",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
     "lint_arch positive control: kind contract outside rh-contract-* must FAIL",
     "lint_arch positive control: libm outside rh-sample must FAIL",
@@ -99,6 +103,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
+    "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
+    "exact distributions (SPR-003)",
     "uv lock --check positive control: drifted lock must FAIL",
 )
 
