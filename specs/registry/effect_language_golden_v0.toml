@@ -64,7 +64,7 @@ kinds = ["person", "life_course", "title", "office", "claim", "house", "polity",
 "life_course.mother" = { entity = "life_course", key = "person", type = "ref", ref = "person", plane = "A", owner = "M2.demography" }
 "life_course.father" = { entity = "life_course", key = "person", type = "ref", ref = "person", plane = "A", owner = "M2.demography" }
 "life_course.birth_tick" = { entity = "life_course", key = "person", type = "int", plane = "A", owner = "M2.demography" }
-"life_course.sex"    = { entity = "life_course", key = "person", type = "enum", enum = "sex", plane = "A", owner = "M2.demography" }   # proposed: open question Q12
+"life_course.sex"    = { entity = "life_course", key = "person", type = "enum", enum = "sex", plane = "A", owner = "M2.demography" }   # REV-P1a NEW-7
 "title.tier"         = { entity = "title", type = "enum", enum = "title_tiers", plane = "A", owner = "M7.dynasty" }
 "title.liege"        = { entity = "title", type = "ref", ref = "title", plane = "A", owner = "M7.dynasty" }
 "title.polity"       = { entity = "title", type = "ref", ref = "polity", plane = "A", owner = "M7.dynasty" }
@@ -108,7 +108,7 @@ rng = ["death_hazard"]
 params = { e0 = [20.0, 85.0] }
 
 [registry.systems."M7.dynasty"]
-reads = ["person.alive", "person.death_cause", "person.death_tick", "person.birth_tick", "person.sex", "person.mother", "person.father", "life_course.person_id", "life_course.mother", "life_course.father", "life_course.birth_tick", "life_course.sex", "person.named", "vow.vower", "vow.status", "polity.exec_constraint"]   # life_course.*: open question Q11
+reads = ["person.alive", "person.death_cause", "person.death_tick", "person.birth_tick", "person.sex", "person.mother", "person.father", "life_course.person_id", "life_course.mother", "life_course.father", "life_course.birth_tick", "life_course.sex", "person.named", "vow.vower", "vow.status", "polity.exec_constraint"]   # life_course.*: same_instant, open question Q11
 sends = [
   { command = "ScheduleDeath", target = "M2.demography" },
   { command = "Promote", target = "T1.minds" },
@@ -248,12 +248,15 @@ order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.bi
 #   │   │   ├── Mara (12, f, -8500)                                               └── Ulf (19, m, holy orders)
 #   │   │   ├── Kell (10, m, -8000) ── Thora (18, f, -300)
 #   │   │   └── Nils (13, m, dead -100) = Pia (15, f) ── Orm (14, m, -400)
+#   │   │   └── Brynja (25, f, -9000, dead -500; the eldest child) ── Sten (26, m, -1000; father unknown)
 #   │   ├── Ingrid (8, f, -13500) ── Wulf (21, m, -9000; father unknown)
-#   │   └── Jorund (9, m, -12500) ── Ragnar (16, m, -3000), Varg (20, m, -1500)
+#   │   └── Jorund (9, m, -12500) ── Hakon (23, m, -5000, dead -800) ── Ivar (24, m, -200)
+#   │                             ── Ragnar (16, m, -3000) and Rolf (27, m, -3000): twins
+#   │                             ── Varg (20, m, -1500)
 #   └── Yrsa (22, f, -11000): Dagny's daughter by an unknown father (a half-sister of Halvard through the mother)
 #
-# The ledger (worlds.dynasty.person) holds the living and Halvard, who dies at this instant; Aldric, Bera, Cedric and
-# Nils died earlier and are compacted (SPR-011 ruling 5), so they exist only in the life-course log.
+# The ledger (worlds.dynasty.person) holds the living and Halvard, who dies at this instant; Aldric, Bera, Cedric,
+# Nils, Hakon and Brynja died earlier and are compacted (SPR-011 ruling 5), so they exist only in the life-course log.
 # Titles: 100 the sovereign seat (holder 7), its vassals 101 (major, Edmund), 102 (minor, Jorund), 103 (minor,
 # Freya); 104 a vacant vassal of 101. Offices of 100: marshal Ragnar (16), steward Liv (11), chaplain Ulf (19),
 # spymaster vacant; of 101: steward Sif (17). Claims: 300 Jorund on 100 (active, pressed), 301 Jorund on 101
@@ -566,6 +569,48 @@ vocation = "none"
 named = false
 residence = 1
 [[worlds.dynasty.person]]
+id = 24
+alive = true
+sex = "male"
+birth_tick = -200
+death_tick = 0
+death_cause = "natural"
+mother = 0
+father = 23
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.dynasty.person]]
+id = 26
+alive = true
+sex = "male"
+birth_tick = -1000
+death_tick = 0
+death_cause = "natural"
+mother = 25
+father = 0
+spouse = 0
+house = 1
+vocation = "none"
+named = false
+residence = 1
+[[worlds.dynasty.person]]
+id = 27
+alive = true
+sex = "male"
+birth_tick = -3000
+death_tick = 0
+death_cause = "natural"
+mother = 0
+father = 9
+spouse = 0
+house = 1
+vocation = "none"
+named = true
+residence = 1
+[[worlds.dynasty.person]]
 id = 22
 alive = true
 sex = "female"
@@ -735,6 +780,42 @@ mother = 4
 father = 0
 birth_tick = -11000
 sex = "female"
+
+[[worlds.dynasty.life_course]]
+id = 23
+person_id = 23
+mother = 0
+father = 9
+birth_tick = -5000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 24
+person_id = 24
+mother = 0
+father = 23
+birth_tick = -200
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 25
+person_id = 25
+mother = 11
+father = 7
+birth_tick = -9000
+sex = "female"
+[[worlds.dynasty.life_course]]
+id = 26
+person_id = 26
+mother = 25
+father = 0
+birth_tick = -1000
+sex = "male"
+[[worlds.dynasty.life_course]]
+id = 27
+person_id = 27
+mother = 0
+father = 9
+birth_tick = -3000
+sex = "male"
 
 [[worlds.dynasty.title]]
 id = 100
@@ -2452,7 +2533,7 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'count(y in children(holder))'
-expect = "int:3"
+expect = "int:4"
 [[case]]
 id = "count_where"
 kind = "expr"
@@ -2508,7 +2589,7 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'sum(y in children(holder): life_course.birth_tick(y))'
-expect = "int:-23500"
+expect = "int:-32500"
 [[case]]
 id = "sum_int_from_the_ledger_misses_the_compacted_dead"   # Nils (13) is compacted: his ledger birth tick reads 0
 kind = "expr"
@@ -2516,7 +2597,7 @@ system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'sum(y in children(holder): person.birth_tick(y))'
 expect = "int:-16500"
-missing_reads = 1
+missing_reads = 2
 [[case]]
 id = "sum_saturates"
 kind = "expr"
@@ -2530,7 +2611,7 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'sum(y in children(holder): 0.5)'
-expect = "q16_16:98304"
+expect = "q16_16:131072"
 [[case]]
 id = "sum_where"
 kind = "expr"
@@ -2544,7 +2625,7 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'min(y in children(holder): life_course.birth_tick(y) else 0)'
-expect = "int:-8500"
+expect = "int:-9000"
 [[case]]
 id = "max_aggregate"
 kind = "expr"
@@ -2669,35 +2750,35 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'count(y in kin(holder, 1))'
-expect = "int:5"
+expect = "int:6"
 [[case]]
 id = "kin_2"   # parents, children, grandparents, siblings (Yrsa included), grandchildren, Liv; Pia is 3 steps (spouse edges are not kinship)
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'count(y in kin(holder, 2))'
-expect = "int:13"
+expect = "int:15"
 [[case]]
 id = "kin_3"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'count(y in kin(holder, 3))'
-expect = "int:19"
+expect = "int:23"
 [[case]]
 id = "kin_4"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'count(y in kin(holder, 4))'
-expect = "int:21"
+expect = "int:26"
 [[case]]
 id = "nesting_depth_two"
 kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'count(a in children(holder) where any(b in children(a): person.alive(b)))'
-expect = "int:2"
+expect = "int:3"
 [[case]]
 id = "nesting_depth_three"
 kind = "expr"
@@ -2711,7 +2792,7 @@ kind = "expr"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'count(a in kin(holder, 4) where any(b in kin(a, 4): b == holder))'
-expect = "int:21"
+expect = "int:26"
 [[case]]
 id = "shadowing_a_bound_variable"
 kind = "expr"
@@ -2788,14 +2869,14 @@ kind = "candidates"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'kin(holder, 4)'
-expect = "relation:[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]"
+expect = "relation:[1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]"
 [[case]]
 id = "candidates_children"
 kind = "candidates"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'children(holder)'
-expect = "relation:[10, 12, 13]"
+expect = "relation:[10, 12, 13, 25]"
 [[case]]
 id = "candidates_court"
 kind = "candidates"
@@ -3127,21 +3208,21 @@ kind = "candidates"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'descendants(holder, 1)'
-expect = "relation:[10, 12, 13]"
+expect = "relation:[10, 12, 13, 25]"
 [[case]]
 id = "descendants_through_a_dead_son"
 kind = "candidates"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'descendants(holder, 2)'
-expect = "relation:[10, 12, 13, 14, 18]"
+expect = "relation:[10, 12, 13, 25, 14, 18, 26]"
 [[case]]
 id = "descendants_of_the_founder"
 kind = "candidates"
 system = "M7.dynasty"
 bind = { a = "person:1" }
 text = 'descendants(a, 6)'
-expect = "relation:[3, 5, 6, 7, 8, 9, 17, 19, 10, 12, 13, 16, 20, 21, 14, 18]"
+expect = "relation:[3, 5, 6, 7, 8, 9, 17, 19, 10, 12, 13, 16, 20, 21, 23, 25, 27, 14, 18, 24, 26]"
 [[case]]
 id = "descendants_generations_too_many"
 kind = "candidates"
@@ -3285,7 +3366,7 @@ kind = "order"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = '[life_course.birth_tick(y) for y in children(holder)]'
-expect = "key:[int:-8000, int:-8500, int:-7000]"
+expect = "key:[int:-8000, int:-8500, int:-7000, int:-9000]"
 [[case]]
 id = "key_list_of_a_line"
 kind = "order"
@@ -3306,7 +3387,7 @@ kind = "order"
 system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = '[1 for y in children(holder)]'
-expect = "key:[int:1, int:1, int:1]"
+expect = "key:[int:1, int:1, int:1, int:1]"
 [[case]]
 id = "key_primogeniture_of_a_sisters_son"
 kind = "order"
@@ -3822,24 +3903,24 @@ kind = "succession"
 system = "M7.dynasty"
 law = "primogeniture"
 bind = { holder = "person:7", title = "title:100" }
-text = 'primogeniture: Kell, Thora, Orm (through the dead Nils), Mara; Jorund, Ragnar, Varg, Ingrid, Wulf, Yrsa; Edmund, Ulf, Sif, Freya'
-expect = "line:[10, 18, 14, 12, 9, 16, 20, 8, 21, 22, 5, 19, 17, 6]"
+text = 'male-preference cognatic primogeniture by representation: Kell, Thora, Orm (through the dead Nils), Sten (through the dead daughter Brynja: after every son, before the living younger daughter Mara), Mara; Jorund, Ivar (through the dead elder son Hakon, ahead of the living twins), Ragnar before his twin Rolf by person_id, Varg, Ingrid, Wulf, Yrsa; Edmund, Ulf, Sif, Freya'
+expect = "line:[10, 18, 14, 26, 12, 9, 24, 16, 27, 20, 8, 21, 22, 5, 19, 17, 6]"
 [[case]]
 id = "succession_ultimogeniture"
 kind = "succession"
 system = "M7.dynasty"
 law = "ultimogeniture"
 bind = { holder = "person:7", title = "title:100" }
-text = 'ultimogeniture: Orm (youngest son Nils, dead), Kell, Thora, Mara; Jorund, Varg, Ragnar, Yrsa, Ingrid, Wulf; Edmund, Ulf, Sif, Freya'
-expect = "line:[14, 10, 18, 12, 9, 20, 16, 22, 8, 21, 5, 19, 17, 6]"
+text = 'male-preference ultimogeniture: Orm (youngest son Nils, dead), Kell, Thora, Mara, Sten (through Brynja, the eldest daughter); Jorund, Varg, the twins Ragnar then Rolf, Ivar (through Hakon, the eldest son), Yrsa, Ingrid, Wulf; Edmund, Ulf, Sif, Freya'
+expect = "line:[14, 10, 18, 12, 26, 9, 20, 16, 27, 24, 22, 8, 21, 5, 19, 17, 6]"
 [[case]]
 id = "succession_seniority"
 kind = "succession"
 system = "M7.dynasty"
 law = "seniority"
 bind = { holder = "person:7", title = "title:100" }
-text = 'agnatic seniority: the uncle Edmund; the brother Jorund and the cousin Ulf; the sons and nephews by age; the grandson Orm'
-expect = "line:[5, 9, 19, 10, 16, 20, 14]"
+text = 'agnatic seniority: the uncle Edmund; the brother Jorund and the cousin Ulf; the sons and nephews by age (the twins by person_id); the grandsons Orm then Ivar; Sten, the son of a daughter, is not of the male line'
+expect = "line:[5, 9, 19, 10, 16, 27, 20, 14, 24]"
 [[case]]
 id = "succession_partition"
 kind = "succession"
@@ -3878,16 +3959,16 @@ kind = "succession"
 system = "M7.dynasty"
 law = "absolute_primogeniture"
 bind = { holder = "person:7", title = "title:100" }
-text = 'absolute primogeniture (a data-only extension): eldest first regardless of sex'
-expect = "line:[12, 10, 18, 14, 8, 21, 9, 16, 20, 22, 6, 5, 17, 19]"
+text = 'absolute primogeniture (a data-only extension): eldest first regardless of sex, so the dead eldest daughter Brynja is represented by Sten first'
+expect = "line:[26, 12, 10, 18, 14, 8, 21, 9, 24, 16, 27, 20, 22, 6, 5, 17, 19]"
 [[case]]
 id = "succession_agnatic_primogeniture"
 kind = "succession"
 system = "M7.dynasty"
 law = "agnatic_primogeniture"
 bind = { holder = "person:7", title = "title:100" }
-text = 'agnatic primogeniture (a data-only extension): males through males only; Wulf and Yrsa excluded'
-expect = "line:[10, 14, 9, 16, 20, 5, 19]"
+text = 'agnatic primogeniture (a data-only extension): males through males only; Wulf, Yrsa and Sten excluded'
+expect = "line:[10, 14, 9, 24, 16, 27, 20, 5, 19]"
 [[case]]
 id = "succession_primogeniture_lay"
 kind = "succession"
@@ -3895,12 +3976,34 @@ system = "M7.dynasty"
 law = "primogeniture_lay"
 bind = { holder = "person:7", title = "title:100" }
 text = 'primogeniture excluding holy orders in the law itself (Q1): Ulf drops out'
-expect = "line:[10, 18, 14, 12, 9, 16, 20, 8, 21, 22, 5, 17, 6]"
+expect = "line:[10, 18, 14, 26, 12, 9, 24, 16, 27, 20, 8, 21, 22, 5, 17, 6]"
+[[case]]
+id = "succession_representation_grandson_before_living_younger_sons"   # REV-P1a NEW-7
+kind = "succession"
+system = "M7.dynasty"
+law = "primogeniture"
+bind = { holder = "person:9", title = "title:102" }
+text = 'Jorund as holder: Ivar, the son of the dead elder son Hakon, ahead of the living twins Ragnar and Rolf (tie by person_id) and Varg; then the brother Halvard line (he dies this instant), Ingrid, Wulf, Yrsa; then Edmund, Ulf, Sif, Freya'
+expect = "line:[24, 16, 27, 20, 10, 18, 14, 26, 12, 8, 21, 22, 5, 19, 17, 6]"
+[[case]]
+id = "twins_tie_broken_by_person_id"   # REV-P1a NEW-7
+kind = "candidates"
+system = "M7.dynasty"
+bind = { x = "person:9" }
+text = 'children(x)'
+expect = "relation:[16, 20, 23, 27]"
+[[case]]
+id = "twins_have_equal_keys"
+kind = "order"
+system = "M7.dynasty"
+bind = { holder = "person:9", x = "person:27" }
+text = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])'
+expect = "key:(int:0, [(bool:false, int:-3000, person:27)])"
 [[case]]
 id = "succession_primogeniture_for_a_vassal"
 kind = "succession"
 system = "M7.dynasty"
 law = "primogeniture"
 bind = { holder = "person:5", title = "title:101" }
-text = 'Edmund as holder: his children, then his brother Cedric line (Halvard dead; Thora and Orm are 5 degrees away, beyond kin(holder, 4): open question Q2), then Freya'
-expect = "line:[19, 17, 10, 12, 9, 16, 20, 8, 21, 6]"
+text = 'Edmund as holder: his children, then his brother Cedric line (Halvard dead; Thora, Orm, Sten and Ivar are 5 degrees away, beyond kin(holder, 4): open question Q2), then Freya'
+expect = "line:[19, 17, 10, 12, 9, 16, 27, 20, 8, 21, 6]"

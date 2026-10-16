@@ -233,7 +233,7 @@ A relation yields its elements in **ascending entity id** (`none` never appears)
 
 ### 5.3 The v0 prelude
 
-**Genealogy comes from the life-course log** (M2: `life_course.person_id`, `life_course.mother`, `life_course.father`, `u64` with 0 for unknown; REV-P1a NEW-3), not from the live ledger: the ledger's dead rows are compacted at Bookkeeping of the death instant (SPR-011 ruling 5), while the log keeps every person who ever lived, so a line through a dead intermediary (a grandson whose father predeceased the holder) stays complete. The genealogy relations read these three columns, declared `lagged` by their users (genealogy never changes within an instant). "Ancestor-or-self of `x` at height `h`" is the set `A_h(x)`: `A_0 = {x}`, `A_{h+1} = {father(y), mother(y) : y ∈ A_h} \ {none}`; the agnatic variant follows fathers only. Heights are bounded by `KIN_DEGREES_MAX = 4` for `kin`, `related`, `up` and `common`, and generations by `DESCENT_MAX = 6` for `ancestors`, `descendants` and the lines. Children are ordered by `life_course.person_id`, so every order below is deterministic without hashing.
+**Genealogy comes from the life-course log** (M2: `life_course.person_id`, `life_course.mother`, `life_course.father`, `u64` with 0 for unknown; `life_course.birth_tick`, `i64`; `life_course.sex`, the enum of `person.sex` at entry; REV-P1a NEW-3 and NEW-7), not from the live ledger: the ledger's dead rows are compacted at Bookkeeping of the death instant (SPR-011 ruling 5), while the log keeps every person who ever lived, so a line through a dead intermediary (a grandson whose father predeceased the holder) stays complete. The log is append-only, so its users declare these reads `same_instant`. The genealogy relations read `person_id`, `mother` and `father`; the law programs read `birth_tick` and `sex` of the persons on a line. Siblings are ordered by `life_course.birth_tick`, ties (twins) by `life_course.person_id`, which every key below ends with. "Ancestor-or-self of `x` at height `h`" is the set `A_h(x)`: `A_0 = {x}`, `A_{h+1} = {father(y), mother(y) : y ∈ A_h} \ {none}`; the agnatic variant follows fathers only. Heights are bounded by `KIN_DEGREES_MAX = 4` for `kin`, `related`, `up` and `common`, and generations by `DESCENT_MAX = 6` for `ancestors`, `descendants` and the lines. Children are ordered by `life_course.person_id`, so every order below is deterministic without hashing.
 
 | Name | Owner | Yields | Reads | Bound | Definition |
 |---|---|---|---|---|---|
@@ -342,11 +342,12 @@ A program is checked against: the Registry enums and the `[commands]` signatures
 
 ## 8. The succession laws of the Registry, as programs
 
-The seven laws are the ids of `[succession_laws]`; M7's spec names all seven (`exit_hazards`: the law multiplier covers every id; `arbitrate`: "the legal heir by the title's law"). Each program below is checked and evaluated in the golden file on a fixture dynasty (`world.dynasty`) and its expected line is pinned. The sex rule of each law is a design decision (D4, §12): the Registry has one `primogeniture`, so it is male-preference cognatic; `seniority` and `tanistry` are agnatic, as their sources are; the golden file also carries `absolute_primogeniture` and `agnatic_primogeniture` as data-only extensions, to show that a variant is a Registry edit.
+The seven laws are the ids of `[succession_laws]`; M7's spec names all seven (`exit_hazards`: the law multiplier covers every id; `arbitrate`: "the legal heir by the title's law"). Each program below is checked and evaluated in the golden file on a fixture dynasty (`world.dynasty`) and its expected line is pinned. Every lineage law orders siblings by `life_course.birth_tick` with ties broken by `life_course.person_id`, and inherits **by representation**: a dead elder child's line comes before a living younger child (the golden cases `succession_primogeniture` and `succession_representation_grandson_before_living_younger_sons`). The sex rule of each law is stated in its comment and is a design decision (D4, §12): the Registry has one `primogeniture`, so it is male-preference cognatic; `seniority` and `tanistry` are agnatic, as their sources are; the golden file also carries `absolute_primogeniture` and `agnatic_primogeniture` as data-only extensions, to show that a variant is a Registry edit. Under male-preference cognatic order a dead daughter's son comes after every son's line and before a living younger daughter's line: the daughter's own key (female, her birth tick) places her line, and she is represented by it.
 
 ```toml
 [succession_laws.primogeniture]
-# Male-preference cognatic primogeniture, lineal. Descendants first (sons by age, each son's line before the next
+# Sex rule: male-preference cognatic (sons by age, then daughters by age, each represented by their line).
+# Primogeniture by representation, lineal. Descendants first (sons by age, each son's line before the next
 # son, then daughters likewise), then the lines of the nearest common ancestor (siblings and their lines, then
 # uncles and aunts and theirs). An ancestor never inherits from a descendant (common(x, holder) != x).
 candidates = "kin(holder, 4)"
@@ -354,12 +355,13 @@ eligible   = "person.alive(x) and x != holder and up(x, holder) <= 3 and common(
 order      = "(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y), y) for y in line(common(x, holder), x)])"
 
 [succession_laws.ultimogeniture]
-# As primogeniture, youngest first within each set of siblings (still male-preference).
+# Sex rule: male-preference cognatic. As primogeniture, youngest first within each set of siblings.
 candidates = "kin(holder, 4)"
 eligible   = "person.alive(x) and x != holder and up(x, holder) <= 3 and common(x, holder) != x"
 order      = "(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y), y) for y in line(common(x, holder), x)])"
 
 [succession_laws.seniority]
+# Sex rule: agnatic (males through fathers only; a person in a father column is male by construction).
 # Agnatic seniority (the rota): the eldest male of the most senior generation of the male line, generations
 # counted relative to the holder (uncles before brothers before sons), then by age.
 candidates = "kin(holder, 4)"
@@ -367,14 +369,14 @@ eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male
 order      = "(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), life_course.birth_tick(x))"
 
 [succession_laws.partition]
-# Partible: the holder's living children, sons by age then daughters by age. M7 F1 holds one title per holder, so
+# Sex rule: male-preference, children only. Partible: the holder's living children, sons by age then daughters by age. M7 F1 holds one title per holder, so
 # the first takes the title; what the others take is open question Q3 (§12).
 candidates = "children(holder)"
 eligible   = "person.alive(x) and x != holder"
 order      = "(life_course.sex(x) == sex.female, life_course.birth_tick(x))"
 
 [succession_laws.elective]
-# Election by the magnates: the court of the title (vassal title holders and office holders), the holder of the
+# Sex rule: none (the court as it stands). Election by the magnates: the court of the title (vassal title holders and office holders), the holder of the
 # highest-tier vassal title first (the M7 spec's resolution rule for a sovereign with no candidate), the eldest first
 # within a tier, office holders without a title last. Votes are open question Q4 (§12).
 candidates = "court(title)"
@@ -382,21 +384,21 @@ eligible   = "person.alive(x) and x != holder"
 order      = "(min(t in titles(x): ordinal(title.tier(t)) else 3), life_course.birth_tick(x))"
 
 [succession_laws.tanistry]
-# The derbfine: adult males of the male line within three generations up and three down of a common ancestor;
+# Sex rule: agnatic, adult males. The derbfine: adult males of the male line within three generations up and three down of a common ancestor;
 # the eldest first (the election of the tánaiste is Q4).
 candidates = "kin(holder, 4)"
 eligible   = "person.alive(x) and x != holder and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and common_agnatic(x, holder) != x and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year))"
 order      = "life_course.birth_tick(x)"
 
 [succession_laws.sortition]
-# Lots among the court: a keyed draw per candidate (05.5 §2.1's rng_permutation). M7 must declare the purpose
+# Sex rule: none. Lots among the court: a keyed draw per candidate (05.5 §2.1's rng_permutation). M7 must declare the purpose
 # `sortition` in its [[rng]] (Q5).
 candidates = "court(title)"
 eligible   = "person.alive(x) and x != holder"
 order      = "draw(sortition, x, 0)"
 ```
 
-Reads these programs need from `M7.dynasty`: `person.alive` (M2, declared); `life_course.person_id`, `life_course.mother`, `life_course.father`, `life_course.birth_tick` and `life_course.sex` (M2, lagged; M7's and T1's specs must add them, Q11; `life_course.sex` does not exist yet, Q12); `title.tier`, `title.holder`, `title.liege`, `office.title`, `office.holder` (owned). `params.majority_age` is M7's. A dead candidate's `person.alive(x)` is a missing read after its death instant (the row is compacted) and so reads `false`, which is the right answer for eligibility. Every other fact about a person on a line (sex, birth tick) is read from the log, never from the ledger: a dead intermediary's ledger row is gone, and a ledger read of it would silently give the zero (the golden case `sum_int_from_the_ledger_misses_the_compacted_dead` shows the pitfall). The fixture's expected lines are in the golden file (`succession_*` cases).
+Reads these programs need from `M7.dynasty`: `person.alive` (M2, declared); `life_course.person_id`, `life_course.mother`, `life_course.father`, `life_course.birth_tick` and `life_course.sex` (M2, `same_instant`; M7's and T1's specs must add them, Q11); `title.tier`, `title.holder`, `title.liege`, `office.title`, `office.holder` (owned). `params.majority_age` is M7's. A dead candidate's `person.alive(x)` is a missing read after its death instant (the row is compacted) and so reads `false`, which is the right answer for eligibility. Every other fact about a person on a line (sex, birth tick) is read from the log, never from the ledger: a dead intermediary's ledger row is gone, and a ledger read of it would silently give the zero (the golden case `sum_int_from_the_ledger_misses_the_compacted_dead` shows the pitfall). The fixture's expected lines are in the golden file (`succession_*` cases).
 
 ## 9. Verb effects and vow predicates (the consumers' programs)
 
@@ -477,7 +479,7 @@ Each decision is the Architect's recommendation with a confidence; the director 
 | D10 | A `[commands]` Registry section with parameter lists, lint-checked against the specs | The checker cannot type a command argument otherwise; the specs' `[[commands]]` carry no signature | 7/10 |
 | D11 | Effects are commands only: no timer, no event, no entity creation from a program | `05.5` §2.1 lists `schedule_outcome` and `emit_event`; neither is needed before SPR-024, and each adds host state the checker cannot see; v0.2 if a consumer needs them | 7/10 |
 | D12 | Bounds: `kin` degree ≤ 4, paths and generations ≤ 6, nesting ≤ 2, bound product ≤ 65,536; relation bounds as in §5.3 | Dormancy's `dormancy_degrees` is bounded `[1, 6]` in the Registry, but every law here needs at most 4; 65,536 keeps a program under a millisecond at `08`'s budgets | 6/10 |
-| D13 | Genealogy is read from the life-course log (`life_course.person_id`, `.mother`, `.father`), lagged, never from the ledger's `person.mother`/`person.father`; the review's `kin(a, b, n)` is `related(a, b, n)` here because `kin(p, n)` is already the relation `05.5` §2.1 names | The log covers the dead (REV-P1a NEW-3); the ledger compacts them, which would cut every line through a dead intermediary. One name for a relation and a predicate would make the grammar ambiguous | 8/10 |
+| D13 | Genealogy is read from the life-course log (`life_course.person_id`, `.mother`, `.father`, `.birth_tick`, `.sex`), `same_instant` (the log is append-only), never from the ledger's `person.mother`/`person.father`; the review's `kin(a, b, n)` is `related(a, b, n)` here because `kin(p, n)` is already the relation `05.5` §2.1 names | The log covers the dead (REV-P1a NEW-3); the ledger compacts them, which would cut every line through a dead intermediary. One name for a relation and a predicate would make the grammar ambiguous | 8/10 |
 
 **Open questions** (the Registry or a spec is silent)
 
@@ -493,8 +495,7 @@ Each decision is the Architect's recommendation with a confidence; the director 
 | Q8 | `emitted_by = "rh-minds"` on the older verbs (`ARREST`, `PURGE`, `REVENGE`, …) is a crate name, not a system id | Rename to `T1.minds` in the Registry with SPR-017's loader change; the checker needs a system id to find the spec | 9/10 |
 | Q9 | Who evaluates: the host system at its binding, or `rh-core`? | The host, through an `rh-registry` API (`compile(program, env) -> Compiled`, `Compiled::eval(&SystemView, &Bindings) -> Value`): the reads then pass through the same `SystemView` that enforces `AccessSpec` at run time, so the compile-time check and the run-time guard agree | 8/10 |
 | Q10 | Should overlays (`derive`) be in v0 at all? | Reserve the kind and its signature only; its accessors (values, fear, success streaks) do not exist before P3.2b | 8/10 |
-| Q11 | M7's and T1's specs declare `person.mother`/`person.father` reads, not the life-course columns the genealogy relations read | In PR #32's next round, M7 and T1 add `[[reads]]` of `life_course.person_id`, `life_course.mother`, `life_course.father` and `life_course.birth_tick` (`lagged`, `identity`); the `person.mother`/`person.father` reads can go | 8/10 |
-| Q12 | The life-course log (M2 on `arch/P1a-skeleton-specs`) has no `sex` column, yet every lineage law needs the sex of dead intermediaries (a dead son's line before a living daughter) | M2 adds `life_course.sex` (an enum written at entry, never changed) in the skeleton specs; until then the laws cannot be evaluated correctly past a death instant. The golden environment carries the column as proposed | 8/10 |
+| Q11 | M7's and T1's specs declare `person.mother`/`person.father` reads, not the life-course columns the genealogy relations and the laws read | In PR #32's next round, M7 and T1 add `[[reads]]` of `life_course.person_id`, `life_course.mother`, `life_course.father`, `life_course.birth_tick` and `life_course.sex` (`same_instant`, `identity`); the `person.mother`/`person.father` reads can go. `life_course.sex` is REV-P1a NEW-7's column, due in M2's skeleton spec | 8/10 |
 
 ## 13. Conformance
 
