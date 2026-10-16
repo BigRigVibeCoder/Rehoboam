@@ -43,6 +43,8 @@ SPR-001 pins the exact Rust version in `rust-toolchain.toml`; `rustup` installs 
 ## 3. Cargo tools (SPR-001 needs the first two)
 ```bash
 cargo install --locked cargo-nextest cargo-deny
+# SPR-009: the instruction-count gate's runner, the same version as the iai-callgrind crate in Cargo.lock
+cargo install --locked iai-callgrind-runner@0.16.1
 # Later sprints: cargo install --locked cargo-mutants   (nightly mutation testing)
 #                cargo install --locked cargo-fuzz       (needs the nightly toolchain)
 ```

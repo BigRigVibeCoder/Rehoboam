@@ -24,6 +24,15 @@ RUN_NAME = re.compile(r'^\s*run "(?P<name>[^"]*)"')
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
     "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)",
+    "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason "
+    "passes (SPR-009 ruling 3)",
+    "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 "
+    "ruling 3)",
+    "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)",
+    "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must FAIL "
+    "(SPR-009 ruling 3)",
+    "Baseline integrity: a changed instruction-count baseline equals the tool's output, in a "
+    "[perf-baseline] PR (SPR-009 ruling 3)",
     "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite and zstd "
     "(SPR-007 ruling 4)",
     "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
@@ -87,6 +96,15 @@ REQUIRED_GATES = (
     "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)",
     "V-DET-10 unsynced guard: read-only APIs fuzzed on the stub world (SPR-007 T-04)",
     "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)",
+    "V-PERF-04 control: a speed-up passes and never re-baselines (docs/08 §9)",
+    "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 "
+    "T-02a)",
+    "V-PERF-04 positive control: a deliberate 15% slowdown in instructions must FAIL (SPR-009 "
+    "T-02)",
+    "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 "
+    "T-02)",
+    "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline "
+    "required (SPR-009 ruling 2)",
     "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL",
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",

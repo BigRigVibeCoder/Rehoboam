@@ -1,0 +1,41 @@
+[package]
+name = "rh-bench"
+description = "Benchmark fixtures, the instruction-count benches and the allocation counter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# A tool crate (SPR-009): it measures plane-A code and is never a dependency of it. Its bench
+# targets are the only place iai-callgrind enters the graph (SPR-009 ruling 2).
+[package.metadata.rehoboam]
+plane = "tool"
+kind = "tool"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
+rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }
+
+# SPR-009 ruling 2: exactly pinned, a dev-dependency of the bench targets only. Its runner binary,
+# iai-callgrind-runner, must be the same version (RUN-001 §3; .github/workflows/ci.yml).
+[dev-dependencies]
+iai-callgrind = "=0.16.1"
+
+[features]
+# V-PERF-04's positive control (SPR-009 T-02): bench 7's full state hash does about 15% more work.
+# Only bin/perf_gate.py's control turns it on; it never changes what a plane-A crate computes.
+slowdown-control = []
+
+# Bench 7 and bench 8 of docs/08 §9 at the PR tier's sizes (SPR-009 ruling 2). Bench 4
+# (raster_8x512) is a named, empty slot until P1a (ruling 1): see src/lib.rs, BENCHES.
+[[bench]]
+name = "plane_hashes"
+harness = false
+
+[[bench]]
+name = "keyframe_write_read"
+harness = false

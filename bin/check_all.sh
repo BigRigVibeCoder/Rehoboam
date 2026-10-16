@@ -3,8 +3,8 @@
 # Every sprint adds its own checks here in the same sprint that creates them.
 # Usage: bin/check_all.sh            (uses $PYTHON; else python/.venv/bin/python; else python3)
 #        PYTHON=/path/to/python bin/check_all.sh
-# Needs the Rust toolchain from rust-toolchain.toml, cargo-nextest, cargo-deny, uv, and the uv
-# environment from `uv sync --frozen --project python` (RUN-001 §2-4). A missing tool fails the
+# Needs the Rust toolchain from rust-toolchain.toml, cargo-nextest, cargo-deny, valgrind,
+# iai-callgrind-runner (SPR-009), uv, and the uv environment from `uv sync --frozen --project python` (RUN-001 §2-4). A missing tool fails the
 # first check by name; nothing is ever skipped silently.
 set -u
 cd "$(dirname "$0")/.." || { echo "check_all.sh: cannot enter the repository root" >&2; exit 2; }
@@ -70,6 +70,8 @@ require_tools() {
   cargo clippy --version >/dev/null 2>&1 || missing="$missing clippy(RUN-001 §2)"
   cargo nextest --version >/dev/null 2>&1 || missing="$missing cargo-nextest(RUN-001 §3)"
   cargo deny --version >/dev/null 2>&1 || missing="$missing cargo-deny(RUN-001 §3)"
+  command -v valgrind >/dev/null 2>&1 || missing="$missing valgrind(RUN-001 §1)"
+  command -v iai-callgrind-runner >/dev/null 2>&1 || missing="$missing iai-callgrind-runner(RUN-001 §3)"
   command -v uv >/dev/null 2>&1 || missing="$missing uv(RUN-001 §4)"
   local mod
   for mod in ruff mypy pytest pydantic yaml duckdb; do
@@ -302,6 +304,53 @@ fixed_point_compile_controls() {
   done <<<"$FIXED_POINT_COMPILE_FAIL"
 }
 
+# SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
+# and 8 under callgrind (bin/perf_gate.py) and compares them with the committed baseline; a second
+# run must give identical counts; a changed baseline must equal the tool's output (ruling 3).
+PERF_BASELINE=crates/rh-bench/baselines/instructions_v1.txt
+PERF_RUN=artifacts/perf/instructions.txt
+PERF_FIXTURES=target/rendered-fixtures/perf
+# perf_plant <name> <awk program>: the measured counts of this run, rewritten by <awk program>, as
+# $PERF_FIXTURES/<name>.txt (a planted baseline for a control).
+perf_plant() {
+  mkdir -p "$PERF_FIXTURES" && awk "$2" "$PERF_RUN" > "$PERF_FIXTURES/$1.txt"
+}
+# A baseline 25% above this run's counts: this run is a speed-up. It passes, and nothing rewrites the
+# baseline it was checked against (docs/08 §9: a speed-up never re-baselines automatically).
+perf_speedup_control() {
+  local before
+  perf_plant speedup '$1 == "bench" { $3 = int($3 * 5 / 4) } { print }' || return 1
+  before="$(cksum < "$PERF_FIXTURES/speedup.txt")"
+  "$PY" -I bin/perf_gate.py check --baseline "$PERF_FIXTURES/speedup.txt" --measured "$PERF_RUN" || return 1
+  [ "$(cksum < "$PERF_FIXTURES/speedup.txt")" = "$before" ] || { echo "the check rewrote its baseline"; return 1; }
+  echo "speed-up passed; the baseline is unchanged"
+}
+# A baseline recorded under another valgrind: the gate must say re-baseline, not pass or fail on counts.
+perf_toolchain_control() {
+  perf_plant toolchain '$1 == "toolchain" && $2 == "valgrind" { $3 = "valgrind-3.21.0" } { print }' || return 1
+  "$PY" -I bin/perf_gate.py check --baseline "$PERF_FIXTURES/toolchain.txt" --measured "$PERF_RUN"
+}
+# perf_integrity_control <case>: ruling 3, both ways. Each case is a baseline that differs from its
+# base revision (the base is this run's counts with one count changed):
+#   typed     one count typed by hand, in a [perf-baseline] PR with a reason: must FAIL
+#   untagged  regenerated (= the tool's output), in a PR without [perf-baseline]: must FAIL
+#   noreason  regenerated, [perf-baseline], no reason line: must FAIL
+#   regen     regenerated, [perf-baseline], with a reason: passes
+perf_integrity_control() {
+  local title="[perf-baseline] control" body="perf-baseline-reason: the control's" baseline="$PERF_RUN"
+  perf_plant base '$1 == "bench" && !done { $3 = $3 + 7; done = 1 } { print }' || return 1
+  case "$1" in
+    typed) perf_plant typed '$1 == "bench" && !done { $3 = $3 + 1; done = 1 } { print }' || return 1
+           baseline="$PERF_FIXTURES/typed.txt" ;;
+    untagged) title="perf: control" ;;
+    noreason) body="no reason given" ;;
+    regen) ;;
+    *) echo "unknown case $1"; return 1 ;;
+  esac
+  RH_PR_TITLE="$title" RH_PR_BODY="$body" "$PY" -I bin/perf_gate.py integrity \
+    --baseline "$baseline" --measured "$PERF_RUN" --base-file "$PERF_FIXTURES/base.txt"
+}
+
 # The checks: ONE fail-fast chain. Define every function above this line; a definition placed between
 # two `&&` lines splits the chain, and later checks would run after a failure (DEF-2).
 run "Required tools present" pass require_tools &&
@@ -415,6 +464,17 @@ run "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skelet
 run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and crash replay (SPR-006)" "pass:V-DET-12: golden event log of 196 events checked" cargo nextest run -p rh-core -p rh-events --locked --test agenda --test agenda_events --test invariants --lib --no-capture &&
 run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)" "fail:V-DET-12 violated" env RH_CORE_LIFE_GOLDEN="$PWD/tests/lint_fixtures/golden/backdated_life_events.txt" cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_12_golden_event_log &&
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
+# Tier 10 — performance: instruction counts (SPR-009 T-02a; GOV-002 tier 10)
+run "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 T-02a)" "pass:V-PERF-04 PASS" "$PY" -I bin/perf_gate.py gate --baseline "$PERF_BASELINE" --out "$PERF_RUN" &&
+run "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 T-02)" "pass:identical counts in two runs" sh -c '"$1" -I bin/perf_gate.py measure --out artifacts/perf/instructions_run2.txt && "$1" -I bin/perf_gate.py same "$2" artifacts/perf/instructions_run2.txt' sh "$PY" "$PERF_RUN" &&
+run "Baseline integrity: a changed instruction-count baseline equals the tool's output, in a [perf-baseline] PR (SPR-009 ruling 3)" pass "$PY" -I bin/perf_gate.py integrity --baseline "$PERF_BASELINE" --measured "$PERF_RUN" &&
+run "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)" "fail:does not equal the tool's output" perf_integrity_control typed &&
+run "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must FAIL (SPR-009 ruling 3)" "fail:needs [perf-baseline] in the pull request's title" perf_integrity_control untagged &&
+run "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 ruling 3)" "fail:needs a \`perf-baseline-reason: <why>\` line" perf_integrity_control noreason &&
+run "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason passes (SPR-009 ruling 3)" "pass:equals the tool's output" perf_integrity_control regen &&
+run "V-PERF-04 control: a speed-up passes and never re-baselines (docs/08 §9)" "pass:speed-up passed; the baseline is unchanged" perf_speedup_control &&
+run "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline required (SPR-009 ruling 2)" "fail:toolchain changed: re-baseline required" perf_toolchain_control &&
+run "V-PERF-04 positive control: a deliberate 15% slowdown in instructions must FAIL (SPR-009 T-02)" "fail:REGRESSION plane_hashes/state_full/rows_10k" "$PY" -I bin/perf_gate.py gate --features slowdown-control --baseline "$PERF_BASELINE" --out artifacts/perf/instructions_slowdown.txt &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&
 run "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)" pass doctest_count_gate "$DOCTEST_LOG" &&
 run "Doctest count gate positive control: one typed-ID case missing must FAIL" "fail:crates/rh-ids/src/ids.rs: expected 7 compile-fail doctests, found 6" doctest_count_control &&

@@ -32,6 +32,10 @@ jobs:
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The baseline-integrity gate compares committed baselines with the merge base of HEAD and
+          # origin/main (SPR-009 ruling 3), so the history must be there.
+          fetch-depth: 0
 
       - name: Rust toolchain (pinned by rust-toolchain.toml)
         run: |
@@ -40,10 +44,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: cargo-nextest and cargo-deny (prebuilt binaries)
+      - name: cargo-nextest, cargo-deny and iai-callgrind-runner (prebuilt binaries)
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-nextest@0.9,cargo-deny@0.20
+          # iai-callgrind-runner must be the version of the iai-callgrind crate in Cargo.lock (SPR-009).
+          tool: cargo-nextest@0.9,cargo-deny@0.20,iai-callgrind-runner@0.16.1
+
+      - name: valgrind from the runner's package manager (SPR-009 ruling 2)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq valgrind
+          valgrind --version
 
       - name: uv and Python 3.12
         uses: astral-sh/setup-uv@v6
@@ -57,6 +68,11 @@ jobs:
         run: uv sync --frozen --project python
 
       - name: bin/check_all.sh
+        # A changed perf baseline needs [perf-baseline] in the PR title and a reason in its body
+        # (SPR-009 ruling 3). Passed through the environment, never interpolated into the script.
+        env:
+          RH_PR_TITLE: ${{ github.event.pull_request.title }}
+          RH_PR_BODY: ${{ github.event.pull_request.body }}
         run: bin/check_all.sh
 
       - name: Upload the check report and the licence ledger
@@ -67,4 +83,5 @@ jobs:
           path: |
             artifacts/check_report.md
             artifacts/licence_ledger.txt
+            artifacts/perf/
           if-no-files-found: warn

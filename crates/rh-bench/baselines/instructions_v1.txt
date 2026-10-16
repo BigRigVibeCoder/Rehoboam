@@ -1,0 +1,20 @@
+# rehoboam/rh-bench/instructions/v1: callgrind instruction counts (Ir) of the PR-tier benches (SPR-009).
+# Written by `python -I bin/perf_gate.py record`, never by hand (SPR-009 ruling 3).
+format rehoboam/rh-bench/instructions/v1
+toolchain rustc 1.97.0 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+toolchain llvm 22.1.6
+toolchain host x86_64-unknown-linux-gnu
+toolchain valgrind valgrind-3.22.0
+toolchain libc glibc 2.39
+toolchain iai-callgrind 0.16.1
+slot raster_8x512 bench 4: no baseline until P1a, the first sprint with a spatial field (M1 or M3)
+bench keyframe_write_read/load/rows_10k 48999595
+bench keyframe_write_read/read/rows_10k 46319371
+bench keyframe_write_read/write/rows_10k 95301456
+bench plane_hashes/narrative_dirty_chunk/rows_10k 156909
+bench plane_hashes/narrative_full/rows_10k 4966422
+bench plane_hashes/observation_dirty_chunk/rows_10k 156964
+bench plane_hashes/observation_full/rows_10k 4966410
+bench plane_hashes/state_dirty_chunk/rows_10k 114745
+bench plane_hashes/state_dirty_column/rows_10k 587471
+bench plane_hashes/state_full/rows_10k 2327495
