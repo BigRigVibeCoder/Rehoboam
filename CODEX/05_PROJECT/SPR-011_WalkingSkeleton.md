@@ -1,26 +1,27 @@
 ---
 id: SPR-011
-title: "Walking skeleton: one loop from manifest to replay, on solo, household and hamlet"
+title: "Walking skeleton A: engine prerequisites (P1.0, increment A)"
 type: how-to
 status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, BCK-002, PRJ-001, PRJ-002, SPR-007, SPR-008, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035]
+related: [BCK-001, BCK-002, PRJ-001, PRJ-002, SPR-007, SPR-008, SPR-012, SPR-013, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.5.0
+version: 1.0.0
 ---
 
-> **BLUF:** Close the engine's loop end to end at the lowest fidelity: manifest → `rh-worldgen` stub → ledger (born, ages, dies) → scheduled death timers → events → the Parquet chronicle and World Stream v0 (channel A) → `rh-cli tail` → a trivial sifter pattern → journal replay. It runs on `solo` first, then on `household` and `hamlet`, on one binary, with plane-hash ladders in CI from the first commit. Developer: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET, AGT-003-IF, AGT-003-STAT. **APPROVED by the director at G0** (C3; D30, 2026-10-16; `docs/decisions_pending.md` D30 to D32); the rulings below are binding. The work is about 9 agent-days, three times the GOV-005 bound, so ruling 1 runs it as three sprints: SPR-011 (increment A), SPR-012 (increment B) and SPR-013 (increment C).
+> **BLUF:** Increment A of the walking skeleton (WP P1.0): the engine prerequisites the first real system needs. An engine-purity lint (A-14), a 32-bit probability type with keyed uniform draws (A-21), draws keyed by the entity's epoch (A-29, which regenerates the `smoke` baseline), ledger rows with the life-course log, and authored numbers compiled exactly into plane A. Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). The director approved P1.0 as one plan run as three sprints (ruling 1): this sprint, SPR-012 (`solo` lives and dies) and SPR-013 (the stream, the sifter, replay and rungs 1–2). Rulings 1–19 below bind all three and stay here, numbered as the specs and code already cite them ("SPR-011 ruling N"). Task numbers T-00 to T-13 are kept across the three sprints, so "SPR-011 T-05" in older text means T-05 of the plan, now in SPR-012.
 
-# SPR-011 — Walking skeleton (WP P1.0)
+# SPR-011 — Walking skeleton A: engine prerequisites (WP P1.0)
 
-- **Roadmap item:** `docs/11` P1.0 · **Phase / rung:** P1a, rungs 0–2
-- **Depends on:** G0 passed (`VER-G0`); SPR-007 merged (2026-10-16); SPR-008 merged; SPR-009 merged for the V-PERF-11 counts in T-13 · **Plan approved by the director 2026-10-16** (C3, D30; GOV-005 §2)
-- **Binding contracts:** `05.1` §2, §4, §6, §9; `05.2` §0, §1, §4, §6; `05.5` §3.2; `05.10` §4, §5, §7, §7a; `05.9` IF-0, IF-1, IF-2; `specs/chronicle/schema.sql`; ADR-0006, ADR-0024, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035 §6; `docs/01` §5 principle 8
-- **System spec:** `specs/systems/M2.demography.odd.toml`, rung-0 slice. It is a draft with gaps (Blockers 2 and 3) and must be completed, pass `lint_odd.py` and be marked `frozen` before increment B starts.
-- **Requirements covered:** STR-1 (v0), DET-1, DET-4, DET-5, DET-7 and DET-13 on the new worlds, DATA-1 and DATA-6 (subset), DATA-8 (founders and deaths), SIM-1 (N = 1 to 60), SIM-5 (death draws), SIM-6 (pre-epoch founders), SIM-15, SIFT-3 (one pattern), EVO-4
+- **Roadmap item:** `docs/11` P1.0 (increment A) · **Phase / rung:** P1a, the machinery under rungs 0–2
+- **Depends on:** G0 passed (`VER-G0`; it passes when SPR-009 merges, the director's ruling on D30–D36); SPR-007 and SPR-008 merged (2026-10-16) · **Plan approved by the director 2026-10-16** (C3, D30; GOV-005 §2)
+- **Binding contracts:** `05.1` §2, §4, §6, §9; `05.2` §0, §1, §4, §6; `05.5` §3.2; ADR-0024, ADR-0025, ADR-0026, ADR-0035 §6; `docs/13` §3 (the engine-purity deny-list)
+- **System spec:** none built here. `specs/systems/M2.demography.odd.toml` is frozen (0.2.0, PR #37; D36) and owns `person.id` and `life_course.*`, which T-03's ledger plumbing serves
+- **Requirements covered:** DET-1, DET-5 and DET-13 (epoch-keyed draws, the ledger in keyframes), SIM-5 (the probability type for death draws), EVO-4; V-INSP-05 for the engine-purity rule
+- **Next:** SPR-012 (`CODEX/05_PROJECT/SPR-012_WalkingSkeletonB.md`) then SPR-013 (`SPR-013_WalkingSkeletonC.md`); each has its own branch, PR, Tester pass and audit
 
 ## Architect rulings (binding since the plan's approval, D30)
 
@@ -59,8 +60,9 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 17. **Extinction.** When `apply_death` empties the ledger, M2 emits `EXTINCTION` once, caused by that `DEATH` (a draft-local cause). The run continues to its requested end, taking hashes as usual (V-SCALE-04). `09`'s phrase "a journaled end event" is read as a channel-A event, not a journal row: the journal holds inputs only. **65%.**
 18. **The rung-1 and rung-2 manifests (BCK-002 A-06).** `household.yaml`: one household, a couple and three children, template `pastoral_household`, M2 defaults. `hamlet.yaml`: `uz_job`'s people (population 60, the cast, Job's household with children and servants, e₀ = 30) without the agent, the wager catalyst, the off-map raiders and the overlays, none of which P1a simulates. `uz_job` stays the P1b micro-catalyst world (V-SCALE-05). **70%.**
 19. **Scale claims for P1.0.** ADR-0028 ("P1.0 runs at N = 1 and N = 100k from its first week") and `docs/12` Q12 ("1, 60 and 100k") predate ADR-0035's meso default and P1.2's population synthesis. Withdraw the 100k claim. V-SCALE-01 in P1.0 covers N ∈ {1, 5, 60}; 10k comes with P1.14. **80%.** **Approved (D32).** ADR-0028, `docs/12` Q12 and `docs/09` V-SCALE-01 record it.
+## P0 carry-forwards P1.0 inherits (BCK-002, open items)
 
-## P0 carry-forwards this sprint inherits (BCK-002, open items)
+For all three increments; "Here" names the task and, outside increment A, its sprint.
 
 | Item | What | Due (BCK-002) | Here |
 |---|---|---|---|
@@ -70,48 +72,39 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 | A-30 | Drop a command for a person who died earlier in the same application | With the first death command | Not due here: P1.0 sends no lifecycle command (ruling 6). Goes to the P1.13 sprint |
 | A-31 | Invariant on each command queue's age or length | With the first real lifecycle command | As A-30 |
 | A-28 | Exact `start_of_day` and `previous_pulse` lags | Before S5, S6 or S7 runs | Not due: M2 reads nothing. Goes to the P1.18 sprint |
-| A-32 | Per-tick allocations driven to the `08` budget | Before benches 1 and 2 | Not due. T-13 records V-PERF-11 counts for the rungs as their budgets; driving them down is P1.14 |
+| A-32 | Per-tick allocations driven to the `08` budget | Before benches 1 and 2 | Not due. T-13 (SPR-013) records V-PERF-11 counts for the rungs as their budgets; driving them down is P1.14 |
 | A-22 | `f32_field` threshold rule | First sprint with an `f32_field` | Not due: no raster here (ruling 10) |
 | A-24 | Type the saga vocabulary tables | Before S6, S7, T1 | Not due |
 | A-23 | YAML flow-continuation indentation | When a hand-written manifest hits it | Possible in A-06's manifests; fix the manifest, not the loader |
-| A-06 | Rung 1–3 manifests (Architect) | P1a | Blocker 4, before increment C |
+| A-06 | Rung 1–3 manifests (Architect) | P1a | Done for rungs 1 and 2: `household.yaml`, `hamlet.yaml` (PR #37) |
 | A-15 | Coverage gates, owned by no sprint | Since SPR-002 | Still unowned. Recommendation in the P1a sprint map |
-| SPR-007, carried | `KeyframeStore` LRU capacity defaults to 8 "until P1 measures keyframe sizes" | P1 | T-13 reports keyframe sizes per rung |
-| SPR-006 ruling | "Replay refuses a run with material inputs until the journal is wired in" | SPR-007 wired it | T-12 replays through `rh_snapshot::resume` |
-
+| SPR-007, carried | `KeyframeStore` LRU capacity defaults to 8 "until P1 measures keyframe sizes" | P1 | T-13 (SPR-013) reports keyframe sizes per rung |
+| SPR-006 ruling | "Replay refuses a run with material inputs until the journal is wired in" | SPR-007 wired it | T-12 (SPR-013) replays through `rh_snapshot::resume` |
 ## Specs this sprint needs
 
 | Spec | Exists? | Gap | Writer | Needed by |
 |---|---|---|---|---|
-| `specs/systems/M2.demography.odd.toml` | Draft (rung-0 slice) | Owns no `person.id` or `life_course.*`; no `EXTINCTION`; no defaults; the mortality algorithm is one sentence (ruling 7 states it); `INV-M2-01` cites V-DET-01 where V-INV-01 is meant; no `resample_on_fork` flag on `death_time` | Architect | T-05, T-07 |
-| `specs/manifest/registry_v0.toml` | Exists | No `DEATH` or `EXTINCTION` verb; verbs have no `tellability`; systems have no `defaults` | Architect (C2) | T-04, T-07 |
-| `specs/manifest/examples/solo.yaml` | Exists | None (ruling 3 covers its unbuilt systems) | — | T-08 |
-| `household.yaml`, `hamlet.yaml` | Missing | BCK-002 A-06 (ruling 18) | Architect | T-13 |
-| `specs/chronicle/schema.sql` | Exists | EventId comment (ruling 12); `life_course` entry/exit split (ruling 13); `concrete_role` codes (initiator, target, partner, bystander, instrument) differ from the Registry's `[event_roles]` (actor, target, witness, instrument); `regional_aggregate.value` is `DOUBLE` in a plane-A table | Architect | T-09 |
-| `specs/stream/channel_a_v0.sql`: segment DDL, record header, kinds, in-instant order | Missing (`05.10` §5 and `05.9` IF-0 are prose) | Ruling 13 | Architect | T-09 |
-| `specs/sifting/patterns.solitary_life.toml` (`life_ends`) | Missing | Ruling 14 | Architect | T-11 |
-| `specs/stream/channel_c_v0.sql`: channel-C segment DDL (`sift_match`) | Missing | PR #37 Q10 | Architect | T-11 |
+| Probability type | Ruling 4 (text) | Width, rounding and the `draw_hits` mapping are in ruling 4 and `05.1` v1.8 §6 (Prob32); T-01 writes the type and its exact reference | Architect (done) | T-01 |
 | `docs/05.5` §3.2 | Exists | — | — | T-04 |
-| Probability type | Missing | Ruling 4 | Architect | T-01 |
+| `specs/manifest/registry_v0.toml` system `defaults` | Exists (0.2.0, PR #37) | — | — | T-04 |
+| `specs/systems/M2.demography.odd.toml` | Frozen 0.2.0 (PR #37) | — (owns `person.id` and `life_course.*`; T-03 builds the core side) | — | T-03 |
 
 ## Compliance (every task)
 
 | Rule | This sprint |
 |---|---|
-| Change class (`docs/13` §4.2) | **C3.** The first real system crate (`rh-sys-demography`) and three new golden worlds; determinism machinery (probability type, epoch-keyed draws, ledger compaction, the channel-A record format). Contains C2 changes: the frozen M2 spec, Registry verbs and defaults, the segment schema, four new crates, one new plane-A dependency |
-| Planes touched (ADR-0024) | A (`rh-core`, `rh-registry`, `rh-worldgen`, `rh-sys-demography`, `rh-stream`); C (`rh-sifter`, channel-C segments); tool (`rh-manifest`, `rh-cli`, `bin/`, `specs/`). B: none |
-| Owned columns written | `M2.demography`: `person.id`, `person.birth_tick`, `person.sex`, `person.alive`, `person.death_tick`, `life_course.*` (after the spec freeze). `rh-core`: row compaction of `person.*` (ruling 5). `rh-worldgen`: initial values only (ruling 10) |
-| Reads (via `rh-contracts`) | None: the rung-0 slice reads no other system |
-| RNG purposes added | M2 `death_time` (person, month; k = 0 the monthly Bernoulli, k = 1 the minute), flagged `resample_on_fork` (a vital timer, `05.1` §6 item 9). `rh-worldgen`: `founder_sex`, `founder_age`, `founder_birthday` (founder, genesis). Re-sampled draws at the entity's epoch (T-02) |
-| Golden-hash effect | New baselines for `solo`, `household`, `hamlet`; `smoke` regenerated by T-02 (A-29) with its bisect report. All announced to the director before merge |
-| Fixed-point quantities | Probabilities (`Prob32`, ruling 4); K, O(x) and l(x) at the widths the M2 spec states; e₀ and β compiled from the manifest (ruling 9) |
-| Determinism lints (GOV-003 §2, §6) | Must pass. New: the engine-purity rule (T-00); pinned labels for `rh-worldgen`, `rh-stream`, `rh-sifter`, `rh-sys-demography`; `parquet` in `PLANE_A_EXTERNAL_DEPS` |
-| Tests that gate this sprint | V-INSP-05, V-DET-01, V-DET-02, V-DET-04, V-DET-05, V-DET-12, V-DET-14, V-DET-18 (subset), V-DET-19, V-INV-01 (subset), V-INV-02 (nightly), V-INV-08, V-INV-11, V-DATA-04 (subset), V-DATA-05, V-DATA-10 (subset), V-STR-01, V-SIFT-01, V-SIFT-05, V-PLN-01, V-SCALE-01, V-SCALE-04, V-GOLD-01, V-WC-04 (new manifests), plus `bin/check_all.sh` |
-| Docs updated in the same sprint | `bin/check_all.sh` and `CLAUDE.md` checks; `05.0` §6 (new crates); `05.2` §1, `05.9` IF-0 and IF-1, `05.10` §4–5, `schema.sql` (rulings 12, 13); the M2 brief. (`docs/11` rung 0 and the `docs/09` rows for V-SCALE-01's N set and the V-STR cadence were corrected at G0: D31, D32, D34) |
+| Change class (`docs/13` §4.2) | **C3**: determinism machinery (the probability type, epoch-keyed draws, ledger compaction). Contains C2: the engine-purity rule in `lint_arch.py`, the `rh-manifest` → `rh-registry` edge |
+| Planes touched (ADR-0024) | A (`rh-core`, `rh-ids`, `rh-registry`); tool (`rh-manifest`, `bin/`). B and C: none |
+| Owned columns written | None by a system. `rh-core`: row compaction of `person.*` (ruling 5), tested on stub worlds |
+| Reads (via `rh-contracts`) | None |
+| RNG purposes added | None. T-01 adds the `StepCtx` helper that draws one keyed `u64` against a `Prob32`; T-02 keys every `StepCtx` draw by the drawn entity's epoch |
+| Golden-hash effect | `smoke` regenerated by T-02 (A-29) with SPR-008's tools, in a `[C3]` commit, with its bisect report; announced to the director before merge (director approval 2 below) |
+| Fixed-point quantities | `Prob32` (ruling 4); manifest numbers compiled exactly (ruling 9) |
+| Determinism lints (GOV-003 §2, §6) | Must pass. New: the engine-purity rule (T-00) |
+| Tests that gate this sprint | V-INSP-05, V-DET-01 and V-DET-02 (stub world with deaths; `smoke`), V-DET-05, V-DET-14, V-DET-19, V-INV-01 (subset), V-INV-04 (positive control), V-WC-04 (parity unchanged), the fixed-point golden vectors, plus `bin/check_all.sh` |
+| Docs updated in the same sprint | `bin/check_all.sh` and `CLAUDE.md` checks; `05.0` §6 if the engine-crate list changes; `05.1` §6 for epoch keying if the text lags the code |
 
 ## Tasks
-
-### Increment A: engine prerequisites (SPR-011 under ruling 1; about 3 agent-days)
 
 #### T-00: Engine-purity lint (BCK-002 A-14)
 - **Deliverable:** Rule `engine-purity` in `bin/lint_arch.py`. One deny-list constant (media, HTTP-UI and LLM-client crates, as `docs/13` §3 lists), checked over the transitive normal and build dependencies of every engine crate. The engine set is the union of the lists in `docs/13` §3, `05.0` §6 and ADR-0035 §6, plus `rh-sys-*` and the new crates. Planted fixtures in `tests/lint_fixtures/`; Python tests; the gate inventory test updated.
@@ -138,58 +131,8 @@ Each ruling is needed because a contract is silent or two contracts disagree. Co
 - **Acceptance:** A property test against a Python `decimal` reference over random literals, halfway cases included, gives the same bits. Out-of-range and non-fitting literals are refused by name. The plane-A-closure lint is clean. `solo` and `uz_job` compile. V-WC-04 parity is unchanged.
 - **Status:** [ ] not started
 
-### Increment B: `solo` lives and dies (SPR-012 under ruling 1; about 3 agent-days)
-
-#### T-05: The M2 rung-0 schedule in fixed point (ruling 7)
-- **Deliverable:** In `rh-sys-demography`: the Brass General Standard as exact decimals, K from e₀ by bisection, l on the monthly grid, monthly death probabilities as `Prob32`. `bin/gen_m2_reference.py` (Python `fractions`, the same algorithm and rounding) with `--check`, and golden vectors in `crates/rh-sys-demography/tests/golden/m2_schedule_v1.txt`.
-- **Acceptance:** Bit-equal to the reference at e₀ ∈ {20, 23.441086, 30, 36.569855, 43.45915, 60, 85}. At the standard's own e₀ (43.45915, the trapezoid on the standard grid; corrected from 43.44 by the skeleton-spec drafter), K = 1 within one unit. At the e₀ values that Brass Table 19's α rows imply, l(x) matches Table 19 within 1 per 10,000 (the `selftest_brass.py` tolerance). The e₀ recomputed from the fixed-point schedule is within 0.06 years of the input. q(15) ∈ [0.35, 0.55] exactly when e₀ ∈ [23.441086, 36.569855] (V-SF-02's identity at the schedule level).
-- **Status:** [ ] not started
-
-#### T-06: The `rh-worldgen` stub (ruling 10)
-- **Deliverable:** Crate `rh-worldgen`, pinned (A, machinery), with `genesis(&WorldSpec) -> WorldTables`: founders into M2's ledger columns and life-course entries (origin founder, pre-epoch birth ticks), keyed draws, `rng_purposes.rs`. No raster, regions, settlements or households.
-- **Acceptance:** V-DATA-05: every founder id equals `founder(seed, k)` or its deterministic rehash, in ruling-10 order; a forced collision resolves the same way on every run. The same `WorldSpec` gives bit-equal tables twice and on 1 and N threads. V-INV-11: negative birth ticks round-trip through a keyframe. `solo` gives Ada: female, aged 25 at tick 0. A planted write to a column whose owner does not initialise from the manifest is refused.
-- **Status:** [ ] not started
-
-#### T-07: `rh-sys-demography`, the rung-0 slice
-- **Deliverable:** System `M2.demography`, with the skeleton from `lint_odd.py --rust` brought in by `include!`, bound to Month/Vital. For each living person: one Bernoulli on the month's probability (k = 0); on a hit, a death timer at the start of a keyed day inside the month (k = 1), never at the Month-pulse instant (ruling 7, amended). `fire` calls `apply_death` (ruling 6): alive flag, death tick, life-course exit with cause `natural`, `DEATH` with the deceased as `target`. `EXTINCTION` once when the ledger empties (ruling 17). `resample_timer` re-draws a pending death at the new epoch. Invariants `INV-M2-01` (conservation) and life-course consistency.
-- **Acceptance:** V-DET-12: every event's tick ≥ its instant, ids strictly increase, a sampled death sits in the agenda as a timer until it fires. V-INV-01 subset after every pulse on random small worlds. V-INV-08: Bernoulli draws only (a grep gate: no Poisson death draw). Registration rule `spec` passes against the frozen spec. M2 refuses `brass_alpha` or β ≠ 1 at construction with a named error (ruling 7). A fixture `WorldSpec` of 10,000 founders aged 0 gives, over 32 seeds, an observed q(15) inside the schedule's value ± its binomial 99.9% band; the band harness itself (V-SF-02, V-SCALE-02) is P1.10. V-DATA-04 subset on the same fixture over 1,000 years: every `PersonId` ever emitted has exactly one life-course entry with founder provenance, and a death record if and only if it is absent from the ledger (residence and occupation intervals wait for S3 and M4).
-- **Status:** [ ] not started
-
-#### T-08: `rh-cli run <world>` and the `solo` golden ladder (rulings 3, 16)
-- **Deliverable:** SPR-008's runner generalised to real worlds: compile, genesis, register the built systems against `specs/systems/`, run with SPR-007's journal and keyframe store (10-year cadence), write the ladder. The run header carries the history tuple and the built and not-built systems. `worlds/solo/` with `world.toml`, the input script and baselines. PR and nightly jobs. SPR-008's baseline-integrity gate covers `solo`.
-- **Acceptance:** V-DET-01/02 on `solo`: monthly at 1, 2, 4 and N threads × 3, nightly; yearly at 1 and N threads on PRs. V-GOLD-01: the PR ladder equals the committed baseline. SPR-008 ruling 6 controls: a hand-edited `solo` baseline FAILS; a regenerated one in a PR not titled `[C3]` FAILS. `--strict` refuses `solo` (ruling 3). V-SCALE-03: the 1,000-year wall time of `solo` is reported. V-PERF-04: the PR tier stays within 15 minutes.
-- **Status:** [ ] not started
-
-### Increment C: the stream, the sifter, replay and the ladder (SPR-013 under ruling 1; about 3.5 agent-days)
-
-Fixed in SPR-013's plan before it starts (PR #37's carried questions): what makes an act class "tellable" for DATA-5 (Q8; ruling 11 already admits every death at rungs 0–2 as tellable); the canonical text form and `segment.canonical_digest`, XXH3-128 over the canonical lines in `seq` order (Q11).
-
-#### T-09: `rh-stream`: channel A and the sealed chronicle (rulings 11, 12, 13)
-- **Deliverable:** Crate `rh-stream`, pinned (A, machinery), with `parquet` reviewed in. The record header and the P1.0 kinds; the in-instant order; per-sim-year sealed segments matching `schema.sql` and `specs/stream/channel_a_v0.sql`; atomic sealing; the per-segment canonical digest; the lossless one-line canonical text form and its parser. The host writes after each instant, from `Engine::drain_events`, the journal and the life-course delta.
-- **Acceptance:** V-STR-01 on `solo` and a 60-person fixture: segments byte-identical across two runs and across 1 and N threads, and canonical digests equal. V-DATA-10 subset: a Python test reads every sealed table with DuckDB, with `schema.sql`'s types. `seq` is contiguous from 0 across segments. The canonical form round-trips every record (property test; the parser joins the nightly fuzz tier). A `kill -9` during sealing leaves no partial segment, and the resumed run reseals the same bytes (GOV-002 tier 15). No channel-A table has a float column.
-- **Status:** [ ] not started
-
-#### T-10: `rh-cli tail`
-- **Deliverable:** `rh-cli tail <run-dir> [--from-seq N] [--follow <person>] [--kind K …] [--canonical] [--wait]`. It reads sealed segments in `seq` order and follows new ones as they seal. It prints the display line (date in the world calendar, kind, roles, causes; cast names from the manifest, tool side) or the canonical line, and the status line of `05.10` §2: last sealed tick and `seq`, the cursor, the lag. Channel-C matches appear as annotations when a channel-C segment exists.
-- **Acceptance:** On a `solo` run, every channel-A record prints exactly once, in `seq` order, from any `--from-seq`. A tail started mid-run and one started after the run print the same lines (V-STR-05 for sealed segments). Tail never writes to the run directory (a read-only test). A stopped tail does not slow `rh-cli run` (wall time against headless, reported). `insta` snapshots of the display form.
-- **Status:** [ ] not started
-
-#### T-11: The trivial sifter pattern and its twin (ruling 14)
-- **Deliverable:** `life_ends` in `specs/sifting/patterns.solitary_life.toml` (Architect). Crate `rh-sifter` v0, pinned (C, machinery). `rh-cli sift <run-dir>` writes channel-C segments. The twin in `specs/sifting/twins/solitary_life.sql`, checked by `python -I specs/sifting/twin_check.py <run-dir>` (AGT-002-TOOLS).
-- **Acceptance:** V-SIFT-05: `lint_patterns.py` passes `life_ends` and rejects a planted unanchored variant. V-SIFT-01: `rh-sifter`'s matches equal the twin's (match ids, bindings, event ids) on `solo`, `household`, `hamlet` and the 10,000-founder fixture. V-PLN-04 subset: sifting twice gives the same channel-C digest and leaves channel A and the state ladder unchanged. V-PLN-01: no plane-A crate depends on `rh-sifter`.
-- **Status:** [ ] not started
-
-#### T-12: Journal replay, end to end (ruling 15)
-- **Deliverable:** `rh-cli run --inputs <file>` journals scope-only re-sample inputs through SPR-007's journal. `rh-cli replay <run-dir>` rebuilds from the history tuple and the journal alone. `rh-cli replay --from-keyframe <tick>` resumes through `rh_snapshot::resume`. `worlds/solo/inputs.toml` holds one input on Ada.
-- **Acceptance:** V-DET-04: the replayed ladder and channel-A digests equal the original, every month. V-DET-18 subset: a replay in a clean directory holding only (build, Registry, manifest, seed, journal) is hash-equal, and every journal row has tick, seq, class, scope and producer. V-DET-05 on `solo` and `hamlet`: resume from the year-10 keyframe, advance 10 years, equal to the continuous run. A missing, extra or edited journal row hard-fails replay. V-DET-14 on `solo`: the input re-samples only Ada, keyed by her new epoch.
-- **Status:** [ ] not started
-
-#### T-13: Rungs 1 and 2 on the same binary (rulings 16–19)
-- **Deliverable:** `worlds/household/` and `worlds/hamlet/`, pointing at A-06's manifests, with input scripts and baselines. The PR-tier and nightly jobs of ruling 16. Nightly V-SCALE jobs. The keyframe-size report.
-- **Acceptance:** One `rh-cli` build runs all three rungs; only the manifest changes. V-SCALE-01 at N ∈ {1, 5, 60}: 0 invariant violations, equal hashes across threads, exact replay. V-SCALE-04: each world reaches zero population, emits one `EXTINCTION`, and its chronicle, tail and replay stay consistent after it. V-WC-04: both manifests validate in Python and in Rust (`manifest_parity.py`). V-DET-01/02 nightly on all three rungs. V-INV-02: a 1,000-year debug soak with invariants on, 0 violations. V-PERF-11: steady-state allocations per tick recorded for each rung as its budget (needs SPR-009; otherwise Blocker 1 stays open for this line). Keyframe sizes per rung reported.
-- **Status:** [ ] not started
-
 ## Out of scope (explicit)
+- Increments B and C: SPR-012 (T-05 to T-08) and SPR-013 (T-09 to T-13).
 - Births, partnering, households and kinship (P1.3); fixed-point `exp`/`ln` and Brass at any (α, β) (P1.3).
 - Regions, settlements, routes and residence (P1.1a, `S3.migration`); place on events stays empty.
 - The event envelope: anchored snapshots, typed and motive edges, the reconciled role codes (P1.9).
@@ -210,20 +153,19 @@ The other rulings are the Architect's.
 
 | Tester | What to verify, from which contract | Report |
 |---|---|---|
-| AGT-003-DET | T-01–T-03, T-06–T-08, T-12, T-13: V-DET-01/02/04/05/12/14/18, V-STR-01, V-SCALE-01/04, epoch-keyed draws, ledger compaction. Written from `05.1` §6, ADR-0025, ADR-0026 and `05.10` §7 before reading the implementation | `VER-SPR-011` (and `-012`, `-013` under ruling 1) |
-| AGT-003-IF | T-00, T-04, T-09–T-11: the purity lint's controls; the authored-number boundary (`05.5` §3.2); segment conformance with `schema.sql` and the segment DDL; the canonical form and its parser (fuzz); `tail`; the twin (V-SIFT-01, V-SIFT-05); registration against the frozen M2 spec | As above |
-| AGT-003-STAT | T-05, T-07: the fixed-point schedule against the exact reference and Brass Table 19; the 10,000-founder q(15) check against the schedule. Written from `specs/demography/` and R12 §9 | As above |
+| AGT-003-DET | T-01–T-03: `Prob32` against its exact reference and one draw per call (CRN); V-DET-14 epoch-keyed draws over random scopes, and `smoke`'s first divergence at or after its first input (bisect report); ledger compaction, alignment and the life-course log under V-INV-01, V-INV-04 and V-DET-05. Written from `05.1` §6, ADR-0025 and ADR-0026 before reading the implementation | `VER-SPR-011-TEST` |
+| AGT-003-IF | T-00, T-04: the purity lint's controls (direct, transitive, dev-dependency); the authored-number boundary (`05.5` §3.2) against a Python `decimal` reference, halfway cases included | As above |
 
 ## Blockers
 
 | # | Blocker | Filed as | Status |
 |---|---|---|---|
-| 1 | G0 not passed: `VER-G0` is a draft; SPR-007 merged 2026-10-16; SPR-008 and SPR-009 in progress | `VER-G0` | Open |
-| 2 | M2 spec incomplete and not frozen (see "Specs this sprint needs") | Spec work, Architect | Open |
-| 3 | Registry lacks `DEATH`, `EXTINCTION`, verb `tellability` and system `defaults`; `lint_odd.py` does not check `[[emits]]` against `[verbs]` | Spec work, Architect (C2) | Open |
-| 4 | `household.yaml` and `hamlet.yaml` do not exist | BCK-002 A-06 | Open (before increment C) |
-| 5 | `life_ends` and the channel-A segment DDL do not exist | Spec work, Architect | Open (before increment C) |
-| 6 | Contract documents disagree with the code on `EventId` and with the Registry on role codes | Ruling 12 (Architect's consistency fix before G0); P1.9 for roles | Open |
+| 1 | G0 not passed: `VER-G0` is a draft; SPR-008 merged 2026-10-16 (`3bd2262`); SPR-009 in progress | `VER-G0` | Open |
+| 2 | M2 spec incomplete and not frozen | Spec work, Architect | Closed: frozen 0.2.0 (PR #37, D36) |
+| 3 | Registry lacks `DEATH`, `EXTINCTION`, verb `tellability` and system `defaults`; `lint_odd.py` does not check `[[emits]]` against `[verbs]` | Spec work, Architect (C2) | Closed (PR #37) |
+| 4 | `household.yaml` and `hamlet.yaml` do not exist | BCK-002 A-06 | Closed (PR #37) |
+| 5 | `life_ends` and the channel-A segment DDL do not exist | Spec work, Architect | Closed (PR #37). The channel-C DDL is SPR-013's blocker |
+| 6 | Contract documents disagree with the code on `EventId` and with the Registry on role codes | Ruling 12; P1.9 for roles | `EventId`: closed (`ab0b2b1`). Roles: P1.9 |
 | 7 | Director approval of the plan and of rulings 1, 2, 19 (D30 to D32) | This document | Closed: approved 2026-10-16 |
 
 ## Completion
@@ -231,7 +173,6 @@ The other rulings are the Architect's.
 - [ ] All tasks meet their acceptance criteria.
 - [ ] `bin/check_all.sh` passes; the report is attached.
 - [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-011` is PASS (and `-012`, `-013` under ruling 1).
+- [ ] Architect audit `VER-SPR-011` is PASS.
 - [ ] No open DEF- against this sprint.
 - [ ] Merge route matches the CI-detected change class; each golden-corpus change was announced to the director first.
-- [ ] Rung checkpoints (GOV-007 §3.5): when `solo`, then `household`, then `hamlet` first runs green, the director watches its stream through `rh-cli tail` for 15–30 minutes. The Architect records the notes as `EVO-` or `DEF-` items.
