@@ -1,6 +1,6 @@
 # Parity corpus (SPR-004 V-WC-04): LS (U+2028) inside a folded ('>') block scalar. Accepted divergence (DEF-11 ruling):
 # the reference reads it as VALID, keeping the character; the Rust loader refuses it (LOAD ERROR), failing closed.
-# parity-divergence: VALID / LOAD ERROR
+# parity-divergence: VALID / LOAD ERROR "inside a folded block scalar is not supported"
 manifest_version: 0
 registry_version: "0.1.0"
 world:

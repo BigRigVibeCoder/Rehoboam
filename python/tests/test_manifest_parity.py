@@ -1,6 +1,6 @@
 """Unit tests for bin/manifest_parity.py's report parser (SPR-004 T-02, GAP-3; V-WC-04)."""
 
-from manifest_parity import DIVERGENCE, Result, parse
+from manifest_parity import CORPUS, Divergence, Result, declared_divergence, divergence_holds, parse
 
 
 def test_registry_checked_report() -> None:
@@ -28,8 +28,44 @@ def test_anything_else_is_a_load_error() -> None:
     assert parse("Traceback (most recent call last):\n", 1) == Result("LOAD ERROR", 1, 1, 0)
 
 
-def test_divergence_header() -> None:
-    """A ruled divergence is declared as two verdicts in a header line."""
-    m = DIVERGENCE.search("# note\n# parity-divergence: VALID / LOAD ERROR\nworld: {}\n")
-    assert m is not None
-    assert (m[1], m[2]) == ("VALID", "LOAD ERROR")
+def _fixture(header: str, lines_before: int = 1) -> str:
+    return "# comment\n" * lines_before + header + "\nworld: {}\n"
+
+
+GOOD = '# parity-divergence: VALID / LOAD ERROR "folded block"'
+
+
+def test_divergence_header_is_read() -> None:
+    """A well-formed header in the corpus gives both verdicts and the Rust diagnostic."""
+    got = declared_divergence(CORPUS / "x.yaml", _fixture(GOOD))
+    assert got == Divergence("VALID", "LOAD ERROR", "folded block")
+
+
+def test_divergence_header_only_in_the_corpus() -> None:
+    """(a) Outside tests/manifest_parity/ the header is not honoured."""
+    assert declared_divergence(CORPUS.parent / "x.yaml", _fixture(GOOD)) is None
+    assert declared_divergence(CORPUS / ".." / "x.yaml", _fixture(GOOD)) is None
+
+
+def test_divergence_header_rejects_equal_verdicts() -> None:
+    """(b) Two equal verdicts are not a divergence."""
+    header = '# parity-divergence: VALID / VALID "x"'
+    assert isinstance(declared_divergence(CORPUS / "x.yaml", _fixture(header)), str)
+
+
+def test_divergence_needs_the_rust_diagnostic() -> None:
+    """(c) The header must name a diagnostic, and the Rust output must contain it."""
+    bare = "# parity-divergence: VALID / LOAD ERROR"
+    assert isinstance(declared_divergence(CORPUS / "x.yaml", _fixture(bare)), str)
+    declared = Divergence("VALID", "LOAD ERROR", "folded block")
+    python = Result("VALID", 0, 0, 0)
+    right = Result("LOAD ERROR", 1, 1, 0, (), "LOAD ERROR: m: ... folded block ...")
+    other = Result("LOAD ERROR", 1, 1, 0, (), "LOAD ERROR: m: found a tab")
+    assert divergence_holds(declared, python, right)
+    assert not divergence_holds(declared, python, other)
+
+
+def test_divergence_header_only_in_the_first_five_lines() -> None:
+    """(d) A header on line 6 or later is ignored."""
+    assert declared_divergence(CORPUS / "x.yaml", _fixture(GOOD, lines_before=4)) is not None
+    assert declared_divergence(CORPUS / "x.yaml", _fixture(GOOD, lines_before=5)) is None
