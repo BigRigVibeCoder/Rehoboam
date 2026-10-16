@@ -168,6 +168,7 @@ fn s5_system(purposes: Vec<&'static str>) -> OnSkeleton {
                 read("region.conditions", "M6.polity"),
             ],
             writes: vec![write("encounter_log.day_index")],
+            ..AccessSpec::default()
         },
         params: vec!["blocks_per_day", "encounter_tie_rate"],
     }
@@ -188,6 +189,7 @@ fn m2_system() -> OnSkeleton {
                 write("person.alive"),
                 write("person.death_tick"),
             ],
+            ..AccessSpec::default()
         },
         params: vec![
             "e0",
@@ -265,6 +267,53 @@ fn s5_and_m2_register_on_their_skeletons() {
     );
     // The code declarations are what `rh-cli ownership` will count "from code".
     assert_eq!(r.accesses().len(), 2);
+}
+
+/// SPR-006: the real specs' `[[commands]]` and `[[emits]]` reach registration. M2 declares the
+/// `DEATH` it emits and S5 the `TieDelta` it sends to S1 (not registered: reported); an
+/// undeclared kind or a wrong owner is refused.
+#[test]
+fn commands_and_event_kinds_are_checked_against_the_real_specs() {
+    use rh_core::access::CommandSend;
+    let t = real_ownership();
+    let with = |emits: Vec<&'static str>, target: &'static str| -> Vec<Box<dyn SystemModel>> {
+        let mut s5 = s5_system(s5::RngPurpose::names());
+        s5.access.sends.push(CommandSend {
+            command: "TieDelta",
+            target,
+        });
+        let mut m2 = m2_system();
+        m2.access.emits = emits;
+        vec![Box::new(s5), Box::new(m2)]
+    };
+    let r = register(with(vec!["DEATH"], "S1.culture"), &t.spec_table())
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        r.reports().iter().any(|n| n
+            == "S5.daily_life: submits command TieDelta to S1.culture, which is not registered")
+    );
+    assert!(
+        r.reports()
+            .iter()
+            .any(|n| n == "S5.daily_life: spec event kind ENCOUNTER has no use in code")
+    );
+    let Err(e) = register(with(vec!["BIRTH"], "M2.demography"), &t.spec_table()) else {
+        panic!("an undeclared kind and a wrong owner must be refused");
+    };
+    let rules: Vec<(&str, &str)> = e
+        .violations
+        .iter()
+        .map(|v| (v.rule, v.system.as_str()))
+        .collect();
+    assert_eq!(
+        rules,
+        [
+            ("command", "S5.daily_life"),
+            ("command", "S5.daily_life"),
+            ("event-kind", "M2.demography"),
+        ],
+        "{e}"
+    );
 }
 
 /// An enum whose names drift from the spec, as a stale or hand-written one would.
@@ -486,6 +535,7 @@ impl Declared {
                         plane: Plane::A,
                     })
                     .collect(),
+                ..AccessSpec::default()
             },
             bindings: spec.map_or_else(Vec::new, |s| {
                 s.schedule

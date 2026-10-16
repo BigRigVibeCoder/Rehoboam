@@ -1,0 +1,870 @@
+//! T-02, T-03 and T-04 on a stub "life world", and V-DET-12 (SPR-006).
+//!
+//! The world, on 48 persons (person ids are hashed, so `PersonId` order is not row order):
+//! - `X1.vital` (Month, Vital) samples death times for the living as timers at intra-month
+//!   minutes up to 60 days ahead (ADR-0025 item 1), cancels some pending ones (a cure), and on a
+//!   firing timer marks the death, emits `DEATH` and submits `Inherit` to the estate, with the
+//!   `DEATH` draft as the command's cause. Its fire handler refuses a timer whose person has no
+//!   pending death: a cancelled timer that fired would stop the run;
+//! - `X5.war` (Month, Military) submits `Inherit` for a few living persons, with no cause;
+//! - `X2.estate` (Day, Agenda) owns and applies `Inherit`: it checks that its queue arrives in
+//!   `(tick, phase, PersonId, seq)` order and emits `INHERITANCE`, caused by the death if any;
+//! - `X3.rumor` and `X4.census` (Month, Agenda) share a scheduler level with the estate, so the
+//!   three run on different threads; the census emits a `CENSUS_NOTE` caused by its own `CENSUS`
+//!   draft (a draft-local causal edge); the rumor checks it never receives a command;
+//! - `X9.observer` (Hour, Bookkeeping) does nothing: it stands for a watched run, which runs
+//!   every hour instant.
+//!
+//! Tests:
+//! - thread-count invariance at 1, 2, 4 and 8 threads (ruling 1): events, agenda state, tables and
+//!   command queues identical;
+//! - every mode: with and without the observer, the same events at the same ticks; death ticks
+//!   fall between pulse boundaries (T-02);
+//! - V-DET-12 over 16 random small worlds, instant by instant: every new event's tick is the
+//!   current instant, `EventId`s strictly increase in `(tick, phase, seq)` order, causes point
+//!   back, and every sampled outcome sits in the agenda as a future timer until it fires;
+//! - material-input re-sampling: only the scope's timers are re-drawn, keyed by epoch; the input
+//!   applies before a timer due at the same tick (T-02; ADR-0025 items 3 and 4);
+//! - refusals: back-dated or unbound-phase timers, another system's timer, undeclared commands and
+//!   events, and registration of a non-owner applier or a second emitter (T-03, T-04).
+//!
+//! Refs: SPR-006 T-02–T-04, rulings 1–5; ADR-0025; `docs/09` V-DET-12; `05.1` §2 rule 2, §4.1.
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "test helpers: a broken stub world must fail the test loudly"
+)]
+
+mod support;
+
+use rh_core::agenda::{AgendaState, TimerEntry};
+use rh_core::command::Command;
+use rh_core::engine::{Engine, InputError, MaterialInput};
+use rh_core::register::{RegistrationError, register};
+use rh_core::system::{PulseBinding, ResampleCtx, SimError, SpecPurpose, StepCtx, TimerSpec};
+use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
+use rh_core::world::{SystemView, WorldTables};
+use rh_core::{Phase, Pulse};
+use rh_events::{Event, EventDraft};
+use rh_ids::rng::{h64_words, tag};
+use rh_ids::{BranchSalt, EntityRef, PersonId};
+use support::{Stub, agreeing_specs};
+
+const CALENDAR: Calendar = Calendar::new(DaysPerYear::D365, SeasonsPerYear::Four);
+const DAY: i64 = 1_440;
+const TAG: u64 = tag("rehoboam/rh-core/tests/agenda-events/v1");
+/// Death timers land up to this many minutes ahead, so some are still pending a month later.
+const HORIZON: u64 = 60 * 1_440;
+
+/// The vital system's purposes.
+enum Vp {
+    DeathTime,
+    Cure,
+}
+
+impl SpecPurpose for Vp {
+    const ALL: &'static [Self] = &[Self::DeathTime, Self::Cure];
+    fn name(&self) -> &'static str {
+        match self {
+            Self::DeathTime => "death_time",
+            Self::Cure => "cure",
+        }
+    }
+}
+
+/// The war system's purpose.
+enum Wp {
+    Levy,
+}
+
+impl SpecPurpose for Wp {
+    const ALL: &'static [Self] = &[Self::Levy];
+    fn name(&self) -> &'static str {
+        "levy"
+    }
+}
+
+fn person(row: usize) -> PersonId {
+    PersonId::from_raw(h64_words(TAG, &[row as u64]) >> 4)
+}
+
+fn entity(row: usize) -> EntityRef {
+    EntityRef::person(person(row))
+}
+
+fn r64(row: usize) -> i64 {
+    i64::try_from(row).unwrap()
+}
+
+fn row_of(payload: i64) -> usize {
+    usize::try_from(payload).unwrap()
+}
+
+fn vital_step(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let rows = v.read("vital.alive")?.len();
+    let alive = v.read("vital.alive")?.to_vec();
+    let mut pending = v.read("vital.pending")?.to_vec();
+    let rate = v.read("vital.rate")?[0].cast_unsigned();
+    for row in 0..rows {
+        if alive[row] == 0 {
+            continue;
+        }
+        if pending[row] == 0 {
+            if c.rng(&Vp::DeathTime, person(row), 0)? % rate == 0 {
+                let offset = 1 + c.rng(&Vp::DeathTime, person(row), 1)? % HORIZON;
+                let time = c.now().checked_add_minutes(offset.cast_signed()).unwrap();
+                c.schedule(
+                    &Vp::DeathTime,
+                    TimerSpec {
+                        time,
+                        phase: Phase::Vital,
+                        entity: entity(row),
+                        kind: 0,
+                        payload: r64(row),
+                    },
+                )?;
+                pending[row] = 1;
+            }
+        } else if c.rng(&Vp::Cure, person(row), 0)? % 5 == 0 {
+            for t in c.own_timers(entity(row)) {
+                c.cancel(t.id())?;
+            }
+            pending[row] = 0;
+            c.emit(EventDraft::new("CURED").subject(entity(row)))?;
+        }
+    }
+    v.write("vital.pending")?.copy_from_slice(&pending);
+    Ok(())
+}
+
+fn vital_fire(
+    s: &Stub,
+    timer: &TimerEntry,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let row = row_of(timer.timer.payload);
+    let fail = |message: String| SimError::System {
+        system: s.id,
+        message,
+    };
+    if c.now() != timer.key.time || c.phase() != timer.key.phase {
+        return Err(fail(format!("{} fired off its own tick", timer.id())));
+    }
+    if v.read("vital.pending")?[row] != 1 || v.read("vital.alive")?[row] != 1 {
+        return Err(fail(format!(
+            "{} fired for row {row} with no pending death",
+            timer.id()
+        )));
+    }
+    v.write("vital.alive")?[row] = 0;
+    v.write("vital.pending")?[row] = 0;
+    let death = c.emit(
+        EventDraft::new("DEATH")
+            .subject(entity(row))
+            .with_payload(vec![r64(row), timer.key.time.minutes()]),
+    )?;
+    c.submit(Command {
+        kind: "Inherit",
+        person: person(row),
+        args: vec![r64(row)],
+        cause: Some(death),
+    })
+}
+
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "it must have the ResampleFn signature"
+)]
+fn vital_resample(
+    _: &Stub,
+    _: &TimerEntry,
+    ctx: &ResampleCtx,
+) -> Result<Option<SimTime>, SimError> {
+    let offset = 1 + ctx.draw(0) % HORIZON;
+    Ok(ctx.now().checked_add_minutes(offset.cast_signed()))
+}
+
+fn war_step(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let alive = v.read("vital.alive")?.to_vec();
+    for (row, &a) in alive.iter().enumerate().rev() {
+        if a == 1 && c.rng(&Wp::Levy, person(row), 0)? % 9 == 0 {
+            c.submit(Command {
+                kind: "Inherit",
+                person: person(row),
+                args: vec![r64(row)],
+                cause: None,
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn estate_step(
+    s: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let queue = c.take_commands();
+    if !queue.windows(2).all(|w| w[0].key() < w[1].key()) {
+        return Err(SimError::System {
+            system: s.id,
+            message: "the queue is not in (tick, phase, PersonId, seq) order".to_owned(),
+        });
+    }
+    for q in queue {
+        let row = row_of(q.command.args[0]);
+        v.write("estate.heirs")?[row] += 1;
+        let order = &mut v.write("estate.order")?[0];
+        *order = order
+            .wrapping_mul(31)
+            .wrapping_add(q.command.person.to_raw().cast_signed());
+        let mut e = EventDraft::new("INHERITANCE").subject(EntityRef::person(q.command.person));
+        if let Some(cause) = q.cause {
+            e = e.caused_by(cause);
+        }
+        c.emit(e)?;
+    }
+    Ok(())
+}
+
+fn rumor_step(
+    s: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if !c.take_commands().is_empty() {
+        return Err(SimError::System {
+            system: s.id,
+            message: "a non-owner received a command".to_owned(),
+        });
+    }
+    let alive = v.read("vital.alive")?.to_vec();
+    for (row, &a) in alive.iter().enumerate() {
+        if a == 1 && row % 7 == usize::try_from(c.now().minutes().rem_euclid(7)).unwrap() {
+            c.emit(EventDraft::new("RUMOR").subject(entity(row)))?;
+        }
+    }
+    Ok(())
+}
+
+fn census_step(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let living: i64 = v.read("vital.alive")?.iter().sum();
+    let census = c.emit(EventDraft::new("CENSUS").with_payload(vec![living]))?;
+    c.emit(EventDraft::new("CENSUS_NOTE").after(census))?;
+    Ok(())
+}
+
+fn life_stubs(observer: bool) -> Vec<Stub> {
+    use rh_core::access::Lag::{SameInstant, StartOfDay};
+    let mut stubs = vec![
+        Stub::new("X1.vital")
+            .purposes_of::<Vp>()
+            .writes("vital.alive")
+            .writes("vital.pending")
+            .writes("vital.rate")
+            .emits("DEATH")
+            .emits("CURED")
+            .sends("Inherit", "X2.estate")
+            .at(Pulse::Month, Phase::Vital)
+            .stepping(vital_step)
+            .firing(vital_fire)
+            .resampling(vital_resample),
+        Stub::new("X2.estate")
+            .writes("estate.heirs")
+            .writes("estate.order")
+            .applies("Inherit")
+            .emits("INHERITANCE")
+            .at(Pulse::Day, Phase::Agenda)
+            .stepping(estate_step),
+        Stub::new("X3.rumor")
+            .reads("vital.alive", "X1.vital", SameInstant)
+            .emits("RUMOR")
+            .at(Pulse::Month, Phase::Agenda)
+            .stepping(rumor_step),
+        Stub::new("X4.census")
+            .reads("vital.alive", "X1.vital", StartOfDay)
+            .emits("CENSUS")
+            .emits("CENSUS_NOTE")
+            .at(Pulse::Month, Phase::Agenda)
+            .stepping(census_step),
+        Stub::new("X5.war")
+            .purposes_of::<Wp>()
+            .reads("vital.alive", "X1.vital", SameInstant)
+            .sends("Inherit", "X2.estate")
+            .at(Pulse::Month, Phase::Military)
+            .stepping(war_step),
+    ];
+    if observer {
+        stubs.push(Stub::new("X9.observer").at(Pulse::Hour, Phase::Bookkeeping));
+    }
+    stubs
+}
+
+fn life_engine(seed: u64, rows: usize, rate: i64, observer: bool, threads: usize) -> Engine {
+    let stubs = life_stubs(observer);
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut tables = WorldTables::new();
+    tables.insert("vital.alive", vec![1; rows]);
+    tables.insert("vital.pending", vec![0; rows]);
+    tables.insert("vital.rate", vec![rate]);
+    tables.insert("estate.heirs", vec![0; rows]);
+    tables.insert("estate.order", vec![0]);
+    let mut engine = Engine::new(
+        CALENDAR,
+        seed,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    );
+    engine.set_threads(threads);
+    engine
+}
+
+/// Everything a run leaves: all events, the agenda's state, the table hash, commands waiting.
+#[derive(Debug, PartialEq, Eq)]
+struct RunResult {
+    events: Vec<Event>,
+    agenda: AgendaState,
+    state_hash: u64,
+    waiting: usize,
+}
+
+fn run(mut engine: Engine, years: i64) -> RunResult {
+    let end = SimTime::from_minutes(years * CALENDAR.minutes_per_year() - 1);
+    let mut events = Vec::new();
+    while let Some(t) = engine.next_instant() {
+        if t > end {
+            break;
+        }
+        engine
+            .advance_until(t, |_, _| {})
+            .unwrap_or_else(|e| panic!("{e}"));
+        events.extend(engine.drain_events());
+    }
+    RunResult {
+        events,
+        agenda: engine.agenda().state(),
+        state_hash: engine.tables().state_hash(),
+        waiting: engine.commands().len(),
+    }
+}
+
+fn count(events: &[Event], kind: &str) -> usize {
+    events.iter().filter(|e| e.kind == kind).count()
+}
+
+#[test]
+fn ruling_1_thread_count_never_reaches_an_id() {
+    let base = run(life_engine(7, 48, 4, false, 1), 3);
+    for kind in [
+        "DEATH",
+        "CURED",
+        "INHERITANCE",
+        "RUMOR",
+        "CENSUS",
+        "CENSUS_NOTE",
+    ] {
+        assert!(count(&base.events, kind) > 3, "the world exercises {kind}");
+    }
+    // A death's inheritance cites it; a census note cites its census.
+    let deaths: Vec<_> = base.events.iter().filter(|e| e.kind == "DEATH").collect();
+    let cited = base
+        .events
+        .iter()
+        .filter(|e| e.kind == "INHERITANCE" && !e.causes.is_empty())
+        .count();
+    assert_eq!(
+        cited,
+        deaths.len(),
+        "every death passes its id through the command"
+    );
+    for e in base.events.iter().filter(|e| e.kind == "CENSUS_NOTE") {
+        assert_eq!(e.causes, [rh_ids::EventId::from_raw(e.id.to_raw() - 1)]);
+    }
+    for threads in [2, 4, 8] {
+        let other = run(life_engine(7, 48, 4, false, threads), 3);
+        assert_eq!(other, base, "{threads} threads");
+    }
+}
+
+#[test]
+fn t02_timers_fire_at_their_own_tick_in_every_mode() {
+    let headless = run(life_engine(11, 48, 3, false, 1), 2);
+    let watched = run(life_engine(11, 48, 3, true, 4), 2);
+    assert_eq!(
+        watched.events, headless.events,
+        "watched and headless runs agree"
+    );
+    let deaths: Vec<&Event> = headless
+        .events
+        .iter()
+        .filter(|e| e.kind == "DEATH")
+        .collect();
+    assert!(deaths.len() > 10);
+    for d in &deaths {
+        assert_eq!(
+            d.tick, d.payload[1],
+            "a death is emitted at its timer's own tick"
+        );
+    }
+    let off_boundary = deaths
+        .iter()
+        .filter(|d| !CALENDAR.is_boundary(Pulse::Hour, SimTime::from_minutes(d.tick)))
+        .count();
+    assert!(
+        off_boundary * 2 > deaths.len(),
+        "deaths fall between pulse boundaries, not at the month pulse"
+    );
+}
+
+#[test]
+fn v_det_12_no_back_dating_property() {
+    for case in 0..16_u64 {
+        let rows = 8 + usize::try_from(h64_words(TAG, &[case, 1]) % 40).unwrap();
+        let rate = 2 + (h64_words(TAG, &[case, 2]) % 5).cast_signed();
+        let threads = [1, 2, 4, 8][usize::try_from(case % 4).unwrap()];
+        let mut engine = life_engine(case, rows, rate, case % 3 == 0, threads);
+        let end = SimTime::from_minutes(CALENDAR.minutes_per_year());
+        let mut last: Option<(i64, u8, u64)> = None;
+        let mut seen = 0_usize;
+        while let Some(t) = engine.next_instant() {
+            if t > end {
+                break;
+            }
+            engine
+                .advance_until(t, |_, _| {})
+                .unwrap_or_else(|e| panic!("{e}"));
+            for e in engine.drain_events() {
+                seen += 1;
+                assert_eq!(
+                    e.tick,
+                    t.minutes(),
+                    "case {case}: an event's tick is the current instant"
+                );
+                let key = e.order_key();
+                assert!(
+                    last.is_none_or(|l| l < key),
+                    "case {case}: (tick, phase, seq) strictly increases"
+                );
+                assert!(
+                    last.is_none_or(|l| l.2 < e.id.to_raw()),
+                    "case {case}: EventIds strictly increase"
+                );
+                assert!(
+                    e.causes.iter().all(|c| *c < e.id),
+                    "case {case}: causes point back"
+                );
+                last = Some(key);
+            }
+            // Sampled outcomes sit in the agenda as future timers until they fire.
+            let pending = engine.tables().get("vital.pending").unwrap();
+            for (row, &p) in pending.iter().enumerate() {
+                let timers = engine.agenda().pending_for(entity(row));
+                assert_eq!(
+                    timers.len(),
+                    usize::try_from(p).unwrap(),
+                    "case {case} row {row}"
+                );
+            }
+            assert!(
+                engine.agenda().peek().is_none_or(|k| k.time > t),
+                "case {case}: no timer is left due"
+            );
+        }
+        assert!(seen > 20, "case {case} emits events ({seen})");
+    }
+}
+
+#[test]
+fn t02_material_input_resamples_only_its_scope_keyed_by_epoch() {
+    let mid = SimTime::from_minutes(40 * DAY + 7);
+    let mut engine = life_engine(5, 48, 2, false, 2);
+    engine.advance_until(mid, |_, _| {}).unwrap();
+    let before = engine.agenda().pending();
+    assert!(before.len() >= 6, "timers are pending ({})", before.len());
+    // The scope: the entities of the first two pending timers, and one at an exact due tick.
+    let due_at = before[0].0.time; // the earliest pending timer: the input lands on its tick
+    let scope_rows: Vec<EntityRef> = vec![before[0].0.entity, before[3].0.entity];
+    let input = MaterialInput {
+        scope: scope_rows.iter().copied().collect(),
+    };
+    assert!(
+        matches!(
+            engine.submit_input(SimTime::from_minutes(5), input.clone()),
+            Err(InputError::PastInput { at, next: Some(next) }) if at == SimTime::from_minutes(5) && next > at
+        ),
+        "acting in the past is refused here (it forks)"
+    );
+    let mut twin = life_engine(5, 48, 2, false, 2);
+    twin.advance_until(mid, |_, _| {}).unwrap();
+    engine.submit_input(due_at, input.clone()).unwrap();
+    engine.advance_until(due_at, |_, _| {}).unwrap();
+    twin.advance_until(due_at, |_, _| {}).unwrap();
+
+    for e in &scope_rows {
+        assert_eq!(engine.epoch(*e), 1);
+    }
+    let after = engine.agenda().pending();
+    let fired_now: Vec<_> = engine
+        .events()
+        .events()
+        .iter()
+        .filter(|e| e.tick == due_at.minutes() && e.kind == "DEATH")
+        .map(|e| e.subjects[0])
+        .collect();
+    assert!(
+        !fired_now.contains(&before[0].0.entity),
+        "the input applies before the timer due at its own tick (ADR-0025 item 4)"
+    );
+    for (key, timer) in &before {
+        let inside = input.scope.contains(&key.entity);
+        let still = after.iter().any(|(k, _)| k == key);
+        if inside {
+            assert!(!still, "{key:?} is in scope: cancelled and re-drawn");
+            let redrawn: Vec<_> = after
+                .iter()
+                .filter(|(k, t)| k.entity == key.entity && t == timer)
+                .collect();
+            assert_eq!(redrawn.len(), 1, "one re-drawn timer for {key:?}");
+            assert!(redrawn[0].0.time > due_at && redrawn[0].0.seq > key.seq);
+        } else if key.time > due_at {
+            assert!(still, "{key:?} is outside the scope: untouched");
+        }
+    }
+    // The twin, without the input, keeps the scope's original timers.
+    assert!(
+        twin.agenda()
+            .pending()
+            .iter()
+            .any(|(k, _)| *k == before[3].0)
+    );
+
+    // A second input on the same entity: epoch 2, a different draw.
+    let one = scope_rows[1];
+    let first_redraw = engine.agenda().pending_for(one)[0].0.time;
+    let next = due_at.checked_add_minutes(1).unwrap();
+    engine
+        .submit_input(
+            next,
+            MaterialInput {
+                scope: [one].into_iter().collect(),
+            },
+        )
+        .unwrap();
+    engine.advance_until(next, |_, _| {}).unwrap();
+    assert_eq!(engine.epoch(one), 2);
+    let second_redraw = engine.agenda().pending_for(one)[0].0.time;
+    assert_ne!(first_redraw, second_redraw, "the epoch keys the re-draw");
+}
+
+#[test]
+fn material_inputs_replay_identically_at_any_thread_count() {
+    let go = |threads| {
+        let mut e = life_engine(9, 48, 2, false, threads);
+        let at = SimTime::from_minutes(45 * DAY + 3);
+        let scope = (0..48).step_by(5).map(entity).collect();
+        e.submit_input(at, MaterialInput { scope }).unwrap();
+        run(e, 1)
+    };
+    let one = go(1);
+    for threads in [2, 4, 8] {
+        assert_eq!(go(threads), one);
+    }
+}
+
+// --- Refusals -----------------------------------------------------------------------------------
+
+enum Np {
+    N,
+}
+
+impl SpecPurpose for Np {
+    const ALL: &'static [Self] = &[Self::N];
+    fn name(&self) -> &'static str {
+        "n"
+    }
+}
+
+fn run_one(stubs: Vec<Stub>) -> Result<(), SimError> {
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut tables = WorldTables::new();
+    tables.insert("y.v", vec![0]);
+    let mut e = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    );
+    e.advance_until(SimTime::from_minutes(3 * DAY), |_, _| {})
+}
+
+fn spec_at(time: SimTime, phase: Phase) -> TimerSpec {
+    TimerSpec {
+        time,
+        phase,
+        entity: EntityRef::WORLD,
+        kind: 0,
+        payload: 0,
+    }
+}
+
+fn schedule_now(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    c.schedule(&Np::N, spec_at(c.now(), c.phase()))
+}
+fn schedule_earlier_phase(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    c.schedule(&Np::N, spec_at(c.now(), Phase::Inputs))
+}
+fn schedule_unbound(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    c.schedule(
+        &Np::N,
+        spec_at(c.now().checked_add_minutes(1).unwrap(), Phase::Culture),
+    )
+}
+fn submit_undeclared(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    c.submit(Command {
+        kind: "Smite",
+        person: PersonId::from_raw(1),
+        args: vec![],
+        cause: None,
+    })
+}
+fn emit_undeclared(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    c.emit(EventDraft::new("OMEN")).map(|_| ())
+}
+fn schedule_soon(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now() == SimTime::EPOCH {
+        c.schedule(
+            &Np::N,
+            spec_at(SimTime::from_minutes(2 * DAY + 5), Phase::Vital),
+        )?;
+    }
+    Ok(())
+}
+fn cancel_theirs(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now() == SimTime::from_minutes(DAY) {
+        c.cancel(rh_core::agenda::TimerId::from_raw(0))?;
+    }
+    Ok(())
+}
+
+#[test]
+fn t02_back_dated_and_unbound_timers_are_refused() {
+    for (step, needle) in [
+        (schedule_now as support::StepFn, "no back-dating"),
+        (schedule_earlier_phase, "no back-dating"),
+        (schedule_unbound, "would never fire"),
+    ] {
+        let err = run_one(vec![
+            Stub::new("Y1.t")
+                .purposes_of::<Np>()
+                .at(Pulse::Day, Phase::Vital)
+                .stepping(step),
+        ])
+        .unwrap_err();
+        assert!(
+            matches!(&err, SimError::Timer { message, .. } if message.contains(needle)),
+            "{err}"
+        );
+    }
+}
+
+#[test]
+fn t02_only_the_owner_cancels_a_timer() {
+    let err = run_one(vec![
+        Stub::new("Y1.owner")
+            .purposes_of::<Np>()
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(schedule_soon)
+            .firing(|_, _, _, _| Ok(())),
+        Stub::new("Y2.other")
+            .at(Pulse::Day, Phase::Agenda)
+            .stepping(cancel_theirs),
+    ])
+    .unwrap_err();
+    assert!(
+        matches!(&err, SimError::Timer { system: "Y2.other", message } if message.contains("another system")),
+        "{err}"
+    );
+}
+
+#[test]
+fn t03_t04_undeclared_commands_and_events_are_refused_at_run_time() {
+    let err = run_one(vec![
+        Stub::new("Y1.s")
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(submit_undeclared),
+    ])
+    .unwrap_err();
+    assert_eq!(
+        err,
+        SimError::UndeclaredCommand {
+            system: "Y1.s",
+            command: "Smite"
+        }
+    );
+    let err = run_one(vec![
+        Stub::new("Y1.e")
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(emit_undeclared),
+    ])
+    .unwrap_err();
+    assert_eq!(
+        err,
+        SimError::UndeclaredEvent {
+            system: "Y1.e",
+            kind: "OMEN"
+        }
+    );
+}
+
+fn refused(stubs: Vec<Stub>, specs_from: &[Stub]) -> RegistrationError {
+    let specs = agreeing_specs(specs_from);
+    match register(stubs.into_iter().map(Stub::boxed).collect(), &specs) {
+        Ok(_) => panic!("registration accepted"),
+        Err(e) => e,
+    }
+}
+
+fn messages(e: &RegistrationError, rule: &str) -> Vec<String> {
+    e.violations
+        .iter()
+        .filter(|v| v.rule == rule)
+        .map(|v| format!("{}: {}", v.system, v.message))
+        .collect()
+}
+
+#[test]
+fn t03_a_non_owner_is_refused_at_registration() {
+    let sender = Stub::new("Z1.sender").sends("Inherit", "Z2.estate");
+    let owner = Stub::new("Z2.estate").applies("Inherit");
+    let rogue = Stub::new("Z3.rogue").applies("Inherit");
+    // A rogue applier, with the sender's spec naming the estate as owner.
+    let e = refused(
+        vec![sender.clone(), rogue.clone()],
+        &[sender.clone(), rogue.clone()],
+    );
+    assert_eq!(
+        messages(&e, "command"),
+        [
+            "Z3.rogue: applies command Inherit, but Z1.sender's spec names Z2.estate as its owner; a non-owner never applies a command",
+            "Z1.sender: submits command Inherit to Z2.estate, but Z3.rogue applies it",
+        ]
+    );
+    // Two appliers.
+    let e = refused(
+        vec![sender.clone(), owner.clone(), rogue.clone()],
+        &[sender.clone(), owner.clone(), rogue],
+    );
+    assert!(
+        messages(&e, "command").contains(
+            &"Z3.rogue: applies command Inherit, which Z2.estate also applies (05.1 §2 rule 2)"
+                .to_owned()
+        )
+    );
+    // A registered target that does not apply the command.
+    let lazy = Stub::new("Z2.estate");
+    let e = refused(vec![sender.clone(), lazy.clone()], &[sender.clone(), lazy]);
+    assert_eq!(
+        messages(&e, "command"),
+        [
+            "Z1.sender: submits command Inherit to Z2.estate, which does not declare that it applies it"
+        ]
+    );
+    // A submission the spec does not declare.
+    let spec_only = Stub::new("Z1.sender");
+    let e = refused(
+        vec![sender.clone(), owner.clone()],
+        &[spec_only, owner.clone()],
+    );
+    assert_eq!(
+        messages(&e, "command"),
+        [
+            "Z1.sender: submits command Inherit to Z2.estate, which its spec's [[commands]] table does not declare"
+        ]
+    );
+    // The owner unregistered: reported, not refused.
+    let specs = agreeing_specs(std::slice::from_ref(&sender));
+    let ok = register(vec![sender.boxed()], &specs).unwrap_or_else(|e| panic!("{e}"));
+    assert!(
+        ok.reports()
+            .iter()
+            .any(|r| r.contains("Z2.estate, which is not registered"))
+    );
+}
+
+#[test]
+fn t04_one_emitter_per_event_kind_declared_in_its_spec() {
+    let a = Stub::new("Z1.a").emits("OMEN");
+    let b = Stub::new("Z2.b").emits("OMEN");
+    let e = refused(vec![a.clone(), b.clone()], &[a.clone(), b]);
+    assert_eq!(
+        messages(&e, "event-kind"),
+        ["Z2.b: emits OMEN, which Z1.a also emits"]
+    );
+    let e = refused(vec![a], &[Stub::new("Z1.a")]);
+    assert_eq!(
+        messages(&e, "event-kind"),
+        ["Z1.a: emits OMEN, which its spec's [[emits]] table does not declare"]
+    );
+}

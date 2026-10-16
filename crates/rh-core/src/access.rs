@@ -7,12 +7,20 @@
 //! lint (`crate::ownership`, which `rh_registry::ownership` calls; SPR-005 ruling 3). At run time the step view
 //! ([`crate::world::SystemView`]) refuses any read or write the declaration does not list.
 //!
-//! Lifecycle commands and event types are declared in the specs (`[[commands]]`, `[[emits]]`);
-//! they join `AccessSpec` when the queues that carry them exist (`05.1` §2 rule 2), not before
-//! (ADR-0033 §5).
+//! SPR-006 adds lifecycle commands and event kinds (carried forward from SPR-005; SPR-006 ruling
+//! 5), so a non-owner is refused at registration, not at run time:
+//! - `sends`: the commands the system submits and the system it names as their owner (the spec's
+//!   `[[commands]]` table);
+//! - `applies`: the commands the system owns and applies from its queue (`05.1` §2 rule 2); one
+//!   owner per command;
+//! - `emits`: the event kinds it emits (the spec's `[[emits]]` table); one emitter per kind.
 //!
-//! REF: `docs/05_architecture/05.1_simulation_core.md` §2 rules 1 and 4; ADR-0024;
-//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04, ruling 3.
+//! At run time the step context ([`crate::system::StepCtx`]) refuses a submission or an emission
+//! the declaration does not list.
+//!
+//! REF: `docs/05_architecture/05.1_simulation_core.md` §2 rules 1, 2, 4 and 8; ADR-0024;
+//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04, ruling 3;
+//! `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-03, ruling 5.
 
 use core::fmt;
 
@@ -126,6 +134,15 @@ pub struct ColumnWrite {
     pub plane: Plane,
 }
 
+/// A declared command submission: the command and the system that owns it (`[[commands]]`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CommandSend {
+    /// The command's Registry name.
+    pub command: &'static str,
+    /// The owning system, as the sender's spec names it (`[[commands]] target`).
+    pub target: &'static str,
+}
+
 /// The access one system declares (`05.1` §2: `fn access(&self) -> AccessSpec`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AccessSpec {
@@ -133,6 +150,12 @@ pub struct AccessSpec {
     pub reads: Vec<ColumnRead>,
     /// Columns written: owned columns only.
     pub writes: Vec<ColumnWrite>,
+    /// Lifecycle commands submitted, with their owner (SPR-006).
+    pub sends: Vec<CommandSend>,
+    /// Lifecycle commands owned and applied (SPR-006).
+    pub applies: Vec<&'static str>,
+    /// Event kinds emitted (SPR-006).
+    pub emits: Vec<&'static str>,
 }
 
 impl AccessSpec {
@@ -153,6 +176,18 @@ impl AccessSpec {
     #[must_use]
     pub fn writes_column(&self, column: &str) -> bool {
         self.writes.iter().any(|w| w.column == column)
+    }
+
+    /// The declared submission of `command`, if any.
+    #[must_use]
+    pub fn send_of(&self, command: &str) -> Option<&CommandSend> {
+        self.sends.iter().find(|c| c.command == command)
+    }
+
+    /// Whether `kind` is a declared event kind.
+    #[must_use]
+    pub fn emits_kind(&self, kind: &str) -> bool {
+        self.emits.contains(&kind)
     }
 
     /// The view of this declaration the shared single-writer rule takes.
