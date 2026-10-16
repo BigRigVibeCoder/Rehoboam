@@ -37,3 +37,4 @@ All ADRs below are **Proposed** until you review them. ADRs that sit on a critic
 | [0027](ADR-0027-era-generic-mechanisms.md) | Era-generic mechanisms: eras are state, not templates | ★ |
 | [0028](ADR-0028-scale-range-and-micro-worlds.md) | One engine from one person to one million: scale profiles and micro worlds | ★ |
 | [0029](ADR-0029-lofi-glyph-client-first.md) | Lo-fi glyph client first; 3D becomes a later art phase | ★ |
+| [0030](ADR-0030-headless-engine-text-harness-first.md) | Headless engine; every view is a harness; text-only until G2 | ★ |

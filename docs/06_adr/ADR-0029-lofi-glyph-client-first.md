@@ -1,6 +1,6 @@
 # ADR-0029 — Lo-fi glyph client first; 3D becomes a later art phase
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Defers:** ADR-0018 (Godot 3D client) to art phase 2 · **Amends:** `05.7`, `11` (P5–P7)
+**Status:** Proposed · **Date:** 2026-10-15 · **Defers:** ADR-0018 (Godot 3D client) to art phase 2 · **Amends:** `05.7`, `11` (P5–P7) · **Amended by:** ADR-0030 (no graphical view before G2: the P1.0 glyph view becomes an ASCII map in `rh-tui`, and the P3 Diorama preview is dropped; P5–P7 are unchanged)
 
 ## Context
 
@@ -63,7 +63,7 @@ A verified scout (R12 batch 2 companion; licences and activity checked against t
 
 - **P5 becomes "Lo-fi Diorama" and P6 "Lo-fi Street-level"** (`11`). The glyph-client work is about **7–11 pw** against the Godot P5/P6 rendering work. The simulation and LLM WPs (M4 F2, hydration, schedules, dialogue, speech) are unchanged.
 - **The program shortens by about 10–14 weeks**, unless art phase 2 is chosen later (about +18–24 weeks then).
-- **A first lo-fi view appears much earlier:** a minimal glyph view is part of the walking skeleton (P1.0). A watchable Diorama can ship during P3, about 6–8 weeks after the P2 server.
+- ~~**A first lo-fi view appears much earlier:** a minimal glyph view is part of the walking skeleton (P1.0). A watchable Diorama can ship during P3, about 6–8 weeks after the P2 server.~~ *Superseded by ADR-0030: phase 1 is text-only; the walking skeleton ends at an ASCII map in `rh-tui`, and the glyph client starts at P5.*
 - **SPK-1 (crowds) and SPK-3 (wallpaper) move with art phase 2.** A small spike replaces them: Lively WebView2 can open a localhost WebSocket, and timers behave in a hidden page. SPK-2 (street from seed) stays, because settlement plans feed the glyph view too.
 - **Per-era art cost drops from weeks of 3D kits to days of glyph packs,** which de-risks R-28.
 

@@ -391,7 +391,7 @@ Verified with shallow clones (LICENSE + `git log -1`) and the npm and crates.io 
 | wglt | WebGL roguelike terminal, single batched draw | MIT [V]; bundles an IBM ROM-dump font and a CC BY-SA font [V] | 2024-05-07; 0.6.4 [V] | **PORT** (shader pattern only; never its fonts) |
 | beamterm | WebGL2 terminal, one instanced draw | MIT [V] | 2026-04-01; 1.0.0 [V] | Fallback |
 | PixiJS + @pixi/tilemap | 2D WebGL engine | MIT [V] | 2026-10-10; 8.22.0 [V] | Fallback |
-| ratatui + crossterm | Rust TUI | MIT [V] | 2026-10-09; 0.30.2 / 0.29 [V] | DEPEND (optional `rh-tui`) |
+| ratatui + crossterm | Rust TUI | MIT [V] | 2026-10-09; 0.30.2 / 0.29 [V] | DEPEND (`rh-tui`, the phase-1 harness; ADR-0030) |
 | ratzilla | ratatui in the browser | MIT/Apache [V] | 2026-07-04; 0.3.1 [V] | Assess |
 | rot.js | Roguelike toolkit | BSD-3 [V] | 2024-11-13; 2.2.1 [V] | REFERENCE (one draw call per cell) |
 | bracket-lib + Rust roguelike tutorial | CP437 consoles | MIT [V] | crates last released 2022-10 [V] | REFERENCE (owns the game loop) |

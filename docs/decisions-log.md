@@ -4,6 +4,7 @@ A running log of director rulings, phase-gate outcomes and approved ADR changes.
 
 | Date | Decision | By | Evidence / links |
 |---|---|---|---|
+| 2026-10-16 | **Proposed** (from the director's direction): the engine is headless and every view is a separate harness that can neither change nor slow the world. Phase 1 (to G2) is text only (`rh-tui`); the web console and glyph client follow G2. | Director; systems design | ADR-0030; PERF-5 / V-PERF-09 |
 | 2026-10-15 | **Proposed** (needs your ruling): adopt ODD-R as the mandatory spec format for every simulation system and fidelity level. | Systems design | `docs/templates/system_spec_odd_r.md`; R12 §15 |
 | 2026-10-15 | Era order (provisional): E2 early modern → E3 industrial → E4 modern, after G3b, sim-only first, under the ADR-0027 scope guardrails. | Director | `docs/11_roadmap.md` era packs; `12` Q19 |
 | 2026-10-15 | Success is defined as a creative engine plus a world to inhabit and invest in, improvable in fidelity and complexity. Commercial success is not the bar. | Director (intake answers) | `docs/01_vision_and_intent.md` §2 |

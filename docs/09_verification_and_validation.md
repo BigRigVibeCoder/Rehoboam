@@ -196,6 +196,7 @@ The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hard
 | V-PERF-06 | Foresight throughput | `bench/foresight_256x25y_100k`; `bench/foresight_64x50y_1M` nightly on a cluster node | `08` §3 targets; batch Foresight at 1M (N = 64 × 50 years) ≤ 60 min on the desktop (G3b) |
 | V-PERF-07 | Compiler path | `bench/liveness_gate_100k`; certification wall time | Liveness gate ≤ 90 s wall at 100k on 8 cores (target 60 s); certification ≤ 30 min wall (target 20 min) |
 | V-PERF-08 | Belief stores | `bench/belief_store_5k` | Memory and update cost within `08` §5; ≤ 600 MB at 5k actors (G3a) |
+| V-PERF-09 | Harness isolation (PERF-5; ADR-0030) | `bench/harness_load_100k`: MAX-speed run headless, then the same seed with 4 harnesses attached (`rh-tui` subscribed to frames and the chronicle feed, a live hydration bubble, a control-plane query fuzzer at the maximum rate, and one consumer that stops reading) | Throughput ≥ 95% of headless; engine RSS growth ≤ the snapshot ring size; `state_hash` ladder identical; the stalled consumer is coalesced, never back-pressured |
 
 ### 2.8 LLM-facing verification (V-LLM)
 
@@ -741,6 +742,7 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | PERF-2 | Macro-step budget | P1b/P3b | V-PERF-02 |
 | PERF-3 | Sifter overhead | P2/P3b | V-PERF-03, V-SIFT-10 |
 | PERF-4 | Benchmark regression gate | P0 | V-PERF-04 |
+| PERF-5 | Harness isolation | P2 | V-PERF-09 |
 | EVO-1 | Ownership and change scope | P0 | V-INV-03, V-INV-04, V-INSP-03, V-GOLD-03, V-WC-10 |
 | EVO-2 | Crate deliverables | P1a | V-INV-06, V-INV-07 |
 | EVO-3 | Fidelity levels | P1b/P5 | V-HYD-10, V-HYD-11, V-SF-01–V-SF-12 |

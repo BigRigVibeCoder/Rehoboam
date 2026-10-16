@@ -85,10 +85,10 @@ Rust (core) · Python (LLM, compilers, calibration) · TypeScript + deck.gl + Si
 |---|---|---|
 | **P0** (≈ 4–6 wk) | Determinism harness, Registry, CI | Identical hashes across thread counts |
 | **P1** (≈ 16–24 wk, split into sub-phases in `11`) | 1,000 years of headless history | ≥ 90% stylized facts; ≤ 2 min/1,000 years at 100k |
-| **P2** (≈ 10–12 wk + a 3–5 wk G2 rating window) | Sifter + Time-Machine console | **Thesis gate:** ≥ 3 events per century that *you* rate ≥ 4/5, within a pause budget |
+| **P2** (≈ 10–12 wk + a 3–5 wk G2 rating window) | Sifter + Time-Machine in a text harness (`rh-tui`; ADR-0030: text only until G2) | **Thesis gate:** ≥ 3 events per century that *you* rate ≥ 4/5, within a pause budget |
 | P3 (split into sub-phases in `11`) | Hive, minds, Oracle-2D, Foresight, 1M scale | Emergent witch-hunt spiral; Foresight validity tests |
 | P4 | Narrative and world compilers | 0 contradictions; gap-report loop proven |
-| P5–P7 | Lo-fi Diorama → Street-level → Oracle travel map (Dwarf Fortress–style glyph view in the console; ADR-0029) | ≈ 20–26 weeks instead of 34–40 for a 3D client; a minimal glyph view already exists in the P1.0 skeleton |
+| P5–P7 | Lo-fi Diorama → Street-level → Oracle travel map (Dwarf Fortress–style glyph view in the console; ADR-0029) | ≈ 20–26 weeks instead of 34–40 for a 3D client; until G2 every view is text (`rh-tui`, ADR-0030); the engine is headless and never waits for a viewer |
 
 **If the thesis gate (G2) fails, no inhabitable-modality work starts.** Simulation and sifting are iterated until stories emerge.
 

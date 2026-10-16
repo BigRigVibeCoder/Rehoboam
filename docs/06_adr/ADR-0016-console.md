@@ -1,6 +1,6 @@
 # ADR-0016 — Web console served by the sim host
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15) · **Deferred by ADR-0030:** the web console is built after G2; until then the Time-Machine is the `rh-tui` text harness
 
 ## Context
 
