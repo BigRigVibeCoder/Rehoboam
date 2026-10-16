@@ -38,14 +38,15 @@ struct Node {
 
 /// A deterministic random fork tree. Node 0 is the canonical timeline.
 fn tree(seed: u64) -> Vec<Node> {
-    let pick = LightStream::from_parts(
-        seed,
-        CANONICAL_SALT,
-        SystemId::from_raw(0),
-        PurposeId::of("test_fork_tree"),
-        0,
-        0,
-    );
+    let pick = LightStream::new(&RngKey {
+        world_seed: seed,
+        branch_salt: CANONICAL_SALT,
+        system: SystemId::from_raw(0),
+        purpose: PurposeId::of("test_fork_tree"),
+        entity: 0,
+        epoch: 0,
+        t: 0,
+    });
     let mut k = 0_u64;
     let mut next = |n: u64| {
         k += 1;
@@ -88,6 +89,7 @@ fn draw(salt: BranchSalt, purpose: &Purpose, entity: u64, t: i64) -> u64 {
         system: SystemId::from_raw(5),
         purpose: purpose.id(),
         entity,
+        epoch: 0,
         t,
     };
     h(&key, 0)

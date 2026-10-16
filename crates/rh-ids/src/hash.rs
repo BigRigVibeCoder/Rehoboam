@@ -1,10 +1,16 @@
 //! The keyed hash `H` (SPR-002 T-02).
 //!
 //! `u = H(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)` (ADR-0006 v1.1 item 2),
-//! built on `ChaCha8` "with stream and position": the key fields select a `ChaCha8` stream, `k` is the
-//! position in it.
+//! plus the entity's `epoch` (ADR-0025: the re-sample key carries the count of material inputs that
+//! have touched the entity), built on `ChaCha8` "with stream and position": the key fields select a
+//! `ChaCha8` stream, `k` is the position in it.
 //!
-//! # Byte layout, version 1
+//! The normative statement of this layout is `05.1` §6 item 2; this module implements it.
+//!
+//! # Byte layout, version 2
+//!
+//! Version 2 added `epoch` (`u32`, in the high half of `K1`'s block counter) and changed the domain
+//! tag to `v2`; version 1 had no epoch.
 //!
 //! All integers are **little-endian**; `t: i64` enters as its two's-complement `u64`.
 //! `ChaCha8` is the original (Bernstein) `ChaCha` with 8 rounds, a 64-bit block counter in state
@@ -12,25 +18,33 @@
 //!
 //! | Step | Key (32 bytes) | Nonce (u64) | Block counter (u64) | Output |
 //! |---|---|---|---|---|
-//! | `K0` | — | — | — | `le64(world_seed) ‖ "rehoboam/rh-ids/H/v1" ‖ 0x00 × 4` |
-//! | `K1` | `K0` | `branch_salt` | `system_id` (`u32` widened) | first 32 bytes of the block |
+//! | `K0` | — | — | — | `le64(world_seed) ‖ "rehoboam/rh-ids/H/v2" ‖ 0x00 × 4` |
+//! | `K1` | `K0` | `branch_salt` | `system_id \| epoch << 32` (two `u32`s) | first 32 bytes of the block |
 //! | `K2` | `K1` | `purpose_id` | `entity_id` | first 32 bytes of the block |
 //! | stream | `K2` | `t` | `k / 8` | `H(…, k)` = stream words `2k` (low) and `2k + 1` (high) |
 //!
 //! Each step is a `ChaCha8` block used as a pseudo-random function of 128 input bits (nonce and
-//! counter) under the previous step's key, so the full 64 + 64 + 32 + 64 + 64 + 64 key bits are
-//! absorbed without truncation and distinct keys give unrelated streams.
+//! counter) under the previous step's key, so the full 64 + 64 + 32 + 32 + 64 + 64 + 64 key bits
+//! are absorbed without truncation and distinct keys give unrelated streams. `epoch` and `k` sit in
+//! different steps, so a draw index can never stand in for an epoch.
+//!
+//! DECISION: `epoch` shares `K1`'s block counter with `system_id` (disjoint 32-bit halves).
+//! ALTERNATIVES CONSIDERED: a fourth cascade step `K3 = PRF(K2, nonce = t, block = epoch)` (one
+//! more `ChaCha8` evaluation for every stream, about 1.5× the cost of opening one); folding it
+//! into `entity` or `t` (rejected: lossless `u64` entity keys and `i64` ticks leave no room).
+//! TRADEOFF: `K1` is cached per (salt, system, epoch): the common `epoch = 0` key stays cached per
+//! system, and an entity re-sampled by a material input pays one extra `ChaCha8` block.
 //!
 //! DECISION: a `ChaCha8` cascade, not a general-purpose hash (`xxh3`) of serialised bytes.
 //! ALTERNATIVES CONSIDERED: `xxh3`-128 of the 44 key bytes as the `ChaCha` key (needs a second
 //! hash crate, and an independent reference implementation is impractical in the standard
 //! library); `Philox-4x64` (ADR-0006 allows it; would need a port, docs/14 Random123).
-//! TRADEOFF: one extra `ChaCha8` evaluation per (system) and per (purpose, entity) — callers cache
+//! TRADEOFF: one extra `ChaCha8` evaluation per (system, epoch) and per (purpose, entity) — callers cache
 //! [`SystemKey`] and [`StreamKey`] — in exchange for a layout that `bin/gen_rng_golden.py`
 //! re-implements independently from the standard library alone (V-DET-09 known answers).
 //!
 //! The layout is part of the determinism contract: changing any byte of it moves every
-//! `state_hash` and is a C3 change. The golden vectors in `tests/golden/rh_ids_v1.txt` pin it.
+//! `state_hash` and is a C3 change. The golden vectors in `tests/golden/rh_ids_v2.txt` pin it.
 //!
 //! REF: ADR-0006 v1.1 items 2–3; `05.1` §6.2; `docs/14` (`rand_chacha`: DEPEND, pinned exactly).
 
@@ -43,8 +57,8 @@ use crate::ids::SystemId;
 const KEY_BYTES: usize = 32;
 /// 32-bit words per `ChaCha` block.
 const BLOCK_WORDS: u128 = 16;
-/// The version-1 domain tag, padded to fill `K0` after the 8 seed bytes.
-pub const DOMAIN_H_V1: [u8; 24] = *b"rehoboam/rh-ids/H/v1\0\0\0\0";
+/// The version-2 domain tag, padded to fill `K0` after the 8 seed bytes.
+pub const DOMAIN_H_V2: [u8; 24] = *b"rehoboam/rh-ids/H/v2\0\0\0\0";
 
 /// The `branch_salt(t)` field: the hash of the fork lineage covering `t` (`05.1` §6.9).
 ///
@@ -101,6 +115,10 @@ pub struct RngKey {
     pub purpose: PurposeId,
     /// The entity drawn for ([`crate::EntityKey`]).
     pub entity: u64,
+    /// The entity's epoch: the number of material inputs that have re-sampled it (ADR-0025;
+    /// ADR-0006 v1.1 item 8). 0 unless a material input has touched the entity. A `u32` holds
+    /// 4 × 10⁹ re-samples of one entity, far beyond any world's input journal.
+    pub epoch: u32,
     /// The tick, in `i64` minutes from the epoch (ADR-0026 item 6).
     pub t: i64,
 }
@@ -115,28 +133,26 @@ fn prf(key: [u8; KEY_BYTES], nonce: u64, block: u64) -> [u8; KEY_BYTES] {
     out
 }
 
-/// `K0`: the world seed followed by the version-1 domain tag.
+/// `K0`: the world seed followed by the version-2 domain tag.
 fn seed_key(world_seed: u64) -> [u8; KEY_BYTES] {
     let mut key = [0_u8; KEY_BYTES];
     let (seed, domain) = key.split_at_mut(8);
     seed.copy_from_slice(&world_seed.to_le_bytes());
-    domain.copy_from_slice(&DOMAIN_H_V1);
+    domain.copy_from_slice(&DOMAIN_H_V2);
     key
 }
 
-/// `K1`: the key of one system in one branch. Cache it per (salt, system).
+/// `K1`: the key of one system in one branch at one entity epoch. Cache it per (salt, system)
+/// for `epoch = 0`, the common case.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct SystemKey([u8; KEY_BYTES]);
 
 impl SystemKey {
-    /// Derives `K1 = PRF(K0(world_seed), nonce = branch_salt, block = system_id)`.
+    /// Derives `K1 = PRF(K0(world_seed), nonce = branch_salt, block = system_id | epoch << 32)`.
     #[must_use]
-    pub fn new(world_seed: u64, branch_salt: BranchSalt, system: SystemId) -> Self {
-        Self(prf(
-            seed_key(world_seed),
-            branch_salt.to_raw(),
-            u64::from(system.to_raw()),
-        ))
+    pub fn new(world_seed: u64, branch_salt: BranchSalt, system: SystemId, epoch: u32) -> Self {
+        let block = u64::from(system.to_raw()) | (u64::from(epoch) << 32);
+        Self(prf(seed_key(world_seed), branch_salt.to_raw(), block))
     }
 
     /// Derives `K2 = PRF(K1, nonce = purpose_id, block = entity_id)`.
@@ -154,7 +170,7 @@ impl StreamKey {
     /// Derives the stream key for a full [`RngKey`].
     #[must_use]
     pub fn of(key: &RngKey) -> Self {
-        SystemKey::new(key.world_seed, key.branch_salt, key.system)
+        SystemKey::new(key.world_seed, key.branch_salt, key.system, key.epoch)
             .stream_key(key.purpose, key.entity)
     }
 
@@ -201,6 +217,7 @@ mod tests {
             system: SystemId::from_raw(3),
             purpose: PurposeId::from_raw(7),
             entity: 1_000,
+            epoch: 0,
             t: -60,
         }
     }
@@ -209,7 +226,7 @@ mod tests {
     fn seed_key_layout_is_seed_then_domain() {
         let k0 = seed_key(0x0102_0304_0506_0708);
         assert_eq!(&k0[..8], &[8, 7, 6, 5, 4, 3, 2, 1], "little-endian seed");
-        assert_eq!(&k0[8..], &DOMAIN_H_V1);
+        assert_eq!(&k0[8..], &DOMAIN_H_V2);
     }
 
     #[test]
@@ -233,7 +250,25 @@ mod tests {
         let mut k = key();
         k.t += 1;
         assert_ne!(h(&k, 0), base);
+        let mut k = key();
+        k.epoch = 1;
+        assert_ne!(h(&k, 0), base);
         assert_ne!(h(&key(), 1), base);
+    }
+
+    /// GAP-2: the epoch and the system share K1's block counter in disjoint halves, so no
+    /// (system, epoch) pair stands in for another, and the draw index never reaches K1.
+    #[test]
+    fn epoch_and_system_do_not_alias() {
+        let at = |system: u32, epoch: u32, k: u64| {
+            let mut key = key();
+            key.system = SystemId::from_raw(system);
+            key.epoch = epoch;
+            h(&key, k)
+        };
+        assert_ne!(at(1, 0, 0), at(0, 1, 0));
+        assert_ne!(at(u32::MAX, 0, 0), at(0, u32::MAX, 0));
+        assert_ne!(at(3, 1, 0), at(3, 0, 1));
     }
 
     #[test]
