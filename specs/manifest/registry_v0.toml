@@ -80,8 +80,7 @@ hazards = ["regicide", "deposition", "successor_purge", "succession_crisis", "ex
 #   arb_*_weight, contest_margin, interregnum_max_days: immediate-succession arbitration (SAGA-13), design values.
 #   dormancy_degrees: SIM-9's N, design value. vocation_*: shares of later children who enter holy orders or a mercenary
 #     company at majority (RT-2026-10-16 item 12); design values: prototype 7's 0.40 / 0.35 are illustrative, not sourced.
-#   filial_piety_mean: legacy; no M7 F1 mechanism reads it (filial piety is a derived overlay of T1.minds, 05.3 §2).
-params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], filial_piety_mean = [0.0, 1.0], predecessor_deposed_hr = [1.3, 2.0], exec_constraint_hr = [0.3, 1.0], majority_age = [12.0, 21.0], arb_legal_weight = [0.0, 1.0], arb_claim_weight = [0.0, 1.0], arb_military_weight = [0.0, 1.0], arb_treasury_weight = [0.0, 1.0], contest_margin = [0.0, 1.0], interregnum_max_days = [7, 730], dormancy_degrees = [1, 6], vocation_holy_orders = [0.0, 0.6], vocation_mercenary = [0.0, 0.6] }
+params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], predecessor_deposed_hr = [1.3, 2.0], exec_constraint_hr = [0.3, 1.0], majority_age = [12.0, 21.0], arb_legal_weight = [0.0, 1.0], arb_claim_weight = [0.0, 1.0], arb_military_weight = [0.0, 1.0], arb_treasury_weight = [0.0, 1.0], contest_margin = [0.0, 1.0], interregnum_max_days = [7, 730], dormancy_degrees = [1, 6], vocation_holy_orders = [0.0, 0.6], vocation_mercenary = [0.0, 0.6] }
 
 [systems."M8.war"]
 fidelity_levels = ["F0", "F1"]
