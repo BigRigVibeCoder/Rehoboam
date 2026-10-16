@@ -73,6 +73,7 @@ cargo build -p rh-cli && python -I bin/manifest_parity.py specs/manifest/example
 target/debug/rh-cli ownership    # single-writer column ownership from specs/systems (SPR-004)
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
+cargo nextest run -p rh-snapshot --locked --test observer   # observer invariance: a host observer changes no hash (SPR-009 ruling 4)
 ```
 
 ## Conventions

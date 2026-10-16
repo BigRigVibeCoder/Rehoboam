@@ -58,6 +58,8 @@ REQUIRED_GATES = (
     "Manifest: val_khor",
     "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp-contract=off "
     "(SPR-003 GAP-6; SPR-007 ruling 4)",
+    "Observer invariance: an attached observer changes no monthly state hash at 1 and 4 threads "
+    "(SPR-009 ruling 4; V-DET-07 style)",
     "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)",
     "Ownership lint positive control: unowned write must FAIL",
     "Ownership lint: single writer from specs/systems (SPR-004 T-03)",

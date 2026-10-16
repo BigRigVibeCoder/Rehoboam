@@ -48,6 +48,11 @@
 //! `EventId`s. The same systems run at an erroring instant at every thread count, and the first
 //! error in canonical order is the one reported.
 //!
+//! **Observer** (SPR-009 ruling 4). A host may attach an [`Observer`] ([`Engine::set_observer`]),
+//! which receives a [`Notice`] at every instant, phase, level and job boundary: sim time, phase and
+//! binding, never a clock and never state. It is how the host times systems without plane A ever
+//! reading a clock, and attaching it changes no result ([`crate::observe`]).
+//!
 //! No wall clock, no unkeyed RNG, no hash-map iteration (GOV-003 §2). Threads come from
 //! `std::thread::scope`; no third-party dependency.
 //!
@@ -60,6 +65,7 @@ use core::fmt;
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::panic::AssertUnwindSafe;
+use std::sync::Arc;
 
 use rh_events::{Event, EventLog};
 use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
@@ -68,8 +74,10 @@ use crate::access::Lag;
 use crate::agenda::{Agenda, Timer, TimerEntry};
 use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance};
+use crate::observe::{Boundary, JobRef, JobWork, Notice, Observer, Pass};
 use crate::phase::Phase;
 use crate::register::{Entry, Registered};
+use crate::schedule::Node;
 use crate::state::{EngineState, RestoreError, check_epochs, check_inputs, check_timers};
 use crate::system::{
     InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx,
@@ -198,6 +206,9 @@ pub struct Engine {
     last_keyframe: Option<String>,
     /// The error that stopped the run, if any. A poisoned engine never runs again (SPR-005 G-d).
     poisoned: Option<SimError>,
+    /// The host's observer, if attached (SPR-009 ruling 4): notices only, never state, so it is
+    /// not part of [`EngineState`] and never changes a result.
+    observer: Option<Arc<dyn Observer>>,
 }
 
 /// One system's work in one pass: its due timers, or one firing binding.
@@ -304,6 +315,7 @@ impl Engine {
             journal_head: None,
             last_keyframe: None,
             poisoned,
+            observer: None,
         }
     }
 
@@ -443,6 +455,25 @@ impl Engine {
     /// Sets the last keyframe a crash artifact records, as `<path>#<state hash>` (SPR-007).
     pub fn set_last_keyframe(&mut self, keyframe: Option<String>) {
         self.last_keyframe = keyframe;
+    }
+
+    /// Attaches the host's observer, or detaches it with `None` (SPR-009 ruling 4; [`crate::observe`]).
+    /// It receives boundary notices with no clock and no state; attached or not, every result is
+    /// the same.
+    pub fn set_observer(&mut self, observer: Option<Arc<dyn Observer>>) {
+        self.observer = observer;
+    }
+
+    /// Sends one notice from the engine's own thread, if an observer is attached.
+    fn notify(&self, at: SimTime, phase: Option<Phase>, boundary: Boundary) {
+        if let Some(o) = &self.observer {
+            o.notify(&Notice {
+                at,
+                phase,
+                worker: 0,
+                boundary,
+            });
+        }
     }
 
     /// Sets the timeline id (0, the canonical timeline, by default).
@@ -729,6 +760,7 @@ impl Engine {
     }
 
     fn run_instant(&mut self, t: SimTime) -> Result<(), SimError> {
+        self.notify(t, None, Boundary::InstantStart);
         let fired: Vec<Pulse> = self
             .calendar
             .pulses_at(t)
@@ -744,6 +776,7 @@ impl Engine {
         let mut tally = Tally::default();
         for phase in Phase::ALL {
             self.at = (t, phase);
+            self.notify(t, Some(phase), Boundary::PhaseStart);
             if phase == Phase::Inputs {
                 tally.inputs = self.apply_inputs(t)?;
             }
@@ -761,7 +794,7 @@ impl Engine {
             // The timer pass, then the firing bindings (SPR-005 DEF-7). Both run the canonical
             // order: dependency levels over every binding, each level coarser pulse first, then id.
             let plan = self.registered.schedule().phase(phase).clone();
-            let mut passes: Vec<Vec<Vec<Job>>> = Vec::new();
+            let mut passes: Vec<(Pass, Vec<Vec<Job>>)> = Vec::new();
             // Timer pass: each owner once, at the level of its first binding in the phase, with
             // its timers in key order.
             let timer_pass: Vec<Vec<Job>> = plan
@@ -789,39 +822,15 @@ impl Engine {
                     ),
                 });
             }
-            passes.push(timer_pass);
-            // Binding pass: a level is split wherever a system's second binding appears, so one
-            // system's bindings never run at once (they share its columns); each split is a level
-            // for the merge. The split depends on the schedule only, never on the thread count.
-            let mut binding_pass: Vec<Vec<Job>> = Vec::new();
-            for level in &plan.levels {
-                let mut groups: Vec<Vec<Job>> = vec![Vec::new()];
-                for n in level.iter().filter(|n| fired.contains(&n.pulse)) {
-                    let repeats = groups
-                        .last()
-                        .is_some_and(|g| g.iter().any(|j| j.index == n.system));
-                    if repeats {
-                        groups.push(Vec::new());
-                    }
-                    if let Some(g) = groups.last_mut() {
-                        g.push(Job {
-                            index: n.system,
-                            work: Work::Step(PulseBinding {
-                                pulse: n.pulse,
-                                phase,
-                            }),
-                        });
-                    }
-                }
-                binding_pass.extend(groups.into_iter().filter(|g| !g.is_empty()));
-            }
-            passes.push(binding_pass);
-            for jobs in passes.into_iter().flatten() {
-                self.run_level(t, phase, &snapshot, &jobs, &mut tally)?;
-            }
+            passes.push((Pass::Timers, timer_pass));
+            // Binding pass: a level is split wherever a system's second binding appears.
+            let binding_pass = binding_pass(&plan.levels, &fired, phase);
+            passes.push((Pass::Bindings, binding_pass));
+            self.run_passes((t, phase), &snapshot, passes, &mut tally)?;
             if phase == Phase::Bookkeeping {
                 self.check_invariants(t)?;
             }
+            self.notify(t, Some(phase), Boundary::PhaseEnd);
         }
         let pulses: Vec<&str> = fired.iter().map(|p| p.name()).collect();
         self.record(format!(
@@ -833,6 +842,30 @@ impl Engine {
             tally.events,
             self.agenda.len()
         ));
+        self.notify(t, None, Boundary::InstantEnd);
+        Ok(())
+    }
+
+    /// Runs the passes of one phase level by level, each level between its observer notices.
+    fn run_passes(
+        &mut self,
+        (t, phase): (SimTime, Phase),
+        snapshot: &WorldTables,
+        passes: Vec<(Pass, Vec<Vec<Job>>)>,
+        tally: &mut Tally,
+    ) -> Result<(), SimError> {
+        for (pass, levels) in passes {
+            for (level, jobs) in levels.iter().enumerate() {
+                let start = Boundary::LevelStart {
+                    pass,
+                    level,
+                    jobs: jobs.len(),
+                };
+                self.notify(t, Some(phase), start);
+                self.run_level((t, phase), snapshot, jobs, tally)?;
+                self.notify(t, Some(phase), Boundary::LevelEnd);
+            }
+        }
         Ok(())
     }
 
@@ -945,8 +978,7 @@ impl Engine {
     /// merges the level's buffers in job order (ruling 1).
     fn run_level(
         &mut self,
-        t: SimTime,
-        phase: Phase,
+        (t, phase): (SimTime, Phase),
         snapshot: &WorldTables,
         jobs: &[Job],
         tally: &mut Tally,
@@ -980,13 +1012,25 @@ impl Engine {
                 (owned, self.commands.take(e.id))
             })
             .collect();
+        let workers = self.threads.min(jobs.len()).max(1);
         let outcomes: Vec<JobOutcome> = {
+            let observer = self.observer.as_deref();
             let tables = &self.tables;
             let agenda = &self.agenda;
             let entries = &self.registered.entries;
             let key = |e: &Entry| SystemKey::new(self.world_seed, self.branch_salt, e.system_id, 0);
-            let run = |job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| -> JobOutcome {
+            let run = |k: usize, job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| {
                 let e = &entries[job.index];
+                let notice = |boundary| Notice {
+                    at: t,
+                    phase: Some(phase),
+                    worker: k % workers,
+                    boundary,
+                };
+                let job_ref = job_ref(e.id, job, k);
+                if let Some(o) = observer {
+                    o.notify(&notice(Boundary::JobStart(job_ref)));
+                }
                 let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
                 let info = JobInfo {
                     system: e.id,
@@ -1007,6 +1051,9 @@ impl Engine {
                     }
                 };
                 let (untaken, out) = ctx.finish();
+                if let Some(o) = observer {
+                    o.notify(&notice(Boundary::JobEnd(job_ref)));
+                }
                 JobOutcome {
                     owned: view.into_owned(),
                     result,
@@ -1016,6 +1063,7 @@ impl Engine {
             };
             dispatch(self.threads, jobs, inputs, run)
         };
+        self.notify(t, Some(phase), Boundary::LevelMerge);
         let mut first_error = None;
         let mut outboxes = Vec::with_capacity(outcomes.len());
         for (job, o) in jobs.iter().zip(outcomes) {
@@ -1100,6 +1148,48 @@ impl Engine {
     }
 }
 
+/// The binding pass of one phase: the bindings that fire at this instant, level by level, a level
+/// split wherever one system's second binding appears, so one system's bindings never run at once
+/// (they share its columns); each split is a level for the merge. The split depends on the
+/// schedule only, never on the thread count (SPR-005 DEF-7).
+fn binding_pass(levels: &[Vec<Node>], fired: &[Pulse], phase: Phase) -> Vec<Vec<Job>> {
+    let mut pass: Vec<Vec<Job>> = Vec::new();
+    for level in levels {
+        let mut groups: Vec<Vec<Job>> = vec![Vec::new()];
+        for n in level.iter().filter(|n| fired.contains(&n.pulse)) {
+            let repeats = groups
+                .last()
+                .is_some_and(|g| g.iter().any(|j| j.index == n.system));
+            if repeats {
+                groups.push(Vec::new());
+            }
+            if let Some(g) = groups.last_mut() {
+                g.push(Job {
+                    index: n.system,
+                    work: Work::Step(PulseBinding {
+                        pulse: n.pulse,
+                        phase,
+                    }),
+                });
+            }
+        }
+        pass.extend(groups.into_iter().filter(|g| !g.is_empty()));
+    }
+    pass
+}
+
+/// What an observer is told about job `k` of a level (SPR-009 ruling 4): no state, only names.
+fn job_ref(system: &'static str, job: &Job, k: usize) -> JobRef {
+    JobRef {
+        system,
+        work: match &job.work {
+            Work::Timers(timers) => JobWork::Timers(timers.len()),
+            Work::Step(binding) => JobWork::Binding(*binding),
+        },
+        index: k,
+    }
+}
+
 /// Runs `run` on every job with its input: in order on one thread, or spread over `threads`
 /// workers (job k on worker k % threads, each keeping its jobs in order). Returns the outcomes in
 /// job order whatever the thread count.
@@ -1107,11 +1197,16 @@ fn dispatch<I: Send, O: Send>(
     threads: usize,
     jobs: &[Job],
     inputs: Vec<I>,
-    run: impl Fn(&Job, I) -> O + Sync,
+    run: impl Fn(usize, &Job, I) -> O + Sync,
 ) -> Vec<O> {
     let threads = threads.min(jobs.len());
     if threads <= 1 {
-        return jobs.iter().zip(inputs).map(|(j, i)| run(j, i)).collect();
+        return jobs
+            .iter()
+            .zip(inputs)
+            .enumerate()
+            .map(|(k, (j, i))| run(k, j, i))
+            .collect();
     }
     let mut per_worker: Vec<Vec<(usize, &Job, I)>> = (0..threads).map(|_| Vec::new()).collect();
     for (k, (j, input)) in jobs.iter().zip(inputs).enumerate() {
@@ -1124,7 +1219,7 @@ fn dispatch<I: Send, O: Send>(
             .map(|work| {
                 scope.spawn(move || {
                     work.into_iter()
-                        .map(|(k, j, input)| (k, run(j, input)))
+                        .map(|(k, j, input)| (k, run(k, j, input)))
                         .collect::<Vec<_>>()
                 })
             })
