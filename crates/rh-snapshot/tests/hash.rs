@@ -117,23 +117,23 @@ fn the_cache_rehashes_only_new_versions_and_matches_a_full_recomputation() {
 fn row_marks_rehash_exactly_the_marked_chunks() {
     let mut rows = column(6 * CHUNK_ROWS, 5);
     let mut cache = MerkleCache::new(Plane::A);
-    cache.update("t", None, rows.as_slice());
+    cache.update("t", rows.as_slice());
     let base = cache.rehashed_chunks();
     rows[2 * CHUNK_ROWS + 9] = 42;
     cache.mark_rows("t", 2 * CHUNK_ROWS + 9..2 * CHUNK_ROWS + 10);
-    let root = cache.update("t", None, rows.as_slice());
+    let root = cache.update("t", rows.as_slice());
     assert_eq!(cache.rehashed_chunks(), base + 1);
     assert_eq!(root, TableDigest::of("t", rows.as_slice()).root);
     // A range across a chunk boundary marks both chunks.
     rows[CHUNK_ROWS - 1] = 1;
     rows[CHUNK_ROWS] = 1;
     cache.mark_rows("t", CHUNK_ROWS - 1..CHUNK_ROWS + 1);
-    let root = cache.update("t", None, rows.as_slice());
+    let root = cache.update("t", rows.as_slice());
     assert_eq!(cache.rehashed_chunks(), base + 3);
     assert_eq!(root, TableDigest::of("t", rows.as_slice()).root);
     // Appending rows re-hashes the last old chunk and the new ones only.
     rows.extend(column(CHUNK_ROWS + 1, 9));
-    let root = cache.update("t", None, rows.as_slice());
+    let root = cache.update("t", rows.as_slice());
     assert_eq!(cache.rehashed_chunks(), base + 3 + 2);
     assert_eq!(root, TableDigest::of("t", rows.as_slice()).root);
 }
@@ -269,13 +269,13 @@ fn an_unbounded_row_mark_is_clamped_and_fast() {
     std::thread::spawn(move || {
         let mut rows = column(10, 3);
         let mut cache = MerkleCache::new(Plane::A);
-        cache.update("t", None, rows.as_slice());
+        cache.update("t", rows.as_slice());
         rows[9] = 0;
         cache.mark_rows("t", 0..usize::MAX);
         cache.mark_rows("t", 5..5);
         cache.mark_rows("t", 100..200);
         cache.mark_rows("absent", 0..usize::MAX);
-        let root = cache.update("t", None, rows.as_slice());
+        let root = cache.update("t", rows.as_slice());
         let _ = done.send((
             root == TableDigest::of("t", rows.as_slice()).root,
             cache.rehashed_chunks(),

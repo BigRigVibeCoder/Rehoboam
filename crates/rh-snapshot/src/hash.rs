@@ -436,13 +436,21 @@ impl MerkleCache {
         }
     }
 
-    /// Brings one table's digest up to date and returns its root.
+    /// Brings one table's digest up to date by row marks and returns its root: a changed row
+    /// count re-hashes from the first chunk whose size changed, and otherwise only the chunks
+    /// marked with [`mark_rows`](Self::mark_rows) are re-hashed.
     ///
-    /// `version` is the table's version when it has one (`None` means the caller tracks rows
-    /// with [`mark_rows`](Self::mark_rows) alone): a new version re-hashes every chunk. A changed
-    /// row count re-hashes from the first chunk whose size changed. Otherwise only the chunks
-    /// marked dirty are re-hashed.
-    pub fn update<T: HashRows + ?Sized>(
+    /// **Hazard:** the cache trusts the marks. A caller that changes a row without marking it gets
+    /// a stale root; [`verify`](Self::verify) or a fresh cache finds that. World tables go through
+    /// [`update_world`](Self::update_world), which tracks columns by version and instance
+    /// identity itself (VER-SPR-007 DEF-1); no public path takes a caller-supplied version.
+    pub fn update<T: HashRows + ?Sized>(&mut self, name: &str, table: &T) -> u64 {
+        self.update_versioned(name, None, table)
+    }
+
+    /// [`update`](Self::update) with the table's version: a new version re-hashes every chunk.
+    /// Private: versions are trusted only from [`update_world`](Self::update_world).
+    fn update_versioned<T: HashRows + ?Sized>(
         &mut self,
         name: &str,
         version: Option<u64>,
@@ -507,7 +515,7 @@ impl MerkleCache {
         }
         let mut names = BTreeSet::new();
         for (name, version, rows) in world.columns() {
-            self.update(name, Some(version), rows);
+            self.update_versioned(name, Some(version), rows);
             names.insert(name);
         }
         self.retain(&names);
