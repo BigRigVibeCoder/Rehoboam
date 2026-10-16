@@ -93,6 +93,37 @@ params = { blocks_per_day = [12, 24], encounter_tie_rate = [0.0, 0.05] }
 fidelity_levels = ["F1"]
 params = { metabolism_multiplier = [0.1, 10.0] }
 
+[systems."T1.minds"]
+fidelity_levels = ["F1", "F2"]
+# The minds of named actors (T1), crate rh-minds (05.3). Registry id added by ADR-0035; no spec yet (BCK-001 §3).
+#   F1 = minds v0 (P1a): HEXACO traits, ambition, relationships and opinion modifiers, IAUS for a few decision types,
+#        and secrets v0 knowledge rows (P1b). F2 = the full psychological core, HTN, beliefs, channels and memory (P4).
+#   It owns traits, overlays, opinions, the agenda's goals and knowledge rows; S6 and S7 change them only through
+#   lifecycle commands (ApplyInfluence, AgendaGoal, ClearGoal, OpinionModifier, ApplyThought).
+# Stress and mental breaks (ADR-0035; minds v0, P1a; design inspired by Crusader Kings 3, no code): stress is a q8_8
+#   column on a 0-100 scale that rises with vow.conflict (S7), kin-loyalty and value conflicts and decays at
+#   stress_decay points per month. Crossing stress_threshold is a deterministic state transition that schedules the
+#   break outcome as a timer, at a keyed delay of at most break_delay_max_days; the act comes from [mental_breaks] and
+#   stress drops by its relief (points). All values are design values (V-SAGA-16).
+params = { stress_threshold = [50.0, 95.0], stress_decay = [0.0, 10.0], vow_conflict_gain = [0.0, 20.0], break_delay_max_days = [1, 90] }
+
+[systems."S6.artifacts"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0035; spec specs/systems/S6.artifacts.odd.toml (draft). Every value is a design value: there is no historical
+# band for relics. influence_base is the per-month overlay delta at Honesty-Humility 0; the delivered delta is
+#   influence_base x kind_strength x (1 - resist_slope x H/100), so it lies in [0, 2 x influence_base].
+# rumour reach is in route-graph hops (M1). find_chance, theft_success and loss_on_death are per attempt or per death.
+params = { influence_base = [0.0, 0.05], resist_slope = [0.0, 1.0], corruption_threshold = [0.2, 0.9], rumour_max_hops = [1, 20], rumour_decay_years = [5, 200], find_chance = [0.0, 0.2], theft_success = [0.05, 0.6], loss_on_death = [0.0, 0.5] }
+
+[systems."S7.vows"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0035; spec specs/systems/S7.vows.odd.toml (draft). Every value is a design value: there is no historical band
+# for oath-keeping. A vow's agenda weight is min(vow_priority_base x kind_weight, vow_priority_cap) and never enters
+# a survival decision. resolve = resolve_base x (1 + resolve_slope x C/100) for conscientiousness C; a vow breaks when
+# its strain exceeds resolve. broken_vow_opinion is the opinion modifier (on the -100..100 opinion scale) applied by
+# witnesses and kin to an oath-breaker.
+params = { vow_priority_base = [0.05, 0.5], vow_priority_cap = [0.1, 0.8], max_active_vows = [1, 8], strain_rate = [0.0, 0.1], strain_decay = [0.0, 0.1], resolve_base = [0.2, 1.0], resolve_slope = [0.0, 0.9], grudge_on_harm = [0.0, 1.0], broken_vow_opinion = [-60.0, 0.0] }
+
 # ----------------------------------------------------------------------------- archetypes
 [archetypes.human]
 ledger = "persons"
@@ -168,7 +199,8 @@ ids = ["heavy_plough", "crop_rotation", "seed_selection", "second_staple", "prin
 [act_classes]
 ids = ["harm", "aid", "promise", "betray", "coerce", "conceal", "reveal", "infect_convert", "succeed_to", "depose",
        "flee", "accuse", "purge", "marry", "birth", "death", "discover", "test", "rebel", "trade", "raid", "bond",
-       "counsel", "lament", "renounce", "restore"]
+       "counsel", "lament", "renounce", "restore",
+       "forge", "pass", "destroy", "corrupt", "fulfil", "lapse", "use"]   # saga acts (ADR-0035): artifacts and vows
 
 [roles]
 ids = ["authority", "successor", "kin", "ally", "rival", "subordinate", "member", "host", "guest", "investigator", "suspect", "any"]
@@ -182,10 +214,65 @@ ids = ["paranoia", "filial_piety", "despair", "hubris", "corruption", "dragon_sy
 [pattern_packs]
 ids = ["succession", "revenge", "famine", "reversal", "irony", "elite_feud", "dragon_age", "covert_infiltration", "plague_era", "witch_hunt",
        "trial_of_faith", "grief_and_lament", "temptation", "counsel_dispute", "restoration", "betrayal_by_friends",
-       "solitary_life"]   # rung-0 smoke patterns: hard season, hunger, recovery, injury, death
+       "solitary_life",   # rung-0 smoke patterns: hard season, hunger, recovery, injury, death
+       "vow_arc", "relic_chain", "betrayal", "succession_war", "corrupted_bearer"]   # saga packs (ADR-0035, WP P2.4)
 
 [style_cards]
 ids = ["mythic_chronicle", "deep_time", "saga", "historian", "ensemble_space_opera", "noir_city", "wisdom_dialogue"]
+
+[event_roles]          # the cast and instrument of an event (the cinematic envelope, ADR-0035 §7a; 05.2 §4.1a); plane A
+ids = ["actor", "target", "witness", "instrument"]   # instrument: the S6 artifact used, if any
+
+[motive_edges]         # typed motive edges: refinements of motivated_by that point to the inciting event; plane A
+ids = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]
+
+[mental_breaks]        # T1.minds (ADR-0035): volatile acts a stressed named actor may commit; relief is the stress removed
+ASSASSINATION_ATTEMPT = { act_classes = ["harm"], relief = 60.0 }          # relief in stress points (0-100 scale)
+FLIGHT                = { act_classes = ["flee"], relief = 50.0 }          # the actor becomes a fugitive (SAGA-14)
+BURN_HOLDINGS         = { act_classes = ["harm", "destroy"], relief = 50.0 }
+PACT_OF_DESPAIR       = { act_classes = ["bond", "renounce"], relief = 40.0 }
+
+[contaminants]         # physical marks on an artifact or a cell, as bitflags in this order (S6; envelope); plane A
+ids = ["blood", "ash", "poison", "mud", "salt_water", "soot", "wine"]
+
+[place_types]          # plane C presentation table (05.11 §3): mechanics never read it
+great_hall     = { acoustic = "stone_hall_reverb", interior = true }
+chapel         = { acoustic = "stone_long_reverb", interior = true }
+crypt          = { acoustic = "close_stone_echo", interior = true }
+hovel          = { acoustic = "small_room_dry", interior = true }
+village_street = { acoustic = "open_street", interior = false }
+field          = { acoustic = "open_field_wind", interior = false }
+forest         = { acoustic = "forest_damped", interior = false }
+battlefield    = { acoustic = "open_field_wind", interior = false }
+
+[visual_style_cards]   # plane C (05.11 §5). No photorealism, and no living artist's name in any card or prompt.
+ids = ["dark_fantasy_ink"]   # dark-fantasy graphic novel: heavy ink, cross-hatching, high-contrast chiaroscuro,
+                             # muted watercolour wash, bold angular silhouettes, textured paper
+
+# ----------------------------------------------------------------------------- sagas (ADR-0035)
+[artifact_kinds]   # S6.artifacts; kind_strength scales the pull on the bearer (design values)
+relic  = { kind_strength = 0.6, overlay = "corruption" }
+crown  = { kind_strength = 0.4, overlay = "hubris", regalia = true }    # passes with its title
+weapon = { kind_strength = 0.3, overlay = "hubris" }
+ring   = { kind_strength = 0.8, overlay = "corruption" }
+tome   = { kind_strength = 0.5, overlay = "paranoia" }
+heirloom = { kind_strength = 0.0, overlay = "corruption" }              # no pull: a family treasure, still sought
+
+[vow_kinds]        # S7.vows; kind_weight scales the agenda priority (design values); target is the kind of entity aimed at
+AVENGE_KIN    = { kind_weight = 1.0, target = "person" }
+RECOVER_RELIC = { kind_weight = 0.8, target = "artifact" }
+DESTROY_RELIC = { kind_weight = 0.9, target = "artifact" }
+PROTECT       = { kind_weight = 0.6, target = "person" }
+CLAIM_TITLE   = { kind_weight = 0.8, target = "title" }
+PILGRIMAGE    = { kind_weight = 0.4, target = "place" }
+GRUDGE        = { kind_weight = 0.3, target = "person" }               # formed without an oath when a known culprit harms self or kin
+
+[visual_vocabulary.agrarian]   # v0 sketch (05.11 §5): the closed token sets visual DNA draws from, per era; cultures override.
+physiognomy = ["long_face", "broad_face", "hawk_nose", "heavy_brow", "high_cheekbones", "round_face", "narrow_jaw", "square_jaw"]
+colouring   = ["pale", "ruddy", "olive", "brown", "dark", "freckled"]
+hair        = ["black", "dark_brown", "auburn", "red", "fair", "grey", "white"]
+build       = ["slight", "lean", "wiry", "broad", "heavy", "tall", "short"]
+signature   = ["scar_left_cheek", "missing_finger", "braided_beard", "shaven_head", "eye_patch", "house_brooch", "iron_torc", "hooded_cloak"]
 
 # ----------------------------------------------------------------------------- templates
 [templates.feudal_realm]
@@ -267,6 +354,23 @@ faith                     = { type = "q8_8", args = ["actor"] }         # confid
 integrity                 = { type = "q8_8", args = ["actor"] }         # commitment to one's own innocence and conduct
 grief                     = { type = "q8_8", args = ["actor"] }
 test_result               = { type = "enum", args = ["actor"], values = ["negative", "positive", "inconclusive"] }
+bears_artifact            = { type = "bool", args = ["actor"] }          # S6: the actor bears any artifact
+bearer_exposure           = { type = "q8_8", args = ["actor"] }          # S6: cumulative influence from the artifact borne
+artifact_transfer_mode    = { type = "enum", args = ["event"], values = ["inheritance", "theft", "gift", "trade", "loss"] }
+contaminants              = { type = "int",  args = ["event"] }          # envelope: bitflags of [contaminants] on the instrument or cell at the event
+cell_x                    = { type = "int",  args = ["event"] }          # envelope: cell coordinates, where the world tracks cells
+cell_y                    = { type = "int",  args = ["event"] }
+fugitive                  = { type = "bool", args = ["actor"] }          # S3.migration: the actor is fleeing (SAGA-14)
+vow_against               = { type = "bool", args = ["actor", "partner"] }  # S7: actor holds an active vow or grudge against partner
+vow_public                = { type = "bool", args = ["actor"] }          # S7: the vow on this event was sworn publicly
+stress                    = { type = "q8_8", args = ["actor"] }          # T1.minds: stress at the event, 0-100 scale (ADR-0035)
+# The cinematic event envelope (ADR-0035 §7a; 05.2 §4.1a): anchored snapshots, captured only where simulated.
+emotion_pleasure          = { type = "q8_8", args = ["actor"] }          # PAD mood, pleasure axis (signed)
+emotion_arousal           = { type = "q8_8", args = ["actor"] }          # PAD mood, arousal axis (signed)
+emotion_dominance         = { type = "q8_8", args = ["actor"] }          # PAD mood, dominance axis (signed)
+emotion_occ               = { type = "enum", args = ["actor"], values = ["none", "joy", "distress", "hope", "fear", "pride", "shame", "gratitude", "anger", "love", "hate"] }
+emotion_intensity         = { type = "q8_8", args = ["actor"] }          # intensity of emotion_occ
+weather                   = { type = "enum", args = ["event"], values = ["clear", "overcast", "rain", "storm", "snow", "fog", "heat"] }   # once M3 simulates weather
 
 # Concrete verbs (subset). Systems emit these. The world compiler maps setting verbs onto them.
 [verbs]
@@ -286,3 +390,14 @@ COUNSEL         = { act_classes = ["counsel"], emitted_by = "rh-minds" }
 LAMENT          = { act_classes = ["lament"], emitted_by = "rh-minds" }
 RENOUNCE_FAITH  = { act_classes = ["renounce"], emitted_by = "rh-minds" }
 RESTORE         = { act_classes = ["restore", "aid"], emitted_by = "rh-minds" }
+ARTIFACT_FORGED    = { act_classes = ["forge"], emitted_by = "S6.artifacts" }
+ARTIFACT_PASSED    = { act_classes = ["pass"], emitted_by = "S6.artifacts" }      # mode: inheritance | theft | gift | trade | loss
+ARTIFACT_USED      = { act_classes = ["use"], emitted_by = "S6.artifacts" }       # the artifact is the instrument of an act
+ARTIFACT_FOUND     = { act_classes = ["discover"], emitted_by = "S6.artifacts" }
+ARTIFACT_DESTROYED = { act_classes = ["destroy"], emitted_by = "S6.artifacts" }
+BEARER_CORRUPTED   = { act_classes = ["corrupt"], emitted_by = "S6.artifacts" }
+VOW_SWORN          = { act_classes = ["promise"], emitted_by = "S7.vows" }
+VOW_FULFILLED      = { act_classes = ["fulfil"], emitted_by = "S7.vows" }
+VOW_BROKEN         = { act_classes = ["betray"], emitted_by = "S7.vows" }
+VOW_VOIDED         = { act_classes = ["lapse"], emitted_by = "S7.vows" }
+MENTAL_BREAK       = { act_classes = ["renounce"], emitted_by = "T1.minds" }   # the break; its act is a separate event from [mental_breaks]

@@ -1,10 +1,12 @@
 //! The Mechanics Registry v0, typed (SPR-004 T-01).
 //!
 //! `specs/manifest/registry_v0.toml` is the closed vocabulary that manifests may reference
-//! (ADR-0010). Every section is a typed structure here, and an unknown section or field is a
-//! load error, so a Registry change that the engine does not understand fails loudly instead of
-//! being ignored. Loading also checks the Registry's own consistency (bounds ordered and finite,
-//! fidelity levels known, references between sections resolved).
+//! (ADR-0010). The sections the validators read are typed structures here, with unknown fields
+//! refused; every other section loads through one generic path ([`Registry::sections`]), so the
+//! Registry can grow (a new system, a new vocabulary) without a loader change. Systems are a
+//! keyed map: no system id is hard-coded. Loading also checks the Registry's own consistency
+//! (bounds ordered and finite, fidelity levels known, ids unique, act classes resolved), for
+//! generic sections as far as their shape allows.
 //!
 //! Maps are `BTreeMap` (ordered by key): plane A never iterates a hash map (GOV-003 §2).
 
@@ -233,10 +235,9 @@ pub struct Verb {
 
 /// The Mechanics Registry: every section of `registry_v0.toml`.
 ///
-/// Sections other than `registry_version` default to empty, as the Python reference treats a
-/// missing section as empty; an unknown section is an error.
+/// Typed sections other than `registry_version` default to empty, as the Python reference
+/// treats a missing section as empty. Any other top-level section lands in `sections`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 #[allow(
     missing_docs,
     reason = "each field is the Registry section of the same name"
@@ -293,6 +294,11 @@ pub struct Registry {
     pub attributes: BTreeMap<String, Attribute>,
     #[serde(default)]
     pub verbs: BTreeMap<String, Verb>,
+    /// Every other section, by name, loaded generically: an id list (`ids = [...]`) or a table
+    /// of keyed entries. Plane-C presentation tables (`place_types`, `visual_*`) live here too;
+    /// mechanics never read them.
+    #[serde(flatten)]
+    pub sections: BTreeMap<String, toml::Value>,
 }
 
 /// Why a Registry could not be loaded.
@@ -391,10 +397,21 @@ impl Registry {
             "attributes" => keys(&self.attributes),
             "verbs" => keys(&self.verbs),
             "eras" => self.eras.ids.iter().map(String::as_str).collect(),
-            _ => self
-                .id_list(section)
-                .map(|l| l.ids.iter().map(String::as_str).collect())
-                .unwrap_or_default(),
+            _ => match self.id_list(section) {
+                Some(l) => l.ids.iter().map(String::as_str).collect(),
+                None => self.generic_ids(section),
+            },
+        }
+    }
+
+    /// The ids of a generic section: its `ids` array of strings, or its keys.
+    fn generic_ids(&self, section: &str) -> BTreeSet<&str> {
+        let Some(toml::Value::Table(t)) = self.sections.get(section) else {
+            return BTreeSet::new();
+        };
+        match t.get("ids") {
+            Some(toml::Value::Array(a)) => a.iter().filter_map(toml::Value::as_str).collect(),
+            _ => t.keys().map(String::as_str).collect(),
         }
     }
 
@@ -533,6 +550,7 @@ impl Registry {
             }
         }
         let acts = self.ids("act_classes");
+        self.generic_problems(&acts, out);
         for (vid, v) in &self.verbs {
             for a in v.act_classes.iter().chain(&v.references) {
                 if !acts.contains(a.as_str()) {
@@ -562,6 +580,41 @@ impl Registry {
                     "era_state.{eid}: type '{}' is not fixed-point",
                     e.ty
                 ));
+            }
+        }
+    }
+}
+
+impl Registry {
+    /// Shape checks for generic sections: each is a table; an `ids` entry is an array of unique
+    /// strings; any `act_classes` in a keyed entry resolves to `[act_classes]`.
+    fn generic_problems(&self, acts: &BTreeSet<&str>, out: &mut Vec<String>) {
+        for (name, value) in &self.sections {
+            let Some(table) = value.as_table() else {
+                out.push(format!(
+                    "{name}: a top-level Registry entry must be a section (a table)"
+                ));
+                continue;
+            };
+            if let Some(ids) = table.get("ids") {
+                let strings: Option<Vec<String>> = ids
+                    .as_array()
+                    .and_then(|a| a.iter().map(|v| v.as_str().map(str::to_owned)).collect());
+                match strings {
+                    Some(ids) => push_duplicates(out, name, &ids),
+                    None => out.push(format!("{name}.ids: must be an array of strings")),
+                }
+            }
+            for (key, entry) in table {
+                let Some(classes) = entry.get("act_classes") else {
+                    continue;
+                };
+                for c in classes.as_array().map(Vec::as_slice).unwrap_or_default() {
+                    match c.as_str() {
+                        Some(c) if acts.contains(c) => {}
+                        _ => out.push(format!("{name}.{key}: act class {c} not in [act_classes]")),
+                    }
+                }
             }
         }
     }
@@ -627,6 +680,44 @@ mod tests {
         assert!(reg.verbs["FAMINE_DECLARED"].aggregate);
     }
 
+    /// Sections the loader has no type for load generically, and every system entry loads
+    /// through the same keyed map (no hard-coded system ids).
+    #[test]
+    fn untyped_sections_load_generically() {
+        let reg = Registry::load(&registry_path()).unwrap();
+        let text = std::fs::read_to_string(registry_path()).unwrap();
+        let raw: toml::Table = toml::from_str(&text).unwrap();
+        let typed: BTreeSet<&str> = [
+            Registry::ID_LIST_SECTIONS.as_slice(),
+            &[
+                "registry_version",
+                "systems",
+                "archetypes",
+                "baskets",
+                "templates",
+                "era_state",
+                "eras",
+                "attributes",
+                "verbs",
+            ],
+        ]
+        .concat()
+        .into_iter()
+        .collect();
+        for name in raw.keys() {
+            let generic = reg.sections.contains_key(name);
+            assert_eq!(generic, !typed.contains(name.as_str()), "section [{name}]");
+        }
+        let systems: BTreeSet<&String> = raw["systems"].as_table().unwrap().keys().collect();
+        assert_eq!(systems, reg.systems.keys().collect());
+        let extra = "registry_version = \"0.1.0\"\n[act_classes]\nids = [\"harm\"]\n\
+            [new_vocab]\nids = [\"a\", \"b\"]\n[new_table]\nx = { act_classes = [\"harm\"], w = 1.0 }\n";
+        let reg = Registry::from_toml(extra).unwrap();
+        assert_eq!(reg.ids("new_vocab"), BTreeSet::from(["a", "b"]));
+        assert_eq!(reg.ids("new_table"), BTreeSet::from(["x"]));
+        assert_eq!(Registry::from_toml(&reg.to_toml().unwrap()).unwrap(), reg);
+    }
+
     /// T-01 acceptance: load, write back, load again, and get the same Registry.
     #[test]
     fn registry_v0_round_trips() {
@@ -653,12 +744,13 @@ mod tests {
     }
 
     #[test]
-    fn unknown_sections_and_fields_are_refused() {
-        let unknown_section = "registry_version = \"0.1.0\"\n[spells]\nids = [\"fireball\"]\n";
-        assert!(matches!(
-            Registry::from_toml(unknown_section),
-            Err(RegistryError::Parse(_))
-        ));
+    fn malformed_generic_sections_and_unknown_fields_are_refused() {
+        let bad = "registry_version = \"0.1.0\"\nstray = 1\n[spells]\nids = [\"a\", \"a\"]\n\
+            [rites]\nx = { act_classes = [\"bless\"] }\n";
+        let Err(RegistryError::Inconsistent(p)) = Registry::from_toml(bad) else {
+            panic!("accepted")
+        };
+        assert_eq!(p.len(), 3, "{p:?}");
         let unknown_field = "registry_version = \"0.1.0\"\n[systems.\"M1.x\"]\nfidelity_levels = [\"F1\"]\nmagic = 1\n";
         assert!(matches!(
             Registry::from_toml(unknown_field),
