@@ -353,3 +353,55 @@ Accepted divergences, listed apart as ruled (BCK-002 A-23): **GAP-8**, the unind
 ### 11.4 Outcome
 
 DEF-13 is closed. The branch is clean on everything the tester verified except two low-medium items that do not touch the engine or any gating result today: DEF-14 (a form PyYAML refuses that a hand-writer is unlikely to type) and DEF-15 (a corpus mechanism that needs a path check and a stricter header; nothing currently abuses it, the only fixture using it is correct). Neither needs another full regression: after they are fixed, repeating `cases17`, `cases18` and the six header probes of 11.3 is enough. GAP-8, the LS-in-folded-scalar refusal and DEF-3 stay ruled out of contract as listed.
+
+## 12. Re-verification at b4e8c12
+
+Tested commit: `b4e8c12` (a fast-forward on `2a80063`: `1f92974` DEF-14, `b4e8c12` DEF-15). `bin/check_all.sh` run locally on a clean checkout of the head: **PASS, 104 checks**. `git diff 2a80063 b4e8c12` touches `yaml.rs` (+86 lines, DEF-14), `bin/manifest_parity.py`, `python/tests/test_manifest_parity.py`, the corpus README and five parity fixtures (four new, one header edited); nothing else.
+
+### 12.1 Verdicts
+
+| Item | Verdict | Basis |
+|---|---|---|
+| DEF-14 (`:` reached across a line break after an implicit flow key) | **FIXED** | `cases18` (80 cases): 0 differences (48 before). `cases17` (332: DEF-13 with all six break characters and four prefixes): 0 differences (1 before). A new set `cases19` (100: the forms that must still load, with LF, CRLF, NEL, LS, PS, with and without a non-ASCII prefix): 0 differences; explicit `? key` followed by a break and `:`, a value on the next line (`label:` break `historical`), a key with no value, a sequence value on the next line, a nested mapping, and a comment between key and `:` agree with PyYAML (20 refused, 40 schema errors, 40 valid, so the set discriminates). `cases16`, `cases12`, `cases7`, `cases8` rerun: unchanged (the one `cases16` difference is the ruled GAP-8 form). |
+| DEF-15 (parity-divergence header) | **FIXED, one residual observation** | 12.2. |
+| Local `check_all.sh` | **PASS** | 104 checks. |
+
+### 12.2 The header probes
+
+Run through `bin/manifest_parity.py` with fixtures written into `tests/manifest_parity/` (and removed afterwards), from a copy of the head.
+
+| Probe | Result |
+|---|---|
+| Shipped fixture `load_error_linebreak_ls_folded.yaml` | `DIVERGE (ruled): python VALID; rust LOAD ERROR`, exit 0 |
+| Rust's verdict changes (LS removed, both VALID) | `PARITY MISMATCH ... declared divergence VALID / LOAD ERROR ...; got python VALID; rust VALID` |
+| Python's verdict changes (`seed: -1`) | `PARITY MISMATCH ... got python SCHEMA INVALID; rust LOAD ERROR` |
+| Rust refuses for a different cause (LS removed, `seed: !!binary MQ==`), header quoting the folded-scalar message | `PARITY MISMATCH` (it passed before DEF-15, §11.3 (c)) |
+| Equal verdicts (`VALID / VALID "x"`), in a fixture and in a spec example copy | `PARITY MISMATCH ... equal verdicts are not a divergence` in the corpus; outside it the header is ignored |
+| No quoted diagnostic | `PARITY MISMATCH ... malformed header` |
+| Header on line 5 / line 6 / line 12 | honoured / not honoured (`PARITY MISMATCH`) / not honoured |
+| Header outside the corpus: a copy of the shipped fixture in `/tmp`; a header in `specs/manifest/examples/val_khor.yaml`; a header on a spec example copy | not honoured: the first is a `PARITY MISMATCH`, the other two are compared line for line as ordinary manifests (`AGREE`) |
+
+### 12.3 Evasion of the confinement
+
+The test is `manifest.resolve().is_relative_to(tests/manifest_parity)`.
+
+| Attempt | Result |
+|---|---|
+| Symlink inside the corpus to a file outside it that carries a header | not honoured (`PARITY MISMATCH`) |
+| Directory symlink inside the corpus to a directory outside it | not honoured |
+| `tests/manifest_parity/../../specs/manifest/examples/val_khor.yaml` with a header | not honoured (compared as an ordinary manifest) |
+| Lookalike directory `tests/manifest_parity_evil/` | not honoured |
+| A symlink or directory named `manifest_parity` elsewhere (`/tmp/manifest_parity/...`) | not honoured |
+| Run from another working directory with an absolute path to a header file outside the corpus | not honoured |
+| Symlink outside the corpus pointing to the shipped corpus fixture | honoured, and rightly: it resolves to the real corpus file, whose content is the fixture |
+| A path that climbs out and back into the corpus | honoured, for the same reason |
+
+No attempt made a header file outside `tests/manifest_parity/` count.
+
+### 12.4 Residual observation (not a defect)
+
+The quoted Rust diagnostic is matched against the whole Rust output, which also contains the verdict word and the file path. A header whose quoted text is one of those, such as `VALID / LOAD ERROR "LOAD ERROR"`, is satisfied by any Rust load error: I changed the cause of the refusal in the folded-scalar fixture (a `!!binary` tag) and it still passed as `DIVERGE (ruled)`. Today the only fixture using the header quotes a specific message, so nothing is hidden; it is a convention a reviewer has to enforce. A cheap guard: in `declared_divergence`, require at least 20 characters and refuse a diagnostic that is a substring of `LOAD ERROR`, `SCHEMA INVALID` or the fixture's own path (confidence 70% that the extra rule is worth its lines).
+
+### 12.5 Outcome
+
+Nothing open from the tester except the items ruled out of contract (GAP-8, LS or PS in a folded scalar, DEF-3 tags, DEF-6/GAP-2, GAP-6) and the observation in 12.4. DEF-1 to DEF-5, DEF-7 to DEF-11, DEF-13 to DEF-15 and the gaps the Architect took are verified fixed at the heads named in §8 to §12.
