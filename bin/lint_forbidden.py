@@ -63,6 +63,18 @@ summary line names the exemption.
                       alias, a `pub use`, a struct, enum, trait or mod header, and a `pub` field;
                       and every `impl` header (a trait impl is public without `pub`). No escape
                       excuses it (VER-SPR-003-TEST GAP-1).
+                      Also in the zone's src/, private or public: no `type … = …` alias that
+                      names f32 or f64 (an associated type in an impl body included), since a
+                      private alias would carry a float through a `pub` signature unnamed
+                      (VER-SPR-003-TEST GAP-11; reported as `float-api` too).
+                      RESIDUAL (Architect ruling on GAP-11): the rule is textual. It does not see
+                      a float in a trait method signature inside a `pub trait` body, an
+                      associated type defined elsewhere and named through a projection, a type
+                      passed to a macro as a token (`mk!(leak, f64)`), or an opaque `impl Trait`
+                      return that wraps a float. These are deliberate evasions, not accidents;
+                      review catches them (SPR-003: the reviewer reads rh-sample's public items),
+                      and BCK-002 tracks moving the rule to rustdoc JSON once its format is
+                      stable.
 
 DECISION (SPR-010 T-04): the float rule does not apply to files under a crate's tests/, benches/ or
 examples/ directories. They never link into the engine, so they hold no threshold position, and a
@@ -124,6 +136,8 @@ PUBLIC_END = {"fn": "{;", "const": "=;", "static": "=;", "type": ";", "use": ";"
 HEADER_END = "{;("
 FIELD_END = ",})"
 IMPL_HEADER = re.compile(r"\bimpl\b[^{;]*")
+# A type alias (or an associated type in an impl body) whose definition names a float.
+FLOAT_ALIAS = re.compile(r"\btype\s+\w+\s*(?:<[^=;]*>)?\s*=[^;]*")
 FLOAT_API_TOKEN = re.compile(r"\b(?:f32|f64|libm)\b")
 DEFAULT_SPECS = Path(__file__).resolve().parents[1] / "specs" / "systems"
 
@@ -443,9 +457,10 @@ def _span_end(code: str, start: int, stops: str) -> int:
 def public_spans(code: str) -> list[tuple[int, int]]:
     """Return the (start, end) spans of blanked code that form a crate's public surface.
 
-    A `pub` item's signature or header (its body excluded), a `pub` field, and every `impl`
-    header. Spans are found textually; they over-approximate (a `pub` item in a private module
-    counts), which is the safe side for a no-floats rule.
+    A `pub` item's signature or header (its body excluded), a `pub` field, every `impl` header,
+    and every type alias definition, private ones included (GAP-11). Spans are found textually;
+    they over-approximate (a `pub` item in a private module counts), which is the safe side for a
+    no-floats rule.
     """
     spans: list[tuple[int, int]] = []
     for match in PUBLIC.finditer(code):
@@ -453,6 +468,7 @@ def public_spans(code: str) -> list[tuple[int, int]]:
         stops = FIELD_END if kind is None else PUBLIC_END.get(kind.group("kind"), HEADER_END)
         spans.append((match.start(), _span_end(code, match.end(), stops)))
     spans += [(m.start(), m.end()) for m in IMPL_HEADER.finditer(code)]
+    spans += [(m.start(), m.end()) for m in FLOAT_ALIAS.finditer(code)]
     return spans
 
 

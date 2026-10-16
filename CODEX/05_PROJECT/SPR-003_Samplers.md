@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, SPR-002, SPR-010, ADR-0006]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.1
+version: 1.1.2
 ---
 
 > **BLUF:** Vendor the distribution samplers the systems need, so that every draw is bit-identical across releases and machines. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -109,3 +109,4 @@ SPR-010's float gate allows a float only in a declared `f32_field` column. ADR-0
 - [ ] Architect audit `VER-SPR-003` is PASS.
 - [ ] No open DEF- against this sprint.
 - [ ] Merge route matches the CI-detected change class.
+- [ ] The reviewer reads `rh-sample`'s public items: `float-api` is a text rule and does not see a float in a `pub trait` method, behind an associated-type projection, in a macro type token or behind an opaque `impl Trait` (VER-SPR-003-TEST GAP-11, Architect ruling).
