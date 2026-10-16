@@ -569,6 +569,11 @@ def float_api_texts(source: str) -> list[str]:
         "pub trait T: Into<f64> {}",
         "impl From<S> for f64 { fn from(s: S) -> f64 { 0.0 } }",
         "impl S { pub fn f(&self) -> Option<f64> { None } }",
+        "type F = f64;\npub fn leak() -> F { 0.0 }",
+        "type G = f64;\npub struct S(pub G);",
+        "type Pair<T> = (T, f32);",
+        "impl Tr for W { type Out = f64; }",
+        "pub(crate) type F = f64;",
     ],
 )
 def test_each_public_float_is_reported(source: str) -> None:
@@ -586,6 +591,8 @@ def test_each_public_float_is_reported(source: str) -> None:
         "pub const X: u32 = 1; fn g() -> f64 { libm::log(1.0) }",
         "/// pub fn f() -> f64\npub fn f() -> u32 { 0 }",
         'pub fn f() -> &\'static str { "f64" }',
+        "type Count = u32;\npub fn f() -> Count { 0 }",
+        "trait T { type Out; }",
     ],
 )
 def test_floats_behind_the_public_surface_are_not_reported(source: str) -> None:
@@ -602,12 +609,12 @@ def test_no_escape_excuses_a_public_float() -> None:
 def test_the_float_api_fixture_reports_each_plant_and_not_internal(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Four plants, four violations; pub(crate) floats in internal.rs are not reported."""
+    """Five plants, five violations; pub(crate) floats in internal.rs are not reported."""
     assert main(["--manifest-path", str(FIXTURES / "float_api" / "Cargo.toml")]) == 1
     out = capsys.readouterr().out.splitlines()
     violations = [line for line in out if line.startswith("VIOLATION")]
     files = sorted(v.split(" at ")[1].split(":")[0].rsplit("/", 1)[1] for v in violations)
-    assert files == ["field.rs", "fn_return.rs", "impl_from.rs", "reexport.rs"]
+    assert files == ["alias.rs", "field.rs", "fn_return.rs", "impl_from.rs", "reexport.rs"]
     assert all("[V-DET-19/float-api]" in v for v in violations)
 
 
