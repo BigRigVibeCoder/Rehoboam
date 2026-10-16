@@ -47,7 +47,7 @@ version: 1.0.0
 | **7. Observer invariance** | Viewers and console fuzz leave `state_hash` unchanged (V-DET-06–08); harness isolation (V-PERF-09) | Every PR from P2 |
 | 8. Integration and contract | ICD conformance (V-IF); **SQL-twin equivalence** (V-SIFT-01); stream contracts (V-STR); consumer contract tests of changed contract crates | Every PR |
 | 9. End-to-end | **The complexity ladder:** `solo` on every PR; higher rungs nightly | Every PR / nightly |
-| 10. Performance | criterion benches; > 10% slower fails (V-PERF-04, PERF-4) | Every PR (micro); nightly (reference desktop) |
+| 10. Performance | Instruction counts (`iai-callgrind`): > 10% more fails (V-PERF-04, PERF-4); criterion wall-clock benches as trends, alerting above 10%. Wall clock gates only on a dedicated machine: on a laptop or a shared runner its noise exceeds 10% (SPR-009) | Every PR (instruction counts); nightly (wall clock) |
 | 11. Mutation | `cargo-mutants` on `rh-core`, the Registry evaluator, RNG and fixed-point primitives; target ≥ 80% kill | Nightly; a regression blocks the next merge to those crates |
 | 12. Fuzz | `cargo-fuzz` on journal, stream, manifest and pattern parsers | Nightly |
 | **13. Statistical validation** | Stylized-fact bands, CRN-paired ensembles, submodel tournaments (`09` §3.1, §3.8); held-out bands only in sealed runs | 32-seed ensemble on every C3 PR; full certification nightly and at gates |

@@ -4,16 +4,24 @@
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
-## Still waiting on you (1, not urgent)
+## Still waiting on you (4 for SPR-001, 1 for later)
 
-### D6 (the rest) — Memory, graphics card and cloud budget
+### SPR-001 approval (C2)
+SPR-001 (`CODEX/05_PROJECT/SPR-001_RepoBootstrap.md`) creates the repository's contracts: layout, lints, CI. As a C2 change it needs your yes before the developer agent starts. **Default:** none; work waits for you.
 
-You answered "8-core desktop, local first, cloud later". I read your "* core" as 8-core; correct me if not. Phase 1 needs no graphics card (no GUI, no AI language models). Before P3 I need:
-- the desktop's RAM;
-- its graphics card;
-- a monthly cloud budget ceiling for when you move to the cloud.
+### Q-INFRA-1 — Which GitHub plan is the account on?
+The repository is private. On GitHub's **Free** plan, a private repository cannot have protected branches or required checks, so CI can report a failure but cannot block the merge. **Pro** (a few dollars a month) allows required checks. GitHub's **merge queue** on a private repository needs Enterprise Cloud, which this project does not need: `docs/13` §4.4 now has a fallback (branches must be up to date, merges one at a time). Private repositories also get a monthly allowance of Actions minutes (about 2,000 on Free, 3,000 on Pro; check your billing page), which the PR tier fits but nightly 1,000-year runs may not.
+**Default:** proceed on whatever plan you have. On Free, the Architect enforces "no green report, no merge" by hand. Upgrading to Pro is recommended before SPR-002.
 
-**Default until then:** 32–64 GB RAM, no GPU assumptions.
+### Q-INFRA-2 — Where do the coding agents run?
+Either Claude Code on your laptop, or cloud sessions like this one. Cloud sessions leave the laptop free and cool, and the laptop then only runs your checks and the nightly cross-machine comparison. Agents on the laptop compete with you for 4 cores and heat it up.
+**Default:** cloud sessions for agents; the laptop for your checks, watching the stream, and the nightly cross-machine run.
+
+### Q-INFRA-3 — How much free disk space does the laptop have?
+Rust build folders grow to 10–30 GB, and a 100k-person world is 6–18 GB per 1,000 years. **Default:** keep at least 100 GB free; tell me if you have less.
+
+### D6 (the rest, needed before P3) — Cloud budget
+Answered 2026-10-16: the machine is a ThinkPad P51 laptop (4 cores, 32 GB, Quadro M2200 4 GB). Its graphics card is too small and too old for local AI language models, so LLM work in P3 and later goes to cloud services or a later machine. Still open: a monthly cloud budget ceiling. **Default:** none needed until P3.
 
 ## Decided on 2026-10-16
 
@@ -23,7 +31,7 @@ You answered "8-core desktop, local first, cloud later". I read your "* core" as
 | D2 | The 18 critical-path ADRs: **accepted** |
 | D4 | First world: **a minimal test world**, `solo` (one person, tiny map); then add complexity one rung at a time (`11` complexity ladder) |
 | D5 | **Linux** |
-| D6 | **8-core desktop**, local first, cloud after local testing (RAM, GPU and budget still open; see above) |
+| D6 | **A ThinkPad P51 laptop** (4 cores, 32 GB, Ubuntu 24.04), local first, cloud after local testing. Cloud budget still open (see above). Setup: `CODEX/30_RUNBOOKS/RUN-001` |
 | D3 / D26 | **Your Agentic Architect operating model, adapted (ADR-0032): accepted.** Set up in `CODEX/` (SPR-000-ARCH). Your time: about 2–4 hours a week outside rating windows |
 | D7 | **ODD-R accepted, taken further:** system specs as machine-checked data (ADR-0033), with a generated one-page brief for you |
 | D8–D12 | G2 thesis-gate defaults **accepted for now**; revisit before P2 |

@@ -6,13 +6,13 @@ status: PLANNING
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001]
+related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
-> **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
+> **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends nightly, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
 
 # SPR-009 — Benchmark harness and regression gate
 
@@ -31,7 +31,7 @@ version: 1.0.0
 | RNG purposes | none |
 | Golden-hash effect | none |
 | Determinism lints (GOV-003 §2) | must pass |
-| Tests that gate this sprint | V-PERF-04 (a deliberate 15% slowdown fails CI; a speed-up never re-baselines automatically) |
+| Tests that gate this sprint | V-PERF-04 (a deliberate 15% slowdown, measured in instructions, fails CI; a speed-up never re-baselines automatically) |
 | Docs updated in the same sprint | `bin/check_all.sh` gains this sprint's checks; `docs/09` rows if tests change; `CLAUDE.md` checks |
 
 ## Tasks
@@ -42,13 +42,18 @@ version: 1.0.0
 - **Status:** [ ] not started
 
 ### T-02: Regression gate
-- **Deliverable:** > 10% slower fails; no automatic re-baseline
-- **Acceptance:** V-PERF-04 positive control
+- **Deliverable:** Two gates. (a) **PR gate on instruction counts** (`iai-callgrind`, valgrind as an outside tool): more than 10% more instructions fails; deterministic to well under 1%, so it does not flake on a hosted runner or a laptop. (b) **Wall-clock benches** (criterion) run nightly and on demand, are tracked as trends, and alert above 10%; they gate only on a dedicated machine with a stable clock. No automatic re-baseline
+- **Acceptance:** V-PERF-04 positive control on gate (a); a run of gate (a) twice on the same commit gives identical counts
 - **Status:** [ ] not started
 
 ### T-03: Serial fraction and vitals
 - **Deliverable:** Per-system timings; the vitals line of GOV-006 §1
 - **Acceptance:** Vitals printed by `rh-cli run smoke`
+- **Status:** [ ] not started
+
+### T-04: Laptop-to-reference ratio
+- **Deliverable:** The benches of T-01 run on the laptop under RUN-001 §6 hygiene; the ratio to the `08` reference desktop estimated from the `08` [M] sandbox figures and recorded in `08` §9 as [M]
+- **Acceptance:** The ratio and its run conditions (power, governor, temperature) are in `VER-SPR-009`
 - **Status:** [ ] not started
 
 ## Verification assignment (Testers)

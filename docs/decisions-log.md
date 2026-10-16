@@ -4,6 +4,7 @@ A running log of director rulings, phase-gate outcomes and approved ADR changes.
 
 | Date | Decision | By | Evidence / links |
 |---|---|---|---|
+| 2026-10-16 | **Development machine (D6, revised):** the director's ThinkPad P51 laptop (i7-7820HQ 4C/8T, 32 GB, Quadro M2200 4 GB, 512 GB NVMe, Ubuntu 24.04), not an 8-core desktop. Consequences: budgets in `08` stay quoted on the reference desktop; the PR performance gate uses instruction counts, wall clock is nightly trends; CI runs on GitHub-hosted Ubuntu runners, which are also the cross-machine determinism partner; no local LLMs (P3 LLM work goes to the cloud or a later machine). Open: Q-INFRA-1 to 3. | Director | GOV-008 v1.1; RUN-001; SPR-001/008/009 v1.1; `08`; `13` §4.4 |
 | 2026-10-16 | **Accepted:** ADR-0032, the Agentic Architect operating model ("make it our own; adapt and expand where needed"); set up in SPR-000-ARCH. D3 resolved: about 2–4 h/week of director time. | Director | ADR-0032; `CODEX/`; VER-SPR-000-ARCH |
 | 2026-10-16 | **Accepted:** ODD-R for every simulation system (D7), taken further as machine-checked specs as data (ADR-0033). | Director | ADR-0033; `specs/systems/` |
 | 2026-10-16 | **Proposed** (director's suggestion for D3): run the project on the Agentic Architect operating model, adapted for a deterministic simulation (ADR-0032). | Director; systems design | ADR-0032; `agentic_architect` @ f3677c4 |

@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** Prove determinism continuously: a smoke world with dummy systems runs a thousand years in CI with hash ladders, and a bisect tool names any divergence. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -42,7 +42,7 @@ version: 1.0.0
 - **Status:** [ ] not started
 
 ### T-02: Hash ladders in CI
-- **Deliverable:** Yearly ladders on PRs (shorter horizons); monthly full length nightly; a second Linux machine nightly (cross-machine, replacing the cross-platform matrix per D5)
+- **Deliverable:** Yearly ladders on PRs (shorter horizons); monthly full length nightly; a cross-machine check nightly between the director's laptop and a GitHub-hosted Ubuntu runner (different CPU generation; replaces the cross-platform matrix per D5; GOV-008 §1). The laptop's thread ladder tops out at 8 threads
 - **Acceptance:** V-DET-01/02 green
 - **Status:** [ ] not started
 
@@ -52,7 +52,7 @@ version: 1.0.0
 - **Status:** [ ] not started
 
 ### T-04: Baseline management
-- **Deliverable:** Baselines recorded only by the merge queue on approved C3 PRs
+- **Deliverable:** Baselines recorded only at merge of approved C3 PRs (by the merge queue, or by the fallback in `docs/13` §4.4)
 - **Acceptance:** A hand-edited baseline is rejected
 - **Status:** [ ] not started
 

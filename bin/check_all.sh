@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # The PR tier of GOV-002, fail-fast, with a forensic report (GOV-002 §4, §6: no report means no pass).
 # Every sprint adds its own checks here in the same sprint that creates them.
-# Usage: bin/check_all.sh            (uses $PYTHON, default "python")
-#        PYTHON=.venv/bin/python bin/check_all.sh
+# Usage: bin/check_all.sh            (uses $PYTHON; else .venv/bin/python; else python3)
+#        PYTHON=/path/to/python bin/check_all.sh
 set -u
 cd "$(dirname "$0")/.."
-PY="${PYTHON:-python}"
+if [ -n "${PYTHON:-}" ]; then PY="$PYTHON"; elif [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY="$(command -v python3 || command -v python)"; fi
 REPORT="artifacts/check_report.md"
 mkdir -p artifacts
 commit="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"

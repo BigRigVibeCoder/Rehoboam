@@ -9,6 +9,7 @@
 - **[P]** Provisional targets. Each is replaced by a measured value at the gate named, and the change is logged in `decisions-log.md`.
 - **Reference desktop:** 8 performance cores at ~4.5 GHz (the 1M estimates are quoted for 8–16 cores), 64 GB dual-channel RAM, RTX 4070/4090-class GPU.
 - **Reference cluster node:** 64+ cores, plus GPU nodes for LLM and TTS.
+- **Development laptop (D6, 2026-10-16):** ThinkPad P51, 4 cores / 8 threads at 2.9–3.9 GHz (2017), 32 GB. Expect roughly **3× the reference desktop's wall times** (an estimate from core count and clock; SPR-009 measures it). Budgets here stay quoted on the reference desktop; the laptop checks correctness and instruction-count regressions, not these wall-clock targets (GOV-008 §1).
 
 ---
 
