@@ -4,8 +4,9 @@
 # Phasing: P1a is traits, ambition, relations, opinions, four decision types (marry, seek_office, press_claim, feud),
 # stress from grief and value conflict, and mental breaks. P1b adds the vow, relic and knowledge couplings (S6, S7,
 # secrets v0) and the swear_vow and pursue_goal decision types. Items that wait for P1b say so.
-# Round 1 rulings (Architect, PR #32): decisions 1-20 accepted; grief reads the instant's deaths from M2's instant_death
-# accessor through minds' own relation rows; every death takes effect as an M2 death timer in Vital (BCK-002 A-30);
+# Round 1 rulings (Architect, PR #32): decisions 1-20 accepted; grief finds the instant's dead through minds' own relation
+# rows (alive = 0, death_tick = now); the dead are readable until Bookkeeping of their death instant (SPR-011 ruling 5),
+# and a read of a dead row after that instant is a bug; every death takes effect as an M2 death timer in Vital (A-30);
 # no P1a-only stress source (the P1a break rate is measured in isolation and taken to the director before G1a);
 # respond_to_threat goes to the P1b sprint; action_order stays here until a second system needs the permutation;
 # the cascade scenario test is V-SAGA-16b.
@@ -448,12 +449,7 @@ owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
 [[reads]]
-column = "instant_death.person"
-owner = "M2.demography"
-lag = "same_instant"
-use = "identity"
-[[reads]]
-column = "instant_death.tick"
+column = "person.death_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
@@ -712,7 +708,7 @@ source = "design value; canonical minimums of 12 and 14 are the lower end (not y
 # ----------------------------------------------------------------------------- submodels (ODD 7)
 [[submodels]]
 name = "grief"
-summary = "At a death instant, the dead are M2's instant_death rows with tick = now (Architect round 1, Q4); for each named actor a with an unended relation row to a dead person d: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; relation.ended_at := now. A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). The deaths are M2's death timers in this Vital slot: every death, however caused, takes effect there (BCK-002 A-30)"
+summary = "At a death instant, the dead are the relation counterparts with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5); for each named actor a with an unended relation row to a dead person d: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; relation.ended_at := now. A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). The deaths are M2's death timers in this Vital slot: every death, however caused, takes effect there (BCK-002 A-30)"
 earns_its_place_by = ["V-SAGA-16", "V-SAGA-16b"]
 [[submodels]]
 name = "threshold"
@@ -827,7 +823,7 @@ lag = "applied at the next tick boundary"
 [[couplings]]
 system = "M2.demography"
 direction = "in"
-via = "the death path: deaths in the Vital slot start grief; genealogy and spouse columns build relation edges and marry eligibility"
+via = "the death path: deaths in the Vital slot start grief; genealogy and spouse columns build relation edges and marry eligibility. The dead row stays readable until rh-core compacts it at the start of Bookkeeping of the death instant (SPR-011 ruling 5); a read of a dead row after that instant is a bug"
 lag = "same instant for deaths; start of instant for genealogy"
 [[couplings]]
 system = "M7.dynasty"
@@ -860,7 +856,7 @@ lag = "applied at the next tick boundary"
 forcing = [
   { input = "vow.conflict", series = "step", note = "P1b: one vow per actor; conflict 0 for 10 years, then 0.5, then 1.0 from year 20, then 0 from year 30; plus constant runs at 0, 0.5 and 1" },
   { input = "artifact.rumour_reach", series = "step", note = "P1b: one relic; reach 0, then 3 hops from year 10, then rumour_max_hops from year 20; ambitious and unambitious actors at distances 0..6" },
-  { input = "instant_death.person", series = "historical:court_deaths", note = "scripted deaths on a fixture court: natural deaths at Brass rates, plus the cascade scenario: the sovereign murdered in front of the court at year 50" },
+  { input = "person.alive", series = "historical:court_deaths", note = "scripted deaths on a fixture court: natural deaths at Brass rates, plus the cascade scenario: the sovereign murdered in front of the court at year 50" },
 ]
 horizon = "1,000 sim-years on a fixture court of 60 named actors in 3 houses (genealogy and seats scripted, M7 and S7 stubbed: no petitions applied, no vows unless forced); the cascade scenario in an ensemble of 32 seeds"
 expect = "INV-T1-01 to 07 hold with 0 violations; stress stays in [0, 100] with exact accounting; breaks per 100 named-actor-years inside 0.5 to 5 under the P1b forcing and reported (with the shortfall stated) under P1a sources alone; cascade scenario: in the year after the sovereign's murder the court's break rate rises but stays inside the band in the ensemble mean, no actor breaks twice within break_refractory_days, and the chain branching ratio (breaks caused per break, via MURDER_ATTEMPT deaths and grief) is below 1, so no chain runs away without a lock or a cap; break counts fall back to baseline within 5 years"

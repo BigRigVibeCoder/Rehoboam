@@ -48,7 +48,7 @@ type = "i64"
 plane = "A"
 meaning = "Scheduled death time (a timer until it fires)"
 fixed_point = false
-# Proposed with the T1.minds and M7.dynasty specs (PR #32; Architect round 1, Q4 and Q5). Genealogy and marriage
+# Proposed with the T1.minds and M7.dynasty specs (PR #32; Architect round 1, Q5, and the Q4 correction). Genealogy and marriage
 # belong to the rung-1/2 slice (P1.3: partnering, marriage, kinship); the ledger of 05.1 §5 lists mother and father.
 # Marriage is decided by T1.minds and written by M2 when it applies T1's Marry command.
 [[owns]]
@@ -72,36 +72,17 @@ type = "u64"
 plane = "A"
 meaning = "PersonId of the living spouse, or 0; set when M2 applies a Marry command from T1.minds (P1.3), cleared on the spouse's death"
 fixed_point = false
-# Deaths of the current instant (Architect round 1, Q4). The dead leave the live ledger at once (P1.3), and SPR-006's
-# AccessSpec has no event reads, so later-phase systems (M7, T1.minds) read the instant's deaths from this M2-owned
-# accessor table rather than from the DEATH event or a column on a row that is gone. Rows are appended by the death
-# path and dropped by M2 when it first writes at a later instant; readers read only rows whose tick is now. Plane A,
-# never history: the life-course log keeps every death and its cause.
 [[owns]]
-column = "instant_death.person"
-entity = "instant_death"
-type = "u64"
-plane = "A"
-meaning = "PersonId of a person who died at instant_death.tick"
-fixed_point = false
-[[owns]]
-column = "instant_death.cause"
-entity = "instant_death"
+column = "person.death_cause"
+entity = "person"
 type = "enum"
 plane = "A"
-meaning = "natural | murder | battle | execution | accident: natural for an M2 hazard death, otherwise the cause the ScheduleDeath command carried (M7, T1.minds; M8 later); also carried by the DEATH event"
-fixed_point = false
-[[owns]]
-column = "instant_death.tick"
-entity = "instant_death"
-type = "i64"
-plane = "A"
-meaning = "The instant of the death; rows with a tick earlier than now are stale and never read"
+meaning = "natural | murder | battle | execution | accident. Written by apply_death with alive = 0 and the death tick: natural for an M2 hazard death, otherwise the cause the ScheduleDeath command carried (M7, T1.minds; M8 later). Readable, like every column of the dead row, until rh-core's compaction at the start of Bookkeeping of the death instant (SPR-011 ruling 5); the life-course log keeps it after that"
 fixed_point = false
 
 [[emits]]
 kind = "DEATH"
-when = "The death timer fires; the event carries the cause (natural, or the ScheduleDeath command's cause and culprit)"
+when = "The death timer fires (apply_death: alive = 0, death tick, death cause); the event carries the cause and, for a ScheduleDeath, the culprit"
 
 [scales]
 spatial = "person"
