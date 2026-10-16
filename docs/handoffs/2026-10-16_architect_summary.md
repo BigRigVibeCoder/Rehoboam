@@ -52,6 +52,7 @@ All are recorded in `docs/decisions-log.md`:
 | Item | Recommendation | Confidence |
 |---|---|---|
 | **The laptop:** RUN-001 (BCK-002 A-16) and one `adjutant` session of about 2 hours, for SPR-008 T-02 and SPR-009 T-04 | I will ping you when SPR-008 is ready | — |
+| **The P1a plan, at G0:** D30 to D36 in `docs/decisions_pending.md`. They cover the walking skeleton (SPR-011, as three sprints), rung 0's scope, the 100k claim, moving S5 F1 and M1 F1 to P1b, runnable G1a tests, inheritance without property, and the `T1.minds`/`M7.dynasty` specs | Each has a recommendation; the plan is `CODEX/05_PROJECT/PRJ-002` | 70–80% |
 
 Resolved since the first version of this summary:
 - you confirmed my reading of Laws 2 and 3;

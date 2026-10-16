@@ -9,7 +9,7 @@ tags: [verification, roadmap]
 related: [BCK-001, BCK-002, PRJ-001, SPR-001, SPR-002, SPR-003, SPR-004, SPR-005, SPR-006, SPR-007, SPR-008, SPR-009, SPR-010]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.6.0
+version: 0.7.0
 ---
 
 > **BLUF:** DRAFT tracker; this is not a verdict. G0 closes when SPR-001 to SPR-010 are closed and the seven criteria of `docs/11` pass, and the red-team inbox is folded in with a dispositions record. Status on 2026-10-16:
@@ -58,5 +58,7 @@ Both recommendations were approved. `docs/11` v1.4 drops the Rerun hooks from P0
 
 ## 4. Before the gate
 - **Red-team inbox:** done. Batches 01 to 04 are disposed of in `docs/red_team/RT-2026-10-16-G0-dispositions.md`. The director ruled on Laws 2 and 3 (principles 8 and 9 of `docs/01` §5) and item 15 (GOV-003 §6). A later dossier on demography and inequality is taken in as batch 05, a proposal for G1a (director, 2026-10-16).
+- **P1a plan:** `PRJ-002` and `SPR-011` are written and reviewed; the director decides D30 to D36 at G0. The `T1.minds` and `M7.dynasty` specs are under review in PR #32.
+- **Consistency fixes:** the Architect corrects the document inconsistencies within its authority listed in `PRJ-002` §10 before G0 (EventId layout, `schema.sql` floats, the engine-crate lists, statuses).
 - **Architect backlog that must close before G0:** A-09, this record. (A-20, the plane-A external dependency allow-list, is done.)
 - **Director:** T-00 of SPR-001 (`RUN-001` on the laptop) is still open (BCK-002 A-16). The laptop and one `adjutant` session are also needed for SPR-008 T-02 (cross-machine hashes) and SPR-009 T-04 (wall-clock baselines). The director will open a session of about 2 hours on the laptop when the Architect reports SPR-008 ready (2026-10-16).
