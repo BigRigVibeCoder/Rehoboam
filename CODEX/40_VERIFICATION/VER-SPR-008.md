@@ -27,15 +27,16 @@ Commit SHAs are as reported during the sprint. The branch is rebased onto `main`
 ## 1. Automated checks
 | Check | Result | Evidence |
 |---|---|---|
-| `bin/check_all.sh` | Round 1: PASS (187 checks), Developer and Tester (clean archive of `29abe04`). Round 2: PASS (210 checks), Developer at `8e17816` | Tester round 2: *pending* |
-| CI on GitHub-hosted runners | Round 1: PASS at `29abe04` (run 38931650691, 11 min 28 s, under the 15-minute budget). Round 2: *pending* (PR #28 conflicted with main in `05.1`'s changelog, so no run was created until the rebase) | PR #28 |
+| `bin/check_all.sh` | Round 1: PASS (187 checks), Developer and Tester (clean archive of `29abe04`). Round 2: PASS (210 checks), Developer at `8e17816`; the Tester's clean archive stopped at 181 of 187 with an absolute `CARGO_TARGET_DIR` (DEF-3), and passed 210 of 210 with that line patched. Final: PASS (226 checks) at `6a87616`, with relative and absolute target dirs | Tester round 3: *pending* |
+| CI on GitHub-hosted runners | Round 1: PASS at `29abe04` (run 38931650691, 11 min 28 s, under the 15-minute budget). Round 2: no run on `8e17816`, because PR #28 conflicted with main in `05.1`'s changelog; then FAIL at `cac67de` (run 38955663828), with every golden gate passing and only pytest failing: a test read CI's own `RH_*` variables. Final: **PASS at `6a87616`** (run 38962222586, 7 min 36 s) | PR #28 |
 | Change class | C3: creates the golden corpus. The baseline was regenerated in `[C3]` commits only, the last one after every change to the smoke world | — |
 
 ## 2. Tester verdicts
 | Round | Head | Result |
 |---|---|---|
 | 1 | `29abe04` (report `058ff35`) | T-00 PASS; T-01 PASS with DEF-2; T-02 PASS with DEF-1 and DEF-2; T-03 PASS; T-04 PASS with GAP-2. Evidence: `include!` evasions 67 of 69 refused (the 2 others were the Tester's own wrong expectations); 66 of 66 random and edge bisect cases plus 8 shape cases named exactly; CI's automatic bisect on a planted change named month 1, `events.meta`, row 0, byte 18; resume equal to continuous at 6 cuts; ladders equal across 1–64 threads and debug, release, native and fma builds; planted HashMap-order and wall-clock leaks caught 11 of 11; the baseline gate holds; `--inject` cannot reach a baseline |
-| 2 | `8e17816` | *pending* |
+| 2 | `8e17816` (report `b62a795`) | **DEF-2 fixed:** real parallel dispatch, with 21,900 two-job levels in 30 years at 4 threads and 43,801 distinct thread ids (before: 0 and 1); `--require-parallel 5` passes, and 8 and 99 fail. The Tester's own leaks: thread identity caught 9 of 11 (the other 2 are the 1-thread repeats, correctly equal), HashMap order 11 of 11, wall clock 11 of 11. **DEF-1 fixed:** a mismatched horizon exits 2 in both directions. MAJ-1, GAP-4, GAP-6 and MIN-1 to MIN-3 pass; the bisect names 33 of 33 on the new world; the nightly's yearly cut equals the committed baseline. GAP-3 is fixed, with GAP-7 (`\|\| exit 0`) found. New: DEF-3 (an absolute `CARGO_TARGET_DIR` broke a baseline control) and GAP-8 (a cancelled push run dropped its range) |
+| 3 | `6a87616` | *pending* |
 
 ## 3. Rulings (Architect)
 | # | Question | Ruling |
@@ -45,6 +46,8 @@ Commit SHAs are as reported during the sprint. The branch is rebased onto `main`
 | Done report | Deviations 1–8 | Accepted. Inputs journaled up front (consistent for P0; the contract fix is BCK-002 A-36). A per-rung `months` digest. Synthetic inputs as `OracleMove` rows from `Producer::System`. The PR-tier golden run as T-01's 1,000-year acceptance. A tool crate `rh-golden`. The `--inject` hook. Column equals table for world tables. A 30-minute CI timeout (A-38 restores 20) |
 | Audit | MAJ-1, MIN-1 to MIN-4 | Below |
 | Round 1 | DEF-1, DEF-2, GAP-1 to GAP-6 | Below |
+| Round 2 | Merge route | The branch carries merge commits from `main` (the Developer's session refused a force push, and the merge was content-identical to the rebase), so PR #28 merges with a merge commit, a one-off against GOV-005's rebase-merge, recorded here |
+| Round 2 | The smoke world under SPR-011 ruling 11's `[[emits]]` lint (main) | The smoke overlay declares the world's own verbs, and X3 emits `X_DEATH`, not M2's `DEATH`: dummy systems emit dummy kinds. The history changed, so the baseline was regenerated in the final `[C3]` commit |
 
 ## 4. Defects and gaps: disposition
 | Item | Disposition |
@@ -63,6 +66,10 @@ Commit SHAs are as reported during the sprint. The branch is rebased onto `main`
 | GAP-5 an event-only divergence named an `events.meta` byte | BCK-002 A-40 |
 | GAP-6 the nightly did not compare with the baseline | Fixed (`ea2be7d`): `ladder cut-yearly`, and the nightly compares its cut with the committed baseline |
 | Found by check_all in round 2 | `def1_resume` reused keyframes cached by an earlier run. Fixed: the cache is keyed to the run |
+| **DEF-3** (low-medium; Tester round 2) `check_all.sh` joined `$PWD/$GOLDEN`, which broke with an absolute `CARGO_TARGET_DIR` | Fixed: `GOLDEN` is absolute once. `check_all_selftest.py abs-target` runs the real baseline controls with an absolute target, and a planted old join fails |
+| GAP-7 (Tester round 2) `\|\| exit 0` evaded the lint and ended the tier green with no verdict | Fixed (`211f0e6`): the verdict runs in an `EXIT` trap and passes only when the chain reached its end; the lint refuses `\|\| exit [N]`; controls fail as they should |
+| GAP-8 (Tester round 2) a cancelled push run on main dropped its baseline range | Fixed (`35b21f2`): `cancel-in-progress` only for pull requests |
+| Found by CI in round 2 | `test_check_baseline` read CI's own `RH_*` variables, so it passed locally and failed on CI | Fixed (`750ce32`): an autouse fixture clears them, and one test sets them on purpose |
 
 **Escapes found later:** none so far.
 
