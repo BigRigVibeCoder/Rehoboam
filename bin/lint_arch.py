@@ -104,11 +104,14 @@ KEYED_RNG_BUILDING_BLOCKS = frozenset({"rand_core", "rand_chacha"})
 KEYED_RNG_OWNER = "rh-ids"
 # REF: BCK-002 A-20; VER-SPR-010 GAP-3. The reviewed third-party dependencies of plane-A crates:
 # package name -> (the plane-A crates that may use it, or None for any; the review note; whether
-# its default features must be off). The note says whether the crate can return a float to plane A.
-# Keep it alphabetical; adding an entry is a review, and the reviewer names it in the PR.
+# its default features must be off; the features it may enable, or None for any). The note says
+# whether the crate can return a float to plane A. Keep it alphabetical; adding an entry is a
+# review, and the reviewer names it in the PR.
 ANY_PLANE_A_CRATE = None
 NO_DEFAULT_FEATURES = True
 DEFAULT_FEATURES_ALLOWED = False
+ANY_FEATURES = None
+NO_FEATURES: frozenset[str] = frozenset()
 # An exact version requirement: `=x.y.z`, optionally with a pre-release or build suffix.
 EXACT_REQUIREMENT = re.compile(r"=\s*\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?")
 PLANE_A_EXTERNAL_DEPS = MappingProxyType(
@@ -116,19 +119,23 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
         "libm": (
             frozenset({"rh-sample"}),
             "returns f32/f64: the transcendentals of the sampler float zone, the only "
-            "plane-A crate allowed float arithmetic (SPR-003 ruling)",
+            "plane-A crate allowed float arithmetic (SPR-003 ruling); no features: `arch` would "
+            "swap in architecture-specific routines (VER-SPR-003-TEST GAP-10)",
             NO_DEFAULT_FEATURES,
+            NO_FEATURES,
         ),
         "serde": (
             ANY_PLANE_A_CRATE,
             "no floats of its own: the (de)serialisation traits and derives",
             DEFAULT_FEATURES_ALLOWED,
+            ANY_FEATURES,
         ),
         "toml": (
             frozenset({"rh-registry"}),
             "can return f64 (toml::Value::Float); rh-registry reads only strings, arrays and "
             "tables from the system specs for the ownership lint (SPR-004)",
             DEFAULT_FEATURES_ALLOWED,
+            ANY_FEATURES,
         ),
     }
 )
@@ -157,6 +164,8 @@ class Edge:
     # not take part in equality or ordering: an edge is its target and kind.
     req: str | None = field(default=None, compare=False)
     default_features: bool | None = field(default=None, compare=False)
+    features: tuple[str, ...] = field(default=(), compare=False)
+    platform: str | None = field(default=None, compare=False)  # a `[target.'cfg(…)']` table
 
 
 @dataclass(frozen=True)
@@ -226,25 +235,35 @@ def _edges(
 
     ``name`` in cargo metadata is the dependency's package name; an alias (``package =``) appears
     only as ``rename``, which is ignored, so an alias cannot disguise a crate.
+
+    Workspace edges are deduplicated by (target, kind). Third-party edges are not: every entry of
+    the metadata is kept, so a second entry for the same crate (a `[target.…]` table with a loose
+    requirement or other features) is judged on its own (VER-SPR-003-TEST GAP-10).
     """
     internal: set[Edge] = set()
-    external: set[Edge] = set()
+    external: list[Edge] = []
     for raw in _as_list(package.get("dependencies", []), "dependencies"):
         dep = _as_dict(raw, "a dependency")
         name, kind = dep.get("name"), dep.get("kind")
         if not isinstance(name, str):
             raise WorkspaceError(f"a dependency has no name: {dep!r}")
         req, defaults = dep.get("req"), dep.get("uses_default_features")
+        features, platform = dep.get("features"), dep.get("target")
         edge = Edge(
             target=name,
             kind=kind if isinstance(kind, str) else "normal",
             req=req if isinstance(req, str) else None,
             default_features=defaults if isinstance(defaults, bool) else None,
+            features=tuple(sorted(str(f) for f in features)) if isinstance(features, list) else (),
+            platform=platform if isinstance(platform, str) else None,
         )
         # A workspace dependency is a path dependency (no registry or git source) on a member.
-        is_member = name in workspace and dep.get("source") is None
-        (internal if is_member else external).add(edge)
-    return tuple(sorted(internal)), tuple(sorted(external))
+        if name in workspace and dep.get("source") is None:
+            internal.add(edge)
+        else:
+            external.append(edge)
+    external.sort(key=lambda e: (e.target, e.kind, e.platform or "", e.req or ""))
+    return tuple(sorted(internal)), tuple(external)
 
 
 def read_lints(manifest: Path) -> tuple[str, ...]:
@@ -377,8 +396,9 @@ def effective(crate: Crate) -> Crate:
 
 
 def _via(edge: Edge) -> str:
-    """Return the phrase naming a non-normal dependency kind, or nothing for a normal one."""
-    return "" if edge.kind == "normal" else f" (as a {edge.kind}-dependency)"
+    """Return the phrase naming a non-normal dependency kind and a target table, if any."""
+    kind = "" if edge.kind == "normal" else f" (as a {edge.kind}-dependency)"
+    return kind + ("" if edge.platform is None else f" (for target {edge.platform})")
 
 
 def check_rng_crates(crate: Crate) -> list[Violation]:
@@ -448,7 +468,18 @@ def check_external_deps(crate: Crate) -> list[Violation]:
                 )
             )
             continue
-        allowed, _note, no_defaults = entry
+        allowed, _note, no_defaults, features = entry
+        extra = [] if features is None else sorted(set(edge.features) - features)
+        if features is not None and extra:
+            found.append(
+                Violation(
+                    "plane-A-external",
+                    crate.name,
+                    f"enables feature(s) {', '.join(extra)} of {edge.target}{_via(edge)}; the "
+                    f"review allows {', '.join(sorted(features)) or 'none'} "
+                    "(PLANE_A_EXTERNAL_DEPS; VER-SPR-003-TEST GAP-10)",
+                )
+            )
         if no_defaults and edge.default_features:
             found.append(
                 Violation(

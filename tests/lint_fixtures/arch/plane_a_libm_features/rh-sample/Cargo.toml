@@ -1,0 +1,15 @@
+[package]
+name = "rh-sample"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints]
+workspace = true
+
+[dependencies]
+libm = { version = "=0.2.16", default-features = false, features = ["arch"] }
