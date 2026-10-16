@@ -1,6 +1,7 @@
 # ADR-0033 — Specs as data: exhaustive, machine-checked system specs (ODD-R v2)
 
-**Status:** Accepted (director's direction on D7, 2026-10-16: "take it to the next level; it will be AI-built, so it can be super complex") · **Date:** 2026-10-16 · **Amends:** `docs/templates/system_spec_odd_r.md` (v1 → v2), `13` §2, ADR-0032 · **Tool:** `specs/systems/lint_odd.py`
+**Status:** Accepted (director's direction on D7, 2026-10-16: "take it to the next level; it will be AI-built, so it can be super complex") · **Date:** 2026-10-16 · **Amends:** `docs/templates/system_spec_odd_r.md` (v1 → v2), `13` §2, ADR-0032 · **Tool:** `specs/systems/lint_odd.py`\
+**Amended 2026-10-16 (RT-2026-10-16, director-approved):** reads declare `use` (identity, mode or rate); a rate read needs a bounded, sourced in-coupling with a neutral value; every spec carries an `[isolation]` forcing section (`docs/09` V-SF-22, V-SF-23). Warnings on draft specs, errors on frozen ones.
 
 ## Context
 

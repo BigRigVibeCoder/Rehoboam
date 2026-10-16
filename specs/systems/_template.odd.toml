@@ -40,6 +40,9 @@ why = "<reason>"
 column = "<entity.column>"
 owner = "<SYS.id>"
 lag = "<same_instant|start_of_day|previous_pulse|lagged>"
+use = "<identity|mode|rate>"               # identity: who/where/what; mode: switches a discrete regime;
+                                           # rate: enters a rate, hazard, price or probability (needs an
+                                           # in-coupling below and an [isolation] forcing; RT-2026-10-16)
 
 [scales]
 spatial = ""
@@ -102,8 +105,22 @@ test = "<V-.. ID>"
 
 [[couplings]]                              # ODD-R 8
 system = "<SYS.id>"
+direction = "<in|out>"                     # in: another system's output drives this system; out: the reverse
 via = ""
 lag = ""
+# For direction = "in" and a read with use = "rate", all of these (RT-2026-10-16, docs/09 V-SF-22/23):
+column = "<the entity.column read>"
+form = "<the response, in the effect language or a Registry function id>"
+neutral = "<the input value at which the coupling has no effect; the coupling sweep scales deviations from it>"
+output_bounds = ["<min>", "<max>"]         # the effect can never leave these bounds
+data_range = "<the input range the form is supported by evidence, with its source>"
+beyond_range = "<what happens outside data_range, and why (clamp, a different mechanism, ...), with a source>"
+source = "<R12 §n | paper, page | design value>"
+
+[isolation]                                # RT-2026-10-16; docs/09 V-SF-22: this system alone, under synthetic forcing
+forcing = []                               # [{ input = "<entity.column of every rate or mode read>", series = "<constant|step|sine|ramp|historical:<id>>", note = "" }]
+horizon = "<e.g. 1,000 sim-years>"
+expect = "<what healthy behaviour looks like: bounded, no runaway, bands that must hold>"
 
 [verification]                             # ODD-R 9
 tests = []

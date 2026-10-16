@@ -138,8 +138,14 @@ test = "V-DET-01"
 
 [[couplings]]
 system = "S5.daily_life"
+direction = "out"
 via = "S5 reads birth_tick, sex and alive at the start of each day"
 lag = "start of day"
+
+[isolation]                                # docs/09 V-SF-22
+forcing = []                               # the rung-0 slice reads no other system
+horizon = "1,000 sim-years"
+expect = "n/a until the entitlement hook (P1.5): then a constant, a sine and a step food-entitlement series, with survival over 1,000 years and mortality inside the V-SF-03 bands"
 
 [verification]
 tests = ["V-SF-02", "V-SF-02b", "V-DET-01"]

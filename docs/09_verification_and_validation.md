@@ -108,6 +108,7 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | V-DET-17 | CRN survival (ADR-0026) | Paired intervention rollouts over 10 years | Correlation of per-person death times across the pair ≥ 0.9 for unaffected lineages |
 | V-DET-18 | Journal completeness (DET-1, DET-7) | Rebuild a session from `(engine_build, registry_version, manifest_hash, seed, input_journal)` only, on a clean machine; audit every journal record | Hashes equal; every record has tick, seq, class, scope and producer |
 | V-DET-19 | Forbidden APIs (DET-2, DET-3) | Clippy lints and a grep gate on authoritative crates: `HashMap` iteration, `thread_rng`, `StdRng`, `mul_add`, float types in threshold positions | Zero hits |
+| V-DET-20 | RNG stream independence (statistical; RT-2026-10-16) | Streams for distinct (system, purpose, entity, t, k) keys and for sibling branch salts: pairwise correlation over 10⁶ draws per stream, chi-square on bytes, and a runs test, over at least 10³ key pairs including adjacent entities and adjacent t | Every statistic inside its 99.9% band, with the expected number of exceedances across all pairs (no more than a binomial 99.9% allows) |
 
 ### 2.2 Invariants and properties (V-INV)
 
@@ -204,6 +205,7 @@ The benchmarks listed in `08` §9 run under criterion in CI on fixed runner hard
 | V-PERF-08 | Belief stores | `bench/belief_store_5k` | Memory and update cost within `08` §5; ≤ 600 MB at 5k actors (G3a) |
 | V-PERF-09 | Harness isolation (PERF-5; ADR-0030) | `bench/harness_load_100k`: MAX-speed run headless, then the same seed with 4 harnesses attached (`rh-tui` subscribed to frames and the chronicle feed, a live hydration bubble, a control-plane query fuzzer at the maximum rate, and one consumer that stops reading) | Throughput ≥ 95% of headless; engine RSS growth ≤ the in-memory live-edge segment; `state_hash` ladder identical; the stalled consumer later resumes from sealed segments with nothing missing, and never back-pressures the engine |
 | V-PERF-10 | High-fidelity daily life (PERF-6) | `bench/solo_80y_minutes`; `bench/minutes_1M_day` from P6 | `solo`: 80 years ≤ 1 min. 1M: ≤ 15 s per sim-day (provisional; recorded with the agent richness used) |
+| V-PERF-11 | Allocation budget per tick (RT-2026-10-16) | A counting global allocator in bench builds; steady-state ticks of the `smoke` world from P0, the ladder worlds from P1a. Buffer growth on capacity doubling is counted separately and amortised | Steady-state heap allocations per tick ≤ the budget recorded per bench (default 0 for P0 machinery); more fails the PR like an instruction-count regression |
 
 ### 2.8 LLM-facing verification (V-LLM)
 
@@ -457,6 +459,8 @@ Held-out bands are evaluated only after this.
 | V-SF-20 | Agrarian welfare-ratio levels (agrarian and early-modern windows) | Labourer WR_A per region and half-century: every window in [0.35, 1.7]; ensemble median in [0.61, 1.36] (Allen 2001's 10th–90th percentiles; median 0.89; 65% of city-periods below 1). Craftsman WR_A: every window in [0.65, 2.9]; median in [0.90, 2.06]. Skill premium (craftsman ÷ labourer day wage): ensemble median in [1.3, 2.0] (Allen's median 1.57, partly imposed by assumption) | Emergent | Per region-window; INSUFFICIENT where no wage was paid in the window (e.g. a pastoral household economy) |
 | V-SF-20b | Subsistence floor coupling | A household whose calorie-entitlement ratio WR_kcal stays below 0.44 (the bread-only floor) for more than a year has a raised hunger-mortality hazard in M2. This is consistent with V-SF-16's ER > 100% rule | Identity | Per household-year at any N, N = 1 included; a violation is an invariant breach |
 | V-SF-21 | Regional price dispersion (soft) | In agrarian and early-modern windows with ≥ 9 market regions, the ratio of the dearest to the cheapest regional basket cost lies in [1.8, 4.0] (Allen 2001 Table 4: 2.0–3.5). Dispersion falls as `market_integration` rises, and does not fall with trade volume alone (pp. 424, 432) | Emergent | Per window; Spearman ρ(dispersion, `market_integration`) < 0 |
+| V-SF-22 | Isolation harness: each system alone (RT-2026-10-16) | Before a system is coupled, it runs under the synthetic forcing its spec declares in `[isolation]` (constant, step, sine, ramp, and historical series where available) for the spec's horizon, its other inputs held at their neutral values. It passes when its own bands and invariants hold and its behaviour matches the spec's `expect`: bounded, no runaway, no extinction unless the forcing demands it | Gate | Required for each system before its in-couplings are switched on (P1a, P1b); `lint_odd.py` requires the forcing for every rate or mode read |
+| V-SF-23 | Coupling-strength sweep (RT-2026-10-16) | The coupled engine at coupling strength α ∈ {0, 0.25, 0.5, 0.75, 1}, where α scales each in-coupling's deviation from its declared `neutral` value; 8 seeds × 200 years per α (the liveness-gate ensemble). α = 0 is the G2 coupling-ablated control | Report | Per α: liveness, the V-SF pass count, event rates by act class and V-COUP chain counts. Flags any α at which every seed goes extinct or no V-COUP chain completes (the runaway and flatline attractors). Reported at G1b and G2 |
 
 **Gate (MOP-5).**
 - **Per band.** A band **passes** when the 90% interval of its ensemble statistic lies inside the band. It **fails definitively** when the interval lies wholly outside. Anything else is **marginal** and is reported as such.
@@ -645,7 +649,7 @@ Each phase ends with:
 |---|---|
 | G0 | V-DET-01, V-DET-02, V-DET-05, V-DET-09, V-DET-11, V-WC-04, V-PERF-04 |
 | G1a | Demography bands V-SF-01 and V-SF-02; V-DET-17 (CRN pairing); V-INV-02 |
-| G1b | V-SF on the P1-applicable bands (MOP-5); V-COUP-01 (truncated) and V-COUP-04; V-PERF-01, V-PERF-07; [H] you read the run reports of 3 seeds |
+| G1b | V-SF on the P1-applicable bands (MOP-5); V-SF-22 for every P1 system; V-SF-23 reported; V-COUP-01 (truncated) and V-COUP-04; V-PERF-01, V-PERF-07; [H] you read the run reports of 3 seeds |
 | G2 | The pre-registered protocol (§3.4.1): V-HUM-01, V-HUM-02, V-HUM-03, V-HUM-09; MOP-3 and MOP-4 (V-TM-03, V-TM-04); V-PERF-03 at 100k; V-SIFT-01, V-SIFT-03, V-SIFT-04; V-DET-06; V-GOLD-04 |
 | G3a | V-COUP-01 (full chain), V-COUP-02, V-COUP-03, V-COUP-05; V-SF on all applicable bands; V-DATA-12, V-PERF-08 |
 | G3b | MOE-1 ≥ 6 under the G2 protocol (V-HUM-01); V-HUM-07; V-FOR-01–V-FOR-03; V-ORA-07, V-ORA-08; V-LLM-02, V-LLM-03, V-LLM-11; V-PERF-01–V-PERF-03, V-PERF-06 at 1M; V-HUM-10 |
@@ -664,7 +668,7 @@ Every requirement in `03` maps to at least one test ID, except withdrawn ones. P
 |---|---|---|---|
 | SIM-1 | Ledger rows, genealogical IDs, ≥ 2M persons | P1a | V-INV-09, V-DATA-05, V-DATA-12, V-PERF-02 |
 | SIM-2 | Region graph and raster | P1a | V-INV-10 |
-| SIM-3 | Must-have systems | P1a/P1b/P3a | V-SF-01–V-SF-12, V-COUP-01–V-COUP-04, V-INV-01 |
+| SIM-3 | Must-have systems | P1a/P1b/P3a | V-SF-01–V-SF-12, V-SF-22, V-SF-23, V-COUP-01–V-COUP-04, V-INV-01 |
 | SIM-4 | `SystemModel` trait | P0 | V-INV-04, V-INSP-02 |
 | SIM-5 | Hazards and binomial draws | P1a | V-INV-08, V-SF-02, V-DET-12 |
 | SIM-6 | Clocks, `i64` sim-time, adaptive daily steps | P1a | V-INV-11, V-DET-01 |
@@ -679,7 +683,7 @@ Every requirement in `03` maps to at least one test ID, except withdrawn ones. P
 | SIM-15 | No minimum-N assumptions; scale profiles | P1a | V-SCALE-01, V-SCALE-02, V-SCALE-03, V-SCALE-04 |
 | SIM-16 | Agentive catalysts | P3b | V-SCALE-05, V-SCALE-06 |
 | DET-1 | History function | P0 | V-DET-04, V-DET-18, V-GOLD-01 |
-| DET-2 | Keyed RNG and branch salts | P0 | V-DET-09, V-DET-16, V-DET-17, V-DET-19 |
+| DET-2 | Keyed RNG and branch salts | P0 | V-DET-09, V-DET-16, V-DET-17, V-DET-19, V-DET-20 |
 | DET-3 | Fixed-point thresholds | P0 | V-DET-03, V-DET-19 |
 | DET-4 | State hash and divergence bisect | P0 | V-DET-01, V-DET-02, V-DET-11 |
 | DET-5 | Golden-run CI | P0 | V-GOLD-01, V-GOLD-02 |
@@ -770,7 +774,7 @@ Every requirement in `03` maps to at least one test ID, except withdrawn ones. P
 | PERF-1 | MOP-1 run time | P1b/P3b | V-PERF-01 |
 | PERF-2 | Macro-step budget | P1b/P3b | V-PERF-02 |
 | PERF-3 | Sifter overhead | P2/P3b | V-PERF-03, V-SIFT-10 |
-| PERF-4 | Benchmark regression gate | P0 | V-PERF-04 |
+| PERF-4 | Benchmark regression gate | P0 | V-PERF-04, V-PERF-11 |
 | PERF-5 | Harness isolation | P2 | V-PERF-09 |
 | PERF-6 | High-fidelity daily life | P1a/P6 | V-PERF-10 |
 | STR-1 | World Stream, deterministic | P1.0/P1b | V-STR-01 |

@@ -51,9 +51,11 @@ version: 1.0.0
 | System | Needed by | Status |
 |---|---|---|
 | `S3.migration` (residence) | P1a (S5 reads it) | no spec |
-| `M4.economy` (occupation, holdings, food) | P1a (`solo`'s food) | no spec |
+| `M4.economy` (occupation, holdings, food) | P1a (`solo`'s food) | no spec. **Must include** (RT-2026-10-16): at the micro profile (ADR-0028), food is the household's own stores and holdings (barn, herds, goods), not a regional market; the price rule's `data_range` (Davenant's schedule covers harvest shortfalls up to about 50%) and a sourced `beyond_range` (entitlement collapse, substitution, migration), with bounded output; `[isolation]` forcing of its rate reads (harvest, population) |
 | `M6.polity` (regional conditions) | P1b (S5 reads it; stub for rungs 0–2) | no spec |
-| `M3.agriculture` | P1a (`solo`'s harvest) | no spec |
+| `M3.agriculture` | P1a (`solo`'s harvest) | no spec. **Must include** (RT-2026-10-16): at the micro profile, the harvest is the yield of the household's own fields, field by field, not a regional soil grid; `[isolation]` forcing of its rate reads (weather, labour) |
+
+Every new spec follows the coupling rules of `lint_odd.py` (rate reads need a bounded, sourced in-coupling with a neutral value; `[isolation]` forcing for rate and mode reads), and every system passes V-SF-22 alone before its in-couplings are switched on.
 
 ## 4. Later phases
 Work packages as listed in `docs/11` (P1b, P2, P3a/b, P4, P5–P7, era packs). They are planned into sprints one phase ahead (GOV-007 §3).
