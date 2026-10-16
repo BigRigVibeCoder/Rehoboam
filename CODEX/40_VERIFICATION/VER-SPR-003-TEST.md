@@ -232,3 +232,76 @@ Each trial was compiled (`cargo check --all-targets`) and run through `lint_forb
 ### 8.6 Not run in this pass
 
 The determinism builds, the distribution statistics and the conversion check of section 2 (code unchanged); the Windows and macOS nightlies; `~/.cargo/config.toml` outside the repository; `float-api` against a rustdoc-JSON ground truth (I judged each shape by whether it compiles and what it exposes, not by an independent tool).
+
+## 9. Re-verification at `91f1ea6e283f975a0c62e79fcbd514a14a738de9` (124 checks, CI run 38875277300)
+
+**BLUF:** GAP-9, GAP-10 and the alias half of GAP-11 are fixed against every reproduction and evasion I tried from section 8, and the regression of the 13 mutations is clean. The fixture changes weakened no older control. **Two new holes remain, found by the same method:** a `clippy.toml` placed inside `crates/rh-sample/` replaces the workspace list for that crate, so removing `f64::ln` there and calling `x.ln()` passes all 124 checks (GAP-12); and a `use core::primitive::f64 as Fl;` rename carries a float through a `pub` signature past the new alias rule (GAP-11b). Neither needs more than one file; the first undoes the same ban that GAP-9 was about.
+
+Method as in section 8: a `git archive` of `91f1ea6`, a fresh copy and a separate target directory for every mutation, the whole `bin/check_all.sh` tier each time. The clean copy is 124 PASS, 0 FAIL.
+
+### 9.1 Regression of the 13 mutations
+
+| IDs | Result at `91f1ea6` |
+|---|---|
+| B06, B09, B10, B11 | red, `lint_forbidden` (`lint-allow`, `float-api`) |
+| C07 | red, `lint_arch` |
+| C08, C08b to C08f (`0.2`, `^0.2.16`, `~0.2.16`, `>=0.2.16`, `=0.2`, `0.2.16`) | red, `lint_arch` |
+| C09 | red, `lint_arch` |
+| D02, D03, D05 | red, pytest |
+| E02 | red, the "float in a crate named `rh-core`" control |
+| B05 (`libm::fma`) | green, by ruling |
+
+### 9.2 GAP-9: the `lints` rule
+
+| Mutation | Result |
+|---|---|
+| H01: `[lints.clippy] disallowed_methods = "allow"` in place of `[lints] workspace = true`, plus `x.ln()` | red, `lint_arch` (`lints`). Was green in section 8. |
+| `[lints]` table deleted, plus `x.ln()` | red, `lint_arch` |
+| misspelt `[lint]` table | red, `lint_arch` |
+| `lints.workspace = true` written inside `[package]` (no `[lints]` table) | red, `lint_arch` |
+| the same override in a second plane-A crate (`rh-core`: `[lints.clippy] float_arithmetic = "allow"` plus float arithmetic) | red, `lint_arch` |
+| `[lints] workspace = false`; `[lints] workspace = true` plus a `[lints.*]` table; an empty `[lints.rust]` | cargo itself refuses the manifest (`workspace cannot be false`), so every cargo command fails; not evasions, and the red I saw (at `cargo fmt`) is cargo's, not the rule's |
+| dotted root key `lints.workspace = true`; inline root key `lints = { workspace = true }` | green, as they should be: equivalent spellings of the required declaration, and cargo accepts them |
+| `[workspace.lints.clippy] disallowed_methods = "allow"` in the root `Cargo.toml`, plus `x.ln()` | red, at the existing "std `ln` in `rh-sample` must FAIL" clippy control (it renders the root lint tables) |
+| `.cargo/config.toml` with `rustflags = ["-A", "clippy::disallowed_methods"]`, plus `x.ln()` | red, at the same control |
+
+### 9.3 GAP-10: the exact-pin rule
+
+| Mutation | Result |
+|---|---|
+| H03: `libm` again under `[target.'cfg(unix)'.dependencies]`, `0.2`, default features on | red, `lint_arch` (was green) |
+| H04: `features = ["arch"]` (exact pin, defaults off) | red, `lint_arch` (was green) |
+| H06: the same under `[target.'cfg(unix)'.dependencies]`; H07: under `[build-dependencies]`; H08: `features = ["unstable"]`; H09: table form with `features = ["force-soft-floats"]` | red, `lint_arch`, all four |
+| H05: renamed `libm2 = { package = "libm", version = "0.2" }` | red, at `cargo deny` (not `lint_arch`; before and after) |
+
+### 9.4 GAP-11: the alias rule
+
+| Mutation | Result |
+|---|---|
+| A01: private `type F = f64;` returned from a `pub fn` | red, `lint_forbidden` (was green) |
+| A02: associated type `type Out = f64;` in an impl body, returned through a projection | red (was green) |
+| A06: generic alias `type V<T> = (T, f64);` | red |
+| A07: alias declared inside a `macro_rules!` body | red |
+| A05: `pub trait Tr { fn get(&self) -> f64; }` | green, a documented residual |
+| **A03: `use core::primitive::f64 as Fl;` then `pub fn leak() -> Fl`** | **green: compiles, passes every gate (GAP-11b)** |
+| **A04: the same rename, then `type G = Fl;` and `pub fn leak() -> G`** | **green** |
+
+The rule scans `type … = …` definitions and `pub` signatures; a `use … as` rename is neither, and the signature then names `Fl`, not `f64`. The Architect's ruling documents the macro-token, projection and opaque-return residuals; the `use` rename is not among them.
+
+### 9.5 GAP-12 (new): a crate-local `clippy.toml` replaces the workspace list
+
+Clippy reads the configuration file nearest the crate being checked, not the root file. With `crates/rh-sample/clippy.toml` holding a copy of the root `clippy.toml` minus the `f64::ln` and `f64::exp` entries, and `x.ln()` in `rh-sample`, **all 124 checks pass** (L09b). The same with the hidden name `crates/rh-sample/.clippy.toml` passes too (L09c). The root-file pytest (GAP-2's fix) cannot see either; the "std `ln` in `rh-sample` must FAIL" control renders the root file into a fixture, so it tests the root list and not the file clippy actually reads for `rh-sample`. (An empty crate-local file is red, only because it also drops `allow-unwrap-in-tests` and friends and clippy then fails on the tests; the evasion has to copy the rest.) Recommendation: in `lint_arch` (or a pytest), fail if any `clippy.toml` or `.clippy.toml` exists in a workspace member's directory or below, other than at the workspace root; and set `CLIPPY_CONF_DIR` is not needed. 90%.
+
+### 9.6 The fixtures
+
+77 files changed in the sprint's last three commits; 50-odd are the `[lints] workspace = true` additions to the lint fixtures. Every positive control in `check_all.sh` that uses one still turns red for its own reason: all 124 checks pass on the clean tree (the controls run there), and my 40 mutations show the controls fire (E02, L08, L10 above went red at their controls). The new `lints` rule applies to plane-A crates only, so the `tool`-plane fixture crates are unaffected. I did not diff each fixture's expected message against the earlier text; the controls match on the diagnostic text (`fail:<text>`), and they pass.
+
+### 9.7 New gaps
+
+1. **GAP-12: a crate-local `clippy.toml` or `.clippy.toml` replaces the workspace transcendental ban.** Section 9.5. Recommendation above; 90%.
+2. **GAP-11b: a `use … as` rename of a float type is not seen.** Recommendation: extend the alias rule to `use … as <name>` where the path ends in or names `f32`/`f64` (one more regex in the zone), accept it as residual and say so, or use rustdoc JSON; 70% for the regex.
+3. Everything else in sections 8.5 and 9: closed.
+
+### 9.8 Not run in this pass
+
+The sampler statistics, determinism builds and conversion checks (no code change since `743ce83`; section 8.1 holds); a `~/.config/clippy` or `CLIPPY_CONF_DIR` environment override (local to a machine, like `~/.cargo/config.toml`); rustdoc-JSON ground truth for `float-api`.
