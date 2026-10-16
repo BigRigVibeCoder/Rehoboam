@@ -11,6 +11,8 @@ Input from the director's red team: an external reviewer running on a different 
 
 This keeps in-flight sprints from building on specs that change underneath them.
 
+**Intake (director's rule, 2026-10-16):** the Architect decides whether a batch enters the repository. The batch arrives on a branch and a PR. The Architect checks it, notes where it conflicts with ratified contracts or overstates its evidence, and merges it into `docs/red_team/`. Any batch the Architect is not confident about, or believes is mistaken, goes to the director first. Entering the repository adopts nothing; adoption happens at the gate.
+
 ## Contents
 
 | Path | What |
