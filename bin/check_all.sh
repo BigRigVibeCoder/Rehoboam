@@ -111,9 +111,12 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   from_os_rng:std-rng:from_os_rng getrandom:std-rng:getrandom rand_random:rand-random:rand::random
   random_range:rand-random:random_range random_bool:rand-random:random_bool
   random_ratio:rand-random:random_ratio random_iter:rand-random:random_iter mul_add:mul-add:mul_add
-  instant:wall-clock:Instant::now system_time:wall-clock:SystemTime unsafe:unsafe:unsafe"
+  instant:wall-clock:Instant::now system_time:wall-clock:SystemTime unsafe:unsafe:unsafe
+  spaced_path:wall-clock:time::Instant spaced_rand:thread-rng:rand::rng
+  path_attr:source-include:#[path include_macro:source-include:include!("
 forbidden_api_controls() {
-  local spec file rest rule token tick='`'
+  local - spec file rest rule token tick='`'
+  set -f  # tokens such as #[path must not be glob-expanded; `local -` restores the option
   for spec in $FORBIDDEN_API_CONTROLS; do
     file="${spec%%:*}"; rest="${spec#*:}"; rule="${rest%%:*}"; token="${rest#*:}"
     run "Forbidden-API positive control: $file must FAIL" "fail:VIOLATION [V-DET-19/$rule] ${tick}${token}${tick}" \

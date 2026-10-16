@@ -19,6 +19,11 @@ reports its metadata). Rules:
                       flagged, so that the simulation may name its own time type; every path to
                       the std type is.
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
+    source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
+                      from a file the gate may never scan, such as one outside the crate (DEF-4).
+
+Paths match with any whitespace or comments around `::` (`std :: time :: Instant :: now()`, as
+in macro bodies), and are reported with it removed (DEF-4).
 
 The only RNG in plane A is the keyed one (ADR-0006); see clippy.toml for the matching clippy lists.
 
@@ -59,6 +64,19 @@ IDENT_CHAR = re.compile(r"[A-Za-z0-9_]")
 RAW_STRING_START = re.compile(r'(?:b|c)?r(?P<hashes>#*)"')
 
 
+def _rx(pattern: str) -> re.Pattern[str]:
+    """Compile a rule pattern so that every ``::`` in it also matches with whitespace around it.
+
+    Comments are already blanked to spaces, so this also covers ``std::time /* x */ ::Instant``.
+    """
+    return re.compile(pattern.replace("::", r"\s*::\s*"))
+
+
+def _display(text: str) -> str:
+    """Return matched text on one line, with whitespace around ``::`` removed."""
+    return re.sub(r"\s*::\s*", "::", " ".join(text.split()))
+
+
 @dataclass(frozen=True)
 class Rule:
     """A forbidden API: its name, the pattern that finds it, and why it is forbidden."""
@@ -71,23 +89,23 @@ class Rule:
 RULES: tuple[Rule, ...] = (
     Rule(
         "hash-collections",
-        re.compile(r"\b\w*Hash(?:Map|Set)\b"),
+        _rx(r"\b\w*Hash(?:Map|Set)\b"),
         "unspecified iteration order; use BTreeMap/BTreeSet, an insertion-ordered map or a "
         "sorted Vec (GOV-003 §2)",
     ),
     Rule(
         "thread-rng",
-        re.compile(r"\bthread_rng\b|\bThreadRng\b|\brand::rng\b|\brand::\{[^}]*\brng\b"),
+        _rx(r"\bthread_rng\b|\bThreadRng\b|\brand::rng\b|\brand::\{[^}]*\brng\b"),
         "thread-local, unkeyed RNG; use the keyed RNG (ADR-0006)",
     ),
     Rule(
         "std-rng",
-        re.compile(r"\b(?:StdRng|SmallRng|OsRng|from_entropy|from_os_rng|getrandom)\b"),
+        _rx(r"\b(?:StdRng|SmallRng|OsRng|from_entropy|from_os_rng|getrandom)\b"),
         "unkeyed or entropy-seeded RNG; use the keyed RNG (ADR-0006)",
     ),
     Rule(
         "rand-random",
-        re.compile(
+        _rx(
             r"\brand::random\b|\brand::\{[^}]*\brandom\b"
             r"|\brandom_(?:range|bool|ratio|iter)\b"
         ),
@@ -95,12 +113,12 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "mul-add",
-        re.compile(r"\bmul_add\b"),
+        _rx(r"\bmul_add\b"),
         "fused multiply-add rounds differently across targets (docs/13 §3)",
     ),
     Rule(
         "wall-clock",
-        re.compile(
+        _rx(
             r"\bInstant::now\b|\bSystemTime\b|\bUNIX_EPOCH\b|\b(?:Utc|Local)::now\b"
             r"|\btime::(?:Instant|\*)|\btime::\{[^}]*\bInstant\b"
         ),
@@ -108,8 +126,14 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "unsafe",
-        re.compile(r"\bunsafe\b"),
+        _rx(r"\bunsafe\b"),
         "unsafe code (GOV-003 §2); backstop to #![forbid(unsafe_code)]",
+    ),
+    Rule(
+        "source-include",
+        _rx(r"#\s*!?\s*\[\s*path\b|\bcfg_attr\s*\([^)]*\bpath\s*=|\binclude\s*!\s*[(\[{]"),
+        "pulls in source from a file this gate may never scan; keep plane-A code in its own "
+        "crate's files, or escape with a reason (DEF-4)",
     ),
 )
 
@@ -284,7 +308,7 @@ def find_forbidden(code: str, path: str) -> list[Finding]:
         for match in rule.pattern.finditer(code):
             line_index = bisect.bisect_right(line_starts, match.start()) - 1
             column = match.start() - line_starts[line_index] + 1
-            text = " ".join(match.group(0).split())
+            text = _display(match.group(0))
             found.append(
                 (match.start(), Finding(rule.name, path, line_index + 1, column, text, rule.why))
             )
