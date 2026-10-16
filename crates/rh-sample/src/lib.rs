@@ -37,9 +37,12 @@
 mod binomial;
 mod convert;
 mod error;
+mod normal;
 mod poisson;
 mod uniform;
+mod ziggurat_tables;
 
 pub use binomial::Binomial;
 pub use error::SampleError;
+pub use normal::Normal;
 pub use poisson::Poisson;
