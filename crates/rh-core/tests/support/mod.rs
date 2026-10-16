@@ -1,5 +1,6 @@
 //! Shared test support for rh-core's integration tests (SPR-005): a configurable stub system and
-//! helpers that build spec tables in memory.
+//! a helper that builds a spec table in memory. rh-core never depends on rh-registry, not even
+//! for tests (Architect ruling): tests against the real specs live in `rh-registry/tests`.
 //!
 //! A stub is a real `SystemModel`: descriptor, access, bindings and purposes are data, and the
 //! step is a plain function, so each test states exactly what a system declares and does.
@@ -7,24 +8,15 @@
     dead_code,
     reason = "each test file uses a different subset of the helpers"
 )]
-#![allow(
-    clippy::expect_used,
-    reason = "test helpers: a bad fixture must fail the test loudly"
-)]
-
-use std::collections::BTreeSet;
-use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
 
 use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, Lag, Plane};
-use rh_core::ownership::SpecTable;
+use rh_core::ownership::{Declaration, Source, SpecEntry, SpecTable, single_writer};
 use rh_core::system::{
     AggregateSpec, InvariantResult, ParamSchema, PulseBinding, SimError, SpecPurpose, StepCtx,
     SystemDescriptor, SystemModel,
 };
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_registry::ownership::{Ownership, SystemSpec, load_specs, registry_system_ids};
 
 /// A step function.
 pub type StepFn =
@@ -109,30 +101,16 @@ impl Stub {
         Box::new(self)
     }
 
-    /// The spec this stub's declarations imply (writes = owns, reads = reads, purposes = rng):
-    /// a spec the stub agrees with.
-    pub fn spec(&self) -> SystemSpec {
-        let mut toml = format!("[system]\nid = \"{}\"\n", self.id);
-        for w in &self.access.writes {
-            let _ = write!(
-                toml,
-                "[[owns]]\ncolumn = \"{}\"\nplane = \"{}\"\ntype = \"i64\"\n",
-                w.column,
-                w.plane.name()
-            );
-        }
-        for r in &self.access.reads {
-            let _ = write!(
-                toml,
-                "[[reads]]\ncolumn = \"{}\"\nowner = \"{}\"\n",
-                r.column, r.owner
-            );
-        }
-        for p in &self.purposes {
-            let _ = write!(toml, "[[rng]]\npurpose = \"{p}\"\n");
-        }
-        SystemSpec::from_toml(Path::new(&format!("{}.odd.toml", self.id)), &toml)
-            .expect("stub spec")
+    /// The spec entry this stub's declarations imply (writes = owns, reads = reads, purposes =
+    /// rng): a spec the stub agrees with.
+    pub fn spec(&self) -> (Declaration, SpecEntry) {
+        let declaration = self.access.declaration(self.id);
+        let entry = SpecEntry {
+            owns: declaration.writes.clone(),
+            reads: self.access.read_columns(),
+            rng: self.purposes.iter().map(|p| (*p).to_owned()).collect(),
+        };
+        (declaration, entry)
     }
 }
 
@@ -172,32 +150,15 @@ impl SystemModel for Stub {
     }
 }
 
-/// The repository root.
-pub fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-/// The ownership table of the real specs (`specs/systems`), as `rh-cli ownership` builds it.
-pub fn real_ownership() -> Ownership {
-    let ids =
-        registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
-    let specs = load_specs(&repo().join("specs/systems")).expect("specs");
-    Ownership::build(&specs, &ids)
-}
-
-/// The real specs as registration takes them: data built by rh-registry, the host's spec reader.
-pub fn real_specs() -> SpecTable {
-    real_ownership().spec_table()
-}
-
-/// A spec table from in-memory specs. The Registry check is the lint's business; tests that build
-/// synthetic systems pass their ids as the Registry.
-pub fn spec_table(specs: &[SystemSpec]) -> SpecTable {
-    let ids: BTreeSet<String> = specs.iter().map(|s| s.id.clone()).collect();
-    Ownership::build(specs, &ids).spec_table()
-}
-
-/// A spec table in which every stub's spec says exactly what the stub declares.
+/// A spec table in which every stub's spec says exactly what the stub declares, built as the lint
+/// builds one (the owners from `single_writer` over the specs; the first owner keeps a contested
+/// column).
 pub fn agreeing_specs(stubs: &[Stub]) -> SpecTable {
-    spec_table(&stubs.iter().map(Stub::spec).collect::<Vec<_>>())
+    let specs: Vec<(Declaration, SpecEntry)> = stubs.iter().map(Stub::spec).collect();
+    let declarations: Vec<Declaration> = specs.iter().map(|(d, _)| d.clone()).collect();
+    let (owners, _) = single_writer(&declarations, Source::Spec);
+    SpecTable {
+        owners,
+        specs: specs.into_iter().map(|(d, e)| (d.system, e)).collect(),
+    }
 }

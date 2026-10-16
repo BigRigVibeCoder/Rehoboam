@@ -15,11 +15,9 @@
 mod support;
 
 use rh_core::access::{Lag, Plane};
-use rh_core::ownership::{Declaration, Source, single_writer};
-use rh_core::register::{RegistrationError, register, system_id};
+use rh_core::register::{RegistrationError, register};
 use rh_core::{Phase, Pulse};
-use rh_registry::ownership::SystemSpec;
-use support::{Stub, agreeing_specs, spec_table};
+use support::{Stub, agreeing_specs};
 
 fn refused(stubs: Vec<Stub>, specs_from: &[Stub]) -> RegistrationError {
     let t = agreeing_specs(specs_from);
@@ -195,44 +193,63 @@ fn a_same_instant_cycle_within_a_phase_needs_a_lag() {
     assert_eq!(r.order(Phase::Exchange), ["X2.b", "X1.a"]);
 }
 
-/// Ruling 3: on every real spec, the lint's rule and the checker's rule are the same function and
-/// agree: the specs' declarations pass both, and a planted second owner fails both.
+/// `05.1` §2 rule 4 (v1.4): levels, then Registry id. A diamond plus a long chain in one phase
+/// tells the rule apart from the smallest-ready-id Kahn order, which would run the whole chain
+/// first (c1, c2, c3, c4, then the diamond). If someone reverts to Kahn, this fails.
 #[test]
-fn the_checker_and_the_lint_share_one_rule() {
-    let t = support::real_ownership();
-    assert_eq!(t.problems, vec![], "the real specs are clean");
-    let declarations: Vec<Declaration> = t.specs.values().map(SystemSpec::declaration).collect();
-    let (spec_owners, spec_problems) = single_writer(&declarations, Source::Spec);
-    let (code_owners, code_problems) = single_writer(&declarations, Source::Code);
-    assert_eq!(spec_owners, t.owners);
-    assert_eq!(code_owners, t.owners);
-    assert!(spec_problems.is_empty() && code_problems.is_empty());
-    let mut planted = declarations.clone();
-    planted[0]
-        .writes
-        .push(("person.alive".to_owned(), "A".to_owned()));
-    planted.rotate_left(1); // the rightful owner (M2) comes first
-    let (_, spec_problems) = single_writer(&planted, Source::Spec);
-    let (_, code_problems) = single_writer(&planted, Source::Code);
-    assert_eq!(spec_problems.len(), 1);
-    assert_eq!(code_problems.len(), 1);
-    assert_eq!(spec_problems[0].rule, code_problems[0].rule);
-    assert_eq!(spec_problems[0].system, code_problems[0].system);
-}
-
-#[test]
-fn system_ids_are_name_derived_and_distinct_for_the_registry() {
-    let ids = rh_registry::ownership::registry_system_ids(
-        &support::repo().join("specs/manifest/registry_v0.toml"),
-    )
-    .unwrap();
-    let raw: std::collections::BTreeSet<u32> =
-        ids.iter().map(|id| system_id(id).to_raw()).collect();
+fn the_order_is_levels_then_id_not_the_smallest_ready_id() {
+    use Lag::SameInstant;
+    let at = |s: Stub| s.at(Pulse::Day, Phase::Production);
+    let stubs = vec![
+        // The chain X1 -> X2 -> X3 -> X4.
+        at(Stub::new("X1.c1").writes("c.1")),
+        at(Stub::new("X2.c2")
+            .writes("c.2")
+            .reads("c.1", "X1.c1", SameInstant)),
+        at(Stub::new("X3.c3")
+            .writes("c.3")
+            .reads("c.2", "X2.c2", SameInstant)),
+        at(Stub::new("X4.c4")
+            .writes("c.4")
+            .reads("c.3", "X3.c3", SameInstant)),
+        // The diamond X5 -> {X6, X7} -> X8.
+        at(Stub::new("X5.top").writes("d.top")),
+        at(Stub::new("X6.left")
+            .writes("d.left")
+            .reads("d.top", "X5.top", SameInstant)),
+        at(Stub::new("X7.right")
+            .writes("d.right")
+            .reads("d.top", "X5.top", SameInstant)),
+        at(Stub::new("X8.bottom")
+            .writes("d.bottom")
+            .reads("d.left", "X6.left", SameInstant)
+            .reads("d.right", "X7.right", SameInstant)),
+    ];
+    let t = agreeing_specs(&stubs);
+    let r = register(stubs.into_iter().map(Stub::boxed).collect(), &t)
+        .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
-        raw.len(),
-        ids.len(),
-        "no two Registry systems share an RNG system_id"
+        r.order(Phase::Production),
+        [
+            "X1.c1",
+            "X5.top",
+            "X2.c2",
+            "X6.left",
+            "X7.right",
+            "X3.c3",
+            "X8.bottom",
+            "X4.c4"
+        ]
     );
-    assert_eq!(system_id("M2.demography"), system_id("M2.demography"));
-    let _ = spec_table(&[]);
+    let kahn = [
+        "X1.c1",
+        "X2.c2",
+        "X3.c3",
+        "X4.c4",
+        "X5.top",
+        "X6.left",
+        "X7.right",
+        "X8.bottom",
+    ];
+    assert_ne!(r.order(Phase::Production), kahn);
 }

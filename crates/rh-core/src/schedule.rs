@@ -23,11 +23,12 @@
 //!   sort with ties broken by system id (`05.1` §2 rule 4), and it is the order the engine runs and
 //!   reports errors in at every thread count.
 //!
-//! DECISION: ties are broken level by level, not by the lexicographically smallest topological
-//! order (Kahn's algorithm taking the smallest ready id). Both are topological sorts with id
-//! tie-breaks and both give the same state, because systems not joined by an edge never touch the
-//! same column at the same instant. Only the level form is also the parallel execution order, so
-//! the first error, and later the emission order of events, is the same at 1 and N threads.
+//! This is the order `05.1` §2 rule 4 defines (v1.4, Architect ruling on SPR-005): levels, then
+//! Registry id, not the lexicographically smallest topological order (Kahn's algorithm taking the
+//! smallest ready id). Both give the same state, because systems not joined by an edge never touch
+//! the same column at the same instant. Only the level form is also the parallel execution order,
+//! so the first error, and later the emission order of events, is the same at 1 and N threads.
+//! `tests/registration.rs` pins it with a case where the two orders differ.
 //!
 //! No `HashMap` anywhere: `BTreeMap`/`BTreeSet` and sorted vectors only (GOV-003 §2).
 //!

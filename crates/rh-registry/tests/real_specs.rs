@@ -1,40 +1,61 @@
-//! T-03 and T-06 on the real specs: the generated skeletons compile against the `SystemModel`
-//! contract, and registration checks their RNG purposes against the specs (SPR-005).
+//! SPR-005 against the real specs (`specs/systems`), loaded with this crate's spec reader.
 //!
-//! Each `tests/generated/*.rs` is the unedited output of `lint_odd.py --rust <id>`
-//! (`bin/gen_skeletons.py --check` keeps it so). Each module below brings `Fixed`, `Phase` and
-//! `Pulse` into scope, `include!`s its skeleton and implements `SpecPurpose` for the generated
-//! `RngPurpose` enum with the generated `name()`: the only way a system names a purpose (ruling 2).
-//! Only the variant list (`SpecPurpose::ALL`) is written by hand, and registration checks it against
-//! the spec.
+//! rh-core never depends on rh-registry, not even for tests (Architect ruling, 2026-10-16), so
+//! every test that needs the real specs lives here; rh-core tests its rules on hand-built
+//! `SpecTable`s.
 //!
-//! Acceptance (T-03): the S5 and M2 skeletons compile, and so do S6 and S7.
-//! Acceptance (T-06): a purpose not in the spec fails registration; a spec purpose with no code use
-//! is reported.
+//! - T-03: the generated skeletons (`crates/rh-core/tests/generated/*.rs`, the unedited output of
+//!   `lint_odd.py --rust <id>`, kept so by `bin/gen_skeletons.py --check`) compile against
+//!   rh-core's `SystemModel` contract. Each module below brings `Fixed`, `Phase` and `Pulse` into
+//!   scope, `include!`s its skeleton and implements `SpecPurpose` for the generated `RngPurpose`
+//!   with the generated `name()`: the only way a system names a purpose (ruling 2). Only the variant
+//!   list (`SpecPurpose::ALL`) is written by hand, and registration checks it against the spec.
+//!   Acceptance: the S5 and M2 skeletons compile, and so do S6 and S7.
+//! - T-06: a purpose not in the spec fails registration; a spec purpose with no code use is
+//!   reported.
+//! - Ruling 3: the lint and the registration checker share one single-writer rule, and agree on
+//!   the real specs.
+//! - The RNG `system_id`s of the Registry systems are distinct.
 //!
-//! Refs: SPR-005 T-03, T-06, rulings 1 and 2; ADR-0033 §3; `05.1` §2.
+//! Refs: SPR-005 T-03, T-04, T-06, rulings 1–3; ADR-0033 §3; `05.1` §2, §6 item 2.
+#![allow(
+    clippy::type_complexity,
+    clippy::expect_used,
+    reason = "a table of test cases; test helpers fail loudly"
+)]
 
-#![allow(clippy::type_complexity, reason = "a table of test cases")]
-
-mod support;
+use std::path::{Path, PathBuf};
 
 use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, Lag, Plane};
 use rh_core::fixed::Q16_16;
-use rh_core::register::register;
+use rh_core::ownership::{Declaration, Source, single_writer};
+use rh_core::register::{register, system_id};
 use rh_core::system::{
     AggregateSpec, Fixed, InvariantResult, ParamSchema, PulseBinding, SimError, SpecPurpose,
     StepCtx, SystemDescriptor, SystemModel,
 };
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
+use rh_registry::ownership::{Ownership, SystemSpec, load_specs, registry_system_ids};
+
+fn repo() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// The ownership table of the real specs, as `rh-cli ownership` builds it.
+fn real_ownership() -> Ownership {
+    let ids =
+        registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
+    let specs = load_specs(&repo().join("specs/systems")).expect("specs");
+    Ownership::build(&specs, &ids)
+}
 
 macro_rules! skeleton {
     ($module:ident, $file:literal, [$($variant:ident),* $(,)?]) => {
         #[allow(dead_code, reason = "generated items a stub does not use")]
-        #[allow(clippy::all, clippy::pedantic, reason = "generated code is never hand-edited")]
         mod $module {
             use rh_core::{Fixed, Phase, Pulse};
-            include!($file); // LINT-ALLOW(forbidden-api): the unedited lint_odd.py --rust skeleton (tests/generated/), kept identical by bin/gen_skeletons.py --check
+            include!($file); // LINT-ALLOW(forbidden-api): the unedited lint_odd.py --rust skeleton (crates/rh-core/tests/generated/), kept identical by bin/gen_skeletons.py --check
 
             impl rh_core::system::SpecPurpose for RngPurpose {
                 const ALL: &'static [Self] = &[$(Self::$variant),*];
@@ -48,16 +69,24 @@ macro_rules! skeleton {
 
 skeleton!(
     s5,
-    "generated/S5_daily_life.rs",
+    "../../rh-core/tests/generated/S5_daily_life.rs",
     [ActivityBlock, EncounterOutcome]
 );
-skeleton!(m2, "generated/M2_demography.rs", [DeathTime]);
+skeleton!(
+    m2,
+    "../../rh-core/tests/generated/M2_demography.rs",
+    [DeathTime]
+);
 skeleton!(
     s6,
-    "generated/S6_artifacts.rs",
+    "../../rh-core/tests/generated/S6_artifacts.rs",
     [LossOnDeath, TheftOutcome, SearchFind]
 );
-skeleton!(s7, "generated/S7_vows.rs", [GrudgeForm, BreakMode]);
+skeleton!(
+    s7,
+    "../../rh-core/tests/generated/S7_vows.rs",
+    [GrudgeForm, BreakMode]
+);
 
 /// A system built on a skeleton: everything the spec fixes comes from the generated module.
 struct OnSkeleton {
@@ -193,7 +222,7 @@ fn the_generated_params_are_q16_16() {
 
 #[test]
 fn every_skeleton_matches_its_spec() {
-    let t = support::real_ownership();
+    let t = real_ownership();
     let cases: [(&str, &[(Pulse, Phase)], Vec<&'static str>); 4] = [
         (s5::SYSTEM_ID, s5::SCHEDULE, s5::RngPurpose::names()),
         (m2::SYSTEM_ID, m2::SCHEDULE, m2::RngPurpose::names()),
@@ -217,7 +246,7 @@ fn every_skeleton_matches_its_spec() {
 
 #[test]
 fn s5_and_m2_register_on_their_skeletons() {
-    let t = support::real_ownership();
+    let t = real_ownership();
     let r = register(
         vec![
             Box::new(s5_system(s5::RngPurpose::names())),
@@ -257,7 +286,7 @@ impl SpecPurpose for Misspelt {
 
 #[test]
 fn an_undeclared_purpose_fails_registration() {
-    let t = support::real_ownership();
+    let t = real_ownership();
     let Err(e) = register(
         vec![Box::new(s5_system(Misspelt::names()))],
         &t.spec_table(),
@@ -284,7 +313,7 @@ fn an_undeclared_purpose_fails_registration() {
 
 #[test]
 fn a_spec_purpose_with_no_code_use_is_reported() {
-    let t = support::real_ownership();
+    let t = real_ownership();
     let r = register(
         vec![Box::new(s5_system(vec!["activity_block"]))],
         &t.spec_table(),
@@ -338,4 +367,42 @@ fn a_system_on_a_skeleton_reports_its_spec_data() {
         Some(Lag::StartOfDay)
     );
     assert!(s5.invariants(&WorldTables::new()).is_empty() && m2.declared_aggregates().is_empty());
+}
+
+/// Ruling 3: on every real spec, the lint's rule and the checker's rule are the same function and
+/// agree: the specs' declarations pass both, and a planted second owner fails both.
+#[test]
+fn the_checker_and_the_lint_share_one_rule() {
+    let t = real_ownership();
+    assert_eq!(t.problems, vec![], "the real specs are clean");
+    let declarations: Vec<Declaration> = t.specs.values().map(SystemSpec::declaration).collect();
+    let (spec_owners, spec_problems) = single_writer(&declarations, Source::Spec);
+    let (code_owners, code_problems) = single_writer(&declarations, Source::Code);
+    assert_eq!(spec_owners, t.owners);
+    assert_eq!(code_owners, t.owners);
+    assert!(spec_problems.is_empty() && code_problems.is_empty());
+    let mut planted = declarations.clone();
+    planted[0]
+        .writes
+        .push(("person.alive".to_owned(), "A".to_owned()));
+    planted.rotate_left(1); // the rightful owner (M2) comes first
+    let (_, spec_problems) = single_writer(&planted, Source::Spec);
+    let (_, code_problems) = single_writer(&planted, Source::Code);
+    assert_eq!(spec_problems.len(), 1);
+    assert_eq!(code_problems.len(), 1);
+    assert_eq!(spec_problems[0].rule, code_problems[0].rule);
+    assert_eq!(spec_problems[0].system, code_problems[0].system);
+}
+
+#[test]
+fn system_ids_are_name_derived_and_distinct_for_the_registry() {
+    let ids = registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
+    let raw: std::collections::BTreeSet<u32> =
+        ids.iter().map(|id| system_id(id).to_raw()).collect();
+    assert_eq!(
+        raw.len(),
+        ids.len(),
+        "no two Registry systems share an RNG system_id"
+    );
+    assert_eq!(system_id("M2.demography"), system_id("M2.demography"));
 }
