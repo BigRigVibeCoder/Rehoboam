@@ -7,12 +7,14 @@
 //! `CODEX/05_PROJECT/SPR-002_IdsAndRng.md`; `CLAUDE.md`.
 #![forbid(unsafe_code)]
 
+pub mod entity;
 pub mod hash;
 pub mod ids;
 pub mod person;
 pub mod rng;
 pub mod salt;
 
+pub use entity::{EntityKind, EntityRef};
 pub use hash::{BranchSalt, PurposeId, RngKey, StreamKey, SystemKey, h};
 pub use ids::{EntityKey, EventId, MatchId, PersonId, RegionId, SystemId, TimelineId};
 pub use person::{IdError, PersonIdTable};
