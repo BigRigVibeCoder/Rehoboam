@@ -692,9 +692,10 @@ fn bindings_and_lags_must_match_the_spec() {
     );
 }
 
-/// `system` declared exactly as its spec says, in a world that registers `world`: every read whose
-/// owner the world registers, with its spec lag (REV-P1a MAJ-2: a read of an absent owner is not
-/// declared, and the coupling's neutral value applies), every owned column written, the event kinds it emits, the commands it submits to a
+/// `system` declared exactly as its spec says, in a world that registers `world`: every read with its
+/// spec lag, declared unconditionally (REV-P1a round 4, NEW-4: registration reports a read of an
+/// absent owner; SPR-014 adds the rule that drops it and applies the coupling's neutral value),
+/// every owned column written, the event kinds it emits, the commands it submits to a
 /// registered owner (ruling 5: a P1a world enables no command whose owner it does not register), and
 /// the commands the other registered specs submit to it.
 fn as_specified(t: &Ownership, system: &'static str, world: &[&'static str]) -> Declared {
@@ -715,7 +716,6 @@ fn as_specified(t: &Ownership, system: &'static str, world: &[&'static str]) -> 
             reads: spec
                 .reads
                 .iter()
-                .filter(|r| world.contains(&r.owner.as_str()))
                 .map(|r| ColumnRead {
                     column: leak(&r.column),
                     owner: leak(&r.owner),
@@ -774,15 +774,14 @@ fn m2_m7_and_t1_register_together_as_specified() {
         r.order(Phase::Agenda),
         ["T1.minds", "M7.dynasty", "T1.minds"]
     );
-    // Reads of owners the world does not register (S6, S7, M6) are not declared (MAJ-2), so
-    // nothing is reported as read from an unregistered system.
-    assert!(
-        !r.reports()
-            .iter()
-            .any(|n| n.contains("which is not registered")),
-        "{:?}",
-        r.reports()
-    );
+    // Reads of owners the world does not register (S6, S7, M6) are declared and reported, not
+    // refused (NEW-4).
+    for note in [
+        "T1.minds: reads vow.conflict from S7.vows, which is not registered",
+        "M7.dynasty: reads polity.exec_constraint from M6.polity, which is not registered",
+    ] {
+        assert!(r.reports().iter().any(|n| n == note), "{:?}", r.reports());
+    }
     // Positive control: T1 reading title.holder at same_instant (M7 writes it at Polity, after
     // T1's Vital binding) is a phase-order violation.
     let mut planted = as_specified(&t, "T1.minds", &world);
