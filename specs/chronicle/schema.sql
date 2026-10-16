@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS event (                -- plane A
     magnitude     INTEGER   DEFAULT 0,
     tellability   UTINYINT  NOT NULL,          -- Registry prior (0..255), NOT the retroactive significance (plane C)
     secrecy       UTINYINT  NOT NULL,          -- 0 public, 1 witnessed, 2 faction, 3 secret
-    origin        UTINYINT  NOT NULL,          -- 0 sim, 1 player, 2 llm_choice (pull input), 3 oracle, 4 director (opt-in storyteller modes only)
+    origin        UTINYINT  NOT NULL,          -- 0 sim, 1 player, 2 reserved (was llm_choice; retired by ADR-0034), 3 oracle, 4 director (opt-in storyteller modes only)
     rule_id       USMALLINT,
     rule_version  USMALLINT,
     PRIMARY KEY (timeline_id, event_id)
@@ -192,11 +192,11 @@ CREATE TABLE IF NOT EXISTS input_journal (
     timeline_id   UINTEGER NOT NULL,
     tick          BIGINT   NOT NULL,
     seq           UINTEGER NOT NULL,
-    input_class   UTINYINT NOT NULL,           -- 0 push, 1 pull (deliberation answer keyed by pull_key)
+    input_class   UTINYINT NOT NULL,           -- 0 push (the only class; pull inputs retired by ADR-0034)
     kind          VARCHAR  NOT NULL,
     scope_kind    UTINYINT NOT NULL,           -- 0 none, 1 person, 2 household, 3 settlement, 4 region
     scope_id      UBIGINT,
-    pull_key      BLOB,                        -- H(actor, decision_type, t_asked, menu_hash) for pull inputs
+    pull_key      BLOB,                        -- reserved, always NULL (ADR-0034)
     producer      VARCHAR  NOT NULL,           -- player | llm:<job_id> | system
     model_id      VARCHAR,                     -- LLM-produced inputs only
     weights_hash  BLOB,                        -- local models

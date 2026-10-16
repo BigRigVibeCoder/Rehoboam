@@ -1,6 +1,7 @@
 # ADR-0011 — LLM gateway; llama.cpp local; vLLM/SGLang cluster; frontier batch
 
-**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
+**Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15) \
+**Amended by ADR-0034 (2026-10-16, D27):** deliberation consults and pull inputs retired.
 
 ## Context
 
@@ -31,7 +32,7 @@ The draft named 2024-era models and runtimes. Since then:
 
 ## Consequences
 
-- Deliberation consults are pull inputs due at t + D sim-time. If an answer is missing at t + D, the simulation stalls until it arrives or a timeout applies a journaled fallback. MAX-speed runs and Foresight rollouts use the declared fallback policy.
+- LLMs translate in and describe out; they never decide, and the engine never waits on a model (ADR-0034). Deliberation consults are retired.
 - Every state-affecting output is journaled.
 - Local and cloud paths exist for every job.
 
@@ -49,16 +50,11 @@ R05 (all); R08 §2, §10; R04 §4.
 *Triggered by the red-team review (RT-M2). Sources of truth: 05.3 §8, 05.6 §2, §8, 05.9 IF-2, ADR-0012 v1.1.*
 
 **Corrected inline:**
-- "pivotal consults are batched ahead of time" was incoherent: you cannot batch questions the simulation has not yet reached. **Deliberation consults** replace pre-batched pivotal consults.
+- "pivotal consults are batched ahead of time" was incoherent: you cannot batch questions the simulation has not yet reached. **Deliberation consults** replace pre-batched pivotal consults. (Deliberation consults were themselves retired by ADR-0034.)
 
 **Changes:**
-1. **Deliberation consults** (`consult.deliberation` job).
-   - When a consult-enabled decision is due at t, the simulation emits a **pull request** keyed `(actor, decision_type, t, menu_hash)` and continues.
-   - The answer, `{action_id ∈ menu, rationale ≤ 40 words}`, is validated and applied as a **pull input at t + D**. D is a fixed sim-time delay per decision type, e.g. 3 days.
-   - If no answer has arrived by t + D, the simulation **stalls** (`timeline.stalled`). A configurable timeout applies the deterministic fallback (utility argmax), and **the fallback is journaled**.
-   - Replay **hard-fails** on a missing, extra or mismatched pull input.
-2. **Off by default, and capped** per simulated year (default ≤ 20 per world). Consults route to the **cluster batch tier**. At the default cap a world-millennium needs about 20,000 calls: about 40M tokens, roughly an hour of one 8-GPU node, or about $40–$120 on a frontier batch API.
-3. **MAX-speed runs and Foresight rollouts** use the declared **fallback policy** and are labelled as such.
+1–3. *Retired by ADR-0034 (D27):* deliberation consults (the `consult.deliberation` job, its pull input at t + D, the stall and timeout fallback), their per-year cap and cost, and the fallback policy for MAX-speed runs and Foresight rollouts. No LLM chooses an action, and nothing waits on a model.
+
 4. **World compiler jobs.** `compile.intent` also emits the **mapping table**. `compile.repair` fixes schema and semantic errors only. Parameter calibration is deterministic and never an LLM job (ADR-0010 v1.1).
 5. **Journal provenance.** LLM-produced inputs carry job ID, model ID, weights hash or provider version, and prompt hash. Their outputs are replayed from the journal, never regenerated.
 6. **INTENT-100** includes an adversarial subset of 30 prompts. Gates: gap recall ≥ 0.9; silent approximation ≤ 5%.

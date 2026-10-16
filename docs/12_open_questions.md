@@ -4,6 +4,7 @@
 
 *Status: Draft v1.1 (2026-10-15). Each item lists my recommendation and the default I will assume if you don't answer. Items marked ★ block P0/P1. Question numbers are stable, so other documents can cite them.*
 *v1.1 changes: ★1 now lists exactly the ★ ADRs in `06_adr/README.md`; new questions on the review-hours budget (★16), licence mode (17) and the pre-registered G2 protocol (18); rating time re-estimated at 3–4 h per seed (Q6); consult, scale-ladder and review questions updated; questions the v1.1 architecture answers are listed as resolved.*
+*v1.2 (2026-10-16): Q7 resolved by D27 (ADR-0034).*
 
 ---
 
@@ -15,7 +16,7 @@
 | ★4 | **Compute you actually have?** *Answered in part (D6, 2026-10-16):* **an 8-core desktop, local first; migrate to the cloud after local testing is complete.** Still open: RAM, GPU and a monthly cloud budget. | Phase 1 needs no GPU (no GUI, no LLM). RAM, GPU and budget are needed before P3 (local LLMs, 1M runs). Until then assume 32–64 GB RAM. | Sizes CI runners, Foresight N defaults and model tiers. |
 | 5 | **Calendar:** a 360-day simplified year or a realistic 365-day year? | 360-day by default, configurable per world. | Simpler arithmetic and cleaner sifter windows. |
 | 6 | **Rating time at gates.** G2 and G3b each need about **3–4 h per seed × 10 seeds = 30–40 h**, plus blind chronicle pairs and re-presented items (V-HUM-09 in `09`). G1b and G4–G7 need about 3–15 h each (`11` §Review-hours budget). Can you schedule it? | Yes: a 3–5-week rating window after P2 and after P3b, at about 8–10 h/week, during which nothing that needs your review merges. | MOE-1 cannot be measured any other way, and your ratings train the preference model. The window sits on the critical path: its length moves the thesis-test date (8–11 months). |
-| 7 | **Deliberation consults for named actors:** on or off by default? | Off until the A/B in WP P3.12 shows they raise MOE-1. When enabled, a consult is a **pull input** due at t + D sim-time (`05.3` §8). MAX-speed runs never stall on a consult: an unanswered one resolves through its journaled fallback (`05.1` §4.3; ADR-0030, nothing slows the engine). | Trade-off between cost, run speed and possibly richer decisions. |
+| 7 | **Deliberation consults for named actors:** on or off by default? *Resolved by D27 (2026-10-16): retired (ADR-0034).* | No LLM chooses a named actor's action. Every decision comes from the simulation, and the engine never waits on a model. Consults may return only as a research experiment after G3b, outside the roadmap, through a new ADR. | A deciding LLM contradicted "the simulation decides" and "nothing slows the engine" (ADR-0030). |
 | 8 | **Frontier APIs may receive world data** (chronicles, character states) for synthesis? | Yes for synthesis jobs, with a local or cluster fallback always available. No player-identifying data is ever sent. | Privacy and data-handling posture. |
 | 9 | **Content boundaries** for narration of atrocities (purges, pogroms, witch-hunts) | "Historian" register: depict consequences, avoid gratuitous detail. Adjustable per world. | Shapes narration prompts, style cards and refusal handling. |
 | 10 | **Oracle mortality.** Permadeath, or rebirth into a new "vessel" with lost Foresight? | Rebirth with heavy loss (years of absence, Foresight reset) to keep stakes. Permadeath as a hard mode. | Game-loop design for P3b/P7. |
@@ -43,7 +44,7 @@ These questions were open in v1.0, or were raised by the red-team review. The v1
 | How is "the same person" identified across branches and immigrants (birth serials)? | Genealogical content-addressed IDs, `H64(mother_id, parity)`, with rules for founders and immigrants. A life-course log keeps everyone ever born. | ADR-0026; `05.2` §1 |
 | Does pinning or viewing promote a person to a named actor (T1)? | No. Pins are plane B. T1 promotion happens only by simulation criteria or a journaled input. | ADR-0024; `05.3` §1.1 |
 | Can observation or re-sifting change history? | No. Three planes with separate hashes; plane A never reads B or C. | ADR-0024 |
-| How are LLM consults batched before MAX-speed runs? | They are not batched. Deliberation consults are pull inputs due at t + D, with a journaled fallback. | `05.3` §8; `05.6` §8 |
+| How are LLM consults batched before MAX-speed runs? | There is nothing to batch. Deliberation consults are retired, so no run waits on a model at any speed. | ADR-0034; `05.6` §0 |
 | Is one 200-year burn-in enough to accept a world? | No. A liveness gate (200 y × 8 seeds) blocks play, and certification (1,000 y × 32 seeds) runs in the background. | `05.5` §4.2 |
 | Does SimTime overflow, or forbid births before year 0? | No. SimTime is i64 minutes with a signed epoch. | ADR-0026; `05.1` §4.1 |
 

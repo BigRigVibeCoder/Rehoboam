@@ -3,6 +3,7 @@
 *Status: Draft v1.1 (2026-10-15). Owner: project lead. Edited by: systems design.*
 *Inputs: the four attached draft documents (Product Vision, Definitive System Design v2.0, Open-Source Bootstrap, rehoboam_2), your answers to the intake questions, and research dossiers R01–R11.*
 *v1.1 changes: MOE-1 gains a precision target and a pause budget; MOE-2 uses a coupling-ablated baseline; MOE-4 is redefined as "frozen past, migrated future"; MOE-6 is reported with Clopper–Pearson bounds; fidelity-level principle relaxed to match `05.1` §3; glossary aligned with the v1.1 architecture (planes, scheduled outcomes, material inputs, genealogical IDs, console modes).*
+*v1.2 (2026-10-16): V2, principle 1 and the glossary state the LLM roles of ADR-0034 (D27): LLMs translate in and describe out, never decide; deliberation consults and pull inputs retired.*
 
 ---
 
@@ -19,7 +20,7 @@ These are the elements of your drafts I treat as the **core of the vision**. The
 | # | Core element | Where it came from |
 |---|---|---|
 | V1 | Drama is born from **unforgiving, deterministic systems**: resources, logistics, contagion, death, succession. | Vision §1.1, Design §1.3 |
-| V2 | LLMs are used **only where they excel**: interpretation (compiler), facade (dialogue), synthesis (narration). They never decide physics or bookkeeping. | Vision §4, Design §1.3 |
+| V2 | LLMs are used **only where they excel**, in three roles: the **workforce** that builds the engine (coding, research and review agents; build time); **translation in** (whispers, speech and world prompts become typed, journaled inputs); and **description out** (dialogue facade, narration). **They never decide**: no action, outcome or parameter of the simulation (ADR-0034). | Vision §4, Design §1.3; D27 |
 | V3 | **Asymmetric minds.** Fragmented, paranoid, grieving humans collide with a zero-friction collective intelligence, the Hive. | Vision §1.1 |
 | V4 | **Scale invariance.** One world can be seen from orbit across 1,000 years or from a cobblestone corner in real time. **And one engine runs worlds from a single person to one million** (ADR-0028): a household enduring the trials of Job, or a realm across a millennium. | Vision §1, Design §1.2; director, 2026-10-15 |
 | V5 | **Infinite worlds from prompts.** One engine, configured by a declarative world manifest. | Vision §3 |
@@ -86,7 +87,7 @@ These drivers rank and break ties for every decision in the architecture and the
 
 ## 5. Principles (non-negotiable unless you overturn them)
 
-1. **The simulation decides; language models describe.** An LLM output can only enter the world as a *typed, validated, journaled input*: a manifest, an argument frame, a choice from a legal-action menu (a pull input), or a speech act. It can never be a free-form mutation.
+1. **The simulation decides; language models describe.** An LLM output can only enter the world as a *typed, validated, journaled input* that translates a person's own act: a manifest, an argument frame or a speech act. It can never be a free-form mutation, and it never chooses an action for anyone in the world (ADR-0034).
 2. **Every claim has provenance.** Any sentence of narration, any line of NPC dialogue and any chart can be traced back to event IDs.
 3. **Determinism is a contract, tested continuously.** History is a pure function of `(engine build, registry version, world manifest, seed, input journal)`.
 4. **Pressure is diegetic and declared.** There is no hidden "director" spawning events in the simulation. Pacing lives in presentation: auto-pause, camera choice and arc selection (R02 §R4). Any opt-in storyteller is labelled and logged as a cause.
@@ -154,9 +155,9 @@ These are distinct from the canon tiers CT0–CT3 (§8.4).
 - **Pinning.** Keeping what you have been shown of a person stable, through the facts ledger (plane B). Pins come from engagement and are sticky. They never change plane A: no T1 promotion, no events, no retained rows, no change to scheduling.
 
 ### 8.3 Inputs, determinism and history
-- **Input journal.** The canonical record of every nondeterministic input (manifest, settings, player actions, speech acts, Oracle verbs, LLM choices), with its tick and scope. Together with the build, Registry version, manifest and seed it defines a history. Replay reads it and never regenerates it.
+- **Input journal.** The canonical record of every nondeterministic input (manifest, settings, player actions, speech acts, Oracle verbs, translated LLM inputs), with its tick and scope. Together with the build, Registry version, manifest and seed it defines a history. Replay reads it and never regenerates it.
 - **Material input.** A journaled input that changes plane A: a player action, a player speech act or an Oracle verb. It declares a **dependency scope** (person, household, settlement or region). Pending timers in that scope are cancelled and re-sampled.
-- **Push / pull input.** A push input starts outside the simulation (you, the Oracle, settings) and applies at its tick. A **pull input** answers a request the simulation emitted, such as a deliberation consult. It applies at t + D, and replay hard-fails if it is missing, extra or different.
+- **Push input.** A journaled input that starts outside the simulation (you, the Oracle, settings, or an LLM translation of your own act) and applies at its tick. It is the only input class; replay hard-fails if one is missing, extra or different. Pull inputs are retired (ADR-0034).
 - **Scheduled outcome.** A state-changing outcome (death, birth, illness onset, migration, marriage) whose time is sampled in advance for everyone, watched or not, and held as a plane-A timer that fires at its own tick (ADR-0025). Nothing is ever back-dated.
 - **Timeline / branch.** One history. A fork creates a new timeline from a tick of a parent. **Acting in the past forks:** a material input before the timeline head always creates a fork. Dropping in to watch or inspect is read-only.
 - **Golden run.** A reference world replayed in CI with its plane-A hash compared, sim-year by sim-year, against a recorded baseline. An unexplained mismatch blocks the merge.
@@ -188,7 +189,7 @@ These are distinct from the canon tiers CT0–CT3 (§8.4).
 ### 8.6 Minds and the Oracle
 - **Thought.** A timed modifier on a mind: vector deltas, half-life, stacking rules and source. Whispers and omens land as Thoughts.
 - **ArgumentFrame.** The typed parse of a whisper: appeals, target vectors, requested action, claims, references and a meta-instruction flag. It is grounded and scored deterministically. The whisper's text never reaches a mind.
-- **Deliberation consult.** An optional LLM choice from a legal-action menu for a named actor's decision, applied as a pull input after a fixed delay D. Off by default. Foresight rollouts use the deterministic fallback.
+- **Deliberation consult.** Retired by ADR-0034 (D27). It was an optional LLM choice from a legal-action menu for a named actor's decision. Named actors now decide only through the simulation.
 - **Oracle.** Your in-world persona: a plane-A entity with its own belief store, fed by the same channels as everyone else. Its verbs are material inputs.
 - **Cultivator mode / Oracle mode.** The console's two modes. **Cultivator** shows the true state, secrets included, with Oracle verbs disabled by default. **Oracle** filters every view, including Foresight, through what the Oracle knows. Switching is journaled.
 - **Foresight (mechanic).** Monte-Carlo rollouts of forked timelines that estimate the probabilities of future outcomes. It is the Oracle's power and the engine's namesake. In Oracle mode, rollouts start from a belief-resampled state, so they never leak hidden truth.

@@ -99,7 +99,6 @@
 
 ## 6. Input data (time-varying external drivers; parameters are NOT input data, see §7.0)
 - **Push inputs** touching this system (Oracle verbs, player actions, catalyst verbs): dependency scope, phase 1 handling.
-- **Pull inputs** (deliberation answers, `05.3` §8): key and fallback.
 - **Exogenous schedules / boundary flows:** forced technology schedule (V-ERA-06), off-map flows (materialisation adapter).
 - If none: "This system uses no input data to represent time-varying processes."
 

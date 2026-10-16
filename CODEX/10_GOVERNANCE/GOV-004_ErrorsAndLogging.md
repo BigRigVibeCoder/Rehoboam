@@ -6,10 +6,10 @@ status: APPROVED
 owner: human
 agents: [coder, tester, architect]
 tags: [governance, coding, observability]
-related: [GOV-003, GOV-006, ADR-0006, ADR-0030]
+related: [GOV-003, GOV-006, ADR-0006, ADR-0030, ADR-0034]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** No error happens in the dark, as in the director's template. But inside the engine, errors and logs must never change what the simulation does or read the wall clock. The engine's own flight recorder is the World Stream. Diagnostic logs are separate, structured, and outside the tick's hot loop. Services (Python, TypeScript) follow the template's rules directly.
@@ -31,7 +31,7 @@ version: 1.0.0
 | **Determinism leak** | Hash mismatch across thread counts; replay divergence | Stop; run the bisect tool (`docs/13` §4.5); P0 |
 | **Input rejection** | A malformed manifest, journal entry or LLM output that fails its schema | Reject at the boundary with a typed error; journal the rejection; the simulation continues unchanged |
 | **Resource** | Disk full while sealing a segment | Pause the engine at a tick boundary and preserve the live edge; never write a partial segment |
-| **External service** | LLM gateway down | Journaled fallback (`05.3` §8); never block the tick |
+| **External service** | LLM gateway down | Translators fall back to a menu, form or rule-based input; narration falls back to templates; the tick never waits on a model (ADR-0034) |
 
 ## 3. Engine logging (Rust)
 

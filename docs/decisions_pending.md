@@ -4,33 +4,26 @@
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
-## Still waiting on you (2, neither blocks P0)
+## Still waiting on you
 
-### D6 (the rest) — Monthly ceiling for Google Cloud spend
-The VM `adjutant` (RUN-002) runs nightly from SPR-008: about one hour a night, roughly $25 a month in compute, plus its disk, which you already pay for. **Recommendation (confidence: medium, until SPR-009 measures real run times):** a ceiling of **$50 a month through P1a**; the Architect reports spend at each gate. **Default:** $50.
-
-### D27 — What are LLMs for? (asked 2026-10-16; not urgent: nothing before P3b uses one)
-The plan has 19 LLM roles. Only one of them decides anything: the **deliberation consult** (COG-8, ADR-0011 §amendment, `05.3` §8), where an LLM picks a named character's action from a menu. That role contradicts three other commitments: "LLMs describe, never decide" (`01` V2, PRJ-001), "nothing slows the engine" (ADR-0030; a missing consult answer stalls the run), and the G2 thesis that the *systems* make the history. ADR-0028 also turns it on by default for deep minds, against ADR-0011 and D14.
-**Recommendation (confidence: high):**
-- **Keep** LLMs as the workforce (coding, research, review agents), where they also add the most fidelity, by helping build richer mechanics from the research.
-- **Keep, optional and late:** as translators *into* the engine (whisper and speech parsing, the world-compiler front end), always typed, validated and journaled, with a menu or form fallback; and as narrators *out of* it (chronicle polish, dialogue, saga and novel), plane C only, with templates as the fallback.
-- **Cut** the deliberation consult from the roadmap (COG-8, P3.12, the ADR-0028 default), and keep it only as a possible experiment after G3b. The engine then never waits on a model, and every decision comes from the simulation.
-On a yes, one page (`05.6` §0) states the roles, and the conflicts above are fixed in the same change.
+Nothing is waiting on you.
 
 ## Decided on 2026-10-16
 
 | ID | Ruling |
 |---|---|
+| D27 | **Accepted: LLMs translate in and describe out; they never decide.** The deliberation consult is cut ([ADR-0034](06_adr/ADR-0034-llm-roles-translate-describe-never-decide.md); `05.6` §0) |
+| D6 (cloud spend) | **No ceiling: you manage Google Cloud spend yourself.** The VM `adjutant` runs only on demand, when simulating or benchmarking, and is shut down otherwise; there is no nightly schedule. The Architect tells you in advance when a VM session is needed and roughly for how long |
 | SPR-001 | **Approved** (C2): repository bootstrap and CI |
 | Q-INFRA-1 | GitHub **Free**: no required checks on a private repository, so the Architect enforces "no green report, no merge" by hand |
 | Q-INFRA-2 | Coding agents run **in the cloud** |
 | Q-INFRA-3 | The laptop has **153 GB free** (enough; keep ≥ 100 GB) |
-| VM | Your Google Cloud VM `adjutant` (8 cores, 64 GB) is the **benchmark and nightly-run machine** from SPR-008 (RUN-002) |
+| VM | Your Google Cloud VM `adjutant` (8 cores, 64 GB) is the **benchmark machine** from SPR-008 (RUN-002), run on demand only (D6) |
 | D1 | World Stream (ADR-0030): **accepted** |
 | D2 | The 18 critical-path ADRs: **accepted** |
 | D4 | First world: **a minimal test world**, `solo` (one person, tiny map); then add complexity one rung at a time (`11` complexity ladder) |
 | D5 | **Linux** |
-| D6 | **A ThinkPad P51 laptop** (4 cores, 32 GB, Ubuntu 24.04), local first, cloud after local testing. Cloud budget still open (see above). Setup: `CODEX/30_RUNBOOKS/RUN-001` |
+| D6 | **A ThinkPad P51 laptop** (4 cores, 32 GB, Ubuntu 24.04), local first, cloud after local testing. Cloud spend: see D6 (cloud spend) above. Setup: `CODEX/30_RUNBOOKS/RUN-001` |
 | D3 / D26 | **Your Agentic Architect operating model, adapted (ADR-0032): accepted.** Set up in `CODEX/` (SPR-000-ARCH). Your time: about 2–4 hours a week outside rating windows |
 | D7 | **ODD-R accepted, taken further:** system specs as machine-checked data (ADR-0033), with a generated one-page brief for you |
 | D8–D12 | G2 thesis-gate defaults **accepted for now**; revisit before P2 |
@@ -41,7 +34,7 @@ On a yes, one page (`05.6` §0) states the roles, and the conflicts above are fi
 | ID | Decision | Default | Where |
 |---|---|---|---|
 | D13 | Calendar | 360-day year, configurable per world | Q5 |
-| D14 | AI "deliberation" for named characters | Off until an A/B test shows it helps; never stalls the engine | Q7 |
+| D14 | AI "deliberation" for named characters | Retired by D27 (ADR-0034) | Q7 |
 | D15 | May cloud AI services see world data, to write prose? | Yes, never anything identifying you; a local fallback always exists | Q8 |
 | D16 | How atrocities are narrated | "Historian" register: consequences, not gratuitous detail | Q9 |
 | D17 | Oracle death | Rebirth with heavy loss; permadeath as a hard mode | Q10 |

@@ -1,6 +1,7 @@
 # 11 — Roadmap: Phases, Gates and Work Packages
 
 *Status: Draft v1.1 (2026-10-15). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*v1.2 (2026-10-16): D27 (ADR-0034): WP P3.12 (deliberation-consult A/B) withdrawn; journals hold push inputs only; LLM-9 joins P3b.*
 *v1.1 changes: P1 split into P1a and P1b (16–24 weeks in total) and P3 into P3a and P3b; new WP P5.0 (M4.economy at F2) before street-level errands; a review-hours budget sized to one human reviewer; numeric thresholds for every gate, fixed before its phase starts; rating windows for G2 and G3b; WPs aligned with ADR-0024–0026 and the v1.1 architecture; total re-estimated at ≈ 22–28 months.*
 
 ---
@@ -126,7 +127,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P0.2 | `rh-ids` | Typed IDs, keyed hash `H`, counter RNG (ChaCha8 streams + SplitMix64), branch salts and salt lineage (`05.1` §6.9), genealogical `PersonId` derivation with deterministic collision rehash (ADR-0026) |
 | P0.3 | Samplers | Vendored binomial (BTPE + inversion), Poisson (PTRS), normal (ziggurat), Beta/Gamma, each with golden vectors |
 | P0.4 | `rh-core` skeleton | `SimTime` (i64 minutes, signed epoch), calendar, pulses, phase order, the `SystemModel` trait, `AccessSpec` conflict checker, derived scheduler (topological order, declared lags), agenda heap for decisions and timers, lifecycle command queues, event bus with `EventDraft`, invariant framework |
-| P0.5 | Snapshot and hash | Three plane hashes (chunked Merkle xxh3 with dirty tracking), Arrow IPC keyframe write/read, SQLite journal (push and pull inputs), unsynced guard |
+| P0.5 | Snapshot and hash | Three plane hashes (chunked Merkle xxh3 with dirty tracking), Arrow IPC keyframe write/read, SQLite journal (push inputs), unsynced guard |
 | P0.6 | Golden-run CI | A `smoke` world with dummy systems; hash ladder at thread counts 1/2/4/N; divergence bisect tool v0 (`13` §4.5); nightly cross-platform matrix |
 | P0.7 | Benchmark harness | criterion benches and the regression gate (> 10% slowdown fails; no automatic re-baseline, `08` §9); serial-fraction instrumentation; Rerun logging hooks; Textual TUI stub |
 | P0.8 | Registry v0 | TOML loader, JSON Schema generation, manifest v0 loader (from `specs/manifest`), column-ownership declarations and their lint |
@@ -314,11 +315,11 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 
 | WP | Work package | Output |
 |---|---|---|
-| P3.7 | Oracle and its verbs | Oracle entity with its own belief store; Cultivator and Oracle console modes (`05.3` §6.2); movement and travel; Whisper (parse → ground → score → show, through the LLM gateway); Pierce; Omen; Ward |
+| P3.7 | Oracle and its verbs | Oracle entity with its own belief store; Cultivator and Oracle console modes (`05.3` §6.2); movement and travel; Whisper (the gateway parses; the simulation grounds, scores, shows and applies); Pierce; Omen; Ward |
 | P3.8 | Foresight | Prophecy DSL, rollout workers, belief-resampled forks in Oracle mode, Wilson CI, failure-path clustering, common-random-number A/B, validity tests (exchangeability, reduced-cost bias, scoring; `05.3` §7.6) |
-| P3.9 | LLM Gateway v1 | Job API; adapters (local llama.cpp, cluster, frontier); journaling of push and pull inputs; structured generation with Registry enums (LLM-1/2/3); ARG-300 eval; red-team corpus (LLM-6/7) |
+| P3.9 | LLM Gateway v1 | Job API; adapters (local llama.cpp, cluster, frontier); journaling of translated inputs; job roles (translator, narrator, QA; `05.6` §0) and the LLM-9 check; structured generation with Registry enums (LLM-1/2/3); ARG-300 eval; red-team corpus (LLM-6/7) |
 | P3.10 | Scale-up | 1M optimisation pass against the serial-fraction budget; PERF-1 (P3), PERF-2 and PERF-3 at 1M; Foresight batch at 1M (`08` §1, §3) |
-| P3.12 | Deliberation-consult A/B | Opt-in deliberation consults as pull inputs due at t + D, with a journaled fallback (`05.3` §8); A/B against the utility argmax on MOE-1 (COG-8) |
+| P3.12 | **Withdrawn (ADR-0034).** Was: the deliberation-consult A/B | Retired by D27. A possible research experiment after G3b, outside the roadmap, through a new ADR |
 | P3.13 | Persuasion balance | Leverage bands, parameter sweeps, and the adversarial player bot as a CI gate (`05.3` §6.3) |
 | ∥ SPK-2 | Street-from-seed spike | Same town on two machines; > 90% of buildings stable under growth |
 
@@ -336,7 +337,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 - **Persuasion** (V-ORA-07, V-ORA-08):
   - a strong, verified whisper on a receptive target moves ΔP by 5–15 points, and a weak or bluffed one by < 3;
   - the adversarial bot never exceeds the cap envelope.
-- **Pull inputs** (V-DET-15, V-COG-09): replay hard-fails on a missing, extra or mismatched answer; the fallback is journaled.
+- **LLMs never decide** (V-LLM-11; LLM-9): every gateway job kind is a translator, narrator or QA; only translator outputs are journaled; replay with the gateway disabled gives equal hashes.
 - **Scale** (V-PERF-01–V-PERF-03, V-PERF-06; `08` §1, §3):
   - PERF-1 (P3) [P]: 1,000 years at 1M in ≤ 15 min on 8 cores;
   - PERF-2 as set at G1b;
@@ -448,7 +449,7 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
 | DET-12 three planes | P0 (lints, hashes); P2 (fuzz) | P0.1, P0.5; P2.12 |
 | DET-13 no back-dating | P0 (core); P1a (scheduled outcomes) | P0.4; P1.13 |
 | DET-14 acting in the past, input scope | P2 | P2.9 |
-| DET-15 pull inputs | P3 (P3b) | P3.9, P3.12 |
+| DET-15 pull inputs: **withdrawn (ADR-0034)** | — | — |
 | DATA-8 life-course log, genealogical IDs | P1 (P1a) | P0.2, P1.3 |
 | DATA-9 knowledge fronts | P3 (P3a) | P3.3 |
 | SIFT-8 match semantics and budgets | P2 | P2.2–P2.4 |
@@ -456,9 +457,10 @@ The phase in which each cross-cutting requirement in `03` becomes binding, and t
 | DET-10 save versioning | P2 | P2.11 |
 | DATA-7 facts ledger | P2 | P2.10 |
 | COG-1 to COG-7 | P3 (P3a) | P3.2–P3.4 |
-| COG-8 deliberation consults | P3 (P3b) | P3.12 |
+| COG-8 deliberation consults: **withdrawn (ADR-0034)** | — | — |
 | LLM-1, LLM-2, LLM-3 gateway, journaling, structured outputs | P3 (P3b) | P3.9 |
 | LLM-6, LLM-7 parser, red-team corpus | P3 (P3b) | P3.7, P3.9 |
+| LLM-9 LLMs never decide; the engine never waits on a model | P3 (P3b) | P3.9 |
 | LLM-8 offline | P4 | P4.8 |
 | LLM-4, LLM-5 TTFT, belief-scoped dialogue | P6 | P6.3, P6.4 |
 | WC-3, WC-4 compile pipeline, gap reports | P4 | P4.6 |

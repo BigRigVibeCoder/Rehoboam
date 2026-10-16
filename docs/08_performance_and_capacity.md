@@ -2,6 +2,7 @@
 
 *Status: Draft v1.1 (2026-10-15).*
 *v1.1 changes: re-baselined after red-team finding RT-M8. 1M persons now costs ≈ 25–60 ms per normal month and ≈ 60–130 ms per crisis month, with the arithmetic shown; a serial-fraction budget is added; PERF-1 (P3) and PERF-2 are provisional; Foresight at 1M is a batch job; memory, keyframe and storage estimates include the life-course log, bounded T1 belief stores, knowledge fronts and the keyframe LRU; burn-in is split into the liveness gate and certification; speed-ups no longer re-baseline the performance gate automatically.*
+*v1.2 (2026-10-16): the deliberation-consult cost line is removed (ADR-0034, D27).*
 
 **Where the numbers come from**
 - **[M]** Measured in research sandboxes: 4-vCPU Xeon at 2.1 GHz (R01, R03, R10).
@@ -220,7 +221,8 @@ A 1M world is **tens of GB**, central estimate ≈ 60 GB. Keyframes and knowledg
 | Novel (100k words) | ~21M in / 2.2M out | ~$28 batch+cache; ~$67 premium | 6–24 h (batch) |
 | Screenplay (120 pp) | — | ~$15 batch | hours |
 | 10-episode audio-drama script | — | ~$19 batch, plus TTS render 1–3× audio length on a ≥ 12 GB GPU | overnight |
-| Deliberation consults (opt-in, T1) | ≤ 20 per sim-year per world × ≈ 2k tokens ≈ 40M tokens per world-millennium | Cluster open model: ≈ 1 h of one 8-GPU node per world-millennium. Frontier batch: ≈ $40–120 | Pull input due at t + D sim-time. At MAX the run stalls on each consult or runs under the labelled fallback policy (`05.3` §8, `05.6` §8) |
+
+A simulation run makes no model calls of its own: no LLM decides anything, so nothing here sits on the tick's critical path (ADR-0034). Deliberation consults and their cost are retired.
 
 ## 9. Benchmarks to establish in P0/P1 (become CI gates)
 
