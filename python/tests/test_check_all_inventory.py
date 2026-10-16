@@ -68,6 +68,7 @@ REQUIRED_GATES = (
     "V-PLN-01 compile-fail fixture has a clean dependency graph",
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
+    "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
     "Virtual telemetry (S5 prototype)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",

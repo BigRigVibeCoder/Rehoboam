@@ -1,20 +1,26 @@
-"""Unit tests for bin/manifest_parity.py's report parser (SPR-004 T-02, V-WC-04)."""
+"""Unit tests for bin/manifest_parity.py's report parser (SPR-004 T-02, GAP-3; V-WC-04)."""
 
 from manifest_parity import Result, parse
 
 
 def test_registry_checked_report() -> None:
-    """A VALID/INVALID line gives the verdict and both counts."""
-    out = "[ERROR] x: y\nINVALID: m.yaml (8 errors, 3 warnings) — next gate: liveness burn-in\n"
-    assert parse(out, 1) == Result("INVALID", 1, 8, 3)
+    """A VALID/INVALID line gives the verdict and counts; the issue lines are kept in order."""
+    out = "[ERROR] x: y\n[WARNING] z: w\nINVALID: m.yaml (1 errors, 1 warnings) — next gate\n"
+    assert parse(out, 1) == Result("INVALID", 1, 1, 1, ("[ERROR] x: y", "[WARNING] z: w"))
 
 
-def test_schema_report() -> None:
-    """Pydantic's header gives the structural error count, singular or plural."""
-    assert parse("SCHEMA INVALID: m.yaml\n1 validation error for Manifest\n", 2) == Result(
-        "SCHEMA INVALID", 2, 1, 0
+def test_schema_report_pairs() -> None:
+    """Pydantic's report gives (loc, type) pairs; a root error has no location line."""
+    out = (
+        "SCHEMA INVALID: m.yaml\n2 validation errors for Manifest\n"
+        "world.seed\n  Input should be ... [type=less_than_equal, input_value=1]\n"
+        "    For further information visit https://errors.pydantic.dev\n"
+        "  Input should be a valid dictionary [type=model_type]\n"
     )
-    assert parse("SCHEMA INVALID: m.yaml\n17 validation errors for Manifest\n", 2).errors == 17
+    assert parse(out, 2) == Result(
+        "SCHEMA INVALID", 2, 2, 0, ("world.seed | less_than_equal", " | model_type")
+    )
+    assert parse("SCHEMA INVALID: m\n1 validation error for Manifest\n", 2).errors == 1
 
 
 def test_anything_else_is_a_load_error() -> None:

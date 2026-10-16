@@ -1,0 +1,402 @@
+# Fixture Registry for the parity corpus (SPR-004 GAP-3): registry_v0.toml plus the change named below. Never a contract.
+# Changed: apex_predator may fly but not bond.
+# Mechanics Registry v0, a minimal illustrative subset.
+# The Registry is the closed vocabulary that manifests may reference (ADR-0010, docs/05_architecture/05.5).
+# Every parameter declares bounds. Validators reject any value outside them.
+
+registry_version = "0.1.0"
+
+# ----------------------------------------------------------------------------- systems
+[systems."M1.regions"]
+fidelity_levels = ["F0", "F1"]
+params = { route_cost_sea = [1.0, 1.0], route_cost_river = [3.0, 8.0], route_cost_land = [10.0, 60.0] }
+
+[systems."M2.demography"]
+fidelity_levels = ["F0", "F1", "F2"]
+# Mortality is a Brass relational logit (specs/demography/). e0 is a convenience input converted to alpha at beta = 1;
+# observed fits span alpha [-1.36, 0.55], beta [0.64, 1.64] (Brass 1971). e0 below ~24.7 or above ~78 is extrapolation.
+params = { e0 = [20.0, 85.0], brass_alpha = [-2.1, 0.75], brass_beta = [0.6, 1.65], tfr = [1.2, 7.5], eps_f = [0.1, 1.0], eps_m = [0.5, 3.0], elite_fertility_mult = [1.0, 1.6] }
+
+[systems."M3.agriculture"]
+fidelity_levels = ["F0", "F1"]
+# Campbell & O Grada 2011 (R12 §17): detrended gross yield CV, single winter staple 0.145-0.165 (1268-1467), 0.125-0.131
+#   (1750-1850), composite 0.111 -> 0.097 -> 0.050 (industrial). Temperate worlds should stay inside those; the upper bound
+#   0.35 is a design allowance for arid and monsoon zones (no verified source yet). Lower CV comes from technology (seed
+#   selection, specialisation): sigma_eff = harvest_sigma x f_tech, falling toward yield_cv_tech_floor as adoption rises.
+# autocorr: yield autocorrelation was "small and never statistically significant" (p. 867). Deep shortfalls nonetheless
+#   cluster (1315-21, 1349-51), which one AR(1) cannot produce: use rare multi-year anomaly regimes for that (anomaly_regime_*).
+#   A bad year carries into the next through sown area, not through the yield ratio.
+# crop_corr_*: winter-spring 0.15-0.41, spring-spring 0.38-0.56 (Table 1); the two-season portfolio is the main insurance.
+params = { harvest_sigma = [0.04, 0.35], autocorr = [0.0, 0.2], spatial_share = [0.2, 0.9], volcanic_rate = [0.0, 0.03], seed_yield_ratio = [2.5, 12.0], crop_corr_winter_spring = [0.1, 0.45], crop_corr_spring_spring = [0.3, 0.6], anomaly_regime_rate = [0.0, 0.02], anomaly_regime_years = [2, 7], anomaly_regime_corr = [0.3, 0.6], yield_cv_tech_floor = [0.4, 1.0] }
+
+[systems."M4.economy"]
+fidelity_levels = ["F0", "F1"]
+# subsistence_kg_grain: the calorie floor per PERSON-year, as grain eaten as bread (about 2,600 kcal/kg). Allen 2001 implies
+#   193 (bread-only diet), 195 (Sukhatme norms), 204 (3 baskets for 4 persons) and 278 (ICMR norms) kg per person (R12 §18).
+#   Valued at grain prices it is the bare-subsistence line used for the IPF's alpha (09 V-SF-16). It is NOT Allen's
+#   welfare-ratio line (baskets.allen2001), which costs about 2.3x as much in silver. An adult male needs about 272.
+# tax_regressivity: 0 = proportional, 1 = fully regressive incidence (drives inequality with fiscal_capacity; R12 §13).
+# days_worked: realised working days per earner-year. Allen assumes 250; about 300 in 17th-c England and Holland, 275-285 in
+#   France; the medieval calendar had about 45 more holy days, so it is a function of doctrine and institutions (p. 425).
+# rent_share: under 0.10 of spending; 0.04-0.05 for English workers; towns pay 2-2.5x rural rents (pp. 413-414, 422).
+# ae_*: adult-male equivalents for household welfare ratios, derived from the ICMR norms Allen cites (p. 426).
+# skill_premium: craftsman / labourer day wage; Allen's 10th-90th percentiles 1.31-2.06, median 1.57 (Tables 1-2).
+# food_price_elasticity is STRUCTURAL (no storage, no trade): observed 0.18-0.87 (Campbell & O Grada 2011, pp. 875-877; R12 §17).
+#   Davenant's 17th-c schedule (shortfall 10..50% -> price x1.3..x5.5) needs about 0.40. Never lower it for market integration:
+#   integration acts through trade_kappa, imports and carry-over, or it is counted twice.
+# grain_carryover_cost: interest + spoilage per year (design value); cheaper storage raises carry-over (pp. 879-880).
+# poor_relief_share: share of regional income spent on relief; England about 1% (late 17th c.) to 2% (late 18th c.) (fn. 69).
+params = { alpha = [0.4, 0.8], food_price_elasticity = [0.18, 0.9], base_tax = [0.05, 0.4], trade_kappa = [0.01, 0.2], subsistence_kg_grain = [180.0, 320.0], tax_regressivity = [0.0, 1.0], days_worked = [200.0, 300.0], rent_share = [0.04, 0.10], ae_adult_female = [0.70, 0.75], ae_child_4_6 = [0.55, 0.65], ae_child_1_3 = [0.40, 0.50], skill_premium = [1.2, 2.1], grain_carryover_cost = [0.05, 0.35], poor_relief_share = [0.0, 0.03] }
+
+[systems."M5.contagion"]
+fidelity_levels = ["F0", "F1"]
+hazards = ["infection", "detection", "purge_after_positive"]       # readable by pattern completion_hazard (05.4 §2.3)
+params = { r0 = [1.0, 8.0], latent_days = [1.0, 365.0], infectious_days = [2.0, 1.0e9], ifr = [0.0, 0.8], waning_per_year = [0.0, 1.0], fear_kappa = [0.0, 0.8], covert_evasion = [0.0, 0.9], test_sensitivity = [0.5, 0.999], test_specificity = [0.9, 0.9999] }
+
+[systems."M6.polity"]
+fidelity_levels = ["F0", "F1"]
+hazards = ["revolt", "coup", "civil_war"]
+# Ψ follows Turchin (2013): Ψ = MMP × EMP × SFD, each a ratio to a reference value (R12 §Turchin).
+#   psi_threshold applies to the GEOMETRIC MEAN Ψ̄ = Ψ^(1/k) over the k active components, not the raw product.
+#   elite_mobility_u is μ0 in dE/dt = r_e·E + μ0·(w0/w − 1)·N (per year); 0.002 in Turchin's antebellum case.
+#   wage_stickiness_years is τ in W(t+τ) = f(GDP/N, labour demand/supply, institutions).
+params = { tax_rate = [0.05, 0.4], elite_mobility_u = [0.0005, 0.01], elite_growth_excess = [0.0, 0.01], psi_threshold = [1.0, 3.0], instability_mortality = [0.005, 0.05], wage_stickiness_years = [3.0, 10.0] }
+
+[systems."M7.dynasty"]
+fidelity_levels = ["F0", "F1"]
+hazards = ["regicide", "deposition", "successor_purge", "succession_crisis", "extinction"]
+# Ruler-exit hazards are per ruler-year AT THE REFERENCE INSTITUTIONAL STATE (elective succession, no assembly,
+# no recent regicide). Realised rates come from multipliers driven by institutional state (ADR-0027, R12):
+#   murder: Eisner 2011 century rates span 0.0019–0.025/yr (all cases), pooled 0.010/yr.
+#   deposition: Kokkonen & Sundell 2014 elective baseline ≈ 0.015–0.04/yr; Blaydes & Chaney 2013 unconstrained 0.013–0.05/yr.
+#   law multipliers vs elective (Cox HR): primogeniture 0.25–0.37 (CI 0.17–0.63); agnatic seniority ≈ 2 (CI 1.17–5.6).
+#   feud stock: a murdered predecessor multiplies the murder odds by ≈ 2.6–3.0 (Eisner) and deposition by ≈ 1.56–1.8 (K&S).
+params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], filial_piety_mean = [0.0, 1.0] }
+
+[systems."M8.war"]
+fidelity_levels = ["F0", "F1"]
+# helmbold_w: W in dA/dt = −β·B^W·A^(1−W); 1 = square law, 0.5 ≈ linear, 0 = logarithmic. WWII fits cannot tell the laws apart
+# (Bracken 1995; Fricker 1998; Lucas & Turkes 2004; R12 §11), so the domain is [0, 1]; derive W from force composition (state).
+# breakpoint and fort_multiplier are design values with no verified source yet (Helmbold 1969/1987 pending); apply per engagement.
+params = { helmbold_w = [0.0, 1.0], breakpoint = [0.1, 0.35], campaign_months = [3, 12], fort_multiplier = [2.0, 10.0] }
+
+[systems."S5.daily_life"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0031: activity(person, day) is a pure function of start-of-day life-course state, regional conditions and the keyed RNG.
+#   F1 = virtual telemetry only (plane B: shown, not consequential); F2 = authoritative at the world's or a focus region's
+#   activity_resolution ("blocks" or "minutes"), with encounters resolved in a second phase as plane-A events.
+# Schedule templates follow ActivitySim's day pattern -> tour -> trip hierarchy (BSD-3, reference only).
+params = { blocks_per_day = [12, 24], encounter_tie_rate = [0.0, 0.05] }
+
+[systems."S4.ecology"]
+fidelity_levels = ["F1"]
+params = { metabolism_multiplier = [0.1, 10.0] }
+
+[systems."T1.minds"]
+fidelity_levels = ["F1", "F2"]
+# The minds of named actors (T1), crate rh-minds (05.3). Registry id added by ADR-0035; no spec yet (BCK-001 §3).
+#   F1 = minds v0 (P1a): HEXACO traits, ambition, relationships and opinion modifiers, IAUS for a few decision types,
+#        and secrets v0 knowledge rows (P1b). F2 = the full psychological core, HTN, beliefs, channels and memory (P4).
+#   It owns traits, overlays, opinions, the agenda's goals and knowledge rows; S6 and S7 change them only through
+#   lifecycle commands (ApplyInfluence, AgendaGoal, ClearGoal, OpinionModifier, ApplyThought).
+# Stress and mental breaks (ADR-0035; minds v0, P1a; design inspired by Crusader Kings 3, no code): stress is a q8_8
+#   column on a 0-100 scale that rises with vow.conflict (S7), kin-loyalty and value conflicts and decays at
+#   stress_decay points per month. Crossing stress_threshold is a deterministic state transition that schedules the
+#   break outcome as a timer, at a keyed delay of at most break_delay_max_days; the act comes from [mental_breaks] and
+#   stress drops by its relief (points). All values are design values (V-SAGA-16).
+params = { stress_threshold = [50.0, 95.0], stress_decay = [0.0, 10.0], vow_conflict_gain = [0.0, 20.0], break_delay_max_days = [1, 90] }
+
+[systems."S6.artifacts"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0035; spec specs/systems/S6.artifacts.odd.toml (draft). Every value is a design value: there is no historical
+# band for relics. influence_base is the per-month overlay delta at Honesty-Humility 0; the delivered delta is
+#   influence_base x kind_strength x (1 - resist_slope x H/100), so it lies in [0, 2 x influence_base].
+# rumour reach is in route-graph hops (M1). find_chance, theft_success and loss_on_death are per attempt or per death.
+params = { influence_base = [0.0, 0.05], resist_slope = [0.0, 1.0], corruption_threshold = [0.2, 0.9], rumour_max_hops = [1, 20], rumour_decay_years = [5, 200], find_chance = [0.0, 0.2], theft_success = [0.05, 0.6], loss_on_death = [0.0, 0.5] }
+
+[systems."S7.vows"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0035; spec specs/systems/S7.vows.odd.toml (draft). Every value is a design value: there is no historical band
+# for oath-keeping. A vow's agenda weight is min(vow_priority_base x kind_weight, vow_priority_cap) and never enters
+# a survival decision. resolve = resolve_base x (1 + resolve_slope x C/100) for conscientiousness C; a vow breaks when
+# its strain exceeds resolve. broken_vow_opinion is the opinion modifier (on the -100..100 opinion scale) applied by
+# witnesses and kin to an oath-breaker.
+params = { vow_priority_base = [0.05, 0.5], vow_priority_cap = [0.1, 0.8], max_active_vows = [1, 8], strain_rate = [0.0, 0.1], strain_decay = [0.0, 0.1], resolve_base = [0.2, 1.0], resolve_slope = [0.0, 0.9], grudge_on_harm = [0.0, 1.0], broken_vow_opinion = [-60.0, 0.0] }
+
+# ----------------------------------------------------------------------------- archetypes
+[archetypes.human]
+ledger = "persons"
+capabilities = []
+
+[archetypes.apex_predator]
+ledger = "creatures"
+variants = ["dragon", "great_wolf", "sea_serpent"]
+capabilities = ["flying"]
+params = { mass_kg = [50.0, 20000.0] }
+
+[archetypes.supernatural_agent]   # an in-world intervening agent with a permission scope (ADR-0028 §3); plane A, own beliefs
+ledger = "agents"
+capabilities = ["intervene"]
+
+[archetypes.hive_node]
+ledger = "persons"            # overlay on human persons: capability set by M5 covert compartment
+capabilities = ["covert_capable"]
+
+# ----------------------------------------------------------------------------- polity
+[governments]
+ids = ["feudal_monarchy", "oligarchic_council", "theocracy", "municipal_democracy", "tribal_confederation"]
+
+[succession_laws]
+ids = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", "tanistry", "sortition"]
+
+[institutions]
+ids = ["testing_mandate", "quarantine_law", "standing_army", "guild_charter", "inquisition",
+       "grain_provisioning_authority",   # annona / abbondanza: export bans, buffer stocks, price ceilings, crisis imports (Alfani et al. 2017)
+       "poor_relief"]                    # parish relief (Campbell & O Grada 2011, p. 880)
+
+[goods]          # household holdings and market goods
+ids = ["grain", "sheep", "goats", "cattle", "oxen", "camels", "donkeys", "horses", "animal_products", "oil", "wine", "timber", "fuel", "lighting", "ore", "cloth", "tools", "arms", "luxuries", "silver"]
+
+[baskets.allen2001]
+# Allen (2001) Table 3, p. 421: one adult-male basket per year at the "respectability" poverty line (WR = 1), NOT bare
+# subsistence. kcal and protein per unit from the table's notes; ref_price = Strasbourg 1745-54, grams of silver per unit.
+# Golden values (specs/economy/selftest_basket.py): cost 414.899 g/yr, 1,941 kcal/day, 80 g protein/day.
+# The printed egg price (0.010) is a misprint; 0.1028 is implied by the table's total. Bread and beer are processed grain.
+# Mediterranean climate zones substitute olive oil for butter and wine for beer, and burn 2 MBTU of fuel instead of 5 (p. 422).
+family_baskets = 3.0          # a man, a woman and two children (pp. 425-426)
+rent_markup    = 0.05         # WR denominator = 3 x 1.05 = 3.15 baskets (p. 427)
+days           = 250          # the WR convention; realised days are M4 days_worked
+items = [
+  { id = "bread",    qty = 182.0, unit = "kg",   good = "grain",           kcal = 2450.0, protein_g = 100.0,  ref_price = 0.693 },
+  { id = "pulses",   qty = 52.0,  unit = "l",    good = "grain",           kcal = 1125.0, protein_g = 71.0,   ref_price = 0.477 },
+  { id = "meat",     qty = 26.0,  unit = "kg",   good = "animal_products", kcal = 2500.0, protein_g = 200.0,  ref_price = 2.213 },
+  { id = "butter",   qty = 5.2,   unit = "kg",   good = "animal_products", kcal = 7286.0, protein_g = 7.0,    ref_price = 3.470, mediterranean = "olive_oil" },
+  { id = "cheese",   qty = 5.2,   unit = "kg",   good = "animal_products", kcal = 3750.0, protein_g = 214.0,  ref_price = 2.843 },
+  { id = "eggs",     qty = 52.0,  unit = "each", good = "animal_products", kcal = 79.0,   protein_g = 6.25,   ref_price = 0.1028 },
+  { id = "beer",     qty = 182.0, unit = "l",    good = "grain",           kcal = 426.0,  protein_g = 3.0,    ref_price = 0.470, mediterranean = "wine" },
+  { id = "soap",     qty = 2.6,   unit = "kg",   good = "lighting",        kcal = 0.0,    protein_g = 0.0,    ref_price = 2.880 },
+  { id = "linen",    qty = 5.0,   unit = "m",    good = "cloth",           kcal = 0.0,    protein_g = 0.0,    ref_price = 4.369 },
+  { id = "candles",  qty = 2.6,   unit = "kg",   good = "lighting",        kcal = 0.0,    protein_g = 0.0,    ref_price = 4.980 },
+  { id = "lamp_oil", qty = 2.6,   unit = "l",    good = "lighting",        kcal = 0.0,    protein_g = 0.0,    ref_price = 7.545 },
+  { id = "fuel",     qty = 5.0,   unit = "MBTU", good = "fuel",            kcal = 0.0,    protein_g = 0.0,    ref_price = 4.164, qty_mediterranean = 2.0 },
+]
+substitutes = [
+  { id = "olive_oil", qty = 5.2,   unit = "l", good = "oil",             kcal = 8142.0, protein_g = 0.0, ref_price = 7.545 },
+  { id = "wine",      qty = 68.25, unit = "l", good = "wine",            kcal = 850.0,  protein_g = 0.0, ref_price = 0.965 },
+]
+
+[off_map_kinds]  # actors from beyond the map that can enter it
+ids = ["raiders", "caravan", "nomads", "neighbouring_polity", "empire"]
+
+[inheritance_rules]   # property (not titles): drives land concentration and inequality (Pfister in Nigro 2020; R12 §13)
+ids = ["partible", "impartible", "entail"]
+
+[technologies]
+ids = ["heavy_plough", "crop_rotation", "seed_selection", "second_staple", "printing", "gunpowder", "germ_theory", "blood_assay", "pcr_testing", "rail", "electric_grid"]
+
+# ----------------------------------------------------------------------------- narrative vocabulary
+[act_classes]
+ids = ["harm", "aid", "promise", "betray", "coerce", "conceal", "reveal", "infect_convert", "succeed_to", "depose",
+       "flee", "accuse", "purge", "marry", "birth", "death", "discover", "test", "rebel", "trade", "raid", "bond",
+       "counsel", "lament", "renounce", "restore",
+       "forge", "pass", "destroy", "corrupt", "fulfil", "lapse", "use"]   # saga acts (ADR-0035): artifacts and vows
+
+[roles]
+ids = ["authority", "successor", "kin", "ally", "rival", "subordinate", "member", "host", "guest", "investigator", "suspect", "any"]
+
+[channels]
+ids = ["witness", "testimony", "document", "crowd", "whisper", "hive"]
+
+[overlays]
+ids = ["paranoia", "filial_piety", "despair", "hubris", "corruption", "dragon_sympathy"]
+
+[pattern_packs]
+ids = ["succession", "revenge", "famine", "reversal", "irony", "elite_feud", "dragon_age", "covert_infiltration", "plague_era", "witch_hunt",
+       "trial_of_faith", "grief_and_lament", "temptation", "counsel_dispute", "restoration", "betrayal_by_friends",
+       "solitary_life",   # rung-0 smoke patterns: hard season, hunger, recovery, injury, death
+       "vow_arc", "relic_chain", "betrayal", "succession_war", "corrupted_bearer"]   # saga packs (ADR-0035, WP P2.4)
+
+[style_cards]
+ids = ["mythic_chronicle", "deep_time", "saga", "historian", "ensemble_space_opera", "noir_city", "wisdom_dialogue"]
+
+[event_roles]          # the cast and instrument of an event (the cinematic envelope, ADR-0035 §7a; 05.2 §4.1a); plane A
+ids = ["actor", "target", "witness", "instrument"]   # instrument: the S6 artifact used, if any
+
+[motive_edges]         # typed motive edges: refinements of motivated_by that point to the inciting event; plane A
+ids = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]
+
+[mental_breaks]        # T1.minds (ADR-0035): volatile acts a stressed named actor may commit; relief is the stress removed
+ASSASSINATION_ATTEMPT = { act_classes = ["harm"], relief = 60.0 }          # relief in stress points (0-100 scale)
+FLIGHT                = { act_classes = ["flee"], relief = 50.0 }          # the actor becomes a fugitive (SAGA-14)
+BURN_HOLDINGS         = { act_classes = ["harm", "destroy"], relief = 50.0 }
+PACT_OF_DESPAIR       = { act_classes = ["bond", "renounce"], relief = 40.0 }
+
+[contaminants]         # physical marks on an artifact or a cell, as bitflags in this order (S6; envelope); plane A
+ids = ["blood", "ash", "poison", "mud", "salt_water", "soot", "wine"]
+
+[place_types]          # plane C presentation table (05.11 §3): mechanics never read it
+great_hall     = { acoustic = "stone_hall_reverb", interior = true }
+chapel         = { acoustic = "stone_long_reverb", interior = true }
+crypt          = { acoustic = "close_stone_echo", interior = true }
+hovel          = { acoustic = "small_room_dry", interior = true }
+village_street = { acoustic = "open_street", interior = false }
+field          = { acoustic = "open_field_wind", interior = false }
+forest         = { acoustic = "forest_damped", interior = false }
+battlefield    = { acoustic = "open_field_wind", interior = false }
+
+[visual_style_cards]   # plane C (05.11 §5). No photorealism, and no living artist's name in any card or prompt.
+ids = ["dark_fantasy_ink"]   # dark-fantasy graphic novel: heavy ink, cross-hatching, high-contrast chiaroscuro,
+                             # muted watercolour wash, bold angular silhouettes, textured paper
+
+# ----------------------------------------------------------------------------- sagas (ADR-0035)
+[artifact_kinds]   # S6.artifacts; kind_strength scales the pull on the bearer (design values)
+relic  = { kind_strength = 0.6, overlay = "corruption" }
+crown  = { kind_strength = 0.4, overlay = "hubris", regalia = true }    # passes with its title
+weapon = { kind_strength = 0.3, overlay = "hubris" }
+ring   = { kind_strength = 0.8, overlay = "corruption" }
+tome   = { kind_strength = 0.5, overlay = "paranoia" }
+heirloom = { kind_strength = 0.0, overlay = "corruption" }              # no pull: a family treasure, still sought
+
+[vow_kinds]        # S7.vows; kind_weight scales the agenda priority (design values); target is the kind of entity aimed at
+AVENGE_KIN    = { kind_weight = 1.0, target = "person" }
+RECOVER_RELIC = { kind_weight = 0.8, target = "artifact" }
+DESTROY_RELIC = { kind_weight = 0.9, target = "artifact" }
+PROTECT       = { kind_weight = 0.6, target = "person" }
+CLAIM_TITLE   = { kind_weight = 0.8, target = "title" }
+PILGRIMAGE    = { kind_weight = 0.4, target = "place" }
+GRUDGE        = { kind_weight = 0.3, target = "person" }               # formed without an oath when a known culprit harms self or kin
+
+[visual_vocabulary.agrarian]   # v0 sketch (05.11 §5): the closed token sets visual DNA draws from, per era; cultures override.
+physiognomy = ["long_face", "broad_face", "hawk_nose", "heavy_brow", "high_cheekbones", "round_face", "narrow_jaw", "square_jaw"]
+colouring   = ["pale", "ruddy", "olive", "brown", "dark", "freckled"]
+hair        = ["black", "dark_brown", "auburn", "red", "fair", "grey", "white"]
+build       = ["slight", "lean", "wiry", "broad", "heavy", "tall", "short"]
+signature   = ["scar_left_cheek", "missing_finger", "braided_beard", "shaven_head", "eye_patch", "house_brooch", "iron_torc", "hooded_cloak"]
+
+# ----------------------------------------------------------------------------- templates
+[templates.feudal_realm]
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "M6.polity", "M7.dynasty", "M8.war"]
+horizon_years = [50, 3000]
+modern = false
+
+[templates.merchant_republic]
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "M6.polity", "M7.dynasty"]
+horizon_years = [50, 3000]
+modern = false
+
+[templates.test_solo]   # rung 0 of the complexity ladder (D4): one person on a tiny map, for testing the engine end to end
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "S5.daily_life"]
+horizon_years = [1, 120]
+modern = false
+
+[templates.pastoral_household]   # micro scale (ADR-0028): one household and its neighbours
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "S1.culture"]
+horizon_years = [1, 200]
+modern = false
+
+[templates.modern_metropolis]
+default_systems = ["M1.regions", "M2.demography", "M4.economy", "M5.contagion", "M6.polity"]
+horizon_years = [1, 50]       # longer horizons require horizon.label = "speculative"
+modern = true
+
+# ----------------------------------------------------------------------------- culture & world vocabularies (no free-string semantics)
+[values]       # Schwartz basic values: keys allowed in Culture.value_bias
+ids = ["self_direction", "stimulation", "hedonism", "achievement", "power", "security", "conformity", "tradition", "benevolence", "universalism"]
+
+[doctrine_tags]
+ids = ["divine_kingship", "fire_rites", "ancestor_veneration", "dragon_kinship", "rule_of_law", "communal_service", "asceticism", "holy_war", "tolerance", "inquisitorial",
+       "monotheism", "divine_justice"]
+
+[heightmap_templates]
+ids = ["caldera_with_passes", "river_delta_city", "archipelago", "continental_plains", "mountain_valleys", "flat", "desert_fringe"]
+
+[climate_zones]
+ids = ["temperate_continental", "temperate_maritime", "mediterranean", "arid", "tropical", "boreal", "urban_temperate"]
+
+# ----------------------------------------------------------------------------- eras (ADR-0027; v0 sketch, not yet read by validators)
+# Era-state variables: plane-A quantities that era-sensitive parameters may depend on. Each has exactly one owner.
+[era_state]
+tech_adoption                    = { owner = "S2.technology", scope = "region", type = "q8_8", per = "technology" }
+energy_per_capita                = { owner = "M4.economy",    scope = "region", type = "q16_16" }
+urban_share                      = { owner = "S3.migration",  scope = "region", type = "q8_8" }
+literacy                         = { owner = "S1.culture",    scope = "region_class", type = "q8_8" }
+fiscal_capacity                  = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+exec_constraint                  = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+franchise                        = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+succession_institutionalisation  = { owner = "M7.dynasty",    scope = "polity", type = "q8_8" }
+medical_level                    = { owner = "S2.technology", scope = "region", type = "q8_8" }
+commons_share                    = { owner = "M4.economy",    scope = "region", type = "q8_8" }
+market_integration               = { owner = "M4.economy",    scope = "region", type = "q8_8" }
+
+# Era labels: predicates over era_state, used by presentation, narrative and validation band selection ONLY.
+# A lint fails the build if any mechanic reads a label.
+[eras]
+ids = ["agrarian", "early_modern", "industrialising", "industrial", "contemporary"]
+frontier = "agrarian"            # last era the engine build supports; reaching beyond it files a gap report
+
+# ----------------------------------------------------------------------------- sifting vocabulary
+# Anchored attributes readable by patterns as `name(args)@eN`. Stored in event_snapshot.value as INTEGER:
+#   q8_8 = fixed-point (value/256); bool = 0/1; enum = index into `values`; int = raw.
+[attributes]
+fear                      = { type = "q8_8", args = ["actor"] }
+trust                     = { type = "q8_8", args = ["actor", "partner"] }
+suspicion                 = { type = "q8_8", args = ["actor", "partner"] }
+succession_rank           = { type = "int",  args = ["actor", "partner"] }
+is_self_or_kin            = { type = "bool", args = ["actor", "partner"] }
+is_parent                 = { type = "bool", args = ["actor", "partner"] }
+notable                   = { type = "bool", args = ["actor"] }
+hive_member               = { type = "bool", args = ["actor"] }
+used_hive_only_knowledge  = { type = "bool", args = ["actor"] }
+knows_event               = { type = "bool", args = ["actor", "event"] }
+in_realm                  = { type = "bool", args = ["event", "actor"] }
+faith                     = { type = "q8_8", args = ["actor"] }         # confidence in the deity's goodness (micro worlds, ADR-0028)
+integrity                 = { type = "q8_8", args = ["actor"] }         # commitment to one's own innocence and conduct
+grief                     = { type = "q8_8", args = ["actor"] }
+test_result               = { type = "enum", args = ["actor"], values = ["negative", "positive", "inconclusive"] }
+bears_artifact            = { type = "bool", args = ["actor"] }          # S6: the actor bears any artifact
+bearer_exposure           = { type = "q8_8", args = ["actor"] }          # S6: cumulative influence from the artifact borne
+artifact_transfer_mode    = { type = "enum", args = ["event"], values = ["inheritance", "theft", "gift", "trade", "loss"] }
+contaminants              = { type = "int",  args = ["event"] }          # envelope: bitflags of [contaminants] on the instrument or cell at the event
+cell_x                    = { type = "int",  args = ["event"] }          # envelope: cell coordinates, where the world tracks cells
+cell_y                    = { type = "int",  args = ["event"] }
+fugitive                  = { type = "bool", args = ["actor"] }          # S3.migration: the actor is fleeing (SAGA-14)
+vow_against               = { type = "bool", args = ["actor", "partner"] }  # S7: actor holds an active vow or grudge against partner
+vow_public                = { type = "bool", args = ["actor"] }          # S7: the vow on this event was sworn publicly
+stress                    = { type = "q8_8", args = ["actor"] }          # T1.minds: stress at the event, 0-100 scale (ADR-0035)
+# The cinematic event envelope (ADR-0035 §7a; 05.2 §4.1a): anchored snapshots, captured only where simulated.
+emotion_pleasure          = { type = "q8_8", args = ["actor"] }          # PAD mood, pleasure axis (signed)
+emotion_arousal           = { type = "q8_8", args = ["actor"] }          # PAD mood, arousal axis (signed)
+emotion_dominance         = { type = "q8_8", args = ["actor"] }          # PAD mood, dominance axis (signed)
+emotion_occ               = { type = "enum", args = ["actor"], values = ["none", "joy", "distress", "hope", "fear", "pride", "shame", "gratitude", "anger", "love", "hate"] }
+emotion_intensity         = { type = "q8_8", args = ["actor"] }          # intensity of emotion_occ
+weather                   = { type = "enum", args = ["event"], values = ["clear", "overcast", "rain", "storm", "snow", "fog", "heat"] }   # once M3 simulates weather
+
+# Concrete verbs (subset). Systems emit these. The world compiler maps setting verbs onto them.
+[verbs]
+FAMINE_DECLARED = { act_classes = ["death"], emitted_by = "M4.economy", aggregate = true }
+ISSUE_DECREE    = { act_classes = ["coerce"], emitted_by = "M6.polity" }
+ARREST          = { act_classes = ["coerce", "harm"], emitted_by = "rh-minds" }
+PURGE           = { act_classes = ["purge", "harm"], emitted_by = "rh-minds" }
+REVENGE         = { act_classes = ["harm"], emitted_by = "rh-minds", references = ["harm"] }
+BLOOD_TEST      = { act_classes = ["test"], emitted_by = "M5.contagion" }
+RAID_LIVESTOCK  = { act_classes = ["raid", "harm"], emitted_by = "S4.ecology" }
+SUCCEED         = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty" }
+INCITE_RAID     = { act_classes = ["harm", "raid"], emitted_by = "agents" }     # an agent moves an off-map actor to raid
+CALL_FIRE       = { act_classes = ["harm"], emitted_by = "agents" }
+RAISE_WIND      = { act_classes = ["harm"], emitted_by = "agents" }
+AFFLICT         = { act_classes = ["harm"], emitted_by = "agents" }
+COUNSEL         = { act_classes = ["counsel"], emitted_by = "rh-minds" }
+LAMENT          = { act_classes = ["lament"], emitted_by = "rh-minds" }
+RENOUNCE_FAITH  = { act_classes = ["renounce"], emitted_by = "rh-minds" }
+RESTORE         = { act_classes = ["restore", "aid"], emitted_by = "rh-minds" }
+ARTIFACT_FORGED    = { act_classes = ["forge"], emitted_by = "S6.artifacts" }
+ARTIFACT_PASSED    = { act_classes = ["pass"], emitted_by = "S6.artifacts" }      # mode: inheritance | theft | gift | trade | loss
+ARTIFACT_USED      = { act_classes = ["use"], emitted_by = "S6.artifacts" }       # the artifact is the instrument of an act
+ARTIFACT_FOUND     = { act_classes = ["discover"], emitted_by = "S6.artifacts" }
+ARTIFACT_DESTROYED = { act_classes = ["destroy"], emitted_by = "S6.artifacts" }
+BEARER_CORRUPTED   = { act_classes = ["corrupt"], emitted_by = "S6.artifacts" }
+VOW_SWORN          = { act_classes = ["promise"], emitted_by = "S7.vows" }
+VOW_FULFILLED      = { act_classes = ["fulfil"], emitted_by = "S7.vows" }
+VOW_BROKEN         = { act_classes = ["betray"], emitted_by = "S7.vows" }
+VOW_VOIDED         = { act_classes = ["lapse"], emitted_by = "S7.vows" }
+MENTAL_BREAK       = { act_classes = ["renounce"], emitted_by = "T1.minds" }   # the break; its act is a separate event from [mental_breaks]

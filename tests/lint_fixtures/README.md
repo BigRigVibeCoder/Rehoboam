@@ -44,6 +44,7 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `uv_drift/` | `uv lock --check --offline` (T-02) | a `pyproject.toml` changed after its `uv.lock` was generated | `needs to be updated` |
 | `forbidden/workspace/` | `bin/lint_forbidden.py` (V-DET-19) | HashMap in a plane-A crate, and also in a tool crate (skipped), comments and strings (ignored), plus one reasoned escape (counted) | `VIOLATION [V-DET-19/hash-collections]` |
 | `parity/registry_drift.toml` | `bin/manifest_parity.py` (V-WC-04, SPR-004) | the Rust side reads a Registry whose M5 `r0` bound is widened, so `invalid_draft_style` loses an error | `PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml` |
+| `parity/registry_drift_message.toml` | `bin/manifest_parity.py` line comparison (SPR-004 GAP-3) | the Rust side reads a Registry whose M5 `r0` bound is `[1.0, 9.0]`: same verdict and counts, different message | `PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml` |
 | `ownership/unowned_write.access.toml` | `rh-cli ownership` (single writer, 05.1 §2; SPR-004 T-03) | `S5.daily_life` declares a write to `person.alive`, owned by `M2.demography` | `VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns` |
 | `schema/drifted_bound.schema.json` | `rh-cli manifest schema --diff` (SPR-004 T-04) | the reference schema with `Horizon.years` maximum changed to 6000 | `SCHEMA DIFFERENCE $defs.Horizon.properties.years.maximum` |
 
