@@ -9,10 +9,12 @@
 
 pub mod hash;
 pub mod ids;
+pub mod person;
 pub mod rng;
 pub mod salt;
 
 pub use hash::{BranchSalt, PurposeId, RngKey, StreamKey, SystemKey, h};
 pub use ids::{EntityKey, EventId, MatchId, PersonId, RegionId, SystemId, TimelineId};
+pub use person::{IdError, PersonIdTable};
 pub use rng::{LightStream, Purpose, PurposeRegistry, RngStream};
 pub use salt::{CANONICAL_SALT, ForkError, ForkPolicy, ForkStep, SaltLineage};

@@ -14,6 +14,7 @@ use rh_ids::rng::{h64_bytes, h64_words, mix, tag};
 use rh_ids::{
     BranchSalt, ForkPolicy, LightStream, PurposeId, RngKey, SaltLineage, SystemId, TimelineId, h,
 };
+use rh_ids::{PersonId, person};
 
 const GOLDEN: &str = "tests/golden/rh_ids_v1.txt";
 
@@ -145,5 +146,32 @@ fn branch_salts_match_the_reference() {
             int::<u64>(&f[2 + 2 * n]),
             "salt line {f:?}"
         );
+    }
+}
+
+/// T-05: person identifiers are stable across runs and match the independent reference.
+#[test]
+fn person_ids_match_the_reference() {
+    let id = |s: &String| PersonId::from_raw(int(s));
+    for f in lines("founder") {
+        assert_eq!(
+            person::founder_base(int(&f[0]), int(&f[1])),
+            id(&f[2]),
+            "{f:?}"
+        );
+    }
+    for f in lines("child") {
+        assert_eq!(
+            person::child_base(id(&f[0]), int(&f[1])),
+            id(&f[2]),
+            "{f:?}"
+        );
+    }
+    for f in lines("immigrant") {
+        let got = person::immigrant_base(int(&f[0]), int(&f[1]), int(&f[2]), int(&f[3]));
+        assert_eq!(got, id(&f[4]), "{f:?}");
+    }
+    for f in lines("rehash") {
+        assert_eq!(person::rehash(id(&f[0]), int(&f[1])), id(&f[2]), "{f:?}");
     }
 }

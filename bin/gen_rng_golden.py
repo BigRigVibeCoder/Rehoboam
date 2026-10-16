@@ -34,6 +34,12 @@ Branch salt (T-04)
     ``branch_salt(t) = h64_words(tag("rehoboam/rh-ids/salt/v1"), [at1, tl1, at2, tl2, ...])``
     over the fork steps ``(at, timeline)`` with ``at <= t``, in order.
 
+PersonId (T-05; ADR-0026)
+    child: ``h64_words(tag("rehoboam/rh-ids/person/child/v1"), [mother, parity])``
+    founder: ``h64_words(tag("rehoboam/rh-ids/person/founder/v1"), [world_seed, k])``
+    immigrant: ``h64_words(tag("rehoboam/rh-ids/person/immigrant/v1"), [seed, origin, t, k])``
+    rehash c of base b: ``h64_words(tag("rehoboam/rh-ids/person/rehash/v1"), [b, c])``
+
 Usage:  python -I bin/gen_rng_golden.py           (rewrite the golden file)
         python -I bin/gen_rng_golden.py --check   (exit 1 if the committed file differs)
         python -I bin/gen_rng_golden.py --check --golden PATH   (check another file; the positive
@@ -335,6 +341,38 @@ def lines_salt() -> list[str]:
     return out
 
 
+TAG_CHILD = tag("rehoboam/rh-ids/person/child/v1")
+TAG_FOUNDER = tag("rehoboam/rh-ids/person/founder/v1")
+TAG_IMMIGRANT = tag("rehoboam/rh-ids/person/immigrant/v1")
+TAG_REHASH = tag("rehoboam/rh-ids/person/rehash/v1")
+
+
+def lines_person() -> list[str]:
+    """Founders, a three-generation family, immigrants and collision rehashes."""
+    out = []
+    founders = [h64_words(TAG_FOUNDER, [seed, k]) for seed in (0, 42) for k in (0, 1, 2)]
+    for seed in (0, 42):
+        out += [f"founder {seed} {k} {h64_words(TAG_FOUNDER, [seed, k])}" for k in (0, 1, 2)]
+    out.append(f"founder {MASK64} {MASK64} {h64_words(TAG_FOUNDER, [MASK64, MASK64])}")
+    mothers = [*founders[:2]]
+    for _generation in range(3):
+        children = []
+        for mother in mothers:
+            for parity in (0, 1, 2):
+                child = h64_words(TAG_CHILD, [mother, parity])
+                out.append(f"child {mother} {parity} {child}")
+                children.append(child)
+        mothers = children[:2]
+    out.append(f"child 0 {MASK32} {h64_words(TAG_CHILD, [0, MASK32])}")
+    immigrants = [(42, 3, 0, 0), (42, 3, 0, 1), (42, 4, 0, 0), (42, 3, -1440, 0), (0, MASK64, 1, 9)]
+    for seed, origin, t, k in immigrants:
+        pid = h64_words(TAG_IMMIGRANT, [seed, origin, t & MASK64, k])
+        out.append(f"immigrant {seed} {origin} {t} {k} {pid}")
+    for base in (founders[0], 0, MASK64):
+        out += [f"rehash {base} {c} {h64_words(TAG_REHASH, [base, c])}" for c in (1, 2, 3, 64)]
+    return out
+
+
 def render() -> str:
     """The whole golden file."""
     header = [
@@ -349,8 +387,12 @@ def render() -> str:
         "#   purpose <name> <purpose_id>",
         "#   light <world_seed> <branch_salt> <system_id> <purpose_id> <entity_id> <t> <k> <u64>",
         "#   salt <n> <at1> <timeline1> .. <atn> <timelinen> <t> <branch_salt(t)>",
+        "#   founder <world_seed> <k> <person_id>",
+        "#   child <mother> <parity> <person_id>",
+        "#   immigrant <world_seed> <origin> <t> <k> <person_id>",
+        "#   rehash <base> <c> <person_id>",
     ]
-    body = [*lines_chacha(), *lines_h(), *lines_splitmix(), *lines_salt()]
+    body = [*lines_chacha(), *lines_h(), *lines_splitmix(), *lines_salt(), *lines_person()]
     return "\n".join([*header, *body]) + "\n"
 
 
