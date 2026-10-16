@@ -407,11 +407,12 @@ fn system_ids_are_name_derived_and_distinct_for_the_registry() {
     assert_eq!(system_id("M2.demography"), system_id("M2.demography"));
 }
 
-/// A system that declares a given access and its spec's RNG purposes, and nothing else: so that
+/// A system that declares a given access with its spec's lags, schedule and RNG purposes: so that
 /// registration judges only the access (Tester DEF-3).
 struct Declared {
     id: &'static str,
     access: AccessSpec,
+    bindings: Vec<PulseBinding>,
     purposes: Vec<&'static str>,
 }
 
@@ -427,7 +428,7 @@ impl SystemModel for Declared {
         self.access.clone()
     }
     fn schedule(&self) -> Vec<PulseBinding> {
-        Vec::new()
+        self.bindings.clone()
     }
     fn rng_purposes(&self) -> Vec<&'static str> {
         self.purposes.clone()
@@ -448,6 +449,55 @@ impl SystemModel for Declared {
     }
     fn declared_aggregates(&self) -> Vec<AggregateSpec> {
         Vec::new()
+    }
+}
+
+impl Declared {
+    /// `system` reading `reads` and writing `writes` (all plane A), with the lags, schedule and RNG
+    /// purposes its spec declares (`start_of_day` for a read the spec does not list).
+    fn from_spec(
+        t: &Ownership,
+        system: &'static str,
+        reads: &[&'static str],
+        writes: &[&'static str],
+    ) -> Self {
+        let spec = t.specs.get(system);
+        let leak = |s: &String| -> &'static str { s.clone().leak() };
+        let lag = |column: &str| {
+            spec.and_then(|s| s.reads.iter().find(|r| r.column == column))
+                .and_then(|r| Lag::from_name(&r.lag))
+                .unwrap_or(Lag::StartOfDay)
+        };
+        Declared {
+            id: system,
+            access: AccessSpec {
+                reads: reads
+                    .iter()
+                    .map(|&column| ColumnRead {
+                        column,
+                        owner: t.owners.get(column).map_or("M9.ghost", |o| leak(&o.system)),
+                        lag: lag(column),
+                    })
+                    .collect(),
+                writes: writes
+                    .iter()
+                    .map(|&column| ColumnWrite {
+                        column,
+                        plane: Plane::A,
+                    })
+                    .collect(),
+            },
+            bindings: spec.map_or_else(Vec::new, |s| {
+                s.schedule
+                    .iter()
+                    .map(|(p, f)| PulseBinding {
+                        pulse: Pulse::from_name(p).expect("a pulse"),
+                        phase: Phase::from_name(f).expect("a phase"),
+                    })
+                    .collect()
+            }),
+            purposes: spec.map_or_else(Vec::new, |s| s.rng.iter().map(leak).collect()),
+        }
     }
 }
 
@@ -490,34 +540,7 @@ fn the_lint_and_registration_agree_on_one_fixture_set() {
             reads: reads.iter().map(ToString::to_string).collect(),
             writes: writes.iter().map(ToString::to_string).collect(),
         });
-        let declared = Declared {
-            id: system,
-            access: AccessSpec {
-                reads: reads
-                    .iter()
-                    .map(|&column| ColumnRead {
-                        column,
-                        owner: t
-                            .owners
-                            .get(column)
-                            .map_or("M9.ghost", |o| &*o.system.clone().leak()),
-                        lag: Lag::StartOfDay,
-                    })
-                    .collect(),
-                writes: writes
-                    .iter()
-                    .map(|&column| ColumnWrite {
-                        column,
-                        plane: Plane::A,
-                    })
-                    .collect(),
-            },
-            purposes: t
-                .specs
-                .get(system)
-                .map(|s| s.rng.iter().map(|p| &*p.clone().leak()).collect())
-                .unwrap_or_default(),
-        };
+        let declared = Declared::from_spec(&t, system, reads, writes);
         let registered = register(vec![Box::new(declared)], &t.spec_table());
         let mut lint_rules: Vec<&str> = lint.iter().map(|v| v.rule).collect();
         let mut reg_rules: Vec<&str> = match &registered {
@@ -541,4 +564,38 @@ fn the_lint_and_registration_agree_on_one_fixture_set() {
         }
     }
     assert_eq!(verdicts, (2, 6), "the fixture set has both verdicts");
+}
+
+/// G-a on the real specs: a binding or a read lag that differs from the spec fails registration.
+#[test]
+fn bindings_and_lags_must_match_the_spec() {
+    let t = real_ownership();
+    let mut wrong_lag = s5_system(s5::RngPurpose::names());
+    wrong_lag.access.reads[1].lag = Lag::Lagged; // person.sex: the spec says start_of_day
+    let Err(e) = register(vec![Box::new(wrong_lag)], &t.spec_table()) else {
+        panic!("a lag that differs from the spec must fail registration");
+    };
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [spec] S5.daily_life: reads person.sex at lag lagged, but its spec's [[reads]] declares 'start_of_day'"
+        ]
+    );
+    let mut wrong_schedule = m2_system();
+    wrong_schedule.schedule = &[(Pulse::Day, Phase::Vital)];
+    let Err(e) = register(vec![Box::new(wrong_schedule)], &t.spec_table()) else {
+        panic!("a binding that differs from the spec must fail registration");
+    };
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [spec] M2.demography: binds Day/Vital but its spec's [[schedule]] declares Month/Vital"
+        ]
+    );
 }

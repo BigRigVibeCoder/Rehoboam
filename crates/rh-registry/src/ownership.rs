@@ -63,6 +63,17 @@ pub struct DeclaredRead {
     pub column: String,
     /// The system the spec says owns it.
     pub owner: String,
+    /// When the read sees the column (`same_instant`, `start_of_day`, `previous_pulse`,
+    /// `lagged`; `05.1` §2 rule 4). Registration compares it with the code's lag (SPR-005 G-a).
+    #[serde(default)]
+    pub lag: String,
+}
+
+/// One `[[schedule]]` binding (SPR-005 G-a).
+#[derive(Debug, Deserialize)]
+struct DeclaredBinding {
+    pulse: String,
+    phase: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +96,8 @@ struct SpecFile {
     reads: Vec<DeclaredRead>,
     #[serde(default)]
     rng: Vec<DeclaredRng>,
+    #[serde(default)]
+    schedule: Vec<DeclaredBinding>,
 }
 
 /// The ownership-relevant part of one system spec.
@@ -101,6 +114,9 @@ pub struct SystemSpec {
     /// Its keyed RNG purposes (`[[rng]] purpose`), in spec order. Registration in `rh-core`
     /// checks a system's purposes against them (SPR-005 T-06).
     pub rng: Vec<String>,
+    /// Its `[[schedule]]` bindings as `(pulse, phase)` names, in spec order. Registration compares
+    /// them with the code's bindings (SPR-005 G-a).
+    pub schedule: Vec<(String, String)>,
 }
 
 impl SystemSpec {
@@ -117,6 +133,7 @@ impl SystemSpec {
             owns: f.owns,
             reads: f.reads,
             rng: f.rng.into_iter().map(|r| r.purpose).collect(),
+            schedule: f.schedule.into_iter().map(|b| (b.pulse, b.phase)).collect(),
         })
     }
 
@@ -157,6 +174,12 @@ impl SystemSpec {
                 .collect(),
             reads: self.reads.iter().map(|r| r.column.clone()).collect(),
             rng: self.rng.clone(),
+            schedule: self.schedule.clone(),
+            lags: self
+                .reads
+                .iter()
+                .map(|r| (r.column.clone(), r.lag.clone()))
+                .collect(),
         }
     }
 }
@@ -441,9 +464,11 @@ mod tests {
                 .map(|c| DeclaredRead {
                     column: (*c).to_owned(),
                     owner: "M1.regions".to_owned(),
+                    lag: "lagged".to_owned(),
                 })
                 .collect(),
             rng: vec![],
+            schedule: vec![],
         };
         let t = Ownership::build(
             &[

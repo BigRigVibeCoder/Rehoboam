@@ -327,3 +327,30 @@ fn duplicates_are_their_own_errors_never_a_conflict_with_oneself() {
         ]
     );
 }
+
+/// G-a: registration compares the bindings and read lags in code with the spec.
+#[test]
+fn bindings_and_lags_are_checked_against_the_spec() {
+    let w = Stub::new("X1.w")
+        .writes("w.x")
+        .at(Pulse::Month, Phase::Production);
+    let r = Stub::new("X2.r")
+        .writes("r.x")
+        .reads("w.x", "X1.w", Lag::Lagged)
+        .at(Pulse::Day, Phase::Exchange);
+    let spec_r = Stub::new("X2.r")
+        .writes("r.x")
+        .reads("w.x", "X1.w", Lag::PreviousPulse)
+        .at(Pulse::Month, Phase::Exchange);
+    let e = refused(vec![w.clone(), r], &[w, spec_r]);
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [spec] X2.r: binds Day/Exchange but its spec's [[schedule]] declares Month/Exchange",
+            "VIOLATION [spec] X2.r: reads w.x at lag lagged, but its spec's [[reads]] declares 'previous_pulse'",
+        ]
+    );
+}

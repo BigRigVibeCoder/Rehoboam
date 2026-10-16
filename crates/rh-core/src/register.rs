@@ -13,6 +13,7 @@
 //! | `single-writer` | across the registered `AccessSpec`s: one writer per column, reads name the writer (`ownership::single_writer`) | ruling 3; T-04 |
 //! | `plane` | a plane-A system reads no plane-B/C column a registered system writes (`ownership::plane_leak`) | ADR-0024 |
 //! | `rng-purpose` | every purpose a system draws under is in its spec's `[[rng]]`, once | ruling 2; T-06 |
+//! | `spec` | the bindings equal the spec's `[[schedule]]`, and each read's lag equals its `[[reads]].lag` | SPR-005 G-a |
 //! | `phase-order`, `schedule-cycle` | the schedule derives (see [`crate::schedule`]) | T-05 |
 //!
 //! Reported, not refused: a spec purpose the code never declares, and a read whose owner is not
@@ -226,6 +227,9 @@ pub fn register(
     // RNG purposes against the spec's [[rng]] table (ruling 2).
     check_purposes(&entries, specs, &mut violations, &mut reports);
 
+    // Bindings and lags against the spec's [[schedule]] and [[reads]].lag (G-a).
+    check_schedule_and_lags(&entries, specs, &mut violations);
+
     // The schedule (T-05), only when the declarations themselves are sound.
     let inputs: Vec<SchedulerInput<'_>> = entries
         .iter()
@@ -302,6 +306,62 @@ fn check_purposes(
         for s in &spec.rng {
             if !declared.contains(s.as_str()) {
                 reports.push(format!("{}: spec RNG purpose {s} has no use in code", e.id));
+            }
+        }
+    }
+}
+
+/// G-a: a system's bindings equal its spec's `[[schedule]]` (as a set of `(pulse, phase)`), and
+/// every read's lag equals the spec's `[[reads]].lag` for that column: the same principle as the
+/// `AccessSpec` agreeing with the ownership lint. A read the spec does not list is
+/// `undeclared-read`, reported by `check_access`.
+fn check_schedule_and_lags(entries: &[Entry], specs: &SpecTable, violations: &mut Vec<Violation>) {
+    for e in entries {
+        let Some(spec) = specs.specs.get(e.id) else {
+            continue; // `registry` already reported by check_access.
+        };
+        let code: BTreeSet<(&str, &str)> = e
+            .bindings
+            .iter()
+            .map(|b| (b.pulse.name(), b.phase.name()))
+            .collect();
+        let declared: BTreeSet<(&str, &str)> = spec
+            .schedule
+            .iter()
+            .map(|(p, f)| (p.as_str(), f.as_str()))
+            .collect();
+        if code != declared {
+            let show = |set: &BTreeSet<(&str, &str)>| {
+                let v: Vec<String> = set.iter().map(|(p, f)| format!("{p}/{f}")).collect();
+                if v.is_empty() {
+                    "nothing".to_owned()
+                } else {
+                    v.join(", ")
+                }
+            };
+            violations.push(violation(
+                e.id,
+                "spec",
+                format!(
+                    "binds {} but its spec's [[schedule]] declares {}",
+                    show(&code),
+                    show(&declared)
+                ),
+            ));
+        }
+        for r in &e.access.reads {
+            if let Some((_, lag)) = spec.lags.iter().find(|(c, _)| c == r.column)
+                && lag != r.lag.name()
+            {
+                violations.push(violation(
+                    e.id,
+                    "spec",
+                    format!(
+                        "reads {} at lag {}, but its spec's [[reads]] declares '{lag}'",
+                        r.column,
+                        r.lag.name()
+                    ),
+                ));
             }
         }
     }

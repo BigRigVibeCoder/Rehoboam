@@ -109,6 +109,17 @@ impl Stub {
             owns: declaration.writes.clone(),
             reads: self.access.read_columns(),
             rng: self.purposes.iter().map(|p| (*p).to_owned()).collect(),
+            schedule: self
+                .bindings
+                .iter()
+                .map(|b| (b.pulse.name().to_owned(), b.phase.name().to_owned()))
+                .collect(),
+            lags: self
+                .access
+                .reads
+                .iter()
+                .map(|r| (r.column.to_owned(), r.lag.name().to_owned()))
+                .collect(),
         };
         (declaration, entry)
     }
