@@ -15,12 +15,12 @@
 //! | `rng-purpose` | every purpose a system draws under is in its spec's `[[rng]]`, once | ruling 2; T-06 |
 //! | `spec` | the bindings equal the spec's `[[schedule]]`, and each read's lag equals its `[[reads]].lag` | SPR-005 G-a |
 //! | `phase-order`, `schedule-cycle` | the schedule derives (see [`crate::schedule`]) | T-05 |
-//! | `command` | every command a system submits is in its spec's `[[commands]]` with the same owner; each command has one registered owner (`applies`); a submission names that owner; no system applies a command whose senders name another owner | SPR-006 T-03, ruling 5 |
+//! | `command` | every command a system submits is in its spec's `[[commands]]` with the same owner; each command has one registered owner (`applies`); a submission names that owner, which must be registered; no system applies a command whose senders name another owner | SPR-006 T-03, ruling 5, G5 |
 //! | `event-kind` | every event kind a system emits is in its spec's `[[emits]]`; each kind has one registered emitter | SPR-006 T-04 |
 //!
 //! Reported, not refused: a spec purpose the code never declares, a read whose owner is not
-//! registered (its owner has no code yet), a command whose owner is not registered, and a spec
-//! event kind the code never declares.
+//! registered (its owner has no code yet), and a spec event kind the code never declares. A
+//! command whose owner is not registered is refused (SPR-006 G5): nothing would ever apply it.
 //!
 //! The single-writer and plane rules are the functions of [`crate::ownership`], the ones the spec
 //! lint (`rh-cli ownership`, through `rh_registry::ownership`) runs: where they meet, the lint
@@ -245,7 +245,7 @@ pub fn register(
     // Bindings and lags against the spec's [[schedule]] and [[reads]].lag (G-a).
     check_schedule_and_lags(&entries, specs, &mut violations);
     // Lifecycle commands and event kinds (SPR-006 ruling 5).
-    check_commands(&entries, specs, &mut violations, &mut reports);
+    check_commands(&entries, specs, &mut violations);
     check_events(&entries, specs, &mut violations, &mut reports);
 
     // The schedule (T-05), only when the declarations themselves are sound.
@@ -386,12 +386,7 @@ fn check_schedule_and_lags(entries: &[Entry], specs: &SpecTable, violations: &mu
 }
 
 /// SPR-006 T-03, ruling 5: lifecycle commands have one owner, and only it applies them.
-fn check_commands(
-    entries: &[Entry],
-    specs: &SpecTable,
-    violations: &mut Vec<Violation>,
-    reports: &mut Vec<String>,
-) {
+fn check_commands(entries: &[Entry], specs: &SpecTable, violations: &mut Vec<Violation>) {
     // The registered owner of each command: the first system, in id order, that applies it.
     let mut owners: BTreeMap<&str, &str> = BTreeMap::new();
     for e in entries {
@@ -458,9 +453,13 @@ fn check_commands(
                         send.command, send.target
                     ),
                 )),
-                None => reports.push(format!(
-                    "{}: submits command {} to {}, which is not registered",
-                    e.id, send.command, send.target
+                None => violations.push(violation(
+                    e.id,
+                    "command",
+                    format!(
+                        "submits command {} to {}, which is not registered; a world that registers a sender registers the command's owner (ruling 5)",
+                        send.command, send.target
+                    ),
                 )),
             }
         }
