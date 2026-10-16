@@ -1,0 +1,201 @@
+//! System registration: the access conflict checker (SPR-005 T-04).
+//!
+//! [`register`] takes the systems and the ownership table the host built from the specs
+//! (`rh_registry::ownership::Ownership`; `rh-core` has no I/O). It refuses the whole set, with
+//! every violation, if any of these fails:
+//!
+//! | Rule | Check | Source |
+//! |---|---|---|
+//! | `registry` | each system id is registered once and has a spec | ADR-0033 |
+//! | `system-id` | no two ids hash to the same RNG `system_id` | this module |
+//! | `single-writer`, `undeclared-read`, `plane` | each `AccessSpec` against the specs: the ownership lint's own check (`Ownership::check`) | ruling 3 |
+//! | `single-writer` | across the registered `AccessSpec`s: one writer per column, reads name the writer (`ownership::single_writer`) | ruling 3; T-04 |
+//! | `plane` | a plane-A system reads no plane-B/C column a registered system writes (`ownership::plane_leak`) | ADR-0024 |
+//!
+//! Reported, not refused: a read whose owner is not registered (its owner has no code yet).
+//!
+//! The single-writer and plane rules are the functions `rh_registry::ownership` exports, the
+//! ones the spec lint (`rh-cli ownership`) runs: where they meet, the lint reads the specs and this
+//! checker reads the registered code (ruling 3).
+//!
+//! Registration sorts systems by id, so the result does not depend on the order they are passed
+//! in.
+//!
+//! REF: `docs/05_architecture/05.1_simulation_core.md` §2 rules 1, 4 and 6; ADR-0006; ADR-0024;
+//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04, ruling 3.
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+
+use rh_ids::SystemId;
+use rh_registry::ownership::{Ownership, Source, Violation, plane_leak, single_writer};
+
+use crate::access::AccessSpec;
+use crate::system::{PulseBinding, SystemModel};
+
+/// Domain tag of [`system_id`].
+pub const TAG_SYSTEM_ID: u64 = rh_ids::rng::tag("rehoboam/rh-core/system/v1");
+
+/// The RNG `system_id` of a Registry system id: the high 32 bits of
+/// `h64_bytes(tag("rehoboam/rh-core/system/v1"), id)`.
+///
+/// DECISION (SPR-005; reported to the Architect): no contract numbers the systems. A
+/// name-derived id never changes when another system is added, so adding a system never shifts
+/// anyone else's draws; a collision is a registration error (`system-id`). Changing this layout
+/// changes every draw: a C3 change.
+#[must_use]
+pub fn system_id(id: &str) -> SystemId {
+    let h = rh_ids::rng::h64_bytes(TAG_SYSTEM_ID, id.as_bytes());
+    SystemId::from_raw(u32::try_from(h >> 32).unwrap_or(0))
+}
+
+/// One registered system and what registration read from it.
+pub(crate) struct Entry {
+    pub(crate) model: Box<dyn SystemModel>,
+    pub(crate) id: &'static str,
+    pub(crate) system_id: SystemId,
+    pub(crate) access: AccessSpec,
+    pub(crate) bindings: Vec<PulseBinding>,
+    pub(crate) purposes: Vec<&'static str>,
+}
+
+/// A registered, conflict-free set of systems.
+pub struct Registered {
+    pub(crate) entries: Vec<Entry>,
+    reports: Vec<String>,
+}
+
+impl Registered {
+    /// The system ids, in id order (the indices the schedule uses).
+    #[must_use]
+    pub fn ids(&self) -> Vec<&'static str> {
+        self.entries.iter().map(|e| e.id).collect()
+    }
+
+    /// Notes that are not violations (reads of unregistered owners).
+    #[must_use]
+    pub fn reports(&self) -> &[String] {
+        &self.reports
+    }
+
+    /// The access declarations from code, in id order, in the form the ownership lint takes:
+    /// what `rh-cli ownership` counts as "access declarations from code".
+    #[must_use]
+    pub fn lint_accesses(&self) -> Vec<rh_registry::ownership::AccessSpec> {
+        self.entries
+            .iter()
+            .map(|e| e.access.lint_access(e.id))
+            .collect()
+    }
+}
+
+/// A refused registration: every violation found, and the reports.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RegistrationError {
+    /// Every violation, in id order then rule order.
+    pub violations: Vec<Violation>,
+    /// The notes that are not violations.
+    pub reports: Vec<String>,
+}
+
+impl fmt::Display for RegistrationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for v in &self.violations {
+            writeln!(f, "{v}")?;
+        }
+        write!(
+            f,
+            "registration refused: {} violations",
+            self.violations.len()
+        )
+    }
+}
+
+impl std::error::Error for RegistrationError {}
+
+fn violation(system: &str, rule: &'static str, message: String) -> Violation {
+    Violation {
+        rule,
+        system: system.to_owned(),
+        message,
+    }
+}
+
+/// Registers `systems` against the specs' ownership table.
+///
+/// # Errors
+/// [`RegistrationError`] with every violation of the rules in the module table.
+pub fn register(
+    systems: Vec<Box<dyn SystemModel>>,
+    ownership: &Ownership,
+) -> Result<Registered, RegistrationError> {
+    let mut entries: Vec<Entry> = systems
+        .into_iter()
+        .map(|model| {
+            let d = model.descriptor();
+            Entry {
+                id: d.id,
+                system_id: system_id(d.id),
+                access: model.access(),
+                bindings: model.schedule(),
+                purposes: model.rng_purposes(),
+                model,
+            }
+        })
+        .collect();
+    entries.sort_by(|a, b| a.id.cmp(b.id));
+    let mut violations = Vec::new();
+    let mut reports = Vec::new();
+
+    // Identity: one registration per id; distinct RNG system ids.
+    let mut seen_ids: BTreeMap<SystemId, &str> = BTreeMap::new();
+    for (i, e) in entries.iter().enumerate() {
+        if i > 0 && entries[i - 1].id == e.id {
+            violations.push(violation(
+                e.id,
+                "registry",
+                "is registered twice".to_owned(),
+            ));
+            continue;
+        }
+        if let Some(other) = seen_ids.insert(e.system_id, e.id) {
+            violations.push(violation(
+                e.id,
+                "system-id",
+                format!("hashes to the RNG system_id of {other} ({})", e.system_id),
+            ));
+        }
+    }
+
+    // Each declaration against the specs: the lint's own check.
+    for e in &entries {
+        violations.extend(ownership.check(&e.access.lint_access(e.id)));
+    }
+
+    // The declarations against each other: the shared single-writer and plane rules.
+    let declarations: Vec<_> = entries.iter().map(|e| e.access.declaration(e.id)).collect();
+    let (owners, conflicts) = single_writer(&declarations, Source::Code);
+    violations.extend(conflicts);
+    let registered: BTreeSet<&str> = entries.iter().map(|e| e.id).collect();
+    for e in &entries {
+        for r in &e.access.reads {
+            match owners.get(r.column) {
+                Some(o) => violations.extend(plane_leak(e.id, e.access.plane(), r.column, o)),
+                None if !registered.contains(r.owner) => reports.push(format!(
+                    "{}: reads {} from {}, which is not registered",
+                    e.id, r.column, r.owner
+                )),
+                None => {}
+            }
+        }
+    }
+
+    if violations.is_empty() {
+        Ok(Registered { entries, reports })
+    } else {
+        Err(RegistrationError {
+            violations,
+            reports,
+        })
+    }
+}
