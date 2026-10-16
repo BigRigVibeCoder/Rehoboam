@@ -29,9 +29,9 @@ version: 1.0.0
 | `specs/chronicle/schema.sql` | Exists | `concrete_role` codes differ from the Registry's `[event_roles]` (P1.9 reconciles them; ruling 11 uses `target` for the deceased) | — | T-09 |
 | `specs/stream/channel_a_v0.sql` | Exists (PR #37; `selftest_channel_a.py`) | — | — | T-09 |
 | `specs/sifting/patterns.solitary_life.toml` (`life_ends`) | Exists (PR #37) | — | — | T-11 |
-| `specs/stream/channel_c_v0.sql` (`sift_match`) | Missing | PR #37 Q10 | Architect | T-11 |
+| `specs/stream/channel_c_v0.sql` (`sift_match`) | In review: PR #45 (draft; `selftest_channel_c.py`, with a `life_ends` SQL twin) | PR #37 Q10 | Architect | T-11 |
 | `household.yaml`, `hamlet.yaml` | Exist (PR #37) | — | — | T-13 |
-| DATA-5 tellability (PR #37 Q8) and the canonical text form with `segment.canonical_digest` (Q11) | Ruling 11 admits every death at rungs 0–2 as tellable; the digest is XXH3-128 over the canonical lines in `seq` order (head of Tasks) | The general tellability rule and the canonical line grammar | Architect | T-09 |
+| DATA-5 tellability (PR #37 Q8) and the canonical text form with `segment.canonical_digest` (Q11) | In review: PR #45 (draft): `05.2` §4.0 (the admission rule, with the DATA-5 clarification for the director) and `specs/stream/canonical_v0.md` with `canonical_v0.py` and `golden/canonical_v0.txt` | — | Architect | T-09 |
 
 ## Compliance (every task)
 
@@ -97,8 +97,8 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 | # | Blocker | Status |
 |---|---|---|
 | 1 | SPR-012 not merged | Open |
-| 2 | `specs/stream/channel_c_v0.sql` does not exist (PR #37 Q10) | Open (Architect, before the sprint starts) |
-| 3 | The canonical line grammar and the general DATA-5 tellability rule are not written (PR #37 Q8, Q11) | Open (Architect, before the sprint starts) |
+| 2 | `specs/stream/channel_c_v0.sql` does not exist (PR #37 Q10) | In review: PR #45 (draft) |
+| 3 | The canonical line grammar and the general DATA-5 tellability rule are not written (PR #37 Q8, Q11) | In review: PR #45 (draft); the DATA-5 clarification needs the director's ruling |
 
 ## Completion
 
