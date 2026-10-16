@@ -1,7 +1,7 @@
 //! The unsynced guard (SPR-007 T-04; V-DET-10): read-only calls pass; a write injected through a
 //! read-only path trips the guard (the positive control); release builds compile it out.
 //!
-//! The engine-level fuzz of the read-only APIs is `crates/rh-core/tests/unsynced_guard.rs`.
+//! The engine-level fuzz of the read-only APIs is `tests/unsynced_guard.rs`.
 //!
 //! REF: `docs/09` V-DET-10; `05.1` §6 item 7; SPR-007 ruling 5.
 #![allow(clippy::unwrap_used, reason = "tests")]
