@@ -449,6 +449,11 @@ target = "M7.dynasty"
 command = "Resign"
 why = "FLIGHT resigns the actor's offices; M7 owns offices"
 [[commands]]
+target = "M4.economy"
+command = "BurnHoldings"
+payload = "{ actor, household, cause_event }"
+why = "The act of a BURN_HOLDINGS break (HOLDINGS_BURNED): destroy the stocks of the actor's household (actor = the breaking named actor, household = its household, cause_event = the HOLDINGS_BURNED event); M4 owns the stocks (P1b). In a P1a world M4 is not registered, so SPR-014's absent-owner rule drops and reports the send; BURN_HOLDINGS is then unavailable anyway (its needs include holdings)"
+[[commands]]
 target = "S7.vows"
 command = "SwearVow"
 why = "The swear_vow decision (P1b): {vower, kind, target, public}; S7 owns vows"
