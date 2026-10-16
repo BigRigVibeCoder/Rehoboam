@@ -36,7 +36,7 @@ households:
     head: job
     children: {sons: 7, daughters: 3}
     servants: 30
-    holdings: {sheep: 9.3e+18, camels: 3000, oxen: 1000, donkeys: 500}
+    holdings: {sheep: 9.3e+18, camels: 100000000000000000000000000000000000000000, oxen: 1000, donkeys: 500}
 off_map_actors:
   - {id: sabeans, name: "Sabean raiders", kind: raiders, strength: 0.6}
   - {id: chaldeans, name: "Chaldean bands", kind: raiders, strength: 0.7}

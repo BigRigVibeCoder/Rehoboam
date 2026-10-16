@@ -134,7 +134,7 @@ fn initial_schema(_: &mut SchemaGenerator) -> Schema {
 }
 
 fn holdings_schema(_: &mut SchemaGenerator) -> Schema {
-    slug_keyed(&serde_json::json!({ "type": "integer", "minimum": 0 }))
+    slug_keyed(&serde_json::json!({ "type": "integer", "minimum": 0, "maximum": i64::MAX }))
 }
 
 fn nullable_slug(_: &mut SchemaGenerator) -> Schema {
@@ -632,16 +632,16 @@ pub struct CovertOutbreak {
     pub seed_region_hint: String,
     #[schemars(default = "default_hive", extend("const" = "hive"))]
     pub channel: String,
-    #[schemars(default, range(min = 0))]
-    pub start_day: i128,
+    #[schemars(default, range(min = 0, max = i64::MAX))]
+    pub start_day: i64,
 }
 
 /// `ClimateShock` (kind `climate_shock`).
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 #[schemars(deny_unknown_fields, transform = tag_climate_shock)]
 pub struct ClimateShock {
-    #[schemars(range(min = 0))]
-    pub year: i128,
+    #[schemars(range(min = 0, max = i64::MAX))]
+    pub year: i64,
     #[schemars(range(min = 0.5, max = 4.0))]
     pub severity_sigma: f64,
     #[schemars(default = "default_one_i64", range(min = 1, max = 10))]
@@ -764,7 +764,7 @@ pub struct Household {
     #[schemars(default, range(min = 0, max = 100_000))]
     pub servants: i64,
     #[schemars(default, schema_with = "holdings_schema")]
-    pub holdings: OrderedMap<i128>,
+    pub holdings: OrderedMap<i64>,
 }
 
 /// `OffMapActor`.
@@ -823,7 +823,7 @@ pub struct Presentation {
 pub struct Manifest {
     #[schemars(extend("const" = 0))]
     pub manifest_version: i64,
-    #[schemars(pattern(r"^\d+\.\d+\.\d+$"))]
+    #[schemars(pattern(super::coerce::SEMVER_PATTERN))]
     pub registry_version: String,
     pub world: WorldMeta,
     pub geography: Geography,
