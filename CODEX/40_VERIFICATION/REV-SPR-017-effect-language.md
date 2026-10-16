@@ -9,7 +9,7 @@ tags: [verification]
 related: [PRJ-002, REV-P1a, BCK-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.1.0
+version: 0.2.0
 ---
 
 > **BLUF:** Not ready at round 1 (PR #41 head `35aa53a`): **2 blockers, 8 majors, 7 minors.** The reference reproduces all 456 golden cases, its positive control fails as it should, and the 12 succession cases agree with the spec text when checked by hand. The genealogy relations read only the life-course log and reach through the dead. Nothing depends on iteration order. D1 rounding matches `rh-core::fixed` and D9 matches `draw_hits`. The blockers: ticks are written in days where the engine counts minutes, and a 4-degree candidate cut breaks representation. Two choices go to the director at the SPR-017 plan gate: whether collateral heirs must be of the title's blood (M8), and the sex rules (D4). The reviewer expects no objection after one revision round (8/10).
@@ -47,3 +47,18 @@ The reviewer's positions on D1–D13: agree with D1, D3, D6, D7, D9, D10, D11 an
 ## 3. Follow-through
 - **PR #41 round 2:** the rulings above, sent to the drafter on 2026-10-16.
 - **PR #32 round 4d** (head `d8bbddb`): M7 declares `sortition`; T1 declares its `OpinionModifier` self-send; the relation names follow §5.3; M7 no longer restates the candidate set.
+
+## 4. Round 2 (PR #41 head `1245d95`, v0.2.0, 487 cases)
+
+**Verdict:** not ready. **1 blocker, 4 majors, 6 minors.** The reference reproduces all 487 cases. Ten laws were checked by hand and agree with the text. The mutants fail as they should: a row-id-keyed log fails 70 cases, an absent-owner read that returns zero fails 3, and a short-circuiting evaluator fails 2. B1, M1–M3, M5, M7 and the round-1 minors are resolved. B2 is resolved but brought two regressions (N1, N2). M4 is not resolved (N4), and M6 only partly. M8 is implemented but wrong (B3).
+
+| # | Finding | Ruling |
+|---|---|---|
+| B3 | `descends(x, title.founder)` looks only 6 generations up, and the founder never changes. Seven generations below the founder, `primogeniture` passes over the dead holder's sons for his mother and grandmother, and `seniority` and agnatic primogeniture return empty lines | Title blood is "descends from the holder, or from one of the title's last 8 holders". `holders_of(title, n)` is read from a new M7 tenure log (`tenure.title`, `holder`, `start`, `end`; append-only; written by `rh-worldgen` at world creation). `title.founder` goes. Add a golden case seven or more generations deep |
+| N1 | `lineage` includes ancestors at heights 1–2, and the `common(x, holder) != x` guard was dropped, so a father can rank ahead of his grandson | Restore the guard; pin it with a case |
+| N2 | The 1,024 bound, with a hard failure, is reached by ordinary fertility (about 1,300) | Prune dead members with no living descendant before applying the bound; size the bound in D12; add an `E_TRUNCATED` case and a case with known great-grandparents |
+| N3 | `event: int` lets an EventId be computed with, or used as a draw key, before it exists, and the merge rewrites only `Command::cause` | `event` becomes an opaque type, allowed only in event-typed payload fields. The `rh-core` merge rewrites those fields (a plan requirement) |
+| N4 | `MURDER_ATTEMPT` draws `attack_outcome` itself, so the event can record a failure while the program schedules a death | Bind `success` from the attempt event that T1 drew (`break_outcome` or `attack_outcome`); `when success` |
+| m | Purpose names and reads out of step with PR #32 (`succession_tie`, T1's reads, the `OpinionModifier` self-send, S7's `death_cause` read). A five-value `death_cause` enum against PR #37's six. `E_RNG_REUSE` is only syntactic. The sortition key has no title. `E_NO_NEUTRAL` depends on which systems are registered. `calendar.minutes_per_day` is an engine constant | Align with PR #32 at `9d883b5` and PR #37 at `83b9654`. `E_RNG_REUSE` gets both a static lint (the entity kind in k, folded constants, aggregates keyed on the loop variable) and a run-time check per step. Sortition is keyed by title. A machine-readable `neutral` value on `[[reads]]`. `MINUTES_PER_DAY` |
+
+**Follow-through:** PR #41 round 3, and PR #32 round 4g (the tenure log, sortition keyed by title, S7's `death_cause` read). Plan items for SPR-014: the merge rewrites event-typed payload fields, and the machine-readable `neutral` value comes with the absent-owner rule.
