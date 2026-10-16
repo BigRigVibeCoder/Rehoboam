@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [BCK-001, AGT-001, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.9.0
+version: 1.10.0
 ---
 
 > **BLUF:** The Architect's own work stream, run in parallel with development: operating-model upkeep, audit tooling, gate preparation, and documentation debt.
@@ -52,3 +52,4 @@ version: 1.9.0
 | A-32 | Drive the per-tick heap allocation count of the engine to the `docs/08` budget (default 0 for machinery): pooled per-level buffers and a persistent worker pool instead of scoped threads per level. SPR-009 T-05 records today's counts as the baseline (Architect ruling) | Before benches 1 and 2 (P1a) | Open |
 | A-33 | When non-material journaled inputs (`Scope::None`, for example `ManifestSet`) reach the engine, count them as accepted inputs, like material ones, so the journal position (`Engine::journal_position`) stays the length of the journal's `seq`-order prefix the engine holds, and `resume` stops refusing them (SPR-007 GAP-10 ruling; `05.1` §6) | When the first non-material input reaches the engine | Open |
 | A-34 | Before any P1b sprint registers `S6.artifacts` or `S7.vows`: (a) their `same_instant` reads of `title.holder` (written by M7 in `Polity`), S7's of `knowledge.knows` (written by `T1.minds` in `Agenda`), and the S6-versus-S7 reads of `artifact.*` become `lagged`, because rh-core's phase-order rule refuses them at registration; (b) regalia awaiting succession arbitration rest at the seat, and S6's `Agenda` step passes them to the new `title.holder` (V-SAGA-02 still holds). Found by the `T1.minds`/`M7.dynasty` drafting, PR #32 Q1 and Q2 | Before the first P1b sprint with S6 or S7 | Open |
+| A-35 | An engine mechanism for same-instant reactions at instants where the reacting system has no pulse: for example, a command delivered to its owner in the same instant (SPR-014's delivery) that also runs the owner's handler at a non-pulse instant. Until it exists, an outcome that others must react to in the same instant is scheduled at a pulse instant (`05.1` §4.3; P1a deaths at day starts). From REV-P1a BLK-1 | Before minute-level outcomes need same-instant reactions (S5 F2 `minutes`, Later) | Open |
