@@ -360,6 +360,10 @@ test = "V-DET-12"
 id = "INV-M2-04"
 statement = "Alive and death tick agree: death_tick = i64::MAX iff alive = 1; a row with alive = 0 has death_tick = now and exists only between Vital and the Bookkeeping compaction of that instant"
 test = "V-INV-01"
+[[invariants]]
+id = "INV-M2-05"
+statement = "No death without a cause: apply_death never writes death_cause = none. A ScheduleDeath command whose cause is none (an invalid payload; effect language round 3, Q13) is dropped and reported, never applied, as a command for an already-dead victim is (BCK-002 A-30); the report names the sender, the victim and the tick. Applies from P1.13, when M2 drains ScheduleDeath; rung 0 has only natural deaths"
+test = "V-INV-01"
 
 [[couplings]]
 system = "S5.daily_life"
