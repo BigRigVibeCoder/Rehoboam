@@ -115,6 +115,18 @@ Carried forward:
 
 Goldens: SPR-005's `stub_world_hashes.txt` is unchanged. New: `crates/rh-core/tests/golden/life_world_events.txt` (`RH_CORE_WRITE_LIFE_GOLDEN=1`) and `crates/rh-core/tests/golden/crash_stock_seed3.json` (`RH_CORE_WRITE_CRASH_GOLDEN=1`).
 
+### Tester interim on 3e71091: rulings and fixes (2026-10-16)
+
+| Finding | Ruling | Fix |
+|---|---|---|
+| DEF-1 (low): a panicking step leaves no crash artifact | defect | caught at dispatch as a poisoning `SimError::Panic`, with an artifact; tested at 1 and 4 threads |
+| DEF-2 (medium): an artifact after material inputs records journal position 0 and replays as `NoFailure` | defect | the artifact records the inputs applied; replay refuses a non-zero position with `ReplayError::JournalRequired` until SPR-007 |
+| G1: firing order across owners at one `(t, phase)` | accepted as built | written into `05.1` §4.3; pinned by a test |
+| G2: a sibling timer in the same slot cannot be cancelled by another's `fire` | one slot fires together; a cancellation takes effect from the next slot; "dead and acted" settles at the lifecycle queue (BCK-002 A-30) | written into `05.1` §4.3; a test pins it |
+| G3: re-sample draws key on the raw entity id only | defect | keyed on `resample_entity_id(EntityRef)` (kind tag and raw id) |
+| G4: `EventLog::hash` depends on the drain cadence | defect | a running fold in `EventId` order that draining does not reset |
+| G5: a sender whose command owner is unregistered passes registration | defect | refused by rule `command` |
+
 ## Blockers
 
 | # | Blocker | Filed as | Status |

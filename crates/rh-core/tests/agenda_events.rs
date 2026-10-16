@@ -1144,3 +1144,108 @@ fn g4_the_event_hash_does_not_depend_on_the_drain_cadence() {
     assert_eq!(hash_with(Some(month)), never, "drained monthly");
     assert_eq!(hash_with(Some(12 * month)), never, "drained yearly");
 }
+
+/// G1/G2: two timers of one owner and one of another, all due at the same (t, Vital).
+const SLOT: i64 = DAY + 600;
+
+fn schedule_slot(
+    s: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now() == SimTime::EPOCH {
+        let n = if s.id == "Y1.a" { 2 } else { 1 };
+        for k in 0..n {
+            c.schedule(
+                &Np::N,
+                TimerSpec {
+                    time: SimTime::from_minutes(SLOT),
+                    phase: Phase::Vital,
+                    entity: EntityRef::new(rh_ids::EntityKind::Person, 7),
+                    kind: k,
+                    payload: 0,
+                },
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// Emits one event per timer, recording how many of its own timers it still sees pending for the
+/// entity, and tries to cancel each: a sibling due in the same slot is already out of the agenda.
+fn fire_slot(
+    _: &Stub,
+    timer: &TimerEntry,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let visible = c.own_timers(timer.key.entity);
+    for t in &visible {
+        c.cancel(t.id())?;
+    }
+    c.emit(
+        EventDraft::new(
+            if timer.timer.owner == rh_core::register::system_id("Y1.a") {
+                "A_FIRED"
+            } else {
+                "B_FIRED"
+            },
+        )
+        .with_payload(vec![
+            i64::from(timer.timer.kind),
+            i64::try_from(visible.len()).unwrap(),
+        ]),
+    )
+    .map(|_| ())
+}
+
+#[test]
+fn g1_g2_timers_in_one_slot_fire_together_in_canonical_then_key_order() {
+    for threads in [1, 4] {
+        let stubs = vec![
+            Stub::new("Y1.a")
+                .purposes_of::<Np>()
+                .emits("A_FIRED")
+                .at(Pulse::Day, Phase::Vital)
+                .stepping(schedule_slot)
+                .firing(fire_slot),
+            Stub::new("Y2.b")
+                .purposes_of::<Np>()
+                .emits("B_FIRED")
+                .at(Pulse::Day, Phase::Vital)
+                .stepping(schedule_slot)
+                .firing(fire_slot),
+        ];
+        let specs = agreeing_specs(&stubs);
+        let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs).unwrap();
+        let mut e = Engine::new(
+            CALENDAR,
+            1,
+            BranchSalt::from_raw(0),
+            registered,
+            WorldTables::new(),
+            SimTime::EPOCH,
+        );
+        e.set_threads(threads);
+        e.advance_until(SimTime::from_minutes(2 * DAY), |_, _| {})
+            .unwrap();
+        let fired: Vec<(i64, u8, &str, Vec<i64>)> = e
+            .events()
+            .events()
+            .iter()
+            .map(|ev| (ev.tick, ev.phase, ev.kind, ev.payload.clone()))
+            .collect();
+        let vital = Phase::Vital.index();
+        assert_eq!(
+            fired,
+            [
+                // Owner A first (canonical order), its timers in key order; none sees a sibling.
+                (SLOT, vital, "A_FIRED", vec![0, 0]),
+                (SLOT, vital, "A_FIRED", vec![1, 0]),
+                (SLOT, vital, "B_FIRED", vec![0, 0]),
+            ],
+            "{threads} threads"
+        );
+    }
+}
