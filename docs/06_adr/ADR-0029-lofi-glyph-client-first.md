@@ -2,6 +2,8 @@
 
 **Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15 · **Defers:** ADR-0018 (Godot 3D client) to art phase 2 · **Amends:** `05.7`, `11` (P5–P7) · **Amended by:** ADR-0030 (no graphical view before G2: the P1.0 glyph view becomes an ASCII map in `rh-tui`, and the P3 Diorama preview is dropped; P5–P7 are unchanged)
 
+**Amended by ADR-0035 (2026-10-16):** art phase 2 (the 3D client) is cut; Kenney CC0 tile packs join the glyph packs in P5, with a settlement growth view.
+
 ## Context
 
 The director: *"For art think lo-fi for phase 1, something very minimal like Dwarf Fortress. Something that comes in a repository on GitHub, something we can bootstrap."*

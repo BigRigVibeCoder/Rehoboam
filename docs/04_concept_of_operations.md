@@ -1,6 +1,7 @@
 # 04 — Concept of Operations (ConOps)
 
 *Status: Draft v1.1 (2026-10-15). This document describes how you will **use** Rehoboam in each modality: the operational scenarios, the modes, and what the engine does underneath in each. Each scenario is written so that it can become an acceptance test.*
+*v1.2 (2026-10-16), ADR-0035: the scenarios stand as designs, re-sequenced. You take in sagas by listening (local MP3 chapters) and reading (storyboards and prose) in the local saga reader and by scrubbing the causal timeline; the diorama is 2D; scenarios that need the 3D client are cut; street-level and Oracle-on-map scenarios are later and optional (`11`).*
 *v1.1 changes: scenarios OS-2, OS-5, OS-6 and OS-7 now share one Val-Khor timeline; Genesis uses the liveness gate and background certification; Foresight intervals are ± 0.06 with the `05.3` §7.6 validity tests; console modes (Cultivator / Oracle) added; speech acts and Oracle verbs are material inputs with a dependency scope; drop-in is read-only and acting in the past forks; OS-10 files gap reports for unsupported trait forcing.*
 
 ---
@@ -139,7 +140,7 @@ At the end of an epoch (years 400–500) you request a "Saga" in the *Mythic Chr
 6. critique;
 7. an exported EPUB/Markdown with provenance sidecar.
 
-The same plan can be exported as Fountain and as an audio-drama manifest, which renders overnight into an MP3 podcast feed for your phone.
+The same plan can be exported as Fountain and as an audio-drama manifest, which renders overnight into local MP3 chapters you play in the local saga reader (ADR-0035).
 
 **Acceptance:** canon contradictions = 0. Every paragraph links to event IDs. Cost and time are logged.
 

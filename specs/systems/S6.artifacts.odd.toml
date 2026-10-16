@@ -1,0 +1,360 @@
+# ODD-R v2 system spec (ADR-0033): artifacts and relics (ADR-0035). Draft: design values throughout, because there is no
+# historical band for relic circulation. lint_odd.py checks it against the Registry, the other specs and the test catalogue.
+odd_r = 2
+
+[system]
+id = "S6.artifacts"
+name = "Artifacts and relics"
+spec_version = "0.1.0"
+fidelity = "F1"
+status = "draft"
+crate = "rh-sys-artifacts"
+adrs = ["ADR-0035", "ADR-0028", "ADR-0025", "ADR-0024", "ADR-0006"]
+requirements = ["SAGA-1", "SAGA-3", "SAGA-12", "SAGA-15", "WC-5"]
+
+[purpose]
+statement = "Keep every unique artifact in the world: where it came from, what it is, who bears it or where it lies, its physical state, how it bends its bearer's mind, and how far its rumour reaches. It changes hands only through simulated events (forging, inheritance, theft, gift, trade, loss, finding, use, destruction), so its bearer chain is never broken."
+role = "drama_coupling"
+patterns = [
+  { test = "V-SAGA-02", pattern = "Every artifact not destroyed has exactly one bearer or one location at every tick boundary", kind = "identity", role = "sole" },
+  { test = "V-SAGA-03", pattern = "The influence a bearer receives each month stays inside its declared bounds", kind = "identity", role = "sole" },
+  { test = "V-SAGA-17", pattern = "No event uses an artifact before its origin event, and every bearer change is an event in an unbroken chain", kind = "identity", role = "sole" },
+  { test = "V-SAGA-21", pattern = "Every damage or transformation of an artifact resolves to its cause event", kind = "identity", role = "sole" },
+  { test = "V-SAGA-10", pattern = "Relics change hands by several transfer kinds across an ensemble, and no transfer is forced", kind = "emergent", role = "contributing" },
+  { test = "V-SAGA-13", pattern = "A relic's rumour raises the seeking rate of ambitious named actors inside its reach", kind = "emergent", role = "contributing" },
+]
+not_yet = [
+  "No historical band exists for relic circulation; plausibility is judged by the director at G1b and G2",
+  "Forgeries and copies (an object claimed to be another) need full epistemics (P3.3)",
+  "Artifacts that act without a bearer (a cursed place) and sentient artifacts (F2)",
+  "Mundane props (a phial of poison, a knife) are not S6 artifacts: they are drawn from an owner's stock (M4) through a simulated acquisition event, and their provenance points to that event and that stock",
+]
+
+[[owns]]
+column = "artifact.id"
+entity = "artifact"
+type = "u64"
+plane = "A"
+meaning = "Content-addressed ArtifactId: H64(seed, \"artifact\", origin_event_or_catalyst, k); never reused"
+fixed_point = false
+[[owns]]
+column = "artifact.origin_event"
+entity = "artifact"
+type = "u64"
+plane = "A"
+meaning = "EventId of the artifact's origin: its placement at world creation (manifest, journaled), the catalyst input that introduced it, or ARTIFACT_FORGED. No event may reference the artifact before it"
+fixed_point = false
+[[owns]]
+column = "artifact.chain_head"
+entity = "artifact"
+type = "u64"
+plane = "A"
+meaning = "EventId of the latest event in its bearer chain (forged, passed, found, used, destroyed); each new chain event links to the previous one by a contingent causal edge, so the chain is unbroken and readable backwards"
+fixed_point = false
+[[owns]]
+column = "artifact.kind"
+entity = "artifact"
+type = "enum"
+plane = "A"
+meaning = "Registry [artifact_kinds] id (relic, crown, weapon, ring, tome, heirloom); sets kind_strength, the overlay pushed and whether it is regalia"
+fixed_point = false
+[[owns]]
+column = "artifact.state"
+entity = "artifact"
+type = "enum"
+plane = "A"
+meaning = "borne | placed | lost | destroyed. borne: bearer set, location 0. placed or lost: location set, bearer 0 (lost = nobody's knowledge row names the place). destroyed: both 0; terminal"
+fixed_point = false
+[[owns]]
+column = "artifact.bearer"
+entity = "artifact"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the living bearer, or 0"
+fixed_point = false
+[[owns]]
+column = "artifact.location"
+entity = "artifact"
+type = "u32"
+plane = "A"
+meaning = "PlaceId (settlement or region cell) where it lies, or 0"
+fixed_point = false
+[[owns]]
+column = "artifact.charge"
+entity = "artifact"
+type = "q8_8"
+plane = "A"
+meaning = "Physical state: remaining charge in [0, 1] for artifacts that spend one (a relic's power); 1 for those that do not"
+fixed_point = true
+[[owns]]
+column = "artifact.condition"
+entity = "artifact"
+type = "q8_8"
+plane = "A"
+meaning = "Physical state: wear or condition in [0, 1], 0 = broken"
+fixed_point = true
+[[owns]]
+column = "artifact.contaminants"
+entity = "artifact"
+type = "u16"
+plane = "A"
+meaning = "Physical state: bitflags of Registry [contaminants] (blood, ash, poison, ...); evidence for discovery (SAGA-4) and an envelope snapshot"
+fixed_point = false
+[[owns]]
+column = "artifact.condition_cause"
+entity = "artifact"
+type = "u64"
+plane = "A"
+meaning = "EventId of the event that last changed condition, contaminants, charge or a curse: the cause is stored with the state (the Legends reverse key, SAGA-15)"
+fixed_point = false
+[[owns]]
+column = "artifact.bearer_since"
+entity = "artifact"
+type = "i64"
+plane = "A"
+meaning = "Sim-time the current bearer took it; set on every transfer"
+fixed_point = false
+[[owns]]
+column = "artifact.exposure"
+entity = "artifact"
+type = "q16_16"
+plane = "A"
+meaning = "Cumulative influence delivered to the current bearer, in overlay points; reset to 0 on every transfer"
+fixed_point = true
+[[owns]]
+column = "artifact.rumour_reach"
+entity = "artifact"
+type = "u16"
+plane = "A"
+meaning = "Rumour reach in route-graph hops (M1) from the artifact's place or its bearer's residence; in [0, rumour_max_hops]"
+fixed_point = false
+
+[[emits]]
+kind = "ARTIFACT_FORGED"
+when = "A Forge command from T1.minds (a named actor's completed plan) or a mythic catalyst creates an artifact"
+[[emits]]
+kind = "ARTIFACT_PASSED"
+when = "The bearer changes, with mode inheritance (the bearer's death path), theft, gift, trade, or loss (it stays where its bearer fell or was dropped); every bearer change is this event, linked to the previous chain event; the motive edges of the act are attached"
+[[emits]]
+kind = "ARTIFACT_USED"
+when = "The artifact is the instrument of an act (it is also the instrument role in that act's event); its charge, condition and contaminants change with the act, and condition_cause takes the act's EventId"
+[[emits]]
+kind = "ARTIFACT_FOUND"
+when = "A Search command succeeds at the place where a placed or lost artifact lies"
+[[emits]]
+kind = "ARTIFACT_DESTROYED"
+when = "A Destroy command succeeds (a vow fulfilled, a deliberate act); terminal"
+[[emits]]
+kind = "BEARER_CORRUPTED"
+when = "A bearer's exposure first crosses corruption_threshold (at most once per bearer-artifact pair)"
+
+[[commands]]
+target = "T1.minds"
+command = "ApplyInfluence"
+why = "The artifact's monthly pull on its bearer: {bearer, overlay, delta}. Minds owns traits and overlays and turns it into a Thought on the core vectors the overlay reads; S6 never writes a minds column"
+
+[[reads]]
+column = "person.alive"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "person.residence"
+owner = "S3.migration"
+lag = "previous_pulse"
+use = "identity"
+[[reads]]
+column = "household.head"
+owner = "M4.economy"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "title.holder"
+owner = "M7.dynasty"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "mind.honesty_humility"
+owner = "T1.minds"
+lag = "previous_pulse"
+use = "rate"
+
+[scales]
+spatial = "artifact; places are settlements or region cells; rumour reach in route-graph hops (M1)"
+temporal = "Month pulse for influence and rumour; inheritance at the bearer's death instant; commands at the instant they are applied"
+extent = "every artifact in the world, typically 1-50 per world (catalysts plus forged ones)"
+restart = "Owned columns (including bearer_since and exposure) restore the system exactly; S6 holds no timers"
+
+[[fidelity_ladder]]
+level = "F1"
+representation = "Discrete artifacts with one bearer or location, a fixed-point pull on one overlay, rumour reach in hops"
+status = "target"
+[[fidelity_ladder]]
+level = "F2"
+representation = "Several influence channels, artifacts with their own minds (T1), forgeries and copies"
+status = "n/a"
+
+[[schedule]]
+pulse = "Day"
+phase = "Vital"
+steps = ["inherit: on a bearer's death, pass or drop each artifact the bearer carried"]
+when = "only at instants where a bearer's death timer fires (the death path's inheritance hook, 05.1 §2)"
+[[schedule]]
+pulse = "Day"
+phase = "Agenda"
+steps = ["apply_commands: apply Transfer, Use, Search, Destroy and Forge commands queued by T1.minds this instant"]
+when = "only at instants with queued S6 commands, after the agenda's actions"
+[[schedule]]
+pulse = "Month"
+phase = "Culture"
+steps = ["influence: send each bearer this month's pull and update exposure", "rumour: grow or shrink each artifact's rumour reach"]
+when = "always"
+
+[[rng]]
+purpose = "loss_on_death"
+key = ["artifact", "tick"]
+use = "Whether an artifact stays where its bearer died instead of passing to the heir"
+[[rng]]
+purpose = "theft_outcome"
+key = ["thief", "artifact", "tick"]
+use = "Whether a theft attempt succeeds, against theft_success"
+[[rng]]
+purpose = "search_find"
+key = ["seeker", "artifact", "month"]
+use = "Whether a seeker at the right place finds a placed or lost artifact, against find_chance"
+
+[design]
+basic_principles = "Relics as Registry kinds: a singular object with one bearer or place, a pull on the bearer's mind and a rumour that draws the ambitious (ADR-0035); mechanics are design values, not calibrated history"
+emergence = "Relic chains (who held it and how it passed), corrupted bearers and quests for lost relics emerge from deaths, thefts, losses and named actors' decisions"
+adaptation = "n/a: S6 makes no decisions; named actors decide through T1.minds"
+objectives = "n/a: S6 has no agents"
+learning = "n/a"
+prediction = "n/a"
+sensing = "The bearer's Honesty-Humility at the previous pulse (resistance); deaths, title holders and household heads at the death instant"
+interaction = "Lifecycle commands only: ApplyInfluence to T1.minds; Transfer, Search, Destroy and Forge from T1.minds. ARTIFACT_* events carry the instrument role of the event envelope"
+stochasticity = "Keyed RNG only: loss on death, theft outcomes, search finds"
+collectives = "Titles (regalia pass with the title) and households (other kinds pass to the household head)"
+observation = "ARTIFACT_* and BEARER_CORRUPTED events in channel A; bearer chains in the chronicle (relic-chain patterns, P2.4); bears_artifact and bearer_exposure as anchored attributes"
+era_state = []
+scale_behaviour = "Identical at every N. At micro scale one heirloom is enough for a household saga; rumour reach is in hops, so it scales with the route graph, not with population"
+
+[initialization]
+state = "Artifacts declared by manifest catalysts (artifact, inheritance) with their holder role resolved to a person at world start, or placed at a location; origin_event and chain_head are the journaled world-creation event; charge and condition 1, no contaminants; exposure 0; rumour reach from the catalyst's renown"
+from_manifest = ["catalysts", "cast", "dynasties"]
+
+[input_data]
+drivers = []
+
+[[params]]
+name = "influence_base"
+meaning = "Monthly overlay delta at Honesty-Humility 0, before kind_strength"
+source = "design value (ADR-0035)"
+[[params]]
+name = "resist_slope"
+meaning = "How much Honesty-Humility resists the pull, as a fraction per 100 trait points"
+source = "design value (ADR-0035)"
+[[params]]
+name = "corruption_threshold"
+meaning = "Cumulative exposure at which BEARER_CORRUPTED fires"
+source = "design value (ADR-0035)"
+[[params]]
+name = "rumour_max_hops"
+meaning = "Upper bound on rumour reach in route-graph hops"
+source = "design value (ADR-0035)"
+[[params]]
+name = "rumour_decay_years"
+meaning = "Years without a notable artifact event before the rumour shrinks by one hop"
+source = "design value (ADR-0035)"
+[[params]]
+name = "find_chance"
+meaning = "Monthly chance that a seeker at the right place finds a placed or lost artifact"
+source = "design value (ADR-0035)"
+[[params]]
+name = "theft_success"
+meaning = "Chance that one theft attempt succeeds"
+source = "design value (ADR-0035)"
+[[params]]
+name = "loss_on_death"
+meaning = "Chance that an artifact stays where its bearer died instead of passing to the heir"
+source = "design value (ADR-0035)"
+
+[[submodels]]
+name = "inherit"
+summary = "At the bearer's death instant: with a keyed draw (loss_on_death) the artifact stays where the bearer died (ARTIFACT_PASSED, mode loss, state placed); otherwise regalia pass with the title to title.holder and other kinds to household.head (ARTIFACT_PASSED, mode inheritance). bearer_since := now; exposure := 0"
+earns_its_place_by = ["V-SAGA-02", "V-SAGA-10"]
+[[submodels]]
+name = "apply_commands"
+summary = "Transfer (gift, trade; theft resolved with theft_outcome against theft_success), Use (the act's instrument: charge, condition and contaminants change, condition_cause := the act's EventId; ARTIFACT_USED), Search (search_find against find_chance at the artifact's place), Destroy, Forge (new id H64(seed, \"artifact\", forge_event, k); origin_event := the forging event). Every applied command emits its event, links it to chain_head by a contingent edge and advances chain_head; a change of bearer resets bearer_since and exposure. A command naming an artifact whose origin event is later than now is refused"
+earns_its_place_by = ["V-SAGA-02", "V-SAGA-13"]
+[[submodels]]
+name = "influence"
+summary = "delta = influence_base x kind_strength x (1 - resist_slope x H/100), clamped to [0, 2 x influence_base]; send ApplyInfluence{bearer, overlay, delta}; exposure += delta; on the first crossing of corruption_threshold emit BEARER_CORRUPTED"
+earns_its_place_by = ["V-SAGA-03"]
+[[submodels]]
+name = "rumour"
+summary = "rumour_reach += 1 hop per notable ARTIFACT_* event this month, capped at rumour_max_hops; -1 hop after rumour_decay_years without one, floored at 0"
+earns_its_place_by = ["V-SAGA-13"]
+
+[[invariants]]
+id = "INV-S6-01"
+statement = "Every artifact not destroyed has exactly one of bearer and location set; a destroyed artifact has neither, and destroyed is terminal"
+test = "V-SAGA-02"
+[[invariants]]
+id = "INV-S6-02"
+statement = "A bearer is a living person at every tick boundary: a death passes or drops the artifact in the same instant, through the one death path"
+test = "V-SAGA-02"
+[[invariants]]
+id = "INV-S6-03"
+statement = "The monthly influence delivered lies in [0, 2 x influence_base]; exposure is monotone while borne and 0 right after a transfer"
+test = "V-SAGA-03"
+[[invariants]]
+id = "INV-S6-05"
+statement = "No event references an artifact before its origin_event; every bearer change is an ARTIFACT_PASSED, FOUND or FORGED event linked to the previous chain event, so the chain from origin to now is unbroken"
+test = "V-SAGA-17"
+[[invariants]]
+id = "INV-S6-06"
+statement = "Every non-default physical or transformation state (condition below 1, any contaminant, spent charge, a curse) has a condition_cause that resolves to an existing, earlier event"
+test = "V-SAGA-21"
+[[invariants]]
+id = "INV-S6-04"
+statement = "S6 writes only its own columns: every effect on a mind is an ApplyInfluence command"
+test = "V-INV-04"
+
+[[couplings]]
+system = "T1.minds"
+direction = "in"
+via = "the bearer's Honesty-Humility, read at the previous pulse, sets how strongly the artifact pulls"
+lag = "previous pulse"
+column = "mind.honesty_humility"
+form = "delta = influence_base x kind_strength x (1 - resist_slope x H/100), clamped to [0, 2 x influence_base]"
+neutral = "H = 0, the trait's population mean on its -100..100 scale (the pull is then influence_base x kind_strength)"
+output_bounds = ["0", "2 x influence_base (at most 0.10 overlay points a month)"]
+data_range = "The trait's full scale, H in [-100, 100]. No empirical data: this is fiction, so the form is a design choice, not a fit"
+beyond_range = "Not reachable: T1.minds clamps H to its scale; the output clamp holds anyway"
+source = "design value (ADR-0035); Honesty-Humility as resistance to temptation follows the HEXACO core of 05.3 §2 as a design analogy"
+[[couplings]]
+system = "T1.minds"
+direction = "out"
+via = "ApplyInfluence commands; minds also reads artifact.bearer, artifact.location and artifact.rumour_reach through the contract crate to score seek, steal and guard decisions"
+lag = "applied at the next tick boundary"
+[[couplings]]
+system = "S7.vows"
+direction = "out"
+via = "S7 reads artifact.bearer and artifact.state for RECOVER_RELIC and DESTROY_RELIC vows; ARTIFACT_* events can fulfil or break vows"
+lag = "same instant, later phase"
+[[couplings]]
+system = "M2.demography"
+direction = "in"
+via = "the death path: a bearer's death triggers inherit in the same instant"
+lag = "same instant"
+
+[isolation]
+forcing = [
+  { input = "mind.honesty_humility", series = "step", note = "one bearer line on a fixture: H = 0, then H = -80 from year 20, then H = +80 from year 40; each bearer dies at a scripted age" },
+]
+horizon = "200 sim-years on a fixture of 1 to 20 artifacts and a scripted bearer line, with no minds decisions"
+expect = "every artifact keeps exactly one bearer or location; the monthly influence stays in [0, 2 x influence_base]; exposure grows while borne and resets on each transfer; BEARER_CORRUPTED fires sooner at H = -80 and later or never at H = +80; rumour reach stays in [0, rumour_max_hops]; no runaway"
+
+[verification]
+tests = ["V-SAGA-02", "V-SAGA-03", "V-SAGA-04", "V-SAGA-10", "V-SAGA-13", "V-SAGA-17", "V-SAGA-21", "V-SF-22"]
+prototype = ""

@@ -2,6 +2,8 @@
 
 **Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-15
 
+**Amended by ADR-0035 (2026-10-16):** GDScript and Rust gdext for a 3D client are cut; there is no Godot host.
+
 ## Context
 
 The simulation must:

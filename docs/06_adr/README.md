@@ -2,7 +2,7 @@
 
 Format: *Status · Context · Decision · Alternatives considered · Consequences · Revisit when · Evidence.*
 Statuses: **Proposed**, which awaits your sign-off; **Accepted**; **Superseded by ADR-xxxx**.
-ADRs that sit on a critical path carry a ★. **The 19 ★ ADRs were Accepted by the director on 2026-10-16** (decisions log, rulings D1, D2 and D24). The other 12 remain **Proposed** and are reviewed when their phase starts (D23). ADR-0034 (the roles of LLMs) was accepted on 2026-10-16 (D27).
+ADRs that sit on a critical path carry a ★. **The 19 ★ ADRs were Accepted by the director on 2026-10-16** (decisions log, rulings D1, D2 and D24). The other 12 remain **Proposed** and are reviewed when their phase starts (D23). ADR-0034 (the roles of LLMs) was accepted on 2026-10-16 (D27). ADR-0035 (the saga engine) was accepted on 2026-10-16 by the director's directive and ratified the same day (D28); it cuts ADR-0018 and amends ADR-0001, 0004, 0016, 0019, 0028 and 0029.
 
 **v1.1 amendments (2026-10-15).** After the red-team review, ADRs 0002–0018, 0020, 0022 and 0023 end with an *Amendment v1.1* section. Each amendment lists any text corrected inline, then the changes, with references to ADR-0024–0026 and the 05.x architecture docs, which are the source of truth. ADR-0024, 0025 and 0026 are new. ADRs 0001, 0019 and 0021 are unchanged. Like the ADRs, the amendments are **Proposed** until you approve them. Record the approval in `docs/decisions-log.md`.
 
@@ -25,7 +25,7 @@ ADRs that sit on a critical path carry a ★. **The 19 ★ ADRs were Accepted by
 | [0015](ADR-0015-foresight.md) | Foresight = Monte-Carlo forked rollouts with common random numbers | |
 | [0016](ADR-0016-console.md) | Web console served by the sim host | |
 | [0017](ADR-0017-narrative-compiler.md) | Hierarchical, canon-gated narrative pipeline; style cards | |
-| [0018](ADR-0018-3d-client.md) | Godot 4.7+ separate process, Rust gdext, painted miniature, VAT crowds | |
+| [0018](ADR-0018-3d-client.md) | Godot 4.7+ separate process, Rust gdext, painted miniature, VAT crowds. **Cut by ADR-0035** | |
 | [0019](ADR-0019-audio.md) | Godot-native systemic audio; licence-vetted TTS | |
 | [0020](ADR-0020-scale-out.md) | Single writer per timeline; scale out with timelines | ★ |
 | [0021](ADR-0021-licence-policy.md) | Licence allow-list and provenance | |
@@ -42,3 +42,4 @@ ADRs that sit on a critical path carry a ★. **The 19 ★ ADRs were Accepted by
 | [0032](ADR-0032-agentic-operating-model.md) | Adopt the Agentic Architect operating model, adapted for a deterministic simulation | ★ |
 | [0033](ADR-0033-specs-as-data.md) | Specs as data: exhaustive, machine-checked system specs (ODD-R v2) | ★ |
 | [0034](ADR-0034-llm-roles-translate-describe-never-decide.md) | LLMs translate in and describe out; they never decide (deliberation consults retired) | |
+| [0035](ADR-0035-legends-over-ledgers-saga-engine.md) | Legends over ledgers: the saga engine (artifacts and vows in plane A, the chronicle pipeline first, the engine only engines, no custom 3D) | ★ |

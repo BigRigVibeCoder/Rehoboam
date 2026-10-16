@@ -1,0 +1,351 @@
+# ODD-R v2 system spec (ADR-0033): vows, grudges and quests (ADR-0035). Draft: design values throughout, because there is
+# no historical band for oath-keeping. lint_odd.py checks it against the Registry, the other specs and the test catalogue.
+odd_r = 2
+
+[system]
+id = "S7.vows"
+name = "Vows, grudges and quests"
+spec_version = "0.1.0"
+fidelity = "F1"
+status = "draft"
+crate = "rh-sys-vows"
+adrs = ["ADR-0035", "ADR-0012", "ADR-0025", "ADR-0024", "ADR-0006"]
+requirements = ["SAGA-2", "SAGA-11", "SIM-7"]
+
+[purpose]
+statement = "Hold every vow, grudge and quest a named actor carries: who swore it, against or for whom, since when, and whether it is active, fulfilled, broken or void. Feed each active vow into its vower's agenda with a bounded priority, let pressure break it, and record how it ends."
+role = "drama_coupling"
+patterns = [
+  { test = "V-SAGA-01", pattern = "Every vow is active, fulfilled, broken or void, and sworn = active + fulfilled + broken + void at every tick", kind = "identity", role = "sole" },
+  { test = "V-SAGA-09", pattern = "An active vow never removes its vower's survival responses", kind = "identity", role = "sole" },
+  { test = "V-SAGA-10", pattern = "Vows end in different ways across an ensemble: fulfilled, broken and void all occur, and no kind is forced", kind = "emergent", role = "contributing" },
+  { test = "V-SAGA-13", pattern = "A witnessed murder of kin by a known culprit leads to AVENGE_KIN at a rate inside its declared range", kind = "emergent", role = "contributing" },
+]
+not_yet = [
+  "No historical band for vow outcomes; the director judges plausibility at G1b and G2",
+  "Oaths to institutions and between houses (fealty, alliance) and vows inherited by heirs (a house's blood feud) are F2",
+  "The minds-side in-coupling of vow.conflict into stress is specified in the T1.minds spec, not yet written",
+]
+
+[[owns]]
+column = "vow.id"
+entity = "vow"
+type = "u64"
+plane = "A"
+meaning = "VowId = H64(vower, sworn_at, kind, target); never reused"
+fixed_point = false
+[[owns]]
+column = "vow.vower"
+entity = "vow"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the vower, a named actor (T1)"
+fixed_point = false
+[[owns]]
+column = "vow.kind"
+entity = "vow"
+type = "enum"
+plane = "A"
+meaning = "Registry [vow_kinds] id: AVENGE_KIN, RECOVER_RELIC, DESTROY_RELIC, PROTECT, CLAIM_TITLE, PILGRIMAGE, GRUDGE (a grudge has no oath; a quest is a vow aimed at an artifact or place)"
+fixed_point = false
+[[owns]]
+column = "vow.target"
+entity = "vow"
+type = "u64"
+plane = "A"
+meaning = "The entity aimed at, by kind: a PersonId, ArtifactId, title or PlaceId"
+fixed_point = false
+[[owns]]
+column = "vow.sworn_at"
+entity = "vow"
+type = "i64"
+plane = "A"
+meaning = "Sim-time the vow was sworn"
+fixed_point = false
+[[owns]]
+column = "vow.status"
+entity = "vow"
+type = "enum"
+plane = "A"
+meaning = "active | fulfilled | broken | void (the vower died with it active). The three ends are absorbing"
+fixed_point = false
+[[owns]]
+column = "vow.public"
+entity = "vow"
+type = "bool"
+plane = "A"
+meaning = "Sworn before witnesses: honour is at stake if it breaks"
+fixed_point = false
+[[owns]]
+column = "vow.priority"
+entity = "vow"
+type = "q8_8"
+plane = "A"
+meaning = "The weight this vow adds to its vower's goal actions: min(vow_priority_base x kind_weight, vow_priority_cap)"
+fixed_point = true
+[[owns]]
+column = "vow.strain"
+entity = "vow"
+type = "q8_8"
+plane = "A"
+meaning = "Accumulated pressure against the vow; it breaks when strain exceeds the vower's resolve"
+fixed_point = true
+[[owns]]
+column = "vow.conflict"
+entity = "vow"
+type = "q8_8"
+plane = "A"
+meaning = "Vow-conflict signal in [0, 1]: how far the vower's situation contradicts the vow (serving or allied to its target, sharing a hall with the murderer). T1.minds reads it into stress"
+fixed_point = true
+
+[[emits]]
+kind = "VOW_SWORN"
+when = "A SwearVow command from T1.minds is applied (the vower's own IAUS choice), or the grudge rule forms a GRUDGE"
+[[emits]]
+kind = "VOW_FULFILLED"
+when = "The vow's completion predicate holds at the end of an instant (its target dead by the vower's or an ally's act; the relic borne by the vower or destroyed; the title held)"
+[[emits]]
+kind = "VOW_BROKEN"
+when = "Strain exceeds resolve (abandoned, or betrayed: the vower harms or deserts the vow's beneficiary), or the vower acts against the vow; a VOW_OF motive edge points to the oath"
+[[emits]]
+kind = "VOW_VOIDED"
+when = "The vower dies with the vow active (the death path, same instant)"
+
+[[commands]]
+target = "T1.minds"
+command = "AgendaGoal"
+why = "Puts an active vow into the vower's agenda as a goal with its bounded priority; minds owns the agenda's utility and decides every action"
+[[commands]]
+target = "T1.minds"
+command = "ClearGoal"
+why = "Removes the goal when the vow ends"
+[[commands]]
+target = "T1.minds"
+command = "OpinionModifier"
+why = "A broken public vow costs the oath-breaker opinion and honour with witnesses and kin (broken_vow_opinion); a fulfilled one gains it. Minds owns opinions"
+[[commands]]
+target = "T1.minds"
+command = "ApplyThought"
+why = "The curse hook: a vow sworn on a relic, or under a mythic catalyst that declares a curse, lays a Thought on an oath-breaker"
+
+[[reads]]
+column = "person.alive"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "artifact.bearer"
+owner = "S6.artifacts"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "artifact.state"
+owner = "S6.artifacts"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "title.holder"
+owner = "M7.dynasty"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "knowledge.knows"
+owner = "T1.minds"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "mind.conscientiousness"
+owner = "T1.minds"
+lag = "previous_pulse"
+use = "rate"
+[[reads]]
+column = "region.conditions"
+owner = "M6.polity"
+lag = "previous_pulse"
+use = "mode"
+
+[scales]
+spatial = "vower; targets are persons, artifacts, titles or places"
+temporal = "Month pulse for strain, conflict and priority; vows are sworn, fulfilled and voided at the instant their cause applies"
+extent = "named actors only (T1): 200-2,000 in the kingdom world, each holding at most max_active_vows active vows"
+restart = "Owned columns restore the system exactly; S7 holds no timers (deaths are M2's timers)"
+
+[[fidelity_ladder]]
+level = "F1"
+representation = "Vows, grudges and quests as records with status, priority, strain and conflict; completion predicates per kind in the effect language"
+status = "target"
+[[fidelity_ladder]]
+level = "F2"
+representation = "Oaths to institutions and between houses; vows inherited by heirs (blood feuds)"
+status = "n/a"
+
+[[schedule]]
+pulse = "Day"
+phase = "Vital"
+steps = ["void: on a vower's death, void the vower's active vows"]
+when = "only at instants where a vower's death timer fires (the death path, 05.1 §2)"
+[[schedule]]
+pulse = "Day"
+phase = "Agenda"
+steps = ["apply_commands: apply SwearVow commands from T1.minds", "grudge: form grudges against known culprits", "fulfil: close vows whose completion predicate now holds"]
+when = "only at instants with queued S7 commands, a harm event, a new knowledge row or a change to a vow's target"
+[[schedule]]
+pulse = "Month"
+phase = "Agenda"
+steps = ["strain: add or shed strain and break vows past resolve", "feed: refresh each active vow's priority and conflict signal"]
+when = "always"
+
+[[rng]]
+purpose = "grudge_form"
+key = ["person", "event"]
+use = "Whether a named actor who learns of a harm to self or kin by a known culprit forms a grudge, against grudge_on_harm"
+[[rng]]
+purpose = "break_mode"
+key = ["vow", "month"]
+use = "When strain exceeds resolve, whether the vow is abandoned or betrayed"
+
+[design]
+basic_principles = "A vow is a persistent directional goal that overrides routine until it is fulfilled, broken or its vower dies (ADR-0035). It adds bounded weight to goal actions only, so survival responses always remain"
+emergence = "Revenge chains, failed quests, oath-breaking under famine and war, and betrayals emerge from vows meeting pressure, opinions and other vows"
+adaptation = "n/a: S7 makes no decisions; whether to swear, pursue or abandon is decided by T1.minds"
+objectives = "n/a: S7 has no agents; it holds the goals T1.minds pursues"
+learning = "n/a"
+prediction = "n/a"
+sensing = "Deaths, artifact bearers and states, title holders and knowledge rows at the instant; the vower's conscientiousness and regional conditions at the previous pulse"
+interaction = "Lifecycle commands only: AgendaGoal, ClearGoal, OpinionModifier and ApplyThought to T1.minds; SwearVow from T1.minds. VOW_* events carry VOW_OF motive edges in the event envelope"
+stochasticity = "Keyed RNG only: grudge formation and break mode"
+collectives = "Kin witness and judge broken vows; F2 adds house vows"
+observation = "VOW_* events in channel A; vow arcs in the chronicle (P2.4); vow_against and vow_public as anchored attributes"
+era_state = []
+scale_behaviour = "Identical at every N; at micro scale one vow can carry a household saga (uz_job); the cap max_active_vows bounds cost at meso scale"
+
+[initialization]
+state = "Vows declared by manifest catalysts (a prophecy's oath, a dynastic feud) are sworn at world start with status active and zero strain; otherwise none"
+from_manifest = ["catalysts", "cast", "dynasties"]
+
+[input_data]
+drivers = []
+
+[[params]]
+name = "vow_priority_base"
+meaning = "Default agenda weight of an active vow, before kind_weight"
+source = "design value (ADR-0035)"
+[[params]]
+name = "vow_priority_cap"
+meaning = "Upper bound on any vow's agenda weight; vows never enter a survival decision"
+source = "design value (ADR-0035)"
+[[params]]
+name = "max_active_vows"
+meaning = "Cap on active vows per named actor; a SwearVow beyond it is refused"
+source = "design value (ADR-0035)"
+[[params]]
+name = "strain_rate"
+meaning = "Strain added per month while the vower's region is under famine, siege or war"
+source = "design value (ADR-0035)"
+[[params]]
+name = "strain_decay"
+meaning = "Strain shed per month without pressure"
+source = "design value (ADR-0035)"
+[[params]]
+name = "resolve_base"
+meaning = "Strain a vower of average conscientiousness withstands before the vow breaks"
+source = "design value (ADR-0035)"
+[[params]]
+name = "resolve_slope"
+meaning = "How much conscientiousness raises resolve, as a fraction per 100 trait points"
+source = "design value (ADR-0035)"
+[[params]]
+name = "grudge_on_harm"
+meaning = "Chance that a named actor who learns of a harm to self or kin by a known culprit forms a grudge"
+source = "design value (ADR-0035)"
+[[params]]
+name = "broken_vow_opinion"
+meaning = "Opinion modifier (on the -100..100 scale) witnesses and kin apply to an oath-breaker of a public vow"
+source = "design value (ADR-0035); CK3-style opinion modifiers (05.3 §2)"
+
+[[submodels]]
+name = "void"
+summary = "At the vower's death instant, every active vow of the vower: status := void; emit VOW_VOIDED; ClearGoal is moot (the mind is gone)"
+earns_its_place_by = ["V-SAGA-01"]
+[[submodels]]
+name = "apply_commands"
+summary = "SwearVow{vower, kind, target, public}: refused if the vower already holds max_active_vows; else create the vow (status active, strain 0), emit VOW_SWORN and send AgendaGoal"
+earns_its_place_by = ["V-SAGA-01", "V-SAGA-13"]
+[[submodels]]
+name = "grudge"
+summary = "When a harm event's victim, or the victim's kin, gains a knowledge row naming the culprit, form a GRUDGE with a keyed draw against grudge_on_harm (VOW_SWORN, kind GRUDGE, public false)"
+earns_its_place_by = ["V-SAGA-13", "V-SAGA-10"]
+[[submodels]]
+name = "fulfil"
+summary = "Evaluate each affected vow's completion predicate (effect language, per kind); if it holds: status := fulfilled, emit VOW_FULFILLED, ClearGoal, and an OpinionModifier gain if public"
+earns_its_place_by = ["V-SAGA-01", "V-SAGA-10"]
+[[submodels]]
+name = "strain"
+summary = "strain += strain_rate under pressure (region.conditions in famine, siege or war), else strain -= strain_decay, floored at 0; resolve = resolve_base x (1 + resolve_slope x C/100); if strain > resolve: break_mode picks abandoned or betrayed, status := broken, emit VOW_BROKEN, ClearGoal, OpinionModifier (broken_vow_opinion) if public, ApplyThought if a curse hook applies"
+earns_its_place_by = ["V-SAGA-10", "V-SAGA-01"]
+[[submodels]]
+name = "feed"
+summary = "priority := min(vow_priority_base x kind_weight, vow_priority_cap); conflict := the effect-language conflict predicate for the vow's kind (serving or allied to the target), in [0, 1]; send AgendaGoal when the priority changed"
+earns_its_place_by = ["V-SAGA-09", "V-SAGA-16"]
+
+[[invariants]]
+id = "INV-S7-01"
+statement = "Every vow has exactly one status; fulfilled, broken and void never change; sworn = active + fulfilled + broken + void at every tick boundary"
+test = "V-SAGA-01"
+[[invariants]]
+id = "INV-S7-02"
+statement = "No active vow has a dead vower at any tick boundary"
+test = "V-SAGA-01"
+[[invariants]]
+id = "INV-S7-03"
+statement = "Every vow's priority is at most vow_priority_cap, and no vow's weight enters a survival decision"
+test = "V-SAGA-09"
+[[invariants]]
+id = "INV-S7-04"
+statement = "S7 writes only its own columns: goals, opinions and curses reach minds as lifecycle commands"
+test = "V-INV-04"
+
+[[couplings]]
+system = "T1.minds"
+direction = "in"
+via = "the vower's conscientiousness, read at the previous pulse, sets resolve"
+lag = "previous pulse"
+column = "mind.conscientiousness"
+form = "resolve = resolve_base x (1 + resolve_slope x C/100)"
+neutral = "C = 0, the trait's population mean on its -100..100 scale (resolve = resolve_base)"
+output_bounds = ["resolve_base x (1 - resolve_slope)", "resolve_base x (1 + resolve_slope)"]
+data_range = "The trait's full scale, C in [-100, 100]. No empirical data on oath-keeping by trait: a design choice, not a fit"
+beyond_range = "Not reachable: T1.minds clamps C to its scale"
+source = "design value (ADR-0035); conscientiousness as dutifulness follows the HEXACO core of 05.3 §2 as a design analogy"
+[[couplings]]
+system = "M6.polity"
+direction = "in"
+via = "regional conditions (normal, famine, siege, war) switch strain on or off: the pressure that breaks vows"
+lag = "previous pulse"
+[[couplings]]
+system = "T1.minds"
+direction = "out"
+via = "AgendaGoal, ClearGoal, OpinionModifier and ApplyThought commands. Also vow.conflict, the vow-conflict signal minds reads into stress (a rate read; its bounded, sourced in-coupling belongs in the T1.minds spec, still to be written) for stress and mental breaks"
+lag = "applied at the next tick boundary; vow.conflict read at the previous pulse"
+[[couplings]]
+system = "S6.artifacts"
+direction = "in"
+via = "artifact.bearer and artifact.state complete RECOVER_RELIC and DESTROY_RELIC vows"
+lag = "same instant"
+[[couplings]]
+system = "M2.demography"
+direction = "in"
+via = "the death path voids the vower's vows and may complete AVENGE_KIN"
+lag = "same instant"
+
+[isolation]
+forcing = [
+  { input = "mind.conscientiousness", series = "constant", note = "three runs: C = -80, 0 and +80 for every vower" },
+  { input = "region.conditions", series = "step", note = "normal, then famine from year 10, war from year 20, normal again from year 30" },
+]
+horizon = "100 sim-years on a fixture of 50 named actors with 10 scripted kin murders by known culprits and a stub mind that swears AVENGE_KIN on each"
+expect = "every vow ends fulfilled, broken or void or is still active (V-SAGA-01); breaking rises under famine and war and with low C, and stops when conditions clear; priority never exceeds vow_priority_cap; the count of active vows does not run away"
+
+[verification]
+tests = ["V-SAGA-01", "V-SAGA-09", "V-SAGA-10", "V-SAGA-13", "V-SAGA-16", "V-SF-22"]
+prototype = ""

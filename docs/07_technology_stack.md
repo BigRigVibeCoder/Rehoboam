@@ -2,6 +2,7 @@
 
 *Status: Draft v1.1 (2026-10-15). Versions are as verified by research R01–R11 in Oct 2026 and re-checked against the crates.io, PyPI and npm registries for `14_reuse_inventory.md`. **Pin exact versions in lockfiles, and re-verify at each phase start.** Licence notes are summaries; ADR-0021 governs.*
 
+*v1.2 (2026-10-16), ADR-0035: the Godot rows are **cut** (no 3D client); 2D visuals are Kenney CC0 tiles and glyph layers; the chronicle pipeline adds Kokoro-82M, Chatterbox or Qwen3-TTS and serverless image APIs (FLUX.1 [dev] or SDXL), all in `python/`, outside the engine (`05.11`; `14` §S); no feed writer.*
 *v1.1 changes: reuse modes from `14_reuse_inventory.md` (PORT rather than ideas for MIT code: Azgaar FMG, Starsim/Covasim/LASER, OpenVic-Simulation, Fluid HTN); licence fixes (twox-hash instead of xxhash-rust, epub-builder instead of EbookLib, MiniCheck-7B weights flagged); new rows for calibration, evals, protocol tooling and console analytics.*
 
 **What we reuse vs build.** The full, verified inventory (about 150 projects, licences checked against LICENSE files) is `14_reuse_inventory.md`. Headline: reuse covers about 35–40% of total effort, but only 10–15% of the story-generating core (M2–M8 couplings, minds and epistemics, the sifter, significance, the compiler expander). That core is the novel work, and it decides gate G2.
@@ -48,11 +49,11 @@
 | Glyph art | **Bitlands** (CP437 12×18 sheet + ~500 tintable sprites); Unscii-8/16 for panels; Kenney 1-Bit for modern extras | 2019 / 2021 | CC-BY 4.0 (attribution tracked); PD/CC0; CC0 | Adopt | Default glyph packs; era packs in days | Spleen (BSD-2), Cozette (MIT) |
 | Wallpaper (lo-fi) | Lively **web** wallpaper (separate app); Plash on macOS | — | GPL-3.0 (out of process); closed source (user-installed) | Adopt | Pause events, power policy for free | Windowed fallback |
 | Terminal client (optional) | ratatui + crossterm (`rh-tui`) | 0.30.2 / 0.29 | MIT | Trial | Contract tests; headless/SSH viewing | — |
-| 3D engine | Godot | 4.7.2 (4.8 dev) | MIT | Art phase 2, optional (ADR-0029; from P5) | Small runtime, wallpaper-friendly | Unreal 5.x (Hold unless SPK-1 fails) |
-| Godot bindings | godot-rust gdext | 0.5.5 (api-4-7) | MPL-2.0 | Trial | Hot paths in Rust; shares `rh-worldgen` | godot-cpp |
+| 3D engine (**cut, ADR-0035**) | Godot | 4.7.2 (4.8 dev) | MIT | Art phase 2, optional (ADR-0029; from P5) | Small runtime, wallpaper-friendly | Unreal 5.x (Hold unless SPK-1 fails) |
+| Godot bindings (**cut, ADR-0035**) | godot-rust gdext | 0.5.5 (api-4-7) | MPL-2.0 | Trial | Hot paths in Rust; shares `rh-worldgen` | godot-cpp |
 | Terrain | Terrain3D or custom clipmap | 1.0.2 | MIT | Trial | Heightmaps 64 m–65 km | Custom mesher |
-| Crowds | OpenVAT-for-Godot pattern (VAT MultiMesh) | Godot 4.5+ | MIT | Trial | 1k–5k animated at 60 FPS | Impostors |
-| Godot add-ons | Sky3D, ProtonScatter, godot-road-generator, Octahedral Impostors, WFC add-on, LimboAI or Beehave, Dialogue Manager | current | MIT (verify each) | Trial | 8–14 pw saved across the client (`14` rank 1) | Own |
+| Crowds (**cut, ADR-0035**) | OpenVAT-for-Godot pattern (VAT MultiMesh) | Godot 4.5+ | MIT | Trial | 1k–5k animated at 60 FPS | Impostors |
+| Godot add-ons (**cut, ADR-0035**) | Sky3D, ProtonScatter, godot-road-generator, Octahedral Impostors, WFC add-on, LimboAI or Beehave, Dialogue Manager | current | MIT (verify each) | Trial | 8–14 pw saved across the client (`14` rank 1) | Own |
 | World generation | **Port** Azgaar FMG (with attribution) + mapgen4, mewo2 terrain and naming-language | FMG 2.0 refactor | MIT | Adopt (**port**) | Region graph, rivers, routes, burgs, states. MIT allows a code port, which saves 2–4 pw over reimplementing from ideas (`14`) | Reimplement |
 | Epidemic modules (reference + port) | Starsim, Covasim, LASER | 2026 | MIT | Adopt (**port** into `rh-sys-contagion`) | Testing with sensitivity, delays and loss to follow-up; CRN hashing design; gravity/radiation migration kernels | Own |
 | Economy reference | OpenVic-Simulation (headless, fixed-point) | 2026 | MIT | Trial (**port** selectively into M4) | Pops, markets, producers in fixed point | Own |
@@ -69,7 +70,7 @@
 | Frontier synthesis | Claude Opus 5.5 / Fable 5.1 (batch + cache); cross-family critic (GPT-6.x / Gemini) | Oct 2026 | Provider ToS | Adopt | Best verified creative-writing results | Open GLM-5.x / DeepSeek V4 on cluster |
 | Fact-check NLI | MiniCheck-class checker with a permissive licence (verify the model card). **Bespoke-MiniCheck-7B weights appear non-commercial**: personal-use lab tier only (`14`) | — | check | Trial | Cheap claim verification | LLM checker |
 | Eval harnesses | inspect_ai (RP-200, ARG-300, INTENT-100, NOVEL-20); promptfoo (red-team corpus in CI) | 0.3.x / 0.124 | MIT | Adopt | Datasets, scorers, logs; injection tests | Own scripts |
-| Narrative exporters | epub-builder (EPUB), screenplain / fountain-js (Fountain), feedgen (RSS) | 0.8.3 | MPL-2.0; MIT; BSD-2 (dual) | Adopt | **Not EbookLib**, which is AGPL-3.0 | pandoc CLI out of process |
+| Narrative exporters | epub-builder (EPUB), screenplain / fountain-js (Fountain) | 0.8.3 | MPL-2.0; MIT | Adopt | **Not EbookLib**, which is AGPL-3.0 | pandoc CLI out of process |
 | TTS (real-time) | Chatterbox-Nano/Turbo; Pocket TTS | 2026 | MIT; MIT + CC-BY-4.0 | Trial | CPU, ~200 ms to first audio | Kokoro (without espeak) |
 | TTS (drama) | Qwen3-TTS 1.7B; IndexTTS-2.5; MOSS-TTSD v1.0 | 2026 | Apache; bilibili licence; Apache | Trial | Voice design, emotion, dialogue | ElevenLabs v3 (BYOK) |
 | ASR | Moonshine streaming; Whisper-turbo (QA) | 2026 | MIT | Adopt | Push-to-talk, WER gate | Parakeet |

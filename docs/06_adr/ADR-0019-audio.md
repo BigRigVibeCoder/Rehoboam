@@ -2,6 +2,8 @@
 
 **Status:** Proposed · **Date:** 2026-10-15
 
+**Amended by ADR-0035 (2026-10-16):** Godot-native ambience is cut (the 2D diorama mixes in the browser). The audio chronicle is core, not optional: Kokoro-82M narration in P2, multi-voice drama (Chatterbox or Qwen3-TTS) in P3, written by the Python pipeline in plane C (`05.11`). Decision 3's private RSS feed is dropped: an offline exporter writes local MP3 chapters, played in the local saga reader.
+
 ## Context
 
 - Runtime neural audio is too slow and competes for the GPU.

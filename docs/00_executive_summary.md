@@ -1,16 +1,25 @@
 # 00 — Executive Summary
 
 *Status: Draft v1.1 (2026-10-15). Rehoboam planning baseline. Read this first. Every claim here links to the document that backs it.*
+*v1.2 (2026-10-16): **the saga engine (ADR-0035)**, ratified by you the same day: the north star, the three consumption modes, the new phases (P1a Bloodlines, P1b Legends, P2 Sagas & audio v0, P3 the illustrated saga, P4 deeper worlds, P5 2D diorama), artifacts and vows in plane A, "the engine only engines", and no custom 3D.*
 *v1.1 changes: reflects the red-team revision of the architecture (`05.0`–`05.9`, ADR-0024 to ADR-0026): three state planes, scheduled outcomes and material inputs, genealogical identity, the Oracle as an in-world entity, deliberation consults, the revised world compiler, and the Registry effect language. Roadmap durations now defer to `11`.*
 
 ---
 
 ## What we are building
 
-**Rehoboam** is a personal world engine. A deterministic simulation runs a world for centuries, **from a single household (the trials of Job) up to a realm of 1M people, on one engine** (ADR-0028). You watch its history unfold, stop where it matters and ask *why*. You turn that history into chronicles and stories. In later phases you step inside it: as an ambient diorama, as a walker in its streets, and as a mortal Oracle who influences its rulers without commanding them.
+**Rehoboam generates legends: a deterministic world whose dynasties, vows, relics and betrayals become sagas you can listen to, read and scrub through** (ADR-0035). It is a saga engine in the manner of the Silmarillion or Dwarf Fortress's legends, not an economy simulator: wheat, demography and taxes are the stage lighting and the pressure, not the story. One engine runs worlds from a single household (the trials of Job) to a kingdom; the default saga world is a kingdom of about 10k–50k people with 200–2,000 named actors, and 1M is optional (ADR-0028).
+
+**You are a reader and listener, not a gamer.** You take in your world in three ways, plus one ambient view:
+- **listen:** an episodic audio chronicle, narrated and then multi-voice, as local MP3 chapters;
+- **read:** graphic-chronicle storyboards (the sifted key scenes as illustrated panels, each linked to its causes) and prose sagas, in a local Web Graphic Novel / Storyboard Reader, the only presentation surface for sagas;
+- **scrub:** an interactive causal timeline;
+- *glance:* a 2D diorama of CC0 tiles and glyphs.
+
+Later, a mortal Oracle can influence rulers without commanding them.
 
 **Success**, by your definition, means four things (`01` §2):
-- **S1, a creative engine:** it produces history worth reading.
+- **S1, a creative engine:** it produces sagas worth listening to and reading.
 - **S2, an inhabitable world:** every person and place is coherent and persists.
 - **S3, investment:** worlds persist, replay exactly and can branch.
 - **S4, evolvable:** fidelity and complexity can keep rising without rewrites, with **AI agents as the workforce** and **no compute ceiling**.
@@ -42,24 +51,25 @@ A second, internal red-team review of the v1.0 plan found that *observing* the w
 ## The redesigned architecture (`05.0`)
 
 ```
- Console (TS: Time-Machine · Causal Inspector · Oracle · Foresight;      Lo-fi glyph view in the console (Diorama · Street · travel map; ADR-0029)
-                                                                         [Godot 3D client: optional art phase 2]
-          Cultivator / Oracle modes)
-                     │  JSON-RPC control + binary columnar state frames  │
- ┌───────────────────┴──────────────────────────────────────────────────┴───────────────────┐
- │ rh-server (Rust): Timeline Manager · Live Sifter · Chronicle Writer · Keyframes · Foresight │
- │   rh-core + system crates (M1 regions · M2 demography · M3 agri/climate · M4 economy ·      │
- │   M5 contagion/hive · M6 polity(SDT) · M7 dynasty · M8 war · S* culture/tech/ecology)       │
- │   rh-minds (psych core · IAUS+HTN · beliefs/channels · persuasion)                          │
+ Downstream presentation tools (python/; plane C; never call the engine)        console/ (P5 only)
+   chronicle pipeline: annals → storyboards → panels → voices → local MP3 chapters 2D diorama: glyphs +
+   local saga reader + causal timeline · map export · rh-tui keyboard Time-Machine Kenney CC0 tiles
+          ▲ read sealed Parquet segments / tail the stream                            ▲
+          │                      journaled inputs (tip actions, forks) via IF-0 ──┐   │
+ ┌────────┴───────────────────────────────────────────────────────────────────────┴───┴─────┐
+ │ The engine only engines (Rust): rh-server (IF-0 control + World Stream) · Timeline Manager │
+ │   Live Sifter · Chronicle Writer · Keyframes · Foresight                                   │
+ │   rh-core + system crates (M1 regions · M2 demography · M7 dynasty · S6 artifacts ·        │
+ │   S7 vows · M3 harvest · M4 stores · M6 polity · later M5 contagion, M8 war, S* culture)    │
+ │   rh-minds / T1.minds (traits · ambition · opinions · IAUS; later HTN, beliefs, channels)  │
  │   Plane A authoritative · Plane B observation · Plane C narrative — three separate hashes  │
- └──────────┬───────────────────────────────┬───────────────────────────────┬────────────────┘
-   Parquet chronicle · Arrow keyframes   Rollout workers (forked timelines)   LLM Gateway (Python)
-   SQLite journal · DuckDB views         Foresight · ensembles · certification llama.cpp · vLLM · frontier
-                                                                               World & Narrative Compilers
+ └──────────┬───────────────────────────────┬────────────────────────────────────────────────┘
+   Parquet chronicle · Arrow keyframes   Rollout workers (forked timelines)   LLM Gateway (python/; outside
+   SQLite journal · DuckDB views         Foresight · ensembles · certification the engine; narrator + translator)
 ```
 
 **The key ideas**
-- **Three planes of state** (ADR-0024). Plane A is authoritative, plane B is what you observed (pins, the facts ledger, the 3D bubble), plane C is narrative (sift matches, significance, prose). A never reads B or C, and each plane has its own hash. The only way into A is a **journaled material input**. So **watching never changes history**, by construction (`05.2` §0).
+- **Three planes of state** (ADR-0024). Plane A is authoritative, plane B is what you observed (pins, the facts ledger, views), plane C is narrative (sift matches, significance, prose, voices, panels, visual DNA). A never reads B or C, and each plane has its own hash. The only way into A is a **journaled material input**. So **watching never changes history**, by construction (`05.2` §0).
 - **Scheduled outcomes for everyone** (ADR-0025). Deaths, births, migrations and marriages are sampled in advance as timers for every person, watched or not, and fire at their own tick. Nothing is back-dated. Your actions, speech acts and Oracle verbs are **material inputs** with a dependency scope. Dropping into the past is read-only; **acting in the past forks** a new timeline (`05.2` §3.2).
 - **Every person is a ledger row**, and **every person ever born is in the life-course log** (ADR-0026). IDs are **genealogical** ("this mother's n-th child"), so the same person exists in every branch and common random numbers survive across forks. Hydration adds detail, never invents people, and never takes authority. Pinning keeps what you were shown stable; it never makes anyone a named actor (`05.2` §1, §3).
 - **Determinism contract.** Keyed counter-based RNG, fixed-point thresholds, golden-run CI, and a divergence bisect tool. History = f(build, registry, manifest, seed, journal). Engine upgrades follow **"frozen past, migrated future"**: a new build continues from a migration keyframe, and older history replays with the archived build (ADR-0006, `05.1` §6, `05.2` §7).
@@ -67,13 +77,15 @@ A second, internal red-team review of the v1.0 plan found that *observing* the w
 - **The chronicle never forgets.** Typed causal edges, anchored state snapshots, retroactive significance with hindsight retention, and tiered storage that hides low-salience events rather than deleting them (`05.2`, `05.4`).
 - **Incremental story sifter.** A setting-agnostic pattern DSL compiled to automata, with declared match semantics and an SQL twin for every pattern. LLMs only re-rank and explain. **No hidden director** (`05.4`).
 - **The Mechanics Registry is the language.** It includes a small, typed **effect language**, so many new laws, overlays and verbs land as data rather than code. The world compiler runs: LLM *intent* plus a **mapping table** (every approximation visible) → deterministic expander → validators → a fast **liveness gate** (200 years × 8 seeds) → **deterministic calibration** if it fails (the LLM never tunes numbers) → play, with **certification** (1,000 years × 32 seeds) in the background. **Gap reports** turn your imagination into the agents' backlog (`05.5`).
+- **Sagas live in plane A** (ADR-0035). **Artifacts** (`S6.artifacts`) have one bearer or place, a bounded pull on the bearer's mind and a rumour that draws the ambitious. **Vows, grudges and quests** (`S7.vows`) give named actors persistent goals with a bounded agenda weight; they can fail and break under pressure, and a conflicted vower gathers stress until a mental break. Every chronicle-worthy event carries a **cinematic envelope** (cast, staging, emotion, instrument, typed motive edges) so every tragedy points to its origin. No prop appears from nowhere, nobody reacts to what they could not yet know, no throne sits empty, fugitives travel the roads, and every scar or ruin stores its cause. **The engine simulates truth; downstream tools generate perception.** **Mythic catalysts** seed scenarios (an awakening, a cursed inheritance, a prophecy) as journaled inputs. **Secrets v0** records who knows about a hidden act. The simulation decides every outcome.
+- **The engine only engines** (ADR-0035 §6). Engine crates hold no presentation, media or LLM code. The engine's only output is the World Stream; its only input is the journal. The chronicle pipeline (`05.11`: text → storyboards → panels and voices → local MP3 chapters), the map export and the local saga reader are separate tools in `python/`.
 - **Minds:** a generic psychological core with setting overlays, event-driven utility AI plus HTN, evidence-typed beliefs, and channels, of which **the hive is one**. **Whisper Counsel is parsed, not injected**, and scored deterministically. Every decision comes from the simulation: LLMs translate your acts in and describe the world out, and never decide (ADR-0034; `05.3`, `05.6` §0).
 - **The Oracle is an in-world entity** with its own belief store. The console has two modes: **Cultivator** (omniscient, verbs off) and **Oracle** (every view, including Foresight, filtered by what the Oracle knows) (`05.3` §6.2, `05.7`).
 - **Foresight is real forecasting.** It runs Monte-Carlo rollouts on forked timelines and uses common random numbers to compare interventions. This is the best use of your unbounded compute, and it is literally what the fictional Rehoboam does (ADR-0015, `05.3` §7).
 - **Narrative compiler.** A hierarchical, canon-gated pipeline with zero tolerated contradictions, style cards built on public-domain exemplars, and roughly $28–35 per novel (`05.4` §6).
 
 ## Stack in one line (`07`)
-Rust (core) · Python (LLM, compilers, calibration) · TypeScript + deck.gl + Sigma.js (console) · Parquet/Arrow/DuckDB/SQLite · llama.cpp + vLLM/SGLang + frontier APIs · a deck.gl glyph layer with Bitlands/Unscii (lo-fi art phase 1; Godot 3D optional later) · Chatterbox/Pocket/Qwen3-TTS · Rerun · marimo.
+Rust (engine only) · Python (LLM gateway, compilers, calibration, the chronicle pipeline, the saga reader) · TypeScript + deck.gl (the P5 diorama only) · Parquet/Arrow/DuckDB/SQLite · frontier APIs and serverless image APIs (FLUX.1 [dev] or SDXL) · Kokoro-82M narration, Chatterbox or Qwen3-TTS dialogue · a deck.gl glyph layer with Bitlands/Unscii and Kenney CC0 tiles (no 3D) · Rerun · marimo.
 
 **What we reuse from open source**, and what we build, is inventoried with licences and effort estimates in `14_reuse_inventory.md`.
 
@@ -83,17 +95,20 @@ Rust (core) · Python (LLM, compilers, calibration) · TypeScript + deck.gl + Si
 
 | Phase | Outcome | Gate |
 |---|---|---|
-| **P0** (≈ 4–6 wk) | Determinism harness, Registry, CI | Identical hashes across thread counts |
-| **P1** (≈ 16–24 wk, split into sub-phases in `11`) | 1,000 years of headless history | ≥ 90% stylized facts; ≤ 2 min/1,000 years at 100k |
-| **P2** (≈ 10–12 wk + a 3–5 wk G2 rating window) | Sifter + Time-Machine in a text harness (`rh-tui`; ADR-0030: text only until G2) | **Thesis gate:** ≥ 3 events per century that *you* rate ≥ 4/5, within a pause budget |
-| P3 (split into sub-phases in `11`) | Hive, minds, Oracle-2D, Foresight, 1M scale | Emergent witch-hunt spiral; Foresight validity tests |
-| P4 | Narrative and world compilers | 0 contradictions; gap-report loop proven |
-| P5–P7 | Lo-fi Diorama → Street-level → Oracle travel map (Dwarf Fortress–style glyph view in the console; ADR-0029) | ≈ 20–26 weeks instead of 34–40 for a 3D client; until G2 every view is text (`rh-tui`, ADR-0030); the engine is headless and never waits for a viewer |
+| **P0** (≈ 4–6 wk; SPR-001–010, unchanged) | Determinism harness, Registry, CI | Identical hashes across thread counts |
+| **P1a Bloodlines** (≈ 10–14 wk) | Dynasties, named minds v0, the Chronicle Writer, the World Stream; `solo` → `household` → `hamlet` | A dynasty lives, dies and inherits deterministically; the templated chronicle reads as a family history |
+| **P1b Legends** (≈ 10–14 wk) | Artifacts, vows, mythic catalysts, secrets v0; famine and unrest at low fidelity; `village` → kingdom (10k–50k) | Sagas form; plausibility bands hold |
+| **P2 Sagas & audio v0** (≈ 10–12 wk + a 3–5 wk G2 rating window) | Sifter with saga packs, keyboard Time-Machine (`rh-tui`), templated chronicle, **offline audio exporter** and reader v0 | **Thesis gate:** pre-registered, template-only rating of sagas against a coupling-ablated control |
+| **P3 The illustrated saga** (≈ 10–14 wk + a 2–3 wk window) | Narrative compiler, multi-voice audio drama, **graphic chronicle**, the local Web Graphic Novel / Storyboard Reader with the causal timeline | You listen to and read a season of your world's saga, rated |
+| P4 Deeper worlds (≈ 16–22 wk) | Full epistemics, plague, war, markets, Oracle, Foresight, whispers, world compiler | Couplings emergent; MOE-1 ≥ 6; Foresight validity |
+| P5 2D diorama (≈ 8–10 wk) | Glyphs and Kenney CC0 tiles, settlement growth view, travel map | Diorama believability |
+| Later / optional | 1M scale-up, M4 F2, era packs, the lo-fi street-level inhabitant | — |
+| **Cut** | Every custom-3D, Godot and VR WP (ADR-0035) | — |
 
-**If the thesis gate (G2) fails, no inhabitable-modality work starts.** Simulation and sifting are iterated until stories emerge.
+**If the thesis gate (G2) fails, no illustrated-saga work (P3) starts.** Simulation and sifting are iterated until sagas emerge. P0 to G2 takes about 9–12 months; the first season you listen to and read (G3) about 11–16 months (`11`).
 
 ## Top risks (`10`)
-1. Emergent history turns out boring (R-01).
+1. Emergent history turns out boring (R-01), or sagas feel scripted (R-31).
 2. Scope creep across modalities (R-02).
 3. Determinism leaks (R-03).
 4. Architectural decay from agent-written code (R-04).
@@ -102,7 +117,7 @@ Rust (core) · Python (LLM, compilers, calibration) · TypeScript + deck.gl + Si
 Every risk has an early-warning indicator and a mitigation. Agent governance (single-writer ownership, change classes, merge queue) is in `13`.
 
 ## What I need from you (`12`)
-★ Approve the core ADRs. ★ Choose the first reference world (recommended: feudal, dragons added in P3). ★ Your OS. ★ Your actual compute and cloud budget. Then commit to rating sessions at each gate, because your ratings *are* the north-star metric. Rulings go in `decisions-log.md`.
+The core ADRs, the first world, your OS, your compute and the saga pivot (ADR-0035) are decided (`decisions_pending.md`). **Open before P3:** the image provider and monthly budget (D29; default: a serverless API in batch, no GPU VM). Then commit to rating sessions at each gate, because your ratings *are* the north-star metric. Rulings go in `decisions-log.md`.
 
 ## Evidence base
 Eleven research dossiers (`research/R01`–`R11`, ~69k words, Oct 2026) covering:

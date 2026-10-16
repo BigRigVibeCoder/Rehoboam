@@ -2,6 +2,8 @@
 
 **Status:** Proposed · **Date:** 2026-10-15 · **Amended:** v1.1 (2026-10-15)
 
+**Amended by ADR-0035 (2026-10-16):** `rh-godot` is cut, so `rh-worldgen` is shared by the server and the offline presentation tools only; settlement layouts are presentation (P5).
+
 ## Context
 
 The draft ran society on 16×16 grid chunks and gave no account of street-level content. Politics, markets, armies and contagion follow provinces and routes. The 3D client needs deterministic towns that agree with the simulation.

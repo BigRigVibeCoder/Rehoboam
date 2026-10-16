@@ -4,28 +4,42 @@
 *Inputs: the four attached draft documents (Product Vision, Definitive System Design v2.0, Open-Source Bootstrap, rehoboam_2), your answers to the intake questions, and research dossiers R01–R11.*
 *v1.1 changes: MOE-1 gains a precision target and a pause budget; MOE-2 uses a coupling-ablated baseline; MOE-4 is redefined as "frozen past, migrated future"; MOE-6 is reported with Clopper–Pearson bounds; fidelity-level principle relaxed to match `05.1` §3; glossary aligned with the v1.1 architecture (planes, scheduled outcomes, material inputs, genealogical IDs, console modes).*
 *v1.2 (2026-10-16): V2, principle 1 and the glossary state the LLM roles of ADR-0034 (D27): LLMs translate in and describe out, never decide; deliberation consults and pull inputs retired.*
+*v1.3 (2026-10-16): the saga engine (ADR-0035, ratified by you the same day). New north star; §1, §2, MOE-1–MOE-6 and MOP-1 re-aimed at sagas instead of economic fidelity (IDs kept); the three consumption modes; §6 re-sequenced to the new phases; principle 7 follows ADR-0021's personal-use mode; glossary entries for artifacts, vows, mythic catalysts and the chronicle pipeline.*
 
 ---
+
+> **North star.** Rehoboam generates legends: a deterministic world whose dynasties, vows, relics and betrayals become sagas you can listen to, read and scrub through.
 
 ## 1. Your intent, restated
 
 This section restates the intent so that you can correct it. Every later document depends on it.
 
-> **Rehoboam is a personal world-engine.** It runs a civilisation from founding through centuries of history. History comes from deterministic simulation, not from a language model making things up. You can watch it as history: fast-forward, rewind, stop at the moments that matter and ask *why*. You can turn it into stories. Over time you can also step inside it: as an ambient painting on your second monitor, as a walker in its streets, and as a mortal oracle nudging its rulers.
+> **Rehoboam is a personal saga engine.** It runs a world from founding through centuries of history, in the manner of the Silmarillion or Dwarf Fortress's legends. Its story is **dynasties, ambitions, vows, relics and betrayals**; famine, plague, war, demography and taxes are the stage lighting and the pressure, not the story. History comes from deterministic simulation, not from a language model making things up. You stop at the moments that matter and ask *why*.
 >
-> It is **a creative engine and a world you inhabit and become invested in.** You keep improving it, raising its fidelity and complexity year after year. You build it **with AI coding agents** doing most of the implementation. **Compute is not the constraint**: start at low fidelity and be able to scale to any amount of compute later. The first thing that must work is **the Time-Machine with its Chronicle**.
+> **You are a reader and listener, not a gamer.** You **listen** to your world as an episodic audio chronicle, **read** it as illustrated storyboards and prose, **scrub** its causal timeline, and **glance** at it as a 2D diorama. You keep improving it, raising its depth year after year. You build it **with AI coding agents** doing most of the implementation. **Compute is not the constraint**, but the default world is a kingdom, not a million people. The first thing that must work is **a dynasty that lives, dies and inherits, told as a chronicle** (ADR-0035).
 
 These are the elements of your drafts I treat as the **core of the vision**. They are not up for debate unless you say otherwise:
 
 | # | Core element | Where it came from |
 |---|---|---|
-| V1 | Drama is born from **unforgiving, deterministic systems**: resources, logistics, contagion, death, succession. | Vision §1.1, Design §1.3 |
+| V1 | Drama is born from **unforgiving, deterministic systems**: dynastic ambition, succession, vows, relics and betrayal, under the pressure of famine, plague, war and death. | Vision §1.1, Design §1.3; ADR-0035 |
 | V2 | LLMs are used **only where they excel**, in three roles: the **workforce** that builds the engine (coding, research and review agents; build time); **translation in** (whispers, speech and world prompts become typed, journaled inputs); and **description out** (dialogue facade, narration). **They never decide**: no action, outcome or parameter of the simulation (ADR-0034). | Vision §4, Design §1.3; D27 |
 | V3 | **Asymmetric minds.** Fragmented, paranoid, grieving humans collide with a zero-friction collective intelligence, the Hive. | Vision §1.1 |
 | V4 | **Scale invariance.** One world can be seen from orbit across 1,000 years or from a cobblestone corner in real time. **And one engine runs worlds from a single person to one million** (ADR-0028): a household enduring the trials of Job, or a realm across a millennium. | Vision §1, Design §1.2; director, 2026-10-15 |
 | V5 | **Infinite worlds from prompts.** One engine, configured by a declarative world manifest. | Vision §3 |
-| V6 | **Five relationships with the world:** Diorama, Time-Machine, Inhabitant, Oracle, Narrative Compiler. | Vision §2 |
+| V6 | **Relationships with the world**, in order: the **chronicle you listen to and read** (audio, prose, graphic storyboards), the **Time-Machine** you scrub, the **Oracle** who influences, and the **Diorama** you glance at. Walking the streets as an Inhabitant is later and optional (ADR-0035). | Vision §2; ADR-0035 |
 | V7 | **Influence, not control.** The player is a mortal catalyst with a finite resource (Foresight), not an RTS god. | Vision §2 (Modality 4) |
+
+### 1.1 The three consumption modes (ADR-0035)
+
+You take in your world in three ways, plus one ambient view. All of them are plane C or plane B: they read the chronicle and never change history.
+
+| Mode | What you do | Delivered as | First phase |
+|---|---|---|---|
+| **Listen** | Hear your world's saga as episodes | The audio chronicle: local MP3 chapters (narration in P2, a multi-voice drama in P3), played in the local saga reader | P2 |
+| **Read** | Flip through the sifted key scenes as illustrated panels, and read the saga as prose | The graphic chronicle (storyboards, then image panels with clickable causal links) and the narrative compiler, in the local Web Graphic Novel / Storyboard Reader, the only presentation surface for sagas | P3 |
+| **Scrub** | Move along the causal timeline and click any event through to its causes | The text Time-Machine (P2), then the saga reader's causal timeline (P3) | P2 |
+| *Glance* (ambient) | Keep the world on a second screen | The 2D diorama of CC0 tiles and glyphs | P5 |
 
 ## 2. What "success" means
 
@@ -35,8 +49,8 @@ That sentence contains four testable claims. The whole plan is organised around 
 
 | ID | Success claim | What would prove it | What would falsify it |
 |---|---|---|---|
-| **S1** | **Creative engine.** It produces history and stories you actually want to read. | Over successive runs you consistently rate sifted events and chronicles as "I would read this" (see MOE-1, MOE-2). | Runs read like logs. Every seed tells the same story. Prose hides the fact that the simulation is shallow. |
-| **S2** | **Inhabitable.** The world feels like a place with people in it, not a spreadsheet. | Any person you look at has a coherent identity, kin, history and errand. Places persist and change believably over centuries (MOE-3). | People pop in and out of existence. Characters forget what they told you. Towns re-roll between visits. |
+| **S1** | **Creative engine.** It produces sagas you actually want to listen to and read. | Over successive runs you consistently rate sifted sagas and chronicle episodes as "I want the next one" (see MOE-1, MOE-2). | Runs read like logs. Every seed tells the same story. Vows and relics play out like a script. Prose hides the fact that the simulation is shallow. |
+| **S2** | **Inhabitable,** as a reader inhabits a legendarium. The world feels like a place with people in it, not a spreadsheet. | Any person you meet in the chronicle has a coherent identity, kin, history, look and purpose. Houses, relics and places persist and change believably over centuries (MOE-3). | People pop in and out of existence. A hero's face changes between panels. Towns re-roll between visits. |
 | **S3** | **Investment.** You care what happens to *your* world and can keep it. | Worlds persist indefinitely. History is never silently lost. You can branch "what-ifs", replay any moment, and revisit people across centuries (MOE-4). | Saves break on upgrade. Compaction deletes the backstory you cared about. A replay produces a different past. |
 | **S4** | **Evolvable.** Fidelity and complexity can rise continuously without rewrites. | New mechanics and higher-fidelity models can be added by AI agents as isolated, tested modules (MOE-5), and old worlds remain loadable (MOE-4). | Every new feature needs a cross-cutting refactor. The engine fossilises at its first fidelity level. |
 
@@ -46,7 +60,7 @@ Commercial success, public reception and store policy were **not** chosen as the
 
 These drivers rank and break ties for every decision in the architecture and the ADRs.
 
-1. **D1 — Truth before beauty.** The simulation is the only source of truth. Everything shown, whether prose, 3D or dialogue, is a *view* over it and carries provenance back to it. This serves S1, S2 and S3.
+1. **D1 — Truth before beauty.** The simulation is the only source of truth. Everything shown, whether prose, voices, panels or dialogue, is a *view* over it and carries provenance back to it. This serves S1, S2 and S3.
 2. **D2 — Story yield is the north-star metric.** A deterministic simulation that is boring has failed, however fast it is. The sifter and chronicle are built *with* the first simulation, not after it. This serves S1.
 3. **D3 — Never lose history, never lie about it.** Event sourcing, deterministic replay, keyframes, branching timelines and versioned saves all follow. Nothing is deleted on a rule fixed at creation time. This serves S3.
 4. **D4 — Observer invariance.** Looking at the world, by hydrating a street or opening an inspector, must not change history. Only *material inputs*, which are journaled, may. This serves S2 and S3.
@@ -62,12 +76,12 @@ These drivers rank and break ties for every decision in the architecture and the
 
 | ID | Measure | Method | Target |
 |---|---|---|---|
-| MOE-1 | **Story yield.** Auto-paused events per simulated century that you rate ≥ 4/5 on "I want to know what happens next". Two companion measures stop yield being bought with noise: **precision**, the fraction of auto-pauses you rate ≥ 3/5, and the **pause budget**, the number of auto-pauses per simulated century. | Blind rating sessions over random seeds, using the rating tool built into the console (TM-6). | Pause budget: ≤ 10 auto-pauses per century at default thresholds. P2: ≥ 3 per century rated ≥ 4, median over 10 seeds, with precision ≥ 0.5. P3: ≥ 6, with precision ≥ 0.7. |
-| MOE-2 | **Chronicle quality.** Pairwise preference of the chronicle against the chronicle of a **coupling-ablated** run: the same engine, manifest, seed and sifter, with the cross-system couplings disabled (`05.1` §8, e.g. famine no longer feeds unrest). | Blind A/B of template-rendered, length-matched chronicles (`09` V-HUM-02). | ≥ 80% preference. *(Proposed, Q21: gate on the lower 80% confidence bound being above 50% over ≥ 40 pairs, and report the point estimate against 80%.)* |
-| MOE-3 | **Inhabitation coherence.** The rate of observed contradictions in sampled people and places: identity, kin, location, memory. | Automated probes plus manual "interrogate 20 random people" sessions. | 0 hard contradictions. Fewer than 1 soft inconsistency per 20 probes. |
+| MOE-1 | **Story yield.** Auto-paused saga moments (a vow sworn or broken, a relic changing hands, a betrayal, a succession) per simulated century that you rate ≥ 4/5 on "I want to know what happens next". Two companion measures stop yield being bought with noise: **precision**, the fraction of auto-pauses you rate ≥ 3/5, and the **pause budget**, the number of auto-pauses per simulated century. | Blind rating sessions over random seeds, using the rating tool built into the console (TM-6). | Pause budget: ≤ 10 auto-pauses per century at default thresholds. P2: ≥ 3 per century rated ≥ 4, median over 10 seeds, with precision ≥ 0.5. P4: ≥ 6, with precision ≥ 0.7. |
+| MOE-2 | **Chronicle quality.** Pairwise preference of the chronicle against the chronicle of a **coupling-ablated** run: the same engine, manifest, seed and sifter, with the cross-system couplings disabled (`05.1` §8: a murder no longer feeds a vow, a famine no longer strains one, a relic no longer pulls on its bearer). | Blind A/B of template-rendered, length-matched chronicles (`09` V-HUM-02). A second, report-only arm turns the saga mechanics off (vows and artifacts; V-SAGA-06). | ≥ 80% preference. *(Proposed, Q21: gate on the lower 80% confidence bound being above 50% over ≥ 40 pairs, and report the point estimate against 80%.)* |
+| MOE-3 | **Inhabitation coherence.** The rate of observed contradictions in sampled people, places and relics: identity, kin, location, memory, who bears what. | Automated probes plus manual "interrogate 20 random people" sessions. | 0 hard contradictions. Fewer than 1 soft inconsistency per 20 probes. |
 | MOE-4 | **Continuity ("frozen past, migrated future").** A new engine build can load a saved world at its head and continue from a **migration keyframe**. Seeks to times before the migration replay with the archived build that wrote that history (DET-10, `05.2` §7). | Save-compatibility corpus of golden worlds in CI: load at head, continue, then seek to a point before the migration. | 100% of saved worlds load and continue at their head. 100% of pre-migration seeks reproduce the archived build's plane-A hashes. |
-| MOE-5 | **Evolvability.** Agent lead time to add a new registry mechanic (e.g., "drought-resistant crop") or raise one system's fidelity level, measured from spec to merged with all gates green. | Track work-package cycle times. | A median of 1–3 agent-days for a mechanic. A data-only extension touches only the Registry. A new system touches only its own crate, Registry entries and contract tests, plus contract crates and lifecycle command types (EVO-1, `13` §4.2). |
-| MOE-6 | **Bad-run rate.** Fraction of seeds with fewer than **N = 2** completed story arcs (complete sift matches from ≥ 2 pattern packs) per simulated century (R02 §R4). N may be revised at G1b; any change is logged in the decisions log. | Ensemble runs, 32 seeds per manifest. Reported with its exact two-sided 95% (Clopper–Pearson) confidence interval. | Below 10% (point estimate). |
+| MOE-5 | **Evolvability.** Agent lead time to add a new registry mechanic (e.g. a new relic kind or vow kind) or raise one system's fidelity level, measured from spec to merged with all gates green. | Track work-package cycle times. | A median of 1–3 agent-days for a mechanic. A data-only extension touches only the Registry. A new system touches only its own crate, Registry entries and contract tests, plus contract crates and lifecycle command types (EVO-1, `13` §4.2). |
+| MOE-6 | **Bad-run rate.** Fraction of seeds with fewer than **N = 2** completed saga arcs (complete sift matches from ≥ 2 pattern packs, such as a vow arc and a relic chain) per simulated century (R02 §R4). N may be revised at G1b; any change is logged in the decisions log. | Ensemble runs, 32 seeds per manifest. Reported with its exact two-sided 95% (Clopper–Pearson) confidence interval. | Below 10% (point estimate). |
 
 **Why these baselines and bounds.**
 - **MOE-1** without a budget could be met by pausing more often. The budget caps pauses at about one per decade, and precision measures how many of them were worth your time. The P2 and P3 precision targets are initial values; changes are made at a gate and logged in the decisions log.
@@ -78,11 +92,11 @@ These drivers rank and break ties for every decision in the architecture and the
 
 | ID | Measure | Target |
 |---|---|---|
-| MOP-1 | Headless macro run time for 1,000 years at 100k people, monthly resolution (8-core desktop) | P1: ≤ 2 min. P3: ≤ 15 min at 1M people (provisional; set from P1 measurements, `08`). |
+| MOP-1 | Headless run time for 1,000 years of the default saga world (meso: ≤ 50k people, ≤ 2,000 named actors), monthly resolution (8-core desktop) | P1b: ≤ 2 min. At 100k (≤ 2 min) and 1M (≤ 15 min, provisional) only with the optional scale-up (ADR-0035; `08`). |
 | MOP-2 | Determinism: plane-A `state_hash` identical across thread counts and repeated runs (same binary and platform), and unchanged by any viewing (DET-6) | 100%, checked every sim-month in CI. |
 | MOP-3 | Timeline scrub latency, chronicle and aggregates (no re-simulation) | < 100 ms. |
 | MOP-4 | "Drop in" seek latency (keyframe plus replay) | ≤ 10 s at 100k people with a ±10-year cache. |
-| MOP-5 | Stylized-fact validation bands passed (the M9 validation harness, `05.1` §3; bands from R09 §11 and the R09 recommendation "Validation harness (M9)") | ≥ 90% of bands across a 32-seed ensemble. |
+| MOP-5 | Stylized-fact validation bands passed (the M9 validation harness, `05.1` §3; bands from R09 §11 and the R09 recommendation "Validation harness (M9)") | ≥ 90% of the gate bands across a 32-seed ensemble. Under ADR-0035 the economic-history bands are reported, not gated (`09` §3.1). |
 | MOP-6 | Canon contradictions in generated prose | 0 per 1,000 words for CT0/CT1 claims (R08). |
 
 ## 5. Principles (non-negotiable unless you overturn them)
@@ -93,22 +107,26 @@ These drivers rank and break ties for every decision in the architecture and the
 4. **Pressure is diegetic and declared.** There is no hidden "director" spawning events in the simulation. Pacing lives in presentation: auto-pause, camera choice and arc selection (R02 §R4). Any opt-in storyteller is labelled and logged as a cause.
 5. **Never delete history by fixed rule.** Information is tiered, summarised and archived, but never destroyed by a weight assigned before significance is known.
 6. **Each fidelity level must stand on its own evidence.** Every level is validated against the stylized facts. Neighbouring levels must agree on conserved quantities and declared targets, and the tested mixes are published as a supported-combinations matrix (`05.1` §3).
-7. **Licence hygiene by default.** No GPL, AGPL or non-commercial code or weights in the engine. Ideas are reimplemented, not copied. This keeps open the option of publishing or selling later.
+7. **Licences in personal-use mode** (D19, ADR-0021 as amended). Rehoboam is never distributed, so any licence may be used, except one whose terms forbid the use itself. Unlicensed code is still not copied, and a licence ledger records what is used.
 
 ## 6. Scope and sequencing
 
-The five modalities are not five features of one release. Each one alone has been the *entire product* of a multi-year precedent (R11 §G). They share one engine and are delivered in sequence:
+The modalities are not features of one release. Each one alone has been the *entire product* of a multi-year precedent (R11 §G). They share one engine and are delivered in sequence. **ADR-0035 re-orders them for a reader and listener:** the saga and its chronicle come first, interactive clients last.
 
-| Order | Modality | Delivered as | Why this position |
+| Order | Phase | What you get | Why this position |
 |---|---|---|---|
-| 1 | **Millenary Time-Machine + Chronicle** (2D console) | The first playable | Cheapest test of the core thesis (S1). Exercises determinism, the sifter and the causal graph. No 3D or LLM dependency. |
-| 2 | **Itinerant Catalyst (thin)**: Oracle verbs in the console | An extension of 1 | Adds agency and "Foresight" (Monte-Carlo forecasts) using the same engine. Proves the persuasion and epistemics models. |
-| 3 | **Narrative Compiler**: chronicle, then saga, then novella | A batch pipeline | Depends on a rich chronicle. Batch and offline, so its risk is isolated. |
-| 4 | **Living Diorama**: a lo-fi glyph view of the live or replayed world (Dwarf Fortress style; ADR-0029) | The first inhabitable view, in the console; also a desktop wallpaper | Cheap, works in every era via glyph packs, and lets you watch the world months earlier than a 3D client would. No T3 hydration yet: crowd shading, glyphs and Spectacle only. The embodied bubble arrives with 5. A 3D "painted miniature" client is an optional later art phase. |
-| 5 | **Street-Level Inhabitant**: hydration, then grounded dialogue | An extension of 4 | The highest-risk modality: an LLM facade, TTS, the hydration bubble. |
-| 6 | **Oracle on the travel map**: avatar plus strategic travel map (lo-fi first; 3D in the optional art phase 2) | An extension of 2 and 5 | Combines everything. |
+| 1 | **P1a Bloodlines** | Dynasties that live, die and inherit, with named minds, told as a templated family history | The substrate every saga needs: people, kin, succession, ambition |
+| 2 | **P1b Legends** | Artifacts, vows, grudges and quests, mythic catalysts and secrets, under low-fidelity famine and unrest, in a kingdom of 10k–50k | The saga mechanics, in plane A, where they change what people do |
+| 3 | **P2 Sagas & audio v0** | The sifter with saga pattern packs, the keyboard Time-Machine (**scrub**), the templated chronicle and the **offline audio exporter** with reader v0 (**listen**) | The cheapest test of the thesis (S1), now on sagas: G2 |
+| 4 | **P3 The illustrated saga** | Prose sagas, a multi-voice audio drama, the **graphic chronicle** (**read**) and the saga reader with the causal timeline | Depends on a rich chronicle. Batch and offline, plane C, so its risk is isolated |
+| 5 | **P4 Deeper worlds** | Full epistemics, plague, war, markets, culture, the Oracle with Foresight and whispers, the world compiler | Deeper pressure and agency once sagas are proven |
+| 6 | **P5 2D diorama** | A glyph and CC0-tile view, a settlement growth view and a travel map (**glance**) | Ambient, cheap, and never needed to enjoy the saga |
+| Later | Optional | 1M scale-up, M4 F2, era packs, the lo-fi street-level inhabitant | On your call |
+| Cut | — | Every custom-3D, Godot and VR view | ADR-0035: you are not a gamer, and 3D was the largest content cost in the plan |
 
-Out of scope until you decide otherwise (see `12_open_questions.md`): multiplayer and shared worlds, mobile, web distribution, and a commercial launch with store-policy compliance work.
+**The engine only engines** (ADR-0035 §6). The engine's only output is the World Stream and its only input is the journal. Every way of listening, reading, scrubbing or glancing is a separate tool downstream of it.
+
+Out of scope until you decide otherwise (see `12_open_questions.md`): multiplayer and shared worlds, mobile apps, web distribution, and a commercial launch.
 
 **Worlds are not stuck in time (ADR-0027).** Eras are *state*, not templates. A world that starts agrarian can pass through early-modern, industrial and modern conditions in one continuous run, because every era-sensitive mechanism is a function of technology and institutions, and institutions themselves change. Coverage grows through **era packs**. A world that reaches the edge of what the engine can model waits there, files a gap report, and continues when the next pack ships.
 
@@ -118,10 +136,12 @@ Out of scope until you decide otherwise (see `12_open_questions.md`): multiplaye
 
 | Thesis | Our position | Early test |
 |---|---|---|
-| Unforgiving physics makes drama. | **Necessary but not sufficient.** Emergent behaviour is not narrative (Walsh, Ryan; R02 §3). Drama needs (a) systems with *contingent unlocking*: actions that create follow-up opportunities, (b) knowledge asymmetry, and (c) curation. | P2 gate: MOE-1 on 10 seeds (rated by you); MOE-6 on 32 seeds (automated). If it fails, fix the simulation and sifter before any 3D. |
-| Grounding makes generated fiction authentic. | **Half true.** Grounding fixes continuity and plot holes, not prose quality (R08). | P4 gate: zero canon contradictions plus your blind rating against an ungrounded baseline. |
-| Local small LLMs can voice any citizen within their knowledge. | **Unproven.** Frontier models leak "future knowledge" 54% of the time on TimeChara (R04/R05). It needs architecture: plan-then-realise, belief-scoped context and claim checks. | P6 spike (WP P6.4): RP-200, a 200-scenario role-play eval run against our own belief store. |
-| 1M entities with individual drama. | **Feasible in the macro model** as per-person ledger rows (R01: 19–64 MB, tens of ms per month). Individual *cognition* stays limited to 1–5k named actors. | P1/P3 MOP-1 benchmarks. |
+| Unforgiving physics makes drama. | **Necessary but not sufficient.** Emergent behaviour is not narrative (Walsh, Ryan; R02 §3). Drama needs (a) systems with *contingent unlocking*: actions that create follow-up opportunities, (b) knowledge asymmetry (secrets v0), and (c) curation. Vows and relics are contingent unlocking made explicit. | P2 gate: MOE-1 on 10 seeds (rated by you); MOE-6 on 32 seeds (automated); the saga-mechanics ablation reported. If it fails, fix the simulation and sifter before any illustrated work (P3). |
+| Vows and relics make sagas. | **Plausible, untested.** They give actors persistent goals that override routine, which is what saga plots are made of. The risk is that they read as scripted (R-31). | G1b: V-SAGA-10 (every vow kind ends in more than one way). G2: the saga-mechanics ablation (V-SAGA-06, reported). |
+| Grounding makes generated fiction authentic. | **Half true.** Grounding fixes continuity and plot holes, not prose quality (R08). | P3 gate (G3): zero canon contradictions plus your blind rating against an ungrounded baseline, and a season you listen to and read. |
+| Generated panels can keep a character recognisable. | **Unproven.** Image models drift between panels. Deterministic visual DNA, a canonical character sheet and reference conditioning should help (`05.11`). | P3: the consistency report (V-SAGA-08) before it becomes a gate (R-32). |
+| Local small LLMs can voice any citizen within their knowledge. | **Unproven.** Frontier models leak "future knowledge" 54% of the time on TimeChara (R04/R05). It needs architecture: plan-then-realise, belief-scoped context and claim checks. | Later and optional (WP P6.4): RP-200, a 200-scenario role-play eval run against our own belief store. |
+| 1M entities with individual drama. | **Feasible in the macro model** as per-person ledger rows (R01: 19–64 MB, tens of ms per month). Individual *cognition* stays limited to 1–5k named actors. **Not needed for sagas:** the default world is a kingdom of 10k–50k with 200–2,000 named actors (ADR-0035). | P1b MOP-1 at meso; 1M only with the optional scale-up (P3.10). |
 
 ## 8. Glossary
 
@@ -183,7 +203,8 @@ These are distinct from the canon tiers CT0–CT3 (§8.4).
 - **Intent / expander.** The LLM writes a small **intent**: a template choice, bounded overrides and flavour seeds. A deterministic **expander** turns it into the full manifest. No LLM writes the bulk of a world.
 - **Mapping table.** Emitted alongside the intent. Every content-bearing span of the prompt is mapped to Registry IDs as *exact*, *approximate* or *unsupported*, and the table is shown on the Genesis screen.
 - **Gap report.** A structured record of something you asked for that the Registry cannot express. Every approximate or unsupported mapping files one. A `data_only` gap closes with a Registry edit; a `needs_code` gap becomes an agent work package.
-- **Catalyst.** A manifest initial condition that sets up drama, such as dynastic tension or a contested artefact. It names a polity and a role, never a person, and never forces an outcome.
+- **Catalyst.** A manifest initial condition that sets up drama, such as dynastic tension or a contested artefact. It names a polity, a place or a role (or a declared cast member), and never forces an outcome.
+- **Mythic catalyst.** A scenario seed (ADR-0035, extending ADR-0028 §3): an entity that awakens in a given year, a relic that passes to a named role, a prophecy announced to named actors. It is an initial condition or a scheduled, journaled material input; every consequence is simulated.
 - **Overlay.** A setting-specific readout (Paranoia, Filial Piety, Despair…) derived from the generic psychological core by a Registry formula. The UI and the sifter can read it; the simulation runs on the core.
 
 ### 8.6 Minds and the Oracle
@@ -193,3 +214,18 @@ These are distinct from the canon tiers CT0–CT3 (§8.4).
 - **Oracle.** Your in-world persona: a plane-A entity with its own belief store, fed by the same channels as everyone else. Its verbs are material inputs.
 - **Cultivator mode / Oracle mode.** The console's two modes. **Cultivator** shows the true state, secrets included, with Oracle verbs disabled by default. **Oracle** filters every view, including Foresight, through what the Oracle knows. Switching is journaled.
 - **Foresight (mechanic).** Monte-Carlo rollouts of forked timelines that estimate the probabilities of future outcomes. It is the Oracle's power and the engine's namesake. In Oracle mode, rollouts start from a belief-resampled state, so they never leak hidden truth.
+
+### 8.7 Sagas and the chronicle pipeline (ADR-0035)
+- **Saga.** A connected run of sifted arcs around a house, a vow or a relic: what the engine is for.
+- **Artifact.** A unique, singular object in plane A (`S6.artifacts`): one bearer or one location at a time, a fixed-point pull on its bearer's mind (sent to the minds system as lifecycle commands), and a rumour that draws ambitious actors.
+- **Vow, grudge, quest.** A persistent directional goal in plane A (`S7.vows`), such as `AVENGE_KIN(father, murderer)`. It adds a bounded priority to its vower's agenda, never to a survival decision, and ends fulfilled, broken or void (the vower died).
+- **Secrets v0.** Minimal epistemics: who knows about a hidden act. Betrayal needs it.
+- **Audio chronicle.** The chronicle as narrated episodes (P2), then as a multi-voice drama (P3), written by an offline exporter as local MP3 chapters and played in the local saga reader. Plane C.
+- **Graphic chronicle.** The sifter's climaxes as four-panel storyboard scripts (staging, confrontation, climax, consequence) and then illustrated panels, each linked to its events. Plane C.
+- **Cinematic event envelope.** The five groups of facts a chronicle-worthy event carries for the downstream tools: cast, staging, emotional vector, action and props, and the causal "why". Only simulated facts are stored in plane A (roles, place, weather and emotion snapshots, the instrument, typed motive edges); the rest is derived in plane C (`05.2` §4.1a).
+- **Stress and mental break.** A named actor's fixed-point stress rises when a vow, kin loyalty or a value conflicts with the situation; above a threshold a mental break is a scheduled timer, and the actor commits a volatile act from the Registry break table (minds v0, P1a).
+- **Visual DNA.** A named actor's look, `H(world_seed, person_id, "visual")` unpacked into locked tokens from the Registry's visual vocabulary. A pure plane-C function of plane-A facts (genealogy, age, scars, artifacts borne, regalia, health); it never consumes a plane-A random draw. Children inherit their parents' tokens with a keyed variation.
+- **Information horizon.** Secrets v0's rule: a hidden act is known first only by its actor, accomplices and witnesses, and spreads only through scheduled outcomes (discovery, alarm, flight, news at travel speed, testimony). Nobody reacts before they know.
+- **Legends reverse key.** Damage or transformation state stores its cause event inside the value (`Ruin { cause }`, `Scar { cause, site }`), so every change answers "why?".
+- **Ontological truth and perception.** The engine simulates matter, space, time, state and the causal graph; downstream tools generate pixels, prompts, dialogue, sound and prose (ADR-0035 §5a).
+- **The engine only engines.** Engine crates hold no presentation, media or LLM code. The engine's only output is the World Stream and its only input is the journal; every presentation tool is a separate consumer downstream (ADR-0035 §6).
