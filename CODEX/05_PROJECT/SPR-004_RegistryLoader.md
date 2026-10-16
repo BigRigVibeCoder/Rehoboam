@@ -44,7 +44,7 @@ version: 1.0.0
 ### T-02: Manifest loader
 - **Deliverable:** Typed manifest loading with the same errors as `manifest_v0.py`
 - **Acceptance:** Parity test on all example manifests (same verdicts and error counts)
-- **Status:** [ ] not started
+- **Status:** [x] done (`rh-registry::manifest`, `rh-cli manifest validate`; parity on 5 examples + 16-file corpus, `bin/manifest_parity.py`)
 
 ### T-03: Ownership lint
 - **Deliverable:** Column ownership from `specs/systems/*.odd.toml` checked against each system's `AccessSpec` (stub until SPR-005)

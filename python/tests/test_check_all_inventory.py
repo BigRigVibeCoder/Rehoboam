@@ -62,6 +62,8 @@ REQUIRED_GATES = (
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
     "V-PLN-01 compile-fail fixture has a clean dependency graph",
+    "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
+    "V-WC-04 parity positive control: drifted Registry must FAIL",
     "Virtual telemetry (S5 prototype)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",

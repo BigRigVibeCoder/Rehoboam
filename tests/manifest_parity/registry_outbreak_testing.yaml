@@ -1,0 +1,52 @@
+# Parity corpus (SPR-004 V-WC-04): Covert outbreak without M5 and with a testing technology; minutes resolution at scale; focus duplicates.
+manifest_version: 0
+registry_version: "0.1.0"
+world:
+  id: aethelgard
+  display_name: "New Aethelgard Metroplex"
+  template: modern_metropolis
+  seed: 2031
+  calendar: {days_per_year: 365, months: 12, seasons: 4, epoch_label: "AE"}
+  horizon: {years: 10, label: historical}
+  activity_resolution: minutes
+  focus: [{settlement: harbour, activity_resolution: minutes}, {settlement: harbour, activity_resolution: blocks}]
+  fidelity_profile: {M2.demography: F1, M4.economy: F1, M5.contagion: F1, M6.polity: F1}
+geography:
+  raster_resolution: 2048
+  region_count: 400          # districts and neighbourhoods
+  heightmap_template: river_delta_city
+  climate: {zone: urban_temperate, harvest_sigma: 0.08, autocorr: 0.2, spatial_share: 0.9, volcanic_rate: 0.0}
+peoples:
+  - archetype: human
+    population: 500000
+    class_shares: {commoner: 0.70, burgher: 0.27, elite: 0.03}
+    cultures:
+      - {id: aethel, name: "Aethelgarders", naming_seed: "modern anglo-nordic, transit-line nicknames", value_bias: {self_direction: 0.3, security: 0.2}}
+    faiths:
+      - {id: secular, name: "Secular civic", doctrine_tags: [rule_of_law]}
+      - {id: reformed, name: "Reformed Assembly", doctrine_tags: [communal_service]}
+polities:
+  - id: metroplex
+    name: "Metroplex Council"
+    government: municipal_democracy
+    succession_law: elective
+    titles: {authority: Mayor, successor: Deputy_Mayor, investigator: Chief_Medical_Examiner, subordinate: Precinct_Captain}
+systems:
+  M1.regions: {route_cost_sea: 1.0, route_cost_river: 3.0, route_cost_land: 10.0}
+  M2.demography: {e0: 81, tfr: 1.5}
+  M4.economy: {alpha: 0.5, food_price_elasticity: 0.3, base_tax: 0.3, trade_kappa: 0.15}
+  M6.polity: {tax_rate: 0.3, psi_threshold: 2.2, instability_mortality: 0.005}
+institutions: [testing_mandate, quarantine_law]
+technologies: [electric_grid, rail, germ_theory, blood_assay]
+catalysts:
+  - kind: covert_outbreak
+    seed_infected: 10000
+    seed_region_hint: port
+    channel: hive
+overlays: [paranoia, despair]
+narrative:
+  pattern_packs: [covert_infiltration, plague_era, witch_hunt, irony]
+  default_style_card: noir_city
+presentation:
+  era_art: contemporary_neon
+  palette: rain_and_sodium
