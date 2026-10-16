@@ -208,21 +208,34 @@ def _comment_end(src: str, i: int) -> int | None:
     return None
 
 
-def _literal_end(src: str, i: int) -> int | None:
-    """Return the end of the string or char literal starting at ``i``, or None if there is none."""
+def _prefixed_literal_end(src: str, i: int) -> int | None:
+    """Return the end of a b"", b'', c"", r"", br"" or cr"" literal starting at ``i``, or None."""
     if i > 0 and IDENT_CHAR.match(src[i - 1]):
-        return None  # inside an identifier: not a b"", r"" or c"" prefix
+        return None  # a prefix letter inside an identifier (`sub`, `bar`) starts no literal
     raw = RAW_STRING_START.match(src, i)
     if raw:
         closing = '"' + raw.group("hashes")
         end = src.find(closing, raw.end())
         return len(src) if end < 0 else end + len(closing)
-    prefix = 1 if src.startswith(('b"', 'c"', "b'"), i) else 0
-    if src.startswith('"', i + prefix):
-        return _quoted_end(src, i + prefix + 1, '"')
-    if src.startswith("'", i + prefix):
-        return _char_literal_end(src, i + prefix)
+    if src.startswith(('b"', 'c"'), i):
+        return _quoted_end(src, i + 2, '"')
+    if src.startswith("b'", i):
+        return _char_literal_end(src, i + 1)
     return None
+
+
+def _literal_end(src: str, i: int) -> int | None:
+    """Return the end of the string or char literal starting at ``i``, or None if there is none.
+
+    A bare quote opens a literal wherever it stands, even right after an identifier character
+    (``return'"'``): whether ``'`` starts a char literal or a lifetime is decided by what follows
+    it, never by what precedes it (DEF-3).
+    """
+    if src.startswith('"', i):
+        return _quoted_end(src, i + 1, '"')
+    if src.startswith("'", i):
+        return _char_literal_end(src, i)
+    return _prefixed_literal_end(src, i)
 
 
 def _token_end(src: str, i: int) -> int | None:

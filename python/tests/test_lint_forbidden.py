@@ -76,6 +76,22 @@ def test_char_literals_do_not_hide_the_code_after_them(prefix: str) -> None:
     assert rules_hit(prefix + " let m: HashMap<u8, u8>;\n") == ["hash-collections"]
 
 
+@pytest.mark.parametrize(
+    ("source", "rule"),
+    [
+        ("fn f()->char{return'\"';}\nfn g(){let _t=Instant::now();}\n", "wall-clock"),
+        ("fn f()->char{return'\\'';}\nunsafe{}\n", "unsafe"),
+        ("fn f()->char{return'\\\\';}\nunsafe{}\n", "unsafe"),
+        ("fn f()->&'static str{return\"x'y\";}\nunsafe{}\n", "unsafe"),
+        ("fn f<'a>(x:&'a str)->&'a str{x}unsafe{}\n", "unsafe"),
+        ("match c{'a'=>1,_=>2};let m:HashMap<u8,u8>;\n", "hash-collections"),
+    ],
+)
+def test_a_quote_right_after_an_identifier_is_still_a_literal(source: str, rule: str) -> None:
+    """``return'"'`` is a char literal; only lookahead decides char versus lifetime (DEF-3)."""
+    assert rules_hit(source) == [rule]
+
+
 def test_lifetimes_and_labels_are_code() -> None:
     """'a and 'outer are not char literals; code after them is still scanned."""
     source = "fn f<'a>(x: &'a str) { 'outer: loop { break 'outer; } let t = SystemTime::now(); }\n"
