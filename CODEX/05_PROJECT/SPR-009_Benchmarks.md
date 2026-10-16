@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.3.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -17,7 +17,7 @@ version: 1.2.0
 # SPR-009 — Benchmark harness and regression gate
 
 - **Roadmap item:** `docs/11` P0.7 · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-005 · **Plan approved by the director 2026-10-16** (P0 batch)
+- **Depends on:** SPR-007 (benches 7 and 8 measure its plane hashes and keyframes) and SPR-008 (T-03 and T-05 run on its `smoke` world). T-04 also needs `adjutant` and the director's laptop (RUN-001, RUN-002). Architect, 2026-10-16: it may start once SPR-007 merges, alongside SPR-008, and merges after it · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** `docs/08` §9; GOV-006
 - **Requirements covered:** PERF-4
 

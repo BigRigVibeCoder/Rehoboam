@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [PRJ-001, BCK-002, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** The development backlog, rolling wave. P0 is planned in full as SPR-001 to SPR-010 and is unchanged by ADR-0035 (the saga engine). P1a "Bloodlines" is sketched as items. Later phases are listed by their `docs/11` work packages. Priorities follow GOV-007 §4. The Architect re-plans at every gate.
@@ -22,16 +22,18 @@ version: 1.1.0
 |---|---|---|---|---|---|
 | SPR-001 | P0.1 | Repository bootstrap and CI (**closed** 2026-10-16, `VER-SPR-001`) | — | C2 | P1 |
 | SPR-002 | P0.2 | `rh-ids`: IDs, keyed hash, counter RNG, salts (**closed** 2026-10-16, `VER-SPR-002`) | 001 | C3 (machinery) | P1 |
-| SPR-003 | P0.3 | Samplers with golden vectors | 002 | C3 (machinery) | P1 |
-| SPR-004 | P0.8 | Registry v0 loader and ownership lint | 001 | C2 | P1 |
+| SPR-003 | P0.3 | Samplers with golden vectors (**closed** 2026-10-16, `VER-SPR-003`) | 002 | C3 (machinery) | P1 |
+| SPR-004 | P0.8 | Registry v0 loader and ownership lint (**closed** 2026-10-16, `VER-SPR-004`) | 001 | C2 | P1 |
 | SPR-005 | P0.4a | `rh-core` time, pulses, phases, `SystemModel`, `AccessSpec`, scheduler | 002, 004 | C3 (machinery) | P1 |
 | SPR-006 | P0.4b | Agenda, timers, lifecycle queues, event bus, invariants | 005 | C3 (machinery) | P1 |
-| SPR-007 | P0.5 | Plane hashes, keyframes, journal | 005 | C3 (machinery) | P1 |
+| SPR-007 | P0.5 | Plane hashes, keyframes, journal | 005; T-02 006 | C3 (machinery) | P1 |
 | SPR-008 | P0.6 | Golden-run CI, the `smoke` world, bisect tool | 006, 007 | C3 (machinery) | P1 |
-| SPR-009 | P0.7 | Benchmark harness and regression gate | 005 | C1 | P2 |
-| SPR-010 | P0.4 (DET-3) | `rh-core::fixed`: fixed-point and money types (gap found by the SPR-001 audit; approved 2026-10-16) | 001 | C3 (machinery) | P1 |
+| SPR-009 | P0.7 | Benchmark harness and regression gate | 007, 008 | C1 | P2 |
+| SPR-010 | P0.4 (DET-3) | `rh-core::fixed`: fixed-point and money types (gap found by the SPR-001 audit; approved 2026-10-16; **closed** 2026-10-16, `VER-SPR-010`) | 001 | C3 (machinery) | P1 |
 
 **Approvals:** SPR-001 approved 2026-10-16; SPR-002 to SPR-009 approved as a batch on 2026-10-16; SPR-010 approved 2026-10-16. The Architect merges every sprint after its Tester pass and audit (GOV-005 §6, director's ruling 2026-10-16); the director approved the plans. The director no longer merges the C3 sprints that change the determinism machinery (GOV-005 §6).
+
+**Sequencing (Architect, 2026-10-16).** The plans listed SPR-009 after SPR-005 alone, but benches 7 and 8 measure SPR-007's hashes and keyframes, and its per-tick measures need SPR-008's `smoke` world. SPR-007's keyframes hold the pending timers of SPR-006. The order is therefore SPR-005, then SPR-006 and SPR-007 side by side (SPR-007 T-02 last), then SPR-008 and SPR-009 side by side. Two tasks need machines only the director can provide: SPR-008 T-02 (the laptop and `adjutant` in the cross-machine hash check) and SPR-009 T-04 (wall-clock baselines on both).
 
 **Gate G0** is assembled by the Architect as `VER-G0` once SPR-001 to SPR-010 are closed.
 

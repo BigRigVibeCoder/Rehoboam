@@ -9,7 +9,7 @@ tags: [verification, roadmap]
 related: [BCK-001, BCK-002, PRJ-001, SPR-001, SPR-002, SPR-003, SPR-004, SPR-005, SPR-006, SPR-007, SPR-008, SPR-009, SPR-010]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.2.0
+version: 0.2.1
 ---
 
 > **BLUF:** DRAFT tracker; this is not a verdict. G0 closes when SPR-001 to SPR-010 are closed and the seven criteria of `docs/11` pass, and the red-team inbox is folded in with a dispositions record. Status on 2026-10-16:
@@ -41,9 +41,9 @@ version: 0.2.0
 | SPR-004 | Registry and manifest loaders, ownership lint, `rh-manifest` | Closed | `VER-SPR-004` PASS | 0 |
 | SPR-005 | Time, phases, SystemModel, AccessSpec, scheduler | In progress | — | — |
 | SPR-006 | Agenda, lifecycle queues, event bus, invariants | Waits on SPR-005 | — | — |
-| SPR-007 | Plane hashes, keyframes, journal | Waits on SPR-005 | — | — |
+| SPR-007 | Plane hashes, keyframes, journal | Waits on SPR-005 (T-02 on SPR-006) | — | — |
 | SPR-008 | Golden-run CI, bisect | Waits on SPR-006 and SPR-007 | — | — |
-| SPR-009 | Benchmarks, regression gate | Waits on SPR-005 | — | — |
+| SPR-009 | Benchmarks, regression gate | Waits on SPR-007 and SPR-008; T-04 needs `adjutant` and the laptop | — | — |
 | SPR-010 | `rh-core::fixed` | Closed | `VER-SPR-010` PASS | 0 |
 
 The escape-rate count (BCK-002 A-05) stands at 1 escape across 5 closed sprints.
@@ -57,4 +57,4 @@ The escape-rate count (BCK-002 A-05) stands at 1 escape across 5 closed sprints.
 ## 4. Before the gate
 - **Red-team inbox:** fold batches 01 to 04 into a dispositions record (`docs/red_team/RT-<date>-G0-dispositions.md`), starting from the Architect's intake notes. The director rules on anything that changes an ADR, the roadmap or `CLAUDE.md`.
 - **Architect backlog that must close before G0:** A-09, this record. (A-20, the plane-A external dependency allow-list, is done.)
-- **Director:** T-00 of SPR-001 (`RUN-001` on the laptop) is still open (BCK-002 A-16).
+- **Director:** T-00 of SPR-001 (`RUN-001` on the laptop) is still open (BCK-002 A-16). The laptop and one `adjutant` session are also needed for SPR-008 T-02 (cross-machine hashes) and SPR-009 T-04 (wall-clock baselines).
