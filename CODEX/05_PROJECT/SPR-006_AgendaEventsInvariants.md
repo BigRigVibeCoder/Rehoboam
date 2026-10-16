@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** Add scheduled outcomes as timers, lifecycle command queues, the event bus with emission-order EventIds, and the invariant framework. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -61,33 +61,59 @@ version: 1.1.0
 ### T-01: Agenda heap
 - **Deliverable:** Binary-heap queue keyed by `(time, phase, entity_id, seq)`
 - **Acceptance:** Deterministic order with ties; property test
-- **Status:** [ ] not started
+- **Status:** [x] done (`56a3b9c`, `e606389`: `rh-core::agenda`, `rh_ids::EntityRef`; `tests/agenda.rs`, 256 cases × 300 operations against a model)
 
 ### T-02: Timers
 - **Deliverable:** Insert, cancel and re-sample by dependency scope (epoch-keyed)
 - **Acceptance:** Timer fires at its own tick in every mode
-- **Status:** [ ] not started
+- **Status:** [x] done (`2781fe9`: `StepCtx::schedule`/`cancel`, `SystemModel::fire`/`resample_timer`, `Engine::submit_input`; `tests/agenda_events.rs`: every mode, scoped re-sampling by epoch, refusals)
 
 ### T-03: Lifecycle command queues
 - **Deliverable:** Typed commands applied in `(phase, PersonId)` order by owners
 - **Acceptance:** A non-owner cannot apply a command directly
-- **Status:** [ ] not started
+- **Status:** [x] done (`2781fe9`: `rh-core::command`, `AccessSpec::sends`/`applies`, registration rule `command`; `tests/agenda_events.rs`, `rh-registry/tests/real_specs.rs`)
 
 ### T-04: Event bus
 - **Deliverable:** `EventDraft` → EventId in emission order `(tick, phase, seq)`; causal edges
 - **Acceptance:** V-DET-12: EventIds strictly increase; no event before the current instant
-- **Status:** [ ] not started
+- **Status:** [x] done (`8fae55e`, `2781fe9`: `rh-events`, the per-level merge, rule `event-kind`; V-DET-12 over 16 random worlds and on the golden event log `tests/golden/life_world_events.txt`, with a back-dated positive control)
 
 ### T-05: Invariant framework
 - **Deliverable:** Per-system invariants run in Bookkeeping; a violation is fatal with a crash artifact (GOV-004 §4)
 - **Acceptance:** An injected violation produces a crash artifact that replays
-- **Status:** [ ] not started
+- **Status:** [x] done (`2781fe9`: `rh-core::crash`, invariants in `Bookkeeping`, `Engine::replay`; `tests/invariants.rs` writes `artifacts/crash/<timeline>_<tick>.json` and replays it; committed artifact `tests/golden/crash_stock_seed3.json` with an altered-instant positive control)
 
 ## Verification assignment (Testers)
 
 | Tester | What to verify, from which contract | Report |
 |---|---|---|
 | AGT-003-DET | The gating tests above, written from the binding contracts before reading the implementation | `VER-SPR-006` |
+
+## Developer notes (AGT-002-CORE, 2026-10-16)
+
+Decisions taken in the sprint, for the audit (none changes a binding ruling):
+
+| # | Decision | Why | Confidence |
+|---|---|---|---|
+| D1 | Within a phase, due timers run in a **timer pass** before the pulse passes (canonical order restricted to the timers' owners; each owner takes its timers in key order) | A timer fires at its own tick, often between pulse boundaries; one pass keeps the canonical order of SPR-005 | high |
+| D2 | Within one system's buffers the merge takes cancellations, timers, events, then commands | A command can then carry the `EventId` of the event that caused it (the death path of `05.1` §2 rule 2) | high |
+| D3 | `DraftRef`: a step names its own earlier event drafts; the merge resolves them to `EventId`s (draft-local causes, a command's cause) | A step cannot know an id before the merge (ruling 1), yet consequences must cite their cause (ruling 4) | medium: a mechanism the spec does not list (ADR-0033 §5); it is the smallest that makes causal edges usable |
+| D4 | Queue key `(tick, phase, PersonId, seq)`; the owner receives its whole queue the next time it runs; untaken commands stay queued | Ruling 5's `(phase, PersonId)`, led by the submitting instant (a queue spans instants) and closed by the merge counter (unique keys) | high |
+| D5 | One registered emitter per event kind (rule `event-kind`) | The single-writer principle applied to events; the specs agree today | medium |
+| D6 | The re-sample key includes the owner's `system_id`: `H(seed, salt, system_id, epoch, purpose, entity, t_input, k)` | The full layout of `05.1` §6 item 2; ADR-0025 item 3 lists the other fields | high |
+| D7 | `SystemModel` gains provided `fire` and `resample_timer`, defaulting to a loud error | Additive: no SPR-005 signature or generated skeleton changes | high |
+| D8 | The crash artifact's JSON is written and read in `rh-core` by hand, and also carries the branch salt and the timeline | No new dependency for plane A; replay needs both | high |
+
+Carried forward:
+
+| Item | To | Why |
+|---|---|---|
+| `StepCtx::rng` still draws at epoch 0; only re-sample draws carry the entity's epoch | SPR-007 or the first input-driven system | `EntityKey` is an untyped `u64`; keying every draw by epoch needs a kind-tagged key in `StepCtx::rng` |
+| A keyframe must hold the command queues, the entity epochs, the queued inputs and the event counter, not only the agenda | SPR-007 | All are plane-A state between instants (ruling 7 names the agenda) |
+| Material-input scopes are explicit entity sets; the host expands a household, settlement or region | the input journal (SPR-007) and the ledger | `rh-core` has no membership tables yet |
+| `EventLog::hash` is a stub fold, not yet part of a combined state hash | SPR-007 | Merkle hashes replace both stubs |
+
+Goldens: SPR-005's `stub_world_hashes.txt` is unchanged. New: `crates/rh-core/tests/golden/life_world_events.txt` (`RH_CORE_WRITE_LIFE_GOLDEN=1`) and `crates/rh-core/tests/golden/crash_stock_seed3.json` (`RH_CORE_WRITE_CRASH_GOLDEN=1`).
 
 ## Blockers
 
