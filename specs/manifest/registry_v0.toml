@@ -318,14 +318,14 @@ pursue_goal = { poll_months = 3,  requires = ["S6.artifacts", "S7.vows", "M7.dyn
 # Traits are effective traits (trait + clamped thoughts, T1 spec). An input outside its domain is clamped to it.
 age                    = { input = "(now - birth_tick(actor)) / minutes_per_year", reads = ["person.birth_tick"], domain = [0.0, 100.0], unit = "years" }
 age_gap                = { input = "abs(age(actor) - age(target))", reads = ["person.birth_tick"], domain = [0.0, 60.0], unit = "years" }
-partner_tier           = { input = "max tier of a title held by target or target's father (0 none, 1 minor, 2 major, 3 sovereign)", reads = ["title.holder", "title.tier", "person.father"], domain = [0.0, 3.0], unit = "tier" }
+partner_tier           = { input = "max tier of a title held by target or target's father (0 none, 1 minor, 2 major, 3 sovereign)", reads = ["title.holder", "title.tier", "life_course.father"], domain = [0.0, 3.0], unit = "tier" }
 opinion                = { input = "opinion(actor, target)", reads = ["opinion.*"], domain = [-100.0, 100.0], unit = "opinion points" }
 ambition               = { input = "mind.ambition(actor)", reads = ["mind.ambition"], domain = [0.0, 100.0], unit = "points" }
 stress                 = { input = "mind.stress(actor)", reads = ["mind.stress"], domain = [0.0, 100.0], unit = "points" }
 seat_tier              = { input = "tier of the target seat (an office counts as 1)", reads = ["title.tier", "office.title"], domain = [0.0, 3.0], unit = "tier" }
-kin_distance_to_granter = { input = "kinship degrees from actor to the granter (the holder of the seat's liege title or the office's title) through kin(6); 6 when none", reads = ["person.mother", "person.father", "title.holder", "title.liege"], domain = [0.0, 6.0], unit = "degrees" }
+kin_distance_to_granter = { input = "kinship degrees from actor to the granter (the holder of the seat's liege title or the office's title) through kin(6) over the life-course columns; 6 when none", reads = ["life_course.mother", "life_course.father", "title.holder", "title.liege"], domain = [0.0, 6.0], unit = "degrees" }
 opinion_of_granter     = { input = "opinion(actor, granter)", reads = ["opinion.*", "title.holder"], domain = [-100.0, 100.0], unit = "opinion points" }
-claim_rank             = { input = "succession_rank(actor, claimed title) by the title's law (M7 contract; 1 = legal heir), capped at 10", reads = ["claim.title", "title.holder"], domain = [1.0, 10.0], unit = "rank" }
+claim_rank             = { input = "claim.rank of the claim (an M7 column: 1 = legal heir, capped at 10; 0 outside the line reads as 10)", reads = ["claim.rank"], domain = [1.0, 10.0], unit = "rank" }
 opinion_of_holder      = { input = "opinion(actor, holder of the claimed title)", reads = ["opinion.*", "title.holder"], domain = [-100.0, 100.0], unit = "opinion points" }
 honesty_humility       = { input = "effective honesty_humility(actor)", reads = ["mind.honesty_humility", "thought.*"], domain = [-100.0, 100.0], unit = "trait points" }
 agreeableness          = { input = "effective agreeableness(actor)", reads = ["mind.agreeableness", "thought.*"], domain = [-100.0, 100.0], unit = "trait points" }
@@ -333,7 +333,7 @@ conscientiousness      = { input = "effective conscientiousness(actor)", reads =
 holder_is_minor        = { input = "1 if the claimed title has a regent, else 0", reads = ["title.regent"], domain = [0.0, 1.0], unit = "bool" }
 kin_harmed             = { input = "1 if actor holds an unexpired KIN_HARMED_BY modifier about target, else 0 (always 0 in P1a: the modifier needs knowledge rows, P1b)", reads = ["opinion.*"], domain = [0.0, 1.0], unit = "bool" }
 rival_claim            = { input = "1 if target holds an active claim on a title actor holds or is first in line for, or actor on one of target's, else 0", reads = ["claim.claimant", "claim.title", "claim.status", "title.holder"], domain = [0.0, 1.0], unit = "bool" }
-closeness              = { input = "closeness ([relation_kinds]) of the closest harmed kin behind the vow candidate (P1b)", reads = ["person.mother", "person.father", "person.spouse"], domain = [0.0, 1.0], unit = "closeness" }
+closeness              = { input = "closeness ([relation_kinds]) of the closest harmed kin behind the vow candidate (P1b)", reads = ["life_course.mother", "life_course.father", "person.spouse"], domain = [0.0, 1.0], unit = "closeness" }
 active_vows            = { input = "number of goal rows of actor (P1b)", reads = ["goal.holder"], domain = [0.0, 8.0], unit = "count" }
 goal_priority          = { input = "goal.priority of the goal (P1b)", reads = ["goal.priority"], domain = [0.0, 0.8], unit = "weight" }
 target_reachable       = { input = "1 - h/7 for a route-graph distance of h <= 6 hops to the goal's target, else 0 (P1b)", reads = ["artifact.location", "artifact.bearer"], domain = [0.0, 1.0], unit = "reach" }
