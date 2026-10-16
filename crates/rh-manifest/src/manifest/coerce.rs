@@ -33,14 +33,33 @@ pub struct SchemaError {
     pub message: String,
 }
 
+impl SchemaError {
+    /// The location as Pydantic prints it: parts joined by `.`, a part that itself contains a
+    /// `.` in backticks (`` systems.`M1.regions`.e0 ``). Empty for the root.
+    #[must_use]
+    pub fn loc_text(&self) -> String {
+        let parts: Vec<String> = self
+            .loc
+            .iter()
+            .map(|p| {
+                if p.contains('.') {
+                    format!("`{p}`")
+                } else {
+                    p.clone()
+                }
+            })
+            .collect();
+        parts.join(".")
+    }
+}
+
 impl fmt::Display for SchemaError {
+    /// Pydantic's layout: the location line (absent for the root), then the message.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let loc = if self.loc.is_empty() {
-            "Manifest".to_owned()
-        } else {
-            self.loc.join(".")
-        };
-        write!(f, "{loc}\n  {} [type={}]", self.message, self.kind)
+        if !self.loc.is_empty() {
+            writeln!(f, "{}", self.loc_text())?;
+        }
+        write!(f, "  {} [type={}]", self.message, self.kind)
     }
 }
 
@@ -102,7 +121,34 @@ fn without_underscores(s: &str) -> Option<String> {
     Some(s.replace('_', ""))
 }
 
-fn parse_int_str(s: &str) -> Option<i128> {
+/// A YAML key as a Pydantic location part: the key's Python `str` (`True` is `1`, a date is
+/// `datetime.date(2026, 1, 1)`).
+fn loc_item(v: &Value) -> String {
+    match v {
+        Value::Str(s) => s.clone(),
+        Value::Null => "None".to_owned(),
+        Value::Bool(b) => u8::from(*b).to_string(),
+        Value::Timestamp(t) => match t
+            .split('-')
+            .map(str::parse::<u32>)
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(d) if d.len() == 3 => format!("datetime.date({}, {}, {})", d[0], d[1], d[2]),
+            _ => t.clone(),
+        },
+        other => other.to_string(),
+    }
+}
+
+/// An integer as Pydantic sees it: exact, or larger than this loader holds (only its sign
+/// matters: every integer field is bounded within 64 bits).
+#[derive(Clone, Copy)]
+enum Parsed {
+    Exact(i128),
+    Big { negative: bool },
+}
+
+fn parse_int_str(s: &str) -> Option<Parsed> {
     let t = without_underscores(s.trim())?;
     let (neg, body) = match t.as_bytes().first() {
         Some(b'-') => (true, &t[1..]),
@@ -116,8 +162,10 @@ fn parse_int_str(s: &str) -> Option<i128> {
     if body.contains('.') && (frac.is_empty() || !frac.bytes().all(|c| c == b'0')) {
         return None;
     }
-    let v: i128 = digits.parse().ok()?;
-    Some(if neg { -v } else { v })
+    Some(match digits.parse::<i128>() {
+        Ok(v) => Parsed::Exact(if neg { -v } else { v }),
+        Err(_) => Parsed::Big { negative: neg },
+    })
 }
 
 fn parse_float_str(s: &str) -> Option<f64> {
@@ -128,15 +176,20 @@ fn parse_float_str(s: &str) -> Option<f64> {
     t.parse::<f64>().ok()
 }
 
+/// 2^63: Pydantic converts a float to an integer only inside `i64`.
+const TWO_POW_63: f64 = 9_223_372_036_854_775_808.0;
+
 #[allow(
-    clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
-    reason = "a finite integral float within i128 range converts exactly enough for Pydantic's int rule"
+    reason = "the float is finite, integral and inside i64, so the conversion is exact"
 )]
 fn int(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<i128>, le: Option<i128>) -> Option<i128> {
-    let n = match v {
-        Value::Int(i) => *i,
-        Value::Bool(b) => i128::from(*b),
+    let parsed = match v {
+        Value::Int(i) => Parsed::Exact(*i),
+        Value::BigInt { negative, .. } => Parsed::Big {
+            negative: *negative,
+        },
+        Value::Bool(b) => Parsed::Exact(i128::from(*b)),
         Value::Float(f) if !f.is_finite() => {
             cx.err(loc, "finite_number", "Input should be a finite number");
             return None;
@@ -149,7 +202,15 @@ fn int(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<i128>, le: Option<i128
             );
             return None;
         }
-        Value::Float(f) if f.abs() < 1.0e38 => *f as i128,
+        Value::Float(f) if *f >= TWO_POW_63 || *f < -TWO_POW_63 => {
+            cx.err(
+                loc,
+                "int_parsing_size",
+                "Unable to parse input string as an integer, exceeded maximum size",
+            );
+            return None;
+        }
+        Value::Float(f) => Parsed::Exact(i128::from(*f as i64)),
         Value::Str(s) => {
             if let Some(n) = parse_int_str(s) {
                 n
@@ -167,7 +228,31 @@ fn int(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<i128>, le: Option<i128
             return None;
         }
     };
-    bounded(cx, loc, n, ge, le)
+    match parsed {
+        Parsed::Exact(n) => bounded(cx, loc, n, ge, le),
+        // Beyond i128: it fails the bound on its side, as Pydantic's big integer does.
+        Parsed::Big { negative } => {
+            let (bound, kind, word) = if negative {
+                (
+                    ge.unwrap_or(i128::from(i64::MIN)),
+                    "greater_than_equal",
+                    "greater",
+                )
+            } else {
+                (
+                    le.unwrap_or(i128::from(i64::MAX)),
+                    "less_than_equal",
+                    "less",
+                )
+            };
+            cx.err(
+                loc,
+                kind,
+                format!("Input should be {word} than or equal to {bound}"),
+            );
+            None
+        }
+    }
 }
 
 #[allow(
@@ -228,6 +313,14 @@ fn float(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<f64>, le: Option<f64
     let x = match v {
         Value::Float(f) => *f,
         Value::Int(i) => *i as f64,
+        // Python's float(n) for a big integer: exact up to f64's range, an error beyond it.
+        Value::BigInt { text, .. } => match parse_float_str(text) {
+            Some(x) if x.is_finite() => x,
+            _ => {
+                cx.err(loc, "float_type", "Input should be a valid number");
+                return None;
+            }
+        },
         Value::Bool(b) => f64::from(u8::from(*b)),
         Value::Str(s) => {
             if let Some(x) = parse_float_str(s) {
@@ -269,6 +362,11 @@ fn boolean(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<bool> {
         Value::Bool(b) => Some(*b),
         Value::Int(0) => Some(false),
         Value::Int(1) => Some(true),
+        // Pydantic reads integers beyond 64 bits as another type altogether.
+        Value::Int(i) if i64::try_from(*i).is_err() => {
+            cx.err(loc, "bool_type", "Input should be a valid boolean");
+            None
+        }
         Value::Int(_) => {
             parsing(cx);
             None
@@ -461,12 +559,13 @@ fn dict<T>(
     let start = cx.errors.len();
     let mut out = Vec::with_capacity(pairs.len());
     for (k, x) in pairs {
-        let kloc = at(&at(loc, k), "[key]");
+        let key_loc = loc_item(k);
+        let kloc = at(&at(loc, &key_loc), "[key]");
         let k = match key {
             Key::Str => text(cx, k, &kloc),
             Key::Slug => slug(cx, k, &kloc),
         };
-        let x = item(cx, x, &at(loc, k.as_deref().unwrap_or("?")));
+        let x = item(cx, x, &at(loc, &key_loc));
         if let (Some(k), Some(x)) = (k, x) {
             out.push((k, x));
         }
@@ -560,13 +659,18 @@ impl<'v> Obj<'v> {
     /// Reports extra keys; true when the model (fields and extras) had no error.
     fn finish(self, cx: &mut Cx) -> bool {
         for (k, _) in self.pairs {
-            let known = matches!(k, Value::Str(s) if self.taken.contains(&s.as_str()));
-            if !known {
-                cx.err(
-                    &at(&self.loc, k),
+            match k {
+                Value::Str(s) if self.taken.contains(&s.as_str()) => {}
+                Value::Str(_) => cx.err(
+                    &at(&self.loc, &loc_item(k)),
                     "extra_forbidden",
                     "Extra inputs are not permitted",
-                );
+                ),
+                _ => cx.err(
+                    &at(&self.loc, &loc_item(k)),
+                    "invalid_key",
+                    "Keys should be strings",
+                ),
             }
         }
         cx.errors.len() == self.start
