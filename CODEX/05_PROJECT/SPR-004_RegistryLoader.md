@@ -54,7 +54,7 @@ version: 1.0.0
 ### T-04: Schema generation
 - **Deliverable:** JSON Schema emitted from the Rust types; diffed against `manifest_v0.schema.json`
 - **Acceptance:** No unexplained schema difference
-- **Status:** [ ] not started
+- **Status:** [x] done (`rh-registry::manifest::schema`, `rh-cli manifest schema --diff`; 0 differences after normalising annotations)
 
 ## Verification assignment (Testers)
 

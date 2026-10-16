@@ -256,6 +256,8 @@ run "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)" 
 run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-registry tests/lint_fixtures/parity/registry_drift.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" target/debug/rh-cli ownership &&
 run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" target/debug/rh-cli ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
+run "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)" "pass:SCHEMA: no unexplained difference" target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json &&
+run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERENCE \$defs.Horizon.properties.years.maximum" target/debug/rh-cli manifest schema --diff tests/lint_fixtures/schema/drifted_bound.schema.json &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 # Tier 5 — golden vectors
 run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&

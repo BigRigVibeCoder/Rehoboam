@@ -7,6 +7,9 @@
 //! - `rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]`: the Rust twin of
 //!   `python specs/manifest/manifest_v0.py validate` (SPR-004 T-02), with the same report and
 //!   exit codes (0 valid, 1 invalid, 2 structurally invalid).
+//! - `rh-cli manifest schema [--diff <reference.schema.json>]`: the JSON Schema emitted from the
+//!   Rust manifest types (SPR-004 T-04); with `--diff`, every unexplained difference from the
+//!   reference schema, exit 1 if there is any.
 //! - `rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]`: the
 //!   single-writer ownership lint (SPR-004 T-03). With no access files it checks the access each
 //!   spec implies; with files, the `[[access]]` declarations in them. Exit 1 on any violation.
@@ -21,7 +24,7 @@ use rh_registry::Registry;
 use rh_registry::manifest;
 use rh_registry::ownership::{self, AccessSpec, Ownership};
 
-const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]";
+const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]";
 const DEFAULT_SPECS: &str = "specs/systems";
 const DEFAULT_REGISTRY: &str = "specs/manifest/registry_v0.toml";
 
@@ -38,6 +41,11 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         ["manifest", "validate", rest @ ..] => manifest_validate(rest),
+        ["manifest", "schema"] => {
+            println!("{:#}", manifest::schema::manifest_schema());
+            ExitCode::SUCCESS
+        }
+        ["manifest", "schema", "--diff", reference] => schema_diff(reference),
         ["ownership", rest @ ..] => ownership(rest),
         _ => usage(),
     }
@@ -132,6 +140,40 @@ fn ownership(args: &[&str]) -> ExitCode {
     if violations.is_empty() {
         ExitCode::SUCCESS
     } else {
+        ExitCode::from(1)
+    }
+}
+
+fn schema_diff(reference: &str) -> ExitCode {
+    let parsed = std::fs::read_to_string(reference)
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).map_err(|e| e.to_string()));
+    let reference_schema = match parsed {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{reference}: {e}");
+            return ExitCode::from(3);
+        }
+    };
+    let generated = manifest::schema::manifest_schema();
+    let differences = manifest::schema::differences(&reference_schema, &generated);
+    for d in &differences {
+        println!("SCHEMA DIFFERENCE {d}");
+    }
+    let defs = generated
+        .get("$defs")
+        .and_then(serde_json::Value::as_object)
+        .map_or(0, serde_json::Map::len);
+    if differences.is_empty() {
+        println!(
+            "SCHEMA: no unexplained difference from {reference} ({defs} definitions and the root compared)"
+        );
+        ExitCode::SUCCESS
+    } else {
+        println!(
+            "SCHEMA: {} unexplained differences from {reference}",
+            differences.len()
+        );
         ExitCode::from(1)
     }
 }

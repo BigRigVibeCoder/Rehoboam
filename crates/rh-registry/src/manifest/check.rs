@@ -5,7 +5,10 @@
 use std::collections::BTreeSet;
 use std::fmt;
 
-use super::types::{ActivityResolution, Catalyst, FocusResolution, HorizonLabel, Manifest, People};
+use super::types::{
+    ActivityResolution, Artifact, Catalyst, CovertOutbreak, DynasticTension, FocusResolution,
+    HorizonLabel, Manifest, People, Wager,
+};
 use crate::pyfmt::{float_repr, int_grouped, str_list_repr};
 use crate::registry::{Bounds, Number, Registry};
 
@@ -488,11 +491,11 @@ fn cast_and_agents(m: &Manifest, reg: &Registry, humans: i128, out: &mut Out) {
         }
     }
     for (i, c) in m.catalysts.iter().enumerate() {
-        let Catalyst::Wager {
+        let Catalyst::Wager(Wager {
             agent,
             protagonist,
             stages,
-        } = c
+        }) = c
         else {
             continue;
         };
@@ -541,7 +544,8 @@ fn catalysts(m: &Manifest, humans: i128, out: &mut Out) {
         .any(|t| TESTING_TECHNOLOGIES.contains(&t.as_str()));
     for (i, c) in m.catalysts.iter().enumerate() {
         match c {
-            Catalyst::DynasticTension { polity, .. } | Catalyst::Artifact { polity, .. }
+            Catalyst::DynasticTension(DynasticTension { polity, .. })
+            | Catalyst::Artifact(Artifact { polity, .. })
                 if !polity_ids.contains(polity.as_str()) =>
             {
                 out.err(
@@ -551,7 +555,7 @@ fn catalysts(m: &Manifest, humans: i128, out: &mut Out) {
             }
             _ => {}
         }
-        if let Catalyst::Artifact { effects, .. } = c {
+        if let Catalyst::Artifact(Artifact { effects, .. }) = c {
             for (j, e) in effects.iter().enumerate() {
                 if !m.overlays.contains(&e.overlay) {
                     out.err(
@@ -561,7 +565,7 @@ fn catalysts(m: &Manifest, humans: i128, out: &mut Out) {
                 }
             }
         }
-        if let Catalyst::CovertOutbreak { seed_infected, .. } = c {
+        if let Catalyst::CovertOutbreak(CovertOutbreak { seed_infected, .. }) = c {
             if !m.systems.contains_key("M5.contagion") {
                 out.err(
                     format!("catalysts[{i}]"),
