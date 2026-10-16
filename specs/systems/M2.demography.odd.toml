@@ -80,6 +80,31 @@ plane = "A"
 meaning = "natural | murder | battle | execution | accident. Written by apply_death with alive = 0 and the death tick: natural for an M2 hazard death, otherwise the cause the ScheduleDeath command carried (M7, T1.minds; M8 later). Readable, like every column of the dead row, until rh-core's compaction at the start of Bookkeeping of the death instant (SPR-011 ruling 5); the life-course log keeps it after that"
 fixed_point = false
 
+# The genealogy of everyone (ADR-0026 item 3; round 4 of PR #32, NEW-1): the live ledger holds only the living and is
+# compacted at Bookkeeping of a death instant (SPR-011 ruling 5), so kinship through the dead walks these life-course
+# columns, never person.mother/father. PR #37's M2 freeze completes the rest of life_course.*; the two merge.
+[[owns]]
+column = "life_course.id"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "PersonId of everyone ever born, immigrated or founded (one entry each, V-DATA-04); never removed"
+fixed_point = false
+[[owns]]
+column = "life_course.mother"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the mother, or 0 for a founder or immigrant without one; written once at birth; kept after death"
+fixed_point = false
+[[owns]]
+column = "life_course.father"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the father, or 0; written once at birth; kept after death"
+fixed_point = false
+
 # Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4): one payload per command, which every sender uses.
 # For P1.13 (SPR-014): M2 then gains a Day/Vital binding that drains its queue each day start (not yet in [[schedule]]:
 # SPR-014 adds it). A command whose tick is the drain's own instant is applied in the drain, in Vital, before the
