@@ -2,6 +2,6 @@
 
 /// `a * b + c` fused: rounds differently across targets (V-DET-19 mul-add rule).
 #[must_use]
-pub fn affine(a: f64, b: f64, c: f64) -> f64 {
+pub(crate) fn affine(a: f64, b: f64, c: f64) -> f64 {
     a.mul_add(b, c)
 }

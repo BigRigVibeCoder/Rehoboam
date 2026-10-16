@@ -532,8 +532,85 @@ def test_the_exemption_is_by_crate_root_not_by_path_text(tmp_path: Path) -> None
     zone, other = tmp_path / "rh-sample", tmp_path / "other"
     for root in (zone, other):
         (root / "src").mkdir(parents=True)
-        (root / "src" / "lib.rs").write_text("pub fn f(x: f64) -> f64 { x }\n")
+        (root / "src" / "lib.rs").write_text("fn f(x: f64) -> f64 { x }\n")
     report = scan_paths([zone, other], float_exempt=frozenset({zone}))
     assert len(report.violations) == 2
     assert all("other" in v for v in report.violations)
     assert main(["--scan", str(zone)]) == EXIT_VIOLATIONS
+
+
+# --- The float zone's public API (SPR-003 ruling item 4; VER-SPR-003-TEST GAP-1) -----------------
+
+
+def float_api_texts(source: str) -> list[str]:
+    """Return the float-api violations of ``source`` scanned as the float zone's src/."""
+    report = Report(violations=[], escaped=[])
+    scan_source(source, "lib.rs", report, floats="zone")
+    return [v for v in report.violations if "[V-DET-19/float-api]" in v]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "pub fn f() -> f64 { 0.0 }",
+        "pub fn f(\n    x: u32,\n    y: f32,\n) -> u32 { x }",
+        "pub const fn f(x: f64) -> u32 { 0 }",
+        "pub const X: f64 = 1.0;",
+        "pub static X: f32 = 1.0;",
+        "pub type T = f64;",
+        "pub use libm::log;",
+        "pub use libm;",
+        "pub struct S { pub rate: f64 }",
+        "pub struct S(pub f64);",
+        "pub struct S<T = f64>(T);",
+        "pub trait T: Into<f64> {}",
+        "impl From<S> for f64 { fn from(s: S) -> f64 { 0.0 } }",
+        "impl S { pub fn f(&self) -> Option<f64> { None } }",
+    ],
+)
+def test_each_public_float_is_reported(source: str) -> None:
+    """Signatures, consts, statics, aliases, re-exports, fields, headers and impl headers."""
+    assert float_api_texts(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "pub(crate) fn f() -> f64 { 0.0 }",
+        "pub(super) struct S { pub(crate) rate: f64 }",
+        "pub fn f(x: u32) -> u32 { let y: f64 = 1.0; x }",
+        "pub struct S { rate: f64 }",
+        "pub const X: u32 = 1; fn g() -> f64 { libm::log(1.0) }",
+        "/// pub fn f() -> f64\npub fn f() -> u32 { 0 }",
+        'pub fn f() -> &\'static str { "f64" }',
+    ],
+)
+def test_floats_behind_the_public_surface_are_not_reported(source: str) -> None:
+    """Bodies, private fields, pub(crate) items, comments and strings are not the API."""
+    assert float_api_texts(source) == []
+
+
+def test_no_escape_excuses_a_public_float() -> None:
+    """Not even a reasoned one: ruling item 4 has no exception."""
+    source = "pub fn f() -> f64 { 0.0 } // LINT-ALLOW(forbidden-api): f32_field region.x\n"
+    assert len(float_api_texts(source)) == 1
+
+
+def test_the_float_api_fixture_reports_each_plant_and_not_internal(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Four plants, four violations; pub(crate) floats in internal.rs are not reported."""
+    assert main(["--manifest-path", str(FIXTURES / "float_api" / "Cargo.toml")]) == 1
+    out = capsys.readouterr().out.splitlines()
+    violations = [line for line in out if line.startswith("VIOLATION")]
+    files = sorted(v.split(" at ")[1].split(":")[0].rsplit("/", 1)[1] for v in violations)
+    assert files == ["field.rs", "fn_return.rs", "impl_from.rs", "reexport.rs"]
+    assert all("[V-DET-19/float-api]" in v for v in violations)
+
+
+def test_the_real_float_zone_exposes_no_float() -> None:
+    """rh-sample's public API is integers and fixed point only (negative control)."""
+    report = scan_paths(
+        [REPO / "crates" / "rh-sample"], float_exempt=frozenset({REPO / "crates" / "rh-sample"})
+    )
+    assert report.violations == []
