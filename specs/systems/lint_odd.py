@@ -263,7 +263,7 @@ def brief(sid, specs, reg):
     out = [f"# {h['id']} — {h['name']} (fidelity {h['fidelity']}, spec {h['spec_version']}, {h['status']})", "",
            f"**What it does.** {pu['statement']}", "",
            "**What it owns:** " + (", ".join(o["column"] for o in s.get("owns", [])) or "nothing (pure function)"),
-           "**What it reads:** " + ", ".join(f"{r['column']} ({r['owner']})" for r in s.get("reads", [])),
+           "**What it reads:** " + (", ".join(f"{r['column']} ({r['owner']})" for r in s.get("reads", [])) or "nothing"),
            "**What it emits:** " + (", ".join(e["kind"] for e in s.get("emits", [])) or "no events"),
            "**When it runs:** " + "; ".join(f"{x['pulse']} pulse, {x['phase']} phase" for x in s["schedule"]),
            "**Randomness:** " + ", ".join(f"{g['purpose']} keyed by ({', '.join(g['key'])})" for g in s["rng"]),
@@ -272,7 +272,8 @@ def brief(sid, specs, reg):
     regp = reg["systems"][sid].get("params", {})
     for x in s["params"]:
         lo, hi = regp.get(x["name"], ["?", "?"])
-        out.append(f"- `{x['name']}` [{lo}, {hi}]: {x['meaning']} — source: {x['source']}")
+        dflt = f" default {x['default']}" if "default" in x else ""
+        out.append(f"- `{x['name']}` [{lo}, {hi}]{dflt}: {x['meaning']} — source: {x['source']}")
     out += ["", "**How we know it works:** " + ", ".join(s["verification"]["tests"]),
             "**Not reproduced yet:** " + ("; ".join(pu.get("not_yet", [])) or "nothing listed")]
     return "\n".join(out)
