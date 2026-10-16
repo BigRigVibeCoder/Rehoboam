@@ -83,6 +83,7 @@ REQUIRED_GATES = (
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
+    "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)",
     "lint_arch positive control: a second, target-specific libm entry must FAIL (SPR-003 GAP-10)",
     "lint_arch positive control: a third-party crate in rh-sample must FAIL (SPR-003 GAP-4)",
     "lint_arch positive control: kind contract outside rh-contract-* must FAIL",

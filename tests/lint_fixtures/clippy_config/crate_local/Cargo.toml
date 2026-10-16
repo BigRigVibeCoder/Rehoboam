@@ -1,0 +1,10 @@
+# Positive control for bin/lint_arch.py, rule clippy-config (VER-SPR-003-TEST GAP-12;
+# tests/lint_fixtures/README.md); not in the Rehoboam workspace. The float zone carries its own clippy.toml,
+# the root list without f64::ln and f64::exp, which clippy would read instead of the root's: refused. This
+# path is the one fixture lint_arch's CLIPPY_CONFIG_FIXTURES allows inside the repository.
+[workspace]
+members = ["crates/rh-sample"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

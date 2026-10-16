@@ -48,6 +48,15 @@ workspace crates, of every dependency kind (normal, build and dev):
                      lints, so each crate's Cargo.toml is read with tomllib. Tool crates may
                      differ; every crate's declaration is printed.
 
+    clippy-config    The workspace root's clippy.toml is the only clippy configuration in the
+                     repository: clippy reads the nearest clippy.toml or .clippy.toml, so a copy
+                     in a crate (the root list minus `f64::ln`, say) would quietly replace the
+                     disallowed lists for that crate (VER-SPR-003-TEST GAP-12). Every file of
+                     either name under the workspace root is reported, except the root's own
+                     clippy.toml and the lint fixtures listed in CLIPPY_CONFIG_FIXTURES;
+                     target/, .git/ and virtual environments are skipped. CLIPPY_CONF_DIR, which
+                     points clippy at another configuration, must not be set.
+
 Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
 Usage:  python -I bin/lint_arch.py [--manifest-path Cargo.toml]
@@ -57,6 +66,7 @@ Standard library only (GOV-003 §3).
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -139,6 +149,15 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
         ),
     }
 )
+
+# Rule clippy-config: the file names clippy reads, the one allowed place, and the lint fixtures that
+# plant a crate-local config on purpose (paths relative to the workspace root). Keep this list tiny.
+CLIPPY_CONFIG_NAMES = frozenset({"clippy.toml", ".clippy.toml"})
+ROOT_CLIPPY_CONFIG = "clippy.toml"
+CLIPPY_CONFIG_FIXTURES = frozenset(
+    {"tests/lint_fixtures/clippy_config/crate_local/crates/rh-sample/clippy.toml"}
+)
+SKIPPED_DIRS = frozenset({"target", ".git", ".venv", "node_modules"})
 
 # The [lints] declaration of a crate that takes the workspace's lints and nothing else (rule lints).
 INHERITED_LINTS = ("workspace",)
@@ -572,6 +591,48 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     return violations
 
 
+def clippy_configs(root: Path) -> list[str]:
+    """Return every clippy.toml or .clippy.toml under ``root``, relative and sorted.
+
+    Directories named in SKIPPED_DIRS are not entered (build output, git data, environments).
+    """
+    found: list[str] = []
+    for directory, subdirectories, files in os.walk(root):
+        subdirectories[:] = sorted(d for d in subdirectories if d not in SKIPPED_DIRS)
+        found += [
+            (Path(directory) / name).relative_to(root).as_posix()
+            for name in files
+            if name in CLIPPY_CONFIG_NAMES
+        ]
+    return sorted(found)
+
+
+def check_clippy_configs(root: Path) -> list[Violation]:
+    """Check that the root clippy.toml is the only clippy config (VER-SPR-003-TEST GAP-12)."""
+    allowed = CLIPPY_CONFIG_FIXTURES | {ROOT_CLIPPY_CONFIG}
+    found = []
+    if os.environ.get("CLIPPY_CONF_DIR"):
+        found.append(
+            Violation(
+                "clippy-config",
+                "CLIPPY_CONF_DIR",
+                f"is set to {os.environ['CLIPPY_CONF_DIR']!r}; clippy would read its configuration "
+                "there instead of the workspace root's clippy.toml (VER-SPR-003-TEST GAP-12)",
+            )
+        )
+    return found + [
+        Violation(
+            "clippy-config",
+            path,
+            "a clippy configuration other than the workspace root's clippy.toml; clippy reads the "
+            "nearest one, so it would replace the disallowed lists (the std transcendentals, "
+            "HashMap, Instant, mul_add) for the crates below it (VER-SPR-003-TEST GAP-12)",
+        )
+        for path in clippy_configs(root)
+        if path not in allowed
+    ]
+
+
 def load_metadata(manifest_path: Path) -> object:
     """Run ``cargo metadata --no-deps --offline`` on a manifest and return the parsed JSON.
 
@@ -631,7 +692,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except WorkspaceError as err:
         print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
         return EXIT_UNREADABLE
-    violations = check_workspace(crates)
+    violations = check_workspace(crates) + check_clippy_configs(args.manifest_path.resolve().parent)
     print(f"lint_arch: {args.manifest_path}")
     for crate in crates:
         print(describe(crate))
