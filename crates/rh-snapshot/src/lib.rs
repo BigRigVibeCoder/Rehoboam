@@ -5,6 +5,7 @@
 //! plane C crates may call its hashing; it never depends on them.
 //!
 //! - [`hash`]: the three plane hashes, chunked Merkle XXH3-64 with dirty tracking (T-01).
+//! - [`journal`]: the `SQLite` (WAL) input journal of push inputs and its hard-failing replay (T-03).
 //!
 //! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.2_world_model_and_data.md`;
 //! `CODEX/05_PROJECT/SPR-007_HashesKeyframesJournal.md`.
@@ -13,5 +14,6 @@
 #![forbid(unsafe_code)]
 
 pub mod hash;
+pub mod journal;
 
 pub use hash::{Plane, state_hash};
