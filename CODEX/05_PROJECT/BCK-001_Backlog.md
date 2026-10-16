@@ -9,10 +9,10 @@ tags: [backlog, project-management]
 related: [PRJ-001, BCK-002, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.3.0
+version: 1.4.0
 ---
 
-> **BLUF:** The development backlog, rolling wave. P0 is planned in full as SPR-001 to SPR-010 and is unchanged by ADR-0035 (the saga engine). P1a "Bloodlines" is sketched as items. Later phases are listed by their `docs/11` work packages. Priorities follow GOV-007 §4. The Architect re-plans at every gate.
+> **BLUF:** The development backlog, rolling wave. P0 is planned in full as SPR-001 to SPR-010 and is unchanged by ADR-0035 (the saga engine). P1a "Bloodlines" is planned in `PRJ-002`, approved by the director at G0 (D30). Later phases are listed by their `docs/11` work packages. Priorities follow GOV-007 §4. The Architect re-plans at every gate.
 
 # BCK-001 — Development backlog
 
@@ -37,9 +37,9 @@ version: 1.3.0
 
 **Gate G0** is assembled by the Architect as `VER-G0` once SPR-001 to SPR-010 are closed.
 
-## 2. Next phase: P1a "Bloodlines" (planned; awaiting the director at G0)
+## 2. Next phase: P1a "Bloodlines" (approved at G0, D30)
 
-The proposed plan is `PRJ-002` (22 sprints, SPR-011 to SPR-032), with the walking skeleton written up in full as `SPR-011` (to be issued as SPR-011, -012 and -013 under its ruling 1). The director decides at G0 (`docs/decisions_pending.md` D30 to D35). Once approved, `PRJ-002` §2 replaces this section.
+The plan is `PRJ-002`, approved by the director at G0 (D30, 2026-10-16; `docs/decisions_pending.md` D30 to D36). Its §2 is the sprint list and replaces this section. The walking skeleton is written up in full as `SPR-011`, issued as SPR-011 (engine prerequisites), SPR-012 (`solo` lives and dies) and SPR-013 (World Stream v0 and the chronicle) under its ruling 1.
 
 Corrections to the earlier sketch here:
 - **Household food** (P1.4, P1.5a) and **the rung manifests as P1.11** were listed in P1a. `docs/11` puts P1.4, P1.5a and P1.11 in P1b, and the rung-1 and rung-2 manifests are BCK-002 A-06 (Architect).
