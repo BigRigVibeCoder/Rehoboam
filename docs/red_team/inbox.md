@@ -85,3 +85,23 @@ Full technical analysis in `docs/red_team/RT-2026-10-16-sota-science-analysis.md
 * **Plane A Implementation:** Bearer's personality vector $\vec{M}$ experiences exponential decay toward $\vec{\Psi}$ over possession time: $\vec{M}(t+1) = \vec{M}(t) + \kappa \cdot (\vec{\Psi} - \vec{M}(t))$. Creates continuous, emergent Ring-corruption driving vow conflict and mental breaks.
 * **Target Spec:** `S6.artifacts` (P1a/P1b).
 
+---
+
+## Batch 03 (2026-10-16): The Red Team Charter & Graveyard Autopsies (For Gate G0)
+
+Full technical dossiers in `docs/red_team/PHILOSOPHY_AND_BACKLOG.md` and `docs/red_team/RT-2026-10-16-bleeding-edge-frontiers.md`.
+
+### Item 9: The Red Team Operating Charter & Action Backlog
+* **Source:** `docs/red_team/PHILOSOPHY_AND_BACKLOG.md`.
+* **The Insight:** Establishes the 5 Immutable Laws of the Red Team (Engine Only Engines, Zero Spontaneous Reality, Anti-Slapstick, Computational Coldness, Scavenge the Graveyard) and an active 14-item backlog (`RT-ACT-001` through `RT-ACT-014`) tracking audits and probes.
+
+### Item 10: Autopsies of the Fallen & 4 Bleeding-Edge Frontiers
+* **Source:** `docs/red_team/RT-2026-10-16-bleeding-edge-frontiers.md`.
+* **The Insight:** Synthesizes community complaints and proven scientific solutions across 7 engines:
+  1. *Constitutive Social Practices (from Versu / Richard Evans):* Formal situational frames (`Practice::HighInquest`, `Practice::Feast`) providing temporary roles and violence throttling to stop multi-agent court chaos.
+  2. *Thematic Mythic Domains (from Caves of Qud):* Dynasties and relics bind to domain tokens (e.g., `[domain.obsidian_falcon]`), automatically styling downstream comic prompts, Azgaar maps, and Watabou architecture.
+  3. *Library of Plays 4-Beat Comic Grammar (from Wildermyth):* Compiles Parquet events into structured visual beats (Establishing -> Hook -> Action -> Consequence) with InstantID consistency.
+  4. *The Dynastic Nobility Thermostat:* Cadet-branch pruning holding active named actors to a bounded equilibrium of $N \in [150, 400]$, preventing the Dwarf Fortress/CK2 noble explosion.
+* **Target Specs:** `M14.court_politics`, `M7.dynasty`, `S6.artifacts`, Downstream Narrative Compiler.
+
+
