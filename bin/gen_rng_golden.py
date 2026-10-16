@@ -43,6 +43,10 @@ PersonId (T-05; ADR-0026)
     immigrant: ``h64_words(tag("rehoboam/rh-ids/person/immigrant/v1"), [seed, origin, t, k])``
     rehash c of base b: ``h64_words(tag("rehoboam/rh-ids/person/rehash/v1"), [b, c])``
 
+RNG system_id (SPR-005; ``rh_core::register::system_id``; ``05.1`` §6 item 2)
+    ``system_id(id) = h64_bytes(tag("rehoboam/rh-core/system/v1"), id) >> 32``: the high 32 bits,
+    for each Registry system id. A collision is a registration error; renaming a system is C3.
+
 Usage:  python -I bin/gen_rng_golden.py           (rewrite the golden file)
         python -I bin/gen_rng_golden.py --check   (exit 1 if the committed file differs)
         python -I bin/gen_rng_golden.py --check --golden PATH   (check another file; the positive
@@ -384,6 +388,21 @@ def lines_person() -> list[str]:
     return out
 
 
+TAG_SYSTEM_ID = tag("rehoboam/rh-core/system/v1")
+# The systems that have a spec (specs/systems/*.odd.toml) when SPR-005 pinned the layout.
+SYSTEM_IDS = ("M2.demography", "S5.daily_life", "S6.artifacts", "S7.vows")
+
+
+def system_id(name: str) -> int:
+    """The RNG ``system_id`` of a Registry system id (rh-core, SPR-005)."""
+    return h64_bytes(TAG_SYSTEM_ID, name.encode("ascii")) >> 32
+
+
+def lines_system() -> list[str]:
+    """The RNG system_id of each system with a spec (read by rh-core's tests)."""
+    return [f"system {name} {system_id(name)}" for name in SYSTEM_IDS]
+
+
 def render() -> str:
     """The whole golden file."""
     header = [
@@ -404,8 +423,16 @@ def render() -> str:
         "#   child <mother> <parity> <person_id>",
         "#   immigrant <world_seed> <origin> <t> <k> <person_id>",
         "#   rehash <base> <c> <person_id>",
+        "#   system <Registry system id> <RNG system_id> (rh-core, SPR-005)",
     ]
-    body = [*lines_chacha(), *lines_h(), *lines_splitmix(), *lines_salt(), *lines_person()]
+    body = [
+        *lines_chacha(),
+        *lines_h(),
+        *lines_splitmix(),
+        *lines_salt(),
+        *lines_person(),
+        *lines_system(),
+    ]
     return "\n".join([*header, *body]) + "\n"
 
 
