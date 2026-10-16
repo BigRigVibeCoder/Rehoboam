@@ -38,7 +38,6 @@ pub struct Params {
     pub primogeniture_hr: Fixed,  // bounds checked against the Registry at load
     pub seniority_hr: Fixed,  // bounds checked against the Registry at load
     pub predecessor_killed_or: Fixed,  // bounds checked against the Registry at load
-    pub filial_piety_mean: Fixed,  // bounds checked against the Registry at load
     pub predecessor_deposed_hr: Fixed,  // bounds checked against the Registry at load
     pub exec_constraint_hr: Fixed,  // bounds checked against the Registry at load
     pub majority_age: Fixed,  // bounds checked against the Registry at load

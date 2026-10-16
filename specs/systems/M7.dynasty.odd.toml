@@ -464,10 +464,6 @@ name = "predecessor_killed_or"
 meaning = "Multiplier on the murder hazard when the predecessor was murdered (an odds ratio applied as a hazard ratio: exact enough for monthly probabilities below 0.01)"
 source = "Eisner 2011, p. 570 (R12 §1): OR 2.98"
 [[params]]
-name = "filial_piety_mean"
-meaning = "Legacy parameter: no M7 F1 mechanism reads it (filial piety is a derived overlay of T1.minds, 05.3 §2). Kept because val_khor sets it; removal recommended (open question)"
-source = "design value (earlier draft); no mechanism"
-[[params]]
 name = "predecessor_deposed_hr"
 meaning = "Multiplier on the deposition hazard when the predecessor was deposed or murdered"
 source = "Kokkonen & Sundell 2014, p. 447 (R12 §2): predecessor deposed HR 1.56–1.80"
