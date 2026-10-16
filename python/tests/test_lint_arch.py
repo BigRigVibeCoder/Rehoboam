@@ -661,12 +661,44 @@ def test_any_clippy_config_but_the_root_one_is_reported(tmp_path: Path, path: st
     assert [(v.rule, v.crate) for v in check_clippy_configs(tmp_path)] == [("clippy-config", path)]
 
 
-def test_build_output_and_environments_are_skipped(tmp_path: Path) -> None:
-    """target/, .git/ and virtual environments hold copies that no build reads as config."""
-    for skipped in ("target/rendered/clippy.toml", ".git/x/clippy.toml", ".venv/lib/clippy.toml"):
+def test_only_the_root_target_and_git_directories_are_skipped(tmp_path: Path) -> None:
+    """Root build output and git data hold no config; anything deeper is searched (GAP-13)."""
+    for skipped in ("target/rendered/clippy.toml", ".git/x/clippy.toml"):
         (tmp_path / skipped).parent.mkdir(parents=True)
         (tmp_path / skipped).write_text("")
     assert check_clippy_configs(tmp_path) == []
+    for searched in (".venv/lib/clippy.toml", "node_modules/x/clippy.toml", "a/target/clippy.toml"):
+        (tmp_path / searched).parent.mkdir(parents=True)
+        (tmp_path / searched).write_text("")
+    assert sorted(v.crate for v in check_clippy_configs(tmp_path)) == [
+        ".venv/lib/clippy.toml",
+        "a/target/clippy.toml",
+        "node_modules/x/clippy.toml",
+    ]
+
+
+def test_a_member_reached_through_a_symlink_is_found_and_reported(tmp_path: Path) -> None:
+    """Clippy's own lookup from the member's (symlinked) directory finds the hidden config."""
+    real = tmp_path / "elsewhere" / "rh-sample"
+    real.mkdir(parents=True)
+    (real / "clippy.toml").write_text("")
+    root = tmp_path / "ws"
+    (root / "target").mkdir(parents=True)
+    (root / "target" / "rh-sample").symlink_to(real)
+    member = replace(crate("rh-sample"), directory=root / "target" / "rh-sample")
+    found = [(v.rule, v.crate) for v in check_clippy_configs(root, [member])]
+    assert found == [
+        ("clippy-config", "rh-sample"),
+        ("clippy-config", "target/rh-sample/clippy.toml"),
+    ]
+
+
+def test_clippy_looks_up_the_ancestors_of_each_member(tmp_path: Path) -> None:
+    """A config between the member and the root applies to it, as in clippy's lookup."""
+    (tmp_path / "group" / "rh-sample").mkdir(parents=True)
+    (tmp_path / "group" / ".clippy.toml").write_text("")
+    member = replace(crate("rh-sample"), directory=tmp_path / "group" / "rh-sample")
+    assert [v.crate for v in check_clippy_configs(tmp_path, [member])] == ["group/.clippy.toml"]
 
 
 def test_clippy_conf_dir_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

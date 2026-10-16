@@ -1,0 +1,11 @@
+# Positive control for bin/lint_arch.py, rule clippy-config (VER-SPR-003-TEST GAP-13;
+# tests/lint_fixtures/README.md); not in the Rehoboam workspace. The float zone is a symlinked member under
+# node_modules/, whose target (../symlink_target/rh-sample) carries a crate-local clippy.toml that a crawl
+# skipping node_modules/ or not following links would miss. Both the symlinked member and the config it
+# reaches must be reported.
+[workspace]
+members = ["node_modules/rh-sample"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
