@@ -156,3 +156,79 @@ No defect against a contract clause was found in the samplers.
 4. Python uses glibc's `exp`/`log`/`lgamma`/`pow`, the Rust code uses `libm`'s; they agreed on every one of the 2.0×10^6 samples I compared, but 1-ulp differences would show only at a decision boundary.
 5. I did not re-run the `rh-ids` V-DET-20 10^6 sweep, the `deny` licence ledger, or the Windows/macOS nightlies.
 6. The Architect audit `VER-SPR-003` is not part of this file.
+
+## 8. Re-verification at `fbe24b0d474d2a53929911f4d9f05ca52211401d` (119 checks, CI run 38872985485)
+
+**BLUF:** The fixes work for what I tried before: all 13 mutations that stayed green in section 3.2 turn red at the intended gate, DEF-1 is fixed, and GAP-6, GAP-8 and the exact-pin rule hold against the evasions I tried first. The sampler code is unchanged. **But I found four ways around the new rules, and one of them silences the transcendental ban completely:** a `[lints.clippy] disallowed_methods = "allow"` table in `rh-sample/Cargo.toml` passes all 119 checks with `x.ln()` in the crate (GAP-9). The exact-pin rule does not see a second `libm` edge (a `[target.…]` table) or `libm`'s `features` (GAP-10). `float-api` is textual and misses a private alias, a trait method and an associated type (GAP-11). Details and reproductions below.
+
+Method: `git archive` of `fbe24b0` into a throwaway copy; `bin/check_all.sh` on the clean copy is 119 PASS, 0 FAIL (`rc=0`). Each mutation below ran the whole tier on its own copy; trials of the new rules ran the gates directly.
+
+### 8.1 The sampler code is unchanged
+
+| Check | Result |
+|---|---|
+| Non-comment lines of every file in `crates/rh-sample/src` (`beta`, `binomial`, `convert`, `error`, `gamma`, `lib`, `normal`, `poisson`, `uniform`, `ziggurat_tables`), `743ce83` vs `fbe24b0` | identical; only `//!` documentation lines differ |
+| `tests/golden/samplers_v1.txt` | byte-identical to `743ce83` |
+| Independent Python port against the new head's golden file | 136 of 136 lines reproduced, draw counts included |
+| Section 2 statistics, determinism builds, conversion check | not re-run: the code they ran on is the same code. Their evidence stands. |
+
+### 8.2 The 14 mutations that stayed green in section 3.2
+
+| ID | Mutation | Result at `fbe24b0` |
+|---|---|---|
+| B09 | `pub fn leak() -> f64` | **red**, `lint_forbidden` (`float-api`) |
+| B10 | `pub fn(f32)`, `pub struct` with a `pub f64` field | **red**, `lint_forbidden` |
+| B11 | `pub use libm::log` | **red**, `lint_forbidden` |
+| B06 | `#[allow(clippy::disallowed_methods, reason = …)]` on an item, then `x.ln()` | **red**, `lint_forbidden` (`lint-allow`) |
+| D02, D03, D05 | drop `f64::cbrt`; `f32::ln`; `f64::powf` and `f64::powi` from `clippy.toml` | **red**, pytest |
+| E02 | the float exemption also covers `rh-core` | **red**, the new control "a float in a crate named rh-core must FAIL" |
+| C07 | `zerocopy` in `rh-sample` | **red**, `lint_arch` (`plane-A-external`) |
+| C08 | `libm` as `0.2`; also `^0.2.16`, `~0.2.16`, `>=0.2.16`, `=0.2`, bare `0.2.16`, `=0.2.16, <0.3` | **red**, `lint_arch`, all seven spellings |
+| C09 | `libm` with default features | **red**, `lint_arch` |
+| B05 | `libm::fma` | green, by the Architect's ruling (GAP-5(a)) |
+| C05, C06 | `rh-sample` → `rh-snapshot`, → `rh-registry` | green by design; not re-run |
+
+`fp-contract` guard (GAP-6): `.cargo/config.toml` with `-C llvm-args=-fp-contract=fast`, `--fp-contract=fast`, or the same under `[target.…]` all turn the tier red at the new guard. Other spellings I tried (`-enable-unsafe-fp-math`, `-fp_contract`) are rejected by rustc itself, and I could not build a binary with FMA from any flag that does not contain `fp-contract` (135 FMA instructions with the flag, none without), so a string match is enough for the flags that exist. Not covered: a `~/.cargo/config.toml` outside the repository (the guard looks under the root and in the environment), and `RUSTC_WRAPPER`; both affect only a developer's machine, not CI.
+
+### 8.3 GAP-8 and DEF-1
+
+| Item | Result |
+|---|---|
+| The four new binomial cases `(2^32−1, 1)`, `(2^32−1, 32768)`, `(1000, 655)`, `(1000, 656)` | in `reference.txt` for both tiers (`df` 342 / 400 / 18 / 18 at the PR tier); both tiers pass on the clean tree; I had already run all four at 4×10^8 draws against my own pmf |
+| Nightly tier on the clean tree | 3 of 3 pass (12.6 s) |
+| b12 (BTPE step 5.3, `0.5 → 0.0`) with the capped bins | PR tier still misses it (4 of 4 pass); **nightly tier fails it** on `binomial 1000 49152` (261.1 vs 109.8) and `binomial 5000 19661` (194.7 vs 192.7). The Developer's claim holds. |
+| DEF-1 | the new text in `binomial.rs`, `poisson.rs`, `gamma.rs`, `beta.rs` and `normal.rs` matches what I measured (BTPE ≈ 2 attempts at np 10 to 20, 1.5 at 50, 1.15 from 10^3; PTRS 1.33 at 10 to 1.14 at 10^3; Beta 4.0 to 4.2, and 5.1 to 6.2 with a shape below 1). **Closed.** |
+| GAP-7 | the call-site rule is in the crate docs of all five samplers. **`05.1` §6 item 3 does not contain it** at this head (it still reads "read sequentially; each sampler documents how many draws it consumes"). The Architect's ruling put it there; it is not in the Developer's diff. Open for the Architect. |
+
+A caution for anyone repeating this: a shared `CARGO_TARGET_DIR` between a mutated copy and a clean copy made `cargo nextest` run the stale mutated build on the clean tree (it reported the mutant's failures on clean code) until I used a separate target directory. My first "clean" nightly result was wrong for that reason and is not reported; the clean result above comes from a fresh directory.
+
+### 8.4 Evasions of the new rules
+
+Each trial was compiled (`cargo check --all-targets`) and run through `lint_forbidden`, `lint_arch` and clippy; an evasion needs all three green and the code to compile.
+
+**`lint-allow`: held against 15 of 16 attempts that really silence clippy.** Caught: plain `allow`, `expect`, `cfg_attr(all(), allow(…))`, a multi-line attribute, `allow` with a leading `unknown_lints`, `clippy::style` and `clippy::all` (group lints), spaces around `::`, an inner attribute in a function body, an `allow` on a statement, and `allow` inside a `macro_rules!` body. The cases that left `lint_forbidden` green do not silence clippy either: `allow(warnings)` (clippy still reports the disallowed method), `allow(clippy::pedantic, clippy::nursery)`, and a misspelled lint name (clippy rejects it). **The one real evasion is in `Cargo.toml`, not in source (GAP-9).**
+
+**`float-api`: textual, and 5 of 16 shapes get past it.** Caught: `pub type X = f64`, a generic `Into<f64>`, a `where` clause, `macro_rules!` generating `pub fn … -> f64`, a glob re-export from a private module, `core::primitive::f64`, a signature split over lines, `libm` in a `pub use`. **Not caught, and they compile and pass clippy (GAP-11):**
+1. a private alias: `type F = f64; pub fn leak() -> F`, and `type G = f64; pub struct S(pub G);`;
+2. a trait method, required or default: `pub trait T { fn get(&self) -> f64; }`;
+3. an associated type fixed in an impl body: `impl Tr for W { type Out = f64; } pub fn leak() -> <W as Tr>::Out`;
+4. a macro that takes the type as a token: `mk!(leak, f64)` expanding to `pub fn $n() -> $t`;
+5. an opaque return, `-> impl Debug` of an `f64` (leaks the value only through `Debug`; mild).
+
+**Exact pin (`plane-A-external`): held for seven spellings and the build-dependency table; two holes (GAP-10).**
+1. A second `libm` edge is invisible. `[target.'cfg(unix)'.dependencies] libm = { version = "0.2", default-features = true }` appears in `cargo metadata` with `req = "^0.2"` and default features on, but `Edge` compares only `(target, kind)` (`req` and `default_features` are `compare=False`), so the set keeps one of the two and the rule judges that one. Full tier: green (H03).
+2. `features` is never read. `libm = { version = "=0.2.16", default-features = false, features = ["arch"] }` enables libm's architecture-specific routines, which is what `default-features = false` was meant to exclude. Full tier: green (H04).
+3. A renamed second edge (`libm2 = { package = "libm", version = "0.2" }`) was stopped by `cargo deny`, not by `lint_arch` (H05); a `path` dependency named `libm` was stopped by `lint_arch` (`req = *`). A `dev-dependency` is exempt by design.
+
+**The configuration layer (GAP-9, the serious one).** In `crates/rh-sample/Cargo.toml`, replace `[lints] workspace = true` with `[lints.clippy] disallowed_methods = "allow"` (and `[lints.rust] unsafe_code = "forbid"`), then put `x.ln()` in the crate: **119 of 119 checks pass** (H01). Nothing reads a plane-A crate's `[lints]` table. The same override removes every workspace deny for that crate (`float_arithmetic`, `unwrap_used`, `missing_docs`, `allow_attributes_without_reason` and the rest) while `lint_forbidden`, whose float rule is already off in the zone, sees nothing. (A table that drops the lints entirely failed clippy for an unrelated reason in my trial H02, so I do not claim it.)
+
+### 8.5 New gaps, with recommendations
+
+1. **GAP-9: a crate can opt out of the workspace lints, and no gate looks.** Recommendation: in `lint_arch`, every plane-A crate's manifest must declare `[lints] workspace = true` and no `[lints.*]` table of its own (read from cargo metadata's raw manifest or the TOML), with a planted control; 85%. This is the cheapest gap to close and the only one that defeats the transcendental ban outright.
+2. **GAP-10: the exact-pin rule judges one edge per `(crate, kind)` and ignores `features`.** Recommendation: make `req` and `default_features` part of `Edge` equality (or keep a list per crate) so every edge is checked, add `features` to the reviewed entry (`libm`: none), and add a control for a `[target.…]` table; 80%.
+3. **GAP-11: `float-api` is a text rule.** It stops the accidental leak and the plain `pub fn … -> f64`, not a deliberate alias. Recommendation: accept for now and say so in the rule's docstring, or add two textual rules for the zone (no `type … = f32|f64` alias anywhere in `rh-sample/src`, and scan trait bodies and impl bodies for `f32`/`f64`), or use rustdoc JSON; 65% for the textual additions, 75% for rustdoc JSON.
+4. **OBS-4:** the call-site rule of GAP-7 is not yet in `05.1` §6 item 3 (section 8.3).
+
+### 8.6 Not run in this pass
+
+The determinism builds, the distribution statistics and the conversion check of section 2 (code unchanged); the Windows and macOS nightlies; `~/.cargo/config.toml` outside the repository; `float-api` against a rustdoc-JSON ground truth (I judged each shape by whether it compiles and what it exposes, not by an independent tool).
