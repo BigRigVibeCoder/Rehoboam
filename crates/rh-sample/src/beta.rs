@@ -15,8 +15,15 @@
 //! # Draws consumed
 //!
 //! A sample reads the stream sequentially from its current position: first all of `X`'s draws,
-//! then all of `Y`'s (each as `gamma` documents; about 4.2 draws per sample in all), deterministic
-//! given the stream.
+//! then all of `Y`'s (each as `gamma` documents), deterministic given the stream. Measured
+//! (VER-SPR-003-TEST §2.2, confirmed here): about 4.0 to 4.2 draws per sample when both shapes are
+//! at least 1, and 5.1 to 6.2 when either is below 1 (its boost adds a draw, and Marsaglia–Tsang
+//! at `k + 1` rejects more often).
+//!
+//! Because the count varies with the parameters, a call site gives each sample its own keyed stream
+//! (or its own fixed draw offset `k`), never several samples from one stream: otherwise a parameter
+//! that differs between two branches shifts every later sample (ADR-0006 item 3, common random
+//! numbers; `05.1` §6 item 3).
 //!
 //! REF: SPR-003 T-04 ("Beta from two Gammas"); ADR-0006 item 3; `05.1` §6 item 3.
 

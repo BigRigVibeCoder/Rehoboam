@@ -26,8 +26,10 @@
 //! A sample reads the stream sequentially from its current position. Each attempt takes **one
 //! draw**; an attempt that lands in a box's wedge takes **one more** for the density test; the base
 //! box's tail takes **two per tail iteration**. About 1.02 draws per sample on average; the count is
-//! deterministic given the stream and does not depend on `μ` or `σ` (a sample with `σ = 0` still
-//! draws, so draw positions never depend on the parameters).
+//! deterministic given the stream. It depends on neither `μ` nor `σ`, and `σ = 0` still draws:
+//! the normal has no degenerate shortcut. That is a property of this sampler only; the other
+//! samplers' counts depend on their parameters, so call sites must still give each sample its own
+//! keyed stream or draw offset (ADR-0006 item 3; `05.1` §6 item 3).
 //!
 //! REF: SPR-003 T-03; ADR-0006 item 3; `05.1` §6 item 3 ("normal (ziggurat with fixed tables)");
 //! `docs/14` (`rand_distr`: ZIGNOR, PORT).

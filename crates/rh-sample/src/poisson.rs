@@ -28,9 +28,14 @@
 //! A sample reads the stream sequentially from its current position:
 //! - `λ = 0`: **no draw**.
 //! - inversion (`λ < 10`): **one draw per attempt**, in practice one draw.
-//! - PTRS (`λ ≥ 10`): **two draws per attempt** (`u`, then `v`), a variable number of attempts
-//!   (Hörmann reports about 1.15 expected attempts at `μ = 10`, falling towards 1 as `μ` grows),
-//!   deterministic given the stream.
+//! - PTRS (`λ ≥ 10`): **two draws per attempt** (`u`, then `v`), a variable number of attempts,
+//!   deterministic given the stream. Measured (VER-SPR-003-TEST §2.2, confirmed here): 1.33
+//!   attempts (2.65 draws) at `λ = 10`, 1.22 at 30, 1.17 at 100, 1.14 at 10^3, about 1.13 beyond.
+//!
+//! Because the count varies with the parameters, a call site gives each sample its own keyed stream
+//! (or its own fixed draw offset `k`), never several samples from one stream: otherwise a parameter
+//! that differs between two branches shifts every later sample (ADR-0006 item 3, common random
+//! numbers; `05.1` §6 item 3).
 //!
 //! REF: SPR-003 T-02; ADR-0006 item 3; `05.1` §6 item 3; `docs/14` (`rand_distr`'s Poisson is not
 //! PTRS).

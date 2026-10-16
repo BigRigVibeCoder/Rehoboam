@@ -32,8 +32,15 @@
 //! - BINV (`n·min(p, 1 − p) < 10`): **one draw per attempt**; an attempt fails only if its count
 //!   passes `min(110, n)`, which for these parameters is a > 30-standard-deviation event, so in
 //!   practice one draw.
-//! - BTPE (otherwise): **two draws per attempt** (`u`, then `v`), and a variable number of attempts
-//!   (about 1.1 on average, the BTPE acceptance rate), deterministic given the stream.
+//! - BTPE (otherwise): **two draws per attempt** (`u`, then `v`), and a variable number of attempts,
+//!   deterministic given the stream. Measured (SPR-003 VER-SPR-003-TEST §2.2, confirmed here):
+//!   about 2 attempts (4 draws) for `n·p` near 10 to 20, 1.5 (3 draws) at `n·p = 50`, and about
+//!   1.15 (2.3 draws) from `n·p ≈ 10^3` on.
+//!
+//! Because the count varies with the parameters, a call site gives each sample its own keyed stream
+//! (or its own fixed draw offset `k`), never several samples from one stream: otherwise a parameter
+//! that differs between two branches shifts every later sample (ADR-0006 item 3, common random
+//! numbers; `05.1` §6 item 3).
 //!
 //! REF: SPR-003 T-01; ADR-0006 item 3; `05.1` §6 item 3; `docs/14` (`rand_distr`: PORT).
 
