@@ -9,12 +9,12 @@ tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.4.0
+version: 0.5.0
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
 
-> **BLUF:** APPROVED by the director at G0 (D30, 2026-10-16; `docs/decisions_pending.md` D30 to D36); the rulings of §7 are binding. P1a "Bloodlines" runs as 20 sprints, SPR-011 to SPR-030, each at most about 3 agent-days; SPR-031 and SPR-032 moved to P1b (D33) and keep their numbers. The critical path is the dynasty chain: walking skeleton (SPR-011–013) → lifecycle queues (014) → births (015) → M7 (021–022) → the scale run (030) → G1a. Effect language, the event envelope, stream v1 and minds run beside it in two more lanes. 15 of the 20 sprints are C3, so the binding limit is the one-C3-at-a-time merge rule, not agent time. About 20 of the specs these sprints need do not exist yet, `M7.dynasty` and `T1.minds` among them; the three that exist (the M2 rung-0 slice, `S5`, the chronicle schema) each have gaps (§6). Section 2 replaces BCK-001 §2; sections 3–9 support it. §10 marks the inconsistencies the G0 rulings resolve; the Architect corrects the others that are within the Architect's authority.
+> **BLUF:** APPROVED by the director at G0 (D30, 2026-10-16; `docs/decisions_pending.md` D30 to D36); the rulings of §7 are binding. P1a "Bloodlines" runs as 20 sprints, SPR-011 to SPR-030, each at most about 3 agent-days; SPR-031 and SPR-032 moved to P1b (D33) and keep their numbers. The critical path is the dynasty chain: walking skeleton (SPR-011–013) → lifecycle queues (014) → births (015) → M7 (021–022) → the scale run (030) → G1a. Effect language, the event envelope, stream v1 and minds run beside it in two more lanes. 15 of the 20 sprints are C3, so the binding limit is the one-C3-at-a-time merge rule, not agent time. Most of the specs these sprints need do not exist yet; `M7.dynasty` and `T1.minds` are frozen on `main` (D36, PR #32), and the two others that exist (the M2 rung-0 slice, the chronicle schema) have gaps (§6). Section 2 replaces BCK-001 §2; sections 3–9 support it. §10 marks the inconsistencies the G0 rulings resolve; the Architect corrects the others that are within the Architect's authority.
 
 ## 1. How to read this
 
@@ -139,7 +139,7 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | Minds | V-COG-03, V-COG-04 | SPR-024 |
 | Succession | V-SF-06, V-SF-06b reported; V-SAGA-19 | SPR-022 with SPR-028; SPR-021 |
 | Stream | V-STR-01–03, V-STR-05, V-PERF-09 | SPR-013 (01); SPR-026 (03, 05); SPR-027 (02); SPR-030 (V-PERF-09, P1a variant: D34) |
-| Envelope and stress | V-SAGA-15; V-SAGA-16's stress-accounting identity (its break band is reported at G1a and gates G1b: D34) | SPR-020; SPR-025 |
+| Envelope and stress | V-SAGA-15 (P1a variant: the 10k dynastic world, 100 years); V-SAGA-16's stress-accounting identity (its break band is reported at G1a and gates G1b: D34) | SPR-020; SPR-025 |
 | Performance: 10k persons, ≤ 500 named actors, 1,000 years in ≤ 60 s on 8 cores | (G1a default) | SPR-030 |
 | [H] the family history of 3 seeds | — | SPR-029, then the director |
 
@@ -156,8 +156,8 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018; SPR-032 (P1b, D33) | Missing |
 | Population synthesis | SPR-019 | Missing |
 | Role codes reconciled (`schema.sql` vs `[event_roles]`) | SPR-020 | Conflict |
-| `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Approved (D36): PR #32, round 4; merges before PR #37 |
-| `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Approved (D36): PR #32, round 4; merges before PR #37 |
+| `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`) |
+| `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`) |
 | Stream v1 wire format (`rh-protocol`) | SPR-026 | Missing |
 | Family-annals template set | SPR-029 | Missing |
 | Dynastic fixture world; 10k dynastic manifest (extend A-06) | SPR-030 | Missing |
@@ -176,7 +176,7 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 | M-4 | **Approved (D33).** P1.18 (S5 F1) moves to P1b. Its reads of `person.occupation` (M4) and `region.conditions` (M6) have no owner in P1a, so S5 F1 would run on neutral values only (registration reports an unowned read and refuses only sends: REV-P1a MAJ-2). G1a does not gate V-STR-07, and ADR-0031 had placed it in P1b. A director decision: it changes `docs/11` | 70% |
 | M-5 | **Approved (D33).** P1.8 (M1 F1) moves to P1b with fugitives, its first consumer. P1a needs only M1 F0, inside worldgen-lite | 60% |
 | M-6 | `S3.migration` F0 (residence at genesis and at birth, no moves) enters P1a inside SPR-018, so V-DATA-04 has residence intervals at G1a | 65% |
-| M-7 | **Approved (D34).** G1a's tests are made runnable before P1a starts (`docs/11`: numbers before the phase). V-INV-12 runs on the dynastic fixture world, not `val_khor` (optional under ADR-0035). V-DATA-04 at G1a checks identity, parents, death and residence; occupation waits for M4 (P1b). V-INV-03 at G1a kills through M2, M7 and agenda actions; M5 and M8 are P4. V-PERF-09 gets a P1a variant: the 10k dynastic world, `rh-cli tail`, the TUI stub and a stalled consumer, with no hydration bubble and no 100k world. V-SAGA-16: its stress-accounting identity gates G1a, and its break band (0.5–5 per 100 named-actor-years, declared on the kingdom ensemble) is reported at G1a and gates G1b (REV-P1a MAJ-8). The G1a lists of `docs/11` and `docs/09` §5 become one list. A director decision | 75% |
+| M-7 | **Approved (D34).** G1a's tests are made runnable before P1a starts (`docs/11`: numbers before the phase). V-INV-12 runs on the dynastic fixture world, not `val_khor` (optional under ADR-0035). V-DATA-04 at G1a checks identity, parents, death and residence; occupation waits for M4 (P1b). V-INV-03 at G1a kills through M2, M7 and agenda actions; M5 and M8 are P4. V-PERF-09 gets a P1a variant: the 10k dynastic world, `rh-cli tail`, the TUI stub and a stalled consumer, with no hydration bubble and no 100k world. V-SAGA-16: its stress-accounting identity gates G1a, and its break band (0.5–5 per 100 named-actor-years, declared on the kingdom ensemble) is reported at G1a and gates G1b (REV-P1a MAJ-8). V-SAGA-15 at G1a measures its stored bytes on SPR-030's 10k dynastic world for 100 years, not on a kingdom run. The G1a lists of `docs/11` and `docs/09` §5 become one list. A director decision | 75% |
 | M-8 | **Approved (D35).** Inheritance in P1a is titles and claims only. Property inheritance waits for M4 F0 holdings (P1b), although P1.7's text says "titles and property" | 70% |
 | M-9 | The rung-1 and rung-2 manifests are BCK-002 A-06 (Architect), not P1.11, which is a P1b WP | 85% |
 | M-10 | BCK-002 A-15 (coverage gates, owned by no sprint since SPR-002) joins SPR-028, the P1a tools sprint | 60% |
@@ -212,9 +212,9 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 
 | # | Where | What |
 |---|---|---|
-| 1 | `05.2` §1, `05.9` IF-1, `schema.sql`, `specs/chronicle/selftest.py` vs `rh-events` (SPR-006) | Docs say `EventId = (day_index << 24) \| seq_in_day`; the code uses one counter per timeline. `05.9` IF-1 also has `ctx.emit` return an `EventId`; since SPR-006 a step gets a `DraftRef` and ids are assigned at the merge (`05.1` v1.6) |
+| 1 | `05.2` §1, `05.9` IF-1, `schema.sql`, `specs/chronicle/selftest.py` vs `rh-events` (SPR-006) | **Resolved** (`ab0b2b1`, on `main`). Docs say `EventId = (day_index << 24) \| seq_in_day`; the code uses one counter per timeline. `05.9` IF-1 also has `ctx.emit` return an `EventId`; since SPR-006 a step gets a `DraftRef` and ids are assigned at the merge (`05.1` v1.6) |
 | 2 | `schema.sql` `event_role.concrete_role` vs Registry `[event_roles]` | Initiator, target, partner, bystander, instrument vs actor, target, witness, instrument |
-| 3 | `schema.sql` `regional_aggregate.value DOUBLE` | A float column in a plane-A table, against "floats in plane A live in `rh-sample` only" |
+| 3 | `schema.sql` `regional_aggregate.value DOUBLE` | **Resolved** (`80c6f7d`, on `main`). A float column in a plane-A table, against "floats in plane A live in `rh-sample` only" |
 | 4 | `M2.demography.odd.toml` vs Registry `[verbs]` | **Resolved by PR #37 when it merges (D36);** S5's `ENCOUNTER` stays a draft warning (SPR-011 ruling 11). M2 emits `DEATH`, which is not a Registry verb; `lint_odd.py` does not check emits against verbs. S5's `ENCOUNTER` has the same gap |
 | 5 | `M2.demography.odd.toml` | **Resolved by PR #37 when it merges (D36).** Owns no `person.id` and no `life_course.*` although `05.0` §6 gives the life-course log to its crate; `INV-M2-01` (conservation) cites V-DET-01 instead of V-INV-01; `era_state = ["medical_level"]` while "none at rung 0" |
 | 6 | Registry `[systems.*]` vs `solo.yaml` | **Resolved by PR #37 when it merges (D36).** Parameters have bounds but no defaults, and `solo` sets none |
@@ -228,9 +228,9 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 | 14 | `docs/11` G1a vs `docs/09` §5 G1a | **Resolved (D34):** one list in both. The two test lists differed: `09` adds V-SAGA-15 and V-SAGA-16 and omits V-DET-01/02/12, V-INV-01/11, V-DATA-04/05, V-SF-06 |
 | 15 | `docs/11` P1.7 | **Resolved (D35).** "Titles and property inherited"; property belongs to M4 (P1b) |
 | 16 | `S5.daily_life.odd.toml` vs `docs/11` P1a | **Resolved (D33):** S5 F1 is in P1b. S5 F1 reads M4 and M6 columns, both P1b; registration refuses a read without an owner |
-| 17 | Engine-crate lists in `docs/13` §3, `05.0` §6, ADR-0035 §6, BCK-002 A-14, `docs/09` V-INSP-05 | They differ (`rh-sample`, `rh-manifest`, `rh-minds`, `rh-worldgen` are in some and not others); `docs/09` V-INSP-03 also omits `rh-sample`, which `bin/lint_arch.py` allows |
-| 18 | GOV-002 tier 9 vs `docs/13` §4.3 | "`solo` on every PR; higher rungs nightly" vs "200 years for the other worlds on PRs" |
-| 19 | `docs/09` V-SCALE-04 | "A journaled end event", but the journal holds inputs only |
+| 17 | Engine-crate lists in `docs/13` §3, `05.0` §6, ADR-0035 §6, BCK-002 A-14, `docs/09` V-INSP-05 | **Resolved** (`e945583`, on `main`). They differ (`rh-sample`, `rh-manifest`, `rh-minds`, `rh-worldgen` are in some and not others); `docs/09` V-INSP-03 also omits `rh-sample`, which `bin/lint_arch.py` allows |
+| 18 | GOV-002 tier 9 vs `docs/13` §4.3 | **Resolved** (`d0b1f6c`, this branch: one CI-tier text, from SPR-011 ruling 16). "`solo` on every PR; higher rungs nightly" vs "200 years for the other worlds on PRs" |
+| 19 | `docs/09` V-SCALE-04 | **Resolved** (`8fec382`, on `main`). "A journaled end event", but the journal holds inputs only |
 | 20 | `05.9` IF-0 channel-A kinds vs `05.10` §4 | No record kind carries the life-course log, yet every birth and death must be in channel A and DATA-5 keeps commoner deaths out of `event` rows |
-| 21 | `specs/README.md` | Calls `uz_job` "reference world 3" and `aethelgard` "reference world 2", which clashes with rung numbering (`uz_job` sits at rung 2) |
+| 21 | `specs/README.md` | **Resolved** (`a58c243`, on `main`). Calls `uz_job` "reference world 3" and `aethelgard` "reference world 2", which clashes with rung numbering (`uz_job` sits at rung 2) |
 | 22 | BCK-001 §1, `VER-G0` | Status lags the branches: BCK-001 does not mark SPR-005 and SPR-006 closed; `VER-G0` says SPR-008 "waits", while its branch has T-00 and T-01 |
