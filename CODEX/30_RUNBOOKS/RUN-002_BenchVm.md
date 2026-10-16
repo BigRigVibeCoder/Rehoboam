@@ -9,10 +9,10 @@ tags: [infrastructure, workflow]
 related: [GOV-008, RUN-001, SPR-008, SPR-009]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
-> **BLUF:** The director's Google Cloud VM `adjutant` is our reference-class machine: 8 cores and 64 GB, like the reference desktop in `docs/08`. It runs the wall-clock benchmarks, the nightly cross-machine determinism check (AMD, against the laptop's Intel), and later the heavy runs (100k to 1M persons, ensembles). It costs about $0.83 per hour while running, so it runs only on a schedule or on demand and stops itself afterwards. Nothing in P0 needs it before SPR-008.
+> **BLUF:** The director's Google Cloud VM `adjutant` is our reference-class machine: 8 cores and 64 GB, like the reference desktop in `docs/08`. It runs the wall-clock benchmarks, a cross-machine determinism check (AMD, against the laptop's Intel), and later the heavy runs (100k to 1M persons, ensembles). It costs about $0.83 per hour while running, so it runs **only on demand** (D6): the Architect asks for a session in advance, the director starts the VM, and it shuts itself down after 30 idle minutes. The director manages the spend. The first session is in SPR-009; regular use starts in P1b.
 
 # RUN-002 — The benchmark and heavy-run VM
 
@@ -39,22 +39,22 @@ Always stop it when idle. §3 adds an automatic start and stop for nightly runs.
 ## 2. One-time setup on the VM
 Run RUN-001 §1–5 on the VM (system packages, Rust, Cargo tools, Python through `uv`, a first `bin/check_all.sh`). Skip RUN-001 §6: a VM has no power profile, but keep its benchmark rules (§5 below).
 
-## 3. Nightly runs through GitHub Actions (set up in SPR-008)
+## 3. Sessions through GitHub Actions (set up in SPR-009)
 1. **Self-hosted runner.** Register a GitHub Actions runner on the VM for this repository, as a service under an unprivileged user, with the label `adjutant`. Self-hosted runners use no GitHub Actions minutes, which matters on the Free plan (GOV-008 §1).
    - Safe because the repository is private. **If the repository ever becomes public, remove the runner first**: a public repository lets anyone's pull request run code on it.
-2. **Automatic start and stop.** A Compute Engine **instance schedule** starts the VM shortly before the nightly workflow and stops it two hours later. This needs no keys stored in GitHub.
-   - The nightly workflow (`runs-on: [self-hosted, adjutant]`) waits in GitHub's queue until the runner comes online.
-   - The schedule's stop time is the backstop: a hung job cannot run up the bill past it.
-3. **Results** go back as workflow artifacts: the bench report, the hash ladders and the check report.
+2. **Jobs wait for the VM.** Workflows for the VM (`runs-on: [self-hosted, adjutant]`) are started by hand (`workflow_dispatch`) or by the Architect. They wait in GitHub's queue until the VM is running.
+3. **Idle shutdown.** A small systemd timer on the VM powers it off after 30 minutes with no runner job and no interactive login. This is the backstop that keeps a forgotten VM from running up the bill.
+4. **Results** go back as workflow artifacts: the bench report, the hash ladders and the check report.
 
-## 4. Cost discipline
-| Use | Hours a month | About |
+## 4. When the VM is needed
+The Architect asks in advance, saying what the session is for and roughly how long it takes (BCK-002 A-12).
+
+| When | What for | About |
 |---|---|---|
-| Nightly runs (one hour a night) | 30 | $25 |
-| Benchmark sessions on demand | 5–10 | $4–8 |
-| Persistent disk (100 GB SSD) | always | Billed whether or not the VM runs; check your billing page |
-
-The monthly ceiling is the director's (`decisions_pending.md`, D6). Default: **$50 a month through P1a**. The Architect reports actual spend at each gate.
+| SPR-009 | Wall-clock baselines; the VM's and the laptop's ratios to the `08` reference | 1–2 h, once |
+| Before each gate from G0 | Cross-machine determinism on AMD; wall-clock trend | 1 h |
+| P1b onward | 100k-person, 1,000-year runs; liveness gate and certification ensembles | Several hours per session |
+| P3b | 1M runs, Foresight batches | To be planned then |
 
 ## 5. Benchmark rules on a VM
 - Record the machine type, CPU model (`lscpu`) and kernel in every bench report; a resized or migrated VM gets a new baseline, never a silent comparison.

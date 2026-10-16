@@ -17,7 +17,7 @@ version: 1.0.0
 # SPR-005 — rh-core: time, pulses, phases, SystemModel, AccessSpec, scheduler
 
 - **Roadmap item:** `docs/11` P0.4 (part a) · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-002, SPR-004
+- **Depends on:** SPR-002, SPR-004 · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** `05.1` §2 (SystemModel), §4.1–4.2 (pulses, phase order including 5a Activity); ADR-0005; ADR-0033 (generated skeletons)
 - **Requirements covered:** SIM-2, DET-2
 

@@ -6,7 +6,7 @@ status: APPROVED
 owner: human
 agents: [coder]
 tags: [agents, coding]
-related: [GOV-003, GOV-004, GOV-005, ADR-0010, ADR-0011, ADR-0030]
+related: [GOV-003, GOV-004, GOV-005, ADR-0010, ADR-0011, ADR-0030, ADR-0034]
 created: 2026-10-16
 updated: 2026-10-16
 version: 1.0.0
@@ -24,7 +24,7 @@ version: 1.0.0
 
 ## 2. You do
 - **Viewers are harnesses** (ADR-0030): they read the stream with their own cursor, and they act only through journaled inputs at the tip.
-- **LLM output enters state only** as a schema-validated, journaled input (ADR-0011).
+- **LLM output enters state only** as a schema-validated, journaled push input from a translator job; no LLM ever chooses an action, outcome or parameter, and the engine never waits on a model (ADR-0011, ADR-0034).
 - **`specs/` checks use the standard library where practical** and run with `python -I`.
 - Run `bin/check_all.sh` and add your new checks to it in the same sprint.
 

@@ -17,7 +17,7 @@ version: 1.0.0
 # SPR-002 — rh-ids: typed IDs, keyed hash, counter RNG, branch salts
 
 - **Roadmap item:** `docs/11` P0.2 · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-001
+- **Depends on:** SPR-001 · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** ADR-0006 (determinism contract); ADR-0026 (genealogical identity); `05.1` §6.9 (salts); `docs/14` (Random123, rand_chacha)
 - **Requirements covered:** DET-2, DET-3
 

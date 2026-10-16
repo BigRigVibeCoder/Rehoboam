@@ -17,7 +17,7 @@ version: 1.0.0
 # SPR-006 — Agenda, timers, lifecycle queues, event bus, invariants
 
 - **Roadmap item:** `docs/11` P0.4 (part b) · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-005
+- **Depends on:** SPR-005 · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** ADR-0025 (scheduled outcomes, no back-dating); `05.1` §4.3 (agenda), §2 (lifecycle queues), §9 (invariants)
 - **Requirements covered:** DET-13, SIM-2
 

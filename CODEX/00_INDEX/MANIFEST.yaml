@@ -114,7 +114,7 @@ entries:
     status: "PLANNING"
     area: "05_PROJECT"
     tags: [sprint]
-    summary: "Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends nightly, serial-fraction instrumentation and the vitals line. Develop…"
+    summary: "Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals l…"
   - id: "GOV-001"
     path: "CODEX/10_GOVERNANCE/GOV-001_DocumentationStandard.md"
     title: "Documentation standard"
@@ -202,7 +202,7 @@ entries:
     status: "APPROVED"
     area: "30_RUNBOOKS"
     tags: [infrastructure, workflow]
-    summary: "The director's Google Cloud VM adjutant is our reference-class machine: 8 cores and 64 GB, like the reference desktop in docs/08. It runs the wall-clock benchmarks, the nightly cross-machine determinism check (AMD, again…"
+    summary: "The director's Google Cloud VM adjutant is our reference-class machine: 8 cores and 64 GB, like the reference desktop in docs/08. It runs the wall-clock benchmarks, a cross-machine determinism check (AMD, against the lap…"
   - id: "README-CODEX-40_VERIFICATION"
     path: "CODEX/40_VERIFICATION/README.md"
     title: "40_VERIFICATION"

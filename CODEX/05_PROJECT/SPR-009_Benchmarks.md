@@ -12,12 +12,12 @@ updated: 2026-10-16
 version: 1.1.0
 ---
 
-> **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends nightly, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
+> **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
 
 # SPR-009 — Benchmark harness and regression gate
 
 - **Roadmap item:** `docs/11` P0.7 · **Phase:** P0 (gate G0)
-- **Depends on:** SPR-005
+- **Depends on:** SPR-005 · **Plan approved by the director 2026-10-16** (P0 batch)
 - **Binding contracts:** `docs/08` §9; GOV-006
 - **Requirements covered:** PERF-4
 
@@ -42,7 +42,7 @@ version: 1.1.0
 - **Status:** [ ] not started
 
 ### T-02: Regression gate
-- **Deliverable:** Two gates. (a) **PR gate on instruction counts** (`iai-callgrind`, valgrind as an outside tool): more than 10% more instructions fails; deterministic to well under 1%, so it does not flake on a hosted runner or a laptop. (b) **Wall-clock benches** (criterion) run nightly on `adjutant` and on demand, are tracked as trends, and alert above 10%; they gate only on `adjutant`, once T-04 shows its spread is well under 10%. No automatic re-baseline
+- **Deliverable:** Two gates. (a) **PR gate on instruction counts** (`iai-callgrind`, valgrind as an outside tool): more than 10% more instructions fails; deterministic to well under 1%, so it does not flake on a hosted runner or a laptop. (b) **Wall-clock benches** (criterion) run in each `adjutant` session (on demand, RUN-002 §4), are tracked as trends, and alert above 10%; they gate only on `adjutant`, once T-04 shows its spread is well under 10%. No automatic re-baseline
 - **Acceptance:** V-PERF-04 positive control on gate (a); a run of gate (a) twice on the same commit gives identical counts
 - **Status:** [ ] not started
 
@@ -52,7 +52,7 @@ version: 1.1.0
 - **Status:** [ ] not started
 
 ### T-04: Machine ratios and wall-clock baselines
-- **Deliverable:** The benches of T-01 run on `adjutant` (RUN-002 §5) and on the laptop (RUN-001 §6). `adjutant` becomes the wall-clock baseline machine; its run-to-run spread decides whether a wall-clock gate is possible there. Both machines' ratios to the `08` reference desktop are recorded in `08` as [M]
+- **Deliverable:** The `adjutant` runner and its idle shutdown (RUN-002 §3). The benches of T-01 run on `adjutant` in one VM session (RUN-002 §4–5) and on the laptop (RUN-001 §6). `adjutant` becomes the wall-clock baseline machine; its run-to-run spread decides whether a wall-clock gate is possible there. Both machines' ratios to the `08` reference desktop are recorded in `08` as [M]
 - **Acceptance:** Ratios, spreads and run conditions (machine type, CPU model, power profile, temperature) are in `VER-SPR-009`
 - **Status:** [ ] not started
 
