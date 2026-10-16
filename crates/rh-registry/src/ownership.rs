@@ -25,9 +25,29 @@ use serde::Deserialize;
 pub struct OwnedColumn {
     /// `entity.column`.
     pub column: String,
-    /// The plane the column lives in: `A`, `B` or `C`.
+    /// The plane the column lives in: `A`, `B` or `C` (anything else is a violation).
     pub plane: String,
+    /// The column's storage type, one of [`COLUMN_TYPES`].
+    #[serde(rename = "type")]
+    pub ty: String,
 }
+
+/// The planes a column may live in (ADR-0024).
+pub const PLANES: [&str; 3] = ["A", "B", "C"];
+/// The column types an ODD-R spec may declare (`specs/systems/lint_odd.py` `TYPES`).
+pub const COLUMN_TYPES: [&str; 11] = [
+    "i64",
+    "u64",
+    "i32",
+    "u32",
+    "u16",
+    "u8",
+    "bool",
+    "enum",
+    "q8_8",
+    "q16_16",
+    "f32_field",
+];
 
 /// One declared read, from `[[reads]]`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -244,6 +264,25 @@ impl Ownership {
                 });
             }
             for o in &s.owns {
+                // The lint validates what it relies on itself (SPR-004 DEF-8): an unknown plane
+                // would otherwise read as "not B or C" and pass the plane rule (fail-open).
+                if !PLANES.contains(&o.plane.as_str()) {
+                    problems.push(Violation {
+                        rule: "plane",
+                        system: s.id.clone(),
+                        message: format!(
+                            "owns {} in plane '{}'; a column needs plane A, B or C (ADR-0024)",
+                            o.column, o.plane
+                        ),
+                    });
+                }
+                if !COLUMN_TYPES.contains(&o.ty.as_str()) {
+                    problems.push(Violation {
+                        rule: "spec",
+                        system: s.id.clone(),
+                        message: format!("owns {} with unknown type '{}'", o.column, o.ty),
+                    });
+                }
                 if let Some(first) = owners.get(&o.column) {
                     problems.push(Violation {
                         rule: "single-writer",
@@ -261,6 +300,23 @@ impl Ownership {
                             plane: o.plane.clone(),
                         },
                     );
+                }
+            }
+        }
+        // A declared read names its owner; it must be the system whose spec owns the column.
+        for s in specs {
+            for r in &s.reads {
+                if let Some(o) = owners.get(&r.column)
+                    && o.system != r.owner
+                {
+                    problems.push(Violation {
+                        rule: "single-writer",
+                        system: s.id.clone(),
+                        message: format!(
+                            "reads {} from {}, but {} owns it",
+                            r.column, r.owner, o.system
+                        ),
+                    });
                 }
             }
         }
@@ -415,12 +471,13 @@ mod tests {
             owns: vec![OwnedColumn {
                 column: col.to_owned(),
                 plane: plane.to_owned(),
+                ty: "bool".to_owned(),
             }],
             reads: reads
                 .iter()
                 .map(|c| DeclaredRead {
                     column: (*c).to_owned(),
-                    owner: "x".to_owned(),
+                    owner: "M1.regions".to_owned(),
                 })
                 .collect(),
         };
@@ -440,6 +497,58 @@ mod tests {
         );
         let leak = t.check(&access("M2.demography", &["region.pins"], &[]));
         assert_eq!(leak[0].rule, "plane");
+    }
+
+    /// DEF-8: the lint checks the spec fields it relies on, without `lint_odd.py`.
+    #[test]
+    fn spec_fields_the_lint_relies_on_are_validated() {
+        let reg = registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
+        let dir = repo().join("specs/systems");
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let m2 = read("M2.demography.odd.toml");
+        let s7 = read("S7.vows.odd.toml");
+        let cases = [
+            (
+                "M2.demography.odd.toml",
+                m2.replacen("plane = \"A\"", "plane = \"D\"", 1),
+                "plane",
+                "in plane 'D'",
+            ),
+            (
+                "M2.demography.odd.toml",
+                m2.replacen("plane = \"A\"", "plane = \"b\"", 1),
+                "plane",
+                "in plane 'b'",
+            ),
+            (
+                "M2.demography.odd.toml",
+                m2.replacen("type = \"i64\"", "type = \"wibble\"", 1),
+                "spec",
+                "unknown type 'wibble'",
+            ),
+            (
+                "S7.vows.odd.toml",
+                s7.replacen("owner = \"M2.demography\"", "owner = \"S6.artifacts\"", 1),
+                "single-writer",
+                "from S6.artifacts, but M2.demography owns it",
+            ),
+        ];
+        for (file, text, rule, needle) in cases {
+            let mut specs = load_specs(&dir).unwrap();
+            let i = specs
+                .iter()
+                .position(|s| s.path.file_name().is_some_and(|n| n == file))
+                .unwrap();
+            specs[i] = SystemSpec::from_toml(&dir.join(file), &text).unwrap();
+            let t = Ownership::build(&specs, &reg);
+            assert!(
+                t.problems
+                    .iter()
+                    .any(|v| v.rule == rule && v.message.contains(needle)),
+                "{needle}: {:?}",
+                t.problems
+            );
+        }
     }
 
     #[test]
