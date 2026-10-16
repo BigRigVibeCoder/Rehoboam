@@ -1,0 +1,5 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# A system crate reaches rh-snapshot under the alias `rh-core`, an allowed name (DEF-5).
+[workspace]
+members = ["rh-sys-a", "rh-snapshot"]
+resolver = "3"
