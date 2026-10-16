@@ -142,7 +142,7 @@ macro_rules! typed_id {
 
 typed_id! {
     /// A person, for life (ADR-0026): a genealogical hash of mother and parity, so the same person
-    /// has the same identifier in every branch. New ones are derived in the `person` module.
+    /// has the same identifier in every branch. New ones are derived by [`crate::person`].
     PersonId(u64)
 }
 
@@ -166,7 +166,7 @@ typed_id! {
 typed_id! {
     /// A timeline: the canonical one, a fork, a Foresight rollout (`05.9` IF-2 `timeline_id: u32`).
     /// Allocated uniquely by the Timeline Manager, which is what makes salt lineages unique
-    /// (`05.1` §6.9; the `salt` module).
+    /// (`05.1` §6.9; [`crate::salt`]).
     TimelineId(u32)
 }
 
