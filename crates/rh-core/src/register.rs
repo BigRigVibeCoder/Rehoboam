@@ -15,9 +15,12 @@
 //! | `rng-purpose` | every purpose a system draws under is in its spec's `[[rng]]`, once | ruling 2; T-06 |
 //! | `spec` | the bindings equal the spec's `[[schedule]]`, and each read's lag equals its `[[reads]].lag` | SPR-005 G-a |
 //! | `phase-order`, `schedule-cycle` | the schedule derives (see [`crate::schedule`]) | T-05 |
+//! | `command` | every command a system submits is in its spec's `[[commands]]` with the same owner; each command has one registered owner (`applies`); a submission names that owner; no system applies a command whose senders name another owner | SPR-006 T-03, ruling 5 |
+//! | `event-kind` | every event kind a system emits is in its spec's `[[emits]]`; each kind has one registered emitter | SPR-006 T-04 |
 //!
-//! Reported, not refused: a spec purpose the code never declares, and a read whose owner is not
-//! registered (its owner has no code yet).
+//! Reported, not refused: a spec purpose the code never declares, a read whose owner is not
+//! registered (its owner has no code yet), a command whose owner is not registered, and a spec
+//! event kind the code never declares.
 //!
 //! The single-writer and plane rules are the functions of [`crate::ownership`], the ones the spec
 //! lint (`rh-cli ownership`, through `rh_registry::ownership`) runs: where they meet, the lint
@@ -26,8 +29,9 @@
 //! Registration sorts systems by id, so the result does not depend on the order they are passed
 //! in.
 //!
-//! REF: `docs/05_architecture/05.1_simulation_core.md` §2 rules 1, 4 and 6; ADR-0006; ADR-0024;
-//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04–T-06, rulings 2 and 3.
+//! REF: `docs/05_architecture/05.1_simulation_core.md` §2 rules 1, 2, 4, 6 and 8; ADR-0006;
+//! ADR-0024; `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04–T-06, rulings 2 and 3;
+//! `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-03, T-04, ruling 5.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -240,6 +244,9 @@ pub fn register(
 
     // Bindings and lags against the spec's [[schedule]] and [[reads]].lag (G-a).
     check_schedule_and_lags(&entries, specs, &mut violations);
+    // Lifecycle commands and event kinds (SPR-006 ruling 5).
+    check_commands(&entries, specs, &mut violations, &mut reports);
+    check_events(&entries, specs, &mut violations, &mut reports);
 
     // The schedule (T-05), only when the declarations themselves are sound.
     let inputs: Vec<SchedulerInput<'_>> = entries
@@ -372,6 +379,129 @@ fn check_schedule_and_lags(entries: &[Entry], specs: &SpecTable, violations: &mu
                         r.column,
                         r.lag.name()
                     ),
+                ));
+            }
+        }
+    }
+}
+
+/// SPR-006 T-03, ruling 5: lifecycle commands have one owner, and only it applies them.
+fn check_commands(
+    entries: &[Entry],
+    specs: &SpecTable,
+    violations: &mut Vec<Violation>,
+    reports: &mut Vec<String>,
+) {
+    // The registered owner of each command: the first system, in id order, that applies it.
+    let mut owners: BTreeMap<&str, &str> = BTreeMap::new();
+    for e in entries {
+        for &c in &e.access.applies {
+            if let Some(first) = owners.get(c) {
+                violations.push(violation(
+                    e.id,
+                    "command",
+                    format!("applies command {c}, which {first} also applies (05.1 §2 rule 2)"),
+                ));
+                continue;
+            }
+            owners.insert(c, e.id);
+            // Every spec that submits c must name e as its owner.
+            for (sender, spec) in &specs.specs {
+                for (target, command) in &spec.commands {
+                    if command == c && target != e.id {
+                        violations.push(violation(
+                            e.id,
+                            "command",
+                            format!(
+                                "applies command {c}, but {sender}'s spec names {target} as its owner; a non-owner never applies a command"
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    let registered: BTreeSet<&str> = entries.iter().map(|e| e.id).collect();
+    for e in entries {
+        let spec = specs.specs.get(e.id);
+        for send in &e.access.sends {
+            let in_spec = spec.is_some_and(|s| {
+                s.commands
+                    .iter()
+                    .any(|(t, c)| t == send.target && c == send.command)
+            });
+            if spec.is_some() && !in_spec {
+                violations.push(violation(
+                    e.id,
+                    "command",
+                    format!(
+                        "submits command {} to {}, which its spec's [[commands]] table does not declare",
+                        send.command, send.target
+                    ),
+                ));
+            }
+            match owners.get(send.command) {
+                Some(&owner) if owner != send.target => violations.push(violation(
+                    e.id,
+                    "command",
+                    format!(
+                        "submits command {} to {}, but {owner} applies it",
+                        send.command, send.target
+                    ),
+                )),
+                Some(_) => {}
+                None if registered.contains(send.target) => violations.push(violation(
+                    e.id,
+                    "command",
+                    format!(
+                        "submits command {} to {}, which does not declare that it applies it",
+                        send.command, send.target
+                    ),
+                )),
+                None => reports.push(format!(
+                    "{}: submits command {} to {}, which is not registered",
+                    e.id, send.command, send.target
+                )),
+            }
+        }
+    }
+}
+
+/// SPR-006 T-04: every emitted kind is declared in the spec, and each kind has one emitter.
+fn check_events(
+    entries: &[Entry],
+    specs: &SpecTable,
+    violations: &mut Vec<Violation>,
+    reports: &mut Vec<String>,
+) {
+    let mut emitters: BTreeMap<&str, &str> = BTreeMap::new();
+    for e in entries {
+        let spec = specs.specs.get(e.id);
+        for &kind in &e.access.emits {
+            if let Some(first) = emitters.get(kind) {
+                violations.push(violation(
+                    e.id,
+                    "event-kind",
+                    format!("emits {kind}, which {first} also emits"),
+                ));
+            } else {
+                emitters.insert(kind, e.id);
+            }
+            if let Some(spec) = spec
+                && !spec.emits.iter().any(|k| k == kind)
+            {
+                violations.push(violation(
+                    e.id,
+                    "event-kind",
+                    format!("emits {kind}, which its spec's [[emits]] table does not declare"),
+                ));
+            }
+        }
+        for kind in spec.map(|s| s.emits.as_slice()).unwrap_or_default() {
+            if !e.access.emits_kind(kind) {
+                reports.push(format!(
+                    "{}: spec event kind {kind} has no use in code",
+                    e.id
                 ));
             }
         }

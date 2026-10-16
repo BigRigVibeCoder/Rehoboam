@@ -28,7 +28,7 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Violation {
     /// The rule: `single-writer`, `duplicate`, `undeclared-read`, `plane`, `registry`, `spec`, `system-id`,
-    /// `rng-purpose`, `phase-order` or `schedule-cycle`.
+    /// `rng-purpose`, `phase-order`, `schedule-cycle`, `command` or `event-kind`.
     pub rule: &'static str,
     /// The system that breaks it.
     pub system: String,
@@ -235,6 +235,11 @@ pub struct SpecEntry {
     pub schedule: Vec<(String, String)>,
     /// `(column, lag)` for every `[[reads]]` entry.
     pub lags: Vec<(String, String)>,
+    /// `(target, command)` for every `[[commands]]` entry: the lifecycle commands the system
+    /// submits and the system it names as their owner (SPR-006).
+    pub commands: Vec<(String, String)>,
+    /// The `[[emits]] kind` names, in spec order (SPR-006).
+    pub emits: Vec<String>,
 }
 
 impl SpecEntry {

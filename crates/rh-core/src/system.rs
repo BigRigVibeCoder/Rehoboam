@@ -18,14 +18,27 @@
 //!   the whole [`WorldTables`];
 //! - `rng_purposes` is added (T-06, ruling 2).
 //!
-//! REF: `docs/05_architecture/05.1_simulation_core.md` §2; ADR-0033 §3;
-//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-03, T-06, rulings 1 and 2.
+//! SPR-006 adds, without changing any SPR-005 signature:
+//! - two provided methods, [`SystemModel::fire`] (a due timer, `05.1` §4.1) and
+//!   [`SystemModel::resample_timer`] (a timer in a material input's scope, ADR-0025 item 3); both
+//!   default to a loud error, so a system that schedules timers must implement them;
+//! - the step context's output buffers ([`StepCtx::schedule`], [`StepCtx::cancel`],
+//!   [`StepCtx::submit`], [`StepCtx::emit`]) and its command inbox ([`StepCtx::take_commands`]).
+//!   Nothing a step buffers is visible until the engine merges the buffers of a whole scheduler
+//!   level in canonical order (SPR-006 ruling 1).
+//!
+//! REF: `docs/05_architecture/05.1_simulation_core.md` §2, §4.1, §4.3; ADR-0025; ADR-0033 §3;
+//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-03, T-06, rulings 1 and 2;
+//! `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-02–T-05, rulings 1–5.
 
 use core::fmt;
 
-use rh_ids::{EntityKey, PurposeId, SystemKey};
+use rh_events::{DraftRef, EventDraft};
+use rh_ids::{EntityKey, EntityRef, PurposeId, SystemId, SystemKey};
 
 use crate::access::AccessSpec;
+use crate::agenda::{Agenda, TimerEntry, TimerId};
+use crate::command::{Command, QueuedCommand};
 use crate::phase::Phase;
 use crate::time::{Pulse, SimTime};
 use crate::world::{SystemView, WorldTables};
@@ -123,6 +136,46 @@ pub enum SimError {
         /// The purpose name.
         purpose: &'static str,
     },
+    /// A timer the agenda refuses: in the past, in a phase the system is not bound in, or a
+    /// cancellation of a timer that is not the system's pending timer (SPR-006 T-02).
+    Timer {
+        /// The system.
+        system: &'static str,
+        /// What was refused.
+        message: String,
+    },
+    /// A command the system does not declare in `AccessSpec::sends`, or whose owner is not
+    /// registered (SPR-006 T-03).
+    UndeclaredCommand {
+        /// The system.
+        system: &'static str,
+        /// The command.
+        command: &'static str,
+    },
+    /// An event kind the system does not declare in `AccessSpec::emits` (SPR-006 T-04).
+    UndeclaredEvent {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+    },
+    /// An event the log refuses at the merge: back-dated, or a cause that is not earlier
+    /// (SPR-006 T-04, ruling 4).
+    Event {
+        /// The emitting system.
+        system: &'static str,
+        /// The refusal.
+        message: String,
+    },
+    /// A violated invariant, found in `Bookkeeping` (SPR-006 T-05). Always fatal.
+    Invariant {
+        /// The system whose invariant it is (`rh-core` for the core's own).
+        system: &'static str,
+        /// The invariant's name.
+        name: &'static str,
+        /// What was found.
+        detail: String,
+    },
     /// A system-specific failure.
     System {
         /// The system.
@@ -156,7 +209,23 @@ impl fmt::Display for SimError {
                     "{system} drew under RNG purpose {purpose}, which it did not register"
                 )
             }
-            Self::System { system, message } => write!(f, "{system}: {message}"),
+            Self::Timer { system, message } => write!(f, "{system}: timer refused: {message}"),
+            Self::UndeclaredCommand { system, command } => write!(
+                f,
+                "{system} submitted command {command}, which its AccessSpec does not declare or no registered system applies"
+            ),
+            Self::UndeclaredEvent { system, kind } => write!(
+                f,
+                "{system} emitted event {kind}, which its AccessSpec does not declare"
+            ),
+            Self::Invariant {
+                system,
+                name,
+                detail,
+            } => write!(f, "invariant {name} of {system} violated: {detail}"),
+            Self::Event { system, message } | Self::System { system, message } => {
+                write!(f, "{system}: {message}")
+            }
         }
     }
 }
@@ -184,29 +253,73 @@ pub trait SpecPurpose: Sized + 'static {
     }
 }
 
-/// The step context: the keyed RNG of the running system at the current instant
-/// (`05.1` §2 rule 6: all randomness comes from `ctx.rng(purpose, entity, k)`).
+/// Where a timer fires: the instant, the phase and the entity it is about. The owning system,
+/// the purpose, the closure id and the argument complete it ([`StepCtx::schedule`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TimerSpec {
+    /// The instant it fires at: strictly after the current `(instant, phase)`.
+    pub time: SimTime,
+    /// The phase it fires in: one the system is bound in.
+    pub phase: Phase,
+    /// The entity it is about.
+    pub entity: EntityRef,
+    /// The system's closure id.
+    pub kind: u32,
+    /// The system's argument.
+    pub payload: i64,
+}
+
+/// What one step buffered, merged by the engine at the end of the level (ruling 1).
+#[derive(Debug, Default)]
+pub(crate) struct Outbox {
+    pub(crate) cancels: Vec<TimerId>,
+    pub(crate) timers: Vec<(TimerSpec, PurposeId)>,
+    pub(crate) commands: Vec<Command>,
+    pub(crate) events: Vec<EventDraft>,
+}
+
+/// What the engine lends one job: the system's identity and declarations and the agenda as it
+/// stood at the start of the level.
+pub(crate) struct JobInfo<'a> {
+    pub(crate) system: &'static str,
+    pub(crate) system_id: SystemId,
+    pub(crate) key: SystemKey,
+    pub(crate) purposes: &'a [&'static str],
+    pub(crate) access: &'a AccessSpec,
+    pub(crate) bindings: &'a [PulseBinding],
+    pub(crate) agenda: &'a Agenda,
+}
+
+/// The step context of one system at one instant and phase (`05.1` §2 rule 6): the keyed RNG,
+/// the system's command inbox, and the buffers for timers, cancellations, commands and events.
 pub struct StepCtx<'a> {
-    system: &'static str,
-    key: SystemKey,
+    info: JobInfo<'a>,
     t: SimTime,
-    purposes: &'a [&'static str],
+    phase: Phase,
+    inbox: Vec<QueuedCommand>,
+    pub(crate) out: Outbox,
 }
 
 impl<'a> StepCtx<'a> {
-    /// A context for one system step.
+    /// A context for one job: one system at instant `t` in `phase`, with its queued commands.
     pub(crate) fn new(
-        system: &'static str,
-        key: SystemKey,
+        info: JobInfo<'a>,
         t: SimTime,
-        purposes: &'a [&'static str],
+        phase: Phase,
+        inbox: Vec<QueuedCommand>,
     ) -> Self {
         Self {
-            system,
-            key,
+            info,
             t,
-            purposes,
+            phase,
+            inbox,
+            out: Outbox::default(),
         }
+    }
+
+    /// The commands the system did not take, and the buffers.
+    pub(crate) fn finish(self) -> (Vec<QueuedCommand>, Outbox) {
+        (self.inbox, self.out)
     }
 
     /// The current instant.
@@ -215,10 +328,17 @@ impl<'a> StepCtx<'a> {
         self.t
     }
 
+    /// The phase running.
+    #[must_use]
+    pub fn phase(&self) -> Phase {
+        self.phase
+    }
+
     /// Draw `k` of `purpose` for `entity` at the current instant:
     /// `H(world_seed, branch_salt, system_id, epoch, purpose, entity, t, k)`.
     ///
-    /// `epoch` is 0 until material inputs exist to re-sample an entity (ADR-0025 item 3).
+    /// `epoch` is 0 here: a material input's re-sample draws its own epoch-keyed values
+    /// ([`ResampleCtx`]).
     ///
     /// # Errors
     /// [`SimError::UndeclaredPurpose`] if `purpose` is not one the system registered.
@@ -228,17 +348,186 @@ impl<'a> StepCtx<'a> {
         entity: impl EntityKey,
         k: u64,
     ) -> Result<u64, SimError> {
+        let id = self.purpose_id(purpose)?;
+        let stream = self.info.key.stream_key(id, entity.entity_key());
+        Ok(stream.draw(self.t.minutes(), k))
+    }
+
+    fn purpose_id<P: SpecPurpose>(&self, purpose: &P) -> Result<PurposeId, SimError> {
         let name = purpose.name();
-        if !self.purposes.contains(&name) {
-            return Err(SimError::UndeclaredPurpose {
-                system: self.system,
+        if self.info.purposes.contains(&name) {
+            Ok(PurposeId::of(name))
+        } else {
+            Err(SimError::UndeclaredPurpose {
+                system: self.info.system,
                 purpose: name,
+            })
+        }
+    }
+
+    fn timer_error(&self, message: String) -> SimError {
+        SimError::Timer {
+            system: self.info.system,
+            message,
+        }
+    }
+
+    /// Schedules an outcome as a timer (ADR-0025 item 1), drawn under `purpose`. The timer gets
+    /// its id and `seq` at the end of the level.
+    ///
+    /// # Errors
+    /// [`SimError::UndeclaredPurpose`]; [`SimError::Timer`] if `(spec.time, spec.phase)` is not
+    /// strictly after the current `(instant, phase)` (no back-dating) or the system is not bound
+    /// in `spec.phase` (it would never fire).
+    pub fn schedule<P: SpecPurpose>(
+        &mut self,
+        purpose: &P,
+        spec: TimerSpec,
+    ) -> Result<(), SimError> {
+        let id = self.purpose_id(purpose)?;
+        if (spec.time, spec.phase) <= (self.t, self.phase) {
+            return Err(self.timer_error(format!(
+                "a timer at ({}, {}) is not after the current ({}, {}): no back-dating (ADR-0025)",
+                spec.time, spec.phase, self.t, self.phase
+            )));
+        }
+        if !self.info.bindings.iter().any(|b| b.phase == spec.phase) {
+            return Err(self.timer_error(format!(
+                "a timer in phase {}, where the system is not bound, would never fire",
+                spec.phase
+            )));
+        }
+        self.out.timers.push((spec, id));
+        Ok(())
+    }
+
+    /// Cancels one of the system's pending timers. It is gone at the end of the level and never
+    /// fires.
+    ///
+    /// # Errors
+    /// [`SimError::Timer`] if `id` is not pending, is another system's timer, or is already
+    /// cancelled in this step.
+    pub fn cancel(&mut self, id: TimerId) -> Result<(), SimError> {
+        match self.info.agenda.get(id) {
+            Some((_, timer)) if timer.owner == self.info.system_id => {}
+            Some(_) => {
+                return Err(self.timer_error(format!("{id} belongs to another system")));
+            }
+            None => return Err(self.timer_error(format!("{id} is not pending"))),
+        }
+        if self.out.cancels.contains(&id) {
+            return Err(self.timer_error(format!("{id} is cancelled twice")));
+        }
+        self.out.cancels.push(id);
+        Ok(())
+    }
+
+    /// The system's own pending timers about `entity`, in key order, as the agenda stood at the
+    /// start of the level (timers due now have already been handed to `fire`).
+    #[must_use]
+    pub fn own_timers(&self, entity: EntityRef) -> Vec<TimerEntry> {
+        self.info
+            .agenda
+            .pending_for(entity)
+            .into_iter()
+            .filter(|(_, t)| t.owner == self.info.system_id)
+            .map(|(key, timer)| TimerEntry { key, timer })
+            .collect()
+    }
+
+    /// Takes the lifecycle commands queued for this system, in `(tick, phase, PersonId, seq)`
+    /// order (`05.1` §2 rule 2). The system applies them; commands it does not take stay queued.
+    pub fn take_commands(&mut self) -> Vec<QueuedCommand> {
+        std::mem::take(&mut self.inbox)
+    }
+
+    /// Submits a lifecycle command to its owner's queue.
+    ///
+    /// # Errors
+    /// [`SimError::UndeclaredCommand`] if the system does not declare it in `AccessSpec::sends`;
+    /// [`SimError::Event`] if its cause is not an event this step already emitted.
+    pub fn submit(&mut self, command: Command) -> Result<(), SimError> {
+        if self.info.access.send_of(command.kind).is_none() {
+            return Err(SimError::UndeclaredCommand {
+                system: self.info.system,
+                command: command.kind,
             });
         }
-        let stream = self
-            .key
-            .stream_key(PurposeId::of(name), entity.entity_key());
-        Ok(stream.draw(self.t.minutes(), k))
+        if let Some(r) = command.cause
+            && r.0 >= self.out.events.len()
+        {
+            return Err(self.event_error(format!(
+                "command {} names draft {} as its cause, which this step has not emitted",
+                command.kind, r.0
+            )));
+        }
+        self.out.commands.push(command);
+        Ok(())
+    }
+
+    fn event_error(&self, message: String) -> SimError {
+        SimError::Event {
+            system: self.info.system,
+            message,
+        }
+    }
+
+    /// Emits an event at the current instant and phase, and returns its reference within this
+    /// step. It gets its `EventId` at the end of the level.
+    ///
+    /// # Errors
+    /// [`SimError::UndeclaredEvent`] if the system does not declare the kind in
+    /// `AccessSpec::emits`; [`SimError::Event`] if a draft-local cause is not an earlier draft.
+    pub fn emit(&mut self, draft: EventDraft) -> Result<DraftRef, SimError> {
+        if !self.info.access.emits_kind(draft.kind) {
+            return Err(SimError::UndeclaredEvent {
+                system: self.info.system,
+                kind: draft.kind,
+            });
+        }
+        let index = self.out.events.len();
+        if let Some(r) = draft.local_causes.iter().find(|r| r.0 >= index) {
+            return Err(self.event_error(format!(
+                "event {} names draft {} as its cause, which is not an earlier draft of this step",
+                draft.kind, r.0
+            )));
+        }
+        self.out.events.push(draft);
+        Ok(DraftRef(index))
+    }
+}
+
+/// The context of one re-sample (ADR-0025 item 3): draws keyed by
+/// `H(world_seed, branch_salt, system_id, epoch, purpose, entity, t_input, k)`, where `epoch`
+/// counts the material inputs that have touched the entity, `purpose` is the timer's own and
+/// `t_input` the input's instant.
+pub struct ResampleCtx {
+    pub(crate) key: SystemKey,
+    pub(crate) purpose: PurposeId,
+    pub(crate) entity: EntityRef,
+    pub(crate) t_input: SimTime,
+    pub(crate) epoch: u32,
+}
+
+impl ResampleCtx {
+    /// The input's instant: a re-drawn time must be after it.
+    #[must_use]
+    pub fn now(&self) -> SimTime {
+        self.t_input
+    }
+
+    /// The entity's epoch after this input.
+    #[must_use]
+    pub fn epoch(&self) -> u32 {
+        self.epoch
+    }
+
+    /// Draw `k` of the re-sample stream.
+    #[must_use]
+    pub fn draw(&self, k: u64) -> u64 {
+        self.key
+            .stream_key(self.purpose, self.entity.raw())
+            .draw(self.t_input.minutes(), k)
     }
 }
 
@@ -268,4 +557,51 @@ pub trait SystemModel: Send + Sync {
     fn invariants(&self, world: &WorldTables) -> Vec<InvariantResult>;
     /// Its stylized-fact targets and conserved quantities.
     fn declared_aggregates(&self) -> Vec<AggregateSpec>;
+
+    /// Handles one of its timers, due at the current instant and phase (`05.1` §4.1: a timer
+    /// fires at its own tick in every mode). The engine hands a system its due timers in key
+    /// order, before its pulse steps in that phase.
+    ///
+    /// The default refuses: a system that schedules timers implements this (SPR-006 T-02).
+    ///
+    /// # Errors
+    /// Any [`SimError`]; the run stops.
+    fn fire(
+        &self,
+        timer: &TimerEntry,
+        world: &mut SystemView<'_>,
+        ctx: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let _ = (world, ctx);
+        Err(SimError::System {
+            system: self.descriptor().id,
+            message: format!(
+                "{} fired, but the system does not implement SystemModel::fire",
+                timer.id()
+            ),
+        })
+    }
+
+    /// Re-draws the time of one of its timers that a material input's scope cancelled (ADR-0025
+    /// item 3), with the input's epoch-keyed draws. `Some(t)` re-schedules the timer at `t` (in the
+    /// same phase, about the same entity); `None` drops it: the outcome no longer happens.
+    ///
+    /// The default refuses: a system that schedules timers implements this (SPR-006 T-02).
+    ///
+    /// # Errors
+    /// Any [`SimError`]; the run stops.
+    fn resample_timer(
+        &self,
+        timer: &TimerEntry,
+        ctx: &ResampleCtx,
+    ) -> Result<Option<SimTime>, SimError> {
+        let _ = ctx;
+        Err(SimError::System {
+            system: self.descriptor().id,
+            message: format!(
+                "{} is in a material input's scope, but the system does not implement SystemModel::resample_timer",
+                timer.id()
+            ),
+        })
+    }
 }

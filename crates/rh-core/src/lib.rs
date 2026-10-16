@@ -12,11 +12,15 @@
 //! and the step view),
 //! `register` (the conflict checker and RNG purpose check), `schedule` (the derived scheduler) and
 //! `engine` (the instant loop).
-//! SPR-006 adds `agenda` (timers keyed by `(time, phase, entity, seq)`).
+//! SPR-006 adds `agenda` (timers keyed by `(time, phase, entity, seq)`), `command` (the lifecycle
+//! command queues) and `crash` (crash artifacts), and gives the engine the per-level merge, the
+//! event bus (`rh-events`), material-input re-sampling and the invariants in `Bookkeeping`.
 #![forbid(unsafe_code)]
 
 pub mod access;
 pub mod agenda;
+pub mod command;
+pub mod crash;
 pub mod engine;
 pub mod fixed;
 pub mod ownership;

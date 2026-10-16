@@ -87,6 +87,21 @@ struct DeclaredRng {
     purpose: String,
 }
 
+/// One lifecycle command submission, from `[[commands]]` (SPR-006).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct DeclaredCommand {
+    /// The owning system the spec names.
+    pub target: String,
+    /// The command's Registry name.
+    pub command: String,
+}
+
+/// One emitted event kind, from `[[emits]]` (SPR-006).
+#[derive(Debug, Deserialize)]
+struct DeclaredEmit {
+    kind: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct SpecFile {
     system: SpecHeader,
@@ -98,6 +113,10 @@ struct SpecFile {
     rng: Vec<DeclaredRng>,
     #[serde(default)]
     schedule: Vec<DeclaredBinding>,
+    #[serde(default)]
+    commands: Vec<DeclaredCommand>,
+    #[serde(default)]
+    emits: Vec<DeclaredEmit>,
 }
 
 /// The ownership-relevant part of one system spec.
@@ -117,6 +136,10 @@ pub struct SystemSpec {
     /// Its `[[schedule]]` bindings as `(pulse, phase)` names, in spec order. Registration compares
     /// them with the code's bindings (SPR-005 G-a).
     pub schedule: Vec<(String, String)>,
+    /// The lifecycle commands it submits (`[[commands]]`), in spec order (SPR-006).
+    pub commands: Vec<DeclaredCommand>,
+    /// The event kinds it emits (`[[emits]] kind`), in spec order (SPR-006).
+    pub emits: Vec<String>,
 }
 
 impl SystemSpec {
@@ -134,6 +157,8 @@ impl SystemSpec {
             reads: f.reads,
             rng: f.rng.into_iter().map(|r| r.purpose).collect(),
             schedule: f.schedule.into_iter().map(|b| (b.pulse, b.phase)).collect(),
+            commands: f.commands,
+            emits: f.emits.into_iter().map(|e| e.kind).collect(),
         })
     }
 
@@ -163,7 +188,7 @@ impl SystemSpec {
     }
 
     /// What `rh-core`'s registration needs from this spec (owned columns, declared reads, RNG
-    /// purposes), as data: `rh-core` reads no files.
+    /// purposes, commands and event kinds), as data: `rh-core` reads no files.
     #[must_use]
     pub fn entry(&self) -> SpecEntry {
         SpecEntry {
@@ -180,6 +205,12 @@ impl SystemSpec {
                 .iter()
                 .map(|r| (r.column.clone(), r.lag.clone()))
                 .collect(),
+            commands: self
+                .commands
+                .iter()
+                .map(|c| (c.target.clone(), c.command.clone()))
+                .collect(),
+            emits: self.emits.clone(),
         }
     }
 }
@@ -469,6 +500,8 @@ mod tests {
                 .collect(),
             rng: vec![],
             schedule: vec![],
+            commands: vec![],
+            emits: vec![],
         };
         let t = Ownership::build(
             &[
