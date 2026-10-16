@@ -544,3 +544,141 @@ fn a28_lags_p0_cannot_run_exactly_are_refused_by_the_engine() {
         );
     }
 }
+
+fn panicking_invariant(_: &Stub, w: &WorldTables) -> Vec<InvariantResult> {
+    let runs = w.get("flag.runs").map_or(0, |c| c[0]);
+    assert!(runs < 3, "invariant check blew up");
+    Vec::new()
+}
+
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "it must have the ResampleFn signature"
+)]
+fn panicking_resample(
+    _: &Stub,
+    _: &rh_core::agenda::TimerEntry,
+    _: &rh_core::system::ResampleCtx,
+) -> Result<Option<SimTime>, SimError> {
+    panic!("resample blew up");
+}
+
+enum Tp {
+    T,
+}
+
+impl SpecPurpose for Tp {
+    const ALL: &'static [Self] = &[Self::T];
+    fn name(&self) -> &'static str {
+        "t"
+    }
+}
+
+fn schedule_one(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now() == SimTime::EPOCH {
+        c.schedule(
+            &Tp::T,
+            rh_core::system::TimerSpec {
+                time: SimTime::from_minutes(30 * 1_440),
+                phase: Phase::Vital,
+                entity: rh_ids::EntityRef::WORLD,
+                kind: 0,
+                payload: 0,
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn def4_panics_in_invariants_and_resample_timer_poison_with_an_artifact() {
+    // A panicking invariant, in Bookkeeping.
+    let stubs = vec![
+        Stub::new("F1.flag")
+            .writes("flag.up")
+            .writes("flag.at")
+            .writes("flag.runs")
+            .at(Pulse::Day, Phase::Bookkeeping)
+            .stepping(raise_flag)
+            .checking(panicking_invariant),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs).unwrap();
+    let mut tables = WorldTables::new();
+    tables.insert("flag.up", vec![0]);
+    tables.insert("flag.at", vec![-1]);
+    tables.insert("flag.runs", vec![0]);
+    let mut e = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    );
+    let err = e.advance_until(ten_years(), |_, _| {}).unwrap_err();
+    assert_eq!(
+        err,
+        SimError::Panic {
+            system: "F1.flag",
+            message: "invariant check blew up".to_owned()
+        }
+    );
+    assert_eq!(e.poisoned(), Some(&err));
+    let a = e.crash_artifact().unwrap();
+    assert_eq!(
+        (a.tick, a.phase.as_str(), a.system.as_str()),
+        (2 * 1_440, "Bookkeeping", "F1.flag")
+    );
+
+    // A panicking resample_timer, in Inputs.
+    let stubs = vec![
+        Stub::new("R1.timer")
+            .purposes_of::<Tp>()
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(schedule_one)
+            .resampling(panicking_resample),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs).unwrap();
+    let mut e = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        WorldTables::new(),
+        SimTime::EPOCH,
+    );
+    let at = SimTime::from_minutes(5 * 1_440 + 9);
+    e.submit_input(
+        at,
+        MaterialInput {
+            scope: [rh_ids::EntityRef::WORLD].into_iter().collect(),
+        },
+    )
+    .unwrap();
+    let err = e.advance_until(ten_years(), |_, _| {}).unwrap_err();
+    assert_eq!(
+        err,
+        SimError::Panic {
+            system: "R1.timer",
+            message: "resample blew up".to_owned()
+        }
+    );
+    assert_eq!(e.poisoned(), Some(&err));
+    let a = e.crash_artifact().unwrap();
+    assert_eq!(
+        (
+            a.tick,
+            a.phase.as_str(),
+            a.system.as_str(),
+            a.journal_position
+        ),
+        (at.minutes(), "Inputs", "R1.timer", 1)
+    );
+}

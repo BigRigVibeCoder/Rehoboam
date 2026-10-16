@@ -489,7 +489,8 @@ impl Engine {
         }
     }
 
-    /// Every system's invariants over the current tables, in id order.
+    /// Every system's invariants over the current tables, in id order. A host helper outside a
+    /// run: a panic here reaches the host. During a run, `Bookkeeping` checks them through `guard`.
     #[must_use]
     pub fn invariants(&self) -> Vec<(&'static str, InvariantResult)> {
         self.registered
@@ -703,7 +704,7 @@ impl Engine {
             t_input: t,
             epoch,
         };
-        if let Some(time) = e.model.resample_timer(&entry, &ctx)? {
+        if let Some(time) = guard(e.id, || e.model.resample_timer(&entry, &ctx))? {
             if (time, entry.key.phase) <= (t, Phase::Inputs) {
                 return Err(SimError::Timer {
                     system: e.id,
@@ -748,12 +749,8 @@ impl Engine {
             ));
         }
         for e in &self.registered.entries {
-            if let Some(r) = e
-                .model
-                .invariants(&self.tables)
-                .into_iter()
-                .find(|r| !r.holds)
-            {
+            let results = guard(e.id, || Ok(e.model.invariants(&self.tables)))?;
+            if let Some(r) = results.into_iter().find(|r| !r.holds) {
                 return Err(SimError::Invariant {
                     system: e.id,
                     name: r.name,
@@ -809,7 +806,7 @@ impl Engine {
             let agenda = &self.agenda;
             let entries = &self.registered.entries;
             let key = |e: &Entry| SystemKey::new(self.world_seed, self.branch_salt, e.system_id, 0);
-            let step = |job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| -> JobOutcome {
+            let run = |job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| -> JobOutcome {
                 let e = &entries[job.index];
                 let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
                 let info = JobInfo {
@@ -823,10 +820,12 @@ impl Engine {
                 };
                 let mut ctx = StepCtx::new(info, t, phase, inbox);
                 let result = match &job.work {
-                    Work::Timers(timers) => timers
-                        .iter()
-                        .try_for_each(|timer| e.model.fire(timer, &mut view, &mut ctx)),
-                    Work::Step(binding) => e.model.step(*binding, &mut view, &mut ctx),
+                    Work::Timers(timers) => timers.iter().try_for_each(|timer| {
+                        guard(e.id, || e.model.fire(timer, &mut view, &mut ctx))
+                    }),
+                    Work::Step(binding) => {
+                        guard(e.id, || e.model.step(*binding, &mut view, &mut ctx))
+                    }
                 };
                 let (untaken, out) = ctx.finish();
                 JobOutcome {
@@ -835,22 +834,6 @@ impl Engine {
                     untaken,
                     out,
                 }
-            };
-            // A panic in a step becomes a poisoning `SimError::Panic` with a crash artifact
-            // (GOV-004 §2; SPR-006 DEF-1), caught on the thread that ran the step. The panicking
-            // job's columns and inbox are lost; the engine never runs again.
-            let run = |job: &Job, input: (Owned, Vec<QueuedCommand>)| -> JobOutcome {
-                std::panic::catch_unwind(AssertUnwindSafe(|| step(job, input))).unwrap_or_else(
-                    |payload| JobOutcome {
-                        owned: Owned::new(),
-                        result: Err(SimError::Panic {
-                            system: entries[job.index].id,
-                            message: panic_message(payload.as_ref()),
-                        }),
-                        untaken: Vec::new(),
-                        out: Outbox::default(),
-                    },
-                )
             };
             dispatch(self.threads, jobs, inputs, run)
         };
@@ -971,14 +954,30 @@ fn dispatch<I: Send, O: Send>(
             .into_iter()
             .flat_map(|h| match h.join() {
                 Ok(v) => v,
-                // INVARIANT: `run` catches every step's panic, so a worker never unwinds; if one
-                // somehow does, re-raise it rather than lose it.
+                // INVARIANT: `guard` catches every panic in system code, so a worker never unwinds;
+                // if engine code itself panics, re-raise it rather than lose it.
                 Err(payload) => std::panic::resume_unwind(payload),
             })
             .collect()
     });
     done.sort_by_key(|(k, _)| *k);
     done.into_iter().map(|(_, o)| o).collect()
+}
+
+/// Every call the engine makes into system code during a run goes through here (SPR-006 DEF-1,
+/// DEF-4): `step`, `fire`, `resample_timer` and `invariants`. A panic becomes a fatal
+/// [`SimError::Panic`] naming the system, so the run stops with a crash artifact instead of
+/// unwinding out of [`Engine::advance_until`].
+fn guard<T>(
+    system: &'static str,
+    call: impl FnOnce() -> Result<T, SimError>,
+) -> Result<T, SimError> {
+    std::panic::catch_unwind(AssertUnwindSafe(call)).unwrap_or_else(|payload| {
+        Err(SimError::Panic {
+            system,
+            message: panic_message(payload.as_ref()),
+        })
+    })
 }
 
 /// The text of a panic payload (`&str` or `String`; anything else is named as such).
