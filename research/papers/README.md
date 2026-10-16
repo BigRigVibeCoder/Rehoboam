@@ -30,6 +30,11 @@ Naming: `<reading-list ID>_<first author>_<year>_<short title>.<ext>`. IDs match
 | `A14b_alfani_mocarelli_strangio_2017_famine_italy.pdf` | Alfani, G., Mocarelli, L. & Strangio, D. (2017). "Italy." Ch. 2 in Alfani, G. & Ó Gráda, C. (eds.), *Famine in European History*, CUP | V-SF-03 famine chronology 1250–1810; provisioning institutions | R12 §17 |
 | `A17_arbesman_2011_lifespans_of_empires.pdf` | Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3), 127–129 | V-SF-07 polity lifespans | R12 §16 |
 | `A18_allen_2001_great_divergence_wages_prices.pdf` | Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38, 411–447 | M4 wages and subsistence; V-SF-10, V-SF-11 | R12 §18 |
+| `B2_kreminski_dickinson_wardripfruin_2019_felt.pdf` | Kreminski, M., Dickinson, M. & Wardrip-Fruin, N. (2019). "Felt: a simple story sifter." *ICIDS 2019* | Sifter query semantics (ADR-0008, `05.4`) | R12 §19 |
+| `B3_kreminski_dickinson_mateas_2021_winnow.pdf` | Kreminski, M., Dickinson, M. & Mateas, M. (2021). "Winnow: a domain-specific language for incremental story sifting." *AIIDE 2021* | Incremental sifting and partial matches (ADR-0008, `specs/sifting/`) | R12 §19 |
+| `B5_behrooz_swanson_jhala_2015_remember_that_time.pdf` | Behrooz, M., Swanson, R. & Jhala, A. (2015). "Remember that time? Telling interesting stories from past interactions." *ICIDS 2015* | Retrospective story selection | R12 §20 |
+| `B6a_oneill_riedl_2014_dramatis.pdf` | O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014* | Suspense and auto-pause (`05.4`) | R12 §20 |
+| `B17_lessard_et_al_2026_narrative_gold_digging.pdf` | Lessard, J., Friedrich, S., Paré-Chouinard, S. & Kosseim, L. (2026). "Narrative gold digging: sifting and narrating stories from a procedural simulation" | Sifting heuristics vs narration; the G2 protocol | R12 §20 |
 
 **Still wanted** (in priority order; exact citations so they can be found):
 
