@@ -39,7 +39,7 @@ version: 1.0.0
 ### T-01: Registry loader
 - **Deliverable:** `rh-registry` parses `registry_v0.toml` into typed structures, with bounds
 - **Acceptance:** Round-trip test; every Registry section loads
-- **Status:** [ ] not started
+- **Status:** [x] done (`rh-registry::registry`; round-trip and section tests)
 
 ### T-02: Manifest loader
 - **Deliverable:** Typed manifest loading with the same errors as `manifest_v0.py`
