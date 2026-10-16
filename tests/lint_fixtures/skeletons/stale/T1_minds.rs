@@ -1,6 +1,6 @@
 // GENERATED from specs/systems/T1.minds.odd.toml by lint_odd.py --rust. Do not edit; edit the spec.
 pub const SYSTEM_ID: &str = "T1.minds";
-pub const SPEC_VERSION: &str = "0.2.0";
+pub const SPEC_VERSION: &str = "0.3.0";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Vital),
     (Pulse::Day, Phase::Agenda),
@@ -15,7 +15,8 @@ pub enum RngPurpose {
     ActionOrder = 4,  // key: (tick, person)
     BreakDelay = 5,  // key: (person, tick)
     BreakAct = 6,  // key: (person, tick)
-    ActOutcome = 7,  // key: (actor, target, tick)
+    BreakOutcome = 7,  // key: (actor, target, tick)
+    AttackOutcome = 8,  // key: (actor, target, tick)
 }
 impl RngPurpose {
     /// The purpose's name in the spec's `[[rng]]` table.
@@ -27,7 +28,8 @@ impl RngPurpose {
             Self::ActionOrder => "action_order",
             Self::BreakDelay => "break_delay",
             Self::BreakAct => "break_act",
-            Self::ActOutcome => "act_outcome",
+            Self::BreakOutcome => "break_outcome",
+            Self::AttackOutcome => "attack_outcome",
         }
     }
 }
