@@ -301,3 +301,55 @@ Accounting of the differences they cause, so that they are not read as defects:
 - Net count after the ruling: of 41 `fuzz2` verdict differences, 25 are GAP-8, 16 are DEF-13, 0 are unexplained; of 103 `cases14` cases, 76 agree and 27 are GAP-8.
 
 Residual risk of GAP-8, for the record: a manifest that a hand-writer lays out with a closing brace or a quoted continuation at the left margin is accepted by `manifest_v0.py` and refused by `rh-cli`. The failure is loud (a load error naming the line), not silent.
+
+## 11. Final pass at 5bcae8d
+
+Tested commit: `5bcae8d` (rebased onto `main` 2a2f9a9; the tester commits are now `6bd5ae1` and `26ae3e8`). `bin/check_all.sh` run locally on a clean checkout of the head: **PASS, 104 checks** (V-WC-04 parity runs 54 manifests; a new positive control, "message-only drift must FAIL", is green). New probe sets: `cases17` (332 cases: DEF-13 with the break written as LF, CRLF, CR, NEL, LS and PS, with no prefix and 2-, 3- and 4-byte prefixes, and a non-ASCII key on the same line; plain, double-quoted, single-quoted and explicit `? key` keys, in mappings, sequences and nested flows) and `cases18` (80 cases: an implicit key followed by a line break before its `:`).
+
+### 11.1 Verdicts
+
+| Item | Verdict | Basis |
+|---|---|---|
+| DEF-13 (line break inside an implicit flow key) | **FIXED, with one adjacent form still open (DEF-14)** | `cases17`: 331 of 332 agree on verdict, counts and every line. Plain, double- and single-quoted keys broken inside the key, for every break character and every prefix, give a `LOAD ERROR` as in PyYAML; the explicit `? la<break>bel : x` form is accepted by both; values and sequence items with a break, and a multi-line value after a comma, agree. `cases16`: the 7 DEF-13 forms agree. |
+| Rebase: no unverified code | **PASS** | `git diff 35e5893 5bcae8d` changes in code: `crates/rh-manifest/src/yaml.rs` (+34 lines, `single_line_flow_key`, DEF-13), `bin/manifest_parity.py` (the divergence header), `bin/lint_arch.py`, `bin/check_all.sh` and their tests (the `lint_arch`/inventory merge from `main`), and three new parity fixtures plus two `lint_arch` fixtures. No other crate, spec, Registry or reference file differs; the rest is documentation (`05.5`, `decisions-log`, BCK-002, SPR-003, SPR-005, VER-G0). I read the `yaml.rs` and `manifest_parity.py` diffs; I ran the merged `lint_arch` through `check_all.sh` only. |
+| Divergence header cannot hide a real difference | **NOT AS STATED: DEF-15 (low-medium)** | 11.3. |
+| Full regression | **PASS, with DEF-14 as the only new difference** | 11.2. |
+
+### 11.2 Regression at 5bcae8d
+
+| Set | Cases | Verdict or count differs | Message differs only | Agree on every line |
+|---|---|---|---|---|
+| **Original 3,420** (`cases1`, `cases2`, `cases4`, `cases5`, `cases6`, `fuzz`) | 3,420 | 4 (the explicit tags `!!set`, `!!binary`, `!!timestamp`, and `!!int abc`, which crashes the reference: DEF-3, deferred) | 2 (a list or date shown as `[...]`/`date(...)`, cosmetic) | 3,414 |
+| `fuzz2` (non-ASCII, line-break, `?` mutations) | 1,500 | 25, all **accepted divergences (GAP-8)**: Rust `invalid indentation`, PyYAML accepts | 1 (a dict shown as `{...}`) | 1,474 |
+| `cases12` (232: `?` and empty-key forms with 2-, 3-, 4-byte prefixes) | 232 | 0 | 0 | 232 |
+| `cases13` (20: BOM, CRLF, CR, 500 four-byte characters, combining marks, ZWJ) | 20 | 0 | 0 | 20 |
+| `cases7` to `cases10` (tab, `?`, empty-key) | 119 | 0 | 0 | 119 |
+| `cases14` (103: NEL, LS, PS in 34 positions) | 103 | 27, all **accepted (GAP-8)** | 0 | 76 |
+| `cases15` (10) | 10 | 6, all **accepted (GAP-8)** | 0 | 4 |
+| `cases16` (11) | 11 | 1, **accepted (GAP-8)** (`{years: 80,<newline> label: historical}`) | 0 | 10 |
+| `cases17` (332: DEF-13) | 332 | 1 (**DEF-14**) | 0 | 331 |
+| `cases18` (80: key, line break, then `:`) | 80 | 48 (**DEF-14**) | 0 | 32 |
+| `cases11` (64 key forms) | 64 | 3 (invalid dates crash the reference) | 14 (datetime-key location text), as in §8 | 47 |
+| Registry variants | 113 | 52, by design (GAP-5) | 0 | 61 |
+
+Accepted divergences, listed apart as ruled (BCK-002 A-23): **GAP-8**, the unindented continuation of a flow collection or quoted scalar: 25 of `fuzz2`, 27 of `cases14`, 6 of `cases15`, 1 of `cases16`, 59 cases, every one a `LOAD ERROR: invalid indentation` in Rust against an accepting PyYAML. **LS or PS in a folded scalar**: not hit by any generated set (11.3 pins it with a fixture). **DEF-3** tags: deferred. Nothing else is unexplained.
+
+### 11.3 New defects
+
+**DEF-14 (low-medium): an implicit key in a flow collection whose `:` is on the next line is accepted by Rust; PyYAML refuses it.** Clause: the DEF-13 ruling (a flow key must fit on one line, as PyYAML requires of a simple key); the free-key case is fail-open.
+- Reproduction: in `solo.yaml` replace `{years: 80, label: historical}` with `{years: 80, label` newline `   : historical}` (the key `label` ends the line, its `:` starts the next, indented).
+- Expected: `PY` stops with `ScannerError` (exit 1), so `RS` must give `LOAD ERROR`. Actual: `RS` reads the mapping and gives `VALID` (exit 0).
+- Extent: 48 of 80 `cases18` cases: plain, double-quoted and single-quoted keys, the first key of the mapping, a key with `:` glued to the next word, with LF, CRLF, NEL and LS as the break, with and without a non-ASCII prefix. In a sequence (`[a` newline `   : x]`), Rust accepts a one-pair mapping and fails on the field type (`SCHEMA INVALID`) where PyYAML refuses to load. Block mappings agree (both refuse `seed` newline `    : 1`), and a `:` at column 0 agrees (both refuse).
+- Why it matters: a manifest key can differ from what the author wrote and still validate (the reference rejects the same file).
+
+**DEF-15 (low-medium): the `# parity-divergence:` header is not confined as intended and can disable the line comparison.** Clause: the Architect's request: a marked fixture must fail if either verdict changes; the header honoured only in `tests/manifest_parity/`.
+- What holds: the shipped fixture passes as `DIVERGE (ruled)`; it fails if Rust's verdict changes (the LS removed, so both say VALID: `declared divergence VALID / LOAD ERROR, got python VALID; rust VALID`), if the declared pair is wrong (`VALID / VALID` against `VALID / LOAD ERROR`), and if Python's verdict changes (`seed: -1`: `got python SCHEMA INVALID; rust LOAD ERROR`).
+- (a) **Not confined to `tests/manifest_parity/`.** `bin/manifest_parity.py` does not look at the path. A header in `/tmp`, or at the top of `specs/manifest/examples/val_khor.yaml` (run in the whole-corpus command of `check_all.sh`), is honoured: `DIVERGE (ruled) specs/manifest/examples/val_khor.yaml`.
+- (b) **An equal pair disables the line check.** With `# parity-divergence: VALID / VALID` on a copy of `val_khor.yaml`, the file passes as `DIVERGE (ruled): python VALID; rust VALID` even when I change a warning text in the Rust loader; without the header the same file gives `PARITY MISMATCH ... line 1`. The header accepts a pair in which the two verdicts agree, so a fixture can opt out of the line-for-line oracle. (The other fixtures still catch that particular mutation, so the gate as a whole stays red; the hole is per file.)
+- (c) **The pin is on verdicts, not on the cause.** `VALID / LOAD ERROR` still passes when the Rust refusal has a different cause: I removed the LS from the folded-scalar fixture and added `seed: !!binary MQ==` (a DEF-3 refusal), and it passed as `DIVERGE (ruled)`.
+- (d) **Not limited to the first lines.** The header is found anywhere in the first 2,000 characters (a header on line 26 was honoured), although the documentation says "first lines".
+- Suggested fix (confidence 85%): honour the header only for a path under `tests/manifest_parity/` (resolve it, so `..` and symlinks do not escape); reject a header whose two verdicts are equal; add the expected Rust message to the header (`# parity-divergence: VALID / LOAD ERROR / a line separator (U+2028)`) and require it in Rust's output; search only the first 5 lines; add a `python/tests/test_manifest_parity.py` case for each.
+
+### 11.4 Outcome
+
+DEF-13 is closed. The branch is clean on everything the tester verified except two low-medium items that do not touch the engine or any gating result today: DEF-14 (a form PyYAML refuses that a hand-writer is unlikely to type) and DEF-15 (a corpus mechanism that needs a path check and a stricter header; nothing currently abuses it, the only fixture using it is correct). Neither needs another full regression: after they are fixed, repeating `cases17`, `cases18` and the six header probes of 11.3 is enough. GAP-8, the LS-in-folded-scalar refusal and DEF-3 stay ruled out of contract as listed.
