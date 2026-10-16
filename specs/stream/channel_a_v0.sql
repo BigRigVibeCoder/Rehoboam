@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS life_course_entry (    -- kind 3 LIFE_ENTRY: a person
     kind        USMALLINT NOT NULL CHECK (kind = 3),
     person_id   UBIGINT   NOT NULL,
     origin      UTINYINT  NOT NULL,                -- 0 born, 1 founder, 2 immigrant
-    sex         UTINYINT  NOT NULL,                -- 0 male, 1 female (person.sex)
+    sex         UTINYINT  NOT NULL,                -- 0 male, 1 female (life_course.sex = person.sex at entry)
     mother_id   UBIGINT   NOT NULL,                -- 0 = none (founders, immigrants without one)
     father_id   UBIGINT   NOT NULL,                -- 0 = none or unknown
     birth_tick  BIGINT    NOT NULL,                -- negative for founders born before the epoch
@@ -222,7 +222,7 @@ CREATE OR REPLACE VIEW order_violation AS
 
 -- The chronicle's life_course (schema.sql) as the join of entries and exits (SPR-011 ruling 13).
 CREATE OR REPLACE VIEW life_course_v AS
-    SELECT e.timeline_id, e.person_id, e.origin,
+    SELECT e.timeline_id, e.person_id, e.origin, e.sex,
            NULLIF(e.mother_id, 0) AS mother_id, NULLIF(e.father_id, 0) AS father_id, e.birth_tick,
            CASE WHEN x.exit_kind = 0 THEN x.tick END AS death_tick,
            CASE WHEN x.exit_kind = 0 THEN x.death_cause::USMALLINT END AS death_cause,

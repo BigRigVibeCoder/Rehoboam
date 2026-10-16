@@ -111,6 +111,10 @@ fixed_point = false
 # order: at genesis the founders in ascending PersonId; later, the order of the entering events. The log is never
 # compacted (ADR-0007): it is the plane-A record of who lived. Channel A carries it as LIFE_ENTRY and LIFE_EXIT records
 # (specs/stream/channel_a_v0.sql); the chronicle's life_course table is their join.
+# The genealogy of everyone (ADR-0026 item 3; round 4 of PR #32, NEW-1): the live ledger holds only the living and is
+# compacted at Bookkeeping of a death instant (SPR-011 ruling 5), so kinship through the dead (T1.minds, M7.dynasty) walks
+# life_course.person_id, mother, father and sex, never person.*. mother, father and sex are set once, at entry (sex as person.sex): 0 for
+# founders (pre-epoch rows appended at genesis), the parents for births (P1.3).
 [[owns]]
 column = "life_course.person_id"
 entity = "life_course"
@@ -138,6 +142,13 @@ entity = "life_course"
 type = "u64"
 plane = "A"
 meaning = "As person.father at entry; 0 when unknown, for founders and immigrants without one"
+fixed_point = false
+[[owns]]
+column = "life_course.sex"
+entity = "life_course"
+type = "enum"
+plane = "A"
+meaning = "As person.sex at entry: male | female (codes 0, 1); written once at entry, like mother and father. Founders take their person.sex at genesis. Succession through a dead ancestor needs it (REV-P1a section 8, NEW-7)"
 fixed_point = false
 [[owns]]
 column = "life_course.birth_tick"
@@ -333,7 +344,7 @@ check_values = [
 #     about [23.4, 36.6]). SPR-011 T-05 and ruling 8 use these exact values (Architect, PR #37).
 
 [initialization]
-state = "rh-worldgen (SPR-011 ruling 10) writes the founders: person.id = founder(seed, k) with the deterministic rehash, birth_tick from age_years (pre-epoch, with a keyed offset inside the year), sex as given or a keyed fair draw, alive = 1, death_tick = i64::MAX, mother = father = spouse = 0, death_cause = none; and one life_course row per founder (origin founder, entry_tick 0, exit_kind open, exit_tick i64::MAX, death_cause none), in ascending PersonId. No death timer exists at genesis: the first Month pulse at tick 0 draws the first month"
+state = "rh-worldgen (SPR-011 ruling 10) writes the founders: person.id = founder(seed, k) with the deterministic rehash, birth_tick from age_years (pre-epoch, with a keyed offset inside the year), sex as given or a keyed fair draw, alive = 1, death_tick = i64::MAX, mother = father = spouse = 0, death_cause = none; and one life_course row per founder (origin founder, sex as person.sex, mother = father = 0, birth_tick as person.birth_tick, entry_tick 0, exit_kind open, exit_tick i64::MAX, death_cause none), in ascending PersonId. No death timer exists at genesis: the first Month pulse at tick 0 draws the first month"
 from_manifest = ["peoples", "cast", "households"]
 
 [input_data]

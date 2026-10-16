@@ -11,7 +11,9 @@ It loads ``specs/stream/channel_a_v0.sql`` into an in-memory DuckDB and checks:
      written file, seq contiguous from 0 across segments, the R4 in-instant order holds (the
      order_violation view is empty), the segment rows chain, and life_course_v rebuilds
      schema.sql's life_course;
-  4. the order check refuses a planted swap of two records.
+  4. the order check refuses a planted swap of two records;
+  5. life_course_v has exactly the columns of specs/chronicle/schema.sql's life_course, in order and
+     with the same types (REV-P1a NEW-7 added sex to both).
 
 Run: python -I specs/stream/selftest_channel_a.py
 """
@@ -27,6 +29,7 @@ from pathlib import Path
 import duckdb
 
 DDL = Path(__file__).resolve().with_name("channel_a_v0.sql")
+CHRONICLE = Path(__file__).resolve().parents[1] / "chronicle" / "schema.sql"
 HEADER = [
     ("timeline_id", "UINTEGER"),
     ("seq", "UBIGINT"),
@@ -260,6 +263,25 @@ def check_order_control() -> bool:
     return clean == (0,) and swapped is not None and swapped[0] > 0
 
 
+def columns(con: duckdb.DuckDBPyConnection, table: str) -> list[tuple[str, str]]:
+    """Return (name, type) of every column of ``table``, in order."""
+    return con.execute(
+        "SELECT column_name, data_type FROM information_schema.columns "
+        "WHERE table_name = ? ORDER BY ordinal_position",
+        [table],
+    ).fetchall()
+
+
+def check_chronicle_view() -> bool:
+    """Check 5: life_course_v rebuilds schema.sql's life_course column for column."""
+    view = columns(load(DDL.read_text(encoding="utf-8")), "life_course_v")
+    table = columns(load(CHRONICLE.read_text(encoding="utf-8")), "life_course")
+    print(f"   life_course_v: {[c for c, _ in view]}")
+    if view != table:
+        print(f"   schema.sql life_course: {table}")
+    return view == table
+
+
 def main() -> int:
     """Run every check and print PASS or FAIL."""
     checks = [
@@ -267,6 +289,7 @@ def main() -> int:
         ("2. record headers", check_headers),
         ("3. sealed segments round-trip", check_segments),
         ("4. order positive control", check_order_control),
+        ("5. life_course_v = schema.sql life_course", check_chronicle_view),
     ]
     ok = True
     for name, fn in checks:
