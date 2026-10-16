@@ -60,6 +60,16 @@ class Trajectory(Strict):
     institutions: list[Milestone] = []
 
 
+ActivityResolution = Literal["life_course", "blocks", "minutes"]   # ADR-0031: a world setting, never a side effect of viewing
+
+
+class Focus(Strict):
+    """A focus region: daily life there is authoritative at a finer resolution (ADR-0031 §3). The settlement is one the
+    manifest names (e.g. a polity seat); choosing one after world generation is a journaled migration (05.1 §3)."""
+    settlement: Slug
+    activity_resolution: Literal["blocks", "minutes"]
+
+
 class WorldMeta(Strict):
     id: Slug
     display_name: Annotated[str, Field(min_length=1, max_length=120)]
@@ -69,6 +79,8 @@ class WorldMeta(Strict):
     horizon: Horizon
     trajectory: Trajectory | None = None
     fidelity_profile: dict[str, Literal["F0", "F1", "F2", "F3"]] = {}
+    activity_resolution: ActivityResolution | None = None   # None: the scale profile's default (blocks <= 1k, else life_course)
+    focus: list[Focus] = []
 
     @model_validator(mode="after")
     def _speculative_needs_trajectory(self) -> "WorldMeta":
@@ -430,6 +442,24 @@ def validate_against_registry(m: Manifest, reg: dict) -> list[Issue]:
     humans = sum(p.population for p in m.peoples if isinstance(p, HumanPeople))
     if humans > 1_000_000:
         warn("peoples", f"{humans:,} persons: above the 1M target range (ADR-0028); expect batch-speed runs (docs/08)")
+
+    # activity resolution (ADR-0031): cost scales with persons x resolution; estimates at ~1e8 updates/s
+    res = m.world.activity_resolution
+    if res == "minutes" and humans > 10_000:
+        err("world.activity_resolution", f"'minutes' for {humans:,} persons is about {humans / 1000 * 5 / 60:.0f} min per sim-year; "
+                                         "use focus regions instead (ADR-0031)")
+    elif res == "minutes" and humans > 1_000:
+        warn("world.activity_resolution", f"'minutes' for {humans:,} persons: about {humans / 1000 * 5:.0f} s per sim-year")
+    if res == "blocks" and humans > 100_000:
+        warn("world.activity_resolution", f"'blocks' for {humans:,} persons: about {humans / 1000 * 0.06 * 1000 / 3600:.1f} h per "
+                                          "simulated millennium, above PERF-1; consider focus regions (ADR-0031)")
+    seen = set()
+    for i, f in enumerate(m.world.focus):
+        if f.settlement in seen:
+            err(f"world.focus[{i}]", f"duplicate focus settlement '{f.settlement}'")
+        seen.add(f.settlement)
+        if res == "minutes" or (res == "blocks" and f.activity_resolution == "blocks"):
+            warn(f"world.focus[{i}]", "focus resolution is not finer than the world's; it has no effect")
 
     # cast, households, outside world, agents (ADR-0028)
     attrs = reg.get("attributes", {})

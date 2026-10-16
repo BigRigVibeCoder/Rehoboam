@@ -205,6 +205,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P1.15 | Registry effect language v0 | The typed, total evaluator in `rh-registry` (`05.5` §2.1); succession-law eligibility and ordering; verb effects as queued commands; a golden test |
 | P1.16 | Era-state hooks (ADR-0027) | The era-state vector in the contract crates; every era-sensitive parameter of M2, M4, M6, M7 declared as a Registry function of it (agrarian range calibrated only); the era-label classifier (plane C); a lint that fails if a mechanic reads the label. About 1–2 weeks, mostly interface work |
 | P1.17 | World Stream v1 (ADR-0030, `05.10`) | Channels A and C, `seq` and segments (the Parquet chronicle as the stream at rest), the live edge over a socket, viewer cursors, `stream.subscribe` / `stream.status`, the materializer (keyframe + replay), tip and scheduled inputs, the pace command, `rh-cli tail` filters (significance, place, person, pattern, regional digest). Gate: V-STR-01–03, V-STR-05, V-PERF-09 |
+| P1.18 | `S5.daily_life` F1: virtual telemetry (ADR-0031) | The activity function over the life-course log and regional conditions; `rh-cli where <person> <date>` and `rh-cli who <place> <date>`; `DECISION_TRACE` records for named minds. Gate: V-STR-07; `specs/stream/selftest_virtual_telemetry.py` behaviour reproduced in Rust |
 
 **Gate G1b** (the v1.0 G1)
 - **MOP-1** (V-PERF-01): 1,000 years at 100k in ≤ 2 min on 8 cores.
@@ -276,6 +277,7 @@ A coupling is **possible** when the chain completes in at least *x*% of seeds, a
 | P3.5 | M8 Campaign war F1 | War onset hazard (force ratio × contagion, no global cooldown); war aggregation as space-time components; supply, attrition, Helmbold battles, sieges, camp disease; severity emerges from escalation (R12) |
 | P3.14 | Endogenous institutions (ADR-0027) | The Registry institution-transition graph; adoption by emulation, reform under fiscal stress, regime change after breakdown; transitions as events with causal edges; `exec_constraint`, `fiscal_capacity`, `succession_institutionalisation` dynamics |
 | P3.6 | Should-systems: S1.culture, S2.technology, S3.migration, S4.ecology | Religion and ideology, technology diffusion, migration, ecology (dragons as T1 with energetics) |
+| P3.15 | `S5.daily_life` F2: authoritative `blocks` (ADR-0031) | Focus regions and micro worlds at `blocks`: two-phase encounter resolution as plane-A `ENCOUNTER` events (ties, contacts for M5, crimes); the migration path for changing a region's resolution. Gate: V-STR-06, V-STR-08; PERF-1 still met with one 5k-person focus town |
 | P3.11 | Reference worlds | `aethelgard` (modern hive, 10 years); dragons added to `val_khor` |
 
 **Gate G3a**

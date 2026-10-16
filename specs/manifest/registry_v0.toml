@@ -78,6 +78,14 @@ fidelity_levels = ["F0", "F1"]
 # breakpoint and fort_multiplier are design values with no verified source yet (Helmbold 1969/1987 pending); apply per engagement.
 params = { helmbold_w = [0.0, 1.0], breakpoint = [0.1, 0.35], campaign_months = [3, 12], fort_multiplier = [2.0, 10.0] }
 
+[systems."S5.daily_life"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0031: activity(person, day) is a pure function of start-of-day life-course state, regional conditions and the keyed RNG.
+#   F1 = virtual telemetry only (plane B: shown, not consequential); F2 = authoritative at the world's or a focus region's
+#   activity_resolution ("blocks" or "minutes"), with encounters resolved in a second phase as plane-A events.
+# Schedule templates follow ActivitySim's day pattern -> tour -> trip hierarchy (BSD-3, reference only).
+params = { blocks_per_day = [12, 24], encounter_tie_rate = [0.0, 0.05] }
+
 [systems."S4.ecology"]
 fidelity_levels = ["F1"]
 params = { metabolism_multiplier = [0.1, 10.0] }

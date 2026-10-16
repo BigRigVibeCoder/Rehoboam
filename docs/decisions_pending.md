@@ -15,6 +15,8 @@
 | **D5** | **Your operating system** for development and play | *No good default. Please tell me.* Assumed: Linux or macOS for development, CI on all three | Decides packaging and later wallpaper hosting; phase 1 is terminal-only, so it matters less now | Q★3 |
 | **D6** | **Your compute**: desktop spec, GPU, cloud budget ceiling | *Please tell me.* Assumed: a strong 8-core desktop and $50–200/month of cloud | Sizes CI runners, 1M-scale targets and local model choices | Q★4 |
 | **D7** | **ODD-R** as the required spec format for every simulation system | **Adopt** | Specs stay free-form; agents and reviewers lose a checklist | [template](templates/system_spec_odd_r.md); decisions log |
+| **D24** | **Fidelity by zoom** (ADR-0031). The World Language; **virtual telemetry**, meaning anyone's whereabouts on any day of history, computed and never stored; authoritative daily life where you declare it | **Accept** | Either store movement (≈ 11 GB per sim-year at 1M) or have no street-level history at all | [ADR-0031](06_adr/ADR-0031-fidelity-by-zoom-virtual-telemetry.md) |
+| **D25** | **Default activity resolution**: micro worlds `blocks` (daily life counts); meso and macro `life_course` plus focus regions you name | **Accept** | `blocks` everywhere at 100k costs ≈ 1.5 h per millennium, against the 2-minute budget; `minutes` is for micro worlds only | ADR-0031 §3 |
 
 ## B. The thesis gate, G2 (fix before P2 starts)
 

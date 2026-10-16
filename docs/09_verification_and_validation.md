@@ -378,6 +378,9 @@ Playwright drives the console against the real `rh-server` and against the mock 
 | V-STR-03 | Cursor independence (STR-3) | Viewers at 1×, at 100×, rewinding, and one stalled for 10 minutes, all attached during a MAX run | Channel A unchanged (V-STR-01 hash); throughput per V-PERF-09 |
 | V-STR-04 | Tip semantics (STR-4) | A scripted viewer 10 sim-years behind issues an action, a scheduled action for a future tick, and an action aimed at a past tick | The first lands at the then-current tip and is journaled with that tick; the second lands exactly on its tick; the third is refused unless issued as a fork; replay reproduces all |
 | V-STR-05 | Live edge and catch-up (STR-3) | A viewer falls behind the in-memory edge, reads sealed segments, then jumps to live | `seq` contiguous throughout: no gaps, no duplicates |
+| V-STR-06 | Viewer equals engine in focus regions (STR-6; ADR-0031) | In a `blocks` focus region, compare the activity a viewer computes for 10k random person-blocks with the positions the engine used for encounter resolution | Identical |
+| V-STR-07 | Virtual telemetry without replay (STR-6) | Query random person-days across a 1,000-year run from the life-course log and seed only; compare with a stateful engine loop on a sample | Identical; < 1 ms per person-day; no keyframe touched (prototype: `specs/stream/selftest_virtual_telemetry.py`) |
+| V-STR-08 | Resolution changes count, not looks (STR-7) | Run a region at `life_course` and again at `blocks` from the same keyframe | Displayed activity identical up to the first encounter event; differences only downstream of encounter events |
 
 ## 3. Validation (fit for purpose)
 
@@ -770,6 +773,8 @@ Every requirement in `03` maps to at least one test ID. Phases are those of `03`
 | STR-3 | Viewing is a buffer event | P1b | V-STR-03, V-STR-05, V-PERF-09 |
 | STR-4 | Interaction is a tip event | P2 | V-STR-04, V-DET-13 |
 | STR-5 | Pace is the director's setting | P2 | V-STR-03, V-TM-03 |
+| STR-6 | Virtual telemetry | P1b | V-STR-06, V-STR-07 |
+| STR-7 | Activity resolution is a world setting | P3a | V-STR-08, V-DET-06 |
 | EVO-1 | Ownership and change scope | P0 | V-INV-03, V-INV-04, V-INSP-03, V-GOLD-03, V-WC-10 |
 | EVO-2 | Crate deliverables | P1a | V-INV-06, V-INV-07 |
 | EVO-3 | Fidelity levels | P1b/P5 | V-HYD-10, V-HYD-11, V-SF-01–V-SF-12 |

@@ -13,6 +13,7 @@ world:
   calendar: {days_per_year: 360, months: 12, seasons: 4, epoch_label: "Days of Job"}
   horizon: {years: 150, label: historical}
   fidelity_profile: {M2.demography: F1, M4.economy: F1}
+  activity_resolution: blocks    # every day of every person in Uz is authoritative (ADR-0031); 'minutes' is affordable too
 geography:
   raster_resolution: 256
   region_count: 4                # Job's tents and pastures; the friends' towns of Teman, Shuah and Naamah

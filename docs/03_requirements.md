@@ -94,6 +94,8 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | STR-3 | **Viewing is a buffer event.** Viewers shall read the stream with their own cursors, at any playback rate, live or behind, from memory or sealed segments, with no gaps or duplicates. No reader shall slow the engine or change the stream. | T | P1b | Director (2026-10-16) |
 | STR-4 | **Interaction is a tip event.** A material input shall land at the next tick boundary after the tip, or at a scheduled future tick, and be journaled with that tick. An input aimed at a past tick shall be refused unless issued as a fork. Every harness shall show the tip, its pace, the viewer's cursor and the lag, and confirm the landing date before an action. | T | P2 | Director (2026-10-16); ADR-0025 |
 | STR-5 | **Pace is the director's setting.** The engine's pace (speed band or MAX) shall be set only by control commands, logged in the run log and never in the input journal. In Watch style an auto-pause pauses the viewer's playback; in Play style it pauses the tip. | T | P2 | Director (2026-10-16) |
+| STR-6 | **Virtual telemetry (ADR-0031).** Any person's activity (place and activity per block) on any day of history shall be computable on demand from the life-course log, regional conditions and the seed alone, without replay, in < 1 ms, and identical to what the engine used wherever it was authoritative. | T | P1b | Director (2026-10-16) |
+| STR-7 | **Activity resolution is a world setting.** `life_course`, `blocks` or `minutes`, per world or per focus region, set in the manifest or by a journaled migration; never raised or lowered by viewing. | T | P3a | Director (2026-10-16); ADR-0024 |
 
 ### 2.4 Story sifting and significance (SIFT)
 

@@ -38,3 +38,4 @@ All ADRs below are **Proposed** until you review them. ADRs that sit on a critic
 | [0028](ADR-0028-scale-range-and-micro-worlds.md) | One engine from one person to one million: scale profiles and micro worlds | ★ |
 | [0029](ADR-0029-lofi-glyph-client-first.md) | Lo-fi glyph client first; 3D becomes a later art phase | ★ |
 | [0030](ADR-0030-headless-engine-text-harness-first.md) | Headless engine and the World Stream: viewers read a buffer, actions land at the tip; text only until G2 | ★ |
+| [0031](ADR-0031-fidelity-by-zoom-virtual-telemetry.md) | Fidelity by zoom: the World Language, virtual telemetry everywhere, authoritative daily life where you declare it | ★ |

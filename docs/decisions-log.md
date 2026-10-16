@@ -4,6 +4,7 @@ A running log of director rulings, phase-gate outcomes and approved ADR changes.
 
 | Date | Decision | By | Evidence / links |
 |---|---|---|---|
+| 2026-10-16 | **Proposed:** fidelity by zoom (ADR-0031). The World Language (Registry vocabulary + typed event grammar + Arrow/Parquet container + generative core); `S5.daily_life` with virtual telemetry for anyone, any day; authoritative daily life by activity resolution per world or focus region, never by viewing. | Systems design, at the director's request | ADR-0031; STR-6, STR-7; V-STR-06–08; `specs/stream/` |
 | 2026-10-16 | **Proposed** (from the director's direction, v2): the engine is headless and **streams its world** (the World Stream). Viewing is a buffer event: each viewer reads the stream with its own cursor at its own rate. Interaction is a tip event: actions land at the tip, or at a scheduled future tick, and acting at a past moment is a fork. Pace is the director's setting; no viewer can slow the engine. Phase 1 has no GUI (`rh-cli tail`, then `rh-tui`). | Director; systems design | ADR-0030 v2; `05.10`; STR-1–5; V-STR; PERF-5 |
 | 2026-10-15 | **Proposed** (needs your ruling): adopt ODD-R as the mandatory spec format for every simulation system and fidelity level. | Systems design | `docs/templates/system_spec_odd_r.md`; R12 §15 |
 | 2026-10-15 | Era order (provisional): E2 early modern → E3 industrial → E4 modern, after G3b, sim-only first, under the ADR-0027 scope guardrails. | Director | `docs/11_roadmap.md` era packs; `12` Q19 |

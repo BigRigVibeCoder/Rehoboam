@@ -595,6 +595,31 @@
       "title": "Faith",
       "type": "object"
     },
+    "Focus": {
+      "additionalProperties": false,
+      "description": "A focus region: daily life there is authoritative at a finer resolution (ADR-0031 \u00a73). The settlement is one the\nmanifest names (e.g. a polity seat); choosing one after world generation is a journaled migration (05.1 \u00a73).",
+      "properties": {
+        "settlement": {
+          "pattern": "^[a-z][a-z0-9_]{1,63}$",
+          "title": "Settlement",
+          "type": "string"
+        },
+        "activity_resolution": {
+          "enum": [
+            "blocks",
+            "minutes"
+          ],
+          "title": "Activity Resolution",
+          "type": "string"
+        }
+      },
+      "required": [
+        "settlement",
+        "activity_resolution"
+      ],
+      "title": "Focus",
+      "type": "object"
+    },
     "Geography": {
       "additionalProperties": false,
       "properties": {
@@ -1089,6 +1114,31 @@
           "default": {},
           "title": "Fidelity Profile",
           "type": "object"
+        },
+        "activity_resolution": {
+          "anyOf": [
+            {
+              "enum": [
+                "life_course",
+                "blocks",
+                "minutes"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Activity Resolution"
+        },
+        "focus": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Focus"
+          },
+          "title": "Focus",
+          "type": "array"
         }
       },
       "required": [
