@@ -94,6 +94,8 @@ REQUIRED_GATES = (
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
     "Virtual telemetry (S5 prototype)",
+    "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip "
+    "(SPR-011 ruling 13)",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
