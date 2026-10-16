@@ -233,7 +233,7 @@ fn check(name: &str, expected_cases: usize, (cases, failures): (usize, Vec<Strin
 
 #[test]
 fn binomial_and_poisson_match_the_exact_pmf_chi2_pr() {
-    check("chi2 pr", 14, chi2("pr"));
+    check("chi2 pr", 18, chi2("pr"));
 }
 
 #[test]
@@ -249,7 +249,7 @@ fn normal_tails_match_the_exact_tail_probabilities_pr() {
 #[test]
 #[ignore = "nightly tier: 64 times the PR samples (.github/workflows/nightly.yml)"]
 fn binomial_and_poisson_match_the_exact_pmf_chi2_nightly() {
-    check("chi2 nightly", 14, chi2("nightly"));
+    check("chi2 nightly", 18, chi2("nightly"));
 }
 
 #[test]
