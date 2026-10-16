@@ -176,6 +176,14 @@ pub enum SimError {
         /// What was found.
         detail: String,
     },
+    /// A step panicked: caught at dispatch and turned into this fatal error (GOV-004 §2; SPR-006
+    /// DEF-1), so the run stops with a crash artifact instead of unwinding.
+    Panic {
+        /// The system whose step panicked.
+        system: &'static str,
+        /// The panic message.
+        message: String,
+    },
     /// A system-specific failure.
     System {
         /// The system.
@@ -223,6 +231,7 @@ impl fmt::Display for SimError {
                 name,
                 detail,
             } => write!(f, "invariant {name} of {system} violated: {detail}"),
+            Self::Panic { system, message } => write!(f, "{system} panicked: {message}"),
             Self::Event { system, message } | Self::System { system, message } => {
                 write!(f, "{system}: {message}")
             }
