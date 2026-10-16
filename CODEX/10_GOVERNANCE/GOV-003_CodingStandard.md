@@ -9,7 +9,7 @@ tags: [governance, coding]
 related: [GOV-002, GOV-004, ADR-0006, ADR-0024, ADR-0021]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** The authoritative engine is Rust. Its code must be deterministic, fixed-point where it matters, plane-isolated and owned per column. Python and TypeScript follow the director's template principles (types everywhere, no magic numbers, guard clauses, readable for incidents). Every rule here is either checked by a tool or by the Architect's audit.
@@ -57,5 +57,5 @@ version: 1.0.0
 
 - Silent error swallowing (`except: pass`, `let _ =` on a `Result` without a comment).
 - Free-string semantics in manifests or code where the Registry has a vocabulary (ADR-0010).
-- Code, weights or assets under GPL, AGPL, non-commercial or territorial licences in shipped crates (ADR-0021).
+- Code, weights or assets whose licence forbids the use itself, and copied code that carries no licence (ADR-0021 as amended: personal-use mode, D19, 2026-10-16; any other licence is allowed, and the licence ledger records it).
 - Re-recording golden baselines by hand (`docs/13` §4.2).

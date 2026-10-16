@@ -2,6 +2,8 @@
 
 *Status: Draft v1.0 (2026-10-15). This answers the director's question: "How much can we bootstrap or cannibalize from GitHub projects that already solve a lot of the problems and tech in the stack?" It extends `07_technology_stack.md` and is governed by ADR-0021 (licence allow-list). **All effort numbers are estimates** made for planning and have roughly ±50% error. This is not legal advice.*
 
+> **Personal-use mode (D19, 2026-10-16; ADR-0021 as amended).** Rehoboam is a private experiment that is never distributed. Every "licence trap" and AVOID verdict below that rests only on a licence no longer applies, and the "personal-use mode" options in finding 8 are open: Veloren's world and town generation, watabou's town generator, EbookLib, xxhash-rust and MiniCheck-7B weights. Unlicensed code (Felt, Winnow) is still read, not copied. Licence columns are kept for the ledger and in case the ruling is ever reversed.
+
 **How the facts were checked (2026-10-15)**
 
 - **Licences.** For each GitHub or GitLab project I read the LICENSE/COPYING file at the default-branch HEAD (shallow, blobless `git clone`). Where a repo has no LICENSE file, that is stated.

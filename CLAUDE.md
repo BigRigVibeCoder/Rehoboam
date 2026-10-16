@@ -26,7 +26,7 @@ Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and b
 - **No physical compaction of named-actor history.** Hide low-salience events with the visibility sidecar instead (ADR-0007).
 - **Sifting patterns must anchor every state read** (`attr@eN`) and declare their match semantics and firing budget. Use `specs/sifting/lint_patterns.py`.
 - **Mechanics come only from the Registry.** No free-string semantics in manifests (ADR-0010).
-- **Licences:** no GPL, AGPL, non-commercial or territorial-licensed code, weights or assets in shipped crates (ADR-0021). GPL/AGPL tools may run only out of process; see `docs/14_reuse_inventory.md` for traps (EbookLib, xxhash-rust, MiniCheck-7B weights).
+- **Licences: personal-use mode** (ADR-0021 as amended, D19, 2026-10-16). Rehoboam is a private experiment that is never distributed, so any licence may be used. Two limits remain: no licence whose terms forbid the use itself, and no copying of unlicensed code. The repository stays private. `bin/check_all.sh` keeps a licence ledger (`artifacts/licence_ledger.txt`) that never fails a build; crates come from crates.io only, with no wildcard versions.
 
 ## Checks to run after any change
 All of them, fail-fast, with a report: `bin/check_all.sh`. It uses `python/.venv` (create it with `uv sync --frozen --project python`; `PYTHON` overrides) and needs cargo-nextest and cargo-deny (RUN-001). Each gate also runs on a planted violation that must FAIL (`tests/lint_fixtures/`). Individually:

@@ -42,7 +42,7 @@ Nothing is waiting on you.
 | D16 | How atrocities are narrated | "Historian" register: consequences, not gratuitous detail | Q9 |
 | D17 | Oracle death | Rebirth with heavy loss; permadeath as a hard mode | Q10 |
 | D18 | Foresight cost in Cultivator mode | Free; it costs Foresight in Oracle mode | Q11 |
-| D19 | Ever distribute it? | Keep the option open: strict licences in core code | Q13, Q17 |
+| D19 | Ever distribute it? | **Decided 2026-10-16: never.** A private experiment, so personal-use licence mode (ADR-0021 as amended) | Q13, Q17 |
 | D20 | Multiplayer | Out of scope; worlds are shared as manifest + seed + journal | Q14 |
 | D21 | Science-fiction frontiers; when per-era art starts | Decide after the first era pack; art packs after P5 | Q★19 |
 | D22 | Suspense pauses in Oracle mode | Off until they can use the Oracle's beliefs | Q23 |
