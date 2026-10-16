@@ -186,52 +186,6 @@ plane = "A"
 meaning = "As person.death_cause (none | natural | murder | battle | execution | accident); none unless exit_kind = death; written once with exit_kind"
 fixed_point = false
 
-# The genealogy of everyone (ADR-0026 item 3; round 4 of PR #32, NEW-1): the live ledger holds only the living and is
-# compacted at Bookkeeping of a death instant (SPR-011 ruling 5), so kinship through the dead walks these life-course
-# columns, never person.mother/father. PR #37's M2 freeze completes the rest of life_course.*; the two merge.
-[[owns]]
-column = "life_course.person_id"
-entity = "life_course"
-type = "u64"
-plane = "A"
-meaning = "PersonId of the person the row records; unique in the log"
-fixed_point = false
-[[owns]]
-column = "life_course.mother"
-entity = "life_course"
-type = "u64"
-plane = "A"
-meaning = "As person.mother at entry; 0 for founders and immigrants without one"
-fixed_point = false
-[[owns]]
-column = "life_course.father"
-entity = "life_course"
-type = "u64"
-plane = "A"
-meaning = "As person.father at entry; 0 when unknown, for founders and immigrants without one"
-fixed_point = false
-[[owns]]
-column = "life_course.birth_tick"
-entity = "life_course"
-type = "i64"
-plane = "A"
-meaning = "As person.birth_tick; negative for founders born before the epoch"
-fixed_point = false
-[[owns]]
-column = "life_course.sex"
-entity = "life_course"
-type = "enum"
-plane = "A"
-meaning = "As person.sex at entry"
-fixed_point = false
-[[owns]]
-column = "life_course.death_cause"
-entity = "life_course"
-type = "enum"
-plane = "A"
-meaning = "As person.death_cause (none | natural | murder | battle | execution | accident); none unless exit_kind = death; written once with exit_kind"
-fixed_point = false
-
 # Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4): one payload per command, which every sender uses.
 # For P1.13 (SPR-014): M2 then gains a Day/Vital binding that drains its queue each day start (not yet in [[schedule]]:
 # SPR-014 adds it). A command whose tick is the drain's own instant is applied in the drain, in Vital, before the
