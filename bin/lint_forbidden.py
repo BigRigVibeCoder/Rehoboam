@@ -66,12 +66,17 @@ summary line names the exemption.
                       Also in the zone's src/, private or public: no `type … = …` alias that
                       names f32 or f64 (an associated type in an impl body included), since a
                       private alias would carry a float through a `pub` signature unnamed
-                      (VER-SPR-003-TEST GAP-11; reported as `float-api` too).
+                      (VER-SPR-003-TEST GAP-11; reported as `float-api` too). Likewise no `use`
+                      that names f32 or f64, private or public: `use core::primitive::f64 as
+                      Fl;` renames the type the same way (GAP-11b). A `use` of libm functions
+                      stays allowed.
                       RESIDUAL (Architect ruling on GAP-11): the rule is textual. It does not see
                       a float in a trait method signature inside a `pub trait` body, an
                       associated type defined elsewhere and named through a projection, a type
-                      passed to a macro as a token (`mk!(leak, f64)`), or an opaque `impl Trait`
-                      return that wraps a float. These are deliberate evasions, not accidents;
+                      passed to a macro as a token (`mk!(leak, f64)`), an opaque `impl Trait`
+                      return that wraps a float, or a float alias exported by another crate the
+                      zone depends on (none does today: libm exports functions, rh-core and
+                      rh-ids no float types). These are deliberate evasions, not accidents;
                       review catches them (SPR-003: the reviewer reads rh-sample's public items),
                       and BCK-002 tracks moving the rule to rustdoc JSON once its format is
                       stable.
@@ -139,6 +144,9 @@ IMPL_HEADER = re.compile(r"\bimpl\b[^{;]*")
 # A type alias (or an associated type in an impl body) whose definition names a float.
 FLOAT_ALIAS = re.compile(r"\btype\s+\w+\s*(?:<[^=;]*>)?\s*=[^;]*")
 FLOAT_API_TOKEN = re.compile(r"\b(?:f32|f64|libm)\b")
+# Any `use` item, private or public, and the float type names it must not import (GAP-11b).
+USE_ITEM = re.compile(r"\buse\b[^;]*;")
+FLOAT_TYPE_TOKEN = re.compile(r"\b(?:f32|f64)\b")
 DEFAULT_SPECS = Path(__file__).resolve().parents[1] / "specs" / "systems"
 
 
@@ -477,8 +485,10 @@ def find_float_api(code: str, path: str) -> list[Finding]:
     line_starts = [0] + [m.end() for m in re.finditer("\n", code)]
     seen: set[int] = set()
     found: list[Finding] = []
-    for start, end in public_spans(code):
-        for token in FLOAT_API_TOKEN.finditer(code, start, end):
+    spans = [(start, end, FLOAT_API_TOKEN) for start, end in public_spans(code)]
+    spans += [(m.start(), m.end(), FLOAT_TYPE_TOKEN) for m in USE_ITEM.finditer(code)]
+    for start, end, tokens in spans:
+        for token in tokens.finditer(code, start, end):
             if token.start() in seen:
                 continue
             seen.add(token.start())
