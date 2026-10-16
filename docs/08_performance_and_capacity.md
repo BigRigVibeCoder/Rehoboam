@@ -1,8 +1,9 @@
 # 08 — Performance Budgets and Capacity Model
 
-*Status: Draft v1.1 (2026-10-15).*
+*Status: Draft v1.4 (2026-10-16).*
 *v1.1 changes: re-baselined after red-team finding RT-M8. 1M persons now costs ≈ 25–60 ms per normal month and ≈ 60–130 ms per crisis month, with the arithmetic shown; a serial-fraction budget is added; PERF-1 (P3) and PERF-2 are provisional; Foresight at 1M is a batch job; memory, keyframe and storage estimates include the life-course log, bounded T1 belief stores, knowledge fronts and the keyframe LRU; burn-in is split into the liveness gate and certification; speed-ups no longer re-baseline the performance gate automatically.*
 *v1.2 (2026-10-16): the deliberation-consult cost line is removed (ADR-0034, D27).*
+*v1.4 (2026-10-16): §1.4's MOP-1 line follows G1a and D33: G1a measures the 10k dynastic world, and M1 F1 joins at G1b.*
 *v1.3 (2026-10-16), ADR-0035: the default saga world is meso (≤ 50k persons, ≤ 2,000 named actors), and MOP-1 is gated there at G1b. The 100k and 1M budgets below stand for the optional scale-up (P3.10, Later). Media costs (images, TTS) are outside the engine and estimated in `05.11` §11.*
 
 **Where the numbers come from**
@@ -95,7 +96,7 @@ Adding cores is not a lever.
   - Ledger-proportional terms shrink ~10× and actor-proportional terms ~5×. Raster and region terms and the phase barriers do not shrink.
   - Single-core cost is ≈ 25 CPU-ms per month [E] (range 16–43), i.e. **≈ 5 CPU-min per 1,000 simulated years**. Liveness gates, certification and ensembles use this figure (§2, §4).
   - On 8 cores it is ≈ 4–11 ms per month, or **≈ 1–2.5 min per 1,000 years** including crisis months (central estimate ≈ 1.5 min).
-  - MOP-1 (≤ 2 min, P1) is reachable but not certain. It is measured at G1a with M1/M2 and at G1b with every P1 system.
+  - MOP-1 (≤ 2 min, gated at G1b on the meso kingdom world) is reachable at 100k but not certain. G1a measures the 10k dynastic world with M1 F0, M2, M7 and `T1.minds` (≤ 60 s, `11` G1a); G1b measures every P1 system, M1 F1 included (D33).
 - **Risk to G1b.** If a 100k-person world carries the full 5k named actors, actor-proportional terms add ≈ 3–7 ms per month (≈ 2–4 min per 1,000 years), which misses MOP-1. The T1 count must scale with population (~1k at 100k).
 - Release builds hash yearly by default. CI and debug builds hash monthly; dirty tracking keeps that cheap.
 
