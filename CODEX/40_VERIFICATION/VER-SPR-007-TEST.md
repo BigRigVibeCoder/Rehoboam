@@ -9,12 +9,12 @@ tags: [verification, testing, determinism]
 related: [SPR-007, VER-SPR-007, VER-SPR-003-TEST, AGT-003-DET, ADR-0006, ADR-0024]
 created: 2026-10-16
 updated: 2026-10-16
-version: 2.0.0
+version: 3.0.0
 ---
 
-> **BLUF (rounds 1 and 2: all four tasks, T-01 to T-04):** Round 1 found two defects and five gaps, all fixed and re-verified. Round 2 (T-02 keyframes) passes V-DET-05 at 47 cut points and in every variant I could build (1, 2, 4 and 8 threads, inputs submitted after the load, chained keyframes, a write in one process and a load in another, debug and release), and my own implementation of the eight engine tables reproduces `state_hash` on 13 states and the 120-month stub ladder. **Two defects are open:** DEF-3, a keyframe with a valid envelope and a corrupt Arrow body panics or aborts the loader (338 panics and 19 aborts in 3,946 forged files at the final head); DEF-4, `write_keyframe` stamps the caller's history tuple, and a keyframe stamped with the wrong seed and salt restores an engine that diverges after 9 instants while hashing equal at load. **Open gaps:** GAP-7 (the journal anchor in a keyframe has no verifier), GAP-8 (history fields other than the seed are not pinned by a test), GAP-9 (`Engine::restore` accepts an agenda entry dated before the cursor). GAP-6, that `state_hash` depended on when the host drained events (782 of 782 instants differed), was fixed by the Developer during the round and is re-verified. `bin/check_all.sh` is green, 165 of 165, on the final head.
+> **BLUF (rounds 1, 2 and 2b: all four tasks, T-01 to T-04):** All five defects and ten of eleven gaps I filed are fixed and re-verified; **no defect is open.** The last round (2b) found DEF-5, the worst of the lot: a keyframe could not be loaded back when its agenda held two or more cancelled timers whose due order differed from their insertion order (2,426 of 29,926 keyframes in a dense sweep; the Developer's 48-row test world happened to have none). It is fixed, and a dense sweep of 29,926 keyframes, a 33-case world-size sweep, a targeted reverse-order state and 40 random journals resumed through `resume` all pass. Across the three keyframes I forged (11,858 bytes; 13,858 bytes; 1,326,546 bytes at 20,000 rows) with 1-bit, 2-bit, byte-replacement and field-level forgeries, re-sealed and loaded in subprocesses, **I found 0 panics, 0 aborts and 0 loads with another state in 157,321 forged files on the last two heads** (103,787 on `8755af4`, 53,534 on `5103b13`; the same field-level class gave 909 panics and 107 aborts on `ee7d6ff`). One new gap is open: GAP-11 (low), the size-bound layer of the loader is covered by no test of the Developer's, and only my subprocess corpus kills its mutant. `bin/check_all.sh` is green, 166 of 166, on the final head.
 
-Tested commits: first pass `bb82bceab347fa16ca90257738c2652b52d7c495` (PR #25, stacked on SPR-005 `fc635dc`); re-test on the rebased head `2bb679d817470baf711bf0bc2bc8712c87aedfb8` (onto main `b0cf3e2` after SPR-005 merged) on `766bdb901dfa997541852c2e7d79711a37e3c351` (`MerkleCache::update` free of caller-supplied versions), and on the round-1 final head `867bf954df2d2876f0ca06aa69488e48def5145f` (GAP-5 tests). Round 2 ran on `2ef968eb5f3606fe866c01c38530f2f1e6951b3a` (PR #25 rebased onto main with SPR-006) and was re-run on the final head `ee7d6ff4e4f83762f615f2e683829819e1ca487c` (held events carried outside `state_hash`). The round-2 probes are Rust tests and examples added to throwaway copies (`tester_kf.rs`, in the scratchpad `ver/` directory with `forge.py`, `enc8.py` and `crash2.py`); the repository's working tree was only read. Probes ran on `git archive` copies with a fresh `CARGO_TARGET_DIR` per copy; the repository's working tree was only read. The probe plan was written from the contracts (SPR-007 v1.2.0 with its six rulings, ADR-0006, ADR-0024, ADR-0007, `05.1` §6 items 4, 6, 7, 8, `05.9` IF-2, `09` V-DET-05, V-DET-10, V-DET-11) before the branch was opened; the Architect's later rulings on layout documentation, forced CFLAGS and transitive crates were applied. Reference code: `hashref.py` (the layout, from the text, with XXH3 from python-xxhash 4.0.1 on xxHash 0.8.3), `check_golden.py`, `check_stub.py`, `jv2.py` (row digest and chain, plus 22 tamper cases), `fptable.sh`, `crash.py` and `crash2.py`, and Rust probes added to throwaway copies. They are in the session scratchpad `ver/` directory. Tester model: set by the Architect in GOV-005 §4.2; not recorded here by instruction.
+Tested commits: first pass `bb82bceab347fa16ca90257738c2652b52d7c495` (PR #25, stacked on SPR-005 `fc635dc`); re-test on the rebased head `2bb679d817470baf711bf0bc2bc8712c87aedfb8` (onto main `b0cf3e2` after SPR-005 merged) on `766bdb901dfa997541852c2e7d79711a37e3c351` (`MerkleCache::update` free of caller-supplied versions), and on the round-1 final head `867bf954df2d2876f0ca06aa69488e48def5145f` (GAP-5 tests). Round 2 ran on `2ef968eb5f3606fe866c01c38530f2f1e6951b3a` (PR #25 rebased onto main with SPR-006) and was re-run on `ee7d6ff4e4f83762f615f2e683829819e1ca487c` (held events carried outside `state_hash`). Round 2b ran on `8755af49b2cb36f3cc8ef3e3bb2fa2b7af8a13c7` (the fixes for DEF-3 to DEF-5 and GAP-7 to GAP-9) and was re-run on the final head `5103b13a861adb1a98527c2225635577a00f5a60` (the GAP-10 fix), whose parent `8755af4` I had already tested. The round-2 probes are Rust tests and examples added to throwaway copies (`tester_kf.rs`, in the scratchpad `ver/` directory with `forge.py`, `enc8.py` and `crash2.py`); the repository's working tree was only read. Probes ran on `git archive` copies with a fresh `CARGO_TARGET_DIR` per copy; the repository's working tree was only read. The probe plan was written from the contracts (SPR-007 v1.2.0 with its six rulings, ADR-0006, ADR-0024, ADR-0007, `05.1` §6 items 4, 6, 7, 8, `05.9` IF-2, `09` V-DET-05, V-DET-10, V-DET-11) before the branch was opened; the Architect's later rulings on layout documentation, forced CFLAGS and transitive crates were applied. Reference code: `hashref.py` (the layout, from the text, with XXH3 from python-xxhash 4.0.1 on xxHash 0.8.3), `check_golden.py`, `check_stub.py`, `jv2.py` (row digest and chain, plus 22 tamper cases), `fptable.sh`, `crash.py` and `crash2.py`, and Rust probes added to throwaway copies. They are in the session scratchpad `ver/` directory. Tester model: set by the Architect in GOV-005 §4.2; not recorded here by instruction.
 
 ## 1. Verdicts (round 1)
 
@@ -24,8 +24,8 @@ Tested commits: first pass `bb82bceab347fa16ca90257738c2652b52d7c495` (PR #25, s
 | T-03 journal | **PASS** (GAP-3 and GAP-5 fixed) | IF-2 fields round-trip including extremes; `payload_hash` equals the C library's XXH3-128; STRICT schema with no `REAL`; replay reads only the file; row digest and chain reproduced independently; 22 of 22 tamper cases detected (one accepted by design); 120 kill -9 rounds clean on v1 and v2. |
 | T-04 unsynced guard | **PASS** | Guard trips on an injected write in debug, is compiled out in release, and both are in `check_all.sh`; the guard mutants are red. Since T-02 it also covers engine-held state (GAP-4 closed, section 8). |
 | Gates (`lint_arch`, `lint_forbidden`, fp-contract, inventory) | **PASS** (GAP-1, GAP-2 fixed) | 11 of 11 first-pass gate mutations red; the GAP-1 snippets and eight evasion attempts are refused; the GAP-2 variables are flagged; every deletion of a new gate line turns the inventory test red. |
-| `bin/check_all.sh` | **PASS** | 152 of 152 on `bb82bce`; 160 of 160 on `2bb679d`, `766bdb9` and `867bf95`; 165 of 165 on `2ef968e` and `ee7d6ff` (clean archives, fresh target directories). |
-| T-02 keyframes, V-DET-05 | **PASS with DEF-3, DEF-4 open** (round 2, section 7) | V-DET-05 holds at 47 cuts and every variant; engine-table encoding reproduced independently; all accidental corruption refused; but a re-sealed corrupt body crashes the loader, and the history tuple is trusted from the caller. |
+| `bin/check_all.sh` | **PASS** | 152 of 152 on `bb82bce`; 160 of 160 on `2bb679d`, `766bdb9` and `867bf95`; 165 of 165 on `2ef968e` and `ee7d6ff`; 166 of 166 on `8755af4` and `5103b13` (clean archives, fresh target directories). |
+| T-02 keyframes, V-DET-05 | **PASS** (rounds 2 and 2b, sections 7 and 13) | V-DET-05 holds at 47 cuts and every variant; engine-table encoding reproduced independently; no keyframe I forged crashes the loader or loads another state; the history, anchor and cursor checks hold; DEF-3 to DEF-5 and GAP-6 to GAP-10 are fixed. |
 
 ## 2. Results
 
@@ -182,14 +182,14 @@ On `2ef968e`: two identical 2-year runs, one never draining events and one drain
 | Delete each of the four new `check_all.sh` gate lines (float-dep Arrow control, `rh-snapshot` suites, V-DET-05, the C check) | the inventory test is red each time | PASS |
 | T-02 implementation mutants against the Developer's suites: 46 (every field of every engine table, the envelope check, the stored-hash check, the five history fields, the poisoned refusal, the timeline check, three store mutants) | 41 red; 5 survive: the four untested history fields (GAP-8) and the redundant restored-state hash check (equivalent, since `restore(x).snapshot() == x`) | PASS with GAP-8 |
 
-## 9. Defects (open)
+## 9. Defects (found in round 2; fixed in round 2b)
 
-### DEF-3 (medium): a keyframe with a valid envelope and a corrupt Arrow body panics or aborts the loader
+### DEF-3 (medium; fixed in `b9c3ede` and `10b0f4e`, section 13): a keyframe with a valid envelope and a corrupt Arrow body panics or aborts the loader
 The envelope digest is an XXH3-128 of the Arrow bytes, so a body written wrongly with a correct digest passes it, and Arrow 60's reader panics (`arrow-buffer-60.0.0/src/buffer/immutable.rs:299`) or requests an absurd allocation ("memory allocation of 2240417436949248509 bytes failed", an abort that `catch_unwind` cannot catch). The envelope exists for this, but it only stops accidental corruption: all 23,716 single-bit flips of a whole file and every truncation are refused cleanly. The state-hash check does catch every semantic edit (0 of 11,836 forged files loaded with a different state).
 
 Reproduction (`forge.py`): write a day-50 life-world keyframe, flip one bit of the Arrow body at byte 387 (bit 0) or byte 384 (bit 7), recompute the 16-byte digest after the 8-byte magic, call `load_engine`. Recommendation: treat the Arrow body as untrusted: bound the declared buffer and decompressed sizes by the file length before `FileReader` sees them, or decode the fixed two-column schema with a small reader; wrap the read in `catch_unwind` as a second line, and add a regression test that re-seals corrupted bodies. Confidence 85% on the finding, 70% on the fix choice.
 
-### DEF-4 (medium): `write_keyframe` trusts the caller's history tuple, and the engine cannot be asked for its own
+### DEF-4 (medium; fixed in `24d2262`): `write_keyframe` trusts the caller's history tuple, and the engine cannot be asked for its own
 `write_keyframe(&engine, &History { world_seed: 99, branch_salt: 5, .. }, position)` succeeds for an engine with seed 13 and salt 0, and `load_engine` accepts the file under the same history. `state_hash` does not cover seed or salt, so the restored state hashes equal; the restored engine, built with seed 99 and salt 5, diverges from the original at the 9th instant after the load. `Engine` has no accessor for its seed, salt or provenance, so the writer cannot check them.
 
 Reproduction: `k11_writer_trusts_the_callers_history` in the scratchpad copy. Recommendation: add `Engine::world_seed()`, `branch_salt()` and `provenance()`, and take the tuple from the engine or refuse a mismatch in `write_keyframe`. Confidence 90%.
@@ -199,9 +199,9 @@ Reproduction: `k11_writer_trusts_the_callers_history` in the scratchpad copy. Re
 | Gap | Status | Basis |
 |---|---|---|
 | GAP-6 (medium): `state_hash` depended on when the host called `drain_events` | **fixed** (`ee7d6ff`) | Held events are a carried table: in the keyframe, outside the hash; `events.meta` (counter and running hash) still commits all history, and I checked that it is order, tick, subject, kind, cause, payload and count sensitive and drain independent (7.3, 7.6). |
-| GAP-7 (medium): the keyframe's journal anchor has no verifier, no test, and is outside `state_hash` | **open** | Section 7.5. Recommendation: `Replay::check_anchor(&JournalPosition)` requiring a count of at least `inputs` and `chain_after(inputs) == head`, a test that the truncation above fails it, and a ruling on whether `load_engine` should take it. Confidence 85%. |
-| GAP-8 (low, test coverage): only `world_seed` of the five history fields is pinned by a test | **open** | The shipped code refuses all five; four mutants survive. Recommendation: one parameterised test. |
-| GAP-9 (low): `Engine::restore` accepts an agenda entry dated before the cursor | **open** | Refused only when it fires. Recommendation: refuse `time < cursor` at restore, as for queued inputs. Confidence 75%. |
+| GAP-7 (medium): the keyframe's journal anchor has no verifier, no test, and is outside `state_hash` | **fixed** (`24d2262`; see GAP-10) | Section 7.5. Recommendation: `Replay::check_anchor(&JournalPosition)` requiring a count of at least `inputs` and `chain_after(inputs) == head`, a test that the truncation above fails it, and a ruling on whether `load_engine` should take it. Confidence 85%. |
+| GAP-8 (low, test coverage): only `world_seed` of the five history fields is pinned by a test | **fixed** (`24d2262`) | The shipped code refuses all five; four mutants survive. Recommendation: one parameterised test. |
+| GAP-9 (low): `Engine::restore` accepts an agenda entry dated before the cursor | **fixed** (`24d2262`) | Refused only when it fires. Recommendation: refuse `time < cursor` at restore, as for queued inputs. Confidence 75%. |
 
 ## 11. Observations (round 2)
 - OBS-5 (from round 1, now closed by the Architect's decision to document it): a table truncated and regrown to the same row count needs `mark_rows` for the regrown rows, or `MerkleCache::update` returns a stale root (3000 rows cached, `truncate(1500)`, 1500 new rows, no marks). 400 rounds of honest marking never went stale.
@@ -209,9 +209,80 @@ Reproduction: `k11_writer_trusts_the_callers_history` in the scratchpad copy. Re
 - OBS-8: since GAP-6's fix the unsynced guard no longer sees a read-only call that drains the held events (they are outside `state_hash`); the loss would be pending output, not history. Guarding the carried tables would need a separate hash.
 - OBS-7: a keyframe with a nullable Arrow schema and the same data loads; the reader checks the column types, not their nullability.
 
-## 12. Not run (rounds 1 and 2)
+## 12. Not run (rounds 1 and 2; see section 15 for the final list)
 - Windows and macOS ARM (nightly level 2); throughput at 1M rows and keyframe sizes at scale.
 - A power-loss test of `synchronous = FULL` (SIGKILL cannot lose data the OS already holds).
 - The first-pass round-1 probes were not all repeated on the round-2 heads: there I re-ran the DEF-1 and DEF-2 attacks on `867bf95`, and in round 2 the guard, golden, ladder and gate probes on `2ef968e` and `ee7d6ff`.
 - The synthetic `engine` lines of the new golden file (their state is defined only in `bin/gen_hash_golden.py`); my own states cover the same encodings.
 - DEF-3's forged files were run at a stride (every 3rd byte on `2ef968e`, every 6th on `ee7d6ff`), not exhaustively.
+
+# Round 2b: the fixes, on `8755af4` and `5103b13`
+
+Round 2b verified DEF-3 to DEF-5 and GAP-7 to GAP-9 (commits `b9c3ede`, `24d2262`, `10b0f4e`, `8755af4`) and, once it landed, the GAP-10 fix (`5103b13`). Most probes ran on `8755af4`; every probe that touches code changed by `5103b13` (keyframes, the journal position, restore) was re-run on it, and the forge sweeps on the keyframe formats were re-run too. I adapted my probe harness to the API changes (`write_keyframe(&engine, journal)`, the history coming from the engine, the journal position counting accepted inputs). `bin/check_all.sh` is green on both heads: 166 of 166.
+
+## 13. Results
+
+### 13.1 Forge sweeps (DEF-3, DEF-3b): subprocess runs, every forged file re-sealed
+Three keyframes of the life world: **a** (day 50, 48 rows, 67 held events, 11,858 bytes), **b** (day 2500, 48 rows, 13,858 bytes) and **c** (day 100, 20,000 rows, 1,326,546 bytes). Each forged file is loaded by `load_engine` in a child process, so an abort cannot hide. A "panic" is a child that exits with a panic; a caught panic would appear as a refusal naming it (the library's second layer), and none did.
+
+| Class (what is forged, then re-sealed) | Keyframe | Files | Panics | Aborts | Loaded with another state |
+|---|---|---|---|---|---|
+| One bit of every byte (bits 0 and 7) | a | 23,668 | 0 | 0 | 0 |
+| Two random bits | a | 6,000 | 0 | 0 | 0 |
+| Random whole bytes (0, 0xFF, 0x7F, 0x80, 0x01, 0xF8) | a | 6,000 | 0 | 0 | 0 |
+| Field level: every footer-block field, the trailer's footer length, each batch's message length prefix and message `bodyLength`, its record-batch `length`, each node's `length` and `null_count`, each buffer's `offset` and `length`, each set to 0, ±1, -8, -16, `MIN`, `MAX`, the true value ±1 and ±8, 2^40, the file length, twice that, half and double the true value | a | 4,433 | 0 | 0 | 0 |
+| Field level, same | b | 3,751 | 0 | 0 | 0 |
+| Field level, same | c | 4,433 | 0 | 0 | 0 |
+| Random single bits | c | 12,000 | 0 | 0 | 0 |
+| Two random bits | c | 4,000 | 0 | 0 | 0 |
+| Random whole bytes | c | 4,000 | 0 | 0 | 0 |
+| In-process, exhaustive: bits 0, 3 and 7 of every byte of the Arrow body | a | 35,502 | 0 | (the test process survived) | 0 (22,229 refused, 13,273 equal state: padding) |
+| **Total on `8755af4`** | | **103,787 files** | **0** | **0** | **0** |
+| Re-run on `5103b13`: 1-bit, 2-bit, byte and field-level on a (40,101 files); field level, 6,000 random bits and 3,000 bytes on c (13,433 files) | a, c | 53,534 | 0 | 0 | 0 |
+
+For comparison, the same field-level class on `ee7d6ff` (before the fix) gave 909 panics and 107 aborts in 2,737 files, and on `b9c3ede` 16 panics (the negative `bodyLength` values -8 and -16 that the Architect found, DEF-3b). Both are gone.
+
+### 13.2 DEF-5 and V-DET-05
+| Probe | Result | Verdict |
+|---|---|---|
+| Dense sweep: 24 seeds (6 world sizes from 48 to 320 rows, five scheduled inputs), a keyframe written and loaded at every instant of a 3-year run. 29,926 keyframes; 4,926 states with tombstones, 2,426 with tombstones out of key order | 0 `ReadBack`, 0 `Restore`, 0 `HashMismatch` (on `ee7d6ff`: 2,426 `HashMismatch`, exactly the out-of-order states) | PASS |
+| Row list: 11 world sizes (48 to 20,000 rows) × days 100, 400 and 1000, through `write_keyframe` → `load_engine`; state equal, and for worlds up to 1,000 rows 120 more days equal | 33 cases, 0 errors, 0 differences | PASS |
+| Targeted state: six cancelled timers whose due order is the reverse of their insertion order | the engine accepts it, encode-then-decode is identical, the keyframe loads and the loaded engine advances 400 days equal to the unbroken run (on `ee7d6ff`: decode not identical, load refused) | PASS |
+| V-DET-05 at 47 cut points, 10 years each; the drain probe; the store model; the chained keyframes | as in section 7; GAP-6 drain: 0 of 782 instants differ | PASS |
+| My implementation of the eight engine tables and the plane hash against 13 states, on both heads | 13 of 13 | PASS |
+
+### 13.3 History, anchor, restore (DEF-4, GAP-7 to GAP-10)
+| Probe | Result | Verdict |
+|---|---|---|
+| DEF-4: the header carries the engine's seed (777) and salt (0, and 5 for a salted engine) and its provenance; a keyframe loaded under another build, registry version, manifest hash, seed or salt | refused naming the field, five of five; the salt-5 keyframe loads under salt 5; the restored engine continues 3 years identically; a write with another input count or timeline is refused | PASS |
+| `Replay::check_anchor`: true anchors at 0, 3 and 6 of 6; truncation with forged count and head (anchor past the cut, at the cut, before it); regrowth to the same count with other rows (anchor before and after the change); another timeline; bent head (first and last bit); an anchor past the end; an anchor of `u32::MAX` | accepted where the journal still holds the anchor's prefix; refused otherwise, each with its own error | PASS |
+| The keyframe header's input count against the engine: edited to 999 (re-sealed), and a write with the wrong count or timeline | refused on load and on write | PASS |
+| GAP-9: a timer at cursor-1, cursor-1440, `i64::MIN`; at the cursor in each of the 12 phases; at cursor+1; far future; `i64::MAX`; a tombstoned timer before the cursor | the first three and the tombstone are refused; the other 15 restore | PASS |
+| `Engine::restore` with the 19 altered states of section 7.5 (re-run) | the past-dated timer is now refused; the rest as before; lowering the accepted count below the queued inputs is refused | PASS |
+| **GAP-10**, before the fix (`8755af4`): journals A = [seq0 (tick 100), seq1 (tick 10, payload 2)] and B with seq1's payload 99; the engine has applied one input by tick 50 | the anchor (1, `chain_after(1)`) commits to seq0, so `check_anchor` accepted B | GAP-10 |
+| GAP-10 after the fix (`5103b13`): the journal position counts accepted inputs (applied or queued) in `seq` order, and `resume` re-submits the rows after it | the same anchor is now (2, `chain_after(2)`); B is refused, A accepted | PASS |
+| Randomised resume (my own): 40 random journals of 3 to 8 material inputs with ticks now or up to 900 days ahead, journaled at issue time, 4 keyframes per run at random cuts, each resumed through `resume` and run to the end; compared with the continuous run after the last issue time (the queues differ before it, by design) | 160 resumes, 0 refused, 0 differences, every keyframe written with the journal's own position | PASS |
+
+### 13.4 Mutants
+| Set | Result |
+|---|---|
+| The T-02 set on `8755af4`: 46 earlier mutants plus 12 for the fixes (tombstone sort, IPC guard checks, read-back, guard call, `catch_unwind`, both anchor counts, `check_anchor`'s head and timeline, the past-timer check, the history from the engine) | 52 red, 6 survive. All five history fields are now red (GAP-8 closed), and so are the tombstone sort (DEF-5), the keyframe anchor count, `check_anchor`, the past-timer check and the engine history. |
+| The six survivors, against my own subprocess corpus | **negative body length allowed**: survives mine too, because the second layer catches that panic (equivalent at the API). **Ratio bound off**: survives (nothing reaches it). **`catch_unwind` removed**: survives, because layer 1 stops every panic first. **Restored-state hash check**: equivalent. **Read-back on write**: needs a faulty writer to show. **Uncompressed-size bounds off**: **killed by my corpus**, with 123 aborts in the 4,433 field-level files and 22 in 3,000 two-bit files, and by none of the Developer's tests. See GAP-11. |
+| The GAP-10 set on `5103b13` (8 mutants: `resume` without its anchor check, skipping the row at the position, resubmitting from 0, without the sort, the engine not counting accepted inputs, restore accepting more queued than accepted, the keyframe count check, `check_anchor`'s head) | 6 red, 2 survive: the missing `seq` sort is equivalent (rows at one tick are in `seq` order already), and the restore check that queued inputs cannot exceed accepted ones is not pinned by a test (I checked that the shipped code refuses it: counts 0 and queued-1 are refused). |
+
+## 14. Defects and gaps after round 2b
+
+No defect is open. DEF-3, DEF-3b, DEF-4 and DEF-5 are fixed (`b9c3ede`, `10b0f4e`, `24d2262`; the tombstone sort is part of `24d2262`).
+
+| Gap | Status | Basis |
+|---|---|---|
+| GAP-7, GAP-8, GAP-9 | **fixed** (`24d2262`) | Section 13.3 and the mutants of 13.4. |
+| GAP-10 (low-medium): the anchor did not bind the applied inputs when journaling order differs from application order | **fixed** (`5103b13`) | The position counts accepted inputs in `seq` order; `resume` re-submits from it; 13.3. |
+| GAP-11 (low, test coverage): the size-bound layer of the loader (uncompressed sizes, and the ratio bound) is not covered by any of the Developer's tests | **open** | The mutant with the bounds off passes their suites, because an abort cannot be observed from the test process and their forged corpus does not reach an oversized declaration; my subprocess corpus kills it (145 aborts in the two classes above). Recommendation: a regression test that writes forged files (the buffer and block length classes of 13.1) and loads each in a child process, or a `check_all.sh` step that does; also a test for the restore check that queued inputs cannot exceed the accepted count. Confidence 85%. |
+| GAP-4 | closed (round 2) | |
+
+## 15. Observations and not run (final)
+- OBS-9: the second layer (`catch_unwind`) and the third (read-back on write) never fired in any of my sweeps and are untested by mutation; they are defence in depth, and the first layer plus the dense sweep cover what they would catch.
+- OBS-10: a resumed engine has later journal inputs queued earlier than the continuous run had them, so the hashes of the two differ until the last issue time (`engine.inputs` and `engine.meta` are in `state_hash`). Nothing is wrong; a host that compares a resumed run with a continuous one must compare after that time.
+
+Not run: Windows and macOS ARM (nightly level 2); throughput at 1M rows and keyframe sizes at scale; a power-loss test of `synchronous = FULL` (SIGKILL cannot lose data the OS already holds); the synthetic `engine` lines of the golden file (my own 13 states cover their encodings); forged files beyond the classes and counts above (3-bit and larger flips on the large keyframe, forgeries of the schema message, and Arrow dictionary batches, which the keyframe never writes); and keyframes of worlds with queued lifecycle commands at an instant boundary, which the life world never has.
