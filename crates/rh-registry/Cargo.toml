@@ -1,6 +1,6 @@
 [package]
 name = "rh-registry"
-description = "Mechanics Registry loader and validation"
+description = "Plane-A Mechanics Registry (fixed point), ownership lint, effect-language evaluator"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,8 +14,5 @@ kind = "machinery"
 workspace = true
 
 [dependencies]
-saphyr-parser = "=0.2.2"
-schemars = "=1.2.3"
 serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.154"
 toml = "=1.1.8"

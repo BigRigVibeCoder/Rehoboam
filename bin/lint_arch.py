@@ -7,10 +7,11 @@ workspace crates, of every dependency kind (normal, build and dev):
     metadata         Every crate declares plane and kind from the vocabularies below,
                      consistently: kinds core, contract and system are plane A; plane "tool"
                      goes with kind "tool". Labels cannot be chosen to pass the law: the seven
-                     SPR-001 crates are pinned to their (plane, kind) by name; crates named
-                     rh-sys-* are (A, system), and only they are kind "system"; kind
-                     "contract" belongs only to rh-contracts and rh-contract-* crates. Edges are
-                     judged with the pinned labels, not the declared ones.
+                     SPR-001 crates and rh-manifest (SPR-004) are pinned to their (plane,
+                     kind) by name; crates named rh-sys-* are (A, system), and only they are
+                     kind "system"; kind "contract" belongs only to rh-contracts and
+                     rh-contract-* crates. Edges are judged with the pinned labels, not the
+                     declared ones.
     V-INSP-03        A system crate depends only on rh-core, rh-ids, rh-events, rh-registry and
                      contract crates, never on another system crate (docs/13 §3; EVO-1).
     V-PLN-01         A plane-A crate never depends on a plane-B or plane-C crate (ADR-0024 rule 1;
@@ -67,6 +68,8 @@ PINNED_LABELS = MappingProxyType(
         "rh-contracts": ("A", "contract"),
         "rh-snapshot": ("A", "machinery"),
         "rh-cli": ("tool", "tool"),
+        # SPR-004 ruling A: the load-time front end reproduces the reference's float checks.
+        "rh-manifest": ("tool", "tool"),
     }
 )
 SYSTEM_LABELS = ("A", "system")

@@ -14,5 +14,6 @@ kind = "tool"
 workspace = true
 
 [dependencies]
+rh-manifest = { version = "0.0.0", path = "../rh-manifest" }
 rh-registry = { version = "0.0.0", path = "../rh-registry" }
 serde_json = "=1.0.154"

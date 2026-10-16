@@ -20,8 +20,8 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use rh_registry::Registry;
-use rh_registry::manifest;
+use rh_manifest::Registry;
+use rh_manifest::manifest;
 use rh_registry::ownership::{self, AccessSpec, Ownership};
 
 const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]";
@@ -103,7 +103,8 @@ fn ownership(args: &[&str]) -> ExitCode {
             return ExitCode::from(3);
         }
     };
-    let table = Ownership::build(&specs, &reg);
+    let system_ids = reg.systems.keys().cloned().collect();
+    let table = Ownership::build(&specs, &system_ids);
     let mut accesses: Vec<AccessSpec> = Vec::new();
     if files.is_empty() {
         accesses.extend(table.specs.values().map(AccessSpec::from_spec));

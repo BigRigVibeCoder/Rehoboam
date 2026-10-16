@@ -20,8 +20,6 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::registry::Registry;
-
 /// One owned column, from `[[owns]]` (other ODD fields are not needed here).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct OwnedColumn {
@@ -120,6 +118,21 @@ pub fn load_specs(dir: &Path) -> Result<Vec<SystemSpec>, String> {
         .collect()
 }
 
+/// The system ids of a Registry file: the keys of its `[systems]` table. Reads nothing else, so
+/// this plane-A crate never parses a Registry number.
+///
+/// # Errors
+/// The file cannot be read, is not TOML, or has no `[systems]` table.
+pub fn registry_system_ids(path: &Path) -> Result<BTreeSet<String>, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let table: toml::Table =
+        toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    match table.get("systems") {
+        Some(toml::Value::Table(systems)) => Ok(systems.keys().cloned().collect()),
+        _ => Err(format!("{}: no [systems] table", path.display())),
+    }
+}
+
 /// The access a system declares: what it reads and what it writes. A stub of `rh-core`'s
 /// `AccessSpec` (SPR-005 adds lifecycle commands, events and lags).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -205,14 +218,15 @@ pub struct Ownership {
 }
 
 impl Ownership {
-    /// Builds the table from the specs, checking them against each other and the Registry.
+    /// Builds the table from the specs, checking them against each other and the Registry's
+    /// system ids (from `rh-manifest`'s Registry, or [`registry_system_ids`]).
     #[must_use]
-    pub fn build(specs: &[SystemSpec], reg: &Registry) -> Self {
+    pub fn build(specs: &[SystemSpec], system_ids: &BTreeSet<String>) -> Self {
         let mut owners: BTreeMap<String, Owner> = BTreeMap::new();
         let mut problems = Vec::new();
         let mut by_id = BTreeMap::new();
         for s in specs {
-            if !reg.systems.contains_key(&s.id) {
+            if !system_ids.contains(&s.id) {
                 problems.push(Violation {
                     rule: "registry",
                     system: s.id.clone(),
@@ -337,7 +351,7 @@ mod tests {
     }
 
     fn table() -> Ownership {
-        let reg = Registry::load(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
+        let reg = registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
         let specs = load_specs(&repo().join("specs/systems")).unwrap();
         Ownership::build(&specs, &reg)
     }
@@ -394,7 +408,7 @@ mod tests {
 
     #[test]
     fn two_owners_and_plane_leaks_are_found() {
-        let reg = Registry::load(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
+        let reg = registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
         let spec = |id: &str, col: &str, plane: &str, reads: &[&str]| SystemSpec {
             path: PathBuf::from(format!("{id}.odd.toml")),
             id: id.to_owned(),
