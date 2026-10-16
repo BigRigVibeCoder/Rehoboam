@@ -1,6 +1,6 @@
 """Unit tests for bin/manifest_parity.py's report parser (SPR-004 T-02, GAP-3; V-WC-04)."""
 
-from manifest_parity import Result, parse
+from manifest_parity import DIVERGENCE, Result, parse
 
 
 def test_registry_checked_report() -> None:
@@ -26,3 +26,10 @@ def test_schema_report_pairs() -> None:
 def test_anything_else_is_a_load_error() -> None:
     """A traceback (reference) or LOAD ERROR (Rust) is a load error with its exit code."""
     assert parse("Traceback (most recent call last):\n", 1) == Result("LOAD ERROR", 1, 1, 0)
+
+
+def test_divergence_header() -> None:
+    """A ruled divergence is declared as two verdicts in a header line."""
+    m = DIVERGENCE.search("# note\n# parity-divergence: VALID / LOAD ERROR\nworld: {}\n")
+    assert m is not None
+    assert (m[1], m[2]) == ("VALID", "LOAD ERROR")

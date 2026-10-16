@@ -13,6 +13,10 @@ Runs ``specs/manifest/manifest_v0.py validate`` (the reference) and ``rh-cli man
 Any difference is a ``PARITY MISMATCH`` and the gate fails. Where the two disagree the Python
 reference wins (CLAUDE.md; SPR-004), so a mismatch is a Rust bug until shown otherwise.
 
+A manifest whose first lines hold ``# parity-divergence: PYTHON-VERDICT / RUST-VERDICT`` is an
+accepted divergence (an out-of-contract form ruled so, 05.5 §3): it passes only if the two
+verdicts are exactly those, so the divergence stays pinned rather than ignored.
+
 A manifest ``NAME.yaml`` with a ``NAME.registry.toml`` beside it is validated against that
 Registry on both sides (a corpus case that needs a Registry the real one cannot provide).
 
@@ -43,6 +47,8 @@ CHECKED = re.compile(r"^(VALID|INVALID): .* \((\d+) errors, (\d+) warnings\)", r
 SCHEMA = re.compile(r"^(\d+) validation errors? for Manifest$", re.MULTILINE)
 ISSUE = re.compile(r"^\[(?:ERROR|WARNING)\] .*$", re.MULTILINE)
 ERROR_TYPE = re.compile(r"\[type=([a-z_]+)")
+RULED: list[Path] = []  # accepted divergences seen in this run
+DIVERGENCE = re.compile(r"^# parity-divergence: (.+?) / (.+?)\s*$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -141,6 +147,17 @@ def compare(manifest: Path, rust_bin: Path, rust_registry: Path | None) -> bool:
     )
     rust_reg = rust_registry or registry
     rust = run([str(rust_bin), "manifest", "validate", str(manifest), "--registry", str(rust_reg)])
+    declared = DIVERGENCE.search(manifest.read_text(encoding="utf-8")[:2000])
+    if declared:
+        if (python.verdict, rust.verdict) == (declared[1], declared[2]):
+            print(f"DIVERGE (ruled) {manifest}: python {python.verdict}; rust {rust.verdict}")
+            RULED.append(manifest)
+            return True
+        print(
+            f"PARITY MISMATCH {manifest}: declared divergence {declared[1]} / {declared[2]}, "
+            f"got python {python.verdict}; rust {rust.verdict}"
+        )
+        return False
     if python == rust:
         print(f"AGREE           {manifest}: {python.render()}")
         return True
@@ -173,7 +190,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if mismatches:
         print(f"PARITY: {mismatches} of {total} manifests disagree (V-WC-04)")
         return EXIT_MISMATCH
-    print(f"PARITY: all {total} manifests agree, line for line (V-WC-04)")
+    ruled = f"; {len(RULED)} of them a ruled divergence" if RULED else ""
+    print(f"PARITY: all {total} manifests agree, line for line (V-WC-04){ruled}")
     return EXIT_OK
 
 
