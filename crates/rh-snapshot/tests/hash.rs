@@ -226,3 +226,37 @@ fn the_divergence_report_names_the_first_table_and_chunk() {
         })
     );
 }
+
+/// VER-SPR-007 DEF-1 (the Tester's repro): two clones that each replace a column give it the same
+/// per-instance version; the cache must not mistake one clone for the other.
+#[test]
+fn p1_stale_cache_across_clones() {
+    let mut w1 = world(3000);
+    let mut cache = MerkleCache::new(Plane::A);
+    cache.update_world(&w1);
+    let mut w2 = w1.clone();
+    w1.insert("pop.count", column(3000, 100));
+    w2.insert("pop.count", column(3000, 200));
+    assert_eq!(w1.version("pop.count"), w2.version("pop.count"));
+    assert_ne!(w1.identity(), w2.identity());
+    assert_eq!(cache.update_world(&w1), state_hash(&w1));
+    assert_eq!(cache.update_world(&w2), state_hash(&w2));
+    assert_ne!(state_hash(&w1), state_hash(&w2));
+    assert!(cache.verify(&w2));
+    // And back: the first world again is re-hashed in full, not served from w2's digest.
+    assert_eq!(cache.update_world(&w1), state_hash(&w1));
+}
+
+/// Identities are bookkeeping: equal tables of different instances hash equal and compare equal.
+#[test]
+fn the_identity_never_reaches_the_hash_or_equality() {
+    let a = world(2000);
+    let b = world(2000);
+    let c = a.clone();
+    assert_ne!(a.identity(), b.identity());
+    assert_ne!(a.identity(), c.identity());
+    assert_eq!(a, b);
+    assert_eq!(a, c);
+    assert_eq!(state_hash(&a), state_hash(&b));
+    assert_eq!(state_hash(&a), state_hash(&c));
+}

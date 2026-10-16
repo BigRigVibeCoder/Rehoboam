@@ -45,8 +45,10 @@
 //! marked dirty: a whole table when its version changes (the stub tables' column versions, see
 //! [`rh_core::world::WorldTables`]), or single chunks through [`MerkleCache::mark_rows`] for a
 //! writer that knows which rows it changed. A change of row count re-hashes the chunks from the
-//! first one that changed size. [`MerkleCache::verify`] recomputes everything and compares, for
-//! tests and debug checks.
+//! first one that changed size. Versions are unique within one `WorldTables` instance only, so the
+//! cache also records the instance's identity and re-hashes in full when it sees another one (a
+//! clone, a fork, a loaded keyframe; VER-SPR-007 DEF-1). Neither identity nor versions ever enter
+//! a hash. [`MerkleCache::verify`] recomputes everything and compares, for tests and debug checks.
 //!
 //! REF: `docs/05_architecture/05.1_simulation_core.md` §6 item 6; ADR-0024; ADR-0006;
 //! `CODEX/05_PROJECT/SPR-007_HashesKeyframesJournal.md` T-01, Architect ruling 1.
@@ -401,6 +403,8 @@ pub struct MerkleCache {
     plane: Plane,
     tables: BTreeMap<String, Cached>,
     rehashed_chunks: u64,
+    /// The identity of the world tables last hashed by [`MerkleCache::update_world`].
+    world: Option<u64>,
 }
 
 impl MerkleCache {
@@ -411,6 +415,7 @@ impl MerkleCache {
             plane,
             tables: BTreeMap::new(),
             rehashed_chunks: 0,
+            world: None,
         }
     }
 
@@ -485,7 +490,14 @@ impl MerkleCache {
 
     /// Brings every column of the world tables up to date, drops removed ones, and returns
     /// `state_hash`. Only plane-A caches may hash the world.
+    ///
+    /// Column versions are unique within one `WorldTables` instance only, so tables of another
+    /// identity (a clone, a fork, a loaded keyframe) are re-hashed in full (VER-SPR-007 DEF-1).
     pub fn update_world(&mut self, world: &WorldTables) -> u64 {
+        if self.world != Some(world.identity()) {
+            self.tables.clear();
+            self.world = Some(world.identity());
+        }
         let mut names = BTreeSet::new();
         for (name, version, rows) in world.columns() {
             self.update(name, Some(version), rows);

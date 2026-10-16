@@ -300,3 +300,34 @@ fn the_stub_world_hash_ladder_matches_its_golden() {
     );
     assert_eq!(committed.lines().count(), text.lines().count());
 }
+
+/// Two runs of the stub world build their tables as different instances (different identities,
+/// VER-SPR-007 DEF-1) and still hash equal at every month: the identity never reaches a hash.
+#[test]
+fn two_runs_hash_equal_despite_different_instance_identities() {
+    let run = || {
+        let mut engine = Engine::new(
+            CALENDAR,
+            0x5EED,
+            BranchSalt::from_raw(0),
+            registered(|_| {}),
+            world(),
+            SimTime::EPOCH,
+        );
+        let end = SimTime::from_minutes(CALENDAR.minutes_per_year() - 1);
+        let mut hashes = Vec::new();
+        engine
+            .advance_until(end, |t, tables| {
+                if CALENDAR.is_boundary(Pulse::Month, t) {
+                    hashes.push(rh_snapshot::state_hash(tables));
+                }
+            })
+            .unwrap_or_else(|e| panic!("{e}"));
+        (engine.tables().identity(), hashes)
+    };
+    let (id_a, a) = run();
+    let (id_b, b) = run();
+    assert_ne!(id_a, id_b);
+    assert_eq!(a.len(), 12);
+    assert_eq!(a, b);
+}

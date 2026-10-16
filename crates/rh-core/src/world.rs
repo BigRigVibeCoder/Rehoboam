@@ -20,6 +20,7 @@
 //! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04, T-05.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::access::AccessSpec;
 use crate::system::SimError;
@@ -33,12 +34,50 @@ pub type Column = Vec<i64>;
 /// every [`insert`](Self::insert), the only way a column enters or returns to the tables (a
 /// system's written columns come back through it after every step). Equal versions mean the
 /// column has not been replaced since; `rh-snapshot`'s Merkle cache uses that as its column-level
-/// dirty mark (SPR-007 T-01). Versions are bookkeeping, not state: equality compares the columns
-/// only, and the plane hash never reads them.
-#[derive(Clone, Debug, Default)]
+/// dirty mark (SPR-007 T-01).
+///
+/// Versions are unique within one instance only: two clones that each replace a column can give
+/// both the same version. So each instance also carries an **identity**, a number from one
+/// process-wide counter, fresh at construction and at every clone; a cache that sees another
+/// identity recomputes everything (VER-SPR-007 DEF-1).
+///
+/// Identity and versions are bookkeeping, not state. They never enter a hash, an equality or any
+/// output: equality compares the columns only, and the plane hash never reads either. Their values
+/// depend on how many tables the process has built, and nothing may depend on them but caching.
+#[derive(Debug)]
 pub struct WorldTables {
     columns: BTreeMap<String, (u64, Column)>,
     next_version: u64,
+    identity: u64,
+}
+
+/// The process-wide source of [`WorldTables`] identities (bookkeeping only; see the type docs).
+static NEXT_IDENTITY: AtomicU64 = AtomicU64::new(0);
+
+fn fresh_identity() -> u64 {
+    NEXT_IDENTITY.fetch_add(1, Ordering::Relaxed)
+}
+
+impl Default for WorldTables {
+    fn default() -> Self {
+        Self {
+            columns: BTreeMap::new(),
+            next_version: 0,
+            identity: fresh_identity(),
+        }
+    }
+}
+
+/// A clone is another instance: it gets a fresh identity, so a cache never mistakes it for the
+/// original after either changes.
+impl Clone for WorldTables {
+    fn clone(&self) -> Self {
+        Self {
+            columns: self.columns.clone(),
+            next_version: self.next_version,
+            identity: fresh_identity(),
+        }
+    }
 }
 
 impl PartialEq for WorldTables {
@@ -73,6 +112,12 @@ impl WorldTables {
     #[must_use]
     pub fn get(&self, column: &str) -> Option<&Column> {
         self.columns.get(column).map(|(_, rows)| rows)
+    }
+
+    /// This instance's identity (bookkeeping for caches only; see the type documentation).
+    #[must_use]
+    pub fn identity(&self) -> u64 {
+        self.identity
     }
 
     /// A column's version, if present (see the type documentation).
