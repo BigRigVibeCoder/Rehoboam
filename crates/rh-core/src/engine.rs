@@ -88,6 +88,10 @@ use crate::world::{Column, SystemView, WorldTables};
 /// The name the core's own invariants and errors carry.
 pub const CORE: &str = "rh-core";
 
+/// The name a crash artifact gives the host's observer when it panicked (SPR-009 DEF-1). A replay
+/// runs without the host's observer, so such an artifact replays as no failure.
+pub const OBSERVER: &str = "observer";
+
 /// A material input as P0 knows it: its dependency scope (ADR-0025 item 3). The host expands a
 /// household, settlement or region scope into the entities it covers.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -464,16 +468,23 @@ impl Engine {
         self.observer = observer;
     }
 
-    /// Sends one notice from the engine's own thread, if an observer is attached.
-    fn notify(&self, at: SimTime, phase: Option<Phase>, boundary: Boundary) {
-        if let Some(o) = &self.observer {
-            o.notify(&Notice {
-                at,
-                phase,
-                worker: 0,
-                boundary,
-            });
-        }
+    /// Sends one notice from the engine's own thread, if an observer is attached. A panic in the
+    /// observer is a fatal [`SimError::Observer`] (DEF-1), which poisons the engine like any other.
+    fn notify(
+        &self,
+        at: SimTime,
+        phase: Option<Phase>,
+        boundary: Boundary,
+    ) -> Result<(), SimError> {
+        let notice = Notice {
+            at,
+            phase,
+            worker: 0,
+            boundary,
+        };
+        self.observer
+            .as_deref()
+            .map_or(Ok(()), |o| observe(o, &notice))
     }
 
     /// Sets the timeline id (0, the canonical timeline, by default).
@@ -739,6 +750,7 @@ impl Engine {
             | SimError::Panic { system, .. }
             | SimError::Unsupported { system, .. }
             | SimError::System { system, .. } => ((*system).to_owned(), None),
+            SimError::Observer { .. } => (OBSERVER.to_owned(), None),
         };
         CrashArtifact {
             timeline: self.timeline.to_raw(),
@@ -760,7 +772,7 @@ impl Engine {
     }
 
     fn run_instant(&mut self, t: SimTime) -> Result<(), SimError> {
-        self.notify(t, None, Boundary::InstantStart);
+        self.notify(t, None, Boundary::InstantStart)?;
         let fired: Vec<Pulse> = self
             .calendar
             .pulses_at(t)
@@ -776,7 +788,7 @@ impl Engine {
         let mut tally = Tally::default();
         for phase in Phase::ALL {
             self.at = (t, phase);
-            self.notify(t, Some(phase), Boundary::PhaseStart);
+            self.notify(t, Some(phase), Boundary::PhaseStart)?;
             if phase == Phase::Inputs {
                 tally.inputs = self.apply_inputs(t)?;
             }
@@ -830,7 +842,7 @@ impl Engine {
             if phase == Phase::Bookkeeping {
                 self.check_invariants(t)?;
             }
-            self.notify(t, Some(phase), Boundary::PhaseEnd);
+            self.notify(t, Some(phase), Boundary::PhaseEnd)?;
         }
         let pulses: Vec<&str> = fired.iter().map(|p| p.name()).collect();
         self.record(format!(
@@ -842,7 +854,7 @@ impl Engine {
             tally.events,
             self.agenda.len()
         ));
-        self.notify(t, None, Boundary::InstantEnd);
+        self.notify(t, None, Boundary::InstantEnd)?;
         Ok(())
     }
 
@@ -861,9 +873,9 @@ impl Engine {
                     level,
                     jobs: jobs.len(),
                 };
-                self.notify(t, Some(phase), start);
+                self.notify(t, Some(phase), start)?;
                 self.run_level((t, phase), snapshot, jobs, tally)?;
-                self.notify(t, Some(phase), Boundary::LevelEnd);
+                self.notify(t, Some(phase), Boundary::LevelEnd)?;
             }
         }
         Ok(())
@@ -1028,9 +1040,10 @@ impl Engine {
                     boundary,
                 };
                 let job_ref = job_ref(e.id, job, k);
-                if let Some(o) = observer {
-                    o.notify(&notice(Boundary::JobStart(job_ref)));
-                }
+                // DEF-1: an observer panic is this job's fatal error; the job's columns still go
+                // back to the tables with the others.
+                let started =
+                    observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobStart(job_ref))));
                 let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
                 let info = JobInfo {
                     system: e.id,
@@ -1050,10 +1063,11 @@ impl Engine {
                         guard(e.id, || e.model.step(*binding, &mut view, &mut ctx))
                     }
                 };
+                let result = started.and(result);
                 let (untaken, out) = ctx.finish();
-                if let Some(o) = observer {
-                    o.notify(&notice(Boundary::JobEnd(job_ref)));
-                }
+                let ended =
+                    observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobEnd(job_ref))));
+                let result = result.and(ended);
                 JobOutcome {
                     owned: view.into_owned(),
                     result,
@@ -1063,7 +1077,6 @@ impl Engine {
             };
             dispatch(self.threads, jobs, inputs, run)
         };
-        self.notify(t, Some(phase), Boundary::LevelMerge);
         let mut first_error = None;
         let mut outboxes = Vec::with_capacity(outcomes.len());
         for (job, o) in jobs.iter().zip(outcomes) {
@@ -1080,6 +1093,8 @@ impl Engine {
         if let Some(e) = first_error {
             return Err(e);
         }
+        // After every owned column is back in the tables, so a failing observer loses none (DEF-1).
+        self.notify(t, Some(phase), Boundary::LevelMerge)?;
         for (job, out) in jobs.iter().zip(outboxes) {
             self.merge(t, phase, job.index, out, tally)?;
         }
@@ -1251,6 +1266,24 @@ fn guard<T>(
             system,
             message: panic_message(payload.as_ref()),
         })
+    })
+}
+
+/// Delivers one notice to the host's observer under the same discipline as system code: a panic
+/// becomes a fatal [`SimError::Observer`] naming the notice (SPR-009 DEF-1), never an unwind out of
+/// [`Engine::advance_until`].
+fn observe(observer: &dyn Observer, notice: &Notice) -> Result<(), SimError> {
+    std::panic::catch_unwind(AssertUnwindSafe(|| observer.notify(notice))).map_err(|payload| {
+        SimError::Observer {
+            notice: format!(
+                "{:?} at {} in {} on worker {}",
+                notice.boundary,
+                notice.at,
+                notice.phase.map_or("no phase", Phase::name),
+                notice.worker
+            ),
+            message: panic_message(payload.as_ref()),
+        }
     })
 }
 

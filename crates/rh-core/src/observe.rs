@@ -16,6 +16,13 @@
 //! Sync`; [`Notice::worker`] names the worker (job `k` of a level runs on worker `k % threads`).
 //! Every other notice comes from the thread that called [`crate::engine::Engine::advance_until`].
 //!
+//! **A panicking observer** is a fatal engine error, reported, never unwound to the host (SPR-009
+//! DEF-1). Every notice is delivered under the same `catch_unwind` discipline as system code: a
+//! panic becomes `SimError::Observer`, naming the notice, which poisons the engine and leaves a crash
+//! artifact whose system is `observer` (`crate::engine::OBSERVER`). A job notice's panic is that job's
+//! error, so its columns go back to the tables with the others. `LevelMerge` is sent once every
+//! column is back. A poisoned engine runs nothing more and refuses a keyframe, as for any fatal error.
+//!
 //! **Order.** For each instant: `InstantStart`; per phase `PhaseStart`, then per level of each pass
 //! `LevelStart`, the level's `JobStart`/`JobEnd` pairs (interleaved across workers), `LevelMerge`
 //! (every job has finished; the merge begins), `LevelEnd`; then `PhaseEnd`; and `InstantEnd` once the
@@ -78,7 +85,8 @@ pub enum Boundary {
     JobStart(JobRef),
     /// A job ends, on worker [`Notice::worker`].
     JobEnd(JobRef),
-    /// Every job of the level has ended; the merge begins (it runs on one thread).
+    /// Every job of the level has ended and its columns are back in the tables; the merge begins
+    /// (it runs on one thread). Not sent when a job failed.
     LevelMerge,
     /// The level's merge has ended.
     LevelEnd,
@@ -103,6 +111,7 @@ pub struct Notice {
 
 /// A host's observer. It sees notices only; see the module documentation.
 pub trait Observer: Send + Sync {
-    /// Receives one notice. It must not panic: a panic here is the host's bug and reaches the host.
+    /// Receives one notice. It should not panic: a panic is caught and becomes a fatal
+    /// `SimError::Observer` that poisons the engine (see the module documentation).
     fn notify(&self, notice: &Notice);
 }

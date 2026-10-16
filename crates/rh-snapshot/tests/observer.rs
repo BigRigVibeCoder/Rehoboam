@@ -26,8 +26,12 @@ use std::sync::{Arc, Mutex};
 use life::{CALENDAR, DAY, entity, life_engine};
 use rh_core::engine::{Engine, MaterialInput};
 use rh_core::observe::{Boundary, Notice, Observer};
+use rh_core::system::SimError;
 use rh_core::time::SimTime;
+use rh_snapshot::journal::{JournalPosition, chain_genesis};
+use rh_snapshot::keyframe::{KeyframeError, write_keyframe};
 use rh_snapshot::state_hash;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 const SEED: u64 = 21;
 const YEAR: i64 = 365 * DAY;
@@ -176,4 +180,120 @@ fn the_notices_follow_the_protocol_at_every_thread_count() {
     // The same notices (as a multiset) at every thread count; only their worker differs.
     assert_eq!(counts[0], counts[1]);
     assert_eq!(counts[0], counts[2]);
+}
+
+/// Panics at the `nth` notice of one kind (SPR-009 DEF-1).
+struct Panicking {
+    kind: &'static str,
+    nth: usize,
+    seen: AtomicUsize,
+}
+
+fn kind(b: &Boundary) -> &'static str {
+    match b {
+        Boundary::InstantStart => "InstantStart",
+        Boundary::PhaseStart => "PhaseStart",
+        Boundary::LevelStart { .. } => "LevelStart",
+        Boundary::JobStart(_) => "JobStart",
+        Boundary::JobEnd(_) => "JobEnd",
+        Boundary::LevelMerge => "LevelMerge",
+        Boundary::LevelEnd => "LevelEnd",
+        Boundary::PhaseEnd => "PhaseEnd",
+        Boundary::InstantEnd => "InstantEnd",
+    }
+}
+
+impl Observer for Panicking {
+    fn notify(&self, notice: &Notice) {
+        if kind(&notice.boundary) == self.kind
+            && self.seen.fetch_add(1, Ordering::SeqCst) + 1 == self.nth
+        {
+            panic!("observer boom at {}", self.kind);
+        }
+    }
+}
+
+const KINDS: [&str; 9] = [
+    "InstantStart",
+    "PhaseStart",
+    "LevelStart",
+    "JobStart",
+    "JobEnd",
+    "LevelMerge",
+    "LevelEnd",
+    "PhaseEnd",
+    "InstantEnd",
+];
+
+/// The tables' shape: every column's name and length.
+fn shape(e: &Engine) -> Vec<(String, usize)> {
+    e.tables()
+        .columns()
+        .map(|(n, _, rows)| (n.to_owned(), rows.len()))
+        .collect()
+}
+
+#[test]
+fn def_1_a_panicking_observer_poisons_the_engine_at_every_notice_kind() {
+    for threads in [1, 4] {
+        for k in KINDS {
+            let mut e = world(threads);
+            let before = shape(&e);
+            e.set_observer(Some(Arc::new(Panicking {
+                kind: k,
+                nth: 200,
+                seen: AtomicUsize::new(0),
+            })));
+            let err = e
+                .advance_until(SimTime::from_minutes(YEARS * YEAR), |_, _| {})
+                .expect_err(&format!(
+                    "a panic at {k} must stop the run at {threads} threads"
+                ));
+            assert!(
+                matches!(&err, SimError::Observer { notice, message } if notice.starts_with(k) && message == &format!("observer boom at {k}")),
+                "{k} at {threads} threads: {err}"
+            );
+            let artifact = e.crash_artifact().expect("a crash artifact");
+            assert_eq!(artifact.system, rh_core::engine::OBSERVER);
+            assert!(artifact.error.contains(k), "{}", artifact.error);
+            assert_eq!(e.poisoned(), Some(&err));
+            // Poisoned: it runs nothing more and repeats the error.
+            assert_eq!(
+                e.advance_until(SimTime::from_minutes(YEARS * YEAR), |_, _| {}),
+                Err(err)
+            );
+            // No column was lost to the unwind (the defect): every column is back, full length.
+            assert_eq!(shape(&e), before, "{k} at {threads} threads lost a column");
+            // The poison path refuses a keyframe of this state.
+            let position = JournalPosition {
+                timeline_id: 0,
+                inputs: 3,
+                head: chain_genesis(0),
+            };
+            assert!(matches!(
+                write_keyframe(&e, position),
+                Err(KeyframeError::Poisoned(_))
+            ));
+        }
+    }
+}
+
+#[test]
+fn def_1_the_failing_instant_is_the_same_at_one_and_four_threads() {
+    for k in ["JobStart", "JobEnd", "LevelMerge"] {
+        let ticks: Vec<i64> = [1, 4]
+            .into_iter()
+            .map(|threads| {
+                let mut e = world(threads);
+                e.set_observer(Some(Arc::new(Panicking {
+                    kind: k,
+                    nth: 500,
+                    seen: AtomicUsize::new(0),
+                })));
+                let _err = e.advance_until(SimTime::from_minutes(YEARS * YEAR), |_, _| {});
+                e.crash_artifact().expect("an artifact").tick
+            })
+            .collect();
+        assert_eq!(ticks[0], ticks[1], "{k}");
+    }
 }
