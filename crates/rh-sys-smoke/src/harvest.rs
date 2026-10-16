@@ -1,7 +1,7 @@
 //! `X2.smoke_harvest` (`worlds/smoke/systems/X2.smoke_harvest.odd.toml`): a Q16.16 grain stock
 //! per region that grows each season from a `lagged` read of the weather and is evened between
 //! regions each month. The smoke world's Season pulse, its Production and Exchange phases, and
-//! its `rh-sample` draw (a Poisson yield shock).
+//! its `rh-sample` draws (a Poisson yield shock: inversion in three regions, PTRS in the fourth).
 #![allow(
     dead_code,
     reason = "generated skeleton items (Params) a parameterless system does not use"
@@ -23,6 +23,8 @@ const STOCK: &str = "harvest.stock";
 const LAST_YIELD: &str = "harvest.last_yield";
 const TEMP: &str = "weather.temp";
 const CAP: i16 = 10_000;
+/// The mean of each region's Poisson yield shock: inversion below 10, PTRS at and above it.
+const SHOCK_MEAN: [i16; REGIONS] = [5, 5, 5, 12];
 
 /// The harvest system.
 pub struct Harvest;
@@ -36,16 +38,20 @@ impl Harvest {
             .collect::<Result<_, _>>()?;
         let (zero, thirty) = (Q16_16::from_int(0), Q16_16::from_int(30));
         let cap = Q16_16::from_int(CAP);
-        let poisson = Poisson::new(Q16_16::from_int(5))
-            .map_err(|e| crate::common::fail(SYSTEM_ID, format!("Poisson(5): {e}")))?;
         let mut yields = Vec::with_capacity(REGIONS);
         for (r, &t) in temps.iter().enumerate().take(REGIONS) {
             let warmth = Q16_16::from_bits(t.max(zero).min(thirty).to_bits() / 2);
             // The rh-sample draw of the smoke world (ruling 3): one Poisson call on its own
-            // keyed stream (05.1 §6 item 3), so the float zone is inside the golden run.
+            // keyed stream (05.1 §6 item 3), so the float zone is inside the golden run. The
+            // last region's mean is above rh-sample's PTRS threshold (10), so both Poisson paths
+            // run: inversion, and PTRS with its logs and its variable number of draws
+            // (VER-SPR-008 MIN-1).
+            let lambda = SHOCK_MEAN[r];
+            let poisson = Poisson::new(Q16_16::from_int(lambda))
+                .map_err(|e| crate::common::fail(SYSTEM_ID, format!("Poisson({lambda}): {e}")))?;
             let mut stream = ctx.stream(&RngPurpose::YieldNoise, region(r))?;
             let shock = i16::try_from(poisson.sample(&mut stream)).unwrap_or(i16::MAX);
-            let noise = Q16_16::from_int(shock.saturating_sub(5));
+            let noise = Q16_16::from_int(shock.saturating_sub(lambda));
             yields.push(
                 Q16_16::from_int(20)
                     .saturating_add(warmth)

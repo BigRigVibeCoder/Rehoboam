@@ -67,7 +67,7 @@ when = "always"
 [[rng]]
 purpose = "yield_noise"
 key = ["region", "season"]
-use = "the seasonal yield shock: one rh-sample Poisson(5) call on its own stream (05.1 §6 item 3)"
+use = "the seasonal yield shock: one rh-sample Poisson call per region on its own stream (05.1 §6 item 3); mean 5 (inversion) in three regions, 12 (PTRS) in the fourth"
 
 [design]
 basic_principles = "n/a: a dummy system of the smoke world (SPR-008); it exists to exercise the engine, not to model anything"
@@ -93,7 +93,7 @@ drivers = []
 
 [[submodels]]
 name = "grow"
-summary = "yield = 20 + clamp(temp, 0, 30)/2 + (Poisson(5) - 5); stock := stock * 7/8 + yield, capped at 10,000"
+summary = "yield = 20 + clamp(temp, 0, 30)/2 + (Poisson(m) - m), m = 5, 5, 5, 12 by region; stock := stock * 7/8 + yield, capped at 10,000"
 earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
 [[submodels]]
 name = "trade"
