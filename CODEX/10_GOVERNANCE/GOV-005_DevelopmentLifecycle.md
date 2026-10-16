@@ -9,7 +9,7 @@ tags: [governance, workflow]
 related: [GOV-007, GOV-002, ADR-0032, ADR-0033]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** Every piece of work follows one loop: conversation → spec → sprint → verification → audit → merge by change class. Specs come before code. One agent works on one branch per sprint, with one commit per task. Merges follow the change classes in `docs/13` §4.2: routine work merges on green tests plus independent audits; the director approves only contract, determinism-machinery and out-of-tolerance changes. Adapted from `agentic_architect` GOV-005.
@@ -92,11 +92,13 @@ Sprints with no dependency between them run in parallel sessions. The Architect 
 
 ## 6. Merge
 
-- **All merges follow `docs/13` §4.4.** On GitHub Free there is no merge queue and no enforced required checks, so its fallback applies: **no green check report, no merge**, kept by the Architect and the director.
-- **Route by class** ("auto-merge" means the Architect merges on the conditions listed; "needs the director" means the director merges, or tells the Architect to):
-  - **C0/C1** auto-merge on green CI, a Tester pass and the Architect's audit.
-  - **C2** additive changes auto-merge; breaking changes need the director.
-  - **C3** within tolerance auto-merges; out of tolerance, or touching the determinism machinery or the golden-world corpus, needs the director.
+- **All merges follow `docs/13` §4.4.** On GitHub Free there is no merge queue and no enforced required checks, so its fallback applies: **no green check report, no merge**, kept by the Architect.
+- **The Architect merges every class** (director's ruling, 2026-10-16). The conditions rise with the class:
+  - **C0/C1:** green CI and the Architect's review.
+  - **C2:** green CI, an independent Tester pass and the Architect's audit (`VER-`). A breaking change also carries its migration.
+  - **C3:** as C2, plus, once golden worlds exist, the divergence bisect report and the CRN-paired ensemble (`docs/13` §4.2). A C3 change that would alter the history of a golden world **out of tolerance** is announced to the director with its evidence before the merge; the director may veto.
+- **The director is told, not asked.** Each merge appears in the Architect's merge summary (the PR, its class, the audit verdict). The director may veto or order a revert at any time.
+- **The director still approves** sprint plans for C2/C3 work (§2), ADR changes and anything that reverses an earlier ruling: those are decisions, not merges.
 - **No one re-records golden baselines by hand** (`docs/13` §4.2).
 
 ## 7. Releases

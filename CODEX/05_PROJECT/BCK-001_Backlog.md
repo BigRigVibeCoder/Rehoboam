@@ -31,7 +31,7 @@ version: 1.1.0
 | SPR-009 | P0.7 | Benchmark harness and regression gate | 005 | C1 | P2 |
 | SPR-010 | P0.4 (DET-3) | `rh-core::fixed`: fixed-point and money types (gap found by the SPR-001 audit; approved 2026-10-16) | 001 | C3 (machinery) | P1 |
 
-**Approvals:** SPR-001 approved 2026-10-16; SPR-002 to SPR-009 approved as a batch on 2026-10-16; SPR-010 approved 2026-10-16. The director still merges the C3 sprints that change the determinism machinery (GOV-005 §6).
+**Approvals:** SPR-001 approved 2026-10-16; SPR-002 to SPR-009 approved as a batch on 2026-10-16; SPR-010 approved 2026-10-16. The Architect merges every sprint after its Tester pass and audit (GOV-005 §6, director's ruling 2026-10-16); the director approved the plans. The director no longer merges the C3 sprints that change the determinism machinery (GOV-005 §6).
 
 **Gate G0** is assembled by the Architect as `VER-G0` once SPR-001 to SPR-010 are closed.
 
