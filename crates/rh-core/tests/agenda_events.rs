@@ -848,13 +848,13 @@ fn t03_a_non_owner_is_refused_at_registration() {
             "Z1.sender: submits command Inherit to Z2.estate, which its spec's [[commands]] table does not declare"
         ]
     );
-    // The owner unregistered: reported, not refused.
-    let specs = agreeing_specs(std::slice::from_ref(&sender));
-    let ok = register(vec![sender.boxed()], &specs).unwrap_or_else(|e| panic!("{e}"));
-    assert!(
-        ok.reports()
-            .iter()
-            .any(|r| r.contains("Z2.estate, which is not registered"))
+    // The owner unregistered: refused (G5), since nothing would ever apply the command.
+    let e = refused(vec![sender.clone()], std::slice::from_ref(&sender));
+    assert_eq!(
+        messages(&e, "command"),
+        [
+            "Z1.sender: submits command Inherit to Z2.estate, which is not registered; a world that registers a sender registers the command's owner (ruling 5)"
+        ]
     );
 }
 

@@ -270,34 +270,44 @@ fn s5_and_m2_register_on_their_skeletons() {
 }
 
 /// SPR-006: the real specs' `[[commands]]` and `[[emits]]` reach registration. M2 declares the
-/// `DEATH` it emits and S5 the `TieDelta` it sends to S1 (not registered: reported); an
-/// undeclared kind or a wrong owner is refused.
+/// `DEATH` it emits; S5's spec sends `TieDelta` to S1. S5 declaring that submission is refused
+/// while S1 is not registered (G5); an undeclared kind or a wrong owner is refused too.
 #[test]
 fn commands_and_event_kinds_are_checked_against_the_real_specs() {
     use rh_core::access::CommandSend;
     let t = real_ownership();
-    let with = |emits: Vec<&'static str>, target: &'static str| -> Vec<Box<dyn SystemModel>> {
-        let mut s5 = s5_system(s5::RngPurpose::names());
-        s5.access.sends.push(CommandSend {
-            command: "TieDelta",
-            target,
-        });
-        let mut m2 = m2_system();
-        m2.access.emits = emits;
-        vec![Box::new(s5), Box::new(m2)]
-    };
-    let r = register(with(vec!["DEATH"], "S1.culture"), &t.spec_table())
-        .unwrap_or_else(|e| panic!("{e}"));
-    assert!(
-        r.reports().iter().any(|n| n
-            == "S5.daily_life: submits command TieDelta to S1.culture, which is not registered")
-    );
+    let with =
+        |emits: Vec<&'static str>, target: Option<&'static str>| -> Vec<Box<dyn SystemModel>> {
+            let mut s5 = s5_system(s5::RngPurpose::names());
+            if let Some(target) = target {
+                s5.access.sends.push(CommandSend {
+                    command: "TieDelta",
+                    target,
+                });
+            }
+            let mut m2 = m2_system();
+            m2.access.emits = emits;
+            vec![Box::new(s5), Box::new(m2)]
+        };
+    let r = register(with(vec!["DEATH"], None), &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
     assert!(
         r.reports()
             .iter()
             .any(|n| n == "S5.daily_life: spec event kind ENCOUNTER has no use in code")
     );
-    let Err(e) = register(with(vec!["BIRTH"], "M2.demography"), &t.spec_table()) else {
+    let Err(e) = register(with(vec!["DEATH"], Some("S1.culture")), &t.spec_table()) else {
+        panic!("a command to an unregistered owner must be refused (G5)");
+    };
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [command] S5.daily_life: submits command TieDelta to S1.culture, which is not registered; a world that registers a sender registers the command's owner (ruling 5)"
+        ]
+    );
+    let Err(e) = register(with(vec!["BIRTH"], Some("M2.demography")), &t.spec_table()) else {
         panic!("an undeclared kind and a wrong owner must be refused");
     };
     let rules: Vec<(&str, &str)> = e
