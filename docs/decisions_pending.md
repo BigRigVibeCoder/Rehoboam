@@ -6,24 +6,30 @@
 
 ## Still waiting on you (3)
 
-### D3 — How many hours a week can you spend checking the AI's work?
+### D3 → D26 — Run the project on your Agentic Architect model? (ADR-0032)
 
-**In plain words.** The engine is built by AI coding agents, and you are the only human checking their work. A typical week of checking looks like this:
-- **Approving plans** before a piece is built. Each is a one-page description such as "the population system: what it controls, what it reads, how it is tested". About 15 minutes each.
-- **Looking at results**: run the test world, read the stream, say "that looks right" or "that's wrong".
-- **Answering questions** when the agents hit a real choice.
+You answered D3 by proposing your `agentic_architect` template. I read it in full and recommend **adopting it, adapted**. My full assessment is in [ADR-0032](06_adr/ADR-0032-agentic-operating-model.md). In short:
 
-Everything else (tests passing, formatting, routine fixes) is checked automatically and merges without you.
+- **Adopt as is:**
+  - the three tiers (you → an AI Architect → AI developers and testers);
+  - the independent tester who tests against the contract and never bargains with the developer;
+  - the discrepancy protocol (ambiguity always comes to you);
+  - spec before code; scope-bounded sprints; one agent per branch;
+  - regression test first; defect, sprint and verification records.
+- **Adapt:**
+  - your roadmap template becomes our existing roadmap, *with* its gates and kill criteria;
+  - sprints are planned one phase ahead, not all up front;
+  - the document index is generated automatically;
+  - a Rust coding standard is added;
+  - logging must never disturb determinism;
+  - merges follow our change classes, so you approve only contract and determinism changes.
+- **Testing:** your 17 tiers mapped onto a simulation:
+  - about a third (web security, GUI, hardware) don't apply in phase 1;
+  - mutation testing runs nightly rather than per merge;
+  - our determinism, statistical-validation and golden-vector tests become the tiers that matter most.
+- **Your time:** about **2–4 hours a week** outside rating windows. That covers approving gates, contract changes and escalations, and watching each new world rung. The AI Architect does the routine audits.
 
-**Why it matters.** Your hours set how many agents can work at once, and so how fast the project moves:
-
-| Your hours per week | Agents working in parallel | Effect on the schedule |
-|---|---|---|
-| About 3 | 1–2 | Slower: phases take roughly 1.5× longer |
-| **About 6 (default)** | 2–3 | As planned in `11_roadmap.md` |
-| About 10–12 | 4–5 | Faster: phases roughly a third shorter |
-
-**What I need:** a number, even a rough one. If you say nothing, I assume about 6.
+**What I need:** yes or no on ADR-0032. **Default: yes.** On yes, the first sprint (SPR-000-ARCH) sets up the `CODEX/` operations area and the agent boot docs, without touching any design.
 
 ### D7 — Use a standard fill-in-the-blanks form for describing each simulation system?
 
@@ -34,7 +40,7 @@ Everything else (tests passing, formatting, routine fixes) is checked automatica
 - every setting, with its allowed range and the source of that range;
 - how it is tested, and against which historical facts.
 
-**Why I recommend it.** Agents produce consistent descriptions; you review the same layout every time; and the usual failures (vague timing, undocumented settings) get caught before code is written. A 2010 review of 54 published models found exactly those failures in most of them.
+**Why I recommend it.** Under ADR-0032 it becomes the blueprint template for every simulation system. Agents produce consistent descriptions; you review the same layout every time; and the usual failures (vague timing, undocumented settings) get caught before code is written. A 2010 review of 54 published models found exactly those failures in most of them.
 
 **The cost.** Each description is 2–3 pages instead of 1.
 

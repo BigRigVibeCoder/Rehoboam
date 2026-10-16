@@ -1,0 +1,134 @@
+# ADR-0032 — Adopt the Agentic Architect operating model, adapted for a deterministic simulation
+
+**Status:** Proposed (director's suggestion, 2026-10-16) · **Date:** 2026-10-16 · **Source:** [BigRigVibeCoder/agentic_architect](https://github.com/BigRigVibeCoder/agentic_architect) (read in full at commit `f3677c4`) · **Amends:** `13` (playbook), `11` (roadmap mechanics), `09` (testing regime), `decisions_pending.md` D3
+
+## Context
+
+The director proposes running Rehoboam on his Agentic Architect template:
+- **A three-tier hierarchy:** Human → Architect Agent → Developer and Tester agents.
+- **CODEX:** a Markdown "project-management operating system" with typed documents: PRJ, BCK, SPR, BLU, CON, DEF, EVO, VER, RES, AGT and GOV.
+- **Scope-bounded sprints,** one agent per branch, with the spec written before any code.
+- **An independent tester** that tests against the contract and reports to the Architect, never to the developer.
+- **A discrepancy protocol:** developer error vs contract ambiguity, with ambiguity always escalating to the human.
+- **GOV-002,** a 17-tier testing protocol with forensic reports, traceability, regression-first bug fixes and flaky-test quarantine.
+
+Lessons from a real two-developer build (LexFlow) are folded into GOV-007 §9.
+
+**Rehoboam already has part of this:**
+- `13` defines a work-package template, a Definition of Done, change classes C0–C3 with auto-merge routes, and an independent reviewer agent.
+- `11` defines phases, gates G0–G7 with kill criteria, and the complexity ladder.
+- `09` defines a test catalogue with traceability to `03`.
+
+What it lacks is the **operational layer**:
+- sprint and backlog documents;
+- defect and evolution records;
+- per-sprint verification reports;
+- formal agent roles with boot documents;
+- a machine-readable document index;
+- an explicit escalation protocol.
+
+**The template was built for a multi-service web application.** Several of its rules fit Rehoboam (a deterministic, headless simulation with statistical validation) only after adaptation, and some do not fit at all.
+
+## Decision
+
+Adopt the operating model. Keep Rehoboam's design documents, gates and test catalogue as the content it operates on. Adapt the testing protocol to a simulation.
+
+### 1. Adopt as is
+| From the template | Why |
+|---|---|
+| Three tiers: Human → Architect Agent → Developer and Tester agents | It moves routine audit work off the director (D3), who keeps decisions, contracts and gates |
+| The discrepancy protocol (GOV-007 §5) | It is the cleanest rule for "the code and the spec disagree": the agent never guesses |
+| An independent Tester Agent that tests against the contract, reports to the Architect and never negotiates with the developer (AGT-003) | It is what IV&V means, and it stops scope bargaining |
+| Spec before code; scope-bounded sprints; one agent and one branch per sprint; one commit per task (GOV-005) | It matches `13`'s work packages, with better traceability |
+| Regression test first for every bug fix; flaky = broken, quarantined within one sprint; no report = no pass (GOV-002 §20, 24, 25) | Cheap rules with a high return |
+| DEF-, EVO-, VER-, SPR-, BCK- documents in a `CODEX/` operational area | Rehoboam has no defect or sprint records yet |
+| Project-specific agent boot documents (GOV-007 §9.1) | They prevent agents from guessing their context |
+| The anti-sycophancy working rules (GEMINI.md §3) | Already the norm here; they go into `CLAUDE.md` |
+
+### 2. Adapt
+| Template rule | Rehoboam adaptation | Reason |
+|---|---|---|
+| **The roadmap is PRJ-001; phases are scope-bounded** | `11_roadmap.md` *is* PRJ-001. Phases P0–P7 keep their **gates G0–G7**, kill and pivot criteria, and the complexity ladder. Durations are estimates, not deadlines | The template has checkpoints but no phase gates or kill criteria; Rehoboam's are stronger and measurable |
+| **Create ALL sprint docs up front** (GOV-007 §9.6) | **Rolling wave:** every phase and gate up front; the current phase's sprints in full; the next phase's sprints sketched; later phases as backlog items only | In a research-heavy simulation, sprint plans more than a phase ahead are mostly wrong; the papers changed the design in 26 of 29 cases |
+| **BLU- and CON- documents** | `docs/05_architecture/` and the ODD-R system specs are the **blueprints**. **Contracts** are `05.9` (IF-0 to IF-9) plus the executable specs in `specs/` (Registry, manifest schema, chronicle DDL, golden vectors). ADRs stay ADRs | Rehoboam's contracts are executable; a contract that a test can check outranks prose |
+| **The sprint template's GOV compliance table** | Merged with `13`'s work-package fields (change class, planes touched, column ownership, determinism notes, RNG purposes, fixtures) | Determinism and plane rules are Rehoboam's most important compliance items, and the template has no slot for them |
+| **YAML frontmatter on every document; MANIFEST.yaml** | Frontmatter is added to every doc. MANIFEST.yaml is **generated by a script** from the frontmatter, and CI fails if it is stale | The template's own lesson: "a stale MANIFEST is a broken project". Generating it removes the failure mode |
+| **≤ 10 KB per document** | For new documents. Existing large documents (e.g. `09`, about 100 KB) are split only when they next change substantially | Splitting about 900 KB of docs for taxonomy's sake is churn with no design value |
+| **GOV-003 coding standard** (Python, C/C++, TypeScript) | Adds a **Rust** section, which is the core language. It covers: `clippy -D warnings` (pedantic where practical), `#![forbid(unsafe_code)]` outside a reviewed allow-list, no `HashMap` iteration in authoritative code, fixed-point thresholds, the keyed RNG only, no wall-clock reads in plane A | The template has no Rust standard; these are Rehoboam's non-negotiables |
+| **GOV-004 / GOV-006 error handling and logging** | Apply as written to the Python and TypeScript services. In `rh-core`: no logging or error path may change simulation order or read the wall clock. Structured `tracing` events are kept outside the tick's hot loop. The **World Stream is the simulation's flight recorder** | Logging written in the service style would break determinism inside the engine |
+| **GOV-008 infrastructure** | Filled in now: a Linux 8-core desktop (D5, D6); cloud later on x86-64 Linux. No services are exposed beyond localhost in phase 1 | Required by the template before the backlog (GOV-007 §9.2) |
+| **"No merge without Architect approval"** | By change class (`13` §4.2): **C0/C1** auto-merge after CI plus Tester and Architect-Agent audit. **C2** (contract change) needs the human. **C3** (determinism machinery, out-of-tolerance) needs the human | Otherwise every merge needs the human and the review budget fails |
+
+### 3. The testing regime: GOV-002 mapped onto a simulation
+| GOV-002 tier | Rehoboam | When |
+|---|---|---|
+| Static fortress | `clippy`, `rustfmt`, `cargo-deny` (licences, ADR-0021), `ruff`, `mypy --strict`, `tsc`, the pattern linter, the manifest validator | Every PR |
+| Unit; property-based; snapshot | Unit tests; **proptest/Hypothesis invariants**: conservation of people, grain and coin; no negative stocks; plane isolation. `insta` snapshots of stream records and schemas | Every PR |
+| Mutation (≥ 80% kill) | `cargo-mutants` on `rh-core`, the Registry evaluator and the RNG/fixed-point primitives | **Nightly**, not per merge: mutation runs on a large Rust crate take hours. A regression blocks the next merge to those crates |
+| Integration; contract | V-IF conformance; **SQL-twin equivalence** (V-SIFT-01); stream contract tests (V-STR) | Every PR |
+| Fuzz | `cargo-fuzz` on the journal, stream and manifest parsers | Nightly |
+| E2E | **The complexity-ladder worlds:** `solo` on every PR; the higher rungs nightly | Every PR (`solo`) |
+| Performance (10% regression fails) | V-PERF (PERF-4 already has the same 10% rule) | Every PR (micro); nightly (reference desktop) |
+| Soak | 1,000-year runs; memory and stream growth over time | Nightly or weekly |
+| Chaos | **Crash consistency:** `kill -9` during a keyframe or segment write, then resume with identical hashes | Nightly |
+| UAT | **Gate G2's pre-registered human rating**, plus the director watching each rung's stream | Gates |
+| DAST and pen testing; GUI (Playwright); i18n; IaC; HIL | **Not applicable in phase 1** (headless, localhost, no GUI). Playwright returns with the web console after G2 (V-TM); IaC with the cloud move | — |
+
+**Tiers GOV-002 lacks, which matter most here** (all already in `09`):
+1. **Determinism:** golden hashes, replay, thread-count invariance, cross-machine runs (V-DET).
+2. **Observer invariance and plane isolation** (V-DET-06–08, V-PLN).
+3. **Statistical validation:** stylized-fact bands with sealed **held-out** bands, CRN-paired ensembles, submodel tournaments (V-SF, §3.8).
+4. **Golden vectors** from the literature (Brass, M4 basket, Davenant).
+5. **Pre-registered human evaluation** (G2).
+
+**Coverage thresholds:** 80% line / 75% branch on authoritative crates and the Python tooling. The mutation score is reported nightly (target 80%). **No MC/DC.** **No "≥ 2 assertions per test" rule:** it is easily gamed; property tests are the stronger form of the same intent.
+
+### 4. Agents for Rehoboam
+| Role | Boot doc | Scope |
+|---|---|---|
+| Architect Agent (AGT-001) | `AGT-001-REH` | Owns CODEX operations; plans sprints from the backlog; audits against contracts and ADRs; files DEFs; runs the discrepancy protocol; maintains MANIFEST generation. Writes no engine code |
+| Developer, core (AGT-002-CORE) | Rust, `rh-core` and `rh-sys-*` | Bound by the determinism and plane rules; one system per sprint; ODD-R spec first |
+| Developer, tools (AGT-002-TOOLS) | Python and TypeScript | Compiler, gateway, harness, `rh-cli` and `rh-tui` |
+| **Tester, determinism** (AGT-003-DET) | — | Replay, hash ladders, thread and machine invariance, crash consistency, observer invariance |
+| **Tester, validation** (AGT-003-STAT) | — | Stylized facts and certification. **Never sees or tunes held-out bands before the run**, which keeps the held-out test honest |
+| **Tester, contracts** (AGT-003-IF) | — | ICD conformance, SQL twins, stream contracts, fuzzing |
+
+**Two independence rules:**
+1. Testers write tests **from the contract before reading the implementation diff** (black-box first).
+2. **Where possible, the testers and the Architect's audit run on a different model or provider from the developer's.** AI auditing AI has correlated blind spots; diversity and objective oracles (hashes, golden vectors, bands) are the defence.
+
+### 5. What the director does (D3)
+- **Approves:**
+  - phase-gate decisions;
+  - contract changes (C2);
+  - determinism-machinery changes (C3);
+  - ADRs;
+  - resolutions of escalated ambiguities.
+- **Watches** each ladder rung's stream (UAT).
+- **Rates** at G2 and G3b.
+
+The Architect Agent absorbs sprint planning, audits and defect triage. **Estimated load: about 2–4 hours a week outside rating windows.** That is less than the earlier 6-hour default, and more agents can work in parallel (4–6). Throughput then depends on the Architect Agent's audit capacity and compute cost, not on the director's hours.
+
+## Alternatives considered
+| Alternative | Why not |
+|---|---|
+| Adopt the template wholesale: move every doc into CODEX folders and split everything to 10 KB | A large mechanical churn with risk of broken references, and no design value; the operational layer is what is missing |
+| Keep `13` as it is | No sprint or defect records, no formal tester independence, no escalation protocol. The human remains the bottleneck |
+| Adopt GOV-002 as written | About a third of its tiers do not apply to a headless simulation, and its most important missing tiers (determinism, statistical validation) would be invisible |
+
+## Consequences
+- **New `CODEX/` operational area** in the repo: `05_PROJECT` (PRJ alias of `11`, BCK-001, BCK-002, SPR-), `40_VERIFICATION` (VER-), `50_DEFECTS` (DEF-), `60_EVOLUTION` (EVO-), `80_AGENTS` (AGT boot docs), `00_INDEX` (generated MANIFEST.yaml).
+- **The design documents stay where they are,** with frontmatter added.
+- **New governance:** GOV-001/002/005/007 adapted; a Rust coding standard; GOV-008 filled in for Linux, local first.
+- **`13` becomes the Rehoboam-specific supplement** to GOV-005/007: change classes, determinism notes, WP fields.
+- **D3 is resolved** by the operating model; D7 (ODD-R) becomes the blueprint template for every simulation system.
+- **Migration is one Architect sprint**, SPR-000-ARCH. No engine code is touched; checks stay green.
+
+## Revisit when
+- The Architect Agent's audits miss defects that the testers or the director later find (track the escape rate in VER reports).
+- Human load exceeds 4 hours a week for two consecutive weeks: raise the auto-merge threshold or add a second auditor model.
+
+## Evidence
+- `agentic_architect` @ `f3677c4`: AGENTS.md; GOV-001–008; AGT-001–003; the sprint, roadmap and audit templates; ROAD-001 (LexFlow lessons); GEMINI.md.
+- Rehoboam `13`, `11`, `09`, `03`, CLAUDE.md non-negotiables.
+- **An inconsistency in the template to fix upstream:** GOV-005 §1.1 says the Architect is the human, while GOV-007 and AGT-001 make the Architect an AI agent below the human.
