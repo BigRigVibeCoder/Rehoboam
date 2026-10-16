@@ -303,19 +303,27 @@ impl Ownership {
                 }
             }
         }
-        // A declared read names its owner; it must be the system whose spec owns the column.
+        // A declared read names its owner; it must be the system whose spec owns the column. If
+        // the named owner has a spec, that spec must declare the column (DEF-8, as lint_odd.py);
+        // an owner without a spec yet is reported by `unresolved_reads`, not refused.
         for s in specs {
             for r in &s.reads {
-                if let Some(o) = owners.get(&r.column)
-                    && o.system != r.owner
-                {
+                let message = match owners.get(&r.column) {
+                    Some(o) if o.system != r.owner => Some(format!(
+                        "reads {} from {}, but {} owns it",
+                        r.column, r.owner, o.system
+                    )),
+                    None if by_id.contains_key(&r.owner) => Some(format!(
+                        "reads {}, which {}'s spec does not declare in [[owns]]",
+                        r.column, r.owner
+                    )),
+                    _ => None,
+                };
+                if let Some(message) = message {
                     problems.push(Violation {
                         rule: "single-writer",
                         system: s.id.clone(),
-                        message: format!(
-                            "reads {} from {}, but {} owns it",
-                            r.column, r.owner, o.system
-                        ),
+                        message,
                     });
                 }
             }
@@ -525,6 +533,12 @@ mod tests {
                 m2.replacen("type = \"i64\"", "type = \"wibble\"", 1),
                 "spec",
                 "unknown type 'wibble'",
+            ),
+            (
+                "S7.vows.odd.toml",
+                s7.replacen("column = \"person.alive\"", "column = \"person.mood\"", 1),
+                "single-writer",
+                "reads person.mood, which M2.demography's spec does not declare",
             ),
             (
                 "S7.vows.odd.toml",
