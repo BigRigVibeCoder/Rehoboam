@@ -455,29 +455,61 @@ fn def1_a_panicking_step_poisons_the_engine_with_a_crash_artifact() {
     }
 }
 
+/// SPR-006 DEF-2, completed by VER-SPR-007-TEST GAP-10: an artifact records the journal position,
+/// the number of inputs the engine had *accepted* (applied or still queued), and replays once the
+/// host submits the journal's first `journal_position` inputs in journal (`seq`) order. One of
+/// the three inputs is still queued at the crash and was journaled between the other two, so the
+/// applied count (2) would name the wrong prefix: seq 0 and 1, missing the day-2 input.
 #[test]
-fn def2_an_artifact_after_material_inputs_records_them_and_replay_requires_the_journal() {
-    let mut engine = stock_engine(3, 40, 1);
+fn def2_an_artifact_after_material_inputs_replays_from_the_journal_prefix() {
     let scope: std::collections::BTreeSet<_> = [rh_ids::EntityRef::region(RegionId::from_raw(2))]
         .into_iter()
         .collect();
-    for at in [1_440, 2 * 1_440 + 5] {
-        engine
-            .submit_input(
-                SimTime::from_minutes(at),
-                MaterialInput {
-                    scope: scope.clone(),
-                },
-            )
-            .unwrap();
-    }
+    // Journal (seq) order: day 1, a far-future input, day 2.
+    let journal = [1_440, 100 * 365 * 1_440, 2 * 1_440 + 5];
+    let submit = |engine: &mut Engine, inputs: &[i64]| {
+        for &at in inputs {
+            engine
+                .submit_input(
+                    SimTime::from_minutes(at),
+                    MaterialInput {
+                        scope: scope.clone(),
+                    },
+                )
+                .unwrap();
+        }
+    };
+    let mut engine = stock_engine(3, 40, 1);
+    submit(&mut engine, &journal);
     assert!(engine.advance_until(ten_years(), |_, _| {}).is_err());
+    assert_eq!(
+        engine.applied_inputs(),
+        2,
+        "the far-future input is still queued"
+    );
     let a = engine.crash_artifact().unwrap().clone();
-    assert_eq!(a.journal_position, 2, "two material inputs were applied");
+    assert_eq!(a.journal_position, 3, "three inputs were accepted");
+    // Without the journal's inputs the replay is refused, explicitly.
     assert_eq!(
         stock_engine(3, 40, 1).replay(&a),
-        Err(ReplayError::JournalRequired { position: 2 }),
-        "no journal can be supplied before SPR-007: an explicit refusal, not NoFailure"
+        Err(ReplayError::JournalRequired {
+            position: 3,
+            submitted: 0
+        })
+    );
+    // With the first `journal_position` journal rows it replays exactly.
+    let mut replaying = stock_engine(3, 40, 1);
+    submit(&mut replaying, &journal[..3]);
+    assert_eq!(replaying.replay(&a), Ok(()));
+    // The applied-count prefix (the first two rows) is refused: it is not what the run held.
+    let mut short = stock_engine(3, 40, 1);
+    submit(&mut short, &journal[..2]);
+    assert_eq!(
+        short.replay(&a),
+        Err(ReplayError::JournalRequired {
+            position: 3,
+            submitted: 2
+        })
     );
     // Without inputs the position is 0 and the artifact replays (t05 tests above).
     let mut plain = stock_engine(3, 40, 1);

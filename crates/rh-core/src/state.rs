@@ -9,7 +9,8 @@
 //! - the queued material inputs;
 //! - the event log's held events (carried output: kept by a keyframe, outside `state_hash`), counter,
 //!   last `(tick, phase)` and running hash;
-//! - the cursor (the next instant to consider), the number of material inputs applied, and the
+//! - the cursor (the next instant to consider), the number of material inputs accepted (the
+//!   journal position, VER-SPR-007-TEST GAP-10), and the
 //!   timeline.
 //!
 //! Bookkeeping that never changes a result is left out: the thread count, the diagnostic records,
@@ -41,8 +42,9 @@ pub struct EngineState {
     pub cursor: Option<SimTime>,
     /// The timeline.
     pub timeline: TimelineId,
-    /// The number of material inputs applied so far.
-    pub applied_inputs: u64,
+    /// The number of material inputs accepted, applied or still queued: the journal position
+    /// (VER-SPR-007-TEST GAP-10). At least the number queued in `inputs`.
+    pub accepted_inputs: u64,
     /// The world tables.
     pub tables: WorldTables,
     /// The agenda.
@@ -138,7 +140,14 @@ pub(crate) fn check_timers(
 pub(crate) fn check_inputs(
     inputs: &[(SimTime, Vec<MaterialInput>)],
     cursor: Option<SimTime>,
+    accepted: u64,
 ) -> Result<(), RestoreError> {
+    let queued: usize = inputs.iter().map(|(_, list)| list.len()).sum();
+    if u64::try_from(queued).unwrap_or(u64::MAX) > accepted {
+        return Err(RestoreError::Inputs(format!(
+            "{queued} inputs are queued but only {accepted} were accepted"
+        )));
+    }
     if let Some(w) = inputs.windows(2).find(|w| w[0].0 >= w[1].0) {
         return Err(RestoreError::Inputs(format!(
             "instants are not strictly increasing: {} then {}",
