@@ -1,0 +1,14 @@
+[package]
+name = "rh-events"
+description = "Event schema, causal edges and emission-order EventIds"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints]
+workspace = true

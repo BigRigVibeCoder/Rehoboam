@@ -1,0 +1,14 @@
+[package]
+name = "rh-registry"
+description = "Mechanics Registry loader and validation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints]
+workspace = true

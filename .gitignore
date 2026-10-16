@@ -4,3 +4,8 @@ __pycache__/
 
 # Check reports and crash artifacts (GOV-002, GOV-004)
 artifacts/
+
+# Rust build output and Python virtual environments (SPR-001)
+target/
+.venv/
+python/.venv/

@@ -1,0 +1,14 @@
+[package]
+name = "rh-snapshot"
+description = "Keyframes, plane hashes and input-journal I/O"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints]
+workspace = true
