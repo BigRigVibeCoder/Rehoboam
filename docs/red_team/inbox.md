@@ -107,6 +107,13 @@ Full technical dossiers in `docs/red_team/PHILOSOPHY_AND_BACKLOG.md` and `docs/r
 ### Architect's intake notes on batch 03 (2026-10-16)
 These are not dispositions; those come at G0. They list where batch 03 conflicts with ratified contracts, so the G0 fold starts from them.
 
+**Director's ruling on these notes (2026-10-16):** N1, N2 and N3 are agreed as G0 directions:
+- Sifting stays in plane C.
+- The Registry holds only symbolic domain tokens; adjectives, styles and prompt text live in plane C.
+- The noble population must emerge from in-world rules (seat capacity and an explicit demotion rule into M2 cohorts), with no global controller and no deletion of history.
+
+The charter (N4) is approved as the red team's internal working rules; Laws 2 and 3 are decided at G0 as design principles.
+
 | # | Item | Conflict or open point | Contract |
 |---|---|---|---|
 | N1 | Item 10, Case 6 | Sifting is plane C, not plane B. Plane B is observation (pins, facts ledger, hydrated views) | ADR-0024; `05.2` §0 |
