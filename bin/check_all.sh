@@ -247,6 +247,28 @@ forbidden_api_controls() {
   done
 }
 
+# Golden runs (SPR-008): the release rh-cli, its output directory and the N of "N threads" (at least 2).
+RH_CLI_RELEASE="$TARGET_DIR/release/rh-cli"
+GOLDEN="$TARGET_DIR/golden"
+GOLDEN_THREADS=$(( $(nproc 2>/dev/null || echo 2) > 2 ? $(nproc 2>/dev/null || echo 2) : 2 ))
+mkdir -p "$GOLDEN"
+# The ladder-compare control: the 1-thread ladder with rung 500's first table root changed must differ there.
+ladder_compare_control() {
+  local edited="$TARGET_DIR/rendered-fixtures/ladder_one_root.ladder"
+  mkdir -p "$TARGET_DIR/rendered-fixtures" || return 1
+  awk 'BEGIN{r=0} /^rung 500 /{r=1; print; next} r==1 && /^root /{sub(/[0-9a-f]$/, ($NF ~ /0$/ ? "1" : "0")); r=0} {print}' \
+    "$GOLDEN/smoke_yearly_t1.ladder" > "$edited" || return 1
+  "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$edited"
+}
+# The hand-edited baseline control: the committed baseline with one hex digit of rung 1's hash typed over.
+baseline_hand_edited_control() {
+  local edited="$TARGET_DIR/rendered-fixtures/baseline_hand_edited.ladder"
+  mkdir -p "$TARGET_DIR/rendered-fixtures" || return 1
+  awk '/^rung 1 /{n=split($0, w, " "); h=w[5]; c=substr(h,16,1); w[5]=substr(h,1,15) (c=="0" ? "1" : "0"); $0=w[1]; for(i=2;i<=n;i++) $0=$0 " " w[i]} {print}' \
+    worlds/smoke/baselines/smoke_yearly_1000y.ladder > "$edited" || return 1
+  "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed no
+}
+
 # Doctests (nextest skips them). The compile-fail cases are acceptance tests (SPR-002 T-01), so the
 # gate counts them per file: a case demoted to plain text, deleted or renamed must turn it red, not
 # just vanish (VER-SPR-002-TEST DEF-2). Each entry is file:compile_fail:compiling, the number of
@@ -436,6 +458,16 @@ run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [
 run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
 run "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)" "pass:SCHEMA: no unexplained difference" "$RH_CLI" manifest schema --diff specs/manifest/manifest_v0.schema.json &&
 run "Schema diff positive control: drifted bound must FAIL" "fail:SCHEMA DIFFERENCE \$defs.Horizon.properties.years.maximum" "$RH_CLI" manifest schema --diff tests/lint_fixtures/schema/drifted_bound.schema.json &&
+run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
+run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread (SPR-008 T-02)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --out "$GOLDEN/smoke_yearly_t1.ladder" &&
+run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads (SPR-008 T-02)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/smoke_yearly_tN.ladder" &&
+run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
+run "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)" "fail:LADDERS DIFFER: first differing rung: 500" ladder_compare_control &&
+run "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR (check_baseline; SPR-008 T-04)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
+run "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)" "fail:BASELINE MISMATCH" baseline_hand_edited_control &&
+run "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL (SPR-008 T-04)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "SPR-008: Golden-run CI" &&
+run "Golden baseline control: a regenerated baseline in a [C3] PR passes (SPR-008 T-04)" "pass:regenerated in a [C3] PR" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "SPR-008: Golden-run CI [C3]" &&
+run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture &&
 run "Python: unit tests (pytest)" pass "$PY" -I -m pytest -c python/pyproject.toml --rootdir=. -q &&
 # Tier 5 — golden vectors
 run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&

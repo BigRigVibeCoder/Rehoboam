@@ -41,6 +41,15 @@ REQUIRED_GATES = (
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
     "T-03)",
+    "Golden baseline control: a regenerated baseline in a [C3] PR passes (SPR-008 T-04)",
+    "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)",
+    "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL "
+    "(SPR-008 T-04)",
+    "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR "
+    "(check_baseline; SPR-008 T-04)",
+    "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)",
+    "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread (SPR-008 T-02)",
+    "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads (SPR-008 T-02)",
     "Golden vectors: Brass (M2)",
     "Golden vectors: M4 basket and price rule",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
@@ -68,6 +77,7 @@ REQUIRED_GATES = (
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
     "Required tools present",
     "Rust: bans and sources (cargo deny: crates.io only, no wildcards)",
+    "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)",
     "Rust: build the workspace (cargo build)",
     "Rust: doctests (cargo test --doc)",
     "Rust: format (cargo fmt --check)",
@@ -119,6 +129,7 @@ REQUIRED_GATES = (
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",
@@ -189,6 +200,8 @@ REQUIRED_GATES = (
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
     "crash replay (SPR-006)",
+    "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
+    "perturbations (SPR-008 T-02, T-03)",
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
