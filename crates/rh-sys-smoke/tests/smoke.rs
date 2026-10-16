@@ -21,8 +21,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use rh_core::engine::Engine;
-use rh_core::state::EngineState;
 use rh_core::ownership::SpecTable;
+use rh_core::state::EngineState;
 use rh_core::time::SimTime;
 use rh_core::{Phase, Pulse};
 use rh_events::Event;
