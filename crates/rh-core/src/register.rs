@@ -1,4 +1,5 @@
-//! System registration: the access conflict checker (SPR-005 T-04).
+//! System registration: the access conflict checker and the derived schedule (SPR-005 T-04,
+//! T-05).
 //!
 //! [`register`] takes the systems and the ownership table the host built from the specs
 //! (`rh_registry::ownership::Ownership`; `rh-core` has no I/O). It refuses the whole set, with
@@ -11,6 +12,7 @@
 //! | `single-writer`, `undeclared-read`, `plane` | each `AccessSpec` against the specs: the ownership lint's own check (`Ownership::check`) | ruling 3 |
 //! | `single-writer` | across the registered `AccessSpec`s: one writer per column, reads name the writer (`ownership::single_writer`) | ruling 3; T-04 |
 //! | `plane` | a plane-A system reads no plane-B/C column a registered system writes (`ownership::plane_leak`) | ADR-0024 |
+//! | `phase-order`, `schedule-cycle` | the schedule derives (see [`crate::schedule`]) | T-05 |
 //!
 //! Reported, not refused: a read whose owner is not registered (its owner has no code yet).
 //!
@@ -22,7 +24,7 @@
 //! in.
 //!
 //! REF: `docs/05_architecture/05.1_simulation_core.md` §2 rules 1, 4 and 6; ADR-0006; ADR-0024;
-//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04, ruling 3.
+//! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-04, T-05, ruling 3.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -31,6 +33,7 @@ use rh_ids::SystemId;
 use rh_registry::ownership::{Ownership, Source, Violation, plane_leak, single_writer};
 
 use crate::access::AccessSpec;
+use crate::schedule::{self, Schedule, SchedulerInput};
 use crate::system::{PulseBinding, SystemModel};
 
 /// Domain tag of [`system_id`].
@@ -59,9 +62,10 @@ pub(crate) struct Entry {
     pub(crate) purposes: Vec<&'static str>,
 }
 
-/// A registered, conflict-free set of systems.
+/// A registered, conflict-free set of systems with its derived schedule.
 pub struct Registered {
     pub(crate) entries: Vec<Entry>,
+    schedule: Schedule,
     reports: Vec<String>,
 }
 
@@ -72,10 +76,27 @@ impl Registered {
         self.entries.iter().map(|e| e.id).collect()
     }
 
+    /// The derived schedule.
+    #[must_use]
+    pub fn schedule(&self) -> &Schedule {
+        &self.schedule
+    }
+
     /// Notes that are not violations (reads of unregistered owners).
     #[must_use]
     pub fn reports(&self) -> &[String] {
         &self.reports
+    }
+
+    /// The canonical order of one phase, as system ids.
+    #[must_use]
+    pub fn order(&self, phase: crate::phase::Phase) -> Vec<&'static str> {
+        self.schedule
+            .phase(phase)
+            .order
+            .iter()
+            .map(|&i| self.entries[i].id)
+            .collect()
     }
 
     /// The access declarations from code, in id order, in the form the ownership lint takes:
@@ -190,12 +211,33 @@ pub fn register(
         }
     }
 
-    if violations.is_empty() {
-        Ok(Registered { entries, reports })
-    } else {
-        Err(RegistrationError {
+    // The schedule (T-05), only when the declarations themselves are sound.
+    let inputs: Vec<SchedulerInput<'_>> = entries
+        .iter()
+        .map(|e| SchedulerInput {
+            id: e.id,
+            access: &e.access,
+            bindings: &e.bindings,
+        })
+        .collect();
+    let derived = schedule::derive(&inputs);
+    drop(inputs);
+    match derived {
+        Ok(schedule) if violations.is_empty() => Ok(Registered {
+            entries,
+            schedule,
+            reports,
+        }),
+        Ok(_) => Err(RegistrationError {
             violations,
             reports,
-        })
+        }),
+        Err(schedule_problems) => {
+            violations.extend(schedule_problems);
+            Err(RegistrationError {
+                violations,
+                reports,
+            })
+        }
     }
 }

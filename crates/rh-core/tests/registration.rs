@@ -4,7 +4,7 @@
 //! same single-writer rule as the ownership lint (one owner per column, reads declared, no plane-B
 //! or plane-C read from plane A); the lint reads the specs, the checker the registered code.
 //!
-//! Refs: SPR-005 T-04, ruling 3; `05.1` §2 rules 1 and 4; ADR-0024.
+//! Refs: SPR-005 T-04, T-05 (registration errors), ruling 3; `05.1` §2 rules 1 and 4; ADR-0024.
 
 #![allow(
     clippy::panic,
@@ -81,6 +81,7 @@ fn registration_order_does_not_matter() {
         register(vec![a.clone().boxed(), b.clone().boxed()], &t).unwrap_or_else(|e| panic!("{e}"));
     let two = register(vec![b.boxed(), a.boxed()], &t).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(one.ids(), two.ids());
+    assert_eq!(one.schedule(), two.schedule());
 }
 
 #[test]
@@ -133,6 +134,64 @@ fn a_system_without_a_spec_and_a_double_registration_are_refused() {
     let ghost = Stub::new("X9.ghost");
     let e = refused(vec![ghost], &[]);
     assert_eq!(rules(&e), ["registry"]);
+}
+
+#[test]
+fn a_same_instant_read_against_phase_order_needs_a_lag() {
+    let w = Stub::new("X1.w")
+        .writes("w.x")
+        .at(Pulse::Month, Phase::Polity);
+    let r = Stub::new("X2.r")
+        .reads("w.x", "X1.w", Lag::SameInstant)
+        .writes("r.x")
+        .at(Pulse::Day, Phase::Production);
+    let e = refused(vec![w.clone(), r.clone()], &[w.clone(), r.clone()]);
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [phase-order] X2.r: reads w.x at same_instant in phase Production, but X1.w writes it in the later phase Polity; declare a lag (05.1 §2 rule 4)"
+        ]
+    );
+    // Declaring a lag resolves it.
+    let lagged = Stub::new("X2.r")
+        .reads("w.x", "X1.w", Lag::PreviousPulse)
+        .writes("r.x")
+        .at(Pulse::Day, Phase::Production);
+    let t = agreeing_ownership(&[w.clone(), lagged.clone()]);
+    assert!(register(vec![w.boxed(), lagged.boxed()], &t).is_ok());
+}
+
+#[test]
+fn a_same_instant_cycle_within_a_phase_needs_a_lag() {
+    let a = Stub::new("X1.a")
+        .writes("a.x")
+        .reads("b.x", "X2.b", Lag::SameInstant)
+        .at(Pulse::Day, Phase::Exchange);
+    let b = Stub::new("X2.b")
+        .writes("b.x")
+        .reads("a.x", "X1.a", Lag::SameInstant)
+        .at(Pulse::Day, Phase::Exchange);
+    let e = refused(vec![a.clone(), b.clone()], &[a.clone(), b]);
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [schedule-cycle] X1.a: in phase Exchange, X1.a, X2.b read each other's columns at same_instant in a cycle; declare a lag on one read (05.1 §2 rule 4)"
+        ]
+    );
+    let b_lagged = Stub::new("X2.b")
+        .writes("b.x")
+        .reads("a.x", "X1.a", Lag::Lagged)
+        .at(Pulse::Day, Phase::Exchange);
+    let t = agreeing_ownership(&[a.clone(), b_lagged.clone()]);
+    let r = register(vec![a.boxed(), b_lagged.boxed()], &t).unwrap_or_else(|e| panic!("{e}"));
+    // b reads a lagged, a reads b at the same instant: b first.
+    assert_eq!(r.order(Phase::Exchange), ["X2.b", "X1.a"]);
 }
 
 /// Ruling 3: on every real spec, the lint's rule and the checker's rule are the same function and
