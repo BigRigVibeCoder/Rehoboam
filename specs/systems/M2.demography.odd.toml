@@ -80,6 +80,22 @@ plane = "A"
 meaning = "natural | murder | battle | execution | accident. Written by apply_death with alive = 0 and the death tick: natural for an M2 hazard death, otherwise the cause the ScheduleDeath command carried (M7, T1.minds; M8 later). Readable, like every column of the dead row, until rh-core's compaction at the start of Bookkeeping of the death instant (SPR-011 ruling 5); the life-course log keeps it after that"
 fixed_point = false
 
+# Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4): one payload per command, which every sender uses.
+# For P1.13 (SPR-014): M2 then gains a Day/Vital binding that drains its queue each day start (not yet in [[schedule]]:
+# SPR-014 adds it). A command whose tick is the drain's own instant is applied in the drain, in Vital, before the
+# bindings that read M2 at same_instant (T1.minds, M7.dynasty); a later tick becomes a timer at that tick. In P1a every
+# death and marriage takes effect at a day start (round 3, BLK-1). `[[applies]]` is documentation until the lint reads it.
+[[applies]]
+command = "ScheduleDeath"
+payload = "{ victim: PersonId, tick: SimTime (a day start), cause: natural | murder | battle | execution | accident, culprit: PersonId or 0, cause_event: EventId or 0 }"
+from = ["M7.dynasty", "T1.minds"]
+sprint = "P1.13 (SPR-014)"
+[[applies]]
+command = "Marry"
+payload = "{ a: PersonId, b: PersonId, tick: SimTime (a day start) }"
+from = ["T1.minds"]
+sprint = "P1.13 (SPR-014)"
+
 [[emits]]
 kind = "DEATH"
 when = "The death timer fires (apply_death: alive = 0, death tick, death cause); the event carries the cause and, for a ScheduleDeath, the culprit"
