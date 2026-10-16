@@ -1,4 +1,4 @@
-# Architect summary: 2026-10-16 (P0, before G0)
+# Architect summary: 2026-10-16 (P0, closing G0)
 
 *A living handoff from the Architect (AGT-001) to the director, and to any later Architect session. It records the state of the work, so the work survives the loss of a cloud container. Decisions are recorded in `docs/decisions-log.md`; this file only points to them.*
 
@@ -13,11 +13,15 @@
 | SPR-005 | Time, phases, `SystemModel`, `AccessSpec`, a parallel scheduler identical at every thread count | Merged (#21) | VER-SPR-005 PASS |
 | SPR-006 | Agenda of timers, lifecycle command queues, event bus, invariants with replayable crash artifacts | Merged (#26) | VER-SPR-006 PASS |
 | SPR-007 | Plane hashes, keyframes (Arrow IPC with zstd), the SQLite journal, the unsynced guard, `resume` | Merged (#25) | VER-SPR-007 PASS |
-| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | PR #28: every task done, CI green on `29abe04` (PR tier 11 min 28 s). Tester's phase 2 running. The cross-machine check waits for your session | — |
-| SPR-009 | Benchmarks and the regression gate | PR #34. Developer building: benches 7 and 8 and the instruction-count gate, now pinning down count drift from the executable's path; Tester's plan written | — |
+| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | Merging (PR #28). The Tester's round 3 found no open defect. The cross-machine check waits for your session | VER-SPR-008 PASS |
+| SPR-009 | Benchmarks and the regression gate | PR #34 at `46f0f59`: benches 7 and 8, instruction-count gate, DEF-1 (observer panic) and DEF-2 fixed. Tester re-running phase 1. T-03 (vitals) and the T-05 smoke parts finish after SPR-008 merges | — |
 | SPR-010 | `rh-core::fixed` | Merged (#5) | VER-SPR-010 PASS |
 
-Escapes found after a sprint closed: 1 (documentation only) across 8 closed sprints (SPR-001 to SPR-007, SPR-010).
+Escapes found after a sprint closed: 1 (documentation only) across 9 closed sprints (SPR-001 to SPR-008, SPR-010).
+
+**G0** passes when SPR-008 and SPR-009 complete (your ruling on D30–D36). What is left: SPR-009's remaining tasks and its Tester passes, the first nightly run on `main`, then `VER-G0`. Your cross-machine session is the last SPR-008 evidence.
+
+**P1a specs on `main`:** `T1.minds` and `M7.dynasty` frozen 0.3.1 (PR #32), M2 rung 0 frozen 0.2.0 with the skeleton specs (PR #37), your G0 rulings applied across the plans and docs (PR #42), and the effect-language review record (PR #43, `REV-SPR-017` CLOSED).
 
 ## 2. SPR-007 in detail
 
@@ -53,9 +57,10 @@ All are recorded in `docs/decisions-log.md`:
 | Item | Recommendation | Confidence |
 |---|---|---|
 | **The laptop:** RUN-001 (BCK-002 A-16) and one `adjutant` session of about 2 hours, for SPR-008 T-02 and SPR-009 T-04 | I will ping you when SPR-008 is ready | — |
-| **The P1a plan, at G0:** D30 to D36 in `docs/decisions_pending.md`. They cover the walking skeleton (SPR-011, as three sprints), rung 0's scope, the 100k claim, moving S5 F1 and M1 F1 to P1b, runnable G1a tests, inheritance without property, and the `T1.minds`/`M7.dynasty` specs | Each has a recommendation; the plan is `CODEX/05_PROJECT/PRJ-002` | 70–80% |
+| **D37, the Registry effect language v0** (PR #41, v0.5.0, 558 golden cases), with D14 (title blood over the last 16 holders, which needs worldgen to back-fill pre-epoch history in SPR-019), D4 (sex rules) and D12 (bounds) | Approve. Four review rounds on a different model from the drafter's ended with 0 blockers and 0 majors (`REV-SPR-017`) | 75% |
 
 Resolved since the first version of this summary:
+- you approved the P1a plan, D30 to D36 (PRJ-002 and SPR-011 approved; PR #32 and PR #37 merged in that order);
 - you confirmed my reading of Laws 2 and 3;
 - you took the demography dossier in as a proposal (red-team batch 05, intake notes N13 to N17).
 
@@ -79,10 +84,12 @@ Resolved since the first version of this summary:
 
   | Role | Session | Work |
   |---|---|---|
-  | Spec drafter: `T1.minds`, `M7.dynasty` | `session_0197w1yjvJqAKATkCbw9KanD` | PR #32 (draft; awaits D36), round 4 |
-  | Spec drafter: skeleton specs (M2 freeze, Registry verbs, channel A, `life_ends`, rung manifests) | `session_012dXsVBVUA3yTBQybqVbxe6` | PR #37 (draft), stacked on #32 |
-  | Spec drafter (Fable): the Registry effect language v0, with the kinship relations | `session_017JVNkiac6bxeP4MpihBfxd` | for SPR-017 |
+  | Spec drafter: `T1.minds`, `M7.dynasty` | `session_0197w1yjvJqAKATkCbw9KanD` | PR #32, merged (frozen 0.3.1) |
+  | Spec drafter: skeleton specs (M2 freeze, Registry verbs, channel A, `life_ends`, rung manifests) | `session_012dXsVBVUA3yTBQybqVbxe6` | PR #37, merged |
+  | Spec drafter (Fable): the Registry effect language v0, with the kinship relations | `session_017JVNkiac6bxeP4MpihBfxd` | PR #41, final; awaits D37 |
   | Independent reviewer (Fable) | `session_0172pYwXgkfpB3tkErgMDHsc` | REV-P1a, rounds 1 and 3 |
 
+- **PR #28 and PR #41 contain merge commits:** merge them with a merge commit, not a rebase.
+- **After SPR-008 merges:** dispatch `nightly.yml` on `main`, then give the director the commit and the nightly run for the cross-machine session (`worlds/smoke/README.md`).
 - **SPR-008:** its keyframe-assisted bisect must go through `rh_snapshot::resume`, which calls `Replay::check_anchor` (SPR-007 GAP-7, GAP-10). Its journaled input follows the host order: check, journal, submit, one row per input.
 - **BCK-002 A-33** (filed): when non-material journaled inputs reach the engine, count them as accepted inputs, like material ones.
