@@ -231,6 +231,10 @@ pub struct SpecEntry {
     pub reads: Vec<String>,
     /// The `[[rng]] purpose` names, in spec order.
     pub rng: Vec<String>,
+    /// The `[[schedule]]` bindings as `(pulse, phase)` names, in spec order.
+    pub schedule: Vec<(String, String)>,
+    /// `(column, lag)` for every `[[reads]]` entry.
+    pub lags: Vec<(String, String)>,
 }
 
 impl SpecEntry {
@@ -386,7 +390,7 @@ mod tests {
         let entry = SpecEntry {
             owns: vec![("y.b".to_owned(), "A".to_owned())],
             reads: vec!["pins.p".to_owned()],
-            rng: vec![],
+            ..SpecEntry::default()
         };
         let found = check_access(
             &owners,
