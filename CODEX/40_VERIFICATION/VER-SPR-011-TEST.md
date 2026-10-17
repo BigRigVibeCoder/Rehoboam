@@ -115,7 +115,7 @@ A-37, one system with two bindings (Year and Month, which fire together at insta
 
 Baseline: `rh-cli` built from `main` `ae70060`. Candidate: `a0316b5`. `rh-cli bisect --years 1000` reports `verdict: divergence`, year 8, month 89 (0007-05, tick 3896639), table `chronicle.census`, row 0, column `chronicle.census`, 56 → 55; the differing tables are `chronicle.census`, `estate.*`, `market.audits`, `person.alive`, `person.pending` and four `rh-core` tables. I confirmed it a second way: monthly ladders of 10 years from both binaries differ first at rung 89, the header and rungs 1 to 88 are byte-identical. The first synthetic input is year 7 plus 99 days 06:07 on the 365-day calendar, tick 3822127 (`synthetic_inputs`), so the divergence is at or after the first input and never before. It appears a month later than the input because a re-sampled timer only matters when it fires. `git log` shows `97f1aa5` ([C3]) as the only commit that touches `worlds/smoke/baselines`; the 1,000-year golden gates (1 thread, N threads, baseline equality) pass inside `check_all`.
 
-### 2.8 Delta pass on `e173783`
+### 2.8 Phase 3: the delta `a0316b5..e173783`
 
 The Developer pushed `b638e1c` (DEF-6), `4d2280d` (DEF-5, MAJ-1, MIN-2, nits) and `e173783` (a doctest count) after `a0316b5`. I re-ran on a fresh archive of `e173783`:
 
@@ -126,6 +126,7 @@ The Developer pushed `b638e1c` (DEF-6), `4d2280d` (DEF-5, MAJ-1, MIN-2, nits) an
 - **All earlier A-44 probes** (about 70 files) behave as on `a0316b5`, plus `set_var` now flagged.
 - **DEF-6:** my `M2.closedliving` step is refused by system and person; `M2.appendclosed` (a back-filled ancestor absent from the ledger), `M2.closepartial` and `M2.closekind` are still accepted; the other 12 misbehaviours keep their results.
 - **T-01, T-02, A-37, T-03, T-04 probes:** unchanged results (same counts as §2.2 to §2.5); the `StreamReuse` message now names what was drawn.
+- **MAJ-1 and MIN-2 evasions of my own** (20 files, `lint_forbidden.py --scan`), all refused: `pub use std as q` inside a module, `pub use ::std as x`, a comment inside `use std /* c */ as x`, `use r#std as x`, `use` split over three lines, `#[macro_use] extern crate std as x`, `use std::{io::{self}, fs as f}`, `use std :: { self as a, io }`, a `macro_rules!` body and a macro that expands to `use $p as s`, `use std::*` then `fs::`, `process::`, `env::`, `use {std as x}`, `use ::{std as x}`, `extern crate std as std2`, `use std as _`, `<std::fs::File>::open` and `::std::fs::read`, `pub(crate) use std as x`, `fs::{self as g}` with `env::{self as e}`. The one clean file is `use core::{self as c}`, which is legitimate.
 - **Smoke:** the 10-year monthly ladder from `e173783` is byte-identical to the one from `a0316b5`; valgrind on a 2-year release run is clean.
 
 ## 3. Defects
@@ -153,7 +154,7 @@ The Developer pushed `b638e1c` (DEF-6), `4d2280d` (DEF-5, MAJ-1, MIN-2, nits) an
 | GAP-4 | The new rules are textual and conservative: an own module `process::f()`, an own accessor `.created()` or `.mtime()`, an own module `fs::foo` are all flagged | Accept (the `LINT-ALLOW` escape is counted and printed; 4 escapes today) and say so in `tests/lint_fixtures/README.md` | 75% |
 | GAP-5 | `env!`, `option_env!` and `core::env!` read the build environment into the binary and are not covered (the Developer's docstring states they are out of scope); `engine_build` is the only thing that would tell two such binaries apart | Decide whether `engine_build` hashes the build environment, or ban the macros in plane A | 55% |
 | GAP-6 | The `rules process/file-io/env` apply to `src/` and `build.rs` only. A plane-A `tests/` file may spawn a process or read the environment; the 4 escapes show this is used | Fine for the engine; record that `tests/` of plane-A crates are trusted, not scanned | 70% |
-| GAP-7 | `PersonId(77)` and `RegionId(77)` under one purpose share one keyed stream and one guard entry (the pair is the raw key). The text says the purpose declares its entity kind, but registration does not enforce that a purpose is used with one kind | Check at the draw that the entity's kind equals the kind the spec declares for the purpose (a later sprint), or document it | 55% |
+| GAP-7 | `PersonId(77)` and `RegionId(77)` under one purpose share one keyed stream and one guard entry (the pair is the raw key). It is a conservative false refusal, reachable only by a purpose drawn for two entity kinds, which a spec's `[[rng]] key` does not declare; not a defect | Do not key the guard by kind (the RNG key itself is the raw id, so two kinds would draw the same numbers: a hidden correlation the guard rightly refuses). Instead lint that a purpose is used with one kind, by checking the `[[rng]] key` of the spec against the `EntityKey` type at the draw site, in the sprint that first draws for two kinds | 60% |
 | GAP-8 | The `StreamReuse` message said "asked for a stream" when the refused call was `rng` after `stream` (older than SPR-011) | **Resolved in `4d2280d`**: it now reads "drew again under purpose .. which it already took as a stream" | 60% |
 | GAP-9 | The exponent-bound error for a manifest value is printed twice at the same path (validation and compile each report it) | Report once | 50% |
 
@@ -201,9 +202,9 @@ Run on the git-initialised copy, each mutant against `pytest` for the relevant f
 
 | Survivor | What it means |
 |---|---|
-| L3c `hyper` removed from the deny-list | GAP-2 |
-| L3d `tts` removed from the deny-list | GAP-2 |
-| F1 `\bprocess::\w` removed from the `process` rule | GAP-3 |
+| L3c `hyper` removed from the deny-list | GAP-2. Recommend a golden-list assertion over the whole `ENGINE_DENY_LIST` (one line per entry, regenerated only by a reviewed edit) so any removal fails a test |
+| L3d `tts` removed from the deny-list | GAP-2, same fix |
+| F1 `\bprocess::\w` removed from the `process` rule | GAP-3. Recommend a planted fixture `use std::*; fn f() { process::Command::new("x"); }` that must FAIL, next to `process_command.rs` (I verified the current rule flags it) |
 
 Also caught on `e173783`: the `env` regex without its `consts` exemption, without its `env::<item>` alternative or without its `std::env` alternative; the `std-rename` rule without its `extern crate` or its `use std as x` branch. Caught: dev edges counted; build edges ignored; `reqwest` and `tokenizers` off the list; `rh-cli` not an engine crate; plane A not engine; transitive walk removed; unresolved dependency ignored; missing lock passes; each of the three `BANNED_MODULES` entries removed; `env` regex without `args` or without `var_os`; `file-clock` without `accessed`, UFCS, `MetadataExt`, `[amc]time` or the Windows accessors; `FILE_IO_CRATES` widened to `rh-core`; `file-io` without `OpenOptions` or without `fs::`; CI timeout 30; matrix cut to `[core]`; step without `--part`; both jobs `--part core`; the `part golden` marker removed from `check_all.sh`. In the first pass at `1d72e48` the equivalent mutant "drop the `rh-sys-` prefix from the engine set" (plane A already covers it) and the survivor "drop `fs::\w`" were found; the latter is now caught.
 
