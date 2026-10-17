@@ -9,7 +9,7 @@ tags: [verification]
 related: [PRJ-002, SPR-026, SPR-027, SPR-013, SPR-020, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.1.0
+version: 0.2.0
 ---
 
 > **BLUF: round 1 on `5e19bc2` found 1 blocker, 5 majors, 8 minors and 7 nits. Not mergeable yet.**
@@ -21,7 +21,8 @@ version: 0.1.0
 >   - races between a seal and a subscribe;
 >   - empty channel-C years;
 >   - coupling to the SPR-020 envelope.
-> - **Rulings:** R1–R14 in §0. The review ran in a session on a different model from the drafter's.
+> - **Rulings:** R1–R14 in §0.
+> - **Round 2** (`27a20e2`): every round-1 major is fixed. One new major (`Catchup` under a real transport's event order), 8 minors and 9 nits. Rulings R15–R24 in §2.0. The review ran in a session on a different model from the drafter's.
 
 # REV-SPR-026: independent review of the World Stream v1 wire format
 
@@ -312,3 +313,280 @@ Recommendation: fix the five MAJs, add D-wire-2 (amend ADR-0031 §1.4; approve, 
 - V-PERF-09 and the V-STR rows, which need an implementation.
 - A real threaded host and `loom`; I modelled the interleavings in Python only.
 - CPU and RSS figures are estimates from `docs/08`, `docs/11` and generated lines, except the Python parse speed, which I measured.
+
+## 2. Round 2 (2026-10-17, `27a20e2`)
+
+### 2.0 Architect rulings, round 2
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R15 | MAJ-1 | **Accepted, as the reviewer proposes.**<ul><li>`Jumping` treats `records` as `Live` does: deliver, then advance.</li><li>A `behind` or `end` in `Jumping` ends the jump; the `not_subscribed` answer that follows is expected.</li><li>`Closed` in `ReadingSealed` sets reconnect-pending, and `read_sealed_done` then answers `Status`.</li><li>`retry_elapsed` outside `Retry` is ignored.</li><li>The four orderings join `CATCHUP_SCENARIO`, and the golden transcript stays normative</li></ul> | 9/10 |
+| R16 | MIN-1 | **Accepted.**<ul><li>Drop at the seal's landing as well as at the year end.</li><li>State the precondition (a seal shorter than a sim-year of writing) and the overrun beyond it, both in the bound column and in D42's option (b).</li><li>The host logs seal latency against sim-year wall time, and V-PERF-09 prints it.</li><li>The reference asserts the bound only under the precondition, plus a slow-seal scenario that shows the overrun</li></ul> | 8/10 |
+| R17 | MIN-2 | **Accepted.**<ul><li>The snapshot carries `w0` and the chunk references, and `read` answers from them alone.</li><li>`_race_checks` adds a seal-and-drop between the snapshot and the copy, asserting that a frame carries exactly the seqs it claims.</li><li>Probe (b) also freezes a reader across a drop</li></ul> | 9/10 |
+| R18 | MIN-3 | **Accepted.**<ul><li>State the resumed host's initial state: an empty window; `w0 = w1` = the first seq of the first year not on disk; `s` and `last_year` from disk.</li><li>I4 holds within one `run_nonce`.</li><li>The reference's restart drops `pending` and the window.</li><li>Propose in this PR a line for SPR-013's T-09: after a mid-year `kill -9` and a resume from the 10-year keyframe, no seq below the first unsealed year is re-emitted, and that year's lines, `STEP_DIGEST` included, are identical. The Architect applies the line at the merge.</li><li>Byte-for-byte re-emission holds while inputs are journaled up front (P1a). For P2's tip inputs it is not guaranteed (VER-SPR-007-TEST OBS-10), and the spec says so</li></ul> | 8/10 |
+| R19 | MIN-4 | **Accepted.**<ul><li>In a `network_only` crate, the lint follows literal `include!`s and refuses `#[path]`.</li><li>A `pub use` or `pub type` of a socket type in a `NETWORK_FILES` file is refused.</li><li>The six probes become planted controls.</li><li>§7 and §9 are reworded: the lint keeps socket types out of every file but `serve.rs`, and probe (b) is what shows the tick path never waits</li></ul> | 8/10 |
+| R20 | MIN-5 | **Accepted.** One lock per served socket: `A.lock` held by the engine host, `C.lock` by the sifter | 9/10 |
+| R21 | MIN-6 | **Accepted.**<ul><li>`future_seq` carries `finished: bool`, and a viewer stops on `true`.</li><li>On a new `run_nonce`, the viewer verifies the resumed year against `stream.sealed`.</li><li>The nonce comes from the OS random source or wall-clock nanoseconds, never a pid alone, and never in plane A</li></ul> | 8/10 |
+| R22 | MIN-7 | **One buildable design: `arc-swap`, pre-approved for `rh-stream` only.**<ul><li>An `ArcSwap` of the immutable `(w0, s, last_year, chunk list, seal log)` snapshot, published by the writer and loaded by readers. There is no lock, and the writer never waits.</li><li>The crate: `arc-swap` (MIT OR Apache-2.0, no dependencies), an exact pin chosen by SPR-026's Developer at a version at least two weeks old, default features off, added to `PLANE_A_EXTERNAL_DEPS` for `rh-stream` alone. It holds no simulation state, so determinism is untouched.</li><li>The fixed-capacity `AtomicU64` ring stays the documented alternative.</li><li>This qualifies R3's "std-only preferred"</li></ul> | 7/10 |
+| R23 | MIN-8 | **Accepted.**<ul><li>`tail --to-seq` moves to SPR-026, a small flag.</li><li>The V-PERF-09 row is marked SPR-030's (D34). SPR-026 supplies the stalled consumer and the RSS terms, counted with SPR-009's counting allocator rather than measured as RSS</li></ul> | 8/10 |
+| R24 | NIT-1 to NIT-9; R14's NIT-6 | All the nits are accepted.<ul><li>`net_parent_glob.rs` compiles.</li><li>The window-gap gate pins `I1 broken`.</li><li>The counts are corrected.</li><li>A float is answered `invalid_params`.</li><li>An empty year's `first_seq` is the year's first seq.</li><li>RECORDS frames: say what the host does.</li><li>`NETWORK_FILES` is keyed by package name.</li><li>`aborted` is simulated.</li><li>The frozen prefix is cited as `canonical_v0.md` §1, pending SPR-020.</li><li>The NIT-6 director item in the PR body gains its alternative (leave `docs/11` as it is and let SPR-027's scope say otherwise)</li></ul> | 9/10 |
+
+### 2.1 The review (round 2, independent reviewer)
+
+Reviewer: independent and adversarial, on a different model from the drafter's. Copy reviewed: `$R2/src`, a git archive of `27a20e2`. `$R2` = the Architect's scratchpad `wire_review_r2/`.
+
+Reviewer: independent (Claude Opus 5.5), 2026-10-17. Copy: `wire_review_r2/src` (git archive of `27a20e2`, plus `git init` for pytest). My scripts are in `wire_review_r2/scripts/`, my lint probes in `wire_review_r2/probes/`. Round 1: `wire_review/REVIEW.md`. Rulings: REV-SPR-026 §0 on `origin/review/SPR-026-r1`.
+
+### BLUF
+
+**Not ready to merge: 1 MAJ, 8 MIN, 9 NIT. The fixes are small; I expect round 3 to close it.**
+
+- **What round 2 fixes.** All five round-1 majors are fixed, and every gate passes.
+  - **Empty years (round-1 MAJ-4):** fixed; `scripts/empty_year_r2.py` shows the empty-year notifications are correct.
+  - **SPR-020 (MAJ-5):** fixed. Merged with SPR-020 round 2 (`9755956`), the self-test PASSes, the golden file reports `STALE:` as designed, and regenerating it works.
+  - **The year-end drop:** my `policy_b` result now reproduces in the drafter's own reference, with a peak of 2 years at every seal delay up to one sim-year and 0 viewer failures.
+  - **The lints:** the regex and the allow-list hold against every bypass I tried.
+- **The MAJ is in `Catchup`, the state machine that `rh-protocol` must reproduce line for line from the golden transcript.** It fails a correct viewer whenever events arrive in an order a real transport produces:
+  - a RECORDS frame already in flight when the viewer sends the Jump's unsubscribe;
+  - a connection that closes during a sealed read;
+  - a backoff timer that fires after a reconnect.
+
+  The first case happens at the first Jump at MAX pace. V-STR-05 would then fail ("`Catchup` reports no protocol error").
+- **The MINs** have one theme: the reference models the easy side of three races.
+  - Its copy uses the writer's live `w0`, not the snapshot, so it never shows MAJ-3's check-then-copy race.
+  - Its restart keeps the seal that was in flight and the previous year in memory, which a `kill -9` does not.
+  - Its year-end drop keeps 3 to 4 years when a seal is slower than a sim-year, and D42 does not say so.
+
+  The others:
+  - the `NETWORK_FILES` lint can be bypassed by `#[path]`, `include!` and re-exports;
+  - the engine host and the sifter share one `flock`;
+  - `run_nonce` is never used;
+  - the recommended `LiveEdge` mechanism is hard to build in a crate that forbids `unsafe`;
+  - two of the SPR-026 probes need deliverables that belong to SPR-027 or SPR-030.
+
+### R1–R14: status
+
+| # | Ruling | Status | Evidence |
+|---|---|---|---|
+| R1 | D43 drafted; §2.2, `05.10` §5 v1.4 and `05.9` IF-0 v1.4 marked pending D43 | **Applied** | `wire_v1.md:54,80`; `05.10:6,80`; `05.9:6,23`; D43 is in the PR body, recommendation 75% |
+| R2 | Year-end drop; three options; the amended wording removed until D42; the bound stated per option; default (b), pending D42 | **Applied, one gap** | `wire_v1.md:211-219`; `05.10:86`; `docs/03` and `docs/09` untouched. The `sync` and `year_end` bounds are asserted (`selftest:1379`). Gap: (b)'s precondition (a seal shorter than a sim-year of writing) is in the spec's parenthesis, but the bound column, D42 and V-PERF-09 omit it, and the reference's behaviour when the precondition fails is not "briefly" (MIN-1) |
+| R3 | Normative property; seal log pulled; recommended mechanism; deterministic probe (b); `loom` recommended | **Applied; mechanism under-specified** | `wire_v1.md:230-241,303`; `Host._sealed_frames` pulls from `seal_log`. Probe (b) is deterministic (pass/fail). Mechanism: MIN-7 |
+| R4 | `LiveEdge::read` against one snapshot; `s` published before `w0`; the reference interleaves loads and steps | **Partial** | `_race_checks` (`selftest:1448`) covers only the `(s, w0)` pair at retention 0, with two positive controls (both fire). Check-then-copy is not modelled, and `Writer.read` indexes by the live `w0` (MIN-2) |
+| R5 | Nullable `last_seq`; empty-year notification; empty channel-C years in the simulation; `check_status` accepts null | **Applied** | `scripts/empty_year_r2.py`: status valid after each seal; `stream.sealed` with `last_seq` null, `first_seq` 0 and the empty digest, sent at once, before later records, under both policies. The simulation empties every third year on channel C |
+| R6 | Lines from the canonical reference; prefix-only check; "a kind the format assigns"; `:68` corrected; free merge order | **Applied** | `golden_records` reads `golden/canonical_v0.txt`; `_make_line` uses `canonical_v0.py`'s generator. The frozen-prefix sentence exists on `arch/SPR-020-envelope` (`canonical_v0.md:19`), not yet on `main` (NIT-9). Merged with SPR-020 r2, the self-test PASSes and the golden reports `STALE:`; `test_check_all_inventory.py` conflicts textually |
+| R7 | `net::<Type>` regex with 3 controls; `PROTOCOL_EXTERNAL_DEPS`; `NETWORK_FILES` | **Applied; one rule bypassable** | Regex: every probe caught except the macro-metavariable case, a limitation every rule already shares. Allow-list: 9/9 probes correct. `NETWORK_FILES`: 6 compiling bypasses (MIN-4). The `net_parent_glob.rs` control does not compile (NIT-1) |
+| R8 | `Failed` accepts only `Closed`; Retry with backoff; `behind.next_seq` checked; `run_nonce` checked on reconnect; `Jump` input | **Partial** | `Failed`, Retry, the `next_seq` check and `Jump` are present. `run_nonce` is reported but no viewer code reads it (MIN-6). The new states fail correct viewers (MAJ-1) |
+| R9 | 4 KiB / depth-4 caps; unknown members refused; `WireError`; dispatcher with golden refusals | **Applied** | 15 `dispatch` and 28 `refuse` golden lines, `method_not_found` included; a non-ASCII body gives `WireError`. A float param is answered `invalid_request`, against §4.2's `invalid_params` (NIT-4) |
+| R10 | Validate at append; serving threads copy; stdlib sealed-read path; header filter; cores pinned; RSS bound | **Applied** | `records_payload` copies without a parse; `tail --canonical --from-seq --to-seq` named; RSS = `bytes()` + V × 1 MiB + 8 MiB. Sprint ordering of `--to-seq`: MIN-8 |
+| R11 | Read-only invariant for every version; method-table conformance test; 0700 and 0600; `control.sock` version | **Applied** | `wire_v1.md:188,23,293` (`rehoboam/stream/control/v1`) |
+| R12 | `stream.end{reason}`; no partial seal on abort; A-42 kept and A-36 moved | **Applied** | `wire_v1.md:163,239`; BCK-002 A-36 and A-42 rows. `aborted` is in the golden file but never simulated (NIT-8) |
+| R13 | `C.sock` in SPR-026; host in `rh-cli/src/serve.rs` | **Applied** | §6.4 and §7. The lock layout breaks channel C beside the run (MIN-5) |
+| R14 | Real digest; control never writes the golden; `05.9` order; `jsonrpsee` note; `t<id>` paths and `flock`; IF-0 = three sockets | **Applied** | `notify_sealed` digest `82bfd47d…` = XXH3-128 of `records_a`'s 3 lines (recomputed). `--control` returns before writing. `05.9`: v1.2, v1.3, v1.4. `docs/14` §K updated. NIT-6 is in the PR body (see the director items below) |
+
+### New findings
+
+#### MAJ-1: `Catchup` fails correct viewers when events arrive in a real transport's order (85%)
+- **Where:**
+  - `specs/stream/selftest_wire_v1.py:640` (`_records`), `:648` (`_read_done`), `:664` (`_retry_elapsed`), `:670-683` (`_jump`, `_unsubscribed`), `:593` (`_closed`), `:606` (`_end`), `:626` (`_behind`);
+  - `wire_v1.md:153` (§4.2: frames may precede the unsubscribe response), `:262-264`, `:286` (the golden transcript is normative for `rh-protocol`).
+- **Evidence** (`scripts/catchup_races.py`, driving the drafter's `Catchup`):
+
+  | Case | Events | Result |
+  |---|---|---|
+  | 1 | `behind` → `read_sealed 0 9`; `closed` → `status` → `subscribe 0`; then `read_sealed_done 0 10` | **close**: "a sealed read that does not start at the cursor" |
+  | 2 | `refused future_seq` → `wait`; `closed` → `status` → `subscribed 0` → live; then the stale `retry_elapsed` | **close**: "retry_elapsed while not retrying" |
+  | 4 | `subscribed 0`, `records 0 5`, `jump` → `unsubscribe`; then the frame already in flight, `records 5 3` | **close**: "records while not subscribed". A `behind` or an `end` in flight fails the same way |
+
+- **Why the reference misses it:** it is single-threaded. `Viewer._read_sealed` and `_unsubscribe` complete synchronously, so these orderings never occur.
+- **Impact:**
+  - At MAX pace a live viewer always has frames in flight, so every Jump reports a protocol error, reconnects and resubscribes at the old cursor: the jump fails.
+  - In case 1 the reference viewer has already delivered the sealed lines (`Viewer._read_sealed` delivers before it feeds the event), so a driver built the same way delivers them twice.
+- **Fix:**
+  - `Jumping` treats `records` as `Live` does (deliver, advance), and `Unsubscribed(next_seq)` then equals the cursor.
+  - A `behind` or `end` in `Jumping` ends the jump: subscribe live, or done. The `not_subscribed` answer that follows is expected.
+  - In `ReadingSealed`, `Closed` sets a reconnect-pending flag, and `read_sealed_done` then answers `Status` instead of `Subscribe`.
+  - `retry_elapsed` outside `Retry` is `Ignore`, a stale timer.
+  - Add these four orderings to `CATCHUP_SCENARIO`.
+
+#### MIN-1: option (b)'s bound needs a seal shorter than a sim-year; when it is not, the window holds 3–4 years for whole sim-years, and D42 does not say so (80%)
+- **Where:** `wire_v1.md:216` (the precondition is in a parenthesis; the bound column is unconditional), `:219`, `:302`; `selftest:783-797` (`_year_completes` drops `y-1` only if it is on disk), `:799-810` (a late seal never drops); the PR body's D42 row.
+- **Evidence** (`scripts/policy_b_r2.py`, the drafter's `simulate`, 40 seeds, 8 years, 12 ticks a year):
+
+  | Seal delay | Peak window | Ticks with more than 2 years (of 96) | Viewer failures |
+  |---|---|---|---|
+  | 0 to 12 | 2 years | 0 | 0 |
+  | 13 to 24 | **3 years** | up to 66 | 0 |
+  | 30 | **4 years** | 73 | 0 |
+
+- **Not "briefly":** a late seal lands and nothing drops the year it unblocks, so the year stays until the next year end. `scripts/drop_on_landing.py` (drop at the landing) gives 2 years at delay 13, and an overrun equal to the seal's lateness beyond that.
+- **When the precondition fails:**
+  - tiny worlds at MAX, where a sim-year takes less than an `fsync`;
+  - possibly V-PERF-09's 10k world: at 16.7 sim-years/s a sim-year is about 60 ms, against Parquet encoding plus `fsync`.
+- **Fix:**
+  - State the precondition and the overrun in the bound column and in D42's option (b).
+  - Drop at the seal's landing as well as at the year end.
+  - The host logs seal latency against sim-year wall time, and V-PERF-09 prints it.
+  - Assert the bound in the reference only under the precondition, with a slow-seal scenario showing the overrun.
+
+#### MIN-2: the reference never models the check-then-copy race; `Writer.read` copies from the live window (85%)
+- **Where:** `selftest:831-836` (`read(snap, …)` indexes by `self.w0` and `self.window`, using only `snap.next_seq`), `:952-968`, `:1448` (`_race_checks` covers only the `(s, w0)` pair); `wire_v1.md:304` (the §9 seal-race row checks I1 only).
+- **Evidence:** `scripts/toctou_r2.py` runs the year-end drop between `serve`'s snapshot and its copy. The reference emits a frame labelled `first_seq 1` that carries seq 21's line, and the viewer refuses it: "seq 1: the line's seq is 21".
+- **Round-1 baseline:** my round-1 simulation, re-run, still shows this race (up to 40/40 seeds with non-atomic reads).
+- **Fix:**
+  - The snapshot carries `w0` and the chunk references, and `read` returns `Behind` or lines `[c, c+n)` from them alone.
+  - Add an interleaving to `_race_checks`: a seal and a drop between snapshot and copy, asserting the frame equals the seqs it claims.
+  - Probe (b) in §9: the reader frozen inside `LiveEdge::read` across a drop must, once released, return exactly the lines `[c, c+n)` or `Behind`.
+
+#### MIN-3: the restart model assumes things a `kill -9` and a keyframe resume do not give (75%)
+- **Where:** `selftest:823-829`; `wire_v1.md:129`, `:226` (I4: `w1` never decreases), `:263`, `:267` ("re-emits the lost unsealed records byte for byte (SPR-013 T-09)").
+- **What the reference assumes** (`scripts/restart_real.py`): restarted while year 3's seal is in flight, it keeps that seal in `pending` and year 3's lines in memory (`w0 = 56`). A real resumed host has neither.
+- **What the engine guarantees:**
+  - Keyframes are written every 10 sim-years (`channel_a_v0.sql:195`; `05.10:62`), so a resume replays up to 10 years before it emits anything new.
+  - T-09 promises only that the resumed run "reseals the same bytes". Nothing states where the resumed writer starts `seq`, or that already-sealed years are not re-appended.
+  - VER-SPR-007-TEST OBS-10: when inputs are journaled at issue time, a resumed run's `state_hash` differs from the continuous run's until the last issue time. `STEP_DIGEST` carries `state_hash`, so "byte for byte" holds in P1a (inputs up front) but not for P2 tip inputs.
+- **The protocol itself survives:** with a realistic restart (seal and memory lost, resume at the first unsealed year), 0 of 540 runs fail. The test is not vacuous: 60 retries, and the disk equals the unbroken run's in 10/10.
+- **Fix:**
+  - State the resumed host's initial state: the window is empty; `w0 = w1` = the first seq of the first year not on disk, which may be the previous year; `s` and `last_year` come from disk.
+  - Scope I4 to one `run_nonce`.
+  - Make the reference's restart drop `pending` and the window.
+  - Ask SPR-013 to test a mid-year `kill -9` followed by a 10-year-keyframe resume: no seq below the first unsealed year is re-emitted, and that year's lines, `STEP_DIGEST` included, are identical.
+
+#### MIN-4: `NETWORK_FILES` can be bypassed by `#[path]`, `include!` and re-exports; "by construction" is overstated (80%)
+- **Where:** `bin/lint_forbidden.py:715-716` (`network_only` keeps only network findings, so `#[path]` and `include!` are neither flagged nor followed); `:209`; `wire_v1.md:288` ("the engine host's tick loop cannot either … by construction"), `:303`.
+- **Evidence:** six probes in `probes/nf/`. Each builds with `cargo build --offline`, and `lint_forbidden --manifest-path` reports 0 violations for each:
+
+  | Probe | Bypass |
+  |---|---|
+  | A | `pub use std::os::unix::net::UnixListener as Pipe` in `serve.rs`, then `serve::Pipe::bind` in `main.rs` |
+  | E | `pub type Ear = …UnixStream` in `serve.rs` |
+  | G | `pub use std::os::unix::net::*` in `serve.rs`, then `serve::UnixStream::connect` in `main.rs` |
+  | B | `#[path = "../tests/socket.rs"] mod sock;` in `main.rs` (`tests/` is exempt) |
+  | C | `include!("../tests/socket.rs")` in `main.rs` |
+  | D | `#[path]` to a file outside the crate (never scanned) |
+
+  The fixture's direct case is still caught.
+- **Fix:**
+  - In `network_only` crates, apply the source-include rule: follow literal `include!`s and refuse `#[path]`.
+  - Refuse a `pub use` or `pub type` of a socket type in a `NETWORK_FILES` file.
+  - Reword §7 and §9: the lint keeps socket types out of every file but `serve.rs`; probe (b) is what shows the tick path never waits.
+
+#### MIN-5: the engine host and the sifter take the same `flock`, so channel C cannot be served beside the run (80%)
+- **Where:** `wire_v1.md:23` ("an exclusive `flock` on `<run-dir>/stream/t<id>/.lock` … a second host for the same timeline cannot start"), `:21`, `:275`, `:307`.
+- **Problem:** `A.sock` (engine host) and `C.sock` (sifter, a separate process) share that directory.
+  - If both servers take `.lock`, then `rh-cli sift --follow --socket` "beside the run" cannot start.
+  - If only the engine host takes it, a second sifter can unlink a live `C.sock`, which is the problem NIT-5 was meant to fix.
+- **Fix:** one lock per served socket: `A.lock` held by the engine host, `C.lock` held by the sifter.
+
+#### MIN-6: `run_nonce` is never checked, and `future_seq` has no terminal state (75%)
+- **Where:** `selftest:1146-1158` (`_reconnect` compares `history` only), `:657-668` (`future_seq` retried whatever the nonce), `:916-928` (`future_seq` even when the writer has finished); `wire_v1.md:255-256`, `:263`.
+- **Evidence:** `scripts/catchup_races.py` case 3: `future_seq` gives waits of 1, 2, 4… indefinitely.
+- **Problems:**
+  - A cursor above the end of a finished run retries forever, because `stream.end` goes only to a subscribed connection. That happens after a resume with `--until`, an aborted run that is never resumed, or a user's `--from-seq`. Channel C has no `pace.state` to tell a viewer the run is over.
+  - The nonce changes nothing a viewer does, which is not what R8 asked for.
+- **Fix:**
+  - `future_seq` carries `finished: bool`; a viewer stops on `true`.
+  - On a new nonce, the viewer verifies the resumed year against `stream.sealed`, which turns the T-09 assumption into a check.
+  - Draw the nonce from the wall clock in nanoseconds, or from the OS. A pid alone repeats across restarts in a container (pid 1).
+
+#### MIN-7: the recommended `LiveEdge` mechanism is not buildable as described in `rh-stream` (65%)
+- **Where:** `wire_v1.md:241`; `Cargo.toml:22` (`unsafe_code = "forbid"`); `bin/lint_arch.py:301` (only `rh-bench` is allowed `unsafe`); `rh-stream` is plane A.
+- **Problem:**
+  - A std-only seqlock covers the scalars. Note it is four fields (`w0`, `s`, `last_year`, `seal_log_len`), not "two atomics".
+  - It does not cover handing readers the chunk `Arc`s and the seal log while the writer reclaims chunks. In safe std Rust that needs a lock (forbidden by §6.2), `unsafe` (`AtomicPtr`), or a crate (`arc-swap`, `crossbeam-epoch`) on the plane-A dependency list.
+- **Fix:** name one design that meets every constraint, for example:
+  - a fixed-capacity ring of `AtomicU64` words with a generation check after the copy (safe and std-only, but the capacity is fixed at start); or
+  - `arc-swap` pre-reviewed for plane A.
+
+  Otherwise SPR-026 meets this mid-sprint. This also qualifies the Architect's own R3 wording.
+
+#### MIN-8: two SPR-026 probes depend on later sprints (80%)
+- **`--to-seq`:** §6.3 (`:271`) gives `tail --to-seq` to SPR-027, but SPR-026's V-STR-05 probe (`:301`) needs it. `--from-seq` is already SPR-013 T-10's; only `--to-seq` is new.
+- **V-PERF-09:** its row (`:302`) needs the Textual TUI stub, which is SPR-027's. PRJ-002 (`:47-48`, `:141`) assigns V-PERF-09 to SPR-030 (D34), and SPR-026 precedes SPR-027.
+- **Fix:**
+  - Give `--to-seq` to SPR-026, or use `rh-stream`'s reader in the probe.
+  - Mark the V-PERF-09 row as SPR-030's. SPR-026 supplies the stalled consumer and the RSS terms.
+  - Measure peak RSS growth against the peak of `bytes()`. Better: count live bytes with SPR-009's counting allocator. The 8 MiB allowance is fine at 10k persons (a 1–3 MB window) but not scale-invariant: a freed 30–100 MB year that the allocator retains exceeds it at 1M.
+
+#### NITs
+- **NIT-1:** `tests/lint_fixtures/forbidden/planted/net_parent_glob.rs` does not compile: `TcpListener` is not in `std::os::unix::net`, and rustc says "cannot find `TcpListener` in `net`". Use `net::UnixListener`, or `use std::*; net::TcpListener` (verified: it compiles and is caught).
+- **NIT-2:** the window-gap gate (`check_all.sh:983`) pins only the check's label. Pin `I1 broken`, the reason the control actually fails.
+- **NIT-3:** two wrong counts:
+  - §9 (`:303`) says "five planted controls"; there are four.
+  - The PR body says "31 planted refusals"; there are 28.
+- **NIT-4:** where a float goes. §4.2 (`:151`) and the `invalid_params` row (`:176`) list "a float", while `invalid_request` (`:174`) also lists it. The reference and the golden file answer `invalid_request` (`dispatch_subscribe_float`). Pick one.
+- **NIT-5:** for an empty year, `first_seq` "= the next seq at the seal" (`:161`) is wrong when seals are asynchronous. The reference uses the year's first seq, which is right.
+- **NIT-6:** a RECORDS frame from a viewer is refused "before reading its payload" (`:46`), but `Host.dispatch` reads the payload first (`decode_frame` returns `Incomplete` until it has the whole frame).
+- **NIT-7:** `_network_allowed` keys `NETWORK_FILES` by directory name (`root.name`), not package name. Today this fails closed; rename the crate's directory and `serve.rs` is refused.
+- **NIT-8:** `stream.end{aborted}` and "never seal a partial year" are not simulated, only golden-encoded.
+- **NIT-9:**
+  - `wire_v1.md:68` cites `canonical_v0.md` §3 for the frozen prefix. That sentence exists only on `arch/SPR-020-envelope` (`canonical_v0.md:19`, §1), not on `main`. Say "pending SPR-020" and cite §1.
+  - The second of the two PRs to merge must also resolve a textual conflict in `python/tests/test_check_all_inventory.py`.
+
+### Round-1 evidence, re-run
+
+| Script | Result on `27a20e2` |
+|---|---|
+| `wire_review/scripts/my_live_edge_sim.py` (independent) | Reproduces round 1 exactly. Atomic reads: 0 failures across 640 runs. `s` then `w0`: I1 visible (40/40 at retention 0, delay 1). Non-atomic check-then-copy: up to 40/40 |
+| `wire_review/scripts/policy_b.py` | Peak 2 years at delays 0, 1, 5 and 11; 0/60 failures |
+| `scripts/policy_b_r2.py` (the drafter's reference) | Year-end drop: peak 2 years at delays 0–12 on A and C; 0 viewer failures at every delay; 3–4 years at delay 13 or more (MIN-1). `sync`: peak 1 at every delay |
+| `scripts/empty_year_r2.py` | MAJ-4 fixed under both policies |
+| MAJ-3 against `_race_checks` | Snapshot and `w0`-then-`s`: never broken. The two positive controls fire. Check-then-copy is not covered (MIN-2, `scripts/toctou_r2.py`) |
+| Merge with `arch/SPR-020-envelope` r2 (`9755956`) | Self-test PASS; golden `STALE:`; regeneration works (MAJ-5 fixed) |
+
+### Lint probes
+
+### `network` (`--scan`)
+- **Caught:** `use std::os::unix::{net as n}`; nested `{net::{self as sock}}`; a `pub use` in the re-exporting file; `{UnixListener as Ear}`; `use std::os as o`; `extern crate std as s`.
+- **Not caught:**
+  - a consumer of a re-export in another file (in plane A the re-exporting file is still caught);
+  - a `macro_rules!` metavariable path segment (`std::os::unix::$a::UnixListener`). This compiles, but the same gap already exists for `std::$a::read` and `std::time::$a::now`, so it is not new to this PR.
+
+### `PROTOCOL_EXTERNAL_DEPS` (`probes/pl/`)
+Caught, each:
+- a renamed package (`serde_json = { package = "tokio" }`);
+- `cfg(unix)` normal and dev target dependencies;
+- `serde` as a build-dependency;
+- `tokio` as a build- or dev-dependency;
+- `proptest` as a normal dependency;
+- a workspace-inherited `hyper`.
+
+The clean allow-list passes. Robust.
+
+### `NETWORK_FILES`
+Six compiling bypasses (MIN-4).
+
+### The drafter's choices within the rulings
+- **The year-end drop needing the previous seal on disk:** it is right not to wait. But the overrun is not "brief": the year stays until the next year end, and it grows with seal lateness (MIN-1). Drop at landing.
+- **`run_nonce` from the wall clock or the pid, never in plane A:** fine for plane isolation. Drop "or the pid", and give the nonce a use (MIN-6).
+- **Two retriable refusals:** the right two. They need a terminal state (finished) and stale-timer handling (MAJ-1, MIN-6).
+- **The 8 MiB allowance:** plausible at 10k persons. Measure peak against peak, or use the counting allocator (MIN-8).
+
+### Director items (PR body)
+- **D43:** fairly framed: an alternative with its cost; 75% matches R1. "Loses line-by-line verification" is a little strong, since an Arrow viewer could render canonical lines to verify.
+- **D42:** three options with costs; recommends (b) at 75%; the default if unanswered is stated. Two gaps:
+  - it omits (b)'s precondition and its overrun (MIN-1);
+  - option (a)'s cost is qualitative: Parquet encoding plus `fsync` per sim-year against a sim-year's wall time at G1a, which bears on V-PERF-09's 95%.
+- **NIT-6:** a recommendation at 80%, but no alternative is listed. Add one: keep tip inputs in P1a, which needs a P1a `control.sock` deliverable.
+
+### Gates (all in the copy, all as designed)
+
+| Gate | Result |
+|---|---|
+| `selftest_wire_v1.py --check` | 8/8 PASS, `OK:` (170 lines) |
+| `--control window-gap` | exit 2, check 6 FAIL with "I1 broken"; the golden file is untouched |
+| Stale-golden control | wired as before (`check_all.sh:329-336`) |
+| `lint_arch` | 0 violations. Each of the three fixtures fails for its own rule, plus the usual "no Cargo.lock" line |
+| `lint_forbidden` | workspace: 120 files, 0 violations. The four planted controls each give exactly 1 finding. `network_workspace`: 1 finding, `main.rs:3:14` |
+| `gen_manifest --check` | 176 documents, 0 errors |
+| ruff (check and format) | clean |
+| mypy | 44 files, clean |
+| pytest | 648 passed, inventory test included |
+
+Every new gate is in `--part core` only: `check_all.sh` lines 787–789, 826 (the planted controls), 832 and 981–983, between `part core` (745) and `part golden` (985).
+
+### Not run
+- **The full `bin/check_all.sh`** (needs valgrind and the other tools). The PR body says round 2's verdict is "running"; there is no report yet ("no report, no pass").
+- **No Rust:** `rh-protocol`, `serve.rs` and `LiveEdge` do not exist. A real threaded host and `loom` were not run; the races were modelled in Python only.
+- **A real `kill -9` and keyframe resume (SPR-013 T-09):** not run. MIN-3 reasons from SPR-013, `channel_a_v0.sql` and VER-SPR-007-TEST OBS-10.
+- **V-PERF-09, seal latency and RSS:** not measured. The figures are estimates.
+
