@@ -22,14 +22,17 @@ thousandths, the gestation and postpartum months, the sex ratio) are READ FROM T
   5. the stationary estimate WITH WIDOWHOOD (REV-SPR-015 R7): the 42-state chain of one woman
      (married or not, 21 closed-period states, the husband a fixed number of years older and
      dying on the same rung-0 schedule at e0 = 30, a widow re-entering at her band's probability)
-     puts the default ``tfr`` inside V-SF-01's growth band; the no-widowhood figure is printed for
-     comparison, and the tfr at which NRR = 1 is reported;
+     puts the default ``tfr`` inside V-SF-01's growth band; the figure without widowhood (the
+     husband never dies) is printed for comparison, and the tfr at which NRR = 1 is reported;
   6. timers: a birth falls on a day start of the due month, never its pulse instant; a marriage
      on a day start of its own month; a re-sampled birth lies after the input and never drops;
   7. V-SF-24's report values: births per married woman-year by the mother's age at birth, from
-     the no-mortality chain, are NOT M n(a) (REV-SPR-015 MAJ-3); the per-band ratios are printed
-     and pinned against the spec's stated figures, and conceptions per susceptible woman-month
-     equal c_i exactly (the identity V-SF-24 tests).
+     the chain WITH mortality and widowhood at e0 = 30 (the population the isolation run measures;
+     REV-SPR-015 MAJ-3, R17.2), are NOT M n(a); the per-band ratios are printed and pinned against
+     the spec's ``report_ratios``, and conceptions per susceptible woman-month equal c_i exactly
+     (the identity V-SF-24 tests);
+  8. the prose of the step texts F1, F2, N1 and N2 states the same numbers as ``constants`` (a
+     reviewer reads the steps, the engine compiles the constants: they must not drift apart).
 
 Run: python -I specs/demography/selftest_m2_f1.py
      python -I specs/demography/selftest_m2_f1.py --spec <path>   (a planted control: must FAIL)
@@ -352,13 +355,16 @@ class Chain:
     G..closed in the postpartum period, closed = G + P skipped pulses; a birth happens when k
     reaches G). With ``mortality`` the woman and her husband (``gap`` years older) die on the
     rung-0 schedule at ``e0`` on the 360-day calendar, and a widow re-enters the unmarried state
-    and marries again at N1's probability; without it the chain is the no-widowhood approximation
-    of round 1. The probabilities come from the exact integers; the chain itself is a float model
-    of the spec text, not engine arithmetic, and its outputs are bands and reports.
+    and marries again at N1's probability (``gap = None``: the husband never dies, the
+    no-widowhood approximation of round 1); without it nobody dies. The probabilities come from
+    the exact integers; the chain itself is a float model of the spec text, not engine arithmetic,
+    and its outputs are bands and reports.
     """
 
-    def __init__(self, st: Standards, m_bits: int, e0: str, *, mortality: bool, gap: int) -> None:
-        """Build the chain for level ``m_bits`` and the husband ``gap`` years older."""
+    def __init__(
+        self, st: Standards, m_bits: int, e0: str, *, mortality: bool, gap: int | None
+    ) -> None:
+        """Build the chain for ``m_bits``; the husband is ``gap`` years older (None: immortal)."""
         self.st = st
         self.c = [conception_bits(st, m_bits, i) / ONE for i in range(BANDS)]
         self.mu = [b / ONE for b in nuptiality_bits(st)]
@@ -374,7 +380,7 @@ class Chain:
 
     def husband_death(self, x: int) -> float:
         """Return the husband's probability of dying this month at the woman's age ``x``."""
-        if not self.mortality:
+        if not self.mortality or self.gap is None:
             return 0.0
         now = self.survival(x + self.gap * YEAR_360)
         if now == 0:
@@ -409,13 +415,18 @@ class Chain:
         return new
 
     def run(self) -> tuple[list[float], list[float], list[float]]:
-        """Return per-month (births, married share, susceptible share) from age 15 to 49."""
+        """Return per-month (births, married woman-months, susceptible share) from age 15 to 49.
+
+        Births and married woman-months are weighted by the woman's survival, so their ratio is
+        what an observer of the living population measures; the susceptible share is conditional
+        on her being alive (the chain's state is).
+        """
         p: dict[tuple[int, int], float] = {(0, 0): 1.0}
         births, married, susceptible = [], [], []
         x15 = FIRST_AGE * YEAR_360 + MONTH_360 // 2
         for a in range(BANDS * BAND_MONTHS):
             x = x15 + a * MONTH_360
-            married.append(sum(v for (mm, _), v in p.items() if mm == 1))
+            married.append(self.survival(x) * sum(v for (mm, _), v in p.items() if mm == 1))
             susceptible.append(p.get((1, 0), 0.0))
             due = sum(v for (_, k), v in p.items() if k == self.st.gestation)
             births.append(due * self.survival(x + MONTH_360 // 2))  # the mother alive at the birth
@@ -444,7 +455,7 @@ def check_stationary(st: Standards, spec: dict[str, Any]) -> bool:
     hi = math.exp(float(GROWTH_BAND[1]) * t_mean)
     ok = lo <= nrr <= hi
     r = math.log(nrr) / t_mean
-    no_widow = Chain(st, level_bits(st, tfr_bits), "30", mortality=True, gap=0)
+    no_widow = Chain(st, level_bits(st, tfr_bits), "30", mortality=True, gap=None)
     nrr_no, _ = nrr_and_mean_age(no_widow.run()[0], st)
     guess = tfr_bits / Q16 / nrr  # NRR is almost linear in tfr: a few secant steps
     for _ in range(SECANT_STEPS):
@@ -454,7 +465,8 @@ def check_stationary(st: Standards, spec: dict[str, Any]) -> bool:
         f"   stationary estimate at e0 = 30 with widowhood (husband {HUSBAND_OLDER_YEARS} y older):"
         f" NRR = {nrr:.4f} (band [{lo:.4f}, {hi:.4f}]), r = {100 * r:+.3f}%/yr, "
         f"mean age of net maternity {t_mean:.1f}; NRR = 1 at tfr = {guess:.3f}; "
-        f"with a same-age husband: NRR = {nrr_no:.4f}"
+        f"without widowhood (the husband never dies): NRR = {nrr_no:.4f}, "
+        f"r = {100 * math.log(nrr_no) / t_mean:+.3f}%/yr"
     )
     return ok
 
@@ -481,23 +493,71 @@ def check_timers(st: Standards) -> bool:
     return ok
 
 
-def check_report(st: Standards, spec: dict[str, Any]) -> bool:
-    """Check 7: V-SF-24's report values from the no-mortality chain (REV-SPR-015 MAJ-3)."""
-    m = level_bits(st, default_tfr_bits(spec))
-    births, married, _ = Chain(st, m, "30", mortality=False, gap=0).run()
+def band_ratios(st: Standards, m: int, chain: Chain) -> list[float]:
+    """Return births per married woman-year over M n(a), per band at birth, from ``chain``."""
+    births, married, _ = chain.run()
     ratios = []
     for i in range(BANDS):
         lo, hi = i * BAND_MONTHS, (i + 1) * BAND_MONTHS
         married_years = sum(married[lo:hi]) / MONTHS_PER_YEAR
         ratios.append(sum(births[lo:hi]) / married_years / (m * st.natural[i] / (Q16 * THOUSAND)))
+    return ratios
+
+
+def check_report(st: Standards, spec: dict[str, Any]) -> bool:
+    """Check 7: V-SF-24's report values from the chain with mortality and widowhood (R17.2)."""
+    m = level_bits(st, default_tfr_bits(spec))
+    ratios = band_ratios(st, m, Chain(st, m, "30", mortality=True, gap=HUSBAND_OLDER_YEARS))
+    plain = band_ratios(st, m, Chain(st, m, "30", mortality=False, gap=None))
     stated = [float(x) for x in spec["algorithm"]["fertility_f1"]["report_ratios"]]
     ok = all(abs(r - x) <= float(REPORT_TOL) for r, x in zip(ratios, stated, strict=True))
     print(
-        "   V-SF-24 report: births per married woman-year / M n(a) by band at birth = "
+        "   V-SF-24 report: births per married woman-year / M n(a) by band at birth, e0 = 30 with "
+        f"widowhood (husband {HUSBAND_OLDER_YEARS} y older) = "
         + ", ".join(f"{r:.2f}" for r in ratios)
-        + f" (spec: {', '.join(f'{x:.2f}' for x in stated)}); the chain draws every conception "
-        "at c_i, the identity V-SF-24 tests"
+        + f" (spec: {', '.join(f'{x:.2f}' for x in stated)}); without mortality "
+        + ", ".join(f"{r:.2f}" for r in plain)
+        + "; the chain draws every conception at c_i, the identity V-SF-24 tests"
     )
+    return ok
+
+
+def step_text(spec: dict[str, Any], table: str, label: str) -> str:
+    """Return the step of ``table`` whose text starts with ``label`` and a space."""
+    for step in spec["algorithm"][table]["steps"]:
+        if str(step).startswith(label + " "):
+            return str(step)
+    raise SystemExit(f"{table} has no step {label}")
+
+
+def check_prose(st: Standards, spec: dict[str, Any]) -> bool:
+    """Check 8: the numbers the step texts state are the constants (F1, F2, N1, N2)."""
+    part = spec["algorithm"]["partnering_f1"]["constants"]
+    wanted = {
+        ("fertility_f1", "F1"): [", ".join(f"{n / THOUSAND:.3f}" for n in st.natural)],
+        ("fertility_f1", "F2"): [
+            f"G = {st.gestation} calendar months",
+            f"P = {st.postpartum} calendar months",
+            f"G + P = {st.closed} pulses",
+            f"2^32 x {st.sex_ratio[0]} / {st.sex_ratio[1]}",
+            f"= {sex_male_bits(st)},",
+        ],
+        ("partnering_f1", "N1"): [", ".join(str(t) for t in st.nuptiality)],
+        ("partnering_f1", "N2"): [
+            f"MIN_AGE_F = {int(part['min_age_f_years'])} years",
+            f"MIN_AGE_M = {int(part['min_age_m_years'])} years",
+            f"between {int(part['gap_years'][0])} and +{int(part['gap_years'][1])} years",
+        ],
+    }
+    ok = True
+    for (table, label), needles in wanted.items():
+        text = step_text(spec, table, label)
+        for needle in needles:
+            if needle not in text:
+                ok = False
+                print(f"   {label} does not state {needle!r} (the constants say so)")
+    if ok:
+        print("   prose: F1, F2, N1 and N2 state the numbers of `constants`")
     return ok
 
 
@@ -513,6 +573,7 @@ def main() -> int:
         ("5. stationary estimate with widowhood", lambda: check_stationary(st, spec)),
         ("6. timers", lambda: check_timers(st)),
         ("7. V-SF-24 report values", lambda: check_report(st, spec)),
+        ("8. step prose = constants", lambda: check_prose(st, spec)),
     ]
     ok = True
     for name, fn in checks:

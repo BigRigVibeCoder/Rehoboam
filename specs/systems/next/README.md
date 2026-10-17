@@ -22,35 +22,40 @@ slice** (`lint_next` in `lint_odd.py`):
 | Frozen element | Must be preserved in the next version |
 |---|---|
 | `[system]` | same `id`, `crate`; `spec_version` strictly greater (semver); `status = "draft"`; the frozen spec's status is `frozen` |
-| `[[owns]]` | every column, with the same `entity`, `type`, `plane` and `fixed_point` (`meaning` may change) |
-| `[algorithm.<name>]` | every table, equal in every key (the frozen algorithm text, `version`, `check_values`); a frozen step changes only by amendment |
-| `[[rng]]` | the frozen purposes first, in the same order, with the same `key`, `resample_on_fork` and `draws` (new purposes only after them: the generated `RngPurpose` discriminants are positional) |
+| `[[owns]]` | every column, with the same `entity`, `type`, `plane` and `fixed_point`; the same `meaning` or an amendment |
+| `[algorithm.<name>]` | every table, equal in every key (the frozen algorithm text, `version`, `check_values`); a frozen step changes only by amendment, and an amended step needs a changed `version` |
+| `[[rng]]` | the frozen purposes first, in the same order, with the same `key`, `resample_on_fork` and `draws` (new purposes only after them: the generated `RngPurpose` discriminants are positional); the same `use` or an amendment |
 | `[[invariants]]` | every id, with the same `test`; the same `statement` or an amendment |
 | `[[applies]]` | every command, with the same `payload`; `from` may only grow |
-| `[[schedule]]` | every `(pulse, phase)` binding with every frozen step (steps may be added; a frozen step changes only by amendment) |
-| `[[emits]]` | every kind, its frozen `when` kept inside the new text or amended |
-| `[initialization]` | the frozen `state` text kept inside the new one, or amended |
+| `[[schedule]]` | every `(pulse, phase)` binding with the same `when` or an amendment, and every frozen step, equal or amended (steps may be added) |
+| `[[emits]]` | every kind, its frozen `when` equal or amended |
+| `[initialization]` | the frozen `state` text equal, or amended |
 | `[[params]]` | every name; a frozen `default` keeps its value |
 
-Two more rows (REV-SPR-015 R6): a frozen `[[applies]]` keeps at least its frozen `from`; a frozen `[[emits]]`
-`when`, the frozen `[initialization]` text and every frozen schedule step are kept inside the new text. And in
-`--next` mode the superseding spec is held to **frozen-level strictness** on `[[applies]]` and `[[emits]]` even
-though its status is `draft`.
+Two more rules (REV-SPR-015 R6, R15): a frozen `[[applies]]` keeps at least its frozen `from`; and every frozen
+text above is compared **for equality, line by line** (a superset that keeps the frozen text inside a longer one no
+longer passes: the change goes through an amendment). In `--next` mode the superseding spec is held to
+**frozen-level strictness** on `[[applies]]` and `[[emits]]` even though its status is `draft`. In both modes a
+spec with a duplicate key (an owned column, parameter, RNG purpose, invariant id, emitted kind, applied command,
+schedule binding or step name within a binding) is refused, so a second entry can never shadow the one the lint
+compares (R15).
 
 **Amending a frozen statement** (REV-SPR-015 R1). A next version may change a frozen statement only through a
 `[[amends]]` record:
 
 ```toml
 [[amends]]
-of = "invariants.INV-M2-03.statement"     # also algorithm.<name>.steps.<Sn>, emits.<KIND>.when,
-frozen = "<the frozen text, byte for byte>" #   initialization.state, schedule.<Pulse>/<Phase>.steps.<name>
-to = "<the new text, what this file now says there>"
+of = "invariants.INV-M2-03.statement"     # also algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state,
+frozen = "<the frozen text, byte for byte>" #   schedule.<Pulse>/<Phase>.steps.<name>, schedule.<Pulse>/<Phase>.when,
+to = "<the new text, what this file now says there>"   # owns.<entity.column>.meaning, rng.<purpose>.use
 reason = "<why>"
 ```
 
 The lint checks `frozen` against the frozen file and `to` against the next file, refuses a record whose texts are
-equal or whose path has no text, and prints every amendment as an `AMEND` line, so a reviewer sees each change to
-the frozen meaning in the run's output. A change without a record is an error.
+equal or whose path has no text, and prints every amendment as an `AMEND` line and a count
+(`amendments (next of <id>): N recorded`, pinned by `bin/check_all.sh`), so a reviewer sees each change to the
+frozen meaning in the run's output. A change without a record is an error; an amended algorithm step under an
+unchanged table `version` is an error too (REV-SPR-015 R17.4).
 
 A draft spec that still reads a column from the owner it had before the next version claimed it (S6's
 `household.head` from M4 today) warns in `--next` mode and names the follow-up; a frozen reader errs as always.
