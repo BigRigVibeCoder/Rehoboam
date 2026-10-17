@@ -1231,9 +1231,7 @@ run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference 
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
 run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential (SPR-019; REV-SPR-019 R3)" "pass:EFFECT DIFFERENTIAL: 1389 successions of 5 laws over 2 configurations compared" "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref specs/registry &&
-run "population synthesis positive control: effect_ref.py with its succession order reversed must FAIL the effect differential (REV-SPR-019 R3)" "fail:differs from effect_ref.py's" population_synthesis_effect_control &&
 run "population synthesis positive control: an altered golden output must FAIL (SPR-019)" "fail:STALE:" population_synthesis_golden_control &&
-run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
 run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
 run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
 run "population synthesis positive control: a spec check value off by one must FAIL the reference's spec check (SPR-019; REV-SPR-019 R5)" "fail:SPEC MISMATCH" population_synthesis_spec_control &&
@@ -1261,6 +1259,9 @@ run "selftest_envelope positive control: fifty witnesses on every event must FAI
 run "selftest_envelope positive control: an input's consequence that loses the origin after one hop must FAIL (05.2 §4.0 criterion 4; REV-SPR-020 R14)" "fail:7. origin through hops: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control origin-lost &&
 part golden &&
 run "Required tools present (golden part)" pass require_tools golden &&
+# SPR-019 population-synthesis controls in part golden: pure Python, no build (part core's 12-minute target; SPR-013 Architect ruling)
+run "population synthesis positive control: effect_ref.py with its succession order reversed must FAIL the effect differential (REV-SPR-019 R3)" "fail:differs from effect_ref.py's" population_synthesis_effect_control &&
+run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
 # Tier 10 — performance: instruction counts (SPR-009 T-02a; GOV-002 tier 10)
 run "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 T-02a)" "pass:V-PERF-04 PASS" "$PY" -I bin/perf_gate.py gate --baseline "$PERF_BASELINE" --out "$PERF_RUN" &&
 run "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 T-02)" "pass:identical counts in two runs" sh -c '"$1" -I bin/perf_gate.py measure --out artifacts/perf/instructions_run2.txt && "$1" -I bin/perf_gate.py same "$2" artifacts/perf/instructions_run2.txt' sh "$PY" "$PERF_RUN" &&
