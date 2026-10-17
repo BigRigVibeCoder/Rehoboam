@@ -2,27 +2,26 @@
 id: REV-SPR-026
 title: "Independent review of the World Stream v1 wire format and rh-protocol spec (PR #60)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-026, SPR-027, SPR-013, SPR-020, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.2.0
+version: 1.0.0
 ---
 
-> **BLUF: round 1 on `5e19bc2` found 1 blocker, 5 majors, 8 minors and 7 nits. Not mergeable yet.**
-> - **What holds.** Re-derived independently, the live-edge rule (I1–I4) is correct under an atomic snapshot. In the reviewer's own simulation: 0 failures in 640 runs, across 8 viewer types, retention 0 and 1, overlapping seals and empty years.
-> - **The blocker.** Canonical lines on the live edge overturn ADR-0031 §1 item 4 ("Arrow IPC with LZ4"). That is the director's call, so it goes to the director as D43.
-> - **The majors:**
->   - the window bound when a seal overlaps the next year;
->   - a lock the writer could share with readers;
->   - races between a seal and a subscribe;
->   - empty channel-C years;
->   - coupling to the SPR-020 envelope.
-> - **Rulings:** R1–R14 in §0.
-> - **Round 2** (`27a20e2`): every round-1 major is fixed. One new major (`Catchup` under a real transport's event order), 8 minors and 9 nits. Rulings R15–R24 in §2.0. The review ran in a session on a different model from the drafter's.
+> **BLUF: CLOSED, approved.** The World Stream v1 wire spec (PR #60) took three rounds:
+>
+> | Round | Head | Findings | Rulings |
+> |---|---|---|---|
+> | 1 | `5e19bc2` | 1 blocker, 5 majors, 8 minors, 7 nits | R1–R14 (§0) |
+> | 2 | `27a20e2` | Every round-1 major fixed; 1 new major, 8 minors, 9 nits | R15–R24 (§2.0) |
+> | 3 | `5218564` | Verified by the Architect, who re-ran round 2's reproduction scripts against the new reference (§3) | — |
+>
+> - **Director items:** D42 (the live-edge window and PERF-5), D43 (ADR-0031 §1 item 4, the live-edge container) and D47 (`docs/11` P1.17's "tip and scheduled inputs", a roadmap text fix). Until they are ruled, the texts carry "pending" marks.
+> - **Reviewers:** rounds 1 and 2 ran in sessions on a different model from the drafter's.
 
 # REV-SPR-026: independent review of the World Stream v1 wire format
 
@@ -589,4 +588,27 @@ Every new gate is in `--part core` only: `check_all.sh` lines 787–789, 826 (th
 - **No Rust:** `rh-protocol`, `serve.rs` and `LiveEdge` do not exist. A real threaded host and `loom` were not run; the races were modelled in Python only.
 - **A real `kill -9` and keyframe resume (SPR-013 T-09):** not run. MIN-3 reasons from SPR-013, `channel_a_v0.sql` and VER-SPR-007-TEST OBS-10.
 - **V-PERF-09, seal latency and RSS:** not measured. The figures are estimates.
+
+## 3. Round 3: the Architect's check (2026-10-17, `5218564`)
+
+Everything below ran on a `git archive` copy of `5218564`, using round 2's own reproduction scripts (`$R2/scripts`) against the new reference.
+
+| Check | Result |
+|---|---|
+| `selftest_wire_v1.py --check` | WIRE v1: PASS; the golden file matches (191 lines) |
+| `--control window-gap` | FAIL, as required |
+| `catchup_races.py` (MAJ-1) | Fixed:<ul><li>case 1: a close during a sealed read sets reconnect-pending, and `read_sealed_done` answers `status`;</li><li>case 2: a stale `retry_elapsed` is ignored;</li><li>case 4: a frame in flight under a Jump is delivered, and `unsubscribed(8)` leads to `subscribe_live`.</li></ul>Case 3 keeps retrying only because the round-2 script sends no `finished` flag; `future_seq{finished}` is new in round 3 |
+| `toctou_r2.py` (MIN-2) | The copy comes from the snapshot: the frame claims `first_seq 1` and holds 24 lines, labelled correctly |
+| `policy_b_r2.py`, `year_end` (MIN-1) | Up to a seal delay of 13 ticks (one sim-year is 12), the peak window is 2 years; round 2 reached 3 at delay 13. At delays 18, 24 and 30 the peaks are 3, 3 and 4 years, exactly the stated overrun 2 + ⌈k⌉. 0 viewer failures in 40 seeds at every delay, on both channels |
+| `restart_real.py` (MIN-3) | The reference's restart drops `pending` and the window. A realistic restart fails 0 of 540 runs; 60 retries over 10 runs show the check is not vacuous |
+| `empty_year_r2.py` (MAJ-4 of round 1) | An empty year is served with `last_seq` null |
+| `lint_arch.py`, `lint_forbidden.py` (workspace) | 0 violations. Sockets in `rh-cli` are allowed only in `src/serve.rs` |
+| `lint_forbidden.py` on `network_bypasses` (MIN-4) | Exactly 6 findings: 2 `#[path]`, 1 `network` in the included `tests/socket.rs`, and 3 `network-reexport` in `serve.rs` |
+
+**Accepted:** the drafter's three choices within the rulings:
+- a late seal drops its year when it lands;
+- the resumed-year check compares only years the viewer holds whole;
+- `future_seq{finished}` is fatal.
+
+**Merge:** the PR merges `main` after SPR-012 (`df4a7f4`), with conflicts in `lint_arch.py`, `lint_forbidden.py`, `05.0` and the inventory test. It then merges on green CI.
 
