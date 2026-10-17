@@ -54,6 +54,7 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelg
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml   # rung 1 (BCK-002 A-06)
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml      # rung 2 (BCK-002 A-06)
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/manor.yaml       # the SPR-019 fixture: a dynastic manor between rung 2 and SPR-030's fixture world
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml  # must FAIL
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
@@ -77,6 +78,7 @@ cargo nextest run -p rh-worldgen --locked --release --test m2_system   # also th
 python -I specs/demography/selftest_m2_f1.py      # M2 F1 fertility and partnering: the exact reference of [algorithm.fertility_f1] and [algorithm.partnering_f1] in the next-version spec (SPR-015)
 python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml   # the next version of a frozen spec (M2 F1 draft 0.3.0) supersedes it for the run and must preserve the frozen slice (SPR-015; specs/systems/next/README.md); its [[emits]] roles and motives may only grow, and snapshots, default and cause_column stay equal unless an [[amends]] record changes them (SPR-020; REV-SPR-020 R15)
 python -I specs/worldgen/selftest_worldgen_lite.py   # worldgen-lite v0 and S3 F0 residence: the exact reference of M1's [algorithm.worldgen_lite] and S3's [algorithm.residence_f0], golden outputs in specs/worldgen/golden/ (SPR-018)
+python -I specs/worldgen/selftest_population_synthesis.py   # population synthesis v0 and the dynastic back-fill: the exact reference of specs/worldgen/population_synthesis.toml [algorithm.population_synthesis] and [algorithm.dynastic_backfill], golden outputs in specs/worldgen/golden/ (SPR-019); --control spacing, --control rounding-cells and --control rounding-table must FAIL, and --spec on a copy with a stale check value must FAIL; --effect-ref specs/registry runs the differential gate against the effect language's evaluator once PR #41 merges (REV-SPR-019 R3)
 python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of the M2 spec's [algorithm.mortality_f1] (specs/systems/next while it is a draft; SPR-016); --control beta-one-power, --control infant-discontinuous and --control newborn-uncovered must FAIL (each isolates one check)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
