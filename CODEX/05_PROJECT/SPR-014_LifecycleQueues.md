@@ -68,12 +68,12 @@ version: 0.1.0
 
 | Rule | This sprint |
 |---|---|
-| Change class (`docs/13` §4.2) | **C3** by class: scheduler semantics, which is determinism machinery (PRJ-002 §2), with no `state_hash` change on any golden world (R1, R15). It contains C2: `rh-contracts` v0, the typed `[[applies]]` payloads in `AccessSpec`, and M2 0.2.3. CI will detect C2 (no hash moves); the declared class is C3 and is the higher of the two |
+| Change class (`docs/13` §4.2) | **C3** by class: scheduler semantics, which is determinism machinery (PRJ-002 §2), with no world-table change on any golden world (R1 as amended, R15): the `state_hash` of `solo`, `household` and `hamlet` moves only through `rh-core/engine.meta`'s cursor, which M2's daily `Day`/`Vital` instants advance, re-recorded in the final `[C3]` commit (Architect ruling, 2026-10-17, option A). It contains C2: `rh-contracts` v0, the typed `[[applies]]` payloads in `AccessSpec`, and M2 0.2.3. CI will detect C2 (no hash moves); the declared class is C3 and is the higher of the two |
 | Planes touched (ADR-0024) | A: `rh-core`, `rh-events` (`EventRef`), `rh-snapshot` (row encodings), `rh-contracts`, `rh-sys-demography`, and `rh-registry` if the loader is still there. Tool: the spec-table loader, `bin/gen_skeletons.py`, `bin/lint_forbidden.py`, `specs/`. B and C: none |
 | Owned columns written | `M2.demography`, through commands: `person.alive`, `person.death_tick`, `person.death_cause`, and the life-course exit fields (a drained `ScheduleDeath`); `person.spouse` (a drained `Marry`). `rh-core`'s row insert writes no column as a system: it is a core act like compaction (SPR-011 ruling 5) |
 | Reads (via `rh-contracts`) | No production reader. Test-only stub readers of M2's columns go through `rh-contracts` v0 (T-06). M7's and T1's foreign reads are checked at registration only (T-04) |
 | RNG purposes added | None in production code. Test-only stub senders declare their own purposes in fixture specs |
-| Golden-hash effect | **None.** `smoke` (1,000 years), `solo`, `household` and `hamlet` ladders stay byte-identical, and so do the channel-A segments of the three rungs. A difference is a defect to fix, not a `[C3]` regeneration (EVO-001 §5). If R15's neutrality cannot be met, R15's fallback needs a text change and an announcement to the director first, outside this plan |
+| Golden-hash effect | **Cursor only** (amended 2026-10-17, the Architect's option A): `smoke` (1,000 years) stays byte-identical; on `solo`, `household` and `hamlet` every world table and every engine table but `rh-core/engine.meta` stays byte-identical at every rung, and `engine.meta`'s cursor moves because M2's daily instants advance it; the three are re-recorded with `bin/regen_baseline.sh` in the final `[C3]` commit, with a divergence record. In channel A only `STEP_DIGEST.state_hash` and `KEYFRAME.state_hash` differ (and the segments' `canonical_digest` as their consequence). Any other difference is a defect to fix (EVO-001 §5 as amended). If R15's neutrality cannot be met, R15's fallback needs a text change and an announcement to the director first, outside this plan |
 | Fixed-point quantities | None new. `q8_8` and `q16_16` payload fields of the closed vocabulary are carried as raw integers and type-checked at `submit` |
 | Determinism lints (GOV-003 §2, §6) | Must pass. New: A-50's `env!`/`option_env!` rule in `bin/lint_forbidden.py`, with planted controls (T-07). `rh-contracts` stays (A, contract) |
 | Tests that gate this sprint | V-DET-01, V-DET-02, V-DET-05, V-DET-12 (unchanged), **V-DET-21**, V-INV-01, V-INV-03 (subset, stub senders), **V-INV-04** (absent owners), **V-INV-15** (stub systems; the court soak is SPR-021's and SPR-023's), V-DET-19, V-INSP-03, V-GOLD-01 on all four worlds, V-PERF-04, V-PERF-11, plus `bin/check_all.sh` |
@@ -252,7 +252,7 @@ version: 0.1.0
   - All four golden ladders are unchanged: every existing draw passes the kind check.
 - **Status:** [ ] not started
 
-#### T-08: Every ladder unchanged; the gates and the docs (R1; EVO-001 §5)
+#### T-08: Every ladder unchanged but for the cursor; the gates and the docs (R1 and EVO-001 §5 as amended)
 - **Deliverable:**
   - **`check_all.sh` gates in part `core`:**
     - the new `nextest` targets: `agenda_events` for V-DET-21 and V-INV-15, `registration` for V-INV-04, the ledger insert, and the `rh-contracts` drift test;
@@ -261,8 +261,8 @@ version: 0.1.0
     Part `golden` gets no new run: the existing ladders are the evidence. The inventory test is updated in the same commit.
   - **The docs of the compliance table.**
 - **Acceptance:**
-  - **Ladders.** The `smoke`, `solo`, `household` and `hamlet` ladders equal their baselines at 1 and N threads (PR tier). The nightly monthly ladders at 1, 2, 4 and N threads × 3 equal too: `bin/golden_nightly.sh` runs on the PR head before the audit. The PR changes no file under `worlds/*/baselines/`.
-  - **Channel A.** The segments of `solo`, `household` and `hamlet` are byte-identical to SPR-013's, with equal canonical digests. `STEP_DIGEST` is per Month pulse, and M2's daily instants change no month-end hash (EVO-001 §5).
+  - **Ladders.** The `smoke` ladder equals its baseline at 1 and N threads (PR tier), and its file under `worlds/smoke/baselines/` is unchanged. `solo`, `household` and `hamlet` are re-recorded in the final `[C3]` commit; the divergence record shows, for each, every table digest at every rung from `8f7edb4` and from the head, with `rh-core/engine.meta` the only differing table (amended 2026-10-17). The nightly monthly ladders at 1, 2, 4 and N threads × 3 equal the new baselines: `bin/golden_nightly.sh` runs on the PR head before the audit.
+  - **Channel A.** On `solo`, `household` and `hamlet` only `STEP_DIGEST.state_hash` and `KEYFRAME.state_hash` differ from SPR-013's segments (the state hash holds the cursor); every other record and field is byte-identical, and each segment's `canonical_digest` differs only as their consequence (amended 2026-10-17).
   - **Parallelism floors.** SPR-013 states `--require-parallel` floors for `household` and `hamlet`. M2's daily single-job `Day`/`Vital` levels may dilute that fraction. If a floor no longer holds, the Architect restates it with the measured figure; it is never lowered silently.
   - **Performance.** V-PERF-04 and V-PERF-11 are green. The empty daily drain should allocate nothing in steady state. If a recorded count moves, the tool regenerates the baseline in a `[perf-baseline]` commit with a reason line (SPR-009 ruling 3), and the audit explains it.
   - **CI time.** Both CI parts finish in 12 minutes or less; the times are in the PR.
