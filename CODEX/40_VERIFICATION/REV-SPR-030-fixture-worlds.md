@@ -2,17 +2,29 @@
 id: REV-SPR-030
 title: "Independent review of the SPR-030 spec deliverables: the dynastic fixture world, the 10k manifest and the V-DET-17 protocol (PR #73)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-030, SPR-019, SPR-021, SPR-022, SPR-015, REV-SPR-019, REV-SPR-029, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.3.0
+version: 1.0.0
 ---
 
-> **BLUF: round 1 on `c9efce8`. Changes are needed: 1 blocker, 3 majors, 7 minors and 2 nits.**
+> **BLUF: CLOSED on `3b42714` (round 4, verified by the Architect, 2026-10-17). The SPR-030 spec deliverables are ready to merge** (§0d).
+> - R23–R27 hold.
+> - Every SPR-030 gate passes or fails as required in the PR tier, and both nightly commands pass.
+> - All eleven CRN mutants fail at seeds 1 and 3; the correct engine passes.
+> - The folded population-synthesis gate takes 27 s, where the gate and its separate control took about 50 s.
+>
+> Four rounds; rulings R1–R28. BCK-002 A-56 (M7 house membership) and A-57 (M7 dormancy precedence) go to SPR-021's plan.
+>
+> **Round 3** on `35b0717`. Ready after short fixes: no blocker, no major, 3 minors and 2 nits (§3). Rulings R23–R27 are in §0c.
+>
+> **Round 2** on `c442adb`. Changes are needed, but small: 1 major (the nightly CRN job fails every night), 7 minors and 1 nit (§2). Rulings R14–R22 are in §0b.
+>
+> **Round 1** on `c9efce8`. Changes are needed: 1 blocker, 3 majors, 7 minors and 2 nits.
 >
 > **What holds:**
 > - Six new gates and their controls pass or fail as they should.
@@ -53,6 +65,44 @@ version: 0.3.0
 | R13 | Director | No director item is needed for this PR. The Architect's merge summary tells the director about R1(a), which holds the G1a criterion as written, and about A-56, the M7 membership question that touches D40's revisit | — |
 
 **Round 2:** the drafter applies R1–R13, regenerates the goldens with the tools, runs `check_all --part core` with the gate timings, and pushes once. An independent check follows, with the reviewer's `work/` scripts.
+
+## 0d. Round 4, verified by the Architect: CLOSED (2026-10-17)
+
+The Architect verified `3b42714` (a git archive in `fixtures_review_r4/src/`) with the round-3 reviewer's scripts. **No finding is open. The spec is ready to merge.**
+
+**The round-3 rulings hold:**
+- **R23.** The partnering clause covers a U woman only while her N4 candidate list and her own eligibility are identical in both runs at each of her draws. A differing marriage outside that set is reported with the person responsible: an S person, or an exposed U woman. The engine check replays N4 from the ledger.
+- **R24.** §6's fallback for V-INV-03's agenda path is `kingdom_10k`'s 1,000-year G1a runs, with the gap reported.
+- **R25.**
+  - The four "pairs differ" controls require a VALID pair.
+  - `choose_target` applies the window and the pairs floor from run A. The golden prints `runA_informative` per candidate.
+  - Seed 2's SKIPPED block pins run A's deaths digest.
+  - The companion states that the run fails when no tested seed gives a VALID pair.
+- **R26.** The three text slips are fixed, and the full reading's resolution of A-57's overlap is stated (in favour of naming).
+- **R27.**
+  - The effect differential's reversed-line control runs inside the population-synthesis gate's run: "1148 of 1389 successions differ (as required)". The separate line and its inventory entry are gone.
+  - Run A is snapshotted at the input's month instead of re-run.
+
+**Evidence:**
+- **PR-tier gates:** all ten SPR-030 lines pass or fail as required, each for its own reason.
+  - The folded population-synthesis gate takes 27 s.
+  - The fixture-worlds gate takes 10 s; its dormancy-one control, 2 s.
+  - CRN at seed 1 with its five controls takes 28 s.
+- **Nightly:**
+  - `fixture_worlds --tier nightly`: PASS (17 s; 5 cases, 372 lines).
+  - `crn_pairing --seeds 1,2,3 --controls`: PASS (63 s, from 71 s): "2 VALID and exact pair(s), 1 seed(s) skipped for power, controls 10 of 10 FAIL as required".
+- **Mutants:** the reviewer's `crn_mutants_r2.py` at seeds 1 and 3.
+  - All eleven fail, with the round-3 counts unchanged: review-swap 120/274 and 101/206, row-index 101/268 and 95/216, re-key 1% 3/231 and 4/179. No-op-input and skip-S11 give an INVALID pair.
+  - The correct engine passes.
+  - No person dead before T_IN gets a new death tick.
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R28 | `crn_pairing_v0.md` §4.1 still says run A is re-run to `T_IN`. Since R27, the common starting point is run A's snapshot at the input's month, run forward to `T_IN` | Fixed in this review's PR: a text change only, and the reference already does it | 95% |
+
+**Merge order with SPR-013.** On `main` without SPR-013, PR #73 replaces the separate effect-control line in part core. SPR-013 (PR #64) moved that line to part golden. Whichever of the two merges second deletes the line from part golden and keeps the folded control (R27).
+
+**Part core's budget after both merges.** SPR-030 adds about 41 s to part core, and its fold takes about 25 s out of part golden. The CRN controls (about 17 s) stay in part core unless a CI run puts part core above 12 minutes.
 
 ## 0c. Architect rulings, round 3 (2026-10-17)
 
