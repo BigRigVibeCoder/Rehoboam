@@ -54,6 +54,7 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/aethelg
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml   # rung 1 (BCK-002 A-06)
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml      # rung 2 (BCK-002 A-06)
+python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/manor.yaml       # the SPR-019 fixture: a dynastic manor between rung 2 and SPR-030's fixture world
 python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml  # must FAIL
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
@@ -67,6 +68,7 @@ cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler stati
 python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
 python -I specs/worldgen/selftest_worldgen_lite.py   # worldgen-lite v0 and S3 F0 residence: the exact reference of M1's [algorithm.worldgen_lite] and S3's [algorithm.residence_f0], golden outputs in specs/worldgen/golden/ (SPR-018)
+python -I specs/worldgen/selftest_population_synthesis.py   # population synthesis v0 and the dynastic back-fill: the exact reference of specs/worldgen/population_synthesis.toml [algorithm.population_synthesis] and [algorithm.dynastic_backfill], golden outputs in specs/worldgen/golden/ (SPR-019); --control spacing and --control rounding must FAIL
 python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of specs/demography/mortality_f1.toml [algorithm.mortality_f1] (SPR-016); --control beta-one-power, --control infant-discontinuous and --control newborn-uncovered must FAIL (each isolates one check)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)

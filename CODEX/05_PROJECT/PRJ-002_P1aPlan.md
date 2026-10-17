@@ -8,8 +8,8 @@ agents: [all]
 tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
-updated: 2026-10-16
-version: 0.5.2
+updated: 2026-10-17
+version: 0.5.3
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
@@ -156,7 +156,7 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | Effect-language grammar and golden cases, with the kinship relations (REV-P1a NEW-3) | SPR-017 | Final (PR #41, `REV-SPR-017` closed); awaits D37 |
 | `neutral` on `[[reads]]` in `lint_odd.py`'s schema and in M7's and T1's foreign reads: the effect language's loader needs it, and SPR-014's absent-owner rule supplies it (D36) | SPR-017 | PR #49 (EVO-001): `neutral` on every rate and mode read, identity reads require their owner (R12), enum codes on `[[owns]]`, typed `[[applies]]` with `drained_by`, `key` and `key_field`, outcome commands with their sender's timer; M7 0.3.2, T1 0.3.2, M2 0.2.1 |
 | `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018; SPR-032 (P1b, D33) | Drafting (2026-10-17, PR #52, REV-SPR-018 round 2): `M1.regions` 0.1.0 and `S3.migration` 0.1.0 drafts, `specs/worldgen/` (templates, exact reference, golden outputs, bench 4 fixture). The spec PR adds S3 to the Registry without a version bump; SPR-018's sprint PR adds S3 to every template's `default_systems` and bumps `registry_version` (REV-SPR-018 R3). M1 F1 stays missing (P1b) |
-| Population synthesis, with the dynastic back-fill: pre-epoch life-course rows with parent links back to each dynasty's `generations`, and tenure rows for each title's past holders (REV-SPR-017 N5) | SPR-019 | Missing |
+| Population synthesis, with the dynastic back-fill: pre-epoch life-course rows with parent links back to each dynasty's `generations`, and tenure rows for each title's past holders (REV-SPR-017 N5) | SPR-019 | Drafting (2026-10-17, branch `arch/SPR-019-popsynth`): `specs/worldgen/population_synthesis.toml` (`[algorithm.population_synthesis]` P0–P12, `[algorithm.dynastic_backfill]` B0–B11, the fold's amendments, eleven decisions for the Architect), its companion, the exact reference `selftest_population_synthesis.py` with golden outputs on `hamlet` and the new `manor` fixture at two seeds each, and the core gates |
 | Role codes reconciled (`schema.sql` vs `[event_roles]`) | SPR-020 | Conflict |
 | `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`); 0.3.2 in PR #49 (EVO-001: `neutral` on rate and mode reads, identity reads require their owner, enum codes, typed `[[applies]]`, the `Day`/`Vital` murder timer) |
 | `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`); 0.3.2 in PR #49 (EVO-001: `neutral` on rate and mode reads, identity reads require their owner, enum codes, typed `[[applies]]`, `Marry` and `ScheduleDeath` submitted by T1's own `MARRY_DUE` and `DEATH_DUE` timers) |

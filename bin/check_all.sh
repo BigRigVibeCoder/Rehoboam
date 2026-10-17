@@ -284,6 +284,16 @@ worldgen_lite_template_control() {
   "$PY" -I specs/worldgen/selftest_worldgen_lite.py --templates "$planted"
 }
 
+# Population synthesis golden control (SPR-019): the committed golden outputs with hamlet's leftover count changed; the
+# exact reference must FAIL on them (selftest_population_synthesis.py --golden).
+population_synthesis_golden_control() {
+  local planted=target/rendered-fixtures/population_synthesis_altered_golden.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^leftover 1 orphans 0$/s//leftover 2 orphans 0/' specs/worldgen/golden/population_synthesis_v0.txt > "$planted" || return 1
+  grep -q '^leftover 2 orphans 0$' "$planted" || { echo "control not planted: no 'leftover 1 orphans 0' line in the population-synthesis golden file"; return 1; }
+  "$PY" -I specs/worldgen/selftest_population_synthesis.py --golden "$planted"
+}
+
 # Channel-C float control (SPR-013 T-11): the channel-C DDL with closed_by_seq made a DOUBLE; the self-test must FAIL.
 channel_c_float_control() {
   local planted=target/rendered-fixtures/channel_c_float_column.sql
@@ -835,6 +845,7 @@ run "Manifest: aethelgard" pass "$PY" -I specs/manifest/manifest_v0.py validate 
 run "Manifest: uz_job" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml &&
 run "Manifest: household (rung 1; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml &&
 run "Manifest: hamlet (rung 2; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml &&
+run "Manifest: manor (the SPR-019 fixture: a dynastic manor)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/manor.yaml &&
 run "Manifest: invalid_draft_style must FAIL" fail "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml &&
 run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-targets --locked --quiet -- -D warnings &&
 run "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)" pass cargo clippy -p rh-bench --all-targets --features count-alloc --locked --quiet -- -D warnings &&
@@ -902,6 +913,10 @@ run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruli
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
+run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference (SPR-019)" "pass:POPULATION SYNTHESIS: PASS" "$PY" -I specs/worldgen/selftest_population_synthesis.py &&
+run "population synthesis positive control: an altered golden output must FAIL (SPR-019)" "fail:STALE:" population_synthesis_golden_control &&
+run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
+run "population synthesis positive control: floors in place of the allocations must FAIL the marginals (SPR-019 P3, P7)" "fail:POPULATION SYNTHESIS: FAIL (the reference's own checks" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding &&
 run "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality --check; SPR-016)" "pass:M2 F1 MORTALITY: PASS" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check &&
 run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)" "fail:1. rung 0 = beta 1: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control beta-one-power &&
 run "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 (SPR-016 MR7)" "fail:5. infant sub-schedule: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control infant-discontinuous &&

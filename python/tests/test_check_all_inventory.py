@@ -119,6 +119,8 @@ REQUIRED_GATES = (
     "--check; SPR-016)",
     "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)",
     "Golden vectors: M4 basket and price rule",
+    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference "
+    "(SPR-019)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
@@ -138,6 +140,7 @@ REQUIRED_GATES = (
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
     "Manifest: household (rung 1; SPR-011 ruling 18)",
     "Manifest: invalid_draft_style must FAIL",
+    "Manifest: manor (the SPR-019 fixture: a dynastic manor)",
     "Manifest: solo",
     "Manifest: uz_job",
     "Manifest: val_khor",
@@ -413,6 +416,11 @@ REQUIRED_GATES = (
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
+    "population synthesis positive control: an altered golden output must FAIL (SPR-019)",
+    "population synthesis positive control: conceptions inside the closed period must FAIL the "
+    "spacing invariant (SPR-019 B6)",
+    "population synthesis positive control: floors in place of the allocations must FAIL the "
+    "marginals (SPR-019 P3, P7)",
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
