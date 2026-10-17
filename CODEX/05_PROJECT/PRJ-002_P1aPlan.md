@@ -155,7 +155,7 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | M2 F1 mortality (infant sub-schedule, old-age tail, density modifier); fixed-point `exp`/`ln` ruling and reference | SPR-016 | Missing |
 | Effect-language grammar and golden cases, with the kinship relations (REV-P1a NEW-3) | SPR-017 | Final (PR #41, `REV-SPR-017` closed); awaits D37 |
 | `neutral` on `[[reads]]` in `lint_odd.py`'s schema and in M7's and T1's foreign reads: the effect language's loader needs it, and SPR-014's absent-owner rule supplies it (D36) | SPR-017 | Drafting with EVO-001 (2026-10-17) |
-| `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018; SPR-032 (P1b, D33) | Missing |
+| `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018; SPR-032 (P1b, D33) | Drafting (2026-10-17): `M1.regions` 0.1.0 and `S3.migration` 0.1.0 drafts, `specs/worldgen/` (templates, exact reference, golden outputs, bench 4 fixture); M1 F1 stays missing (P1b) |
 | Population synthesis, with the dynastic back-fill: pre-epoch life-course rows with parent links back to each dynasty's `generations`, and tenure rows for each title's past holders (REV-SPR-017 N5) | SPR-019 | Missing |
 | Role codes reconciled (`schema.sql` vs `[event_roles]`) | SPR-020 | Conflict |
 | `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`) |
