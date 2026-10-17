@@ -306,6 +306,17 @@ m2_f1_stale_control() {
   "$PY" -I specs/demography/selftest_m2_f1.py --spec "$planted"
 }
 
+# M2 F1 mortality reference control (SPR-016; REV-SPR-016-FOLD NIT-3): the next-version M2 spec with one
+# [algorithm.mortality_f1] check value off by one; the exact reference must FAIL check 3 on it
+# (selftest_m2_f1_mortality.py --spec).
+m2_f1_mortality_stale_control() {
+  local planted=target/rendered-fixtures/m2_f1_mortality_stale_check_value.odd.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/K = 27498377919,/K = 27498377920,/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
+  grep -q 'K = 27498377920,' "$planted" || { echo "control not planted: K = 27498377919 not found in the next M2 spec"; return 1; }
+  "$PY" -I specs/demography/selftest_m2_f1_mortality.py --spec "$planted"
+}
+
 # Worldgen-lite golden control (SPR-018): the committed golden outputs with one land count off by one; the exact reference
 # must FAIL on them (selftest_worldgen_lite.py --golden).
 worldgen_lite_golden_control() {
@@ -880,7 +891,7 @@ run "lint_odd neutral positive control: an enum neutral outside the column's cod
 run "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)" "pass:WARN  M3.agriculture.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
 run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
 run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
-run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 29 planted changes rejected (3 of them by the amendments lock), 18 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 29 planted changes rejected (3 of them by the amendments lock), 19 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
@@ -975,6 +986,7 @@ run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equalit
 run "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 (SPR-016 MR7)" "fail:5. infant sub-schedule: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control infant-discontinuous &&
 run "M2 F1 positive control: a newborn drawn on rung 0's S8 must FAIL the first-draw rule (SPR-016 MR10)" "fail:7. draws: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control newborn-uncovered &&
 run "M2 F1 positive control: a stale golden file must FAIL (SPR-016)" "fail:STALE:" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check --golden tests/lint_fixtures/golden/stale_m2_f1_mortality.txt &&
+run "M2 F1 mortality reference positive control: a stale check value in the next M2 spec must FAIL (SPR-016)" "fail:3. corners: FAIL" m2_f1_mortality_stale_control &&
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
 # Tier 6/8 — determinism-style and contract prototypes
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
