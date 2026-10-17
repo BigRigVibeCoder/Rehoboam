@@ -33,8 +33,9 @@ use rh_core::world::WorldTables;
 use rh_ids::person::PersonIdTable;
 use rh_ids::{EntityRef, SystemId};
 use rh_manifest::Registry;
+use rh_manifest::specs::{load_specs, registry_system_ids};
 use rh_registry::WorldSpec;
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_sys_demography::Demography;
 use serde::Deserialize;
 

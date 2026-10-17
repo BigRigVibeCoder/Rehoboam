@@ -29,6 +29,7 @@ NEXTEST_TARGET = re.compile(r"--test (\S+)")
 
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
+    "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL",
     "Architecture: crate boundaries, planes and engine purity (lint_arch; V-INSP-03, V-PLN-01, "
     "V-INSP-05)",
     "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's "
@@ -95,6 +96,9 @@ REQUIRED_GATES = (
     "(check_baseline; SPR-008 T-04)",
     "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
     "SPR-012 T-08)",
+    "Golden draws power: a one-day error in q' either way changes re-sample outcomes of the "
+    "larger fixture world (gen_m2_draws_reference --power; BCK-002 A-53, VER-SPR-012-TEST "
+    "GAP-8)",
     "Golden draws: M2's death instants on fixture worlds are the independent model's, every S11 "
     "re-sample case covered (gen_m2_draws_reference --check; SPR-012, Tester's interim report)",
     "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for "
@@ -288,6 +292,8 @@ REQUIRED_GATES = (
     "VER-SPR-008-TEST GAP-3, GAP-7)",
     "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness"
     " error, not match any failure (VER-SPR-012-TEST GAP-6)",
+    "check_all harness positive control: a fail: expectation with whitespace-only text must "
+    "FAIL as a harness error (VER-SPR-012-TEST GAP-9; BCK-002 A-53)",
     "check_all positive control: the old PWD-joined golden path under an absolute "
     "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
     "check_all verdict per part positive control: --part golden fails at its failing gate "
@@ -419,7 +425,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: env::current_dir after a grouped import is reported on its "
     "own line (DEF-5)",
     "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must "
-    "FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)",
+    "FAIL, rh-registry included since A-51, and in an rh-stream file other than seal.rs; tests/, "
+    "rh-snapshot and rh-stream/src/seal.rs pass (BCK-002 A-44, A-51; SPR-013)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
     "lint_forbidden positive control: fs::read after a grouped import is reported on its own line "
     "(DEF-1)",
@@ -427,9 +434,6 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
     "(VER-SPR-008)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
-    "lint_forbidden positive control: rh-registry's spec loaders named in plane-A src/ outside "
-    "their home must FAIL in all seven forms, alias and macro included; tests/ and ownership.rs "
-    "pass (BCK-002 A-47; review MAJ-2)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, "
     "with its drain binding, passes (REV-P1a section 7; EVO-001)",
@@ -476,6 +480,7 @@ REQUIRED_GATES = (
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
+    "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
@@ -562,7 +567,7 @@ def test_every_gate_states_a_non_empty_expectation() -> None:
         assert match is not None
         expect = _first_word(line[match.end() :].strip())
         assert expect in {"pass", "fail"} or (
-            expect.startswith(("pass:", "fail:")) and len(expect) > len("pass:")
+            expect.startswith(("pass:", "fail:")) and expect[len("pass:") :].strip()
         ), f"{line.strip()[:80]}: expectation {expect!r}"
         seen += 1
     assert seen > 300, f"only {seen} run lines read"

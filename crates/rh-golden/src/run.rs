@@ -53,7 +53,8 @@ use rh_core::register::register;
 use rh_core::system::SystemModel;
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_ids::BranchSalt;
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_manifest::specs::{load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_snapshot::hash::{LAYOUT, PlaneDigest, xxh3};
 use rh_snapshot::journal::{
     HistoryKey, InputKind, Journal, JournalPosition, NewInput, Producer, Replay, Scope,
@@ -380,6 +381,7 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
 /// # Errors
 /// As [`run`].
 pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
+    refuse_mutants()?;
     let smoke = args.world == SMOKE;
     if args.leak_thread && !smoke {
         return Err(Error(format!(
@@ -479,6 +481,30 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         dispatch: add(dispatched, engine.dispatch_stats()),
         vitals: timing.and_then(|t| t.vitals()),
     })
+}
+
+/// The `mutant-*` Cargo features compiled into this build, from every crate that has any
+/// (BCK-002 A-52).
+#[must_use]
+pub fn mutant_features() -> Vec<&'static str> {
+    rh_sys_demography::MUTANTS.to_vec()
+}
+
+/// BCK-002 A-52: a build with a `mutant-*` feature compiled in never runs a world, so a mutant can
+/// never make a ladder, a baseline or a stream.
+///
+/// # Errors
+/// [`Error`] naming the features.
+pub fn refuse_mutants() -> Result<(), Error> {
+    let mutants = mutant_features();
+    if mutants.is_empty() {
+        return Ok(());
+    }
+    Err(Error(format!(
+        "MUTANT BUILD: this build has the planted control feature(s) {} compiled in; a mutant \
+         never runs a world or makes a baseline (BCK-002 A-52). Rebuild without them",
+        mutants.join(", ")
+    )))
 }
 
 const fn add(a: DispatchStats, b: DispatchStats) -> DispatchStats {

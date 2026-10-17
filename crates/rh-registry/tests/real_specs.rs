@@ -39,7 +39,10 @@ use rh_core::system::{
 };
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_registry::ownership::{Ownership, SystemSpec, load_specs, registry_system_ids};
+use rh_registry::ownership::{Ownership, SystemSpec};
+use spec_files::{load_specs, registry_system_ids};
+
+mod spec_files;
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

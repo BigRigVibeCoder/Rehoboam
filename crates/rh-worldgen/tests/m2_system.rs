@@ -33,10 +33,13 @@ use rh_core::system::SystemModel;
 use rh_core::time::{Calendar, DaysPerYear, Pulse, SeasonsPerYear, SimTime};
 use rh_events::Event;
 use rh_ids::BranchSalt;
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_registry::{DemographyParams, Founder, FounderRole, Sex, WorldSpec};
 use rh_sys_demography::demography::{DEATH, EXTINCTION};
 use rh_sys_demography::{Demography, DemographyError};
+use spec_files::{load_specs, registry_system_ids};
+
+mod spec_files;
 
 const D360: Calendar = Calendar::new(DaysPerYear::D360, SeasonsPerYear::Four);
 const D365: Calendar = Calendar::new(DaysPerYear::D365, SeasonsPerYear::Four);
@@ -349,6 +352,15 @@ fn newborns(seed: u64, n: usize) -> WorldSpec {
 ///   (the seeds are independent). It has the power the per-seed check lacks: an engine at
 ///   e0 = 30.25 instead of 30 passes every seed but sits at a pooled z of about -5.7 (the review's
 ///   mutant runs). The pooled z is printed in the gate's pass line.
+/// - **The pooled check is one-sided in practice** (VER-SPR-012-TEST GAP-9; BCK-002 A-53). On these
+///   fixed seeds the correct engine's pooled z is about -2.0, one realisation of the null. An error
+///   that kills fewer people than the schedule (z moves down) fails once it shifts the pooled count
+///   by about 1.3 sd; one that kills more (z moves up) needs about 5.3 sd. So the check catches a
+///   too-high e0 (or a too-low hazard) at small sizes and a too-low e0 only at large ones. That is
+///   accepted rather than buying symmetry with more seeds: M2's fixed-point schedule is bit-equal
+///   to the exact reference (`schedule_golden`), and the differential golden of M2's draws
+///   (`draws_golden`) pins every death instant, so this check guards the wiring of the
+///   Bernoulli to the schedule, which either direction of error breaks at a size the band sees.
 ///
 /// **Fixed seeds.** The 32 world seeds are 1000 to 1031, written here, never drawn: the test is
 /// one fixed experiment whose outcome (and false-alarm odds) the review can reproduce, and a

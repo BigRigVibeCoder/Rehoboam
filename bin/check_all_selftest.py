@@ -13,7 +13,8 @@ checks both:
   is followed by `exit 0` before the chain's end. Each must be FAIL (exit 1).
   `--empty-fail` (VER-SPR-012-TEST GAP-6) plants a failing gate whose expectation is `fail:` with
   no text, which would match any failure: `run` refuses it as a harness error, and the verdict is
-  FAIL (exit 1).
+  FAIL (exit 1). `--blank-fail` (GAP-9, BCK-002 A-53) does the same with `fail:` followed by
+  spaces only, which is empty once trimmed.
   `--part-core` and `--part-golden` (SPR-009 review 2) plant a two-part chain whose golden gate
   fails, and run it with `--part core` (PASS, 1 check: the golden part is skipped and says so) and
   `--part golden` (FAIL at the golden gate): the verdict works per part.
@@ -28,7 +29,8 @@ checks both:
   `$PWD/$GOLDEN` join in memory, which must then fail for the wrong reason.
 
 Usage: python -I bin/check_all_selftest.py verdict [--or-true | --or-exit | --early-exit |
-                                                    --empty-fail | --part-core | --part-golden]
+                                                    --empty-fail | --blank-fail | --part-core |
+                                                    --part-golden]
        python -I bin/check_all_selftest.py lint bin/check_all.sh [--plant-or-true | --plant-or-exit]
        python -I bin/check_all_selftest.py abs-target [--plant-pwd-join]
 """
@@ -59,6 +61,7 @@ PLANTED_CHAINS = {
     "--or-exit": 'run "planted failing gate" pass false || exit 0 &&' + LATER,
     "--early-exit": 'run "planted gate" pass true && exit 0' + LATER,
     "--empty-fail": 'run "planted gate with an empty expectation" "fail:" false &&' + LATER,
+    "--blank-fail": 'run "planted gate with a blank expectation" "fail:   " false &&' + LATER,
     "--part-core": PARTS,
     "--part-golden": PARTS,
 }

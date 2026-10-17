@@ -21,12 +21,15 @@ use rh_core::ownership::SpecTable;
 use rh_core::register::{Registered, register};
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_ids::BranchSalt;
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_registry::{DemographyParams, Founder, FounderRole, WorldSpec};
 use rh_snapshot::journal::{JournalPosition, chain_genesis};
 use rh_snapshot::keyframe::{History, load_engine, write_keyframe};
 use rh_snapshot::state_hash;
 use rh_sys_demography::Demography;
+use spec_files::{load_specs, registry_system_ids};
+
+mod spec_files;
 
 const D360: Calendar = Calendar::new(DaysPerYear::D360, SeasonsPerYear::Four);
 

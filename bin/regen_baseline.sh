@@ -17,6 +17,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 cargo build --release --locked -p rh-cli
+# BCK-002 A-52: never a baseline from a build with a mutant-* feature compiled in (rh-cli run refuses
+# it too; this says so before any run).
+if ! info="$("$TARGET_DIR/release/rh-cli" build-info)" || [ "$info" != "mutants: none" ]; then
+  echo "regen_baseline.sh: refused: the rh-cli build reports '$info' (BCK-002 A-52)" >&2
+  exit 3
+fi
 work="$TARGET_DIR/golden/regen"
 mkdir -p "$work"
 worlds="${1:-smoke solo}"

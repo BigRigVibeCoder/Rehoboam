@@ -39,10 +39,17 @@ reports its metadata). Rules:
                       id too (A-44; DEF-1). tests/ may name temporary files by process id.
     file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
                       build.rs (where the float rule's scope says engine code) of a plane-A crate
-                      not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot
-                      (the journal and keyframes) and rh-registry (the system specs it reads for
-                      the ownership lint). tests/, benches/ and examples/ may read their golden
-                      files. A dependency's own file API is not seen (A-44).
+                      not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot (the
+                      journal and keyframes). One file of one other crate is allowed it too
+                      (FILE_IO_FILES; SPR-013, Architect ruling): rh-stream's src/seal.rs, which
+                      seals World Stream segments (temporary file, fsync, rename) and reads them
+                      back; every other rh-stream file encodes to bytes and parses from bytes. The
+                      allowance is by the file's exact path in its crate, and an include! followed
+                      from that file keeps it (the rh-stream source tree only; #[path] is refused
+                      everywhere by source-include). BCK-002 A-51 took rh-registry off the list:
+                      it keeps pure parsers, and the host (rh-manifest::specs) reads the spec
+                      files. tests/, benches/ and examples/ may read their golden files. A
+                      dependency's own file API is not seen (A-44).
                       DEF-1: for process and file-io, every `use` item is parsed as a tree, so a
                       rename, `self`, `{self as x}` or a nested `std::{..}` group that imports the
                       module is reported at its `use`, whatever the form.
@@ -51,16 +58,6 @@ reports its metadata). Rules:
                       carry std::process, std::fs and std::env past every path pattern. Raw
                       identifiers are normalised first (`r#std::r#fs` is `std::fs`); on a line
                       that holds one, the reported column counts without the `r#` prefixes.
-    spec-loader       (BCK-002 A-47; SPR-012, review MAJ-2) rh-registry's spec loaders, load_specs
-                      and registry_system_ids, named in src/ or build.rs of any plane-A crate other
-                      than their home, crates/rh-registry/src/ownership.rs: rh-registry is on
-                      FILE_IO_CRATES for its load path, so plane-A code calling them would read
-                      spec files at step time. Matched as tokens, so a grouped or renamed import,
-                      a path call, a function pointer, a re-export under another name and a macro
-                      that expands to a call are all reported. Not covered: a wrapper written
-                      inside ownership.rs itself, under another name; the structural fix (pure
-                      parsers in rh-registry, file reading in a tool crate) is BCK-002 A-51, after
-                      which the rule retires. tests/ are not scanned for it.
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
@@ -207,11 +204,6 @@ FILE_IO_RULE = "file-io"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
 STD_RENAME_RULE = "std-rename"
-# BCK-002 A-47 (SPR-012 T-07; review MAJ-2): rh-registry may read spec files (FILE_IO_CRATES), so no
-# plane-A code but their home may name its loaders: the specs are read by the host at load, never at
-# step time. The home is (crate, file); everything else in plane A src/ and build.rs is scanned.
-SPEC_LOADER_RULE = "spec-loader"
-SPEC_LOADER_HOME = ("rh-registry", ("src", "ownership.rs"))
 # MIN-2: `r#ident` is `ident`; stripped before any rule matches (a raw string, r#"..."#, is a
 # literal the lexer has already blanked).
 RAW_IDENT = re.compile(r"\br#(?=[A-Za-z_])")
@@ -227,8 +219,19 @@ ALLOWED_PATHS = frozenset({("std", "env", "consts")})
 USE_TOKEN = re.compile(r"::|[{},*;]|\w+")
 FILE_IO_CRATES = MappingProxyType(
     {
-        "rh-registry": "reads specs/systems/*.odd.toml for the ownership lint at load (SPR-004)",
         "rh-snapshot": "the input journal and keyframe files (SPR-007), through rusqlite and bytes",
+    }
+)
+# SPR-013 (Architect ruling on T-09): single files allowed file I/O in a plane-A crate that is not
+# on FILE_IO_CRATES, by package name and the file's path relative to the crate directory, with why.
+# python/tests/test_lint_forbidden.py asserts the map: widening it is a reviewed change.
+FILE_IO_FILES = MappingProxyType(
+    {
+        "rh-stream": (
+            ("src", "seal.rs"),
+            "seals World Stream segments (temporary file, fsync, rename) and reads them back "
+            "(SPR-011 ruling 13); the rest of rh-stream encodes and parses bytes",
+        ),
     }
 )
 # Which float rule a file gets (scan_source): the float rule, the float-api rule, or neither.
@@ -243,9 +246,7 @@ class FloatScan:
     deps: tuple[tuple[str, re.Pattern[str]], ...] = ()
     # The file's crate is on FILE_IO_CRATES (BCK-002 A-44); the file-io rule then does not apply.
     file_io: bool = False
-    # The file's crate is a plane-A workspace crate, scanned for the spec-loader rule (A-47).
-    spec_loader: bool = False
-    # The file's crate name: the spec-loader rule exempts its home (SPEC_LOADER_HOME).
+    # The file's crate name (for the file-level allowance, FILE_IO_FILES).
     crate: str = ""
 
 
@@ -380,13 +381,6 @@ RULES: tuple[Rule, ...] = (
         _rx(r"\bstd::fs\b|\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
         "file I/O in plane A outside the crates allowed it (FILE_IO_CRATES): plane A reads its "
         "inputs through the journal and the compiled world, never from files (BCK-002 A-44)",
-    ),
-    Rule(
-        SPEC_LOADER_RULE,
-        _rx(r"\b(?:load_specs|registry_system_ids)\b"),
-        "plane-A code outside crates/rh-registry/src/ownership.rs names rh-registry's spec "
-        "loaders, which read files: specs are read by the host at load and reach systems as data, "
-        "never at step time (BCK-002 A-47; review MAJ-2)",
     ),
     Rule(
         "unsafe",
@@ -710,13 +704,9 @@ def _applies(finding: Finding, scan: "FloatScan") -> bool:
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
-    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE, SPEC_LOADER_RULE)
+    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE)
     if finding.rule in rules and scan.scope == "none":
         return False
-    if finding.rule == SPEC_LOADER_RULE:
-        home_crate, home_file = SPEC_LOADER_HOME
-        at_home = scan.crate == home_crate and Path(finding.path).parts[-2:] == home_file
-        return scan.spec_loader and not at_home
     return not (finding.rule == FILE_IO_RULE and scan.file_io)
 
 
@@ -1145,7 +1135,11 @@ def scan_paths(
                 scopes.setdefault(file, "none")
             else:
                 scopes.setdefault(file, "zone" if root in float_exempt else "rule")
-            crate_of.setdefault(file, (crate_scans or {}).get(root, FloatScan()))
+            scan = (crate_scans or {}).get(root, FloatScan())
+            allowed = FILE_IO_FILES.get(scan.crate)
+            if allowed is not None and file.relative_to(root).parts == allowed[0]:
+                scan = replace(scan, file_io=True)
+            crate_of.setdefault(file, scan)
     for file in sorted(scopes):
         source = file.read_text(encoding="utf-8")
         scan_source(
@@ -1269,7 +1263,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                         if users is None or name in users
                     ),
                     file_io=name in FILE_IO_CRATES,
-                    spec_loader=True,
                     crate=name,
                 )
                 for name, directory in crates
@@ -1279,7 +1272,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for dep, (users, _) in apis.items()
             )
             scope += f"; float-yielding APIs refused: {'; '.join(listed) or 'none'}"
+            files = ", ".join(f"{n}/{'/'.join(p)}" for n, (p, _) in sorted(FILE_IO_FILES.items()))
             scope += f"; file I/O allowed in {', '.join(sorted(FILE_IO_CRATES))} only (A-44)"
+            scope += f" and in the file {files} (FILE_IO_FILES)"
             # The float-zone note stays last: controls match it together with the file count.
             zone = frozenset(d for name, d in crates if name in FLOAT_EXEMPT_CRATES)
             if zone:
