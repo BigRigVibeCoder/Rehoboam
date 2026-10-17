@@ -583,7 +583,7 @@ world_sift_twin() {
 # the replay must hard-fail before it runs.
 replay_tampered_control() {
   local d="$GOLDEN/solo_tampered"
-  rm -rf "$d"; mkdir -p "$d" || return 2
+  rm -rf "$d" "$GOLDEN/solo_tampered_replay"; mkdir -p "$d" || return 2
   cp "$GOLDEN/solo_run/run.toml" "$GOLDEN/solo_run/journal.sqlite" "$GOLDEN/solo_run/run.ladder" "$d/" || return 2
   "$PY" -I -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM inputs WHERE seq = 0"); c.commit()' "$d/journal.sqlite" || return 2
   "$RH_CLI_RELEASE" replay "$d" --into "$GOLDEN/solo_tampered_replay"
@@ -591,7 +591,8 @@ replay_tampered_control() {
 # SPR-013 T-09: solo's PR-tier golden run streams into a fresh run directory (the ladder is the
 # baseline's; watching changes nothing).
 solo_stream_run() {
-  rm -rf "$GOLDEN/solo_run"
+  # The replay destinations too: a replay replaces only a directory it wrote (DEF-2).
+  rm -rf "$GOLDEN/solo_run" "$GOLDEN/solo_replay" "$GOLDEN/solo_replay_kf"
   # The ladder and journal stay in the run directory (rh-cli replay reads them there, T-12).
   "$RH_CLI_RELEASE" run solo --years 200 --threads 1 --ladder yearly --run-dir "$GOLDEN/solo_run" || return 1
   cp "$GOLDEN/solo_run/run.ladder" "$GOLDEN/solo_yearly_t1.ladder"
