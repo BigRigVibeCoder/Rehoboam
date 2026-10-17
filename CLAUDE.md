@@ -101,10 +101,17 @@ target/release/rh-cli tail target/golden/solo_run [--from-seq N] [--to-seq M] [-
 cargo nextest run -p rh-golden --release --test tail   # tail: every record once from any cursor, canonical digests, read-only, display snapshots (RH_UPDATE_SNAPSHOTS=1 rewrites them; a stale copy must FAIL)
 cargo nextest run -p rh-cli --locked --test tail_live   # a tail started mid-run prints the after-run tail's lines (SPR-013 T-10)
 target/release/rh-cli sift target/golden/solo_run   # channel C (life_ends matches) from sealed channel A, downstream of the engine (SPR-013 T-11)
-python -I specs/sifting/twin_check.py target/golden/solo_run   # V-SIFT-01: the SQL twin (specs/sifting/twins/) = rh-sifter's channel C; --control drop-last must FAIL
+python -I specs/sifting/twin_check.py target/golden/solo_run   # V-SIFT-01: the SQL twin (specs/sifting/twins/) = rh-sifter's channel C, every record, pattern row and segment column included (BCK-002 A-58 GAP-10); --control drop-last, other-seq, other-pattern and other-segment must FAIL
+cargo nextest run -p rh-cli --locked --test run_dir   # BCK-002 A-58: a kill at each creation step leaves a usable run directory; a resume keeps run.toml's rung; a torn keyframe rung is refused; replay names a running writer
 cargo nextest run -p rh-sifter --locked --test sift   # rh-sifter v0: the golden matches and MatchIds; refusals (SPR-013 T-11)
 cargo nextest run -p rh-golden --release --test sift   # V-PLN-04 subset: sifting twice is byte-identical; channel A and the ladder unchanged (SPR-013 T-11)
 python -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml   # V-SIFT-05: must FAIL (an unanchored read)
+cargo nextest run -p rh-protocol --locked --test golden --test method_table --test round_trip   # rh-protocol: every golden frame, refusal, dispatch answer and the Catchup transcript; the three-read method table; SplitMix64 round trips (SPR-026 T-01); --features mutant-pace-method or mutant-accept-flags must FAIL
+cargo nextest run -p rh-stream --locked --test live   # LiveEdge: probe (b), the seal race, the window bounds, headless = (a) = (b) sealed bytes (SPR-026 T-02); --features mutant-window-gap must FAIL with I1 broken
+cargo nextest run -p rh-cli --locked --test serve --test channel_c   # the host of run --socket (read-only, fuzz, cap, abort, lock, path limit, probe (c)) and channel C live (SPR-026 T-03, T-04)
+cargo nextest run -p rh-cli --locked --release --test vstr   # V-STR-01, V-STR-03, V-STR-05 with the viewer harness, kill -9 and resume included (SPR-026 T-05)
+cargo bench -p rh-bench --features count-alloc --bench live_edge   # V-PERF-09's ingredients: live bytes under the counting allocator against LiveEdge::bytes() + V x 1 MiB (no gate)
+target/release/rh-cli run solo --years 200 --run-dir D --socket [--window year-end|sync] [--max-viewers N] [--linger S] [--seal-log]   # serves channel A live on D/stream/t0000000000/A.sock (SPR-026); rh-cli sift D --follow --socket serves C.sock; rh-cli tail D --live [--channel A|C] follows them
 python -I specs/stream/selftest_wire_v1.py --check   # World Stream wire format v1 (IF-0 live edge): framing, control messages, refusals, the live-edge rule simulated with slow, stalled and reconnecting viewers, golden frames (SPR-026); --control window-gap must FAIL
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py

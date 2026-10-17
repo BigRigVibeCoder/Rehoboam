@@ -73,6 +73,7 @@ fn the_method_table_is_exactly_the_three_reads() {
         "method table broken: the table is {names:?}; extra entries {extra:?} (wire_v1.md §4.5: a \
          stream socket accepts exactly the stream.* reads)"
     );
+    println!("method table: exactly stream.status, stream.subscribe and stream.unsubscribe");
     for (name, _, access) in METHOD_TABLE {
         assert_eq!(
             *access,

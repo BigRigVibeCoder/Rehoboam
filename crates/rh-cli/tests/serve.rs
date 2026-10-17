@@ -124,6 +124,7 @@ fn the_socket_refuses_every_attempt_to_act_and_the_run_is_unchanged() {
     );
     let replay = replay_equal(&dir);
     assert!(replay.contains("REPLAY EQUAL"), "{replay}");
+    println!("read-only: five act methods refused, the ladder is the baseline, REPLAY EQUAL");
 }
 
 fn unhex(s: &str) -> Vec<u8> {

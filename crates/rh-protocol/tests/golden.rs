@@ -199,6 +199,7 @@ fn every_golden_frame_encodes_to_its_bytes_and_decodes_back() {
         n += 1;
     }
     assert_eq!(n, 26, "the golden file's frame lines");
+    println!("wire_v1 conformance: {n} golden frames encoded byte for byte and decoded back");
 }
 
 fn decode_any(data: &[u8]) -> Result<(), wire::WireError> {
@@ -226,6 +227,7 @@ fn every_refuse_line_is_refused_naming_its_reason() {
         n += 1;
     }
     assert_eq!(n, 28, "the golden file's refuse lines");
+    println!("wire_v1 conformance: {n} golden refusals refused by name");
 }
 
 #[test]
@@ -241,6 +243,7 @@ fn every_dispatch_line_is_answered_byte_for_byte_on_a_fresh_connection() {
         n += 1;
     }
     assert_eq!(n, 15, "the golden file's dispatch lines");
+    println!("wire_v1 conformance: {n} dispatch answers byte for byte on a fresh connection");
 }
 
 fn event(line: &str) -> Event {
@@ -313,6 +316,10 @@ fn catchup_reproduces_the_golden_transcript_line_for_line() {
     ] {
         assert!(transcript.iter().any(|l| l == needle), "missing {needle}");
     }
+    println!(
+        "wire_v1 conformance: the Catchup transcript reproduced line for line ({} lines)",
+        transcript.len()
+    );
     // R21: future_seq on a finished run stops the viewer.
     let mut fin = Catchup::new(0);
     fin.start();

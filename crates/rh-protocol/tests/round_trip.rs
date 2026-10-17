@@ -111,6 +111,9 @@ fn frames_round_trip_at_every_size_and_every_prefix_is_incomplete() {
         "a payload over the limit encodes"
     );
     assert!(cases >= 6_000);
+    println!(
+        "round trips: {cases} frames from 0 bytes to the 1 MiB limit, every prefix incomplete"
+    );
 }
 
 fn line(g: &mut SplitMix64, channel: Channel, tl: u32, seq: u64) -> String {
@@ -180,6 +183,7 @@ fn records_round_trip_and_a_changed_prefix_is_refused() {
         }
     }
     assert!(cases >= 4_000);
+    println!("round trips: {cases} RECORDS payloads, a changed prefix field refused in each");
 }
 
 fn ascii(g: &mut SplitMix64) -> String {
@@ -302,6 +306,7 @@ fn control_messages_round_trip_in_any_spelling() {
         }
     }
     assert!(cases >= 6_000);
+    println!("round trips: {cases} control messages in canonical and other spellings");
 }
 
 #[test]

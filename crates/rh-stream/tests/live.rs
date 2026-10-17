@@ -141,6 +141,7 @@ fn the_window_bound_of_each_policy_and_a_late_seals_overrun() {
             );
         }
     }
+    println!("window bounds: (b) 2 sim-years, 3/4/5 at the reference's late seals, (a) 1");
 }
 
 /// An edge with year 0 (seqs 0..10) and year 1 (10..20) complete, nothing sealed: year 0's seal
@@ -218,6 +219,7 @@ fn the_seal_race_never_shows_i1_broken_through_the_snapshot_api() {
         interleaving_breaks("s_then_w0"),
         "the control: reading s then w0 never showed I1 broken (it must)"
     );
+    println!("seal race: no interleaving shows I1 broken through the snapshot API");
 }
 
 #[test]
@@ -379,6 +381,10 @@ fn probe_b_a_frozen_reader_never_holds_the_writer() {
     // A fresh read from c is now behind, with I1.
     let behind = edge.read(c, 1 << 20).unwrap_err();
     assert!(behind.s.unwrap() + 1 >= behind.w0, "I1");
+    println!(
+        "probe (b): 10 sim-years appended and sealed on the seal thread while a reader was frozen \
+         inside LiveEdge::read across a year-end drop; it returned exactly its seqs"
+    );
 }
 
 /// The window-gap control's detection, and the real policy passing it: a reader that polls once

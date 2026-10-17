@@ -208,4 +208,8 @@ fn channel_c_is_served_live_beside_the_run_with_its_empty_years() {
         ladders_equal(&dir.join("run.ladder"), &baseline("hamlet")),
         "V-PLN-04"
     );
+    println!(
+        "channel C live: {full} sealed years and {empty} empty ones announced, lines = tail \
+         --channel C, follow = batch"
+    );
 }
