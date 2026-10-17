@@ -51,7 +51,7 @@ use rh_core::engine::{DispatchStats, Engine};
 use rh_core::ownership::SpecTable;
 use rh_core::register::register;
 use rh_core::system::SystemModel;
-use rh_core::time::{Pulse, SimTime};
+use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_ids::BranchSalt;
 use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
 use rh_snapshot::hash::{LAYOUT, PlaneDigest, xxh3};
@@ -62,13 +62,14 @@ use rh_snapshot::keyframe::{History, write_keyframe};
 use rh_snapshot::resume::{material_input, resume};
 use rh_snapshot::state::state_digest;
 use rh_snapshot::store::KeyframeStore;
-use rh_sys_smoke::{CALENDAR, OVERLAY, SPECS_DIR, synthetic_inputs};
+use rh_sys_smoke::{CALENDAR, OVERLAY, SPECS_DIR};
 
 use std::sync::Arc;
 
 use crate::dump;
 use crate::ladder::{Header, Ladder, Rung, RungKind};
 use crate::vitals::{Timing, Vitals};
+use crate::world::{SMOKE, Setup, setup};
 
 /// The world name in ladders.
 pub const WORLD: &str = "smoke";
@@ -104,11 +105,21 @@ pub struct Inject {
 
 /// What to run.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each bool is one command-line flag"
+)]
 pub struct RunArgs {
-    /// The repository root, where `worlds/smoke` is.
+    /// The world: `smoke`, or a manifest world under `worlds/` (SPR-012 T-08; [`crate::world`]).
+    pub world: String,
+    /// The repository root, where `worlds/` is.
     pub repo: PathBuf,
-    /// The world seed.
+    /// The world seed. A manifest world takes its manifest's unless `seed_set`.
     pub seed: u64,
+    /// Whether `--seed` was given (a manifest world's seed is otherwise its manifest's).
+    pub seed_set: bool,
+    /// Refuse a manifest that names a system this build lacks (`--strict`; SPR-011 ruling 3).
+    pub strict: bool,
     /// The horizon: the history is the smoke world's synthetic inputs of this many sim-years, and
     /// the run ends at the end of this year unless `until` stops it earlier.
     pub years: i64,
@@ -149,8 +160,11 @@ impl RunArgs {
     #[must_use]
     pub fn new(repo: &Path, years: i64, threads: usize, rung: RungKind, out: &Path) -> Self {
         Self {
+            world: SMOKE.to_owned(),
             repo: repo.to_path_buf(),
             seed: 1,
+            seed_set: false,
+            strict: false,
             years,
             threads,
             rung,
@@ -218,7 +232,8 @@ impl Outcome {
 }
 
 /// The smoke world's systems; with `leak`, `X7.smoke_market` inside [`crate::leak::Leaky`].
-fn systems(leak: bool) -> Vec<Box<dyn SystemModel>> {
+#[must_use]
+pub fn smoke_systems(leak: bool) -> Vec<Box<dyn SystemModel>> {
     rh_sys_smoke::systems()
         .into_iter()
         .map(|s| {
@@ -251,8 +266,8 @@ pub fn history(seed: u64) -> History {
     }
 }
 
-fn journal_key(seed: u64) -> HistoryKey {
-    let p = provenance();
+fn journal_key(p: &Provenance, seed: u64) -> HistoryKey {
+    let p = p.clone();
     HistoryKey {
         engine_build: p.build,
         registry_version: p.registry_version,
@@ -271,19 +286,28 @@ pub fn spec_table(repo: &Path) -> Result<SpecTable, Error> {
     Ok(Ownership::build(&specs, &ids).spec_table())
 }
 
-/// The last minute of sim-year `year` (1-based).
+/// The last minute of sim-year `year` (1-based), on the smoke calendar.
 #[must_use]
 pub fn year_end(year: i64) -> SimTime {
-    SimTime::from_minutes(year * CALENDAR.minutes_per_year() - 1)
+    year_end_in(CALENDAR, year)
 }
 
-/// The last minute of every month (1-based from the epoch) up to the end of year `years`.
+fn year_end_in(calendar: Calendar, year: i64) -> SimTime {
+    SimTime::from_minutes(year * calendar.minutes_per_year() - 1)
+}
+
+/// The last minute of every month (1-based from the epoch) up to the end of year `years`, on the
+/// smoke calendar.
 #[must_use]
 pub fn month_ends(years: i64) -> Vec<SimTime> {
-    let end = year_end(years);
+    month_ends_in(CALENDAR, years)
+}
+
+fn month_ends_in(calendar: Calendar, years: i64) -> Vec<SimTime> {
+    let end = year_end_in(calendar, years);
     let mut out = Vec::new();
     let mut t = SimTime::EPOCH;
-    while let Some(next) = CALENDAR.next_boundary(Pulse::Month, t) {
+    while let Some(next) = calendar.next_boundary(Pulse::Month, t) {
         let last = SimTime::from_minutes(next.minutes() - 1);
         if last > end {
             break;
@@ -294,10 +318,14 @@ pub fn month_ends(years: i64) -> Vec<SimTime> {
     out
 }
 
-/// `YYYY-MM` of the instant `t`.
+/// `YYYY-MM` of the instant `t`, on the smoke calendar.
 #[must_use]
 pub fn date(t: SimTime) -> String {
-    let d = CALENDAR.to_date(t);
+    date_in(CALENDAR, t)
+}
+
+fn date_in(calendar: Calendar, t: SimTime) -> String {
+    let d = calendar.to_date(t);
     format!("{:04}-{:02}", d.year, d.month)
 }
 
@@ -311,14 +339,15 @@ struct Stop {
     year_end: Option<i64>,
 }
 
-fn stops(args: &RunArgs) -> BTreeMap<SimTime, Stop> {
+fn stops(args: &RunArgs, calendar: Calendar) -> BTreeMap<SimTime, Stop> {
     let mut stops: BTreeMap<SimTime, Stop> = BTreeMap::new();
     let last = args.until.unwrap_or(args.years).min(args.years);
-    let months = month_ends(last);
+    let months = month_ends_in(calendar, last);
     for year in 1..=last {
-        stops.entry(year_end(year)).or_default().year_end = Some(year);
+        let end = year_end_in(calendar, year);
+        stops.entry(end).or_default().year_end = Some(year);
         if args.rung == RungKind::Yearly {
-            stops.entry(year_end(year)).or_default().rung = u64::try_from(year).ok();
+            stops.entry(end).or_default().rung = u64::try_from(year).ok();
         }
     }
     for (i, &t) in months.iter().enumerate() {
@@ -351,10 +380,20 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
 /// # Errors
 /// As [`run`].
 pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
-    let specs = spec_table(&args.repo)?;
-    let registered =
-        || register(systems(args.leak_thread), &specs).map_err(|e| error("registration")(&e));
-    let (mut engine, journal, identity) = start(args, &registered)?;
+    let smoke = args.world == SMOKE;
+    if args.leak_thread && !smoke {
+        return Err(Error(format!(
+            "--leak-thread plants its leak in the smoke world only, not {}",
+            args.world
+        )));
+    }
+    let seed = (smoke || args.seed_set).then_some(args.seed);
+    let world = setup(&args.repo, &args.world, seed, args.strict)?;
+    let registered = || {
+        register((world.systems)(args.leak_thread), &world.specs)
+            .map_err(|e| error("registration")(&e))
+    };
+    let (mut engine, journal, identity) = start(args, &world, &registered)?;
     // SPR-009 T-03: the host's clock-free observer; the engine carries no clock (ruling 4).
     let timing = args.vitals.then(|| Arc::new(Timing::default()));
     let attach = |e: &mut Engine| {
@@ -366,8 +405,8 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     let start = engine.snapshot().cursor.unwrap_or(SimTime::EPOCH);
     let mut ladder = Ladder {
         header: Header {
-            world: WORLD.to_owned(),
-            seed: args.seed,
+            world: world.name.clone(),
+            seed: world.seed,
             years: args.years,
             rung: args.rung,
             hash: LAYOUT.to_owned(),
@@ -378,6 +417,8 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
                 .as_ref()
                 .map(|i| format!("{}:{}:{}", i.month, i.table, i.row)),
             leak: args.leak_thread,
+            tuple: world.tuple.clone(),
+            systems: world.systems_line.clone(),
         },
         rungs: Vec::new(),
         failed: None,
@@ -395,10 +436,10 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     // A resumed run starts after its keyframe's own instant: the stops it has nothing to run up
     // to are the keyframe's state, which the continuous run already took its rung at.
     let resumed = args.resume.is_some();
-    let first = stops(args)
+    let first = stops(args, world.calendar)
         .into_keys()
         .find(|&t| t >= start && !(resumed && engine.next_instant().is_none_or(|n| n > t)));
-    for (t, stop) in stops(args)
+    for (t, stop) in stops(args, world.calendar)
         .into_iter()
         .filter(|(t, _)| first.is_some_and(|f| *t >= f))
     {
@@ -410,7 +451,7 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         drop(engine.drain_events());
         if let Some(inject) = args.inject.as_ref().filter(|_| stop.inject) {
             dispatched = add(dispatched, engine.dispatch_stats());
-            engine = perturb(&engine, inject, args, registered()?)?;
+            engine = perturb(&engine, inject, args, &world, registered()?)?;
             attach(&mut engine);
         }
         let digest = state_digest(&engine.snapshot());
@@ -418,7 +459,9 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
             months.extend_from_slice(&digest.hash.to_le_bytes());
         }
         if let Some(index) = stop.rung {
-            ladder.rungs.push(rung(&digest, index, t, xxh3(&months)));
+            ladder
+                .rungs
+                .push(rung(&digest, index, t, xxh3(&months), world.calendar));
             months.clear();
         }
         if let Some((_, path)) = args.dump.as_ref().filter(|_| stop.dump) {
@@ -457,6 +500,7 @@ type Started = (Engine, Option<Journal>, Option<JournalPosition>);
 /// order; a resumed run checks the journal's horizon (DEF-1) and resumes through it.
 fn start(
     args: &RunArgs,
+    world: &Setup,
     registered: &dyn Fn() -> Result<rh_core::register::Registered, Error>,
 ) -> Result<Started, Error> {
     if args.until.is_some_and(|u| u < 0 || u > args.years) {
@@ -468,17 +512,20 @@ fn start(
     }
     if let Some(keyframe) = &args.resume {
         let bytes = std::fs::read(keyframe).map_err(|e| error("keyframe")(&e))?;
-        let replay = Replay::open(&args.journal, &journal_key(args.seed), TIMELINE)
-            .map_err(|e| error("journal")(&e))?;
-        check_horizon(&replay, args)?;
-        let (mut engine, _) = resume(
-            &bytes,
-            CALENDAR,
-            registered()?,
-            &history(args.seed),
-            &replay,
+        let replay = Replay::open(
+            &args.journal,
+            &journal_key(&world.provenance, world.seed),
+            TIMELINE,
         )
-        .map_err(|e| error("resume")(&e))?;
+        .map_err(|e| error("journal")(&e))?;
+        check_horizon(&replay, args, world)?;
+        let history = History {
+            provenance: world.provenance.clone(),
+            world_seed: world.seed,
+            branch_salt: 0,
+        };
+        let (mut engine, _) = resume(&bytes, world.calendar, registered()?, &history, &replay)
+            .map_err(|e| error("resume")(&e))?;
         engine.set_threads(args.threads);
         return Ok((engine, None, Some(replay.position())));
     }
@@ -487,19 +534,19 @@ fn start(
         path.push(suffix);
         let _ = std::fs::remove_file(path);
     }
-    let mut journal = Journal::create(&args.journal, &journal_key(args.seed))
+    let mut journal = Journal::create(&args.journal, &journal_key(&world.provenance, world.seed))
         .map_err(|e| error("journal")(&e))?;
     let mut engine = Engine::new(
-        CALENDAR,
-        args.seed,
+        world.calendar,
+        world.seed,
         BranchSalt::from_raw(0),
         registered()?,
-        rh_sys_smoke::initial_tables(),
+        world.tables.clone(),
         SimTime::EPOCH,
     );
-    engine.set_provenance(provenance());
+    engine.set_provenance(world.provenance.clone());
     engine.set_threads(args.threads);
-    for (at, entity) in synthetic_inputs(args.years) {
+    for (at, entity) in (world.inputs)(args.years) {
         accept(&mut engine, &mut journal, at, entity)?;
     }
     let identity = journal
@@ -512,9 +559,9 @@ fn start(
 /// synthetic inputs of `args.years`, in order; with `--extend`, a strict prefix of them is
 /// allowed too (the run goes past the journal's last input, and the ladder's journal line says
 /// which journal it ran).
-fn check_horizon(replay: &Replay, args: &RunArgs) -> Result<(), Error> {
+fn check_horizon(replay: &Replay, args: &RunArgs, world: &Setup) -> Result<(), Error> {
     let rows: Vec<(SimTime, Scope)> = replay.inputs().iter().map(|r| (r.tick, r.scope)).collect();
-    let expected = synthetic_inputs(args.years)
+    let expected = (world.inputs)(args.years)
         .into_iter()
         .map(|(t, e)| {
             Scope::of_entity(e)
@@ -600,11 +647,11 @@ pub fn keyframe_path(dir: &Path, year: i64) -> PathBuf {
     dir.join(format!("year-{year:04}.rhkf"))
 }
 
-fn rung(digest: &PlaneDigest, index: u64, t: SimTime, months: u64) -> Rung {
+fn rung(digest: &PlaneDigest, index: u64, t: SimTime, months: u64, calendar: Calendar) -> Rung {
     Rung {
         index,
         tick: t.minutes(),
-        date: date(t),
+        date: date_in(calendar, t),
         hash: digest.hash,
         months,
         roots: digest
@@ -619,6 +666,7 @@ fn perturb(
     engine: &Engine,
     inject: &Inject,
     args: &RunArgs,
+    world: &Setup,
     registered: rh_core::register::Registered,
 ) -> Result<Engine, Error> {
     let mut state = engine.snapshot();
@@ -636,11 +684,11 @@ fn perturb(
     *value ^= 1;
     state.tables.insert(&inject.table, rows);
     let mut restored = Engine::restore(
-        CALENDAR,
-        args.seed,
+        world.calendar,
+        world.seed,
         BranchSalt::from_raw(0),
         registered,
-        provenance(),
+        world.provenance.clone(),
         state,
     )
     .map_err(|e| error("inject")(&e))?;
@@ -665,6 +713,8 @@ mod tests {
                     until: None,
                     inject: None,
                     leak: false,
+                    tuple: None,
+                    systems: None,
                 },
                 rungs: Vec::new(),
                 failed: None,

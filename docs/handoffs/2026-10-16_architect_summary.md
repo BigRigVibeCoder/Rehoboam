@@ -100,13 +100,13 @@ Resolved since the first version of this summary:
   | SPR-013 spec drafter | `session_0127pPFgvbRfd3gRk2vQrxxY` | PR #45, merged |
   | EVO-001 drafter | `session_01KHKcdcgSqTBuEw1RS6XvH8` | **Merged** (PR #49, `0398a4e`, `05.1` v1.12); `REV-EVO-001` closed after four rounds |
   | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | **Merged** (PR #50): the next M2 0.3.0 in `specs/systems/next/`; `REV-SPR-015` closed after three rounds. Q5 and Q6 went to the director as D40 and D41
-  | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | **Merged** (PR #51, `513e281`, `05.1` v1.10); now folding `mortality_f1.toml` into the next M2 as a new `[algorithm.*]` table
+  | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | **Merged** (PR #51, `513e281`; the fold, PR #59, `e890ae9`): mortality is `[algorithm.mortality_f1]` in the next M2; `REV-SPR-016-FOLD` closed. The next M2 0.3.0 is promoted in SPR-016's PR
   | SPR-018 drafter | `session_01EZrn9bjDkDgj6kEQsYpCuD` | **Merged** (PR #52, `e9e0fe3`); `REV-SPR-018` closed |
   | SPR-019 drafter (Fable) | `session_01Kw2QAtEyRCehcyDsgxsZrm` | Population synthesis and the dynastic back-fill, `arch/SPR-019-popsynth` |
   | SPR-020 drafter (Fable) | `session_01BuhAx8LwsfCjcUR5BDhFJQ` | The event envelope and the role-code reconciliation, `arch/SPR-020-envelope` |
   | SPR-026 drafter (Fable) | `session_01Kzu8vtatp9Zszm6brUQ8BM` | The World Stream v1 wire format and `rh-protocol`, `arch/SPR-026-stream-v1` |
 
-- **Review records:** `REV-SPR-015`, `REV-SPR-016`, `REV-SPR-018` and `REV-EVO-001` are closed.
+- **Review records:** `REV-SPR-015`, `REV-SPR-016`, `REV-SPR-016-FOLD`, `REV-SPR-018` and `REV-EVO-001` are closed. Open, with round-1 rulings on their review branches: `REV-SPR-019` (`review/SPR-019-r1`), `REV-SPR-020` (`review/SPR-020-r1`), `REV-SPR-026` (`review/SPR-026-r1`).
 - **`05.1` versions:** v1.10 is `exp`/`ln` (PR #51), v1.11 is SPR-011's rule 6, v1.12 is EVO-001's rule 2.
 - **M7.dynasty spec version:** EVO-001 took 0.3.2. PR #41 (effect language, awaiting D37) takes 0.3.3, merges `main` and moves its gates to `--part core` before it merges.
 - **Outcome-carrying commands** (`ScheduleDeath`, `Marry`) are submitted only by their sender's timer at the outcome's instant (REV-EVO-001 R9). D39 was withdrawn.

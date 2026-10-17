@@ -121,6 +121,12 @@ pub struct Header {
     pub inject: Option<String>,
     /// Whether the run carried the planted thread-identity leak (DEF-2 control).
     pub leak: bool,
+    /// A manifest world's history tuple, `tuple engine_build=… registry_version=… manifest_hash=…
+    /// seed=…` without the `tuple ` prefix (SPR-012 T-08; DET-1). `None` for smoke.
+    pub tuple: Option<String>,
+    /// A manifest world's built and not-built systems, `systems built … not_built …` without the
+    /// `systems ` prefix (SPR-011 ruling 3). `None` for smoke.
+    pub systems: Option<String>,
 }
 
 /// One rung: the state at the end of a year or a month.
@@ -193,6 +199,12 @@ impl Ladder {
         if h.leak {
             out.push_str("leak thread\n");
         }
+        if let Some(tuple) = &h.tuple {
+            let _ = writeln!(out, "tuple {tuple}");
+        }
+        if let Some(systems) = &h.systems {
+            let _ = writeln!(out, "systems {systems}");
+        }
         for r in &self.rungs {
             out.push_str(&render_rung(r));
         }
@@ -241,6 +253,8 @@ impl Ladder {
         let until_line = optional("until ");
         let inject_line = optional("inject ");
         let leak = optional("leak thread").is_some_and(|(_, rest)| rest.is_empty());
+        let tuple = optional("tuple ").map(|(_, v)| v);
+        let systems = optional("systems ").map(|(_, v)| v);
         let journal = match journal_line {
             None => None,
             Some((n, j)) => {
@@ -264,6 +278,8 @@ impl Ladder {
             until,
             inject: inject_line.map(|(_, v)| v),
             leak,
+            tuple,
+            systems,
         };
         let mut rungs: Vec<Rung> = Vec::new();
         let mut failed = None;
@@ -473,13 +489,15 @@ fn check_bytes(text: &str) -> Result<(), ParseError> {
 #[must_use]
 pub fn compare(a: &Ladder, b: &Ladder) -> Option<Difference> {
     let (ha, hb) = (&a.header, &b.header);
-    let fields: [(&'static str, bool); 6] = [
+    let fields: [(&'static str, bool); 8] = [
         ("world", ha.world == hb.world),
         ("seed", ha.seed == hb.seed),
         ("years", ha.years == hb.years),
         ("rung", ha.rung == hb.rung),
         ("hash", ha.hash == hb.hash),
         ("journal", ha.journal == hb.journal),
+        ("tuple", ha.tuple == hb.tuple),
+        ("systems", ha.systems == hb.systems),
     ];
     if let Some((field, _)) = fields.iter().find(|(_, same)| !same) {
         return Some(Difference::Header { field });
@@ -549,6 +567,8 @@ mod tests {
                 until: None,
                 inject: None,
                 leak: false,
+                tuple: None,
+                systems: None,
             },
             rungs: (1..=2)
                 .map(|i| Rung {
