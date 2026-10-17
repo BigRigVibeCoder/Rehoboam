@@ -172,7 +172,7 @@ def semver(text):
     return tuple(int(x) for x in m.groups()) if m else None
 
 
-AMEND_PATH = re.compile(r"^(invariants\.(?P<inv>[A-Za-z0-9_-]+)\.statement|algorithm\.(?P<alg>[a-z0-9_]+)\.steps\.(?P<step>[A-Za-z0-9]+)|"
+AMEND_PATH = re.compile(r"^(params\.(?P<param>[a-z0-9_]+)\.meaning|invariants\.(?P<inv>[A-Za-z0-9_-]+)\.statement|algorithm\.(?P<alg>[a-z0-9_]+)\.steps\.(?P<step>[A-Za-z0-9]+)|"
                         r"emits\.(?P<kind>[A-Z_]+)\.when|initialization\.state|schedule\.(?P<pulse>[A-Za-z]+)/(?P<phase>[A-Za-z]+)\.steps\.(?P<sname>[a-z_]+)|"
                         r"schedule\.(?P<wpulse>[A-Za-z]+)/(?P<wphase>[A-Za-z]+)\.when|owns\.(?P<col>[a-z_]+\.[a-z_]+)\.meaning|rng\.(?P<rpurpose>[a-z_]+)\.use)$")
 
@@ -194,6 +194,8 @@ def text_at(spec, m):
     if m.group("wpulse"):
         return next((x.get("when") for x in spec.get("schedule", [])
                      if (x.get("pulse"), x.get("phase")) == (m.group("wpulse"), m.group("wphase"))), None)
+    if m.group("param"):
+        return next((x.get("meaning") for x in spec.get("params", []) if x.get("name") == m.group("param")), None)
     if m.group("col"):
         return next((o.get("meaning") for o in spec.get("owns", []) if o.get("column") == m.group("col")), None)
     if m.group("rpurpose"):
@@ -212,7 +214,7 @@ def amendments(fs, ns, p, errs):
         if m is None:
             errs.append(f"{p}: [[amends]] of = {of!r} is not a path this lint knows (invariants.<id>.statement, "
                         "algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state, schedule.<Pulse>/<Phase>.steps.<name>, "
-                        "schedule.<Pulse>/<Phase>.when, owns.<entity.column>.meaning, rng.<purpose>.use)")
+                        "schedule.<Pulse>/<Phase>.when, owns.<entity.column>.meaning, rng.<purpose>.use, params.<name>.meaning)")
             continue
         if not a.get("reason"):
             errs.append(f"{p}: [[amends]] {of} needs a reason")
@@ -440,6 +442,16 @@ def lint_next(frozen, specs, errs):
                 errs.append(f"{p}: frozen parameter {x.get('name')} is missing")
             elif "default" in x and n.get("default") != x.get("default"):
                 errs.append(f"{p}: frozen default of {x.get('name')} changed: {x.get('default')} -> {n.get('default')}")
+            if n is not None and n.get("meaning") != x.get("meaning") and f"params.{x.get('name')}.meaning" not in amended:
+                errs.append(f"{p}: frozen parameter {x.get('name')} changed its meaning without an [[amends]] record")
+        # REV-SPR-015 round 3 NIT-5: the frozen verification tests and couplings are part of the slice
+        next_tests = set(ns.get("verification", {}).get("tests", []))
+        for t in fs.get("verification", {}).get("tests", []):
+            if t not in next_tests:
+                errs.append(f"{p}: frozen test {t} dropped from [verification] (frozen tests stay; new ones may be added)")
+        next_couplings = {(c.get("system"), c.get("direction")) for c in ns.get("couplings", [])}
+        for pair in sorted({(c.get("system"), c.get("direction")) for c in fs.get("couplings", [])} - next_couplings, key=str):
+            errs.append(f"{p}: frozen coupling {pair} dropped from [[couplings]]")
     return notes
 
 
@@ -796,6 +808,14 @@ def main() -> int:
                     notes.append(f"{specs[sid][0].name}: amendments lock: {len(digests[sid])} paths match {lock_path}")
     for note in notes:
         print("AMEND" if " amends " in note else " ", note)
+    if errs:
+        # REV-SPR-015 round 3 NIT-4: a spec that does not lint gets its diagnostics, not a self-check that may trip on it
+        for w in warns:
+            print("WARN ", w)
+        for e in errs:
+            print("ERROR", e)
+        print(f"FAIL: {len(specs)} system specs linted ({len(warns)} warnings); the self-checks run on a clean set only")
+        return 1
     # self-check (SPR-015; REV-SPR-015 R1, R6): a next version that changes a frozen algorithm step, a frozen column's
     # type, a frozen default, a frozen invariant's statement, a frozen emits `when` or the frozen [initialization]
     # without an [[amends]] record, records an amendment whose frozen text is wrong, drops a sender from a frozen
@@ -879,6 +899,29 @@ def main() -> int:
                 x["default"] = x["default"] + 1
                 probes.append((bad, "frozen default of"))
                 break
+        # REV-SPR-015 round 3 NIT-4 and NIT-5: a purpose's use text, an unknown amend path, a dropped frozen test or
+        # coupling, a frozen parameter's meaning
+        bad = copy.deepcopy(ns)
+        bad["rng"][0]["use"] = "planted"
+        probes.append((bad, "changed its use text without an [[amends]] record"))
+        bad = copy.deepcopy(ns)
+        bad.setdefault("amends", []).append({"of": "planted.path", "frozen": "x", "to": "y", "reason": "planted"})
+        probes.append((bad, "is not a path this lint knows"))
+        if fz.get("verification", {}).get("tests"):
+            bad = copy.deepcopy(ns)
+            bad["verification"]["tests"] = [t for t in bad["verification"]["tests"] if t != fz["verification"]["tests"][0]]
+            probes.append((bad, "dropped from [verification]"))
+        if fz.get("couplings"):
+            bad = copy.deepcopy(ns)
+            drop = (fz["couplings"][0].get("system"), fz["couplings"][0].get("direction"))
+            bad["couplings"] = [c for c in bad["couplings"] if (c.get("system"), c.get("direction")) != drop]
+            probes.append((bad, "dropped from [[couplings]]"))
+        if fz.get("params"):
+            bad = copy.deepcopy(ns)
+            for x in bad["params"]:
+                if x.get("name") == fz["params"][0].get("name"):
+                    x["meaning"] = "planted"
+            probes.append((bad, "changed its meaning without an [[amends]] record"))
         first_frozen_alg = next(iter(fz.get("algorithm", {})), None)
         if first_frozen_alg:
             fsteps = fz["algorithm"][first_frozen_alg]["steps"]

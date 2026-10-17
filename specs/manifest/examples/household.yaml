@@ -2,8 +2,9 @@
 # A couple, their three children and one unrelated founder on a tiny map. In P1.0 it ran the rung-0 slice (SPR-011
 # ruling 2): founders age and die, no births. From SPR-015 (M2 F1) the couple are married at genesis, the children are
 # theirs, and the unrelated founder Wulf makes a marriage possible (siblings never marry: kin within two degrees), so
-# the household persists or dies out by chance, not by construction (REV-SPR-015 R8). The household's food comes with
-# P1b. M2 takes its Registry defaults (e0 = 30, beta = 1, tfr = 4.9; SPR-011 ruling 8): systems sets nothing.
+# the household is not childless by construction (REV-SPR-015 R8). Six people are still too few: it dies out in every
+# replica over the horizon (median extinction year 88; alive at 100 years in 39%, at 200 in 3%), and rung 1's test is
+# the distribution of extinction times, not persistence (REV-SPR-015 R17.5). The household's food comes with P1b. M2 takes its Registry defaults (e0 = 30, beta = 1, tfr = 4.9; SPR-011 ruling 8): systems sets nothing.
 manifest_version: 0
 registry_version: "0.2.0"
 world:

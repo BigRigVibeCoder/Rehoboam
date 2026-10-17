@@ -30,7 +30,9 @@ slice** (`lint_next` in `lint_odd.py`):
 | `[[schedule]]` | every `(pulse, phase)` binding with the same `when` or an amendment, and every frozen step, equal or amended (steps may be added) |
 | `[[emits]]` | every kind, its frozen `when` equal or amended |
 | `[initialization]` | the frozen `state` text equal, or amended |
-| `[[params]]` | every name; a frozen `default` keeps its value |
+| `[[params]]` | every name; a frozen `default` keeps its value; the same `meaning` or an amendment (REV-SPR-015 round 3 NIT-5) |
+| `[verification]` | every frozen test id stays in `tests` (new ones may be added; the `prototype` may change) |
+| `[[couplings]]` | every frozen `(system, direction)` pair stays (new couplings may be added) |
 
 Two more rules (REV-SPR-015 R6, R15): a frozen `[[applies]]` keeps at least its frozen `from`; and every frozen
 text above is compared **for equality, line by line** (a superset that keeps the frozen text inside a longer one no
@@ -47,8 +49,8 @@ compares (R15).
 [[amends]]
 of = "invariants.INV-M2-03.statement"     # also algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state,
 frozen = "<the frozen text, byte for byte>" #   schedule.<Pulse>/<Phase>.steps.<name>, schedule.<Pulse>/<Phase>.when,
-to = "<the new text, what this file now says there>"   # owns.<entity.column>.meaning, rng.<purpose>.use
-reason = "<why>"
+to = "<the new text, what this file now says there>"   # owns.<entity.column>.meaning, rng.<purpose>.use,
+reason = "<why>"                                         # params.<name>.meaning
 ```
 
 The lint checks `frozen` against the frozen file and `to` against the next file, refuses a record whose texts are
@@ -85,6 +87,10 @@ any row above is an error. The positive controls are rendered by `bin/check_all.
 
 Run: `python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml`
 
+A set that does not lint gets its `ERROR` lines and `FAIL` and nothing else: the lint's self-checks (the planted
+probes) run only on a clean set, so a broken spec can never bury its diagnostic under a self-check assertion
+(REV-SPR-015 round 3 NIT-4).
+
 ## Lifecycle of a next version
 
 1. The drafter writes `next/<id>.odd.toml` (the frozen file plus the new slice) and, if the
@@ -106,4 +112,4 @@ never changes a committed skeleton or the index until step 4.
 |---|---|
 | `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) on the frozen 0.2.0 rung-0 slice |
 | `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`); verbs `BIRTH`, `MARRIAGE` |
-| `amendments.lock.toml` | the twelve amendments of the M2 draft, path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |
+| `amendments.lock.toml` | the eighteen amendments of the M2 draft (five texts, seven column meanings, six parameter meanings), path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |
