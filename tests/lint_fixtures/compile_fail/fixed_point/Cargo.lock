@@ -38,6 +38,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mix-prob-arith"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+]
+
+[[package]]
+name = "mix-prob-q16"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+]
+
+[[package]]
 name = "mix-q8-q16"
 version = "0.0.0"
 dependencies = [
@@ -51,6 +65,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
+]
+
+[[package]]
+name = "prob-float-cast"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+]
+
+[[package]]
+name = "prob-float-from"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+]
+
+[[package]]
+name = "prob-into-q16"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
 ]
 
 [[package]]

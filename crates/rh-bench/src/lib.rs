@@ -28,5 +28,7 @@ compile_error!("count-alloc and arena-alloc are for separate bench targets: enab
 
 #[cfg(any(feature = "count-alloc", feature = "arena-alloc"))]
 pub mod alloc_count;
+// SPR-011 T-02 (BCK-002 A-37): the draw-cost bench's world.
+pub mod draws;
 pub mod fixture;
 pub mod smoke;

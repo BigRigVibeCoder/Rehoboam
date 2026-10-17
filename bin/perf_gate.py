@@ -65,8 +65,9 @@ PACKAGE = "rh-bench"
 LIMIT_PERCENT = 10
 
 # The benches of docs/08 §9 that P0 owns, by number. Bench 4 is a named, empty slot by the
-# director's ruling at G0 (SPR-009 ruling 1): stencil fields do not exist before P1a.
-BENCH_TARGETS = ("keyframe_write_read", "plane_hashes")
+# director's ruling at G0 (SPR-009 ruling 1): stencil fields do not exist before P1a. `draws` is the
+# per-draw cost of StepCtx's keyed draws (SPR-011 T-02, BCK-002 A-37), gated like benches 7 and 8.
+BENCH_TARGETS = ("draws", "keyframe_write_read", "plane_hashes")
 SLOTS = (
     (
         "raster_8x512",

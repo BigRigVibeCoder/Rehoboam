@@ -7,7 +7,13 @@
 //!
 //! Integer arithmetic only: the frequency bound is computed without floats.
 //!
+//! `Prob32` (SPR-011 T-01, ruling 4) gets the same checks at 32 fraction bits, from a keyed stream.
+//!
 //! Refs: DET-3; ADR-0006; `05.1` §6 items 2, 4.
+#![allow(
+    clippy::panic,
+    reason = "test helper: a bad bit pattern must fail the test loudly"
+)]
 
 use rh_core::fixed::{Q16_16, UniformDraw, chance, draw_hits};
 
@@ -124,4 +130,89 @@ fn frequency_matches_the_exact_probability() {
             "p >= 1 always hits"
         );
     }
+}
+
+// --- Prob32 (SPR-011 T-01, ruling 4; `05.1` §6 item 4) ----------------------------------------
+
+use rh_core::fixed::Prob32;
+use rh_ids::{BranchSalt, PurposeId, RngStream, SystemId, SystemKey};
+
+fn prob32(bits: u64) -> Prob32 {
+    Prob32::from_bits(bits).unwrap_or_else(|| panic!("{bits} is not a Prob32"))
+}
+
+/// Probabilities at the edges of the type, and a spread across it.
+fn prob32_edges() -> Vec<u64> {
+    let mut bits = vec![0, 1, 2, 3, 1 << 31, (1 << 32) - 2, (1 << 32) - 1, 1 << 32];
+    bits.extend((1..64_u64).map(|i| i.wrapping_mul(0x9E37_79B9) & 0xFFFF_FFFF));
+    bits
+}
+
+#[test]
+fn prob32_hits_exactly_the_draws_below_bits_times_two_to_the_32() {
+    // The hitting draws are exactly [0, bits · 2^32): `P(hit) = bits · 2^32 / 2^64 = bits / 2^32`.
+    // A draw's low 32 bits never change the outcome inside a block; the boundary is exact.
+    for bits in prob32_edges() {
+        let p = prob32(bits);
+        if bits == 1 << 32 {
+            assert!(
+                draw_hits(u64::MAX, p) && draw_hits(0, p),
+                "p = 1 always hits"
+            );
+            continue;
+        }
+        let first_miss = bits << 32;
+        for low in [0_u64, 1, 1 << 31, (1 << 32) - 1] {
+            if let Some(d) = first_miss.checked_sub((1 << 32) - low) {
+                assert!(
+                    draw_hits(d, p),
+                    "bits {bits}: draw {d} is in the last hitting block"
+                );
+            }
+            if let Some(d) = first_miss.checked_add(low) {
+                assert!(
+                    !draw_hits(d, p),
+                    "bits {bits}: draw {d} is in the first missing block"
+                );
+            }
+        }
+        assert_eq!(draw_hits(0, p), bits > 0);
+        assert!(!draw_hits(u64::MAX, p));
+    }
+}
+
+#[test]
+fn prob32_frequency_from_a_keyed_stream_matches_the_exact_probability() {
+    // |hits - N p| <= 5 standard deviations, in integers, with p = b / 2^32:
+    // (hits · 2^32 - N b)^2 <= 25 N b (2^32 - b). The stream is rh-ids' keyed ChaCha8.
+    const N: u64 = 1 << 18;
+    let key = SystemKey::new(0x5EED, BranchSalt::from_raw(0), SystemId::from_raw(9), 0)
+        .stream_key(PurposeId::of("frequency"), 1);
+    let mut source = RngStream::from_stream_key(&key, 0);
+    for bits in [
+        1 << 12,
+        214_748,
+        21_474_836,
+        1 << 31,
+        3_865_470_566,
+        (1 << 32) - 4_096,
+    ] {
+        let p = prob32(bits);
+        let hits = u128::from((0..N).filter(|_| chance(&mut source, p)).count() as u64);
+        let b = u128::from(bits);
+        let deviation = (hits << 32).abs_diff(u128::from(N) * b);
+        let bound = 25 * u128::from(N) * b * ((1 << 32) - b);
+        assert!(
+            deviation * deviation <= bound,
+            "bits {bits}: {hits} hits in {N}"
+        );
+    }
+    let before = source.position();
+    assert!((0..1_000).all(|_| !chance(&mut source, Prob32::ZERO)));
+    assert!((0..1_000).all(|_| chance(&mut source, Prob32::ONE)));
+    assert_eq!(
+        source.position(),
+        before + 2_000,
+        "one draw per call, whatever p (CRN)"
+    );
 }

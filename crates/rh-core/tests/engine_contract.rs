@@ -29,6 +29,7 @@ mod support;
 
 use rh_core::access::Lag;
 use rh_core::engine::Engine;
+use rh_core::fixed::{Prob32, Q16_16, draw_hits};
 use rh_core::register::{register, system_id};
 use rh_core::system::{PulseBinding, SimError, SpecPurpose, StepCtx};
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
@@ -540,6 +541,59 @@ fn a_stream_has_the_key_of_rng() {
     assert_eq!(e.tables().get("d.x").unwrap(), &expected);
 }
 
+/// SPR-011 T-01: `chance` is one keyed draw against a probability: `draw_hits(rng(p, e, k), q)`,
+/// for `Prob32` and `Q16_16` alike, at the edges 0 and 1 and in between.
+#[test]
+fn chance_is_one_keyed_draw_against_the_probability() {
+    const PROBS: [u64; 6] = [0, 1, 1 << 31, (1 << 32) - 1, 1 << 32, 2_863_311_531];
+    fn record(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let mut out = Vec::new();
+        for (k, bits) in (0_u64..).zip(PROBS) {
+            let p = Prob32::from_bits(bits).expect("a probability");
+            out.push(i64::from(c.chance(
+                &Draw::Noise,
+                RegionId::from_raw(3),
+                k,
+                p,
+            )?));
+        }
+        let q = Q16_16::from_bits(40_000);
+        out.push(i64::from(c.chance(
+            &Draw::Noise,
+            RegionId::from_raw(3),
+            6,
+            q,
+        )?));
+        v.write("d.x")?.extend(out);
+        Ok(())
+    }
+    let s = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .writes("d.x")
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(record);
+    let t = SimTime::from_minutes(1_440);
+    let mut e = engine(vec![s], t, 1);
+    e.advance_until(t, |_, _| {}).unwrap();
+    let mut expected: Vec<i64> = (0_u64..)
+        .zip(PROBS)
+        .map(|(k, bits)| {
+            let p = Prob32::from_bits(bits).expect("a probability");
+            i64::from(draw_hits(independent_draw_k("X1.d", 3, t, k), p))
+        })
+        .collect();
+    let q = Q16_16::from_bits(40_000);
+    expected.push(i64::from(draw_hits(independent_draw_k("X1.d", 3, t, 6), q)));
+    assert_eq!(e.tables().get("d.x").unwrap(), &expected);
+    assert_eq!(expected[0], 0, "p = 0 never hits");
+    assert_eq!(expected[4], 1, "p = 1 always hits");
+}
+
 /// SPR-008 (`05.1` §6 item 3): one stream per `(purpose, entity)` per step, never alongside
 /// `rng` for the same pair; another entity is a different pair. Each refusal names the system,
 /// the purpose and the entity.
@@ -629,12 +683,81 @@ fn a_step_takes_one_stream_per_pair_and_never_mixes_it_with_rng() {
     }
 }
 
-/// A new step starts with no pair taken: the same pair's stream in the next step is allowed.
+/// BCK-002 A-37: the pair set spans one system's bindings at one instant. Bound in Vital and in
+/// Agenda on the same day, the second binding's stream of the same pair is refused (the two would
+/// draw identical numbers); a new instant starts with no pair taken, so a system bound once draws
+/// the same pair's stream every day.
 #[test]
-fn the_taken_pairs_reset_with_each_step() {
+fn the_taken_pairs_span_every_binding_of_an_instant_and_reset_with_each_instant() {
     fn step(
         _: &Stub,
         _: PulseBinding,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        c.stream(&Draw::Noise, RegionId::from_raw(3)).map(|_| ())
+    }
+    let t = SimTime::from_minutes(1_440);
+    let twice = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .at(Pulse::Day, Phase::Vital)
+        .at(Pulse::Day, Phase::Agenda)
+        .stepping(step);
+    let mut e = engine(vec![twice], t, 1);
+    assert_eq!(
+        e.advance_until(SimTime::from_minutes(3 * 1_440), |_, _| {}),
+        Err(SimError::StreamReuse {
+            system: "X1.d",
+            purpose: "noise",
+            entity: 3,
+            taken: "stream",
+        })
+    );
+    assert_eq!(e.crash_artifact().map(|a| a.tick), Some(1_440));
+    let once = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(step);
+    let mut e = engine(vec![once], t, 1);
+    assert_eq!(
+        e.advance_until(SimTime::from_minutes(3 * 1_440), |_, _| {}),
+        Ok(())
+    );
+}
+
+/// BCK-002 A-37: a timer pass and a step of one system at one instant share the pair set. The
+/// timer fires in Vital and takes the stream; the Day step in Agenda asks for the same pair.
+#[test]
+fn a_timer_pass_and_a_step_at_one_instant_share_the_pair_set() {
+    use rh_core::agenda::TimerEntry;
+    use rh_core::system::TimerSpec;
+    use rh_ids::EntityRef;
+    fn step(
+        _: &Stub,
+        b: PulseBinding,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        if b.phase == Phase::Vital && c.now() == SimTime::EPOCH {
+            let time = c.now().checked_add_minutes(1_440).unwrap();
+            let entity = EntityRef::region(RegionId::from_raw(3));
+            let spec = TimerSpec {
+                time,
+                phase: Phase::Vital,
+                entity,
+                kind: 0,
+                payload: 0,
+            };
+            c.schedule(&Draw::Noise, spec)?;
+        }
+        if b.phase == Phase::Agenda && c.now() > SimTime::EPOCH {
+            c.stream(&Draw::Noise, RegionId::from_raw(3))?;
+        }
+        Ok(())
+    }
+    fn fire(
+        _: &Stub,
+        _: &TimerEntry,
         _: &mut SystemView<'_>,
         c: &mut StepCtx<'_>,
     ) -> Result<(), SimError> {
@@ -644,13 +767,19 @@ fn the_taken_pairs_reset_with_each_step() {
         .purposes_of::<Draw>()
         .at(Pulse::Day, Phase::Vital)
         .at(Pulse::Day, Phase::Agenda)
-        .stepping(step);
-    let t = SimTime::from_minutes(1_440);
-    let mut e = engine(vec![s], t, 1);
+        .stepping(step)
+        .firing(fire);
+    let mut e = engine(vec![s], SimTime::EPOCH, 1);
     assert_eq!(
-        e.advance_until(SimTime::from_minutes(3 * 1_440), |_, _| {}),
-        Ok(())
+        e.advance_until(SimTime::from_minutes(2 * 1_440), |_, _| {}),
+        Err(SimError::StreamReuse {
+            system: "X1.d",
+            purpose: "noise",
+            entity: 3,
+            taken: "stream",
+        })
     );
+    assert_eq!(e.crash_artifact().map(|a| a.tick), Some(1_440));
 }
 
 /// SPR-008 (Architect ruling on D3): the pair set spans every fire of one system in one timer

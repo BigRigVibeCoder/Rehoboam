@@ -1,0 +1,151 @@
+# Planted fixture for lint_odd.py's absent-owner checks on [[reads]] (EVO-001; REV-P1a NEW-4; R12): an identity read requires
+# its owner and has no `neutral`; a rate or mode read of an owner that may be absent carries a typed `neutral` (typed by the
+# owner's [[owns]], or by the Registry [era_state] for M6, which has no spec; named by the in-coupling's prose). Never a
+# contract. Case `enum_member`: the mode read's neutral is not one of person.death_cause's codes; must FAIL
+# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/enum_member
+odd_r = 2
+
+[system]
+id = "M3.agriculture"
+name = "Agriculture (lint fixture)"
+spec_version = "0.0.1"
+fidelity = "F0"
+status = "frozen"
+crate = "rh-sys-agriculture"
+adrs = []
+requirements = []
+
+[purpose]
+statement = "Fixture only."
+role = "substrate"
+patterns = []
+not_yet = []
+
+[[applies]]
+command = "FixtureCmd"
+payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
+from = ["M3.agriculture"]
+drained_by = "Year/Environment"
+key = "living"
+key_field = "a"
+
+[[commands]]
+target = "M3.agriculture"
+command = "FixtureCmd"
+payload = "{ a, b, c }"
+why = "planted"
+
+[[reads]]
+column = "person.alive"
+owner = "M2.demography"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "person.death_cause"
+owner = "M2.demography"
+lag = "lagged"
+use = "mode"
+neutral = "smitten"
+
+[scales]
+spatial = "region"
+temporal = "Year"
+extent = "n/a: fixture"
+restart = "n/a: fixture"
+
+[[schedule]]
+pulse = "Year"
+phase = "Environment"
+steps = ["noop: nothing"]
+when = "always"
+
+[[rng]]
+purpose = "fixture_draw"
+key = ["region", "year"]
+use = "n/a: fixture"
+
+[design]
+basic_principles = "n/a: fixture"
+emergence = "n/a: fixture"
+adaptation = "n/a: fixture"
+objectives = "n/a: fixture"
+learning = "n/a: fixture"
+prediction = "n/a: fixture"
+sensing = "n/a: fixture"
+interaction = "n/a: fixture"
+stochasticity = "n/a: fixture"
+collectives = "n/a: fixture"
+observation = "n/a: fixture"
+era_state = []
+scale_behaviour = "n/a: fixture"
+
+[initialization]
+state = "n/a: fixture"
+from_manifest = []
+
+[input_data]
+drivers = []
+
+[[params]]
+name = "anomaly_regime_corr"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "anomaly_regime_rate"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "anomaly_regime_years"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "autocorr"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "crop_corr_spring_spring"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "crop_corr_winter_spring"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "harvest_sigma"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "seed_yield_ratio"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "spatial_share"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "volcanic_rate"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "yield_cv_tech_floor"
+meaning = "fixture"
+source = "design value"
+
+[[submodels]]
+name = "noop"
+summary = "nothing"
+earns_its_place_by = ["V-INV-01"]
+
+[[invariants]]
+id = "INV-M3-01"
+statement = "fixture"
+test = "V-INV-01"
+
+[isolation]
+forcing = [{ input = "person.death_cause", series = "constant", note = "fixture" }]
+horizon = "n/a: fixture"
+expect = "n/a: fixture"
+
+[verification]
+tests = ["V-INV-01"]
+prototype = ""

@@ -1,15 +1,15 @@
-# Planted fixture for lint_odd.py's [[applies]] check (PR #32; REV-P1a §7). Never a contract: M1.regions applies a command
-# it also sends to itself, so one spec exercises both sides; only the sender's payload differs between the two cases.
-# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/<case>
+# Planted fixture for lint_odd.py's [[applies]] checks (PR #32; REV-P1a §7; typed payloads, drained_by, key, key_field and outcome by EVO-001).
+# Never a contract: M3.agriculture applies a command it also sends to itself, so one spec exercises both sides. Case `mismatch`: the sender lists the fields in another order; must FAIL
+# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/mismatch
 odd_r = 2
 
 [system]
-id = "M1.regions"
-name = "Regions (lint fixture)"
+id = "M3.agriculture"
+name = "Agriculture (lint fixture)"
 spec_version = "0.0.1"
 fidelity = "F0"
 status = "frozen"
-crate = "rh-sys-regions"
+crate = "rh-sys-agriculture"
 adrs = []
 requirements = []
 
@@ -21,11 +21,14 @@ not_yet = []
 
 [[applies]]
 command = "FixtureCmd"
-payload = "{ a: PersonId, b: SimTime (a day start), c: natural | other }"
-from = ["M1.regions"]
+payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
+from = ["M3.agriculture"]
+drained_by = "Year/Environment"
+key = "living"
+key_field = "a"
 
 [[commands]]
-target = "M1.regions"
+target = "M3.agriculture"
 command = "FixtureCmd"
 payload = "{ a, c, b }"
 why = "planted"
@@ -70,15 +73,47 @@ from_manifest = []
 drivers = []
 
 [[params]]
-name = "route_cost_sea"
+name = "anomaly_regime_corr"
 meaning = "fixture"
 source = "design value"
 [[params]]
-name = "route_cost_river"
+name = "anomaly_regime_rate"
 meaning = "fixture"
 source = "design value"
 [[params]]
-name = "route_cost_land"
+name = "anomaly_regime_years"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "autocorr"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "crop_corr_spring_spring"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "crop_corr_winter_spring"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "harvest_sigma"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "seed_yield_ratio"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "spatial_share"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "volcanic_rate"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "yield_cv_tech_floor"
 meaning = "fixture"
 source = "design value"
 
@@ -88,7 +123,7 @@ summary = "nothing"
 earns_its_place_by = ["V-INV-01"]
 
 [[invariants]]
-id = "INV-M1-01"
+id = "INV-M3-01"
 statement = "fixture"
 test = "V-INV-01"
 

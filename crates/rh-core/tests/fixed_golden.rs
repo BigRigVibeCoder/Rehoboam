@@ -1,4 +1,4 @@
-//! Golden vectors for `rh_core::fixed` (SPR-010 T-02; GOV-002 §2 tier 5).
+//! Golden vectors for `rh_core::fixed` (SPR-010 T-02; `Prob32`: SPR-011 T-01; GOV-002 §2 tier 5).
 //!
 //! Replays every vector of `tests/golden/fixed_vectors.txt`, which `bin/gen_fixed_vectors.py`
 //! generates from an exact rational reference (Python `fractions`, round half to even, then
@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use rh_core::fixed::{Money, Q8_8, Q16_16, draw_hits};
+use rh_core::fixed::{Money, Prob32, Q8_8, Q16_16, draw_hits};
 
 const VECTORS: &str = include_str!("golden/fixed_vectors.txt");
 
@@ -39,6 +39,20 @@ fn money(token: &str) -> Money {
 /// Formats an optional result the way the vector file does.
 fn opt<T>(value: Option<T>, bits: impl Fn(T) -> i64) -> String {
     value.map_or_else(|| "none".to_owned(), |v| bits(v).to_string())
+}
+
+fn uint(token: &str) -> u64 {
+    token
+        .parse()
+        .unwrap_or_else(|_| panic!("not a u64: {token}"))
+}
+
+fn p32(token: &str) -> Prob32 {
+    Prob32::from_bits(uint(token)).expect("a Prob32 bit pattern")
+}
+
+fn p32_bits(p: Prob32) -> i64 {
+    i64::try_from(p.to_bits()).expect("Prob32 bits fit i64")
 }
 
 fn q8_bits(q: Q8_8) -> i64 {
@@ -72,6 +86,11 @@ fn compute(op: &str, args: &[&str]) -> String {
         ("money.mul_int", [a, n]) => money(a).saturating_mul_int(int(n)).to_minor().to_string(),
         ("money.mul_rate", [a, r]) => money(a).mul_rate(q16(r)).to_minor().to_string(),
         ("money.div_int", [a, n]) => opt(money(a).checked_div_int(int(n)), Money::to_minor),
+        ("p32.bits", [b]) => opt(Prob32::from_bits(uint(b)), p32_bits),
+        ("p32.draw", [d, b]) => u8::from(draw_hits(uint(d), p32(b))).to_string(),
+        ("p32.from_q16", [q]) => opt(Prob32::from_q16_16(q16(q)), p32_bits),
+        ("p32.to_q16", [b]) => q16_bits(p32(b).to_q16_16()).to_string(),
+        ("p32.ratio", [n, d]) => opt(Prob32::from_ratio(uint(n), uint(d)), p32_bits),
         ("draw", [d, p]) => {
             let draw = d
                 .parse::<u64>()
@@ -130,6 +149,11 @@ fn every_golden_vector_matches_the_exact_reference() {
         "money.mul_int",
         "money.mul_rate",
         "money.div_int",
+        "p32.bits",
+        "p32.draw",
+        "p32.from_q16",
+        "p32.to_q16",
+        "p32.ratio",
     ];
     for op in ops {
         assert!(

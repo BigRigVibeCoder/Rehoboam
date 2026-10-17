@@ -3,12 +3,14 @@
 //! - `Q8_8` (i16 storage) and `Q16_16` (i32 storage): the `q8_8` and `q16_16` column types of the
 //!   system specs (`specs/systems/_template.odd.toml`).
 //! - `Money`: i64 minor units.
-//! - `draw_hits` and `chance`: a uniform `u64` draw against a `Q16_16` probability, with an exact
-//!   mapping (`draw.rs`).
+//! - `Prob32` (u64 storage, 32 fraction bits): a probability in `[0, 1]` for draws that need finer
+//!   steps than `Q16_16` (SPR-011 ruling 4; `prob.rs`).
+//! - `draw_hits` and `chance`: a uniform `u64` draw against a `Q16_16` or `Prob32` probability,
+//!   with an exact mapping (`draw.rs`); `rh_ids::RngStream` is a draw source (BCK-002 A-21).
 //!
 //! There is no conversion from or to `f32`/`f64` anywhere in this module, under any feature: a
 //! plane-A crate cannot reach one (`05.1` §6 item 4). A tool that wants to plot a value divides
-//! `to_bits()` by `2^FRAC_BITS` itself, outside plane A. The three types never mix implicitly; the
+//! `to_bits()` by `2^FRAC_BITS` itself, outside plane A. The four types never mix implicitly; the
 //! compile-fail controls in `tests/lint_fixtures/compile_fail/fixed_point/` prove both rules.
 //!
 //! REF: `CODEX/05_PROJECT/SPR-010_FixedPoint.md`; `05.1` §6 item 4; `05.5` §2.1; ADR-0006;
@@ -17,9 +19,11 @@
 mod arith;
 mod draw;
 mod money;
+mod prob;
 mod q;
 mod round;
 
-pub use draw::{UniformDraw, chance, draw_hits};
+pub use draw::{Probability, UniformDraw, chance, draw_hits};
 pub use money::Money;
+pub use prob::Prob32;
 pub use q::{Q8_8, Q16_16};

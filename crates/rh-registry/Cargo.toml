@@ -17,5 +17,7 @@ workspace = true
 # SPR-005: the single-writer and plane rules live in rh-core (rh-registry -> rh-core, never the
 # reverse; Architect ruling 2026-10-16).
 rh-core = { version = "0.0.0", path = "../rh-core" }
+# SPR-011 T-04: WorldSpec names its systems by SystemId.
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.8"
