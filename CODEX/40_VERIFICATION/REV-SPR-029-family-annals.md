@@ -9,10 +9,17 @@ tags: [verification]
 related: [PRJ-002, SPR-029, SPR-019, SPR-020, SPR-021, SPR-030, REV-SPR-019, REV-SPR-020, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.1.0
+version: 0.2.0
 ---
 
-> **BLUF: round 1 on `5509079`. Changes are needed before the merge: no blocker, 10 majors, 11 minors and 5 nits.**
+> **BLUF: round 2 on . Changes are needed before the merge: no blocker, 3 majors, 7 minors and 5 nits** (§2). An independent renderer reproduces all 15 golden files, and all 27 gates pass with their controls. The majors:
+> - the house walk is not M7's rule;
+> - check 1 re-derives  rows only;
+> - the motive can name an inhibitor.
+>
+> Rulings R18–R30 are in §0b.
+>
+> **Round 1:** round 1 on `5509079`. Changes are needed before the merge: no blocker, 10 majors, 11 minors and 5 nits.**
 > - **What holds.** An independent renderer written from the contract reproduces all ten golden files once three unstated layout choices are adopted. Rendering is byte-stable across hash seeds, locales and row orders. All 15 gates pass, and every lint control fails on its own diagnostic. Every slot binds to something its emitter declares, and nothing feeds plane A.
 > - **The majors.**
 >   - The contract does not fully determine the output files.
@@ -50,6 +57,28 @@ version: 0.1.0
 | R14 | F22–F26 | **Accepted:**<ul><li>variants keyed on the edge or the role (deposed "by" versus "in favour of"; a feud ended by a death versus by reconciliation; a pressed claim with no holder);</li><li>the wording slips, with ordinal headings in one style;</li><li>the two text slips;</li><li>`[[emits]]` keyed by (system, kind), with duplicates refused;</li><li>a `verify` mode that recomputes a committed sidecar's digest</li></ul> | 8/10 |
 | R15 | Decisions 1–3, 6, 7; Q1 | **Decision 1** is accepted with R6's `father` slot. **Decision 2** is accepted for v0: succession sentences name no title until M7 declares typed payloads. The Architect files **BCK-002 A-55**: a typed `payload = [...]` list on `[[emits]]` in `lint_odd.py`, declared for M2, M7 and T1, which lands before SPR-021. The annals bind to typed payloads once it lands. It is not added to PR #62, which is verified and waiting to merge. **Decision 3** stands as a stopgap, made clause-exact by R12, until A-55. **Decision 6** is accepted for P1a; correct the citation of `05.4` §5, and make R5's trailer the explicit record of what is left out. **Decision 7** is accepted, restricted by R12. **Q1:** keep the prologue | 8/10 |
 | R16 | D49, D50 | **D49 (names):** revise the recommendation to a plane-C name generator scheduled in P2.8a, before the G1a reading, not at P2.8. Real ids are 64-bit, so without it G1a's annals would print 20-digit numbers. The generator is deterministic and keyed (`H(world_seed, person_id, "name")` over a culture's name base). Give its cost in agent-days and its reuse candidates (`docs/14`). The contract defines designation's hook for a generated name, not the generator. **D50:** file it once R2's probe enforces what its text says, worded as the reviewer proposes. Both are confidence-rated for the director | 7/10 |
+
+## 0b. Architect rulings, round 2 (2026-10-17)
+
+Round 2 was reviewed on `214fbd8` by an independent session on a different model from the drafter's (§2). R1–R17 hold or partly hold, as §2's table shows. The drafter's calls 1–7 inside the rulings are accepted. These rulings are binding for round 3.
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R18 | G1 | **Accepted.** `house_of(p)` is exactly §4 rule 4. It is the keyframe row. Else, for a birth during the run (an in-run `LIFE_ENTRY` of origin `born`), it is the father's house if that is not none, else the mother's. Else it is none. There is no recursion into a genesis person's ancestry. Add the probe's case (a genesis grandson through a daughter, and his in-run son by a Thorne) to `gen_fixtures`. The Architect files the disagreement between the agnatic back-fill and M7's cognatic fallback for SPR-019's code sprint and SPR-021 (BCK-002) | 85% |
+| R19 | G2; D50 | **Accepted.** Check 1 re-renders the whole group from its inputs (prologue, sentences, trailers, header). It compares the sidecar row by row and field by field, in list order, and names the first field that differs. D50 is enforced as ruled: a `P` row's sources are the keyframe rows it was rendered from. Committed controls: P12 (an altered prologue text), P13 (another house's root cited) and P7b (a forged source), each FAIL by name. State in §11 that check 1 shares the substitution function with the renderer, so it guards the sidecar against the text; the goldens and the independent renderer guard the contract | 90% |
+| R20 | G3 | **Accepted.** The motive is the motivated contributor with the largest *positive* weight, ties to the lower cause id. When no weight is positive, the sentence renders without a motive (the unnamed variant). The envelope's coalescing rule has the same exposure: the Architect amends `envelope_v0.md` §5 through SPR-020, so that the coalesced edge's motive takes the sign of the summed weight. That is outside this PR | 75% |
+| R21 | G4 | **Accepted, no golden change.** (a) A row's persons are the persons the sentence designates (its roles, its cause labels and a birth's father), plus the parents a designation reaches. (b) A sibling rank's sources are the rows of every child of that parent of the same sex. (c)–(j): state each rule. Ids are 16 lowercase hex digits, zero-padded, and a prefix is taken from that form. Trailer kinds are in name order. Words for numbers are covered by R25. An unnamed house or title is refused by name (R27). Castless chains follow R22. The manifest lists the houses, then `line:<min named id>`. The extract digest follows R23. `chronicle_digest` is the segments' canonical digests in segment order, folded as §9 states | 85% |
+| R22 | G5 | **Accepted.** Castless events join in ascending id order, and a castless event that has joined counts as a member event for later ones. Triggered edges point to earlier ids, so one pass in id order computes it | 80% |
+| R23 | G6 | **Accepted.** The extract digest is the XXH3 of a canonical byte form: each table's rows sorted by key, one canonical line each, in a stated table order. A shuffled extract gives the same digest; add that as a check. `manifest_hash` is `sha256:<64 hex>` as `rh-golden` prints it; correct the fixture | 85% |
+| R24 | G7 | **Disambiguate, don't refuse.** D49's generator makes shared names routine, so refusing would break normal use. When two persons of one annal share a designation, each is followed by its compact label, as in "Maud (p-4a8f)". Check 9 then holds by construction and stays as the guard. Add a control with two persons named Maud | 75% |
+| R25 | G10 | **Words to 999,999**, British style ("one thousand and one"), because 1,000-year runs are routine from G1a's performance run. Add known answers (1000, 1001, 1100, 2024, 999,999) to check 4. A larger number is refused by name | 85% |
+| R26 | G8 | **Accepted, all three.** The deposition moves to day 2 or later. Drop claim 31, or re-trigger it from a passed-over heir. Check 5 enforces M7's `when` exactly (claims come only from a passed-over heir or a deposition) and the deposition day, each with a committed control. Founder indices: the cast first, as `rh-worldgen` issues them. **Display is 1-based:** `Founder #k` prints k + 1, because readers count from one; the sidecar keeps the full id | 80% |
+| R27 | G9, G12 | **Accepted.** Each prologue template has its own vocabulary. Versions are integers, ids must be known, and control characters are refused. A raw id never reaches the text: `house #<id>`, `title #<id>` and the "event N" fallback are each refused by name | 85% |
+| R28 | G11 | **Uniqueness over the run's persons:** the keyframe extract's persons and every person the chronicle names. A person's label is then the same in every annal rendered from one chronicle. It may lengthen as a live chronicle grows; state that | 70% |
+| R29 | G13, G14, G15 | **All accepted.** Fix the control hygiene: plant P1 for `row-drops-own` and an existing event for `unrelated-event`; give each lint control exactly one diagnostic; commit a check-5 control; run check 6's two renders in two processes under different `PYTHONHASHSEED` values. Match the heading `## Before the chronicle began` exactly. Fix the text slips. §1 states that a chronicle under the frozen dictionary cannot be rendered while the delta exists | 90% |
+| R30 | Drafter Q4, Q5 | **Q4:** the broad label set (every out-of-scope kind any `[[emits]]` declares) is accepted. **Q5:** re-derivation is enough for v0. The tool recovers k by re-running `founder(seed, k)` with the deterministic rehash over the genesis rows. `life_course.founder_index` would be an M2 amendment that moves every hash (C3) and is not justified | 75% |
+
+**Round 3:** the drafter applies R18–R30, regenerates the goldens with the tool, and re-runs `check_all --part core`. The Architect verifies round 3 with the round-2 scripts (`work_r2/`: `mutants.py`, `probes.py`, `compare_indep.sh`, `fixture_check.py`, `lint_probes.py`, `determinism.sh`).
 
 ## 1. The review (round 1, independent reviewer)
 
@@ -186,3 +215,134 @@ The numbering below is the brief's. The contract's own §10 numbers these differ
 ### Scripts (`work/`)
 
 `indep_render.py` (the independent renderer), `compare_indep.sh`, `ambiguity_flags.sh`, `run_gates.sh`, `mutants.py` (P1–P19), `lint_probes.py`, `lint_probes_render.py`, `extra_probes.py`, `fixture_check.py`, `header_probe.sh`.
+
+## 2. The review (round 2, independent reviewer)
+
+Copy reviewed: a git archive of `214fbd8` in the Architect's scratchpad, `annals_review_r2/src/`.
+- Every script cited is in `annals_review_r2/work_r2/` and runs from there with `python3 -I -B <script> ../src`, or `./<script>.sh`.
+- Nothing in `src/` or the repository was modified.
+- The independent renderer was written from `annals_v0.md` §§1–9 and `templates_v0.toml` before the reviewer read `selftest_annals_v0.py`.
+
+### BLUF
+**Verdict: changes needed before the merge. 0 blockers, 3 majors, 7 minors, 5 nits.**
+
+**What holds:**
+- The independent renderer, written from the contract alone, reproduced all 6 annal texts byte for byte on the first attempt. It reproduces all 15 golden files once two readings the text leaves open are adopted (G4).
+- All 27 SPR-029 gates pass, and each control fails for its own reason. Ruff, mypy and the inventory test are clean.
+- Output is byte-stable across 96 renders (4 hash seeds × 4 locale settings × 6 groups) and across 5 shufflings of the input rows.
+- Round 1's mutants P1 and P3–P6 each fail check 1 by name.
+- These rulings hold: R3, R5, R7, R11, R13, R14, R15 and R16, and R12's F12–F19.
+- R17's labels: no golden text contains a run of 5 or more digits.
+- The impossible fixture records fall from 10 to 3.
+
+**Majors:**
+- **G1.** The reference's house walk is neither M7's `on_birth` rule nor the rule §4 states.
+- **G2.** Check 1 re-derives only the `S` rows' events, persons, template and text. It does not re-derive prologue rows, any row's sources, versions, trailers or the header, so 17 of 28 planted mutants survive.
+- **G3.** R8's "largest |weight|" can name an inhibiting contributor as the motive.
+
+### Rulings R1–R17
+| # | Verdict | Evidence |
+|---|---|---|
+| R1 exact grammar | **Partly** | `./compare_indep.sh out_literal` (the first reading of the text) matches 10 of 15 golden files, including all 6 texts. With `--sibling-src all --cause-persons designated` it matches 15 of 15. The text determines the title lines, blank lines, headings, capitalisation, `templates_digest` as integer hex, numeric ids, bytewise sources, prologue rows, and the manifest digest. Undetermined choices remain (G4) |
+| R2 sidecar re-derived | **Partly** | Each of these fails check 1 by name: P1, P3 (an *existing* kf source after the first year heading), P4 and P4b (a non-existent kf source), P5 (an *existing* unrelated event), P6 (rows swapped: "the text is not the rendering of event 9"). 17 other mutants survive (G2) |
+| R3 `[[label]]` | **Holds** | The emitters declare 16 out-of-scope kinds (`specs/systems`, with `next/` superseding), and they are exactly the 16 labels. Deleting ENCOUNTER's label is refused by name. A feud motivated by `MURDER_ATTEMPT` renders, and check 1 passes |
+| R4 one walk, M7's rule | **Fails on a legal input** | One function (`Kinship.house_of`), cited by §4 and §5, but it is not M7's rule (G1) |
+| R5 castless events | **Holds** | House Thorne renders the interregnum, and Ashcombe and the line count it in the trailer. §12 is corrected. Castless chains diverge (G5) |
+| R6 + R17 designation | **Holds on the fixtures** | Name, then father, then mother, then label. The mother probe gives "the first son of Ysolde", and twins give `Founder #4`/`#5`. No designation comes from the birth being told. A prefix collision gives `p-aae0ea`/`p-aae0e0` in both renderers. No digit run of 5 or more appears in any golden text. Check 9 catches planted collisions, but only inside the self-test (G7) |
+| R7 no strain | **Holds** | The only "stress"/"strain" is a header comment in `templates_v0.toml` |
+| R8 motive | **Partly** | A tie at \|128\| goes to the lower cause id, and `when.motive` separates named and unnamed motives. But \|weight\| picks an inhibitor (G3) |
+| R9 provenance header | **Partly** | Every field is present, and a `registry_version` mismatch is refused by name. But the extract is bound by the XXH3 of its TOML file's bytes, which the P2.8a Arrow reader does not have (G6) |
+| R10 possible history | **Partly** | 3 deviations remain, down from 10 (G8). `gen_fixtures --check` passes; check 5 is live |
+| R11 manifest | **Holds** | Groups are in (kind, numeric id) order, each with its digest, and the manifest has its own digest. The `STEP_DIGEST` statement is present and the folding sentence is gone |
+| R12 F12–F19 | **Holds** | 18 planted template files: every F12–F19 case is refused by name. Prologue lint gaps remain (G9) |
+| R13 no-event-id | **Holds** | The control fails check 1 only, with the exact line |
+| R14 F22–F26 | **Holds** | Edge- and role-keyed variants; ordinal headings; duplicate emits refused; `verify` recomputes all 6 digests |
+| R15, R16 | **Hold** | §10 records the decisions. D49/D50 are recorded on `main`, with no `docs/` edit on the branch; the generator is at P2.8 |
+| R17 compact label | **Holds** | Caveats G11, G12 and G4(c) |
+
+### Findings
+Severity: **MAJ**, wrong in a way a later sprint inherits; **MIN**, fix now; **NIT**, cosmetic or unreachable today.
+
+- **G1 (MAJ, 85%): the house walk.**
+  - §4 rule 4 says: the keyframe row; else, for a birth during the run, the father's house if he has one, else the mother's. M7's `on_birth` is a single lookup.
+  - `Kinship.house_of` walks every `LIFE_ENTRY` person, genesis persons included, and recurses into a father's ancestry when he has no row.
+  - **Probe `r4`:**
+    - Setup: daughter D (a member); her houseless husband O; their genesis son X, with no row; and an in-run son C of X by Ysolde, a Thorne.
+    - The reference puts X and C in Ashcombe and prints "five living members".
+    - The contract gives four, and puts C in Thorne.
+  - **Fix:** `house_of(p)` is the keyframe row. Else, for an in-run birth, the father's house if not none, else the mother's. Else none. Add the case to `gen_fixtures`, and flag that the agnatic back-fill and M7's cognatic fallback disagree.
+- **G2 (MAJ, 90%): check 1 re-derives `S` rows only.**
+  - `_check_prologue_row` checks only position, no events and that some `kf:` source exists. `_kf_source_exists` is true for every non-`kf:` source. Sources and versions are never compared, and events and persons are compared as sets.
+  - D50 as ruled ("maps to the keyframe rows it was rendered from") is not enforced.
+  - **Surviving mutants:**
+    - P6b: prologue rows swapped;
+    - P7a–d: sources dropped or forged;
+    - P8: a version changed;
+    - P9: events reordered;
+    - P10: a member dropped from a `P` row;
+    - P11: a prologue template relabelled;
+    - P12 and P12b: the prologue text altered;
+    - P13: another house's root cited;
+    - P15: the castless trailer deleted;
+    - P16: the omitted count changed;
+    - P17 and P18: header digests and the registry version swapped;
+    - P22b (G14).
+
+    Only the goldens catch these, and `--write` would bless them.
+  - **Fix:** check 1 re-renders the group from its inputs (prologue, sentences, trailers, header) and compares the sidecar row by row and field by field, list order included, naming the first field that differs. Add `P`-row and source controls (P12, P13, P7b).
+- **G3 (MAJ, 70%): the motive by |weight|.** The envelope's §5 says weight is signed, and an inhibitor is negative. With `JEALOUSY_OF` at −200 and `RETALIATION_FOR` at +90, the annal prints "declared a feud … out of jealousy of …". **Fix:** take the largest *positive* weight, with ties to the lower cause id; if none is positive, render without a motive. The envelope's coalescing rule has the same exposure.
+- **G4 (MIN, 85%): choices the text does not determine.**
+  - (a) A cited cause's persons: the goldens list only the persons the cause's label designates.
+  - (b) A sibling rank's sources: the goldens cite every child of that parent of the same sex.
+
+  Both of these change golden files under the literal reading. Unexercised:
+  - (c) hex padding;
+  - (d) trailer kind order;
+  - (e) numbers of 1000 and above;
+  - (f) an unnamed house or title in the prologue;
+  - (g) castless chains;
+  - (h) which groups the manifest lists;
+  - (i) the extract digest's bytes;
+  - (j) `chronicle_digest` over several segments.
+
+  **Fix:** state each one.
+- **G5 (MIN, 75%): castless chains.** `group_events` makes a single pass, so a castless event triggered by a castless event that joined goes to the trailer. **Fix:** join in ascending id, each joined event counting for later ones, or narrow the text.
+- **G6 (MIN, 80%): the extract digest is not canonical.** It is the XXH3 of `keyframe.toml`'s bytes: 5 shuffles of the same rows give 5 digests. **Fix:** a canonical byte form of the extract (sorted rows, one canonical line each). Also state the form of `manifest_hash`: the fixture has 40 hex digits, while `rh-golden` prints `sha256:<64>`.
+- **G7 (MIN, 75%): a shared designation.** Check 9 runs only on the fixtures; the renderer prints two "Maud"s without complaint, and D49's generator will make collisions routine. **Fix:** refuse by name, or disambiguate with the `p-` label.
+- **G8 (MIN, 80%): three fixture facts the cited specs forbid.**
+  1. `DEPOSED 18` falls on day 1 of the month, but M7 places it on days 2 to the last.
+  2. `CLAIM_CREATED 31` is triggered by an `INTERREGNUM_CRISIS`, but M7's `when` allows only a passed-over heir or a deposition.
+  3. Founder indices follow dict order, not "the cast first".
+
+  **Fix:** correct all three, and add both rules to check 5 with a committed control.
+- **G9 (MIN, 85%): the prologue lint.** It accepts `{death_date}` in `prologue.house` (the renderer raises `KeyError`), `version = "two"`, an unknown `[[prologue]]` id, and an embedded `\n## `. **Fix:** a vocabulary per prologue template, integer versions, known ids, and no control characters.
+- **G10 (MIN, 80%): no words for 1000 and above.** `cardinal` refuses n ≥ 1000, so year 1001 raises an error. **Fix:** define the words, or the bound, and add known answers.
+- **G11 (NIT, 70%): `p-` labels are relative to the annal.** The same person is `p-aae0` in one annal and `p-aae0e` in another. Compute uniqueness over the world's persons, or say so.
+- **G12 (NIT, 75%): raw ids can still reach the text:** `house #<id>`, `title #<id>`, and "in retaliation for event 6." None is reachable today. Refuse each by name.
+- **G13 (NIT, 85%): control hygiene.**
+  - `row-drops-own` plants P2, not P1.
+  - `unrelated-event` uses a non-existent id.
+  - Two lint controls give 2 diagnostics each.
+  - Check 5 has no committed control.
+  - Check 6's two renders share one process and one hash seed.
+- **G14 (NIT, 85%):** the first year heading is found by substring (`"chronicle" not in line`). Match `## Before the chronicle began` exactly.
+- **G15 (NIT, 90%): text slips.**
+  - §0 still says "else by id".
+  - §12 gives the wrong counts of births with a father named and of sibling references.
+  - §3's "the envelope's own coalescing rule" is inexact: the envelope breaks ties by `[motive_edges]` index.
+  - PRJ-002 says "two fixture chronicles"; there are 3.
+  - §1 should say that a chronicle under the frozen dictionary cannot be rendered while the delta exists.
+
+### Scripts (`annals_review_r2/work_r2/`)
+| Script | What it does |
+|---|---|
+| `indep_render.py` | The independent renderer; each open choice is a flag |
+| `compare_indep.sh OUTDIR [flags]` | Every group and manifest against the goldens |
+| `mutants.py` | 28 sidecar and text mutants |
+| `probes.py` | 19 behaviour probes |
+| `fixture_check.py` | The R10 plausibility check |
+| `lint_probes.py` | 18 planted template files |
+| `run_gates.sh` | The 27 gates |
+| `determinism.sh` | Hash seeds, locales and shuffles |
+
+**Not run:** the full `bin/check_all.sh`; real engine chronicles (none are written yet); `en_US.UTF-8` and `tr_TR.UTF-8`, which are not installed.
