@@ -458,12 +458,22 @@ world_sift_twin() {
   "$RH_CLI_RELEASE" sift "$dir" || return 1
   "$PY" -I specs/sifting/twin_check.py "$dir"
 }
+# SPR-013 T-12: solo's run directory with its journal's only row deleted (python -I, stdlib sqlite3):
+# the replay must hard-fail before it runs.
+replay_tampered_control() {
+  local d="$GOLDEN/solo_tampered"
+  rm -rf "$d"; mkdir -p "$d" || return 2
+  cp "$GOLDEN/solo_run/run.toml" "$GOLDEN/solo_run/journal.sqlite" "$GOLDEN/solo_run/run.ladder" "$d/" || return 2
+  "$PY" -I -c 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM inputs WHERE seq = 0"); c.commit()' "$d/journal.sqlite" || return 2
+  "$RH_CLI_RELEASE" replay "$d" --into "$GOLDEN/solo_tampered_replay"
+}
 # SPR-013 T-09: solo's PR-tier golden run streams into a fresh run directory (the ladder is the
 # baseline's; watching changes nothing).
 solo_stream_run() {
   rm -rf "$GOLDEN/solo_run"
-  "$RH_CLI_RELEASE" run solo --years 200 --threads 1 --ladder yearly --out "$GOLDEN/solo_yearly_t1.ladder" \
-    --journal "$GOLDEN/solo_yearly_t1.journal.sqlite" --run-dir "$GOLDEN/solo_run"
+  # The ladder and journal stay in the run directory (rh-cli replay reads them there, T-12).
+  "$RH_CLI_RELEASE" run solo --years 200 --threads 1 --ladder yearly --run-dir "$GOLDEN/solo_run" || return 1
+  cp "$GOLDEN/solo_run/run.ladder" "$GOLDEN/solo_yearly_t1.ladder"
 }
 # SPR-012 T-08: solo's hand-edited baseline control, as smoke's: one hex digit of rung 1's hash typed over.
 solo_baseline_hand_edited_control() {
@@ -783,7 +793,7 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
   rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
-  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift"
+  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -1191,6 +1201,10 @@ run "V-SIFT-01 on household: stream 200 years, sift, the twin = rh-sifter (SPR-0
 run "V-SIFT-01 on hamlet: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 60 matches of solitary_life" world_sift_twin hamlet 200 &&
 run "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 10000 matches of solitary_life" world_sift_twin fixture-founders_10k 120 &&
 run "rh-golden by name: V-PLN-04 subset: sifting twice is byte-identical and leaves channel A, keyframes, journal and ladder unchanged; one life_ends match per death, shown by tail (SPR-013 T-11)" "pass:T-11 V-PLN-04: hamlet: two sifts byte-identical" cargo nextest run -p rh-golden --release --locked --test sift --no-capture &&
+run "V-DET-04: rh-cli replay rebuilds solo's 200-year run from its run.toml and journal (Ada's input) at N threads: ladder, every channel-A segment and keyframe byte-identical (SPR-013 T-12)" "pass:REPLAY EQUAL: $GOLDEN/solo_run from genesis: 1 journal inputs, 200 ladder rungs, 200 channel-A segments (2425 records)" "$RH_CLI_RELEASE" replay "$GOLDEN/solo_run" --into "$GOLDEN/solo_replay" --threads "$GOLDEN_THREADS" &&
+run "V-DET-05: rh-cli replay from solo's year-100 keyframe = the run (SPR-013 T-12)" "pass:REPLAY EQUAL: $GOLDEN/solo_run from the keyframe at tick 51839999: 1 journal inputs, 100 ladder rungs" "$RH_CLI_RELEASE" replay "$GOLDEN/solo_run" --into "$GOLDEN/solo_replay_kf" --from-keyframe 51839999 &&
+run "Replay positive control: a journal with its row deleted must hard-FAIL the replay (SPR-013 T-12)" "fail:fewer rows than the timeline's input count" replay_tampered_control &&
+run "rh-golden by name: V-DET-04/18 on solo and hamlet (run.toml and the journal alone rebuild the run byte for byte), V-DET-05 from keyframes at 1 and 4 threads, V-DET-14 (an input changes only its founder's records), and missing, extra, edited and re-chained journal rows hard-FAIL (SPR-013 T-12)" "pass:T-12 V-DET-14: hamlet, 120 years" cargo nextest run -p rh-golden --release --locked --test replay --no-capture &&
 run "tail snapshot positive control: a stale snapshot must FAIL with the first differing line (SPR-013 T-10)" "fail:SNAPSHOT hamlet_follow_job differs at line 2" env RH_TAIL_SNAPSHOTS="$PWD/tests/lint_fixtures/golden/stale_tail_snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture the_display_form_matches_its_snapshots &&
 run "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, streaming, and streaming with a stopped tail attached, reported" "pass:T-10 wall: solo 200 years" tail_stopped_wall &&
 run "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)" "pass:solo: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/solo_yearly_tN.ladder" &&

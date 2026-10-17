@@ -71,7 +71,7 @@ use crate::dump;
 use crate::ladder::{Header, Ladder, Rung, RungKind};
 use crate::stream::{Hook, RunDir, RunToml, Stall, StreamHost, keyframe_rel, writer_config};
 use crate::vitals::{Timing, Vitals};
-use crate::world::{SMOKE, Setup, setup};
+use crate::world::{SMOKE, Setup};
 use rh_snapshot::journal::JournaledInput;
 use rh_stream::writer::Summary as StreamSummary;
 
@@ -162,6 +162,11 @@ pub struct RunArgs {
     pub run_dir: Option<PathBuf>,
     /// A test hook that blocks the run while it seals (never on a baseline).
     pub stall: Option<Stall>,
+    /// Another input script in place of the world's (`--inputs`; SPR-013 T-12).
+    pub inputs: Option<PathBuf>,
+    /// Replay: build the run from the history tuple and the journal at `journal` alone, journaling
+    /// nothing (`rh-cli replay`; SPR-013 T-12, V-DET-04, V-DET-18).
+    pub replay: bool,
 }
 
 impl RunArgs {
@@ -190,6 +195,8 @@ impl RunArgs {
             vitals: false,
             run_dir: None,
             stall: None,
+            inputs: None,
+            replay: false,
         }
     }
 }
@@ -277,6 +284,16 @@ pub fn history(seed: u64) -> History {
         world_seed: seed,
         branch_salt: 0,
     }
+}
+
+/// Opens the journal at `path` for `world`'s history (`Replay::open`: the history key, the count,
+/// every row and the chain), read-only (SPR-013 T-12).
+///
+/// # Errors
+/// [`Error`] naming the first check that fails.
+pub(crate) fn open_journal(path: &Path, world: &Setup) -> Result<Replay, Error> {
+    Replay::open(path, &journal_key(&world.provenance, world.seed), TIMELINE)
+        .map_err(|e| error("journal")(&e))
 }
 
 fn journal_key(p: &Provenance, seed: u64) -> HistoryKey {
@@ -424,7 +441,13 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         )));
     }
     let seed = (smoke || args.seed_set).then_some(args.seed);
-    let world = setup(&args.repo, &args.world, seed, args.strict)?;
+    let world = crate::world::setup_with(
+        &args.repo,
+        &args.world,
+        seed,
+        args.strict,
+        args.inputs.as_deref(),
+    )?;
     let registered = || {
         register((world.systems)(args.leak_thread), &world.specs)
             .map_err(|e| error("registration")(&e))
@@ -479,9 +502,9 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         .map(RunDir::keyframes)
         .or_else(|| args.keyframes.clone().filter(|_| journal.is_some()));
     let mut host = match (&run_dir, &world.stream) {
-        (Some(dir), Some(info)) => {
-            Some(stream_host(args, dir, &world, info, &engine, start, rows)?)
-        }
+        (Some(dir), Some(_)) => Some(stream_host(
+            args, dir, &world, &engine, start, rows, identity,
+        )?),
         _ => None,
     };
     if let (Some(dir), Some(position), false) = (&keyframes, identity, args.resume.is_some()) {
@@ -576,11 +599,15 @@ fn stream_host(
     args: &RunArgs,
     dir: &RunDir,
     world: &Setup,
-    info: &crate::world::StreamInfo,
     engine: &Engine,
     start: SimTime,
     rows: Vec<JournaledInput>,
+    identity: Option<JournalPosition>,
 ) -> Result<StreamHost, Error> {
+    let info = world
+        .stream
+        .as_ref()
+        .ok_or_else(|| Error(format!("{} has no World Stream", world.name)))?;
     std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
     let cfg = writer_config(
         dir,
@@ -605,7 +632,10 @@ fn stream_host(
             engine_build: world.provenance.build.clone(),
             registry_version: world.provenance.registry_version.clone(),
             manifest_hash: world.provenance.manifest_hash.clone(),
-            inputs: None,
+            inputs: args.inputs.as_ref().map(|p| p.display().to_string()),
+            journal_inputs: identity.map(|p| p.inputs),
+            journal_head: identity.map(|p| dump::hex(&p.head)),
+            rung: Some(args.rung.name().to_owned()),
         }
         .write(&dir.0)?;
         StreamHost::create(cfg, engine.tables(), rows, hook)
@@ -678,7 +708,10 @@ fn start(
             TIMELINE,
         )
         .map_err(|e| error("journal")(&e))?;
-        check_horizon(&replay, args, world)?;
+        // A replay's horizon is its run.toml's, checked against the journal's count and head there.
+        if !args.replay {
+            check_horizon(&replay, args, world)?;
+        }
         let history = History {
             provenance: world.provenance.clone(),
             world_seed: world.seed,
@@ -689,6 +722,9 @@ fn start(
         engine.set_threads(args.threads);
         let rows = replay.inputs().to_vec();
         return Ok((engine, None, Some(replay.position()), rows));
+    }
+    if args.replay {
+        return replay_start(args, world, registered);
     }
     for suffix in ["", "-wal", "-shm"] {
         let mut path = args.journal.clone().into_os_string();
@@ -715,6 +751,44 @@ fn start(
         .position(TIMELINE)
         .map_err(|e| error("journal")(&e))?;
     Ok((engine, Some(journal), Some(identity), rows))
+}
+
+/// A replay's start (SPR-013 T-12): the engine at genesis, and every row of the journal at
+/// `args.journal`, checked against the history tuple (`Replay::open`: count, seq, payload and row
+/// digests, the chain), submitted in `seq` order as the run submitted them. Nothing is journaled:
+/// the replay reads the journal and never writes it.
+fn replay_start(
+    args: &RunArgs,
+    world: &Setup,
+    registered: &dyn Fn() -> Result<rh_core::register::Registered, Error>,
+) -> Result<Started, Error> {
+    let replay = Replay::open(
+        &args.journal,
+        &journal_key(&world.provenance, world.seed),
+        TIMELINE,
+    )
+    .map_err(|e| error("journal")(&e))?;
+    let mut engine = Engine::new(
+        world.calendar,
+        world.seed,
+        BranchSalt::from_raw(0),
+        registered()?,
+        world.tables.clone(),
+        SimTime::EPOCH,
+    );
+    engine.set_provenance(world.provenance.clone());
+    engine.set_threads(args.threads);
+    let rows = replay.inputs().to_vec();
+    for row in &rows {
+        let input = material_input(row)
+            .ok_or_else(|| Error(format!("journal row {} is not material", row.seq)))?;
+        engine
+            .submit_input(row.tick, input)
+            .map_err(|e| error("input")(&e))?;
+    }
+    let position = replay.position();
+    engine.set_journal_head(Some(dump::hex(&position.head)));
+    Ok((engine, None, Some(position), rows))
 }
 
 /// DEF-1: a resumed run's horizon must be the journal's. The journal must hold exactly the

@@ -33,13 +33,16 @@ fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// One run directory per world, made once per test binary.
+/// One run directory per world, made once per test process (nextest runs each test in its own
+/// process, so the directory is the process's: two processes never rebuild one directory).
 fn run_dir(world: &str) -> PathBuf {
     static DIRS: OnceLock<BTreeMap<String, PathBuf>> = OnceLock::new();
     DIRS.get_or_init(|| {
         let mut out = BTreeMap::new();
         for (w, years) in [("solo", 200), ("hamlet", 120)] {
-            let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tail").join(w);
+            let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+                .join("tail")
+                .join(format!("{w}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             let mut a = RunArgs::new(&repo(), years, 1, RungKind::Yearly, &dir.join("run.ladder"));
             w.clone_into(&mut a.world);

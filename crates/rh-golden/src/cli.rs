@@ -3,7 +3,8 @@
 //!
 //! - `rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T]
 //!   [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]]
-//!   [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]`: `--years`
+//!   [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]
+//!   [--run-dir D] [--inputs SCRIPT]`: `--years`
 //!   is the history's horizon (with `--resume`, the journal's own, unless `--extend`); `--until`
 //!   stops earlier (DEF-1). The summary line reports the dispatch (levels, levels with two or
 //!   more jobs, the most jobs in a level); `--require-parallel` fails the run when no level held
@@ -137,6 +138,7 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--keyframes" => args.keyframes = Some(PathBuf::from(value)),
             "--resume" => args.resume = Some(PathBuf::from(value)),
             "--run-dir" => args.run_dir = Some(PathBuf::from(value)),
+            "--inputs" => args.inputs = Some(PathBuf::from(value)),
             "--test-stall" => {
                 args.stall = Some(
                     crate::stream::Stall::parse(value)
@@ -517,4 +519,91 @@ pub fn sift_cmd(words: &[String], repo: &Path) -> u8 {
             TOOL
         }
     }
+}
+
+/// `replay <run-dir> --into D [--from-keyframe TICK] [--threads T] [--repo R]` (SPR-013 T-12;
+/// [`crate::replay`]). Exit 0 when the replay equals the run, 1 when it differs, 2 on a tool error
+/// (a journal that is not the run's among them).
+#[must_use]
+pub fn replay_cmd(words: &[String], repo: &Path) -> u8 {
+    match parse_replay(words, repo).and_then(|a| crate::replay::replay(&a).map(|r| (a, r))) {
+        Ok((args, r)) if !r.compared => {
+            println!(
+                "REPLAY REBUILT: {} (run.toml and the journal only) into {}: {} journal inputs, {} \
+                 ladder rungs, {} channel-A segments ({} records), {} keyframes; nothing to compare",
+                args.run_dir.display(),
+                args.into.display(),
+                r.inputs,
+                r.rungs,
+                r.segments,
+                r.records,
+                r.keyframes
+            );
+            OK
+        }
+        Ok((args, r)) if r.equal() => {
+            println!(
+                "REPLAY EQUAL: {} from {}: {} journal inputs, {} ladder rungs, {} channel-A segments \
+                 ({} records) and {} keyframes equal to the run's, byte for byte",
+                args.run_dir.display(),
+                args.from_keyframe.map_or_else(
+                    || "genesis".to_owned(),
+                    |t| format!("the keyframe at tick {t}")
+                ),
+                r.inputs,
+                r.rungs,
+                r.segments,
+                r.records,
+                r.keyframes
+            );
+            OK
+        }
+        Ok((args, r)) => {
+            println!(
+                "REPLAY DIFFERS: {} replayed into {}",
+                args.run_dir.display(),
+                args.into.display()
+            );
+            for d in &r.differences {
+                println!("  {d}");
+            }
+            DIFFERENT
+        }
+        Err(e) => {
+            eprintln!("replay: {e}");
+            TOOL
+        }
+    }
+}
+
+fn parse_replay(words: &[String], repo: &Path) -> Result<crate::replay::ReplayArgs, Error> {
+    let bad = |what: &str| Error(format!("replay: {what}"));
+    let (mut run_dir, mut into, mut from_keyframe, mut threads) = (None, None, None, 1);
+    let mut repo = repo.to_path_buf();
+    let mut it = words.iter();
+    while let Some(w) = it.next() {
+        let mut value = || it.next().ok_or_else(|| bad(&format!("{w} needs a value")));
+        match w.as_str() {
+            "--into" => into = Some(PathBuf::from(value()?)),
+            "--from-keyframe" => {
+                from_keyframe = Some(
+                    value()?
+                        .parse()
+                        .map_err(|_| bad("--from-keyframe is a tick"))?,
+                );
+            }
+            "--threads" => threads = value()?.parse().map_err(|_| bad("--threads is a number"))?,
+            "--repo" => repo = PathBuf::from(value()?),
+            flag if flag.starts_with("--") => return Err(bad(&format!("unknown flag {flag}"))),
+            dir if run_dir.is_none() => run_dir = Some(PathBuf::from(dir)),
+            extra => return Err(bad(&format!("unexpected {extra}"))),
+        }
+    }
+    Ok(crate::replay::ReplayArgs {
+        repo,
+        run_dir: run_dir.ok_or_else(|| bad("a run directory is required"))?,
+        into: into.ok_or_else(|| bad("--into is required"))?,
+        from_keyframe,
+        threads,
+    })
 }

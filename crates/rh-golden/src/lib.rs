@@ -25,6 +25,7 @@ pub mod cli;
 pub mod dump;
 pub mod ladder;
 pub mod leak;
+pub mod replay;
 pub mod run;
 pub mod sha256;
 pub mod sift;

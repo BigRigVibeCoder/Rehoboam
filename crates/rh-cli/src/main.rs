@@ -21,6 +21,8 @@
 //!   canonical lines, following new segments with `--wait` (`rh_golden::tail`).
 //! - `rh-cli sift <run-dir>` (SPR-013 T-11): channel C (sift matches) from the run's sealed
 //!   channel A, downstream of the engine (`rh_golden::sift`).
+//! - `rh-cli replay <run-dir> --into D …` (SPR-013 T-12): the run rebuilt from its `run.toml` and
+//!   journal alone and compared with it (`rh_golden::replay`).
 //!
 //! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.10_world_stream.md`.
 #![forbid(unsafe_code)]
@@ -32,7 +34,7 @@ use rh_manifest::Registry;
 use rh_manifest::manifest;
 use rh_registry::ownership::{AccessSpec, Ownership};
 
-const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]\n       rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]\n       rh-cli run <world> [--strict] [--seed S] --years N [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--vitals] [--run-dir D]\n       rh-cli tail <run-dir> [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K ...] [--canonical] [--wait]\n       rh-cli sift <run-dir>\n       rh-cli ladder compare <a.ladder> <b.ladder>\n       rh-cli ladder cut-yearly <monthly.ladder> <out.ladder>\n       rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg A ...] [--seed S] [--years N] [--threads T] --work DIR [--out REPORT]";
+const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]\n       rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]\n       rh-cli run <world> [--strict] [--seed S] --years N [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--vitals] [--run-dir D] [--inputs SCRIPT]\n       rh-cli tail <run-dir> [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K ...] [--canonical] [--wait]\n       rh-cli sift <run-dir>\n       rh-cli replay <run-dir> --into D [--from-keyframe TICK] [--threads T]\n       rh-cli ladder compare <a.ladder> <b.ladder>\n       rh-cli ladder cut-yearly <monthly.ladder> <out.ladder>\n       rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg A ...] [--seed S] [--years N] [--threads T] --work DIR [--out REPORT]";
 /// The repository the golden runs read `worlds/` from: this binary's own source tree, so a build
 /// of another revision runs that revision's world (SPR-008 T-03).
 const DEFAULT_REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
@@ -99,6 +101,8 @@ fn main() -> ExitCode {
         ["tail", rest @ ..] => golden(rh_golden::cli::tail_cmd, rest),
         // SPR-013 T-11: channel C from the run's sealed channel A (downstream of the engine).
         ["sift", rest @ ..] => golden(rh_golden::cli::sift_cmd, rest),
+        // SPR-013 T-12: a run rebuilt from its history tuple and journal alone, compared.
+        ["replay", rest @ ..] => golden(rh_golden::cli::replay_cmd, rest),
         _ => usage(),
     }
 }

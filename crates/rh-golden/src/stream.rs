@@ -215,6 +215,16 @@ pub struct RunToml {
     /// The input script, relative to the repository, if the run took one other than the world's.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inputs: Option<String>,
+    /// The journal's input count when the run started (SPR-013 T-12): a replay refuses a journal
+    /// that is not this one, even a self-consistent one with a row added or removed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub journal_inputs: Option<u32>,
+    /// The journal's chain head then (hex).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub journal_head: Option<String>,
+    /// The ladder's rung kind (`yearly` or `monthly`), so a replay writes a comparable ladder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rung: Option<String>,
 }
 
 impl RunToml {

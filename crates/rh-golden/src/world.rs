@@ -172,11 +172,26 @@ fn world_toml(repo: &Path, name: &str) -> Result<WorldToml, Error> {
 /// # Errors
 /// [`Error`]: an unknown world, a manifest that does not match its pin or does not compile, a
 /// genesis or a construction refusal, or `strict` with a system not built (ruling 3).
+pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result<Setup, Error> {
+    setup_with(repo, name, seed, strict, None)
+}
+
+/// [`setup`] with another input script in place of the world's (`rh-cli run --inputs`, SPR-013
+/// T-12): a path relative to the repository, or absolute.
+///
+/// # Errors
+/// As [`setup`], and an unreadable script.
 #[allow(
     clippy::too_many_lines,
     reason = "a manifest world's setup in its order: pin, compile, names, genesis, systems, stream"
 )]
-pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result<Setup, Error> {
+pub fn setup_with(
+    repo: &Path,
+    name: &str,
+    seed: Option<u64>,
+    strict: bool,
+    inputs: Option<&Path>,
+) -> Result<Setup, Error> {
     if name == SMOKE {
         return smoke(repo, seed.unwrap_or(1));
     }
@@ -232,7 +247,7 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
     let tables = rh_worldgen::genesis(&spec, &specs).map_err(|e| Error(e.to_string()))?;
     // Constructed once here, so a refusal (alpha, beta) fails the setup, not a registration.
     let m2 = Demography::from_world(&spec).map_err(|e| Error(e.to_string()))?;
-    let script = scripted_inputs(repo, &toml.inputs, &spec)?;
+    let script = scripted_inputs(repo, inputs.unwrap_or(&toml.inputs), &spec)?;
     let (names, packs) = display_names(&repo.join(&toml.manifest), &registry, &spec)?;
     let calendar = spec.calendar;
     let provenance = Provenance {

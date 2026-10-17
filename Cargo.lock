@@ -893,6 +893,7 @@ dependencies = [
  "rh-sys-demography",
  "rh-sys-smoke",
  "rh-worldgen",
+ "rusqlite",
  "serde",
  "toml",
 ]

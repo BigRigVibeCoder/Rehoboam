@@ -187,6 +187,8 @@ REQUIRED_GATES = (
     "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, GITHUB_EVENT_NAME, "
     "RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
+    "Replay positive control: a journal with its row deleted must hard-FAIL the replay (SPR-013 "
+    "T-12)",
     "Required tools present (core part)",
     "Required tools present (golden part)",
     "Rust: bans and sources (cargo deny: crates.io only, no wildcards)",
@@ -238,8 +240,12 @@ REQUIRED_GATES = (
     "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's "
     "and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, "
     "and the reference's canonical digests (SPR-013 T-09)",
+    "V-DET-04: rh-cli replay rebuilds solo's 200-year run from its run.toml and journal (Ada's "
+    "input) at N threads: ladder, every channel-A segment and keyframe byte-identical (SPR-013 "
+    "T-12)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
+    "V-DET-05: rh-cli replay from solo's year-100 keyframe = the run (SPR-013 T-12)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
     "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)",
     "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)",
@@ -521,6 +527,10 @@ REQUIRED_GATES = (
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
     "crash replay (SPR-006)",
+    "rh-golden by name: V-DET-04/18 on solo and hamlet (run.toml and the journal alone rebuild "
+    "the run byte for byte), V-DET-05 from keyframes at 1 and 4 threads, V-DET-14 (an input "
+    "changes only its founder's records), and missing, extra, edited and re-chained journal "
+    "rows hard-FAIL (SPR-013 T-12)",
     "rh-golden by name: V-PLN-04 subset: sifting twice is byte-identical and leaves channel A, "
     "keyframes, journal and ladder unchanged; one life_ends match per death, shown by tail "
     "(SPR-013 T-11)",

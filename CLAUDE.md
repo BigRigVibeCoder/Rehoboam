@@ -128,6 +128,8 @@ python -I bin/perf_gate.py alloc-gate --out artifacts/perf/allocations.txt   # V
 python -I bin/perf_gate.py alloc-record   # regenerate the allocation baseline (exact counts; never by hand)
 target/release/rh-cli run smoke --years 1000 --threads 4 --vitals --out target/golden/smoke_yearly_tN.ladder   # T-03 vitals line, on the N-thread golden run; its ladder equals the golden baseline
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml   # life_ends (SPR-011)
+target/release/rh-cli replay <run-dir> --into <dir> [--from-keyframe <tick>]   # V-DET-04/05: the run rebuilt from run.toml and its journal alone; REPLAY EQUAL, or a missing, extra or edited journal row hard-fails (SPR-013 T-12)
+cargo nextest run -p rh-golden --release --test replay   # V-DET-04/18 (run.toml and the journal alone), V-DET-05 from keyframes, V-DET-14, the tampered-journal controls (SPR-013 T-12)
 ```
 
 Not a check: `bin/regen_baseline.sh [smoke|solo]` regenerates the golden baselines (both without an argument), only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`). Nor is `lint_odd.py --next … --write-amendments-lock`, which rewrites `specs/systems/next/amendments.lock.toml` (every amendment of a next-version spec, by path and text digest) after the Architect has read the new `AMEND` lines; the lock is never typed (SPR-015, REV-SPR-015 round 3 MIN-1).
