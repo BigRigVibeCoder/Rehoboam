@@ -192,6 +192,11 @@ pub struct AccessSpec {
     pub applies: Vec<CommandApply>,
     /// Event kinds emitted (SPR-006).
     pub emits: Vec<&'static str>,
+    /// The bindings whose only step is the drain of an `[[applies]]` entry (SPR-014, BCK-002 A-60
+    /// part): at an instant where such a binding's inbox is empty its job has no work, and the
+    /// ledger guard keeps only its row counts. Registration refuses an entry that is not the
+    /// `drained_by` of one of the system's own applies.
+    pub drain_only: Vec<PulseBinding>,
 }
 
 impl AccessSpec {

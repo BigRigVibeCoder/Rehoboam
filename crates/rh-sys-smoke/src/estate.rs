@@ -93,6 +93,7 @@ impl SystemModel for Estate {
                 target: "X7.smoke_market",
             }],
             emits: vec!["INHERITANCE"],
+            drain_only: Vec::new(),
         }
     }
 

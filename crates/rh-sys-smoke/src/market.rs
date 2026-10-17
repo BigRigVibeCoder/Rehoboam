@@ -137,6 +137,7 @@ impl SystemModel for Market {
             }],
             applies: CommandApply::from_drains(DRAINS),
             emits: vec!["TRADE"],
+            drain_only: Vec::new(),
         }
     }
 

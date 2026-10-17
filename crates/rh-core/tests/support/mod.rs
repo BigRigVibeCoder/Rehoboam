@@ -125,6 +125,12 @@ impl Stub {
         self
     }
 
+    /// Declares a binding drain-only (`AccessSpec::drain_only`; BCK-002 A-60 part).
+    pub fn drain_only(mut self, pulse: Pulse, phase: Phase) -> Self {
+        self.access.drain_only.push(PulseBinding { pulse, phase });
+        self
+    }
+
     /// Declares the purposes of a generated-style enum.
     pub fn purposes_of<P: SpecPurpose>(mut self) -> Self {
         self.purposes = P::names();

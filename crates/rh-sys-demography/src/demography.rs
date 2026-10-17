@@ -419,6 +419,11 @@ impl SystemModel for Demography {
                 .to_vec(),
             applies: CommandApply::from_drains(DRAINS),
             emits: vec![DEATH, EXTINCTION],
+            // M2 0.2.3's Day/Vital entry has one step, the drain ([[schedule]]; A-60 part).
+            drain_only: vec![PulseBinding {
+                pulse: Pulse::Day,
+                phase: Phase::Vital,
+            }],
             ..AccessSpec::default()
         }
     }

@@ -822,6 +822,7 @@ fn as_specified(t: &Ownership, system: &'static str, _world: &[&'static str]) ->
                 .collect(),
             applies,
             emits: spec.emits.iter().map(leak).collect(),
+            drain_only: Vec::new(),
         },
         bindings: spec
             .schedule

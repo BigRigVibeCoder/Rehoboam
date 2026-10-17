@@ -1183,11 +1183,8 @@ impl Engine {
     /// What each job of a level takes to its thread: its owned columns (moved out of the tables),
     /// its inbox and its system's drawn pairs. Every inbox is taken, and every dead-person drop
     /// decided, before any column moves.
-    fn job_inputs(&mut self, jobs: &[Job]) -> Vec<JobInput> {
-        let mut inboxes = std::mem::take(&mut self.inboxes);
-        self.fill_inboxes(jobs, &mut inboxes);
-        let inputs = jobs
-            .iter()
+    fn job_inputs(&mut self, jobs: &[Job], inboxes: &mut Vec<Vec<QueuedCommand>>) -> Vec<JobInput> {
+        jobs.iter()
             .zip(inboxes.drain(..))
             .map(|(job, inbox)| {
                 let e = &self.registered.entries[job.index];
@@ -1200,9 +1197,7 @@ impl Engine {
                 let taken = std::mem::take(&mut self.taken[job.index]);
                 (owned, inbox, taken)
             })
-            .collect();
-        self.inboxes = inboxes;
-        inputs
+            .collect()
     }
 
     /// Runs one level of jobs (in order on one thread, spread over several otherwise), returns
@@ -1217,8 +1212,11 @@ impl Engine {
     ) -> Result<(), SimError> {
         self.dispatch.record(jobs.len());
         self.check_owned_columns(jobs)?;
-        let guards = self.ledger_guards(jobs, phase);
-        let inputs = self.job_inputs(jobs);
+        let mut inboxes = std::mem::take(&mut self.inboxes);
+        self.fill_inboxes(jobs, &mut inboxes);
+        let guards = self.ledger_guards(jobs, &inboxes, phase);
+        let inputs = self.job_inputs(jobs, &mut inboxes);
+        self.inboxes = inboxes;
         let workers = self.threads.min(jobs.len()).max(1);
         let outcomes: Vec<JobOutcome> = {
             let observer = self.observer.as_deref();
@@ -1316,18 +1314,28 @@ impl Engine {
     /// What each job must preserve of the ledger columns it owns (SPR-011 ruling 5): `None` for a
     /// job that owns none, or in a world without a ledger.
     /// A world without a ledger pays nothing: no guard and no allocation (DEF-4, V-PERF-11).
-    fn ledger_guards(&self, jobs: &[Job], phase: Phase) -> Vec<Option<LifeCourseGuard>> {
-        if self.ledger.is_none() {
+    fn ledger_guards(
+        &self,
+        jobs: &[Job],
+        inboxes: &[Vec<QueuedCommand>],
+        phase: Phase,
+    ) -> Vec<Option<LifeCourseGuard>> {
+        let Some(ledger) = self.ledger.as_ref() else {
             return Vec::new();
-        }
+        };
         jobs.iter()
-            .map(|job| {
+            .zip(inboxes)
+            .map(|(job, inbox)| {
                 let e = &self.registered.entries[job.index];
-                self.ledger.as_ref().and_then(|ledger| {
-                    let writes = e.access.writes.iter().map(|w| w.column);
-                    let g = ledger.guard(&self.tables, writes, phase);
-                    (!g.is_empty()).then_some(g)
-                })
+                // Work: a due timer, a non-empty inbox, or a binding that is not drain-only
+                // (A-60 part); a job without work is guarded by its row counts only.
+                let full = match &job.work {
+                    Work::Timers(_) => true,
+                    Work::Step(b) => !inbox.is_empty() || !e.access.drain_only.contains(b),
+                };
+                let writes = e.access.writes.iter().map(|w| w.column);
+                let g = ledger.guard(&self.tables, writes, phase, full);
+                (!g.is_empty()).then_some(g)
             })
             .collect()
     }

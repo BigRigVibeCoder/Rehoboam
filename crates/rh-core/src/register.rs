@@ -729,6 +729,19 @@ fn check_applies<'e>(
                 }
             }
         }
+        // A drain-only binding is the drained_by of one of its own applies (A-60 part).
+        for b in &e.access.drain_only {
+            if !e.access.applies.iter().any(|a| a.drained_by == *b) {
+                violations.push(violation(
+                    e.id,
+                    "spec",
+                    format!(
+                        "declares {} drain-only, but no command it applies is drained there",
+                        show_binding(*b)
+                    ),
+                ));
+            }
+        }
     }
     (owners, commands)
 }
