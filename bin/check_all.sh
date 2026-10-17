@@ -362,7 +362,7 @@ population_synthesis_golden_control() {
   local planted=target/rendered-fixtures/population_synthesis_altered_golden.txt
   mkdir -p "$(dirname "$planted")" || return 1
   sed '0,/^leftover 0 orphans 0$/s//leftover 1 orphans 0/' specs/worldgen/golden/population_synthesis_v0.txt > "$planted" || return 1
-  grep -q '^leftover 2 orphans 0$' "$planted" || { echo "control not planted: no 'leftover 1 orphans 0' line in the population-synthesis golden file"; return 1; }
+  grep -q '^leftover 1 orphans 0$' "$planted" || { echo "control not planted: no 'leftover 0 orphans 0' line in the population-synthesis golden file"; return 1; }
   "$PY" -I specs/worldgen/selftest_population_synthesis.py --golden "$planted"
 }
 
