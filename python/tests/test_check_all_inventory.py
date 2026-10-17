@@ -13,6 +13,7 @@ Refs: SPR-010 GAP-4 (VER-SPR-010-TEST); GOV-002 §1 laws 4 and 9, §4.
 """
 
 import re
+import shlex
 from pathlib import Path
 
 import check_all_selftest
@@ -260,6 +261,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)",
     "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL "
     "(SPR-009 T-05)",
+    "lint_arch positive control: a #[global_allocator] under a source directory named target "
+    "must FAIL (VER-SPR-009-TEST GAP-21)",
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",
     "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)",
@@ -472,11 +475,35 @@ def test_the_chain_has_two_parts_and_every_gate_belongs_to_exactly_one() -> None
     }.isdisjoint(in_golden)
 
 
+# nextest options that take a value; any other bare word after `nextest run` is a test filter.
+NEXTEST_VALUE_OPTIONS = {"-p", "--package", "--test", "--status-level", "-E", "--features"}
+
+
+def _whole_binaries(line: str) -> bool:
+    """Whether a by-name gate runs its binaries whole: a passing gate with no test filter.
+
+    A positive control (a run that must fail) or a filtered run covers only part of a binary, so
+    it never stands for the whole of it (VER-SPR-009-TEST GAP-20).
+    """
+    words = shlex.split(line.strip().removesuffix("&&"))
+    if len(words) < 3 or not words[2].startswith("pass") or "nextest" not in words:
+        return False
+    args = words[words.index("nextest") + 2 :]
+    bare = [
+        w
+        for i, w in enumerate(args)
+        if not w.startswith("-") and (i == 0 or args[i - 1] not in NEXTEST_VALUE_OPTIONS)
+    ]
+    return not bare
+
+
 def _by_name_test_binaries(*, release: bool) -> set[str]:
-    """Nextest binary IDs the by-name gates run (with or without --release lines)."""
+    """Nextest binary IDs the by-name gates run whole (with or without --release lines)."""
     found = set()
     for line in _chain_lines():
         if "cargo nextest run -p" not in line or ("--release" in line and not release):
+            continue
+        if not _whole_binaries(line):
             continue
         for package in NEXTEST_PACKAGE.findall(line):
             tests = NEXTEST_TARGET.findall(line)
@@ -488,6 +515,16 @@ def _by_name_test_binaries(*, release: bool) -> set[str]:
             if "--lib" in line:
                 found.add(package)
     return found
+
+
+def test_a_filtered_run_or_a_control_is_not_coverage() -> None:
+    """GAP-20: the V-DET-12 positive control (a filtered run that must fail) covers nothing."""
+    control = next(line for line in _chain_lines() if "V-DET-12 positive control" in line)
+    assert not _whole_binaries(control)
+    filtered = next(line for line in _chain_lines() if line.startswith('run "V-DET-05 keyframes'))
+    assert not _whole_binaries(filtered)
+    whole = next(line for line in _chain_lines() if line.startswith('run "rh-sys-smoke gates'))
+    assert _whole_binaries(whole)
 
 
 def test_the_workspace_run_leaves_out_exactly_the_by_name_binaries() -> None:

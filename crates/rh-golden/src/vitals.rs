@@ -263,9 +263,13 @@ mod tests {
         }
     }
 
-    /// Delivers `boundary` at clock time `ms`, instant `at` (minutes), from `worker`.
+    /// Where the scripted clock starts: far from zero, so a mistake about the origin (a wall time
+    /// taken from the clock's zero, or `first` scaled) changes a result (VER-SPR-009-TEST GAP-22).
+    const ORIGIN_MS: u64 = 3_600_000;
+
+    /// Delivers `boundary` at clock time `ORIGIN_MS + ms`, instant `at` (minutes), from `worker`.
     fn send(t: &(Timing, Arc<AtomicU64>), ms: u64, at: i64, worker: usize, boundary: Boundary) {
-        t.1.store(ms, Ordering::SeqCst);
+        t.1.store(ORIGIN_MS + ms, Ordering::SeqCst);
         let phase = match boundary {
             Boundary::InstantStart | Boundary::InstantEnd => None,
             _ => Some(Phase::Activity),

@@ -305,6 +305,57 @@ fn def_1_the_failing_instant_is_the_same_at_one_and_four_threads() {
     }
 }
 
+/// Panics on the first job notice of `kind` whose job has index 1 in its level: at 4 threads that
+/// job runs on worker 1, at 1 thread on worker 0.
+struct PanickingAtIndexOne {
+    kind: &'static str,
+    fired: std::sync::atomic::AtomicBool,
+}
+
+impl Observer for PanickingAtIndexOne {
+    fn notify(&self, notice: &Notice) {
+        let index = match notice.boundary {
+            Boundary::JobStart(job) | Boundary::JobEnd(job) => Some(job.index),
+            _ => None,
+        };
+        if kind(&notice.boundary) == self.kind
+            && index == Some(1)
+            && !self.fired.swap(true, Ordering::SeqCst)
+        {
+            panic!("observer boom at {}", self.kind);
+        }
+    }
+}
+
+/// VER-SPR-009-TEST T4: the failing job runs on worker 1 at 4 threads and on worker 0 at 1
+/// thread, so an error text that named the worker would differ between them. It names the job
+/// (its `JobRef`, index 1) and is the same at both, as is the artifact's tick.
+#[test]
+fn def_1_a_job_on_another_worker_fails_with_the_same_text_at_one_and_four_threads() {
+    for k in ["JobStart", "JobEnd"] {
+        let outcomes: Vec<(i64, String)> = [1, 4]
+            .into_iter()
+            .map(|threads| {
+                let mut e = world(threads);
+                e.set_observer(Some(Arc::new(PanickingAtIndexOne {
+                    kind: k,
+                    fired: std::sync::atomic::AtomicBool::new(false),
+                })));
+                let err = e
+                    .advance_until(SimTime::from_minutes(YEARS * YEAR), |_, _| {})
+                    .expect_err("the observer panics");
+                (
+                    e.crash_artifact().expect("an artifact").tick,
+                    err.to_string(),
+                )
+            })
+            .collect();
+        assert_eq!(outcomes[0], outcomes[1], "{k}");
+        assert!(outcomes[0].1.contains("index: 1"), "{}", outcomes[0].1);
+        assert!(!outcomes[0].1.contains("worker"), "{}", outcomes[0].1);
+    }
+}
+
 /// DEF-2 (VER-SPR-009-TEST): the content of every notice, checked against what the run itself
 /// says, independently of the engine's notify code:
 /// - every notice's `at` is the instant `advance_until` reports to its callback;

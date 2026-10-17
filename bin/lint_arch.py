@@ -755,16 +755,17 @@ def check_unsafe_lints(crate: Crate, inherited: dict[str, object]) -> list[Viola
 
 
 def _sources(crate: Crate) -> list[Path]:
-    """Every .rs file of the crate, outside any target directory inside the crate.
+    """Every .rs file of the crate, outside the crate's own top-level `target/` directory.
 
-    The test looks at the path below the crate's directory only: a checkout under a directory
-    named `target` must still be scanned (SPR-009 review 4).
+    Only the first component below the crate's directory is tested, as lint_forbidden does: a
+    checkout under a directory named `target` is scanned (SPR-009 review 4), and so is a source
+    directory named `target` inside the crate, such as `src/target/` (VER-SPR-009-TEST GAP-21).
     """
     directory = crate.directory
     if directory is None:
         return []
     return sorted(
-        p for p in directory.rglob("*.rs") if "target" not in p.relative_to(directory).parts
+        p for p in directory.rglob("*.rs") if p.relative_to(directory).parts[0] != "target"
     )
 
 

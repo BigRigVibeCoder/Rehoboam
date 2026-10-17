@@ -7,6 +7,8 @@ artifacts/
 
 # Rust build output and Python virtual environments (SPR-001)
 target/
+# A lint fixture whose source tree holds a directory named target (VER-SPR-009-TEST GAP-21).
+!tests/lint_fixtures/arch/global_allocator_src_target/rh-tool/src/target/
 .venv/
 python/.venv/
 

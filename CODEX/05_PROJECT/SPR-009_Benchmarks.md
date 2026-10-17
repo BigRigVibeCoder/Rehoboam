@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.9.0
+version: 1.10.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -88,6 +88,13 @@ version: 1.9.0
 - **G3 and D4:** tests cover a push with an all-zero `before` ("not checked: the push has no base") and `wall_trend` refusing 0 samples.
 - **GAP-18:** the core part runs ruff, mypy, pytest and the hostile-CI pytest before any Rust build. An inventory test keeps that order.
 - **GAP-17:** `worlds/smoke/README.md`: never squash-merge a C3 PR, because the push rule needs the tag at the end of a commit subject.
+
+## VER-SPR-009-TEST section 8, fixed (Architect, 2026-10-17)
+- **GAP-19:** `python/tests/test_ci_workflow.py` parses `ci.yml`. It checks that the `check-all` matrix equals the parts `bin/check_all.sh` declares, and that the step runs `--part` with the matrix value. Controls: a `[core]` matrix fails, and so does a hard-coded `--part core`, written directly or through the step's env.
+- **GAP-21:** lint_arch skips only the crate's top-level `target/`; `src/target/` is scanned (fixture `arch/global_allocator_src_target/`).
+- **GAP-22:** the Timing tests' clock starts at 1 h, so the origin mutant V10b fails.
+- **T4:** a DEF-1 test fails the job at index 1. That job runs on worker 1 at 4 threads and on worker 0 at 1 thread, so the error text must be identical at both; the mutant that names the worker fails.
+- **GAP-20:** the inventory counts only passing, unfiltered by-name runs as covering a binary; a positive control or a filtered run covers nothing.
 
 ## Deviations (Developer)
 - **Instruction counts run on a deterministic arena, not on glibc's malloc** (R-7). Instruction counts measure computation, with allocation at a constant cost; V-PERF-11 counts allocations.

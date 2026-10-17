@@ -741,6 +741,12 @@ def test_a_checkout_under_a_target_directory_is_still_scanned(tmp_path: Path) ->
     )
     (directory / "target" / "debug").mkdir(parents=True)
     (directory / "target" / "debug" / "built.rs").write_text("#[global_allocator]\n")
+    # GAP-21: a source directory named `target` inside src/ is code, and is scanned.
+    (directory / "src" / "target").mkdir()
+    (directory / "src" / "target" / "alloc.rs").write_text("#[global_allocator]\n")
     tool = replace(crate("rh-tool", plane="tool", kind="tool"), directory=directory)
     found = [(v.rule, v.crate, v.message.split(" ", 1)[0]) for v in check_allocator_sources(tool)]
-    assert found == [("global-allocator", "rh-tool", "src/lib.rs")]
+    assert found == [
+        ("global-allocator", "rh-tool", "src/lib.rs"),
+        ("global-allocator", "rh-tool", "src/target/alloc.rs"),
+    ]
