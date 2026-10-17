@@ -51,13 +51,13 @@
 "verification.prototype" = "sha256:a87b4b17a85bc9432132b9320cc032fd5648afe933159db51105bbfb3df0c269"
 
 [amendments."M7.dynasty"]
-"commands.Demote.why" = "sha256:30dc33bb11022ffa25de6445a5d37296b6fcd08c516bdf155a1dffaaeab72821"
+"commands.Demote.why" = "sha256:58e6ff99b522b764baf7adfcec8f1a9b8129420fa417244cc67fe0dee4ee1234"
 "commands.Promote.why" = "sha256:1cab98e8af193430c66ac7ef336fa9c61ed9877f0c962466618d7687cf4564e0"
 "initialization.state" = "sha256:f12fbc4628bcf775091df8809b590abadcb060706609a8a98c5061aaabf1dbaa"
 "invariants.INV-M7-06.statement" = "sha256:f45233d226ada145769147c9dc7fd7e3faea78ee990e45296dc39a1548dade8b"
 "owns.house_member.house.meaning" = "sha256:b8b42da87c8b7746c03f441993719d4f64bb508ff285ca216b1840872da31bf1"
 "owns.tenure.title.meaning" = "sha256:27850981311ebb09814b475f1f71658403d263b944dafb43f78e9a7af61836be"
 "schedule.Year/Polity.steps.vocation" = "sha256:dbc26fbe4ed9ea8aac1cef354eb683ce0a45eb6c983b02a6d40b87d7004757f8"
-"submodels.dormancy.summary" = "sha256:5fb3719f84a527a4781af3ea38410784fd6b4bb4b5754de2735479b8a01a95ab"
+"submodels.dormancy.summary" = "sha256:60bf4561a5cfecf699c436bbf1e752ba9400ddae358a4d04bb1d6bc7807279e4"
 "submodels.on_birth.summary" = "sha256:17a63d1ca4ee7ff59694e83fa452694823c6b21bb75b402595a97a5d15a63139"
 "submodels.vocation.summary" = "sha256:a46eb212bbee4a4707d1997d0e77f5602cac23c2f6eceffbc3147b6b5cd92ee5"

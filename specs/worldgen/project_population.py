@@ -46,14 +46,16 @@ into l(T)^m_d, so each NRR is scaled by l(T)^(m_d - 1), with l from the same cha
 
 Limits (stated, not hidden): generations are discrete (no age structure, no overlap); mating is
 random (M2 N4 bounds husbands to the settlement and excludes the named; both make h smaller for
-commoner women far from a seat); holy orders is applied as a 20% removal of member women at
-majority and of member men from the marriage pool (the vocation draw excludes the first in a
-line and seat holders, a handful per house, which under the agnatic and bounded rules slows the
-decline of a small house's male line a little); the back-fill's age structure at genesis and
-widowhood beyond the chain's are ignored; the capped case's NRR scaling is the
-proportional-hazards approximation at one age; W_n is a genesis cross-section held constant.
-The model says what the mechanics imply to within tens of per cent, not a golden; the engine's
-run reports the truth.
+commoner women far from a seat); holy orders is applied as a removal of the share v of member
+women at majority and of member men from the marriage pool (0.2 under the frozen reading; under
+the later-child reading v is derived per mother from the chain, so it ignores a father's
+children by other wives and splits a widower's families by mother: an independent Monte Carlo
+split by husband gives v = 0.111 / 0.122 against 0.116 / 0.128, and remarriage pushes the other
+way; seat holders and the first and second in a line, a handful per house, are left out); the
+back-fill's age structure at genesis and widowhood beyond the chain's are ignored; the capped
+case's NRR scaling is the proportional-hazards approximation at one age; W_n is a genesis
+cross-section held constant. The model says what the mechanics imply to within tens of per cent,
+not a golden; the engine's run reports the truth.
 
 Run: python -I specs/worldgen/project_population.py            (print the tables)
      python -I specs/worldgen/project_population.py --check    (compare with the golden file)

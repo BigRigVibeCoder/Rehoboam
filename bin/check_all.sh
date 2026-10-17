@@ -370,7 +370,7 @@ odd_next_control() {
         scales) sed '0,/^extent = "/s//extent = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         requirements) sed '0,/^requirements = \["SIM-3"/s//requirements = ["DATA-8", "SIM-3"/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         q5_summary) sed '/^summary = "MAJ-5/s/else no row (the membership rule of house_member.house/else the mother'"'"'s house (the membership rule of house_member.house/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
-        q5_why) sed 's/^why = "A named great-house member, an adult, meets no naming criterion/why = "A named great-house member of any age meets no naming criterion/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        q5_why) sed 's/^why = "A named adult (a great-house member/why = "A named person of any age meets no naming criterion (a great-house member/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         q5_frozen_onbirth) sed '/^summary = "Yearly, and at world start\. The naming/s/beyond the degrees, is named and not dormant-eligible/beyond the degrees, is dormant-eligible/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         enum) sed '0,/^values = \["held", "awaiting", "interregnum"\]/s//values = ["PLANTED", "awaiting", "interregnum"]/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         drained) sed '/^command = "PressClaim"$/,/^drained_by = /s/^drained_by = "Day\/Agenda"/drained_by = "Year\/Polity"/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
