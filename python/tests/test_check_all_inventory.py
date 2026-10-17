@@ -120,8 +120,7 @@ REQUIRED_GATES = (
     "--check; SPR-016)",
     "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)",
     "Golden vectors: M4 basket and price rule",
-    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference "
-    "(SPR-019)",
+    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference (SPR-019)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
