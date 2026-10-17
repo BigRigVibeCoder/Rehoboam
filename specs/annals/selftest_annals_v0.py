@@ -640,9 +640,10 @@ class Kinship:
         return self.c.life.get(pid) or self.w.kf_life.get(pid)
 
     def house_of(self, pid: int, prov: Provenance) -> int | None:
-        """§4 rule 4, M7's on_birth: the keyframe row; else the father's house, else the mother's.
+        """§4 rule 4, M7 0.5.0's agnatic rule: the keyframe row; else the father's house; else none.
 
-        Only a birth during the run walks to a parent; any other origin without a row has none.
+        Only a birth during the run walks to its father, by this same rule, through any number of
+        in-run rows; any other origin without a row has none, and the mother's house never passes.
         """
         if pid in self.w.members:
             prov.sources.add(f"kf:member/{pid}")
@@ -651,11 +652,7 @@ class Kinship:
         if row is None or row.origin != BORN:
             return None
         prov.sources.add(row.source)
-        for parent in (row.father, row.mother):
-            house = self.house_of(parent, prov) if parent else None
-            if house is not None:
-                return house
-        return None
+        return self.house_of(row.father, prov) if row.father else None
 
     def label_of(self, pid: int, prov: Provenance) -> str:
         """``Founder #k`` (1-based) from the extract, else ``p-`` and a unique hex prefix."""
