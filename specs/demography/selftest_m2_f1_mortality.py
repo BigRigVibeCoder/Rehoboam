@@ -47,7 +47,7 @@ evaluates the power form at beta = 1 inside check 1 (the rung-0 schedule is no l
 golden file.
 
 Run: python -I specs/demography/selftest_m2_f1_mortality.py [--check] [--golden PATH]
-     [--control NAME]
+     [--control NAME] [--spec PATH]
 Exit: 0 ok, 1 stale golden file, 2 a check failed. Standard library only (GOV-003 §3).
 """
 
@@ -66,10 +66,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 STANDARD = HERE / "brass_general_standard.toml"
 INFANT = HERE / "infant_sub_schedule.toml"
-# The spec: the next-version M2 draft while it exists, else the M2 spec it superseded (as the births
-# reference, selftest_m2_f1.py).
+# The spec that carries [algorithm.mortality_f1]: the next-version M2 draft while it exists, else
+# the M2 spec it was promoted into (as the births reference, selftest_m2_f1.py); --spec PATH
+# overrides it (a planted check value must FAIL check 3: bin/check_all.sh). SPEC_M2 is the frozen
+# file: rung 0's values.
 NEXT_SPEC = HERE.parent / "systems" / "next" / "M2.demography.odd.toml"
-MAIN_SPEC = HERE.parent / "systems" / "M2.demography.odd.toml"
 SPEC_M2 = HERE.parent / "systems" / "M2.demography.odd.toml"
 GOLDEN = HERE / "golden" / "m2_f1_mortality.txt"
 EXIT_OK, EXIT_STALE, EXIT_FAILED = 0, 1, 2
@@ -219,11 +220,17 @@ class Options:
     power_at_beta_one: bool = False  # control beta-one-power, read by check 1 only
     infant_discontinuous: bool = False  # control infant-discontinuous, read by check 5 only
     newborn_uncovered: bool = False  # control newborn-uncovered, read by check 7 only
+    spec: Path | None = None  # --spec PATH: the spec whose check values check 3 asserts
     shares: list[int] = field(default_factory=infant_shares)
 
     def any(self) -> bool:
         """Return whether a control is active (a control run never writes the golden file)."""
-        return self.power_at_beta_one or self.infant_discontinuous or self.newborn_uncovered
+        return (
+            self.power_at_beta_one
+            or self.infant_discontinuous
+            or self.newborn_uncovered
+            or self.spec is not None
+        )
 
 
 def odds_grid(beta_bits: int, power_at_one: bool = False) -> list[int | None]:
@@ -489,7 +496,7 @@ def check_widths() -> bool:
     return worst_kw <= 94 and worst_knot <= 53 and narrow  # noqa: PLR2004
 
 
-def check_corners() -> bool:
+def check_corners(opt: Options) -> bool:
     """Check 3: bracketing, monotone T, ordered knots, the tail's preconditions at the corners."""
     ok = True
     for e0, beta in CORNERS + DESIGN_POINTS:
@@ -508,8 +515,12 @@ def check_corners() -> bool:
         )
     samples = [trapezoid(grid(k, odds_grid(q16("1.3")))) for k in range(1, K_HI, K_HI // 97)]
     ok &= all(a >= b for a, b in itertools.pairwise(samples))
-    spec = NEXT_SPEC if NEXT_SPEC.exists() else MAIN_SPEC
-    rows = tomllib.loads(spec.read_text(encoding="utf-8"))["algorithm"]["mortality_f1"]
+    spec = opt.spec or (NEXT_SPEC if NEXT_SPEC.exists() else SPEC_M2)
+    try:
+        rows = tomllib.loads(spec.read_text(encoding="utf-8"))["algorithm"]["mortality_f1"]
+    except KeyError:
+        print(f"   {spec} has no [algorithm.mortality_f1] table")
+        return False
     for row in rows["check_values"]:
         sched = compile_schedule(row["e0"], row["beta"])
         got = (sched.k, sched.tail.a, sched.tail.b, sched.zero_twelfths)
@@ -757,7 +768,7 @@ def selftest(opt: Options) -> bool:
     checks: list[tuple[str, Callable[[], bool]]] = [
         ("1. rung 0 = beta 1", lambda: check_beta_one(opt)),
         ("2. widths", check_widths),
-        ("3. corners", check_corners),
+        ("3. corners", lambda: check_corners(opt)),
         ("4. tail", check_tail),
         ("5. infant sub-schedule", lambda: check_infant(opt)),
         ("6. density modifier", check_density),
@@ -773,9 +784,9 @@ def selftest(opt: Options) -> bool:
     return ok
 
 
-def options(control: str | None) -> Options:
+def options(control: str | None, spec: Path | None = None) -> Options:
     """Return the options of a control that must fail, or the plain ones."""
-    opt = Options()
+    opt = Options(spec=spec)
     if control == "beta-one-power":
         opt.power_at_beta_one = True
     elif control == "infant-discontinuous":
@@ -794,8 +805,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="fail if the golden file is stale")
     parser.add_argument("--golden", type=Path, default=GOLDEN, help="the file to write or check")
     parser.add_argument("--control", help="a planted violation that must FAIL a check")
+    parser.add_argument(
+        "--spec", type=Path, help="the spec whose check values check 3 asserts (a control)"
+    )
     args = parser.parse_args(argv)
-    opt = options(args.control)
+    opt = options(args.control, args.spec)
     if not selftest(opt):
         return EXIT_FAILED
     if args.check:
