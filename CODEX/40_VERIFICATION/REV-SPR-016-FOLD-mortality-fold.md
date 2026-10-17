@@ -2,24 +2,27 @@
 id: REV-SPR-016-FOLD
 title: "Independent review of the fold of M2 F1 mortality into the next M2 (PR #59)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-016, SPR-015, REV-SPR-016, REV-SPR-015, SPR-020, SPR-019]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.1.0
+version: 1.0.0
 ---
 
-> **BLUF: round 1 on `6c33f10` approves after changes, with no blocker, 3 majors, 6 minors and 5 nits.**
-> - **The fold itself is faithful.** MR0–MR13, the table version and the 8 check values are byte-identical to `mortality_f1.toml` as merged (PR #51). The golden vectors are bit-identical except for the header line, the lock regenerates byte for byte, and the RNG reuse is sound.
-> - **The majors are about the surrounding text:**
->   - P1 contradicts S2 and MR2;
->   - the M4 read's neutral cannot be typed once the spec is frozen;
->   - the freeze point of 0.3.0, which now carries mortality that SPR-015 does not build.
-> - **Rulings:** R1–R6 in §0.
-> - **Reviewer:** a session on a different model from the drafter's.
+> **BLUF: CLOSED, approved.** The fold of M2 F1 mortality into the next M2 (PR #59) took two rounds.
+> - **Round 1** (`6c33f10`): no blocker, 3 majors, 6 minors and 5 nits. The fold itself was faithful: MR0–MR13, the version and the check values are byte-identical to PR #51. The majors were in the surrounding text:
+>   - P1 contradicted S2;
+>   - the M4 read's neutral could not be typed;
+>   - the freeze point of 0.3.0 was wrong.
+> - **Round 2** (`1d88ce9`): verified by the Architect (§2).
+>   - The M4 read is deferred to P1.5a.
+>   - 0.3.0 is promoted in SPR-016's PR, and P1 states the interim rule SPR-015 builds against.
+>   - There are 19 amendments, locked.
+>
+> The round-1 review ran in a session on a different model from the drafter's.
 
 # REV-SPR-016-FOLD: independent review of the mortality fold
 
@@ -257,3 +260,34 @@ The defects are in the text around the table:
 ## Not run
 - **`bin/check_all.sh`, cargo and the nightly sweeps.** `check_all` would need a cold cargo build in the copy, so I ran the relevant gates one by one instead.
 - **REV-SPR-015.** It is not a file in this tree. I used the companion doc's §6 and §6b as the record of its rulings.
+
+## 2. Round 2: the Architect's check (2026-10-17, `1d88ce9`)
+
+`1d88ce9` merges `origin/main` at `f53c192`, then applies R1–R6. Everything below ran on a worktree of `1d88ce9`.
+
+| Check | Result |
+|---|---|
+| `lint_odd.py` (frozen mode) | PASS: 8 specs, 14 warnings |
+| `lint_odd.py --next … --overlay registry_delta.toml` | PASS: 12 warnings, because the two M4 warnings are gone. Self-check: "29 planted changes rejected (3 of them by the amendments lock), 19 amendments recorded and locked" |
+| `--write-amendments-lock` | No diff: the lock regenerates byte for byte |
+| `selftest_m2_f1_mortality.py --check` | OK: 4,808 lines match the reference |
+| `selftest_m2_f1.py` | PASS |
+| `gen_skeletons --check`, `gen_manifest --check` | Up to date; clean |
+| pytest (a git worktree) | 619 passed |
+| The drafter's `check_all --part core` | PASS: 292 checks. The new check is the mortality stale-check-value control, which must FAIL |
+
+**The round-2 changes:**
+- **R1:** P1 names the six parameters with their types. `density_capacity` is a u64 count (`type = "count"`, with `--rust` emitting `u64`), and α stays refused.
+- **R2:** the M4 read, its coupling and its forcing are removed, with a comment where each was; MR11's factor is exactly 1 until the read exists. Recorded in `next/README.md`.
+- **R3:** the header and `next/README.md` say 0.3.0 is promoted in SPR-016's PR. P1 states the interim rule: `mortality_rung0` for everyone, β ≠ 1 refused, the density parameters not compiled, and INV-M2-20/21 applying from SPR-016.
+- **R4:**
+  - the references now point at companion §8.1 and §8.2;
+  - the step figures are the reference's own;
+  - a 19th amendment on `params.e0.meaning`;
+  - the fertility density term is back in `not_yet`;
+  - §8.2 marks the refuted claims.
+- **R5:** the nits, including a `--spec` stale control.
+- **R6:** the promotion checklist in `next/README.md`.
+
+**The drafter's judgement call is accepted:** `eps_m`'s meaning stays as amended ("not evaluated until M4 F0 registers"), which is still true after R2.
+
