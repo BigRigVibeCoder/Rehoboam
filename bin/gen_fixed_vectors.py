@@ -13,6 +13,9 @@ Output: ``crates/rh-core/tests/golden/fixed_vectors.txt``, one vector per line,
 ``<op> <input>... <expected>``, all as decimal integers (raw bits for Q types, minor units for
 money); ``none`` is an expected ``None``. Read by ``crates/rh-core/tests/fixed_golden.rs``.
 
+The last section holds the vectors of ``Prob32`` (SPR-011 T-01, ruling 4): from_bits, the draw
+mapping, both conversions with Q16_16, and from_ratio, all from exact rationals.
+
 Usage:  python -I bin/gen_fixed_vectors.py           (write the file)
         python -I bin/gen_fixed_vectors.py --check   (exit 1 if the committed file is stale)
 Standard library only (GOV-003 §3). Refs: SPR-010 T-02, T-03; DET-3; V-DET-19; GOV-002 §2 tier 5.
@@ -203,12 +206,64 @@ def overflow_vectors(_rng: SplitMix64) -> list[str]:
     return lines
 
 
+P32_ONE = 1 << 32  # Prob32's 1: bits / 2^32, bits in [0, 2^32] (SPR-011 ruling 4)
+
+
+def p32_value(bits: int) -> Fraction:
+    """Return the exact probability a Prob32 bit pattern stands for."""
+    return Fraction(bits, P32_ONE)
+
+
+def prob32_vectors(rng: SplitMix64) -> list[str]:
+    """Return the Prob32 vectors (SPR-011 T-01; `05.1` §6 item 4), every one from exact rationals.
+
+    ``p32.bits b``: ``from_bits`` (``none`` above 2^32). ``p32.draw d b``: hit iff
+    ``d / 2^64 < b / 2^32``. ``p32.from_q16 q``: the exact value of a Q16_16 on [0, 1], else none.
+    ``p32.to_q16 b``: ``b / 2^32`` rounded half to even to 16 fraction bits. ``p32.ratio n d``:
+    ``n / d`` rounded half to even to 32 fraction bits, none for d = 0 or above 1.
+    Appended after the SPR-010 sections, so their vectors and their random inputs are unchanged.
+    """
+    lines = ["# Prob32: an unsigned probability with 32 fraction bits (SPR-011 ruling 4)."]
+    edges = [0, 1, 2, 3, (1 << 15) - 1, 1 << 15, 3 << 15, 1 << 16, (1 << 16) + 1, 1 << 31]
+    edges += [P32_ONE - 2, P32_ONE - 1, P32_ONE, P32_ONE + 1, MASK64 - 1, MASK64]
+    singles = [*edges, *(rng.next_u64() >> 31 for _ in range(RANDOM_CASES))]
+    for b in singles:
+        lines.append(f"p32.bits {b} {fmt(b if b <= P32_ONE else None)}")
+    valid = [b for b in singles if b <= P32_ONE]
+    for b in valid:
+        lines.append(f"p32.to_q16 {b} {Q16.nearest(p32_value(b))}")
+        block = b << 32  # the first draw that misses, for b < 2^32
+        draws = {0, 1, (1 << 32) - 1, 1 << 32, MASK64 - 1, MASK64}
+        draws |= {rng.next_u64() for _ in range(4)}
+        draws |= {d for d in (block - 1, block, block + 1) if 0 <= d <= MASK64}
+        for d in sorted(draws):
+            hit = Fraction(d, 1 << 64) < p32_value(b)
+            lines.append(f"p32.draw {d} {b} {int(hit)}")
+    for q in [*Q16.edges(), *(rng.signed(18) for _ in range(64))]:
+        exact = Q16.value(q)
+        bits = exact * P32_ONE if 0 <= exact <= 1 else None
+        lines.append(f"p32.from_q16 {q} {fmt(None if bits is None else int(bits))}")
+    numerators = [0, 1, 2, 3, 7, 1 << 31, P32_ONE - 1, P32_ONE, MASK64 - 1, MASK64]
+    denominators = [0, 1, 2, 3, 7, 1 << 32, 1 << 33, P32_ONE + 1, MASK64 - 1, MASK64]
+    pairs_ = [(n, d) for n in numerators for d in denominators]
+    for _ in range(RANDOM_CASES):
+        d = rng.next_u64() >> (rng.next_u64() % 64)
+        pairs_.append((rng.next_u64() % (d + 1), d))  # mostly at most 1
+    for n, d in pairs_:
+        raw = None if d == 0 else round(Fraction(n * P32_ONE, d))
+        lines.append(
+            f"p32.ratio {n} {d} {fmt(raw if raw is not None and raw <= P32_ONE else None)}"
+        )
+    return lines
+
+
 SECTIONS: tuple[Callable[[SplitMix64], list[str]], ...] = (
     lambda rng: q_vectors(Q8, Q16, rng),
     lambda rng: q_vectors(Q16, Q8, rng),
     money_vectors,
     draw_vectors,
     overflow_vectors,
+    prob32_vectors,
 )
 
 

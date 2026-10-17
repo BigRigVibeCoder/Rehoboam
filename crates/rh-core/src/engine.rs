@@ -24,8 +24,11 @@
 //!    (queued for their owners, with the id of their cause). Only
 //!    the merge touches the agenda, the queues and the log, so the thread count never reaches an
 //!    id;
-//! 5. in `Bookkeeping`, after the phase's systems, runs the invariants: the core's own, then each
-//!    system's in id order. The first violation is fatal.
+//! 5. in `Bookkeeping`, first compacts the person ledger (the dead of the instant leave every
+//!    `person.*` column; SPR-011 ruling 5, `crate::ledger`), then runs the phase's systems, then the
+//!    invariants: the core's own (the ledger's among them), then each system's in id order. The
+//!    first violation is fatal. After every step that owns a ledger column, the core checks it
+//!    kept the ledger's row count and the life-course log's append-only rule.
 //!
 //! **Material inputs** (ADR-0025 item 3). [`Engine::submit_input`] queues an input with its
 //! dependency scope (a set of entities) for an instant at or after the next one; an earlier one is
@@ -74,13 +77,14 @@ use crate::access::Lag;
 use crate::agenda::{Agenda, Timer, TimerEntry};
 use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance};
+use crate::ledger::{Ledger, LifeCourseGuard};
 use crate::observe::{Boundary, JobRef, JobWork, Notice, Observer, Pass};
 use crate::phase::Phase;
 use crate::register::{Entry, Registered};
 use crate::schedule::Node;
 use crate::state::{EngineState, RestoreError, check_epochs, check_inputs, check_timers};
 use crate::system::{
-    InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx,
+    InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx, Taken,
 };
 use crate::time::{Calendar, Pulse, SimTime};
 use crate::world::{Column, SystemView, WorldTables};
@@ -216,6 +220,14 @@ pub struct Engine {
     /// The host's observer, if attached (SPR-009 ruling 4): notices only, never state, so it is
     /// not part of [`EngineState`] and never changes a result.
     observer: Option<Arc<dyn Observer>>,
+    /// The person ledger and life-course log, when the world has them (SPR-011 ruling 5): which
+    /// columns the core compacts at `Bookkeeping` and checks after each step that owns one.
+    ledger: Option<Ledger>,
+    /// The `(purpose, entity)` pairs each system (by entry index) has drawn from at the current
+    /// instant, lent to each of its jobs in turn and cleared at every instant (BCK-002 A-37).
+    /// Bookkeeping of the step guard, never state: an instant always starts it empty. One slot
+    /// per system, built once, so an instant with no draws allocates nothing (V-PERF-11).
+    taken: Vec<Taken>,
 }
 
 /// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
@@ -257,12 +269,17 @@ struct Job {
 /// The columns one system owns, moved out of the tables for its step.
 type Owned = BTreeMap<&'static str, Column>;
 
+/// What one job takes to its thread: its owned columns, its command inbox, and the pairs its
+/// system has drawn from at this instant (BCK-002 A-37).
+type JobInput = (Owned, Vec<QueuedCommand>, Taken);
+
 /// The result of one job.
 struct JobOutcome {
     owned: Owned,
     result: Result<(), SimError>,
     untaken: Vec<QueuedCommand>,
     out: Outbox,
+    taken: Taken,
 }
 
 /// Counts for the per-instant diagnostic record.
@@ -319,7 +336,11 @@ impl Engine {
             }
             by_system_id.insert(e.system_id, i);
         }
-        let poisoned = unsupported_lag(&registered.entries);
+        let (ledger, ledger_error) = match Ledger::of(&tables) {
+            Ok(ledger) => (ledger, None),
+            Err(e) => (None, Some(e)),
+        };
+        let poisoned = unsupported_lag(&registered.entries).or(ledger_error);
         Self {
             calendar,
             world_seed,
@@ -348,6 +369,8 @@ impl Engine {
             poisoned,
             dispatch: DispatchStats::default(),
             observer: None,
+            ledger,
+            taken: Vec::new(),
         }
     }
 
@@ -784,6 +807,7 @@ impl Engine {
             | SimError::Event { system, .. }
             | SimError::Panic { system, .. }
             | SimError::Unsupported { system, .. }
+            | SimError::Ledger { system, .. }
             | SimError::System { system, .. } => ((*system).to_owned(), None),
             SimError::Observer { .. } => (OBSERVER.to_owned(), None),
         };
@@ -810,6 +834,9 @@ impl Engine {
         // The instant is the current one before its first notice, so a failure there (an observer
         // panic at InstantStart) names this instant, not the last (VER-SPR-009-TEST OBS-1).
         self.at = (t, Phase::Inputs);
+        self.taken
+            .resize_with(self.registered.entries.len(), Taken::default);
+        self.taken.iter_mut().for_each(Taken::clear);
         self.notify(t, None, Boundary::InstantStart)?;
         let fired: Vec<Pulse> = self
             .calendar
@@ -829,6 +856,13 @@ impl Engine {
             self.notify(t, Some(phase), Boundary::PhaseStart)?;
             if phase == Phase::Inputs {
                 tally.inputs = self.apply_inputs(t)?;
+            }
+            // SPR-011 ruling 5: the dead of this instant leave every person.* column before any
+            // Bookkeeping system, invariant or hash sees the tables.
+            if phase == Phase::Bookkeeping
+                && let Some(ledger) = &self.ledger
+            {
+                ledger.compact(&mut self.tables)?;
             }
             let mut due: BTreeMap<usize, Vec<TimerEntry>> = BTreeMap::new();
             for (key, timer) in self.agenda.pop_due(t, phase) {
@@ -1010,6 +1044,9 @@ impl Engine {
                 format!("an event carries tick {tick}, after the current instant {t}"),
             ));
         }
+        if let Some(ledger) = &self.ledger {
+            ledger.check(&self.tables)?;
+        }
         for e in &self.registered.entries {
             let results = guard(e.id, || Ok(e.model.invariants(&self.tables)))?;
             if let Some(r) = results.into_iter().find(|r| !r.holds) {
@@ -1035,7 +1072,8 @@ impl Engine {
     ) -> Result<(), SimError> {
         self.dispatch.record(jobs.len());
         self.check_owned_columns(jobs)?;
-        let inputs: Vec<(Owned, Vec<QueuedCommand>)> = jobs
+        let guards = self.ledger_guards(jobs, phase);
+        let inputs: Vec<JobInput> = jobs
             .iter()
             .map(|job| {
                 let e = &self.registered.entries[job.index];
@@ -1045,7 +1083,8 @@ impl Engine {
                     .iter()
                     .filter_map(|w| self.tables.take(w.column).map(|rows| (w.column, rows)))
                     .collect();
-                (owned, self.commands.take(e.id))
+                let taken = std::mem::take(&mut self.taken[job.index]);
+                (owned, self.commands.take(e.id), taken)
             })
             .collect();
         let workers = self.threads.min(jobs.len()).max(1);
@@ -1054,8 +1093,10 @@ impl Engine {
             let tables = &self.tables;
             let agenda = &self.agenda;
             let entries = &self.registered.entries;
-            let key = |e: &Entry| SystemKey::new(self.world_seed, self.branch_salt, e.system_id, 0);
-            let run = |k: usize, job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| {
+            let epochs = &self.epochs;
+            let (world_seed, branch_salt) = (self.world_seed, self.branch_salt);
+            let key = |e: &Entry| SystemKey::new(world_seed, branch_salt, e.system_id, 0);
+            let run = |k: usize, job: &Job, (cols, inbox, taken): JobInput| {
                 let e = &entries[job.index];
                 let notice = |boundary| Notice {
                     at: t,
@@ -1073,12 +1114,15 @@ impl Engine {
                     system: e.id,
                     system_id: e.system_id,
                     key: key(e),
+                    world_seed,
+                    branch_salt,
+                    epochs,
                     purposes: &e.purposes,
                     access: &e.access,
                     bindings: &e.bindings,
                     agenda,
                 };
-                let mut ctx = StepCtx::new(info, t, phase, inbox);
+                let mut ctx = StepCtx::new(info, t, phase, inbox, taken);
                 // A failed JobStart skips the step; the instant is lost either way.
                 let result = started.and_then(|()| match &job.work {
                     Work::Timers(timers) => timers.iter().try_for_each(|timer| {
@@ -1088,7 +1132,7 @@ impl Engine {
                         guard(e.id, || e.model.step(*binding, &mut view, &mut ctx))
                     }
                 });
-                let (untaken, out) = ctx.finish();
+                let (untaken, out, taken) = ctx.finish();
                 let ended =
                     observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobEnd(job_ref))));
                 let result = result.and(ended);
@@ -1097,6 +1141,7 @@ impl Engine {
                     result,
                     untaken,
                     out,
+                    taken,
                 }
             };
             dispatch(self.threads, jobs, inputs, run)
@@ -1109,6 +1154,7 @@ impl Engine {
             }
             self.commands
                 .restore(self.registered.entries[job.index].id, o.untaken);
+            self.taken[job.index] = o.taken;
             if first_error.is_none() {
                 first_error = o.result.err();
             }
@@ -1117,12 +1163,37 @@ impl Engine {
         if let Some(e) = first_error {
             return Err(e);
         }
+        // `guards` is empty without a ledger: the zip pairs nothing (DEF-4).
+        for (job, g) in jobs.iter().zip(&guards) {
+            g.as_ref().map_or(Ok(()), |g| {
+                g.check(self.registered.entries[job.index].id, &self.tables)
+            })?;
+        }
         // After every owned column is back in the tables, so a failing observer loses none (DEF-1).
         self.notify(t, Some(phase), Boundary::LevelMerge)?;
         for (job, out) in jobs.iter().zip(outboxes) {
             self.merge(t, phase, job.index, out, tally)?;
         }
         Ok(())
+    }
+
+    /// What each job must preserve of the ledger columns it owns (SPR-011 ruling 5): `None` for a
+    /// job that owns none, or in a world without a ledger.
+    /// A world without a ledger pays nothing: no guard and no allocation (DEF-4, V-PERF-11).
+    fn ledger_guards(&self, jobs: &[Job], phase: Phase) -> Vec<Option<LifeCourseGuard>> {
+        if self.ledger.is_none() {
+            return Vec::new();
+        }
+        jobs.iter()
+            .map(|job| {
+                let e = &self.registered.entries[job.index];
+                self.ledger.as_ref().and_then(|ledger| {
+                    let writes = e.access.writes.iter().map(|w| w.column);
+                    let g = ledger.guard(&self.tables, writes, phase);
+                    (!g.is_empty()).then_some(g)
+                })
+            })
+            .collect()
     }
 
     /// Every column the level's jobs own exists (materialised in `new`). Checked for all before any

@@ -249,6 +249,10 @@ fn report(repo: &Path, control: bool) -> Result<String, String> {
     Ok(lines.join("\n") + "\n")
 }
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "tool plane: command-line arguments and environment overrides (SPR-011 A-4)"
+)]
 fn main() -> ExitCode {
     let got = self_test();
     let zeroed = zeroed_test();

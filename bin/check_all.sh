@@ -264,6 +264,26 @@ canonical_golden_control() {
   "$PY" -I specs/stream/canonical_v0.py --check --golden "$planted"
 }
 
+# Worldgen-lite golden control (SPR-018): the committed golden outputs with one land count off by one; the exact reference
+# must FAIL on them (selftest_worldgen_lite.py --golden).
+worldgen_lite_golden_control() {
+  local planted=target/rendered-fixtures/worldgen_lite_altered_golden.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^land 4096$/s//land 4095/' specs/worldgen/golden/worldgen_lite_v0.txt > "$planted" || return 1
+  grep -q '^land 4095$' "$planted" || { echo "control not planted: no 'land 4096' line in the worldgen-lite golden file"; return 1; }
+  "$PY" -I specs/worldgen/selftest_worldgen_lite.py --golden "$planted"
+}
+
+# Worldgen-lite template control (SPR-018): a template number changed in a copy of templates_v0.toml must change the
+# golden outputs, so the reference must FAIL against the committed file (the templates are part of the contract).
+worldgen_lite_template_control() {
+  local planted=target/rendered-fixtures/worldgen_lite_templates_altered.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/^base = 30000$/base = 30001/' specs/worldgen/templates_v0.toml > "$planted" || return 1
+  grep -q '^base = 30001$' "$planted" || { echo "control not planted: no 'base = 30000' line in templates_v0.toml"; return 1; }
+  "$PY" -I specs/worldgen/selftest_worldgen_lite.py --templates "$planted"
+}
+
 # Channel-C float control (SPR-013 T-11): the channel-C DDL with closed_by_seq made a DOUBLE; the self-test must FAIL.
 channel_c_float_control() {
   local planted=target/rendered-fixtures/channel_c_float_column.sql
@@ -275,7 +295,7 @@ channel_c_float_control() {
 
 # Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, holding exactly
 # that API, which must be reported under its own rule with its own token (tests/lint_fixtures/README.md).
-# Each entry is file:rule:token; a token may itself contain "::".
+# Each entry is file:rule:token; a token may itself contain "::", and "~" in it stands for a space.
 FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collections:HashSet
   thread_rng:thread-rng:thread_rng thread_rng_type:thread-rng:ThreadRng rand_rng:thread-rng:rand::rng
   std_rng:std-rng:StdRng small_rng:std-rng:SmallRng os_rng:std-rng:OsRng from_entropy:std-rng:from_entropy
@@ -287,12 +307,22 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   float_type:float:f32 float_literal:float:0.5 float_suffix:float:2e-3f64 float_conversion:float:to_f64
   float_escape_reason:float:f64 float_undeclared_field:float:f32
   allow_disallowed:lint-allow:allow(clippy::disallowed_methods
+  file_modified:file-clock:.modified( process_command:process:std::process file_io:file-io:std::fs
+  process_rename:process:std::process fs_group_rename:file-io:std::fs metadata_ext:file-clock:MetadataExt
+  metadata_ufcs:file-clock:Metadata::modified mtime:file-clock:.mtime(
+  env_rename:env:std::env env_var:env:std::env env_current_dir:env:std::env env_current_exe:env:std::env
+  env_temp_dir:env:std::env env_home_dir:env:std::env env_set_current_dir:env:std::env
+  env_split_paths:env:std::env env_join_paths:env:std::env
+  fs_renamed_std:file-io:fs::r fs_os_symlink:file-io:fs::s raw_ident_fs:file-io:std::fs
+  std_rename:std-rename:std~as std_rename_root:std-rename:std~as std_rename_self:std-rename:std~as
+  extern_crate_std:std-rename:extern~crate~std~as
   path_attr:source-include:#[path include_macro:source-include:include!("
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
   set -f  # tokens such as #[path must not be glob-expanded; `local -` restores the option
   for spec in $FORBIDDEN_API_CONTROLS; do
     file="${spec%%:*}"; rest="${spec#*:}"; rule="${rest%%:*}"; token="${rest#*:}"
+    token="${token//\~/ }"
     run "Forbidden-API positive control: $file must FAIL" "fail:VIOLATION [V-DET-19/$rule] ${tick}${token}${tick}" \
       "$PY" -I bin/lint_forbidden.py --scan "tests/lint_fixtures/forbidden/planted/$file.rs" || return 1
   done
@@ -408,7 +438,7 @@ def1_resume() {
 # just vanish (VER-SPR-002-TEST DEF-2). Each entry is file:compile_fail:compiling, the number of
 # `compile_fail` doctests and of compiling doctests (the twins that show each case fails for its
 # stated reason). Update an entry in the same commit that adds or removes a case.
-DOCTEST_EXPECT="crates/rh-ids/src/ids.rs:7:7 crates/rh-ids/src/rng.rs:1:1"
+DOCTEST_EXPECT="crates/rh-ids/src/ids.rs:8:8 crates/rh-ids/src/rng.rs:1:1"
 DOCTEST_LOG=target/doctests.txt
 doctests_run() {
   mkdir -p target && rm -f "$DOCTEST_LOG" || return 1
@@ -447,7 +477,12 @@ FIXED_POINT_COMPILE_FAIL='mix-q8-q16|expected `Q8_8`, found `Q16_16`
 mix-money-q16|expected `Money`, found `Q16_16`
 float-from|expected `Q16_16`, found `f64`
 float-into|the trait bound `f64: From<Q16_16>` is not satisfied
-float-cast|non-primitive cast: `Money` as `f64`'
+float-cast|non-primitive cast: `Money` as `f64`
+mix-prob-q16|expected `Prob32`, found `Q16_16`
+mix-prob-arith|expected `Q16_16`, found `Prob32`
+prob-into-q16|the trait bound `Q16_16: From<Prob32>` is not satisfied
+prob-float-from|expected `Prob32`, found `f64`
+prob-float-cast|non-primitive cast: `Prob32` as `f64`'
 fixed_point_compile_controls() {
   local fixture=tests/lint_fixtures/compile_fail/fixed_point/Cargo.toml crate text
   run "rh-core::fixed compile control: well-typed plane-A use compiles" pass \
@@ -683,7 +718,7 @@ run "cargo deny positive control: git source must FAIL" "fail:error[source-not-a
 run "cargo deny positive control: wildcard version must FAIL" "fail:error[wildcard]" cargo deny --color never --offline --locked --manifest-path tests/lint_fixtures/deny/wildcard_version/Cargo.toml check bans &&
 run "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)" pass licence_ledger Cargo.toml artifacts/licence_ledger.txt &&
 run "Licence ledger control: the GPL fixture is listed as GPL-3.0-only" "pass:GPL-3.0-only" licence_ledger tests/lint_fixtures/deny/gpl_dependency/Cargo.toml target/rendered-fixtures/licence_ledger_gpl.txt &&
-run "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)" pass "$PY" -I bin/lint_arch.py &&
+run "Architecture: crate boundaries, planes and engine purity (lint_arch; V-INSP-03, V-PLN-01, V-INSP-05)" pass "$PY" -I bin/lint_arch.py &&
 run "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL (SPR-009 T-05)" "fail:VIOLATION [global-allocator] rh-tool: src/lib.rs declares a #[global_allocator]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/global_allocator_elsewhere/Cargo.toml &&
 run "lint_arch positive control: a #[global_allocator] under a source directory named target must FAIL (VER-SPR-009-TEST GAP-21)" "fail:VIOLATION [global-allocator] rh-tool: src/target/alloc.rs declares a #[global_allocator]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/global_allocator_src_target/Cargo.toml &&
 run "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)" "fail:VIOLATION [global-allocator] rh-tool: src/lib.rs declares a #[global_allocator]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/global_allocator_cfg_attr/Cargo.toml &&
@@ -712,6 +747,9 @@ run "lint_arch positive control: plane A -> unreviewed third-party crate must FA
 run "lint_arch positive control: libm outside rh-sample must FAIL" "fail:VIOLATION [plane-A-external] rh-core: depends on libm, which plane A may use only in rh-sample" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_scoped_dep_outside/Cargo.toml &&
 run "lint_arch positive control: plane A -> rh-manifest (tool) must FAIL (SPR-004)" "fail:VIOLATION [plane-A-closure] rh-registry: plane-A crate depends on plane-\"tool\" crate rh-manifest" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_manifest/Cargo.toml &&
 run "lint_arch positive control: rh-manifest relabelled as plane A must FAIL (SPR-004)" "fail:VIOLATION [metadata] rh-manifest: declares (plane, kind) = ('A', 'machinery'), but rh-manifest is pinned" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_manifest/Cargo.toml &&
+run "lint_arch positive control: an engine crate depending directly on a deny-listed crate must FAIL (V-INSP-05; SPR-011 T-00)" "fail:VIOLATION [engine-purity] rh-cli: engine crate depends on reqwest (HTTP client (LLM and web APIs)) through rh-cli -> reqwest;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/engine_purity_direct/Cargo.toml &&
+run "lint_arch positive control: an engine crate reaching a deny-listed crate transitively must FAIL (V-INSP-05; SPR-011 T-00)" "fail:VIOLATION [engine-purity] rh-cli: engine crate depends on axum (HTTP UI (web server framework)) through rh-cli -> middle -> axum;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/engine_purity_transitive/Cargo.toml &&
+run "lint_arch control: a deny-listed dev-dependency of an engine crate, and a viewer's normal one, pass (V-INSP-05; SPR-011 T-00)" "pass:1 engine crates checked against" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/engine_purity_dev/Cargo.toml &&
 run "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)" "fail:VIOLATION [clippy-config] crates/rh-sample/clippy.toml: a clippy configuration other than the workspace root's" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/clippy_config/crate_local/Cargo.toml &&
 run "lint_arch positive control: a symlinked workspace member must FAIL (SPR-003 GAP-13)" "fail:VIOLATION [clippy-config] rh-sample: its manifest directory" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/clippy_config/symlinked_member/Cargo.toml &&
 run "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL (SPR-003 GAP-13)" "fail:VIOLATION [clippy-config] node_modules/rh-sample/clippy.toml: a clippy configuration other than" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/clippy_config/symlinked_member/Cargo.toml &&
@@ -730,6 +768,11 @@ fixed_point_compile_controls &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
+run "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its tests/ and a builder's args pass (SPR-011 A-4)" "fail:VIOLATION [V-DET-19/env] \`std::env\` at tests/lint_fixtures/forbidden/env_workspace/rh-core/src/lib.rs:5:35;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/env_workspace/Cargo.toml &&
+run "lint_forbidden positive control: env::current_dir after a grouped import is reported on its own line (DEF-5)" "fail:VIOLATION [V-DET-19/env] \`env::c\` at tests/lint_fixtures/forbidden/env_path_after_group.rs:5:50" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/env_path_after_group.rs &&
+run "lint_forbidden control: std::env::consts, env! and option_env! pass (DEF-5)" "pass:1 files scanned; 0 violations" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/env_consts_ok.rs &&
+run "lint_forbidden positive control: fs::read after a grouped import is reported on its own line (DEF-1)" "fail:VIOLATION [V-DET-19/file-io] \`fs::r\` at tests/lint_fixtures/forbidden/fs_path_after_group.rs:5:18" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/fs_path_after_group.rs &&
+run "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)" "fail:VIOLATION [V-DET-19/file-io] \`std::fs\` at tests/lint_fixtures/forbidden/file_io_workspace/rh-core/src/lib.rs:4:5;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/file_io_workspace/Cargo.toml &&
 run "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)" "fail:VIOLATION [V-DET-19/float] \`f32\` at tests/lint_fixtures/forbidden/float_workspace/fixture-sys/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_workspace/Cargo.toml &&
 run "lint_forbidden positive control: a float outside rh-sample must FAIL (SPR-003 T-00)" "fail:VIOLATION [V-DET-19/float] \`f64\` at tests/lint_fixtures/forbidden/float_zone/rh-sampler/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_zone/Cargo.toml &&
 run "lint_forbidden positive control: a float in a crate named rh-core must FAIL (SPR-003 GAP-3)" "fail:VIOLATION [V-DET-19/float] \`f64\` at tests/lint_fixtures/forbidden/float_zone_core/rh-core/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_zone_core/Cargo.toml &&
@@ -759,23 +802,23 @@ run "Clippy float backstop positive control: unnamed float arithmetic in plane A
 run "Clippy libm-only positive control: std ln in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::ln`' clippy_control std_transcendental rh-sample &&
 run "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::exp`' clippy_control std_transcendental rh-sample &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
-run "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling 11)" "fail:ERROR M1.regions.odd.toml: emits NOT_A_VERB, which is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/frozen &&
-run "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)" "pass:WARN  M1.regions.odd.toml: emits SUCCEED, which the Registry gives to M7.dynasty" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/draft &&
-run "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 ruling 11)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/overlay --overlay tests/lint_fixtures/odd_emits/overlay.toml &&
+run "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling 11)" "fail:ERROR M3.agriculture.odd.toml: emits NOT_A_VERB, which is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/frozen &&
+run "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)" "pass:WARN  M3.agriculture.odd.toml: emits SUCCEED, which the Registry gives to M7.dynasty" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/draft &&
+run "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 ruling 11)" "pass:PASS: 9 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/overlay --overlay tests/lint_fixtures/odd_emits/overlay.toml &&
 run "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, must FAIL (REV-P1a section 7)" "fail:has payload fields ['a', 'c', 'b'], but [[applies]] declares ['a', 'b', 'c']" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/mismatch &&
-run "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, with its drain binding, passes (REV-P1a section 7; EVO-001)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/match &&
-run "lint_odd applies positive control: an [[applies]] payload type outside the closed vocabulary, frozen, must FAIL (EVO-001)" "fail:ERROR M1.regions.odd.toml: [[applies]] FixtureCmd field b: type 'Potato' is not in the payload vocabulary" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/bad_type &&
-run "lint_odd applies positive control: an [[applies]] drained_by naming no binding of [[schedule]], frozen, must FAIL (EVO-001)" "fail:ERROR M1.regions.odd.toml: [[applies]] FixtureCmd is drained_by Day/Agenda, which [[schedule]] does not declare" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/unbound_drain &&
-run "lint_odd applies positive control: two [[applies]] entries for one command must FAIL (REV-EVO-001 MIN-11)" "fail:ERROR M1.regions.odd.toml: [[applies]] FixtureCmd is declared twice" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/dup_command &&
-run "lint_odd applies positive control: an outcome-carrying command whose sender names no timer, frozen, must FAIL (REV-EVO-001 R9)" "fail:ERROR M1.regions.odd.toml: [[commands]] FixtureCmd to M1.regions carries an outcome, so it needs timer" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/outcome_untimed &&
-run "lint_odd neutral control: an identity read without a neutral and a rate read with a typed neutral stated by its coupling pass (EVO-001)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/typed &&
-run "lint_odd neutral positive control: a frozen spec's rate read of an absent owner with no neutral must FAIL (EVO-001)" "fail:ERROR M1.regions.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/missing &&
-run "lint_odd neutral positive control: a neutral of the wrong type must FAIL (EVO-001)" "fail:ERROR M1.regions.odd.toml: read polity.exec_constraint from M6.polity: neutral zero must be a TOML number for a q8_8 column" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/mistyped &&
-run "lint_odd neutral positive control: a neutral that cannot be typed, frozen, must FAIL (EVO-001)" "fail:ERROR M1.regions.odd.toml: neutral of region.conditions cannot be typed" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/untyped &&
-run "lint_odd neutral positive control: an enum neutral outside the column's codes must FAIL (EVO-001)" "fail:ERROR M1.regions.odd.toml: read person.death_cause from M2.demography: neutral smitten is not one of the enum's codes" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/enum_member &&
-run "lint_odd neutral positive control: a frozen substrate reading a non-substrate's column as identity must FAIL (REV-EVO-001 R12)" "fail:ERROR M1.regions.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
-run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M1.regions.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
-run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M1.regions.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
+run "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, with its drain binding, passes (REV-P1a section 7; EVO-001)" "pass:PASS: 9 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/match &&
+run "lint_odd applies positive control: an [[applies]] payload type outside the closed vocabulary, frozen, must FAIL (EVO-001)" "fail:ERROR M3.agriculture.odd.toml: [[applies]] FixtureCmd field b: type 'Potato' is not in the payload vocabulary" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/bad_type &&
+run "lint_odd applies positive control: an [[applies]] drained_by naming no binding of [[schedule]], frozen, must FAIL (EVO-001)" "fail:ERROR M3.agriculture.odd.toml: [[applies]] FixtureCmd is drained_by Day/Agenda, which [[schedule]] does not declare" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/unbound_drain &&
+run "lint_odd applies positive control: two [[applies]] entries for one command must FAIL (REV-EVO-001 MIN-11)" "fail:ERROR M3.agriculture.odd.toml: [[applies]] FixtureCmd is declared twice" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/dup_command &&
+run "lint_odd applies positive control: an outcome-carrying command whose sender names no timer, frozen, must FAIL (REV-EVO-001 R9)" "fail:ERROR M3.agriculture.odd.toml: [[commands]] FixtureCmd to M3.agriculture carries an outcome, so it needs timer" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/outcome_untimed &&
+run "lint_odd neutral control: an identity read without a neutral and a rate read with a typed neutral stated by its coupling pass (EVO-001)" "pass:PASS: 9 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/typed &&
+run "lint_odd neutral positive control: a frozen spec's rate read of an absent owner with no neutral must FAIL (EVO-001)" "fail:ERROR M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/missing &&
+run "lint_odd neutral positive control: a neutral of the wrong type must FAIL (EVO-001)" "fail:ERROR M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity: neutral zero must be a TOML number for a q8_8 column" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/mistyped &&
+run "lint_odd neutral positive control: a neutral that cannot be typed, frozen, must FAIL (EVO-001)" "fail:ERROR M3.agriculture.odd.toml: neutral of region.conditions cannot be typed" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/untyped &&
+run "lint_odd neutral positive control: an enum neutral outside the column's codes must FAIL (EVO-001)" "fail:ERROR M3.agriculture.odd.toml: read person.death_cause from M2.demography: neutral smitten is not one of the enum's codes" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/enum_member &&
+run "lint_odd neutral positive control: a frozen substrate reading a non-substrate's column as identity must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
+run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
+run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
 run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
@@ -820,7 +863,7 @@ run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&
 run "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)" pass doctest_count_gate "$DOCTEST_LOG" &&
-run "Doctest count gate positive control: one typed-ID case missing must FAIL" "fail:crates/rh-ids/src/ids.rs: expected 7 compile-fail doctests, found 6" doctest_count_control &&
+run "Doctest count gate positive control: one typed-ID case missing must FAIL" "fail:crates/rh-ids/src/ids.rs: expected 8 compile-fail doctests, found 7" doctest_count_control &&
 run "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)" "pass:PARITY: all" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml &&
 run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
@@ -850,10 +893,15 @@ run "canonical_v0 positive control: a stale golden digest must FAIL" "fail:STALE
 run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
+run "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's (gen_decimal_vectors --check; SPR-011 T-04)" pass "$PY" -I bin/gen_decimal_vectors.py --check &&
+run "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)" "fail:STALE:" "$PY" -I bin/gen_decimal_vectors.py --check --output tests/lint_fixtures/golden/stale_decimal_vectors.txt &&
 run "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)" "pass:OK:" "$PY" -I specs/numerics/exp_ln_v0.py --check &&
 run "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)" "fail:STALE:" "$PY" -I specs/numerics/exp_ln_v0.py --check --golden tests/lint_fixtures/golden/stale_exp_ln_v0.txt &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
+run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
+run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
+run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
 run "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality --check; SPR-016)" "pass:M2 F1 MORTALITY: PASS" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check &&
 run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)" "fail:1. rung 0 = beta 1: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control beta-one-power &&
 run "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 (SPR-016 MR7)" "fail:5. infant sub-schedule: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control infant-discontinuous &&

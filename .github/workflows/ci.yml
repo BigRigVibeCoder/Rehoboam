@@ -40,7 +40,9 @@ jobs:
     # performance gates). Every gate runs on every PR, in exactly one of them.
     name: PR tier (bin/check_all.sh --part ${{ matrix.part }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # 20 minutes guards the 15-minute PR budget (V-PERF-04): a part that runs past it is a red
+    # tier, not a slow green one (BCK-002 A-38, SPR-011). python/tests/test_ci_workflow.py pins it.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
