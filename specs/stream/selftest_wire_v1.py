@@ -523,6 +523,7 @@ class Event:
     live_first_seq: int = 0
     reason: str = ""
     same_run: bool = True
+    finished: bool = False  # future_seq on a finished run (R21)
 
 
 @dataclass(frozen=True)
@@ -543,11 +544,16 @@ class Catchup:
     """The pure catch-up state machine of a cursor (wire_v1.md §6.3).
 
     States: ``idle``, ``connecting`` (a reconnect, waiting for ``status``), ``subscribing``,
-    ``live``, ``reading_sealed``, ``retry`` (backing off), ``jumping``, ``failed`` (a protocol
-    error: only ``closed`` is accepted), ``done``, ``fatal`` (another run on the socket).
+    ``live``, ``reading_sealed``, ``retry`` (backing off), ``jumping`` (the unsubscribe of a
+    jump is in flight; frames still arrive and are delivered), ``jump_ended`` (a ``behind``
+    ended the subscription during the jump; the ``not_subscribed`` answer is expected),
+    ``failed`` (a protocol error: only ``closed`` is accepted), ``done``, ``fatal`` (another run
+    on the socket, or a cursor past the end of a finished run).
     Events: ``subscribed``, ``behind``, ``records``, ``sealed``, ``end``, ``closed``,
-    ``read_sealed_done``, ``refused`` (an error reply with ``reason``), ``retry_elapsed``,
-    ``status`` (``same_run``), ``jump`` (an input), ``unsubscribed``.
+    ``read_sealed_done``, ``refused`` (an error reply with ``reason`` and ``finished``),
+    ``retry_elapsed``, ``status`` (``same_run``), ``jump`` (an input), ``unsubscribed``.
+    A ``closed`` during a sealed read is remembered, and the read's end answers ``status``;
+    a stale ``retry_elapsed`` is ignored (REV-SPR-026 R15).
     """
 
     def __init__(self, cursor: int = 0) -> None:
@@ -557,6 +563,7 @@ class Catchup:
         self.read_to = 0
         self.backoff = BACKOFF_FIRST
         self.skipped: tuple[int, int] | None = None  # (from, to) of a jump
+        self.reconnect_pending = False  # a closed socket during a sealed read
 
     def start(self) -> Action:
         """The first action: subscribe from the cursor."""
@@ -591,6 +598,9 @@ class Catchup:
         return Action("close", detail=detail)
 
     def _closed(self, _: Event) -> Action:
+        if self.state == "reading_sealed":
+            self.reconnect_pending = True  # finish the read, then reconnect
+            return Action("ignore", detail="reconnect pending")
         self.state = "connecting"
         return Action("status")
 
@@ -604,9 +614,9 @@ class Catchup:
         return Action("subscribe", self.cursor)
 
     def _end(self, event: Event) -> Action:
-        if self.state != "live":
+        if self.state not in ("live", "jumping"):
             return self._fail("stream.end while not subscribed")
-        self.state = "done"
+        self.state = "done"  # in jumping: the end was in flight; not_subscribed follows, ignored
         return Action("done", self.cursor, detail=event.reason)
 
     def _subscribed(self, event: Event) -> Action:
@@ -624,6 +634,9 @@ class Catchup:
         return Action("deliver", self.cursor, 0)
 
     def _behind(self, event: Event) -> Action:
+        if self.state == "jumping":
+            self.state = "jump_ended"  # the subscription ended under the jump's unsubscribe
+            return Action("ignore", detail="behind during a jump")
         if self.state not in ("subscribing", "live"):
             return self._fail("behind while not subscribed or subscribing")
         if self.state == "live" and event.first_seq != self.cursor:
@@ -638,7 +651,7 @@ class Catchup:
         return Action("read_sealed", self.cursor, s)
 
     def _records(self, event: Event) -> Action:
-        if self.state != "live":
+        if self.state not in ("live", "jumping"):
             return self._fail("records while not subscribed")
         if event.first_seq != self.cursor or event.count == 0:
             return self._fail(f"frame first_seq {event.first_seq} is not the cursor {self.cursor}")
@@ -651,10 +664,20 @@ class Catchup:
         if event.first_seq + event.count - 1 != self.read_to:
             return self._fail(f"a sealed read of {event.count} seqs to {self.read_to}")
         self.cursor = event.first_seq + event.count
+        if self.reconnect_pending:
+            self.reconnect_pending = False
+            self.state = "connecting"
+            return Action("status")
         self.state = "subscribing"
         return Action("subscribe", self.cursor)
 
     def _refused(self, event: Event) -> Action:
+        if self.state == "jump_ended" and event.reason == "not_subscribed":
+            self.state = "jumping"  # the expected answer to the jump's unsubscribe
+            return Action("subscribe_live")
+        if event.reason == "future_seq" and event.finished:
+            self.state = "fatal"
+            return Action("stop", detail="future_seq on a finished run: the cursor is past the end")
         if event.reason not in RETRIABLE:
             return self._fail(f"subscribe refused: {event.reason}")
         self.state = "retry"
@@ -663,7 +686,7 @@ class Catchup:
 
     def _retry_elapsed(self, _: Event) -> Action:
         if self.state != "retry":
-            return self._fail("retry_elapsed while not retrying")
+            return Action("ignore", detail="a stale retry timer")
         self.state = "subscribing"
         return Action("subscribe", self.cursor)
 
@@ -674,10 +697,11 @@ class Catchup:
         return Action("unsubscribe")
 
     def _unsubscribed(self, event: Event) -> Action:
-        if self.state != "jumping":
+        if self.state not in ("jumping", "jump_ended"):
             return self._fail("unsubscribed while not jumping")
-        if event.first_seq != self.cursor:
+        if self.state == "jumping" and event.first_seq != self.cursor:
             return self._fail("unsubscribe.next_seq is not the cursor")
+        self.state = "jumping"
         return Action("subscribe_live")
 
 
@@ -710,6 +734,7 @@ class Snapshot:
     next_seq: int
     s: int | None  # sealed.last_seq: the last non-empty sealed segment
     last_year: int | None
+    window: tuple[tuple[int, bytes], ...]  # the chunk references: (seq, line + LF) from w0
 
 
 @dataclass(frozen=True)
@@ -726,10 +751,12 @@ class Planned:
 class Writer:
     """One channel's writer: a plan of records, appends, asynchronous seals, the window policy.
 
-    ``policy`` is ``year_end`` (wire_v1.md §6.1 option b: the previous year leaves memory when
-    the current one completes, once its seal is on disk) or ``sync`` (option a: the seal is
-    synchronous and the sealed year leaves memory at once). ``break_i4`` is the control: the
-    window moves before the dropped year is on disk.
+    ``policy`` is ``year_end`` (wire_v1.md §6.1 option b: a year leaves memory when the next
+    one completes or, if its seal landed later than that, when the seal lands) or ``sync``
+    (option a: the seal is synchronous and the sealed year leaves memory at once). The window
+    is an immutable tuple replaced on every change, so a snapshot holds the chunks it was
+    taken with (R17). ``break_i4`` is the control: the window moves before the dropped year is
+    on disk.
     """
 
     channel: str
@@ -739,7 +766,7 @@ class Writer:
     break_i4: bool = False
     disk: dict[int, Segment] = field(default_factory=dict)
     seal_log: list[Segment] = field(default_factory=list)
-    window: list[tuple[int, bytes]] = field(default_factory=list)  # (seq, line + LF)
+    window: tuple[tuple[int, bytes], ...] = ()  # (seq, line + LF), contiguous from w0
     w0: int = 0
     next_seq: int = 0
     s: int | None = None
@@ -753,6 +780,7 @@ class Writer:
     finished: bool = False
     end_reason: str = "finished"
     peak_years: int = 0
+    seal_latency: list[int] = field(default_factory=list)  # ticks from year end to landing
 
     def __post_init__(self) -> None:
         """Year 0 starts at seq 0."""
@@ -760,15 +788,17 @@ class Writer:
 
     def snapshot(self) -> Snapshot:
         """One atomic read of the published state."""
-        return Snapshot(self.w0, self.next_seq, self.s, self.last_year)
+        return Snapshot(self.w0, self.next_seq, self.s, self.last_year, self.window)
 
     def step(self, t: int) -> None:
         """Append the plan's records due at step ``t``; complete the year at its last tick."""
-        while self.cursor < len(self.plan) and self.plan[self.cursor].step <= t:
+        while (
+            not self.finished and self.cursor < len(self.plan) and self.plan[self.cursor].step <= t
+        ):
             self._append(self.plan[self.cursor])
             self.cursor += 1
         self._complete_seals(t)
-        if t % TICKS_PER_YEAR == TICKS_PER_YEAR - 1:
+        if not self.finished and t % TICKS_PER_YEAR == TICKS_PER_YEAR - 1:
             self._year_completes(t)
         years = {seq_year(seq, self.year_first) for seq, _ in self.window}
         self.peak_years = max(self.peak_years, len(years))
@@ -776,7 +806,7 @@ class Writer:
     def _append(self, rec: Planned) -> None:
         """Append one planned line: a memory write and a published next_seq; nothing waits."""
         assert rec.seq == self.next_seq
-        self.window.append((rec.seq, rec.line.encode("ascii") + LF))
+        self.window = (*self.window, (rec.seq, rec.line.encode("ascii") + LF))
         self.next_seq += 1
         self.tip_tick = rec.year * MINUTES_PER_YEAR + (rec.step % TICKS_PER_YEAR) * TICK_MINUTES
 
@@ -797,10 +827,14 @@ class Writer:
             self._drop_through(y - 1)
 
     def _complete_seals(self, t: int) -> None:
-        """Seals whose disk write is due: publish the disk, then ``s`` (I4), then the log."""
+        """Seals whose disk write is due: publish the disk, then ``s`` (I4), then the log.
+
+        Under ``year_end`` a landed year older than the previous one leaves memory at the landing
+        (R16), so a slow seal overruns the bound only by its lateness.
+        """
         due = [p for p in self.pending if p[0] <= t]
         self.pending = [p for p in self.pending if p[0] > t]
-        for _, y, first, lines in due:
+        for landing, y, first, lines in due:
             last = first + len(lines) - 1 if lines else None
             seg = Segment(y, first, last, lines, digest(lines))
             self.disk[y] = seg
@@ -808,6 +842,9 @@ class Writer:
                 self.s = last
             self.last_year = y
             self.seal_log.append(seg)
+            self.seal_latency.append(landing - (y * TICKS_PER_YEAR + TICKS_PER_YEAR - 1))
+            if self.policy == "year_end" and not self.break_i4:
+                self._drop_through(self.current_year - 2)
 
     def _drop_through(self, year: int) -> None:
         """Drop every year <= ``year`` once it is on disk (I4); the control does not wait."""
@@ -817,22 +854,35 @@ class Writer:
         if drop_to < 0:
             return
         keep_seq = self.year_first[drop_to + 1]
-        self.window = [(seq, line) for seq, line in self.window if seq >= keep_seq]
+        if keep_seq <= self.w0:
+            return
+        self.window = tuple((seq, line) for seq, line in self.window if seq >= keep_seq)
         self.w0 = keep_seq
 
     def restart(self) -> None:
-        """A `kill -9` and resume: the unsealed year is lost and re-emitted from its keyframe."""
+        """A `kill -9` and resume (wire_v1.md §6.2, R18).
+
+        The window is empty, seals in flight are lost, and the writer re-emits from the first
+        year not on disk (its keyframe).
+        """
         self.run_nonce += 1
-        y = self.current_year
-        self.window = [(seq, line) for seq, line in self.window if seq < self.year_first[y]]
-        self.next_seq = self.year_first[y]
+        self.pending = []
+        y0 = min(y for y in range(self.current_year + 1) if y not in self.disk)
+        self.current_year = y0
+        self.year_first = {y: first for y, first in self.year_first.items() if y <= y0}
+        self.next_seq = self.w0 = self.year_first[y0]
+        self.window = ()
         self.cursor = next(i for i, rec in enumerate(self.plan) if rec.seq == self.next_seq)
 
+    def abort(self) -> None:
+        """The host stops on an error: no more appends, the unsealed year is never sealed."""
+        self.finished, self.end_reason = True, "aborted"
+
     def read(self, snap: Snapshot, start: int, limit: int) -> tuple[bytes, int]:
-        """The window bytes from ``start`` under ``snap``: up to ``limit`` lines, and the count."""
-        offset = start - self.w0
-        chunk = self.window[max(offset, 0) : max(offset, 0) + limit]
-        chunk = [(seq, line) for seq, line in chunk if start <= seq < snap.next_seq]
+        """The window bytes from ``start`` under ``snap`` alone: up to ``limit`` lines, counted."""
+        offset = start - snap.w0
+        chunk = snap.window[max(offset, 0) : max(offset, 0) + limit]
+        chunk = tuple((seq, line) for seq, line in chunk if start <= seq < snap.next_seq)
         return b"".join(line for _, line in chunk), len(chunk)
 
     def read_sealed(self, lo: int, hi: int) -> tuple[str, ...]:
@@ -922,7 +972,7 @@ class Host:
         if n < snap.w0:
             return error(rid, "behind_live_edge", **_behind_data(snap))
         if n > snap.next_seq:
-            return error(rid, "future_seq", next_seq=snap.next_seq)
+            return error(rid, "future_seq", finished=self.writer.finished, next_seq=snap.next_seq)
         conn.cursor, conn.seal_index = n, len(self.writer.seal_log)
         return response(rid, {"first_seq": n})
 
@@ -968,8 +1018,15 @@ class Host:
         return frames
 
     def dispatch(self, conn: Connection, data: bytes) -> list[bytes]:
-        """Answer one frame from a viewer (wire_v1.md §4): the host's dispatcher."""
+        """Answer one frame from a viewer (wire_v1.md §4): the host's dispatcher.
+
+        The header is judged first: a RECORDS type, a bad version or an over-long length is
+        refused on the 12 header bytes, before the payload is read.
+        """
         try:
+            ftype, length = decode_header(data, VIEWER_MAX_PAYLOAD)
+            if ftype == TYPE_RECORDS:
+                raise WireError("a RECORDS frame from a viewer")
             frame, _ = decode_frame(data, VIEWER_MAX_PAYLOAD)
         except IncompleteFrameError:
             return []
@@ -980,15 +1037,7 @@ class Host:
                 {"supported": [VERSION]} if reason == "unsupported_version" else {"detail": str(e)}
             )
             return [encode_frame(control_frame(error(None, reason, **extra)))]
-        if frame.ftype == TYPE_RECORDS:
-            conn.closed = True
-            return [
-                encode_frame(
-                    control_frame(
-                        error(None, "invalid_frame", detail="a RECORDS frame from a viewer")
-                    )
-                )
-            ]
+        del length
         return [encode_frame(control_frame(self._answer(conn, frame.payload)))]
 
     def _answer(self, conn: Connection, payload: bytes) -> Json:
@@ -997,8 +1046,8 @@ class Host:
         except WireError as e:
             text = str(e)
             reason = "parse_error" if text.startswith("parse_error") else "invalid_request"
-            if text.startswith("invalid_params"):
-                reason = "invalid_params"
+            if text.startswith("invalid_params") or "a float" in text:
+                reason = "invalid_params"  # a float anywhere is a parameter refusal (R24)
             return error(None, reason, detail=text)
         if kind != "request":
             return error(None, "invalid_request", detail=f"a {kind} from a viewer")
@@ -1083,6 +1132,9 @@ class Viewer:
     live_counts: dict[int, int] = field(default_factory=dict)
     sealed_seen: dict[int, str] = field(default_factory=dict)  # year -> announced digest
     history: Json | None = None
+    nonce: int | None = None
+    verify_years: set[int] = field(default_factory=set)  # resumed years to check (R21)
+    verified: int = 0
     behinds: int = 0
     retries: int = 0
     waits: int = 0
@@ -1155,6 +1207,13 @@ class Viewer:
             return
         same = self.history is None or status["history"] == self.history
         self.history = status["history"] if isinstance(status["history"], dict) else None
+        nonce = int(str(status["run_nonce"]))
+        if same and self.nonce is not None and nonce != self.nonce:
+            live = status["live"]
+            assert isinstance(live, dict)
+            w0 = int(str(live["first_seq"]))  # the resumed host's first unsealed seq
+            self.verify_years.add(seq_year(w0, self.host.writer.year_first))
+        self.nonce = nonce
         self._apply(self.loop.next(Event("status", same_run=same)))
 
     def _subscribe(self, seq: int | None) -> None:
@@ -1172,11 +1231,17 @@ class Viewer:
             assert isinstance(err, dict) and isinstance(err["data"], dict)
             self._apply(self.loop.next(_behind_event(err["data"], self.loop.cursor)))
         else:
-            self._apply(self.loop.next(Event("refused", reason=reason)))
+            err = reply["error"]
+            assert isinstance(err, dict) and isinstance(err["data"], dict)
+            finished = bool(err["data"].get("finished", False))
+            self._apply(self.loop.next(Event("refused", reason=reason, finished=finished)))
 
     def _unsubscribe(self) -> None:
         reply = self._call("stream.unsubscribe")
-        self._apply(self.loop.next(Event("unsubscribed", _result(reply, "next_seq"))))
+        if _reason(reply) == "ok":
+            self._apply(self.loop.next(Event("unsubscribed", _result(reply, "next_seq"))))
+        else:
+            self._apply(self.loop.next(Event("refused", reason=_reason(reply))))
 
     def _deliver(self, first_seq: int, lines: Sequence[str], *, live: bool) -> None:
         for i, line in enumerate(lines):
@@ -1200,13 +1265,29 @@ class Viewer:
         assert isinstance(params, dict)
         method = obj["method"]
         if method == "stream.sealed":
-            self.sealed_seen[int(str(params["sim_year"]))] = str(params["canonical_digest"])
+            year, announced = int(str(params["sim_year"])), str(params["canonical_digest"])
+            self.sealed_seen[year] = announced
+            if year in self.verify_years:
+                self._verify_resumed(year, params, announced)
         elif method == "stream.behind":
             self.behinds += 1
             self._apply(self.loop.next(_behind_event(params, int(str(params["next_seq"])))))
         elif method == "stream.end":
             self._apply(self.loop.next(Event("end", reason=str(params["reason"]))))
         return 0
+
+    def _verify_resumed(self, year: int, params: Json, announced: str) -> None:
+        """R21: what this viewer received of a year re-emitted by a resumed host must match."""
+        self.verify_years.discard(year)
+        lines = dict(self.received)
+        last = params["last_seq"]
+        wanted = (
+            range(int(str(params["first_seq"])), int(str(last)) + 1) if last is not None else []
+        )
+        if all(s in lines for s in wanted):
+            self.verified += 1
+            if digest(lines[s] for s in wanted) != announced:
+                self.errors.append(f"the resumed year {year} differs from what was received")
 
     def step(self, t: int, *, drain: bool = False) -> None:
         """One step of wall time: poll if due (always when draining), jump or drop if scripted."""
@@ -1259,6 +1340,7 @@ class Scenario:
     policy: str = "year_end"
     seal_delay: int = 0
     restart_at: int = -1
+    abort_at: int = -1
     cap: int = 64
     break_i4: bool = False
 
@@ -1313,6 +1395,8 @@ def simulate(sc: Scenario) -> tuple[Writer, list[Viewer]]:
                 if v.conn is not None and not v.conn.closed:
                     host.close(v.conn)
                     v.on_closed()
+        if t == sc.abort_at:
+            writer.abort()
         writer.step(t)
         for v in viewers:
             v.step(t)
@@ -1369,21 +1453,56 @@ SCENARIOS = (
     Scenario(3, 5, channel="C", seal_delay=2),
     Scenario(4, 12, seal_delay=1, restart_at=50),
     Scenario(5, 6, seal_delay=5, cap=6),
+    Scenario(6, 6, seal_delay=20),  # a seal slower than a sim-year: the overrun (R16)
+    Scenario(7, 5, seal_delay=2, abort_at=40),  # the host dies: stream.end{aborted}
+    Scenario(8, 8, seal_delay=14, restart_at=60),  # a resume that loses a seal in flight (R18)
 )
 
 
-def _scenario_checks(sc: Scenario, writer: Writer, viewers: list[Viewer]) -> list[str]:
-    """What the whole run must show: the window bound, the sealed path, retries, the fast viewer."""
+YEAR_END_BOUND = 2  # option (b): the current sim-year and the previous one
+
+
+def window_bound(sc: Scenario) -> int:
+    """The window bound of wire_v1.md §6.1: 1 (sync), 2 (year_end), plus a slow seal's overrun."""
+    if sc.policy == "sync":
+        return 1
+    late = max(0, sc.seal_delay - TICKS_PER_YEAR)
+    return YEAR_END_BOUND + (late + TICKS_PER_YEAR - 1) // TICKS_PER_YEAR
+
+
+def _window_checks(sc: Scenario, writer: Writer) -> list[str]:
+    """The window bound of the run's policy, and the overrun of a slow seal (R16)."""
     problems: list[str] = []
-    bound = 1 if sc.policy == "sync" else 2
+    bound = window_bound(sc)
     if writer.peak_years > bound:
         problems.append(f"the window held {writer.peak_years} years, the bound is {bound}")
+    if sc.seal_delay > TICKS_PER_YEAR and writer.peak_years <= YEAR_END_BOUND:
+        problems.append("a seal slower than a sim-year did not overrun the two-year window")
+    if sc.abort_at >= 0 and writer.current_year in writer.disk:
+        problems.append("the aborted host sealed its partial year")
+    return problems
+
+
+def _event_checks(sc: Scenario, writer: Writer, viewers: list[Viewer]) -> list[str]:
+    """The paths the run must have exercised: behind, retries, the resumed-year check, abort."""
+    problems: list[str] = []
     if not any(v.behinds for v in viewers):
         problems.append("no viewer exercised the sealed path")
     if sc.policy == "year_end" and any(v.behinds for v in viewers if v.name == "fast"):
         problems.append("the fast viewer fell off the edge")
     if sc.restart_at >= 0 and not any(v.retries for v in viewers):
         problems.append("no viewer retried after the restart")
+    if sc.restart_at >= 0 and not any(v.verified for v in viewers):
+        problems.append("no viewer verified the resumed year against stream.sealed")
+    if sc.abort_at >= 0 and any(v.end_reason != "aborted" for v in viewers):
+        problems.append("a viewer did not end with reason aborted")
+    del writer
+    return problems
+
+
+def _scenario_checks(sc: Scenario, writer: Writer, viewers: list[Viewer]) -> list[str]:
+    """What the whole run must show: the window bound, the sealed path, retries, the fast viewer."""
+    problems = _window_checks(sc, writer) + _event_checks(sc, writer, viewers)
     if sc.cap < len(viewers) and not any(v.retries for v in viewers if v.name == "late"):
         problems.append("the late viewer was never told too_many_viewers")
     if sc.channel == "C" and not any(seg.last_seq is None for seg in writer.disk.values()):
@@ -1445,9 +1564,32 @@ def _interleaved(order: str, read: str) -> bool:
     return False
 
 
+def _copy_race(read_from_snapshot: bool) -> list[int]:
+    """The seqs a frame carries when a year is dropped between the snapshot and the copy."""
+    sc = Scenario(11, 3, seal_delay=0)
+    w = Writer("A", make_plan(sc), "year_end")
+    for t in range(TICKS_PER_YEAR + 1):  # year 0 complete and sealed; year 1 begun
+        w.step(t)
+    c = 1
+    snap = w.snapshot()
+    for t in range(TICKS_PER_YEAR + 1, 2 * TICKS_PER_YEAR + 1):  # year 1 completes: year 0 drops
+        w.step(t)
+    if read_from_snapshot:
+        body, _ = w.read(snap, c, 5)
+    else:  # the round-2 reference: index the live window by the live w0
+        offset = c - w.w0
+        chunk = w.window[max(offset, 0) : max(offset, 0) + 5]
+        body = b"".join(line for _, line in chunk)
+    return [int(line.split(b" ")[2]) for line in body.split(LF) if line]
+
+
 def _race_checks() -> list[str]:
-    """R4: one snapshot never shows I1 broken; `w0` before `s` neither; `s` then `w0` can."""
+    """R4, R17: a snapshot never shows I1 broken and copies exactly the seqs a frame claims."""
     problems = []
+    if _copy_race(read_from_snapshot=True)[:3] != [1, 2, 3]:
+        problems.append("a copy from the snapshot did not return the seqs the frame claims")
+    if _copy_race(read_from_snapshot=False)[:1] == [1]:
+        problems.append("the control: a copy from the live window never mislabelled (it must)")
     if _interleaved("ordered", "snapshot"):
         problems.append("a snapshot read showed I1 broken")
     if _interleaved("ordered", "w0_then_s"):
@@ -1787,7 +1929,7 @@ EXPECTED_REASONS = {
     "dispatch_stream_pace": "method_not_found",
     "dispatch_status_with_param": "invalid_params",
     "dispatch_subscribe_filter": "invalid_params",
-    "dispatch_subscribe_float": "invalid_request",
+    "dispatch_subscribe_float": "invalid_params",
     "dispatch_subscribe_future": "future_seq",
     "dispatch_unsubscribe_none": "not_subscribed",
     "dispatch_notification": "invalid_request",
@@ -1845,15 +1987,19 @@ def _host_checks() -> list[str]:
 
 CATCHUP_SCENARIO: tuple[Event, ...] = (
     Event("behind", sealed_last_seq=99, live_first_seq=100),
-    Event("read_sealed_done", 0, 100),
+    Event("closed"),  # R15 case 1: the socket closes during the sealed read
+    Event("read_sealed_done", 0, 100),  # the read ends: reconnect, not resubscribe
+    Event("status", same_run=True),
     Event("subscribed", 100),
     Event("records", 100, 50),
     Event("sealed"),
     Event("closed"),
     Event("status", same_run=True),
     Event("refused", reason="too_many_viewers"),
-    Event("retry_elapsed"),
+    Event("closed"),  # R15 case 2: a reconnect while backing off ...
+    Event("status", same_run=True),
     Event("subscribed", 150),
+    Event("retry_elapsed"),  # ... then the stale timer: ignored
     Event("records", 150, 1),
     Event("behind", 151, sealed_last_seq=400, live_first_seq=401),
     Event("read_sealed_done", 151, 250),
@@ -1867,20 +2013,30 @@ CATCHUP_SCENARIO: tuple[Event, ...] = (
     Event("subscribed", 401),
     Event("records", 401, 3),
     Event("jump"),
-    Event("unsubscribed", 404),
+    Event("records", 404, 2),  # R15 case 3: a frame in flight under the jump: delivered
+    Event("unsubscribed", 406),
     Event("subscribed", 900),
     Event("records", 900, 2),
+    Event("jump"),
+    Event("behind", 902, sealed_last_seq=950, live_first_seq=951),  # R15 case 4: in flight
+    Event("refused", reason="not_subscribed"),  # the jump's unsubscribe, as expected
+    Event("subscribed", 1000),
+    Event("records", 1000, 1),
     Event("end", reason="finished"),
-    Event("records", 902, 1),
+    Event("records", 1001, 1),
 )
 CATCHUP_CLOSES = 1  # the out-of-order frame (402 before 401)
-CATCHUP_END = "action done 902 0 finished"
+CATCHUP_END = "action done 1001 0 finished"
+CATCHUP_FINISHED: tuple[Event, ...] = (
+    Event("refused", reason="future_seq", finished=True),  # R21: past the end of a finished run
+)
 
 
 def _fmt_event(ev: Event) -> str:
     return (
         f"{ev.kind} {ev.first_seq} {ev.count} {ev.sealed_last_seq} {ev.live_first_seq} "
-        f"{_CANON.encode_str(ev.reason) if ev.reason else '%'} {int(ev.same_run)}"
+        f"{_CANON.encode_str(ev.reason) if ev.reason else '%'} {int(ev.same_run)} "
+        f"{int(ev.finished)}"
     )
 
 
@@ -1914,6 +2070,11 @@ def _catchup_checks() -> list[str]:
         problems.append("the loop did not finish at 902 with reason finished")
     if sum(ln.startswith("action wait") for ln in lines) != 2:  # noqa: PLR2004 (two refusals)
         problems.append("the two retriable refusals did not each produce a wait")
+    if sum(ln.startswith("action ignore 0 0 a%20stale") for ln in lines) != 1:
+        problems.append("the stale retry timer was not ignored")
+    finished = catchup_transcript(CATCHUP_FINISHED)
+    if not any(ln.startswith("action stop") for ln in finished):
+        problems.append("future_seq with finished did not stop the viewer")
     return problems
 
 
@@ -1921,7 +2082,7 @@ def self_test(control: str | None = None) -> list[str]:
     """Run every check; return the report lines (the last says PASS or FAIL)."""
     live_edge: Check = (
         "live-edge rule: fast, slow, crawling, stalled, reconnecting, jumping, late viewers; "
-        "both window policies; empty channel-C years; a restart; the connection cap",
+        "both window policies; empty channel-C years; a restart; the cap; a slow seal; an abort",
         _live_edge_checks,
     )
     if control == "window-gap":
@@ -1944,7 +2105,10 @@ def self_test(control: str | None = None) -> list[str]:
         ),
         ("host answers: future, behind, already, not subscribed, window", _host_checks),
         live_edge,
-        ("seal races: one snapshot, and w0 before s, never show I1 broken", _race_checks),
+        (
+            "seal races: one snapshot never shows I1 broken and copies exactly its seqs",
+            _race_checks,
+        ),
         ("Catchup state machine transcript", _catchup_checks),
     ]
     report, failed = [], False
@@ -1972,7 +2136,8 @@ def render_golden() -> str:
         "#   on a fresh connection to a host with no record (wire_v1.md §4).",
         "# `scenario catchup` then `action ...` / `event ...` pairs: Catchup (wire_v1.md §6.3)",
         "#   driven by events `<kind> <first_seq> <count> <sealed_last_seq> <live_first_seq>",
-        "#   <reason> <same_run>`, answering `<kind> <a> <b> <detail>` (strings as tokens).",
+        "#   <reason> <same_run> <finished>`, answering `<kind> <a> <b> <detail>` (strings as",
+        "#   tokens).",
         "# The record lines are golden/canonical_v0.txt's; a canonical change regenerates this.",
     ]
     body: list[str] = []

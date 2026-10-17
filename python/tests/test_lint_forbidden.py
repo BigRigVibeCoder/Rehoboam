@@ -379,6 +379,21 @@ def test_a_network_scoped_tool_crate_is_scanned_for_sockets_only(
     assert "sockets in rh-cli only in src/serve.rs (SPR-026)" in out
 
 
+def test_the_six_bypasses_of_the_serving_module_are_refused(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """REV-SPR-026 R19: re-exports in serve.rs, #[path] and include! in main.rs, each a finding."""
+    manifest = FIXTURES / "network_bypasses" / "Cargo.toml"
+    assert main(["--manifest-path", str(manifest)]) == EXIT_VIOLATIONS
+    out = capsys.readouterr().out
+    violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
+    rules = sorted(v.split("]")[0].split("/")[1] for v in violations)
+    reexport = ["network-reexport"] * 3
+    assert rules == ["network", *reexport, "source-include", "source-include"]
+    assert sum("serve.rs" in v for v in violations) == 3
+    assert sum("tests/socket.rs" in v and "[V-DET-19/network]" in v for v in violations) == 1
+
+
 def test_main_scans_plane_a_and_undeclared_crates_only(capsys: pytest.CaptureFixture[str]) -> None:
     """In a workspace, the tool crate is skipped and the undeclared crate is scanned."""
     manifest = FIXTURES / "workspace" / "Cargo.toml"

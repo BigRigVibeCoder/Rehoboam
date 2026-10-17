@@ -207,6 +207,17 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
             NO_DEFAULT_FEATURES,
             NO_FEATURES,
         ),
+        "arc-swap": (
+            frozenset({"rh-stream"}),
+            "no floats: an ArcSwap of the World Stream live edge's immutable snapshot (w0, s, "
+            "last_year, chunk list, seal log), published by the writer and loaded by the serving "
+            "threads without a lock, so the writer never waits (specs/stream/wire_v1.md §6.2; "
+            "REV-SPR-026 R22: pre-approved for rh-stream alone). MIT OR Apache-2.0, no "
+            "dependencies, default features off; the exact pin is SPR-026's, at a version at "
+            "least two weeks old. It holds no simulation state",
+            NO_DEFAULT_FEATURES,
+            NO_FEATURES,
+        ),
         "libm": (
             frozenset({"rh-sample"}),
             "returns f32/f64: the transcendentals of the sampler float zone, the only "

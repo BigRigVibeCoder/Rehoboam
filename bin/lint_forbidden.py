@@ -42,9 +42,13 @@ reports its metadata). Rules:
                       datagram types (SPR-026; specs/stream/wire_v1.md §7). The World Stream's
                       live edge is served by the tool-plane host, so the engine's append has no
                       path to a reader (05.10 §7 item 3; V-PERF-09). tests/ may open a socket to
-                      test a host. The tool crates on NETWORK_FILES (rh-cli, the engine host) are
-                      scanned for this rule alone, with their serving module allowed
-                      (src/serve.rs; REV-SPR-026 R7).
+                      test a host. The tool crates on NETWORK_FILES (rh-cli, the engine host,
+                      by package name) are scanned for this rule and source-include alone (a
+                      `#[path]` is refused and a literal include! followed, so a socket cannot
+                      be spliced in from another file), with their serving module allowed
+                      (src/serve.rs; REV-SPR-026 R7, R19).
+    network-reexport  in a NETWORK_FILES file only: a `pub use` or `pub type` of a socket type
+                      would hand the socket to the rest of the crate (REV-SPR-026 R19).
     file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
                       build.rs (where the float rule's scope says engine code) of a plane-A crate
                       not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot
@@ -207,6 +211,7 @@ NETWORK_RULE = "network"
 # network rule only, with the files allowed a socket: the engine host's tick loop lives in rh-cli,
 # so a socket anywhere in it but the serving module would put a reader on the tick path.
 NETWORK_FILES = MappingProxyType({"rh-cli": frozenset({"src/serve.rs"})})
+NETWORK_REEXPORT_RULE = "network-reexport"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
 STD_RENAME_RULE = "std-rename"
@@ -243,10 +248,13 @@ class FloatScan:
     deps: tuple[tuple[str, re.Pattern[str]], ...] = ()
     # The file's crate is on FILE_IO_CRATES (BCK-002 A-44); the file-io rule then does not apply.
     file_io: bool = False
-    # The file's crate is on NETWORK_FILES (SPR-026): only the network rule applies, and not to
-    # the crate's allowed files.
+    # The file's crate is on NETWORK_FILES (SPR-026): the network and source-include rules apply
+    # (REV-SPR-026 R19: `#[path]` is refused, a literal include! is followed), and in the crate's
+    # allowed files (``network_files``, by package name) the network rule gives way to
+    # network-reexport: a `pub use` or `pub type` of a socket type is refused there.
     network_only: bool = False
     network_allowed: bool = False
+    network_files: frozenset[str] = frozenset()
 
 
 FLOAT_API_WHY = (
@@ -394,6 +402,18 @@ RULES: tuple[Rule, ...] = (
         "a socket in plane A (std::net, std::os::unix::net): the World Stream's live edge is "
         "served by the tool-plane host, never by plane-A code, so the engine's append has no path "
         "to a reader (05.10 §7 item 3; specs/stream/wire_v1.md §7; V-PERF-09)",
+    ),
+    Rule(
+        NETWORK_REEXPORT_RULE,
+        # REV-SPR-026 R19: applied only in a NETWORK_FILES file (serve.rs), where the network rule
+        # is allowed; a `pub use` or `pub type` would hand the socket type to the rest of the crate.
+        _rx(
+            r"\bpub\b[^;{]*?\b(?:use|type)\b[^;]*?(?:\bnet::|\b(?:Unix|Tcp)(?:Listener|Stream)\b"
+            r"|\bUnixDatagram\b|\bUdpSocket\b)"
+        ),
+        "a public re-export or alias of a socket type in the host's serving module hands the "
+        "socket to the rest of the crate; keep socket types inside src/serve.rs (specs/stream/"
+        "wire_v1.md §7; REV-SPR-026 R19)",
     ),
     Rule(
         "unsafe",
@@ -710,10 +730,21 @@ def _with_use_trees(code: str, path: str) -> list[Finding]:
     return sorted(found + extra, key=lambda f: (f.line, f.column, f.rule))
 
 
+def _applies_network_only(finding: Finding, scan: "FloatScan") -> bool:
+    """The rules of a NETWORK_FILES crate (REV-SPR-026 R7, R19): sockets, splices, re-exports."""
+    if scan.scope == "none":
+        return False
+    if scan.network_allowed:
+        return finding.rule == NETWORK_REEXPORT_RULE
+    return finding.rule in (NETWORK_RULE, SOURCE_INCLUDE_RULE)
+
+
 def _applies(finding: Finding, scan: "FloatScan") -> bool:
     """Whether a finding's rule applies under the file's scan (module DECISION; A-44; DEF-1)."""
     if scan.network_only:
-        return finding.rule == NETWORK_RULE and scan.scope != "none" and not scan.network_allowed
+        return _applies_network_only(finding, scan)
+    if finding.rule == NETWORK_REEXPORT_RULE:
+        return False  # the re-export rule exists for NETWORK_FILES files; plane A has `network`
     if finding.rule == FLOAT_RULE:
         return scan.scope == "rule"
     if finding.rule == NETWORK_RULE and scan.network_allowed:
@@ -1120,10 +1151,9 @@ def float_rule_applies(file: Path, root: Path) -> bool:
     return file.relative_to(root).parts[0] not in FLOAT_FREE_DIRS
 
 
-def _network_allowed(file: Path, root: Path) -> bool:
+def _network_allowed(file: Path, root: Path, scan: "FloatScan") -> bool:
     """Whether ``file`` is one of its crate's NETWORK_FILES (by its path relative to the root)."""
-    allowed = NETWORK_FILES.get(root.name, frozenset())
-    return root.is_dir() and file.relative_to(root).as_posix() in allowed
+    return root.is_dir() and file.relative_to(root).as_posix() in scan.network_files
 
 
 def scan_paths(
@@ -1159,7 +1189,7 @@ def scan_paths(
             else:
                 scopes.setdefault(file, "zone" if root in float_exempt else "rule")
             scan = (crate_scans or {}).get(root, FloatScan())
-            if scan.network_only and _network_allowed(file, root):
+            if scan.network_only and _network_allowed(file, root, scan):
                 scan = replace(scan, network_allowed=True)
             crate_of.setdefault(file, scan)
     for file in sorted(scopes):
@@ -1322,7 +1352,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 scope += f"; float rule exempts {exempt} only (SPR-003 float zone)"
             scoped = network_scoped_crate_dirs(args.manifest_path)
             for name, directory in scoped:
-                crate_scans[directory] = FloatScan(network_only=True)
+                crate_scans[directory] = FloatScan(
+                    network_only=True, network_files=NETWORK_FILES[name]
+                )
                 files = ", ".join(sorted(NETWORK_FILES[name]))
                 scope += f"; sockets in {name} only in {files} (SPR-026)"
             report = scan_paths(

@@ -391,6 +391,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
     "(VER-SPR-008)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
+    "lint_forbidden positive control: the six ways round sockets-only-in-serve.rs (re-exports, "
+    "#[path], include!) must FAIL (SPR-026 R19)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, "
     "with its drain binding, passes (REV-P1a section 7; EVO-001)",
