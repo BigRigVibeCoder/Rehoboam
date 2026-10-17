@@ -184,6 +184,18 @@ def check_standard() -> bool:
     return exact == STANDARD_E0 and abs(e0 - exact) < E0_GRID_TOL and abs(k - ONE) < K_NEAR_ONE
 
 
+def implied_e0_bits(alpha: float) -> int:
+    """Return the Q16_16 e0 that a Table 19 row implies (check 4; SPR-012 T-05).
+
+    It is the trapezoid e0 of the row's beta = 1 schedule on M2's grid (tool-side floats), rounded
+    half to even.
+    """
+    odds = math.exp(2 * alpha)
+    lx = [1.0 if s == SCALE else 0.0 if s == 0 else s / (s + odds * (SCALE - s)) for s in S]
+    e0 = sum((H[i + 1] - H[i]) * (lx[i] + lx[i + 1]) / 4 for i in range(GRID_POINTS - 1))
+    return round(Fraction(e0) * Q16)
+
+
 def check_table19() -> bool:
     """Check 4: Brass Table 19 within 1 per 10,000 at each alpha's e0 (tool-side floats)."""
     t = tomllib.loads(STANDARD.read_text(encoding="utf-8").replace("nan", "-1"))
@@ -192,10 +204,7 @@ def check_table19() -> bool:
     for key, row in golden.items():
         if key == "ages":
             continue
-        odds = math.exp(2 * row["alpha"])
-        lx = [1.0 if s == SCALE else 0.0 if s == 0 else s / (s + odds * (SCALE - s)) for s in S]
-        e0 = sum((H[i + 1] - H[i]) * (lx[i] + lx[i + 1]) / 4 for i in range(GRID_POINTS - 1))
-        fixed = survivors(solve_k(round(Fraction(e0) * Q16)))
+        fixed = survivors(solve_k(implied_e0_bits(row["alpha"])))
         for age, want in zip(ages, row["l_per_10k"], strict=True):
             got = rhe(fixed[H.index(2 * age)] * SCALE, ONE)
             worst = max(worst, abs(got - want))

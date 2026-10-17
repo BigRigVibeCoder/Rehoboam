@@ -63,6 +63,16 @@ reports its metadata). Rules:
                       carry std::process, std::fs and std::env past every path pattern. Raw
                       identifiers are normalised first (`r#std::r#fs` is `std::fs`); on a line
                       that holds one, the reported column counts without the `r#` prefixes.
+    spec-loader       (BCK-002 A-47; SPR-012, review MAJ-2) rh-registry's spec loaders, load_specs
+                      and registry_system_ids, named in src/ or build.rs of any plane-A crate other
+                      than their home, crates/rh-registry/src/ownership.rs: rh-registry is on
+                      FILE_IO_CRATES for its load path, so plane-A code calling them would read
+                      spec files at step time. Matched as tokens, so a grouped or renamed import,
+                      a path call, a function pointer, a re-export under another name and a macro
+                      that expands to a call are all reported. Not covered: a wrapper written
+                      inside ownership.rs itself, under another name; the structural fix (pure
+                      parsers in rh-registry, file reading in a tool crate) is BCK-002 A-51, after
+                      which the rule retires. tests/ are not scanned for it.
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
@@ -215,6 +225,11 @@ NETWORK_REEXPORT_RULE = "network-reexport"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
 STD_RENAME_RULE = "std-rename"
+# BCK-002 A-47 (SPR-012 T-07; review MAJ-2): rh-registry may read spec files (FILE_IO_CRATES), so no
+# plane-A code but their home may name its loaders: the specs are read by the host at load, never at
+# step time. The home is (crate, file); everything else in plane A src/ and build.rs is scanned.
+SPEC_LOADER_RULE = "spec-loader"
+SPEC_LOADER_HOME = ("rh-registry", ("src", "ownership.rs"))
 # MIN-2: `r#ident` is `ident`; stripped before any rule matches (a raw string, r#"..."#, is a
 # literal the lexer has already blanked).
 RAW_IDENT = re.compile(r"\br#(?=[A-Za-z_])")
@@ -255,6 +270,10 @@ class FloatScan:
     network_only: bool = False
     network_allowed: bool = False
     network_files: frozenset[str] = frozenset()
+    # The file's crate is a plane-A workspace crate, scanned for the spec-loader rule (A-47).
+    spec_loader: bool = False
+    # The file's crate name: the spec-loader rule exempts its home (SPEC_LOADER_HOME).
+    crate: str = ""
 
 
 FLOAT_API_WHY = (
@@ -414,6 +433,13 @@ RULES: tuple[Rule, ...] = (
         "a public re-export or alias of a socket type in the host's serving module hands the "
         "socket to the rest of the crate; keep socket types inside src/serve.rs (specs/stream/"
         "wire_v1.md §7; REV-SPR-026 R19)",
+    ),
+    Rule(
+        SPEC_LOADER_RULE,
+        _rx(r"\b(?:load_specs|registry_system_ids)\b"),
+        "plane-A code outside crates/rh-registry/src/ownership.rs names rh-registry's spec "
+        "loaders, which read files: specs are read by the host at load and reach systems as data, "
+        "never at step time (BCK-002 A-47; review MAJ-2)",
     ),
     Rule(
         "unsafe",
@@ -743,19 +769,28 @@ def _applies(finding: Finding, scan: "FloatScan") -> bool:
     """Whether a finding's rule applies under the file's scan (module DECISION; A-44; DEF-1)."""
     if scan.network_only:
         return _applies_network_only(finding, scan)
-    if finding.rule == NETWORK_REEXPORT_RULE:
+    if finding.rule == NETWORK_REEXPORT_RULE or (
+        finding.rule == NETWORK_RULE and scan.network_allowed
+    ):
         return False  # the re-export rule exists for NETWORK_FILES files; plane A has `network`
     if finding.rule == FLOAT_RULE:
         return scan.scope == "rule"
-    if finding.rule == NETWORK_RULE and scan.network_allowed:
-        return False
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
-    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE, NETWORK_RULE)
+    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE, NETWORK_RULE, SPEC_LOADER_RULE)
     if finding.rule in rules and scan.scope == "none":
         return False
+    if finding.rule == SPEC_LOADER_RULE:
+        return _applies_spec_loader(finding, scan)
     return not (finding.rule == FILE_IO_RULE and scan.file_io)
+
+
+def _applies_spec_loader(finding: Finding, scan: "FloatScan") -> bool:
+    """The spec-loader rule (A-47) applies in plane-A crates, except at the loaders' home."""
+    home_crate, home_file = SPEC_LOADER_HOME
+    at_home = scan.crate == home_crate and Path(finding.path).parts[-2:] == home_file
+    return scan.spec_loader and not at_home
 
 
 def find_escapes(lexed: Lexed, path: str) -> list[Escape]:
@@ -1336,6 +1371,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         if users is None or name in users
                     ),
                     file_io=name in FILE_IO_CRATES,
+                    spec_loader=True,
+                    crate=name,
                 )
                 for name, directory in crates
             }

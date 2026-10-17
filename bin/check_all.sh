@@ -58,6 +58,15 @@ run() {
   if [ -n "${PART:-}" ] && [ "${current_part:-}" != "$PART" ]; then return 0; fi
   local name="$1" expect="$2"; shift 2
   n=$((n+1))
+  # VER-SPR-012-TEST GAP-6: an expectation with empty text would match any output (a fail: with no
+  # text accepts any failure). It is a harness error, refused before the gate runs.
+  case "$expect" in
+    pass:|fail:)
+      echo "| $n | $name | **FAIL** (HARNESS ERROR: empty $expect expectation) | 0 |" >> "$REPORT"
+      echo "FAIL  $name (HARNESS ERROR: \"$expect\" with no text matches any output)"
+      failed="$name"
+      return 1 ;;
+  esac
   local t0 out rc
   t0=$(date +%s)
   out="$("$@" 2>&1)"; rc=$?
@@ -370,7 +379,7 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   float_type:float:f32 float_literal:float:0.5 float_suffix:float:2e-3f64 float_conversion:float:to_f64
   float_escape_reason:float:f64 float_undeclared_field:float:f32
   allow_disallowed:lint-allow:allow(clippy::disallowed_methods
-  file_modified:file-clock:.modified( process_command:process:std::process file_io:file-io:std::fs
+  file_modified:file-clock:.modified( process_command:process:std::process process_glob_std:process:process::C file_io:file-io:std::fs
   process_rename:process:std::process fs_group_rename:file-io:std::fs metadata_ext:file-clock:MetadataExt
   metadata_ufcs:file-clock:Metadata::modified mtime:file-clock:.mtime(
   env_rename:env:std::env env_var:env:std::env env_current_dir:env:std::env env_current_exe:env:std::env
@@ -418,6 +427,26 @@ baseline_hand_edited_control() {
   awk '/^rung 1 /{n=split($0, w, " "); h=w[5]; c=substr(h,16,1); w[5]=substr(h,1,15) (c=="0" ? "1" : "0"); $0=w[1]; for(i=2;i<=n;i++) $0=$0 " " w[i]} {print}' \
     worlds/smoke/baselines/smoke_yearly_1000y.ladder > "$edited" || return 1
   "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed no
+}
+
+# SPR-012 T-08: solo's hand-edited baseline control, as smoke's: one hex digit of rung 1's hash typed over.
+solo_baseline_hand_edited_control() {
+  local edited="$TARGET_DIR/rendered-fixtures/solo_baseline_hand_edited.ladder"
+  mkdir -p "$TARGET_DIR/rendered-fixtures" || return 1
+  awk '/^rung 1 /{n=split($0, w, " "); h=w[5]; c=substr(h,16,1); w[5]=substr(h,1,15) (c=="0" ? "1" : "0"); $0=w[1]; for(i=2;i<=n;i++) $0=$0 " " w[i]} {print}' \
+    worlds/solo/baselines/solo_yearly_200y.ladder > "$edited" || return 1
+  "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/solo_yearly_t1.ladder" --changed no
+}
+# V-SCALE-03 (SPR-012 T-08): solo's 1,000-year wall time, measured by the host around the release run
+# (the engine reads no clock). Reported, not gated: solo is one person.
+solo_scale_run() {
+  local start end out
+  start=$(date +%s%N)
+  out="$("$RH_CLI_RELEASE" run solo --years 1000 --threads 1 --ladder yearly --out "$GOLDEN/solo_yearly_1000y.ladder" \
+    --journal "$GOLDEN/solo_yearly_1000y.journal.sqlite")" || { echo "$out"; return 1; }
+  end=$(date +%s%N)
+  echo "$out"
+  echo "V-SCALE-03: solo, 1,000 sim-years at 1 thread in $(( (end - start) / 1000000 )) ms of wall time"
 }
 
 # The push form of the C3 rule (VER-SPR-008 MAJ-1): a two-commit repository whose second commit, with
@@ -708,13 +737,38 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
-  rh-sys-smoke::smoke rh-golden::golden"
+  rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
+  rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
+  rh-golden::solo"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
   echo "left to the by-name gates: $filter"
   cargo nextest run --workspace --locked --no-fail-fast --status-level fail -E "not ($filter)"
 }
+# V-INV-08 (SPR-012 T-07): M2's deaths are one keyed Bernoulli per person-month, never a Poisson or
+# binomial count. A grep gate over a system crate's src/ and Cargo.toml: no sampler crate, no
+# Poisson or binomial draw. Its control is a planted Poisson death that must FAIL.
+bernoulli_only() {
+  local dir="$1" hits rc
+  # Review MIN-2: a missing crate fails closed, never passes as "nothing found".
+  if [ ! -d "$dir/src" ] || [ ! -f "$dir/Cargo.toml" ]; then
+    echo "VIOLATION [V-INV-08] $dir is not a crate directory (no src/ or no Cargo.toml): nothing to check, refused"
+    return 1
+  fi
+  hits="$(grep -rniE 'poisson|binomial|rh_sample|rh-sample' "$dir/src" "$dir/Cargo.toml")"; rc=$?
+  if [ "$rc" -gt 1 ]; then
+    echo "VIOLATION [V-INV-08] grep failed on $dir (exit $rc): refused"
+    return 1
+  fi
+  if [ "$rc" -eq 0 ]; then
+    echo "VIOLATION [V-INV-08] $dir draws deaths other than by one Bernoulli per person-month:"
+    echo "$hits"
+    return 1
+  fi
+  echo "V-INV-08: $dir draws deaths by Bernoulli only (no sampler crate, no Poisson or binomial draw)"
+}
+
 # Its control: a typo in an entry must fail, never silently exclude nothing.
 workspace_tests_typo_control() {
   BY_NAME_TESTS="rh-snapshot::no_such_test" workspace_tests
@@ -834,6 +888,7 @@ run "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph" pass 
 run "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL" 'fail:unlinked crate `fixture_narrative`' cargo check --offline --locked --quiet --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_c/Cargo.toml --target-dir target/lint-fixtures &&
 fixed_point_compile_controls &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
+run "lint_forbidden positive control: rh-registry's spec loaders named in plane-A src/ outside their home must FAIL in all seven forms, alias and macro included; tests/ and ownership.rs pass (BCK-002 A-47; review MAJ-2)" "fail:4 files scanned; 7 violations" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/spec_loader_workspace/Cargo.toml &&
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
 run "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its tests/ and a builder's args pass (SPR-011 A-4)" "fail:VIOLATION [V-DET-19/env] \`std::env\` at tests/lint_fixtures/forbidden/env_workspace/rh-core/src/lib.rs:5:35;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/env_workspace/Cargo.toml &&
@@ -934,6 +989,20 @@ run "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR
 run "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes (SPR-005)" "pass:V-DET-01: 600 monthly states equal at 1, 2, 4 and 8 threads" cargo nextest run -p rh-core -p rh-registry --locked --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract --no-capture &&
 run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and crash replay (SPR-006)" "pass:V-DET-12: golden event log of 196 events checked" cargo nextest run -p rh-core -p rh-events --locked --test agenda --test agenda_events --test invariants --lib --no-capture &&
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
+run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
+run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
+run "M2 draws differential golden: the engine's death instants equal the independent model's, re-samples included (SPR-012, Tester's interim report)" "pass:M2 draws: 188 death instants in 6 worlds equal the independent model's" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
+run "M2 draws positive control: one altered death line in the golden must FAIL (SPR-012)" "fail:death 0 differs: engine" env RH_M2_DRAWS_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_draws_v1.txt" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
+run "M2 draws positive control: the re-sample's Bernoulli taken from k = 1 must FAIL (SPR-012, the Tester's first mutant)" "fail:differs: engine" cargo nextest run -p rh-sys-demography --locked --features mutant-resample-hit-k1 --test draws_golden --no-capture &&
+run "M2 draws positive control: the re-sample's day taken from k = 0 must FAIL (SPR-012, the Tester's second mutant)" "fail:differs: engine" cargo nextest run -p rh-sys-demography --locked --features mutant-resample-day-k0 --test draws_golden --no-capture &&
+run "T-06 rh-worldgen: V-DATA-05 founder ids and a forced collision, bit-equal genesis twice and across threads, Ada at 25, refused writes (SPR-012)" "pass:V-DATA-05: a forced collision resolves to the same rehash on every run" cargo nextest run -p rh-worldgen --locked --test genesis --no-capture &&
+run "T-06 V-INV-11: founders' negative birth ticks round-trip through a keyframe, and the loaded engine advances as the continuous one (SPR-012)" "pass:V-INV-11: negative birth ticks round-trip through a keyframe in 4 worlds" cargo nextest run -p rh-worldgen --locked --test keyframe --no-capture &&
+run "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)" "pass:V-DET-12, V-INV-01: 24 random worlds" cargo nextest run -p rh-worldgen --locked --test m2_system --no-capture &&
+run "T-07 M2.demography in release: q(15) of 10,000 founders aged 0 inside the binomial 99.9% band for each of 32 seeds and pooled (SPR-012; review MAJ-1, MIN-1)" "pass:inside +-3.29" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(q15)" &&
+run "T-07 M2.demography in release: V-DATA-04 over 1,000 years, one founder entry per person and a death record iff absent (SPR-012; review MIN-1)" "pass:V-DATA-04: 10000 persons emitted over 1,000 years" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(v_data_04)" &&
+run "V-INV-08: M2 draws deaths by Bernoulli only (no Poisson or binomial draw; SPR-012 T-07)" "pass:V-INV-08: crates/rh-sys-demography draws deaths by Bernoulli only" bernoulli_only crates/rh-sys-demography &&
+run "V-INV-08 positive control: a planted Poisson death draw must FAIL (SPR-012 T-07)" "fail:VIOLATION [V-INV-08] tests/lint_fixtures/bernoulli/poisson_death" bernoulli_only tests/lint_fixtures/bernoulli/poisson_death &&
+run "V-INV-08 positive control: a missing crate directory must FAIL, never pass as nothing found (SPR-012; review MIN-2)" "fail:VIOLATION [V-INV-08] crates/rh-sys-no-such-crate is not a crate directory" bernoulli_only crates/rh-sys-no-such-crate &&
 run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)" "fail:V-DET-12 violated" env RH_CORE_LIFE_GOLDEN="$PWD/tests/lint_fixtures/golden/backdated_life_events.txt" cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_12_golden_event_log &&
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&
@@ -953,6 +1022,7 @@ run "check_all chain: no run line ends in || true, || : or || exit (check_all_se
 run "check_all chain positive control: a run line mutated with || true must FAIL the lint (VER-SPR-008-TEST GAP-3)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-true &&
 run "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint (VER-SPR-008-TEST GAP-7)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-exit &&
 run "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-exit &&
+run "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness error, not match any failure (VER-SPR-012-TEST GAP-6)" "fail:HARNESS ERROR" "$PY" -I bin/check_all_selftest.py verdict --empty-fail &&
 run "check_all verdict per part: --part core passes while only a golden-part gate fails (check_all_selftest; SPR-009 review 2b)" "pass:Verdict: PASS (1 checks, part core)" "$PY" -I bin/check_all_selftest.py verdict --part-core &&
 run "check_all verdict per part positive control: --part golden fails at its failing gate (SPR-009 review 2b)" 'fail:Verdict: FAIL at "planted failing golden gate"' "$PY" -I bin/check_all_selftest.py verdict --part-golden &&
 run "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL (the chain exited early" "$PY" -I bin/check_all_selftest.py verdict --early-exit &&
@@ -974,6 +1044,10 @@ run "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refus
 run "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)" "fail:STALE:" "$PY" -I specs/numerics/exp_ln_v0.py --check --golden tests/lint_fixtures/golden/stale_exp_ln_v0.txt &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
+run "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference --check; SPR-012 T-05)" pass "$PY" -I bin/gen_m2_reference.py --check &&
+run "gen_m2_reference positive control: one altered vector must FAIL (SPR-012 T-05)" "fail:STALE:" "$PY" -I bin/gen_m2_reference.py --check --output tests/lint_fixtures/golden/altered_m2_schedule_v1.txt &&
+run "Golden draws: M2's death instants on fixture worlds are the independent model's, every S11 re-sample case covered (gen_m2_draws_reference --check; SPR-012, Tester's interim report)" "pass:gen_m2_draws_reference: current" "$PY" -I bin/gen_m2_draws_reference.py --check &&
+run "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)" "fail:STALE:" "$PY" -I bin/gen_m2_draws_reference.py --check --output tests/lint_fixtures/golden/altered_m2_draws_v1.txt &&
 run "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)" "pass:M2 F1 FERTILITY AND PARTNERING: PASS" "$PY" -I specs/demography/selftest_m2_f1.py &&
 run "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)" "fail:M2 F1 FERTILITY AND PARTNERING: FAIL" m2_f1_stale_control &&
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
@@ -1050,6 +1124,15 @@ run "Golden resume positive control: a --years shorter than the journal's horizo
 run "Golden resume positive control: a --years past the journal's last input must FAIL without --extend (VER-SPR-008 DEF-1)" "fail:past the journal's last input" def1_resume 30 &&
 run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
 run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
+run "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and not-built systems in its header (SPR-012 T-08; rulings 3, 16)" "pass:solo: 200 yearly rungs to year 200 at 1 thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads 1 --ladder yearly --out "$GOLDEN/solo_yearly_t1.ladder" &&
+run "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)" "pass:solo: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-012 T-08)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden baseline positive control: a hand-edited solo baseline must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE MISMATCH" solo_baseline_hand_edited_control &&
+run "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" --changed yes --title "SPR-012: walking skeleton B" &&
+run "Golden run positive control: --strict refuses solo, whose manifest names systems this build lacks (SPR-011 ruling 3; SPR-012 T-08)" "fail:--strict refuses solo: the manifest names systems this build lacks (M1.regions, M3.agriculture, M4.economy, S5.daily_life)" "$RH_CLI_RELEASE" run solo --strict --years 2 --out "$TARGET_DIR/rendered-fixtures/solo_strict.ladder" &&
+run "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)" "pass:V-SCALE-03: solo, 1,000 sim-years at 1 thread in" solo_scale_run &&
+run "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread invariance, the manifest pin, Ada at genesis, the input's re-sample of her pending death (SPR-012 T-08)" "pass:T-08: solo's input re-samples Ada's pending death (a miss)" cargo nextest run -p rh-golden --release --locked --test solo --no-capture &&
 run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture
 status=$?
 chain_done=1
