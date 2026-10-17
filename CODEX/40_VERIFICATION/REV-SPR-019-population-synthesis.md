@@ -2,22 +2,26 @@
 id: REV-SPR-019
 title: "Independent review of the population synthesis and dynastic back-fill spec (PR #62)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-019, SPR-015, SPR-016, SPR-018, SPR-021, SPR-030, REV-SPR-017, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.2.0
+version: 1.0.0
 ---
 
-> **BLUF: round 2 on `5466fc6`. Changes are needed before the merge: no blocker, 1 major, 5 minors and 3 nits.**
-> - **What holds.** R1, R2, R4, R6 and R7 are applied. The law lines agree with PR #41's `effect_ref.py` in all 4,307 successions the reviewer checked (up to G = 6, `majority_age` 12, 16 and 21, both calendars). The lock regenerates byte for byte, and every gate passes.
-> - **The major.** When a law's line is empty, B9's stand-in seats a child: in every tanistry fallback observed, and the PR did not say so. The Architect accepts minor stand-ins, stated, measured and pinned (R9).
-> - **The minors.** The sibling gap is below M2's minimum; three next-version texts are wrong; the seven-law pins discriminate little; `next/M7` breaks when PR #61 lands; a genesis mother's `last_birth_tick` has three rules.
-> - **Rulings:** R1–R8 (round 1) and R9–R15 (round 2) in §0. Round 3 is verified by the Architect.
-> - **Reviewer:** a session on a different model from the drafter's, in both rounds.
+> **BLUF: CLOSED after three rounds. Round 3 (`698e23d`) is verified by the Architect, and PR #62 merges on green CI.**
+> - **Round 1** (`87707ca`): 0 blockers, 4 majors, 10 minors, 2 nits. Rulings R1–R8.
+> - **Round 2** (`5466fc6`): 0 blockers, 1 major, 5 minors, 3 nits. Rulings R9–R15.
+> - **Round 3** (`698e23d`): the Architect re-ran the round-2 reviewer's scripts. Every ruling is applied. Two corrections from the drafter are accepted: R9's "adult branch" mutant was the same function as the rule, and R10's 609-day bound applies to synthesised pairs only (§0c).
+> - **What holds.**
+>   - B9's law lines agree with PR #41's `effect_ref.py` in every succession the reviewer's independent builder compared (0 line differences over four configurations), and in the drafter's 1,389-succession gate.
+>   - Synthesised siblings are at least 609 days apart; back-filled siblings are at least M2's own least gap.
+>   - The amendment lock regenerates byte for byte.
+> - **Director item:** D46 (P1.2's marginals deferred to `population` in v0), filed in `docs/decisions_pending.md`.
+> - **Reviewer:** a session on a different model from the drafter's, in rounds 1 and 2.
 
 # REV-SPR-019: independent review of population synthesis and the dynastic back-fill
 
@@ -45,6 +49,26 @@ version: 0.2.0
 | R13 | MIN-4 | **Accepted.**<ul><li>PR #61 merges first, now. Merge `main` after it lands; that also resolves the `check_all.sh` conflict.</li><li>Re-derive `next/M7` 0.4.0 from frozen M7 0.3.3, which carries the `roles` and `claim.cause_event` as `event_ref`, and re-apply the three amendments. Regenerate the lock with the tool.</li><li>`next/README.md` gains the rule that, of a frozen spec's bump and its next version, whichever lands second re-derives the next version from the new frozen file.</li><li>PR #41 (D37) takes M7 0.3.4 and, if this PR is on `main` first, re-derives `next/M7`.</li></ul> | 8/10 |
 | R14 | MIN-5 | **One rule for every genesis mother**, H2 included: `last_birth_tick` is the birth tick of her latest genesis child, and `i64::MIN` when she has none. The meaning text already says so; correct `[initialization]` and P10 to match. A mother with a newborn at genesis does not conceive at once. No engine baseline moves, because the column is new in the next M2 and SPR-015 builds it. The spec's golden file regenerates with its tool if it moves | 7/10 |
 | R15 | NIT-1, NIT-3 | NIT-1: keep P3 unsigned, using ceil(x − φ) = ceil(x + 1 − φ) − 1 in `u128`, and state a bound the callers meet. NIT-3: the companion's open items say that SPR-021 gives M7's 17 parameters Registry defaults, or the compile refuses a manifest without them, and that `val_khor.yaml` (dynasties, no `majority_age`) is the case to check. No manifest change here | 8/10 |
+
+## 0c. Architect verification, round 3 (2026-10-17)
+
+Head `698e23d`: `origin/main` merged at `0a17520`, the drafter's `check_all --part core` 359 PASS. GitHub Actions started no runner from about 09:22Z, for every workflow in the repository, so this is checked locally. Copy: a git archive in the Architect's scratchpad `popsynth_r3/`. Scripts: the round-2 reviewer's `work/`.
+
+| Check | Result |
+|---|---|
+| `selftest_population_synthesis.py` | PASS: 4 cases, 323 lines |
+| `standin.py` | Seeds 1–20: tanistry 6 fallbacks of 55, all minors; the other laws 0. Seeds 21–60: tanistry 42 of 106 (minors), partition 3 of 105 (2 minors). Court laws: the genesis stand-in is a minor in 4 of 80 (D-09) |
+| `gaps.py` | `sibling_gap_minutes` = 876,960 (609 days). Over 80 cases: 1,982 synthesised pairs, minimum 612.5 days, none below 602; back-filled minimum 604.0 days |
+| `compare_d04.py` against PR #41's `effect_ref.py` | 0 line differences over four configurations (manor, G5 with majority 21 and e₀ 45, G6 with majority 12, G6+G4 on 365 days) |
+| Mutants (`mut_standin.py`, adapted to `stand_in`'s new `(id, adult)` return) | `holders-window-8`: FAIL, 3 SPEC MISMATCH lines. `standin-youngest`: FAIL, 6. `seniority-birth-desc`: FAIL, 3. `standin-adult-any`: PASS, as it should (see R9 below) |
+| `lint_odd.py` | Default: PASS (8 specs). `--next`: PASS. `--write-amendments-lock`: lock byte-identical. The three M7 `to` texts read by the Architect: the stand-in named, "offices vacant", "regent = 0 … until SPR-021", `holders_of(title, 16)` |
+| `gen_manifest.py --check`; `manifest_v0.py validate manor.yaml` | 181 documents, 0 errors; VALID |
+
+**Drafter's corrections, accepted.**
+- **R9.** The mutant "oldest living male regardless of age" is the same function as B9's rule. Whenever an adult male lives, the oldest living male is that adult; otherwise both seat the oldest minor. The round-2 reviewer's mutant and R9's demand to kill it were wrong. B9 now states one rule, and the reference checks that the two forms agree at all 2,778 stand-in evaluations of the sweep.
+- **R10.** Back-filled siblings come from M2's own conception draws, so on the 360-day calendar they can be 602–608 days apart. INV-BF-04 checks them against the calendar's own least gap (602 on 360 days, 609 on 365), and INV-PS-05 checks synthesised pairs against the 609-day constant. Asserting 609 days for back-filled pairs would reject M2's own output.
+
+**Closed.** No open finding. D46 is filed for the director.
 
 ## 1. The review (round 1, independent reviewer)
 
