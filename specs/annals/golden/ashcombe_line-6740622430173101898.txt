@@ -39,7 +39,6 @@ On day 4 of month 4, the first son of Edric Ashcombe (Founder #11) and the secon
 
 ## The twenty-second year (Year of Ash)
 On day 2 of month 2, the second daughter of Hugh Thorne bore the first son of Edric Ashcombe (Founder #11) a son, p-3374, the first child of that mother.
-On day 2 of month 2, following the birth of p-3374, the child was received into the house of the second daughter of Hugh Thorne, the mother.
 
 ## The twenty-third year (Year of Ash)
 On day 2 of month 3, p-aae0 was deposed.
@@ -63,6 +62,12 @@ On day 5 of month 5, p-e400 gained a claim against p-aae0.
 
 ## The twenty-eighth year (Year of Ash)
 On day 3 of month 3, p-e400 renounced a claim.
+
+## The twenty-ninth year (Year of Ash)
+On day 4 of month 4, p-aae0 and Founder #17 were married.
+
+## The thirtieth year (Year of Ash)
+On day 2 of month 2, Founder #17 bore p-aae0 a son, p-553c, the first child of that mother.
 
 ## The thirty-fifth year (Year of Ash)
 On day 1 of month 1, after the interregnum, p-aae0 succeeded the first son of Hugh Thorne.

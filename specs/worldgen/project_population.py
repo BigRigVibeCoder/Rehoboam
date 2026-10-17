@@ -102,11 +102,23 @@ MEMBER_MILESTONES = (0.5, 0.9, 0.98)
 
 # BCK-002 A-56: M7 0.3.4's rule, the back-fill's, and M7 0.5.0's
 RULES = ("cognatic", "agnatic", "bounded")
+# REV of PR #79 R1: the regime decides who marries whom. "isolation": M7's isolation run, T1
+# stubbed, nobody named, everyone on M2's market (N3/N4: random within the settlement). "t1": T1
+# registered, as both fixture worlds are: the named core (M7's criteria; a bounded set) marries
+# within itself through T1's marry decision (T1 0.3.3: unmarried named adults in the actor's court
+# or relation set) and M2's N3/N4 exclude the named; the un-named members, beyond the degrees,
+# marry on M2's market.
+REGIMES = ("isolation", "t1")
+# the vocation reading (R4): "all" draws holy orders for every member at majority (the frozen
+# submodel's "not first in any title's line"), "later" for later children only (the first-born
+# exempt: the frozen [[params]] meaning, the frozen schedule step and RT-2026-10-16 item 12), the
+# primary reading
+VOCATION_READINGS = ("all", "later")
 
 
 @dataclass(frozen=True)
 class World:
-    """A world's genesis counts (the fixture-worlds golden at seed 1) and its parameters."""
+    """A world's genesis counts (the fixture-worlds golden at seed 1), parameters and levers."""
 
     id: str
     population: int  # living at tick 0
@@ -118,6 +130,21 @@ class World:
     holy: float  # vocation_holy_orders
     capacity: int | None  # density_capacity, None for the default (never binds)
     rule: str = "cognatic"  # the membership rule of M7's on_birth (RULES)
+    regime: str = "isolation"  # REGIMES
+    vocation: str = "all"  # VOCATION_READINGS
+    elite_read: str = (
+        "woman"  # M2 F3/F4's elite read: the woman's row, or "couple" (either spouse's; lever e)
+    )
+    hypergamy: float = (
+        0.0  # share of the named core marrying unnamed persons of the polity (lever f)
+    )
+
+    def label(self) -> str:
+        """The levers in force, for a golden line."""
+        return (
+            f"regime {self.regime} rule {self.rule} vocation {self.vocation} "
+            f"elite_read {self.elite_read} hypergamy {self.hypergamy}"
+        )
 
 
 # W_n: the fixture reference's named member women aged 15-49 at genesis (the full reading), per
@@ -125,10 +152,22 @@ class World:
 TWIN_VALES = World("twin_vales", 1500, 56, 5, 1.0, 300, "1.2", 0.2, None)
 KINGDOM_10K = World("kingdom_10k", 10000, 117, 12, 8 / 12, 1000, "1.2", 0.2, None)
 WORLDS = (TWIN_VALES, KINGDOM_10K, replace(KINGDOM_10K, capacity=10000))
-# the reviewer's variants, uncapped, under the cognatic rule
+# the reviewer's variants, uncapped, under the cognatic rule in isolation
 SENSITIVITY = (("1.0", 0.2), ("1.2", 0.0), ("1.0", 0.0))
 # the bounded rule with W_n doubled (mid-reign holders are younger than the genesis cross-section)
 CAP_SENSITIVITY = 2.0
+HYPERGAMY = 0.5  # lever f: half of the named core's marriages reach outside it
+# the levers compared under the T1 regime for the agnatic and the bounded rule (R1): (d)
+# later-children vocations, (e) the elite read on the couple, (f) hypergamy, (g) their
+# combinations
+LEVERS = (
+    ("d", {"vocation": "later"}),
+    ("e", {"elite_read": "couple"}),
+    ("f", {"hypergamy": HYPERGAMY}),
+    ("d+e", {"vocation": "later", "elite_read": "couple"}),
+    ("d+f", {"vocation": "later", "hypergamy": HYPERGAMY}),
+    ("d+e+f", {"vocation": "later", "elite_read": "couple", "hypergamy": HYPERGAMY}),
+)
 
 
 @dataclass
@@ -154,6 +193,15 @@ def rates(mult: str) -> Rates:
     return Rates(nrr_c, nrr_e, t_years, l_t)
 
 
+def holy_share(w: World, r: Rates) -> float:
+    """The share of a member cohort holy orders removes at majority, by the vocation reading."""
+    if w.vocation == "all":
+        return w.holy
+    # later children only: the first-born of each couple is exempt; with 2 NRR_c surviving
+    # children per couple, the first-born share of a cohort is 1 / (2 NRR_c)
+    return w.holy * (1 - 1 / (2 * r.nrr_c))
+
+
 @dataclass
 class Point:
     """The population, the member share and the member count at one year."""
@@ -165,26 +213,53 @@ class Point:
 
 
 def step(w: World, r: Rates, w_e: float, w_c: float) -> tuple[float, float]:
-    """One generation under the world's membership rule (the docstring's recursion)."""
+    """One generation under the world's regime, rule and levers (the docstring's recursion).
+
+    Counts are persons with a constant sex ratio: a group of P persons bears P x NRR persons in a
+    generation (its P/2 women, 2 NRR children each).
+    """
     n = w_e + w_c
     m_d = 1.0
     if w.capacity is not None and n > w.capacity:
         m_d = min(MODIFIER_CAP, 1.0 + (n / w.capacity - 1.0))
-    scale = r.l_t ** (m_d - 1.0)
-    m = w_e / n
-    h = m * (1 - w.holy) / (m * (1 - w.holy) + 1 - m)
-    b_e = w_e * (1 - w.holy) * r.nrr_e * scale  # born of member mothers
-    b_c = w_c * r.nrr_c * scale  # born of commoner mothers
+    s = r.l_t ** (m_d - 1.0)
+    v = holy_share(w, r)
+    nrr_w = r.nrr_e if w.elite_read == "couple" else r.nrr_c  # a member man's commoner wife
+    if w.regime == "isolation":
+        core, u = 0.0, w_e  # nobody is named: every member is on M2's market
+    else:
+        core = min(w_e, 2 * w.houses * w.named_women)  # the named core, persons
+        u = w_e - core  # the un-named members, on M2's market
+    h = u * (1 - v) / (u * (1 - v) + w_c) if u + w_c > 0 else 0.0  # member share of M2's husbands
+    q = w.hypergamy if w.regime == "t1" else 0.0
+    # births, in persons: the core within itself, the core's women and men marrying out, the
+    # un-named member women (M2 husbands), the commoner women (member husbands with share h)
+    b_core = core * (1 - q) * (1 - v) * r.nrr_e * s
+    b_core_women_out = (core / 2) * q * (1 - v) * r.nrr_e * s
+    b_core_men_out = (core / 2) * q * (1 - v) * nrr_w * s
+    b_u = u * (1 - v) * r.nrr_e * s
+    b_c = w_c * ((1 - h) * r.nrr_c + h * nrr_w) * s
+    b_c_member_father = w_c * h * nrr_w * s
+    births = b_core + b_core_women_out + b_core_men_out + b_u + b_c
     if w.rule == "cognatic":
-        members = b_e + h * b_c
+        members = b_core + b_core_women_out + b_core_men_out + b_u + b_c_member_father
     elif w.rule == "agnatic":
-        members = h * (b_e + b_c)
+        members = b_core + b_core_men_out + h * b_u + b_c_member_father
     elif w.rule == "bounded":
-        named = min(w_e, 2 * w.houses * w.named_women)  # the named member women, as persons
-        members = h * (b_e + b_c) + (1 - h) * named * (1 - w.holy) * r.nrr_e * scale
+        # the mother branch: a named-eligible woman and a houseless father. In isolation
+        # the named women (M7's own criteria, not T1's column) bear on M2's market; under
+        # T1 they marry within the core, so the branch fires only for a named woman
+        # married out (hypergamy) or for one who became eligible after an M2 marriage,
+        # which the model puts at zero
+        if w.regime == "isolation":
+            named = min(w_e, 2 * w.houses * w.named_women)
+            extra = (1 - h) * named * (1 - v) * r.nrr_e * s
+        else:
+            extra = b_core_women_out
+        members = b_core + b_core_men_out + h * b_u + b_c_member_father + extra
     else:
         raise SystemExit(f"unknown membership rule {w.rule!r}")
-    return members, b_e + b_c - members
+    return members, births - members
 
 
 def project(w: World, r: Rates) -> list[Point]:
@@ -210,13 +285,29 @@ def at(points: list[Point], year: float) -> Point:
     return points[-1]
 
 
+def summary(w: World, r: Rates) -> str:
+    """One line: the horizon's population and members, the least members, the peak population."""
+    points = project(w, r)
+    inside = [*(p for p in points if p.year <= w.horizon), at(points, w.horizon)]
+    final = inside[-1]
+    least = min(inside, key=lambda p: p.members)
+    peak = max(inside, key=lambda p: p.n)
+    cap = "default" if w.capacity is None else str(w.capacity)
+    return (
+        f"line {w.id} capacity {cap} {w.label()}: year {w.horizon} population {final.n:.0f} "
+        f"members {final.members:.0f} ({final.members / w.houses:.1f} per house) "
+        f"share {final.share:.3f} least {least.members:.0f} at year {least.year:.0f} "
+        f"peak {peak.n:.0f} at year {peak.year:.0f}"
+    )
+
+
 def render_world(w: World, r: Rates) -> list[str]:
-    """The golden lines of one world under one rule."""
+    """The golden block of one world under one regime and rule."""
     points = project(w, r)
     cap = "default" if w.capacity is None else str(w.capacity)
     lines = [
-        f"world {w.id} rule {w.rule} horizon {w.horizon} mult {w.mult} holy {w.holy} "
-        f"capacity {cap} houses {w.houses} named_women_per_house {w.named_women:.2f}"
+        f"world {w.id} capacity {cap} horizon {w.horizon} mult {w.mult} holy {w.holy} "
+        f"houses {w.houses} named_women_per_house {w.named_women:.2f} {w.label()}"
     ]
     for year in CHECKPOINTS:
         if year <= w.horizon:
@@ -242,41 +333,75 @@ def render_world(w: World, r: Rates) -> list[str]:
     return lines
 
 
-def render() -> str:
-    """The whole golden text."""
-    base = rates("1.2")
-    lines = [
-        "# population projection of the SPR-030 fixture worlds (REV-SPR-030 R1) under the three",
-        "# membership rules of BCK-002 A-56 (specs/systems/next/M7_membership.md): GENERATED by",
-        "# python -I specs/worldgen/project_population.py --write; do not edit.",
-        "constants population-projection-v1",
-        f"rates mult 1.2 nrr_c {base.nrr_c:.4f} nrr_e {base.nrr_e:.4f} "
-        f"r_c {100 * math.log(base.nrr_c) / base.t_years:+.3f}%/yr "
-        f"generation_years {base.t_years:.2f} l_T {base.l_t:.4f}",
-    ]
-    for rule in RULES:
+def lever_lines(base: Rates) -> list[str]:
+    """The levers (R1): one line each for the agnatic and the bounded rule, under both regimes."""
+    out = []
+    for regime in REGIMES:
+        for rule in ("agnatic", "bounded"):
+            for name, levers in LEVERS:
+                if regime == "isolation" and "hypergamy" in levers:
+                    continue  # nobody is named in isolation: the lever has no subject
+                for w in WORLDS:
+                    world = replace(w, rule=rule, regime=regime, **levers)
+                    out.append(f"lever {name} " + summary(world, base))
+    # the cognatic rule under lever d (R4: the knife edge does not survive the later-children
+    # reading)
+    for regime in REGIMES:
         for w in WORLDS:
-            lines += render_world(replace(w, rule=rule), base)
+            world = replace(w, rule="cognatic", regime=regime, vocation="later")
+            out.append("lever d " + summary(world, base))
+    return out
+
+
+def sensitivity_lines(base: Rates) -> list[str]:
+    """The reviewer's cognatic variants in isolation, and the bounded rule with W_n doubled."""
+    out = []
     for mult, holy in SENSITIVITY:
         r = rates(mult)
         w = replace(KINGDOM_10K, mult=mult, holy=holy)
         p = project(w, r)
         final = at(p, w.horizon)
         peak = max([*(q for q in p if q.year <= w.horizon), final], key=lambda q: q.n)
-        lines.append(
-            f"sensitivity rule cognatic mult {mult} holy {holy} nrr_e {r.nrr_e:.4f} "
-            f"final population {final.n:.0f} member_share {final.share:.3f} "
+        out.append(
+            f"sensitivity regime isolation rule cognatic mult {mult} holy {holy} "
+            f"nrr_e {r.nrr_e:.4f} final population {final.n:.0f} member_share {final.share:.3f} "
             f"peak {peak.n:.0f} at year {peak.year:.0f}"
         )
-    for base_world in (TWIN_VALES, KINGDOM_10K):
-        w_n = base_world.named_women * CAP_SENSITIVITY
-        w = replace(base_world, rule="bounded", named_women=w_n)
-        final = at(project(w, base), w.horizon)
-        lines.append(
-            f"sensitivity rule bounded named_women_per_house {w.named_women:.2f} world {w.id} "
-            f"final population {final.n:.0f} member_share {final.share:.3f} "
-            f"members {final.members:.0f}"
-        )
+    for regime in REGIMES:
+        for base_world in (TWIN_VALES, KINGDOM_10K):
+            w_n = base_world.named_women * CAP_SENSITIVITY
+            w = replace(base_world, rule="bounded", regime=regime, named_women=w_n)
+            final = at(project(w, base), w.horizon)
+            out.append(
+                f"sensitivity regime {regime} rule bounded named_women_per_house "
+                f"{w.named_women:.2f} world {w.id} final population {final.n:.0f} "
+                f"member_share {final.share:.3f} members {final.members:.0f}"
+            )
+    return out
+
+
+def render() -> str:
+    """The whole golden text."""
+    base = rates("1.2")
+    v_later = holy_share(replace(TWIN_VALES, vocation="later"), base)
+    lines = [
+        "# population projection of the SPR-030 fixture worlds (REV-SPR-030 R1) under the three",
+        "# membership rules of BCK-002 A-56, in M7's isolation regime and the T1-registered",
+        "# regime, with the levers of PR #79's review R1 (specs/systems/next/M7_membership.md):",
+        "# GENERATED by python -I specs/worldgen/project_population.py --write; do not edit.",
+        "constants population-projection-v2",
+        f"rates mult 1.2 nrr_c {base.nrr_c:.4f} nrr_e {base.nrr_e:.4f} "
+        f"r_c {100 * math.log(base.nrr_c) / base.t_years:+.3f}%/yr "
+        f"generation_years {base.t_years:.2f} l_T {base.l_t:.4f} "
+        f"holy_all {TWIN_VALES.holy} holy_later {v_later:.4f}",
+    ]
+    # the blocks: every regime and rule on every world, at the frozen readings (all, woman, 0)
+    for regime in REGIMES:
+        for rule in RULES:
+            for w in WORLDS:
+                lines += render_world(replace(w, rule=rule, regime=regime), base)
+    lines += lever_lines(base)
+    lines += sensitivity_lines(base)
     return "\n".join(lines) + "\n"
 
 
@@ -327,7 +452,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"STALE: {GOLDEN} differs from the projection")
             print("POPULATION PROJECTION: FAIL")
             return 1
-        cases = len(WORLDS) * len(RULES)
+        cases = len(WORLDS) * len(RULES) * len(REGIMES)
         print(f"POPULATION PROJECTION: PASS ({cases} cases, {text.count(chr(10))} lines)")
         return 0
     print(text, end="")

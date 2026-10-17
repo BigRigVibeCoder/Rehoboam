@@ -90,6 +90,13 @@ mother_id = 9020488354894702845
 father_id = 6740622430173101898
 birth_tick = -9804960
 [[life_course]]
+person_id = 12076042259415950935   # nell
+founder = 16
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -4102560
+[[life_course]]
 person_id = 13404045530391465978   # alys
 founder = 3
 sex = 1

@@ -33,6 +33,7 @@ slice** (`lint_next` in `lint_odd.py`):
 | `[[params]]` | every name; a frozen `default` keeps its value; the same `meaning` or an amendment (REV-SPR-015 round 3 NIT-5). In both modes an entry is q16_16 unless it declares `type = "count"`, an integer with integer bounds and default (`u64` in the skeleton; SPR-016 MR2) |
 | `[verification]` | every frozen test id stays in `tests` (new ones may be added; the `prototype` may change) |
 | `[[couplings]]` | every frozen `(system, direction)` pair stays (new couplings may be added) |
+| **every other field of the frozen slice** (PR #79's review R3, deny by default) | equal, or amended through a record on its generic path: `submodels.<name>.<field>`, `commands.<command>.<field>`, `couplings.<system>/<direction>.<field>`, `params.<name>.<field>` (`source` and the rest; `meaning` has its own path, a frozen `default` keeps its value), `fidelity_ladder.<level>.<field>`, `purpose.<field>` and `purpose.patterns.<test>.<field>`, `isolation.<field>` and `isolation.forcing.<input>.<field>`, `design.<field>`, `scales.<field>`, `verification.prototype`, `system.name`, `system.adrs`, `system.requirements`. A list-valued field is quoted as JSON. Entries may be added; a frozen entry's fields may not change. `[[reads]]` are declarations, not the frozen slice, and stay free |
 
 Two more rules (REV-SPR-015 R6, R15): a frozen `[[applies]]` keeps at least its frozen `from`; and every frozen
 text above is compared **for equality, line by line** (a superset that keeps the frozen text inside a longer one no
@@ -50,7 +51,7 @@ compares (R15).
 of = "invariants.INV-M2-03.statement"     # also algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state,
 frozen = "<the frozen text, byte for byte>" #   schedule.<Pulse>/<Phase>.steps.<name>, schedule.<Pulse>/<Phase>.when,
 to = "<the new text, what this file now says there>"   # owns.<entity.column>.meaning, rng.<purpose>.use,
-reason = "<why>"                                         # params.<name>.meaning
+reason = "<why>"                                         # params.<name>.meaning, and every generic path of the row above
 ```
 
 The lint checks `frozen` against the frozen file and `to` against the next file, refuses a record whose texts are
@@ -65,7 +66,8 @@ that amends a frozen arithmetic step while a meaning amendment is withdrawn), so
 on every `--next` run and fails, naming the path, on any amendment added, withdrawn or changed since the lock (and
 on a missing lock). It is written only by the tool, `lint_odd.py --next … --write-amendments-lock`, after the
 reviewer has read the new `AMEND` lines; it is never typed. `bin/check_all.sh` renders a control with one digest
-changed, which must fail.
+changed, which must fail, and thirteen deny-by-default controls (one planted change per generic path class on the M7
+draft, and the reviewer's `q5_summary`, `q5_why` and `q5_frozen_onbirth` cases, which linted PASS before R3).
 
 **A new table never overrides a frozen step.** A frozen step changes only through an `[[amends]]` record on its
 own table. The lint refuses a new `[algorithm.*]` table whose step reuses a frozen step id (`S9` in a table of the
@@ -147,7 +149,7 @@ never changes a committed skeleton or the index until step 4.
 | File | What |
 |---|---|
 | `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) and F1 mortality (SPR-016, `[algorithm.mortality_f1]`, folded after PR #50) on the frozen rung-0 slice (0.2.2: 0.2.0 plus EVO-001's typed payloads and codes, and SPR-020's `roles`) |
-| `M7.dynasty.odd.toml` | 0.5.0 draft (SPR-019, PR #62, then BCK-002 A-56 and A-57, `M7_membership.md`, pending the director's D56): the frozen 0.3.4 with four `[[amends]]` records: `[initialization]` (the houses, genealogy, `house_member` rows and each title's pre-epoch tenure log by its law, SPR-019), `tenure.title` (a pre-epoch log, not one initial row), `house_member.house` (the bounded membership rule: the father's house, else the mother's only when she is named-eligible for it, with a `HOUSE_JOINED` record; the back-fill's agnatic rows agree) and `INV-M7-06` (A-57: the naming criteria are one list, naming wins, a named minor is never demoted); a new `[[emits]]` `HOUSE_JOINED`; the `on_birth` and `dormancy` summaries and the Promote and Demote `why` texts restated (not lint-pinned: `M7_membership.md` §10 Q5) |
-| `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`) and mortality's two parameters with their defaults (`density_capacity`, `density_mortality_slope`); verbs `BIRTH`, `MARRIAGE` (M2 0.3.0) and `HOUSE_JOINED` (M7 0.5.0) |
-| `M7_membership.md` | the analysis behind the M7 0.5.0 draft (BCK-002 A-56, A-57): the three membership rules projected on the fixture worlds, the named-actor counts, the effect on succession eligibility by law, what the annals would say, the precedence rule, the recommendation (bounded, 7/10), the specs table and D56 |
-| `amendments.lock.toml` | the nineteen amendments of the M2 draft (five texts, seven column meanings, seven parameter meanings; the mortality fold re-stated five and added `e0`'s; SPR-019 re-stated `[initialization]`) and the four of the M7 draft, path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |
+| `M7.dynasty.odd.toml` | 0.5.0 draft (SPR-019, PR #62, then BCK-002 A-56 and A-57 under PR #79, `M7_membership.md`, pending the director's D56): the frozen 0.3.4 with ten `[[amends]]` records: `[initialization]` and `tenure.title` (SPR-019), `house_member.house` (agnatic membership: the father's house, else none, the back-fill's rule), `INV-M7-06` (A-57: one list of naming criteria, naming wins, a named minor is never demoted; a house with a member father's pregnancy pending is not extinct), and under the deny-by-default lint the `on_birth`, `on_death`, `vocation` (later children, R4) and `dormancy` (criterion (d) widened to any title's heir, R6) summaries and the Promote and Demote `why` texts; a new read of M2's `person.unborn_father` |
+| `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`) and mortality's two parameters with their defaults (`density_capacity`, `density_mortality_slope`); verbs `BIRTH`, `MARRIAGE` (M2 0.3.0); the M7 draft adds none |
+| `M7_membership.md` | the analysis behind the M7 0.5.0 draft (BCK-002 A-56, A-57): the three membership rules in M7's isolation regime and the T1-registered regime, the levers that keep a house alive, the named-actor counts, the effect on succession eligibility by law, what the annals would say, the precedence rule, the recommendation (agnatic with the later-children reading and the elite read on the couple, 6/10), the specs table and D56 |
+| `amendments.lock.toml` | the nineteen amendments of the M2 draft (five texts, seven column meanings, seven parameter meanings; the mortality fold re-stated five and added `e0`'s; SPR-019 re-stated `[initialization]`) and, under the deny-by-default lint (PR #79's review R3), the 26 generic-path records of the M2 draft and the ten of the M7 draft, path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |

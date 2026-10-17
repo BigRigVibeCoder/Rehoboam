@@ -1,3 +1,3 @@
-#rehoboam/annals/manifest/v0 world=solitary chronicle_digest=dc0d277e20275f23f7503a382de3984b templates=0.3.0 templates_digest=21b7a5cbbf14a024
-group year 1177ae8b63a0abe3
-digest 6a1ff07d2c2663cd
+#rehoboam/annals/manifest/v0 world=solitary chronicle_digest=dc0d277e20275f23f7503a382de3984b templates=0.3.0 templates_digest=81d3b87cf316b470
+group year 8708ea972a93a620
+digest daaeeae14608b161

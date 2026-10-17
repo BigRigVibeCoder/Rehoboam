@@ -95,10 +95,18 @@ and prints every amendment (AMEND lines). In --next mode the superseding spec is
 step bumps that table's `version`, and every spec, in both modes, names each owned column, parameter, purpose,
 invariant, emitted kind, applied command, binding and step once (REV-SPR-015 R15, R17). With --next, an overlay may
 replace the Registry [systems] entry of a superseded system (never another), keeping fidelity_levels and every existing
-parameter's bounds and default.
+parameter's bounds and default. Deny by default (PR #79's review R3, 2026-10-17): every other field of the
+frozen slice is compared too, as a generic path, and changes only through a record: submodels.<name>.<field>,
+commands.<command>.<field>, couplings.<system>/<direction>.<field>, params.<name>.<field> (source and the rest),
+fidelity_ladder.<level>.<field>, purpose.<field> and purpose.patterns.<test>.<field>, isolation.<field> and
+isolation.forcing.<input>.<field>, design.<field>, scales.<field>, verification.prototype, system.name, system.adrs
+and system.requirements; a list-valued field is quoted as JSON. Entries may be added (a submodel, a command, a
+coupling, a pattern, a forcing input); a frozen entry's fields may not change. [[reads]] are declarations, not the
+frozen slice, and stay free.
 """
 import copy
 import hashlib
+import json
 import re
 import sys
 import tomllib
@@ -293,6 +301,109 @@ def text_at(spec, m):
     return spec.get("initialization", {}).get("state")
 
 
+GENERIC_PATH = re.compile(r"^(?P<sec>submodels|commands|couplings|params|fidelity_ladder|purpose|isolation|design|scales|verification|system)\.(?P<rest>.+)$")
+KEYED = {"submodels": "name", "commands": "command", "params": "name", "fidelity_ladder": "level"}
+# the table fields of the frozen slice the generic comparison protects (the rest of [system] is checked by name:
+# id, crate, spec_version, status; fidelity moves with the slice)
+TABLE_FIELDS = {"purpose": None, "isolation": None, "design": None, "scales": None, "verification": ("prototype",),
+                "system": ("name", "adrs", "requirements")}
+
+
+def leaf_text(value):
+    """A frozen field as the text an [[amends]] record quotes: a string as is, anything else as JSON."""
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+
+
+def generic_text_at(spec, path):
+    """The text a generic amendment path names in ``spec`` (deny by default, R3), or None when there is none."""
+    m = GENERIC_PATH.match(path)
+    if m is None:
+        return None
+    sec, rest = m.group("sec"), m.group("rest")
+    if sec in KEYED or sec == "couplings":
+        key, _, field = rest.rpartition(".")
+        entry = keyed_entry(spec.get(sec, []), sec, key)
+        return None if entry is None or field not in entry else leaf_text(entry[field])
+    for sub in SUBKEYED:
+        if rest.startswith(sub + "."):
+            key, _, field = rest[len(sub) + 1:].rpartition(".")
+            entry = keyed_entry(spec.get(sec, {}).get(sub, []), sub, key)
+            return None if entry is None or field not in entry else leaf_text(entry[field])
+    table = spec.get(sec, {})
+    allowed = TABLE_FIELDS.get(sec)
+    if allowed is not None and rest not in allowed:
+        return None
+    return leaf_text(table[rest]) if rest in table else None
+
+
+SUBKEYED = {"patterns": "test", "forcing": "input"}  # purpose.patterns.<test>, isolation.forcing.<input>
+
+
+def entry_key(x, sec):
+    """The key of a keyed entry: its name, command, level, test, input, or system/direction for a coupling."""
+    if sec == "couplings":
+        return f"{x.get('system')}/{x.get('direction')}"
+    return str(x.get(KEYED.get(sec) or SUBKEYED[sec]))
+
+
+def keyed_paths(entries, sec):
+    """(path key, entry) for each entry of a keyed section; a repeated key carries its ordinal: key, key[1], key[2]."""
+    seen = {}
+    out = []
+    for x in entries:
+        k = entry_key(x, sec)
+        n = seen.get(k, 0)
+        seen[k] = n + 1
+        out.append((k if n == 0 else f"{k}[{n}]", x))
+    return out
+
+
+def keyed_entry(entries, sec, key):
+    """The entry a path key names, or None."""
+    return next((x for k, x in keyed_paths(entries, sec) if k == key), None)
+
+
+def frozen_leaves(fs):
+    """Every generic path of a frozen spec with its text: the fields deny-by-default protects (R3)."""
+    out = {}
+    for sec, keyfield in KEYED.items():
+        for key, x in keyed_paths(fs.get(sec, []), sec):
+            for field, value in x.items():
+                if sec == "params" and field in ("meaning", "default"):
+                    continue  # params.<name>.meaning has its own path; a frozen default must keep its value
+                if field != keyfield:
+                    out[f"{sec}.{key}.{field}"] = leaf_text(value)
+    for key, x in keyed_paths(fs.get("couplings", []), "couplings"):
+        for field, value in x.items():
+            if field not in ("system", "direction"):
+                out[f"couplings.{key}.{field}"] = leaf_text(value)
+    for sec, sub in (("purpose", "patterns"), ("isolation", "forcing")):
+        for field, value in fs.get(sec, {}).items():
+            if field == sub:
+                for key, x in keyed_paths(value, sub):
+                    for f2, v2 in x.items():
+                        if f2 != SUBKEYED[sub]:
+                            out[f"{sec}.{sub}.{key}.{f2}"] = leaf_text(v2)
+            else:
+                out[f"{sec}.{field}"] = leaf_text(value)
+    for sec in ("design", "scales"):
+        for field, value in fs.get(sec, {}).items():
+            out[f"{sec}.{field}"] = leaf_text(value)
+    for sec, fields in (("verification", TABLE_FIELDS["verification"]), ("system", TABLE_FIELDS["system"])):
+        for field in fields:
+            if field in fs.get(sec, {}):
+                out[f"{sec}.{field}"] = leaf_text(fs[sec][field])
+    return out
+
+
+def resolve_text(spec, of):
+    """The text an [[amends]] path names: the named paths first, then the generic ones; None for neither."""
+    m = AMEND_PATH.match(of)
+    if m is not None:
+        return text_at(spec, m)
+    return generic_text_at(spec, of)
+
+
 def amendments(fs, ns, p, errs):
     """The next version's `[[amends]]` records (REV-SPR-015 R1): each names a path, quotes the frozen text byte for
     byte, gives the new text (which must be what the next version now says there) and a reason. Returns
@@ -300,16 +411,19 @@ def amendments(fs, ns, p, errs):
     out = {}
     for a in ns.get("amends", []):
         of = str(a.get("of", ""))
-        m = AMEND_PATH.match(of)
-        if m is None:
+        if AMEND_PATH.match(of) is None and GENERIC_PATH.match(of) is None:
             errs.append(f"{p}: [[amends]] of = {of!r} is not a path this lint knows (invariants.<id>.statement, "
                         "algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state, schedule.<Pulse>/<Phase>.steps.<name>, "
                         "schedule.<Pulse>/<Phase>.when, owns.<entity.column>.meaning, rng.<purpose>.use, params.<name>.meaning, "
-                        "emits.<KIND>.snapshots, owns.<entity.column>.default, owns.<entity.column>.cause_column)")
+                        "emits.<KIND>.snapshots, owns.<entity.column>.default, owns.<entity.column>.cause_column, or a generic "
+                        "path of the frozen slice: submodels.<name>.<field>, commands.<command>.<field>, "
+                        "couplings.<system>/<direction>.<field>, params.<name>.<field>, fidelity_ladder.<level>.<field>, "
+                        "purpose.<field>, purpose.patterns.<test>.<field>, isolation.<field>, isolation.forcing.<input>.<field>, "
+                        "design.<field>, scales.<field>, verification.prototype, system.name|adrs|requirements)")
             continue
         if not a.get("reason"):
             errs.append(f"{p}: [[amends]] {of} needs a reason")
-        was, now = text_at(fs, m), text_at(ns, m)
+        was, now = resolve_text(fs, of), resolve_text(ns, of)
         if was is None:
             errs.append(f"{p}: [[amends]] {of}: the frozen spec has no text there")
         elif a.get("frozen") != was:
@@ -450,7 +564,7 @@ def lint_next(frozen, specs, errs):
             step_amended = False
             for of, (was, now) in amended.items():
                 m = AMEND_PATH.match(of)
-                if m.group("alg") == name:
+                if m is not None and m.group("alg") == name:
                     expect["steps"] = [now if st == was else st for st in expect.get("steps", [])]
                     step_amended = True
             if step_amended:
@@ -550,6 +664,13 @@ def lint_next(frozen, specs, errs):
                 errs.append(f"{p}: frozen default of {x.get('name')} changed: {x.get('default')} -> {n.get('default')}")
             if n is not None and n.get("meaning") != x.get("meaning") and f"params.{x.get('name')}.meaning" not in amended:
                 errs.append(f"{p}: frozen parameter {x.get('name')} changed its meaning without an [[amends]] record")
+        # deny by default (PR #79's review R3): every other field of the frozen slice, equal or amended
+        for of, was in frozen_leaves(fs).items():
+            now = generic_text_at(ns, of)
+            if now is None:
+                errs.append(f"{p}: frozen {of} is missing from the next version (a frozen entry keeps its fields)")
+            elif now != was and of not in amended:
+                errs.append(f"{p}: frozen {of} changed without an [[amends]] record (deny by default, R3 of PR #79's review)")
         # REV-SPR-015 round 3 NIT-5: the frozen verification tests and couplings are part of the slice
         next_tests = set(ns.get("verification", {}).get("tests", []))
         for t in fs.get("verification", {}).get("tests", []):
@@ -1460,6 +1581,31 @@ def main() -> int:
             bad = copy.deepcopy(ns)
             bad["algorithm"]["planted_table"] = {"version": "planted", "steps": ["Z1 Planted. This step replaces " + step_label(fsteps[-1]) + " entirely."]}
             probes.append((bad, "as replaced"))
+        # deny by default (R3): a planted change on each generic path class must be rejected
+        fzs = frozen[sid][1]
+        generic_plants = []
+        if fzs.get("submodels"):
+            generic_plants.append(("submodels", 0, "summary"))
+        if fzs.get("commands"):
+            generic_plants.append(("commands", 0, "why"))
+        if fzs.get("couplings"):
+            generic_plants.append(("couplings", 0, "via"))
+        if fzs.get("params"):
+            generic_plants.append(("params", 0, "source"))
+        if fzs.get("fidelity_ladder"):
+            generic_plants.append(("fidelity_ladder", 0, "representation"))
+        for sec, i, field in generic_plants:
+            bad = copy.deepcopy(ns)
+            target_key = keyed_paths(fzs[sec], sec)[i][0]
+            for k, x in keyed_paths(bad.get(sec, []), sec):
+                if k == target_key:
+                    x[field] = "planted " + str(x.get(field, ""))
+            probes.append((bad, f"frozen {sec}."))
+        for sec, field in (("purpose", "statement"), ("isolation", "expect"), ("design", "basic_principles"), ("scales", "extent"), ("verification", "prototype"), ("system", "requirements")):
+            if field in fzs.get(sec, {}):
+                bad = copy.deepcopy(ns)
+                bad[sec][field] = ["planted"] if isinstance(fzs[sec][field], list) else "planted " + str(bad[sec].get(field, ""))
+                probes.append((bad, f"frozen {sec}.{field}"))
         for probe, needle in probes:
             pe = []
             lint_duplicate_keys(nf.name, probe, pe)

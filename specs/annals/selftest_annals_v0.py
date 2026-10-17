@@ -405,7 +405,6 @@ class Chronicle:
     events: dict[int, Event] = field(default_factory=dict)
     life: dict[int, LifeRow] = field(default_factory=dict)
     exits: dict[int, int] = field(default_factory=dict)  # person -> exit tick
-    joined: dict[int, int] = field(default_factory=dict)  # person -> its HOUSE_JOINED (M7 0.5.0)
     records: list[Any] = field(default_factory=list)  # the canonical Records, in file order
 
 
@@ -490,9 +489,6 @@ def load_chronicle(path: Path, dictionary: Dictionary) -> Chronicle:
         if rec.kind == "EVENT":
             ev = _event_of(rec)
             chron.events[ev.id] = ev
-            target = ev.person(TARGET)
-            if ev.kind == "HOUSE_JOINED" and target is not None:
-                chron.joined[target] = ev.id
         elif rec.kind == "LIFE_ENTRY":
             pid = int(rec["person_id"])
             chron.life[pid] = LifeRow(
@@ -644,11 +640,10 @@ class Kinship:
         return self.c.life.get(pid) or self.w.kf_life.get(pid)
 
     def house_of(self, pid: int, prov: Provenance) -> int | None:
-        """§4 rule 4, M7 0.5.0's membership rule (the keyframe row; else the father's house).
+        """§4 rule 4, M7 0.5.0's agnatic rule: the keyframe row; else the father's house; else none.
 
-        Else the mother's house when a HOUSE_JOINED names the person (the bounded rule's record);
-        else none. Only a birth during the run walks to a parent; any other origin without a row
-        has none.
+        Only a birth during the run walks to its father, by this same rule, through any number of
+        in-run rows; any other origin without a row has none, and the mother's house never passes.
         """
         if pid in self.w.members:
             prov.sources.add(f"kf:member/{pid}")
@@ -657,15 +652,7 @@ class Kinship:
         if row is None or row.origin != BORN:
             return None
         prov.sources.add(row.source)
-        if row.father:
-            house = self.house_of(row.father, prov)
-            if house is not None:
-                return house
-        joined = self.c.joined.get(pid)
-        if joined is not None and row.mother:
-            prov.sources.add(f"joined/{joined}")
-            return self.house_of(row.mother, prov)
-        return None
+        return self.house_of(row.father, prov) if row.father else None
 
     def label_of(self, pid: int, prov: Provenance) -> str:
         """``Founder #k`` (1-based) from the extract, else ``p-`` and a unique hex prefix."""
@@ -1607,31 +1594,6 @@ class History:
         if actor is not None:
             self.claims.setdefault(actor, set()).add(title)
 
-    def joined(self, ev: Event) -> None:
-        """M7 0.5.0's membership rule: a HOUSE_JOINED names a newborn of this instant.
-
-        Its actor is the newborn's mother, the father has no house, and a told triggered edge
-        leads to the newborn's BIRTH.
-        """
-        child, mother = ev.person(TARGET), ev.person(ACTOR)
-        row = None if child is None else self.c.life.get(child)
-        if row is None or row.birth_tick != ev.tick or row.mother != mother:
-            self.problems.append(
-                f"event {ev.id}: a HOUSE_JOINED whose target is not a child born this instant of "
-                "its actor (M7 on_birth)"
-            )
-            return
-        if row.father in self.w.members or row.father in self.c.joined:
-            self.problems.append(
-                f"event {ev.id}: a HOUSE_JOINED for a child whose father has a house (the father's "
-                "house needs no record)"
-            )
-        births = {e.id for e in self.same_tick(ev, "BIRTH") if e.person(TARGET) == child}
-        if not ev.triggered_by(births):
-            self.problems.append(
-                f"event {ev.id}: a HOUSE_JOINED with no triggered edge to the child's BIRTH"
-            )
-
     def murder_attempt(self, ev: Event) -> None:
         """T1's edges: motivated_by, or triggered to a MENTAL_BREAK (envelope_v0.md §3)."""
         for c, code, _, _, _, _ in ev.causes:
@@ -1646,8 +1608,6 @@ class History:
                 self.birth(ev)
             elif ev.kind == "DEATH":
                 self.death(ev)
-            elif ev.kind == "HOUSE_JOINED":
-                self.joined(ev)
             elif ev.kind in M7_KINDS:
                 self.m7(ev)
             elif ev.kind == "MURDER_ATTEMPT":
