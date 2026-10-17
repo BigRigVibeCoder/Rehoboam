@@ -1,0 +1,8 @@
+# Fixture world for the family annals reference (SPR-029): a scripted dynastic
+# chronicle in the shape of specs/manifest/examples/manor.yaml (two houses, two seats). Nothing
+# here was run by the engine: gen_fixtures.py derives the records from M2's and M7's rules, and
+# the self-test checks that the committed files equal its output. GENERATED; do not edit.
+[world]
+id = "ashcombe"
+days_per_year = 360          # the manifest calendar (05.1 §4.1): 12 months of 30 days
+epoch_label = "Year of Ash"  # world.calendar.epoch_label
