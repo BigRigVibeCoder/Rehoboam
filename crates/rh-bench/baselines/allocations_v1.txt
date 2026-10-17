@@ -6,14 +6,18 @@ toolchain llvm 22.1.6
 toolchain host x86_64-unknown-linux-gnu
 toolchain libc glibc 2.39
 window smoke seed 1 warm-up 2 years, measured 1 year(s), no inputs
-budget threads 1 ticks 8801 allocations 819476 growths 856 shrinks 0 max_per_tick 282
-budget threads 4 ticks 8801 allocations 828236 growths 856 shrinks 730 max_per_tick 306
+budget threads 1 ticks 8801 allocations 819401 growths 856 shrinks 0 max_per_tick 281
+budget threads 4 ticks 8801 allocations 828161 growths 856 shrinks 730 max_per_tick 305
+window-rungs solo,household,hamlet warm-up 2 years, measured 1 year(s), no inputs, manifest seeds
+rung solo seed 1 threads 1 ticks 12 allocations 1068 growths 85 shrinks 0 max_per_tick 89
+rung household seed 7 threads 1 ticks 13 allocations 1179 growths 106 shrinks 0 max_per_tick 106
+rung hamlet seed 42 threads 1 ticks 14 allocations 1502 growths 157 shrinks 0 max_per_tick 113
 site - | instant setup and inputs | allocations 87969 growths 0
 site Activity | level dispatch | allocations 4883 growths 0
 site Activity | merge | allocations 1058 growths 489
 site Activity | phase start (timers due) | allocations 44735 growths 0
 site Activity | step X4.smoke_estate | allocations 444 growths 0
-site Activity | step X7.smoke_market | allocations 3817 growths 0
+site Activity | step X7.smoke_market | allocations 3846 growths 0
 site Agenda | level dispatch | allocations 96 growths 0
 site Agenda | merge | allocations 48 growths 24
 site Agenda | phase start (timers due) | allocations 44029 growths 0
@@ -24,7 +28,7 @@ site Bookkeeping | level dispatch | allocations 2920 growths 0
 site Bookkeeping | phase start (timers due) | allocations 103787 growths 0
 site Contagion | level dispatch | allocations 3052 growths 0
 site Contagion | phase start (timers due) | allocations 44735 growths 0
-site Contagion | step X4.smoke_estate | allocations 365 growths 0
+site Contagion | step X4.smoke_estate | allocations 261 growths 0
 site Culture | level dispatch | allocations 2920 growths 0
 site Culture | phase start (timers due) | allocations 44735 growths 0
 site Environment | level dispatch | allocations 63213 growths 0
