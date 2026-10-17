@@ -53,6 +53,8 @@ REQUIRED_GATES = (
     "(SPR-007 ruling 4)",
     "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
     "CI workflows parse (YAML)",
+    "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 "
+    "--check; SPR-013 T-09)",
     "Chronicle SQL-twin equivalence",
     "Clippy float backstop positive control: unnamed float arithmetic in plane A must FAIL "
     "(SPR-010 GAP-3)",
@@ -209,8 +211,12 @@ REQUIRED_GATES = (
     "(SPR-009 review 2a)",
     "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip "
     "(SPR-011 ruling 13)",
+    "World Stream v0 channel-C segment schema: no floats, header, order, sealed round trip, "
+    "digests, life_ends twin (SPR-013 T-11)",
+    "canonical_v0 positive control: a stale golden digest must FAIL",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
+    "channel-C self-test positive control: a float column in the DDL must FAIL",
     "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the "
     "right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)",
     "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint "

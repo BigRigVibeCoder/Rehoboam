@@ -129,13 +129,15 @@ CREATE TABLE IF NOT EXISTS event (                -- kind 2 EVENT (schema.sql ev
 CREATE TABLE IF NOT EXISTS event_role (           -- child rows of EVENT: who plays which role
     timeline_id  UINTEGER NOT NULL,
     event_id     UBIGINT  NOT NULL,
-    ordinal      UTINYINT NOT NULL,                -- position among the event's subjects (emission order)
+    ordinal      UTINYINT NOT NULL,                -- position among the event's subjects (emission order), contiguous from 0
     entity_kind  UTINYINT NOT NULL,                -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region
     entity_id    UBIGINT  NOT NULL,
     role         UTINYINT NOT NULL,                -- Registry [event_roles] index: 0 actor, 1 target, 2 witness, 3 instrument
     PRIMARY KEY (timeline_id, event_id, ordinal)
 );
 -- DEATH: one row, role 1 (target), the deceased; no actor for a natural death (ruling 11). EXTINCTION: no row.
+-- An event's ordinals are 0..n-1 with no gap: the canonical text form writes roles as a list whose position is the
+-- ordinal (specs/stream/canonical_v0.md §3), so a gap could not round-trip. The self-test checks it.
 -- schema.sql's concrete_role codes (initiator, target, partner, bystander, instrument) and abstract_role are reconciled
 -- with [event_roles] in P1.9 (SPR-011 Blocker 6); channel A v0 uses the Registry's codes.
 
