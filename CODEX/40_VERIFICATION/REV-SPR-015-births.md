@@ -9,10 +9,10 @@ tags: [verification]
 related: [PRJ-002, SPR-015, SPR-016, EVO-001, REV-EVO-001, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.1.0
+version: 0.2.0
 ---
 
-> **BLUF:** Round 1 on PR #50 at `421f2e1`: **not ready to freeze. 1 blocker, 5 majors, 10 minors, 7 nits.** The arithmetic is right: every check value was reproduced independently. The spec fails as a contract, for four reasons. (1) The `--next` preservation lint cannot carry an amendment the spec needs (INV-M2-03), and it misses silent changes. (2) Two mechanisms do not fit rh-core's frozen trait and timer layout. (3) F0's band formula is wrong. (4) V-SF-24 fails by construction. The Architect's rulings are in §0. The drafter revises, and a round 2 re-checks. The review ran in a session on a different model from the drafter's. The reviewer's scripts and probes were kept in the Architect's scratchpad. The findings below give each reproduction.
+> **BLUF:** Round 2, on PR #50 at `35226c0` plus the delta to `13fbb70`: **not ready to freeze, but close. No blockers, 4 majors, 7 minors, 7 nits.** The arithmetic reproduces independently. At the default tfr of 4.9, r is +0.114 %/yr; NRR is 1 at about 4.74. The new V-SF-24 identity is exact across 3.9 M simulated conceptions. The 13fbb70 delta (a husband drawn from the bride's settlement) is legal, deterministic and CRN-stable. The rulings are in §2.0. Commanded deaths and marriages follow REV-EVO-001 R9, shape (b): the sender's timer submits at the outcome's instant, and M2 holds no pending commanded outcomes. Round 1 found 1 blocker, 5 majors, 10 minors and 7 nits (§0, §1). Both rounds ran in sessions on a different model from the drafter's.
 
 # REV-SPR-015: independent review of the M2 F1 births spec
 
@@ -332,3 +332,403 @@ Keying it by the child's id alone (t = 0) keeps "the same person" the same sex.
   are good to about ±0.02 %/yr on r, with 4 seeds × 1,000 years. I did not run a 365-day calendar, the hamlet world,
   or T1 and M7 coupled.
 - I could not check the Coale & Trussell (1974) paper (not in `research/`), the sex-ratio source, or Hajnal (1965).
+
+
+## 2. Round 2 (2026-10-17, `35226c0` and `13fbb70`)
+
+### 2.0 Architect rulings, round 2
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R12 | R5 and the review's shape recommendation | **Shape (b)** (REV-EVO-001 R9). M2 holds no pending commanded outcome: no `pending.*` table, no `COMMANDED_*` kinds, no `commanded` purpose. A `ScheduleDeath` or `Marry` reaches M2 at its outcome's instant, submitted by the sender's timer, and M2 applies it in its `Day/Vital` drain of that instant. INV-M2-13 (pending rows) goes. `tick` leaves the payloads (M2 0.2.1 via EVO-001). Switch your one paragraph | 7.5/10 |
+| R13 | MAJ-2 | Changes to frozen S12 go through `[[amends]]` records. A commanded death applied by M2 cancels the victim's own pending `death_time` timer in the same step, and a pending commanded death whose victim died first is dropped by the "living key" rule (REV-EVO-001 R1), counted. There is no double death and no `SimError` | 8/10 |
+| R14 | MAJ-3 | Moot under R12. If any pending-state invariant remains, it must hold when a victim dies naturally before the commanded day | — |
+| R15 | MAJ-1 | Accepted. `--next` refuses duplicate keys among invariants, `[[emits]]` and `[[applies]]`, and compares frozen `when`, `[initialization]` and step texts line by line, so a prefixed negation is a changed line and needs `[[amends]]`. Each bypass the reviewer planted becomes a probe that must FAIL | 9/10 |
+| R16 | MAJ-4 | Accepted. The husband choice goes through `StepCtx`'s keyed RNG under a declared purpose (for example `husband_pick`), so the branch salt and the epoch are in the key. It stays an argmin over the filtered candidates, so it stays CRN-stable. `resample_on_fork` follows `05.1` §6 item 9 | 8/10 |
+| R17 | MIN items | (1) A death before a birth in one slot must not emit EXTINCTION while a newborn enters in that slot. (2) The V-SF-24 report values come from the chain with mortality (45–49: 2.02). (3) The isolation expectations report V-SF-24 and V-SF-25 at G1a and do not gate them (Q6 is the director's). (4) An amendment to a computational step bumps that table's version. (5) `household.yaml` dies out in every replica: state extinction as the rung-1 expectation and test the distribution of extinction times, not persistence (7/10). (6) The two-settlement forcing runs for every generation. (7) A marriage commanded by T1 may join two settlements; the household spans both in P1a, which is documented as a P1a limitation that S3 F1's moves (P1b) lift (6/10) | 7/10 |
+| R18 | Q5 and Q6 | After round 3, these go to the director as D-items with the final numbers: tfr 4.9, r = +0.114 %/yr; the early marriage pattern and the 50-month birth interval; V-SF-24 and V-SF-25 reported at G1a and gating from G1b | — |
+
+### 2.1 The review (round 2, independent reviewer)
+
+Reviewer: independent and adversarial, on a different model from the drafter's. Copy reviewed: `$R/src`, a git archive of
+`35226c0`. The delta was reviewed in `$R/src13` (a git archive of `13fbb70`, §5).
+`$R` = `/tmp/claude-0/-home-user-Rehoboam/78f410bc-aa41-55ce-883d-f1b2ebd2cbcd/scratchpad/births_review_r2`.
+Line numbers refer to `$R/src`. Only `$R/tools` and `$R/probes` were written; the repository was not touched.
+
+### BLUF
+
+**Not ready to freeze, but close: 0 blockers, 4 majors, 7 minors, 7 nits** (the minors and nits include 2 and 1 from
+the `13fbb70` delta).
+
+**What is now right:**
+- The arithmetic reproduces independently.
+- R2 (pregnancy state), R3 (bands), R7 (widowhood NRR) and R8 (Wulf) are correctly applied. NRR = 1 at tfr ≈ 4.73–4.74,
+  and the default 4.9 gives r = +0.114 %/yr. My day-resolution cohort Monte Carlo gives +0.116 %/yr, and three
+  1,000-founder micro-simulations give +0.09, +0.15 and +0.14 %/yr.
+- V-SF-24's new identity is exact by construction. Measured over 3.9 M simulated conceptions, the ratio to c_i is
+  1.000 ± 0.004.
+
+**What still fails as a contract:**
+1. **MAJ-1.** `lint_odd --next` can still be bypassed. A duplicate `[[invariants]]`, `[[emits]]` or `[[applies]]` entry
+   shadows the frozen one, so a frozen statement or a dropped sender gets through with no `[[amends]]` record (three
+   probes PASS). Prefixing a frozen `when` with a negation also passes.
+2. **MAJ-2.** The draft again changes a frozen algorithm sentence (S12) from other tables (F10, L2). It also leaves M2's
+   own death timer undefined when the person has already died by command. That is a double-death or crash path.
+3. **MAJ-3.** INV-M2-13 contradicts L3. It fails, fatally, in a legitimate history: a victim who dies naturally before
+   their commanded tick.
+4. **MAJ-4.** The argmin husband hash is uniform and CRN-stable, but it is keyed outside the RNG rule: no branch salt,
+   no epoch, no declared purpose.
+
+**Shape question for the Architect.** Shape (a) re-samples a commanded death to its own tick. That keeps ADR-0025
+item 3's mechanics and defeats its substance, for the only case that actually uses the pending table (M7's background
+murders). **Recommendation: (b), 65%.**
+
+Confidence in the overall verdict: 80%.
+
+### 1. Architect rulings R1–R11: status
+
+| # | Status | Evidence / what is missing |
+|---|---|---|
+| R1 | **PARTLY APPLIED** | The `[[amends]]` mechanism works for its five path kinds. `frozen` is checked byte for byte: probe `amend_frozen_trailing_space` FAILs with "`frozen` is not the frozen text byte for byte", and `amend_record_removed` FAILs. The draft uses it to scope INV-M2-03, S2 (with `[algorithm.parameters_f1]`), EXTINCTION's `when` and `[initialization]`, and the lint prints four AMEND lines. **Missing:** F10 and L2 still change the meaning of frozen S12 from new tables, with no record (MAJ-2), which is exactly the BLK-1 pattern. An amendment can also rewrite a *computational* frozen step without bumping the table's `version` (MIN-4) |
+| R2 | **APPLIED** | `person.conceived_tick` (`:155-160`); BIRTH_TIMER payload = t_m (F7 `:595`); F8 derives the due month from the payload and writes nothing (`:596`); INV-M2-10 restated without a tick equality (`:782`). `resample_timer` has no world access: F8, S11 and N6 need only the payload, t_in and the calendar, and L4 returns the timer's own tick. The reference's `resample_birth_day` (`selftest_m2_f1.py:217`) takes only payload-derived bounds. Check 6 passes, including the repeated late re-sample (`end + DAY`) |
+| R3 | **APPLIED** | F0 `:588` reads i = floor((floor(x/Y) − 15)/5). The reference's `bands_cover` (`:285-291`) pins 0..6 over [15Y, 50Y) on both calendars |
+| R4 | **PARTLY APPLIED** | The identity is now conceptions per susceptible woman-month = c_i by band at conception (docs/09 V-SF-24). It is **exact**: my cohort Monte Carlo gives 0.993–1.004 per band over 3.86 M conceptions; the micro-sim gives 0.94–1.03 (small 45–49 counts). **Missing:** the "exact per-band values" of the report come from a no-mortality chain banded by month index, not from the quantity measured (MIN-2). The observable is not stated: conceptions are not in channel A. The elite multiplier's mixture is not stratified (MIN-2) |
+| R5 | **PARTLY APPLIED** | Binding parts done: a commanded outcome is never under a `resample_on_fork = true` purpose (`commanded`, `:522-527`). Cause, culprit, `cause_event` and sender live in `pending.*` (`:244-299`): plane A, so in `state_hash` and keyframes. Determinism holds (seq = the queue's merge counter, hashed in `rh-core/engine.meta`). **Missing:** INV-M2-13 is unsound (MAJ-3); M2's own DEATH_TIMER after a commanded death is unspecified (MAJ-2); the shape still awaits EVO-001 R6 (§4) |
+| R6 | **PARTLY APPLIED** | `from` ⊇ frozen and frozen-level strictness are applied: probe `r1_from` FAILs twice. The four round-1 silent-change probes now FAIL (`r1_emits`, `r1_init`, `r1_sched`, `r1_from`). **Missing:** duplicate-key shadowing and prefix/suffix contradictions pass (MAJ-1). There is no self-check probe for frozen schedule steps or duplicates, and the `[initialization]` probe passes only through the `to` fallback (`lint_odd.py:672`, `:700`; NIT-1). Frozen `[[schedule]] when`, `[[rng]] use` and `[[owns]] meaning` are unchecked (MIN-4) |
+| R7 | **APPLIED** | Check 5 has the 42-state widowhood chain: NRR 1.0341, r = +0.114 %/yr, NRR = 1 at 4.741. Independent reproductions: round 1's `chain_widow.py` re-run gives 4.9 / gap 3: NRR 1.0352, +0.117 %/yr, with the root at ≈ 4.736. My `cohort_mc.py` (10^6 women, day resolution) gives NRR 1.0349, +0.116 %/yr, and NRR 1.0016 at 4.741, so the root is ≈ 4.733. The micro-sim (1,000 founders, 1,000 y, seeds 1–3) gives +0.092, +0.152 and +0.135 %/yr, with an emergent husband–wife gap of 3.7–3.8 y and the population at 2.1–3.6× its start. The no-widowhood claim "+0.31 %" reproduces (+0.304 %), but the reference does not compute it (NIT-2). The default moved to 4.9 ahead of Q5: acceptable as a proposal |
+| R8 | **APPLIED** | `household.yaml` validates (0 errors). Wulf (19, own household) makes a marriage possible in 81 % of 5,000 replicas (`household_mc.py`). But P(alive) is 0.39 at 100 y, 0.033 at 200 y and **0/5,000 at 1,000 y**. "Persists or dies out by chance" is true only on the decade scale (MIN-5) |
+| R9 | **PARTLY APPLIED** | MIN-4, MIN-5, MIN-6, MIN-7, MIN-10 and NIT-1 to NIT-3, NIT-6 and NIT-7 are done. **MIN-3 is partial:** if the death fires before the birth (possible after a re-sample), the amended text still emits EXTINCTION before the birth (MIN-1). **MIN-8:** the argmin is uniform and CRN-stable but unsalted (MAJ-4). **NIT-4:** the `constants` tables are read, but the prose numbers are unchecked (NIT-2). **NIT-5:** applied (birth_sex by child; NIT-4 below on wording) |
+| R10 | **APPLIED** | The G1b list is reverted and both rows are marked "proposed (Q6)". But `[isolation].expect` (2)–(3) gates V-SF-24/25 through V-SF-22 at G1a (MIN-3) |
+| R11 | **APPLIED** | Q1 is cited-pending (F1 `:589`), Q2 follows SPR-014, Q3 is H1 `household/v1`, and Q5/Q6/Q7 are routed. Stale: `:208` still calls the marriage LIFE_INTERVAL format "SPR-015's format decision (Q4)", which R11 deferred to P1.11 (NIT-5) |
+
+### 2. Re-run of round 1's reproductions
+
+- **Silent-change probes**, re-planted on the round-2 text (`$R/tools/probes.py`, `$R/probes/r1_*`): `from`, `emits`
+  (DEATH roles/payload), `init` ("sex female for everyone") and `sched` (the mortality step dropped) all **FAIL** now,
+  each with its own diagnostic.
+- **INV-M2-03:** amended by record (`:870-874`). The `frozen` text matches the 0.2.0 file byte for byte, and `to`
+  matches `:753`. Its new clause "a COMMANDED_* timer at its sender's tick … not Month pulse instants" is not enforced
+  (MAJ-3).
+- **`resample_timer` without world access:** confirmed (R2 row).
+- **Band formula:** confirmed (R3 row).
+- **V-SF-24.** The identity is exact (R4 row). Round 1's `chain.py` at 4.9 gives births per married woman-year / M n
+  of 0.821, 0.959, 1.004, 1.009, 1.027, 1.131, 1.971; the spec pins 0.85 … 1.87 (MIN-2).
+- **Widowhood NRR:** confirmed (R7 row).
+- **`household.yaml`:** a marriage is possible (R8 row).
+
+### 3. New findings
+
+#### MAJ-1. `lint_odd --next` can still be bypassed without an `[[amends]]` record (confidence 90%)
+- **Where:** `specs/systems/lint_odd.py:273` (`invs = {id: …}`), `:283` (`applies = {command: …}`), `:300` (`whens =
+  {kind: …}`), `:305` and `:308` (substring tests), `:335` (`lint_applies` also keeps the last duplicate).
+- **Evidence** (`$R/tools/probes.py`, `probes_shadow.py`; each probe is the round-2 spec with one edit, run as
+  `lint_odd.py --next <dir> --overlay registry_delta.toml`):
+
+  | Probe | Edit | Result |
+  |---|---|---|
+  | `inv02_shadow` | a second `INV-M2-02` with a changed statement, placed before the frozen one | **PASS** |
+  | `emits_death_shadow` | a changed `DEATH` `[[emits]]` placed before the frozen one (EXTINCTION first, so the self-check's index-0 plant still trips) | **PASS** |
+  | `applies_sd_shadow` | a `ScheduleDeath` `[[applies]]` without `M7.dynasty`, with `drained_by = "Month/Polity"`, placed before the frozen-`from` copy | **PASS** |
+  | `emits_prefix_negation` | `when = "NEVER (the text below is void): " + frozen text` | **PASS** |
+  | `emits_suffix_contradiction` | frozen text + ". F1 override: the deceased is actor and the payload is [age]" | **PASS** |
+  | `sched_superset_contradiction` | a second Month/Vital `apply_death:` step "deaths fire at the Month pulse instant" | **PASS** |
+
+  Dicts keep the last duplicate, so a changed copy placed first is invisible to both `lint_next` and `lint_applies`.
+  The same probes with the changed copy at index 0 crash the self-check with an `AssertionError`. That is a FAIL, but
+  only by accident.
+- **Fix.**
+  - Reject duplicate invariant ids, emits kinds, applies commands, owned columns, param names and RNG purposes in
+    every spec, in both modes.
+  - Now that `[[amends]]` exists, compare a frozen `when` and `[initialization]` for **equality or amendment**. If the
+    superset rule stays, require the frozen text as a prefix.
+  - Add self-check probes for a duplicate and for a dropped schedule step.
+
+#### MAJ-2. Frozen S12 is changed from other tables, and M2's own DEATH_TIMER after a commanded death is undefined (85%)
+- **Where:**
+  - S12 `:563` (frozen: "emit DEATH (target = person; no actor …); then, if no ledger row has alive = 1, emit EXTINCTION").
+  - F10 `:598` ("S12's EXTINCTION test … include[s] the newborns of the slot").
+  - L2 `:664` ("the DEATH event's actor = the culprit … its cause edge = cause_event").
+  - H4(c) `:652`; L3 `:665`.
+- **Problem 1: the R1 rule is broken again.** F10 and L2 change what frozen S12 does, with no `[[amends]]` record for
+  S12. The lint cannot see it.
+- **Problem 2: a crash path.** F9 drops a birth whose mother is absent, N7 drops a marriage, and L3 drops a commanded
+  death whose victim is dead. Nothing says what S12 does when **M2's own DEATH_TIMER** fires for a person already dead
+  by command:
+  - **On an earlier day:** the row is compacted, so S12 writes to an absent row.
+  - **In the same slot after a re-sample** (`agenda.rs` re-inserts with a new seq): the row has alive = 0, and S12's
+    second life-course exit write is refused by rh-core (ruling 5). That is a `SimError`.
+- **The case is reachable.** A T1 command dated a Month pulse instant is applied in the Day/Vital drain *after*
+  Month/Vital has drawn the victim's month. An M7 murder on day d can follow a natural death timer drawn for a later
+  day. The probability is about q_month (0.2–0.4 % at adult ages) per commanded death: rare, but certain across a
+  nightly ensemble.
+- **Fix.** One `[[amends]]` of S12 that states:
+  1. a death timer whose person is absent, or has alive = 0, is dropped and counted (or apply_death cancels the
+     person's pending DEATH_TIMER through `StepCtx::own_timers`, `system.rs:579`, and `cancel`);
+  2. a commanded death's actor and cause edge;
+  3. the newborn-aware EXTINCTION test.
+
+#### MAJ-3. INV-M2-13 is unsound (85%)
+- **Where:** INV-M2-13 `:794`; L1–L3 `:663-665`; INV-M2-03 as amended `:753`.
+- **Problem 1: the dead-key-person clause.** INV-M2-13 says "no row names a key person already dead at Bookkeeping
+  (the fire or the drain removed it)". But L3 keeps a pending row until its timer fires, and drops the command only
+  then ("a victim already dead at the fire (a natural death came first)"). Take an M7 murder held for day 20 whose
+  ruler dies naturally on day 9: the row names a dead person at Bookkeeping of day 9. INV-M2-13 fails, and invariant
+  failures are fatal.
+- **Problem 2: unenforced tick claims.** "pending.tick is a day start, not a Month pulse instant" is asserted, and
+  repeated in the INV-M2-03 amendment. L1 and L2 never check it. T1 dates its commands "the next day start", which is
+  a Month pulse instant on the 1st. Those commands are applied at the drain today, never held, but any future sender
+  that dates a held command on the 1st, or off a day start, triggers a fatal invariant.
+- **Fix.**
+  - H4 gains (e): a dead key person's pending rows are removed, their COMMANDED timers cancelled, and the drop
+    counted. Alternatively, delete the clause.
+  - L1 drops and reports a tick that is not a day start (INV-M2-05's rule).
+  - L2 either drops a held tick that is a Month pulse instant, or accepts it and removes the claim from INV-M2-13 and
+    from the INV-M2-03 amendment. Firing at a pulse instant is harmless: the timer pass precedes the pulse steps.
+
+#### MAJ-4. The husband hash is keyed outside the RNG rule (80%)
+- **Where:** N4 `:638`. The husband is h = argmin of `h64_words(tag(husband/v1), [world_seed, w, h, t_m])`.
+- **What is sound** (`$R/tools/argmin_hash.py`, a Python port of rh-ids' SplitMix64):
+  - **Uniform:** 200k draws over 8 candidates give χ² = 5.0 with ids 1..8 and 3.8 with ids k·2^40 (7 df; the 99.9 %
+    critical value is 24.3).
+  - **CRN-stable:** 0 of 50,000 non-winner removals changed the match.
+  - The ruling's MIN-8 intent is met.
+- **What is not.** The CLAUDE.md non-negotiable is H(world_seed, branch_salt(t), system_id, epoch, purpose, entity, t,
+  k). This hash has no branch salt, no epoch and no declared `[[rng]]` purpose, so registration cannot check it
+  (05.1 §6 item 9). Consequences:
+  - "reroll fate" forks and Foresight rollouts re-draw the k = 0 hit and the day, but rank the husbands identically in
+    every branch;
+  - a material input that scopes the bride (epoch + 1) cannot change her ranking.
+- **Fix.** Rank candidates by draw k = h of a keyed stream: a new purpose `husband`, appended after `commanded` so no
+  discriminant moves; key (person, month); entity w, t = t_m, her epoch. `RngStream::draw(t, k)` takes a u64 k, and
+  `LightStream` is the declared scalar option (`rng.rs:8`). CRN stability is unchanged, because the ranking is still
+  per candidate.
+
+#### MIN-1. MIN-3 is only half fixed: death-before-birth in one slot still gives EXTINCTION, then a child (75%)
+- **Where:** EXTINCTION `when` `:441` and its amendment `:883`; F9 `:597`; F10 `:598`.
+- **Problem.** F10 admits that after a re-sample the death timer can fire first. S12's test then sees no living row
+  and no newborn yet, and emits EXTINCTION. F9 then bears the child, because the mother is "dead in this very slot".
+  The amended text's reason, "a pending birth of a dead mother is dropped", is false for a same-slot death. So the
+  world is extinct and inhabited, and a second EXTINCTION follows later.
+- **A smaller contradiction.** F9's re-opening of a dissolved household rewrites `dissolved_tick`, against INV-M2-09's
+  "written once".
+- **Fix.** Count pending BIRTH_TIMERs of this slot whose mother's row is present in the EXTINCTION test, or test
+  EXTINCTION once at the end of M2's timer pass. Restate INV-M2-09 to allow F9's same-instant re-open.
+
+#### MIN-2. V-SF-24's report values are not the measured quantity, and its observable is unstated (80%)
+- **Where:** `report_ratios` `:603`; facts `:617-620`; `[isolation].expect` (2) `:861`; reference check 7
+  (`selftest_m2_f1.py:484-501`); `docs/09` V-SF-24.
+- **Evidence.** Births per married woman-year by mother's age at birth / M n_i, at tfr 4.9:
+
+  | Source | 15–19 | 20–24 | 25–29 | 30–34 | 35–39 | 40–44 | 45–49 |
+  |---|---|---|---|---|---|---|---|
+  | spec (reference chain, no mortality, banded by month index) | 0.85 | 0.97 | 1.00 | 1.01 | 1.02 | 1.12 | 1.87 |
+  | round 1 `chain.py` (age at birth = pulse age + ½ month) | 0.821 | 0.959 | 1.004 | 1.009 | 1.027 | 1.131 | 1.971 |
+  | my `cohort_mc.py`, no mortality, exact age at the birth instant | 0.832 | 0.963 | 1.004 | 1.009 | 1.026 | 1.122 | 1.923 |
+  | my `cohort_mc.py`, e0 = 30, widowhood (gap 3) — what `[isolation]` (1)–(2) measures | 0.837 | 0.965 | 1.010 | 1.015 | 1.035 | 1.149 | 2.019 |
+  | micro-sim, 1,000 founders, seeds 1–3 | 0.83–0.85 | 0.95–0.97 | 1.01 | 1.02 | 1.02–1.06 | 1.16–1.17 | 1.92–2.04 |
+
+  The 40–44 and 45–49 values are off by about +2.6 % and +8 % in the population that is actually measured. With a
+  few hundred births per seed in 45–49, single seeds mostly pass. Pooled over 32 seeds, both bands fall outside a
+  99.9 % interval.
+- **Observable.** Conceptions are not in channel A. A pregnancy lost with its mother leaves no trace, so a log-based
+  count is biased: about 1 % fewer conceptions, and spurious "susceptible" months. Under the isolation's
+  10 %-at-×1.3 elite forcing, the per-band rate is a mixture of c_i and c_i^e.
+- **Fix.**
+  - Generate the report values with mortality and widowhood at day resolution, or report them with a tolerance
+    (±5 %; ±15 % at 45–49).
+  - Delete "within their binomial intervals" from expect (2).
+  - State that V-SF-24 is measured by a plane-A observer of the fertility step (or of `conceived_tick` per pulse),
+    stratified by table.
+
+#### MIN-3. `[isolation]` gates V-SF-24/25 at G1a, ahead of Q6 (70%)
+- **Where:** `[isolation].expect` (2) and (3) `:861`; `docs/09` V-SF-22 "Gate from G1a … Isolation: V-SF-22 (M2, …)".
+- **Problem.** V-SF-22 passes only "when … its behaviour matches the spec's expect". M2's expect contains V-SF-24's
+  identity and V-SF-25's bands. So they are gated at G1a through V-SF-22, while their docs/09 rows say "reported at
+  G1a; gating from G1b is the Q6 proposal".
+- **Fix.** Mark (2) and (3) "reported, not gated, until Q6", or say in Q6 that the director's ruling also covers this.
+
+#### MIN-4. `[[amends]]` can rewrite arithmetic under an unchanged version, and some frozen texts are never compared (75%)
+- **Problem 1: arithmetic under the same version.** Probe `amend_s9_computational` replaces S9's multiply-shift day
+  draw with `d1 mod (n − 1)` through a valid record. The lint **PASSes** with one more AMEND line, and
+  `[algorithm.mortality_rung0] version` stays `m2-rung0-v1`. A frozen algorithm can thus change its arithmetic, and
+  move goldens, under the same name.
+- **Problem 2: unchecked frozen texts.** These pass silently:
+  - probe `sched_when`: a frozen binding's `when` set to "never (planted)";
+  - probe `rng_use`: a frozen `[[rng]] use` rewritten;
+  - probe `owns_meaning`: a frozen `[[owns]] meaning` rewritten. This draft changes seven frozen meanings this way
+    (person.id, birth_tick, sex, mother, father, spouse, life_course.origin), allowed by `next/README.md`.
+- **Problem 3: the amendment list is not pinned.** `check_all.sh:800` checks only the self-check line, so a fifth
+  amendment added later changes no gate outcome.
+- **Fix.**
+  - An amended `[algorithm.*]` step requires a new table `version`, checked by the lint.
+  - Add `owns.<col>.meaning` and `rng.<purpose>.use` as amendable paths (or print a MEANING note), and compare frozen
+    `when`s.
+  - Pin the expected AMEND paths in `check_all`.
+
+#### MIN-5. `household.yaml` dies out almost surely within the isolation horizon (90%)
+- **Evidence** (`$R/tools/household_mc.py`, 5,000 replicas, the F1 rules at e0 = 30, tfr 4.9):
+
+  | Alive at | 50 y | 100 y | 200 y | 1,000 y |
+  |---|---|---|---|---|
+  | Share of replicas | 0.961 | 0.393 | 0.033 | 0 |
+
+  At least one non-genesis marriage happens in 81 % of replicas. The median extinction year is 88.
+- **Problem.** Expect (5)'s "persists or dies out by chance" is literally true. Over V-SF-22's 1,000-year horizon it
+  means "dies out": fewer than 0.06 % of replicas survive.
+- **Fix.** State the numbers in expect (5) and companion Q5. If persistence is the lesson, a second unrelated couple
+  is needed, and a 6-person world will still die out on 1,000-year scales.
+
+#### MIN-6 and MIN-7 are from the `13fbb70` delta (§5).
+
+#### NITs
+- **NIT-1.** The self-check (`lint_odd.py:672`, `:700`): the `[initialization]` probe is satisfied only through the
+  "`to` is not what…" fallback, because that path is amended. There are no probes for schedule steps, duplicates or
+  `lint_applies` strictness.
+- **NIT-2.** The reference:
+  - check 5's docstring says "the no-widowhood figure is printed", but the code prints a same-age-husband *widowhood*
+    chain (NRR 1.0370);
+  - the spec's "+0.31 % without widowhood" is not computed (my `chain.py`: +0.304 %);
+  - check 7's docstring says conceptions per susceptible month = c_i is checked, but nothing is computed;
+  - the prose numbers (F1's 0.411…, N1's 18…, F2's 105/205) are not compared with `constants`. Probe `ref/prose.toml`,
+    with F1's prose 0.411 → 0.511, PASSes;
+  - `constants` edits are caught: `natural[0] = 412` and `gestation_months = 10` both FAIL.
+- **NIT-3.** `person.unborn_father` is correct and consistent with INV-M2-06 and INV-M2-10, but it is derivable from
+  `conceived_tick` and the marriage log's row open at t_m. Keep it as a stated cache or drop it.
+- **NIT-4.** `birth_sex`'s key "branch_salt(t) … t = 0" (`:517`) reads as the canonical salt; the engine's `SystemKey`
+  uses the current branch salt. Say "the current branch salt". Keying by the child alone is otherwise sound: a new
+  id has epoch 0, there is one draw per id, and it is not re-sampled.
+- **NIT-5.** Stale text:
+  - `:208` (Q4 is deferred to P1.11);
+  - `[algorithm.parameters_f1]` P1 `:626` says "S2 unchanged there", although S2 is amended;
+  - the lifecycle header `:659-660` says (a) "extends ADR-0025 item 3" to queued commands, but nothing in L1–L5 does:
+    `apply_inputs` never visits the command queue (`engine.rs:922-945`).
+- **NIT-6.** The `pending` entity is keyed by seq, not by an entity id, and is the first M2 table whose rows the owner
+  deletes. Say how its rows are removed: the owner rewrites its columns.
+- **NIT-7** is from the `13fbb70` delta (§5).
+
+### 4. R5, ADR-0025 item 3 and DET-13: analysis and recommendation
+
+**Who re-draws a commanded death under shape (a) when a material input scopes the victim? Nobody.**
+- `Engine::apply_inputs` (`engine.rs:922-945`) cancels every pending timer about the scoped entity and calls its
+  owner's `resample_timer`. For a COMMANDED_DEATH the owner is M2, and L4 returns the timer's own tick. The engine
+  re-inserts it with a new agenda seq; the payload (the pending seq) and the tick are unchanged.
+- The sender (M7) holds no timer about the victim and is never asked. M2 has nothing to draw from.
+- So once submitted, the outcome is fixed. A Foresight "reroll fate" fork keeps it too (`resample_on_fork = false`),
+  while natural deaths re-draw.
+
+**Does an identity re-sample satisfy ADR-0025 item 3? In mechanics yes, in substance no.**
+- It satisfies the mechanics: cancel, call the owner, re-insert, no back-dating.
+- It contradicts the substance: item 3 makes a material input re-draw the sampled outcomes in its scope under the new
+  epoch, so the input can change them.
+- In P1a the only commands that are *held* are M7's background murders. T1 dates its commands at the drain instant,
+  so they are applied at once. An M7 murder is a hazard draw at the month's first day, with no emitted cause, which is
+  exactly what item 3 says to re-draw.
+- Keeping T1's outcomes would be defensible (they follow an already-emitted successful attempt), but they never reach
+  the pending table.
+- So (a) contradicts item 3 in every case it actually serves. The drafter's own header (`:659-660`) concedes that
+  this needs a director decision.
+
+**Is the outcome a plane-A timer while it waits in the queue (DET-13)? No.**
+- Between submit and drain, M7 at (t_m, Polity) → M2 at (t_m + 1 d, Vital), and T1 at (d, Agenda) → (d + 1, Vital),
+  the outcome is an entry in `rh-core/engine.commands`.
+- That is plane A, inside `state_hash` and stored in keyframes (`rh-snapshot/src/state.rs:30`, `:66`), and it is
+  deterministic.
+- But it is not a timer, and `apply_inputs` never visits the queue.
+- This window, at most one day (A-31), exists in **both** shapes: T1 always goes through it. DET-13's letter needs the
+  director's reading that a hashed queue entry counts.
+- Shape (a) adds a second gap: an M2 timer that cannot be re-drawn, held for up to a month.
+
+**Shape (b) satisfies both rules as written, at a cost.**
+- In (b), M7 owns its murder timer, as it already owns its deposition timer (`exit_timer`).
+- A scoped input re-draws it through M7's `resample_timer` with the new epoch, and the queue then carries an outcome
+  whose timer has already fired.
+- The cost is an M7 next version: a murder timer kind and a resample rule.
+- There is also a placement convention. `StepCtx::schedule` refuses a timer in a phase where the system is not bound
+  (`system.rs:533-551`). So M7 fires at (d − 1, Polity) and sends `{tick = d}`, which M2's drain applies on time. The
+  alternative is a Vital binding for M7.
+- T1 needs no change: its tick is already the drain instant.
+- M2 loses 8 columns, a purpose, two kinds, INV-M2-13 and L2–L4, which removes MAJ-3 and half of MAJ-2.
+
+**Recommendation: (b), confidence 65%.**
+- (a) needs an amendment of ADR-0025 item 3 ("a commanded outcome keeps its tick on a re-sample") on top of DET-13's
+  queue reading, and it fixes M7's murders against player inputs.
+- (b) keeps R5's own principle, that re-sampling belongs to the system that sampled the outcome.
+- If the Architect keeps (a) because it matches M7's frozen text:
+  - fix MAJ-2 and MAJ-3;
+  - put the item-3 amendment to the director explicitly. Today's draft claims an extension (`:659-660`) that L1–L5 do
+    not implement.
+
+### 5. The `13fbb70` delta (REV-SPR-018 R8: the husband draw stays in the bride's settlement)
+
+`lint_odd` passes in both modes; the only new warning is "reads person.residence from S3.migration, which has no spec
+yet". `selftest_m2_f1.py` PASSes.
+
+- **Is the lag legal and deterministic? Yes.**
+  - The engine snapshots every lagged column at the start of the instant (`engine.rs:815-821`), so the read is a pure
+    function of the previous instant's state.
+  - `lagged` is also *required*. S3's `residence_at_birth` reads M2's new rows in the same Vital slot, so a
+    same-instant read by M2 would close an M2↔S3 cycle.
+  - Row alignment between the lagged snapshot and the live ledger holds at a Month pulse instant. Nothing is inserted
+    before M2's Month/Vital step there: births never fire at pulse instants (F6, F8, INV-M2-10), and compaction runs
+    only at Bookkeeping.
+  - With S3 registered, every living row has residence ≠ 0 by the next instant (S3 INV-S3-02; M1
+    `settlement.id` is 1..K, and 0 is reserved).
+- **Does the filter keep the argmin CRN-stable? Yes.**
+  - The filter is a per-candidate predicate on residences that never change in P1a (ruling M-6).
+  - An argmin over a filtered set still changes only when the added or removed man is the winner.
+  - The gap fallback keeps the settlement condition (N4), so both tiers stay inside the settlement. The salt and
+    epoch gap of MAJ-4 is unchanged.
+- **Does the neutral reproduce the unfiltered pool? Yes, exactly.** With residence 0 for everyone, "both not 0" never
+  holds. The candidate list, the hash inputs and therefore the argmin are those of `35226c0`, bit for bit. A
+  registered S3 with a single settlement (the rung worlds) is also an identity filter.
+- **Does a world with settlements but no S3 behave as round 2 did? Yes.** SPR-014's registration rule drops the read
+  and supplies the neutral 0.
+
+New findings from the delta:
+- **MIN-6. The two-settlement isolation forcing stops testing R8 after one generation (75%).**
+  - **Where:** `[isolation].forcing` `person.residence` and expect (3) (`src13` `:878`, `:881`).
+  - **Problem.** The step series splits only the *founders*. Without S3, newborns keep the row insert's 0, which
+    means "no restriction". From the first born generation on, a man descended from settlement 1 marries a settlement-2
+    bride freely, so "no marriage pairs two settlements" becomes vacuous.
+  - **Fix.** The forcing gives each newborn its mother's residence, emulating S3 F0's R4, or the check runs with S3 F0
+    registered.
+- **MIN-7. T1's Marry commands can still pair two settlements (65%).**
+  - **Problem.** R8 states the goal "marriage must not create a household that spans two settlements". N7 has no
+    settlement precondition, so a named actor's cross-settlement Marry still creates such a household through H3.
+  - **Fix.** Add the N7 precondition residence(a) = residence(b) when both are non-zero, dropped and reported, or have
+    the Architect accept the exception (S3 F1's co-residence).
+- **NIT-7.** The coupling's `output_bounds = [0, 65535]` should match S3's `u32` SettlementId. Its `data_range` should
+  read "SettlementId (M1 settlement.id, 1..K; 0 = none)", not "RegionId or SettlementId".
+
+### 6. Checks run, and what I did not run
+
+**Run on `35226c0`, all passing unless noted:**
+- `lint_odd.py`: PASS (6 specs).
+- `lint_odd.py --next … --overlay registry_delta.toml`: PASS, with 4 AMEND lines and "10 planted changes rejected,
+  the clean next version kept".
+- The three rendered `odd_next` controls (algorithm, rng, bound) FAIL with their own diagnostics.
+- `selftest_m2_f1.py`: PASS. Its planted control (`tfr1_bits = 615615`) FAILs with "tfr1_bits: spec 615615 !=
+  reference 615614".
+- Manifests: all 7 examples validate as expected, and `invalid_draft_style` is INVALID.
+- `gen_manifest --check` and `gen_skeletons --check` pass. `--next --rust` keeps `DeathTime = 1` and appends
+  `Commanded = 5`.
+- Repository-wide ruff and mypy pass.
+- `test_check_all_inventory.py` (venv): 12 passed.
+
+**My tools, all in `$R/tools`** (floats, tool side, none of them the engine):
+- `probes.py` and `probes_shadow.py` (20 lint probes in `$R/probes`, plus 5 reference probes in `$R/probes/ref`);
+- `cohort_mc.py` (10^6 women, day resolution);
+- `household_mc.py`;
+- `argmin_hash.py`;
+- round 1's `chain.py`, `chain_widow.py` and `microsim.py`, re-run at 4.9. Outputs are in `mc_*.txt`,
+  `microsim_49_s*.txt` and `household_mc.txt`.
+
+**Not run:**
+- The engine, any Rust build or test: no M2 crate exists, and neither commit changes Rust.
+- `rh-cli` manifest parity, which needs a build.
+- The full `bin/check_all.sh`, which needs valgrind and iai-callgrind-runner.
+- A 365-day calendar.
+- The hamlet world, and T1 or M7 coupled.
+- A multi-settlement world under the `13fbb70` filter: kin exhaustion and no-candidate months in small settlements are
+  unquantified.
+- I could not check Coale & Trussell (1974) Table 1, which is still cited-pending.
