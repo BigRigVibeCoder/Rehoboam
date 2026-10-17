@@ -9,7 +9,7 @@ tags: [verification]
 related: [PRJ-002, SPR-030, SPR-019, SPR-021, SPR-022, SPR-015, REV-SPR-019, REV-SPR-029, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF: round 1 on `c9efce8`. Changes are needed: 1 blocker, 3 majors, 7 minors and 2 nits.**
@@ -53,6 +53,25 @@ version: 0.2.0
 | R13 | Director | No director item is needed for this PR. The Architect's merge summary tells the director about R1(a), which holds the G1a criterion as written, and about A-56, the M7 membership question that touches D40's revisit | — |
 
 **Round 2:** the drafter applies R1–R13, regenerates the goldens with the tools, runs `check_all --part core` with the gate timings, and pushes once. An independent check follows, with the reviewer's `work/` scripts.
+
+## 0c. Architect rulings, round 3 (2026-10-17)
+
+The round-1 reviewer verified round 3 on `35b0717` (§3). **No blocker or major is left. The spec is ready to merge after the fixes below.**
+- R14 and R16–R19, R21 and R22 hold; R15 and R20 hold partly.
+- Both nightly commands pass.
+- Every mutant fails at seeds 1 and 3, including row-index, skip-S11 and the 1% re-key.
+- A seed that is skipped for power cannot hide a regression: if every seed skips, the gate fails, and a VALID seed that turns SKIPPED fails the golden.
+- The degree-ignoring plant now fails `dormancy-one`.
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R23 | H1 | The partnering clause covers a U woman only while her N4 candidate list and her own eligibility are **identical in both runs at each of her draws**. That implies the same marriage, because `husband_pick` is keyed `(w, t, h)`. State how the lists are observed: the engine check replays N4 from the ledger, since the lists are not in channel A | 75% |
+| R24 | H2 | §6 (line 161): V-INV-03's agenda-path fallback is `kingdom_10k`'s G1a runs, with the gap reported, as §2.3 and R20 say | 95% |
+| R25 | H3 | All four:<ul><li>the four "pairs differ" controls require a VALID pair;</li><li>`choose_target` falls through to the next candidate on the pairs floor as well as the window;</li><li>a SKIPPED block pins run A's deaths digest;</li><li>the companion says the engine run fails when no tested seed gives a VALID pair</li></ul> | 90% |
+| R26 | H4 | The text slips:<ul><li>a co-parent of a grandchild is 3 steps away;</li><li>state that the full reading resolves the far-adult-heir overlap in favour of naming, pending A-57;</li><li>CRN D-02 lists the realm-members component</li></ul> | 95% |
+| R27 | H5 | Part core's budget:<ul><li>**Fold the effect-differential control into the population-synthesis gate's run.** Today it repeats a full reference run of about 25 s, of which the differential is about 7 s. Make it an in-process control that reuses the gate's genesis and runs the differential against a reversed `succession_line`, saving about 18–35 s.</li><li>Snapshot run A at T_IN instead of re-running it.</li><li>The CRN controls stay in part core unless CI shows part core above 12 minutes after these savings; then they move to part golden.</li><li>SPR-013 moves the separate effect-control line to part golden. When main has SPR-013, the folded control replaces that line</li></ul> | 80% |
+
+**Round 4:** the drafter applies R23–R27 and merges main once SPR-013 has landed. The drafter then runs `check_all --part core` and the nightly commands, and pushes once. The Architect verifies with the reviewer's `_r2` scripts and closes the review.
 
 ## 0b. Architect rulings, round 2 (2026-10-17)
 
@@ -147,3 +166,31 @@ Copy reviewed: a git archive of `c442adb` (`fixtures_review_r2/src/`). The scrip
 | G7 | MIN | The T1 isolation fallback (the round-1 suggestion) cannot observe V-INV-03's consequences |
 | G8 | MIN | §3.2: the kinship and membership text is inconsistent |
 | G9 | NIT | Stale text; a dead `PR_SEEDS`; an ambiguous `members_k`; the golden's line count; the T_IN rule for a non-M2 death |
+
+## 3. The verification (round 3, the round-1 reviewer)
+
+Copy verified: a git archive of `35b0717` (`fixtures_review_r3/src/`). The scripts are in `fixtures_review_r3/work/`.
+
+**Verdict: ready after two short text fixes. 0 BLK, 0 MAJ, 3 MIN, 2 NIT.**
+- R14 and R16–R19, R21 and R22 hold; R15 and R20 hold partly.
+- **Nightly:** `fixture_worlds --tier nightly` PASS (17 s); `crn_pairing --seeds 1,2,3 --controls` PASS (71 s): "2 VALID and exact pair(s), 1 seed(s) skipped for power, controls 10 of 10 FAIL as required".
+- **Mutants**, pairs differing at seeds 1 / 3:
+
+  | Mutant | Seed 1 | Seed 3 |
+  |---|---|---|
+  | Reference swap-remove | 38/247 | 24/176 |
+  | Review-swap | 120/274 | 101/206 |
+  | Row-index | 101/268 | 95/216 |
+  | Re-key 1% | 3/231 | 4/179 |
+
+  No-op-input and skip-S11 are INVALID at both seeds.
+- **Skips:** `--seeds 2` alone gives `PROTOCOL FAILED: no seed produced a pair`. A window floor planted at 7 years gives STALE or no pair.
+- **Plants:** the degree-ignoring plant fails the gate through `dormancy-one`; the four genesis plants fail the fixture golden.
+
+| # | Sev. | Finding |
+|---|---|---|
+| H1 | MIN | The bounded partnering clause can still fail on a correct engine: N4's per-step matched set couples a woman with no S person in her list to an exposed earlier woman |
+| H2 | MIN | §6 (line 161) still names T1's isolation court as the fallback R20 withdrew |
+| H3 | NIT | "Pairs differ" controls accept an INVALID pair; `choose_target` checks only the window; a SKIPPED block pins only two death years; the companion does not state the all-skipped failure |
+| H4 | NIT | A co-parent of a grandchild is 3 steps away; the full reading's resolution of A-57's overlap is not stated; CRN D-02 omits the realm-members component |
+| H5 | MIN | The PR-tier gates take about 101 s on the reviewer's machine. Fold the effect control into the gate's run (about −18 s); snapshot run A (about −3 s); the CRN controls (about 17 s) to part golden only if needed |
