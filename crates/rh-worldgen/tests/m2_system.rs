@@ -332,11 +332,27 @@ fn newborns(seed: u64, n: usize) -> WorldSpec {
     )
 }
 
-/// Founders "aged 0" are born at a keyed offset inside the year before tick 0 (ruling 10), so
-/// founder `i` is `x_i` in [0, 1) years old at genesis and can only die from there: the schedule's
-/// q(15) for it is `1 - l(15) / l(x_i)`. The expected deaths by age 15 are the sum of those, with
-/// the binomial (Poisson-binomial) variance `sum p_i (1 - p_i)`; the observed count must lie within
-/// z = 3.290527 (two-sided 99.9 %) standard deviations, for each seed.
+/// The 10,000-founder q(15) check of T-07 (deviation 1 and MAJ-1 of the Architect's review,
+/// SPR-012).
+///
+/// **The null hypothesis.** The engine's deaths follow the fixed-point schedule. Founders "aged 0"
+/// are born at a keyed offset inside the year before tick 0 (ruling 10), so founder `i` is `x_i`
+/// in [0, 1) years old at genesis and can only die from there: under the null, its probability of
+/// dying before age 15 is `p_i = 1 - l(15) / l(x_i)`, not the plain `1 - l(15)` (which ignores the
+/// infancy already survived). The deaths by age 15 of one seed are then Poisson-binomial with mean
+/// `sum p_i` and variance `sum p_i (1 - p_i)`.
+///
+/// **Two checks, both at z = 3.290527 (two-sided 99.9 %).**
+/// - Per seed: each of the 32 seeds' counts within the band. Under the null the family-wise false
+///   alarm rate is about 1 - 0.999^32 = 3.2 %.
+/// - Pooled: the sum of the 32 counts against the sum of the 32 means, with the summed variance
+///   (the seeds are independent). It has the power the per-seed check lacks: an engine at
+///   e0 = 30.25 instead of 30 passes every seed but sits at a pooled z of about -5.7 (the review's
+///   mutant runs). The pooled z is printed in the gate's pass line.
+///
+/// **Fixed seeds.** The 32 world seeds are 1000 to 1031, written here, never drawn: the test is
+/// one fixed experiment whose outcome (and false-alarm odds) the review can reproduce, and a
+/// failure names a seed that replays.
 #[test]
 #[cfg_attr(
     debug_assertions,
@@ -385,6 +401,7 @@ fn q15_of_10000_newborns_is_inside_the_binomial_band_for_32_seeds() {
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
     let mut worst: f64 = 0.0;
+    let (mut dead_all, mut mean_all, mut var_all) = (0_usize, 0.0, 0.0);
     for &(seed, dead, mean, sd) in &results {
         let z = (dead as f64 - mean) / sd;
         worst = worst.max(z.abs());
@@ -393,9 +410,18 @@ fn q15_of_10000_newborns_is_inside_the_binomial_band_for_32_seeds() {
             "seed {seed}: {dead} of {N} dead by 15, expected {mean:.1} +- {:.1}",
             Z * sd
         );
+        dead_all += dead;
+        mean_all += mean;
+        var_all += sd * sd;
     }
+    let pooled = (dead_all as f64 - mean_all) / var_all.sqrt();
+    assert!(
+        pooled.abs() <= Z,
+        "pooled over 32 seeds: {dead_all} dead by 15, expected {mean_all:.1} +- {:.1} (z = {pooled:.2})",
+        Z * var_all.sqrt()
+    );
     println!(
-        "T-07 q(15): 32 seeds x {N} founders aged 0 (born in the year before tick 0), each observed q(15) inside the schedule's binomial 99.9 % band; worst |z| = {worst:.2}"
+        "T-07 q(15): 32 seeds x {N} founders aged 0 (born in the year before tick 0), each observed q(15) inside the schedule's binomial 99.9 % band (worst |z| = {worst:.2}); pooled z = {pooled:.2}, inside +-3.29"
     );
 }
 

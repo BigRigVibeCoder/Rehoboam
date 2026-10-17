@@ -71,6 +71,12 @@ pub enum ScheduleError {
         /// The instant.
         at: i64,
     },
+    /// A value the algorithm's widths rule out (review NIT-4): never mapped silently to a
+    /// probability, always named.
+    Impossible {
+        /// What was found.
+        what: String,
+    },
 }
 
 impl fmt::Display for ScheduleError {
@@ -86,6 +92,10 @@ impl fmt::Display for ScheduleError {
                 "an age of {minutes} minutes is negative ([algorithm.mortality_rung0] S7)"
             ),
             Self::Calendar { at } => write!(f, "the calendar cannot place tick {at}"),
+            Self::Impossible { what } => write!(
+                f,
+                "{what}: impossible under [algorithm.mortality_rung0]'s widths (a broken schedule)"
+            ),
         }
     }
 }
@@ -256,16 +266,25 @@ impl Schedule {
     /// and the month's end.
     ///
     /// # Errors
-    /// [`ScheduleError::NegativeAge`].
+    /// [`ScheduleError::NegativeAge`]; [`ScheduleError::Impossible`] if `x1 < x0` or l rises
+    /// between them (l is non-increasing, S7), or the result exceeds 2^32.
     pub fn interval_q(&self, x0: i64, x1: i64) -> Result<Prob32, ScheduleError> {
         let now = self.survivors_at(x0)?;
         if now == 0 {
             return Ok(Prob32::ONE);
         }
         let later = self.survivors_at(x1)?;
-        let bits = rhe(u128::from(ONE) * u128::from(now - later), u128::from(now));
-        // now - later <= now, so bits <= 2^32 and from_bits succeeds.
-        Ok(Prob32::from_bits(narrow(bits)).unwrap_or(Prob32::ONE))
+        let impossible = |what: String| ScheduleError::Impossible { what };
+        let fall = now
+            .checked_sub(later)
+            .filter(|_| x0 <= x1)
+            .ok_or_else(|| impossible(format!("l({x0}) = {now} < l({x1}) = {later}")))?;
+        let bits = rhe(u128::from(ONE) * u128::from(fall), u128::from(now));
+        // fall <= now, so bits <= 2^32; anything else is refused by name, never clamped.
+        u64::try_from(bits)
+            .ok()
+            .and_then(Prob32::from_bits)
+            .ok_or_else(|| impossible(format!("q = {bits} / 2^32 above 1 at ages {x0}, {x1}")))
     }
 
     /// S8: the month's probability of death for a person born at `birth` at the Month pulse
@@ -349,5 +368,19 @@ mod tests {
             solve_k(19 << 16),
             Err(ScheduleError::E0OutOfRange { bits: 19 << 16 })
         );
+    }
+
+    #[test]
+    fn an_interval_backwards_in_age_is_refused_by_name() {
+        use rh_core::time::{DaysPerYear, SeasonsPerYear};
+        let calendar = Calendar::new(DaysPerYear::D360, SeasonsPerYear::Four);
+        let s = Schedule::new(Q16_16::from_int(30), calendar).unwrap_or_else(|e| panic!("{e}"));
+        let year = calendar.minutes_per_year();
+        let Err(e) = s.interval_q(20 * year, 10 * year) else {
+            panic!("an interval with x1 < x0 gave a probability")
+        };
+        assert!(matches!(e, ScheduleError::Impossible { .. }), "{e}");
+        assert!(e.to_string().contains("impossible under"), "{e}");
+        assert_eq!(s.interval_q(10 * year, 10 * year), Ok(Prob32::ZERO));
     }
 }

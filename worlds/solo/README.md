@@ -11,7 +11,7 @@ S5, which this build lacks: they are `not_built`, skipped and never stubbed, and
 | File | What it is |
 |---|---|
 | `world.toml` | The manifest (`specs/manifest/examples/solo.yaml`, the one copy) and its pinned SHA-256, the Registry and the input script (SPR-011 ruling 16) |
-| `inputs.toml` | The committed input script: one scope-only material input on Ada in year 10, so epoch-keyed draws are inside the golden run (ruling 15) |
+| `inputs.toml` | The committed input script: one scope-only material input on Ada in year 10, so epoch-keyed draws are inside the golden run (ruling 15). No death is pending then, so nothing is re-sampled |
 | `baselines/solo_yearly_200y.ladder` | The PR tier's baseline: the 200-year yearly hash ladder (ruling 16; V-GOLD-01) |
 
 **The history tuple** (DET-1) is in the ladder's header: `engine_build` (`rh-golden <version>` with

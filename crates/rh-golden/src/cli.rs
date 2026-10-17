@@ -114,7 +114,6 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
                 );
             }
             "--repo" => args.repo = PathBuf::from(value),
-            "--world" => args.world.clone_from(value),
             "--require-parallel" => args.require_parallel = Some(number("--require-parallel")?),
             "--seed" => {
                 args.seed = number("--seed")?;

@@ -1,5 +1,5 @@
 //! `rh-sys-demography`: the system `M2.demography` (`specs/systems/M2.demography.odd.toml`,
-//! frozen 0.2.0).
+//! frozen; 0.2.1 since EVO-001, which changed no rung-0 mechanics).
 //!
 //! Plane A, kind `system`. SPR-012 builds the rung-0 slice: ageing and death of founders, no
 //! births.

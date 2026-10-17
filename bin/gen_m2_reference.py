@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
-import math
 import sys
 import tomllib
 from collections.abc import Iterator, Sequence
@@ -95,15 +94,7 @@ def table19_rows(ref: ModuleType) -> list[tuple[str, str, int, int, list[int]]]:
     for key, row in t["golden_table19"].items():
         if key == "ages":
             continue
-        odds = math.exp(2 * row["alpha"])
-        lx = [
-            1.0 if s == ref.SCALE else 0.0 if s == 0 else s / (s + odds * (ref.SCALE - s))
-            for s in ref.S
-        ]
-        e0 = sum(
-            (ref.H[i + 1] - ref.H[i]) * (lx[i] + lx[i + 1]) / 4 for i in range(ref.GRID_POINTS - 1)
-        )
-        bits = round(Fraction(e0) * ref.Q16)
+        bits = ref.implied_e0_bits(row["alpha"])  # the reference's own check-4 e0
         published = golden_e0[Fraction(str(row["alpha"]))] * 100
         assert published.denominator == 1
         rows.append((key, str(row["alpha"]), bits, int(published), row["l_per_10k"]))
@@ -169,9 +160,8 @@ def age_lines(ref: ModuleType, rng: SplitMix64, e: int, lx: list[int], year: int
     for _ in range(RANDOM_AGES):  # S11 intervals: an input inside the month
         x0 = rng.below(100 * year)
         x1 = x0 + 1 + rng.below(31 * DAY)
-        now = ref.ell(lx, x0, year)
-        q = ref.ONE if now == 0 else ref.rhe(ref.ONE * (now - ref.ell(lx, x1, year)), now)
-        lines.append(f"q {e} {year} {x0} {x1} {q}")
+        # S11's interval [x0, x1) is S8's month from x0 of length x1 - x0: the reference's month_q.
+        lines.append(f"q {e} {year} {x0} {x1} {ref.month_q(lx, x0, x1 - x0, year)}")
     return lines
 
 

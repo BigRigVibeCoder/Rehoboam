@@ -51,13 +51,16 @@ reports its metadata). Rules:
                       carry std::process, std::fs and std::env past every path pattern. Raw
                       identifiers are normalised first (`r#std::r#fs` is `std::fs`); on a line
                       that holds one, the reported column counts without the `r#` prefixes.
-    spec-loader       (BCK-002 A-47; SPR-012) rh-registry's spec loaders, load_specs and
-                      registry_system_ids, named in src/ or build.rs of a system crate (rh-sys-*):
-                      rh-registry is on FILE_IO_CRATES for its load path, so a system calling them
-                      would read spec files at step time. Matched as tokens, so a grouped or
-                      renamed import, a path call and a function pointer are all reported; other
-                      plane-A crates (rh-registry defines them) and every tests/ are not scanned
-                      for it.
+    spec-loader       (BCK-002 A-47; SPR-012, review MAJ-2) rh-registry's spec loaders, load_specs
+                      and registry_system_ids, named in src/ or build.rs of any plane-A crate other
+                      than their home, crates/rh-registry/src/ownership.rs: rh-registry is on
+                      FILE_IO_CRATES for its load path, so plane-A code calling them would read
+                      spec files at step time. Matched as tokens, so a grouped or renamed import,
+                      a path call, a function pointer, a re-export under another name and a macro
+                      that expands to a call are all reported. Not covered: a wrapper written
+                      inside ownership.rs itself, under another name; the structural fix (pure
+                      parsers in rh-registry, file reading in a tool crate) is BCK-002 A-51, after
+                      which the rule retires. tests/ are not scanned for it.
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
@@ -204,10 +207,11 @@ FILE_IO_RULE = "file-io"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
 STD_RENAME_RULE = "std-rename"
-# BCK-002 A-47 (SPR-012 T-07): rh-registry may read spec files (FILE_IO_CRATES), so a system crate
-# must never call its loaders: the specs are read by the host at load, never at step time.
+# BCK-002 A-47 (SPR-012 T-07; review MAJ-2): rh-registry may read spec files (FILE_IO_CRATES), so no
+# plane-A code but their home may name its loaders: the specs are read by the host at load, never at
+# step time. The home is (crate, file); everything else in plane A src/ and build.rs is scanned.
 SPEC_LOADER_RULE = "spec-loader"
-SYSTEM_CRATE_PREFIX = "rh-sys-"
+SPEC_LOADER_HOME = ("rh-registry", ("src", "ownership.rs"))
 # MIN-2: `r#ident` is `ident`; stripped before any rule matches (a raw string, r#"..."#, is a
 # literal the lexer has already blanked).
 RAW_IDENT = re.compile(r"\br#(?=[A-Za-z_])")
@@ -239,8 +243,10 @@ class FloatScan:
     deps: tuple[tuple[str, re.Pattern[str]], ...] = ()
     # The file's crate is on FILE_IO_CRATES (BCK-002 A-44); the file-io rule then does not apply.
     file_io: bool = False
-    # The file's crate is a system crate (rh-sys-*); the spec-loader rule applies only there (A-47).
-    system: bool = False
+    # The file's crate is a plane-A workspace crate, scanned for the spec-loader rule (A-47).
+    spec_loader: bool = False
+    # The file's crate name: the spec-loader rule exempts its home (SPEC_LOADER_HOME).
+    crate: str = ""
 
 
 FLOAT_API_WHY = (
@@ -378,8 +384,9 @@ RULES: tuple[Rule, ...] = (
     Rule(
         SPEC_LOADER_RULE,
         _rx(r"\b(?:load_specs|registry_system_ids)\b"),
-        "a system crate calls rh-registry's spec loaders, which read files: specs are read by the "
-        "host at load and reach systems as data, never at step time (BCK-002 A-47)",
+        "plane-A code outside crates/rh-registry/src/ownership.rs names rh-registry's spec "
+        "loaders, which read files: specs are read by the host at load and reach systems as data, "
+        "never at step time (BCK-002 A-47; review MAJ-2)",
     ),
     Rule(
         "unsafe",
@@ -707,7 +714,9 @@ def _applies(finding: Finding, scan: "FloatScan") -> bool:
     if finding.rule in rules and scan.scope == "none":
         return False
     if finding.rule == SPEC_LOADER_RULE:
-        return scan.system
+        home_crate, home_file = SPEC_LOADER_HOME
+        at_home = scan.crate == home_crate and Path(finding.path).parts[-2:] == home_file
+        return scan.spec_loader and not at_home
     return not (finding.rule == FILE_IO_RULE and scan.file_io)
 
 
@@ -1260,7 +1269,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         if users is None or name in users
                     ),
                     file_io=name in FILE_IO_CRATES,
-                    system=name.startswith(SYSTEM_CRATE_PREFIX),
+                    spec_loader=True,
+                    crate=name,
                 )
                 for name, directory in crates
             }

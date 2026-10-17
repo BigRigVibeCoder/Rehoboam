@@ -676,9 +676,18 @@ workspace_tests() {
 # binomial count. A grep gate over a system crate's src/ and Cargo.toml: no sampler crate, no
 # Poisson or binomial draw. Its control is a planted Poisson death that must FAIL.
 bernoulli_only() {
-  local dir="$1" hits
-  hits="$(grep -rniE 'poisson|binomial|rh_sample|rh-sample' "$dir/src" "$dir/Cargo.toml")" || true
-  if [ -n "$hits" ]; then
+  local dir="$1" hits rc
+  # Review MIN-2: a missing crate fails closed, never passes as "nothing found".
+  if [ ! -d "$dir/src" ] || [ ! -f "$dir/Cargo.toml" ]; then
+    echo "VIOLATION [V-INV-08] $dir is not a crate directory (no src/ or no Cargo.toml): nothing to check, refused"
+    return 1
+  fi
+  hits="$(grep -rniE 'poisson|binomial|rh_sample|rh-sample' "$dir/src" "$dir/Cargo.toml")"; rc=$?
+  if [ "$rc" -gt 1 ]; then
+    echo "VIOLATION [V-INV-08] grep failed on $dir (exit $rc): refused"
+    return 1
+  fi
+  if [ "$rc" -eq 0 ]; then
     echo "VIOLATION [V-INV-08] $dir draws deaths other than by one Bernoulli per person-month:"
     echo "$hits"
     return 1
@@ -802,7 +811,7 @@ run "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph" pass 
 run "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL" 'fail:unlinked crate `fixture_narrative`' cargo check --offline --locked --quiet --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_c/Cargo.toml --target-dir target/lint-fixtures &&
 fixed_point_compile_controls &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
-run "lint_forbidden positive control: rh-registry's spec loaders in a system crate's src/ must FAIL in every form, its tests/ and rh-registry pass (BCK-002 A-47)" "fail:3 files scanned; 5 violations" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/spec_loader_workspace/Cargo.toml &&
+run "lint_forbidden positive control: rh-registry's spec loaders named in plane-A src/ outside their home must FAIL in all seven forms, alias and macro included; tests/ and ownership.rs pass (BCK-002 A-47; review MAJ-2)" "fail:4 files scanned; 7 violations" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/spec_loader_workspace/Cargo.toml &&
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
 run "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its tests/ and a builder's args pass (SPR-011 A-4)" "fail:VIOLATION [V-DET-19/env] \`std::env\` at tests/lint_fixtures/forbidden/env_workspace/rh-core/src/lib.rs:5:35;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/env_workspace/Cargo.toml &&
@@ -901,9 +910,11 @@ run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fa
 run "T-06 rh-worldgen: V-DATA-05 founder ids and a forced collision, bit-equal genesis twice and across threads, Ada at 25, refused writes (SPR-012)" "pass:V-DATA-05: a forced collision resolves to the same rehash on every run" cargo nextest run -p rh-worldgen --locked --test genesis --no-capture &&
 run "T-06 V-INV-11: founders' negative birth ticks round-trip through a keyframe, and the loaded engine advances as the continuous one (SPR-012)" "pass:V-INV-11: negative birth ticks round-trip through a keyframe in 4 worlds" cargo nextest run -p rh-worldgen --locked --test keyframe --no-capture &&
 run "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)" "pass:V-DET-12, V-INV-01: 24 random worlds" cargo nextest run -p rh-worldgen --locked --test m2_system --no-capture &&
-run "T-07 M2.demography in release: q(15) of 10,000 founders aged 0 inside the binomial 99.9% band for 32 seeds; V-DATA-04 over 1,000 years (SPR-012)" "pass:V-DATA-04: 10000 persons emitted over 1,000 years" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(q15) | test(v_data_04)" &&
+run "T-07 M2.demography in release: q(15) of 10,000 founders aged 0 inside the binomial 99.9% band for each of 32 seeds and pooled (SPR-012; review MAJ-1, MIN-1)" "pass:inside +-3.29" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(q15)" &&
+run "T-07 M2.demography in release: V-DATA-04 over 1,000 years, one founder entry per person and a death record iff absent (SPR-012; review MIN-1)" "pass:V-DATA-04: 10000 persons emitted over 1,000 years" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(v_data_04)" &&
 run "V-INV-08: M2 draws deaths by Bernoulli only (no Poisson or binomial draw; SPR-012 T-07)" "pass:V-INV-08: crates/rh-sys-demography draws deaths by Bernoulli only" bernoulli_only crates/rh-sys-demography &&
 run "V-INV-08 positive control: a planted Poisson death draw must FAIL (SPR-012 T-07)" "fail:VIOLATION [V-INV-08] tests/lint_fixtures/bernoulli/poisson_death" bernoulli_only tests/lint_fixtures/bernoulli/poisson_death &&
+run "V-INV-08 positive control: a missing crate directory must FAIL, never pass as nothing found (SPR-012; review MIN-2)" "fail:VIOLATION [V-INV-08] crates/rh-sys-no-such-crate is not a crate directory" bernoulli_only crates/rh-sys-no-such-crate &&
 run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)" "fail:V-DET-12 violated" env RH_CORE_LIFE_GOLDEN="$PWD/tests/lint_fixtures/golden/backdated_life_events.txt" cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_12_golden_event_log &&
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&

@@ -1,7 +1,13 @@
-//! Fixture: rh-registry defines the loaders and calls them on its load path (never reported).
-pub fn load_specs() {}
-pub fn registry_system_ids() {}
-pub fn load() {
-    load_specs();
-    registry_system_ids();
+//! Fixture: rh-registry outside the loaders' home (review MAJ-2). A re-export under another name
+//! and an exported macro that expands to a call would carry the loaders to any crate under names
+//! the token rule never sees there, so both are reported here, at their source.
+pub mod ownership;
+
+pub use ownership::load_specs as read_dir;
+
+#[macro_export]
+macro_rules! ids {
+    () => {
+        $crate::ownership::registry_system_ids()
+    };
 }

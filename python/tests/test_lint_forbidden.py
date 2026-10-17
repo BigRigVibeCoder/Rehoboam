@@ -1250,41 +1250,55 @@ def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
     assert rules_hit(source) == []
 
 
-def test_spec_loaders_are_refused_in_system_crates_only() -> None:
-    """A-47: load_specs and registry_system_ids in a system crate's src/, in every form."""
+def test_spec_loaders_are_refused_in_plane_a_outside_their_home() -> None:
+    """A-47 (review MAJ-2): the loaders named in plane-A src/, in every form, but ownership.rs."""
     forms = (
         "use rh_registry::ownership::load_specs;\n",
         "use rh_registry::ownership::{registry_system_ids as ids};\n",
         "let _ = rh_registry::ownership::load_specs(p);\n",
         "let f = registry_system_ids;\n",
         "let _ = ownership :: load_specs (p);\n",
+        "pub use ownership::load_specs as read_dir;\n",
+        "macro_rules! ids { () => { $crate::ownership::registry_system_ids() }; }\n",
     )
     for code in forms:
         report = Report(violations=[], escaped=[])
-        scan_source(code, "x.rs", report, floats=FloatScan(system=True))
+        scan = FloatScan(spec_loader=True, crate="rh-worldgen")
+        scan_source(code, "src/lib.rs", report, floats=scan)
         assert len(report.violations) == 1, code
         assert "[V-DET-19/spec-loader]" in report.violations[0], code
-        for scan in (FloatScan(), FloatScan("none", system=True)):
+        home = FloatScan(spec_loader=True, crate="rh-registry")
+        report = Report(violations=[], escaped=[])
+        scan_source(code, "crates/rh-registry/src/lib.rs", report, floats=home)
+        assert len(report.violations) == 1, ("rh-registry outside ownership.rs", code)
+        quiet = (
+            (FloatScan(), "src/lib.rs"),
+            (FloatScan("none", spec_loader=True, crate="rh-worldgen"), "tests/t.rs"),
+            (home, "crates/rh-registry/src/ownership.rs"),
+        )
+        for floats, path in quiet:
             report = Report(violations=[], escaped=[])
-            scan_source(code, "x.rs", report, floats=scan)
-            assert report.violations == [], (code, scan)
+            scan_source(code, path, report, floats=floats)
+            assert report.violations == [], (code, path)
     # Names that merely contain the loaders' names are not them.
     report = Report(violations=[], escaped=[])
     scan_source(
         "let load_specs_count = 1;\nfn my_registry_system_ids() {}\n",
         "x.rs",
         report,
-        floats=FloatScan(system=True),
+        floats=FloatScan(spec_loader=True, crate="rh-worldgen"),
     )
     assert report.violations == []
 
 
-def test_the_spec_loader_workspace_reports_the_system_crates_src_only(
+def test_the_spec_loader_workspace_reports_plane_a_src_outside_the_home(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """rh-sys-x's src/ is reported five times; its tests/ and rh-registry are not (A-47)."""
+    """Seven forms: rh-sys-x's src/ five, rh-registry's lib.rs two; tests/ and ownership.rs none."""
     manifest = FIXTURES / "spec_loader_workspace" / "Cargo.toml"
     assert main(["--manifest-path", str(manifest)]) == 1
     out = capsys.readouterr().out
-    assert out.count("[V-DET-19/spec-loader]") == 5
-    assert "rh-sys-x/tests" not in out and "rh-registry/src" not in out
+    assert out.count("[V-DET-19/spec-loader]") == 7
+    assert out.count("rh-registry/src/lib.rs") == 2
+    assert "rh-sys-x/tests" not in out
+    assert "spec_loader_workspace/rh-registry/src/ownership.rs" not in out
