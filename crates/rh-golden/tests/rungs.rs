@@ -58,7 +58,10 @@ fn stream(world: &str, years: i64) -> PathBuf {
 #[test]
 fn every_rung_runs_past_its_extinction_and_its_chronicle_stays_consistent() {
     let solo = stream("solo", 60);
-    assert_eq!(read_channel_a(&solo.join("stream"), 0, MPY).unwrap().len(), 60);
+    assert_eq!(
+        read_channel_a(&solo.join("stream"), 0, MPY).unwrap().len(),
+        60
+    );
     for (world, years, extinct_by) in [("household", 80, 62), ("hamlet", 100, 79)] {
         let dir = stream(world, years);
         let records: Vec<_> = read_channel_a(&dir.join("stream"), 0, MPY)
