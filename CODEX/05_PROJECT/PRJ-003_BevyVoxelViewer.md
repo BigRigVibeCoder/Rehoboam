@@ -3,18 +3,18 @@ id: PRJ-003
 title: "Bevy Native Voxel Viewer (rh-view): project plan"
 type: reference
 status: PROPOSED
-owner: red-team
-agents: [all]
+owner: architect
+agents: [coder, tester, architect]
 tags: [roadmap, project-management, stream, observability]
 related: [PRJ-001, PRJ-002, ADR-0030, ADR-0031, ADR-0035, ADR-0036, ADR-0037, SPR-027]
 created: 2026-10-17
 updated: 2026-10-17
-version: 1.0.0
+version: 1.1.0
 ---
 
 # PRJ-003 — Bevy Native Voxel Viewer (`rh-view`): Project Plan
 
-> **BLUF:** Authored and owned by the Red Team / Developer Tools lane under Director mandate (2026-10-17). Specifies the architecture, scope, and phased implementation for `crates/rh-view`, a native Rust 3D voxel spectator and timeline scrubber built on Bevy 0.20. Operates as a Plane-B procedural hydration harness guided by Plane-C narrative sifting. Connects directly to `rh-protocol`, `rh-stream`, and the SPR-027 materializer via local sockets/pipes. Lives strictly in the Tool plane (`Tool` crate classification); no Plane A simulation crate may ever depend on it. Text-first simulation contracts and G2 thesis gates remain completely unaffected. Submitted for Architect review and D51 / ADR-0036 ratification.
+> **BLUF:** Authored by the Red Team under Director mandate (2026-10-17) as the formal specification and execution plan for the Developer (`AGT-002-TOOLS`). Specifies the architecture, scope, and phased implementation for `crates/rh-view`, a native Rust 3D voxel spectator and timeline scrubber built on Bevy 0.20. Serves as a **vital visual testing & observability harness for the Red Team and Director**: text logs alone blind external auditors when evaluating spatial layouts, demographic emergence, and dynastic drama. **We need to SEE the simulation to test it.** Connects directly to `rh-protocol`, `rh-stream`, and the SPR-027 materializer via local sockets/pipes. Lives strictly in the Tool plane (`Tool` crate classification); no Plane A simulation crate may ever depend on it. Text-first simulation contracts and G2 thesis gates remain completely unaffected. Submitted for Architect review and D51 / ADR-0036 ratification.
 
 ---
 
@@ -24,8 +24,9 @@ To ensure that core simulation velocity and determinism are never compromised:
 
 | Role | Responsibility |
 |---|---|
-| **Red Team / Tool Devs** *(This Lane)* | **Primary Owner & Implementer.** Specs, builds, benchmarks, and maintains `crates/rh-view`. Iterates on visual look-dev, voxel meshing shaders, camera controls, and procedural hydration grammars. |
-| **Architect** | **Reviewer & System Integrator.** Reviews interface boundaries (`rh-protocol`, socket wire formats). Formally files Decision D51 and drafts ADR-0036. Enforces that no Plane A crate ever imports `rh-view`. |
+| **Developer (`AGT-002-TOOLS`)** | **Primary Implementer.** Writes the Rust code for `crates/rh-view`, implements the binary greedy chunk mesher, configures Bevy 0.20 render pipelines, and connects the stream reader to `rh-stream`. |
+| **Architect (`AGT-001`)** | **System Integrator & Gatekeeper.** Reviews interface boundaries (`rh-protocol`, socket wire formats). Formally files Decision D51 and drafts ADR-0036. Issues sprints into the merge pipeline and enforces that no Plane A crate ever imports `rh-view`. |
+| **Red Team** | **Requirements Author & Quality Auditor.** Defined `PRJ-003` and `SPR-033`. Audits visual fidelity, tests non-interference (`V-VIEW-01`), verifies timeline scrub latency (`V-VIEW-05`), and utilizes the diorama viewer as the primary visual inspection harness to test demographic and spatial emergence. |
 | **Director** | **Executive Authority.** Ratifys Decision D51, approves visual fidelity milestones, and exercises the timeline scrubber / Gandalf avatar controls. |
 
 ---

@@ -3,20 +3,22 @@ id: SPR-033
 title: "Bevy 0.20 native voxel viewer spike"
 type: how-to
 status: PLANNING
-owner: red-team
+owner: architect
 agents: [coder, tester]
 tags: [sprint]
 related: [PRJ-003, ADR-0035, ADR-0036, ADR-0037, SPR-027]
 created: 2026-10-17
 updated: 2026-10-17
-version: 1.0.0
+version: 1.1.0
 ---
 
-> **BLUF:** Create `crates/rh-view`, a native Rust 3D voxel spectator and diorama viewer built on Bevy 0.20, with high-performance binary greedy meshing and an orbital camera. Operates in the Tool plane; no Plane A engine crate may depend on it. Scope-bounded; about 2 agent-weeks.
+> **BLUF:** Developer: AGT-002-TOOLS. Testers: AGT-003-DET, AGT-003-IF, and the Red Team. Create `crates/rh-view`, a native Rust 3D voxel spectator and diorama viewer built on Bevy 0.20, with high-performance binary greedy meshing and an orbital camera. Serves as the primary visual testing and observability harness for the Red Team. Operates in the Tool plane; no Plane A engine crate may depend on it. Scope-bounded; about 2 agent-weeks.
 
 # SPR-033 — Bevy 0.20 Native Voxel Viewer Spike
 
 - **Roadmap item:** `PRJ-003` §4 (SPR-033) · **Phase:** P1a-Tool (Tool Plane)
+- **Developer:** `AGT-002-TOOLS` (Rust monorepo developer)
+- **Auditor / Tester:** Red Team & `AGT-003-IF` (testing visual parity and zero-interference)
 - **Depends on:** Ratification of Decision D51 / ADR-0036.
 - **Binding contracts:** ADR-0030 (headless engine), ADR-0031 (fidelity by zoom), ADR-0036 (Plane B hydration), ADR-0037 (view protocol), GOV-003 (architecture lints).
 - **Requirements covered:** V-VIEW-01, V-VIEW-02, V-VIEW-03, V-VIEW-04.
