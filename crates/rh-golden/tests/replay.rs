@@ -452,3 +452,103 @@ fn an_extended_run_directory_records_its_horizon_and_replays() {
 fn base_of(dir: &Path) -> PathBuf {
     dir.parent().unwrap().to_path_buf()
 }
+
+/// REV-SPR-013 MIN-5: a run directory whose journal is swapped for another self-consistent one of
+/// the same history (and `run.toml` edited to match it) is refused by name: the journal does not
+/// match channel A's `INPUT` records.
+#[test]
+fn a_journal_that_is_not_the_streams_is_refused_by_name() {
+    let base = scratch("swapped");
+    let (a, b) = (base.join("a"), base.join("b"));
+    run_into("solo", 60, &a, None);
+    let other = script(&base.join("other"), &[(MPY * 50 + 1440 + 367, 0)]);
+    run_into("solo", 60, &b, Some(&other));
+    std::fs::copy(b.join("journal.sqlite"), a.join("journal.sqlite")).unwrap();
+    let mut toml = RunToml::read(&a).unwrap();
+    let theirs = RunToml::read(&b).unwrap();
+    toml.journal_inputs = theirs.journal_inputs;
+    toml.journal_head = theirs.journal_head;
+    toml.write(&a).unwrap();
+    let err = replay(&ReplayArgs {
+        repo: repo(),
+        run_dir: a.clone(),
+        into: base.join("into"),
+        from_keyframe: None,
+        threads: 1,
+    })
+    .unwrap_err();
+    assert!(
+        err.0.contains("does not match channel A's INPUT records"),
+        "{err}"
+    );
+    println!(
+        "T-12 MIN-5: a swapped, self-consistent journal is refused against the stream's INPUT records"
+    );
+}
+
+/// REV-SPR-013 MIN-6, MIN-7, MIN-8: `--inject` and a foreign `--out` or `--journal` are refused
+/// with a run directory; a replay into the run directory itself is refused; and a replay writes
+/// nothing into the run directory it reads.
+#[test]
+fn a_run_directory_is_never_perturbed_redirected_or_written_by_its_replay() {
+    let base = scratch("guards");
+    let dir = base.join("run");
+    run_into("solo", 40, &dir, None);
+    let mut a = RunArgs::new(
+        &repo(),
+        40,
+        1,
+        RungKind::Yearly,
+        &base.join("elsewhere.ladder"),
+    );
+    "solo".clone_into(&mut a.world);
+    a.journal = base.join("elsewhere.sqlite");
+    a.run_dir = Some(base.join("fresh"));
+    assert!(
+        run(&a)
+            .unwrap_err()
+            .0
+            .contains("are refused with --run-dir")
+    );
+    a.out = base.join("fresh/run.ladder");
+    a.journal = base.join("fresh/journal.sqlite");
+    a.inject = Some(rh_golden::run::Inject {
+        month: 1,
+        table: "persons".to_owned(),
+        row: 0,
+    });
+    assert!(run(&a).unwrap_err().0.contains("refused with --run-dir"));
+    assert!(
+        !base.join("fresh").exists(),
+        "a refused run created its run directory"
+    );
+    for into in [dir.clone(), dir.join("inner")] {
+        let err = replay(&ReplayArgs {
+            repo: repo(),
+            run_dir: dir.clone(),
+            into,
+            from_keyframe: None,
+            threads: 1,
+        })
+        .unwrap_err();
+        assert!(err.0.contains("a replay writes a fresh directory"), "{err}");
+    }
+    let before = files(&dir);
+    let r = replay_of(&dir, &base.join("replayed"), None, 1);
+    assert!(r.equal());
+    assert!(
+        files(&dir) == before,
+        "the replay wrote into the run directory"
+    );
+    assert_eq!(
+        before
+            .keys()
+            .filter(|k| k.starts_with("journal.sqlite"))
+            .count(),
+        1,
+        "the immutable reader leaves no -wal or -shm beside the journal"
+    );
+    println!(
+        "T-12 MIN-6/7/8: --inject, --out and --journal refused with --run-dir; replay into the run refused; replay reads the run directory without a write"
+    );
+}

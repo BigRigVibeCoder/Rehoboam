@@ -5,8 +5,9 @@
 //! `initiator` is `actor`) that the pattern's role variables fill. The declared semantics
 //! (`selection`, `on_complete`) are carried into every match; with one clause no partial match is
 //! ever open, so they change nothing yet. Everything v0 cannot honour is refused at load, never
-//! ignored: a second clause, `where` reads, `require_edge`, `unless`, `emit`, `dedupe`,
-//! `death_tolerant`, `completion_hazard`. The lint (`specs/sifting/lint_patterns.py`) checks the
+//! ignored: a second clause, `where` reads, `require_edge`, `within_days`, `unless`, `emit`,
+//! `dedupe`, `death_tolerant`, `completion_hazard`, a role domain other than `any`, and a declared
+//! role that no clause binds (REV-SPR-013 MIN-1). The lint (`specs/sifting/lint_patterns.py`) checks the
 //! DSL itself (anchoring, budgets) before a pack is enabled (V-SIFT-05).
 //!
 //! A pack is identified by its file's digest (`pattern.pack_digest`: XXH3-128 of the bytes,
@@ -144,6 +145,8 @@ pub fn compile_pack(pack: &str, text: &str) -> Result<Vec<Pattern>, SiftError> {
             "completion_hazard",
             "threatened_role",
             "surface_from",
+            "within_days",
+            "require_edge",
         ] {
             if p.contains_key(unsupported) {
                 return Err(refuse(
@@ -172,9 +175,21 @@ pub fn compile_pack(pack: &str, text: &str) -> Result<Vec<Pattern>, SiftError> {
         };
         let selection = code_of("selection", &SELECTIONS, 0)?;
         let on_complete = code_of("on_complete", &ON_COMPLETE, 0)?;
-        let mut roles: Vec<String> = p
-            .get("roles")
-            .and_then(toml::Value::as_table)
+        let role_table = p.get("roles").and_then(toml::Value::as_table);
+        // A role's domain (`A = "authority"`) is an anchored state read v0 cannot evaluate
+        // (REV-SPR-013 MIN-1; envelope_v0.md §1): only `any` is honoured.
+        if let Some((var, domain)) = role_table
+            .into_iter()
+            .flatten()
+            .find(|(_, v)| v.as_str() != Some("any"))
+        {
+            return Err(refuse(
+                pack,
+                &id,
+                &format!("role domain `{var} = {domain}` is not supported (only \"any\")"),
+            ));
+        }
+        let mut roles: Vec<String> = role_table
             .map(|t| t.keys().cloned().collect())
             .unwrap_or_default();
         roles.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
@@ -221,6 +236,16 @@ pub fn compile_pack(pack: &str, text: &str) -> Result<Vec<Pattern>, SiftError> {
             }
         }
         clause_roles.extend(keys);
+        if let Some(unbound) = roles
+            .iter()
+            .find(|r| !clause_roles.iter().any(|(_, v)| v == *r))
+        {
+            return Err(refuse(
+                pack,
+                &id,
+                &format!("role `{unbound}` is declared but no clause binds it"),
+            ));
+        }
         let bind = clause
             .get("bind")
             .and_then(toml::Value::as_str)

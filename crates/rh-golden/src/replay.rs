@@ -4,6 +4,8 @@
 //! world, the seed, the horizon and the rung kind, and records the journal's input count and chain
 //! head when the run started. The replay
 //!
+//! 0. refuses `--into` the run directory or a directory inside it, and a journal that still has a
+//!    write-ahead log (a killed run not yet resumed);
 //! 1. opens the run's journal read-only (`Replay::open`: the history key, the count, the `seq`
 //!    sequence, every payload hash and row digest, the chain) and requires its position to be
 //!    `run.toml`'s exactly, so a missing, extra or edited row hard-fails, even in a journal that
@@ -17,6 +19,15 @@
 //!    from its keyframe's ladder sidecar), every channel-A segment's `canonical_digest` and file
 //!    bytes, and every keyframe file. It prints `REPLAY EQUAL` or `REPLAY DIFFERS` with the first difference.
 //!
+//! In a run directory with a stream, the journal is cross-checked against channel A's `INPUT`
+//! records first (journal seq, tick, scope and row digest): a journal swapped for another,
+//! self-consistent one with `run.toml` edited to match is refused by name, the tool exit code
+//! (REV-SPR-013 MIN-5). **Limit:** a directory holding only `run.toml` and the journal (the
+//! V-DET-18 case) has no stream to cross-check against; its journal is checked against `run.toml`
+//! alone.
+//!
+//! The source directory is never written: the journal is opened immutable (no `-wal`, no `-shm`).
+//!
 //! The replay's inputs are the journal's, never the input script's (V-DET-18). A run directory
 //! holding only `run.toml` and the journal is replayed without the comparison (`compared` is
 //! false): the rebuilt directory is then compared with the run by replaying the run, or file by
@@ -27,6 +38,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use rh_snapshot::journal::{Replay, row_digest, stream_fields};
+use rh_stream::record::Body;
 use rh_stream::writer::read_channel_a;
 
 use crate::dump;
@@ -108,6 +121,79 @@ fn files(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, Error> {
     Ok(out)
 }
 
+/// `path` made absolute through its nearest existing ancestor (resolved), the rest appended: a
+/// path that does not exist yet still compares by where it would be.
+fn resolved(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut at = path.to_path_buf();
+    loop {
+        if let Ok(real) = at.canonicalize() {
+            return rest.iter().rev().fold(real, |p, c| p.join(c));
+        }
+        match (at.file_name().map(std::ffi::OsStr::to_owned), at.parent()) {
+            (Some(name), Some(parent)) => {
+                rest.push(name);
+                at = if parent.as_os_str().is_empty() {
+                    PathBuf::from(".")
+                } else {
+                    parent.to_path_buf()
+                };
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+
+/// REV-SPR-013 MIN-5: in a run directory with a stream, the journal must be the one the stream
+/// recorded: every journal row applied within the sealed years has its `INPUT` record (seq, tick,
+/// scope and row digest), and every `INPUT` record its row. A mismatch is a tampered journal
+/// (refused by name, the tool exit code), never a "differs". A directory holding only `run.toml`
+/// and the journal (V-DET-18) has nothing to cross-check against.
+fn cross_check_inputs(src: &RunDir, journal: &Replay, mpy: i64) -> Result<(), Error> {
+    if !src.stream().is_dir() {
+        return Ok(());
+    }
+    let segs = read_channel_a(&src.stream(), 0, mpy).map_err(|e| Error(format!("stream: {e}")))?;
+    let Some(last) = segs.last().map(|s| s.row.last_tick) else {
+        return Ok(());
+    };
+    let recorded: Vec<(u64, i64, Option<u64>, [u8; 16])> = segs
+        .iter()
+        .flat_map(|s| &s.records)
+        .filter_map(|r| match &r.body {
+            Body::Input(i) => Some((i.journal_seq, r.header.tick, i.scope_id, i.row_digest)),
+            _ => None,
+        })
+        .collect();
+    let journaled: Vec<(u64, i64, Option<u64>, [u8; 16])> = journal
+        .inputs()
+        .iter()
+        .filter(|r| r.tick.minutes() <= last)
+        .map(|r| {
+            let (_, _, scope_id, _) = stream_fields(r);
+            (u64::from(r.seq), r.tick.minutes(), scope_id, row_digest(r))
+        })
+        .collect();
+    if recorded == journaled {
+        return Ok(());
+    }
+    let at = recorded
+        .iter()
+        .zip(&journaled)
+        .position(|(a, b)| a != b)
+        .unwrap_or_else(|| recorded.len().min(journaled.len()));
+    Err(Error(format!(
+        "journal: {} does not match channel A's INPUT records: {} journal rows within the sealed \
+         years against {} INPUT records, first difference at input {at} (journal {:?}, stream \
+         {:?}). The journal was edited after the run (REV-SPR-013 MIN-5)",
+        src.journal().display(),
+        journaled.len(),
+        recorded.len(),
+        journaled.get(at).map(|r| (r.0, r.1)),
+        recorded.get(at).map(|r| (r.0, r.1)),
+    )))
+}
+
 fn copy(from: &Path, to: &Path) -> Result<(), Error> {
     if let Some(parent) = to.parent() {
         std::fs::create_dir_all(parent).map_err(io("replay"))?;
@@ -155,6 +241,7 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
         )));
     }
     let mpy = toml.minutes_per_year;
+    cross_check_inputs(&src, &journal, mpy)?;
     let resume_year = match args.from_keyframe {
         None => None,
         Some(tick) if tick >= mpy - 1 && (tick + 1) % mpy == 0 => Some((tick + 1) / mpy),
@@ -165,6 +252,13 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
         }
     };
     let dst = RunDir(args.into.clone());
+    // REV-SPR-013 MIN-7: the replay writes a fresh directory, never the run's own.
+    if resolved(&dst.0).starts_with(resolved(&src.0)) {
+        return Err(Error(format!(
+            "--into {} is the run directory (or inside it): a replay writes a fresh directory",
+            dst.0.display()
+        )));
+    }
     if dst.0.exists() {
         std::fs::remove_dir_all(&dst.0).map_err(io("replay"))?;
     }

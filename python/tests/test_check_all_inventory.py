@@ -263,7 +263,8 @@ REQUIRED_GATES = (
     "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and"
     " V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)",
     "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, "
-    "streaming, and streaming with a stopped tail attached, reported",
+    "streaming, and streaming with a tail stopped mid-run (after it printed a sealed segment), "
+    "within twice streaming plus 1 s",
     "V-DATA-10 subset on the envelope fixture: DuckDB reads its event_snapshot rows and typed "
     "causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and "
     "constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; "
@@ -659,6 +660,8 @@ REQUIRED_GATES = (
     "(SPR-013 T-10; the file-snapshot ruling)",
     "tail snapshot positive control: a stale snapshot must FAIL with the first differing line "
     "(SPR-013 T-10)",
+    "twin_check positive control: a twin expecting another status (a column the match id does "
+    "not cover) must FAIL (REV-SPR-013 MIN-2)",
     "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)",
     "uv lock --check positive control: drifted lock must FAIL",
     "wire_v1 positive control: a host whose window moves before the dropped year is on disk must "

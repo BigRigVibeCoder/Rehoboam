@@ -90,6 +90,10 @@ pub fn to_argv(args: &RunArgs, repo: bool) -> Vec<String> {
 ///
 /// # Errors
 /// [`Error`] naming the first argument that does not parse, or a missing `--years` or `--out`.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one match arm per flag of `rh-cli run`, then the run directory's consistency checks"
+)]
 pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
     let bad = |what: &str| Error(format!("run smoke: {what}"));
     let mut args = RunArgs::new(repo, 0, 1, RungKind::Yearly, Path::new(""));
@@ -183,8 +187,15 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
         }
     }
     args.years = years.ok_or_else(|| bad("--years is required"))?;
-    // SPR-013 T-09: a run directory holds the ladder and the journal unless they are named.
+    // SPR-013 T-09: a run directory holds the ladder and the journal (REV-SPR-013 MIN-8: naming
+    // others is refused, so replay and resume always find them there).
     let run_dir = args.run_dir.clone().map(crate::stream::RunDir);
+    if run_dir.is_some() && (out.is_some() || journal.is_some()) {
+        return Err(bad(
+            "--out and --journal are the run directory's own (D/run.ladder, D/journal.sqlite) \
+             and are refused with --run-dir",
+        ));
+    }
     args.out = out
         .or_else(|| run_dir.as_ref().map(crate::stream::RunDir::ladder))
         .ok_or_else(|| bad("--out is required (or --run-dir)"))?;
@@ -542,7 +553,9 @@ pub fn sift_cmd(words: &[String], repo: &Path) -> u8 {
 
 /// `replay <run-dir> --into D [--from-keyframe TICK] [--threads T] [--repo R]` (SPR-013 T-12;
 /// [`crate::replay`]). Exit 0 when the replay equals the run, 1 when it differs, 2 on a tool error
-/// (a journal that is not the run's among them).
+/// (a journal that is not the run's among them: against `run.toml`, and in a run directory with a
+/// stream against its `INPUT` records; a journal-only directory is checked against `run.toml`
+/// alone).
 #[must_use]
 pub fn replay_cmd(words: &[String], repo: &Path) -> u8 {
     match parse_replay(words, repo).and_then(|a| crate::replay::replay(&a).map(|r| (a, r))) {

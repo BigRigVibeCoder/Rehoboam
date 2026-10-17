@@ -5,7 +5,8 @@
 //! delta ([`rh_stream::convert::LifeTracker`]); at each stop of the run loop it drains the events
 //! (`Engine::drain_events`), adds the journal rows applied up to the stop (`INPUT`, at the row's
 //! tick), a `STEP_DIGEST` when the stop is a Month pulse (living count and the three plane hashes
-//! after `Bookkeeping`; the writer fills the births and deaths) and a `KEYFRAME` marker when it
+//! after `Bookkeeping`, B and C being the empty-plane constants in P1a; the writer fills the births
+//! and deaths) and a `KEYFRAME` marker when it
 //! writes a keyframe, and pushes them all to the writer, which orders them by R4 and seals each
 //! sim-year as it completes. The genesis founders' `LIFE_ENTRY` records are at tick 0.
 //!
@@ -130,6 +131,67 @@ impl SealHook for Hook {
             Self::stall(&format!("sealed y{year:06}"));
         }
     }
+}
+
+/// The writer's lock file of a run directory: a run holds it exclusively for its whole length,
+/// and the OS releases it when the run ends or is killed (REV-SPR-013 MIN-9).
+pub const WRITER_LOCK: &str = ".writer.lock";
+
+/// Takes the run directory's writer lock, refusing a second writer.
+///
+/// # Errors
+/// [`Error`] if the lock cannot be taken (another run writes this directory) or the file cannot
+/// be opened.
+pub fn lock_writer(dir: &Path) -> Result<std::fs::File, Error> {
+    let path = dir.join(WRITER_LOCK);
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .map_err(|e| Error(format!("{}: {e}", path.display())))?;
+    f.try_lock().map_err(|_| {
+        Error(format!(
+            "{}: another run is writing this run directory",
+            dir.display()
+        ))
+    })?;
+    Ok(f)
+}
+
+/// Whether a run directory's writer is gone: its lock file exists and is not held. Before a run
+/// has started (no lock file yet) it is not gone.
+#[must_use]
+pub fn writer_gone(dir: &Path) -> bool {
+    std::fs::File::open(dir.join(WRITER_LOCK)).is_ok_and(|f| f.try_lock_shared().is_ok())
+}
+
+/// Writes `bytes` to `path` atomically: a temporary sibling, fsync, rename, fsync of the
+/// directory. The host's files of a run directory (`run.toml`, keyframes and their ladder
+/// sidecars); `rh-stream` writes only sealed segments (REV-SPR-013 MIN-3).
+///
+/// # Errors
+/// [`Error`] naming the path.
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
+    let fail = |e: std::io::Error| Error(format!("{}: {e}", path.display()));
+    let dir = path
+        .parent()
+        .ok_or_else(|| Error(format!("{}: no parent directory", path.display())))?;
+    std::fs::create_dir_all(dir).map_err(fail)?;
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| Error(format!("{}: no file name", path.display())))?;
+    let tmp = dir.join(format!(".{name}.tmp"));
+    {
+        let mut f = std::fs::File::create(&tmp).map_err(fail)?;
+        f.write_all(bytes).map_err(fail)?;
+        f.sync_all().map_err(fail)?;
+    }
+    std::fs::rename(&tmp, path).map_err(fail)?;
+    std::fs::File::open(dir)
+        .and_then(|d| d.sync_all())
+        .map_err(fail)
 }
 
 /// The dictionaries of a Registry (R6): `[verbs]` sorted by name and `[act_classes].ids`.
@@ -295,8 +357,7 @@ impl RunToml {
     /// [`Error`] if it cannot be written.
     pub fn write(&self, dir: &Path) -> Result<(), Error> {
         let text = toml::to_string(self).map_err(|e| Error(format!("run.toml: {e}")))?;
-        rh_stream::seal::write_atomic(&dir.join(RUN_TOML), text.as_bytes())
-            .map_err(|e| Error(e.to_string()))
+        write_atomic(&dir.join(RUN_TOML), text.as_bytes())
     }
 }
 
@@ -437,6 +498,8 @@ impl StreamHost {
                     births: 0,
                     deaths: 0,
                     state_hash: state_hash(&state),
+                    // Planes B and C hold nothing the engine hashes in P1a, so these are the
+                    // empty-plane constants of rh-snapshot (REV-SPR-013 NIT): equal in every digest.
                     observation_hash: empty_plane_hash(Plane::B),
                     narrative_hash: empty_plane_hash(Plane::C),
                 }),

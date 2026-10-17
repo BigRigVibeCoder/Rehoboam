@@ -1054,8 +1054,34 @@ impl Replay {
             path,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        check_key(&conn, key)?;
-        let position = position_of(&conn, timeline_id)?;
+        Self::load(&conn, key, timeline_id)
+    }
+
+    /// [`Replay::open`] as an immutable reader (`mode=ro&immutable=1`): `SQLite` neither writes nor
+    /// creates any file beside the journal (no `-shm`, no `-wal`), so a replay leaves the run's
+    /// directory untouched (REV-SPR-013 MIN-8). An immutable reader ignores a write-ahead log, so
+    /// the caller refuses a journal that still has one.
+    ///
+    /// # Errors
+    /// As [`Replay::open`].
+    pub fn open_immutable(
+        path: &Path,
+        key: &HistoryKey,
+        timeline_id: u32,
+    ) -> Result<Self, JournalError> {
+        let uri = format!("file:{}?mode=ro&immutable=1", path.display());
+        let conn = Connection::open_with_flags(
+            uri,
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX
+                | OpenFlags::SQLITE_OPEN_URI,
+        )?;
+        Self::load(&conn, key, timeline_id)
+    }
+
+    fn load(conn: &Connection, key: &HistoryKey, timeline_id: u32) -> Result<Self, JournalError> {
+        check_key(conn, key)?;
+        let position = position_of(conn, timeline_id)?;
         let count = i64::from(position.inputs);
         let mut stmt = conn.prepare(
             "SELECT seq, tick, class, kind, kind_arg, scope, scope_id, producer, job_id, \
@@ -1105,7 +1131,7 @@ impl Replay {
                 reason: "fewer rows than the timeline's input count",
             });
         }
-        let chains = verify_chain(&conn, timeline_id, &inputs, &position)?;
+        let chains = verify_chain(conn, timeline_id, &inputs, &position)?;
         inputs.sort_by_key(|i| (i.tick, i.seq));
         Ok(Self {
             timeline_id,

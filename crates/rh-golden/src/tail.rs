@@ -322,8 +322,13 @@ pub fn tail(
     };
     let io = |e: std::io::Error| Error(format!("tail: {e}"));
     let mut printed_through: Option<i64> = None;
+    // REV-SPR-013 MIN-9: under --wait, when no new segment has come and the run's writer is gone
+    // (its lock is free: the run ended or was killed), one more pass picks up a segment sealed in
+    // between, and the tail ends, saying so.
+    let mut writer_gone = false;
     loop {
         let notes = annotations(&args.run_dir)?;
+        let seen = printed_through;
         for (year, path) in sealed_segments(&dir).map_err(|e| Error(e.to_string()))? {
             if printed_through.is_some_and(|p| year <= p) {
                 continue;
@@ -386,6 +391,23 @@ pub fn tail(
                 .is_some_and(|m| cursor.last_seq.is_some_and(|s| s >= m));
         if done {
             break;
+        }
+        if writer_gone {
+            let through =
+                printed_through.map_or_else(|| "no segment".to_owned(), |y| format!("y{y:06}"));
+            let prefix = if args.canonical { "# " } else { "" };
+            writeln!(
+                out,
+                "{prefix}STATUS writer gone: the run's writer stopped before its horizon (sealed \
+                 through {through}, cursor {}); resume it with rh-cli run --resume",
+                cursor.next
+            )
+            .map_err(io)?;
+            break;
+        }
+        if printed_through == seen && crate::stream::writer_gone(&args.run_dir) {
+            writer_gone = true;
+            continue;
         }
         std::thread::sleep(Duration::from_millis(100));
     }

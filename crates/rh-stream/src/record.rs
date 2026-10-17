@@ -319,9 +319,9 @@ pub struct StepDigest {
     pub deaths: u32,
     /// Plane A's hash after `Bookkeeping`.
     pub state_hash: u64,
-    /// Plane B's.
+    /// Plane B's (in P1a the empty-plane constant: the engine hashes nothing in plane B).
     pub observation_hash: u64,
-    /// Plane C's.
+    /// Plane C's (in P1a the empty-plane constant).
     pub narrative_hash: u64,
 }
 

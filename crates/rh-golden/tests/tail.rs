@@ -5,7 +5,7 @@
 //! - The canonical output of one segment is a canonical file whose digest is the segment's
 //!   `canonical_digest`, and the canonical output of the whole run digests to the run's records.
 //! - Tail never writes to the run directory: every file, its bytes and its modification time are
-//!   unchanged after every mode of tail.
+//!   unchanged after every mode of tail, with and without channel C's annotations.
 //! - Snapshots of the display form (`tests/snapshots/*.txt`): `RH_UPDATE_SNAPSHOTS=1` rewrites
 //!   them (reviewed in the diff); `RH_TAIL_SNAPSHOTS=DIR` compares with another directory (the
 //!   stale-snapshot control must FAIL).
@@ -159,6 +159,9 @@ fn tree(dir: &Path) -> BTreeMap<PathBuf, (Vec<u8>, std::time::SystemTime)> {
 #[test]
 fn tail_never_writes_to_the_run_directory() {
     let dir = run_dir("hamlet");
+    // Sifted first, so the tails below read channel C's annotations too (REV-SPR-013 MIN-10).
+    let (_, sifted) = rh_golden::sift::sift(&repo(), &dir).unwrap();
+    assert!(sifted.matches > 0);
     let before = tree(&dir);
     let modes = [
         args("hamlet"),
@@ -176,8 +179,19 @@ fn tail_never_writes_to_the_run_directory() {
             ..args("hamlet")
         },
     ];
+    let repo = repo();
+    let notes = |d: &Path| rh_golden::sift::annotations(&repo, d);
     for m in &modes {
         let _ = tail_text(m);
+        let mut out = Vec::new();
+        tail(m, &notes, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        if m.kinds.is_empty() || m.kinds.iter().any(|k| k == "DEATH") {
+            assert!(
+                text.contains("match solitary_life/life_ends"),
+                "no annotation: {m:?}"
+            );
+        }
     }
     assert_eq!(tree(&dir), before, "tail changed the run directory");
 }

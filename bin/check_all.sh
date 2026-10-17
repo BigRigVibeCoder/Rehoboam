@@ -474,18 +474,26 @@ baseline_hand_edited_control() {
 # directory and stopped (SIGSTOP) before the run starts; the run's wall time is reported against a
 # headless run and a streaming run without a reader. Reported, not gated (a wall clock).
 tail_stopped_wall() {
-  local d="$GOLDEN/tail_wall" t0 t1 headless streaming stopped pid
+  # REV-SPR-013 NIT: non-vacuous. The tail follows the run until it has printed a sealed segment
+  # (a STATUS line), is stopped there with the run still writing, and the run's wall time must stay
+  # within twice the unwatched streaming run's plus 1 s: the writer never waits on a reader.
+  local d="$GOLDEN/tail_wall" t0 t1 headless streaming stopped pid run_pid i
   rm -rf "$d"; mkdir -p "$d"
   t0=$(date +%s%N); "$RH_CLI_RELEASE" run solo --years 200 --out "$d/h.ladder" >/dev/null || return 1; t1=$(date +%s%N)
   headless=$(( (t1 - t0) / 1000000 ))
   t0=$(date +%s%N); "$RH_CLI_RELEASE" run solo --years 200 --run-dir "$d/a" >/dev/null || return 1; t1=$(date +%s%N)
   streaming=$(( (t1 - t0) / 1000000 ))
-  "$RH_CLI_RELEASE" tail "$d/b" --wait >/dev/null & pid=$!
+  "$RH_CLI_RELEASE" tail "$d/b" --wait > "$d/tail.out" & pid=$!
+  t0=$(date +%s%N)
+  "$RH_CLI_RELEASE" run solo --years 200 --run-dir "$d/b" >/dev/null & run_pid=$!
+  for i in $(seq 1 400); do grep -q STATUS "$d/tail.out" 2>/dev/null && break; sleep 0.01; done
   kill -STOP "$pid"
-  t0=$(date +%s%N); "$RH_CLI_RELEASE" run solo --years 200 --run-dir "$d/b" >/dev/null || { kill -KILL "$pid"; return 1; }; t1=$(date +%s%N)
+  kill -0 "$run_pid" 2>/dev/null || { kill -KILL "$pid"; echo "the run ended before the tail was stopped: vacuous"; return 1; }
+  wait "$run_pid" || { kill -KILL "$pid"; return 1; }; t1=$(date +%s%N)
   stopped=$(( (t1 - t0) / 1000000 ))
   kill -KILL "$pid"; wait "$pid" 2>/dev/null
-  echo "T-10 wall: solo 200 years: ${headless} ms headless, ${streaming} ms streaming, ${stopped} ms streaming with a stopped tail attached"
+  echo "T-10 wall: solo 200 years: ${headless} ms headless, ${streaming} ms streaming, ${stopped} ms streaming with a tail stopped mid-run after $(grep -c STATUS "$d/tail.out") sealed segments"
+  [ "$stopped" -le $(( 2 * streaming + 1000 )) ] || { echo "SLOWED: a stopped tail slowed the run beyond twice the streaming wall time plus 1 s"; return 1; }
 }
 # SPR-013 T-13: a rung's PR-tier golden run: 200 sim-years, yearly, 1 thread, serial (--expect-serial:
 # the Architect's ruling for the one-system worlds, where no --require-parallel floor can hold),
@@ -1112,7 +1120,7 @@ run "rh-stream by name: byte-identical sealing over seeds and world sizes, conti
 run "V-DATA-10 subset on the envelope fixture: DuckDB reads its event_snapshot rows and typed causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; SPR-020 shape)" "pass:check_segments: 4 segments, 324 records" "$PY" -I specs/stream/check_segments.py "$TARGET_DIR/tmp/rh-stream/envelope_fixture" &&
 run "rh-stream by name: the pinned Parquet writer properties in every file, no float column, the golden segment's bytes pinned (SPR-013 T-09; the Architect's parquet review)" "pass:T-09 golden segment bytes: xxh3-128 8f0799bae0b2c24ded75efec76e95a82 over 16 files" cargo nextest run -p rh-stream --locked --test parquet_props --no-capture &&
 run "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 T-09; GOV-002 tier 15; wire_v1.md §11)" "pass:T-09 mid-year kill -9: hamlet verified years 10-14" cargo nextest run -p rh-cli --locked --test kill --no-capture &&
-run "tail by name: a tail started before a run's first seal and following it prints the after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 sealed)" "pass:T-10: a tail started mid-run prints the after-run tail's lines" cargo nextest run -p rh-cli --locked --test tail_live --no-capture &&
+run "tail by name: a tail started before a run's first seal and following it prints the after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 sealed)" "pass:printed a sealed segment before the run ended, prints the after-run tail's lines" cargo nextest run -p rh-cli --locked --test tail_live --no-capture &&
 run "rh-sifter by name: the golden channel-A segment sifts to the golden life_ends matches and MatchIds; several targets give several matches; what v0 cannot honour is refused (SPR-013 T-11)" "pass:T-11: the golden segment sifts to the golden life_ends matches" cargo nextest run -p rh-sifter --locked --test sift --no-capture &&
 run "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)" "pass:left to the by-name gates" workspace_tests &&
 run "Workspace tests positive control: a by-name entry that names no test binary must FAIL (SPR-009 review 2a)" "fail:no binary IDs matched" workspace_tests_typo_control &&
@@ -1291,6 +1299,7 @@ run "rh-golden by name: tail prints every record once in seq order from any curs
 run "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment (SPR-013 T-11; ruling 14)" "pass:sift: 1 matches of solitary_life in 200 channel-C segments" "$RH_CLI_RELEASE" sift "$GOLDEN/solo_run" &&
 run "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 1 matches of solitary_life" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" &&
 run "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)" "fail:TWIN DIFFERS: 0 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control drop-last &&
+run "twin_check positive control: a twin expecting another status (a column the match id does not cover) must FAIL (REV-SPR-013 MIN-2)" "fail:TWIN DIFFERS: 1 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control other-status &&
 run "Golden run: household, the six-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run household &&
 run "Golden run: household, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run household --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/household_yearly_tN.ladder" &&
 run "Golden ladders: household at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&
@@ -1312,7 +1321,7 @@ run "Replay positive control: a journal with its row deleted must hard-FAIL the 
 run "rh-golden by name: V-DET-04/18 on solo and hamlet (run.toml and the journal alone rebuild the run byte for byte), V-DET-05 from keyframes at 1 and 4 threads, V-DET-14 (an input changes only its founder's records), and missing, extra, edited and re-chained journal rows hard-FAIL (SPR-013 T-12)" "pass:T-12 V-DET-14: hamlet, 120 years" cargo nextest run -p rh-golden --release --locked --test replay --no-capture &&
 run "tail snapshot positive control: a stale snapshot must FAIL with the first differing line (SPR-013 T-10)" "fail:SNAPSHOT hamlet_follow_job differs at line 2" env RH_TAIL_SNAPSHOTS="$PWD/tests/lint_fixtures/golden/stale_tail_snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture the_display_form_matches_its_snapshots &&
 run "tail snapshot positive control: a missing snapshot must FAIL, never be created silently (SPR-013 T-10; the file-snapshot ruling)" "fail:SNAPSHOT solo_story is missing" env RH_TAIL_SNAPSHOTS="$TARGET_DIR/rendered-fixtures/no_tail_snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture the_display_form_matches_its_snapshots &&
-run "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, streaming, and streaming with a stopped tail attached, reported" "pass:T-10 wall: solo 200 years" tail_stopped_wall &&
+run "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, streaming, and streaming with a tail stopped mid-run (after it printed a sealed segment), within twice streaming plus 1 s" "pass:T-10 wall: solo 200 years" tail_stopped_wall &&
 run "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)" "pass:solo: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/solo_yearly_tN.ladder" &&
 run "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
 run "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-012 T-08)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&

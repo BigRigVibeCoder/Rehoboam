@@ -1,8 +1,8 @@
 //! Rungs 0, 1 and 2 on the same build (SPR-013 T-13; V-SCALE-04, PR subset).
 //!
-//! One `rh-golden` build runs `solo` (1 person), `household` (5) and `hamlet` (60); only the
-//! manifest changes. Each of `household` and `hamlet` runs past its extinction (date years 0061 and 0078)
-//! with its committed input script, and:
+//! One `rh-golden` build runs `solo` (1 person), `household` (6) and `hamlet` (60); only the
+//! manifest changes. Each of `household` and `hamlet` runs past its extinction (date years 0061
+//! and 0078) with its committed input script, and:
 //! - every founder's life closes: as many `LIFE_EXIT` records as `LIFE_ENTRY` records, each exit
 //!   a death with its `DEATH` event;
 //! - exactly one `EXTINCTION`, after the last death, and after it nothing but the last death's

@@ -310,12 +310,24 @@ pub fn history(seed: u64) -> History {
 }
 
 /// Opens the journal at `path` for `world`'s history (`Replay::open`: the history key, the count,
-/// every row and the chain), read-only (SPR-013 T-12).
+/// every row and the chain), read-only and immutable, refusing one that still has a write-ahead
+/// log (SPR-013 T-12).
 ///
 /// # Errors
 /// [`Error`] naming the first check that fails.
 pub(crate) fn open_journal(path: &Path, world: &Setup) -> Result<Replay, Error> {
-    Replay::open(path, &journal_key(&world.provenance, world.seed), TIMELINE)
+    let mut wal = path.as_os_str().to_owned();
+    wal.push("-wal");
+    // A checkpointed log is empty (TRUNCATE); one with bytes holds rows the file does not.
+    if std::fs::metadata(Path::new(&wal)).is_ok_and(|m| m.len() > 0) {
+        return Err(Error(format!(
+            "journal: {} still has a write-ahead log: the run was killed and not resumed. Resume \
+             it first (rh-cli run --resume), which folds the log in (REV-SPR-013 MAJ-3)",
+            path.display()
+        )));
+    }
+    // Immutable: the replay writes nothing beside the run's journal (REV-SPR-013 MIN-8).
+    Replay::open_immutable(path, &journal_key(&world.provenance, world.seed), TIMELINE)
         .map_err(|e| error("journal")(&e))
 }
 
@@ -483,6 +495,23 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         )));
     }
     if let Some(dir) = &run_dir {
+        // REV-SPR-013 MIN-6, MIN-8: a run directory's run is a clean one with its own ladder and
+        // journal, so that replay and resume find them there.
+        if args.inject.is_some() {
+            return Err(Error(
+                "--inject perturbs a run, which a run directory would then hold as its history; \
+                 it is refused with --run-dir"
+                    .to_owned(),
+            ));
+        }
+        if args.out != dir.ladder() || args.journal != dir.journal() {
+            return Err(Error(format!(
+                "a run directory holds its own ladder and journal ({}, {}): --out and --journal \
+                 are refused with --run-dir",
+                dir.ladder().display(),
+                dir.journal().display()
+            )));
+        }
         // REV-SPR-013 MAJ-2: a refused run touches no file, so the check comes before the
         // journal is created and run.toml written.
         if args.resume.is_none() {
@@ -490,6 +519,11 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         }
         std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
     }
+    // The writer's lock, held until the run returns (a tail --wait sees it released).
+    let _writer_lock = run_dir
+        .as_ref()
+        .map(|d| crate::stream::lock_writer(&d.0))
+        .transpose()?;
     let (mut engine, journal, identity, rows) = start(args, &world, &registered)?;
     // SPR-009 T-03: the host's clock-free observer; the engine carries no clock (ruling 4).
     let timing = args.vitals.then(|| Arc::new(Timing::default()));
@@ -623,11 +657,10 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
                     rungs: ladder.rungs.clone(),
                     failed: None,
                 };
-                rh_stream::seal::write_atomic(
+                crate::stream::write_atomic(
                     &ladder_sidecar(&keyframe_path(dir, *year)),
                     prefix.render().as_bytes(),
-                )
-                .map_err(|e| error("ladder sidecar")(&e))?;
+                )?;
             }
             write_file(&keyframe_path(dir, *year), bytes)?;
         }
@@ -718,7 +751,7 @@ fn refuse_used_run_dir(dir: &RunDir, replay: bool) -> Result<(), Error> {
 /// Writes a run's file: atomically for the run directory's keyframes, so that a keyframe on disk
 /// is whole (SPR-013 T-09).
 fn write_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
-    rh_stream::seal::write_atomic(path, bytes).map_err(|e| error("keyframe")(&e))
+    crate::stream::write_atomic(path, bytes)
 }
 
 /// The stream of a run into `dir` (SPR-013 T-09): `run.toml`, then a new stream at genesis or a

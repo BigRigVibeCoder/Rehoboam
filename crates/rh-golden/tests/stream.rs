@@ -3,7 +3,8 @@
 //! - On `solo` (1 person) and `hamlet` (60 persons), two runs and runs at 1, 2 and 4 threads seal
 //!   byte-identical segment files, with equal canonical digests; `seq` is contiguous from 0
 //!   across the segments; every death has its `LIFE_EXIT` linked to its `DEATH` event; the
-//!   `STEP_DIGEST`s carry the ladder's monthly state hash at each Month pulse.
+//!   `STEP_DIGEST` of each Month pulse carries the ladder's state hash of the state after that
+//!   instant, checked against an engine driven independently (REV-SPR-013 MIN-10).
 //! - A streaming run's ladder equals the same run's ladder without a stream: watching changes
 //!   nothing (05.10 §3).
 //! - A run resumed from a 10-year keyframe into the same run directory verifies the years it
@@ -141,20 +142,89 @@ fn a_streaming_run_has_the_headless_runs_ladder() {
     }
 }
 
-/// A resumed run into the same directory verifies every year it reproduces and changes no byte.
+/// A resumed run into the same directory verifies every year it reproduces and changes no byte,
+/// its `run.ladder` included.
 #[test]
 fn a_resumed_run_verifies_the_sealed_years_and_changes_no_byte() {
     let dir = scratch("hamlet-resume");
     run(&args("hamlet", 40, 1, &dir)).unwrap();
     let before = stream_files(&dir);
+    let ladder = std::fs::read(dir.join("run.ladder")).unwrap();
     for year in [10, 20] {
         let mut resumed = args("hamlet", 40, 2, &dir);
-        resumed.out = dir.join(format!("from{year}.ladder"));
         resumed.resume = Some(keyframe_path(&dir.join("keyframes"), year));
         let o = run_reporting(&resumed).unwrap();
         let s = o.stream.unwrap();
         assert_eq!(s.sealed, 0);
         assert_eq!(s.verified, u64::try_from(40 - year).unwrap());
         assert_eq!(stream_files(&dir), before, "from year {year}");
+        // The resumed run's run.ladder is the whole run's (REV-SPR-013 MAJ-3 (b)).
+        assert!(
+            std::fs::read(dir.join("run.ladder")).unwrap() == ladder,
+            "from year {year}"
+        );
     }
+}
+
+/// REV-SPR-013 MIN-10: the `STEP_DIGEST` of each Month pulse carries the plane-A state hash of the
+/// state after that instant, the ladder's hash function: an engine driven independently (the
+/// world's setup, no stream, draining its events at the run's stops) gives every digest's
+/// `state_hash` at its pulse and every monthly rung's hash at its month end.
+#[test]
+fn step_digests_carry_the_ladders_state_hash_at_every_month_pulse() {
+    use rh_core::engine::Engine;
+    use rh_core::register::register;
+    use rh_core::time::SimTime;
+    use rh_ids::BranchSalt;
+    use rh_snapshot::state::state_hash;
+    let base = scratch("digest-hash");
+    std::fs::create_dir_all(&base).unwrap();
+    let none = base.join("no_inputs.toml");
+    std::fs::write(&none, "# no input\n").unwrap();
+    let dir = base.join("run");
+    let mut a = args("hamlet", 12, 1, &dir);
+    a.rung = RungKind::Monthly;
+    a.inputs = Some(none.clone());
+    let ladder = run(&a).unwrap();
+    let digests: Vec<(i64, u64)> = read_channel_a(&dir.join("stream"), 0, 518_400)
+        .unwrap()
+        .into_iter()
+        .flat_map(|s| s.records)
+        .filter_map(|r| match r.body {
+            Body::StepDigest(d) => Some((r.header.tick, d.state_hash)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(digests.len(), 12 * 12);
+    let w = rh_golden::world::setup_with(&repo(), "hamlet", None, false, Some(&none)).unwrap();
+    let mut engine = Engine::new(
+        w.calendar,
+        w.seed,
+        BranchSalt::from_raw(0),
+        register((w.systems)(false), &w.specs).unwrap(),
+        w.tables.clone(),
+        SimTime::EPOCH,
+    );
+    engine.set_provenance(w.provenance.clone());
+    let mut want: BTreeMap<i64, (Option<u64>, Option<u64>)> = BTreeMap::new();
+    for &(t, h) in &digests {
+        want.entry(t).or_default().0 = Some(h);
+    }
+    for r in &ladder.rungs {
+        want.entry(r.tick).or_default().1 = Some(r.hash);
+    }
+    for (t, (digest, rung)) in &want {
+        engine
+            .advance_until(SimTime::from_minutes(*t), |_, _| {})
+            .unwrap();
+        drop(engine.drain_events());
+        let h = state_hash(&engine.snapshot());
+        assert!(digest.is_none_or(|d| d == h), "STEP_DIGEST at tick {t}");
+        assert!(rung.is_none_or(|r| r == h), "monthly rung at tick {t}");
+    }
+    println!(
+        "T-09 MIN-10: hamlet, 12 years: all {} STEP_DIGESTs and {} monthly rungs equal the state hash of an independently driven engine",
+        digests.len(),
+        ladder.rungs.len()
+    );
 }

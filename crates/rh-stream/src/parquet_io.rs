@@ -15,7 +15,7 @@
 //! them: a fixed `created_by`, dictionary encoding off, no statistics (so no column index and no
 //! truncation), no bloom filter, no page checksum, no key-value metadata, zstd at a fixed level,
 //! Parquet 1.0 data pages, fixed page and row-group limits, the offset index on, no content-defined
-//! chunking. A golden segment's bytes are pinned by their digest (`tests/segment_golden.rs`), so a
+//! chunking. A golden segment's bytes are pinned by their digest (`tests/parquet_props.rs`), so a
 //! library upgrade that changes the layout fails loudly; the canonical digest survives it.
 //!
 //! REF: SPR-011 ruling 13; `specs/stream/channel_a_v0.sql` R2, R7; `05.10` §5.
@@ -265,10 +265,13 @@ impl Column {
 }
 
 /// The pinned writer properties (module docs). The one place they are set.
-#[must_use]
-pub fn properties() -> WriterProperties {
-    let zstd = ZstdLevel::try_new(ZSTD).unwrap_or_default();
-    WriterProperties::builder()
+///
+/// # Errors
+/// [`StreamError::Parquet`] if the library refuses the pinned zstd level (never a silent fallback
+/// to its default: that would change the bytes; REV-SPR-013 NIT).
+pub fn properties() -> Result<WriterProperties, StreamError> {
+    let zstd = ZstdLevel::try_new(ZSTD).map_err(pq("zstd level"))?;
+    Ok(WriterProperties::builder()
         .set_writer_version(WriterVersion::PARQUET_1_0)
         .set_created_by(CREATED_BY.to_owned())
         .set_key_value_metadata(None)
@@ -290,7 +293,7 @@ pub fn properties() -> WriterProperties {
         .set_max_row_group_row_count(Some(ROW_GROUP_ROWS))
         .set_max_row_group_bytes(None)
         .set_write_row_group_number_distinct_values(false)
-        .build()
+        .build())
 }
 
 fn pq(context: &str) -> impl Fn(parquet::errors::ParquetError) -> StreamError + '_ {
@@ -335,7 +338,7 @@ pub fn write_table(
     let schema = Arc::new(parse_message_type(&message(name, spec)).map_err(pq(name))?);
     let mut out = Vec::new();
     let mut writer =
-        SerializedFileWriter::new(&mut out, schema, Arc::new(properties())).map_err(pq(name))?;
+        SerializedFileWriter::new(&mut out, schema, Arc::new(properties()?)).map_err(pq(name))?;
     let mut group = writer.next_row_group().map_err(pq(name))?;
     for c in columns {
         let Some(mut col) = group.next_column().map_err(pq(name))? else {

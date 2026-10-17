@@ -151,6 +151,27 @@ fn replay(dir: &Path) -> String {
     String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr)
 }
 
+/// `rh-cli tail <dir> --wait`, which must end by itself within 60 s; its output.
+fn tail_wait(dir: &Path) -> String {
+    let mut child = Command::new(BIN)
+        .arg("tail")
+        .arg(dir)
+        .arg("--wait")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    for _ in 0..600 {
+        if child.try_wait().unwrap().is_some() {
+            let out = child.wait_with_output().unwrap();
+            return String::from_utf8_lossy(&out.stdout).into_owned();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    child.kill().unwrap();
+    panic!("tail --wait did not end on a killed run");
+}
+
 /// The `STALL mid tick T sim-year Y buffered N` line's tick, year and buffered count.
 fn mid(line: &str) -> (i64, i64, usize) {
     let w: Vec<&str> = line.split(' ').collect();
@@ -183,6 +204,16 @@ fn a_mid_year_kill_and_resume_re_emit_no_seq_below_the_first_unsealed_year() {
         assert!(channel.join("y000014/segment.parquet").is_file());
         assert!(!channel.join("y000015").exists() && !channel.join(".y000015.partial").exists());
         let before: BTreeMap<String, Vec<u8>> = stream_of(&dir);
+        // REV-SPR-013 MIN-9: a tail --wait on the killed run ends by itself, saying the writer is
+        // gone, after printing what was sealed.
+        let tail = tail_wait(&dir);
+        assert!(
+            tail.lines()
+                .last()
+                .is_some_and(|l| l.starts_with("STATUS writer gone")),
+            "{world}: {tail}"
+        );
+        assert!(tail.contains("sealed through y000014"), "{world}: {tail}");
         let kf = dir.join("keyframes/year-0010.rhkf");
         let summary = run(world, &dir, &["--resume", kf.to_str().unwrap()]);
         assert!(

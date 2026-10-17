@@ -144,7 +144,7 @@ fn every_file_carries_exactly_the_pinned_writer_properties() {
             );
         }
     }
-    let props = parquet_io::properties();
+    let props = parquet_io::properties().unwrap();
     let any = parquet::schema::types::ColumnPath::from("any");
     assert_eq!(props.compression(&any), Compression::ZSTD(level));
     assert!(!props.dictionary_enabled(&any));

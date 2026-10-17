@@ -85,7 +85,7 @@ python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C se
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
 cargo nextest run -p rh-stream --locked --test canonical --test writer --test parquet_props   # rh-stream: the canonical form = the reference's golden lines; byte-identical sealing; the pinned Parquet properties and golden segment bytes (SPR-013 T-09); the parser fuzz is nightly (--run-ignored)
 cargo nextest run -p rh-cli --locked --test kill   # kill -9 during sealing and mid-year, then resume from the 10-year keyframe: the same bytes, no seq re-emitted below the first unsealed year (SPR-013 T-09)
-target/release/rh-cli run solo --years 200 --run-dir target/golden/solo_run --out target/golden/solo_yearly_t1.ladder   # a run directory: run.toml, journal, keyframes, stream/ (SPR-013 T-09)
+target/release/rh-cli run solo --years 200 --run-dir target/golden/solo_run   # a run directory: run.toml, journal.sqlite, run.ladder, keyframes/ (each with its ladder sidecar), stream/ (SPR-013 T-09); --out, --journal and --inject are refused with it
 python -I specs/stream/check_segments.py target/golden/solo_run   # V-DATA-10 subset: DuckDB reads every sealed table with the DDLs' types; the reference recomputes every canonical_digest; --plant float-column and --plant digest must FAIL
 cargo nextest run -p rh-golden --release --test stream   # V-STR-01 on solo and the 60-person hamlet: byte-identical segments over repeats and threads; resume verification (SPR-013 T-09)
 target/release/rh-cli tail target/golden/solo_run [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K] [--canonical] [--wait]   # the sealed stream as display or canonical lines (SPR-013 T-10)
@@ -134,7 +134,7 @@ python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.to
 target/release/rh-cli replay <run-dir> --into <dir> [--from-keyframe <tick>]   # V-DET-04/05: the run rebuilt from run.toml and its journal alone; REPLAY EQUAL, or a missing, extra or edited journal row hard-fails (SPR-013 T-12)
 cargo nextest run -p rh-golden --release --test replay   # V-DET-04/18 (run.toml and the journal alone), V-DET-05 from keyframes, V-DET-14, the tampered-journal controls (SPR-013 T-12)
 target/release/rh-cli run household --years 200 --threads 1 --ladder yearly --expect-serial --run-dir target/golden/household_run   # rung 1's golden run (rung 2: hamlet); --expect-serial passes only while no level holds two jobs, and the multi-system smoke world must FAIL it (SPR-013 T-13)
-python -I bin/check_baseline.py --baseline worlds/household/baselines/household_yearly_200y.ladder --recomputed target/golden/household_yearly_t1.ladder   # household's and hamlet's baselines = recomputation; changed only in a [C3] PR
+python -I bin/check_baseline.py --baseline worlds/household/baselines/household_yearly_200y.ladder --recomputed target/golden/household_run/run.ladder   # household's and hamlet's baselines = recomputation; changed only in a [C3] PR
 cargo nextest run -p rh-golden --release --test rungs   # V-SCALE-04 PR subset: household and hamlet past their extinction, one EXTINCTION, tail, sift and replay consistent; one build runs rungs 0-2 (SPR-013 T-13)
 ```
 

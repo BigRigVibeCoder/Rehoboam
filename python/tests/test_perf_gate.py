@@ -304,6 +304,11 @@ def test_each_rung_is_gated_like_the_smoke_world() -> None:
     verdict, lines = alloc_compare(RUNGS, RUNGS.replace("ticks 12", "ticks 13"))
     assert (verdict, lines) == (REBASELINE, ["window changed: the ticks of rung solo differ"])
     assert alloc_compare(RUNGS, RUNGS.replace("seed 42", "seed 43"))[0] == REBASELINE
+    rung_threads = RUNGS.replace("rung solo seed 1 threads 1", "rung solo seed 1 threads 2")
+    assert alloc_compare(RUNGS, rung_threads) == (
+        REBASELINE,
+        ["window changed: the ticks of rung solo differ"],
+    )
     assert alloc_compare(ALLOC, RUNGS)[0] == REBASELINE, "a rung added is a new window"
 
 

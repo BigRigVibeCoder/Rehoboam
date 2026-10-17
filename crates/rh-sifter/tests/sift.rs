@@ -183,11 +183,43 @@ fn what_v0_cannot_honour_is_refused() {
             "an unbound variable",
             base.replace("target = \"A\"", "target = \"B\""),
         ),
+        (
+            "a role domain",
+            base.replace("roles = { A = \"any\" }", "roles = { A = \"authority\" }"),
+        ),
+        (
+            "a pattern-level within_days",
+            base.replace("on_complete", "within_days = 365\non_complete"),
+        ),
+        (
+            "a pattern-level require_edge",
+            base.replace(
+                "on_complete",
+                "require_edge = { into = \"e1\", kind = \"motivated_by\" }\non_complete",
+            ),
+        ),
+        (
+            "a declared role no clause binds",
+            base.replace(
+                "roles = { A = \"any\" }",
+                "roles = { A = \"any\", B = \"any\" }",
+            ),
+        ),
     ];
     for (what, text) in cases {
+        assert_ne!(text, base, "{what}: the plant did not apply");
+        let err = compile_pack("solitary_life", &text).expect_err(what);
+        let message = err.to_string();
+        let named = match what {
+            "a role domain" => "role domain `A",
+            "a pattern-level within_days" => "`within_days` is not supported",
+            "a pattern-level require_edge" => "`require_edge` is not supported",
+            "a declared role no clause binds" => "role `B` is declared but no clause binds it",
+            _ => "",
+        };
         assert!(
-            compile_pack("solitary_life", &text).is_err(),
-            "{what} accepted"
+            message.contains(named),
+            "{what}: refused for another reason: {message}"
         );
     }
 }

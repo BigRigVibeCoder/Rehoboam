@@ -668,11 +668,9 @@ def alloc_compare(baseline: str, measured: str) -> tuple[int, list[str]]:
         ]
     verdict, lines = OK, []
     for key in sorted(base, key=budget_order):
-        if base[key].get("ticks") != now[key].get("ticks") or base[key].get("seed") != now[key].get(
-            "seed"
-        ):
+        if any(base[key].get(f) != now[key].get(f) for f in ("ticks", "seed", "threads")):
             what = f"at {key.split()[1]} thread(s)" if key.startswith("threads ") else f"of {key}"
-            return REBASELINE, [f"window changed: the ticks {what} differ"]
+            return REBASELINE, [f"window changed: the ticks {what} differ"]  # or its seed, threads
         for field_name in ALLOC_GATED:
             b, n = base[key][field_name], now[key][field_name]
             if n > b:

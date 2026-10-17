@@ -184,11 +184,24 @@ pub fn sealed_segments(dir: &Path) -> Result<BTreeMap<i64, PathBuf>, StreamError
     Ok(out)
 }
 
-/// Every regular file of a sealed segment directory, by name.
+/// Every regular file of a sealed segment directory, by name. Only a sealed segment is read: a
+/// directory named `y` and six digits that holds `segment.parquet` (REV-SPR-013 MIN-3: the crate's
+/// file reads stay segment reads).
 ///
 /// # Errors
-/// [`StreamError::Io`].
+/// [`StreamError::Segment`] for a directory that is not a sealed segment; [`StreamError::Io`].
 pub fn read_segment(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, StreamError> {
+    let named = dir
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.strip_prefix('y'))
+        .is_some_and(|y| y.len() == 6 && y.bytes().all(|b| b.is_ascii_digit()));
+    if !named || !dir.join(SEGMENT_FILE).is_file() {
+        return Err(StreamError::Segment(format!(
+            "{} is not a sealed segment directory",
+            dir.display()
+        )));
+    }
     let mut out = BTreeMap::new();
     for entry in fs::read_dir(dir).map_err(io(dir))? {
         let path = entry.map_err(io(dir))?.path();
@@ -205,25 +218,4 @@ pub fn read_segment(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, StreamError
         out.insert(name, fs::read(&path).map_err(io(&path))?);
     }
     Ok(out)
-}
-
-/// Writes `bytes` to `path` atomically: a temporary sibling, fsync, rename, fsync of the
-/// directory (keyframe files, so that a keyframe on disk always has its sealed segment before it,
-/// T-09).
-///
-/// # Errors
-/// [`StreamError::Io`].
-pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), StreamError> {
-    let dir = path
-        .parent()
-        .ok_or_else(|| StreamError::Io(format!("{}: no parent directory", path.display())))?;
-    fs::create_dir_all(dir).map_err(io(dir))?;
-    let name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| StreamError::Io(format!("{}: no file name", path.display())))?;
-    let tmp = dir.join(format!(".{name}.tmp"));
-    write_synced(&tmp, bytes)?;
-    fs::rename(&tmp, path).map_err(io(path))?;
-    sync_dir(dir)
 }

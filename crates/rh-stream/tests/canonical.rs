@@ -703,6 +703,41 @@ fn planted_non_canonical_lines_are_refused() {
     for (line, why) in REFERENCE_REFUSED {
         assert!(parse(line).is_err(), "accepted {why}: {line:?}");
     }
+    // VER-SPR-013-TEST survivors: an equal key at each strict-order comparison is refused (a
+    // `>=` weakened to `>` would accept it).
+    let equal_keys = [
+        (
+            "EVENT 0 0 0 9 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/2,1/7/2] [] []",
+            "roles (by role code, then entity) not strictly ascending",
+        ),
+        (
+            "EVENT 0 0 0 9 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/0,1/7/0] [] []",
+            "roles (by role code, then entity) not strictly ascending",
+        ),
+        (
+            "EVENT 0 0 0 9 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [2/1/~/0/256/1,2/1/~/0/256/1]",
+            "causes: cause ids not strictly ascending",
+        ),
+        (
+            "EVENT 0 0 0 9 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [3/1/7/1/8/5,3/1/7/1/8/6] []",
+            "snapshot keys not strictly ascending",
+        ),
+        (
+            "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [] [e1/1,e2/1]",
+            "events: event ids not strictly ascending",
+        ),
+        (
+            "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [A/1/1,A/1/2] [e1/1]",
+            "bindings: roles not strictly ascending",
+        ),
+    ];
+    for (line, why) in equal_keys {
+        let err = parse(line).expect_err(why).to_string();
+        assert!(
+            err.contains(why),
+            "{line:?} refused for another reason: {err}"
+        );
+    }
     let cast: Vec<String> = (0..257).map(|i| format!("1/{i}/2")).collect();
     let big = format!(
         "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [{}] [] []",
@@ -748,6 +783,9 @@ fn planted_non_canonical_files_are_refused() {
         format!("{header}\n{a}\nLIFE_EXIT 1 1 5 4369 0 1 ~\n"),
         format!("{header}\nLIFE_ENTRY 0 0 9 4369 1 0 0 0 -1\nLIFE_EXIT 0 1 5 4369 0 1 ~\n"),
         String::new(),
+        // VER-SPR-013-TEST survivors: a CR or a non-ASCII byte inside a comment line.
+        format!("{header}\n# a\rcomment\n{a}\n{b}\n"),
+        format!("{header}\n# café\n{a}\n{b}\n"),
     ];
     for f in &bad {
         assert!(digest_file(f.as_bytes()).is_err(), "accepted {f:?}");

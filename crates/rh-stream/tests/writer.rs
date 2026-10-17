@@ -310,3 +310,45 @@ fn the_envelope_fixture_carries_snapshots_and_typed_edges() {
         dir.display()
     );
 }
+
+/// VER-SPR-013-TEST survivors: a record whose R4 key equals the last one's (a second
+/// `STEP_DIGEST` at the same instant) is refused, not only an earlier one.
+#[test]
+fn a_record_with_the_last_records_r4_key_is_refused() {
+    let root = scratch("order-equal");
+    let records = history(3, 5, 1);
+    let mut w = StreamWriter::create(config(&root)).unwrap();
+    let first: Vec<(i64, Body)> = records
+        .iter()
+        .filter(|(t, _)| *t <= 43_200)
+        .cloned()
+        .collect();
+    let digest = first
+        .iter()
+        .rev()
+        .find(|(t, b)| *t == 43_200 && matches!(b, Body::StepDigest(_)))
+        .cloned()
+        .expect("a digest at the month start");
+    w.push(43_200, first, &mut NoHook).unwrap();
+    let e = w.push(86_400, vec![digest], &mut NoHook).unwrap_err();
+    assert!(
+        e.to_string().contains("does not follow the last record"),
+        "{e}"
+    );
+}
+
+/// VER-SPR-013-TEST survivors: `seal` requires `segment.parquet` last, so a directory with the
+/// segment row is never complete before every table is.
+#[test]
+fn seal_requires_the_segment_row_last() {
+    use rh_stream::seal::seal;
+    let root = scratch("seal-order");
+    let dir = root.join("t0000000000/A");
+    let files = vec![
+        ("segment.parquet".to_owned(), vec![1]),
+        ("event.parquet".to_owned(), vec![2]),
+    ];
+    let e = seal(&dir, Channel::A, 0, &files, &mut NoHook).unwrap_err();
+    assert!(e.to_string().contains("end with segment.parquet"), "{e}");
+    assert!(!dir.join("y000000").exists() && sealed_segments(&dir).unwrap().is_empty());
+}

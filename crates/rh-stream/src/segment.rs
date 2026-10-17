@@ -253,8 +253,8 @@ pub const KEYFRAME_MARKER: TableSpec = TableSpec {
     ],
 };
 
-/// Every table of a channel-A v0 segment, in the order they are sealed: the dictionaries, the
-/// record and child tables, and `segment` last (R5).
+/// Every table of a channel-A v0 segment, in the order they are sealed: every other table in name
+/// order (dictionaries, records and child rows alike), then `segment` last (R5).
 pub const CHANNEL_A: [TableSpec; 16] = [
     ACT_CLASS,
     ATTRIBUTE,
