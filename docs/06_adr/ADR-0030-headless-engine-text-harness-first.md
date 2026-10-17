@@ -1,6 +1,6 @@
 # ADR-0030 — Headless engine and the World Stream: viewers read a buffer, actions land at the tip; text only until G2
 
-**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-16 · **Amends:** ADR-0016 (web console moves after G2), ADR-0029 (no graphical view before G2), ADR-0005 (the street bubble follows the viewer's playback rate), `05.7`, `05.9`, `09`, `11` (P1.0, P1.17, P2.7) · **Spec:** `05.10`
+**Status:** Accepted (director, 2026-10-16) · **Date:** 2026-10-16 · **Amends:** ADR-0016 (web console moves after G2), ADR-0029 (no graphical view before G2), ADR-0005 (the street bubble follows the viewer's playback rate), `05.7`, `05.9`, `09`, `11` (P1.0, P1.17, P2.7) · **Amended by:** ADR-0036 (D51, 2026-10-17: §7, a graphical observation harness before G2) · **Spec:** `05.10`
 
 ## Context
 
@@ -54,7 +54,8 @@ The director wrote:
      - a keyboard Time-Machine over the stream;
      - vitals and the status line;
      - the G2 rating form.
-   - **Deferred until after G2:** the web console (ADR-0016), the glyph client (ADR-0029) and the 3D client. All of them read the same stream.
+   - **Deferred until after G2:** the web console (ADR-0016) and the glyph client (ADR-0029). All of them read the same stream.
+   - **Exception (ADR-0036, D51, 2026-10-17):** `rh-view`, a native voxel viewer, is allowed before G2 as a read-only plane-B observation harness for the red team's audits. It starts after SPR-027 in its own lane and is off every gate's critical path. Text stays the G2 rating surface.
 8. **Requirements and tests.**
    - STR-1 to STR-5 and PERF-5 (`03`).
    - V-STR-01 to 05 and V-PERF-09 (`09`): the engine's throughput with viewers attached, a stalled one included, is ≥ 95% of headless.
@@ -75,7 +76,7 @@ The director wrote:
 - **Viewers can be replaced freely.** Any later viewer (web console, glyph client, Godot, a phone app, an LLM narrator) reads the same stream. Graphics upgrades never touch the engine.
 - **Auto-pause pauses your playback, not the world, by default.** Interventions at the moment that matters use Play style.
 - **Actions at MAX land wherever the tip has got to,** possibly years after what you were watching. The harness shows this before you confirm, and scheduled actions give exact timing.
-- **Some spatial debugging capability is lost** until a graphical viewer exists. ASCII maps and Rerun (a separate developer tool) cover most of it.
+- **Some spatial debugging capability is lost** until a graphical viewer exists. ASCII maps and Rerun (a separate developer tool) cover most of it. *ADR-0036 (D51) brings that viewer forward: `rh-view`, after SPR-027.*
 
 ## Revisit when
 

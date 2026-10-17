@@ -1,6 +1,7 @@
 # 09 — Verification & Validation Plan
 
-*Status: Draft v1.8 (2026-10-16). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*Status: Draft v1.9 (2026-10-17). **Verification** asks "did we build it right?" against the requirements in `03`. **Validation** asks "did we build the right thing?" against the success criteria and MOEs in `01`. Every gate below is automated unless marked **[H]**, which means a human judgement by you.*
+*v1.9 (2026-10-17): D51 (ADR-0036): V-R3D-13 (viewer hydration determinism) and V-R3D-14 (viewer isolation) for the voxel viewer, R3D-11.*
 *v1.8 (2026-10-16): V-SAGA-15's P1a variant measures on the 10k dynastic world (D34). §6: STR-6 binds from P1b (D33), PERF-6 is Later (D31), PERF-5 binds from P1a through V-PERF-09's P1a variant (D34), as in `03`.*
 *v1.7 (2026-10-16): G0 rulings by the director. V-SCALE-01's N set follows the phases: N = 1, 5 and 60 from P1.0, 10k with P1.14, 100k and 1M only with the optional scale-up (D32). §5's G1a list is the one list of `11`; the P1a variants are stated in the rows of V-INV-03, V-INV-12, V-DATA-04 and V-PERF-09; V-SAGA-16's stress-accounting identity gates G1a, and its break band is reported at G1a and gates G1b; V-STR-02, 03 and 05 run from P1a (D34). V-INV-03's P1a variant inherits titles and claims only (D35).*
 *v1.6 (2026-10-16): V-SCALE-04's end event is in channel A, not the journal, which holds inputs only.*
@@ -54,7 +55,7 @@ Test IDs have the form `V-<suite>-<nn>`. Work packages cite them in their accept
 | **V-ORA** Oracle and persuasion | §2.13 | ORA-*, SEC-1 | Every PR; sweeps and player bot nightly |
 | **V-TM** Time-Machine console (Playwright) | §2.14 | TM-*, DET-6, DET-14 | PRs touching the console or server |
 | **V-WC** World compiler | §2.15 | WC-*, SIM-10 | PRs touching the compiler or Registry; certification per compiled world |
-| **V-R3D** 2D client (3D tests withdrawn, ADR-0035) | §2.16 | R3D-* | P5 PRs |
+| **V-R3D** 2D client (3D tests withdrawn, ADR-0035) and the voxel viewer (ADR-0036) | §2.16 | R3D-* | P5 PRs; the viewer lane's PRs (V-R3D-13, V-R3D-14) |
 | **V-AUD** Audio | §2.17 | AUD-* | Per export; latency tests only if street-level is taken up |
 | **V-INSP** Inspection and licences | §2.18 | LIC-1, OBS-1, EVO-1 | Every PR (licences); review |
 | **V-SF** Stylized-fact harness and certification | §3.1 | SIM-3, SIM-12, EVO-3, MOP-5 | Nightly; labelled PRs; per compiled world |
@@ -360,6 +361,8 @@ Playwright drives the console against the real `rh-server` and against the mock 
 | V-R3D-10 | Glyph performance (R3D-10) | Browser on the reference laptop iGPU; 10k cells with panning and a 1 Hz frame stream; wallpaper covered and uncovered | ≥ 60 FPS uncovered; ≤ 15 FPS cap in wallpaper mode; ≈ 0 rendering work when covered |
 | V-R3D-11 | The glyph client decides nothing (R3D-10) | Lint for FOV, pathing and RNG APIs in client code; feed two clients the same recorded server stream | Lint clean; byte-identical rendered cell buffers |
 | V-R3D-12 | Glyph-pack completeness (R3D-10) | CI lint over every Registry presentation key and each shipped pack | Every key mapped; every asset's licence on the allow-list with attribution recorded |
+| V-R3D-13 | Viewer hydration determinism (R3D-11, R3D-2; ADR-0036) | A fixed bubble on a recorded run at fixed ticks: two runs, 1 and N threads, two builds; each tick reached by forward play and by rewind | Equal voxel content digests in every case; rendering (lighting, frames) is not hashed |
+| V-R3D-14 | Viewer isolation (R3D-11; ADR-0036) | `lint_arch` over both workspaces; the engine's `Cargo.lock` with and without `viewer/`; V-PERF-09 with `rh-view` attached as one harness | No crate under `crates/` depends on `viewer/`; the engine's lock unchanged; throughput ≥ 95% of headless and the `state_hash` ladder identical |
 
 ### 2.17 Audio (V-AUD)
 
@@ -816,6 +819,7 @@ Every requirement in `03` maps to at least one test ID, except withdrawn ones. P
 | R3D-8 | Replay mode | P5 | V-R3D-07 |
 | R3D-9 | Investigation templates | Later | V-R3D-08 |
 | R3D-10 | Lo-fi glyph client first | P5 | V-R3D-10, V-R3D-11, V-R3D-12, V-DET-07, V-AUD-02 |
+| R3D-11 | The voxel viewer is an observation harness (ADR-0036) | Viewer lane | V-R3D-13, V-R3D-14 |
 | AUD-1 | Systemic ambience | P5 | V-AUD-01 |
 | AUD-2 | Licence-cleared TTS, designed voices | Later | V-AUD-06 |
 | AUD-3 | Audio-drama rendering | P2/P3 | V-AUD-03, V-AUD-04, V-AUD-07, V-SAGA-07 |
