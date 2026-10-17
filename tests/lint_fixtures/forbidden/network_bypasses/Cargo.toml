@@ -1,0 +1,7 @@
+# Fixture for bin/lint_forbidden.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# REV-SPR-026 R19: six ways round "sockets only in src/serve.rs" that compile, each refused: three
+# re-exports in serve.rs (network-reexport), a #[path] into tests/, an include! of tests/ (followed and
+# scanned as src/), and a #[path] to a file outside the crate (source-include).
+[workspace]
+members = ["rh-cli"]
+resolver = "3"
