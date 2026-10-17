@@ -2,17 +2,17 @@
 id: REV-SPR-016
 title: "Independent review of the fixed-point exp/ln ruling and M2 F1 mortality (PR #51)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-016, SPR-015, REV-SPR-015, EVO-001, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.1.0
+version: 1.0.0
 ---
 
-> **BLUF:** Round 1 on PR #51, at `d69691d` plus the delta to `9f8d3f9`: **approve after changes.** No blockers. Four majors before the fold, and one more in the delta. The `exp`/`ln` core is sound: an independent re-implementation written from the `05.1` text alone matched the reference bit for bit on 83k inputs, and the full 3.6M-input `--exhaustive` run gave only faithful results. At β = 1 the schedule equals rung 0 bit for bit (48k random points, ages 1 to 90). The Architect's rulings are in §0. The review ran in a session on a different model from the drafter's.
+> **BLUF: CLOSED, approved.** PR #51 took three rounds. Round 1 (`d69691d` plus `9f8d3f9`): approve after changes, with no blockers, 4 majors and 1 delta major. Round 2 (`dbc1699`): approve after small changes, and the R6 pushback accepted. Round 3 (`e56bcbb`) the Architect verified directly. The `exp`/`ln` core is sound. An independent re-implementation written from the `05.1` text alone matched the reference bit for bit on 83k inputs, and the exhaustive sweep (2,621,441 `exp` and 1,114,112 `ln` inputs) found only faithful results. At β = 1 the schedule equals rung 0 bit for bit. The monthly-q drop at 90 is rung 0's linear-l sawtooth, not the tail's (R6, accepted). The smooth-interpolant fix goes to BCK-002 A-48 for SPR-016's planning. Every review ran in a session on a different model from the drafter's.
 
 # REV-SPR-016: independent review of exp/ln and M2 F1 mortality
 
@@ -300,3 +300,276 @@ headline bounds (faithful, ≤ ¾ ulp) still hold.
 - A merged births + mortality fold beyond the `draws` simulation.
 - Ages and inputs outside the samples named above. In particular, `exp` and `ln` were not run exhaustively over Q32_32,
   which is infeasible in Python.
+
+
+## 2. Round 2 (2026-10-17, `dbc1699`)
+
+### 2.0 Architect rulings, round 2
+
+| # | Finding | Ruling |
+|---|---|---|
+| R13 | R6 not applied, with the drafter's evidence (`[join_at_90]`) | **Accepted.** The reviewer reproduced it independently: −26.5 %, −32.2 % and −36 % at 82.5, 85 and 87.5; −30.8 % at the join; rung 0's own drop at 90 is −51 %; the tail's first-month hazard is within 0.1–0.5 % of its anchor. Keep the mid-interval anchor. The backlog fix is a smooth (C¹) logit interpolant built into monthly knots at construction, from age 1, not logit-linear (which leaves +8 % to +25 % steps; childhood steps reach −57 %): BCK-002 A-48, decided at SPR-016's planning, because it trades the β = 1 equality with rung 0 (8/10) |
+| R14 | Round 3 | (1) The nightly sweep exited 127 on CI (no venv): `bin/golden_nightly.sh` calls `"${PYTHON:-python3}" -I`, since the sweep is stdlib only. (2) R2's u₀ closed form was off by 2^32; it now uses (2·L_66)^b and lands within 2 knots of the exact zero knot. (3) R5's MR3 range and MR11 text, and the value 0.0662. (4) R10's rename damage (`arch/MR2-F1-births`, `INV-MR2`, two missed step names). (5) Mortality's invariants are INV-M2-20 and INV-M2-21, and births holds 06 to 19 |
+
+### 2.1 Round 3 (`e56bcbb`), verified by the Architect
+All five R14 items are applied. The Architect re-ran on an archive of `e56bcbb`:
+- `exp_ln_v0.py --check` with `PYTHON` unset on the system `python3`: the golden file is current, 9,377 lines;
+- `selftest_m2_f1_mortality.py`: PASS, and the golden file it regenerates is byte-identical to the committed one.
+
+Scans for `MR2[^0-9]`, `INV-MR` and `arch/MR` find only step names. The drafter's `--part core`: PASS, 230 checks. Merged with `05.1` v1.10.
+
+### 2.2 The review (round 2, independent reviewer)
+
+Reviewer: independent, for the Architect, 2026-10-17, on a different model from the drafter's. The copy `src/` is
+`dbc1699`. I did not modify the repository. My scripts are in `scripts/`; the round-1 tools are reused from
+`../mortality_review/scripts/`.
+
+### BLUF
+
+**Approve after small changes. Nothing blocks.** R1, R3, R4, R7, R8, R9, R11 and R12 are applied. R2, R5 and R10 are
+partly applied. R6 is not applied, as the drafter chose.
+
+- **The core is sound.**
+  - All 8 check values (K, a, b, `l_zero_twelfths`) match an independent implementation of MR1–MR10, bit for bit, at
+    every knot.
+  - The three controls each fail exactly one check. Deleting that check, or only the clause the control targets,
+    makes the control pass.
+  - `exp_ln_v0.py --check --exhaustive` passes: 2,621,441 `exp` inputs and 1,114,112 `ln` inputs, none of them
+    unfaithful.
+  - The pytest inventory test, ruff and mypy are clean.
+  - The merge of `main` brought in only `80343bf`'s two documentation files.
+- **One fix is needed before merge.** The new nightly line fails on CI (exit 127): the nightly `golden` job never
+  creates `python/.venv`.
+- **The rest is text.**
+  - The R10 rename corrupted the invariant ids and a branch name, and missed two step names.
+  - The R2 closed form is wrong by a factor of 2^32.
+  - Two R5 corrections were not carried into MR3 and MR11.
+  - The ids of the mortality invariants collide with the births branch's round-2 INV-M2-13.
+- **R6:** the drafter's diagnosis is right, and I verified the numbers independently. The recommendation is right
+  too, with one correction: logit-linear interpolation does **not** remove the teeth. The backlog item must name an
+  interpolant whose hazard is continuous.
+
+### R-status
+
+| # | Status | Evidence |
+|---|---|---|
+| R1 | APPLIED | `mortality_f1.toml:52-55`: `change = "none"`. The frozen `draws` text is untouched. The births head `13fbb70` keeps the same two lines (`next/M2…toml:496-499`). |
+| R2 | PARTLY APPLIED | **Correct:** the rule (certain death from knot j₀; q = 2^32 iff l(x+D) = 0, `:188`, `:190`) and the `l_zero_twelfths` values. I reproduced them independently: 1314 at (20, 1.65), 1361 at (60, 1.65), 1408 at (30, 1.3), 1381 at (85, 1.65), and 1440 at every β ≤ 1 (box sweep: 1440 for all e0 at β ≤ 1.1). Check 4 asserts l > 0 at knot j₀−1 and l = 0 at j₀. **Wrong:** the closed form for u₀ (NEW-4), and the overview `:174`, which still says "a certain death at 120". |
+| R3 | APPLIED | Unchanged from `9f8d3f9`; `[seam]` `:121-125`. |
+| R4 | APPLIED | `:192` states one formula, q = 2^32 − rhe(l(x)·l(x1)/l(x0)). On the round-1 case it gives **284156028 bits = 0.066160**, the same in my implementation and in the reference, against 0.1130 (re-charge) and 0.0064 (S11). The text says **0.0661** (`:192`, `:215`, PR body); the correct rounding is 0.0662 (NIT-1). Golden `qresample` vectors pin all three readings. |
+| R5 | PARTLY APPLIED | **Correct:** the budgets are 164·2^-65 absolute for `ln` (½ + 2^-25 ulp, since 164·2^-33 = 2^-25.6) and 133·2^-65 relative for `exp` (0.138 ulp of excess at y = 16). `05.1:245` and `exp_ln_v0.py` (`BUDGET_LN`, `BUDGET_EXP`) use them. The survivor error is 1.5 bits. The exhaustive count is 2,555,905 and a Q32_32 sample is added. DV-SPR016-1's month counts and m = 4 region are corrected. The sweep is in `golden_nightly.sh`. **Not carried through:** MR3's range is still `[-1.1, 15.2]` (measured `[-2.861, 15.197]`). MR11 still says "first two months … above about 88" (NEW-5). The nightly line cannot run on CI (NEW-1). |
+| R6 | NOT APPLIED (drafter's choice) | Evidence in `[join_at_90]` `:156-160`, printed by check 4. Verdict below. |
+| R7 | APPLIED | Each control is read by exactly one check (`Options`; `:444-453`, `:565`, `:616`). Results are in the table below. |
+| R8 | APPLIED | `05.1:12` gives the v1.10/v1.11 merge-order note. `neutral = 1.0` is at `:68`. The PRJ-002 remark is gone. |
+| R9 | APPLIED | **MIN-7:** N is counted at the start of the Inputs phase of t_in, once per input. **MIN-8:** `[fold] design_changes`. **NIT-1:** the corners are in check 8 (85.524 within 1 year). **NIT-3:** a control run never writes. **NIT-5:** `widen` and `narrow_saturating`. **NIT-6:** widths given. **D-MIN-2:** 365-day case, `assert 0 < x < prev_month`. **D-NIT-2:** clamp to [19661, 65536]. **D-NIT-3:** `05.1` updated. |
+| R10 | PARTLY APPLIED | See NEW-2. Two steps are not renamed (`M2 Parameters` `:182`, `M9 Knots` `:189`), and four references are not renamed. The rename damaged a branch name and the invariant ids. |
+| R11 | APPLIED | DV-SPR016-1 to 4 are design values. A9's column is marked provisional (`:61`). `brass_alpha` stays refused. |
+| R12 | APPLIED | Q4: research items in DV-3 and DV-4. Q5: the typed `neutral`. Q2: I could not see the drafter's original wording. `05.1:239` still lists `ln(x: Q16_16)` as a named form. MR11's entitlement term consumes it (P1.5a), so I do not count it as a violation. |
+
+#### R7: the controls, mutated (`scripts/mutate_controls.py`)
+
+| Mutant (fresh copy) | Control | Result |
+|---|---|---|
+| none | `beta-one-power` / `infant-discontinuous` / `newborn-uncovered` | Only check 1, 5 or 7 fails respectively. Exit 2. |
+| check 1 → `True` | `beta-one-power` | exit 0 |
+| check 5 → `True` | `infant-discontinuous` | exit 0 |
+| check 7 → `True` | `newborn-uncovered` | exit 0 |
+| only the continuity clause of check 5 deleted | `infant-discontinuous` | exit 0 (round-1 MIN-5 is fixed) |
+| only `q_new == forty > q_old` deleted | `newborn-uncovered` | exit 0 |
+| only K/grid, or only l(x), deleted in check 1 | `beta-one-power` | exit 2: each clause catches it alone. Deleting both gives exit 0. |
+
+The stale golden fixtures exit 1 for both `exp_ln_v0` and `m2_f1_mortality`.
+
+### New findings (round-2 commit)
+
+#### NEW-1 (fix before merge): the nightly `exp`/`ln` sweep cannot run on CI
+- **Where:**
+  - `bin/golden_nightly.sh:46-47`: `PY="${PYTHON:-python/.venv/bin/python}"`, with no fallback.
+  - `.github/workflows/nightly.yml:50-73`: the `golden` job has no `setup-uv` or `uv sync` step. Only `ci.yml:100-109`
+    has them.
+- **Evidence.**
+  - In a checkout without `python/.venv`, the line gives `bash: python/.venv/bin/python: No such file or directory`.
+  - The exit is 127. Under `set -euo pipefail` the nightly golden job goes red every night after merge.
+  - The ladder work runs first, so nothing is lost. But a nightly that is always red hides real failures.
+  - The job's 45-minute timeout also has to absorb the sweep's 4 min 16 s (measured here).
+- **Fix.** Either one:
+  - Use `check_all.sh:16`'s fallback (`$PYTHON`, else the venv if it is executable, else `python3`). The script is
+    stdlib-only and needs Python 3.11 or later; ubuntu-24.04 has 3.12.
+  - Add the two `ci.yml` steps to the `golden` job.
+- Confidence 9/10.
+
+#### NEW-2: the R10 rename both overreached and fell short
+- **Corrupted (system ids or names renamed as if they were steps):**
+  - `mortality_f1.toml:2` reads `arch/MR2-F1-births`. The branch is `arch/M2-F1-births`.
+  - `:222` reads "INV-MR2-06..12 are births'". `:224` and `:228` have ids `INV-MR2-13` and `INV-MR2-14`.
+  - Invariant ids are namespaced by system (`INV-M2-nn`), so these ids are invalid.
+- **Not renamed (steps still M-numbered, which is exactly the clash R10 removes):**
+  - `:182` "M2 Parameters" is the step, and clashes with system M2.demography.
+  - `:189` "M9 Knots …".
+  - `:87` "(M3, MR4)".
+  - `:171` "M9 is S7".
+  - `:185` "with M4's L_i(k)". M4 is the economy system.
+  - `:220` "M4's numerator 2^96".
+- **Stale since round 1:** `infant_sub_schedule.toml:1` still names step "F7".
+- **Fix:**
+  - Restore the branch name and the `INV-M2-` prefix.
+  - Rename the six step references to MR2, MR9, MR3, MR9, MR4, MR4.
+  - Change F7 to MR7.
+- Confidence 9/10.
+
+#### NEW-3: the mortality invariants collide with the births round-2 invariant
+- **Where:** `mortality_f1.toml:222-229` against `origin/arch/M2-F1-births` (`35226c0` and the head `13fbb70`),
+  `next/M2.demography.odd.toml:800`.
+- **Evidence.**
+  - Births round 2 defines `INV-M2-13`, "Commanded outcomes are held exactly", and cites it at `:458` and `:760`.
+  - Once NEW-2 is fixed, mortality's two invariants are INV-M2-13 and INV-M2-14, and the first collides.
+  - `[fold]` and the header still pin births at `421f2e1`. That commit is two commits behind the births head.
+- **Fix.**
+  - Number the mortality invariants INV-M2-14 and INV-M2-15, or whatever follows births at fold time.
+  - Re-pin `[fold]` to the current births head.
+  - I checked the parts of the fold the round-2 text relies on, and they still hold at `13fbb70`: the `not_yet`
+    entries 1–4 and the frozen `death_time` draws.
+- Confidence 8/10.
+
+#### NEW-4: R2's closed form for u₀ is wrong by a factor of 2^32 inside the power
+- **Where:** MR8, `mortality_f1.toml:188`. The text reads: "once S(u) < 2^31 / L_66 … u_0 = (1/b) ln(((1 + a)(L_66
+  / 2^31)^b − 1) / a)".
+- **The error.** T_j = rhe(L_66 S_j / 2^32) is 0 once L_66·S_j < 2^31, where S_j is in *bits*. In terms of the real
+  survival S(u) = S_j / 2^32, that is S(u) < 1 / (2 L_66). The text uses S_j's threshold as if it were S(u)'s.
+- **Evidence** (`scripts/indep_f1.py`). The written formula gives u₀ < 0, or a meaningless value, at all 8 check
+  values (for example −23.2 years at (20, 1.65)), and is wrong at 64 of 64 box points.
+- **The corrected form** is u₀ = (1/b) ln(((1 + a)(2 L_66)^b − 1) / a), with L_66 in bits, and j₀ = min(360, ⌈12 u₀⌉).
+  - It gives j₀ exactly at the 8 check values: 234, 281, 328 and 301 for the β > 1.2 rows, and the cap of 360
+    elsewhere.
+  - Over a 64-point box sweep it is within **2** knots, not the "one knot" the text states. The misses are at
+    e0 70–85, where T_(j₀−1) = 1 bit.
+- **Effect:** text only. The contract is the exact knot, and check 4 and the check values assert it.
+- **Fix:** replace the formula and say "within two knots".
+- Confidence 9/10.
+
+#### NEW-5: two R5 corrections did not reach the algorithm text
+- **MR3, `:183`:** "exp's argument is in [-1.1, 15.2]". The measured range is **[-2.861, 15.197]**
+  (λ₁ = −1.734 at β = 1.65), and the commit message says this was fixed.
+- **MR11, `:191`:** "at m = 2 … excludes only the first two months of life and ages above about 88". DV-SPR016-1
+  (`:131`) now gives the corrected figures: the first six months; the ends of the teeth from 84.4; every month from
+  87.9. The two passages contradict each other.
+- **Fix:** copy the DV-SPR016-1 figures into MR11, and correct MR3's range.
+- Confidence 9/10.
+
+#### NITs
+- **NIT-1.** The R4 value is 0.06616, which is **0.0662**, not 0.0661. Correct it at `:192`, `:215` and in the PR
+  body. The reference itself prints 0.0662.
+- **NIT-2.** The golden case `qresample 518400 1440 44640 84960` (`selftest_m2_f1_mortality.py:664`, case
+  `(DAY, 31*DAY, 59*DAY)`) is unreachable.
+  - On the 360-day calendar, x1 = x + D = 31 days, so x0 = 31 days is the month's end and is outside the pending
+    month.
+  - A port that asserts x1 = x + D will reject the vector.
+  - Use, for example, `(DAY, 16*DAY, 31*DAY)`.
+- **NIT-3.** Check 7 asserts only `plain < chosen < recharge` (`:627`). The bits are pinned only by the golden file.
+  That is acceptable, but the toml's "check 7 pins all three readings" really means the golden file does.
+- **NIT-4.** The figures in `[join_at_90]`:
+  - "−27% at 82.5" at e0 30 is −26.5%, and the reference prints −26%.
+  - "−47% to −58% at (60, 1.65)" is −44.7% to −58.0%.
+  - "survival 90→100 falls … to about 0.7%" under the h_end anchor is 0.41–0.47%, depending on whether b is
+    re-derived. That makes the drafter's argument stronger.
+  - "ages 1 to 50 … the teeth are small" is false: −57% at 2 and +20% at 16. See the R6 verdict.
+
+### R6 verdict
+
+**Independent check.**
+- **Method.**
+  - `scripts/r6_check.py` implements rung 0 from the frozen S1–S8 text. It asserts K = 9582773732, and the grid and
+    monthly q equal `selftest_m2_rung0.py`.
+  - The F1 side uses my independent MR1–MR10 implementation, built on the round-1 exp/ln written from `05.1`.
+- **Rung 0's sawtooth (e0 30, β 1, 360-day calendar).** Monthly q changes across grid boundaries by:
+
+  | 75 | 77.5 | 80 | 82.5 | 85 | 87.5 | 90 |
+  |---|---|---|---|---|---|---|
+  | −11.5% | −21.9% | −19.8% | **−26.5%** | **−32.2%** | **−36.0%** | **−51.4%** |
+
+  Rung 0's own step at 90 is −51% (its linear [90, 92.5] tooth), which the drafter does not mention. Boundaries
+  from 20 to 72.5 move by under 7%.
+- **The drafter's claim about ages 1 to 50 is false in relative terms.** `[join_at_90]` (`:159`) says that ages 1 to
+  50 "have one-year intervals, where the teeth are small". In childhood the steps are large:
+
+  | 2 | 3 | 4 | 5 | 10 | 16 |
+  |---|---|---|---|---|---|
+  | −57% | −43% | −39% | −32% | −17% | +20% |
+
+  The hazard falls or rises steeply there, even over one-year intervals. The absolute q is small (about 1e-3 or
+  less), so this is a matter of the backlog item's scope, not a defect.
+- **The F1 join at 90.**
+  - At e0 30 it is **−30.8%**: q goes from 0.0392 to 0.0271.
+  - F1's join is therefore *smaller* than rung 0's own step at 90.
+  - The tooth's hazard on [87.5, 90] runs from 0.220 to 0.490 per year, against m1 = 0.320 and μ = 0.330.
+  - So h_end / μ = 1.485: the "48% above" holds.
+- **The tail's first-month hazard against μ** is +0.10% to +0.51% at every design point and corner. The integer
+  schedule agrees with the real logistic to 4 digits. The claim "within 1%" holds.
+- **Under the h_end anchor:**
+  - h_end = 1.10 per year at both (60, 1.65) and (20, 1.65), above the logistic's asymptote of 1. The clamp the
+    drafter names is needed.
+  - Survival from 90 to 100 at e0 30 falls from 2.44% to 0.41–0.47%.
+
+**Is the drafter's position right?**
+- **Keep the mid-interval anchor: yes.**
+  - A tail join cannot fix a step whose cause is S7.
+  - The h_end anchor would raise the whole tail's hazard by 1.5–2 times to cosmetically smooth one boundary.
+  - That anchor is infeasible for β ≳ 1.55, and it leaves the identical −27% to −36% steps at 82.5, 85 and 87.5.
+  - The join at 90 already improves on rung 0's own −51%.
+- **The backlog item: yes, but the remedy it names is wrong.** Logit-linear S7 leaves steps of **+8% to +25%** at
+  75–87.5 and +2.9% at the join (`scripts/r6_interp.py`). The teeth flip sign and shrink, but they remain. The
+  comparison:
+
+  | Interpolation | Steps at 75–87.5 |
+  |---|---|
+  | Log-linear | +10% to +26% |
+  | Logit-linear | +8% to +25% |
+  | PCHIP on the Brass logit (C¹) | +0.1% to +1.2%, and −0.4% at 90 |
+
+- **What the backlog item should say:**
+  - A hazard-continuous (C¹) interpolant of the logit Y(x) between grid points from 1 to 90, for example a monotone
+    cubic Hermite. Childhood has steps of up to −57%, so the item cannot be limited to ages above 50.
+  - It is evaluated **at construction** into monthly knots, as MR8 already does above 90. That keeps exp/ln off the
+    per-person path.
+  - Acceptance: monthly q continuous within 2% at every grid boundary, the join at 90 included.
+  - The change is C3. It breaks the β = 1 bit-equality with rung 0 wherever it applies, and moves the P1a goldens
+    there.
+- **Recommendation to the Architect:**
+  - Amend R6: withdraw the "≤ 2% at 90" requirement from F1.
+  - Record the backlog item above, owned by SPR-028's harness or P1b, with this table as its evidence.
+  - Have the drafter correct `[join_at_90]`'s remedy wording and NIT-4's figures.
+  - Confidence 8/10.
+
+### The merge of `main` (`dbc1699`)
+- **Parents:** `d25333a` and `80343bf`.
+- **The merge brought in exactly `80343bf`'s change:**
+  - `git diff d25333a dbc1699` is byte-identical to `git diff 132e17d 80343bf` (the merge-base to `main`).
+  - Two documentation files changed: `SPR-012_WalkingSkeletonB.md` (T-05 acceptance text) and the architect handoff
+    summary.
+- **Nothing else:** no conflict resolution, and no overlap with the PR's files.
+
+### What I ran
+- `python3 -I specs/numerics/exp_ln_v0.py --check`: PASS, OK, exit 0.
+- `python3 -I specs/numerics/exp_ln_v0.py --check --exhaustive`: PASS, 4 min 16 s.
+  - **`exp`:** 2,621,441 inputs, unfaithful 0, worst 8.83e-19 relative (2^-59.97).
+  - **`ln`:** 1,114,112 inputs, unfaithful 0, worst 7.20e-19 absolute (2^-60.27).
+  - Both are under the budgets.
+- `python3 -I specs/demography/selftest_m2_f1_mortality.py --check`: PASS, OK (4808 lines), exit 0.
+- Controls:
+  - The three must-fail controls each exit 2.
+  - Both stale fixtures exit 1.
+  - The deletion mutants are in the R7 table above.
+- `python/.venv`:
+  - `pytest python/tests/test_check_all_inventory.py`: 12 passed.
+  - `ruff check`: clean.
+  - `ruff format --check` on the two references: clean.
+  - `mypy`: clean (40 files).
+- **Independent checks:**
+  - `scripts/indep_f1.py`: MR1–MR10, the check values, the zero knots, R4 and the closed form.
+  - `scripts/r6_check.py`: rung 0 from S1–S8, the drops, the hazards, the h_end anchor.
+  - `scripts/r6_interp.py`: the four interpolants.
+  - `scripts/mutate_controls.py`: R7.
+
+### What I did not run
+- `bin/check_all.sh`, cargo, and the births branch's next-mode lint on a full fold.
+- The nightly workflow itself. I reproduced the failing line locally.
