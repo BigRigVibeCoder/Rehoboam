@@ -61,6 +61,7 @@ python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 gold
 python -I specs/chronicle/selftest.py
 python -I specs/chronicle/selftest_envelope.py   # the event envelope v0: anchored snapshots, typed edges, cause_told, the plane-B index, the byte budget (SPR-020; specs/chronicle/envelope_v0.md); --control snapshot-drift, motive-on-triggered, cause-later, budget-bloat and origin-lost must FAIL
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
+python -I specs/registry/effect_ref.py --check   # effect language v0: the reference reproduces every golden case (SPR-017 contract)
 python -I bin/gen_decimal_vectors.py --check   # authored numbers: rh-manifest exact decimals -> fixed point match Python decimal (SPR-011 T-04)
 python -I specs/numerics/exp_ln_v0.py --check   # fixed-point exp and ln v0 (Q32_32): constants, convergence, faithful rounding, golden vectors (05.1 §6 item 4 v1.10; SPR-016); --exhaustive nightly
 python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference distributions are current (SPR-003)
