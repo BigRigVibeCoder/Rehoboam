@@ -2,14 +2,14 @@
 id: SPR-011
 title: "Walking skeleton A: engine prerequisites (P1.0, increment A)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-001, PRJ-002, SPR-007, SPR-008, SPR-012, SPR-013, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035]
 created: 2026-10-16
 updated: 2026-10-17
-version: 1.1.1
+version: 1.2.0
 ---
 
 > **BLUF:** Increment A of the walking skeleton (WP P1.0): the engine prerequisites the first real system needs. An engine-purity lint (A-14), a 32-bit probability type with keyed uniform draws (A-21), draws keyed by the entity's epoch (A-29, which regenerates the `smoke` baseline), ledger rows with the life-course log, and authored numbers compiled exactly into plane A. Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). The director approved P1.0 as one plan run as three sprints (ruling 1): this sprint, SPR-012 (`solo` lives and dies) and SPR-013 (the stream, the sifter, replay and rungs 1–2). Rulings 1–19 below bind all three and stay here, numbered as the specs and code already cite them ("SPR-011 ruling N"). Task numbers T-00 to T-13 are kept across the three sprints, so "SPR-011 T-05" in older text means T-05 of the plan, now in SPR-012.
@@ -112,7 +112,7 @@ For all three increments; "Here" names the task and, outside increment A, its sp
 #### T-00: Engine-purity lint (BCK-002 A-14)
 - **Deliverable:** Rule `engine-purity` in `bin/lint_arch.py`. One deny-list constant (media, HTTP-UI and LLM-client crates, as `docs/13` §3 lists), checked over the transitive normal and build dependencies of every engine crate. The engine set is the union of the lists in `docs/13` §3, `05.0` §6 and ADR-0035 §6, plus `rh-sys-*` and the new crates. Planted fixtures in `tests/lint_fixtures/`; Python tests; the gate inventory test updated.
 - **Acceptance:** V-INSP-05: zero violations on the workspace. A planted direct dependency on a deny-listed crate FAILS; a planted transitive one FAILS; a dev-dependency passes. A test proves the deny-list is defined once.
-- **Status:** [x] done: `bbbd973`; DEF-1, DEF-2 `f820447`; A-1, A-4 `ce35874`; A-5, G-3 in the review-fix push
+- **Status:** [x] done: `bbbd973`; DEF-1, DEF-2 `f820447`; A-1, A-4 `ce35874`; A-5, G-3 `cc28c82`; DEF-5, MAJ-1, MIN-2 `4d2280d`
 
 #### T-01: A finer probability type and keyed uniform draws (BCK-002 A-21; ruling 4)
 - **Deliverable:** `Prob32` in `rh_core::fixed`, with `draw_hits` and `chance` on it; `UniformDraw` for `rh_ids::RngStream`; a `StepCtx` helper that draws one keyed `u64` against a probability. `bin/gen_fixed_vectors.py` extended (exact rational reference) and its golden file regenerated.
@@ -127,7 +127,7 @@ For all three increments; "Here" names the task and, outside increment A, its sp
 #### T-03: Ledger rows and the life-course log (ruling 5)
 - **Deliverable:** In `rh-core`: the ledger exists when `person.id` is registered. All `person.*` columns stay aligned and sorted by `person.id`. A compaction pass at the start of `Bookkeeping` removes every row with `person.alive = 0` from all `person.*` columns. `life_course.*` columns are append-only, and a row's exit fields are written once (a core check refuses anything else). Core invariants: alignment, order, and one open life-course entry per ledger row. Compaction removes rows from `person.*` columns that other systems own (`person.named` for T1, `person.house` and `person.vocation` for M7): this is a core-only exemption from single-writer ownership, and no `SystemModel` can obtain it. The life-course log keeps `mother` and `father` for everyone who ever entered, so kinship stays readable through the dead (REV-P1a NEW-1).
 - **Acceptance:** V-INV-01 subset as property tests on random small worlds: alignment; order; the living count equals the open entries; a closed entry is absent from the ledger. A death applied in `Vital` is gone before `Bookkeeping` hashes the same instant. V-DET-05: keyframe round-trip with a compaction inside the window. V-DET-01/02 on a stub world with deaths. The smoke ladder is unchanged. V-INV-04 positive control (REV-P1a MIN-9): a test system that removes a ledger row, or writes a `person.*` column it does not own, is refused at registration or at the step with a named error, while the core compaction of the same rows passes.
-- **Status:** [x] done: `3c88775`, fix `1d72e48`; DEF-3 `5edbc5e`; A-2, G-1, A-3 `a859273`
+- **Status:** [x] done: `3c88775`, fix `1d72e48`; DEF-3 `5edbc5e`; A-2, G-1, A-3 `a859273`; DEF-6 `b638e1c`
 
 #### T-04: Authored numbers into plane A (`05.5` §3.2; rulings 8, 9)
 - **Deliverable:** `rh_registry::WorldSpec` (plane-A types only) and `rh_manifest::compile(manifest, registry) -> WorldSpec`. Registry `defaults` are read (ruling 8). Exact decimal to fixed point, rounded half to even, never through `f64`; a value that does not fit is a load error. `rh-manifest` gains its edge to `rh-registry`; no plane-A crate depends on `rh-manifest`.
@@ -173,9 +173,9 @@ The other rulings are the Architect's.
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-011` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class; each golden-corpus change was announced to the director first.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-011` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class; each golden-corpus change was announced to the director first.
