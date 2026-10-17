@@ -102,6 +102,7 @@ mod t1 {
         BreakAct,
         BreakOutcome,
         AttackOutcome,
+        OutcomeDelay,
     );
 }
 
