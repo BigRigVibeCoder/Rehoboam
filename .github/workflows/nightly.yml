@@ -69,7 +69,20 @@ jobs:
         with:
           tool: cargo-nextest@0.9
 
-      - name: V-DET-01/02 monthly ladders at 1, 2, 4 and N threads x 3; V-DET-11 x 64
+      # SPR-013 T-13: V-SCALE-04's chronicle checks (twin_check.py, check_segments.py) read the
+      # sealed segments with DuckDB, from the locked environment as the PR tier does.
+      - name: uv and Python 3.12
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Python environment from the lock (RUN-001 §4)
+        run: uv sync --frozen --project python
+
+      - name: V-DET-01/02 monthly ladders at 1, 2, 4 and N threads x 3 (smoke, solo, household, hamlet); V-SCALE-01/04; V-INV-02; V-DET-11 x 64
         run: bin/golden_nightly.sh
 
       - name: Upload the monthly ladder (the cross-machine reference)

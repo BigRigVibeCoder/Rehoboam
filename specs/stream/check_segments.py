@@ -17,9 +17,9 @@ Reads every sealed table of ``<run-dir>/stream/t*/A/y*/`` with DuckDB, independe
      rebuilt from its table, its child rows (roles, snapshots, typed causes) and the segment's
      verb dictionary).
 
-``--plant float-column`` and ``--plant digest`` copy the run directory, plant a DOUBLE column in
-one segment's ``step_digest.parquet`` or alter one ``canonical_digest``, and check the copy: each
-must FAIL, with ``TYPE:`` and ``DIGEST:`` respectively (the positive controls).
+``--plant float-column`` and ``--plant digest`` copy the run's first three segments, plant a
+DOUBLE column in one segment's ``step_digest.parquet`` or alter one ``canonical_digest``, and
+check the copy: each must FAIL, with ``TYPE:`` and ``DIGEST:`` respectively (the positive controls).
 
 Usage: python -I specs/stream/check_segments.py RUN_DIR [--plant float-column|digest]
 Exit:  0 every check passed, 1 a check failed, 2 the run directory could not be read.
@@ -61,6 +61,7 @@ TABLES = (
     "verb",
 )
 FLOAT_TYPES = ("FLOAT", "REAL", "DOUBLE")
+PLANT_SEGMENTS = 3
 DICTIONARIES = ("event_role_kind", "motive_edge_kind", "attribute")
 EXIT_OK, EXIT_FAIL, EXIT_UNREADABLE = 0, 1, 2
 
@@ -298,9 +299,15 @@ def check(run_dir: Path) -> int:
 
 
 def plant(run_dir: Path, what: str, tmp: Path) -> Path:
-    """A copy of ``run_dir`` with one planted fault (the positive controls)."""
+    """A copy of ``run_dir``'s first segments with one planted fault (the positive controls).
+
+    The fault is planted in the first segment; the copy holds the first ``PLANT_SEGMENTS`` sealed
+    channel-A segments only (seq still contiguous from 0), so a control costs a few segments' check,
+    not the run's.
+    """
     copy = tmp / "run"
-    shutil.copytree(run_dir / "stream", copy / "stream")
+    for seg_dir in sorted(run_dir.glob("stream/t*/A/y[0-9]*"))[:PLANT_SEGMENTS]:
+        shutil.copytree(seg_dir, copy / seg_dir.relative_to(run_dir))
     seg = sorted(copy.glob("stream/t*/A/y*"))[0]
     con = duckdb.connect()
     if what == "float-column":

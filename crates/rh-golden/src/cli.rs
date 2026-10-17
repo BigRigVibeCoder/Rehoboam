@@ -4,7 +4,7 @@
 //! - `rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T]
 //!   [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]]
 //!   [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]
-//!   [--run-dir D] [--inputs SCRIPT]`: `--years`
+//!   [--run-dir D] [--inputs SCRIPT] [--expect-serial]`: `--years`
 //!   is the history's horizon (with `--resume`, the journal's own, unless `--extend`); `--until`
 //!   stops earlier (DEF-1). The summary line reports the dispatch (levels, levels with two or
 //!   more jobs, the most jobs in a level); `--require-parallel` fails the run when no level held
@@ -74,6 +74,9 @@ pub fn to_argv(args: &RunArgs, repo: bool) -> Vec<String> {
     if args.extend {
         v.push("--extend".to_owned());
     }
+    if args.expect_serial {
+        v.push("--expect-serial".to_owned());
+    }
     if args.leak_thread {
         v.push("--leak-thread".to_owned());
     }
@@ -93,7 +96,16 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
     let (mut years, mut out, mut journal) = (None, None, None);
     let mut it = words.iter();
     while let Some(flag) = it.next() {
-        if ["--extend", "--leak-thread", "--vitals", "--strict"].contains(&flag.as_str()) {
+        if [
+            "--extend",
+            "--leak-thread",
+            "--vitals",
+            "--strict",
+            "--expect-serial",
+        ]
+        .contains(&flag.as_str())
+        {
+            args.expect_serial |= flag == "--expect-serial";
             args.extend |= flag == "--extend";
             args.leak_thread |= flag == "--leak-thread";
             args.vitals |= flag == "--vitals";
@@ -217,7 +229,14 @@ pub fn run_world(world: &str, words: &[String], repo: &Path) -> u8 {
             });
             let parallel = args
                 .require_parallel
-                .map_or(Ok(()), |floor| outcome.check_parallel(floor));
+                .map_or(Ok(()), |floor| outcome.check_parallel(floor))
+                .and_then(|()| {
+                    if args.expect_serial {
+                        outcome.check_serial()
+                    } else {
+                        Ok(())
+                    }
+                });
             match (&ladder.failed, parallel) {
                 (Some(_), _) | (None, Ok(())) => {}
                 (None, Err(message)) => {

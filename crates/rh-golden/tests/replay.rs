@@ -92,6 +92,7 @@ fn script(dir: &Path, inputs: &[(i64, usize)]) -> PathBuf {
     for (tick, k) in inputs {
         writeln!(text, "[[input]]\ntick = {tick}\nfounder = {k}").unwrap();
     }
+    std::fs::create_dir_all(dir).unwrap();
     let path = dir.join("inputs.toml");
     std::fs::write(&path, text).unwrap();
     path
@@ -248,7 +249,10 @@ fn about(r: &Record) -> Option<(Option<u64>, String)> {
 fn an_input_on_one_founder_changes_only_that_founders_records() {
     let base = scratch("v_det_14");
     let plain = base.join("plain");
-    run_into("hamlet", 120, &plain, None);
+    // No input at all (the world's committed script has one), so each run below differs from
+    // this one by exactly its own input.
+    let none = script(&base.join("none"), &[]);
+    run_into("hamlet", 120, &plain, Some(&none));
     let recs = records(&plain);
     let ids = founders(&plain);
     let last_death = recs

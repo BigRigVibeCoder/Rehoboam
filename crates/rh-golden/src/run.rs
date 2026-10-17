@@ -154,6 +154,11 @@ pub struct RunArgs {
     /// The floor, in percent, of the share of levels that held two or more jobs (DEF-2): below it,
     /// or with no such level at all, the run fails.
     pub require_parallel: Option<u64>,
+    /// The run must be serial: no level held two or more jobs (`--expect-serial`; the
+    /// Architect's T-13 ruling for the one-system worlds, where a `--require-parallel` floor
+    /// cannot hold). It fails the moment a second system makes a level hold two jobs, so the
+    /// world then needs a floor.
+    pub expect_serial: bool,
     /// Attach the timing observer and report the vitals (SPR-009 T-03): per-system times, the
     /// serial fraction and the vitals line. It changes no result.
     pub vitals: bool,
@@ -192,6 +197,7 @@ impl RunArgs {
             dump: None,
             leak_thread: false,
             require_parallel: None,
+            expect_serial: false,
             vitals: false,
             run_dir: None,
             stall: None,
@@ -245,6 +251,23 @@ impl Outcome {
                 d.parallel_levels,
                 d.levels,
                 self.parallel_percent()
+            ));
+        }
+        Ok(())
+    }
+
+    /// `Err` when a level held two or more jobs (`--expect-serial`).
+    ///
+    /// # Errors
+    /// The message to print.
+    pub fn check_serial(&self) -> Result<(), String> {
+        let d = self.dispatch;
+        if d.max_jobs >= 2 || d.parallel_levels > 0 {
+            return Err(format!(
+                "NOT SERIAL: {} of {} levels held two or more jobs (at most {} in a level); the \
+                 world runs systems in parallel now, so set a `--require-parallel` floor instead \
+                 of --expect-serial (SPR-013 T-13)",
+                d.parallel_levels, d.levels, d.max_jobs
             ));
         }
         Ok(())

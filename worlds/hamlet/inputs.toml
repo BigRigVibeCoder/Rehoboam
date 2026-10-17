@@ -1,1 +1,16 @@
-# provisional
+# hamlet's committed input script (SPR-013 T-13; SPR-011 ruling 15), placed as solo's is: one
+# scope-only material input on Job (founder 0), inside the month of his pending death, so the golden
+# run takes the whole path of ADR-0025 item 3 (the epoch bump and the cancel-and-re-sample of a
+# pending death) on the 60-person world. Found by a probe run (SPR-013 lesson: a golden input must
+# exercise the path it claims).
+#   Without the input, Job's death is drawn at the Month pulse of tick 17,755,200 (year 34,
+#   day 90) for tick 17,789,760 (day 114).
+#   tick:    17,772,847 = year 34, day 102, 06:07 (34 x 518400 + 102 x 1440 + 6 x 60 + 7): strictly
+#            between that pulse and the death instant, and between pulse boundaries.
+#   Outcome: the re-sample misses, so the death is dropped; Job dies at tick 18,240,480
+#            (year 35, day 67). No other person's records change (V-DET-14), and the world still
+#            ends in year 78 (date 0078-10-06) with one EXTINCTION.
+#   founder: the founder's index in genesis order; its PersonId is founder(seed, 0).
+[[input]]
+tick = 17772847
+founder = 0

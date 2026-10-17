@@ -467,6 +467,27 @@ tail_stopped_wall() {
   kill -KILL "$pid"; wait "$pid" 2>/dev/null
   echo "T-10 wall: solo 200 years: ${headless} ms headless, ${streaming} ms streaming, ${stopped} ms streaming with a stopped tail attached"
 }
+# SPR-013 T-13: a rung's PR-tier golden run: 200 sim-years, yearly, 1 thread, serial (--expect-serial:
+# the Architect's ruling for the one-system worlds, where no --require-parallel floor can hold),
+# streaming into its run directory; the ladder is copied out for the baseline gates.
+world_golden_run() {
+  rm -rf "$GOLDEN/$1_run"
+  "$RH_CLI_RELEASE" run "$1" --years 200 --threads 1 --ladder yearly --expect-serial --run-dir "$GOLDEN/$1_run" || return 1
+  cp "$GOLDEN/$1_run/run.ladder" "$GOLDEN/$1_yearly_t1.ladder"
+}
+# SPR-013 T-13: sift a run directory that a golden run streamed, then check the SQL twin.
+sift_twin() {
+  "$RH_CLI_RELEASE" sift "$1" || return 1
+  "$PY" -I specs/sifting/twin_check.py "$1"
+}
+# SPR-013 T-13: the keyframe sizes of each rung's 200-year golden run (reported, not gated).
+keyframe_sizes() {
+  local w sizes
+  for w in solo household hamlet; do
+    sizes=$(stat -c %s "$GOLDEN/${w}_run"/keyframes/*.rhkf | sort -n) || return 1
+    echo "keyframes: $w: $(wc -l <<<"$sizes") files, $(head -1 <<<"$sizes") to $(tail -1 <<<"$sizes") bytes, $(awk '{s+=$1} END {print s}' <<<"$sizes") in all"
+  done
+}
 # SPR-013 T-11: a world's run streamed into a fresh run directory, sifted, and checked against the SQL twin.
 world_sift_twin() {
   local dir="$GOLDEN/$1_run"
@@ -810,7 +831,7 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
   rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
-  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay"
+  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -1241,8 +1262,19 @@ run "rh-golden by name: tail prints every record once in seq order from any curs
 run "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment (SPR-013 T-11; ruling 14)" "pass:sift: 1 matches of solitary_life in 200 channel-C segments" "$RH_CLI_RELEASE" sift "$GOLDEN/solo_run" &&
 run "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 1 matches of solitary_life" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" &&
 run "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)" "fail:TWIN DIFFERS: 0 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control drop-last &&
-run "V-SIFT-01 on household: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 6 matches of solitary_life" world_sift_twin household 200 &&
-run "V-SIFT-01 on hamlet: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 60 matches of solitary_life" world_sift_twin hamlet 200 &&
+run "Golden run: household, the six-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run household &&
+run "Golden run: household, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run household --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/household_yearly_tN.ladder" &&
+run "Golden ladders: household at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&
+run "Golden baseline: worlds/household = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-013 T-13)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/household/baselines/household_yearly_200y.ladder --recomputed "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&
+run "V-SIFT-01 on household: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)" "pass:twin_check: V-SIFT-01: 6 matches of solitary_life" sift_twin "$GOLDEN/household_run" &&
+run "Golden run: hamlet, the 60-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:hamlet: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run hamlet &&
+run "Golden run: hamlet, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:hamlet: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run hamlet --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/hamlet_yearly_tN.ladder" &&
+run "Golden ladders: hamlet at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/hamlet_yearly_t1.ladder" "$GOLDEN/hamlet_yearly_tN.ladder" &&
+run "Golden baseline: worlds/hamlet = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-013 T-13)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/hamlet/baselines/hamlet_yearly_200y.ladder --recomputed "$GOLDEN/hamlet_yearly_t1.ladder" "$GOLDEN/hamlet_yearly_tN.ladder" &&
+run "V-SIFT-01 on hamlet: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)" "pass:twin_check: V-SIFT-01: 60 matches of solitary_life" sift_twin "$GOLDEN/hamlet_run" &&
+run "--expect-serial positive control: the multi-system smoke world must FAIL it, naming the floor to set (SPR-013 T-13; the Architect's ruling)" "fail:NOT SERIAL: 1460 of 20648 levels held two or more jobs" "$RH_CLI_RELEASE" run smoke --years 2 --threads 1 --expect-serial --out "$TARGET_DIR/rendered-fixtures/expect_serial.ladder" &&
+run "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; reported)" "pass:keyframes: hamlet:" keyframe_sizes &&
+run "rh-golden by name: V-SCALE-04 PR subset: household and hamlet each reach zero population with one EXTINCTION, nothing but digests and keyframes after it, and their chronicle, tail, sift and replay stay consistent past it; one rh-cli build runs rungs 0, 1 and 2 (SPR-013 T-13)" "pass:T-13 V-SCALE-04: hamlet" cargo nextest run -p rh-golden --release --locked --test rungs --no-capture &&
 run "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 10000 matches of solitary_life" world_sift_twin fixture-founders_10k 120 &&
 run "rh-golden by name: V-PLN-04 subset: sifting twice is byte-identical and leaves channel A, keyframes, journal and ladder unchanged; one life_ends match per death, shown by tail (SPR-013 T-11)" "pass:T-11 V-PLN-04: hamlet: two sifts byte-identical" cargo nextest run -p rh-golden --release --locked --test sift --no-capture &&
 run "V-DET-04: rh-cli replay rebuilds solo's 200-year run from its run.toml and journal (Ada's input) at N threads: ladder, every channel-A segment and keyframe byte-identical (SPR-013 T-12)" "pass:REPLAY EQUAL: $GOLDEN/solo_run from genesis: 1 journal inputs, 200 ladder rungs, 200 channel-A segments (2425 records)" "$RH_CLI_RELEASE" replay "$GOLDEN/solo_run" --into "$GOLDEN/solo_replay" --threads "$GOLDEN_THREADS" &&

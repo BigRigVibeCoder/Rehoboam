@@ -613,24 +613,39 @@ def alloc_measure(control: bool) -> str:
 
 
 def parse_budget(text: str, origin: str) -> tuple[str, dict[str, dict[str, int]]]:
-    """The window line and every `budget threads N field value ...` line of an allocation file."""
+    """The window lines and every budget line of an allocation file.
+
+    `budget threads N field value ...` lines (the smoke world) are keyed by `threads N`; since
+    SPR-013 T-13, `rung <world> field value ...` lines (one per rung of the ladder, at 1 thread)
+    are keyed by `rung <world>`, and their `window-rungs` line joins the window.
+    """
     window, budgets, seen = "", {}, False
     for raw in text.splitlines():
         if raw.startswith("format "):
             seen = raw == f"format {ALLOC_FORMAT}"
-        elif raw.startswith("window "):
-            window = raw
-        elif raw.startswith("budget threads "):
+        elif raw.startswith(("window ", "window-rungs ")):
+            window = f"{window}\n{raw}" if window else raw
+        elif raw.startswith(("budget threads ", "rung ")):
             words = raw.split()
+            # `budget threads N k v ...` or `rung <world> k v ...` (its threads among the pairs).
+            first = 3 if words[0] == "budget" else 2
+            key = " ".join(words[1:3]) if words[0] == "budget" else f"rung {words[1]}"
+            pairs = zip(words[first::2], words[first + 1 :: 2], strict=True)
             try:
-                budgets[words[2]] = {
-                    k: int(v) for k, v in zip(words[3::2], words[4::2], strict=True)
-                }
-            except ValueError as e:
+                budgets[key] = {k: int(v) for k, v in pairs}
+            except (ValueError, IndexError) as e:
                 raise GateError(f"{origin}: not a budget line: {raw!r}") from e
     if not seen or not window or not budgets:
         raise GateError(f"{origin}: not a {ALLOC_FORMAT} file")
     return window, budgets
+
+
+def budget_order(key: str) -> tuple[int, int, str]:
+    """Smoke's thread counts in numeric order, then the rungs in name order."""
+    words = key.split()
+    if words[0] == "threads":
+        return (0, int(words[1]), "")
+    return (1, 0, key)
 
 
 def alloc_compare(baseline: str, measured: str) -> tuple[int, list[str]]:
@@ -652,17 +667,20 @@ def alloc_compare(baseline: str, measured: str) -> tuple[int, list[str]]:
             f"window changed: re-baseline required ({base_window!r} -> {now_window!r})"
         ]
     verdict, lines = OK, []
-    for threads in sorted(base, key=int):
-        if base[threads].get("ticks") != now[threads].get("ticks"):
-            return REBASELINE, [f"window changed: the ticks at {threads} thread(s) differ"]
+    for key in sorted(base, key=budget_order):
+        if base[key].get("ticks") != now[key].get("ticks") or base[key].get("seed") != now[key].get(
+            "seed"
+        ):
+            what = f"at {key.split()[1]} thread(s)" if key.startswith("threads ") else f"of {key}"
+            return REBASELINE, [f"window changed: the ticks {what} differ"]
         for field_name in ALLOC_GATED:
-            b, n = base[threads][field_name], now[threads][field_name]
+            b, n = base[key][field_name], now[key][field_name]
             if n > b:
-                lines.append(f"OVER BUDGET threads {threads} {field_name}: {b} -> {n} (+{n - b})")
+                lines.append(f"OVER BUDGET {key} {field_name}: {b} -> {n} (+{n - b})")
                 verdict = FAIL
             else:
                 word = "below budget (kept)" if n < b else "ok"
-                lines.append(f"{word} threads {threads} {field_name}: {b} -> {n}")
+                lines.append(f"{word} {key} {field_name}: {b} -> {n}")
     return verdict, lines
 
 

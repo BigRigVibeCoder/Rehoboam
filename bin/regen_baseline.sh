@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Regenerates the golden baselines with the golden-run tool (SPR-008 T-04, ruling 6): smoke's, and
-# since SPR-012 T-08 solo's (its 200-year yearly ladder, the PR tier of SPR-011 ruling 16).
+# since SPR-012 T-08 solo's (its 200-year yearly ladder, the PR tier of SPR-011 ruling 16), and since
+# SPR-013 T-13 household's and hamlet's (rungs 1 and 2: 200-year yearly ladders at 1 thread, serial,
+# with their committed input scripts).
 #
 # A baseline is regenerated, never typed: bin/check_baseline.py (in bin/check_all.sh) requires the
 # committed file to equal CI's recomputation byte for byte, and a changed baseline to come in a PR
@@ -11,7 +13,8 @@
 # push, bin/check_baseline.py requires a [C3]-tagged commit in the pushed range whenever the
 # baseline changed (VER-SPR-008 MAJ-1), as it requires [C3] at the end of the PR title.
 #
-# Usage: bin/regen_baseline.sh [smoke|solo]   (no argument: both) then commit worlds/*/baselines/
+# Usage: bin/regen_baseline.sh [smoke|solo|household|hamlet]   (no argument: all four) then commit
+#        worlds/*/baselines/
 #        in the C3 PR
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -25,7 +28,7 @@ if ! info="$("$TARGET_DIR/release/rh-cli" build-info)" || [ "$info" != "mutants:
 fi
 work="$TARGET_DIR/golden/regen"
 mkdir -p "$work"
-worlds="${1:-smoke solo}"
+worlds="${1:-smoke solo household hamlet}"
 for world in $worlds; do
   case "$world" in
     smoke)
@@ -38,7 +41,12 @@ for world in $worlds; do
       "$TARGET_DIR/release/rh-cli" run solo --years 200 --threads 1 --ladder yearly \
         --out worlds/solo/baselines/solo_yearly_200y.ladder --journal "$work/solo_journal.sqlite"
       echo "Regenerated worlds/solo/baselines/solo_yearly_200y.ladder." ;;
-    *) echo "regen_baseline.sh: unknown world $world (smoke or solo)" >&2; exit 2 ;;
+    household|hamlet)
+      mkdir -p "worlds/$world/baselines"
+      "$TARGET_DIR/release/rh-cli" run "$world" --years 200 --threads 1 --ladder yearly --expect-serial \
+        --out "worlds/$world/baselines/${world}_yearly_200y.ladder" --journal "$work/${world}_journal.sqlite"
+      echo "Regenerated worlds/$world/baselines/${world}_yearly_200y.ladder." ;;
+    *) echo "regen_baseline.sh: unknown world $world (smoke, solo, household or hamlet)" >&2; exit 2 ;;
   esac
 done
 echo "Commit it in the [C3] PR, with [C3] at the end of the commit subject, e.g.:"

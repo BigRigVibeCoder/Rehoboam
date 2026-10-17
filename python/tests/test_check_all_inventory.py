@@ -29,6 +29,8 @@ NEXTEST_TARGET = re.compile(r"--test (\S+)")
 
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
+    "--expect-serial positive control: the multi-system smoke world must FAIL it, naming the "
+    "floor to set (SPR-013 T-13; the Architect's ruling)",
     "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL",
     "Architecture: crate boundaries, planes and engine purity (lint_arch; V-INSP-03, V-PLN-01, "
     "V-INSP-05)",
@@ -94,6 +96,10 @@ REQUIRED_GATES = (
     "(SPR-008 T-04)",
     "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must "
     "FAIL (SPR-012 T-08; SPR-008 ruling 6)",
+    "Golden baseline: worlds/hamlet = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
+    "SPR-013 T-13)",
+    "Golden baseline: worlds/household = the recomputation, changed only in a [C3] PR "
+    "(V-GOLD-01; SPR-013 T-13)",
     "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR "
     "(check_baseline; SPR-008 T-04)",
     "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
@@ -112,6 +118,8 @@ REQUIRED_GATES = (
     "Golden ladder positive control: an injected run never compares equal to a clean one "
     "(VER-SPR-008 MIN-2)",
     "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)",
+    "Golden ladders: hamlet at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)",
+    "Golden ladders: household at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)",
     "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)",
     "Golden parallel-level positive control: a floor above the run's share of parallel levels "
     "must FAIL (VER-SPR-008 DEF-2)",
@@ -124,6 +132,14 @@ REQUIRED_GATES = (
     "(VER-SPR-008 DEF-1)",
     "Golden run positive control: --strict refuses solo, whose manifest names systems this build "
     "lacks (SPR-011 ruling 3; SPR-012 T-08)",
+    "Golden run: hamlet, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)",
+    "Golden run: hamlet, the 60-person rung, 200 sim-years, yearly ladder, 1 thread, serial "
+    "(--expect-serial), its committed input re-sampling founder 0's pending death, streaming "
+    "into its run directory (SPR-013 T-13)",
+    "Golden run: household, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)",
+    "Golden run: household, the six-person rung, 200 sim-years, yearly ladder, 1 thread, serial "
+    "(--expect-serial), its committed input re-sampling founder 0's pending death, streaming "
+    "into its run directory (SPR-013 T-13)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% "
     "(SPR-008 T-02, DEF-2)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, "
@@ -149,6 +165,8 @@ REQUIRED_GATES = (
     "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
     "--check; SPR-007 T-01)",
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
+    "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; "
+    "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
     "M2 F1 mortality reference positive control: a stale check value in the next M2 spec must FAIL "
@@ -288,8 +306,8 @@ REQUIRED_GATES = (
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
     "V-PLN-01 compile-fail fixture has a clean dependency graph",
     "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)",
-    "V-SIFT-01 on hamlet: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)",
-    "V-SIFT-01 on household: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)",
+    "V-SIFT-01 on hamlet: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)",
+    "V-SIFT-01 on household: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)",
     "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, "
     "event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)",
     "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter "
@@ -576,6 +594,10 @@ REQUIRED_GATES = (
     "rh-golden by name: V-PLN-04 subset: sifting twice is byte-identical and leaves channel A, "
     "keyframes, journal and ladder unchanged; one life_ends match per death, shown by tail "
     "(SPR-013 T-11)",
+    "rh-golden by name: V-SCALE-04 PR subset: household and hamlet each reach zero population "
+    "with one EXTINCTION, nothing but digests and keyframes after it, and their chronicle, "
+    "tail, sift and replay stay consistent past it; one rh-cli build runs rungs 0, 1 and 2 "
+    "(SPR-013 T-13)",
     "rh-golden by name: V-STR-01 on solo and the 60-person hamlet (byte-identical segments "
     "twice and at 1, 2 and 4 threads), the streaming ladder = the headless one, resume "
     "verification (SPR-013 T-09)",
