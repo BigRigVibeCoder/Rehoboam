@@ -50,6 +50,8 @@ extend-exclude = [
     "specs/systems/lint_odd.py",
     # Red-team prototypes: illustrative evidence for design proposals, not product code (docs/red_team/).
     "docs/red_team/prototypes",
+    "tools/asset_ripper",
+    "bin/stream_server.py",
 ]
 
 [tool.ruff.format]
@@ -93,6 +95,7 @@ module = [
     "compress_probe",
     "selftest_virtual_telemetry",
     "lint_odd",
+    "stream_server",
     "prototype_1_tantrum_spiral",
     "prototype_2_story_sifter_motifs",
     "prototype_3_epistemic_ghost_king",

@@ -1478,15 +1478,16 @@
     <section class="hero-banner">
       <div class="hero-grid">
         <div class="hero-text">
-          <div style="margin-bottom: 8px;">
+          <div style="margin-bottom: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
             <span class="badge-flight" id="hero-badge" style="background: rgba(16, 185, 129, 0.2); border-color: var(--emerald); color: var(--emerald);">PHASE 1A ACTIVE // GATE G0 RATIFIED (100% KERNEL COMPLETE)</span>
+            <span class="badge-flight" style="background: rgba(0, 240, 255, 0.15); border-color: var(--cyan); color: var(--cyan);">☁️ ADJUTANT CLOUD RUNNER ACTIVE (AMD EPYC GENOA ZEN 4, 16 vCPU, 64 GB DDR5)</span>
           </div>
-          <h2 id="hero-title">Phase 1a: Bloodlines & Walking Skeleton Execution</h2>
+          <h2 id="hero-title">Phase 1a: Bloodlines, Cloud Verification & Visual Telemetry</h2>
           <p id="hero-desc">
-            The mathematical engine block is <strong>100% complete and certified at Gate G0</strong>! All 10 Phase 0 sprints merged. The first living person (Ada) in world <code>solo</code> lived, aged, and died with bitwise deterministic parity (SPR-012). We are now live-streaming into the World Stream (SPR-013) and unblocking Wave 4 (mortality queues, event envelope, stream wire).
+            The mathematical engine block is <strong>100% complete and certified at Gate G0</strong>! Running live on Google Cloud reference machine <code>adjutant</code> (branch <code>arch/red-team-batch-04</code>). Verifying cross-machine bitwise hash determinism (AMD Genoa vs ThinkPad Intel i7), establishing server-class throughput baselines, and auditing visual telemetry. Live services broadcasting on <strong>HTTP :8088</strong> and <strong>WebSocket :8089</strong>.
           </p>
           <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-            <button class="btn-action" onclick="switchTab('decisions')">View Ratified Director Decisions (D37/D48) →</button>
+            <button class="btn-action" onclick="switchTab('decisions')">View Ratified Director Decisions (D37/D48/D51) →</button>
             <button class="btn-action" style="background: rgba(168, 85, 247, 0.2); border: 1px solid var(--violet); color: var(--violet);" onclick="switchTab('stream')">Open 3D Two Castles Stream Viewer ↗</button>
             <span style="font-size: 0.82rem; color: var(--slate-400); font-family: var(--font-mono);">Gate G0: <strong>PASSED (VER-G0)</strong> · Target: <strong>Gate G1a</strong></span>
           </div>
@@ -1512,15 +1513,15 @@
           <!-- Progress Meter -->
           <div class="mission-meter">
             <div class="meter-header">
-              <span id="meter-title">Phase 0 Kernel: 100% (Passed Gate G0)</span>
-              <span style="color: var(--emerald); font-family: var(--font-mono);">100% G0 PASS</span>
+              <span id="meter-title">Cloud Environment: adjutant (AMD Genoa 8 Cores / 16 vCPU)</span>
+              <span style="color: var(--cyan); font-family: var(--font-mono);">ONLINE :8088/:8089</span>
             </div>
             <div class="meter-bar-outer">
               <div class="meter-bar-fill" style="width: 100%; background: linear-gradient(90deg, #10b981 0%, #00f0ff 100%);"></div>
             </div>
             <div class="meter-details">
-              <span>Active Sprint: SPR-013 (Stream v0)</span>
-              <span>Wave 4 (SPR-014, 020, 026) Approved</span>
+              <span>Active Sprints: SPR-014 (Queues), SPR-020 (Envelope), SPR-026 (Stream)</span>
+              <span>Bevy Spike: PRJ-003 / SPR-033</span>
             </div>
           </div>
         </div>
@@ -2890,6 +2891,36 @@
           </div>
         </div>
 
+        <!-- D51 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--cyan);">D51</span>
+            <span class="status-pill merged">✓ Ratified & Merged</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Native Bevy 0.20 Voxel Viewer (rh-view)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Authorizes the Native Bevy 0.20 Voxel Viewer (<code>crates/rh-view</code>, PRJ-003, SPR-033) as a Plane-B hydration harness amending ADR-0035 and ADR-0030. Developer (<code>AGT-002-TOOLS</code>) writes the Bevy 0.20 implementation & binary greedy mesher (&lt;3ms/chunk); Red Team audits visual parity and non-interference (V-VIEW-01 &le; 0.5%, V-VIEW-05 &le; 250ms).
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--cyan); margin-top: 10px;">
+            Target: PR #71, PR #75 · crates/rh-view · PRJ-003
+          </div>
+        </div>
+
+        <!-- PR #80 / SPR-027 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--violet);">SPR-027</span>
+            <span class="status-pill merged">✓ Merged (PR #80)</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">World Stream Control Channel v1 (control.sock)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Approved IF-0 Control Channel v1 over Unix domain socket <code>control.sock</code>. Standardizes five control methods (<code>pause</code>, <code>resume</code>, <code>step</code>, <code>pace</code>, <code>status</code>) with atomic decision points and zero lock contention on published simulation snapshots.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--violet); margin-top: 10px;">
+            Target: specs/stream/control_v1.md · PR #80 Merged
+          </div>
+        </div>
+
         <!-- Historical Rulings Anchor -->
         <div class="interactive-card">
           <div class="card-top">
@@ -3609,6 +3640,46 @@
             </div>
             <span class="graveyard-cure">Cure: SPR-010 100% integer fixed-point math</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Cloud Verification & Adjutant Mission Card -->
+      <div class="interactive-card" style="margin-top: 16px; border-color: rgba(0, 240, 255, 0.35); background: linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(16, 22, 34, 0.9) 100%);">
+        <div class="card-top">
+          <h4>🛰️ Red Team Cloud Mission: Adjutant Activation (HANDOFF-2026-10-17)</h4>
+          <span class="status-pill active">Active on Genoa VM</span>
+        </div>
+        <p style="font-size: 0.88rem; color: var(--slate-300);">
+          The Red Team session is active on the Director's reference-class Google Cloud VM <code>adjutant</code> (<code>c3d-standard-16</code>, AMD EPYC Genoa Zen 4, 16 vCPU / 8 physical cores, 64 GB DDR5 RAM) on branch <code>arch/red-team-batch-04</code>.
+        </p>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 14px;">
+          <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--cyan); font-weight: 700;">1. CROSS-MACHINE DETERMINISM (SPR-008)</div>
+            <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 4px;">
+              Verifying Plane A produces <strong>bitwise identical SHA-256 state hashes</strong> on AMD Zen 4 as on Intel Core i7 (ThinkPad P51), validating 0.000 float ops and fixed-point math (Q8_8, Q16_16, Q32_32).
+            </p>
+          </div>
+
+          <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--amber); font-weight: 700;">2. SERVER-CLASS BENCHMARKS (SPR-009)</div>
+            <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 4px;">
+              Establishing server-class baseline wall-clock timings and instruction counts for Benches 7 and 8 across 8 physical Genoa cores (RUN-002 §5).
+            </p>
+          </div>
+
+          <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
+            <div style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--emerald); font-weight: 700;">3. VISUAL TELEMETRY AUDIT (PRJ-003)</div>
+            <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 4px;">
+              Visual observability is our #1 testing priority. Auditing settlement emergence and succession in 3D across rungs 0–4 via Native Bevy 0.20 viewer (<code>rh-view</code>) and WebSocket stream on :8089.
+            </p>
+          </div>
+        </div>
+
+        <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 0.78rem; font-family: var(--font-mono); color: var(--slate-400);">
+          <span>Charter: PHILOSOPHY_AND_BACKLOG.md (5 Laws)</span>
+          <span>Ledger: DISPOSITION_LEDGER.md (34 Items · 0 Rejected)</span>
+          <span style="color: var(--cyan);">HTTP :8088 / WS :8089 LIVE</span>
         </div>
       </div>
     </section>
