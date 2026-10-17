@@ -55,12 +55,14 @@ when = "a dead row is revived"
 [[commands]]
 target = "X4.smoke_estate"
 command = "Settle"
+payload = "{ row }"
 why = "a death leaves an estate to settle"
 [[reads]]
 column = "harvest.stock"
 owner = "X2.smoke_harvest"
 lag = "same_instant"
 use = "mode"
+neutral = 0.0
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"
