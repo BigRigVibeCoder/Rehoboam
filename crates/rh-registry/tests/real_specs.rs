@@ -774,7 +774,12 @@ fn m2_m7_and_t1_register_together_as_specified() {
     };
     let r = register(trio(), &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(r.ids(), world);
-    assert_eq!(r.order(Phase::Vital), ["M2.demography", "T1.minds"]);
+    // M7 0.3.2 binds Day/Vital for its murder timer (EVO-001 R6 (b)): after M2 (it reads M2 at
+    // same_instant), before T1 (no edge either way; ties by id).
+    assert_eq!(
+        r.order(Phase::Vital),
+        ["M2.demography", "M7.dynasty", "T1.minds"]
+    );
     // One entry per binding (Year, Month, Day), coarser pulse first within a level.
     assert_eq!(
         r.order(Phase::Polity),
