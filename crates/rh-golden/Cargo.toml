@@ -21,3 +21,9 @@ rh-ids = { version = "0.0.0", path = "../rh-ids" }
 rh-registry = { version = "0.0.0", path = "../rh-registry" }
 rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }
 rh-sys-smoke = { version = "0.0.0", path = "../rh-sys-smoke" }
+# SPR-012 T-08: manifest worlds (`worlds/<id>/world.toml`): compile, genesis, the built systems.
+rh-manifest = { version = "0.0.0", path = "../rh-manifest" }
+rh-sys-demography = { version = "0.0.0", path = "../rh-sys-demography" }
+rh-worldgen = { version = "0.0.0", path = "../rh-worldgen" }
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.8"

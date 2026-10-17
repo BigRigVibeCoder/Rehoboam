@@ -135,6 +135,21 @@ fn a_system_without_a_spec_and_a_double_registration_are_refused() {
     assert_eq!(rules(&e), ["registry"]);
 }
 
+/// SPR-011 ruling 10: world generation draws under the reserved id `rh-worldgen`, so a system
+/// that takes it would share its streams.
+#[test]
+fn a_system_taking_the_reserved_worldgen_id_is_refused() {
+    let w = Stub::new("rh-worldgen");
+    let e = refused(vec![w.clone()], &[w]);
+    assert_eq!(rules(&e), ["system-id"], "{e}");
+    assert!(
+        e.violations.iter().any(|v| v
+            .message
+            .contains("hashes to the RNG system_id of rh-worldgen")),
+        "{e}"
+    );
+}
+
 #[test]
 fn a_same_instant_read_against_phase_order_needs_a_lag() {
     let w = Stub::new("X1.w")

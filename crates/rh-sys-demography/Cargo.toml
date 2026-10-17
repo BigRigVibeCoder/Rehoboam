@@ -1,0 +1,31 @@
+[package]
+name = "rh-sys-demography"
+description = "M2.demography: ageing, the rung-0 mortality schedule, death timers and the life-course log"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# SPR-012 T-05, T-07: the first real system crate (specs/systems/M2.demography.odd.toml, frozen 0.2.1).
+# Pinned in bin/lint_arch.py.
+[package.metadata.rehoboam]
+plane = "A"
+kind = "system"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }
+rh-events = { version = "0.0.0", path = "../rh-events" }
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
+# WorldSpec: M2's compiled parameters (SPR-011 ruling 9). A system never reads spec files (A-47).
+rh-registry = { version = "0.0.0", path = "../rh-registry" }
+
+
+# Planted controls only (tests/draws_golden.rs; bin/check_all.sh): each feature moves one of
+# resample_timer's draws to the other k, and the differential golden of M2's draws must FAIL. No
+# world or host enables them.
+[features]
+mutant-resample-hit-k1 = []
+mutant-resample-day-k0 = []

@@ -151,6 +151,23 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | (rendered) `target/rendered-fixtures/m2_f1_stale_check_value.odd.toml` | `specs/demography/selftest_m2_f1.py --spec` (SPR-015) | the next-version M2 spec with `tfr1_bits` off by one | `M2 F1 FERTILITY AND PARTNERING: FAIL` |
 | (rendered) `target/rendered-fixtures/m2_f1_mortality_stale_check_value.odd.toml` | `specs/demography/selftest_m2_f1_mortality.py --spec` (SPR-016) | the next-version M2 spec with the `K` of `[algorithm.mortality_f1]`'s (20, 1.65) check value off by one | `3. corners: FAIL` |
 | `sifting/life_ends_unanchored.toml` | `specs/sifting/lint_patterns.py` (V-SIFT-05; SPR-011 ruling 14) | `life_ends` with a `where` read that is not anchored to a bound event | `ERROR life_ends.e1: UNANCHORED state read` |
+| `forbidden/planted/process_glob_std.rs` | `bin/lint_forbidden.py --scan` (rule `process`; VER-SPR-011-TEST GAP-3, BCK-002 A-49) | `use std::*;` then `process::Command::new(..)`: no `std::process` path is written, so only the `process::<item>` alternative catches it | ``VIOLATION [V-DET-19/process] `process::C` `` |
+| `forbidden/spec_loader_workspace/` | `bin/lint_forbidden.py` (rule `spec-loader`; BCK-002 A-47, SPR-012 T-07, review MAJ-2) | seven forms, each reported once: a system crate `rh-sys-x` naming `load_specs` and `registry_system_ids` in `src/` five ways (a grouped import, a renamed import, a path call, a function pointer, a bare use), and `rh-registry/src/lib.rs` re-exporting one under another name and exporting a macro that calls the other. Not reported: `rh-sys-x/tests/` (it builds its spec table from files) and `rh-registry/src/ownership.rs`, the loaders' home | `4 files scanned; 7 violations` |
+| `bernoulli/poisson_death/` | `bernoulli_only` in `bin/check_all.sh` (V-INV-08; SPR-012 T-07) | a system crate drawing a month's deaths from `rh_sample::poisson`, with `rh-sample` in its `Cargo.toml` | `VIOLATION [V-INV-08] tests/lint_fixtures/bernoulli/poisson_death` |
+| `arch/engine_deny_list.txt` | `python/tests/test_lint_arch.py` (VER-SPR-011-TEST GAP-2, BCK-002 A-49) | not a violation: the whole `ENGINE_DENY_LIST`, one package per line, written without quote marks (G-3's defined-once scan) | the constant equals it; an added or removed entry fails |
+| `golden/altered_m2_schedule_v1.txt` | `bin/gen_m2_reference.py --check --output …` and `RH_M2_SCHEDULE_GOLDEN=… cargo nextest run -p rh-sys-demography --test schedule_golden` (SPR-012 T-05) | M2's rung-0 schedule vectors with K at e0 = 30 one unit too high | `STALE:` and `K at e0 bits 1966080` |
+| `golden/altered_m2_draws_v1.txt` | `bin/gen_m2_draws_reference.py --check --output …` and `RH_M2_DRAWS_GOLDEN=… cargo nextest run -p rh-sys-demography --test draws_golden` (SPR-012, the Tester's interim report) | the differential golden of M2's draws with world w1's first death one day later | `STALE:` and `death 0 differs: engine` |
+| (feature) `rh-sys-demography/mutant-resample-hit-k1`, `mutant-resample-day-k0` | `cargo nextest run -p rh-sys-demography --features … --test draws_golden` (SPR-012) | the Tester's two surviving mutants: `resample_timer`'s Bernoulli from k = 1, or its day from k = 0 | `differs: engine` |
+
+**What the textual rules flag, and what they do not scan** (VER-SPR-011-TEST GAP-4, GAP-6; BCK-002
+A-49). The `process`, `file-io`, `file-clock` and `env` rules of `bin/lint_forbidden.py` match text,
+conservatively: a crate's own module named `process` (`process::f()`), its own module named `fs`
+(`fs::foo`), or its own accessor named `.created()` or `.mtime()` is flagged like the std item. That
+is accepted: such a line carries `// LINT-ALLOW(forbidden-api): <reason>`, and the gate counts and
+prints every escape, so review sees each one. These rules apply to `src/` and `build.rs` only. The
+`tests/` of plane-A crates are trusted, not scanned for them: a test may read its golden files, an
+override from the environment, or name a temporary directory by process id, and tests never link
+into the engine. The `spec-loader` rule (A-47) follows the same scope, over every plane-A crate except the loaders' home, `crates/rh-registry/src/ownership.rs`; a wrapper written inside that file under another name is not covered, and BCK-002 A-51 moves file reading out of plane A so the rule can retire.
 
 Since SPR-003 GAP-9, every plane-A crate in the `arch/` and `compile_fail/plane_a_names_plane_*` fixtures declares `[lints] workspace = true` (each fixture root has a `[workspace.lints]` table), so each control fails only for the rule it plants.
 
