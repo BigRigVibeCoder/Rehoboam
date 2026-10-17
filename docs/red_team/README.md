@@ -17,6 +17,7 @@ This keeps in-flight sprints from building on specs that change underneath them.
 
 | Path | What |
 |---|---|
+| `RT-2026-10-17-voxel-engine-synthesis-and-architect-analysis.md` | The red team's synthesis of the Architect's voxel-viewer analysis (Bevy against Veloren and Luanti) and its D51 recommendation; D51 was approved, and the decision is ADR-0036 and PRJ-003 |
 | `inbox.md` | Batched design proposals: batches 01 to 04 were disposed of at G0; batch 05 awaits G1a. Each batch has the Architect's intake notes |
 | `RT-2026-10-16-demography-inequality-science.md` | A science dossier on pre-industrial demography, inequality and empire lifespans (batch 05): a proposal, not evidence, until its sources are read |
 | `RT-2026-10-16-G0-dispositions.md` | The G0 dispositions of batches 01 to 04, with the director's rulings on Laws 2 and 3 and item 15 (2026-10-16) |
