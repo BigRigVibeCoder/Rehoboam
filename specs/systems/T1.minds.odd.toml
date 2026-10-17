@@ -25,9 +25,12 @@
 # Round 4d (from the effect-language spec, PR #41 §5.3): relations by their exact names, kin(p, n) and related(a, b, n);
 # DESPAIR_PACT's opinion effect is a declared self-send (OpinionModifier to T1), with T1's [[applies]].
 # Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
-# 0.3.2 (2026-10-17, EVO-001, approved with its PR; no mechanics changed): every [[reads]] entry carries a machine-readable `neutral`,
-# the value SPR-014's absent-owner rule serves when the owner is not registered (05.1 §2 rule 2) and the effect language's
-# loader reads (REV-SPR-017 round 3). No other content changed.
+# 0.3.2 (2026-10-17, EVO-001, D39 pending; no mechanics changed): every [[reads]] entry says whether its owner is `required`
+# (M2 is; M7, S6 and S7 are not), and the rate reads of S6 and S7 carry the machine-readable `neutral` SPR-014's absent-owner
+# rule serves (05.1 §2 rule 2; the effect language's loader reads it, REV-SPR-017 round 3); enum columns carry their codes;
+# the [[applies]] payloads are typed and drained at Day/Agenda; Marry and ScheduleDeath carry no date (EVO-001 R6 (b):
+# sent at Agenda, M2 drains them at the next day start's Vital, the timing MAJ-4 asked for); the Day/Vital `when` names
+# apply_death (timer fire or drain) rather than the timer pass alone (REV-EVO-001 MIN-1).
 odd_r = 2
 
 [system]
@@ -155,6 +158,7 @@ fixed_point = false
 column = "mind.break_state"
 entity = "mind"
 type = "enum"
+values = ["calm", "pending", "refractory"]
 plane = "A"
 meaning = "calm | pending (a break timer is scheduled) | refractory (a break fired; no new break until refractory_until)"
 fixed_point = false
@@ -204,6 +208,7 @@ fixed_point = false
 column = "relation.kind"
 entity = "relation"
 type = "enum"
+registry = "relation_kinds"
 plane = "A"
 meaning = "Registry [relation_kinds] id: liege or vassal in a row; the kinship ids of the same table name the derived kinds, and every kind's closeness scales grief"
 fixed_point = false
@@ -232,6 +237,7 @@ fixed_point = false
 column = "opinion.kind"
 entity = "opinion"
 type = "enum"
+registry = "opinion_modifiers"
 plane = "A"
 meaning = "Registry [opinion_modifiers] id"
 fixed_point = false
@@ -267,6 +273,7 @@ fixed_point = false
 column = "thought.overlay"
 entity = "thought"
 type = "enum"
+registry = "overlays"
 plane = "A"
 meaning = "Registry [overlays] id; [overlay_traits] maps it to trait deltas. One row per (holder, overlay)"
 fixed_point = false
@@ -302,6 +309,7 @@ fixed_point = false
 column = "goal.kind"
 entity = "goal"
 type = "enum"
+registry = "vow_kinds"
 plane = "A"
 meaning = "Registry [vow_kinds] id"
 fixed_point = false
@@ -351,6 +359,7 @@ fixed_point = false
 column = "feud.status"
 entity = "feud"
 type = "enum"
+values = ["active", "ended"]
 plane = "A"
 meaning = "active | ended (FEUD_ENDED: reconciled, or a party died). Ended is absorbing"
 fixed_point = false
@@ -424,13 +433,13 @@ when = "IAUS chooses the reconcile option, or a party dies (the death path)"
 [[commands]]
 target = "M2.demography"
 command = "Marry"
-payload = "{ a, b, tick }"
-why = "The marry decision proposes, with M2's declared payload Marry {a, b, tick = the next day start}; M2 owns marriages (P1.3) and writes person.spouse when it applies the command"
+payload = "{ a, b }"
+why = "The marry decision proposes, with M2's declared payload Marry {a, b}, sent at Agenda and drained by M2's Day/Vital binding at the next day start (EVO-001: a command carries no date); M2 owns marriages (P1.3) and writes person.spouse when it applies the command"
 [[commands]]
 target = "M2.demography"
 command = "ScheduleDeath"
-payload = "{ victim, tick, cause, culprit, cause_event }"
-why = "A successful MURDER_ATTEMPT kills only through the single death path (05.1 §2 rule 2), with M2's declared payload ScheduleDeath {victim, tick = the next day start, cause = murder, culprit = the actor, cause_event = the MURDER_ATTEMPT}"
+payload = "{ victim, cause, culprit, cause_event }"
+why = "A successful MURDER_ATTEMPT kills only through the single death path (05.1 §2 rule 2), with M2's declared payload ScheduleDeath {victim, cause = murder, culprit = the actor, cause_event = the MURDER_ATTEMPT as a DraftRef, rewritten to its EventId at the merge}, sent at Agenda and drained by M2's Day/Vital binding at the next day start (EVO-001: a command carries no date), so the victim dies at the next day start"
 [[commands]]
 target = "T1.minds"
 command = "OpinionModifier"
@@ -439,18 +448,22 @@ why = "A self-send (round 4d): DESPAIR_PACT's opinion effect, the DESPAIR_PACT_W
 [[commands]]
 target = "M7.dynasty"
 command = "PetitionSeat"
+payload = "{ person, target }"
 why = "The seek_office decision asks for a vacant office or a seat held in demesne; M7 grants by its rule"
 [[commands]]
 target = "M7.dynasty"
 command = "PressClaim"
+payload = "{ claim }"
 why = "The press_claim decision; M7 owns claims"
 [[commands]]
 target = "M7.dynasty"
 command = "RenounceClaim"
+payload = "{ claim }"
 why = "A PACT_OF_DESPAIR renounces the actor's claims"
 [[commands]]
 target = "M7.dynasty"
 command = "Resign"
+payload = "{ person, office }"
 why = "FLIGHT resigns the actor's offices; M7 owns offices"
 [[commands]]
 target = "M4.economy"
@@ -475,38 +488,58 @@ command = "Destroy"
 why = "pursue_goal for DESTROY_RELIC (P1b)"
 
 # ----------------------------------------------------------------------------- lifecycle commands applied
-# For PR #37's [[applies]] lint (round 4d). Each payload is the one every sender uses.
+# For PR #37's [[applies]] lint (round 4d); typed by EVO-001 (05.1 §2 rule 2). Each payload is the one every sender uses.
+# All are drained by the Day/Agenda binding (apply_commands and promote). Keyed by the holder, bearer or person, who must be
+# living (key = "living": rh-core drops a command for someone dead and counts it); ClearGoal clears what may belong to a dead
+# holder, so it takes any key. kind, overlay and the event slots are typed by the columns and the merge rewrite.
 [[applies]]
 command = "OpinionModifier"
-payload = "{ holder, about, kind, magnitude, source_event }"
+payload = "{ holder: PersonId, about: PersonId, kind: enum(opinion.kind), magnitude: q8_8, source_event: EventRef }"
 from = ["M7.dynasty", "S7.vows", "T1.minds"]
+drained_by = "Day/Agenda"
+key = "living"
 [[applies]]
 command = "AgendaGoal"
-payload = "{ vow, holder, kind, target, priority }"
+payload = "{ vow: VowId, holder: PersonId, kind: enum(goal.kind), target: u64, priority: q8_8 }"
 from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "living"
 [[applies]]
 command = "ClearGoal"
-payload = "{ vow, holder }"
+payload = "{ vow: VowId, holder: PersonId }"
 from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "any"
 [[applies]]
 command = "ApplyThought"
-payload = "{ holder, overlay, delta, source_event }"
+payload = "{ holder: PersonId, overlay: enum(thought.overlay), delta: q8_8, source_event: EventRef }"
 from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "living"
 [[applies]]
 command = "ApplyInfluence"
-payload = "{ bearer, overlay, delta }"
+payload = "{ bearer: PersonId, overlay: enum(thought.overlay), delta: q8_8 }"
 from = ["S6.artifacts"]
+drained_by = "Day/Agenda"
+key = "living"
 [[applies]]
 command = "Promote"
-payload = "{ person }"
+payload = "{ person: PersonId }"
 from = ["M7.dynasty"]
+drained_by = "Day/Agenda"
+key = "living"
 [[applies]]
 command = "Demote"
-payload = "{ person }"
+payload = "{ person: PersonId }"
 from = ["M7.dynasty"]
+drained_by = "Day/Agenda"
+key = "living"
 
 # ----------------------------------------------------------------------------- reads
-# Round 4 (NEW-4): the reads below are declared unconditionally (round 4, NEW-4); the rh-core registration rule that SPR-014 adds drops and reports a read whose owner the world does not register, and gives the view the coupling's neutral value
+# Round 4 (NEW-4) and EVO-001: the reads below are declared unconditionally. M2 is required (registration refuses a world without it);
+# M7, S6 and S7 are not: SPR-014's registration rule drops and reports a read whose owner the world does not register, the dropped
+# column enumerates as an empty table (no seats, claims, vows or artifacts) and a keyed lookup returns the read's neutral (S7: vow
+# conflict 0, so s_vow = 0; S6: rumour_reach 0, so the seek consideration is as at R = 0) or, for an identity read, the type's zero.
 # Kinship walks life_course.mother/father through kin(p, n) (SPR-017), read at same_instant (round 4c, NEW-6: the log is append-only and written only by M2 in Vital, so same_instant is exact and avoids P0's per-instant clone of a lagged column) (round 4, NEW-1). minds rebuilds a
 # children-by-parent index over those columns at restore and on each birth: derived state, outside the plane-A hash and
 # the keyframe. Neutral values (S7: vow conflict 0, so s_vow = 0, and no goals; S6: rumour_reach 0, so the
@@ -517,162 +550,164 @@ column = "person.alive"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = false
+required = true
 [[reads]]
 column = "person.death_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = 0
+required = true
 [[reads]]
 column = "person.birth_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = 0
+required = true
 [[reads]]
 column = "person.sex"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = "male"
+required = true
 [[reads]]
 column = "person.mother"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = 0
+required = true
 [[reads]]
 column = "person.father"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = 0
+required = true
 [[reads]]
 column = "life_course.person_id"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = 0
+required = true
 [[reads]]
 column = "life_course.mother"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = 0
+required = true
 [[reads]]
 column = "life_course.father"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = 0
+required = true
 [[reads]]
 column = "person.spouse"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-neutral = 0
+required = true
 [[reads]]
 column = "house_member.person"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "house_member.house"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "claim.rank"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "title.holder"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "title.liege"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "title.tier"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = "minor"
+required = false
 [[reads]]
 column = "title.regent"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "office.holder"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "office.title"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "claim.claimant"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "claim.title"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "claim.status"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
-neutral = "void"
+required = false
 [[reads]]
 column = "vow.vower"
 owner = "S7.vows"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "vow.conflict"
 owner = "S7.vows"
 lag = "lagged"
 use = "rate"
+required = false
 neutral = 0.0
 [[reads]]
 column = "artifact.bearer"
 owner = "S6.artifacts"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "artifact.location"
 owner = "S6.artifacts"
 lag = "lagged"
 use = "identity"
-neutral = 0
+required = false
 [[reads]]
 column = "artifact.rumour_reach"
 owner = "S6.artifacts"
 lag = "lagged"
 use = "rate"
+required = false
 neutral = 0
 
 [scales]
@@ -695,7 +730,7 @@ status = "n/a"
 pulse = "Day"
 phase = "Vital"
 steps = ["grief: for each death this instant, add grief stress to every named actor kin to the dead (derived kinship) or holding a liege or vassal row to them, saturating per instant; end the dead's rows and feuds; drop a dead actor's mind timers", "threshold: schedule a break for every actor whose stress crossed stress_threshold in this binding"]
-when = "every day start (rh-core runs every binding whose pulse fires); work only where M2's death timers fired in this instant's Vital timer pass, which precedes every binding (round 3, BLK-1)"
+when = "every day start (rh-core runs every binding whose pulse fires); work only where M2's apply_death ran in this instant's Vital, in its timer pass (which precedes every binding, round 3, BLK-1) or in its Day/Vital drain (which precedes T1's Vital binding by the M2 -> T1 edge; EVO-001)"
 [[schedule]]
 pulse = "Day"
 phase = "Agenda"

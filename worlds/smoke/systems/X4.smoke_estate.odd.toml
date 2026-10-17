@@ -49,13 +49,20 @@ when = "a Settle command is applied"
 [[commands]]
 target = "X7.smoke_market"
 command = "Audit"
+payload = "{ row }"
 why = "a settled estate is audited by the market (DEF-2: the Activity siblings exchange commands)"
+[[applies]]
+command = "Settle"
+payload = "{ row: i64 }"
+from = ["X3.smoke_vital", "X5.smoke_polity", "X7.smoke_market"]
+drained_by = "Day/Activity"
+key = "any"
 [[reads]]
 column = "person.alive"
 owner = "X3.smoke_vital"
 lag = "same_instant"
 use = "identity"
-neutral = false
+required = true
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"

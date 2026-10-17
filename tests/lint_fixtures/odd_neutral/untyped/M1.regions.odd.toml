@@ -1,6 +1,6 @@
-# Planted fixture for lint_odd.py's `neutral` check on [[reads]] (EVO-001; REV-P1a NEW-4). Never a contract: M1.regions
-# reads M2's person.alive (bool, typed by M2's spec) and M6's polity.exec_constraint (q8_8, typed by the Registry [era_state]
-# since M6 has no spec). Case `untyped`: region.conditions has no owner spec and no [era_state] entry, so its neutral cannot be typed; frozen, must FAIL
+# Planted fixture for lint_odd.py's absent-owner checks on [[reads]] (EVO-001; REV-P1a NEW-4): `required`, and the typed
+# `neutral` of a rate or mode read whose owner may be absent (typed by the owner's [[owns]], or by the Registry [era_state] for
+# M6, which has no spec). Never a contract. Case `untyped`: region.conditions has no owner spec and no [era_state] entry, so its neutral cannot be typed; frozen, must FAIL
 # Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/untyped
 odd_r = 2
 
@@ -22,8 +22,10 @@ not_yet = []
 
 [[applies]]
 command = "FixtureCmd"
-payload = "{ a: PersonId, b: SimTime (a day start), c: natural | other }"
+payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
 from = ["M1.regions"]
+drained_by = "Year/Environment"
+key = "living"
 
 [[commands]]
 target = "M1.regions"
@@ -36,12 +38,13 @@ column = "person.alive"
 owner = "M2.demography"
 lag = "lagged"
 use = "identity"
-neutral = false
+required = true
 [[reads]]
 column = "region.conditions"
 owner = "M6.polity"
 lag = "lagged"
-use = "identity"
+use = "mode"
+required = false
 neutral = 0
 
 [scales]
@@ -107,7 +110,7 @@ statement = "fixture"
 test = "V-INV-01"
 
 [isolation]
-forcing = []
+forcing = [{ input = "region.conditions", series = "constant", note = "fixture" }]
 horizon = "n/a: fixture"
 expect = "n/a: fixture"
 

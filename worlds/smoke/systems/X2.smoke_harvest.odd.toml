@@ -41,6 +41,7 @@ column = "weather.temp"
 owner = "X1.smoke_weather"
 lag = "lagged"
 use = "rate"
+required = false
 neutral = 0.0
 
 [scales]

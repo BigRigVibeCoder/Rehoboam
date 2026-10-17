@@ -1,6 +1,6 @@
-# Planted fixture for lint_odd.py's `neutral` check on [[reads]] (EVO-001; REV-P1a NEW-4). Never a contract: M1.regions
-# reads M2's person.alive (bool, typed by M2's spec) and M6's polity.exec_constraint (q8_8, typed by the Registry [era_state]
-# since M6 has no spec). Case `typed`: both neutrals present and well typed; must pass
+# Planted fixture for lint_odd.py's absent-owner checks on [[reads]] (EVO-001; REV-P1a NEW-4): `required`, and the typed
+# `neutral` of a rate or mode read whose owner may be absent (typed by the owner's [[owns]], or by the Registry [era_state] for
+# M6, which has no spec). Never a contract. Case `typed`: an identity read of M2 marked required, and a rate read of M6 with a neutral the Registry [era_state] types and the coupling names; must pass
 # Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/typed
 odd_r = 2
 
@@ -22,8 +22,10 @@ not_yet = []
 
 [[applies]]
 command = "FixtureCmd"
-payload = "{ a: PersonId, b: SimTime (a day start), c: natural | other }"
+payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
 from = ["M1.regions"]
+drained_by = "Year/Environment"
+key = "living"
 
 [[commands]]
 target = "M1.regions"
@@ -36,14 +38,27 @@ column = "person.alive"
 owner = "M2.demography"
 lag = "lagged"
 use = "identity"
-neutral = false
+required = true
 [[reads]]
 column = "polity.exec_constraint"
 owner = "M6.polity"
 lag = "lagged"
-use = "identity"
+use = "rate"
+required = false
 neutral = 0.0
 
+[[couplings]]
+system = "M6.polity"
+direction = "in"
+via = "fixture"
+lag = "lagged"
+column = "polity.exec_constraint"
+form = "fixture"
+neutral = "exec_constraint = 0, the reference state"
+output_bounds = ["0", "1"]
+data_range = "fixture"
+beyond_range = "fixture"
+source = "fixture"
 [scales]
 spatial = "region"
 temporal = "Year"
@@ -107,7 +122,7 @@ statement = "fixture"
 test = "V-INV-01"
 
 [isolation]
-forcing = []
+forcing = [{ input = "polity.exec_constraint", series = "constant", note = "fixture" }]
 horizon = "n/a: fixture"
 expect = "n/a: fixture"
 

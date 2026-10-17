@@ -23,6 +23,8 @@ not_yet = []                               # patterns known NOT to be reproduced
 column = "<entity.column>"
 entity = "<person|household|settlement|region|polity|market|...>"
 type = "<i64|u64|i32|u32|u16|u8|bool|enum|q8_8|q16_16|f32_field>"
+# values = ["<a>", "<b>"]                 # an enum column carries its codes (EVO-001): values by position, or
+# registry = "<table>"                     # a Registry table (its ids list, else its keys in byte-wise order)
 plane = "<A|B|C>"
 meaning = "<units and meaning>"
 fixed_point = false                        # true for q8_8/q16_16 and anything that crosses a threshold
@@ -34,7 +36,17 @@ when = "<condition>"
 [[commands]]                               # lifecycle commands to other owners (never write their columns)
 target = "<SYS.id>"
 command = "<CommandName>"
+payload = "{ <field>, <field> }"             # the owner's [[applies]] field names, in its order
 why = "<reason>"
+
+[[applies]]                                # lifecycle commands this system owns and applies (05.1 §2 rule 2; EVO-001)
+command = "<CommandName>"
+payload = "{ <field>: <Type>, ... }"       # typed: PersonId, EventRef, SimTime, TitleId, OfficeId, ClaimId, HouseId,
+                                           # VowId, ArtifactId, HouseholdId, PlaceId, u8..u64, i64, bool, q8_8,
+                                           # q16_16, enum(<entity.column>); every sender uses these names
+from = ["<SYS.id>"]                        # exactly the specs that send it
+drained_by = "<Pulse>/<Phase>"             # the one binding of [[schedule]] that takes the queue
+key = "<living|any>"                       # living: rh-core drops a command whose key person is dead (A-30)
 
 [[reads]]                                  # read set, through contract accessors only
 column = "<entity.column>"
@@ -43,10 +55,13 @@ lag = "<same_instant|start_of_day|previous_pulse|lagged>"
 use = "<identity|mode|rate>"               # identity: who/where/what; mode: switches a discrete regime;
                                            # rate: enters a rate, hazard, price or probability (needs an
                                            # in-coupling below and an [isolation] forcing; RT-2026-10-16)
-neutral = <value>                          # required when owner is another system (EVO-001): the value the step
-                                           # view returns when the world does not register the owner (05.1 §2
-                                           # rule 2), typed by the column: an integer, true/false, an enum value
-                                           # name, or a number for q8_8/q16_16/f32_field; the lint checks it
+required = <true|false>                    # EVO-001 (05.1 §2 rule 2): true = registration refuses a world without
+                                           # this owner; false = the read is dropped when the owner is absent, its
+                                           # column enumerates as an empty table and a keyed lookup returns neutral
+neutral = <value>                          # required when required = false and use is rate or mode (optional for
+                                           # identity: the type's zero otherwise); typed by the column: an integer
+                                           # in range, true/false, one of the enum's codes, or a number inside
+                                           # q8_8/q16_16; a rate read's coupling prose names it; the lint checks it
 
 [scales]
 spatial = ""

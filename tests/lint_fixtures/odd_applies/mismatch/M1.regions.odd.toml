@@ -1,6 +1,6 @@
-# Planted fixture for lint_odd.py's [[applies]] check (PR #32; REV-P1a §7). Never a contract: M1.regions applies a command
-# it also sends to itself, so one spec exercises both sides; only the sender's payload differs between the two cases.
-# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/<case>
+# Planted fixture for lint_odd.py's [[applies]] checks (PR #32; REV-P1a §7; typed payloads, drained_by and key by EVO-001).
+# Never a contract: M1.regions applies a command it also sends to itself, so one spec exercises both sides. Case `mismatch`: the sender lists the fields in another order; must FAIL
+# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/mismatch
 odd_r = 2
 
 [system]
@@ -21,8 +21,10 @@ not_yet = []
 
 [[applies]]
 command = "FixtureCmd"
-payload = "{ a: PersonId, b: SimTime (a day start), c: natural | other }"
+payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
 from = ["M1.regions"]
+drained_by = "Year/Environment"
+key = "living"
 
 [[commands]]
 target = "M1.regions"

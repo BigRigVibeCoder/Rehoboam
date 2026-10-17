@@ -49,19 +49,27 @@ when = "an hourly price move is large, or a daily trade happens"
 [[commands]]
 target = "X4.smoke_estate"
 command = "Settle"
+payload = "{ row }"
 why = "a market default settles a living person's estate"
+[[applies]]
+command = "Audit"
+payload = "{ row: i64 }"
+from = ["X4.smoke_estate"]
+drained_by = "Day/Activity"
+key = "any"
 [[reads]]
 column = "harvest.stock"
 owner = "X2.smoke_harvest"
 lag = "lagged"
 use = "identity"
+required = false
 neutral = 0.0
 [[reads]]
 column = "person.alive"
 owner = "X3.smoke_vital"
 lag = "lagged"
 use = "identity"
-neutral = false
+required = true
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"

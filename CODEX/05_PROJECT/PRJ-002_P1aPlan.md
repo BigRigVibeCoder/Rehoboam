@@ -150,16 +150,16 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | `M2.demography` rung-0 completion and freeze; Registry verbs, verb `tellability`, system `defaults`; probability-type ruling | SPR-011, SPR-012 | M2 draft (gaps listed in SPR-011); the rest missing |
 | Channel-A segment DDL (`specs/stream/channel_a_v0.sql`); `life_ends`; `household.yaml`, `hamlet.yaml` (A-06) | SPR-013 | Missing |
 | Channel C segment DDL (`specs/stream/channel_c_v0.sql`) (PR #37 Q10) | SPR-013 | Missing |
-| EVO: same-instant command delivery, the absent-owner registration rule, and the merge's rewrite of event-typed payload fields (`05.1` §2 rule 2; REV-P1a NEW-4; D36) | SPR-014 | Missing |
+| EVO: same-instant command delivery, the absent-owner registration rule, and the merge's rewrite of event-typed payload fields (`05.1` §2 rule 2; REV-P1a NEW-4; D36) | SPR-014 | EVO-001, PR #49 (round 2; D39 pending): `05.1` v1.10 applied with it. SPR-014's acceptance gains "the smoke ladder is unchanged" (REV-EVO-001 R1) |
 | M2 F1: fertility, partnering, households, kinship | SPR-015 | Missing |
 | M2 F1 mortality (infant sub-schedule, old-age tail, density modifier); fixed-point `exp`/`ln` ruling and reference | SPR-016 | Missing |
 | Effect-language grammar and golden cases, with the kinship relations (REV-P1a NEW-3) | SPR-017 | Drafting (`05.5` §2.1 is prose) |
-| `neutral` on `[[reads]]` in `lint_odd.py`'s schema and in M7's and T1's foreign reads: the effect language's loader needs it, and SPR-014's absent-owner rule supplies it (D36) | SPR-017 | Missing |
+| `neutral` on `[[reads]]` in `lint_odd.py`'s schema and in M7's and T1's foreign reads: the effect language's loader needs it, and SPR-014's absent-owner rule supplies it (D36) | SPR-017 | PR #49 (EVO-001): `required` on every foreign read, `neutral` on the rate and mode reads of absent owners, enum codes on `[[owns]]`, typed `[[applies]]` with `drained_by` and `key`; M7 0.3.2, T1 0.3.2, M2 0.2.1 |
 | `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018; SPR-032 (P1b, D33) | Missing |
 | Population synthesis, with the dynastic back-fill: pre-epoch life-course rows with parent links back to each dynasty's `generations`, and tenure rows for each title's past holders (REV-SPR-017 N5) | SPR-019 | Missing |
 | Role codes reconciled (`schema.sql` vs `[event_roles]`) | SPR-020 | Conflict |
-| `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`) |
-| `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`) |
+| `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`); 0.3.2 in PR #49 (EVO-001: `required`, `neutral`, enum codes, typed `[[applies]]`, the `Day`/`Vital` murder timer) |
+| `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`); 0.3.2 in PR #49 (EVO-001: `required`, `neutral`, enum codes, typed `[[applies]]`, undated `Marry` and `ScheduleDeath`) |
 | Stream v1 wire format (`rh-protocol`) | SPR-026 | Missing |
 | Family-annals template set | SPR-029 | Missing |
 | Dynastic fixture world; 10k dynastic manifest (extend A-06) | SPR-030 | Missing |
@@ -190,7 +190,7 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 | A-14 engine-purity lint | SPR-011 T-00 |
 | A-21 `UniformDraw` for `RngStream` | SPR-011 T-01 |
 | A-29 epoch-keyed draws | SPR-011 T-02 |
-| A-30 dead-person command drop; A-31 queue-age invariant | SPR-014 (P1.0 sends no lifecycle command: SPR-011 ruling 6) |
+| A-30 dead-person command drop; A-31 queue-age invariant | SPR-014 (P1.0's M2 sends no lifecycle command, SPR-011 ruling 6; the smoke world does: `Settle` from X3, X5 and X7, keyed by the person who just died in X3's case, and `Audit` from X4, all `key = "any"`, so they keep flowing and the smoke ladder is unchanged: REV-EVO-001 R1) |
 | A-28 exact lags | P1b: SPR-031 (S5, D33), before S6 and S7 |
 | A-32 allocations to budget | SPR-030, before benches 1 and 2 |
 | A-24 typed saga vocabularies | SPR-020 (`event_roles`, `motive_edges`); SPR-025 (`mental_breaks`); P1b for the rest |

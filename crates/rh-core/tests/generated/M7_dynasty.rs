@@ -4,6 +4,7 @@ pub const SPEC_VERSION: &str = "0.3.2";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Polity),
     (Pulse::Month, Phase::Polity),
+    (Pulse::Day, Phase::Vital),
     (Pulse::Day, Phase::Agenda),
     (Pulse::Year, Phase::Polity),
 ];
