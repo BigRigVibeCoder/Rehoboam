@@ -160,7 +160,7 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | Role codes reconciled (`schema.sql` vs `[event_roles]`) | SPR-020 | Conflict |
 | `M7.dynasty` (with immediate succession, `[isolation]`, `title.holder`, seats and vocations from red-team item 12) | SPR-019, SPR-021, SPR-022 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`); 0.3.2 in PR #49 (EVO-001: `neutral` on rate and mode reads, identity reads require their owner, enum codes, typed `[[applies]]`, the `Day`/`Vital` murder timer) |
 | `T1.minds` (with the commands it accepts, stress and breaks, grief damping from red-team item 1, practices from item 10a evaluated) | SPR-023–025 | Frozen 0.3.1 on `main` (D36; PR #32, `c41de52`); 0.3.2 in PR #49 (EVO-001: `neutral` on rate and mode reads, identity reads require their owner, enum codes, typed `[[applies]]`, `Marry` and `ScheduleDeath` submitted by T1's own `MARRY_DUE` and `DEATH_DUE` timers) |
-| Stream v1 wire format (`rh-protocol`) | SPR-026 | Missing |
+| Stream v1 wire format (`rh-protocol`) | SPR-026 | In review: `specs/stream/wire_v1.md`, `selftest_wire_v1.py`, `golden/wire_v1.txt`; lint rules `protocol-leaf` and `network` |
 | Family-annals template set | SPR-029 | Missing |
 | Dynastic fixture world; 10k dynastic manifest (extend A-06) | SPR-030 | Missing |
 | Owners or neutral stand-ins for S5's reads | SPR-031 (P1b, D33) | Missing |

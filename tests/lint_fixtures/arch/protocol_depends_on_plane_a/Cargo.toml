@@ -1,0 +1,9 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# SPR-026: the tool-plane leaf rh-protocol depends on rh-core; rule protocol-leaf must refuse it.
+[workspace]
+members = ["rh-protocol", "rh-core"]
+resolver = "3"
+
+# Every plane-A crate inherits these lints (bin/lint_arch.py rule lints, VER-SPR-003-TEST GAP-9).
+[workspace.lints.rust]
+unsafe_code = "forbid"

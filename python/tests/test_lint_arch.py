@@ -176,6 +176,7 @@ PINNED = {
     "rh-cli": ("tool", "tool"),
     "rh-manifest": ("tool", "tool"),
     "rh-sample": ("A", "machinery"),
+    "rh-protocol": ("tool", "tool"),
 }
 
 
@@ -183,8 +184,28 @@ PINNED = {
 def test_each_pinned_crate_must_keep_its_labels(name: str) -> None:
     """The SPR-001 crates, rh-manifest and rh-sample cannot be relabelled, even to a valid one."""
     relabel = ("A", "core") if PINNED[name] != ("A", "core") else ("A", "machinery")
-    crates = [crate(name, *relabel) if c.name == name else c for c in engine(crate("rh-sample"))]
+    base = engine(crate("rh-sample"), crate("rh-protocol", "tool", "tool"))
+    crates = [crate(name, *relabel) if c.name == name else c for c in base]
     assert ("metadata", name) in found(crates)
+
+
+@pytest.mark.parametrize("dep_kind", ["normal", "build", "dev"])
+def test_rh_protocol_is_a_leaf_of_every_dependency_kind(dep_kind: str) -> None:
+    """SPR-026 (wire_v1.md §7): rh-protocol depends on no member, not even as a dev-dependency."""
+    leaf = crate("rh-protocol", plane="tool", kind="tool", deps=("rh-ids",), dep_kind=dep_kind)
+    assert ("protocol-leaf", "rh-protocol") in found(engine(leaf))
+    assert found(engine(crate("rh-protocol", plane="tool", kind="tool"))) == []
+
+
+def test_rh_protocol_is_pinned_to_the_tool_plane_and_closed_to_plane_a() -> None:
+    """Relabelling rh-protocol is refused; a plane-A crate depending on it breaks the closure."""
+    assert PINNED["rh-protocol"] == ("tool", "tool")
+    relabelled = crate("rh-protocol", plane="A", kind="machinery")
+    assert ("metadata", "rh-protocol") in found(engine(relabelled))
+    stream = crate("rh-stream", deps=("rh-protocol",))
+    rules = found(engine(crate("rh-protocol", plane="tool", kind="tool"), stream))
+    assert ("plane-A-closure", "rh-stream") in rules
+    assert ("protocol-leaf", "rh-protocol") not in rules
 
 
 def test_a_relabelled_crate_does_not_open_an_edge() -> None:
@@ -416,6 +437,8 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("relabelled_sample", "metadata"),
         ("engine_purity_direct", "engine-purity"),
         ("engine_purity_transitive", "engine-purity"),
+        ("protocol_depends_on_plane_a", "protocol-leaf"),
+        ("plane_a_to_protocol", "plane-A-closure"),
     ],
 )
 def test_main_catches_each_fixture(

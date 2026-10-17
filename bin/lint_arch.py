@@ -71,6 +71,12 @@ workspace crates, of every dependency kind (normal, build and dev):
                      edge, are not default features, and are required by no target of
                      ALLOCATOR_CRATE but a bench.
 
+    protocol-leaf    rh-protocol, the wire-format crate (SPR-026; specs/stream/wire_v1.md §7), is a
+                     tool-plane leaf pinned by name: it depends on no workspace crate, of any
+                     dependency kind, so a viewer holding the wire types has no path to the
+                     engine; and the plane-A closure keeps every plane-A crate from depending on
+                     it, so the engine cannot name a frame.
+
     engine-purity    The engine only engines (ADR-0035 §6; docs/13 §3; V-INSP-05; BCK-002 A-14). No
                      engine crate (ENGINE_CRATES, every rh-sys-* and rh-contract-* crate, and
                      every plane-A crate) reaches a crate on ENGINE_DENY_LIST, the one deny-list
@@ -123,8 +129,14 @@ PINNED_LABELS = MappingProxyType(
         # SPR-004 ruling A: the load-time front end reproduces the reference's float checks.
         "rh-manifest": ("tool", "tool"),
         "rh-sample": ("A", "machinery"),
+        # SPR-026 (specs/stream/wire_v1.md §7): the wire-format crate is a tool-plane leaf, so no
+        # plane-A crate can depend on it (plane-A-closure) and it depends on no member
+        # (protocol-leaf): the engine cannot name a frame, and a viewer cannot reach the engine.
+        "rh-protocol": ("tool", "tool"),
     }
 )
+PROTOCOL_CRATE = "rh-protocol"
+PROTOCOL_LEAF_RULE = "protocol-leaf"
 SYSTEM_LABELS = ("A", "system")
 CONTRACT_CRATE = "rh-contracts"
 CONTRACT_CRATE_PREFIX = "rh-contract-"
@@ -294,7 +306,8 @@ UNSAFE_TOKEN = re.compile(r"\bunsafe\b")
 
 # REF: docs/13 §3 ("The engine only engines"); ADR-0035 §6; 05.0 §6; docs/09 V-INSP-05; EVO-4;
 # BCK-002 A-14 (SPR-011 T-00). The engine crates: the union of the lists in docs/13 §3, 05.0 §6 and
-# ADR-0035 §6, planned ones included, and SPR-011's new rh-stream. Every crate named rh-sys-* or
+# ADR-0035 §6, planned ones included, SPR-011's new rh-stream and SPR-026's rh-protocol (it runs in
+# the engine host's process; specs/stream/wire_v1.md §7). Every crate named rh-sys-* or
 # rh-contract-*, and every crate whose effective plane is A, is an engine crate too, so a new
 # plane-A crate cannot be left out of the rule by forgetting to list it. rh-bench and rh-golden are
 # not engine crates, by design: they are tool crates that measure and replay the engine from outside
@@ -308,6 +321,7 @@ ENGINE_CRATES = frozenset(
         "rh-ids",
         "rh-manifest",
         "rh-minds",
+        "rh-protocol",
         "rh-registry",
         "rh-sample",
         "rh-server",
@@ -719,6 +733,28 @@ def check_external_deps(crate: Crate) -> list[Violation]:
     return found
 
 
+def check_protocol_leaf(crate: Crate, members: frozenset[str]) -> list[Violation]:
+    """SPR-026: rh-protocol depends on no workspace crate, of any dependency kind (wire_v1.md §7).
+
+    The crate that spells the wire must give a viewer no path to rh-core, rh-stream or
+    rh-snapshot, and must stay testable from its golden file alone; a dev-dependency is refused
+    too, so the conformance test cannot quietly grow an engine.
+    """
+    if crate.name != PROTOCOL_CRATE:
+        return []
+    return [
+        Violation(
+            PROTOCOL_LEAF_RULE,
+            crate.name,
+            f"depends on workspace crate {edge.target}{_via(edge)}; rh-protocol is a leaf: it "
+            "depends on no member of the workspace, so that a viewer holding the wire types has "
+            "no path to the engine (specs/stream/wire_v1.md §7)",
+        )
+        for edge in crate.edges
+        if edge.target in members
+    ]
+
+
 def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:
     """Check one workspace edge against V-INSP-03, V-PLN-01 and the plane-A closure."""
     found: list[Violation] = []
@@ -946,6 +982,8 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     violations += [v for crate in crates if crate.declared_ok for v in check_rng_crates(crate)]
     violations += [v for crate in crates if crate.declared_ok for v in check_external_deps(crate)]
     violations += [v for crate in crates if crate.declared_ok for v in check_lints(crate)]
+    members = frozenset(by_name)
+    violations += [v for crate in crates for v in check_protocol_leaf(crate, members)]
     for crate in crates:
         for edge in crate.edges:
             target = by_name.get(edge.target)

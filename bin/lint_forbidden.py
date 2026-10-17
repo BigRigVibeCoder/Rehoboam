@@ -37,6 +37,11 @@ reports its metadata). Rules:
                       overrides of their golden files.
     process           the module std::process, in src/ and build.rs: Command, and exit, abort and
                       id too (A-44; DEF-1). tests/ may name temporary files by process id.
+    network           a socket, in src/ and build.rs: std::net, std::os::unix::net and their
+                      listener, stream and datagram types (SPR-026; specs/stream/wire_v1.md §7).
+                      The World Stream's live edge is served by the tool-plane host, so the
+                      engine's append has no path to a reader (05.10 §7 item 3; V-PERF-09).
+                      tests/ may open a socket to test a host.
     file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
                       build.rs (where the float rule's scope says engine code) of a plane-A crate
                       not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot
@@ -194,6 +199,7 @@ FLOAT_API_RULE = "float-api"
 # read their golden files anywhere. python/tests/test_lint_forbidden.py asserts the set: widening it
 # is a reviewed change. --scan has no crate context and allows no one.
 FILE_IO_RULE = "file-io"
+NETWORK_RULE = "network"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
 STD_RENAME_RULE = "std-rename"
@@ -206,6 +212,8 @@ BANNED_MODULES = (
     (("std", "process"), PROCESS_RULE),
     (("std", "fs"), FILE_IO_RULE),
     (("std", "env"), ENV_RULE),
+    (("std", "net"), NETWORK_RULE),
+    (("std", "os", "unix", "net"), NETWORK_RULE),
 )
 # DEF-5: the one path into a banned module that is allowed: the target's constants.
 ALLOWED_PATHS = frozenset({("std", "env", "consts")})
@@ -361,6 +369,18 @@ RULES: tuple[Rule, ...] = (
         _rx(r"\bstd::fs\b|\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
         "file I/O in plane A outside the crates allowed it (FILE_IO_CRATES): plane A reads its "
         "inputs through the journal and the compiled world, never from files (BCK-002 A-44)",
+    ),
+    Rule(
+        NETWORK_RULE,
+        # SPR-026 (specs/stream/wire_v1.md §7): a socket in plane A would put a reader on the tick
+        # path. A type name right after `::` is part of a path the first alternatives match.
+        _rx(
+            r"\bstd::net\b|\bstd::os::unix::net\b|\bunix::net\b"
+            r"|(?<![:\w])(?:Unix|Tcp)(?:Listener|Stream)\b|(?<![:\w])(?:UnixDatagram|UdpSocket)\b"
+        ),
+        "a socket in plane A (std::net, std::os::unix::net): the World Stream's live edge is "
+        "served by the tool-plane host, never by plane-A code, so the engine's append has no path "
+        "to a reader (05.10 §7 item 3; specs/stream/wire_v1.md §7; V-PERF-09)",
     ),
     Rule(
         "unsafe",
@@ -684,7 +704,7 @@ def _applies(finding: Finding, scan: "FloatScan") -> bool:
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
-    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE)
+    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE, NETWORK_RULE)
     if finding.rule in rules and scan.scope == "none":
         return False
     return not (finding.rule == FILE_IO_RULE and scan.file_io)

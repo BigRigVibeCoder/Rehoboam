@@ -160,6 +160,11 @@ def test_raw_identifiers_are_code() -> None:
         ('#[cfg_attr(test, path = "mock.rs")] mod clock;', "source-include"),
         ('include!("../../outside.rs");', "source-include"),
         ('include! { "gen.rs" }', "source-include"),
+        ("use std::net::TcpListener;", "network"),
+        ("use std::os::unix::net::{UnixListener, UnixStream};", "network"),
+        ("let s = UnixStream::connect(path)?;", "network"),
+        ("let l = TcpListener::bind(addr)?;", "network"),
+        ("use std::os::unix::net::*;", "network"),
     ],
 )
 def test_each_forbidden_api_is_caught_by_its_rule(snippet: str, rule: str) -> None:
@@ -266,6 +271,7 @@ def test_rust_files_skip_only_the_top_level_target_directory(tmp_path: Path) -> 
 
 # file stem -> (rule, the token the report names); mirrors FORBIDDEN_API_CONTROLS in check_all.sh.
 PLANTED = {
+    "net_socket": ("network", "std::os::unix::net"),
     "hash_map": ("hash-collections", "HashMap"),
     "hash_set": ("hash-collections", "HashSet"),
     "thread_rng": ("thread-rng", "thread_rng"),
