@@ -1,0 +1,231 @@
+# M2 F1 mortality (SPR-016, P1.3 b): the standalone spec section the Architect folds into the next-version M2 spec,
+# specs/systems/next/M2.demography.odd.toml (0.3.0 draft, SPR-015, arch/M2-F1-births 421f2e1), after the births PR
+# merges. Drafted 2026-10-17 for the Architect's ruling (AGT-001); it binds nothing until it is folded in. It holds:
+# the [algorithm.mortality_f1] text, stated as exactly as [algorithm.mortality_rung0] (steps MR0-MR13; the births
+# tables use F, N and H, rung 0 uses S; MR because M1-M9 are system ids and D- is a decision prefix: REV-SPR-016 R10); the [[rng]] and not_yet changes; the [[reads]], [[couplings]] and
+# [isolation] stub of the entitlement hook; the [[params]] it reads; the Registry delta SPR-016 needs (listed, not
+# made); the seam with births (who owns what at a birth and a death); and the director items (D-) it raises, each
+# with a recommendation and a confidence.
+#
+# Research: Brass (1971) through R12 §9 (the relational logit, the General Standard, the observed ranges, "weak at
+# both ends": p. 86 and p. 95; Beard's Perks logistic for old age, p. 59); the demographic facts of R09 §2 (infant
+# mortality a quarter to a third; density dependence as d (1 + x), x = N / K - 1; the entitlement form
+# q = 1 - (1 - q0)(y / y*)^eps_m, clamped; famine kills infants and the old). Contracts: 05.1 §3 (the M2 row:
+# fixed-point odds form, alpha a function of era state, an infant sub-schedule below 1 and an old-age tail above
+# 90, entitlement and density modifiers); 05.1 §6 item 4 v1.10 (Q32_32 exp and ln; Prob32); SPR-011 rulings 4,
+# 7 (amended), 8, 9; SIM-5 (age-specific, density-dependent hazards, binomial draws); V-INV-08; V-SF-01, V-SF-02,
+# V-SF-02b; the births draft's companion, docs/05_architecture/systems/M2.demography_F1.md §4 (what SPR-016 needs).
+# Exact reference: specs/demography/selftest_m2_f1_mortality.py (standard library), golden file
+# specs/demography/golden/m2_f1_mortality.txt. Data: specs/demography/brass_general_standard.toml (MR1),
+# specs/demography/infant_sub_schedule.toml (MR7).
+
+[fold]
+target = "specs/systems/next/M2.demography.odd.toml"   # 0.3.0 draft (SPR-015); not the frozen 0.2.0 file
+spec_version = "0.3.0"                                   # the same next version: births and mortality freeze together
+adds_beside = "[algorithm.mortality_rung0]"              # the next-mode lint keeps every 0.2.0 algorithm table byte for byte
+                                                         # (specs/systems/next/README.md); mortality_f1 is a new table, and
+                                                         # rung 0 is its beta = 1, N <= capacity case on ages 1 to 90
+fidelity_ladder_F1_representation = "Per-person Brass relational-logit hazards on the General Standard at any (alpha, beta) in fixed point (specs/demography; 05.1 §6 item 4 exp and ln), with an infant sub-schedule below 1, a logistic old-age tail above 90, a density modifier and a stubbed entitlement hook ([algorithm.mortality_f1]); births, partnering and households as [algorithm.fertility_f1], [algorithm.partnering_f1], [algorithm.households_f1]; monthly Bernoulli draws"
+design_changes = { scale_behaviour = "Identical at every N while the living count is at or under density_capacity (every P1a world): the per-person draw depends only on that person's state. Above the capacity the month's probability carries the world's density term m_d (MR11), one Q16_16 per Month pulse computed before any draw, so the result still does not depend on visiting order or thread count (REV-SPR-016 MIN-8)", interaction = "Deaths are independent across persons given the month's density term and, from P1.5a, the household's entitlement term (MR11); ScheduleDeath and Marry commands as the births draft states" }
+verification_note = "V-SF-01 (growth and the population band [0.3, 5] K) joins [verification] only when a manifest sets density_capacity (SPR-030's dynastic world); in P1a the modifier is inert and gives V-SF-01 no support (REV-SPR-016 MIN-3)"
+submodel_mortality_summary = "[algorithm.mortality_f1] MR1-MR12: the odds grid O(x)^beta by fixed-point exp and ln (MR3); K from e0 by the rung-0 bisection on that grid (MR5); the infant sub-schedule (MR7) and the logistic tail to 120 (MR8) as knots in minutes of age; monthly q = 1 - l(x + D) / l(x) as Prob32 (MR10), a newborn's first draw from birth; the density modifier and the stubbed entitlement term (MR11); one keyed Bernoulli per living person per month (k = 0) and a death timer at a keyed day start (k = 1)"
+
+# ----------------------------------------------------------------------------- not_yet (changes to the next file's list)
+# Removed by this fold: the next file's first two entries ("Brass at any (alpha, beta) ... (SPR-016)" and "An infant
+# sub-schedule below age 1 and an old-age tail above 90 (SPR-016)"). Its third entry is replaced by the first below;
+# its fourth (maternal mortality, stillbirth and twins) stays and gains the ownership note in [seam]. Added:
+not_yet_replaced = [
+  "Density and entitlement modifiers: the density term is in ([algorithm.mortality_f1] MR11, on the world's density_capacity until M1 F0 / M3 give a settlement capacity, SPR-018 and P1b); the entitlement term is declared (the read of M4's household entitlement ratio, neutral 1) and stated in R09 §2's form, but not evaluated until M4 F0 (P1.5a) registers and eps_m gets its default; the same hook on fertility (eps_f) multiplies [algorithm.fertility_f1]'s level M. V-SF-20b",
+]
+not_yet_added = [
+  "Era-state level shifts (05.1 §3.1; ADR-0027): medical_level and sanitation_level (S2.technology, P1b) move alpha; F1 applies them as K_eff = K exp(2 delta_alpha) through 05.1 §6 item 4's exp, recomputing MR6-MR8 when the era state changes. Not read in P1a: S2 has no owner",
+  "Sex-specific schedules: Brass's Table 8 differentials (p. 86) are not applied; both sexes run the same (alpha, beta). A P1b item if V-SF-02b or the harness (SPR-028) needs it",
+  "Minute-level death times (BCK-002 A-35): MR12 keeps rung 0's day starts",
+]
+
+# ----------------------------------------------------------------------------- [[rng]] death_time: no change
+# REV-SPR-016 R1 (MAJ-1): the frozen death_time entry (purpose, key ["person", "month"], use, resample_on_fork,
+# the stream-key comment and the two `draws` lines) is kept VERBATIM: the births next-mode lint refuses a
+# changed `draws` text on a frozen purpose. Its k = 0 line already reads "the monthly Bernoulli on the month's
+# Prob32 probability"; which probability that is (S8's q at rung 0, MR11's q'' at F1) is stated in the
+# algorithm tables only (MR12). No new purpose; death_time stays the first purpose (the RngPurpose prefix).
+[[rng_changes]]
+purpose = "death_time"
+change = "none"
+no_new_purposes = true
+
+# ----------------------------------------------------------------------------- the entitlement hook (MR11), stubbed
+# A declared read with a neutral value, in the next file's own format ([[reads]] with the neutral in `why`, an
+# in-coupling with the RT-2026-10-16 fields, a forcing series in [isolation]). SPR-014's absent-owner rule gives
+# the step view the neutral until M4.economy registers, so the hook is wired now and does nothing until P1.5a.
+# The column name is the Architect's to confirm against M4's spec when it exists (none today; lint_odd warns
+# "owner has no spec yet", as it does for S7's read of MR6).
+[[reads_added]]
+column = "household.food_entitlement_ratio"
+owner = "M4.economy"
+lag = "start_of_day"
+use = "rate"
+neutral = 1.0                                # EVO-001's typed neutral (REV-SPR-016 R8): the column's own type, q16_16 65536
+why = "MR11's entitlement term: a household's calorie-entitlement ratio y / y* below 1 raises its members' monthly death probability in R09 §2's form (V-SF-20b: a raised hunger-mortality hazard below the bread-only floor 0.44 for more than a year). Neutral: 1.0 (q16_16 65536), no shortfall; the term is the identity. Not evaluated in P1a (eps_m unread)"
+[[couplings_added]]
+system = "M4.economy"
+direction = "in"
+column = "household.food_entitlement_ratio"
+via = "MR11: f = (y / y*)^eps_m, clamped to 1 from above, computed once per household per month with 05.1 §6 item 4's exp and ln; q'' = 1 - (1 - q') f per member (R09 §2). The one-year dwell of V-SF-20b and the exact clamp are P1.5a's to state. In P1a the owner is absent: SPR-014's registration rule drops the read and the neutral applies"
+lag = "start of day"
+form = "survival factor: 1 - q'' = (1 - q') (y / y*)^eps_m, 1 at y / y* >= 1"
+neutral = "household.food_entitlement_ratio = 1.0 for every household (no shortfall: f = 1, q'' = q')"
+output_bounds = "f in (0, 1]; q'' in [q', 1]"
+data_range = "y / y* in [0.3, 3] (R12 §17-18, Allen 2001 welfare ratios)"
+beyond_range = "clamped on both sides before the logarithm: w := min(max(w, 19661), 65536) (0.3 to 1.0 in q16_16), so ln_ratio never sees 0 and f = 1 above 1 (P1.5a confirms the floor)"
+source = "R09 §2 (the entitlement form; famine kills infants and the old); V-SF-20b"
+isolation_forcing_added = { input = "household.food_entitlement_ratio", series = "constant:1.0", note = "no MR4: no shortfall, the term is the identity; from P1.5a also sine:[0.6, 1.4]/7y and step:1.0->0.4@year50/2y, as the next file's [isolation] expect already names" }
+
+# ----------------------------------------------------------------------------- [[params]] (changes and additions)
+[[params_changed]]
+name = "brass_beta"
+meaning = "Slope of mortality on the logit scale: O(x)^beta on the General Standard (MR3). Any value in the Registry bounds; 1 is the standard's own shape and reproduces rung 0 bit for bit (M3, MR4)"
+source = "Brass 1971; observed 0.64 to 1.64 (R12 §9); default 1 (SPR-011 ruling 8)"
+default = 1.0
+[[params_changed]]
+name = "brass_alpha"
+meaning = "Level of mortality on the logit scale. Still refused at load in P1a (as at rung 0): e0 is the level input, and K = exp(2 alpha) is its image, so any (alpha, beta) is reachable through e0 at the given beta (DV-SPR016-2 offers the alternative). P1b reads era-state shifts delta_alpha through K_eff = K exp(2 delta_alpha)"
+source = "Brass 1971; observed -1.36 to 0.55"
+[[params_added]]
+name = "density_capacity"
+meaning = "The living count K_cap at and under which the density modifier is exactly 1 (MR11); above it mortality rises linearly in N / K_cap - 1. A count (integer), compiled as u64, the world's one capacity in P1a (not_yet: settlement capacities from M1 F0 / M3). Default 10,000,000, the manifest's maximum population, so no P1a world is above it unless its manifest sets one: the P1a goldens do not move for it"
+source = "R09 §2: density dependence d (1 + x), x = N / K - 1, which removed every extinction and bounded the band in R09's own simulation; V-SF-01 reads K for its population band [0.3, 5] K"
+default = 10000000
+registry_bounds = [1, 10000000]
+[[params_added]]
+name = "density_mortality_slope"
+meaning = "The slope of the density modifier above the capacity (MR11): m_d = 1 + slope (N / K_cap - 1), capped at 4. A q16_16"
+source = "R09 §2 uses slope 1 in its toy; a design value until SPR-028 calibrates it against V-SF-01 on the dynastic fixture world"
+default = 1.0
+registry_bounds = [0.0, 3.0]
+[[params_unchanged_not_read]]
+name = "eps_m"
+note = "Not read in P1a (the entitlement term is declared but not evaluated: MR11), as the births Registry delta states; so it needs no default yet. P1.5a reads it and gives it one (Registry bounds [0.5, 3.0] exist)"
+
+# ----------------------------------------------------------------------------- Registry delta SPR-016 needs (not made here)
+# In the births draft's format (specs/systems/next/registry_delta.toml, merged into registry_v0.toml when 0.3.0
+# freezes): the next-mode lint lets a delta add parameters and defaults, never change an existing bound or default.
+registry_delta_needed = [
+  "[systems.\"M2.demography\"] params: add density_capacity = [1, 10000000] (integer) and density_mortality_slope = [0.0, 3.0]; every existing bound unchanged",
+  "[systems.\"M2.demography\"] defaults: add density_capacity = 10000000 and density_mortality_slope = 1.0 beside e0, brass_beta, tfr and elite_fertility_mult (a parameter default is C3: SPR-016's class already)",
+  "No new verb, role, column or purpose. brass_alpha and eps_m keep their bounds and stay without a default (refused at load; unread) in P1a",
+  "manifest_v0.py: the M2 system parameter block accepts the two new names with the Registry's bounds (it validates every system parameter against the Registry, so this follows from the Registry change)",
+]
+
+# ----------------------------------------------------------------------------- the seam with births (SPR-015 <-> SPR-016)
+[seam]
+newborn_first_draw = "Mortality owns it (MR10). A child born at a day start inside a month (births F9) is alive at the next Month pulse with age x = t_m - b < D; S8's q covers [x, x + D) and leaves [0, x) without a hazard. MR10 closes the gap: for a person with b > t_(m-1) (born since the previous Month pulse; never a founder, whose birth tick is at or before the epoch), q covers [0, x + D): q = 2^32 - l(x + D). SPR-015 runs rung 0's S8 for newborns until SPR-016 merges; closing the gap is part of SPR-016's golden change"
+infant_death = "Mortality owns it. A newborn is on MR7's infant knots from its first draw: no separate purpose, no draw at the birth. Stillbirth and twins stay in births' not_yet (a birth is always one live child)"
+maternal_death = "Not in F1 (births' not_yet: the mother's death is the ordinary schedule). When it comes (F2), it is mortality's: a new purpose maternal_death keyed by (the mother, the birth instant), drawn in apply_birth's instant and applied through apply_death, after the birth timer by births' F10 ordering, so the child is born first. It is not a death_time draw, so the CRN rule of death_time is untouched"
+death_path = "apply_death stays the single death path: MR13 = S12, then births' H4 (widowhood, headship, pending births and marriages dropped when they fire), whatever hazard produced the death (the schedule, the modifier, a ScheduleDeath command from P1.13)"
+
+# ----------------------------------------------------------------------------- design values (ruled by the Architect: REV-SPR-016 R11; none is a director item)
+[[design_values]]
+id = "DV-SPR016-1"
+question = "The density modifier's form and parameters: a one-sided multiplier on the monthly probability, m_d = 1 + density_mortality_slope max(0, N / density_capacity - 1), capped at 4, with two new M2 Registry parameters (density_capacity, default 10,000,000; density_mortality_slope, default 1). Inert in every P1a world (the default capacity is above any manifest's population): it is machinery for SPR-030's dynastic worlds and V-SF-01, which has no support from it until a manifest sets a capacity."
+recommendation = "Approve. One-sided because a positive check bites above capacity and the schedule already is the normal-times level; below capacity nothing changes, so the P1a goldens (rungs 0-2, which never exceed the default capacity) do not move for it, and the last survivors of a dying world do not become longer-lived. On the probability rather than on alpha or the hazard because it is exact in integers at one multiply per person-month, while a proportional-hazards form needs exp and ln per person-month (about 36 s per 10k-person millennium, outside the G1a budget) and a level shift would recompute MR6-MR8 every month. The first-order error against proportional hazards is (m - 1) q / 2 relative: at m = 2 below 1% wherever q < 0.02 per month, which at e0 = 30 (β 1) excludes the first six months of life (ages 0 to 0.42), the ends of rung 0's linear-l teeth from 84.4 and every month from 87.9 (1.4% at 90, 2.1% at 110); at the ceiling m = 4 the region above 1% is ages 0 to 1.9 and every age from 69.4 (REV-SPR-016 MIN-3). A cheaper exact alternative than per-person exp/ln exists: the proportional-hazards form l^m applied to the 438 knots once per month, recomputed only when m_d changes (438 exp/ln pairs a month whatever N is); it was not taken because it recomputes MR9's knots per month, and it keeps nothing bit-identical to rung 0 whenever m_d is not 1, which is also true of the multiplier; a later sprint may prefer it on the harness's evidence. The entitlement term keeps R09 §2's own form (a survival factor with eps_m as the exponent), which is cheap because y / y* is per household, not per person."
+alternative = "Symmetric: m_d = N / K_cap (R09's toy), which lowers mortality below capacity; it changes every P1a golden as a world dies out and gives a dying household's last member a lower hazard. Or no density term in P1a at all (V-SF-01 then has no brake until M3). Or the knot-level proportional-hazards form above."
+confidence = "6/10"
+[[design_values]]
+id = "DV-SPR016-2"
+question = "brass_alpha as a manifest input: keep it refused in P1a (e0 is the level), or accept exactly one of e0 and brass_alpha per manifest (a tagged level value in the compiled WorldSpec)?"
+recommendation = "Keep it refused in P1a. Any (alpha, beta) is reachable through e0 at the given beta (K = exp(2 alpha) is a bijection), the Registry default e0 = 30 then needs no 'unless alpha is set' rule, rh_manifest::compile stays as SPR-011 T-04 built it, and the harness reports alpha = ln(K) / 2 from the schedule's K. Brass's own finding (R12 §9) is that long-run change is in alpha, which P1b applies as era-state shifts on K, not as a manifest number."
+alternative = "Accept either, exactly one (WorldSpec level = E0(bits) | Alpha(bits)); the manifest author's choice, at the price of a sum type in the compiled spec and a compile rule for the default."
+confidence = "7/10"
+[[design_values]]
+id = "DV-SPR016-3"
+question = "The old-age tail: Beard's Perks logistic (R12 §9, p. 59) with both parameters derived from the Brass schedule at 90 (MR8), death certain from the first knot where survivorship rounds to 0 (109.5 to 120 years across the Registry box) with 120 as the cap, and the compiled e0 kept as the Brass-grid e0 (so rung 0's K is unchanged at beta = 1; the realized e0 of the F1 schedule exceeds it by the tail's life past 100: +0.003 years at e0 = 30, +0.52 at e0 = 85)."
+recommendation = "Approve. The research names the logistic and no constants; deriving (a, b) from the schedule's own hazard and log-slope at 90 adds no Registry constant, is continuous in level at 90 (l(90) = L_66 exactly), matches Brass's mid-interval hazard at 90 within 1% (the realized monthly q drops 31% at 90 because the linear-l tooth [87.5, 90] ends 48% above the mid-interval hazard: rung 0's own sawtooth, which drops q by 27% at 82.5, 32% at 85 and 36% at 87.5 at e0 30, and the join is one more of those; the reference prints them: check 4), scales with (alpha, beta), and keeps K identical to rung 0's. SPR-028 reports l(100) / l(90) and the centenarian count, and the R12 batch-3 item checks Thatcher, Kannisto and Vaupel (1998) for the slope b, after which b can become a Registry constant if the derived one is off."
+alternative = "Kannisto constants from the literature (b about 0.1 per year, a from a modern level): a research item first, and a tail that does not scale with the schedule's level. Or Gompertz (unbounded, which the research argues against)."
+confidence = "6/10"
+[[design_values]]
+id = "DV-SPR016-4"
+question = "The infant sub-schedule's shape: Bourgeois-Pichat's biometric law with an endogenous share of 0.15 (32% of the first year's deaths in the first month), as a 13-entry table of constants (specs/demography/infant_sub_schedule.toml) that plane A holds and never recomputes."
+recommendation = "Approve as design values, with the R12 batch-3 research item (Bourgeois-Pichat 1951 and a pre-transition neonatal share; the births companion §4 names Coale-Demeny West q0 and q1-4 by e0 as the alternative lookup) that replaces the table if the sources disagree. The table changes the within-year timing only: l(0) = 1 and l(1) are Brass's, so q(0), q(15) and every band stay what rung 0 gives; what moves is which month an infant dies in, which the family annals (SPR-029) and the famine coupling (P1.5a) need to be plausible."
+alternative = "Keep rung 0's flat hazard through year 0 (no sub-schedule): simplest, but 05.1 §3 and R12 §9 both ask for the sub-schedule, and a flat first year puts only 8% of infant deaths in the first month. Or the Coale-Demeny lookup by e0, which needs the West tables in research/ first."
+confidence = "6/10"
+
+# ----------------------------------------------------------------------------- the join at 90 (REV-SPR-016 R6)
+# R6 asks that monthly q be continuous across 90 within 2%. The drafter's evidence and recommendation (the
+# Architect decides; the mid-interval anchor stands until then, as the text above states it).
+[join_at_90]
+evidence = "The 31% drop at 90 is rung 0's sawtooth, not the tail's: S7 interpolates l linearly between grid points, and on a 2.5-year interval the hazard of a linear l runs from below the interval's mean to far above it (at e0 30, beta 1: 0.22 to 0.49 per year on [87.5, 90] against a mid-interval 0.32), so monthly q drops at every grid boundary above 50: -27% at 82.5, -32% at 85, -36% at 87.5, -31% at 90 (e0 30), -47% to -58% at (60, 1.65), and +37% at (85, 0.6), where the teeth run the other way. The tail's first-month hazard matches its anchor mu within 1% at every corner. Continuity of q at 90 within 2% is reachable only by anchoring the tail on the tooth's end hazard, h_end = (L_65 - L_66) / (2.5 L_66) per year (the continuous-time equivalent of the last twelfth's q is 12 ln((29 L_66 + L_65) / (30 L_66))): 0.49 per year at e0 30 against mu = 0.33"
+cost_of_continuity = "Anchoring on h_end raises the whole tail by about 1.5x (survival 90 to 100 falls from 2.4% to about 0.7% at e0 30), and the logistic's asymptote of 1 per year is below h_end wherever beta is above about 1.55 (h_end = 1.10 per year at (60, 1.65) and (20, 1.65)), so the join would need a clamp or a free asymptote (a new constant) inside Brass's observed range beta <= 1.64. The sawtooth below 90 would remain at 82.5, 85 and 87.5 either way"
+recommendation = "Keep the mid-interval anchor (the text above): the join is one more of rung 0's teeth, no worse than the three before it, and the fix that removes the teeth is not at 90 but in S7: logit-linear (Brass-consistent) interpolation of l between grid points, which SPR-028's harness can judge on the age-at-death distribution and which would be a C3 model change breaking the beta = 1 equality with rung 0 above 50 (ages 1 to 50 have one-year intervals, where the teeth are small). File it as a BCK item for SPR-028, with this file's numbers. Confidence 6/10. If the Architect wants the 2% continuity now, the h_end anchor with mu clamped at 0.9 per year is one line in MR8 (mu := min(h_end, 0.9 per year)) and one check; it meets 2% for beta below about 1.55 and the reference would report the drop above that"
+alternative_implemented = false
+
+# ----------------------------------------------------------------------------- the algorithm
+[algorithm.mortality_f1]
+# Stated as [algorithm.mortality_rung0] is. Every quantity is an exact integer; every width is the smallest standard
+# width that holds every intermediate; every division is rounded exactly once, as stated. The only non-rational
+# functions are the exp and ln of 05.1 §6 item 4 (v1.10): integer procedures with a stated error bound, evaluated at
+# construction on fixed grids (and, from P1.5a, once per household per month), never per person per month. The exact
+# reference (specs/demography/selftest_m2_f1_mortality.py) reproduces every step bit for bit; SPR-016's
+# bin/gen_m2_reference.py ports it and generates the golden vectors the crate replays.
+# Rung 0 is the special case beta = 1, N <= K_cap, no newborn, ages 1 to 90: there MR3-MR6 are S3-S6 bit for bit (the
+# odds grid is the exact rational one, by pow(x, 1) = x), MR9 is S7 on the same grid points, MR10 is S8 and MR11 is the
+# identity. F1 differs from rung 0 exactly (i) below age 1, where MR7 replaces the linear year 0 (l(0) and l(1)
+# unchanged) and MR10 starts a newborn's hazard at its birth, (ii) above 90, where MR8 replaces the grid points 92.5 to
+# 100 and the certain death at 100 with the logistic tail and a certain death at 120, and (iii) above the capacity,
+# where MR11 raises q. Where the P1a goldens move when SPR-016 merges: a founder under one year old, a child born
+# since SPR-015 (its first months) or a person aged over 90 - D at a pulse draws against a different q; nothing else (SPR-016 is
+# C3 and announces the change with its evidence).
+version = "m2-f1-v1"
+steps = [
+  "MR0 Rounding and the transcendentals. rhe(n / d) as S0 (n signed, d > 0, ties to even). exp(y) and ln(n / d) are 05.1 §6 item 4's functions on Q32_32 (an i64 with 32 fraction bits; results within 3/4 ulp, faithful), with their refusals: a refusal during construction is a load error naming the step. No float, no truncating cast, no other rounding.",
+  "MR1 Standard. As S1: h_i = 2 a_i (u8) and s_i = 10^4 ls_i (u16) for the 71 grid ages. The interior odds O_i = (10^4 - s_i) / s_i, i = 1..69, exact rationals; their logarithms lambda_i = ln_ratio(10^4 - s_i, s_i) (Q32_32 bits, i64), 69 compiled-in constants that the reference pins (lambda_1 = ln(0.1766...) < 0, lambda_69 = ln 9999 = 9.2102...).",
+  "MR2 Parameters. E = e0 bits (Q16_16, as S2; the Registry default 30 when the manifest sets none). B = brass_beta bits (Q16_16), in the Registry bounds [0.6, 1.65] (bits 39322 to 108134, rounded half to even from the literal; the manifest validator checks the decimal against the bounds). brass_alpha set in a manifest is refused at load by name (DV-SPR016-2). K_cap = density_capacity (a count, u64; default 10,000,000) and S_d = density_mortality_slope bits (Q16_16; default 1.0 = 65536). eps_m is not read (MR11). rh_manifest::compile fills each of these from the manifest, else from the Registry default, as SPR-011 T-04 does; tfr and elite_fertility_mult are births' ([algorithm.fertility_f1] F2, F3); eps_f is unread until P1.5a.",
+  "MR3 Odds grid. For i = 1..69: if B = 65536 (beta exactly 1) then W_i is the exact rational O_i and MR4 uses its rational form (pow(x, 1) = x exactly, as IEEE 754's pow: the rung-0 schedule is reproduced bit for bit); otherwise w_i = exp(rhe(B lambda_i / 2^16)) (the product has 48 fraction bits and is rounded once to 32; exp's argument is in [-2.9, 15.2] inside the bounds (beta lambda_1 at beta 1.65 to beta lambda_69 at beta 1.65), within its domain y <= 16), a u64 with 32 fraction bits (w_i < 2^54: W_69 <= 9999^1.65 < 4 x 10^6). w_0 = 0 and w_70 = infinity stand for l = 1 and l = 0.",
+  "MR4 Survivors at a grid age for a level k (K = k / 2^32, k a u64 in [0, 2^40]). L_0(k) = 2^32; L_70(k) = 0; for i = 1..69: rational form (beta = 1) L_i(k) = rhe(s_i 2^64 / (s_i 2^32 + k (10^4 - s_i))) (S3 verbatim; numerator < 2^78, denominator < 2^54); power form L_i(k) = rhe(2^96 / (2^64 + k w_i)) (numerator 2^96, k w_i < 2^94, denominator < 2^95: u128). Both are 2^32 / (1 + K W_i) rounded once; L_i(k) is in [0, 2^32], non-increasing in i and in k.",
+  "MR5 Level from e0. The trapezoid T(k) over the 71 grid points (S4 verbatim, with M4's L_i(k)) and the 40-step bisection (S5 verbatim): K = the largest k with T(k) >= E 2^18. The infant knots and the tail do not enter the bisection: the compiled e0 is the Brass e0 of (K, beta) on the standard grid, so at beta = 1 K is rung 0's K exactly (the seven check values of mortality_rung0 hold). The F1 schedule's own trapezoid e0 differs from E by the infant redistribution (-0.06 years at e0 = 30) and by the tail's life past Brass's l(100) = 0 (+0.003 years at e0 = 30, +0.5 at e0 = 85); the reference measures it (check 8). Bracketing holds at every corner of the bounds (check 3): T(1) / 2^34 > 85 and T(2^40) / 2^34 < 20 years for beta in [0.6, 1.65]. Computed once, at construction.",
+  "MR6 Brass schedule. L_i = L_i(K) for i = 0..70 (S6 verbatim).",
+  "MR7 Infant sub-schedule. Thirteen knots at ages j Y / 12 minutes, j = 0..12 (Y the calendar's minutes per year, divisible by 12 for both calendars: 43200 and 43800 per knot). q0 = 2^32 - L_1 (the year's Prob32). c_j = cumulative_share_q16[j] from specs/demography/infant_sub_schedule.toml (13 u16 constants: c_0 = 0, c_12 = 65536, non-decreasing; Bourgeois-Pichat's biometric law with endogenous share 0.15, a design table, DV-SPR016-4). I_j = 2^32 - rhe(q0 c_j / 2^16): I_0 = 2^32, I_12 = L_1 exactly, non-increasing. The grid's age-0 and age-1 points are these knots; q(0) = q0 is unchanged from rung 0, only its timing within the year moves (32% of it in the first month).",
+  "MR8 Old-age tail (Beard's Perks logistic, R12 §9 p. 59: mu(u) = a e^{b u} / (1 + a e^{b u}), the simplest member of Perks's family, bounded; the Gompertz mu = B c^x is unbounded and Brass's own grid reaches l = 0 at 100). Anchor: age 90 = grid index 66, with L_65 (87.5), L_66 (90), L_67 (92.5), all > 0 and strictly decreasing inside the bounds (L_i >= 4 since K W_i < 2^30; a violation is a construction error naming MR8). Brass's per-year interval hazards: m1 = rhe(2 ln_ratio(L_65, L_66) / 5), m2 = rhe(2 ln_ratio(L_66, L_67) / 5) (Q32_32; 2.5 years = 5 half-years). m2 > m1 for every K > 0 and beta > 0 (proof: with r1 = W_66 / W_65 < r2 = W_67 / W_66 and u = K W_66, (1 + u r2) / (1 + u) > (1 + u r1) / (1 + u) >= r1 (1 + u) / (r1 + u) because (1 + u r1)(r1 + u) - r1 (1 + u)^2 = u (1 - r1)^2 >= 0). The hazard at 90: mu = rhe((m1 + m2) / 2), which must be < 2^32 (one per year; it is at most 0.55 inside the bounds; otherwise a construction error naming MR8). a = rhe(mu 2^32 / (2^32 - mu)). The log-slope g = rhe(2 ln_ratio(m2, m1) / 5) > 0 and b = rhe(g 2^32 / (2^32 - mu)) (the logistic's d ln mu / du at u = 0 is b (1 - mu), matched to Brass's g); b (120 - 90) <= 16 2^32 must hold (exp's domain; it is at most 0.17 x 30 inside the bounds; otherwise a construction error naming MR8). Knots at ages 90 Y + j Y / 12 minutes, j = 0..360: T_0 = L_66; for j = 1..359: E_j = exp(rhe(b j / 12)); A_j = 2^32 + rhe(a E_j / 2^32) (1 + a e^{b u}, Q32_32, < 2^44); R_j = ln_ratio(2^32 + a, A_j) (<= 0); y_j = rhe(R_j 2^32 / b) (ln S(u) = (1 / b) ln((1 + a) / (1 + a e^{b u})), the closed form of the logistic's survival); S_j = exp(y_j) (0 when y_j < -23 2^32, exp's rule); T_j = min(T_(j-1), rhe(L_66 S_j / 2^32)) (forced non-increasing: faithful rounding is not monotone below 2^-27); T_360 = 0, the cap: no knot lies past 120. Death becomes certain at the first knot j_0 where T_j = 0 (REV-SPR-016 R2): rhe rounds L_66 S_j / 2^32 to 0 once L_66 S_j < 2^31 (S_j in bits), that is once S(u) < 1 / (2 L_66) with L_66 in bits (2^-33 / l_90 for the survivorship l_90 = L_66 / 2^32 as a fraction), which the closed form puts at u_0 = (1 / b) ln(((1 + a) (2 L_66)^b - 1) / a) years past 90 (L_66 in bits); j_0 = the first j with u_j past u_0, or 360 when u_0 is past 30 years (the cap reaches 0 first: T_360 = 0 by construction). The exact value is the knot index; the reference checks that u_0 lies within 2 knots of it, or past the cap where j_0 = 360 (check 4). At e0 30, beta 1 j_0 = 360 (T_359 = 15 bits); over the Registry box j_0 falls to 234 (109.5 years) at e0 20, beta 1.65: check_values gives l_zero_twelfths = 1080 + j_0 per design point and the reference asserts l > 0 at the knot before j_0 and l = 0 at j_0 (check 4); between those two knots MR9's interpolation toward 0 can itself round to 0 a few minutes early when T_(j_0 - 1) is a few bits, so the exact statement is: l(x) = 0 at every age from knot j_0, l(x) > 0 at every knot below it, and q = 2^32 if and only if l(x + D) = 0 (MR10). The grid points 92.5, 95, 97.5 and 100 are not knots. Continuity: l(90) = L_66 exactly; the tail's first-month hazard is within 1% of mu (check 4). The monthly q is not continuous at 90: it drops by about 31% at e0 30 (0.0392 to 0.0271), because the linear-l tooth [87.5, 90] of rung 0's S7 ends at a hazard 48% above the mid-interval hazard the tail starts from; rung 0 has the same drop at every grid boundary above 50 (27% at 82.5, 32% at 85, 36% at 87.5 at e0 30; at e0 85 the teeth run the other way, +37%), so the join is one more tooth, not a new artefact (REV-SPR-016 R6: see [join_at_90] below).",
+  "MR9 Knots and survivors at an age in minutes. The knot ages, in twelfths of a year (exact minutes for both calendars: twelfth x Y / 12): the infant knots 0..12, the grid ages 2..90 (h_i / 2 years for i = 2..66), the tail knots 90 + j / 12 for j = 1..360: 438 knots, strictly increasing in age (0 to 120 years), non-increasing in survivorship (2^32 to 0). For an age x (i64 minutes, x >= 0; negative is an error): if x >= 120 Y then l(x) = 0 (the cap; l reaches 0 at the knot j_0 of MR8, at or before 120); otherwise, for the unique knot interval [A_j, A_(j+1)) holding x, l(x) = T_j + rhe((T_(j+1) - T_j)(x - A_j) / (A_(j+1) - A_j)) (S7's rule; |T_(j+1) - T_j| <= 2^32 and x - A_j < 2.5 x 525600 < 2^21, so the product is < 2^53, i64). l(x) is in [0, 2^32] and non-increasing in x; on [Y, 90 Y] it is rung 0's S7 value at every minute when beta = 1 (check 1).",
+  "MR10 Monthly probability. As S8, with MR9's l: at the Month pulse instant t_m with month length D (minutes), a living person with birth tick b has x = t_m - b; q = 2^32 if l(x) = 0, else rhe(2^32 (l(x) - l(x + D)) / l(x)) (numerator u128). q is a Prob32 (bits in [0, 2^32]); q = 2^32 if and only if l(x + D) = 0, which holds from the zero knot j_0 of MR8 (at the latest when x + D >= 120 Y), and q = 0 if and only if l(x + D) = l(x). A newborn's first draw (the seam with births, [seam]): if m >= 1 and b > t_(m-1) (born since the previous Month pulse; a founder's birth tick is at or before the epoch, so never a founder), the probability covers [0, x + D) instead of [x, x + D): q = rhe(2^32 (2^32 - l(x + D)) / 2^32) = 2^32 - l(x + D) exactly. Without it a child born inside a month would carry no hazard for its first x minutes (SPR-015 as drafted; closed by SPR-016).",
+  "MR11 Density modifier and the entitlement hook. Once per Month pulse, before any draw: N = the number of ledger rows with alive = 1 at that instant (M2's own column, so no coupling and no lag). The density term m_d (Q16_16 bits): if N <= K_cap then m_d = 65536 exactly; else m_d = min(4 x 65536, 65536 + rhe(S_d (N - K_cap) / K_cap)) (S_d < 2^18 and N - K_cap < 2^24, so the product is a u64 < 2^42; a one-sided positive check: 1 + slope (N / K_cap - 1), ceiling 4; R09 §2's d (1 + x) above capacity only; DV-SPR016-1). Per person: q' = min(2^32, rhe(q m_d / 2^16)); with m_d = 65536, q' = q exactly, so rung 0's draws are unchanged at or under the capacity. Form: a multiplier on the monthly probability, exact in integers at one multiply per person-month; it is the first-order form of a proportional hazard, 1 - (1 - q)^m, whose relative difference is (m - 1) q / 2 (below 1% wherever q < 0.02 / (m - 1): at m = 2 that is q < 0.02 per month, which at e0 = 30 (beta 1) excludes the first six months of life, the ends of rung 0's linear-l teeth from 84.4 and every month from 87.9; at the ceiling m = 4 it is q < 0.0067, which excludes ages 0 to 1.9 and every age from 69.4). The entitlement term, R09 §2's form q'' = 1 - (1 - q')(y / y*)^eps_m, clamped: once per household per month, with w = the household's food_entitlement_ratio (Q16_16 bits, the declared read) clamped first to [19661, 65536] (0.3 to 1.0, the coupling's data range: ln_ratio never sees 0) and eps = eps_m bits (Q16_16, < 2^18): f = 2^32 if w = 65536, else f = exp(rhe(eps ln_ratio(w, 65536) / 2^16)) (the product is an i128 < 2^52; f a Q32_32 in (0, 2^32); the argument is in [-3.7, 0], within exp's domain); per member q'' = 2^32 - rhe((2^32 - q') f / 2^32) (numerator < 2^64; q'' in [q', 2^32]). With f = 2^32, q'' = q' exactly. In P1a the term is not evaluated: the read's owner is absent (rh-core supplies the neutral 65536), eps_m is not compiled (the births Registry delta keeps it unread), and q'' = q'; P1.5a turns the evaluation on with eps_m's default, which is then a C3 change on no P1a golden (every P1a household has the neutral ratio).",
+  "MR12 Draws, timer, re-sample. S9, S10 and S11 verbatim, on q'' instead of q: k = 0 hits iff q'' = 2^32 or d0 < q'' 2^32, exactly one k = 0 draw per living person per month; k = 1 the day start inside the month; the timer at (tau, Vital); the re-sample through ResampleCtx: with t_m the pending month's pulse, t_end its end, x = t_m - b, x0 = t_in - b, x1 = t_end - b, the base probability is S11's q_r = 2^32 if l(x0) = 0, else rhe(2^32 (l(x0) - l(x1)) / l(x0)); for a person whose pending timer was drawn under MR10's newborn rule (b > t_(m-1)), the deferred exposure [0, x) stays charged and only [x, x0) counts as survived: q_r = 2^32 if l(x0) = 0, else 2^32 - rhe(l(x) l(x1) / l(x0)) (REV-SPR-016 R4; the product is < 2^64; this is 1 - (l(x) / l(0)) (l(x1) / l(x0)), not 2^32 - l(x1), which would charge [x, x0) twice, and not S11's conditional, which would drop the deferred [0, x): check 7 pins all three readings on one case, born 20 days before the pulse, input 25 days into the month, at e0 30: 0.0662 against 0.1130 and 0.0064). MR11's terms in a re-sample: N is the living count at the start of the Inputs phase of t_in, before the input's own effects, counted once per input (REV-SPR-016 MIN-7); the entitlement term as at the pulse. q'' from q_r as in MR11; nothing is stored.",
+  "MR13 apply_death. S12 verbatim, then births' H4 ([algorithm.households_f1]): the single death path for every cause.",
+]
+# Check values (from the exact reference; selftest_m2_f1_mortality.py asserts them). K, a and b are in units
+# of 2^-32; K at beta = 1 equals mortality_rung0's. a = mu(90) / (1 - mu(90)); b per year.
+check_values = [
+  { e0 = "30",        beta = "1",    K = 9582773732,  tail_a = 2113825997, tail_b = 155061017, l_zero_twelfths = 1440 },
+  { e0 = "30",        beta = "0.8",  K = 8976400291,  tail_a = 1526879409, tail_b = 148737350, l_zero_twelfths = 1440 },
+  { e0 = "30",        beta = "1.3",  K = 10833527583, tail_a = 3239314466, tail_b = 176323153, l_zero_twelfths = 1408 },
+  { e0 = "23.441086", beta = "1",    K = 14649764166, tail_a = 2117578026, tail_b = 152752039, l_zero_twelfths = 1440 },
+  { e0 = "60",        beta = "1.65", K = 1195340568,  tail_a = 5152537621, tail_b = 224241131, l_zero_twelfths = 1361 },
+  { e0 = "85",        beta = "0.6",  K = 219332176,   tail_a = 476725642,  tail_b = 580391773, l_zero_twelfths = 1440 },
+  { e0 = "20",        beta = "1.65", K = 27498377919, tail_a = 5166640489, tail_b = 218892643, l_zero_twelfths = 1314 },
+  { e0 = "85",        beta = "1.65", K = 9586827,     tail_a = 3877905714, tail_b = 720402679, l_zero_twelfths = 1381 },
+]
+# Facts of the F1 schedule the plan's acceptance criteria must use (the reference proves them):
+#   * At beta = 1 the seven K values of mortality_rung0 are reproduced, the 71 grid survivors are S3's bit for
+#     bit, and l(x) equals S7's at every sampled minute of age from 1 to 90 years, on both calendars.
+#   * e0 30, beta 1 (360-day calendar): q(0) = 0.2827 (unchanged); the first month's q = 0.0903, the twelfth
+#     month's 0.0143; age 10 q = 4.73e-4 per month (the golden file has the exact bits); mu(90) = 0.330
+#     per year, b = 0.036 per year, survival 90 -> 100 = 2.4%, l(110) / l(90) = 2.5e-4.
+#   * A newborn's first draw: born 10 days before the pulse, q covers 40 days from birth (MR10; check 7); on the
+#     365-day calendar a child born on 2 January draws on 1 February with x = 30 days and D = 28 (check 7).
+#   * The re-sample of a newborn's pending timer (MR12): 0.0662 on the case above, against 0.1130 and 0.0064 for
+#     the two readings the review found (check 7, qresample vectors).
+#   * Death is certain from the first knot where l rounds to 0: 120 years at e0 30 (beta 1), 109.5 at (20, 1.65).
+#   * V-SF-02 (q(15)) and its e0 band [23.441086, 36.569855] at beta = 1 are unchanged from rung 0.
+#   * V-SF-02b at e0 30: l(65) / l(15) = 0.481 (beta 0.64), 0.315 (beta 1), 0.139 (beta 1.64).
+#   * Widths at the bounds' extremes: k w_i < 2^94, M4's numerator 2^96, knot products < 2^53, A_j < 2^44.
+
+# ----------------------------------------------------------------------------- invariants (added; births hold INV-M2-06 to 19: mortality takes 20 and 21, REV-SPR-016 round 2)
+[[invariants_added]]
+id = "INV-M2-20"
+statement = "The modifier is neutral at or under capacity: in any month where the living count at the pulse is at most density_capacity and no entitlement owner is registered, every person's q'' equals MR10's q bit for bit (so rungs 0-2 draw as rung 0 does, newborns' first month aside)"
+test = "V-INV-08"
+[[invariants_added]]
+id = "INV-M2-21"
+statement = "Survivorship is a non-increasing function of age: for every compiled schedule the 438 knots are strictly increasing in age and non-increasing in l, l(90) equals the Brass grid's L_66, and l(x) = 0 exactly for x >= 120 years"
+test = "V-INV-08"
+verification_tests_added = []   # V-SF-01 waits for a manifest that sets density_capacity ([fold] verification_note)
