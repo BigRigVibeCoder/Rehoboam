@@ -9,10 +9,12 @@ tags: [verification]
 related: [PRJ-002, SPR-029, SPR-019, SPR-020, SPR-021, SPR-030, REV-SPR-019, REV-SPR-020, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.3.0
+version: 0.4.0
 ---
 
-> **BLUF: round 3 on `e3fa495`. Nearly ready: no blocker, 1 major (a non-positive motive edge still reads "moved by"), 4 minors and 3 nits** (§3). Every round-2 mutant now fails by name. Rulings R31–R38 are in §0c.
+> **BLUF: round 4 on `70b4c67`. Ready once two small fixes land: no blocker, no major, 2 minors (stale golden files; §2's edge predicate) and 3 nits** (§4). The contract alone reproduces every golden the manifest lists. Rulings R39–R42 are in §0d.
+>
+> **Round 3** on `e3fa495`. Nearly ready: no blocker, 1 major (a non-positive motive edge still reads "moved by"), 4 minors and 3 nits** (§3). Every round-2 mutant now fails by name. Rulings R31–R38 are in §0c.
 >
 > **Round 2** on `214fbd8`. Changes are needed before the merge: no blocker, 3 majors, 7 minors and 5 nits** (§2). An independent renderer reproduces all 15 golden files, and all 27 gates pass with their controls. The majors:
 > - the house walk is not M7's rule;
@@ -104,6 +106,24 @@ Round 3 was verified on `e3fa495` by the round-2 reviewer, with its scripts re-t
 | R38 | H8 | The person pool includes the parent ids of `LIFE_ENTRY` records. A father named in a birth sentence is then always in the pool, and his label stays unique | 70% |
 
 **Round 4:** the drafter applies R31–R38, regenerates with the tool, runs `check_all --part core`, and pushes once. The Architect verifies round 4 with `annals_review_r3/work_r3/`, then closes the review.
+
+## 0d. Architect rulings, round 4 (2026-10-17)
+
+The round-2 reviewer verified round 4 on `e3fa495`'s successor, `70b4c67` (§4).
+- **The contract alone now reproduces every golden file the manifest lists:** 15 of 15, byte for byte, with no flags.
+- All 34 mutants fail check 1, all 37 gates pass, and renders are deterministic across hash seeds, locales and shuffled extracts.
+- R31–R38 hold, with one wrong message under R37.
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R39 | I1 | Delete the two stale golden files (`ashcombe_line-6740622430173101898.*`). `--check` reports any file in `golden/` that no rendered group owns, as `STALE: orphan <file>`, with a control. Keep line-grouping coverage by rendering Edric's line as an extra checked group in check 8. It is listed by the self-test and not by the manifest, because §9's rule now picks Orm's line | 85% |
+| R40 | I2 | §2 defines `edge = kind` as "the chosen told edge of that kind exists (§3; for `motivated_by`, a positive one)". It defines `motive` over that same chosen edge | 90% |
+| R41 | I3 | The header message iterates to `max(len(got), len(want))` and reports an extra or a missing token by position | 95% |
+| R42 | I4 | §4 states that a `p-` label cites nothing beyond the person's id, and that only channel-A `LIFE_ENTRY` parents enter the pool | 85% |
+
+**Round 5:**
+1. The drafter applies R39–R42, regenerates with the tool, runs `check_all --part core`, and pushes once.
+2. The Architect verifies with `annals_review_r4/work_r4/`, closes this review, and merges PR #69.
 
 ## 1. The review (round 1, independent reviewer)
 
@@ -421,3 +441,32 @@ Copy verified: a git archive of `e3fa495` (`annals_review_r3/src/`). The scripts
 - **H8 (NIT):** whether `LIFE_ENTRY` parent ids are in the pool is unstated.
 
 **Scripts:** `indep_render.py` (literal defaults, new flags), `compare_indep.sh`, `mutants.py` (34 mutants), `probes.py` (20 probes), `compare_worlds.py`, `fixture_check.py`, `lint_probes.py` (22 files), `run_gates.sh`, `determinism.sh`.
+
+## 4. The verification (round 4, the round-2 reviewer)
+
+Copy verified: a git archive of `70b4c67` (`annals_review_r4/src/`). The scripts are in `annals_review_r4/work_r4/`; `indep_render.py` is updated from the round-4 text.
+
+**BLUF: 0 blockers, 0 majors, 2 minors and 3 nits. Ready once I1 and I2 are fixed.**
+- `./compare_indep.sh out_literal` gives 15 of the 15 files the manifest lists, byte for byte, with no flags. This is the first round in which the contract alone reproduces every live golden. Of the 17 files in `golden/`, the other 2 are stale orphans (I1).
+- `compare_worlds.py`: 88 identical renders across every probe world and group.
+- `determinism.sh`: 96 renders equal the goldens. Shuffled, comment-stripped extracts all give `keyframe_extract=958b6c9b8ddbe213`.
+- All 34 mutants fail check 1, and all 37 gates pass.
+
+**Verdicts:**
+
+| Ruling | Verdict | Evidence |
+|---|---|---|
+| R31 | Holds | `S 32 feud.declared 1 [14]`, plain. A weight of −200/−90, a single −90 or a single 0 renders the plain variant |
+| R32 | Holds | The text's digest equals the goldens' |
+| R33 | Holds | Run-wide. "the first son of Edric Ashcombe (Founder #8)". The label cites its row |
+| R34 | Holds | "line 67: missing: …" |
+| R35 | Holds | |
+| R36 | Holds | |
+| R37 | Holds | The header message is wrong for an extra trailing token (I3) |
+| R38 | Holds | Unexercised either way (I4) |
+
+**Findings:**
+- **I1 (MIN):** two stale golden files (`ashcombe_line-6740622430173101898.*`, round-3 output) are no longer listed by the manifest, and nothing checks them. Edric's line annal is no longer rendered, because §9's rule now picks Orm's line.
+- **I2 (MIN):** §2 still defines `edge = kind` as "a told edge of that kind is present". Read literally, Giles's −40 feud then renders `feud.declared.moved`, and 7 files change.
+- **I3 (NIT):** an extra trailing header token is reported as "token 0 differs: … where the render gives …" with identical text.
+- **I4 (NIT):** two choices are open and unexercised: what a `p-` label cites, and whether keyframe parents enter the pool.
