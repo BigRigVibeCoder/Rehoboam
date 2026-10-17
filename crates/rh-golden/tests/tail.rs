@@ -14,7 +14,9 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::disallowed_methods,
-    reason = "test helpers fail loudly; the snapshot switches are environment overrides of a test"
+    clippy::disallowed_types,
+    reason = "test helpers fail loudly; the snapshot switches are environment overrides of a test; \
+              the read-only check compares file modification times"
 )]
 
 use std::collections::BTreeMap;
