@@ -144,6 +144,8 @@ REQUIRED_GATES = (
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
+    "M2 F1 mortality reference positive control: a stale check value in the next M2 spec must FAIL "
+    "(SPR-016)",
     "M2 F1 positive control: a newborn drawn on rung 0's S8 must FAIL the first-draw rule (SPR-016 "
     "MR10)",
     "M2 F1 positive control: a stale golden file must FAIL (SPR-016)",
