@@ -29,7 +29,8 @@ NEXTEST_TARGET = re.compile(r"--test (\S+)")
 
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
-    "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)",
+    "Architecture: crate boundaries, planes and engine purity (lint_arch; V-INSP-03, V-PLN-01, "
+    "V-INSP-05)",
     "Baseline integrity control: a count 40 instructions off passes inside the band and is "
     "printed (SPR-009 R-8)",
     "Baseline integrity control: a local run says the tag and reason are not checked, never the "
@@ -257,6 +258,8 @@ REQUIRED_GATES = (
     "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)",
     "lint_arch control: a bench target requiring arena-alloc, with its allocator in benches/, "
     "passes (SPR-009 R-7)",
+    "lint_arch control: a deny-listed dev-dependency of an engine crate, and a viewer's normal "
+    "one, pass (V-INSP-05; SPR-011 T-00)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
     "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)",
     "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL "
@@ -276,6 +279,10 @@ REQUIRED_GATES = (
     "lint_arch positive control: a third-party crate in rh-sample must FAIL (SPR-003 GAP-4)",
     "lint_arch positive control: an allow-listed crate whose lints drift from the workspace's "
     "must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: an engine crate depending directly on a deny-listed crate must "
+    "FAIL (V-INSP-05; SPR-011 T-00)",
+    "lint_arch positive control: an engine crate reaching a deny-listed crate transitively must "
+    "FAIL (V-INSP-05; SPR-011 T-00)",
     "lint_arch positive control: kind contract outside rh-contract-* must FAIL",
     "lint_arch positive control: libm not pinned exactly must FAIL (SPR-003 GAP-4)",
     "lint_arch positive control: libm outside rh-sample must FAIL",
@@ -334,6 +341,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: an include! reached through a symlink resolves from the "
     "link, as rustc does (VER-SPR-008 MIN-3)",
+    "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must "
+    "FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
     "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "

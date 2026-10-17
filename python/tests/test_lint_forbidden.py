@@ -10,6 +10,7 @@ from lint_forbidden import (
     EXIT_OK,
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
+    FILE_IO_CRATES,
     FLOAT_EXEMPT_CRATES,
     FloatScan,
     FloatScope,
@@ -295,6 +296,9 @@ PLANTED = {
     "float_escape_reason": ("float", "f64"),
     "float_undeclared_field": ("float", "f32"),
     "allow_disallowed": ("lint-allow", "allow(clippy::disallowed_methods"),
+    "file_modified": ("file-clock", ".modified("),
+    "process_command": ("process", "process::Command"),
+    "file_io": ("file-io", "std::fs"),
 }
 
 
@@ -1017,3 +1021,72 @@ def test_an_include_resolves_from_the_symlink_not_its_target(tmp_path: Path) -> 
     report = scan_file(tmp_path / "link.rs", tmp_path)
     (violation,) = report.violations
     assert "[V-DET-19/wall-clock]" in violation, "the compiled include is ./gen.rs, not real/gen.rs"
+
+
+# --- File clocks, processes and file I/O (BCK-002 A-44; SPR-011 T-00) ----------------------------
+
+
+@pytest.mark.parametrize(
+    ("code", "rule"),
+    [
+        ("let t = meta.modified()?;", "file-clock"),
+        ("let t = meta . accessed ();", "file-clock"),
+        ("let t = std::fs::metadata(p)?.created()?;", "file-clock"),
+        ("use std::process::{Child, Command};", "process"),
+        ("use std::process::*;", "process"),
+        ("let c = std :: process :: Command :: new(x);", "process"),
+        ("use std::fs;", "file-io"),
+        ("let f = fs::File::open(p);", "file-io"),
+        ("let f = File::create(p);", "file-io"),
+        ("let o = OpenOptions::new();", "file-io"),
+    ],
+)
+def test_a_44_rules_catch_their_forms(code: str, rule: str) -> None:
+    """Each A-44 form is reported under its own rule, in engine code."""
+    report = Report(violations=[], escaped=[])
+    scan_source(code + "\n", "snippet.rs", report)
+    assert any(f"[V-DET-19/{rule}]" in v for v in report.violations), report.violations
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "let id = std::process::id();",
+        "std::process::exit(2);",
+        "let m = state.modified_rows;",
+        "let r = ledger.created_at(t);",
+        "let p = std::path::Path::new(x);",
+    ],
+)
+def test_a_44_rules_leave_allowed_forms_alone(code: str) -> None:
+    """process::id and exit, field names and paths are not file clocks, processes or I/O."""
+    report = Report(violations=[], escaped=[])
+    scan_source(code + "\n", "snippet.rs", report)
+    assert report.violations == []
+
+
+def test_file_io_is_allowed_only_where_the_list_says() -> None:
+    """The reviewed list of plane-A crates allowed file I/O (A-44): widening it is a review."""
+    assert set(FILE_IO_CRATES) == {"rh-registry", "rh-snapshot"}
+
+
+def test_file_io_is_exempt_in_tests_and_in_listed_crates() -> None:
+    """A test reads its golden file; a listed crate's src/ may do I/O; neither is reported."""
+    cases: tuple[tuple[FloatScope, bool], ...] = (("none", False), ("rule", True), ("zone", True))
+    for scope, allowed in cases:
+        report = Report(violations=[], escaped=[])
+        scan_source("std::fs::read(p);\n", "x.rs", report, floats=FloatScan(scope, (), allowed))
+        assert report.violations == [], (scope, allowed)
+    report = Report(violations=[], escaped=[])
+    scan_source("std::fs::read(p);\n", "x.rs", report, floats=FloatScan("zone"))
+    assert len(report.violations) == 1
+
+
+def test_the_file_io_workspace_reports_src_only(capsys: pytest.CaptureFixture[str]) -> None:
+    """rh-core's src/ is reported; its tests/ and rh-snapshot's src/ are not."""
+    assert main(["--manifest-path", str(FIXTURES / "file_io_workspace" / "Cargo.toml")]) == 1
+    out = capsys.readouterr().out
+    violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
+    assert len(violations) == 1
+    assert "file_io_workspace/rh-core/src/lib.rs:4:5" in violations[0]
+    assert "file I/O allowed in rh-registry, rh-snapshot only (A-44)" in out

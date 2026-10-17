@@ -1,0 +1,15 @@
+[package]
+name = "rh-cli"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lints]
+workspace = true
+
+[package.metadata.rehoboam]
+plane = "tool"
+kind = "tool"
+
+[dev-dependencies]
+reqwest = { path = "../vendor/reqwest" }

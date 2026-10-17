@@ -18,6 +18,18 @@ reports its metadata). Rules:
                       groups and globs), SystemTime, Utc::now, Local::now. A bare `Instant` is not
                       flagged, so that the simulation may name its own time type; every path to
                       the std type is.
+    file-clock        .modified(), .accessed() and .created() (std::fs::Metadata): a file's
+                      timestamps are a wall clock reached without a clock name (BCK-002 A-44).
+    process           std::process::Command (also in use groups and globs): another program's
+                      output and timing are outside the history tuple (A-44). std::process::id
+                      and exit stay allowed.
+    file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
+                      build.rs (where the float rule's scope says engine code) of a plane-A crate
+                      not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot
+                      (the journal and keyframes) and rh-registry (the system specs it reads for
+                      the ownership lint). tests/, benches/ and examples/ may read their golden
+                      files. Textual: a renamed import (`use std::fs as f;`) is caught at the
+                      `std::fs`; a dependency's own file API is not (A-44).
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
@@ -132,6 +144,7 @@ import tomllib
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal
 
 RULE_ID = "V-DET-19"
@@ -155,6 +168,17 @@ FLOAT_FREE_DIRS = frozenset({"tests", "benches", "examples"})
 # change (VER-SPR-003-TEST GAP-3).
 FLOAT_EXEMPT_CRATES = frozenset({"rh-sample"})
 FLOAT_API_RULE = "float-api"
+# REF: BCK-002 A-44 (VER-SPR-009-TEST GAP-5; SPR-011 T-00). The plane-A crates allowed file I/O
+# in src/ and build.rs, with why. tests/, benches/ and examples/ never link into the engine and may
+# read their golden files anywhere. python/tests/test_lint_forbidden.py asserts the set: widening it
+# is a reviewed change. --scan has no crate context and allows no one.
+FILE_IO_RULE = "file-io"
+FILE_IO_CRATES = MappingProxyType(
+    {
+        "rh-registry": "reads specs/systems/*.odd.toml for the ownership lint at load (SPR-004)",
+        "rh-snapshot": "the input journal and keyframe files (SPR-007), through rusqlite and bytes",
+    }
+)
 # Which float rule a file gets (scan_source): the float rule, the float-api rule, or neither.
 FloatScope = Literal["rule", "zone", "none"]
 
@@ -165,6 +189,8 @@ class FloatScan:
 
     scope: FloatScope = "rule"
     deps: tuple[tuple[str, re.Pattern[str]], ...] = ()
+    # The file's crate is on FILE_IO_CRATES (BCK-002 A-44); the file-io rule then does not apply.
+    file_io: bool = False
 
 
 FLOAT_API_WHY = (
@@ -257,6 +283,24 @@ RULES: tuple[Rule, ...] = (
             r"|\btime::(?:Instant|\*)|\btime::\{[^}]*\bInstant\b"
         ),
         "wall-clock read; simulation time comes from rh-core (GOV-003 §2)",
+    ),
+    Rule(
+        "file-clock",
+        _rx(r"\.\s*(?:modified|accessed|created)\s*\("),
+        "a file's modified/accessed/created time (fs::Metadata) is a wall-clock read without a "
+        "clock name; simulation time comes from rh-core (BCK-002 A-44)",
+    ),
+    Rule(
+        "process",
+        _rx(r"\bprocess::(?:Command\b|\*|\{[^}]*\bCommand\b)"),
+        "std::process::Command runs another program, whose output and timing are outside the "
+        "history tuple (DET-1; BCK-002 A-44)",
+    ),
+    Rule(
+        FILE_IO_RULE,
+        _rx(r"\bstd::fs\b|\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
+        "file I/O in plane A outside the crates allowed it (FILE_IO_CRATES): plane A reads its "
+        "inputs through the journal and the compiled world, never from files (BCK-002 A-44)",
     ),
     Rule(
         "unsafe",
@@ -722,7 +766,12 @@ def scan_source(
         report.scanned.add((file, scan))
     lexed = lex(source)
     findings = [
-        f for f in find_forbidden(lexed.code, name) if floats == "rule" or f.rule != FLOAT_RULE
+        f
+        for f in find_forbidden(lexed.code, name)
+        if (floats == "rule" or f.rule != FLOAT_RULE)
+        # File I/O is refused where the float rule's scope says engine code (src/, build.rs), and
+        # in the float zone's src/ too, unless the crate is allowed it (BCK-002 A-44).
+        and not (f.rule == FILE_IO_RULE and (floats == "none" or scan.file_io))
     ]
     if floats == "rule":
         findings += find_float_dep(lexed.code, name, dep_floats)
@@ -887,7 +936,7 @@ def scan_paths(
     paths: Iterable[Path],
     float_fields: frozenset[str] = frozenset(),
     float_exempt: frozenset[Path] = frozenset(),
-    dep_floats: dict[Path, list[tuple[str, re.Pattern[str]]]] | None = None,
+    crate_scans: dict[Path, FloatScan] | None = None,
     repo: Path = REPO_ROOT,
 ) -> Report:
     """Scan every ``.rs`` file under ``paths`` as plane-A code.
@@ -897,7 +946,9 @@ def scan_paths(
         float_fields: The columns the system specs declare ``f32_field``.
         float_exempt: Roots among ``paths`` whose files the float rule skips entirely (the float
             zone crate's directory); every other rule still applies to them.
-        dep_floats: Per root, the float-yielding dependency APIs its crate may reach.
+        crate_scans: Per root, what its crate brings to every file's :class:`FloatScan`: the
+            float-yielding dependency APIs it may reach, and whether it is allowed file I/O
+            (FILE_IO_CRATES). The scope is set per file.
         repo: The directory a followed include! must resolve inside (the repository).
 
     Raises:
@@ -906,14 +957,14 @@ def scan_paths(
     """
     report = Report(violations=[], escaped=[], repo=repo)
     scopes: dict[Path, FloatScope] = {}
-    deps_of: dict[Path, list[tuple[str, re.Pattern[str]]]] = {}
+    crate_of: dict[Path, FloatScan] = {}
     for root in paths:
         for file in rust_files([root]):
             if not float_rule_applies(file, root):
                 scopes.setdefault(file, "none")
             else:
                 scopes.setdefault(file, "zone" if root in float_exempt else "rule")
-            deps_of.setdefault(file, (dep_floats or {}).get(root, []))
+            crate_of.setdefault(file, (crate_scans or {}).get(root, FloatScan()))
     for file in sorted(scopes):
         source = file.read_text(encoding="utf-8")
         scan_source(
@@ -921,7 +972,7 @@ def scan_paths(
             file,
             report,
             float_fields,
-            floats=FloatScan(scopes[file], tuple(deps_of[file])),
+            floats=replace(crate_of[file], scope=scopes[file]),
         )
     return report
 
@@ -1029,12 +1080,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             names = ", ".join(name for name, _ in crates)
             scope = f"{len(crates)} crates scanned as plane A ({names})"
             apis = float_yielding_apis()
-            dep_floats = {
-                directory: [
-                    (dep, pattern)
-                    for dep, (users, pattern) in apis.items()
-                    if users is None or name in users
-                ]
+            crate_scans = {
+                directory: FloatScan(
+                    deps=tuple(
+                        (dep, pattern)
+                        for dep, (users, pattern) in apis.items()
+                        if users is None or name in users
+                    ),
+                    file_io=name in FILE_IO_CRATES,
+                )
                 for name, directory in crates
             }
             listed = sorted(
@@ -1042,13 +1096,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for dep, (users, _) in apis.items()
             )
             scope += f"; float-yielding APIs refused: {'; '.join(listed) or 'none'}"
+            scope += f"; file I/O allowed in {', '.join(sorted(FILE_IO_CRATES))} only (A-44)"
             # The float-zone note stays last: controls match it together with the file count.
             zone = frozenset(d for name, d in crates if name in FLOAT_EXEMPT_CRATES)
             if zone:
                 exempt = ", ".join(sorted(n for n, d in crates if d in zone))
                 scope += f"; float rule exempts {exempt} only (SPR-003 float zone)"
             report = scan_paths(
-                [directory for _, directory in crates], float_fields, zone, dep_floats
+                [directory for _, directory in crates], float_fields, zone, crate_scans
             )
     except (WorkspaceError, SpecError, OSError, UnicodeDecodeError) as err:
         print(f"lint_forbidden: cannot read the code to scan: {err}", file=sys.stderr)
