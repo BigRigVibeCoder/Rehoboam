@@ -40,3 +40,9 @@ cmp "$work/smoke_yearly_cut.ladder" worlds/smoke/baselines/smoke_yearly_1000y.la
 echo "GAP-6: the yearly cut of the monthly run = worlds/smoke/baselines/smoke_yearly_1000y.ladder"
 RH_GOLDEN_V_DET_11_CASES=64 cargo nextest run -p rh-golden --release --locked --test golden --no-capture \
   v_det_11_the_bisect_names_an_injected_month_table_and_row
+# SPR-016 (05.1 §6 item 4 v1.10; REV-SPR-016 R5): the exhaustive sweep of the fixed-point exp/ln reference
+# against its 60-digit oracle: every Q16_16-granular input of exp and ln, plus 2^16 pseudo-random Q32_32
+# inputs of each (about 5 minutes of Python).
+PY="${PYTHON:-python/.venv/bin/python}"
+"$PY" -I specs/numerics/exp_ln_v0.py --check --exhaustive
+echo "exp/ln v0: the exhaustive sweep is faithful and the golden file is current"

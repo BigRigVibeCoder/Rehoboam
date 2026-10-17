@@ -23,9 +23,10 @@ Checks (``python -I specs/numerics/exp_ln_v0.py``):
      of both pseudo-divisions by ``2^-32`` (proof in the contract text);
   3. over the edge cases, the Brass standard's 69 odds and 4,096 pseudo-random inputs: every
      result is within 1 ulp of the true value (faithful), equals the correctly rounded value
-     unless the true value lies within ``2^-24`` ulp of a rounding midpoint, and the internal
-     value before the final rounding is within ``2^-58`` of the truth (absolute for ln, relative
-     for exp: the budget the contract text proves);
+     unless the true value lies within ``2^-24`` ulp of a rounding midpoint (for exp, plus the
+     relative budget below, in ulps), and the internal value before the final rounding is within
+     the budget the contract text proves: ``164 2^-65`` (below ``2^-57.6``) absolute for ln,
+     ``133 2^-65`` (below ``2^-57.9``) relative for exp;
   4. the refusals: ``exp`` above 16, ``ln`` of 0 or of an operand of 63 bits or more,
      ``prob_from_hazard`` of a negative hazard; and ``exp(y) = 0`` for every ``y < -23``;
   5. ``prob_from_hazard`` is a ``Prob32`` (bits in [0, 2^32]), non-decreasing, 0 at 0, and
@@ -34,8 +35,10 @@ Checks (``python -I specs/numerics/exp_ln_v0.py``):
      (``--check``; ``--check --golden PATH`` checks another file: the positive control plants a
      stale one).
 
-``--exhaustive`` (nightly tier): check 3 over every ``Q16_16``-granular ``y`` in the exp domain
-(2,097,153 inputs) and every ``ln(n / 2^16)`` for n in [1, 2^20].
+``--exhaustive`` (nightly tier, ``bin/golden_nightly.sh``): check 3 over every ``Q16_16``-granular
+``y`` from -23 to 16 (2,555,905 inputs: the whole computed range of exp), every ``ln(n / 2^16)`` for
+n in [1, 2^20], and 2^16 pseudo-random ``Q32_32`` inputs of each function (the Q32_32 space itself,
+2^63 values, is sampled, never swept).
 
 Exit: 0 ok, 1 stale golden file, 2 a check failed. Standard library only (GOV-003 §3).
 Refs: `05.1` §6 item 4 (v1.10); SPR-010 (``rhe``, ``Q16_16``); SPR-011 ruling 4 (``Prob32``);
@@ -45,6 +48,7 @@ DET-3; V-DET-19.
 from __future__ import annotations
 
 import argparse
+import itertools
 import sys
 import tomllib
 from collections.abc import Callable, Iterator, Sequence
@@ -75,7 +79,11 @@ INV_LN2_SHIFT = 62
 I64_MIN, I64_MAX = -(1 << 63), (1 << 63) - 1
 ORACLE_DIGITS = 60
 NEAR_TIE = Fraction(1, 1 << 24)  # ulps: a true value this close to a midpoint may round either way
-BUDGET = Fraction(1, 1 << 58)  # the pre-rounding error: absolute for ln, relative for exp
+BUDGET_LN = Fraction(
+    164, 1 << 65
+)  # the proven pre-rounding budget of ln, absolute (05.1 §6 item 4)
+BUDGET_EXP = Fraction(133, 1 << 65)  # the proven pre-rounding budget of exp, relative
+EXHAUSTIVE_RANDOM = 1 << 16  # pseudo-random Q32_32 inputs per function in the nightly sweep
 SEED = 0x5EED_E8_1A  # SplitMix64 seed of the pseudo-random inputs
 RANDOM_CASES = 4096
 MASK64 = (1 << 64) - 1
@@ -230,12 +238,17 @@ class Accuracy:
     worst_internal: Fraction = Fraction(0)
     relative: bool = False  # exp's budget is relative to the true value; ln's is absolute
 
+    @property
+    def budget(self) -> Fraction:
+        """Return the proven pre-rounding budget of this function."""
+        return BUDGET_EXP if self.relative else BUDGET_LN
+
     def ok(self) -> bool:
         """Return whether the bound holds: faithful, correct away from ties, budget met."""
         return (
             self.unfaithful == 0
             and self.not_correctly_rounded == 0
-            and self.worst_internal < BUDGET
+            and self.worst_internal < self.budget
             and self.count > 0
         )
 
@@ -247,7 +260,7 @@ class Accuracy:
         if result not in (floor, floor + 1):
             self.unfaithful += 1
         correct = round(exact)
-        window = NEAR_TIE + (BUDGET * exact if self.relative else 0)  # the proven budget, in ulps
+        window = NEAR_TIE + (self.budget * exact if self.relative else 0)  # the budget, in ulps
         if result != correct:
             if abs(exact - floor - Fraction(1, 2)) < window:
                 self.near_ties += 1
@@ -301,7 +314,7 @@ def check_constants() -> bool:
 
 
 def check_convergence() -> bool:
-    """Check 2: c_k <= B_k = sum_{j > k} c_j (the infinite tail) for k = 1..32, with the oracle.
+    """Check 2: c_k <= B_k, the infinite tail sum_{j > k} c_j, for k = 1..32, with the oracle.
 
     With that condition the residual of a pseudo-division after step k is below B_k, so after
     step 32 it is below B_32 < 2^-32 (`05.1` §6 item 4). The tail is summed to j = 160; the rest
@@ -367,14 +380,20 @@ def check_accuracy(exhaustive: bool = False) -> bool:
     """Check 3: faithful rounding, correctness away from ties, the pre-rounding budget."""
     rng = SplitMix64(SEED)
     acc_exp, acc_ln = Accuracy(relative=True), Accuracy()
-    ys: Iterator[int] = (
-        iter(range(EXP_ZERO_BELOW, EXP_MAX + 1, Q16_ONE)) if exhaustive else exp_inputs(rng)
-    )
+    ys: Iterator[int] = exp_inputs(rng)
+    pairs: Iterator[tuple[int, int]] = ln_inputs(rng)
+    if exhaustive:  # the Q16_16 grid of both, then a Q32_32 sample of both
+        span = EXP_MAX - EXP_ZERO_BELOW
+        ys = itertools.chain(
+            range(EXP_ZERO_BELOW, EXP_MAX + 1, Q16_ONE),
+            (EXP_ZERO_BELOW + rng.below(span + 1) for _ in range(EXHAUSTIVE_RANDOM)),
+        )
+        pairs = itertools.chain(
+            ((n, Q16_ONE) for n in range(1, EXHAUSTIVE_LN_MAX + 1)),
+            ((rng.below(1 << 48) + 1, ONE) for _ in range(EXHAUSTIVE_RANDOM)),
+        )
     for y in ys:
         acc_exp.record(exp_q32(y), oracle_exp(Fraction(y, ONE)), exp_internal(y))
-    pairs: Iterator[tuple[int, int]] = (
-        ((n, Q16_ONE) for n in range(1, EXHAUSTIVE_LN_MAX + 1)) if exhaustive else ln_inputs(rng)
-    )
     for n, d in pairs:
         acc_ln.record(ln_ratio(n, d), oracle_ln(n, d), ln_internal(n, d))
     for name, acc in (("exp", acc_exp), ("ln", acc_ln)):
@@ -382,7 +401,7 @@ def check_accuracy(exhaustive: bool = False) -> bool:
             f"   {name}: {acc.count} inputs, unfaithful {acc.unfaithful}, not correctly rounded "
             f"away from a tie {acc.not_correctly_rounded}, near ties {acc.near_ties}, worst "
             f"pre-rounding error {float(acc.worst_internal):.2e} "
-            f"{'relative' if acc.relative else 'absolute'} (budget {float(BUDGET):.2e})"
+            f"{'relative' if acc.relative else 'absolute'} (budget {float(acc.budget):.2e})"
         )
     return acc_exp.ok() and acc_ln.ok()
 

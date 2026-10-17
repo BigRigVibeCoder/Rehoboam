@@ -65,7 +65,7 @@ cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sam
 cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)
 python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
-python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of specs/demography/mortality_f1.toml [algorithm.mortality_f1] (SPR-016); --control beta-one-power and --control shares-unnormalised must FAIL
+python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of specs/demography/mortality_f1.toml [algorithm.mortality_f1] (SPR-016); --control beta-one-power, --control infant-discontinuous and --control newborn-uncovered must FAIL (each isolates one check)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
