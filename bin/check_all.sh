@@ -1296,7 +1296,6 @@ run "population synthesis positive control: floors in place of the couple-table 
 run "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, R10)" "pass:FIXTURE WORLDS: PASS" fixture_worlds_gate &&
 run "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start lines (SPR-030; REV-SPR-030 R11)" "fail:STALE:" "$PY" -I specs/worldgen/selftest_fixture_worlds.py --control dormancy-one &&
 run "Population projection: the fixture worlds' member share and population under the house-member mechanics, uncapped and capped (SPR-030; REV-SPR-030 R1)" "pass:POPULATION PROJECTION: PASS" "$PY" -I specs/worldgen/project_population.py --check &&
-run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)" "pass:CRN PAIRING: PASS" "$PY" -I specs/determinism/selftest_crn_pairing.py --seeds 1 --controls &&
 run "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality --check; SPR-016)" "pass:M2 F1 MORTALITY: PASS" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check &&
 run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)" "fail:1. rung 0 = beta 1: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control beta-one-power &&
 run "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 (SPR-016 MR7)" "fail:5. infant sub-schedule: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control infant-discontinuous &&
@@ -1359,6 +1358,8 @@ run "lint_templates positive control: a prologue template with an unknown id mus
 run "lint_templates positive control: a control character in a template text must FAIL (REV-SPR-029 R27)" "fail:text carries a control character U+0007" annals_lint_control control_char &&
 part golden &&
 run "Required tools present (golden part)" pass require_tools golden &&
+# SPR-030 CRN pairing in part golden: pure Python, about 28 s (REV-SPR-030 R27: part core passed 12 minutes on PR #79's CI, 12:13)
+run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)" "pass:CRN PAIRING: PASS" "$PY" -I specs/determinism/selftest_crn_pairing.py --seeds 1 --controls &&
 # SPR-019 population-synthesis control in part golden: pure Python, no build (part core's 12-minute target; SPR-013 Architect ruling)
 run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
 # Tier 10 — performance: instruction counts (SPR-009 T-02a; GOV-002 tier 10)
