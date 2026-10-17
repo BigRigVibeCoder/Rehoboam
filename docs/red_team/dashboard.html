@@ -2970,6 +2970,65 @@
           </div>
         </div>
       </div>
+
+      <!-- Native Bevy Production Roadmap (PRJ-003 & SPR-033) -->
+      <div style="background: var(--bg-card); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 16px; padding: 24px; margin-top: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="arch-badge badge-plane-b">PLANE B HYDRATION</span>
+              <span class="arch-badge badge-tool">TOOL CRATE: rh-view</span>
+              <span class="status-pill active">PRJ-003 SUBMITTED</span>
+            </div>
+            <h3 style="font-size: 1.3rem; color: #ffffff; margin-top: 8px;">⚡ Native Bevy 0.20 Production Plan: <span style="color: var(--violet); font-family: var(--font-mono);">rh-view</span></h3>
+            <p style="font-size: 0.88rem; color: var(--slate-300); margin-top: 4px;">
+              Authored and owned by the Red Team. Formally submitted to the Architect for Decision D51 / ADR-0036 review. Zero Plane A contamination.
+            </p>
+          </div>
+          <div style="font-family: var(--font-mono); font-size: 0.82rem; color: var(--slate-400); text-align: right;">
+            <div>Target: Bevy 0.20 + WGPU</div>
+            <div style="color: var(--emerald);">Mesher: Binary Greedy (&lt;3ms)</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--cyan); font-weight: 700;">SPR-033: BEVY 0.20 SPIKE</div>
+            <div style="font-size: 0.95rem; font-weight: 700; color: #ffffff; margin-top: 4px;">Engine Scaffold &amp; Mesher</div>
+            <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 6px; line-height: 1.4;">
+              Create <code>crates/rh-view</code> in workspace. Implement 64×64×32 binary greedy mesher. Bench 60 FPS on integrated GPU.
+            </p>
+            <div style="margin-top: 10px; font-size: 0.75rem; color: var(--emerald); font-family: var(--font-mono);">Ready post-D51 · Tool Plane</div>
+          </div>
+
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--violet); font-weight: 700;">SPR-034: STREAM INGESTION</div>
+            <div style="font-size: 0.95rem; font-weight: 700; color: #ffffff; margin-top: 4px;">Plane-B Hydration Grammar</div>
+            <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 6px; line-height: 1.4;">
+              Read <code>rh-stream</code> Unix domain sockets. Procedurally generate timber frames, thatch, and keeps deterministically from seed.
+            </p>
+            <div style="margin-top: 10px; font-size: 0.75rem; color: var(--cyan); font-family: var(--font-mono);">Direct rh-protocol · Zero FFI</div>
+          </div>
+
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--amber); font-weight: 700;">SPR-035: TIMELINE SCRUBBER</div>
+            <div style="font-size: 0.95rem; font-weight: 700; color: #ffffff; margin-top: 4px;">Materializer Integration</div>
+            <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 6px; line-height: 1.4;">
+              Link with SPR-027 materializer. Jump to 10-year Arrow keyframes + journal replay. Scrubbing never modifies history.
+            </p>
+            <div style="margin-top: 10px; font-size: 0.75rem; color: var(--amber); font-family: var(--font-mono);">Post-SPR-027 · &lt;250ms jump</div>
+          </div>
+
+          <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px;">
+            <div style="font-family: var(--font-mono); font-size: 0.78rem; color: #ec4899; font-weight: 700;">SPR-036 / 037: AVATAR &amp; SIFTER</div>
+            <div style="font-size: 0.95rem; font-weight: 700; color: #ffffff; margin-top: 4px;">Being Gandalf + WebGPU</div>
+            <p style="font-size: 0.8rem; color: var(--slate-300); margin-top: 6px; line-height: 1.4;">
+              Direct camera to high-drama causal nodes. Inject PlayerAction over control.sock for street-level walking. Compile to WebGPU.
+            </p>
+            <div style="margin-top: 10px; font-size: 0.75rem; color: #ec4899; font-family: var(--font-mono);">Phase 2 · Input Journal Hook</div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- TAB: ENGINEERING TELEMETRY & HARDCORE STATS -->
