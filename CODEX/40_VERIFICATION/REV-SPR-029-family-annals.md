@@ -12,14 +12,14 @@ updated: 2026-10-17
 version: 0.2.0
 ---
 
-> **BLUF: round 2 on . Changes are needed before the merge: no blocker, 3 majors, 7 minors and 5 nits** (§2). An independent renderer reproduces all 15 golden files, and all 27 gates pass with their controls. The majors:
+> **BLUF: round 2 on `214fbd8`. Changes are needed before the merge: no blocker, 3 majors, 7 minors and 5 nits** (§2). An independent renderer reproduces all 15 golden files, and all 27 gates pass with their controls. The majors:
 > - the house walk is not M7's rule;
-> - check 1 re-derives  rows only;
+> - check 1 re-derives `S` rows only;
 > - the motive can name an inhibitor.
 >
 > Rulings R18–R30 are in §0b.
 >
-> **Round 1:** round 1 on `5509079`. Changes are needed before the merge: no blocker, 10 majors, 11 minors and 5 nits.**
+> **Round 1** on `5509079`: changes were needed before the merge (no blocker, 10 majors, 11 minors and 5 nits).
 > - **What holds.** An independent renderer written from the contract reproduces all ten golden files once three unstated layout choices are adopted. Rendering is byte-stable across hash seeds, locales and row orders. All 15 gates pass, and every lint control fails on its own diagnostic. Every slot binds to something its emitter declares, and nothing feeds plane A.
 > - **The majors.**
 >   - The contract does not fully determine the output files.
