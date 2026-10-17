@@ -2647,6 +2647,20 @@
             Target: specs/chronicle/annals_v0.md (PR #69)
           </div>
         </div>
+        <!-- CI Minute-Saving Skips -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--emerald);">CI Opt</span>
+            <span class="status-pill merged">✓ Approved CI Skips</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">CI Minute-Saving: Docs & Nightly Skips</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Approved. Docs-only PRs skip the long golden half of CI (running check_all --check / fast lints only). Nightly CI runs skip execution when zero new commits have landed on <code>main</code>.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--emerald); margin-top: 10px;">
+            Target: .github/workflows/ci.yml · bin/check_all.sh
+          </div>
+        </div>
 
         <!-- Historical Rulings Anchor -->
         <div class="interactive-card">
