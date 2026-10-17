@@ -551,7 +551,8 @@ key_field = "person"
 
 # ----------------------------------------------------------------------------- reads
 # Round 4 (NEW-4) and EVO-001 (R12): the reads below are declared unconditionally. An identity read requires its owner, so a world
-# that registers minds registers M2 and M7 (registration refuses one that does not, by name; SPR-023 therefore follows SPR-021).
+# that registers minds registers M2 and M7 (registration refuses one that does not, by name; SPR-023 develops against a stub M7 owner,
+# as [isolation] says, and integrates into real worlds after SPR-021).
 # A rate read carries its neutral and is dropped when its owner is absent: SPR-014's registration rule reports it, the dropped
 # column enumerates as an empty table (no vows, no artifacts) and a keyed lookup returns the neutral (S7: vow conflict 0, so
 # s_vow = 0; S6: rumour_reach 0, so the seek consideration is as at R = 0). The P1b identity reads of S6 and S7 (the vower, the
