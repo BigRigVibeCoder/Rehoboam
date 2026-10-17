@@ -29,6 +29,11 @@ NEXTEST_TARGET = re.compile(r"--test (\S+)")
 
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
+    "Annals fixtures: the committed fixture chronicles equal the scripted history (gen_fixtures "
+    "--check; SPR-029, REV-SPR-029 R10)",
+    "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive "
+    "or edge; every in-scope kind has a template and every out-of-scope kind a label "
+    "(lint_templates; SPR-029)",
     "Architecture: crate boundaries, planes and engine purity (lint_arch; V-INSP-03, V-PLN-01, "
     "V-INSP-05)",
     "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's "
@@ -70,6 +75,10 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
+    "Family annals v0: provenance re-derived by a whole-group re-render, template slots, no "
+    "model, calendar, a possible history under M7's rules, determinism in two processes, "
+    "coverage, injective designation, a canonical extract digest, golden annals and manifests "
+    "(selftest_annals_v0 --check; SPR-029)",
     "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden "
     "vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)",
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
@@ -542,6 +551,36 @@ REQUIRED_GATES = (
     "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the "
     "Registry by name (REV-SPR-020 R22, R26)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
+    "lint_templates positive control: a cause slot in a label must FAIL (SPR-029)",
+    "lint_templates positive control: a control character in a template text must FAIL "
+    "(REV-SPR-029 R27)",
+    "lint_templates positive control: a father slot on a kind other than BIRTH must FAIL "
+    "(REV-SPR-029 R6)",
+    "lint_templates positive control: a kind whose last variant is conditional must FAIL (SPR-029)",
+    "lint_templates positive control: a motive slot on a kind that declares no motives must FAIL "
+    "(SPR-029)",
+    "lint_templates positive control: a payload citation that is not the whole clause of the "
+    "emitting [[emits]] must FAIL (REV-SPR-029 F12)",
+    "lint_templates positive control: a payload slot the layout does not declare must FAIL "
+    "(SPR-029)",
+    "lint_templates positive control: a prologue slot outside its own template's vocabulary must "
+    "FAIL (REV-SPR-029 R27)",
+    "lint_templates positive control: a prologue template with an unknown id must FAIL "
+    "(REV-SPR-029 R27)",
+    "lint_templates positive control: a slot naming a role the kind does not declare must FAIL "
+    "(SPR-029)",
+    "lint_templates positive control: a slot that reads world state must FAIL (ADR-0024; SPR-029)",
+    "lint_templates positive control: a slot with a conversion or format spec must FAIL "
+    "(REV-SPR-029 F14)",
+    "lint_templates positive control: a snapshot slot the kind does not declare must FAIL "
+    "(SPR-029)",
+    "lint_templates positive control: an in-scope kind without a template must FAIL (SPR-029)",
+    "lint_templates positive control: an out-of-scope kind an emitter declares without a "
+    "[[label]] must FAIL (REV-SPR-029 R3)",
+    "lint_templates positive control: an unconditional variant that is not last must FAIL "
+    "(REV-SPR-029 F14)",
+    "lint_templates positive control: enum ids that differ from the emitter's column codes must "
+    "FAIL (REV-SPR-029 F13)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
     "population synthesis positive control: effect_ref.py with its succession order reversed must "
@@ -568,6 +607,40 @@ REQUIRED_GATES = (
     "guard (SPR-007 T-01..T-04)",
     "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
     "small-scale V-DET-01/02 (SPR-008 T-01)",
+    "selftest_annals positive control: a body sentence retagged as a prologue row must FAIL "
+    "provenance (REV-SPR-029 R2 P3)",
+    "selftest_annals positive control: a fixture claim with no triggered edge to a succession or "
+    "deposition must FAIL the possible-history check (REV-SPR-029 R26)",
+    "selftest_annals positive control: a fixture deposition moved to a month's first day, its "
+    "claims with it, must FAIL the possible-history check (REV-SPR-029 R26, R37)",
+    "selftest_annals positive control: a forged source row on a sidecar row must FAIL provenance "
+    "(REV-SPR-029 R19 P7b, R37)",
+    "selftest_annals positive control: a golden file no rendered group owns must FAIL as an "
+    "orphan (REV-SPR-029 R39)",
+    "selftest_annals positive control: a network module imported during the render must FAIL "
+    "(V-NAR-07; REV-SPR-029 F16)",
+    "selftest_annals positive control: a prologue row citing a keyframe row that does not exist "
+    "must FAIL provenance (REV-SPR-029 R2 P4)",
+    "selftest_annals positive control: a prologue row citing another house's root must FAIL "
+    "provenance (REV-SPR-029 R19 P13, R37)",
+    "selftest_annals positive control: a row citing an unrelated event must FAIL provenance "
+    "(REV-SPR-029 R2 P5)",
+    "selftest_annals positive control: a row that drops its own event must FAIL provenance "
+    "(REV-SPR-029 R2 P1)",
+    "selftest_annals positive control: a sentence with no sidecar row must FAIL provenance "
+    "(V-NAR-05; SPR-029)",
+    "selftest_annals positive control: a shared name left undisambiguated must FAIL injective "
+    "designation (REV-SPR-029 R24, R33)",
+    "selftest_annals positive control: a slot outside DEATH's declared roles must FAIL (SPR-029)",
+    "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)",
+    "selftest_annals positive control: a template that reads world state must FAIL (ADR-0024; "
+    "SPR-029)",
+    "selftest_annals positive control: a text shorter than the render must FAIL provenance "
+    "(REV-SPR-029 R34 P23)",
+    "selftest_annals positive control: an altered prologue text must FAIL provenance (REV-SPR-029 "
+    "R19 P12, R37)",
+    "selftest_annals positive control: two rows with their contents exchanged must FAIL "
+    "provenance (REV-SPR-029 R2 P6)",
     "selftest_envelope positive control: a motive on a triggered edge must FAIL (V-DATA-09; "
     "SPR-020)",
     "selftest_envelope positive control: a snapshot that is not the emitter's value at emission "
