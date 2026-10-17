@@ -35,12 +35,15 @@
 # Vital's timer pass submits the command, and M2's drain applies it in the same Vital (the timing MAJ-4 asked for); the
 # Day/Vital `when` names apply_death (timer fire or drain) rather than the timer pass alone (REV-EVO-001 MIN-1). Round 4
 # (NIT-15): a due timer whose victim or partner is already dead is dropped (drop_timer), never submitted.
+# 0.3.3 (2026-10-17, SPR-020, the event envelope; specs/chronicle/envelope_v0.md; no mechanics changed): every [[emits]] entry
+# declares the Registry [event_roles] it fills, the [motive_edges] its motivated_by edges may carry and the one anchored snapshot
+# of P1a, stress(actor) read from mind.stress at emit on its seven acts, the pre-act value (envelope_v0.md §4), checked by lint_odd.py.
 odd_r = 2
 
 [system]
 id = "T1.minds"
 name = "Minds of named actors (minds v0)"
-spec_version = "0.3.2"
+spec_version = "0.3.3"
 fidelity = "F1"
 status = "frozen"
 crate = "rh-minds"
@@ -414,24 +417,44 @@ fixed_point = false
 [[emits]]
 kind = "MENTAL_BREAK"
 when = "A break timer fires: the actor drops rational self-preservation for one act (SAGA-11); its motive edge points to the event that pushed stress over the threshold"
+roles = ["actor"]
+motives = ["GRIEF_FOR", "RETALIATION_FOR", "AMBITION_FOR", "JEALOUSY_OF", "VOW_OF"]   # the motivated_by edge to the event that pushed stress over the threshold
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]   # stress(actor)@eN (envelope_v0.md §4)
 [[emits]]
 kind = "MURDER_ATTEMPT"
 when = "The act of an ASSASSINATION_ATTEMPT break, or a feud's attack option chosen by IAUS; the outcome (success or failure) is in the event; success schedules a DEATH_DUE timer at (the next day start, Vital) whose fire submits ScheduleDeath to M2, and the victim dies at the next day start (the attempt-to-death delay is one day; round 3, MAJ-4; EVO-001 R9)"
+roles = ["actor", "target"]
+motives = ["RETALIATION_FOR", "AMBITION_FOR", "JEALOUSY_OF", "VOW_OF"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "FLED"
 when = "The act of a FLIGHT break (P1a: the actor resigns every office and leaves the court; P1b: the actor becomes a fugitive, SAGA-14)"
+roles = ["actor"]
+motives = ["FEAR_OF"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "HOLDINGS_BURNED"
 when = "The act of a BURN_HOLDINGS break (available only when M4 is registered, P1b)"
+roles = ["actor"]
+motives = ["GRIEF_FOR", "RETALIATION_FOR"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "DESPAIR_PACT"
 when = "The act of a PACT_OF_DESPAIR break: a bond with a stressed named relation and the renunciation of the actor's claims"
+roles = ["actor", "target"]   # actor: the breaking actor; target: the stressed relation
+motives = ["GRIEF_FOR", "LOYALTY_TO"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "FEUD_DECLARED"
 when = "IAUS chooses the feud decision's declare option against a target"
+roles = ["actor", "target"]
+motives = ["RETALIATION_FOR", "JEALOUSY_OF", "AMBITION_FOR"]   # to feud.cause_event
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "FEUD_ENDED"
 when = "IAUS chooses the reconcile option, or a party dies (the death path)"
+roles = ["actor", "target"]   # the party who reconciled (or died: the death path) and the other party
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]   # the pre-act value (envelope_v0.md §4)
 
 # ----------------------------------------------------------------------------- lifecycle commands sent
 [[commands]]

@@ -37,19 +37,19 @@ REQUIRED_GATES = (
     "printed (SPR-009 R-8)",
     "Baseline integrity control: a local run says the tag and reason are not checked, never the "
     "success wording (SPR-009 GAP-2)",
-    "Baseline integrity control: a push whose commit ends in [perf-baseline] with a Reason: line "
-    "passes (SPR-009 GAP-2)",
+    "Baseline integrity control: a push whose commit ends in [perf-baseline] with a Reason: "
+    "line passes (SPR-009 GAP-2)",
     "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason "
     "passes (SPR-009 ruling 3)",
-    "Baseline integrity positive control: [perf-baseline] outside the title's trailing tag group "
-    "must FAIL (SPR-009 review 5)",
-    "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 "
-    "ruling 3)",
+    "Baseline integrity positive control: [perf-baseline] outside the title's trailing tag "
+    "group must FAIL (SPR-009 review 5)",
+    "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL "
+    "(SPR-009 ruling 3)",
     "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)",
     "Baseline integrity positive control: a push with no [perf-baseline] commit and reason must "
     "FAIL (SPR-009 GAP-2)",
-    "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must FAIL "
-    "(SPR-009 ruling 3)",
+    "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must "
+    "FAIL (SPR-009 ruling 3)",
     "Baseline integrity: a changed instruction-count baseline equals the tool's output, in a "
     "[perf-baseline] PR (SPR-009 ruling 3)",
     "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite and zstd "
@@ -59,12 +59,14 @@ REQUIRED_GATES = (
     "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 "
     "--check; SPR-013 T-09)",
     "Chronicle SQL-twin equivalence",
+    "Chronicle envelope v0: anchored snapshots, typed edges, cause_told, provenance index, byte "
+    "budget (selftest_envelope; SPR-020)",
     "Clippy float backstop positive control: unnamed float arithmetic in plane A must FAIL "
     "(SPR-010 GAP-3)",
     "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 T-00)",
     "Clippy libm-only positive control: std ln in rh-sample must FAIL (SPR-003 T-00)",
-    "DEF-3 forged keyframes: no bit flip in the Arrow body panics, aborts or loads another state "
-    "(SPR-007 T-02)",
+    "DEF-3 forged keyframes: no bit flip in the Arrow body panics, aborts or loads another "
+    "state (SPR-007 T-02)",
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
@@ -85,8 +87,8 @@ REQUIRED_GATES = (
     " ruling 6)",
     "Golden baseline positive control: a pull_request run with no base must FAIL closed "
     "(VER-SPR-008 MAJ-1)",
-    "Golden baseline positive control: a push that changes the baseline with no [C3] commit must "
-    "FAIL (VER-SPR-008 MAJ-1)",
+    "Golden baseline positive control: a push that changes the baseline with no [C3] commit "
+    "must FAIL (VER-SPR-008 MAJ-1)",
     "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL "
     "(SPR-008 T-04)",
     "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must "
@@ -179,8 +181,8 @@ REQUIRED_GATES = (
     "Python: lint (ruff check)",
     "Python: types (mypy --strict)",
     "Python: unit tests (pytest)",
-    "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, GITHUB_EVENT_NAME, "
-    "RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
+    "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, "
+    "GITHUB_EVENT_NAME, RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
     "Required tools present (core part)",
     "Required tools present (golden part)",
@@ -190,26 +192,26 @@ REQUIRED_GATES = (
     "Rust: doctests (cargo test --doc)",
     "Rust: format (cargo fmt --check)",
     "Rust: lint (cargo clippy -D warnings)",
-    "Rust: lint rh-bench with the arena, the instruction-count targets included (cargo clippy -D "
-    "warnings; SPR-009 R-7)",
+    "Rust: lint rh-bench with the arena, the instruction-count targets included (cargo clippy "
+    "-D warnings; SPR-009 R-7)",
     "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)",
     "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)",
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
     "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)",
-    "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 "
-    "ruling 2)",
+    "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; "
+    "SPR-008 ruling 2)",
     "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)",
     "System specs (lint_odd)",
-    "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves "
-    "it (lint_odd --next; SPR-015)",
+    "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and "
+    "preserves it (lint_odd --next; SPR-015)",
     "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails "
     "(SPR-009)",
     "T-02b wall-clock control: another CPU model must report machine changed, never compare "
     "(RUN-002 §5)",
-    "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, medians and spreads from "
-    "the samples (SPR-009)",
+    "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, medians and spreads "
+    "from the samples (SPR-009)",
     "T-02b wall-clock positive control: a NaN median must be refused, never compared (SPR-009 "
     "DEF-3)",
     "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0,"
@@ -238,23 +240,23 @@ REQUIRED_GATES = (
     "V-INV-08 positive control: a planted Poisson death draw must FAIL (SPR-012 T-07)",
     "V-INV-08: M2 draws deaths by Bernoulli only (no Poisson or binomial draw; SPR-012 T-07)",
     "V-PERF-04 control: a speed-up passes and never re-baselines (docs/08 §9)",
-    "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 "
-    "T-02a)",
+    "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline "
+    "(SPR-009 T-02a)",
     "V-PERF-04 positive control: a deliberate 15% slowdown in instructions must FAIL (SPR-009 "
     "T-02)",
     "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 "
     "T-02)",
     "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline "
     "required (SPR-009 ruling 2)",
-    "V-PERF-11 allocation budget: smoke-world steady-state ticks within the recorded budget at 1 "
-    "and 4 threads (SPR-009 T-05)",
-    "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output exactly "
-    "(SPR-009 ruling 3, R-8)",
+    "V-PERF-11 allocation budget: smoke-world steady-state ticks within the recorded budget at "
+    "1 and 4 threads (SPR-009 T-05)",
+    "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output "
+    "exactly (SPR-009 ruling 3, R-8)",
     "V-PERF-11 counting allocator self-test: a known pattern is counted exactly (SPR-009 T-05)",
     "V-PERF-11 integrity positive control: an allocation baseline one allocation off must FAIL "
     "(SPR-009 R-8)",
-    "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must "
-    "FAIL (SPR-009 T-05)",
+    "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) "
+    "must FAIL (SPR-009 T-05)",
     "V-PERF-11 repeatability: a second run on the same commit gives identical allocation counts "
     "(SPR-009 T-05)",
     "V-PERF-11 toolchain control: an allocation baseline from another rustc must report "
@@ -296,31 +298,31 @@ REQUIRED_GATES = (
     "(SPR-009 review 2b)",
     "check_all verdict per part: --part core passes while only a golden-part gate fails "
     "(check_all_selftest; SPR-009 review 2b)",
-    "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the "
-    "tier (VER-SPR-008-TEST GAP-7)",
-    "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier "
-    "(VER-SPR-008-TEST GAP-3)",
+    "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL "
+    "the tier (VER-SPR-008-TEST GAP-7)",
+    "check_all verdict positive control: a failed gate hidden by || true must still FAIL the "
+    "tier (VER-SPR-008-TEST GAP-3)",
     "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier "
     "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
-    "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
-    "GAP-2)",
+    "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass "
+    "(SPR-007 GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
     "passes (SPR-007 ruling 4)",
     "fp-contract guard positive control: CC with -ffp-contract=fast must FAIL (SPR-007 GAP-2)",
-    "fp-contract guard positive control: CFLAGS with -ffp-contract=fast must FAIL (SPR-007 ruling "
-    "4)",
+    "fp-contract guard positive control: CFLAGS with -ffp-contract=fast must FAIL (SPR-007 "
+    "ruling 4)",
     "fp-contract guard positive control: CXXFLAGS with -ffp-contract=on must FAIL (SPR-007 GAP-2)",
     "fp-contract guard positive control: RUSTFLAGS with fp-contract must FAIL",
-    "fp-contract guard positive control: a .cargo/config.toml CFLAGS with -ffp-contract=fast must "
-    "FAIL (SPR-007 ruling 4)",
+    "fp-contract guard positive control: a .cargo/config.toml CFLAGS with -ffp-contract=fast "
+    "must FAIL (SPR-007 ruling 4)",
     "fp-contract guard positive control: a .cargo/config.toml CFLAGS without force = true must "
     "FAIL (SPR-007 ruling 4)",
     "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL",
-    "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must FAIL "
-    "(SPR-007 GAP-2)",
+    "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must "
+    "FAIL (SPR-007 GAP-2)",
     "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)",
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)",
@@ -345,8 +347,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)",
     "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)",
     "lint_arch positive control: a non-bench target requiring count-alloc must FAIL (SPR-009 T-05)",
-    "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL (SPR-009 "
-    "R-7)",
+    "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL "
+    "(SPR-009 R-7)",
     "lint_arch positive control: a second, target-specific libm entry must FAIL (SPR-003 GAP-10)",
     "lint_arch positive control: a symlinked workspace member must FAIL (SPR-003 GAP-13)",
     "lint_arch positive control: a test target requiring arena-alloc must FAIL (SPR-009 R-7)",
@@ -389,8 +391,8 @@ REQUIRED_GATES = (
     "(GOV-003 §2; SPR-009 T-05)",
     "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)",
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
-    "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed and "
-    "passes (SPR-008 T-00)",
+    "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed "
+    "and passes (SPR-008 T-00)",
     "lint_forbidden control: std::env::consts, env! and option_env! pass (DEF-5)",
     "lint_forbidden float-api positive control: a private float alias in rh-sample must FAIL "
     "(SPR-003 GAP-11)",
@@ -420,18 +422,18 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: a socket in rh-cli outside src/serve.rs must FAIL; "
     "src/serve.rs and tests/ pass, and the tool crate's float is not scanned (SPR-026 R7)",
     "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)",
-    "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its "
-    "tests/ and a builder's args pass (SPR-011 A-4)",
+    "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, "
+    "its tests/ and a builder's args pass (SPR-011 A-4)",
     "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: an include! reached through a symlink resolves from the "
     "link, as rustc does (VER-SPR-008 MIN-3)",
-    "lint_forbidden positive control: env::current_dir after a grouped import is reported on its "
-    "own line (DEF-5)",
-    "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must "
-    "FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)",
+    "lint_forbidden positive control: env::current_dir after a grouped import is reported on "
+    "its own line (DEF-5)",
+    "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES "
+    "must FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
-    "lint_forbidden positive control: fs::read after a grouped import is reported on its own line "
-    "(DEF-1)",
+    "lint_forbidden positive control: fs::read after a grouped import is reported on its own "
+    "line (DEF-1)",
     "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
     "(VER-SPR-008)",
@@ -450,17 +452,50 @@ REQUIRED_GATES = (
     "[[schedule]], frozen, must FAIL (EVO-001)",
     "lint_odd applies positive control: an [[applies]] payload type outside the closed "
     "vocabulary, frozen, must FAIL (EVO-001)",
-    "lint_odd applies positive control: an outcome-carrying command whose sender names no timer, "
-    "frozen, must FAIL (REV-EVO-001 R9)",
+    "lint_odd applies positive control: an outcome-carrying command whose sender names no "
+    "timer, frozen, must FAIL (REV-EVO-001 R9)",
     "lint_odd applies positive control: two [[applies]] entries for one command must FAIL "
     "(REV-EVO-001 MIN-11)",
     "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 "
     "ruling 11)",
     "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
-    "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling "
-    "11)",
-    "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns "
-    "and passes (EVO-001)",
+    "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 "
+    "ruling 11)",
+    "lint_odd envelope control: a draft spec's [[emits]] entry without roles warns and passes "
+    "(SPR-020; REV-SPR-020 R7)",
+    "lint_odd envelope control: roles, motives, snapshots, an algorithm source and a "
+    "cause_column that all resolve pass (SPR-020)",
+    "lint_odd envelope positive control: a cause_column on a state column without a declared "
+    "default must FAIL (REV-SPR-020 R2)",
+    "lint_odd envelope positive control: a cause_column that is not an owned event_ref of the "
+    "same entity must FAIL (SAGA-15; SPR-020, REV-SPR-020 R17)",
+    "lint_odd envelope positive control: a frozen spec's [[emits]] entry without roles must "
+    "FAIL (SPR-020; REV-SPR-020 R7)",
+    "lint_odd envelope positive control: a motive listed twice must FAIL (REV-SPR-020 R7)",
+    "lint_odd envelope positive control: a motive the Registry [motive_edges] lacks must FAIL "
+    "(SPR-020)",
+    "lint_odd envelope positive control: a non-witness role listed twice must FAIL (SPR-020)",
+    "lint_odd envelope positive control: a q8_8 attribute filled from a bool column must FAIL "
+    "(SPR-020)",
+    "lint_odd envelope positive control: a role the Registry [event_roles] lacks must FAIL "
+    "(SPR-020)",
+    "lint_odd envelope positive control: a snapshot declared twice must FAIL (REV-SPR-020 R7)",
+    "lint_odd envelope positive control: a snapshot from a column the spec neither owns nor "
+    "reads must FAIL (SPR-020)",
+    "lint_odd envelope positive control: a snapshot of a role the kind does not fill must FAIL "
+    "(SPR-020)",
+    "lint_odd envelope positive control: a snapshot of an attribute the Registry lacks must "
+    "FAIL (SPR-020)",
+    "lint_odd envelope positive control: a snapshot of witness must FAIL (REV-SPR-020 R7)",
+    "lint_odd envelope positive control: a snapshot without a source column must FAIL (SPR-020)",
+    "lint_odd envelope positive control: an algorithm source without its type must FAIL "
+    "(REV-SPR-020 R7)",
+    "lint_odd envelope positive control: an enum attribute filled from a column with other "
+    "codes must FAIL (SPR-020)",
+    "lint_odd envelope positive control: an enum attribute filled from a foreign column with "
+    "other codes must FAIL (REV-SPR-020 R7)",
+    "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral "
+    "warns and passes (EVO-001)",
     "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity "
     "warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)",
     "lint_odd neutral control: an identity read without a neutral and a rate read with a typed "
@@ -474,16 +509,20 @@ REQUIRED_GATES = (
     "(EVO-001)",
     "lint_odd neutral positive control: an identity read carrying a neutral must FAIL "
     "(REV-EVO-001 R12)",
-    "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must "
-    "FAIL (SPR-015)",
+    "lint_odd next control: a next version with no amendment lints and plants nothing in the lock "
+    "(REV-SPR-020 R26)",
+    "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound "
+    "must FAIL (SPR-015)",
     "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)",
     "lint_odd next positive control: a next version that changes a frozen algorithm step must "
     "FAIL (SPR-015)",
-    "lint_odd next positive control: an amendment whose text changed since the committed lock must "
-    "FAIL (SPR-015)",
+    "lint_odd next positive control: an amendment whose text changed since the committed lock "
+    "must FAIL (SPR-015)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
+    "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the "
+    "Registry by name (REV-SPR-020 R22, R26)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
@@ -499,10 +538,20 @@ REQUIRED_GATES = (
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
-    "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard "
-    "(SPR-007 T-01..T-04)",
+    "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced "
+    "guard (SPR-007 T-01..T-04)",
     "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
     "small-scale V-DET-01/02 (SPR-008 T-01)",
+    "selftest_envelope positive control: a motive on a triggered edge must FAIL (V-DATA-09; "
+    "SPR-020)",
+    "selftest_envelope positive control: a snapshot that is not the emitter's value at emission "
+    "must FAIL (V-DATA-08; SPR-020)",
+    "selftest_envelope positive control: a state value whose cause is a later event must FAIL "
+    "(V-SAGA-21; SPR-020)",
+    "selftest_envelope positive control: an input's consequence that loses the origin after one "
+    "hop must FAIL (05.2 §4.0 criterion 4; REV-SPR-020 R14)",
+    "selftest_envelope positive control: fifty witnesses on every event must FAIL the byte "
+    "budget (V-SAGA-15; REV-SPR-020 R11)",
     "uv lock --check positive control: drifted lock must FAIL",
     "wire_v1 positive control: a host whose window moves before the dropped year is on disk must "
     "FAIL the live-edge rule (SPR-026)",

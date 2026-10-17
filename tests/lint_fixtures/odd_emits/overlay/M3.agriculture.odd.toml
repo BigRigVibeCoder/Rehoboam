@@ -22,6 +22,7 @@ not_yet = []
 [[emits]]
 kind = "X_FIXTURE_FORMED"
 when = "declared by the overlay, not the Registry"
+roles = ["actor"]   # the envelope requires roles on a frozen spec (SPR-020; REV-SPR-020 R7); this case isolates the verb check (SPR-011 ruling 11)
 
 [scales]
 spatial = "region"

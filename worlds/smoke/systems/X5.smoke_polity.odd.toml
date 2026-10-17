@@ -39,6 +39,7 @@ fixed_point = false
 [[emits]]
 kind = "DECREE"
 when = "the yearly tax is levied"
+roles = []
 [[commands]]
 target = "X4.smoke_estate"
 command = "Settle"
