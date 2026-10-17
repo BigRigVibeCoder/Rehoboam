@@ -14,8 +14,10 @@
 //!
 //! **The life-course log** (`life_course.*`) holds a row for everyone who ever entered. It is
 //! append-only: a step may append rows, never remove or reorder them, never change a row's entry
-//! fields, and write a row's exit fields (`exit_kind`, `exit_tick`, `death_cause`) once, from open
-//! (`exit_kind = 0`) to closed; [`LifeCourseGuard`] refuses anything else. The log is never
+//! fields, and write a row's exit fields (`exit_kind`, `exit_tick`, `death_cause`) only in the
+//! step that closes it, from open (`exit_kind = 0`) to closed (not every field need change then);
+//! a row appended open carries the open values in its exit fields, and one appended closed (a
+//! back-filled ancestor) any; [`LifeCourseGuard`] refuses anything else (DEF-3). The log is never
 //! compacted (ADR-0007): kinship through the dead walks it (REV-P1a NEW-1).
 //!
 //! **Core invariants** (`Bookkeeping`, after compaction): every `person.*` column is as long as
@@ -53,6 +55,14 @@ pub const LIFE_COURSE_EXIT_FIELDS: [&str; 3] = [
 ];
 /// `exit_kind` of an open entry.
 pub const OPEN: i64 = 0;
+/// Every exit field's value while the entry is open (`specs/systems/M2.demography.odd.toml`:
+/// `exit_kind` open, `exit_tick` `i64::MAX`, `death_cause` none). An entry appended open carries
+/// exactly these; only the step that closes an entry changes them (DEF-3).
+pub const LIFE_COURSE_OPEN_VALUES: [(&str, i64); 3] = [
+    ("life_course.death_cause", 0),
+    ("life_course.exit_kind", OPEN),
+    ("life_course.exit_tick", i64::MAX),
+];
 
 /// The core's name in errors.
 const CORE: &str = "rh-core";
@@ -282,11 +292,16 @@ impl LifeCourseGuard {
                 )));
             }
         }
-        let kind_before = self
+        let kinds_after = tables
+            .get(LIFE_COURSE_EXIT_KIND)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        // A job that does not own exit_kind cannot change it: before is after.
+        let kinds_before = self
             .life_course
             .iter()
             .find(|(c, _)| c == LIFE_COURSE_EXIT_KIND)
-            .map(|(_, rows)| rows.as_slice());
+            .map_or(kinds_after, |(_, rows)| rows.as_slice());
         for (column, before) in &self.life_course {
             let after = tables.get(column).map(Vec::as_slice).unwrap_or_default();
             if after.len() < before.len() {
@@ -297,30 +312,47 @@ impl LifeCourseGuard {
                     after.len()
                 )));
             }
-            let exit = LIFE_COURSE_EXIT_FIELDS.contains(&column.as_str());
+            let open_value = LIFE_COURSE_OPEN_VALUES
+                .iter()
+                .find(|(c, _)| c == column)
+                .map(|&(_, v)| v);
             for (row, (old, new)) in before.iter().zip(after).enumerate() {
                 if old == new {
                     continue;
                 }
-                // An exit field may change only on a row that was open before the step.
-                let was_open = if column == LIFE_COURSE_EXIT_KIND {
-                    *old == OPEN
-                } else {
-                    let kinds = kind_before
-                        .or_else(|| tables.get(LIFE_COURSE_EXIT_KIND).map(Vec::as_slice));
-                    kinds.and_then(|k| k.get(row)).is_some_and(|&k| k == OPEN)
-                };
-                if !exit {
+                if open_value.is_none() {
                     return Err(refuse(format!(
                         "{column} row {row} changed from {old} to {new}: a life-course entry's \
                          fields are written once, at entry (SPR-011 ruling 5)"
                     )));
                 }
+                // DEF-3: exit fields are written only by the step that closes the entry.
+                let was_open = kinds_before.get(row) == Some(&OPEN);
+                let closes = was_open && kinds_after.get(row) != Some(&OPEN);
                 if !was_open {
                     return Err(refuse(format!(
                         "{column} row {row} changed from {old} to {new} on a closed entry: exit \
                          fields are written once (SPR-011 ruling 5)"
                     )));
+                }
+                if !closes {
+                    return Err(refuse(format!(
+                        "{column} row {row} changed from {old} to {new} on an entry this step \
+                         leaves open: exit fields are written only by the step that closes the \
+                         entry (SPR-011 ruling 5; DEF-3)"
+                    )));
+                }
+            }
+            // DEF-3: an entry appended open carries the open value in every exit field; one
+            // appended closed (a back-filled ancestor) may carry any.
+            if let Some(open) = open_value {
+                for (row, &value) in after.iter().enumerate().skip(before.len()) {
+                    if kinds_after.get(row) == Some(&OPEN) && value != open {
+                        return Err(refuse(format!(
+                            "{column} row {row} was appended open with {value}, not the open \
+                             value {open} (SPR-011 ruling 5; DEF-3)"
+                        )));
+                    }
                 }
             }
         }

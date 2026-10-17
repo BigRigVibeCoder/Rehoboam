@@ -108,7 +108,10 @@ fn mortal(
         if s.id != "M2.forgetful" {
             v.write(LIFE_COURSE_EXIT_KIND)?[row] = 1;
             v.write("life_course.exit_tick")?[row] = now;
-            v.write("life_course.death_cause")?[row] = 1;
+            // DEF-3: a closing need not write every exit field.
+            if s.id != "M2.terse" {
+                v.write("life_course.death_cause")?[row] = 1;
+            }
         }
     }
     match s.id {
@@ -132,6 +135,32 @@ fn mortal(
             }
         }
         "M2.reborn" if !persons.is_empty() => v.write("life_course.birth_tick")?[0] += 1,
+        // DEF-3: an exit field written on an entry the step leaves open.
+        "M2.fidget" => {
+            let kinds = col(v, LIFE_COURSE_EXIT_KIND)?;
+            if let Some(row) = kinds.iter().position(|&k| k == OPEN) {
+                v.write("life_course.exit_tick")?[row] = now;
+            }
+        }
+        // DEF-3: an entry appended open with an exit field that is not the open value; or
+        // (allowed) a dead ancestor appended closed, as SPR-019's back-fill will.
+        "M2.misborn" | "M2.backfill" => {
+            let open = s.id == "M2.misborn";
+            let id = (now / MONTH + 1) << 40;
+            let row = [
+                id,
+                1,
+                0,
+                -MONTH * 12 * 80,
+                now,
+                i64::from(!open),
+                if open { 5 } else { now - 1 },
+                i64::from(!open),
+            ];
+            for (c, value) in LIFE.iter().zip(row) {
+                v.write(c)?.push(value);
+            }
+        }
         // A system that writes person.named, which T1.namer owns.
         "M2.trespasser" => {
             v.write("person.named")?;
@@ -497,4 +526,44 @@ fn person_columns_without_person_id_are_not_a_ledger() {
     e.advance_until(SimTime::from_minutes(3 * MONTH), |_, _| {})
         .unwrap();
     assert_eq!(get(e.tables(), "person.alive"), [1, 0, 1], "not compacted");
+}
+
+#[test]
+fn def_3_exit_fields_change_only_in_the_step_that_closes_the_entry() {
+    for (n, seed) in [(30, 9), (5, 2), (120, 31)] {
+        for (mortal, expected) in [
+            (
+                "M2.fidget",
+                "on an entry this step leaves open: exit fields are written only by the step that closes the entry",
+            ),
+            ("M2.misborn", "was appended open with 5, not the open value"),
+        ] {
+            let mut e = engine(systems(mortal), world(n, 3, seed), seed, 1);
+            match e.advance_until(SimTime::from_minutes(MONTH * 12), |_, _| {}) {
+                Err(SimError::Ledger { system, message }) => {
+                    assert_eq!(system, mortal);
+                    assert!(message.contains(expected), "{mortal}, n {n}: {message}");
+                }
+                other => panic!("{mortal}, n {n}: refused for the wrong reason: {other:?}"),
+            }
+        }
+    }
+}
+
+#[test]
+fn def_3_a_terse_closing_and_a_row_appended_closed_pass() {
+    for (n, seed) in [(30, 9), (5, 2), (120, 31)] {
+        for mortal in ["M2.terse", "M2.backfill"] {
+            let mut e = engine(systems(mortal), world(n, 3, seed), seed, 1);
+            for month in 1..=12 * 10 {
+                e.advance_until(SimTime::from_minutes(MONTH * month), |_, _| {})
+                    .unwrap_or_else(|err| panic!("{mortal}, n {n}, month {month}: {err}"));
+                check_ledger(e.tables(), &format!("{mortal}, n {n}, month {month}"));
+            }
+            assert!(
+                get(e.tables(), PERSON_ID).len() < n,
+                "{mortal}: people died"
+            );
+        }
+    }
 }
