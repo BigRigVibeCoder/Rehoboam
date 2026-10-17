@@ -74,6 +74,10 @@ pub struct Setup {
     /// What its World Stream carries (SPR-013 T-09): a manifest world's dictionaries and history
     /// tuple. The smoke world has none (no life-course log, no Registry verbs).
     pub stream: Option<StreamInfo>,
+    /// The founders' display names, by `PersonId` (SPR-013 T-10; tool side only, the flavour
+    /// rule of `05.5` §3): the cast's names, and each household's children and servants named
+    /// after their head. Commoners have none.
+    pub names: BTreeMap<u64, String>,
 }
 
 /// A manifest world's stream dictionaries and the history tuple its segments carry.
@@ -159,6 +163,10 @@ fn world_toml(repo: &Path, name: &str) -> Result<WorldToml, Error> {
 /// # Errors
 /// [`Error`]: an unknown world, a manifest that does not match its pin or does not compile, a
 /// genesis or a construction refusal, or `strict` with a system not built (ruling 3).
+#[allow(
+    clippy::too_many_lines,
+    reason = "a manifest world's setup in its order: pin, compile, names, genesis, systems, stream"
+)]
 pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result<Setup, Error> {
     if name == SMOKE {
         return smoke(repo, seed.unwrap_or(1));
@@ -216,6 +224,7 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
     // Constructed once here, so a refusal (alpha, beta) fails the setup, not a registration.
     let m2 = Demography::from_world(&spec).map_err(|e| Error(e.to_string()))?;
     let script = scripted_inputs(repo, &toml.inputs, &spec)?;
+    let names = display_names(&repo.join(&toml.manifest), &registry, &spec)?;
     let calendar = spec.calendar;
     let provenance = Provenance {
         build: format!(
@@ -262,7 +271,41 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
         systems_line: Some(systems_line),
         not_built,
         stream: Some(stream),
+        names,
     })
+}
+
+/// The founders' display names (see [`Setup::names`]), in genesis order (ruling 10: the cast,
+/// then each household's sons, daughters and servants, then the rest).
+fn display_names(
+    manifest: &Path,
+    registry: &Registry,
+    spec: &WorldSpec,
+) -> Result<BTreeMap<u64, String>, Error> {
+    let rh_manifest::manifest::Outcome::Checked { manifest: m, .. } =
+        rh_manifest::manifest::validate_file(manifest, registry)
+    else {
+        return Err(Error(format!("{}: does not load", manifest.display())));
+    };
+    let ids = rh_worldgen::founder_ids(spec.seed, spec.founders.len(), &mut PersonIdTable::new())
+        .map_err(|e| Error(e.to_string()))?;
+    let mut labels: Vec<String> = m.cast.iter().map(|c| c.name.clone()).collect();
+    for h in &m.households {
+        let head = m
+            .cast
+            .iter()
+            .find(|c| c.id == h.head)
+            .map_or_else(|| h.head.clone(), |c| c.name.clone());
+        let n = |x: i64| usize::try_from(x).unwrap_or(0);
+        labels.extend((1..=n(h.children.sons)).map(|i| format!("{head}'s son {i}")));
+        labels.extend((1..=n(h.children.daughters)).map(|i| format!("{head}'s daughter {i}")));
+        labels.extend((1..=n(h.servants)).map(|i| format!("{head}'s servant {i}")));
+    }
+    Ok(ids
+        .iter()
+        .zip(labels)
+        .map(|(id, name)| (id.to_raw(), name))
+        .collect())
 }
 
 /// The bytes of a lowercase hex digest.
@@ -347,5 +390,6 @@ fn smoke(repo: &Path, seed: u64) -> Result<Setup, Error> {
         systems_line: None,
         not_built: Vec::new(),
         stream: None,
+        names: BTreeMap::new(),
     })
 }

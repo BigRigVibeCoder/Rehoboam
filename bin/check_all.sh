@@ -433,6 +433,30 @@ baseline_hand_edited_control() {
   "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed no
 }
 
+# SPR-013 T-10: the run never waits on a reader (05.10 §7 item 3). A tail --wait is attached to the run
+# directory and stopped (SIGSTOP) before the run starts; the run's wall time is reported against a
+# headless run and a streaming run without a reader. Reported, not gated (a wall clock).
+tail_stopped_wall() {
+  local d="$GOLDEN/tail_wall" t0 t1 headless streaming stopped pid
+  rm -rf "$d"; mkdir -p "$d"
+  t0=$(date +%s%N); "$RH_CLI_RELEASE" run solo --years 200 --out "$d/h.ladder" >/dev/null || return 1; t1=$(date +%s%N)
+  headless=$(( (t1 - t0) / 1000000 ))
+  t0=$(date +%s%N); "$RH_CLI_RELEASE" run solo --years 200 --run-dir "$d/a" >/dev/null || return 1; t1=$(date +%s%N)
+  streaming=$(( (t1 - t0) / 1000000 ))
+  "$RH_CLI_RELEASE" tail "$d/b" --wait >/dev/null & pid=$!
+  kill -STOP "$pid"
+  t0=$(date +%s%N); "$RH_CLI_RELEASE" run solo --years 200 --run-dir "$d/b" >/dev/null || { kill -KILL "$pid"; return 1; }; t1=$(date +%s%N)
+  stopped=$(( (t1 - t0) / 1000000 ))
+  kill -KILL "$pid"; wait "$pid" 2>/dev/null
+  echo "T-10 wall: solo 200 years: ${headless} ms headless, ${streaming} ms streaming, ${stopped} ms streaming with a stopped tail attached"
+}
+# SPR-013 T-09: solo's PR-tier golden run streams into a fresh run directory (the ladder is the
+# baseline's; watching changes nothing).
+solo_stream_run() {
+  rm -rf "$GOLDEN/solo_run"
+  "$RH_CLI_RELEASE" run solo --years 200 --threads 1 --ladder yearly --out "$GOLDEN/solo_yearly_t1.ladder" \
+    --journal "$GOLDEN/solo_yearly_t1.journal.sqlite" --run-dir "$GOLDEN/solo_run"
+}
 # SPR-012 T-08: solo's hand-edited baseline control, as smoke's: one hex digit of rung 1's hash typed over.
 solo_baseline_hand_edited_control() {
   local edited="$TARGET_DIR/rendered-fixtures/solo_baseline_hand_edited.ladder"
@@ -750,7 +774,8 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
   rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
-  rh-golden::solo"
+  rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
+  rh-cli::kill rh-golden::tail rh-cli::tail_live"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -984,6 +1009,11 @@ run "Rust: lint rh-bench with the arena, the instruction-count targets included 
 run "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 R-7)" "fail:count-alloc and arena-alloc are for separate bench targets" cargo check -p rh-bench --lib --features count-alloc,arena-alloc --locked --quiet &&
 # Tier 2 — unit tests
 run "Rust: build the workspace (cargo build)" pass cargo build --workspace --locked --quiet &&
+run "rh-stream by name: the canonical form reproduces the reference's golden lines, digests and match_id vectors; property round trip over seeds and sizes; planted refusals; the PR fuzz tier (SPR-013 T-09)" "pass:54 golden lines round-trip, 5 digests and 6 match_id vectors equal the reference's" cargo nextest run -p rh-stream --locked --test canonical --no-capture &&
+run "rh-stream by name: byte-identical sealing over seeds and world sizes, contiguous seq, R4 order refused when broken, resume verification, tampered segments refused (SPR-013 T-09)" "pass:T-09 writer: 4 seeds x 3 world sizes seal byte-identical segments" cargo nextest run -p rh-stream --locked --test writer --no-capture &&
+run "rh-stream by name: the pinned Parquet writer properties in every file, no float column, the golden segment's bytes pinned (SPR-013 T-09; the Architect's parquet review)" "pass:T-09 golden segment bytes: xxh3-128 ee00e7bc4a9b2f5610438c3c743e49a2" cargo nextest run -p rh-stream --locked --test parquet_props --no-capture &&
+run "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 T-09; GOV-002 tier 15; wire_v1.md §11)" "pass:T-09 mid-year kill -9: hamlet verified years 10-14" cargo nextest run -p rh-cli --locked --test kill --no-capture &&
+run "tail by name: a tail started before a run's first seal and following it prints the after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 sealed)" "pass:T-10: a tail started mid-run prints the after-run tail's lines" cargo nextest run -p rh-cli --locked --test tail_live --no-capture &&
 run "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)" "pass:left to the by-name gates" workspace_tests &&
 run "Workspace tests positive control: a by-name entry that names no test binary must FAIL (SPR-009 review 2a)" "fail:no binary IDs matched" workspace_tests_typo_control &&
 run "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard (SPR-007 T-01..T-04)" "pass:every_golden_line_reproduces" cargo nextest run -p rh-snapshot --locked --test hash --test golden --test journal --test keyframe --test guard --test stub_world --status-level pass &&
@@ -1138,7 +1168,14 @@ run "Golden resume positive control: a --years shorter than the journal's horizo
 run "Golden resume positive control: a --years past the journal's last input must FAIL without --extend (VER-SPR-008 DEF-1)" "fail:past the journal's last input" def1_resume 30 &&
 run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
 run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
-run "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and not-built systems in its header (SPR-012 T-08; rulings 3, 16)" "pass:solo: 200 yearly rungs to year 200 at 1 thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads 1 --ladder yearly --out "$GOLDEN/solo_yearly_t1.ladder" &&
+run "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and not-built systems in its header, streaming into its run directory (SPR-012 T-08; rulings 3, 16; SPR-013 T-09)" "pass:solo: 200 yearly rungs to year 200 at 1 thread(s)" solo_stream_run &&
+run "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, and the reference's canonical digests (SPR-013 T-09)" "pass:check_segments: 200 segments, 2425 records" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" &&
+run "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL (SPR-013 T-09; R2)" "fail:TYPE: y000000/step_digest: float columns ['living DOUBLE']" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" --plant float-column &&
+run "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)" "fail:DIGEST: y000000" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" --plant digest &&
+run "rh-golden by name: V-STR-01 on solo and the 60-person hamlet (byte-identical segments twice and at 1, 2 and 4 threads), the streaming ladder = the headless one, resume verification (SPR-013 T-09)" "pass:T-09 V-STR-01: hamlet, 60 years" cargo nextest run -p rh-golden --release --locked --test stream --no-capture &&
+run "rh-golden by name: tail prints every record once in seq order from any cursor, its canonical output digests to each segment's canonical_digest, it never writes to the run directory, and the display form matches its snapshots (SPR-013 T-10)" "pass:T-10: the display form matches its 4 snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture &&
+run "tail snapshot positive control: a stale snapshot must FAIL with the first differing line (SPR-013 T-10)" "fail:SNAPSHOT hamlet_follow_job differs at line 2" env RH_TAIL_SNAPSHOTS="$PWD/tests/lint_fixtures/golden/stale_tail_snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture the_display_form_matches_its_snapshots &&
+run "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, streaming, and streaming with a stopped tail attached, reported" "pass:T-10 wall: solo 200 years" tail_stopped_wall &&
 run "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)" "pass:solo: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/solo_yearly_tN.ladder" &&
 run "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
 run "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-012 T-08)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&

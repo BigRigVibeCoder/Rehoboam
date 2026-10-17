@@ -11,6 +11,7 @@
 //! - [`cli`]: the command-line form `rh-cli` exposes and spawned builds read.
 //! - [`stream`]: the World Stream of a run (SPR-013 T-09): feeding `rh-stream`'s writer, the run
 //!   directory.
+//! - [`tail`]: `rh-cli tail`, the sealed stream as display or canonical lines (SPR-013 T-10).
 //!
 //! The baselines are ladders this crate writes, never typed; `bin/check_baseline.py` gates them
 //! (T-04, ruling 6).
@@ -26,5 +27,6 @@ pub mod leak;
 pub mod run;
 pub mod sha256;
 pub mod stream;
+pub mod tail;
 pub mod vitals;
 pub mod world;

@@ -432,3 +432,57 @@ fn parse_bisect(words: &[String], repo: &Path) -> Result<Parsed, Error> {
     };
     Ok((base, cand, args, out))
 }
+
+/// `tail <run-dir> [--from-seq N] [--to-seq M] [--follow P] [--kind K ...] [--canonical] [--wait]`
+/// (SPR-013 T-10; [`crate::tail`]). Exit 0, or 2 on a tool error.
+#[must_use]
+pub fn tail_cmd(words: &[String], repo: &Path) -> u8 {
+    let parsed = parse_tail(words, repo);
+    let result = parsed.and_then(|args| {
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+        crate::tail::tail(&args, &crate::tail::no_annotations, &mut lock)
+    });
+    match result {
+        Ok(()) => OK,
+        // A reader that stops reading (`| head`) ends the tail, not as an error.
+        Err(e) if e.0.contains("Broken pipe") => OK,
+        Err(e) => {
+            eprintln!("{e}");
+            TOOL
+        }
+    }
+}
+
+fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Error> {
+    let bad = |what: &str| Error(format!("tail: {what}"));
+    let mut args = crate::tail::TailArgs {
+        repo: repo.to_path_buf(),
+        ..crate::tail::TailArgs::default()
+    };
+    let mut run_dir = None;
+    let mut it = words.iter();
+    while let Some(w) = it.next() {
+        let mut value = || it.next().ok_or_else(|| bad(&format!("{w} needs a value")));
+        match w.as_str() {
+            "--canonical" => args.canonical = true,
+            "--wait" => args.wait = true,
+            "--from-seq" => {
+                args.from_seq = value()?
+                    .parse()
+                    .map_err(|_| bad("--from-seq is a number"))?;
+            }
+            "--to-seq" => {
+                args.to_seq = Some(value()?.parse().map_err(|_| bad("--to-seq is a number"))?);
+            }
+            "--follow" => args.follow = Some(value()?.clone()),
+            "--kind" => args.kinds.push(value()?.clone()),
+            "--repo" => args.repo = PathBuf::from(value()?),
+            flag if flag.starts_with("--") => return Err(bad(&format!("unknown flag {flag}"))),
+            dir if run_dir.is_none() => run_dir = Some(PathBuf::from(dir)),
+            extra => return Err(bad(&format!("unexpected {extra}"))),
+        }
+    }
+    args.run_dir = run_dir.ok_or_else(|| bad("a run directory is required"))?;
+    Ok(args)
+}

@@ -111,6 +111,9 @@ fn the_same_records_seal_byte_identical_segments_with_contiguous_seq() {
             assert_eq!(deaths, persons);
         }
     }
+    println!(
+        "T-09 writer: 4 seeds x 3 world sizes seal byte-identical segments, seq contiguous from 0"
+    );
 }
 
 /// The digests count the life records since the previous digest; the writer fills them.

@@ -80,6 +80,14 @@ python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortali
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
+cargo nextest run -p rh-stream --locked --test canonical --test writer --test parquet_props   # rh-stream: the canonical form = the reference's golden lines; byte-identical sealing; the pinned Parquet properties and golden segment bytes (SPR-013 T-09); the parser fuzz is nightly (--run-ignored)
+cargo nextest run -p rh-cli --locked --test kill   # kill -9 during sealing and mid-year, then resume from the 10-year keyframe: the same bytes, no seq re-emitted below the first unsealed year (SPR-013 T-09)
+target/release/rh-cli run solo --years 200 --run-dir target/golden/solo_run --out target/golden/solo_yearly_t1.ladder   # a run directory: run.toml, journal, keyframes, stream/ (SPR-013 T-09)
+python -I specs/stream/check_segments.py target/golden/solo_run   # V-DATA-10 subset: DuckDB reads every sealed table with the DDLs' types; the reference recomputes every canonical_digest; --plant float-column and --plant digest must FAIL
+cargo nextest run -p rh-golden --release --test stream   # V-STR-01 on solo and the 60-person hamlet: byte-identical segments over repeats and threads; resume verification (SPR-013 T-09)
+target/release/rh-cli tail target/golden/solo_run [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K] [--canonical] [--wait]   # the sealed stream as display or canonical lines (SPR-013 T-10)
+cargo nextest run -p rh-golden --release --test tail   # tail: every record once from any cursor, canonical digests, read-only, display snapshots (RH_UPDATE_SNAPSHOTS=1 rewrites them; a stale copy must FAIL)
+cargo nextest run -p rh-cli --locked --test tail_live   # a tail started mid-run prints the after-run tail's lines (SPR-013 T-10)
 python -I specs/stream/selftest_wire_v1.py --check   # World Stream wire format v1 (IF-0 live edge): framing, control messages, refusals, the live-edge rule simulated with slow, stalled and reconnecting viewers, golden frames (SPR-026); --control window-gap must FAIL
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py

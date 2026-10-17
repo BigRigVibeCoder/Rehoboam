@@ -1,0 +1,419 @@
+//! `rh-cli tail <run-dir>` (SPR-013 T-10): the sealed World Stream as text.
+//!
+//! It reads the run directory's sealed channel-A segments in `seq` order (`rh-stream`'s reader,
+//! which checks every segment), and follows new ones as they seal (`--wait`). For each record it
+//! prints either the **display line** (the date in the world's calendar, the kind, the roles and
+//! causes, with the cast's names from the manifest; tool side, never plane A) or, with
+//! `--canonical`, the record's canonical line, after the canonical file header, so that the output
+//! of one segment is a canonical file whose digest is the segment's `canonical_digest`. Channel-C
+//! matches, when a sift has written channel C, are printed as annotation lines after the event that
+//! completed them (`^ match …`; `#^ match …` comments in canonical mode, which no digest reads).
+//!
+//! The status line of `05.10` §2 ends the output (and follows each new segment under `--wait`):
+//! the newest sealed sim-year on disk, its last tick and seq, the cursor (the next seq tail would
+//! print) and the lag (the sealed records after the cursor). It is a `#` comment in canonical mode.
+//!
+//! Filters: `--from-seq N` and `--to-seq M` bound the seq range (`--to-seq` is SPR-026's, for the
+//! wire's catch-up); `--follow P` keeps the records about one person (a cast name or a person id:
+//! its role, its life records, an input scoped to it); `--kind K` (repeatable) keeps one record kind
+//! (`DEATH` and other verbs name events). Digests and keyframe markers are about no one, so
+//! `--follow` drops them.
+//!
+//! Tail never writes: it opens no file for writing and creates nothing in the run directory (a
+//! read-only test, T-10). A stopped tail cannot slow the run: the writer never waits on a reader
+//! (`05.10` §7 item 3) and tail holds no lock.
+//!
+//! REF: `CODEX/05_PROJECT/SPR-013_WalkingSkeletonC.md` T-10; `05.10` §2, §5, §6; V-STR-05.
+
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use rh_core::time::{Calendar, SimTime};
+use rh_stream::canonical::{self, FileHeader};
+use rh_stream::record::{Body, Channel, Record};
+use rh_stream::seal::{channel_dir, read_segment, sealed_segments};
+use rh_stream::segment::{self, Dictionaries, FORMAT_A};
+
+use crate::run::Error;
+use crate::stream::{RunToml, TIMELINE};
+
+/// What to print.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TailArgs {
+    /// The run directory.
+    pub run_dir: PathBuf,
+    /// The repository (for the world's manifest: calendar and names).
+    pub repo: PathBuf,
+    /// The first seq to print.
+    pub from_seq: u64,
+    /// The last seq to print.
+    pub to_seq: Option<u64>,
+    /// Keep the records about this person (a name or an id).
+    pub follow: Option<String>,
+    /// Keep these kinds (record kinds or verbs); empty: all.
+    pub kinds: Vec<String>,
+    /// Print canonical lines.
+    pub canonical: bool,
+    /// Follow new segments until the run's last sim-year is sealed.
+    pub wait: bool,
+}
+
+/// The names and the calendar a display needs (tool side).
+pub struct Display {
+    calendar: Calendar,
+    names: BTreeMap<u64, String>,
+}
+
+impl Display {
+    fn name(&self, person: u64) -> String {
+        self.names
+            .get(&person)
+            .cloned()
+            .unwrap_or_else(|| format!("#{person:016x}"))
+    }
+
+    fn date(&self, tick: i64) -> String {
+        let d = self.calendar.to_date(SimTime::from_minutes(tick));
+        let sign = if d.year < 0 { "-" } else { "" };
+        format!(
+            "{sign}{:04}-{:02}-{:02} {:02}:{:02}",
+            d.year.unsigned_abs(),
+            d.month,
+            d.day,
+            d.hour,
+            d.minute
+        )
+    }
+
+    fn entity(&self, kind: u8, id: u64) -> String {
+        match kind {
+            1 => self.name(id),
+            0 => "the world".to_owned(),
+            k => format!("entity {k}:{id}"),
+        }
+    }
+}
+
+const DEATH_CAUSES: [&str; 6] = [
+    "none",
+    "natural",
+    "murder",
+    "battle",
+    "execution",
+    "accident",
+];
+const ROLES: [&str; 4] = ["actor", "target", "witness", "instrument"];
+const ORIGINS: [&str; 3] = ["born", "founder", "immigrant"];
+const SEXES: [&str; 2] = ["male", "female"];
+
+fn label<'a>(table: &[&'a str], code: impl Into<u64>) -> &'a str {
+    usize::try_from(code.into())
+        .ok()
+        .and_then(|i| table.get(i))
+        .copied()
+        .unwrap_or("?")
+}
+
+/// The display line of a record.
+#[must_use]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "one short binding per record kind, as the canonical module does"
+)]
+pub fn display_line(r: &Record, d: &Display) -> String {
+    let mut s = format!("{:>7} {} ", r.header.seq, d.date(r.header.tick));
+    match &r.body {
+        Body::Input(i) => {
+            let on = match (i.scope.as_str(), i.scope_id) {
+                ("person", Some(p)) => format!(" on {}", d.name(p)),
+                (scope, Some(id)) => format!(" on {scope} {id}"),
+                (_, None) => String::new(),
+            };
+            let _ = write!(
+                s,
+                "INPUT {}{on} by {} (journal #{})",
+                i.input_kind, i.producer, i.journal_seq
+            );
+        }
+        Body::Event(e) => {
+            let _ = write!(s, "{}", e.verb);
+            for role in &e.roles {
+                let _ = write!(
+                    s,
+                    " {} {}",
+                    label(&ROLES, role.role),
+                    d.entity(role.entity_kind, role.entity_id)
+                );
+            }
+            if e.verb == "DEATH"
+                && let Some(&cause) = e.payload.first()
+            {
+                let _ = write!(s, " ({})", label(&DEATH_CAUSES, cause.cast_unsigned()));
+            } else if !e.payload.is_empty() {
+                let _ = write!(s, " {:?}", e.payload);
+            }
+            let _ = write!(s, " [event #{}]", e.event_id);
+            for c in &e.causes {
+                let _ = write!(s, " <- #{}", c.cause_id);
+            }
+        }
+        Body::LifeEntry(e) => {
+            let born = d.date(e.birth_tick);
+            let _ = write!(
+                s,
+                "ENTERS {}: {}, {}, born {}",
+                d.name(e.person_id),
+                label(&ORIGINS, e.origin),
+                label(&SEXES, e.sex),
+                born.split(' ').next().unwrap_or_default()
+            );
+        }
+        Body::LifeExit(x) => {
+            let how = if x.exit_kind == 0 {
+                format!("death ({})", label(&DEATH_CAUSES, x.death_cause))
+            } else {
+                "emigration".to_owned()
+            };
+            let _ = write!(s, "LEAVES {}: {how}", d.name(x.person_id));
+            if let Some(e) = x.event_id {
+                let _ = write!(s, " <- #{e}");
+            }
+        }
+        Body::StepDigest(g) => {
+            let _ = write!(
+                s,
+                "DIGEST living {} births {} deaths {} state {:016x}",
+                g.living, g.births, g.deaths, g.state_hash
+            );
+        }
+        Body::Keyframe(k) => {
+            let _ = write!(
+                s,
+                "KEYFRAME {} state {:016x}",
+                k.keyframe_path, k.state_hash
+            );
+        }
+        Body::Match(m) => {
+            let _ = write!(s, "MATCH {}/{}", m.pack, m.pattern_id);
+        }
+    }
+    s
+}
+
+/// The person a record is about, for `--follow`: its target or actor, its life record, an input
+/// scoped to a person.
+fn about(r: &Record, person: u64) -> bool {
+    match &r.body {
+        Body::Input(i) => i.scope == "person" && i.scope_id == Some(person),
+        Body::Event(e) => e
+            .roles
+            .iter()
+            .any(|x| x.entity_kind == 1 && x.entity_id == person),
+        Body::LifeEntry(e) => e.person_id == person,
+        Body::LifeExit(x) => x.person_id == person,
+        Body::StepDigest(_) | Body::Keyframe(_) | Body::Match(_) => false,
+    }
+}
+
+fn kind_matches(r: &Record, kinds: &[String]) -> bool {
+    kinds.is_empty()
+        || kinds
+            .iter()
+            .any(|k| k == r.kind().name() || matches!(&r.body, Body::Event(e) if &e.verb == k))
+}
+
+/// The channel-C annotations of a run, by the channel-A seq they close at (none before a sift).
+pub type Annotations = BTreeMap<u64, Vec<String>>;
+
+/// No channel C yet (before T-11's sift): no annotation.
+///
+/// # Errors
+/// Never.
+pub fn no_annotations(_: &Path) -> Result<Annotations, Error> {
+    Ok(Annotations::new())
+}
+
+/// Where `tail` stands.
+struct Cursor {
+    next: u64,
+    last_seq: Option<u64>,
+    header_printed: bool,
+}
+
+/// The status line: the newest sealed segment on disk (its row only), the cursor and the lag.
+fn status(c: &Cursor, dir: &Path, canonical: bool) -> Result<String, Error> {
+    let newest = sealed_segments(dir)
+        .map_err(|e| Error(e.to_string()))?
+        .into_iter()
+        .next_back();
+    let last = match newest {
+        Some((year, path)) => {
+            let bytes = std::fs::read(path.join(segment::SEGMENT_FILE))
+                .map_err(|e| Error(format!("{}: {e}", path.display())))?;
+            let row = segment::read_row(&bytes).map_err(|e| Error(e.to_string()))?;
+            Some((year, row.last_tick, row.last_seq))
+        }
+        None => None,
+    };
+    let sealed = match last {
+        Some((y, t, s)) => format!("sealed through y{y:06} (tick {t}, seq {s})"),
+        None => "nothing sealed yet".to_owned(),
+    };
+    let lag = last.map_or(0, |(_, _, s)| (s + 1).saturating_sub(c.next));
+    let line = format!("STATUS {sealed} | cursor {} | lag {lag} records", c.next);
+    Ok(if canonical { format!("# {line}") } else { line })
+}
+
+/// The display context of the run's world: its calendar and the cast's names.
+///
+/// # Errors
+/// [`Error`] if the world cannot be set up.
+pub fn display_of(repo: &Path, run: &RunToml) -> Result<Display, Error> {
+    let world = crate::world::setup(repo, &run.world, Some(run.seed), false)?;
+    Ok(Display {
+        calendar: world.calendar,
+        names: world.names,
+    })
+}
+
+/// Runs `tail` and writes to `out`. Returns the exit code (0, or 2 on a tool error).
+///
+/// # Errors
+/// [`Error`] if the run directory, a segment or the world cannot be read.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the read loop in one place: segments in order, filters, annotations, status, follow"
+)]
+pub fn tail(
+    args: &TailArgs,
+    annotations: &dyn Fn(&Path) -> Result<Annotations, Error>,
+    out: &mut dyn std::io::Write,
+) -> Result<(), Error> {
+    // With --wait a tail may start before the run has written its run.toml.
+    while args.wait && !args.run_dir.join(crate::stream::RUN_TOML).is_file() {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let run = RunToml::read(&args.run_dir)?;
+    let display = display_of(&args.repo, &run)?;
+    let follow = match &args.follow {
+        None => None,
+        Some(p) => Some(
+            display
+                .names
+                .iter()
+                .find(|(_, n)| *n == p)
+                .map(|(id, _)| *id)
+                .or_else(|| p.parse().ok())
+                .ok_or_else(|| {
+                    Error(format!(
+                        "--follow {p}: no such person in the cast, nor an id"
+                    ))
+                })?,
+        ),
+    };
+    let dir = channel_dir(&args.run_dir.join("stream"), TIMELINE, Channel::A);
+    let last_year = run.years - 1;
+    let mut cursor = Cursor {
+        next: args.from_seq,
+        last_seq: None,
+        header_printed: false,
+    };
+    let io = |e: std::io::Error| Error(format!("tail: {e}"));
+    let mut printed_through: Option<i64> = None;
+    loop {
+        let notes = annotations(&args.run_dir)?;
+        for (year, path) in sealed_segments(&dir).map_err(|e| Error(e.to_string()))? {
+            if printed_through.is_some_and(|p| year <= p) {
+                continue;
+            }
+            let seg = segment::decode(
+                &read_segment(&path).map_err(|e| Error(e.to_string()))?,
+                run.minutes_per_year,
+            )
+            .map_err(|e| Error(format!("{}: {e}", path.display())))?;
+            let expected = cursor.last_seq.map_or(0, |s| s + 1);
+            if seg.row.first_seq != expected {
+                return Err(Error(format!(
+                    "{}: starts at seq {}, not {expected} (V-STR-05: no gap, no duplicate)",
+                    path.display(),
+                    seg.row.first_seq
+                )));
+            }
+            if args.canonical && !cursor.header_printed {
+                writeln!(out, "{}", header(&seg.dictionaries)).map_err(io)?;
+                cursor.header_printed = true;
+            }
+            for r in &seg.records {
+                let seq = r.header.seq;
+                let in_range = seq >= args.from_seq && args.to_seq.is_none_or(|m| seq <= m);
+                let keep =
+                    in_range && kind_matches(r, &args.kinds) && follow.is_none_or(|p| about(r, p));
+                if keep {
+                    let line = if args.canonical {
+                        canonical::render(r).map_err(|e| Error(e.to_string()))?
+                    } else {
+                        display_line(r, &display)
+                    };
+                    writeln!(out, "{line}").map_err(io)?;
+                    for note in notes.get(&seq).into_iter().flatten() {
+                        if args.canonical {
+                            writeln!(out, "#^ {note}").map_err(io)?;
+                        } else {
+                            writeln!(out, "{:>7} ^ {note}", "").map_err(io)?;
+                        }
+                    }
+                }
+                if in_range {
+                    cursor.next = seq + 1;
+                }
+            }
+            cursor.last_seq = Some(seg.row.last_seq);
+            printed_through = Some(year);
+            if args.wait {
+                writeln!(out, "{}", status(&cursor, &dir, args.canonical)?).map_err(io)?;
+                out.flush().map_err(io)?;
+            }
+            if args.to_seq.is_some_and(|m| seg.row.last_seq >= m) {
+                break;
+            }
+        }
+        let done = !args.wait
+            || printed_through.is_some_and(|y| y >= last_year)
+            || args
+                .to_seq
+                .is_some_and(|m| cursor.last_seq.is_some_and(|s| s >= m));
+        if done {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    if args.canonical && !cursor.header_printed {
+        writeln!(out, "{}", header_of_registry(&run)).map_err(io)?;
+    }
+    if !args.wait {
+        writeln!(out, "{}", status(&cursor, &dir, args.canonical)?).map_err(io)?;
+    }
+    Ok(())
+}
+
+fn header(d: &Dictionaries) -> String {
+    FileHeader {
+        timeline_id: TIMELINE,
+        channel: Channel::A,
+        registry_version: d.registry_version.clone(),
+        format: FORMAT_A.to_owned(),
+    }
+    .line()
+}
+
+fn header_of_registry(run: &RunToml) -> String {
+    FileHeader {
+        timeline_id: TIMELINE,
+        channel: Channel::A,
+        registry_version: run.registry_version.clone(),
+        format: FORMAT_A.to_owned(),
+    }
+    .line()
+}

@@ -1306,5 +1306,3 @@ def test_maj_1_min_2_renamed_std_raw_identifiers_and_nested_fs_are_refused(
 def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
     """Only std itself may not be renamed; a raw identifier or raw string is not a path (MIN-2)."""
     assert rules_hit(source) == []
-
-

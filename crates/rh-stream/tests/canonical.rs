@@ -8,6 +8,8 @@
 //!   planted files of §1.
 #![allow(
     clippy::too_many_lines,
+    clippy::many_single_char_names,
+    clippy::items_after_statements,
     clippy::cast_possible_truncation,
     clippy::unwrap_used,
     clippy::expect_used,
@@ -429,4 +431,81 @@ fn planted_non_canonical_files_are_refused() {
         canonical::hex16(&hex16("99aa06d3014798d86001c324468d497f")),
         "99aa06d3014798d86001c324468d497f"
     );
+}
+
+/// The parser's fuzz tier (nightly; SPR-013 T-09): every golden line and many generated ones,
+/// mutated by byte flips, insertions, deletions and token swaps, is either refused or already
+/// canonical (`render(parse(l)) == l`): no line parses to a record that prints differently, and
+/// nothing panics. The PR tier runs the same check on 1/64 of the mutations.
+fn fuzz(rounds: u64) -> (u64, u64) {
+    let mut lines: Vec<String> = GOLDEN
+        .lines()
+        .filter(|l| Kind::from_name(l.split(' ').next().unwrap_or("")).is_some())
+        .map(str::to_owned)
+        .collect();
+    let mut g = Gen(0xF022);
+    for _ in 0..200 {
+        for kind in KINDS {
+            lines.push(render(&record(&mut g, kind, 3)).unwrap());
+        }
+    }
+    const ALPHABET: &[u8] = b" 0123456789abcdefABCDEF-~%[],/_:.e\t\r\nZ";
+    let (mut refused, mut accepted) = (0u64, 0u64);
+    for round in 0..rounds {
+        for line in &lines {
+            let mut b = line.as_bytes().to_vec();
+            for _ in 0..=g.below(3) {
+                let at = usize::try_from(g.below(b.len() as u64 + 1)).unwrap();
+                let c = ALPHABET[usize::try_from(g.below(ALPHABET.len() as u64)).unwrap()];
+                match g.below(4) {
+                    0 if at < b.len() => b[at] = c,
+                    1 => b.insert(at, c),
+                    2 if at < b.len() => {
+                        b.remove(at);
+                    }
+                    _ => {
+                        let words: Vec<&[u8]> = b.split(|&x| x == b' ').collect();
+                        if words.len() > 2 {
+                            let (i, j) = (
+                                usize::try_from(g.below(words.len() as u64)).unwrap(),
+                                usize::try_from(g.below(words.len() as u64)).unwrap(),
+                            );
+                            let mut w: Vec<Vec<u8>> = words.iter().map(|x| x.to_vec()).collect();
+                            w.swap(i, j);
+                            b = w.join(&b' ');
+                        }
+                    }
+                }
+            }
+            let Ok(text) = String::from_utf8(b) else {
+                refused += 1;
+                continue;
+            };
+            match parse(&text) {
+                Ok(rec) => {
+                    assert_eq!(
+                        render(&rec).unwrap(),
+                        text,
+                        "round {round}: {line} -> {text}"
+                    );
+                    accepted += 1;
+                }
+                Err(_) => refused += 1,
+            }
+        }
+    }
+    (refused, accepted)
+}
+
+#[test]
+fn mutated_lines_are_refused_or_already_canonical() {
+    let (refused, accepted) = fuzz(1);
+    println!("T-09 canonical fuzz (PR tier): {refused} refused, {accepted} canonical");
+}
+
+#[test]
+#[ignore = "nightly fuzz tier: 64 rounds of mutations of every golden and generated line"]
+fn mutated_lines_are_refused_or_already_canonical_nightly() {
+    let (refused, accepted) = fuzz(64);
+    println!("T-09 canonical fuzz (nightly): {refused} refused, {accepted} canonical");
 }

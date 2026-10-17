@@ -126,8 +126,9 @@ REQUIRED_GATES = (
     "(SPR-008 T-02, DEF-2)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, "
     "with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)",
-    "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and "
-    "not-built systems in its header (SPR-012 T-08; rulings 3, 16)",
+    "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built "
+    "and not-built systems in its header, streaming into its run directory (SPR-012 T-08; "
+    "rulings 3, 16; SPR-013 T-09)",
     "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)",
     "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)",
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
@@ -230,6 +231,11 @@ REQUIRED_GATES = (
     "for each of 32 seeds and pooled (SPR-012; review MAJ-1, MIN-1)",
     "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and"
     " V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)",
+    "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, "
+    "streaming, and streaming with a stopped tail attached, reported",
+    "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's "
+    "and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, "
+    "and the reference's canonical digests (SPR-013 T-09)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
@@ -310,6 +316,9 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
+    "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL "
+    "(SPR-013 T-09; R2)",
+    "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
     "GAP-2)",
@@ -335,6 +344,9 @@ REQUIRED_GATES = (
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals "
+    "the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 "
+    "T-09; GOV-002 tier 15; wire_v1.md §11)",
     "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)",
     "lint_arch control: a bench target requiring arena-alloc, with its allocator in benches/, "
     "passes (SPR-009 R-7)",
@@ -500,6 +512,12 @@ REQUIRED_GATES = (
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
     "crash replay (SPR-006)",
+    "rh-golden by name: V-STR-01 on solo and the 60-person hamlet (byte-identical segments "
+    "twice and at 1, 2 and 4 threads), the streaming ladder = the headless one, resume "
+    "verification (SPR-013 T-09)",
+    "rh-golden by name: tail prints every record once in seq order from any cursor, its "
+    "canonical output digests to each segment's canonical_digest, it never writes to the run "
+    "directory, and the display form matches its snapshots (SPR-013 T-10)",
     "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
     "perturbations (SPR-008 T-02, T-03)",
     "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread "
@@ -510,8 +528,20 @@ REQUIRED_GATES = (
     "exact distributions (SPR-003)",
     "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard "
     "(SPR-007 T-01..T-04)",
+    "rh-stream by name: byte-identical sealing over seeds and world sizes, contiguous seq, R4 "
+    "order refused when broken, resume verification, tampered segments refused (SPR-013 T-09)",
+    "rh-stream by name: the canonical form reproduces the reference's golden lines, digests and "
+    "match_id vectors; property round trip over seeds and sizes; planted refusals; the PR fuzz "
+    "tier (SPR-013 T-09)",
+    "rh-stream by name: the pinned Parquet writer properties in every file, no float column, "
+    "the golden segment's bytes pinned (SPR-013 T-09; the Architect's parquet review)",
     "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
     "small-scale V-DET-01/02 (SPR-008 T-01)",
+    "tail by name: a tail started before a run's first seal and following it prints the "
+    "after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 "
+    "sealed)",
+    "tail snapshot positive control: a stale snapshot must FAIL with the first differing line "
+    "(SPR-013 T-10)",
     "uv lock --check positive control: drifted lock must FAIL",
     "wire_v1 positive control: a host whose window moves before the dropped year is on disk must "
     "FAIL the live-edge rule (SPR-026)",

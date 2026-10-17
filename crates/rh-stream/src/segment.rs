@@ -898,6 +898,19 @@ pub fn decode(
     })
 }
 
+/// The `segment` row of a channel-A segment from its `segment.parquet` alone (a reader's status
+/// line: the last sealed tick and seq, without decoding the records).
+///
+/// # Errors
+/// [`StreamError`] if the file is not a channel-A v0 segment row.
+pub fn read_row(segment_parquet: &[u8]) -> Result<SegmentRow, StreamError> {
+    decode_row(&read_table(
+        SEGMENT_A.name,
+        SEGMENT_A.columns,
+        segment_parquet,
+    )?)
+}
+
 fn decode_row(c: &[Column]) -> Result<SegmentRow, StreamError> {
     if c[0].len() != 1 {
         return Err(bad("the segment table holds other than one row"));
