@@ -67,6 +67,7 @@ mod support;
 mod lifecycle_queues {
     pub mod delivery;
     pub mod slots;
+    pub mod stale;
 }
 
 use std::path::PathBuf;
