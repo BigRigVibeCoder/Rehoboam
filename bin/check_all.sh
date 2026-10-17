@@ -383,6 +383,16 @@ population_synthesis_golden_control() {
   "$PY" -I specs/worldgen/selftest_population_synthesis.py --golden "$planted"
 }
 
+# Fixture worlds golden control (SPR-030): the committed golden outputs with twin_vales seed 1's named-actor count changed;
+# the exact reference must FAIL on them (selftest_fixture_worlds.py --golden).
+fixture_worlds_golden_control() {
+  local planted=target/rendered-fixtures/fixture_worlds_altered_golden.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^named_at_start 31 /s//named_at_start 32 /' specs/worldgen/golden/fixture_worlds_v0.txt > "$planted" || return 1
+  grep -q '^named_at_start 32 ' "$planted" || { echo "control not planted: no 'named_at_start 31' line in the fixture-worlds golden file"; return 1; }
+  "$PY" -I specs/worldgen/selftest_fixture_worlds.py --golden "$planted"
+}
+
 # Wire-format golden control (SPR-026): the committed wire golden file with its first frame's hex changed; the
 # reference must FAIL with STALE: (selftest_wire_v1.py --check --golden).
 wire_golden_control() {
@@ -1033,6 +1043,8 @@ run "Manifest: uz_job" pass "$PY" -I specs/manifest/manifest_v0.py validate spec
 run "Manifest: household (rung 1; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml &&
 run "Manifest: hamlet (rung 2; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml &&
 run "Manifest: manor (the SPR-019 fixture: a dynastic manor)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/manor.yaml &&
+run "Manifest: twin_vales (the SPR-030 dynastic fixture world)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/twin_vales.yaml &&
+run "Manifest: kingdom_10k (the SPR-030 G1a performance world)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/kingdom_10k.yaml &&
 run "Manifest: invalid_draft_style must FAIL" fail "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml &&
 run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-targets --locked --quiet -- -D warnings &&
 run "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)" pass cargo clippy -p rh-bench --all-targets --features count-alloc --locked --quiet -- -D warnings &&
@@ -1129,6 +1141,10 @@ run "population synthesis positive control: conceptions inside the closed period
 run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
 run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
 run "population synthesis positive control: a spec check value off by one must FAIL the reference's spec check (SPR-019; REV-SPR-019 R5)" "fail:SPEC MISMATCH" population_synthesis_spec_control &&
+run "Golden vectors: fixture worlds twin_vales and kingdom_10k at genesis, exact reference (SPR-030)" "pass:FIXTURE WORLDS: PASS" "$PY" -I specs/worldgen/selftest_fixture_worlds.py &&
+run "fixture worlds positive control: an altered golden output must FAIL (SPR-030)" "fail:STALE:" fixture_worlds_golden_control &&
+run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales (SPR-030)" "pass:CRN PAIRING: PASS" "$PY" -I specs/determinism/selftest_crn_pairing.py &&
+run "CRN pairing positive control: a world-wide epoch bump must FAIL V-DET-17's correlation threshold (SPR-030)" "fail:CRN PAIRING: FAIL" "$PY" -I specs/determinism/selftest_crn_pairing.py --control global-epoch &&
 run "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality --check; SPR-016)" "pass:M2 F1 MORTALITY: PASS" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check &&
 run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)" "fail:1. rung 0 = beta 1: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control beta-one-power &&
 run "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 (SPR-016 MR7)" "fail:5. infant sub-schedule: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control infant-discontinuous &&

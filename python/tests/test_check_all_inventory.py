@@ -56,6 +56,8 @@ REQUIRED_GATES = (
     "(SPR-007 ruling 4)",
     "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
     "CI workflows parse (YAML)",
+    "CRN pairing positive control: a world-wide epoch bump must FAIL V-DET-17's correlation "
+    "threshold (SPR-030)",
     "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 "
     "--check; SPR-013 T-09)",
     "Chronicle SQL-twin equivalence",
@@ -133,6 +135,7 @@ REQUIRED_GATES = (
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
+    "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales (SPR-030)",
     "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)",
     "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality "
     "--check; SPR-016)",
@@ -140,6 +143,8 @@ REQUIRED_GATES = (
     "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference "
     "--check; SPR-012 T-05)",
     "Golden vectors: M4 basket and price rule",
+    "Golden vectors: fixture worlds twin_vales and kingdom_10k at genesis, exact reference "
+    "(SPR-030)",
     "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference (SPR-019)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
@@ -170,8 +175,10 @@ REQUIRED_GATES = (
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
     "Manifest: household (rung 1; SPR-011 ruling 18)",
     "Manifest: invalid_draft_style must FAIL",
+    "Manifest: kingdom_10k (the SPR-030 G1a performance world)",
     "Manifest: manor (the SPR-019 fixture: a dynastic manor)",
     "Manifest: solo",
+    "Manifest: twin_vales (the SPR-030 dynastic fixture world)",
     "Manifest: uz_job",
     "Manifest: val_khor",
     "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp-contract=off "
@@ -312,6 +319,7 @@ REQUIRED_GATES = (
     "GAP-3)",
     "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
+    "fixture worlds positive control: an altered golden output must FAIL (SPR-030)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass "
     "(SPR-007 GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
