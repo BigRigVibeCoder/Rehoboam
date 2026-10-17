@@ -25,7 +25,9 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     q8_8/q16_16 (an exact decimal that is a multiple of the step) and inside its range. A rate read's neutral is also
     named in its in-coupling's `neutral` prose as `<column> = <value>`. A missing or untypeable neutral is a warning on
     a draft spec and an error on a frozen one; a mistyped neutral is always an error (a deliberate departure from
-    warning-on-draft: a wrong value is never right),
+    warning-on-draft: a wrong value is never right). The lint prints, per spec, the owners its identity reads require
+    (NOTE lines), and a substrate (`[purpose] role = "substrate"`, a system that must run alone: M2 on `solo`) may
+    read as identity only another substrate's column, so it never requires a system a smaller world lacks,
   - enum codes (EVO-001): an enum column of [[owns]] carries its codes, `values = [...]` (code = position) or
     `registry = "<table>"` (the Registry table's `ids` list, else its keys in byte-wise ascending order, as verb_id),
   - lifecycle commands, typed (EVO-001): each [[applies]] entry (one per command kind) has a payload `{ name: Type, ... }`
@@ -365,8 +367,10 @@ def column_type(col, owner, owners_type, reg):
 CLOSED_SPRINTS = set()
 
 
-def lint(reg, specs, req_ids, test_ids, adr_ids):
+def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None):
     errs, warns = [], []
+    notes = notes if notes is not None else []
+    roles = {sid: s.get("purpose", {}).get("role") for sid, (_, s) in specs.items()}
     owners_type = {o.get("column"): o.get("type") for _, (_, s) in specs.items() for o in s.get("owns", [])}
     enum_names = {}                               # enum column -> its code names (EVO-001)
     for _, (_, s) in specs.items():
@@ -463,10 +467,17 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
                 errs.append(f"{p}: in-coupling on {col}: output_bounds must be [min, max]")
         # absent owners (EVO-001; 05.1 §2 rule 2; REV-EVO-001 R12): an identity read requires its owner and has no
         # neutral; a rate or mode read carries the neutral a keyed lookup returns once the read is dropped
+        required_owners = sorted({r.get("owner") for r in s.get("reads", []) if r.get("owner") != sid and r.get("use") == "identity"})
+        if required_owners:
+            notes.append(f"{p}: requires {', '.join(required_owners)} (identity reads; a world that registers {sid} registers them)")
         for r in s.get("reads", []):
             col, owner, use = r.get("column"), r.get("owner"), r.get("use")
             if owner == sid:
                 continue
+            if use == "identity" and s.get("purpose", {}).get("role") == "substrate" and roles.get(owner) != "substrate":
+                strict.append(f"{p}: a substrate reads {col} from {owner} as identity, which requires {owner}"
+                              + (" (not a substrate)" if owner in roles else " (no spec, so its role is unknown)")
+                              + "; a substrate must run alone, so read it as rate or mode with a neutral (EVO-001 R12)")
             if "required" in r:
                 errs.append(f"{p}: read {col} from {owner}: `required` is not a field; an identity read always requires its owner (EVO-001 R12)")
             if use == "identity":
@@ -675,8 +686,11 @@ def main() -> int:
             return 1
         print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
         return 0
-    errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids)
+    notes = []
+    errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids, notes)
     errs = overlay_errs + errs
+    for n in notes:
+        print("NOTE ", n)
     for w in warns:
         print("WARN ", w)
     for e in errs:
@@ -699,7 +713,7 @@ def main() -> int:
     # the outcome timer on [[commands]]. frozen -> error, draft -> warning for the declarations; a wrong value is always
     # an error.
     if "M2.demography" in specs:
-        base = {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F1"}, "owns": [], "params": [], "rng": [{"purpose": "fix", "key": ["person"]}],
+        base = {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F1"}, "purpose": {"role": "substrate"}, "owns": [], "params": [], "rng": [{"purpose": "fix", "key": ["person"]}],
                 "schedule": [{"pulse": "Day", "phase": "Activity", "steps": ["x: y"]}]}
         rd = lambda col, owner, use, **kw: dict({"column": col, "owner": owner, "lag": "lagged", "use": use}, **kw)
         ap = lambda **kw: dict({"command": "X", "payload": "{ a: PersonId }", "from": [], "drained_by": "Day/Activity", "key": "living", "key_field": "a"}, **kw)
@@ -740,12 +754,17 @@ def main() -> int:
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }"}], "carries an outcome, so it needs timer", True),
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "nope"}], "needs purpose = one of its [[rng]] purposes", True),
             ("frozen", [], [ap(outcome=True, **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "", False),
+            ("frozen", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", True),
+            ("draft", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
+            ("frozen", [rd("person.alive", M2, "identity")], [], [], "", False),
         ]
         for status, reads, applies, commands, needle, want_err in probes:
             probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies, commands=commands)
             CLOSED_SPRINTS.add("SPR-006")
-            pe, pw = lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
-            mine = lambda xs: [e for e in xs if "probe.odd.toml" in e and ("neutral" in e or "required" in e or "[[applies]]" in e or "[[commands]]" in e)]
+            pe, pw = lint(reg, {M2: specs[M2], "M7.dynasty": specs["M7.dynasty"], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids) if "M7.dynasty" in specs else lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
+            pe = [e for e in pe if e.startswith("probe.odd.toml")]
+            pw = [e for e in pw if e.startswith("probe.odd.toml")]
+            mine = lambda xs: [e for e in xs if "neutral" in e or "required" in e or "[[applies]]" in e or "[[commands]]" in e or "substrate" in e]
             if needle:
                 assert any(needle in e for e in (pe if want_err else pw)), (status, needle, pe, pw)
                 assert not any(needle in e for e in (pw if want_err else pe)), (status, needle, pe, pw)

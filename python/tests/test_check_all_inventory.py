@@ -380,6 +380,8 @@ REQUIRED_GATES = (
     "neutral stated by its coupling pass (EVO-001)",
     "lint_odd neutral positive control: a frozen spec's rate read of an absent owner with no "
     "neutral must FAIL (EVO-001)",
+    "lint_odd neutral positive control: a frozen substrate reading a non-substrate's column as "
+    "identity must FAIL (REV-EVO-001 R12)",
     "lint_odd neutral positive control: a neutral of the wrong type must FAIL (EVO-001)",
     "lint_odd neutral positive control: a neutral that cannot be typed, frozen, must FAIL "
     "(EVO-001)",

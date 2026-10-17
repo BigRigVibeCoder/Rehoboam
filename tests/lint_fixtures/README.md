@@ -118,6 +118,7 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `odd_neutral/mistyped/` | as above | the same read with `neutral = "zero"` on a `q8_8` column | `neutral zero must be a TOML number for a q8_8 column` |
 | `odd_neutral/untyped/` | as above | a frozen mode read of `region.conditions` from M6, which has no spec and no `[era_state]` entry to type the neutral | `neutral of region.conditions cannot be typed` |
 | `odd_neutral/enum_member/` | as above | a mode read of M2's `person.death_cause` with `neutral = "smitten"`, not one of the column's `values` | `neutral smitten is not one of the enum's codes` |
+| `odd_neutral/substrate_identity/` | as above (R12) | M1.regions, a substrate, reading M7's `title.holder` as identity (a system a smaller world lacks) | `a substrate reads title.holder from M7.dynasty as identity` |
 | `odd_neutral/identity_neutral/` | as above (R12) | the identity read of M2 carrying `neutral = false` | `read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral` |
 | `odd_neutral/draft_missing/` | as above | the `missing` case on a draft spec | must succeed and warn `needs a neutral value` |
 | `sifting/life_ends_unanchored.toml` | `specs/sifting/lint_patterns.py` (V-SIFT-05; SPR-011 ruling 14) | `life_ends` with a `where` read that is not anchored to a bound event | `ERROR life_ends.e1: UNANCHORED state read` |
