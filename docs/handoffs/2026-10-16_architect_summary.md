@@ -1,4 +1,4 @@
-# Architect summary: 2026-10-16 (P0, closing G0)
+# Architect summary: 2026-10-16/17 (G0 passed; P1a starting)
 
 *A living handoff from the Architect (AGT-001) to the director, and to any later Architect session. It records the state of the work, so the work survives the loss of a cloud container. Decisions are recorded in `docs/decisions-log.md`; this file only points to them.*
 
@@ -13,13 +13,13 @@
 | SPR-005 | Time, phases, `SystemModel`, `AccessSpec`, a parallel scheduler identical at every thread count | Merged (#21) | VER-SPR-005 PASS |
 | SPR-006 | Agenda of timers, lifecycle command queues, event bus, invariants with replayable crash artifacts | Merged (#26) | VER-SPR-006 PASS |
 | SPR-007 | Plane hashes, keyframes (Arrow IPC with zstd), the SQLite journal, the unsynced guard, `resume` | Merged (#25) | VER-SPR-007 PASS |
-| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | Merging (PR #28). The Tester's round 3 found no open defect. The cross-machine check waits for your session | VER-SPR-008 PASS |
-| SPR-009 | Benchmarks and the regression gate | PR #34 at `46f0f59`: benches 7 and 8, instruction-count gate, DEF-1 (observer panic) and DEF-2 fixed. Tester re-running phase 1. T-03 (vitals) and the T-05 smoke parts finish after SPR-008 merges | — |
+| SPR-008 | Golden-run CI: smoke world, hash ladders, bisect | Merged (#28, `3bd2262`); first nightly green. The cross-machine check waits for your session | VER-SPR-008 PASS |
+| SPR-009 | Benchmarks and the regression gate | Merged (#34). T-04 (wall-clock baselines) waits for your session | VER-SPR-009 PASS |
 | SPR-010 | `rh-core::fixed` | Merged (#5) | VER-SPR-010 PASS |
 
-Escapes found after a sprint closed: 1 (documentation only) across 9 closed sprints (SPR-001 to SPR-008, SPR-010).
+Escapes found after a sprint closed: 2 across 10 sprints (SPR-002 documentation; SPR-008 a CI concurrency gap, fixed in SPR-009).
 
-**G0** passes when SPR-008 and SPR-009 complete (your ruling on D30–D36). What is left: SPR-009's remaining tasks and its Tester passes, the first nightly run on `main`, then `VER-G0`. Your cross-machine session is the last SPR-008 evidence.
+**G0 passed on 2026-10-17** (`VER-G0` 1.0.0): all ten P0 sprints closed, all seven criteria pass. P1a starts with SPR-011 (engine prerequisites); SPR-012 and SPR-013 follow. Your session on the laptop and `adjutant` still owes the cross-machine golden check, SPR-009 T-04 and RUN-001; none is a G0 criterion.
 
 **P1a specs on `main`:** `T1.minds` and `M7.dynasty` frozen 0.3.1 (PR #32), M2 rung 0 frozen 0.2.0 with the skeleton specs (PR #37), your G0 rulings applied across the plans and docs (PR #42), and the effect-language review record (PR #43, `REV-SPR-017` CLOSED).
 

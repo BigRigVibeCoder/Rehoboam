@@ -1,0 +1,12 @@
+# Fixture for bin/lint_arch.py (SPR-009 R-7; tests/lint_fixtures/README.md); not in the Rehoboam
+# workspace. A plane-A system crate depends on rh-bench with arena-alloc on.
+[workspace]
+members = ["rh-bench", "rh-sys-x"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"

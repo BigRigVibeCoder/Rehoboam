@@ -13,19 +13,42 @@ Refs: SPR-010 GAP-4 (VER-SPR-010-TEST); GOV-002 §1 laws 4 and 9, §4.
 """
 
 import re
+import shlex
 from pathlib import Path
 
 import check_all_selftest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "bin" / "check_all.sh"
+REPO = Path(__file__).resolve().parents[2]
+SCRIPT = REPO / "bin" / "check_all.sh"
 FIXED_POINT_FIXTURE = (
     Path(__file__).resolve().parents[2] / "tests" / "lint_fixtures" / "compile_fail" / "fixed_point"
 )
 RUN_NAME = re.compile(r'^\s*run "(?P<name>[^"]*)"')
+NEXTEST_PACKAGE = re.compile(r"-p (\S+)")
+NEXTEST_TARGET = re.compile(r"--test (\S+)")
 
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
     "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)",
+    "Baseline integrity control: a count 40 instructions off passes inside the band and is "
+    "printed (SPR-009 R-8)",
+    "Baseline integrity control: a local run says the tag and reason are not checked, never the "
+    "success wording (SPR-009 GAP-2)",
+    "Baseline integrity control: a push whose commit ends in [perf-baseline] with a Reason: line "
+    "passes (SPR-009 GAP-2)",
+    "Baseline integrity control: a regenerated baseline in a [perf-baseline] PR with a reason "
+    "passes (SPR-009 ruling 3)",
+    "Baseline integrity positive control: [perf-baseline] outside the title's trailing tag group "
+    "must FAIL (SPR-009 review 5)",
+    "Baseline integrity positive control: a [perf-baseline] PR without a reason must FAIL (SPR-009 "
+    "ruling 3)",
+    "Baseline integrity positive control: a hand-typed baseline must FAIL (SPR-009 ruling 3)",
+    "Baseline integrity positive control: a push with no [perf-baseline] commit and reason must "
+    "FAIL (SPR-009 GAP-2)",
+    "Baseline integrity positive control: a regenerated baseline without [perf-baseline] must FAIL "
+    "(SPR-009 ruling 3)",
+    "Baseline integrity: a changed instruction-count baseline equals the tool's output, in a "
+    "[perf-baseline] PR (SPR-009 ruling 3)",
     "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite and zstd "
     "(SPR-007 ruling 4)",
     "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
@@ -79,8 +102,8 @@ REQUIRED_GATES = (
     "(VER-SPR-008 DEF-1)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% "
     "(SPR-008 T-02, DEF-2)",
-    "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5% "
-    "(SPR-008 T-02, DEF-2)",
+    "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, "
+    "with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)",
     "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)",
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
@@ -104,6 +127,8 @@ REQUIRED_GATES = (
     "Manifest: val_khor",
     "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp-contract=off "
     "(SPR-003 GAP-6; SPR-007 ruling 4)",
+    "Observer invariance: an attached observer changes no monthly state hash at 1 and 4 threads "
+    "(SPR-009 ruling 4; V-DET-07 style)",
     "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)",
     "Ownership lint positive control: unowned write must FAIL",
     "Ownership lint: single writer from specs/systems (SPR-004 T-03)",
@@ -111,15 +136,21 @@ REQUIRED_GATES = (
     "Python: lint (ruff check)",
     "Python: types (mypy --strict)",
     "Python: unit tests (pytest)",
+    "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, GITHUB_EVENT_NAME, "
+    "RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
-    "Required tools present",
+    "Required tools present (core part)",
+    "Required tools present (golden part)",
     "Rust: bans and sources (cargo deny: crates.io only, no wildcards)",
     "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)",
     "Rust: build the workspace (cargo build)",
     "Rust: doctests (cargo test --doc)",
     "Rust: format (cargo fmt --check)",
     "Rust: lint (cargo clippy -D warnings)",
-    "Rust: unit tests (cargo nextest)",
+    "Rust: lint rh-bench with the arena, the instruction-count targets included (cargo clippy -D "
+    "warnings; SPR-009 R-7)",
+    "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)",
+    "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)",
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sifting patterns (lint_patterns)",
@@ -128,6 +159,14 @@ REQUIRED_GATES = (
     "ruling 2)",
     "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)",
     "System specs (lint_odd)",
+    "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails "
+    "(SPR-009)",
+    "T-02b wall-clock control: another CPU model must report machine changed, never compare "
+    "(RUN-002 §5)",
+    "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, medians and spreads from "
+    "the samples (SPR-009)",
+    "T-02b wall-clock positive control: a NaN median must be refused, never compared (SPR-009 "
+    "DEF-3)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
@@ -136,6 +175,28 @@ REQUIRED_GATES = (
     "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)",
     "V-DET-10 unsynced guard: read-only APIs fuzzed on the stub world (SPR-007 T-04)",
     "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)",
+    "V-PERF-04 control: a speed-up passes and never re-baselines (docs/08 §9)",
+    "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 "
+    "T-02a)",
+    "V-PERF-04 positive control: a deliberate 15% slowdown in instructions must FAIL (SPR-009 "
+    "T-02)",
+    "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 "
+    "T-02)",
+    "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline "
+    "required (SPR-009 ruling 2)",
+    "V-PERF-11 allocation budget: smoke-world steady-state ticks within the recorded budget at 1 "
+    "and 4 threads (SPR-009 T-05)",
+    "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output exactly "
+    "(SPR-009 ruling 3, R-8)",
+    "V-PERF-11 counting allocator self-test: a known pattern is counted exactly (SPR-009 T-05)",
+    "V-PERF-11 integrity positive control: an allocation baseline one allocation off must FAIL "
+    "(SPR-009 R-8)",
+    "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must "
+    "FAIL (SPR-009 T-05)",
+    "V-PERF-11 repeatability: a second run on the same commit gives identical allocation counts "
+    "(SPR-009 T-05)",
+    "V-PERF-11 toolchain control: an allocation baseline from another rustc must report "
+    "re-baseline required (SPR-009 review 7)",
     "V-PLN-01 compile-fail control: plane A naming a plane-B type must FAIL",
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
@@ -144,6 +205,8 @@ REQUIRED_GATES = (
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
     "Virtual telemetry (S5 prototype)",
+    "Workspace tests positive control: a by-name entry that names no test binary must FAIL "
+    "(SPR-009 review 2a)",
     "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip "
     "(SPR-011 ruling 13)",
     "cargo deny positive control: git source must FAIL",
@@ -158,6 +221,10 @@ REQUIRED_GATES = (
     "VER-SPR-008-TEST GAP-3, GAP-7)",
     "check_all positive control: the old PWD-joined golden path under an absolute "
     "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
+    "check_all verdict per part positive control: --part golden fails at its failing gate "
+    "(SPR-009 review 2b)",
+    "check_all verdict per part: --part core passes while only a golden-part gate fails "
+    "(check_all_selftest; SPR-009 review 2b)",
     "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the "
     "tier (VER-SPR-008-TEST GAP-7)",
     "check_all verdict positive control: a failed gate hidden by || true must still FAIL the tier "
@@ -188,13 +255,27 @@ REQUIRED_GATES = (
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
     "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)",
+    "lint_arch control: a bench target requiring arena-alloc, with its allocator in benches/, "
+    "passes (SPR-009 R-7)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
+    "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)",
+    "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL "
+    "(SPR-009 T-05)",
+    "lint_arch positive control: a #[global_allocator] under a source directory named target "
+    "must FAIL (VER-SPR-009-TEST GAP-21)",
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",
+    "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)",
     "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)",
+    "lint_arch positive control: a non-bench target requiring count-alloc must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL (SPR-009 "
+    "R-7)",
     "lint_arch positive control: a second, target-specific libm entry must FAIL (SPR-003 GAP-10)",
     "lint_arch positive control: a symlinked workspace member must FAIL (SPR-003 GAP-13)",
+    "lint_arch positive control: a test target requiring arena-alloc must FAIL (SPR-009 R-7)",
     "lint_arch positive control: a third-party crate in rh-sample must FAIL (SPR-003 GAP-4)",
+    "lint_arch positive control: an allow-listed crate whose lints drift from the workspace's "
+    "must FAIL (SPR-009 T-05)",
     "lint_arch positive control: kind contract outside rh-contract-* must FAIL",
     "lint_arch positive control: libm not pinned exactly must FAIL (SPR-003 GAP-4)",
     "lint_arch positive control: libm outside rh-sample must FAIL",
@@ -217,6 +298,9 @@ REQUIRED_GATES = (
     "lint_arch positive control: system -> rh-snapshot as a build-dependency must FAIL",
     "lint_arch positive control: system -> rh-snapshot must FAIL",
     "lint_arch positive control: system -> system must FAIL",
+    "lint_arch positive control: unsafe outside the allow-listed file must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: unsafe_code relaxed by a crate not on the allow-list must FAIL "
+    "(GOV-003 §2; SPR-009 T-05)",
     "lint_forbidden control: a declared f32_field escape is accepted and counted (SPR-010 T-04)",
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
     "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed and "
@@ -269,6 +353,8 @@ REQUIRED_GATES = (
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
+    "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
+    "R-7)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
@@ -296,7 +382,7 @@ REQUIRED_CHAIN_FUNCTIONS = (
 def _chain_lines() -> list[str]:
     """Return the non-comment lines from the first top-level `run` to `status=$?`."""
     lines = SCRIPT.read_text(encoding="utf-8").splitlines()
-    start = next(i for i, line in enumerate(lines) if line.startswith("run "))
+    start = next(i for i, line in enumerate(lines) if line.startswith(("run ", "part ")))
     end = lines.index("status=$?")
     return [line for line in lines[start:end] if not line.lstrip().startswith("#")]
 
@@ -364,3 +450,106 @@ def test_the_baseline_push_controls_hold_with_an_absolute_target_dir() -> None:
     """VER-SPR-008-TEST DEF-3: no `$PWD/$GOLDEN` join; an absolute CARGO_TARGET_DIR works."""
     assert check_all_selftest.abs_target(plant=False) == 0
     assert check_all_selftest.abs_target(plant=True) == 1
+
+
+def test_the_chain_has_two_parts_and_every_gate_belongs_to_exactly_one() -> None:
+    """SPR-009 review 2b: `part core` opens the chain and `part golden` follows it, once each.
+
+    Every `run` line comes after `part core`, so it belongs to the part whose marker is the last
+    one above it: exactly one part. `--part` runs one, no flag both.
+    """
+    lines = [line.strip() for line in _chain_lines() if line.strip()]
+    assert lines[0] == "part core &&"
+    assert [line for line in lines if line.startswith("part ")] == [
+        "part core &&",
+        "part golden &&",
+    ]
+    golden = lines.index("part golden &&")
+    names = [m.group("name") for line in lines if (m := RUN_NAME.match(line))]
+    in_golden = {m.group("name") for line in lines[golden:] if (m := RUN_NAME.match(line))}
+    assert len(names) == len(set(names)), "a gate name appears twice"
+    # The golden runs and the perf gates are the golden part; the debug tests and Python the core.
+    assert {n for n in names if n.startswith(("Golden run:", "V-PERF-04 instruction"))} <= in_golden
+    assert {
+        n for n in names if n.startswith(("Rust: unit tests", "Python: unit tests"))
+    }.isdisjoint(in_golden)
+
+
+# nextest options that take a value; any other bare word after `nextest run` is a test filter.
+NEXTEST_VALUE_OPTIONS = {"-p", "--package", "--test", "--status-level", "-E", "--features"}
+
+
+def _whole_binaries(line: str) -> bool:
+    """Whether a by-name gate runs its binaries whole: a passing gate with no test filter.
+
+    A positive control (a run that must fail) or a filtered run covers only part of a binary, so
+    it never stands for the whole of it (VER-SPR-009-TEST GAP-20).
+    """
+    words = shlex.split(line.strip().removesuffix("&&"))
+    if len(words) < 3 or not words[2].startswith("pass") or "nextest" not in words:
+        return False
+    args = words[words.index("nextest") + 2 :]
+    bare = [
+        w
+        for i, w in enumerate(args)
+        if not w.startswith("-") and (i == 0 or args[i - 1] not in NEXTEST_VALUE_OPTIONS)
+    ]
+    return not bare
+
+
+def _by_name_test_binaries(*, release: bool) -> set[str]:
+    """Nextest binary IDs the by-name gates run whole (with or without --release lines)."""
+    found = set()
+    for line in _chain_lines():
+        if "cargo nextest run -p" not in line or ("--release" in line and not release):
+            continue
+        if not _whole_binaries(line):
+            continue
+        for package in NEXTEST_PACKAGE.findall(line):
+            tests = NEXTEST_TARGET.findall(line)
+            found |= {
+                f"{package}::{test}"
+                for test in tests
+                if (REPO / "crates" / package / "tests" / f"{test}.rs").exists()
+            }
+            if "--lib" in line:
+                found.add(package)
+    return found
+
+
+def test_a_filtered_run_or_a_control_is_not_coverage() -> None:
+    """GAP-20: the V-DET-12 positive control (a filtered run that must fail) covers nothing."""
+    control = next(line for line in _chain_lines() if "V-DET-12 positive control" in line)
+    assert not _whole_binaries(control)
+    filtered = next(line for line in _chain_lines() if line.startswith('run "V-DET-05 keyframes'))
+    assert not _whole_binaries(filtered)
+    whole = next(line for line in _chain_lines() if line.startswith('run "rh-sys-smoke gates'))
+    assert _whole_binaries(whole)
+
+
+def test_the_workspace_run_leaves_out_exactly_the_by_name_binaries() -> None:
+    """Review 2a: each test binary runs once, in the workspace run or in its by-name gate.
+
+    Every entry of BY_NAME_TESTS is run by a by-name gate (else it would run nowhere), and every
+    binary a debug by-name gate runs is an entry (else it would run twice).
+    """
+    script = SCRIPT.read_text(encoding="utf-8")
+    listed = set(script.split('BY_NAME_TESTS="', 1)[1].split('"', 1)[0].split())
+    assert sorted(listed - _by_name_test_binaries(release=True)) == []
+    assert sorted(_by_name_test_binaries(release=False) - listed) == []
+    assert '-E "not ($filter)"' in script
+
+
+def test_the_python_checks_run_before_any_rust_build() -> None:
+    """GAP-18: the Python checks come before the first cargo build or clippy run.
+
+    ruff, mypy, pytest and the hostile-CI pytest lead the core part, so a Python failure shows in
+    about a minute.
+    """
+    names = [m.group("name") for line in _chain_lines() if (m := RUN_NAME.match(line))]
+    python = [i for i, n in enumerate(names) if n.startswith("Python: ")]
+    rust_builds = [
+        i for i, n in enumerate(names) if n.startswith(("Rust: lint", "Rust: build", "Rust: unit"))
+    ]
+    assert len(python) == 6
+    assert max(python) < min(rust_builds)

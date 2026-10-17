@@ -1,0 +1,69 @@
+# Sessions on adjutant, the director's on-demand benchmark VM (RUN-002 §3-5; SPR-009 T-02b, T-04).
+# Started by hand or by the Architect (workflow_dispatch); the job waits in GitHub's queue until the
+# director starts the VM, whose self-hosted runner carries the label `adjutant`. The VM powers itself
+# off after 30 idle minutes (infra/adjutant/). Never triggered by pull requests: a self-hosted runner
+# must not run code from a pull request (RUN-002 §3: remove the runner before the repository is public).
+name: adjutant
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Wall-clock runs in the session (at least 5; RUN-002 §5)"
+        default: "5"
+        required: true
+      gate:
+        description: "Fail on a wall-clock ALERT (only once T-04 has shown the spread is well under 10%)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: adjutant
+  cancel-in-progress: false
+
+jobs:
+  session:
+    name: adjutant session (check_all, wall-clock trends, instruction counts)
+    runs-on: [self-hosted, adjutant]
+    timeout-minutes: 120
+    env:
+      CARGO_TERM_COLOR: never
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Python environment from the lock (RUN-001 §4)
+        run: uv sync --frozen --project python
+
+      # The PR tier on AMD as well: the cross-machine determinism check of SPR-008 (RUN-002 §0).
+      - name: bin/check_all.sh
+        run: bin/check_all.sh
+
+      - name: Wall-clock session (bin/bench_session.sh)
+        env:
+          RUNS: ${{ inputs.runs }}
+        run: bin/bench_session.sh adjutant "$RUNS"
+
+      - name: Compare with the committed trend, if there is one
+        env:
+          GATE: ${{ inputs.gate }}
+        run: |
+          trend=crates/rh-bench/baselines/wall_adjutant_v1.txt
+          session="$(ls -d artifacts/perf/session_adjutant_* | tail -1)/session.txt"
+          if [ ! -f "$trend" ]; then echo "no trend baseline yet ($trend): T-04 records the first"; exit 0; fi
+          if [ "$GATE" = true ]; then flag=--gate; else flag=; fi
+          python/.venv/bin/python -I bin/wall_trend.py check --trend "$trend" --measured "$session" $flag
+
+      - name: Upload the session
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adjutant-session
+          path: |
+            artifacts/check_report.md
+            artifacts/perf/
+          if-no-files-found: warn

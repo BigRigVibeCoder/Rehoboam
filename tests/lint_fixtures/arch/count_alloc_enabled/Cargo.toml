@@ -1,0 +1,13 @@
+# Positive-control fixture for bin/lint_arch.py (SPR-009 T-05; tests/lint_fixtures/README.md); not
+# in the Rehoboam workspace. A tool crate depends on rh-bench with count-alloc on: the
+# counting allocator would reach its binary (rule count-alloc).
+[workspace]
+members = ["rh-bench", "rh-tool"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"

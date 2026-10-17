@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-001, PRJ-002, SPR-007, SPR-008, SPR-012, SPR-013, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF:** Increment A of the walking skeleton (WP P1.0): the engine prerequisites the first real system needs. An engine-purity lint (A-14), a 32-bit probability type with keyed uniform draws (A-21), draws keyed by the entity's epoch (A-29, which regenerates the `smoke` baseline), ledger rows with the life-course log, and authored numbers compiled exactly into plane A. Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). The director approved P1.0 as one plan run as three sprints (ruling 1): this sprint, SPR-012 (`solo` lives and dies) and SPR-013 (the stream, the sifter, replay and rungs 1–2). Rulings 1–19 below bind all three and stay here, numbered as the specs and code already cite them ("SPR-011 ruling N"). Task numbers T-00 to T-13 are kept across the three sprints, so "SPR-011 T-05" in older text means T-05 of the plan, now in SPR-012.
@@ -67,6 +67,9 @@ For all three increments; "Here" names the task and, outside increment A, its sp
 | Item | What | Due (BCK-002) | Here |
 |---|---|---|---|
 | A-14 | Engine-purity lint (V-INSP-05) | P1a | T-00 |
+| A-44 | Plane-A file-metadata clocks and `std::process::Command` banned; the plane-A crates allowed file I/O listed (VER-SPR-009-TEST GAP-5) | Before SPR-012 | T-00 (Architect, at launch) |
+| A-37 | `StepCtx::stream`'s repeated-`(purpose, entity)` guard spans every binding and the timer pass of one system at one instant; its per-draw cost measured with SPR-009's benches | Before SPR-012's first real draws | T-02 (Architect, at launch) |
+| A-38 (remainder) | The PR tier's per-job timeout back to 20 minutes | With the next CI change | Any task (Architect, at launch) |
 | A-21 | `UniformDraw` for `rh_ids::RngStream` | First sprint that draws against a probability: this one | T-01 (ruling 4) |
 | A-29 | `StepCtx` draws keyed by the entity's epoch | Before the first material input that touches a drawing system: this one (ruling 15) | T-02 |
 | A-30 | Drop a command for a person who died earlier in the same application | With the first death command | Not due here: P1.0 sends no lifecycle command (ruling 6). Goes to the P1.13 sprint |

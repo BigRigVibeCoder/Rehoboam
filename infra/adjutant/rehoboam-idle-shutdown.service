@@ -1,0 +1,7 @@
+# RUN-002 §3: the idle check (infra/adjutant/idle-shutdown.sh, installed as /usr/local/sbin/rehoboam-idle-shutdown).
+[Unit]
+Description=Power adjutant off after 30 idle minutes (no runner job, no login)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/rehoboam-idle-shutdown
