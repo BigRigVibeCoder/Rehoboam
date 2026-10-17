@@ -225,8 +225,9 @@ pub struct Engine {
     ledger: Option<Ledger>,
     /// The `(purpose, entity)` pairs each system (by entry index) has drawn from at the current
     /// instant, lent to each of its jobs in turn and cleared at every instant (BCK-002 A-37).
-    /// Bookkeeping of the step guard, never state: an instant always starts it empty.
-    taken: BTreeMap<usize, Taken>,
+    /// Bookkeeping of the step guard, never state: an instant always starts it empty. One slot
+    /// per system, built once, so an instant with no draws allocates nothing (V-PERF-11).
+    taken: Vec<Taken>,
 }
 
 /// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
@@ -369,7 +370,7 @@ impl Engine {
             dispatch: DispatchStats::default(),
             observer: None,
             ledger,
-            taken: BTreeMap::new(),
+            taken: Vec::new(),
         }
     }
 
@@ -833,7 +834,9 @@ impl Engine {
         // The instant is the current one before its first notice, so a failure there (an observer
         // panic at InstantStart) names this instant, not the last (VER-SPR-009-TEST OBS-1).
         self.at = (t, Phase::Inputs);
-        self.taken.clear();
+        self.taken
+            .resize_with(self.registered.entries.len(), Taken::default);
+        self.taken.iter_mut().for_each(Taken::clear);
         self.notify(t, None, Boundary::InstantStart)?;
         let fired: Vec<Pulse> = self
             .calendar
@@ -1080,7 +1083,7 @@ impl Engine {
                     .iter()
                     .filter_map(|w| self.tables.take(w.column).map(|rows| (w.column, rows)))
                     .collect();
-                let taken = self.taken.remove(&job.index).unwrap_or_default();
+                let taken = std::mem::take(&mut self.taken[job.index]);
                 (owned, self.commands.take(e.id), taken)
             })
             .collect();
@@ -1151,7 +1154,7 @@ impl Engine {
             }
             self.commands
                 .restore(self.registered.entries[job.index].id, o.untaken);
-            self.taken.insert(job.index, o.taken);
+            self.taken[job.index] = o.taken;
             if first_error.is_none() {
                 first_error = o.result.err();
             }
@@ -1160,6 +1163,7 @@ impl Engine {
         if let Some(e) = first_error {
             return Err(e);
         }
+        // `guards` is empty without a ledger: the zip pairs nothing (DEF-4).
         for (job, g) in jobs.iter().zip(&guards) {
             g.as_ref().map_or(Ok(()), |g| {
                 g.check(self.registered.entries[job.index].id, &self.tables)
@@ -1175,7 +1179,11 @@ impl Engine {
 
     /// What each job must preserve of the ledger columns it owns (SPR-011 ruling 5): `None` for a
     /// job that owns none, or in a world without a ledger.
+    /// A world without a ledger pays nothing: no guard and no allocation (DEF-4, V-PERF-11).
     fn ledger_guards(&self, jobs: &[Job]) -> Vec<Option<LifeCourseGuard>> {
+        if self.ledger.is_none() {
+            return Vec::new();
+        }
         jobs.iter()
             .map(|job| {
                 let e = &self.registered.entries[job.index];
