@@ -1,8 +1,9 @@
 # Reference world, rung 2 of the complexity ladder (docs/11; BCK-002 A-06; SPR-011 ruling 18): a hamlet of 60.
 # uz_job's people (the population of 60, the cast, Job's household with its children and servants, e0 = 30) without what
 # P1a does not simulate: the Adversary agent, the wager catalyst, the off-map raiders, the despair overlay, and the
-# household's holdings (food and economy are P1b). In P1a it runs the same slice as solo (SPR-011 ruling 2): 60 founders
-# age and die, with no births, and the hamlet dies out within about a century (V-SCALE-04). uz_job stays the P1b
+# household's holdings (food and economy are P1b). In P1.0 it ran the rung-0 slice (SPR-011 ruling 2): 60 founders
+# aged and died with no births; from SPR-015 (M2 F1) Job and his wife are married at genesis, the ten children are
+# theirs, the 30 servants are household members, and births and marriages run. uz_job stays the P1b
 # micro-catalyst world (V-SCALE-05). The cast's flags and initial attributes are kept for T1.minds (P1a, after P1.0);
 # P1.0 reads only sex and age.
 manifest_version: 0
@@ -42,7 +43,7 @@ households:
     children: {sons: 7, daughters: 3}
     servants: 30
 systems:
-  M2.demography: {e0: 30}        # uz_job's value, equal to the Registry default; tfr dropped: no births in P1a
+  M2.demography: {e0: 30}        # uz_job's value, equal to the Registry default; tfr takes the Registry default 4.9 from SPR-015 (M2 F1 births)
 narrative:
   pattern_packs: [solitary_life]  # life_ends (SPR-011 ruling 14); uz_job's packs wait for T1.minds and the catalyst
   default_style_card: historian
