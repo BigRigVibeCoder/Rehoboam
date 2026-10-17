@@ -25,7 +25,7 @@ reproduces the engine's integers bit for bit. It checks:
   3. the law sweep: the back-fill of the manor's houses under each of the seven succession laws
      keeps those invariants;
   4. the widths the spec states (the IPF products fit u128, every tick fits i64) and the
-     constants (TFR1, the level, the conception table) equal the births draft's check values.
+     constants (TFR1, the level, the conception table) equal the births spec's check values.
 
 Run: python -I specs/worldgen/selftest_population_synthesis.py           (check; exit 1 on failure)
      python -I specs/worldgen/selftest_population_synthesis.py --write   (regenerate the golden)
@@ -105,24 +105,29 @@ NEW_PURPOSES = (
     PURPOSE_DEATH,
     PURPOSE_SORTITION,
 )
-# M2 F1 constants (specs/systems/next/M2.demography.odd.toml, [algorithm.fertility_f1] and
-# [algorithm.partnering_f1] `constants`; SPR-015 draft): cited there, copied here until it merges.
-NATURAL = (411, 460, 431, 395, 322, 167, 24)  # Coale-Trussell n(a), thousandths, bands 15-19..45-49
-GESTATION = 9
-POSTPARTUM = 11
+# M2 F1 constants: read from specs/systems/next/M2.demography.odd.toml ([algorithm.fertility_f1] and
+# [algorithm.partnering_f1] `constants`) through the births reference: a changed constant moves the
+# goldens here (SPR-015 merged in PR #50).
+m2f1 = _load("selftest_m2_f1", ROOT / "specs" / "demography" / "selftest_m2_f1.py")
+M2_SPEC = m2f1.load_spec(m2f1.NEXT_SPEC)
+STANDARDS = m2f1.Standards(M2_SPEC)
+NATURAL = tuple(int(n) for n in STANDARDS.natural)  # Coale-Trussell n(a), thousandths, bands 15-19..45-49
+GESTATION = int(STANDARDS.gestation)
+POSTPARTUM = int(STANDARDS.postpartum)
 CLOSED = GESTATION + POSTPARTUM  # pulses after a conception during which a woman is not susceptible
-SEX_RATIO = (105, 205)  # male births per 205
-NUPTIALITY = (18, 35, 24, 11, 5, 2, 2)  # monthly first-marriage probability, thousandths, by band
-MIN_AGE_F = 15
-MIN_AGE_M = 18
-BANDS = 7
-BAND_YEARS = 5
-BAND_MONTHS = 60
+SEX_RATIO = (int(STANDARDS.sex_ratio[0]), int(STANDARDS.sex_ratio[1]))  # male births per 205
+NUPTIALITY = tuple(STANDARDS.nuptiality)  # monthly first-marriage probability, thousandths, by band
+_PARTNERING = M2_SPEC["algorithm"]["partnering_f1"]["constants"]
+MIN_AGE_F = int(_PARTNERING["min_age_f_years"])
+MIN_AGE_M = int(_PARTNERING["min_age_m_years"])
+BANDS = int(m2f1.BANDS)
+BAND_YEARS = int(m2f1.BAND_YEARS)
+BAND_MONTHS = int(m2f1.BAND_MONTHS)
 FERTILE_END = MIN_AGE_F + BANDS * BAND_YEARS  # 50
 TFR_DEFAULT = "4.9"
 MULT_DEFAULT = "1.0"
 E0_DEFAULT = "30"
-# The births draft's check values (its [algorithm.fertility_f1] check_values).
+# The births spec's check values (its [algorithm.fertility_f1] check_values).
 CHECK_TFR1_BITS = 615614
 CHECK_LEVEL_BITS = 34186
 CHECK_CONCEPTION = (119397409, 143118858, 128689234, 112318286, 83490541, 36474834, 4576314)
@@ -277,38 +282,21 @@ class Schedule:
 
 
 class Fertility:
-    """F1's compiled fertility and nuptiality constants (F2-F4, N1), exact."""
+    """F1's compiled fertility and nuptiality constants (F2-F4, N1), from the births reference."""
 
     def __init__(self, tfr_bits: int, mult_bits: int) -> None:
         """Compile the level M, the elite level and the fourteen conception probabilities."""
-        self.nuptiality_bits = [rhe(ONE * m, THOUSAND) for m in NUPTIALITY]
-        shares: list[Fraction] = []
-        unmarried = Fraction(1)
-        for a in range(BANDS * BAND_MONTHS):
-            shares.append(1 - unmarried)
-            unmarried *= 1 - Fraction(self.nuptiality_bits[a // BAND_MONTHS], ONE)
-        self.married_share = shares  # S(a) at the start of month a from exact age 15 (F3)
-        pi = [
-            sum(shares[i * BAND_MONTHS : (i + 1) * BAND_MONTHS], Fraction(0)) / BAND_MONTHS
-            for i in range(BANDS)
+        st = STANDARDS
+        self.nuptiality_bits = [int(b) for b in m2f1.nuptiality_bits(st)]
+        self.married_share = [Fraction(x) for x in m2f1.married_share_by_month(st)]  # S(a), F3
+        self.tfr1_bits = int(m2f1.tfr1_bits(st))
+        self.level_bits = int(m2f1.level_bits(st, tfr_bits))
+        self.elite_bits = int(m2f1.elite_level_bits(self.level_bits, mult_bits))
+        self.conception = [int(m2f1.conception_bits(st, self.level_bits, i)) for i in range(BANDS)]
+        self.conception_elite = [
+            int(m2f1.conception_bits(st, self.elite_bits, i)) for i in range(BANDS)
         ]
-        tfr1 = sum(
-            (BAND_YEARS * Fraction(n, THOUSAND) * p for n, p in zip(NATURAL, pi, strict=True)),
-            Fraction(0),
-        )
-        self.tfr1_bits = round(tfr1 * Q16)
-        self.level_bits = rhe(tfr_bits * Q16, self.tfr1_bits)
-        self.elite_bits = rhe(self.level_bits * mult_bits, Q16)
-        self.conception = [self.conception_bits(self.level_bits, i) for i in range(BANDS)]
-        self.conception_elite = [self.conception_bits(self.elite_bits, i) for i in range(BANDS)]
-        self.sex_male_bits = rhe(ONE * SEX_RATIO[0], SEX_RATIO[1])
-
-    @staticmethod
-    def conception_bits(m_bits: int, band: int) -> int:
-        """Return F4's monthly conception probability c_i (Prob32 bits) at level ``m_bits``."""
-        b = m_bits * NATURAL[band]
-        den = MONTHS * Q16 * THOUSAND - CLOSED * b
-        return ONE if den <= 0 else min(ONE, rhe(ONE * b, den))
+        self.sex_male_bits = int(m2f1.sex_male_bits(st))
 
     def ever_married(self, age_years: int) -> Fraction:
         """Return P5's E(a): the share ever married at the middle month of whole-year age a."""
@@ -1421,15 +1409,15 @@ class Checker:
 
 
 def check_constants(g: Genesis) -> list[str]:
-    """Check 4: the births draft's check values and the spec's widths."""
+    """Check 4: the births spec's check values and the spec's widths."""
     f = []
     default = Fertility(q16(TFR_DEFAULT), q16(MULT_DEFAULT))
     if g.fert.tfr1_bits != CHECK_TFR1_BITS:
         f.append(f"TFR1 bits {g.fert.tfr1_bits} != {CHECK_TFR1_BITS}")
     if default.level_bits != CHECK_LEVEL_BITS:
-        f.append("level at the default tfr differs from the births draft's check value")
+        f.append("level at the default tfr differs from the births spec's check value")
     if tuple(default.conception) != CHECK_CONCEPTION:
-        f.append("conception table at the default differs from the births draft's check values")
+        f.append("conception table at the default differs from the births spec's check values")
     if g.fert.sex_male_bits != CHECK_SEX_MALE_BITS:
         f.append("SEX_M bits")
     if (MAX_POPULATION * IPF_SCALE) * MAX_POPULATION * IPF_SCALE >= 1 << 128:

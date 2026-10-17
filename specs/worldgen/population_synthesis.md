@@ -61,7 +61,7 @@ The houses are small at `e0 = 30`: a three-generation house of about twenty rows
 | 5 | **A child holder at genesis** has no regent until M7's first binding | An SPR-021 item (D-09): M7 names the regent at its first Day/Polity binding and emits REGENCY_BEGUN |
 | 6 | **The `manor` example manifest** sits beside the rung manifests, which are the Architect's (BCK-002 A-06) | Keep it as the SPR-019 fixture (not a rung); SPR-030's dynastic fixture world and the 10k manifest remain the Architect's |
 | 7 | **M7's `majority_age` has no Registry default**; B9 uses its own `adult_years = 16` | Keep the constant in v0, inside the bounds [12, 21]; align it with the default SPR-021 sets |
-| 8 | **The births draft's constants are copied** into the reference until PR #50 merges | Replace the copies by an import of `selftest_m2_f1.py` once it is on `main`; a changed constant moves the goldens (C3 in the sprint) |
+| 8 | **The mortality fold** (SPR-016, branch `arch/M2-F1-mortality-fold`) changes the schedule's knots below age 1 and above 90 and its end | The spec reads the schedule as knots (P0), so the fold needs no text change here; it moves the goldens (the stationary marginal and every death draw read `l`): regenerate them in the fold's PR or in SPR-019's, whichever lands second. The reference reads the births constants from the merged next spec through `selftest_m2_f1.py`, so a changed constant moves the goldens too |
 
 No director item: no requirement, ADR or roadmap text changes (`[director_items]`).
 
