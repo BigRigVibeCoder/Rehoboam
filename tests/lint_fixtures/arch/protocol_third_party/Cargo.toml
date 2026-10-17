@@ -1,0 +1,9 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# SPR-026 (REV-SPR-026 R7): rh-protocol depends on tokio, off its exact third-party allow-list; rule protocol-leaf must refuse it.
+[workspace]
+members = ["rh-protocol"]
+resolver = "3"
+
+# Every plane-A crate inherits these lints (bin/lint_arch.py rule lints, VER-SPR-003-TEST GAP-9).
+[workspace.lints.rust]
+unsafe_code = "forbid"
