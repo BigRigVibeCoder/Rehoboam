@@ -311,6 +311,15 @@ annals_golden_control() {
   "$PY" -I specs/annals/selftest_annals_v0.py --check --golden-dir "$planted"
 }
 
+# annals_orphan_control (REV-SPR-029 R39): the committed golden annals with one file no rendered group owns
+# must be STALE: orphan.
+annals_orphan_control() {
+  local planted=target/rendered-fixtures/annals_orphan
+  rm -rf "$planted" && mkdir -p "$planted" && cp specs/annals/golden/* "$planted"/ || return 1
+  cp specs/annals/golden/ashcombe_year.txt "$planted/ashcombe_line-1.txt" || return 1
+  "$PY" -I specs/annals/selftest_annals_v0.py --check --golden-dir "$planted"
+}
+
 # lint_odd --next controls (SPR-015; REV-SPR-015 NIT-4): rendered from the next M2 spec itself, never copied, so they
 # cannot drift. odd_next_control <case>: algorithm (a frozen S0 step reworded), rng (a purpose planted before
 # death_time), bound (the Registry delta with tfr's upper bound moved). Each must FAIL with its own diagnostic.
@@ -1220,6 +1229,7 @@ run "selftest_annals positive control: a slot outside DEATH's declared roles mus
 run "selftest_annals positive control: a template that reads world state must FAIL (ADR-0024; SPR-029)" "fail:is outside the envelope" "$PY" -I specs/annals/selftest_annals_v0.py --check --control state-read &&
 run "selftest_annals positive control: a network module imported during the render must FAIL (V-NAR-07; REV-SPR-029 F16)" "fail:was imported during the render" "$PY" -I specs/annals/selftest_annals_v0.py --check --control network-import &&
 run "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)" "fail:STALE:" annals_golden_control &&
+run "selftest_annals positive control: a golden file no rendered group owns must FAIL as an orphan (REV-SPR-029 R39)" "fail:STALE: orphan target/rendered-fixtures/annals_orphan/ashcombe_line-1.txt: no rendered group owns it" annals_orphan_control &&
 run "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive or edge; every in-scope kind has a template and every out-of-scope kind a label (lint_templates; SPR-029)" "pass:PASS: 29 templates linted" "$PY" -I specs/annals/lint_templates.py &&
 run "lint_templates positive control: a slot naming a role the kind does not declare must FAIL (SPR-029)" "fail:slot 'instrument' is not a role DEATH declares in [[emits]]" annals_lint_control undeclared_role &&
 run "lint_templates positive control: a snapshot slot the kind does not declare must FAIL (SPR-029)" "fail:slot 'snapshot.stress.actor' is not a snapshot BIRTH declares" annals_lint_control undeclared_snapshot &&

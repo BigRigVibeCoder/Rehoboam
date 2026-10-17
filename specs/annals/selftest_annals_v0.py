@@ -31,8 +31,10 @@ Checks (``--check``):
   6. determinism: a render in this process equals renders in two other processes under different
      ``PYTHONHASHSEED`` values, and every committed sidecar's digest recomputes from the files;
   7. coverage: every in-scope kind is exercised by the fixtures (unexercised variants are reported);
-  8. golden annals: the committed text, sidecar and manifest of every fixture equal the render
-     (``STALE:`` names the first file that differs; ``--write`` regenerates them);
+  8. golden annals: the committed text, sidecar and manifest of every fixture equal the render,
+     Edric Ashcombe's line included beyond the manifest's groups, and no file in ``golden/`` is
+     without a rendered group (``STALE:`` names each file that differs or is an orphan;
+     ``--write`` regenerates them);
   9. designation is injective: no two persons of one annal share a designation, and a planted
      shared name is disambiguated with the compact label; control ``shared-name``;
  10. the extract digest is canonical: a shuffled extract gives the same digest.
@@ -140,6 +142,10 @@ M7_KINDS = frozenset(
 CLAIM_CAUSES = frozenset({"SUCCEED", "DEPOSED"})  # M7: a passed-over heir, or a deposition
 DEPOSITION_FIRST_DAY = 2  # M7: a deposition timer fires on days 2 to the last of its month
 FIXTURE_WORLDS = ("ashcombe", "solitary", "untold")
+# Groups check 8 renders beyond the manifest's (REV-SPR-029 R39): Edric Ashcombe's line keeps the
+# line grouping covered now that §9's `line:<least named id>` is Orm's. The self-test lists them;
+# the annals manifest does not.
+EXTRA_GROUPS: dict[str, tuple[str, ...]] = {"ashcombe": ("line:6740622430173101898",)}
 PROLOGUE_HEADING = "## Before the chronicle began"
 MANIFEST_HASH = re.compile(r"sha256:[0-9a-f]{64}")
 # Modules the renderer may import (V-NAR-07): the standard library and the sibling references.
@@ -1378,9 +1384,14 @@ def check_provenance(text: str, side: str, r: Renderer, group: str) -> list[str]
     if got_side[:1] != want_side_lines[:1]:  # the first differing token, by name (R37)
         got_toks = got_side[0].split(" ") if got_side else []
         want_toks = want_side_lines[0].split(" ")
-        n = next((i for i, w in enumerate(want_toks) if i >= len(got_toks) or got_toks[i] != w), 0)
+        n = next(  # the first position whose token differs, is extra or is missing (R41)
+            i
+            for i in range(max(len(got_toks), len(want_toks)))
+            if i >= len(got_toks) or i >= len(want_toks) or got_toks[i] != want_toks[i]
+        )
         got_tok = got_toks[n] if n < len(got_toks) else "nothing"
-        out.append(f"header: token {n} differs: {got_tok} where the render gives {want_toks[n]}")
+        want_tok = want_toks[n] if n < len(want_toks) else "nothing"
+        out.append(f"header: token {n} differs: {got_tok} where the render gives {want_tok}")
     rows_got = [line for line in got_side if line[:2] in {"S ", "P "}]
     rows_want = [line for line in want_side_lines if line[:2] in {"S ", "P "}]
     out += _compare_rows(rows_got, rows_want, "sidecar")
@@ -1618,6 +1629,7 @@ class Run:
 
     results: list[tuple[str, list[str]]] = field(default_factory=list)
     stale: list[str] = field(default_factory=list)
+    orphans: list[str] = field(default_factory=list)  # golden files no group owns (R39)
     used: Counter[str] = field(default_factory=Counter)
     kinds_used: set[str] = field(default_factory=set)
     provenance: list[str] = field(default_factory=list)
@@ -1734,14 +1746,30 @@ def _render_one(run: Run, setup: Setup, world: str, group: str) -> tuple[str, Re
     return side.rstrip("\n").rsplit(" ", 1)[1], r
 
 
+def checked_groups(world: str) -> tuple[str, ...]:
+    """The manifest's groups and the extra groups check 8 renders (R39)."""
+    return (*fixture_groups(world), *EXTRA_GROUPS.get(world, ()))
+
+
+def golden_files(golden: Path) -> set[Path]:
+    """Every file a rendered group or a manifest owns in ``golden``."""
+    owned: set[Path] = set()
+    for world in FIXTURE_WORLDS:
+        owned.add(golden / f"{world}.manifest.txt")
+        for group in checked_groups(world):
+            owned.update(_golden_paths(golden, world, group))
+    return owned
+
+
 def _render_world(run: Run, setup: Setup, world: str) -> None:
     digests: dict[str, str] = {}
     r: Renderer | None = None
-    for group in fixture_groups(world):
+    for group in checked_groups(world):
         digests[group], r = _render_one(run, setup, world, group)
     assert r is not None
+    listed = {g: digests[g] for g in fixture_groups(world)}  # the manifest lists §9's groups only
     path = setup.golden / f"{world}.manifest.txt"
-    want = manifest(world, digests, r, templates_digest(setup.t.path))
+    want = manifest(world, listed, r, templates_digest(setup.t.path))
     if not path.exists() or path.read_text(encoding="utf-8") != want:
         run.stale.append(str(path))
 
@@ -1805,6 +1833,8 @@ def self_test(control: Control, golden: Path) -> Run:
     setup = Setup(t, load_dictionary(), control, golden)
     for world in FIXTURE_WORLDS:
         _render_world(run, setup, world)
+    owned = golden_files(golden)  # a file no rendered group owns is stale (R39)
+    run.orphans += [str(p) for p in sorted(golden.iterdir()) if p.is_file() and p not in owned]
     run.results.insert(0, ("1. provenance (V-NAR-05)", run.provenance))
     run.results.insert(2, ("3. no model (V-NAR-07)", check_imports() + check_modules()))
     run.add(
@@ -1848,15 +1878,19 @@ def write_golden(golden: Path) -> None:
     golden.mkdir(parents=True, exist_ok=True)
     for world in FIXTURE_WORLDS:
         digests: dict[str, str] = {}
-        for group in fixture_groups(world):
+        for group in checked_groups(world):
             text, side, r = render_group(FIXTURES / world, group, t, d)
             digests[group] = side.rstrip("\n").rsplit(" ", 1)[1]
             for path, data in zip(_golden_paths(golden, world, group), (text, side), strict=True):
                 path.write_bytes(data.encode("utf-8"))
                 print(f"wrote {path}")
+        listed = {g: digests[g] for g in fixture_groups(world)}
         path = golden / f"{world}.manifest.txt"
-        path.write_text(manifest(world, digests, r, tdigest), encoding="utf-8")
+        path.write_text(manifest(world, listed, r, tdigest), encoding="utf-8")
         print(f"wrote {path}")
+    for path in sorted(golden.iterdir()):
+        if path.is_file() and path not in golden_files(golden):
+            print(f"orphan {path}: no rendered group owns it (delete it)")
 
 
 def _report(run: Run, t: Any, control: Control) -> int:  # noqa: ANN401
@@ -1879,9 +1913,11 @@ def _report(run: Run, t: Any, control: Control) -> int:  # noqa: ANN401
         return EXIT_SELFTEST
     for path in run.stale:
         print(f"STALE: {path} differs from the render (regenerate with --write)")
-    if run.stale:
+    for path in run.orphans:
+        print(f"STALE: orphan {path}: no rendered group owns it (delete it)")
+    if run.stale or run.orphans:
         return EXIT_STALE
-    groups = sum(len(fixture_groups(w)) for w in FIXTURE_WORLDS)
+    groups = sum(len(checked_groups(w)) for w in FIXTURE_WORLDS)
     print(f"8. golden annals and manifests: PASS ({groups} groups)")
     print("ANNALS v0: PASS")
     return EXIT_OK

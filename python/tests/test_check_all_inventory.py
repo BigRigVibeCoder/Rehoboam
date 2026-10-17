@@ -606,6 +606,8 @@ REQUIRED_GATES = (
     "claims with it, must FAIL the possible-history check (REV-SPR-029 R26, R37)",
     "selftest_annals positive control: a forged source row on a sidecar row must FAIL provenance "
     "(REV-SPR-029 R19 P7b, R37)",
+    "selftest_annals positive control: a golden file no rendered group owns must FAIL as an "
+    "orphan (REV-SPR-029 R39)",
     "selftest_annals positive control: a network module imported during the render must FAIL "
     "(V-NAR-07; REV-SPR-029 F16)",
     "selftest_annals positive control: a prologue row citing a keyframe row that does not exist "
