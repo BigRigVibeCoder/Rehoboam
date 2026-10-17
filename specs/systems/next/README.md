@@ -121,6 +121,6 @@ never changes a committed skeleton or the index until step 4.
 
 | File | What |
 |---|---|
-| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) and F1 mortality (SPR-016, `[algorithm.mortality_f1]`, folded after PR #50) on the frozen rung-0 slice (0.2.1: 0.2.0 plus EVO-001's typed payloads and codes) |
+| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) and F1 mortality (SPR-016, `[algorithm.mortality_f1]`, folded after PR #50) on the frozen rung-0 slice (0.2.2: 0.2.0 plus EVO-001's typed payloads and codes, and SPR-020's `roles`) |
 | `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`) and mortality's two parameters with their defaults (`density_capacity`, `density_mortality_slope`); verbs `BIRTH`, `MARRIAGE` |
 | `amendments.lock.toml` | the nineteen amendments of the M2 draft (five texts, seven column meanings, seven parameter meanings; the mortality fold re-stated five and added `e0`'s), path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |
