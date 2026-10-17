@@ -6,6 +6,9 @@
 # not a mechanism. S3 owns no RNG purpose at F0: the one genesis draw (founder_residence) is rh-worldgen's.
 # lint_odd.py checks this file; specs/worldgen/selftest_worldgen_lite.py is the exact reference of [algorithm.residence_f0]
 # R1-R3 (its residence lines) and of the interval tiling of R4-R5 (its birth sequence check).
+# Registration (REV-SPR-018 R3): this spec PR adds [systems."S3.migration"] to the Registry with no version bump and names
+# S3 in no template. SPR-018's sprint PR, which builds S3, adds it to every template's default_systems and bumps
+# registry_version; until then a manifest naming S3 falls under SPR-011 ruling 3 (a named system the build lacks).
 odd_r = 2
 # Empty sections first (TOML: a bare key after a table header would join that table). S3 F0 draws nothing in a step and
 # has no Registry parameter: the reasons are given at each section's place below.
@@ -33,7 +36,7 @@ not_yet = [
   "Fugitives (P1.23, SAGA-14, V-SAGA-20): person.fugitive set by a lifecycle command from T1.minds after a crime or a mental break; flight as scheduled moves along M1's route graph (route.a, route.b, length_cells, then F1 costs) toward a border, a sanctuary or an ally, with an interception hazard per segment; tile paths only in focus regions and micro worlds. F1, P1b",
   "Emigration off the map (life_course.exit_kind = emigration) and immigration (H64(seed, immigrant, origin, t, k) ids, LIFE_ENTRY origin immigrant): P4 with the off-map compartments and the materialisation adapter (05.1 §3)",
   "urban_share, the era-state variable the Registry gives S3 ([era_state]; ADR-0027): a region's share of people living in settlements above a size threshold; owned and written by S3 from F1 (settlements grow) on, read by M2 fertility and M5 then. Nothing reads it in P1a",
-  "A residence record in channel A of the World Stream: v0 has LIFE_ENTRY and LIFE_EXIT only (specs/stream/channel_a_v0.sql); the chronicle's life_interval kind 0 needs a record kind or a column, an Architect ruling SPR-018 needs (specs/worldgen/worldgen_lite.md §7)",
+  "A residence record in channel A of the World Stream: v0 has LIFE_ENTRY and LIFE_EXIT only (specs/stream/channel_a_v0.sql). Residence intervals become a non-event channel-A record: the Architect reserves its record-kind number in SPR-013's channel-A v0, and SPR-018's sprint defines its fields (REV-SPR-018 R11 Q1)",
   "Residence at the raster cell or plot (PlotId; 05.2 §2): F2 with settlement plans",
 ]
 
@@ -45,7 +48,7 @@ column = "person.residence"
 entity = "person"
 type = "u32"
 plane = "A"
-meaning = "SettlementId (M1 settlement.id) the person lives in. Written at genesis by rh-worldgen (R1-R3) and at birth by residence_at_birth (R4), then never again at F0. 0 ('none') only on a row inserted this instant before S3's Vital step has run (the zero of the type SPR-014's row insert gives every other owner's column); INV-S3-02 says it is never 0 after Vital. A dead row keeps its value until compaction"
+meaning = "SettlementId (M1 settlement.id) the person lives in. Written at genesis by rh-worldgen (R1-R3) and at birth by residence_at_birth (R4), then never again at F0. 0 ('none') only on a row inserted this instant before S3's Vital step has run: the zero of the type SPR-014's row insert gives every other owner's column, and the mark by which R4 finds the newborns (REV-SPR-018 R4); INV-S3-02 says it is never 0 after Vital. A dead row keeps its value until compaction"
 fixed_point = false
 
 # ----------------------------------------------------------------------------- residence intervals (residence_interval.*)
@@ -81,14 +84,9 @@ fixed_point = false
 # Considered and not accepted at F0: SetHousehold (M2 F1 keeps membership itself, SPR-015), SetResidence from any sender
 # (nobody moves anybody in P1a; a catalyst that does is a journaled material input), BeginFlight from T1.minds (P1.23, F1).
 
-# Reads (same_instant from M2: S3's Day/Vital binding is scheduled after M2's by the edge these reads create, 05.1 §2
-# rule 4, so it sees the rows M2's birth timers inserted in this instant's Vital slot). M1 F0 never writes after genesis, so
-# its reads are lagged (no edge) and exact.
-[[reads]]
-column = "person.birth_tick"
-owner = "M2.demography"
-lag = "same_instant"
-use = "identity"
+# Reads (same_instant from M2: S3's Day/Vital binding is scheduled after M2's by the edge this read creates, 05.1 §2
+# rule 4, so it sees the rows M2's birth timers inserted in this instant's Vital slot; the newborns themselves are found
+# by S3's own column, person.residence = 0, R4). M1 F0 never writes after genesis, so its reads are lagged (no edge) and exact.
 [[reads]]
 column = "person.mother"
 owner = "M2.demography"
@@ -133,7 +131,7 @@ status = "n/a"
 pulse = "Day"
 phase = "Vital"
 steps = [
-  "residence_at_birth: for each ledger row with person.birth_tick = now (a person born this instant: births are M2 timers at day starts in this Vital slot, SPR-015 [algorithm.fertility_f1] F9), in ascending PersonId, write person.residence := the mother's person.residence and append a residence_interval row opening now ([algorithm.residence_f0] R4)",
+  "residence_at_birth: for each ledger row with person.residence = 0 (a row inserted this instant with the type's zero: a birth, since births are M2 timers at day starts in this Vital slot, SPR-015 [algorithm.fertility_f1] F9), in ascending PersonId, write person.residence := the mother's person.residence and append a residence_interval row opening now ([algorithm.residence_f0] R4)",
 ]
 when = "every day start; work only when a row entered the ledger this instant (nothing before SPR-015 merges: P1.0's worlds have no births)"
 
@@ -147,13 +145,13 @@ adaptation = "n/a: no agent in S3 at F0"
 objectives = "n/a: no agent in S3 at F0"
 learning = "n/a: no agent in S3 at F0"
 prediction = "n/a: no agent in S3 at F0"
-sensing = "The newborn's mother (person.mother, M2) and the settlements and region sizes of M1 at genesis; no era state"
-interaction = "None at F0 beyond reading M2's new rows in the same instant. Out: S5.daily_life reads person.residence at start of day as the home place; M2 F1 may bound its marriage pool by settlement (its not_yet, SPR-015); P1.23 fugitives and F1 moves read M1's routes through S3"
+sensing = "The newborn's mother (person.mother, M2), found by S3's own person.residence = 0 mark; the settlements and region sizes of M1 at genesis; no era state"
+interaction = "None at F0 beyond reading M2's new rows in the same instant. Out: S5.daily_life reads person.residence at start of day as the home place; S6.artifacts reads it as the bearer's place; M2 F1's partnering reads it as a mode read (REV-SPR-018 R8: the husband draw's candidates are the eligible men of the bride's settlement, so no P1a marriage joins two settlements; neutral 0 = no restriction, so M2 registers without S3); P1.23 fugitives and F1 moves read M1's routes through S3"
 stochasticity = "Keyed counter-based RNG only (ADR-0006), one draw per manifest household and per loose founder at genesis (purpose founder_residence, entity = the head's or the founder's PersonId, k = 0), drawn by rh-worldgen; no draw after genesis at F0. The draw count is fixed by the manifest, so a template or seed change moves no founder's draw index (CRN)"
-collectives = "Manifest households live together (R2); M2 F1's household.* rows (SPR-015) are membership, S3's residence is place: the two agree at genesis because both follow the manifest's households, and F1's co-residence rule keeps them agreeing after a marriage"
+collectives = "Manifest households live together (R2); M2 F1's household.* rows (SPR-015) are membership, S3's residence is place: the two agree at genesis because both follow the manifest's households, and in P1a after every marriage because M2 F1 marries within a settlement (R8 read contract below); F1's co-residence rule takes over when moves exist"
 observation = "person.residence and the interval table; the V-DATA-04 audit joins them with M2's life-course log. No stream record at F0 (see not_yet); S5's telemetry.where answers from residence in P1b"
 era_state = []                             # S3 F0 reads no era-state variable; it will OWN urban_share from F1 ([era_state], ADR-0027)
-scale_behaviour = "Identical at every N: each founder's and newborn's settlement depends only on its own draw or its mother, never on visiting order or thread count. Cost: the residence_at_birth step scans the ledger once per day start for rows with birth_tick = now (O(N) compares a day: 3.6 M a year at 10k persons, trivial; at 1M persons about 10^8 a year, still small against M2's monthly pass); rh-core's row-insert plumbing (SPR-014) may hand S3 the rows inserted this instant instead, a hash-neutral optimisation left to the sprint"
+scale_behaviour = "Identical at every N: each founder's and newborn's settlement depends only on its own draw or its mother, never on visiting order or thread count. Cost: the residence_at_birth step scans the ledger once per day start for rows with person.residence = 0 (O(N) compares a day: 3.6 x 10^6 a year at 10k persons, trivial; at 1M persons about 3.6 x 10^8 a year, still small against M2's monthly pass); rh-core's row-insert plumbing (SPR-014) may hand S3 the rows inserted this instant instead, a hash-neutral optimisation left to the sprint"
 
 [algorithm.residence_f0]
 # SPR-018. Every quantity is an exact integer; no float. The exact reference (specs/worldgen/selftest_worldgen_lite.py)
@@ -162,15 +160,15 @@ version = "s3-residence-f0-v1"
 steps = [
   "R0 Keys. As [algorithm.worldgen_lite] W0: u = H(world_seed, the canonical salt, system_id(\"rh-worldgen\"), epoch 0, purpose founder_residence, entity, t = 0, k = 0); pick(u, n) = floor(u n / 2^64). Founders are the persons rh-worldgen creates at genesis (SPR-011 ruling 10 order: the cast in manifest order, then each manifest household's children and servants in household order, then the rest of peoples.population), with PersonId founder(seed, k) and the deterministic rehash.",
   "R1 Weights. Over M1's settlements in ascending settlement.id (1..K at F0), w_s = region.land_cells of settlement.region; C_s = w_1 + ... + w_s (u64); W = C_K >= K >= 1. The settlement of a draw u is the least s with C_s > pick(u, W): settlement s is chosen with probability w_s / W exactly (the in-coupling on region.land_cells).",
-  "R2 Households. For each manifest household h in manifest order: one draw with entity = the PersonId of its head (a cast member); every member of h (the head, every cast member whose `household` names h, and h's children and servants) takes the drawn settlement. A household lives together.",
-  "R3 Loose founders. Every founder in no manifest household (a cast member without `household`, and every anonymous founder of peoples.population) takes its own draw, entity = its own PersonId. Exactly one draw per manifest household and per loose founder, in that order; nothing else is drawn.",
-  "R4 Writes at genesis and at birth. Genesis (rh-worldgen, after M2's founder rows and M1's tables): person.residence := s for every founder, and one residence_interval row {person_id, settlement = s, from_tick = 0} per founder, in ascending PersonId. Birth (residence_at_birth, Day/Vital, scheduled after M2 by the same_instant reads): for each ledger row with person.birth_tick = now, in ascending PersonId: m = person.mother (never 0 for a birth, SPR-015 F9; the mother's row is readable in this instant even if she dies in the same slot: a dead row stays until Bookkeeping, SPR-011 ruling 5), s = m's person.residence (>= 1 by INV-S3-02: the mother entered the world in an earlier instant, since a mother is at least 15 years old, SPR-015 F0, so her residence was written before this step); person.residence := s; append {person_id = the newborn, settlement = s, from_tick = now}.",
-  "R5 Interval end (never stored). The interval of person p opened at f ends at the from_tick of p's next residence_interval row (none at F0), else at life_course.exit_tick (i64::MAX while p is in the ledger). V-DATA-04's P1a variant audits that the intervals of p tile [life_course.entry_tick, exit_tick) exactly: one row at F0, from_tick = entry_tick (0 for a founder, the birth tick for a birth; a founder's pre-epoch years before 0 are not history, 05.2 §1), and that per settlement, living residents at a month end = genesis placements + births - deaths there since genesis.",
+  "R2 Households. For each manifest household h in manifest order: one draw with entity = the PersonId of its head (a cast member); every member of h takes the drawn settlement: the head (whatever its own `household` field says: absent, or h), every cast member whose `household` names h, and h's children and servants. A household lives together. Edge cases (REV-SPR-018 R9): the manifest validator refuses, naming the person, a cast member who heads two households and a head whose `household` field names a household other than the one it heads; SPR-018 adds both rules to manifest_v0.py and the Rust loader (V-WC-04 parity).",
+  "R3 Loose founders. Every founder in no manifest household (a cast member without `household` who heads none, and every anonymous founder of peoples.population) takes its own draw, entity = its own PersonId. Exactly one draw per manifest household and per loose founder; nothing else is drawn. Founder order (ruling 10): the cast in manifest order (k = 0..C-1), then each household's children and servants in household order, then the rest; in hamlet the four friends are k = 2..5 and draw for themselves, Job's 40 children and servants are k = 6..45 and take Job's settlement.",
+  "R4 Writes at genesis and at birth. Genesis (rh-worldgen, after M2's founder rows and M1's tables): person.residence := s for every founder, and one residence_interval row {person_id, settlement = s, from_tick = 0} per founder, in ascending PersonId. Birth (residence_at_birth, Day/Vital, scheduled after M2 by the same_instant read of person.mother): for each ledger row with person.residence = 0 (the type's zero SPR-014's row insert writes for every other owner's column, so exactly the rows inserted in this instant; never a founder, whose residence genesis wrote, even one with birth_tick = 0: REV-SPR-018 R4), in ascending PersonId: m = person.mother (never 0 for a birth, SPR-015 F9; the mother's row is readable in this instant even if she dies in the same slot: a dead row stays until Bookkeeping, SPR-011 ruling 5), s = m's person.residence (>= 1 by INV-S3-02: the mother entered the world in an earlier instant, since a mother is at least 15 years old, SPR-015 F0, so her residence was written before this step); person.residence := s; append {person_id = the newborn, settlement = s, from_tick = now}.",
+  "R5 Interval end (never stored). The interval of person p opened at f ends at the from_tick of p's next residence_interval row (none at F0), else at life_course.exit_tick (i64::MAX while p is in the ledger). V-DATA-04's P1a variant audits, for every person who entered the world at or after the epoch (founders and the born; the pre-epoch ancestors SPR-019 back-fills have life-course rows and no residence row, and are exempt: REV-SPR-018 R7), that the intervals of p tile [life_course.entry_tick, exit_tick) exactly: one row at F0, from_tick = entry_tick (0 for a founder, the birth tick for a birth; a founder's pre-epoch years before 0 are not history, 05.2 §1), and that per settlement, living residents at a month end = genesis placements + births - deaths there since genesis.",
   "R6 Restart. The owned columns restore everything; S3 holds no timer and no cache at F0. A keyframe cut between a row insert and S3's step cannot exist: both happen inside one instant's Vital phase and keyframes are cut after Bookkeeping.",
 ]
 
 [initialization]
-state = "rh-worldgen writes person.residence and the genesis residence_interval rows per [algorithm.residence_f0] R1-R4, after M1's tables (it needs settlement.id and region.land_cells) and after M2's founder rows (it needs the founders' PersonIds): one row per founder, from_tick 0, in ascending PersonId. The draw is founder_residence under rh-worldgen's reserved system id. SPR-019's population synthesis keeps R1-R3 for the founders it generates (a synthesised household is a manifest-shaped household) and amends this section if it needs more"
+state = "rh-worldgen writes person.residence and the genesis residence_interval rows per [algorithm.residence_f0] R1-R4, after M1's tables (it needs settlement.id and region.land_cells) and after M2's founder rows (it needs the founders' PersonIds): one row per founder, from_tick 0, in ascending PersonId. The draw is founder_residence under rh-worldgen's reserved system id. S3 runs in a world only when the manifest or its template names it: SPR-018's sprint PR adds S3 to every template's default_systems with the registry_version bump (REV-SPR-018 R3). SPR-019's population synthesis keeps R1-R3 for the founders it generates (a synthesised household is a manifest-shaped household), writes no residence row for the pre-epoch ancestors it back-fills (R7), and amends this section if it needs more"
 from_manifest = ["cast", "households", "peoples"]
 
 [input_data]
@@ -181,12 +179,12 @@ drivers = []
 
 [[submodels]]
 name = "residence_at_birth"
-summary = "[algorithm.residence_f0] R4 at a birth: the newborn's person.residence := the mother's, and one residence_interval row opening at the birth instant; in ascending PersonId over the rows with birth_tick = now, scheduled after M2 in the same Vital slot"
+summary = "[algorithm.residence_f0] R4 at a birth: the newborn's person.residence := the mother's, and one residence_interval row opening at the birth instant; in ascending PersonId over the rows with person.residence = 0 (the rows inserted this instant), scheduled after M2 in the same Vital slot"
 earns_its_place_by = ["V-DATA-04", "V-INV-01"]
 
 [[invariants]]
 id = "INV-S3-01"
-statement = "Tiling: for every life_course row, the person's residence_interval rows, ordered by from_tick, start at entry_tick, each ends where the next begins, and the last ends at exit_tick (open while in the ledger); no gap, no overlap. At F0 exactly one row per person"
+statement = "Tiling: for every life_course row whose person entered the world at or after the epoch (origin founder or born; the pre-epoch ancestors SPR-019 back-fills have no residence row and are exempt), the person's residence_interval rows, ordered by from_tick, start at entry_tick, each ends where the next begins, and the last ends at exit_tick (open while in the ledger); no gap, no overlap. At F0 exactly one row per such person"
 test = "V-DATA-04"
 [[invariants]]
 id = "INV-S3-02"
@@ -230,7 +228,12 @@ lag = "start of day"
 [[couplings]]
 system = "M2.demography"
 direction = "out"
-via = "M2 F1 may bound its marriage pool by settlement through person.residence (SPR-015's not_yet); a seam, nothing in P1a reads it"
+via = "The read contract REV-SPR-018 R8 sets for M2 F1's partnering ([algorithm.partnering_f1] N4, applied on the births branch): M2 reads person.residence as a mode read, lagged; the husband draw's candidates are the eligible men whose residence equals the bride's, so no P1a marriage joins two settlements (P1a has no residence moves, PRJ-002 ruling M-6); neutral 0 means no restriction (the whole ledger), so M2 registers and runs without S3 (REV-EVO-001 R4). A reader of residence = 0 at a Month pulse cannot see a newborn's unset value: residence is written in the Vital slot of the birth instant"
+lag = "lagged (start of the Month pulse instant)"
+[[couplings]]
+system = "S6.artifacts"
+direction = "out"
+via = "S6 reads person.residence as the bearer's place (its [[reads]]); P1b"
 lag = "lagged"
 
 [isolation]                                # docs/09 V-SF-22: S3 F0 alone, with M1's tables and a scripted ledger as inputs

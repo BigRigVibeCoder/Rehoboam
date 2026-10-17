@@ -13,10 +13,14 @@ bit for bit. It checks:
      settlements; ``--write`` regenerates the file, never by hand;
   2. the invariants of the M1 spec hold on every case: every land cell reached from a seed has one
      region and every sea cell none; regions are 4-connected and non-empty; one seat per region,
-     inside it; the region graph is exactly the 4-adjacency of regions; one route per edge;
-  3. the widths the spec states hold (the accumulator, the step cost, the draw-to-index product);
+     inside it; the region graph is exactly the 4-adjacency of regions; one route per edge; every
+     land component has a seed while the region count allows (W6);
+  3. the widths the spec states hold (the accumulator, the step cost, the draw-to-index product),
+     the template ids are the Registry's [heightmap_templates], every template generates at R = 64
+     for seeds 1 to 8 (W5), and no founder id of any case needs the rehash;
   4. residence intervals tile the recorded lifetime of founders and of children born later
-     (V-DATA-04's P1a variant), on a small scripted sequence of births;
+     (V-DATA-04's P1a variant), on a small scripted sequence of births; founders are numbered in
+     SPR-011 ruling 10's order (the cast, each household's children and servants, then the rest);
   5. the bench 4 fixture (``docs/08`` §9, ``bench/raster_8x512``): the 512-square elevation raster
      of ``continental_plains`` at seed 1 and the digest of one smoothing pass over its eight layers.
 
@@ -80,6 +84,10 @@ RANGE_FIELDS = 2
 MAX_OP_COUNT = 64
 MAX_SMOOTH_PASSES = 4
 REGION_NONE = 0
+REGISTRY = ROOT / "specs" / "manifest" / "registry_v0.toml"
+SWEEP_RESOLUTION = 64
+SWEEP_SEEDS = range(1, 9)
+SWEEP_REGIONS = (1, 4)
 I64_MAX = (1 << 63) - 1
 
 
@@ -146,14 +154,14 @@ def _op(raw: dict[str, object], where: str) -> Op:
     count = raw.get("count")
     if not isinstance(count, int) or not (1 <= count <= MAX_OP_COUNT):
         raise ValueError(f"{where}: count must be an integer in [1, {MAX_OP_COUNT}]")
-    width = _pair(raw["width"], 1, PER_MILLE, f"{where}.width") if kind == "ring" else None
+    width = _pair(raw["width"], 0, PER_MILLE, f"{where}.width") if kind == "ring" else None
     if kind == "ring" and "width" not in raw:
         raise ValueError(f"{where}: a ring needs a width")
     return Op(
         kind=str(kind),
         count=count,
         height=_pair(raw.get("height"), -U16_MAX, U16_MAX, f"{where}.height"),
-        radius=_pair(raw.get("radius"), 1, PER_MILLE, f"{where}.radius"),
+        radius=_pair(raw.get("radius"), 0, PER_MILLE, f"{where}.radius"),
         x=_pair(raw.get("x"), 0, PER_MILLE, f"{where}.x"),
         y=_pair(raw.get("y"), 0, PER_MILLE, f"{where}.y"),
         width=width,
@@ -272,20 +280,54 @@ def land_cells(e: list[int], sea_level: int) -> list[int]:
     return [i for i, v in enumerate(e) if v >= sea_level]
 
 
+def land_components(land: list[int], r: int) -> list[list[int]]:
+    """W6: the 4-connected land components, each sorted, in order of their lowest cell index."""
+    members = set(land)
+    seen: set[int] = set()
+    out: list[list[int]] = []
+    for start in land:  # index order, so components come out by their lowest cell
+        if start in seen:
+            continue
+        comp, stack = [start], [start]
+        seen.add(start)
+        while stack:
+            c = stack.pop()
+            for nb in _neighbours(c, r):
+                if nb in members and nb not in seen:
+                    seen.add(nb)
+                    comp.append(nb)
+                    stack.append(nb)
+        out.append(sorted(comp))
+    return out
+
+
 def region_seeds(land: list[int], world_seed: int, k: int, r: int) -> list[int]:
-    """W6: the first seed by a keyed draw, the rest by farthest-point sampling (ties: low index)."""
+    """W6: a keyed first seed, then one per unseeded land component, then farthest-point picks.
+
+    Every pick after the first is the cell farthest from the placed seeds (ties: the lowest index),
+    first inside each component without a seed, in component order, while K allows; then over all
+    land. Land in a component left without a seed stays region 0 (W7).
+    """
     if len(land) < k:
         raise ValueError(f"too few land cells for {k} regions: {len(land)}")
     first = land[pick(draw(world_seed, PURPOSE_REGION_SEED, 0, 0), len(land))]
     seeds = [first]
     dmin = {i: (i % r - first % r) ** 2 + (i // r - first // r) ** 2 for i in land}
-    for _ in range(1, k):
-        best = max(land, key=lambda i: (dmin[i], -i))
+
+    def add(cells: list[int]) -> None:
+        best = max(cells, key=lambda i: (dmin[i], -i))
         seeds.append(best)
         bx, by = best % r, best // r
         for i in land:
-            d = (i % r - bx) ** 2 + (i // r - by) ** 2
-            dmin[i] = min(dmin[i], d)
+            dmin[i] = min(dmin[i], (i % r - bx) ** 2 + (i // r - by) ** 2)
+
+    for comp in land_components(land, r):
+        if len(seeds) >= k:
+            break
+        if not any(dmin[i] == 0 for i in comp):  # no seed in this component yet
+            add(comp)
+    while len(seeds) < k:
+        add(land)
     return seeds
 
 
@@ -401,18 +443,54 @@ TAG_FOUNDER = rng.TAG_FOUNDER
 
 
 def founder(world_seed: int, k: int) -> int:
-    """The PersonId of founder k (rh-ids person/founder/v1; no rehash fires in these cases)."""
+    """The base PersonId of founder k (rh-ids person/founder/v1); see check_founders."""
     return rng.h64_words(TAG_FOUNDER, [world_seed, k])
 
 
-def placement(world_seed: int, weights: list[int], households: list[int], loose: int) -> list[int]:
+@dataclass(frozen=True)
+class Population:
+    """A manifest's people as R0 needs them: the cast, the households and the anonymous rest.
+
+    ``cast`` holds each cast member's ``household`` field (None when absent), in manifest order;
+    ``households`` holds (id, the head's cast index, children + servants) in manifest order.
+    """
+
+    cast: tuple[str | None, ...]
+    households: tuple[tuple[str, int, int], ...]
+    rest: int
+
+    def check(self) -> None:
+        """R2, R3 (REV-SPR-018 R9): no head of two households; a head names its own household."""
+        heads = [h for _, h, _ in self.households]
+        if len(set(heads)) != len(heads):
+            raise ValueError(
+                "a cast member heads two households (the validator refuses it by name)"
+            )
+        for hid, head, _ in self.households:
+            if self.cast[head] not in (None, hid):
+                raise ValueError(f"the head of {hid} names another household (refused by name)")
+
+    def founder_order(self) -> list[tuple[str | None, int]]:
+        """R0: (household id or None, founder k) in SPR-011 ruling 10's order."""
+        order: list[tuple[str | None, int]] = []
+        for k, hid in enumerate(self.cast):
+            order.append((hid, k))
+        for hid, head, members in self.households:
+            if self.cast[head] is None:
+                order[head] = (hid, head)  # the head belongs to the household it heads (R2)
+            order += [(hid, len(order) + j) for j in range(members)]
+        order += [(None, len(order) + j) for j in range(self.rest)]
+        return order
+
+
+def placement(world_seed: int, weights: list[int], pop: Population) -> list[int]:
     """R1-R3: the settlement (1-based) of every founder, in founder order.
 
-    ``weights`` are the settlements' land-cell counts in settlement order. Founders are numbered as
-    SPR-011 ruling 10 orders them: the heads of the manifest households first (one cast member per
-    household here), then each household's other members in household order, then the loose rest.
-    A household takes one draw, keyed by its head's PersonId; a loose founder its own.
+    ``weights`` are the settlements' land-cell counts in settlement order. A manifest household
+    takes one draw, keyed by its head's PersonId, for the head, the cast members whose
+    ``household`` names it, and its children and servants; a founder in no household draws alone.
     """
+    pop.check()
     cum, total = [], 0
     for w in weights:
         total += w
@@ -424,13 +502,17 @@ def placement(world_seed: int, weights: list[int], households: list[int], loose:
         x = pick(draw(world_seed, PURPOSE_RESIDENCE, entity, 0), total)
         return 1 + next(i for i, c in enumerate(cum) if c > x)
 
-    heads = [settle(founder(world_seed, h)) for h in range(len(households))]
-    out = list(heads)
-    for h, size in enumerate(households):
-        out += [heads[h]] * (size - 1)
-    n = len(out)
-    out += [settle(founder(world_seed, n + j)) for j in range(loose)]
-    return out
+    by_household = {hid: settle(founder(world_seed, head)) for hid, head, _ in pop.households}
+    return [
+        by_household[hid] if hid is not None else settle(founder(world_seed, k))
+        for hid, k in pop.founder_order()
+    ]
+
+
+def check_founders(world_seed: int, count: int) -> list[str]:
+    """Check 3: the founder ids of a case are distinct, so the deterministic rehash never fires."""
+    ids = [founder(world_seed, k) for k in range(count)]
+    return [] if len(set(ids)) == count else [f"seed {world_seed}: founder ids collide"]
 
 
 @dataclass(order=True)
@@ -469,14 +551,17 @@ def birth_sequence() -> list[str]:
 
 
 # ----------------------------------------------------------------------------- checks
-def check_widths() -> list[str]:
+def check_widths(templates: dict[str, Template]) -> list[str]:
     """Check 3: the widths the spec states."""
     failures = []
     if pick(MASK64, 1 << 32) != (1 << 32) - 1 or pick(0, 7) != 0:
         failures.append("pick does not map the draw extremes to 0 and n - 1")
-    worst = 64 * U16_MAX + U16_MAX  # 64 blobs of one op at full height, plus the base
-    if worst >= 1 << 31:
-        failures.append("the accumulator needs more than i32: the spec says i64, fine, but note it")
+    worst = max(
+        t.base + sum(op.count * max(abs(op.height[0]), abs(op.height[1])) for op in t.ops)
+        for t in templates.values()
+    )
+    if worst >= 1 << 63:
+        failures.append(f"the accumulator can reach {worst}, beyond i64")
     if MAX_STEP_COST != SPEC_MAX_STEP_COST:
         failures.append(
             f"the step cost bound is {MAX_STEP_COST}, the spec says {SPEC_MAX_STEP_COST}"
@@ -485,6 +570,33 @@ def check_widths() -> list[str]:
         failures.append(
             "a Dijkstra distance can reach 2^33 at the largest raster; the spec says below"
         )
+    if MAX_RESOLUTION * MAX_RESOLUTION * (MAX_RESOLUTION - 1) >= 1 << 64:
+        failures.append("a centroid coordinate sum (W8) does not fit u64")
+    return failures
+
+
+def check_registry_ids(templates: dict[str, Template]) -> list[str]:
+    """Check 3: the template ids are exactly the Registry's [heightmap_templates] ids."""
+    reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
+    want = set(reg["heightmap_templates"]["ids"])
+    have = set(templates)
+    if want != have:
+        return [f"template ids {sorted(have)} differ from the Registry's {sorted(want)}"]
+    return []
+
+
+def check_sweep(templates: dict[str, Template]) -> list[str]:
+    """W5's claim: every template generates at R = 64 for seeds 1 to 8 and K = 1 and 4."""
+    failures = []
+    for name in sorted(templates):
+        for seed in SWEEP_SEEDS:
+            for k in SWEEP_REGIONS:
+                try:
+                    w = generate(templates, name, seed, SWEEP_RESOLUTION, k)
+                except ValueError as e:
+                    failures.append(f"{name} seed {seed} K {k} at R {SWEEP_RESOLUTION}: {e}")
+                    continue
+                failures += check_invariants(w)
     return failures
 
 
@@ -537,21 +649,38 @@ def check_invariants(w: World) -> list[str]:
         failures.append(f"{tpl}: the edge list is not sorted, unique and a < b (INV-M1-04)")
     if len(w.route_length) != len(w.edges):
         failures.append(f"{tpl}: routes and edges differ in count (INV-M1-05)")
+    comps = land_components(w.land, w.r)
+    seeded = sum(1 for c in comps if any(w.region[i] != REGION_NONE for i in c))
+    if seeded != min(w.k, len(comps)):
+        failures.append(f"{tpl}: {seeded} of {len(comps)} land components seeded, K = {w.k} (W6)")
     return failures
 
 
 # ----------------------------------------------------------------------------- golden file
-CASES: tuple[tuple[str, int, int, int, list[int], int], ...] = (
-    # (template, seed, resolution, regions, household sizes, loose founders)
-    ("flat", 1, 64, 1, [1], 0),  # solo: Ada alone, one valley
-    ("flat", 7, 64, 1, [5], 0),  # household: a couple and three children
-    ("desert_fringe", 42, 128, 4, [42], 18),  # hamlet: Job's house of 42, and 18 others
-    ("desert_fringe", 7, 128, 4, [3, 4], 10),
-    ("archipelago", 7, 96, 6, [2, 2, 2], 12),
-    ("mountain_valleys", 7, 128, 5, [6], 30),
-    ("caldera_with_passes", 1, 128, 3, [4, 4], 8),
-    ("continental_plains", 3, 64, 8, [5, 5, 5, 5], 40),
-    ("river_delta_city", 11, 128, 4, [7], 25),
+SOLO = Population(cast=("ada_house",), households=(("ada_house", 0, 0),), rest=0)
+HOUSEHOLD = Population(
+    cast=("oswin_house", "oswin_house"), households=(("oswin_house", 0, 3),), rest=0
+)
+# hamlet.yaml: Job and his wife in job_house, the four friends loose, 7 sons, 3 daughters and 30
+# servants in job_house, and 60 - 6 - 40 = 14 anonymous founders.
+HAMLET = Population(
+    cast=("job_house", "job_house", None, None, None, None),
+    households=(("job_house", 0, 40),),
+    rest=14,
+)
+SYNTHETIC = Population(cast=("a", None, "b"), households=(("a", 0, 3), ("b", 2, 1)), rest=10)
+CASES: tuple[tuple[str, int, int, int, Population], ...] = (
+    # (template, seed, resolution, regions, population): the first three are the rung manifests
+    ("flat", 1, 64, 1, SOLO),  # solo.yaml
+    ("flat", 7, 64, 1, HOUSEHOLD),  # household.yaml
+    ("desert_fringe", 42, 256, 4, HAMLET),  # hamlet.yaml (raster_resolution 256)
+    ("desert_fringe", 42, 128, 4, HAMLET),  # hamlet's template and seed at a smaller raster
+    ("desert_fringe", 7, 128, 4, SYNTHETIC),
+    ("archipelago", 7, 96, 6, SYNTHETIC),
+    ("mountain_valleys", 7, 128, 5, SYNTHETIC),
+    ("caldera_with_passes", 1, 128, 3, SYNTHETIC),
+    ("continental_plains", 3, 64, 8, SYNTHETIC),
+    ("river_delta_city", 11, 128, 4, SYNTHETIC),
 )
 
 
@@ -560,9 +689,10 @@ def sha(values: list[int]) -> str:
     return hashlib.sha256(array("H", values).tobytes()).hexdigest()
 
 
-def render_case(w: World, households: list[int], loose: int) -> list[str]:
+def render_case(w: World, pop: Population) -> list[str]:
     """The golden lines of one case."""
-    place = placement(w.seed, w.land_count, households, loose)
+    place = placement(w.seed, w.land_count, pop)
+    hh = ",".join(f"{hid}:{head}:{n}" for hid, head, n in pop.households)
     lines = [
         f"case {w.template} {w.seed} {w.r} {w.k}",
         f"elevation_sha256 {sha(w.elevation)}",
@@ -573,7 +703,7 @@ def render_case(w: World, households: list[int], loose: int) -> list[str]:
         "seats " + " ".join(map(str, w.seat)),
         f"edges {len(w.edges)} " + " ".join(f"{a}-{b}" for a, b in w.edges),
         "routes " + " ".join(map(str, w.route_length)),
-        f"residence households={','.join(map(str, households))} loose={loose} "
+        f"residence cast={len(pop.cast)} households={hh} rest={pop.rest} "
         + " ".join(map(str, place)),
     ]
     return lines
@@ -601,14 +731,15 @@ def render(templates: dict[str, Template], version: str) -> tuple[str, list[str]
         "# worldgen-lite v0 golden outputs (SPR-018): GENERATED by",
         "# python -I specs/worldgen/selftest_worldgen_lite.py --write; do not edit.",
         "# Each case: template, seed, raster resolution, region count; SHA-256 of the u16 rasters",
-        "# (little-endian, index order); cells as row-major indices; settlements 1-based.",
+        "# (little-endian, index order); cells as row-major indices; settlements 1-based; the",
+        "# residence line lists each founder's settlement in SPR-011 ruling 10's founder order.",
         f"templates {version}",
     ]
     body, failures = [], []
-    for name, seed, r, k, households, loose in CASES:
+    for name, seed, r, k, pop in CASES:
         w = generate(templates, name, seed, r, k)
-        failures += check_invariants(w)
-        body += render_case(w, households, loose)
+        failures += check_invariants(w) + check_founders(seed, len(pop.founder_order()))
+        body += render_case(w, pop)
     body += bench_fixture(templates)
     return "\n".join([*header, *body]) + "\n", failures
 
@@ -627,7 +758,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     templates = load_templates(args.templates)
     text, failures = render(templates, templates_version(args.templates))
-    failures += check_widths() + birth_sequence()
+    failures += check_widths(templates) + check_registry_ids(templates) + birth_sequence()
+    failures += check_sweep(templates)
     if failures:
         for f in failures:
             print(f"REFERENCE FAILED: {f}")
