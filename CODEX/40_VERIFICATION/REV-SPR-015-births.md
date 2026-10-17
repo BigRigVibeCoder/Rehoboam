@@ -9,7 +9,7 @@ tags: [verification]
 related: [PRJ-002, SPR-015, SPR-016, EVO-001, REV-EVO-001, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF:** Round 2, on PR #50 at `35226c0` plus the delta to `13fbb70`: **not ready to freeze, but close. No blockers, 4 majors, 7 minors, 7 nits.** The arithmetic reproduces independently. At the default tfr of 4.9, r is +0.114 %/yr; NRR is 1 at about 4.74. The new V-SF-24 identity is exact across 3.9 M simulated conceptions. The 13fbb70 delta (a husband drawn from the bride's settlement) is legal, deterministic and CRN-stable. The rulings are in §2.0. Commanded deaths and marriages follow REV-EVO-001 R9, shape (b): the sender's timer submits at the outcome's instant, and M2 holds no pending commanded outcomes. Round 1 found 1 blocker, 5 majors, 10 minors and 7 nits (§0, §1). Both rounds ran in sessions on a different model from the drafter's.
@@ -732,3 +732,197 @@ New findings from the delta:
 - A multi-settlement world under the `13fbb70` filter: kin exhaustion and no-candidate months in small settlements are
   unquantified.
 - I could not check Coale & Trussell (1974) Table 1, which is still cited-pending.
+
+
+## 3. Round 3 (2026-10-17, `f9aca53`)
+
+### 3.0 Architect rulings, round 3
+**Ready to freeze after three small fixes, R19 to R22 below.** No blockers and no majors.
+
+| # | Finding | Ruling |
+|---|---|---|
+| R19 | MIN-1 | Pin the amendment paths, not the count: a committed list of each amended path with a hash of its new text, compared as an exact set. The lint refuses a new `[algorithm.*]` table that names a frozen step id unless an `[[amends]]` record covers it; if that cannot be done mechanically, it becomes a review rule in `next/README.md` |
+| R20 | MIN-2 | The 45–49 report value is 2.03. State the banding exactly and recompute every band; Q6 carries the corrected values |
+| R21 | MIN-3 | The settlement rule gates: an invariant that no marriage M2 draws pairs two non-zero settlements. T1's commanded marriages are exempt (the documented P1a limitation) |
+| R22 | Nits | As the reviewer lists them, including the stale step text at `:424` |
+
+### 3.1 The review (round 3, independent reviewer)
+
+Reviewer: independent and adversarial, on a different model from the drafter's. Copy reviewed: `$R/src`, a git archive
+of `f9aca53` (delta from `13fbb70`: 7 files, +404/−219). Line numbers refer to `$R/src`.
+`$R` = `/tmp/claude-0/-home-user-Rehoboam/78f410bc-aa41-55ce-883d-f1b2ebd2cbcd/scratchpad/births_review_r3`.
+Only `$R/tools`, `$R/probes` and this file were written; the repository was not touched.
+
+### BLUF
+
+**Ready to freeze after three small fixes: 0 blockers, 0 majors, 3 minors, 6 nits.**
+
+- R12, R13, R15, R16 and R18 are applied. R17 is partly applied: R17.4 leaves a gap (MIN-1).
+- Every gate passes, and every control fails as designed.
+- Every R15 bypass from round 2 now fails. Of my own new attempts, two pass:
+  - **an amendment swap.** S9's arithmetic is changed through a valid record, and one meaning amendment is withdrawn so
+    the pinned count stays at 12. It passes both the lint and the `check_all` gate string (MIN-1).
+  - **a new table that overrides a frozen step.** No syntactic lint can catch this; only review can.
+- The numbers reproduce: NRR 1.035 and r = +0.114 to +0.117 %/yr at tfr 4.9, NRR = 1 at tfr 4.736 to 4.741, and the c_i
+  bits match exactly.
+- **Q6 needs a correction.** The age-shape report values are biased by how the chain bands births. Banded by exact age
+  at birth, 45–49 is **2.03**, not 1.98 (MIN-2).
+- **Foreign reads comply with the Architect's rule.** All four are `mode`, each has an explicit neutral, and none is
+  `identity`.
+
+Confidence in the verdict: 80%.
+
+### 1. Rulings R12–R18
+
+| # | Status | Evidence |
+|---|---|---|
+| R12 | **APPLIED** | The `pending.*` columns, `COMMANDED_*` kinds, the `commanded` purpose and INV-M2-13 are all gone. A grep of the spec finds none of them. The generated `RngPurpose` is DeathTime=1 … BirthSex=4, HusbandPick=5, with no Commanded. `[[applies]]` has `drained_by = "Day/Vital"` (`:376`, `:382`). L1–L2 (`:622-623`) apply every ScheduleDeath and Marry in M2's Day/Vital drain, after the slot's timer pass. `lifecycle_f1` is now `m2-f1-lifecycle-v2`, and L4 records shape (a) as not chosen. The frozen `tick` field stays in the payloads; L1 counts a mismatched tick and never holds the command (per the ruling, 0.2.1 removes it). Residue: stale step text at `:424` (NIT-1) |
+| R13 | **APPLIED** | The S12 `[[amends]]` record (`:859-862`) passes the lint byte for byte, and `[algorithm.mortality_rung0] version` is now `m2-rung0-v1.1` (`:500`). An absent or `alive = 0` row is dropped and counted, so there is no double death. A commanded death cancels the victim's DEATH_TIMER through `own_timers` and `cancel`, and rh-core supports this (`system.rs:561-589`): the drain's level runs after the timer pass, and after Month/Vital at a pulse instant, so a timer drawn at the same instant is visible and cancellable. A second command for the same victim meets `alive = 0` before it can cancel, so no "cancelled twice" `SimError` occurs. L1 relies on the living-key drop, with S12 as a second guard. I found no path to a double death or a `SimError` |
+| R14 | moot (confirmed) | No pending-state invariant remains |
+| R15 | **APPLIED** | `lint_duplicate_keys` runs on every spec in both modes (`lint_odd.py:245`, `:442`). Frozen `when`, `[initialization]`, schedule steps, binding `when`, column `meaning` and purpose `use` are now compared by equality. The self-check has 19 probes, and `check_all.sh:800` pins its output line. **All of round 2's bypass probes, re-planted on this text, FAIL:** six duplicate shadows, the prefix negation, the suffix contradiction and the superset step, along with r1_*, sched_when, rng_use, owns_meaning, amend_owns, amend_frozen_trailing_space and amend_record_removed. Three index-0 duplicate probes fail through an `AssertionError` that names the duplicate (NIT-4). The exception is `amend_s9_computational`: it passes the lint and fails only through the count pin (MIN-1). **My new attempts:** see §2.1. The R15 rules hold; the remaining gaps lie outside them |
+| R16 | **APPLIED** | `husband_pick` is the 5th purpose, appended after the frozen ones (`:471-478`). Its key is (woman, month), k = the candidate id, and `resample_on_fork = false`: no timer carries it, and the marriage timer keeps the husband (N6). N4 (`:594`) takes the least draw. **The argmin stays CRN-stable over the filtered set.** Every filter is a per-candidate predicate. The tier fallback switches only when the gap tier is empty, and then the added man is the winner. The per-step matched set cascades only through winners. Measured with the repository's ChaCha8 reference (`$R/tools/argmin_chacha.py`): χ² = 7.2 with ids 1..8 and 10.6 with random u64 ids (7 df; the 99.9 % critical value is 24.3). Removing a non-winner changed the pick in 0 of 1,600 trials, and another branch salt kept the same pick in 182 and 216 of 1,600 (≈ 1/8, so a fork re-ranks). Caveat: StepCtx keys every pulse draw at epoch 0 until BCK-002 A-29 lands (NIT-2) |
+| R17 | **PARTLY APPLIED** | (1) Applied: the S12 and EXTINCTION `when` amendments count the slot's due births, and INV-M2-09 allows F9's same-slot re-open. NIT-3 covers how to implement the test. (2) Applied: `report_ratios` come from the chain with mortality and widowhood, but carry a banding bias (MIN-2). (3) Applied, but over-applied to the settlement check (MIN-3). (4) **Partly:** the lint refuses an amended step under the frozen version, and v1.1 is set. But a later amendment under v1.1 passes, and the gate pins the amendment count, not the paths (MIN-1). (5) Applied in expect (5); the comment in `household.yaml` is stale (NIT-1). (6) Applied: the forcing gives every newborn its mother's residence (`:825`). (7) Applied: N7 records a T1 cross-settlement marriage as a P1a limitation (`:597`) |
+| R18 | **APPLIED (numbers confirmed)** | See §3. Q5's figures reproduce. Q6's c_i reproduce exactly, but the age shape at 45–49 should read 2.03 (MIN-2) |
+
+### 2. New findings (round 3)
+
+#### MIN-1. An amendment can rewrite a frozen algorithm's arithmetic under the already-bumped version, and `check_all` pins a count, not paths (80%)
+- **Where:** `specs/systems/lint_odd.py:300-312` (the version rule compares against the frozen version only);
+  `bin/check_all.sh:800` (expects "12 amendments recorded").
+- **Probe `r3_amend_swap_s9`** (`$R/tools/probes_r3.py`). The edit:
+  - replaces S9's multiply-shift day draw with `j = 1 + (d1 mod (n − 1))`, through a valid `[[amends]]` record;
+  - withdraws the `owns.life_course.origin.meaning` amendment and restores the frozen meaning.
+- **Result: the lint passes, and so does the `check_all` gate string.** The count is still 12 and the table is still
+  `m2-rung0-v1.1`, whose comment claims "S0-S11 … unchanged". The golden vectors could move under an unchanged name.
+  Round 2's plain `amend_s9_computational` (13 amendments) is caught only by the count.
+- **Fix (pick one):**
+  - The lint prints a digest of the sorted AMEND paths, and `check_all` pins that digest.
+  - Each amended table declares `amended_steps = [...]`; the lint checks the list against the records, and requires the
+    version to move whenever the list changes.
+
+#### MIN-2. V-SF-24's `report_ratios` carry a half-month banding bias; Q6 should read 2.03 at 45–49, not 1.98 (85%)
+- **Where:** `report_ratios` `:555`; `selftest_m2_f1.py:496-504` (`band_ratios`); docs/09 V-SF-24 `:498`; Q6.
+- **Cause.** The chain bands month a's births by month index. A mother born mid-month gives birth at a mean age half a
+  month later, so half of each boundary month's births belong to the next band.
+- **Test** (`$R/tools/shape_shift.py`): the drafter's own Chain, with each month's births split half and half across the
+  boundary, gives the "exact age" row below. It matches my day-resolution cohort Monte Carlo, which bands by exact age
+  at the birth instant, to within 0.006.
+
+  | Source | 15–19 | 20–24 | 25–29 | 30–34 | 35–39 | 40–44 | 45–49 |
+  |---|---|---|---|---|---|---|---|
+  | spec (banded by month index) | 0.85 | 0.97 | 1.01 | 1.02 | 1.03 | 1.14 | 1.98 |
+  | drafter's chain, banded by exact age at birth | 0.837 | 0.965 | 1.009 | 1.017 | 1.036 | 1.148 | 2.034 |
+  | my cohort MC, 10^6 women, gap 3, seed 7 (seed 1) | 0.837 | 0.966 | 1.009 | 1.017 | 1.036 | 1.148 | 2.040 (2.019) |
+
+- **Impact.** Nothing fails, because the gaps are inside the 5 % and 15 % tolerances. But the numbers the director sees
+  are biased: +1.5 % at 15–19 and −2.8 % at 45–49.
+- **Fix:** split each month's births in `band_ratios`, then pin 0.84, 0.97, 1.01, 1.02, 1.04, 1.15, 2.03.
+
+#### MIN-3. R17.3 is over-applied: the settlement rule is in the "REPORTED, not gated" bucket (70%)
+- **Where:** `[isolation].expect` (3) `:828`.
+- **Problem.** "Under the two-settlement forcing no M2-drawn marriage pairs two settlements" is a hard rule of N4
+  (REV-SPR-018 R8), not a Q6 stylized fact. In the "not gated" bucket, a bug in the settlement filter cannot fail G1a.
+- **Fix:** move it to a gated expect item, or add an invariant: every open M2-drawn marriage row pairs equal residences,
+  or a residence of 0 (P1a has no moves).
+
+#### NITs
+- **NIT-1. Stale text.**
+  - `:424`: the Day/Vital `apply_death` step still says "due death timers (M2's own and those made from ScheduleDeath
+    commands)". That is shape (a); under R12, M2 makes no timer from a command.
+  - `:690`: the `apply_marry` summary says "commanded marriages and T1's Marry commands", which names one thing twice.
+  - `:328-331`: the comment says "All three are flags … none enters a rate". There are four reads, and
+    `house_member.person` selects c_i^e, so it does enter the conception rate when `elite_fertility_mult` ≠ 1.
+  - `specs/manifest/examples/household.yaml:4-5` still says "persists or dies out by chance", against expect (5), which
+    says it dies out in every replica (R17.5).
+  - Optional: frozen DEATH `when` reads "when a death timer fires", but a commanded death is applied in the drain. A
+    one-line `[[amends]]` would make it exact.
+- **NIT-2. The epoch is not yet in the key (BCK-002 A-29, open).** `StepCtx::rng` keys every draw at epoch 0
+  (`system.rs:429-431`, `engine.rs:1057`). So "the woman's epoch … a scoped input re-ranks" (`:474`, N4 `:594`) holds
+  only once A-29 lands. The fork part already holds through the branch salt.
+  - Cite A-29 in the text.
+  - `RngStream::draw(t, k)` does not exist. Name one of these instead: `StepCtx::rng(husband_pick, w, h)`,
+    `RngStream::draw(k)` (`rng.rs:292`) or `StreamKey::draw(t, k)` (`hash.rs:187`).
+- **NIT-3. S12's "BIRTH_TIMER due in this slot" test has no direct accessor.** rh-core pops due timers before the timer
+  pass (`agenda.rs:231`, `engine.rs:834`), and `own_timers` excludes them (`system.rs:577`). The test can still be
+  derived: a woman with `conceived_tick ≠ i64::MIN` and no pending own BIRTH_TIMER has her birth due in this slot. Say
+  so in S12 or F10.
+- **NIT-4. Self-check robustness.**
+  - A duplicate at index 0 of the next version itself aborts on the `assert` (`lint_odd.py:801`) before any ERROR line
+    prints. The run still fails, and the assertion names the duplicate, but the diagnostic is buried.
+  - The self-check has no probe for `rng.<purpose>.use` and none for an unknown amend path. The lint catches both;
+    only the self-check is missing them.
+- **NIT-5. The preserved slice omits some frozen content.** Three probes pass silently: `r3_verification_drop` (a
+  frozen `[verification]` test dropped), `r3_coupling_drop` (a frozen out-coupling dropped) and `r3_param_meaning` (a
+  frozen parameter meaning rewritten). Cheap fixes: require frozen tests ⊆ next tests, and keep frozen couplings by
+  (system, direction).
+- **NIT-6.** The `[[reads]] house_member.person` neutral is `0` (`:351`), but the forcing says `constant:absent` and
+  the coupling says "no row". Use "absent".
+
+#### 2.1 Bypass attempts (round 3), `$R/tools/probes_r3.py`, `$R/probes/r3_*`
+
+| Probe | Edit | lint | `check_all` gate |
+|---|---|---|---|
+| `r3_amend_swap_s9` | S9 changed through a valid record; one meaning amendment withdrawn | **PASS** | **PASS** (MIN-1) |
+| `r3_override_table` | a new `[algorithm.mortality_override_f1]` that "replaces S9's day draw"; the frozen table kept | **PASS** | **PASS**. Inherent: review only. The README should name it as the reviewer's duty |
+| `r3_added_step_contradiction` | a new Month/Vital step `mortality_f1` declaring the frozen `mortality` step void | **PASS** | **PASS**. The same class: additions are allowed |
+| `r3_verification_drop`, `r3_coupling_drop`, `r3_param_meaning` | see NIT-5 | PASS | PASS |
+| `r3_amends_duplicate` | the same amendment path recorded twice | FAIL | FAIL |
+| `r3_stepname_space` | `"mortality : …"` added beside the frozen `mortality` | FAIL (duplicate step name) | FAIL |
+
+### 3. Numbers (R18)
+
+- **The widowhood chain**, re-run with round 1's `chain_widow.py` (`$R/tools/chain_widow_r3.txt`):
+
+  | tfr | husband older by | NRR | r |
+  |---|---|---|---|
+  | 4.9 | 3 y | 1.0352 | +0.117 %/yr |
+  | 4.9 | 4 y | 1.0342 | +0.114 %/yr |
+  | 4.741 | 3 y | 1.0011 | |
+  | 4.741 | 4 y | 1.0001 | |
+  | 4.7 | 3 y | 0.9923 | −0.026 %/yr |
+
+  - The root (NRR = 1) is 4.736 with a 3-year gap and 4.741 with a 4-year gap.
+  - The cohort Monte Carlo (10^6 women, day resolution, seed 7) gives NRR 1.0351 and r = +0.117 %/yr (round 2's seed 1:
+    1.0349 and +0.116).
+  - The drafter's figures are NRR 1.0341, r = +0.114 %/yr and a root at 4.741. They agree to within 0.003 %/yr.
+- **The c_i values.** An independent exact recomputation (`$R/tools/ci_check.py`) gives TFR1 = 9.393524 (bits
+  615614), m = 34186, and c bits [119397409, 143118858, 128689234, 112318286, 83490541, 36474834, 4576314], that is,
+  0.0278, 0.03332, 0.02996, 0.02615, 0.01944, 0.00849 and 0.00107. These equal the spec's `check_values`, and
+  12c/(1 + 20c) = M n_i holds exactly.
+- **The age shape.** See MIN-2: 0.84, 0.97, 1.01, 1.02, 1.04, 1.15, **2.03**.
+- **The interval facts** check out: 1/c at 20–24 is 30 months, and the long-run rate is 0.240 a year, a birth every
+  50 months.
+
+### 4. Foreign reads (`specs/systems/next/M2.demography.odd.toml`)
+
+| Read (line) | Owner | Lag | `use` | `[[reads]]` neutral | In-coupling neutral (line) | Isolation forcing | Verdict |
+|---|---|---|---|---|---|---|---|
+| `person.named` (`:333`) | T1.minds | lagged | mode | `false` | "person.named = 0 for everyone" (`:768`) | constant:0 | OK |
+| `person.vocation` (`:340`) | M7.dynasty | lagged | mode | `"none"` | "person.vocation = none for everyone" (`:785`) | constant:none | OK |
+| `house_member.person` (`:347`) | M7.dynasty | lagged | mode | `0` | "no house_member row for anyone" (`:797`) | constant:absent, plus a 10 % step | OK. It does enter a rate when the multiplier is ≠ 1, but it already has a full in-coupling with bounds (NIT-1, NIT-6) |
+| `person.residence` (`:355`) | S3.migration | lagged | mode | `0` | "person.residence = 0 for everyone" (`:814`) | constant:0, plus a two-settlement step | OK |
+
+**Verdict: compliant.** There is no `identity` read. Every foreign read is `mode`, with an explicit neutral on both the
+`[[reads]]` and the in-coupling, and with an isolation forcing. I also checked the algorithm text for undeclared reads:
+F5, N3, N4 and N7 read only these four columns from other owners. So M2 registers without M7, S3 or T1.
+
+### 5. Checks run
+
+All of these ran on `f9aca53` in `$R/src`:
+- `lint_odd.py` passes: 6 specs, 8 warnings.
+- `lint_odd.py --next … --overlay registry_delta.toml` passes, with 12 AMEND lines and "19 planted changes rejected, 12
+  amendments recorded, the clean next version kept".
+- The three `odd_next_control` cases (algorithm, rng, bound) FAIL, each with its own diagnostic.
+- All 19 lint_odd-related `check_all` gates pass (`$R/tools/odd_gates.sh`): the smoke specs, the skeletons, their
+  controls, and the rung-0 and F1 references.
+- `selftest_m2_f1.py` passes all 8 checks. Its control (`tfr1_bits = 615615`) FAILs with "tfr1_bits: spec 615615 !=
+  reference 615614".
+- `selftest_m2_rung0.py` passes.
+- `gen_manifest --check` passes, and the household, hamlet and solo manifests are VALID.
+- The venv's `test_check_all_inventory.py` gives 12 passed. Repository-wide ruff and mypy are clean.
+
+**Not run:**
+- the engine, or any Rust build or test (this delta changes no Rust);
+- the full `check_all.sh`;
+- a 365-day calendar;
+- T1, M7 or S3 coupled.
