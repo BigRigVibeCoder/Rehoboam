@@ -53,7 +53,8 @@ use rh_core::register::register;
 use rh_core::system::SystemModel;
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_ids::BranchSalt;
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_manifest::specs::{load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_snapshot::hash::{LAYOUT, PlaneDigest, xxh3};
 use rh_snapshot::journal::{
     HistoryKey, InputKind, Journal, JournalPosition, NewInput, Producer, Replay, Scope,
@@ -68,8 +69,11 @@ use std::sync::Arc;
 
 use crate::dump;
 use crate::ladder::{Header, Ladder, Rung, RungKind};
+use crate::stream::{Hook, RunDir, RunToml, Stall, StreamHost, keyframe_rel, writer_config};
 use crate::vitals::{Timing, Vitals};
-use crate::world::{SMOKE, Setup, setup};
+use crate::world::{SMOKE, Setup};
+use rh_snapshot::journal::JournaledInput;
+use rh_stream::writer::Summary as StreamSummary;
 
 /// The world name in ladders.
 pub const WORLD: &str = "smoke";
@@ -150,9 +154,24 @@ pub struct RunArgs {
     /// The floor, in percent, of the share of levels that held two or more jobs (DEF-2): below it,
     /// or with no such level at all, the run fails.
     pub require_parallel: Option<u64>,
+    /// The run must be serial: no level held two or more jobs (`--expect-serial`; the
+    /// Architect's T-13 ruling for the one-system worlds, where a `--require-parallel` floor
+    /// cannot hold). It fails the moment a second system makes a level hold two jobs, so the
+    /// world then needs a floor.
+    pub expect_serial: bool,
     /// Attach the timing observer and report the vitals (SPR-009 T-03): per-system times, the
     /// serial fraction and the vitals line. It changes no result.
     pub vitals: bool,
+    /// The run directory (SPR-013 T-09; [`crate::stream`]): the World Stream, the journal, the
+    /// keyframes and `run.toml`. A manifest world only.
+    pub run_dir: Option<PathBuf>,
+    /// A test hook that blocks the run while it seals (never on a baseline).
+    pub stall: Option<Stall>,
+    /// Another input script in place of the world's (`--inputs`; SPR-013 T-12).
+    pub inputs: Option<PathBuf>,
+    /// Replay: build the run from the history tuple and the journal at `journal` alone, journaling
+    /// nothing (`rh-cli replay`; SPR-013 T-12, V-DET-04, V-DET-18).
+    pub replay: bool,
 }
 
 impl RunArgs {
@@ -178,7 +197,12 @@ impl RunArgs {
             dump: None,
             leak_thread: false,
             require_parallel: None,
+            expect_serial: false,
             vitals: false,
+            run_dir: None,
+            stall: None,
+            inputs: None,
+            replay: false,
         }
     }
 }
@@ -192,6 +216,8 @@ pub struct Outcome {
     pub dispatch: DispatchStats,
     /// The vitals, when the run was asked for them (`--vitals`; SPR-009 T-03).
     pub vitals: Option<Vitals>,
+    /// What the stream writer did, for a run with a run directory (SPR-013 T-09).
+    pub stream: Option<StreamSummary>,
 }
 
 impl Outcome {
@@ -225,6 +251,23 @@ impl Outcome {
                 d.parallel_levels,
                 d.levels,
                 self.parallel_percent()
+            ));
+        }
+        Ok(())
+    }
+
+    /// `Err` when a level held two or more jobs (`--expect-serial`).
+    ///
+    /// # Errors
+    /// The message to print.
+    pub fn check_serial(&self) -> Result<(), String> {
+        let d = self.dispatch;
+        if d.max_jobs >= 2 || d.parallel_levels > 0 {
+            return Err(format!(
+                "NOT SERIAL: {} of {} levels held two or more jobs (at most {} in a level); the \
+                 world runs systems in parallel now, so set a `--require-parallel` floor instead \
+                 of --expect-serial (SPR-013 T-13)",
+                d.parallel_levels, d.levels, d.max_jobs
             ));
         }
         Ok(())
@@ -264,6 +307,33 @@ pub fn history(seed: u64) -> History {
         world_seed: seed,
         branch_salt: 0,
     }
+}
+
+/// Opens the journal at `path` for `world`'s history (`Replay::open`: the history key, the count,
+/// every row and the chain), read-only and immutable, refusing one that still has a write-ahead
+/// log (SPR-013 T-12).
+///
+/// # Errors
+/// [`Error`] naming the first check that fails.
+pub(crate) fn open_journal(path: &Path, world: &Setup) -> Result<Replay, Error> {
+    if wal_has_rows(path) {
+        return Err(Error(format!(
+            "journal: {} still has a write-ahead log: the run was killed and not resumed. Resume \
+             it first (rh-cli run --resume), which folds the log in (REV-SPR-013 MAJ-3)",
+            path.display()
+        )));
+    }
+    // Immutable: the replay writes nothing beside the run's journal (REV-SPR-013 MIN-8).
+    Replay::open_immutable(path, &journal_key(&world.provenance, world.seed), TIMELINE)
+        .map_err(|e| error("journal")(&e))
+}
+
+/// Whether the journal at `path` has a write-ahead log with bytes in it: rows the file does not
+/// hold yet (a checkpointed log is empty, TRUNCATE).
+fn wal_has_rows(path: &Path) -> bool {
+    let mut wal = path.as_os_str().to_owned();
+    wal.push("-wal");
+    std::fs::metadata(Path::new(&wal)).is_ok_and(|m| m.len() > 0)
 }
 
 fn journal_key(p: &Provenance, seed: u64) -> HistoryKey {
@@ -331,9 +401,15 @@ fn date_in(calendar: Calendar, t: SimTime) -> String {
 
 /// One place the run stops: a rung, a perturbation, a dump, or a keyframe year.
 #[derive(Clone, Debug, Default)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each bool says what one stop of the run loop does"
+)]
 struct Stop {
     rung: Option<u64>,
     month_end: bool,
+    /// A Month pulse instant: the stream's `STEP_DIGEST` (SPR-013 T-09).
+    digest: bool,
     inject: bool,
     dump: bool,
     year_end: Option<i64>,
@@ -348,6 +424,18 @@ fn stops(args: &RunArgs, calendar: Calendar) -> BTreeMap<SimTime, Stop> {
         stops.entry(end).or_default().year_end = Some(year);
         if args.rung == RungKind::Yearly {
             stops.entry(end).or_default().rung = u64::try_from(year).ok();
+        }
+    }
+    if args.run_dir.is_some() {
+        // A Month pulse at the start of every month of the run: tick 0 and each month end + 1.
+        let end = year_end_in(calendar, last);
+        for t in std::iter::once(SimTime::EPOCH).chain(
+            months
+                .iter()
+                .filter_map(|m| m.checked_add_minutes(1))
+                .filter(|&t| t <= end),
+        ) {
+            stops.entry(t).or_default().digest = true;
         }
     }
     for (i, &t) in months.iter().enumerate() {
@@ -379,7 +467,12 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
 ///
 /// # Errors
 /// As [`run`].
+#[allow(
+    clippy::too_many_lines,
+    reason = "the run loop in one place: every stop's steps in their order (ladder, keyframe, stream)"
+)]
 pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
+    refuse_mutants()?;
     let smoke = args.world == SMOKE;
     if args.leak_thread && !smoke {
         return Err(Error(format!(
@@ -388,12 +481,101 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         )));
     }
     let seed = (smoke || args.seed_set).then_some(args.seed);
-    let world = setup(&args.repo, &args.world, seed, args.strict)?;
+    let world = crate::world::setup_with(
+        &args.repo,
+        &args.world,
+        seed,
+        args.strict,
+        args.inputs.as_deref(),
+    )?;
     let registered = || {
         register((world.systems)(args.leak_thread), &world.specs)
             .map_err(|e| error("registration")(&e))
     };
-    let (mut engine, journal, identity) = start(args, &world, &registered)?;
+    // VER-SPR-013-TEST DEF-4: every argument and input is checked before anything is created.
+    if args.until.is_some_and(|u| u < 0 || u > args.years) {
+        return Err(Error(format!(
+            "--until {} is outside the horizon of {} years",
+            args.until.unwrap_or_default(),
+            args.years
+        )));
+    }
+    if args.resume.is_none()
+        && !args.replay
+        && let Some((tick, _)) = (world.inputs)(args.years)
+            .into_iter()
+            .find(|(t, _)| *t < SimTime::EPOCH)
+    {
+        return Err(Error(format!(
+            "the input script has an input at tick {}, before genesis: nothing was written",
+            tick.minutes()
+        )));
+    }
+    // VER-SPR-013-TEST GAP-3: an input of the script at or past the horizon is never dropped in
+    // silence. A new run refuses it before anything is written; a resumed --extend run, whose
+    // history is its journal's, says which inputs it leaves out.
+    if !smoke && !args.replay {
+        let all = (world.inputs)(i64::MAX);
+        let within = (world.inputs)(args.years).len();
+        if let Some((tick, _)) = all.get(within) {
+            let mpy = world.calendar.minutes_per_year();
+            let past = all.len() - within;
+            if args.resume.is_none() {
+                return Err(Error(format!(
+                    "the input script has {past} input(s) at or past the {}-year horizon, the \
+                     first at tick {} (sim-year {}): run with a longer --years or remove them; \
+                     nothing was written",
+                    args.years,
+                    tick.minutes(),
+                    tick.minutes() / mpy
+                )));
+            }
+            eprintln!(
+                "note: {past} input(s) of the script at or past the {}-year horizon (the first at \
+                 tick {}) are not in this run's journal, so not in its history",
+                args.years,
+                tick.minutes()
+            );
+        }
+    }
+    let run_dir = args.run_dir.clone().map(RunDir);
+    if run_dir.is_some() && world.stream.is_none() {
+        return Err(Error(format!(
+            "--run-dir streams a manifest world; {} has no World Stream (SPR-013 T-09)",
+            world.name
+        )));
+    }
+    if let Some(dir) = &run_dir {
+        // REV-SPR-013 MIN-6, MIN-8: a run directory's run is a clean one with its own ladder and
+        // journal, so that replay and resume find them there.
+        if args.inject.is_some() {
+            return Err(Error(
+                "--inject perturbs a run, which a run directory would then hold as its history; \
+                 it is refused with --run-dir"
+                    .to_owned(),
+            ));
+        }
+        if args.out != dir.ladder() || args.journal != dir.journal() {
+            return Err(Error(format!(
+                "a run directory holds its own ladder and journal ({}, {}): --out and --journal \
+                 are refused with --run-dir",
+                dir.ladder().display(),
+                dir.journal().display()
+            )));
+        }
+        // REV-SPR-013 MAJ-2: a refused run touches no file, so the check comes before the
+        // journal is created and run.toml written.
+        if args.resume.is_none() {
+            refuse_used_run_dir(dir, args.replay)?;
+        }
+        std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
+    }
+    // The writer's lock, held until the run returns (a tail --wait sees it released).
+    let _writer_lock = run_dir
+        .as_ref()
+        .map(|d| crate::stream::lock_writer(&d.0))
+        .transpose()?;
+    let (mut engine, journal, identity, rows) = start(args, &world, &registered)?;
     // SPR-009 T-03: the host's clock-free observer; the engine carries no clock (ruling 4).
     let timing = args.vitals.then(|| Arc::new(Timing::default()));
     let attach = |e: &mut Engine| {
@@ -425,10 +607,43 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     };
     ladder.header.journal = identity.map(|p| (p.inputs, dump::hex(&p.head)));
     ladder.header.until = args.until.filter(|&u| u < args.years);
+    // REV-SPR-013 MAJ-3 (b), the Architect's option (a): a run directory's run.ladder is written
+    // append-only as the run goes, synced before each keyframe; a resumed run keeps its rungs up
+    // to the keyframe and appends the rest, so it is always the whole run's ladder.
+    let mut log = match &run_dir {
+        None => None,
+        Some(dir) if args.resume.is_some() => {
+            let mpy = world.calendar.minutes_per_year();
+            let through = ((start.minutes() - 1).div_euclid(mpy) + 1) * mpy - 1;
+            let (log, prefix) = LadderLog::resume(&dir.ladder(), &ladder.header, through)?;
+            ladder.rungs = prefix;
+            Some(log)
+        }
+        Some(dir) => Some(LadderLog::create(&dir.ladder(), &ladder.header)?),
+    };
     let store = KeyframeStore::default();
-    if let (Some(dir), Some(j)) = (&args.keyframes, &journal) {
+    // Keyframes: the --keyframes directory of a full run (SPR-008), or the run directory's of
+    // any streaming run, resumed ones included (their markers are part of channel A).
+    let keyframes: Option<PathBuf> = run_dir
+        .as_ref()
+        .map(RunDir::keyframes)
+        .or_else(|| args.keyframes.clone().filter(|_| journal.is_some()));
+    let mut host = match (&run_dir, &world.stream) {
+        (Some(dir), Some(_)) => Some(stream_host(
+            args, dir, &world, &engine, start, rows, identity,
+        )?),
+        _ => None,
+    };
+    // The genesis keyframe (year 0) is written for a full run's --keyframes directory (SPR-008)
+    // only. A run directory has none: every keyframe there has its KEYFRAME marker in channel A,
+    // and a tick of years 0-9 is rebuilt from genesis, which the history tuple determines (the
+    // Architect's ruling on SPR-013 deviation 6).
+    if let (Some(dir), Some(position), false, None) =
+        (&keyframes, identity, args.resume.is_some(), &run_dir)
+    {
         std::fs::create_dir_all(dir).map_err(|e| error("keyframes")(&e))?;
-        keyframe(&engine, j, dir, 0)?;
+        let (bytes, _) = write_keyframe(&engine, position).map_err(|e| error("keyframe")(&e))?;
+        write_file(&keyframe_path(dir, 0), &bytes)?;
     }
     let mut months: Vec<u8> = Vec::new();
     // A perturbation restores the engine, which starts its count again: keep the earlier part.
@@ -443,12 +658,20 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         .into_iter()
         .filter(|(t, _)| first.is_some_and(|f| *t >= f))
     {
-        if let Err(e) = engine.advance_until(t, |_, _| {}) {
+        let advanced = match host.as_mut() {
+            Some(h) => engine.advance_until(t, |_, tables| h.after_instant(tables)),
+            None => engine.advance_until(t, |_, _| {}),
+        };
+        if let Err(e) = advanced {
             let tick = engine.crash_artifact().map_or(t.minutes(), |a| a.tick);
             ladder.failed = Some((tick, e.to_string()));
+            host = None;
             break;
         }
-        drop(engine.drain_events());
+        match host.as_mut() {
+            Some(h) => h.collect(&mut engine, t, stop.digest)?,
+            None => drop(engine.drain_events()),
+        }
         if let Some(inject) = args.inject.as_ref().filter(|_| stop.inject) {
             dispatched = add(dispatched, engine.dispatch_stats());
             engine = perturb(&engine, inject, args, &world, registered()?)?;
@@ -459,26 +682,296 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
             months.extend_from_slice(&digest.hash.to_le_bytes());
         }
         if let Some(index) = stop.rung {
-            ladder
-                .rungs
-                .push(rung(&digest, index, t, xxh3(&months), world.calendar));
+            let r = rung(&digest, index, t, xxh3(&months), world.calendar);
+            if let Some(log) = log.as_mut() {
+                log.append(&r)?;
+            }
+            ladder.rungs.push(r);
             months.clear();
         }
         if let Some((_, path)) = args.dump.as_ref().filter(|_| stop.dump) {
             dump::write(&engine.snapshot(), t, path)?;
         }
-        if let (Some(year), Some(dir), Some(j)) = (stop.year_end, &args.keyframes, &journal)
-            && store.is_permanent_year(year)
-        {
-            keyframe(&engine, j, dir, year)?;
+        // A permanent year's keyframe: its marker goes into the stream (which seals the year),
+        // and only then is the file written (crate::stream module docs).
+        let kf = match (stop.year_end, &keyframes, identity) {
+            (Some(year), Some(_), Some(position)) if store.is_permanent_year(year) => Some((
+                year,
+                write_keyframe(&engine, position).map_err(|e| error("keyframe")(&e))?,
+            )),
+            _ => None,
+        };
+        if let Some(h) = host.as_mut() {
+            let rel = kf.as_ref().map(|(year, _)| keyframe_rel(*year));
+            let marker = rel
+                .as_deref()
+                .zip(kf.as_ref().map(|(_, (_, header))| header));
+            h.push(t, marker)?;
+        }
+        if let (Some((year, (bytes, _))), Some(dir)) = (&kf, &keyframes) {
+            // run.ladder reaches the keyframe before the keyframe exists (REV-SPR-013 MAJ-3 (b)).
+            if let Some(log) = log.as_mut() {
+                log.sync()?;
+            }
+            write_file(&keyframe_path(dir, *year), bytes)?;
         }
     }
-    std::fs::write(&args.out, ladder.render()).map_err(|e| error("ladder")(&e))?;
+    let stream = host.map(StreamHost::finish).transpose()?;
+    match log {
+        Some(log) => log.finish(&ladder)?,
+        None => std::fs::write(&args.out, ladder.render()).map_err(|e| error("ladder")(&e))?,
+    }
     Ok(Outcome {
         ladder,
         dispatch: add(dispatched, engine.dispatch_stats()),
         vitals: timing.and_then(|t| t.vitals()),
+        stream,
     })
+}
+
+/// `--resume genesis`: resume a run directory from genesis through its journal (a run killed
+/// before its first keyframe; REV-SPR-013 MIN-4). Its sealed years are verified, not rewritten.
+pub const GENESIS: &str = "genesis";
+
+/// A run directory's `run.ladder`, written append-only as the run goes (REV-SPR-013 MAJ-3 (b),
+/// option (a)): the header first, then each rung as it is made, flushed and synced before each
+/// keyframe file is written, so the file always reaches at least the newest keyframe. Its size
+/// is linear in the rungs.
+struct LadderLog {
+    path: PathBuf,
+    file: std::io::BufWriter<std::fs::File>,
+}
+
+impl LadderLog {
+    fn open(path: &Path) -> Result<Self, Error> {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .map_err(|e| Error(format!("{}: {e}", path.display())))?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            file: std::io::BufWriter::new(file),
+        })
+    }
+
+    /// A new run's ladder: its header, written atomically.
+    fn create(path: &Path, header: &Header) -> Result<Self, Error> {
+        let empty = Ladder {
+            header: header.clone(),
+            rungs: Vec::new(),
+            failed: None,
+        };
+        crate::stream::write_atomic(path, empty.render().as_bytes())?;
+        Self::open(path)
+    }
+
+    /// A resumed run's ladder: the existing rungs up to tick `through` (the keyframe's year end, or
+    /// -1 from genesis) are kept, checked to be this run's (world, seed, rung kind, hash layout)
+    /// and to reach the keyframe; everything after them, a partial line left by a kill included,
+    /// is dropped; the file is rewritten atomically with `header` (an extended run's horizon) and
+    /// those rungs, and the resumed rungs are appended.
+    fn resume(path: &Path, header: &Header, through: i64) -> Result<(Self, Vec<Rung>), Error> {
+        let fail = |what: String| Error(format!("{}: {what}", path.display()));
+        let text = std::fs::read_to_string(path).map_err(|e| fail(e.to_string()))?;
+        let mut cut = 0;
+        for line in text.split_inclusive('\n') {
+            // A rung line is `rung <index> <tick> ...`; the header's `rung yearly|monthly` is not.
+            let past = line
+                .strip_prefix("rung ")
+                .filter(|rest| !matches!(rest.trim_end(), "yearly" | "monthly"))
+                .is_some_and(|rest| {
+                    rest.split(' ')
+                        .nth(1)
+                        .and_then(|t| t.parse::<i64>().ok())
+                        .is_none_or(|t| t > through)
+                });
+            if !line.ends_with('\n') || past {
+                break;
+            }
+            cut += line.len();
+        }
+        let prefix = Ladder::parse(&text[..cut]).map_err(|e| fail(e.to_string()))?;
+        let h = &prefix.header;
+        if h.world != header.world
+            || h.seed != header.seed
+            || h.rung != header.rung
+            || h.hash != header.hash
+        {
+            return Err(fail(format!(
+                "another run's ladder ({} seed {}, {})",
+                h.world,
+                h.seed,
+                h.rung.name()
+            )));
+        }
+        if through >= 0 && prefix.rungs.last().is_none_or(|r| r.tick != through) {
+            return Err(fail(format!(
+                "the ladder does not reach the keyframe at tick {through}"
+            )));
+        }
+        let kept = Ladder {
+            header: header.clone(),
+            rungs: prefix.rungs,
+            failed: None,
+        };
+        crate::stream::write_atomic(path, kept.render().as_bytes())?;
+        Ok((Self::open(path)?, kept.rungs))
+    }
+
+    fn append(&mut self, r: &Rung) -> Result<(), Error> {
+        use std::io::Write as _;
+        self.file
+            .write_all(crate::ladder::render_rung(r).as_bytes())
+            .map_err(|e| Error(format!("{}: {e}", self.path.display())))
+    }
+
+    fn sync(&mut self) -> Result<(), Error> {
+        use std::io::Write as _;
+        self.file
+            .flush()
+            .and_then(|()| self.file.get_ref().sync_data())
+            .map_err(|e| Error(format!("{}: {e}", self.path.display())))
+    }
+
+    /// Appends a failure line if the run failed, syncs, and checks the file is `ladder`'s text.
+    fn finish(mut self, ladder: &Ladder) -> Result<(), Error> {
+        use std::io::Write as _;
+        if let Some((tick, message)) = &ladder.failed {
+            let one_line = message.replace(['\n', '\r'], " ");
+            writeln!(self.file, "failed {tick} {}", one_line.trim_end())
+                .map_err(|e| Error(format!("{}: {e}", self.path.display())))?;
+        }
+        self.sync()?;
+        let written = std::fs::read_to_string(&self.path)
+            .map_err(|e| Error(format!("{}: {e}", self.path.display())))?;
+        if written != ladder.render() {
+            return Err(Error(format!(
+                "{}: the appended ladder is not the run's ladder",
+                self.path.display()
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// A new run needs a run directory that holds no run (REV-SPR-013 MAJ-2): no stream, no keyframe,
+/// and (unless it is a replay's fresh directory, which holds the copied `run.toml` and journal)
+/// no `run.toml` or journal. Checked before any file is touched, so a refused run leaves the
+/// directory byte-identical.
+fn refuse_used_run_dir(dir: &RunDir, replay: bool) -> Result<(), Error> {
+    let nonempty = |p: &Path| std::fs::read_dir(p).is_ok_and(|mut d| d.next().is_some());
+    let mut found: Vec<String> = Vec::new();
+    if nonempty(&dir.stream()) {
+        found.push("stream/".to_owned());
+    }
+    if nonempty(&dir.keyframes()) {
+        found.push("keyframes/".to_owned());
+    }
+    if !replay {
+        for p in [dir.run_toml(), dir.journal()] {
+            if p.exists() {
+                found.push(
+                    p.file_name()
+                        .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+                );
+            }
+        }
+    }
+    if found.is_empty() {
+        return Ok(());
+    }
+    Err(Error(format!(
+        "{} already holds a run ({}): a new run needs an empty run directory. Resume it with \
+         --resume <keyframe>, replay it with rh-cli replay, or choose another --run-dir; nothing \
+         was written",
+        dir.0.display(),
+        found.join(", ")
+    )))
+}
+
+/// Writes a run's file: atomically for the run directory's keyframes, so that a keyframe on disk
+/// is whole (SPR-013 T-09).
+fn write_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
+    crate::stream::write_atomic(path, bytes)
+}
+
+/// The stream of a run into `dir` (SPR-013 T-09): `run.toml`, then a new stream at genesis or a
+/// resumed one after the keyframe's year end.
+fn stream_host(
+    args: &RunArgs,
+    dir: &RunDir,
+    world: &Setup,
+    engine: &Engine,
+    start: SimTime,
+    rows: Vec<JournaledInput>,
+    identity: Option<JournalPosition>,
+) -> Result<StreamHost, Error> {
+    let info = world
+        .stream
+        .as_ref()
+        .ok_or_else(|| Error(format!("{} has no World Stream", world.name)))?;
+    std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
+    let cfg = writer_config(
+        dir,
+        world.calendar,
+        info.provenance.clone(),
+        info.dictionaries.clone(),
+    );
+    let hook = Hook(args.stall);
+    if args.resume.is_some() {
+        // Keyframes are taken at year ends; the restored cursor is the last instant run + 1, so the
+        // resume point is the last minute of the sim-year that instant is in (-1 at genesis).
+        let mpy = world.calendar.minutes_per_year();
+        let tick = ((start.minutes() - 1).div_euclid(mpy) + 1) * mpy - 1;
+        // REV-SPR-013 MAJ-3 (c): an extended run's horizon is the run directory's from now on.
+        let mut toml = RunToml::read(&dir.0)?;
+        if toml.years != args.years {
+            toml.years = args.years;
+            toml.write(&dir.0)?;
+        }
+        StreamHost::resume(cfg, tick, engine.tables(), rows, hook)
+    } else {
+        RunToml {
+            format: crate::stream::RUN_FORMAT.to_owned(),
+            world: world.name.clone(),
+            seed: world.seed,
+            years: args.years,
+            minutes_per_year: world.calendar.minutes_per_year(),
+            engine_build: world.provenance.build.clone(),
+            registry_version: world.provenance.registry_version.clone(),
+            manifest_hash: world.provenance.manifest_hash.clone(),
+            inputs: args.inputs.as_ref().map(|p| p.display().to_string()),
+            journal_inputs: identity.map(|p| p.inputs),
+            journal_head: identity.map(|p| dump::hex(&p.head)),
+            rung: Some(args.rung.name().to_owned()),
+        }
+        .write(&dir.0)?;
+        StreamHost::create(cfg, engine.tables(), rows, hook)
+    }
+}
+
+/// The `mutant-*` Cargo features compiled into this build, from every crate that has any
+/// (BCK-002 A-52).
+#[must_use]
+pub fn mutant_features() -> Vec<&'static str> {
+    rh_sys_demography::MUTANTS.to_vec()
+}
+
+/// BCK-002 A-52: a build with a `mutant-*` feature compiled in never runs a world, so a mutant can
+/// never make a ladder, a baseline or a stream.
+///
+/// # Errors
+/// [`Error`] naming the features.
+pub fn refuse_mutants() -> Result<(), Error> {
+    let mutants = mutant_features();
+    if mutants.is_empty() {
+        return Ok(());
+    }
+    Err(Error(format!(
+        "MUTANT BUILD: this build has the planted control feature(s) {} compiled in; a mutant \
+         never runs a world or makes a baseline (BCK-002 A-52). Rebuild without them",
+        mutants.join(", ")
+    )))
 }
 
 const fn add(a: DispatchStats, b: DispatchStats) -> DispatchStats {
@@ -493,7 +986,12 @@ const fn add(a: DispatchStats, b: DispatchStats) -> DispatchStats {
     }
 }
 
-type Started = (Engine, Option<Journal>, Option<JournalPosition>);
+type Started = (
+    Engine,
+    Option<Journal>,
+    Option<JournalPosition>,
+    Vec<JournaledInput>,
+);
 
 /// The engine a run starts from, the journal a full run writes, and the journal's identity: a
 /// full run creates the journal and journals every synthetic input of the horizon in the host
@@ -503,22 +1001,31 @@ fn start(
     world: &Setup,
     registered: &dyn Fn() -> Result<rh_core::register::Registered, Error>,
 ) -> Result<Started, Error> {
-    if args.until.is_some_and(|u| u < 0 || u > args.years) {
-        return Err(Error(format!(
-            "--until {} is outside the horizon of {} years",
-            args.until.unwrap_or_default(),
-            args.years
-        )));
-    }
     if let Some(keyframe) = &args.resume {
-        let bytes = std::fs::read(keyframe).map_err(|e| error("keyframe")(&e))?;
-        let replay = Replay::open(
+        // REV-SPR-013 MAJ-3 (a): a run killed mid-run left its rows in the write-ahead log; fold
+        // them into the file, so a read-only reader (replay) sees every input. The write-mode
+        // connection is the journal's last, so closing it removes the emptied -wal and -shm.
+        if wal_has_rows(&args.journal) {
+            Journal::open(&args.journal, &journal_key(&world.provenance, world.seed))
+                .and_then(|j| j.checkpoint())
+                .map_err(|e| error("journal")(&e))?;
+        }
+        // VER-SPR-013-TEST DEF-4: every other read is immutable, so a refused resume leaves the
+        // directory as it was and a finished one leaves no -wal or -shm.
+        let replay = Replay::open_immutable(
             &args.journal,
             &journal_key(&world.provenance, world.seed),
             TIMELINE,
         )
         .map_err(|e| error("journal")(&e))?;
-        check_horizon(&replay, args, world)?;
+        // A replay's horizon is its run.toml's, checked against the journal's count and head there.
+        if !args.replay {
+            check_horizon(&replay, args, world)?;
+        }
+        if keyframe.as_path() == Path::new(GENESIS) {
+            return replay_start(&replay, args, world, registered);
+        }
+        let bytes = std::fs::read(keyframe).map_err(|e| error("keyframe")(&e))?;
         let history = History {
             provenance: world.provenance.clone(),
             world_seed: world.seed,
@@ -527,7 +1034,17 @@ fn start(
         let (mut engine, _) = resume(&bytes, world.calendar, registered()?, &history, &replay)
             .map_err(|e| error("resume")(&e))?;
         engine.set_threads(args.threads);
-        return Ok((engine, None, Some(replay.position())));
+        let rows = replay.inputs().to_vec();
+        return Ok((engine, None, Some(replay.position()), rows));
+    }
+    if args.replay {
+        let replay = Replay::open_immutable(
+            &args.journal,
+            &journal_key(&world.provenance, world.seed),
+            TIMELINE,
+        )
+        .map_err(|e| error("journal")(&e))?;
+        return replay_start(&replay, args, world, registered);
     }
     for suffix in ["", "-wal", "-shm"] {
         let mut path = args.journal.clone().into_os_string();
@@ -546,13 +1063,47 @@ fn start(
     );
     engine.set_provenance(world.provenance.clone());
     engine.set_threads(args.threads);
+    let mut rows = Vec::new();
     for (at, entity) in (world.inputs)(args.years) {
-        accept(&mut engine, &mut journal, at, entity)?;
+        rows.push(accept(&mut engine, &mut journal, at, entity)?);
     }
     let identity = journal
         .position(TIMELINE)
         .map_err(|e| error("journal")(&e))?;
-    Ok((engine, Some(journal), Some(identity)))
+    Ok((engine, Some(journal), Some(identity), rows))
+}
+
+/// A replay's start (SPR-013 T-12): the engine at genesis, and every row of `replay` (the journal
+/// at `args.journal` opened immutable and checked against the history tuple: count, seq, payload
+/// and row digests, the chain), submitted in `seq` order as the run submitted them. Nothing is journaled:
+/// the replay reads the journal and never writes it.
+fn replay_start(
+    replay: &Replay,
+    args: &RunArgs,
+    world: &Setup,
+    registered: &dyn Fn() -> Result<rh_core::register::Registered, Error>,
+) -> Result<Started, Error> {
+    let mut engine = Engine::new(
+        world.calendar,
+        world.seed,
+        BranchSalt::from_raw(0),
+        registered()?,
+        world.tables.clone(),
+        SimTime::EPOCH,
+    );
+    engine.set_provenance(world.provenance.clone());
+    engine.set_threads(args.threads);
+    let rows = replay.inputs().to_vec();
+    for row in &rows {
+        let input = material_input(row)
+            .ok_or_else(|| Error(format!("journal row {} is not material", row.seq)))?;
+        engine
+            .submit_input(row.tick, input)
+            .map_err(|e| error("input")(&e))?;
+    }
+    let position = replay.position();
+    engine.set_journal_head(Some(dump::hex(&position.head)));
+    Ok((engine, None, Some(position), rows))
 }
 
 /// DEF-1: a resumed run's horizon must be the journal's. The journal must hold exactly the
@@ -602,7 +1153,7 @@ fn accept(
     journal: &mut Journal,
     at: SimTime,
     entity: rh_ids::EntityRef,
-) -> Result<(), Error> {
+) -> Result<JournaledInput, Error> {
     if engine.snapshot().cursor.is_none_or(|c| at < c) {
         return Err(Error(format!(
             "the synthetic input at {at} is before the cursor"
@@ -630,15 +1181,7 @@ fn accept(
         .map_err(|e| error("journal")(&e))?
         .head;
     engine.set_journal_head(Some(dump::hex(&head)));
-    Ok(())
-}
-
-fn keyframe(engine: &Engine, journal: &Journal, dir: &Path, year: i64) -> Result<(), Error> {
-    let position = journal
-        .position(TIMELINE)
-        .map_err(|e| error("journal")(&e))?;
-    let (bytes, _) = write_keyframe(engine, position).map_err(|e| error("keyframe")(&e))?;
-    std::fs::write(keyframe_path(dir, year), bytes).map_err(|e| error("keyframe")(&e))
+    Ok(row)
 }
 
 /// Where a full run writes the keyframe of the end of `year` (year 0: the start).
@@ -725,6 +1268,7 @@ mod tests {
                 max_jobs,
             },
             vitals: None,
+            stream: None,
         }
     }
 

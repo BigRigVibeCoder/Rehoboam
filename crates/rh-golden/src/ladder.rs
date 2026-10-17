@@ -317,7 +317,9 @@ impl Ladder {
     }
 }
 
-fn render_rung(r: &Rung) -> String {
+/// One rung's lines (`rung` and its `root`s), as [`Ladder::render`] writes them.
+#[must_use]
+pub fn render_rung(r: &Rung) -> String {
     let mut out = format!(
         "rung {} {} {} {:016x} {:016x}\n",
         r.index, r.tick, r.date, r.hash, r.months

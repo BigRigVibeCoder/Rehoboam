@@ -92,6 +92,19 @@ python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortali
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
+cargo nextest run -p rh-stream --locked --test canonical --test writer --test parquet_props   # rh-stream: the canonical form = the reference's golden lines; byte-identical sealing; the pinned Parquet properties and golden segment bytes (SPR-013 T-09); the parser fuzz is nightly (--run-ignored)
+cargo nextest run -p rh-cli --locked --test kill   # kill -9 during sealing and mid-year, then resume from the 10-year keyframe: the same bytes, no seq re-emitted below the first unsealed year (SPR-013 T-09)
+target/release/rh-cli run solo --years 200 --run-dir target/golden/solo_run   # a run directory: run.toml, journal.sqlite, run.ladder, keyframes/ (each with its ladder sidecar), stream/ (SPR-013 T-09); --out, --journal and --inject are refused with it
+python -I specs/stream/check_segments.py target/golden/solo_run   # V-DATA-10 subset: DuckDB reads every sealed table with the DDLs' types; the reference recomputes every canonical_digest; --plant float-column and --plant digest must FAIL
+cargo nextest run -p rh-golden --release --test stream   # V-STR-01 on solo and the 60-person hamlet: byte-identical segments over repeats and threads; resume verification (SPR-013 T-09)
+target/release/rh-cli tail target/golden/solo_run [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K] [--canonical] [--wait]   # the sealed stream as display or canonical lines (SPR-013 T-10)
+cargo nextest run -p rh-golden --release --test tail   # tail: every record once from any cursor, canonical digests, read-only, display snapshots (RH_UPDATE_SNAPSHOTS=1 rewrites them; a stale copy must FAIL)
+cargo nextest run -p rh-cli --locked --test tail_live   # a tail started mid-run prints the after-run tail's lines (SPR-013 T-10)
+target/release/rh-cli sift target/golden/solo_run   # channel C (life_ends matches) from sealed channel A, downstream of the engine (SPR-013 T-11)
+python -I specs/sifting/twin_check.py target/golden/solo_run   # V-SIFT-01: the SQL twin (specs/sifting/twins/) = rh-sifter's channel C; --control drop-last must FAIL
+cargo nextest run -p rh-sifter --locked --test sift   # rh-sifter v0: the golden matches and MatchIds; refusals (SPR-013 T-11)
+cargo nextest run -p rh-golden --release --test sift   # V-PLN-04 subset: sifting twice is byte-identical; channel A and the ladder unchanged (SPR-013 T-11)
+python -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml   # V-SIFT-05: must FAIL (an unanchored read)
 python -I specs/stream/selftest_wire_v1.py --check   # World Stream wire format v1 (IF-0 live edge): framing, control messages, refusals, the live-edge rule simulated with slow, stalled and reconnecting viewers, golden frames (SPR-026); --control window-gap must FAIL
 python -I specs/stream/selftest_control_v1.py --check   # World Stream control channel v1 (IF-0 control.sock, the pace command; SPR-027 T-01; specs/stream/control_v1.md): the method table, every request and response, refusals, the governor's rule, pace invariance on a simulated engine with a fake wall clock, the run log, golden frames; --control pause-writes-record, pace-in-journal, band-in-hash, input-accepted, step-overshoot, pace-on-stream and paused-time-owed must FAIL
 python -I specs/economy/selftest_economy.py
@@ -108,7 +121,7 @@ python -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200
 cargo nextest run -p rh-golden --release --test solo   # solo: resume through 10-year keyframes = continuous, thread invariance, the manifest pin, Ada, the input re-sampling her pending death (SPR-012 T-08)
 cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
 python -I bin/check_all_selftest.py verdict --or-true   # must FAIL: check_all's own verdict fails a gate hidden by || true (VER-SPR-008-TEST GAP-3)
-bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), the yearly cut = the baseline (GAP-6), V-DET-11 x 64
+bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02) for smoke, solo, household and hamlet, the yearly cut = the baseline (GAP-6), V-SCALE-01/04 at 1,000 years, the V-INV-02 debug soak, V-DET-11 x 64
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
 cargo nextest run -p rh-snapshot --test hash --test golden --test journal --test keyframe --test guard --test unsynced_guard --test stub_world   # plane hashes, input journal, V-DET-05 keyframes, V-DET-10 unsynced guard, stub-world hash golden (SPR-007)
@@ -124,13 +137,18 @@ python -I bin/perf_gate.py integrity --measured artifacts/perf/instructions.txt 
 python -I bin/perf_gate.py record   # regenerate the baseline (never by hand); only in a [perf-baseline] PR with a perf-baseline-reason: line
 cargo nextest run -p rh-snapshot --locked --test observer   # observer invariance: a host observer changes no hash (SPR-009 ruling 4)
 RH_WALL_ROWS=100000,1000000 cargo bench -p rh-bench --bench wall && python -I bin/wall_trend.py summarize --machine <adjutant|laptop> --out artifacts/perf/wall.txt   # T-02b wall-clock trends (gate only on adjutant)
-python -I bin/perf_gate.py alloc-gate --out artifacts/perf/allocations.txt   # V-PERF-11: smoke-world allocations per steady-state tick within the recorded budget (SPR-009 T-05)
+python -I bin/perf_gate.py alloc-gate --out artifacts/perf/allocations.txt   # V-PERF-11: smoke-world allocations per steady-state tick within the recorded budget (SPR-009 T-05), and each rung's (solo, household, hamlet; SPR-013 T-13)
 python -I bin/perf_gate.py alloc-record   # regenerate the allocation baseline (exact counts; never by hand)
 target/release/rh-cli run smoke --years 1000 --threads 4 --vitals --out target/golden/smoke_yearly_tN.ladder   # T-03 vitals line, on the N-thread golden run; its ladder equals the golden baseline
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml   # life_ends (SPR-011)
+target/release/rh-cli replay <run-dir> --into <dir> [--from-keyframe <tick>]   # V-DET-04/05: the run rebuilt from run.toml and its journal alone; REPLAY EQUAL, or a missing, extra or edited journal row hard-fails (SPR-013 T-12); `--into` must be absent, empty or a previous replay's output (it holds `.rh-replay`), never the run, inside it or containing it (DEF-2)
+cargo nextest run -p rh-golden --release --test replay   # V-DET-04/18 (run.toml and the journal alone), V-DET-05 from keyframes, V-DET-14, the tampered-journal controls (SPR-013 T-12)
+target/release/rh-cli run household --years 200 --threads 1 --ladder yearly --expect-serial --run-dir target/golden/household_run   # rung 1's golden run (rung 2: hamlet); --expect-serial passes only while no level holds two jobs, and the multi-system smoke world must FAIL it (SPR-013 T-13)
+python -I bin/check_baseline.py --baseline worlds/household/baselines/household_yearly_200y.ladder --recomputed target/golden/household_run/run.ladder   # household's and hamlet's baselines = recomputation; changed only in a [C3] PR
+cargo nextest run -p rh-golden --release --test rungs   # V-SCALE-04 PR subset: household and hamlet past their extinction, one EXTINCTION, tail, sift and replay consistent; one build runs rungs 0-2 (SPR-013 T-13)
 ```
 
-Not a check: `bin/regen_baseline.sh [smoke|solo]` regenerates the golden baselines (both without an argument), only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`). Nor is `lint_odd.py --next … --write-amendments-lock`, which rewrites `specs/systems/next/amendments.lock.toml` (every amendment of a next-version spec, by path and text digest) after the Architect has read the new `AMEND` lines; the lock is never typed (SPR-015, REV-SPR-015 round 3 MIN-1).
+Not a check: `bin/regen_baseline.sh [smoke|solo|household|hamlet]` regenerates the golden baselines (all four without an argument), only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`). Nor is `lint_odd.py --next … --write-amendments-lock`, which rewrites `specs/systems/next/amendments.lock.toml` (every amendment of a next-version spec, by path and text digest) after the Architect has read the new `AMEND` lines; the lock is never typed (SPR-015, REV-SPR-015 round 3 MIN-1).
 
 ## Conventions
 - Docs are Markdown, and diagrams are Mermaid.

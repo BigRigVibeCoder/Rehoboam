@@ -56,6 +56,7 @@ EXIT_STALE = 1
 EXIT_SELFTEST = 2
 
 MASK64 = (1 << 64) - 1
+U32_MAX = (1 << 32) - 1
 HEX64_LEN = 16
 HEX128_LEN = 32
 DIGEST_LEN = 16
@@ -484,7 +485,8 @@ ROLES = _list_codec(
 SNAPSHOT_KEY = (0, 1, 2, 3, 4)  # (attr_id, entity_kind, entity_id, partner_kind, partner_id)
 SNAPSHOTS = _list_codec(
     "snapshots",
-    _tuple_codec("snapshot", (U16, ENTITY_KIND, U64, OPT_U8, OPT_U64, I32)),
+    # partner_kind is an entity kind like entity_kind (0-5; REV-SPR-013 MAJ-1, canonical_v0.md §8).
+    _tuple_codec("snapshot", (U16, ENTITY_KIND, U64, _optional(ENTITY_KIND), OPT_U64, I32)),
     _ascending(SNAPSHOT_KEY, "snapshot keys"),
     SNAPSHOT_KEY,
 )
@@ -852,6 +854,21 @@ HEADER_LINE = re.compile(
 )
 
 
+def _header_values_ok(header: re.Match[str]) -> bool:
+    """The header's values in their domains: a u32 timeline, canonical string tokens (§1, §2).
+
+    REV-SPR-013 MAJ-1: rh-stream's parser and this one refuse the same headers.
+    """
+    if len(header["timeline"]) > INT_MAX_CHARS or int(header["timeline"]) > U32_MAX:
+        return False
+    try:
+        STR.parse(header["registry"])
+        STR.parse(header["format"])
+    except CanonicalError:
+        return False
+    return True
+
+
 def header_line(timeline: int, channel: str, registry_version: str, segment_format: str) -> str:
     """The header line of a canonical file (canonical_v0.md §1)."""
     return (
@@ -893,7 +910,7 @@ def digest_file(path: Path) -> bytes:
     where = str(path)
     lines = _file_lines(path.read_bytes(), where)
     header = HEADER_LINE.fullmatch(lines[0])
-    if header is None:
+    if header is None or not _header_values_ok(header):
         raise CanonicalError(f"{where}:1: not a canonical header line: {lines[0]!r}")
     timeline, chan = int(header["timeline"]), header["channel"]
     records: list[tuple[int, Record]] = []
@@ -1038,6 +1055,10 @@ REFUSED: tuple[tuple[str, str], ...] = (
         "a snapshot entity kind of 6",
     ),
     (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/6/8/100] []",
+        "a snapshot partner kind of 6 (REV-SPR-013 MAJ-1)",
+    ),
+    (
         "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/8/~/~/100,25/1/7/~/~/100] []",
         "snapshots out of order",
     ),
@@ -1112,6 +1133,18 @@ REFUSED_FILES: tuple[tuple[bytes, str], ...] = (
         "a MATCH in a channel-A file",
     ),
     (b"", "an empty file"),
+    (
+        VALID_FILE.encode().replace(b"timeline=0", b"timeline=4294967296"),
+        "a header timeline past u32 (REV-SPR-013 MAJ-1)",
+    ),
+    (
+        VALID_FILE.encode().replace(b"registry_version=0.2.0", b"registry_version=%30.2.0"),
+        "a header string with an escaped safe byte (REV-SPR-013 MAJ-1)",
+    ),
+    (
+        VALID_FILE.encode().replace(b"format=rehoboam", b"format=reho\tboam"),
+        "a header string with a backslash escape that is not canonical (REV-SPR-013 MAJ-1)",
+    ),
 )
 
 

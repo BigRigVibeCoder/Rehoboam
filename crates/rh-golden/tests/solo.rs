@@ -73,10 +73,10 @@ fn a_resumed_solo_run_writes_the_continuous_runs_ladder() {
 #[test]
 fn the_solo_ladder_does_not_depend_on_the_thread_count() {
     let dir = scratch("solo_threads");
-    let one = run(&solo(40, 1, RungKind::Monthly, &dir.join("t1.ladder"))).unwrap();
+    let one = run(&solo(60, 1, RungKind::Monthly, &dir.join("t1.ladder"))).unwrap();
     for threads in [2, 4] {
         let other = run(&solo(
-            40,
+            60,
             threads,
             RungKind::Monthly,
             &dir.join(format!("t{threads}.ladder")),
@@ -109,7 +109,8 @@ fn the_header_carries_the_history_tuple_and_the_built_systems() {
         "one scripted input"
     );
     // A seed given on the command line is the run's, and the header says so.
-    let mut other = solo(3, 1, RungKind::Yearly, &dir.join("s.ladder"));
+    // 60 years: the committed input on Ada (sim-year 53) is within the horizon (GAP-3).
+    let mut other = solo(60, 1, RungKind::Yearly, &dir.join("s.ladder"));
     other.seed = 7;
     other.seed_set = true;
     let seeded = run(&other).unwrap();

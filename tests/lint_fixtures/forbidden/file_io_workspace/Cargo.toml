@@ -1,7 +1,9 @@
 # Positive control for the file-io rule of bin/lint_forbidden.py (BCK-002 A-44; SPR-011 T-00;
 # tests/lint_fixtures/README.md); not in the Rehoboam workspace. rh-core reads a file in src/ (must
 # FAIL) and in tests/ (golden files: never reported); rh-snapshot, on FILE_IO_CRATES, writes one in
-# src/ (allowed, never reported).
+# src/ (allowed, never reported). SPR-013: rh-stream's src/seal.rs, on FILE_IO_FILES, writes one (allowed),
+# and its src/lib.rs reads one (must FAIL); rh-registry, off the list since BCK-002 A-51, reads one in src/
+# (must FAIL).
 [workspace]
-members = ["rh-core", "rh-snapshot"]
+members = ["rh-core", "rh-registry", "rh-snapshot", "rh-stream"]
 resolver = "3"

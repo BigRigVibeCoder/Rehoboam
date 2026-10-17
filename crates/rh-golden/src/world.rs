@@ -33,8 +33,9 @@ use rh_core::world::WorldTables;
 use rh_ids::person::PersonIdTable;
 use rh_ids::{EntityRef, SystemId};
 use rh_manifest::Registry;
+use rh_manifest::specs::{load_specs, registry_system_ids};
 use rh_registry::WorldSpec;
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_sys_demography::Demography;
 use serde::Deserialize;
 
@@ -45,6 +46,8 @@ use crate::sha256;
 pub const BUILT: [&str; 1] = ["M2.demography"];
 /// The smoke world's name.
 pub const SMOKE: &str = "smoke";
+/// The Registry every manifest world's `world.toml` names (`tail --kind` checks verbs against it).
+pub const DEFAULT_REGISTRY: &str = "specs/manifest/registry_v0.toml";
 
 /// What a run needs of its world.
 pub struct Setup {
@@ -70,6 +73,24 @@ pub struct Setup {
     pub systems_line: Option<String>,
     /// The systems the manifest names that this build lacks.
     pub not_built: Vec<String>,
+    /// What its World Stream carries (SPR-013 T-09): a manifest world's dictionaries and history
+    /// tuple. The smoke world has none (no life-course log, no Registry verbs).
+    pub stream: Option<StreamInfo>,
+    /// The founders' display names, by `PersonId` (SPR-013 T-10; tool side only, the flavour
+    /// rule of `05.5` §3): the cast's names, and each household's children and servants named
+    /// after their head. Commoners have none.
+    pub names: BTreeMap<u64, String>,
+    /// The manifest's `narrative.pattern_packs`, in order (what `rh-cli sift` sifts with; T-11).
+    pub packs: Vec<String>,
+}
+
+/// A manifest world's stream dictionaries and the history tuple its segments carry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StreamInfo {
+    /// The Registry's verbs and act classes.
+    pub dictionaries: rh_stream::segment::Dictionaries,
+    /// The history tuple.
+    pub provenance: rh_stream::segment::Provenance,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,10 +121,17 @@ fn read(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|e| Error(format!("{}: {e}", path.display())))
 }
 
+/// The prefix of a test fixture world: `fixture-<name>` lives in `tests/worlds/<name>`, not under
+/// `worlds/` (it has no baseline; SPR-013 T-11's 10,000-founder fixture).
+pub const FIXTURE_PREFIX: &str = "fixture-";
+
 /// The directory of world `name` under `repo`.
 #[must_use]
 pub fn world_dir(repo: &Path, name: &str) -> PathBuf {
-    repo.join("worlds").join(name)
+    match name.strip_prefix(FIXTURE_PREFIX) {
+        Some(fixture) => repo.join("tests/worlds").join(fixture),
+        None => repo.join("worlds").join(name),
+    }
 }
 
 /// The SHA-256 check of `world.toml`'s pin: `Ok(hex)` when the manifest's bytes hash to it.
@@ -147,6 +175,25 @@ fn world_toml(repo: &Path, name: &str) -> Result<WorldToml, Error> {
 /// [`Error`]: an unknown world, a manifest that does not match its pin or does not compile, a
 /// genesis or a construction refusal, or `strict` with a system not built (ruling 3).
 pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result<Setup, Error> {
+    setup_with(repo, name, seed, strict, None)
+}
+
+/// [`setup`] with another input script in place of the world's (`rh-cli run --inputs`, SPR-013
+/// T-12): a path relative to the repository, or absolute.
+///
+/// # Errors
+/// As [`setup`], and an unreadable script.
+#[allow(
+    clippy::too_many_lines,
+    reason = "a manifest world's setup in its order: pin, compile, names, genesis, systems, stream"
+)]
+pub fn setup_with(
+    repo: &Path,
+    name: &str,
+    seed: Option<u64>,
+    strict: bool,
+    inputs: Option<&Path>,
+) -> Result<Setup, Error> {
     if name == SMOKE {
         return smoke(repo, seed.unwrap_or(1));
     }
@@ -159,9 +206,12 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
     if let Some(s) = seed {
         spec.seed = s;
     }
+    // A template may name a system the Registry's [systems] does not list yet (pastoral_household's
+    // S1.culture): its name comes from the template, so the header never shows a bare id.
     let names: BTreeMap<SystemId, &str> = registry
         .systems
         .keys()
+        .chain(registry.templates.values().flat_map(|t| &t.default_systems))
         .map(|n| (system_id(n), n.as_str()))
         .collect();
     let name_of = |id: SystemId| {
@@ -199,7 +249,8 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
     let tables = rh_worldgen::genesis(&spec, &specs).map_err(|e| Error(e.to_string()))?;
     // Constructed once here, so a refusal (alpha, beta) fails the setup, not a registration.
     let m2 = Demography::from_world(&spec).map_err(|e| Error(e.to_string()))?;
-    let script = scripted_inputs(repo, &toml.inputs, &spec)?;
+    let script = scripted_inputs(repo, inputs.unwrap_or(&toml.inputs), &spec)?;
+    let (names, packs) = display_names(&repo.join(&toml.manifest), &registry, &spec)?;
     let calendar = spec.calendar;
     let provenance = Provenance {
         build: format!(
@@ -211,6 +262,16 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
         manifest_hash: format!("sha256:{manifest_hash}"),
     };
     let (tuple, systems_line) = header_lines(&provenance, spec.seed, &built, &not_built);
+    let stream = StreamInfo {
+        dictionaries: crate::stream::dictionaries(&registry)?,
+        provenance: rh_stream::segment::Provenance {
+            engine_build: provenance.build.clone(),
+            manifest_hash: hex_bytes(&manifest_hash)?,
+            world_seed: spec.seed,
+            built_systems: built.clone(),
+            not_built: not_built.clone(),
+        },
+    };
     Ok(Setup {
         name: name.to_owned(),
         calendar,
@@ -235,7 +296,56 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
         tuple: Some(tuple),
         systems_line: Some(systems_line),
         not_built,
+        stream: Some(stream),
+        names,
+        packs,
     })
+}
+
+/// The founders' display names (see [`Setup::names`]), in genesis order (ruling 10: the cast,
+/// then each household's sons, daughters and servants, then the rest), and the manifest's pattern
+/// packs.
+fn display_names(
+    manifest: &Path,
+    registry: &Registry,
+    spec: &WorldSpec,
+) -> Result<(BTreeMap<u64, String>, Vec<String>), Error> {
+    let rh_manifest::manifest::Outcome::Checked { manifest: m, .. } =
+        rh_manifest::manifest::validate_file(manifest, registry)
+    else {
+        return Err(Error(format!("{}: does not load", manifest.display())));
+    };
+    let ids = rh_worldgen::founder_ids(spec.seed, spec.founders.len(), &mut PersonIdTable::new())
+        .map_err(|e| Error(e.to_string()))?;
+    let mut labels: Vec<String> = m.cast.iter().map(|c| c.name.clone()).collect();
+    for h in &m.households {
+        let head = m
+            .cast
+            .iter()
+            .find(|c| c.id == h.head)
+            .map_or_else(|| h.head.clone(), |c| c.name.clone());
+        let n = |x: i64| usize::try_from(x).unwrap_or(0);
+        labels.extend((1..=n(h.children.sons)).map(|i| format!("{head}'s son {i}")));
+        labels.extend((1..=n(h.children.daughters)).map(|i| format!("{head}'s daughter {i}")));
+        labels.extend((1..=n(h.servants)).map(|i| format!("{head}'s servant {i}")));
+    }
+    let names = ids
+        .iter()
+        .zip(labels)
+        .map(|(id, name)| (id.to_raw(), name))
+        .collect();
+    Ok((names, m.narrative.pattern_packs.clone()))
+}
+
+/// The bytes of a lowercase hex digest.
+fn hex_bytes(hex: &str) -> Result<Vec<u8>, Error> {
+    (0..hex.len() / 2)
+        .map(|i| {
+            hex.get(2 * i..2 * i + 2)
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+                .ok_or_else(|| Error(format!("{hex} is not a hex digest")))
+        })
+        .collect()
 }
 
 /// The header's `tuple …` and `systems …` lines (without their prefixes) of a manifest world.
@@ -308,5 +418,8 @@ fn smoke(repo: &Path, seed: u64) -> Result<Setup, Error> {
         tuple: None,
         systems_line: None,
         not_built: Vec::new(),
+        stream: None,
+        names: BTreeMap::new(),
+        packs: Vec::new(),
     })
 }

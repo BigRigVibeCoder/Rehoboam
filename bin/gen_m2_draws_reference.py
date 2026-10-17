@@ -66,6 +66,16 @@ WORLDS = (
     ("w5", 58, 360, "35", 24, 9500, 10000),
     ("w6", 77, 365, "30", 60, 9995, 10000),
 )
+# BCK-002 A-53 (VER-SPR-012-TEST GAP-8): one larger world whose founders (aged 96 to 99.9, where a
+# day of hazard is large) have their pending deaths re-sampled mid-month again and again
+# (MASS_ROUNDS rounds, one input per founder per round), about 500 re-samples; the small worlds
+# above hold 19, which cannot resolve a one-day error in q' (the rest of the month). Power, from
+# `--power` (this model with q' over one day more, or one day less, than the rest of the month):
+# 5 and 10 re-sample outcomes change, so either error fails the golden. People draw independently
+# (each key carries the person's own epoch), so each round's inputs are chosen from the previous
+# round's history and do not move anyone else's draws.
+MASS_WORLD = ("w7", 101, 365, "30", 200, 9600, 9990)
+MASS_ROUNDS = 5
 CASES = ("last_day", "duplicate", "mid_month", "own_instant", "no_pending")
 
 
@@ -152,6 +162,7 @@ class Run:
     alive: set[int]
     pending: dict[int, int] = field(default_factory=dict)
     instants: list[int] = field(default_factory=list)
+    q_shift: int = 0  # --power only: q' over (rest of the month + q_shift) minutes, a planted error
 
     def month_end(self, t: int) -> int:
         """The first Month pulse strictly after ``t``."""
@@ -173,7 +184,7 @@ class Run:
             return
         del self.pending[p]
         t_end = self.month_end(t)
-        q = SCHED.month_q(self.lx, t - w.births[p], t_end - t, w.days * DAY)
+        q = SCHED.month_q(self.lx, t - w.births[p], t_end - t + self.q_shift, w.days * DAY)
         if not SCHED.hits(self.keys.resample(self.epoch[p], p, t, 0), q):
             w.resamples.append((t, p, "pending", "miss"))
             return
@@ -198,8 +209,11 @@ class Run:
                 self.schedule(tau)
 
 
-def simulate(w: World) -> None:
-    """Run ``w`` with its inputs: fill deaths, re-samples and every scheduled timer."""
+def simulate(w: World, q_shift: int = 0) -> None:
+    """Run ``w`` with its inputs: fill deaths, re-samples and every scheduled timer.
+
+    ``q_shift`` plants an error in q' (``--power`` only; the golden file is always made with 0).
+    """
     starts = month_starts(w.days, w.years)
     run = Run(
         w,
@@ -208,6 +222,7 @@ def simulate(w: World) -> None:
         starts,
         dict.fromkeys(w.births, 0),
         set(w.births),
+        q_shift=q_shift,
     )
     w.deaths, w.resamples, w.timers = [], [], []
     by_tick: dict[int, list[int]] = {}
@@ -293,6 +308,39 @@ def choose_inputs(w: World) -> None:
     simulate(w)
 
 
+def choose_mass_inputs(w: World) -> None:
+    """MASS_WORLD: per round, one input inside each founder's next pending death, in tick order."""
+    for _ in range(MASS_ROUNDS):
+        simulate(w)
+        last: dict[int, int] = {}
+        for t, p in w.inputs:
+            last[p] = max(last.get(p, -1), t)
+        new: list[tuple[int, int]] = []
+        chosen: set[int] = set()
+        for t_m, p, tau in w.timers:
+            after = last.get(p, -1)
+            if p in chosen or t_m < after or tau <= after or tau - t_m < 2 * DAY:
+                continue
+            chosen.add(p)
+            new.append((t_m + (tau - t_m) // 2 + 7, p))
+        if not new:
+            break
+        w.inputs = sorted(w.inputs + new)
+    simulate(w)
+
+
+def power() -> list[tuple[int, int]]:
+    """For a q' one day too long and one day too short: the re-sample outcomes that change."""
+    w = world(MASS_WORLD)
+    choose_mass_inputs(w)
+    base = list(w.resamples)
+    out = []
+    for shift in (DAY, -DAY):
+        simulate(w, shift)
+        out.append((shift, sum(a != b for a, b in zip(base, w.resamples, strict=False))))
+    return out
+
+
 def render() -> tuple[str, dict[str, int]]:
     """Return the golden file's text and the count of each re-sample case covered."""
     lines = [
@@ -305,9 +353,12 @@ def render() -> tuple[str, dict[str, int]]:
     covered = dict.fromkeys(
         ("mid_month", "own_instant", "last_day", "duplicate", "no_pending", "hit", "miss"), 0
     )
-    for spec in WORLDS:
+    for spec in (*WORLDS, MASS_WORLD):
         w = world(spec)
-        choose_inputs(w)
+        if spec is MASS_WORLD:
+            choose_mass_inputs(w)
+        else:
+            choose_inputs(w)
         lines.append(f"world {w.name} {w.seed} {w.days} {w.e0_bits} {w.years}")
         lines += [f"person {p} {b}" for p, b in sorted(w.births.items())]
         lines += [f"input {t} {p}" for t, p in w.inputs]
@@ -344,7 +395,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0] if __doc__ else None)
     parser.add_argument("--check", action="store_true", help="fail if the committed file is stale")
     parser.add_argument("--output", type=Path, default=OUTPUT, help="the golden file")
+    parser.add_argument(
+        "--power", action="store_true", help="print the outcomes a one-day error in q' changes"
+    )
     args = parser.parse_args(argv)
+    if args.power:
+        changes = power()
+        for shift, changed in changes:
+            print(f"gen_m2_draws_reference: q' {shift:+d} minutes changes {changed} outcomes")
+        return 0 if all(changed > 0 for _, changed in changes) else 1
     output: Path = args.output
     text, covered = render()
     missing = [case for case, n in covered.items() if n == 0]
