@@ -539,6 +539,12 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
             }
             "--follow" => args.follow = Some(value()?.clone()),
             "--kind" => args.kinds.push(value()?.clone()),
+            // SPR-026 T-04: the sealed channel C.
+            "--channel" => match value()?.as_str() {
+                "A" => args.channel_c = false,
+                "C" => args.channel_c = true,
+                other => return Err(bad(&format!("--channel {other}: A or C"))),
+            },
             "--repo" => args.repo = PathBuf::from(value()?),
             flag if flag.starts_with("--") => return Err(bad(&format!("unknown flag {flag}"))),
             dir if run_dir.is_none() => run_dir = Some(PathBuf::from(dir)),

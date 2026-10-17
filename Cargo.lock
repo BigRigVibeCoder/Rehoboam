@@ -864,6 +864,8 @@ dependencies = [
  "rh-manifest",
  "rh-protocol",
  "rh-registry",
+ "rh-sifter",
+ "rh-snapshot",
  "rh-stream",
  "serde_json",
 ]

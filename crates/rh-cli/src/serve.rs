@@ -670,3 +670,105 @@ fn run_inner(world: &str, words: &[&str], repo: &Path) -> Result<u8, String> {
     }
     Ok(code)
 }
+
+/// `rh-cli sift D --follow [--socket]` (SPR-026 T-04, §6.4): sifts each channel-A segment as it
+/// seals and, with `--socket`, serves channel C on `C.sock` under `C.lock`. An empty sim-year is
+/// sealed and announced (`stream.sealed` with `last_seq` null); `stream.status` carries
+/// `sifted_through`. The engine process never serves channel C. Returns the exit code.
+#[must_use]
+pub fn sift(words: &[&str], repo: &Path) -> u8 {
+    match sift_inner(words, repo) {
+        Ok(code) => code,
+        Err(e) => {
+            eprintln!("{e}");
+            rh_golden::cli::TOOL
+        }
+    }
+}
+
+fn sift_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
+    let socket = words.contains(&"--socket");
+    let words: Vec<&str> = words.iter().copied().filter(|w| *w != "--follow").collect();
+    let (opts, rest) = take_opts(&words)?;
+    let [dir] = rest.as_slice() else {
+        return Err(
+            "usage: rh-cli sift <run-dir> --follow [--socket] [--linger S] \
+                    [--max-viewers N]"
+                .to_owned(),
+        );
+    };
+    let run_dir = PathBuf::from(dir);
+    let (sock, lock_path) = socket_paths(&run_dir, Channel::C);
+    if socket {
+        check_path(&sock)?;
+    }
+    // The run must have started (its run.toml written after its own checks), so that nothing
+    // the sifter creates can make the run refuse its directory.
+    while !run_dir.join(rh_golden::stream::RUN_TOML).is_file() {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let edge = LiveEdge::new(Policy::YearEnd, rh_stream::live::Start::default());
+    let server = if socket {
+        let run = RunToml::read(&run_dir).map_err(|e| e.0)?;
+        std::fs::create_dir_all(timeline_dir(&run_dir))
+            .map_err(|e| format!("{}: {e}", run_dir.display()))?;
+        let lock = take_lock(&lock_path)?;
+        let info = info_of(&run, Channel::C, rh_sifter::sift::FORMAT_C, run_nonce());
+        let s = Server::start(&sock, lock, info, edge.clone(), opts.cap)?;
+        println!("sift: serving channel C live on {}", sock.display());
+        Some(s)
+    } else {
+        None
+    };
+    let mut on_year = |s: &rh_sifter::sift::Sifted, lines: &[String]| -> Result<(), Error> {
+        let year = i64::from(s.sim_year);
+        let (mut bytes, mut ends) = (Vec::new(), Vec::new());
+        for l in lines {
+            bytes.extend_from_slice(l.as_bytes());
+            bytes.push(b'\n');
+            ends.push(u32::try_from(bytes.len()).map_err(|_| Error("a chunk over 4 GiB".into()))?);
+        }
+        let n = u64::try_from(lines.len()).unwrap_or(u64::MAX);
+        let tick = s.records.last().map_or(0, |r| r.header.tick);
+        edge.append(year, s.first_seq, bytes, ends, tick);
+        edge.year_completes(year);
+        // The sifter sealed the segment before handing it over: it is on disk.
+        edge.seal_landed(
+            year,
+            Some(&rh_stream::live::SealEntry {
+                sim_year: year,
+                first_seq: s.first_seq,
+                last_seq: (n > 0).then(|| s.first_seq + n - 1),
+                canonical_digest: s.canonical_digest,
+            }),
+        );
+        edge.set_upstream(rh_stream::live::Upstream {
+            a_seq: Some(s.a_last_seq),
+            a_year: Some(year),
+        });
+        Ok(())
+    };
+    let result = rh_golden::sift::sift_follow(repo, &run_dir, &mut on_year);
+    edge.end(if result.is_ok() {
+        End::Finished
+    } else {
+        End::Aborted
+    });
+    let code = match &result {
+        Ok(s) => {
+            println!(
+                "sift: {} segments sealed, {} matches from {} channel-A records (followed)",
+                s.segments, s.matches, s.a_records
+            );
+            rh_golden::cli::OK
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            rh_golden::cli::TOOL
+        }
+    };
+    if let Some(s) = server {
+        s.finish(opts.linger, "sift");
+    }
+    Ok(code)
+}

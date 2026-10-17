@@ -107,6 +107,10 @@ fn main() -> ExitCode {
         ["bisect", rest @ ..] => golden(rh_golden::cli::bisect_cmd, rest),
         // SPR-013 T-10: the sealed World Stream of a run directory.
         ["tail", rest @ ..] => golden(rh_golden::cli::tail_cmd, rest),
+        // SPR-026 T-04: channel C sifted as channel A seals, served on C.sock with --socket.
+        ["sift", rest @ ..] if rest.contains(&"--follow") => {
+            ExitCode::from(serve::sift(rest, std::path::Path::new(DEFAULT_REPO)))
+        }
         // SPR-013 T-11: channel C from the run's sealed channel A (downstream of the engine).
         ["sift", rest @ ..] => golden(rh_golden::cli::sift_cmd, rest),
         // SPR-013 T-12: a run rebuilt from its history tuple and journal alone, compared.
