@@ -43,3 +43,4 @@ ADRs that sit on a critical path carry a ★. **The 19 ★ ADRs were Accepted by
 | [0033](ADR-0033-specs-as-data.md) | Specs as data: exhaustive, machine-checked system specs (ODD-R v2) | ★ |
 | [0034](ADR-0034-llm-roles-translate-describe-never-decide.md) | LLMs translate in and describe out; they never decide (deliberation consults retired) | |
 | [0035](ADR-0035-legends-over-ledgers-saga-engine.md) | Legends over ledgers: the saga engine (artifacts and vows in plane A, the chronicle pipeline first, the engine only engines, no custom 3D) | ★ |
+| [0036](ADR-0036-voxel-viewer-observation-harness.md) | The voxel viewer, a native plane-B observation harness (`rh-view`, Bevy; D51) | |

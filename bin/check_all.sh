@@ -373,6 +373,17 @@ population_synthesis_spec_control() {
   "$PY" -I specs/worldgen/selftest_population_synthesis.py --spec "$planted"
 }
 
+# Population synthesis effect-differential control (REV-SPR-019 R3): a copy of specs/registry whose effect_ref.py sorts
+# a succession line in reverse; the differential between the back-fill's own successions and effect_ref.py must FAIL.
+population_synthesis_effect_control() {
+  local planted=target/rendered-fixtures/effect_ref_reversed
+  rm -rf "$planted" && mkdir -p "$planted" || return 1
+  cp specs/registry/effect_ref.py specs/registry/effect_language_golden_v0.toml "$planted"/ || return 1
+  sed -i 's/return \[ident for _, ident in sorted(keyed)\]/return [ident for _, ident in sorted(keyed, reverse=True)]/' "$planted/effect_ref.py" || return 1
+  grep -q 'sorted(keyed, reverse=True)' "$planted/effect_ref.py" || { echo "control not planted: no 'sorted(keyed)' line in effect_ref.py"; return 1; }
+  "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref "$planted"
+}
+
 # Population synthesis golden control (SPR-019): the committed golden outputs with hamlet's leftover count changed; the
 # exact reference must FAIL on them (selftest_population_synthesis.py --golden).
 population_synthesis_golden_control() {
@@ -1135,7 +1146,8 @@ run "M2 F1 reference positive control: a stale check value in the next M2 spec m
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
-run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference (SPR-019)" "pass:POPULATION SYNTHESIS: PASS" "$PY" -I specs/worldgen/selftest_population_synthesis.py &&
+run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential (SPR-019; REV-SPR-019 R3)" "pass:EFFECT DIFFERENTIAL: 1389 successions of 5 laws over 2 configurations compared" "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref specs/registry &&
+run "population synthesis positive control: effect_ref.py with its succession order reversed must FAIL the effect differential (REV-SPR-019 R3)" "fail:differs from effect_ref.py's" population_synthesis_effect_control &&
 run "population synthesis positive control: an altered golden output must FAIL (SPR-019)" "fail:STALE:" population_synthesis_golden_control &&
 run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
 run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
