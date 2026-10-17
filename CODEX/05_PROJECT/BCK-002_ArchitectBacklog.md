@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [BCK-001, AGT-001, GOV-007]
 created: 2026-10-16
 updated: 2026-10-17
-version: 1.14.0
+version: 1.15.0
 ---
 
 > **BLUF:** The Architect's own work stream, run in parallel with development: operating-model upkeep, audit tooling, gate preparation, and documentation debt.
@@ -71,3 +71,5 @@ version: 1.14.0
 | A-51 | Take file I/O out of `rh-registry`: it keeps pure parsers from text; `load_specs` and `registry_system_ids` move to a tool crate, and plane-A tests read files through test helpers; `FILE_IO_CRATES` becomes {rh-snapshot}; the `spec-loader` token rule retires. Closes the bypasses a token rule cannot see (a wrapper inside `ownership.rs`) (`VER-SPR-012` MAJ-2, Tester GAP-5) | SPR-013 or SPR-014, whichever is planned first | Open |
 | A-52 | `rh-cli run` and `bin/regen_baseline.sh` refuse a build with any `mutant-*` Cargo feature compiled in (SPR-012's test-only mutant switches in `rh-sys-demography`), so a mutant can never make a baseline (`VER-SPR-012` §3) | With A-51 | Open |
 | A-53 | Test-strength items from `VER-SPR-012-TEST` phase 3:<ul><li>GAP-8: the M2-draws golden's 19 re-samples cannot resolve a one-day error in q′; add one larger fixture world with about 150 re-samples.</li><li>GAP-9: the pooled q(15) check sits at z −1.96 on the fixed seeds, so it is one-sided in practice: state that, or add seeds. The `spec-loader` home exemption matches a path suffix; match the exact path. A whitespace-only `pass:`/`fail:` text passes the empty check; trim before checking.</li><li>A stale feature name in `tests/draws_golden.rs`.</li></ul> | SPR-013 (it touches the same gates) | Open |
+| A-54 | A typed list of planned systems in the Registry, replacing `lint_odd.py`'s hard-coded exemption of `S1.culture`, `S2.technology` and `S3.migration` (two places). The validator and the Rust loader read the same list, so a foreign read or send to a planned-but-unbuilt owner is accepted by one rule everywhere, and a typo in an owner's name is refused (Architect ruling on SPR-013's `S1.culture` question) | Before the next spec that reads a planned system's column | Open |
+| A-55 | A typed `payload = [...]` list on `[[emits]]` in `lint_odd.py` (names and types of the payload's items, in order), declared for M2, M7 and T1 (M7: the title on `SUCCEED`, `DEPOSED`, `INTERREGNUM_CRISIS`, `REGENCY_*`, `SEAT_GRANTED` and `CLAIM_*`; the house on `HOUSE_EXTINCT`). Rust skeletons emit it; `emit` checks it. It replaces the annals' quotation of the `when` text (REV-SPR-029 R15, decision 2 and 3), so succession sentences can name the title | Before SPR-021 (its spec prep) | Open |

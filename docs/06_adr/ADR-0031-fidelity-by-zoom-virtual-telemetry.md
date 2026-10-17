@@ -37,7 +37,7 @@ So movement does not have to be stored to be exact. It has to be **recomputable 
    - plus a `DECISION_TRACE` record for named minds: the top options with their utility terms, so "why did she do it" is answerable from the stream.
 3. **Canonical text form.** Each record has a lossless one-line rendering, which is the "Matrix" view (`05.10` §6). It is greppable, diffable and readable by people and LLMs.
 4. **Container (standard).**
-   - **Live edge:** Arrow IPC with LZ4.
+   - **Live edge:** frames of the records' canonical text lines (`specs/stream/wire_v1.md` §2; amended by D43, 2026-10-17: one spelling with a stdlib reference, live delivery verifiable line by line against the sealed digest, stdlib viewers). Arrow stays the format at rest and can be added later as a frame type.
    - **At rest:** Parquet with dictionary and delta encoding and zstd.
    - **Measured:** a probe of 1M synthetic core event records gave **10.5 bytes per event** with zstd (snappy 19.2; 37 raw fixed-width). Full rows with roles, anchored snapshots and edges are 20–60 bytes per event (`08` §7).
    - **No bespoke binary codec.** Hand-packing might gain a small constant factor (a judgement, not measured), and it would cost all off-the-shelf tooling (DuckDB, Arrow, Python).
