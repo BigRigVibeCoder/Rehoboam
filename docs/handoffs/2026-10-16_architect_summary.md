@@ -89,6 +89,16 @@ Resolved since the first version of this summary:
   | Spec drafter (Fable): the Registry effect language v0, with the kinship relations | `session_017JVNkiac6bxeP4MpihBfxd` | PR #41, final; awaits D37 |
   | Independent reviewer (Fable) | `session_0172pYwXgkfpB3tkErgMDHsc` | REV-P1a, rounds 1 and 3 |
 
+- **P1a sessions (2026-10-17):**
+
+  | Role | Session | Work |
+  |---|---|---|
+  | SPR-011 Developer | `session_01BNeZLa54C84WkCSFyGLyCw` | Engine prerequisites, `sprint/SPR-011-engine-prereqs` |
+  | SPR-011 Tester | `session_01TL91hSqyKqgnewrVi44NrR` | Probe plan written; waits for the head |
+  | SPR-013 spec drafter | `session_0127pPFgvbRfd3gRk2vQrxxY` | PR #45, merged |
+  | EVO-001 drafter | `session_01KHKcdcgSqTBuEw1RS6XvH8` | SPR-014's contract and `neutral` on `[[reads]]` |
+  | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | SPR-015's births, partnering, households |
+
 - **PR #28 and PR #41 contain merge commits:** merge them with a merge commit, not a rebase.
 - **After SPR-008 merges:** dispatch `nightly.yml` on `main`, then give the director the commit and the nightly run for the cross-machine session (`worlds/smoke/README.md`).
 - **SPR-008:** its keyframe-assisted bisect must go through `rh_snapshot::resume`, which calls `Replay::check_anchor` (SPR-007 GAP-7, GAP-10). Its journaled input follows the host order: check, journal, submit, one row per input.
