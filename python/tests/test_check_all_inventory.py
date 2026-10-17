@@ -587,6 +587,8 @@ REQUIRED_GATES = (
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
     "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the "
     "Registry by name (REV-SPR-020 R22, R26)",
+    "lint_patterns positive control: life_ends with a declared role that no clause binds must "
+    "FAIL (VER-SPR-013-TEST GAP-4; parity with rh-sifter)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
     "population synthesis positive control: a spec check value off by one must FAIL the "
     "reference's spec check (SPR-019; REV-SPR-019 R5)",

@@ -108,3 +108,16 @@ fn a_tail_started_mid_run_prints_what_a_tail_after_the_run_prints() {
         "T-10: a tail started mid-run, which printed a sealed segment before the run ended, prints the after-run tail's lines (solo, hamlet; display, canonical)"
     );
 }
+
+/// VER-SPR-013-TEST GAP-2: a `--kind` that is neither a record kind nor a Registry verb is refused
+/// by name with the usage exit code (64), never an empty tail.
+#[test]
+fn an_unknown_kind_is_refused_with_the_usage_code() {
+    let out = Command::new(BIN)
+        .args(["tail", "/nonexistent-run-dir", "--kind", "DEATHS"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(64));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("--kind DEATHS is neither"), "{err}");
+}

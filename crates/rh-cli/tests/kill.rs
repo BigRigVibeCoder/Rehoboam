@@ -1,6 +1,6 @@
 //! `kill -9` and resume (SPR-013 T-09; GOV-002 tier 15; PR #60 / `specs/stream/wire_v1.md` §11).
 //!
-//! For `solo` and the 60-person `hamlet`, a 30-year streaming run is killed (SIGKILL) at two
+//! For `solo` and the 60-person `hamlet`, a 60-year streaming run (past their committed inputs) is killed (SIGKILL) at two
 //! points, then resumed from its year-10 keyframe into the same run directory:
 //! - **during sealing**: after the 4th file of sim-year 15's segment. The kill leaves no partial
 //!   segment (only the hidden `.y000015.partial`, which no reader lists), and the resumed run
@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const BIN: &str = env!("CARGO_BIN_EXE_rh-cli");
-const YEARS: &str = "30";
+const YEARS: &str = "60";
 
 fn scratch(name: &str) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
@@ -120,7 +120,7 @@ fn a_kill_during_sealing_leaves_no_partial_segment_and_the_resume_reseals_the_sa
         let kf = dir.join("keyframes/year-0010.rhkf");
         let summary = run(world, &dir, &["--resume", kf.to_str().unwrap()]);
         assert!(
-            summary.contains("stream: 15 segments sealed, 5 verified"),
+            summary.contains("stream: 45 segments sealed, 5 verified"),
             "{world}: {summary}"
         );
         assert!(!channel.join(".y000015.partial").exists());
@@ -217,7 +217,7 @@ fn a_mid_year_kill_and_resume_re_emit_no_seq_below_the_first_unsealed_year() {
         let kf = dir.join("keyframes/year-0010.rhkf");
         let summary = run(world, &dir, &["--resume", kf.to_str().unwrap()]);
         assert!(
-            summary.contains("stream: 15 segments sealed, 5 verified"),
+            summary.contains("stream: 45 segments sealed, 5 verified"),
             "{world}: {summary}"
         );
         let after = stream_of(&dir);
@@ -241,7 +241,7 @@ fn a_mid_year_kill_and_resume_re_emit_no_seq_below_the_first_unsealed_year() {
         let replayed = replay(&dir);
         assert!(replayed.starts_with("REPLAY EQUAL"), "{world}: {replayed}");
         println!(
-            "T-09 mid-year kill -9: {world} killed at tick {tick} (sim-year {year}, {buffered} records in memory); verified years 10-14, resealed 15-29 to the unbroken run's bytes; run.ladder whole; REPLAY EQUAL"
+            "T-09 mid-year kill -9: {world} killed at tick {tick} (sim-year {year}, {buffered} records in memory); verified years 10-14, resealed 15-59 to the unbroken run's bytes; run.ladder whole; REPLAY EQUAL"
         );
     }
 }
@@ -261,7 +261,7 @@ fn a_kill_before_the_first_keyframe_resumes_from_genesis() {
         assert!(!dir.join("keyframes/year-0010.rhkf").exists());
         let summary = run(world, &dir, &["--resume", "genesis"]);
         assert!(
-            summary.contains("stream: 25 segments sealed, 5 verified"),
+            summary.contains("stream: 55 segments sealed, 5 verified"),
             "{world}: {summary}"
         );
         assert_eq!(

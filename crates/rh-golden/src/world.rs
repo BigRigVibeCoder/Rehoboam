@@ -46,6 +46,8 @@ use crate::sha256;
 pub const BUILT: [&str; 1] = ["M2.demography"];
 /// The smoke world's name.
 pub const SMOKE: &str = "smoke";
+/// The Registry every manifest world's `world.toml` names (`tail --kind` checks verbs against it).
+pub const DEFAULT_REGISTRY: &str = "specs/manifest/registry_v0.toml";
 
 /// What a run needs of its world.
 pub struct Setup {

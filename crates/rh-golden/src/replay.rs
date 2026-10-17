@@ -144,6 +144,71 @@ fn resolved(path: &Path) -> PathBuf {
     }
 }
 
+/// VER-SPR-013-TEST GAP-3: `run.toml`'s horizon, seed and manifest hash are the run's. The
+/// manifest hash must be the world's pinned manifest (the history tuple replay rebuilds), the
+/// ladder header must carry the same horizon, seed and tuple, and the stream's segments the same
+/// manifest hash and seed. An edited `run.toml` is refused by name, the tool exit code, as MIN-5.
+fn cross_check_tuple(
+    src: &RunDir,
+    toml: &RunToml,
+    world: &crate::world::Setup,
+) -> Result<(), Error> {
+    let tampered = |what: String| {
+        Err(Error(format!(
+            "run.toml: {what}: run.toml was edited after the run (VER-SPR-013-TEST GAP-3)"
+        )))
+    };
+    if toml.manifest_hash != world.provenance.manifest_hash {
+        return tampered(format!(
+            "manifest_hash {} is not the world's pinned manifest {}",
+            toml.manifest_hash, world.provenance.manifest_hash
+        ));
+    }
+    if src.ladder().is_file() {
+        let text = std::fs::read_to_string(src.ladder())
+            .map_err(|e| Error(format!("{}: {e}", src.ladder().display())))?;
+        let ladder =
+            Ladder::parse(&text).map_err(|e| Error(format!("{}: {e}", src.ladder().display())))?;
+        let h = &ladder.header;
+        if h.years != toml.years || h.seed != toml.seed {
+            return tampered(format!(
+                "years {} and seed {} are not the ladder's ({} and {})",
+                toml.years, toml.seed, h.years, h.seed
+            ));
+        }
+        let needle = format!(" manifest_hash={} ", toml.manifest_hash);
+        if h.tuple.as_deref().is_none_or(|t| !t.contains(&needle)) {
+            return tampered(format!(
+                "manifest_hash {} is not the ladder's history tuple's",
+                toml.manifest_hash
+            ));
+        }
+    }
+    let first = rh_stream::seal::sealed_segments(&rh_stream::seal::channel_dir(
+        &src.stream(),
+        0,
+        rh_stream::record::Channel::A,
+    ))
+    .map_err(|e| Error(format!("stream: {e}")))?
+    .into_values()
+    .next();
+    if let Some(dir) = first {
+        let bytes = std::fs::read(dir.join(rh_stream::segment::SEGMENT_FILE))
+            .map_err(|e| Error(format!("{}: {e}", dir.display())))?;
+        let row =
+            rh_stream::segment::read_row(&bytes).map_err(|e| Error(format!("stream: {e}")))?;
+        let p = &row.provenance;
+        let hex = format!("sha256:{}", dump::hex(&p.manifest_hash));
+        if hex != toml.manifest_hash || p.world_seed != toml.seed {
+            return tampered(format!(
+                "manifest_hash {} and seed {} are not the stream's ({hex} and {})",
+                toml.manifest_hash, toml.seed, p.world_seed
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// REV-SPR-013 MIN-5: in a run directory with a stream, the journal must be the one the stream
 /// recorded: every journal row applied within the sealed years has its `INPUT` record (seq, tick,
 /// scope and row digest), and every `INPUT` record its row. A mismatch is a tampered journal
@@ -242,6 +307,7 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
     }
     let mpy = toml.minutes_per_year;
     cross_check_inputs(&src, &journal, mpy)?;
+    cross_check_tuple(&src, &toml, &world)?;
     let resume_year = match args.from_keyframe {
         None => None,
         Some(tick) if tick >= mpy - 1 && (tick + 1) % mpy == 0 => Some((tick + 1) / mpy),

@@ -404,13 +404,14 @@ fn a_missing_extra_or_edited_journal_row_hard_fails_the_replay() {
 }
 
 /// REV-SPR-013 MAJ-2: a new run into a directory that already holds a run is refused before any
-/// file is touched: every file of the 200-year run stays byte-identical.
+/// file is touched: every file of the 200-year run stays byte-identical (a 60-year run, so the
+/// refusal is the directory's, not the input script's).
 #[test]
 fn a_new_run_into_a_used_run_directory_is_refused_and_touches_nothing() {
     let dir = scratch("used_dir");
     run_into("solo", 200, &dir, None);
     let before = files(&dir);
-    let mut a = RunArgs::new(&repo(), 50, 1, RungKind::Yearly, &dir.join("run.ladder"));
+    let mut a = RunArgs::new(&repo(), 60, 1, RungKind::Yearly, &dir.join("run.ladder"));
     "solo".clone_into(&mut a.world);
     a.journal = dir.join("journal.sqlite");
     a.run_dir = Some(dir.clone());
@@ -493,10 +494,10 @@ fn a_journal_that_is_not_the_streams_is_refused_by_name() {
 fn a_run_directory_is_never_perturbed_redirected_or_written_by_its_replay() {
     let base = scratch("guards");
     let dir = base.join("run");
-    run_into("solo", 40, &dir, None);
+    run_into("solo", 60, &dir, None);
     let mut a = RunArgs::new(
         &repo(),
-        40,
+        60,
         1,
         RungKind::Yearly,
         &base.join("elsewhere.ladder"),
@@ -550,5 +551,53 @@ fn a_run_directory_is_never_perturbed_redirected_or_written_by_its_replay() {
     );
     println!(
         "T-12 MIN-6/7/8: --inject, --out and --journal refused with --run-dir; replay into the run refused; replay reads the run directory without a write"
+    );
+}
+
+/// VER-SPR-013-TEST GAP-3: an edited horizon or manifest hash in `run.toml` is refused by name
+/// against the ladder, the stream and the world's pin; and a new run whose input script has an
+/// input at or past its horizon is refused before anything is written.
+#[test]
+fn an_edited_run_toml_and_an_input_past_the_horizon_are_refused() {
+    let base = scratch("gap3");
+    let dir = base.join("run");
+    run_into("solo", 60, &dir, None);
+    let original = std::fs::read(dir.join("run.toml")).unwrap();
+    let attempt = |edit: &dyn Fn(&mut RunToml)| {
+        let mut t = RunToml::read(&dir).unwrap();
+        edit(&mut t);
+        t.write(&dir).unwrap();
+        let err = replay(&ReplayArgs {
+            repo: repo(),
+            run_dir: dir.clone(),
+            into: base.join("into"),
+            from_keyframe: None,
+            threads: 1,
+        })
+        .unwrap_err();
+        std::fs::write(dir.join("run.toml"), &original).unwrap();
+        err.0
+    };
+    let years = attempt(&|t| t.years = 80);
+    assert!(
+        years.contains("years 80 and seed 1 are not the ladder's"),
+        "{years}"
+    );
+    let hash = attempt(&|t| t.manifest_hash = format!("sha256:{}", "0".repeat(64)));
+    assert!(
+        hash.contains("is not the world's pinned manifest"),
+        "{hash}"
+    );
+    // Ada's committed input is in sim-year 53: a 40-year run would drop it.
+    let short = base.join("short");
+    let mut a = RunArgs::new(&repo(), 40, 1, RungKind::Yearly, &short.join("run.ladder"));
+    "solo".clone_into(&mut a.world);
+    a.journal = short.join("journal.sqlite");
+    a.run_dir = Some(short.clone());
+    let err = run(&a).unwrap_err();
+    assert!(err.0.contains("at or past the 40-year horizon"), "{err}");
+    assert!(!short.exists(), "a refused run wrote its run directory");
+    println!(
+        "T-12 GAP-3: an edited years or manifest_hash is refused by name; an input past the horizon refuses the run before any write"
     );
 }

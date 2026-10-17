@@ -132,10 +132,10 @@ fn segments_are_byte_identical_across_runs_and_thread_counts() {
 fn a_streaming_run_has_the_headless_runs_ladder() {
     for world in ["solo", "hamlet"] {
         let dir = scratch(&format!("{world}-headless"));
-        let mut headless = RunArgs::new(&repo(), 40, 1, RungKind::Monthly, &dir.join("h.ladder"));
+        let mut headless = RunArgs::new(&repo(), 60, 1, RungKind::Monthly, &dir.join("h.ladder"));
         world.clone_into(&mut headless.world);
         let h = run(&headless).unwrap();
-        let mut streaming = args(world, 40, 1, &dir.join("run"));
+        let mut streaming = args(world, 60, 1, &dir.join("run"));
         streaming.rung = RungKind::Monthly;
         let s = run(&streaming).unwrap();
         assert_eq!(h, s, "{world}");

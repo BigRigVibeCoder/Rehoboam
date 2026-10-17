@@ -487,6 +487,33 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         register((world.systems)(args.leak_thread), &world.specs)
             .map_err(|e| error("registration")(&e))
     };
+    // VER-SPR-013-TEST GAP-3: an input of the script at or past the horizon is never dropped in
+    // silence. A new run refuses it before anything is written; a resumed --extend run, whose
+    // history is its journal's, says which inputs it leaves out.
+    if !smoke && !args.replay {
+        let all = (world.inputs)(i64::MAX);
+        let within = (world.inputs)(args.years).len();
+        if let Some((tick, _)) = all.get(within) {
+            let mpy = world.calendar.minutes_per_year();
+            let past = all.len() - within;
+            if args.resume.is_none() {
+                return Err(Error(format!(
+                    "the input script has {past} input(s) at or past the {}-year horizon, the \
+                     first at tick {} (sim-year {}): run with a longer --years or remove them; \
+                     nothing was written",
+                    args.years,
+                    tick.minutes(),
+                    tick.minutes() / mpy
+                )));
+            }
+            eprintln!(
+                "note: {past} input(s) of the script at or past the {}-year horizon (the first at \
+                 tick {}) are not in this run's journal, so not in its history",
+                args.years,
+                tick.minutes()
+            );
+        }
+    }
     let run_dir = args.run_dir.clone().map(RunDir);
     if run_dir.is_some() && world.stream.is_none() {
         return Err(Error(format!(

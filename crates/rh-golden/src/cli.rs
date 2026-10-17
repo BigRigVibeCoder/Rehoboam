@@ -34,6 +34,9 @@ pub const OK: u8 = 0;
 pub const DIFFERENT: u8 = 1;
 /// Exit code: a tool error.
 pub const TOOL: u8 = 2;
+/// Exit code: a command line that does not parse or names a filter that does not exist (`EX_USAGE`,
+/// as `rh-cli`'s usage).
+pub const USAGE: u8 = 64;
 
 /// The arguments of `run smoke` for `args`. With `repo`, `--repo` is included; a spawned
 /// build is given none, so it reads its own source tree.
@@ -466,11 +469,18 @@ fn parse_bisect(words: &[String], repo: &Path) -> Result<Parsed, Error> {
 }
 
 /// `tail <run-dir> [--from-seq N] [--to-seq M] [--follow P] [--kind K ...] [--canonical] [--wait]`
-/// (SPR-013 T-10; [`crate::tail`]). Exit 0, or 2 on a tool error.
+/// (SPR-013 T-10; [`crate::tail`]). Exit 0, 64 on a usage error (an unknown flag, or a `--kind`
+/// that is neither a record kind nor a Registry verb: VER-SPR-013-TEST GAP-2), or 2 on a tool error.
 #[must_use]
 pub fn tail_cmd(words: &[String], repo: &Path) -> u8 {
-    let parsed = parse_tail(words, repo);
-    let result = parsed.and_then(|args| {
+    let parsed = match parse_tail(words, repo) {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("{e}");
+            return USAGE;
+        }
+    };
+    let result = Ok(parsed).and_then(|args| {
         let stdout = std::io::stdout();
         let mut lock = stdout.lock();
         let repo = args.repo.clone();
@@ -518,6 +528,24 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
         }
     }
     args.run_dir = run_dir.ok_or_else(|| bad("a run directory is required"))?;
+    // GAP-2: a filter that names nothing is refused, never an empty tail.
+    if !args.kinds.is_empty() {
+        let registry = rh_manifest::Registry::load(&args.repo.join(crate::world::DEFAULT_REGISTRY))
+            .map_err(|e| bad(&format!("the Registry: {e}")))?;
+        for k in &args.kinds {
+            let record = rh_stream::record::Kind::CHANNEL_A
+                .iter()
+                .any(|x| x.name() == k);
+            if !record && !registry.verbs.contains_key(k) {
+                return Err(bad(&format!(
+                    "--kind {k} is neither a channel-A record kind ({}) nor a Registry verb",
+                    rh_stream::record::Kind::CHANNEL_A
+                        .map(rh_stream::record::Kind::name)
+                        .join(", ")
+                )));
+            }
+        }
+    }
     Ok(args)
 }
 
