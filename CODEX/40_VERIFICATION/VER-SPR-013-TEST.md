@@ -9,7 +9,7 @@ tags: [verification, testing, determinism]
 related: [SPR-013, SPR-011, VER-SPR-012-TEST, AGT-003-DET, AGT-003-IF, ADR-0024, ADR-0025, ADR-0026]
 created: 2026-10-17
 updated: 2026-10-17
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF: T-09, T-10, T-11, T-12 and T-13 meet their acceptance criteria and I found no blocking defect. One low-severity defect (DEF-1) and eight contract or test-strength gaps.** `bin/check_all.sh` is **463 of 463** on a clean clone of `a64bc59` (445 of 445 on `0c33aa8`), and pytest passes (659) under the `pull_request`, `push` and `workflow_dispatch` shapes. My own probes, written from the contracts before I read the code, agree with the implementation everywhere I looked: a DuckDB reader of every sealed table, a `life_ends` oracle with my own MatchId and chain, a Rust-against-Python differential fuzz of the canonical parser (about 600,000 cases, 0 disagreements), an independent model of M2's death instants on all three golden worlds over 1,000 years, 100 `kill -9` runs, 27 journal and `run.toml` tampers, and 12 thread-count and repeat runs of each rung at 1,000 years that all gave one hash.
@@ -220,3 +220,174 @@ Of the 40 Rust-code mutants (c, w, s, t, x, r), 24 are killed by the Rust tests,
 - **Genesis roots of the `household` and `hamlet` baselines from an independent reference (GAP-6).**
 - **The 10,000-founder fixture at 1,000 years, or any world above 60 persons for a long run.**
 - **A killed `sift`:** I killed `run`, not `sift` (its sealing code is shared and the sifter is re-runnable).
+
+---
+
+# Phase 3: the review batch (`a348c9b` to `bb2e51a`)
+
+> **BLUF (phase 3): the batch fixes DEF-1 and GAP-1 to GAP-4 as ruled, and the new linear ladder survives `kill -9` and a torn tail; but I found one new defect that destroys data (DEF-2) and two low-severity ones (DEF-3, DEF-4), plus four gaps.** `bin/check_all.sh` on a clean clone of `bb2e51a`: **470 of 470** (PASS; PR shape with the title, body and base `7f38a73`; the two earlier failures were my missing `RH_PR_TITLE` and `RH_PR_BODY`, not the code). My grid of per-field domain edges (161,714 lines, 2,972 files) found **0 disagreements** between `rh-stream` and the amended reference; run against the old reference (`a64bc59`) the same grid finds 4,993 line and 48 file disagreements, so it would have caught the two classes the review found. Of 200 `kill -9` and resume cycles, 196 end with the stream, keyframes and `run.ladder` byte-equal to the unbroken run and REPLAY EQUAL; the other four are DEF-3 (2) and an unexplained lock refusal (2, GAP-11).
+
+Heads: probes on `c2356e7` (the Architect's head), then `bb2e51a` (the last Developer push; it moves two pure-Python controls from part core to part golden and changes no Rust). Baselines: `git diff 3f938a0 bb2e51a -- worlds` is empty and `allocations_v1.txt` is unchanged since `a64bc59`.
+
+## 6. Verdicts on the batch
+
+| Item | Verdict | Basis |
+|---|---|---|
+| MAJ-1 stricter reference, `differential_v0.py`, `rh-cli canonical` | **PASS** | §7.1: grid 0 disagreements; the gate passes and `--control relax-header` fails (53 disagreements) |
+| MAJ-2 a refused run touches nothing | **PARTIAL** | all but two of the refusals I tried leave the directory byte-identical; two do not (DEF-4) |
+| MAJ-3 resume checkpoints the WAL; `--extend`; `kill.rs` replays | **PASS** | §7.2: `--extend` 60 to 80 equals the unbroken run; a killed directory is refused by `replay` by name and left unchanged |
+| MAJ-3(b) linear `run.ladder` | **PASS with DEF-3** | §7.3: 196 of 200 cycles equal; torn lines, a short ladder and a foreign ladder behave |
+| `--resume genesis` | **PASS with DEF-3** | works from a kill at 30 ms or later; a kill near 20 ms leaves a directory it cannot use |
+| `replay --into` guard (MIN-7) | **FAIL (DEF-2)** | guards the descendant direction only; `--into` deletes any existing directory |
+| `.writer.lock`, `tail --wait` ends (MIN-9) | **PASS with GAP-11** | §7.4 |
+| `twin_check` compares every column (MIN-2) | **PARTIAL (GAP-10)** | it checks the match content, not the other columns |
+| DEF-1 `--from-keyframe` at the last keyframe | **FIXED** | REPLAY EQUAL at years 10, 30, 60 of a 60-year run |
+| GAP-1 survivors | **FIXED** | c09, c12, c13, c15, c18, w03 and s01 are killed (§8) |
+| GAP-2 unknown `tail` filter | **FIXED** | exit 64 naming the kinds; `DEATH`, `EVENT`, `INPUT`, `LIFE_EXIT` accepted; lower case and empty refused |
+| GAP-3 `years`, `manifest_hash`, input past the horizon | **FIXED, one residue (DEF-4)** | §7.5 |
+| GAP-4 unbound role | **FIXED** | `ERROR life_ends: role A is declared but no clause binds it`; unknown pattern keys also named |
+| Baselines | **UNCHANGED** | nothing under `worlds/` after `3f938a0` |
+| `bin/check_all.sh` | **PASS** | `bb2e51a`, clean clone, `pull_request` shape with the PR title |
+| CI | **PASS** | `bb2e51a` (run 39035459842): part core 9 min 39 s in `check_all` (job 10 min 31 s), part golden 11 min 13 s (job 12 min 0 s), wall 12 min 0 s. `c2356e7` (run 39033468080): core 13 min 06 s, golden 9 min 45 s, wall 13 min 47 s |
+
+## 7. Results
+
+### 7.1 The fuzz coverage lesson, and the new differential (MAJ-1)
+
+My phase 2 generator missed both disagreement classes (the Architect's question). Cause: only the 54 golden lines carry snapshot fields; my integer substitutions never targeted 6 to 254 on a field; and I fuzzed lines only, never file headers. Fixed in the probe (`p125_grid.py`):
+
+- **Per-field grid:** 388 seed lines (6 seeds x every record kind x 8 records, plus the golden lines). Every maximal digit run of every line is replaced with each of 38 values (0 to 10, 15, 16, 17, 127, 128, 254, 255, 256, `2^15` and `2^16` edges, `2^31` and `2^32` edges, `2^63` and `2^64` edges, `2^64 + 1`, `~`, `%`, empty, `-1`, `-0`, `01`); each bracketed list is emptied and doubled. **161,714 lines (83,973 accepted): 0 disagreements** between `rh-cli canonical parse` and `canonical_v0.py`, and every accepted line is canonical.
+- **Files and headers:** 2,972 files: 14 timelines x 2 channels x 15 registry tokens x 7 format tokens, header prefixes, trailing junk, CR, comments with non-ASCII and NUL, record duplication, deletion and swaps: **0 disagreements** (26 accepted) between `rh-cli canonical files` and `digest_file`.
+- **Control:** the same grid against the `a64bc59` reference: **4,993 line and 48 file disagreements** (`partner_kind` 6 to 255, `[^ ]+` header tokens and the unbounded timeline). The grid would have caught both classes.
+- **The Developer's gate:** `differential_v0.py --rust-bin ...` agrees on 45,409 lines (8,249 accepted) and 3,015 files; `--control relax-header` fails with `DIFFERENTIAL DISAGREES: 53 of 45,409 lines and 3,015 files`. Its mutations are random (12 per line); the grid above reaches exact edges and is a useful addition to it.
+
+### 7.2 Run directory behaviour
+
+| Probe | Result |
+|---|---|
+| Stream-level probes on 1,000-year `solo`, `household`, `hamlet` (4 threads): my DuckDB schema reader, the semantics probe, the `life_ends` oracle (1, 6 and 60 matches), `twin_check`, `check_segments`, `tail --canonical` digests, replay at 4 threads | all 0 failures; REPLAY EQUAL (12,000 rungs, 1,000 segments, 100 keyframes each) |
+| `--extend` 60 to 80 from the year-60 keyframe | stream and keyframes, `run.ladder` and `run.toml` (but `journal_head`) equal to an unbroken 80-year run; REPLAY EQUAL |
+| `replay` of a killed directory (no resume yet) | refused by name ("still has a write-ahead log: the run was killed and not resumed"); the directory is byte-identical afterwards; `tail` and `sift` still work on it |
+| 27 `run.toml` and journal tampers (`p127_tamper.sh`) | 26 refused by name (`manifest_hash` now among them); the 27th, `years` edited in a directory holding only `run.toml` and the journal, is accepted (no ladder or stream to cross-check against); on a **full** directory `years` 59 and 61, and an edited `manifest_hash`, are refused ("run.toml was edited after the run") |
+| `replay` source: journal opened immutable | the source directory is byte-identical after a replay |
+
+### 7.3 The linear ladder under `kill -9` (item 4)
+
+`p127_kill.sh`: kill at a random 5 to 2,400 ms, optionally tear the tail of `run.ladder`, resume with the defaults (`--resume <last keyframe>` or `--resume genesis`, no `--out`), then require: stream plus keyframes tree equal to the unbroken run's, `run.ladder` equal to the unbroken run's, REPLAY EQUAL.
+
+| Run | Cycles | Equal | Others |
+|---|---|---|---|
+| `hamlet`, kill | 60 | 59 | 1 lock refusal (GAP-11) |
+| `hamlet`, kill + torn last line (1 to 120 bytes off the file) | 60 | 59 | 1 kill at 18 ms: DEF-3 |
+| `solo`, kill | 40 | 39 | 1 lock refusal (GAP-11) |
+| `household`, kill + torn last line | 40 | 39 | 1 kill at 13 ms: DEF-3 |
+
+Targeted cases (`p131_ladder.sh`, a `hamlet` run killed at 1.3 s):
+
+| Case | Result |
+|---|---|
+| tear inside the last line's first 6, 12, 20 and 30 bytes (the tick digits cut) | resume equal to the unbroken `run.ladder` in all four |
+| ladder cut at a line boundary three months before the keyframe (a lost fsync) | refused: "the ladder does not reach the keyframe at tick ..." |
+| ladder header from another run (`seed 99`) | refused: "another run's ladder (hamlet seed 99, monthly)" |
+| resume without repeating `--ladder monthly` | refused with the same "another run's ladder" message (GAP-8) |
+
+**DEF-3, killed during start-up** (`rh-cli run` killed at 3 to 80 ms, then `--resume genesis` and a fresh run):
+
+| Kill at | Directory | `--resume genesis` | fresh run into it |
+|---|---|---|---|
+| 3 to 15 ms | empty or absent | ("unable to open journal") | rc 0 |
+| about 20 ms | `journal.sqlite`, its WAL and `.writer.lock`, **no `run.toml`, no `run.ladder`** | rc 2: `run.ladder: No such file` | rc 2: "already holds a run (journal.sqlite)" |
+| 30 to 80 ms | `run.toml`, `run.ladder`, journal, maybe `stream/` | rc 0 | rc 2 (use `--resume`) |
+
+### 7.4 Refusals leave the directory byte-identical (item 5)
+
+`p128_refuse.sh` snapshots every file name, mode and content hash before and after (a finished 60-year `solo` directory, then new-directory cases):
+
+| Refusal | Directory |
+|---|---|
+| new run into an existing run directory; `--inject`, `--out` or `--journal` with `--run-dir` (and `--out`/`--journal` files are never created) | unchanged |
+| `replay --into` the run directory, a directory inside it | unchanged (refused by name) |
+| resume at a bad tick, a missing keyframe, another seed, another world, `--years` that disagrees with the journal's horizon | unchanged, **except `--years 40`** (below) |
+| `tail --kind NOPE` | unchanged; exit 64 |
+| input at or past the horizon (new run) | nothing created at all; message ends "nothing was written" |
+| input script with a founder that does not exist | nothing created |
+| `--years 0` with the committed input script | nothing created |
+| **resume with `--years 40` on a 60-year run** | **changed: `journal.sqlite-shm` and `journal.sqlite-wal` appear** (DEF-4) |
+| **input at tick -5 in a new run directory** | **the directory is created holding `.writer.lock` and a 20 KB `journal.sqlite`** (DEF-4) |
+| a successful resume | leaves empty `journal.sqlite-shm` and `-wal` that the unbroken run's directory does not have (cosmetic) |
+
+`.writer.lock` is released at once on `kill -9` (150 kills probed with `flock` immediately after: 0 held). The two refusals in §7.3 were not reproduced in 300 further solo kill and resume cycles (GAP-11).
+
+### 7.5 The remaining ruled fixes
+
+| Fix | Probe | Result |
+|---|---|---|
+| GAP-2 | `tail --kind` with `DEATH`, `EVENT`, `INPUT`, `LIFE_EXIT`; `NOPE`, `death`, empty | first four exit 0; last three exit 64 naming the record kinds |
+| GAP-3 | tick = horizon, tick = horizon - 1, tick -5, a far-future tick, founder 7 | horizon and beyond refused before anything is written; the last minute accepted; -5 refused late (DEF-4); founder 7 refused |
+| GAP-4 | `lint_patterns.py` on copies: the clause's `target` removed; a second declared role `B`; an undeclared role `Z`; an unknown key | each FAIL with a named reason (`role A is declared but no clause binds it`, `unknown key 'mystery_key'`); the unmodified pattern passes |
+| `write_atomic` | `git grep` | gone from `rh-stream`; `rh-golden` keeps its own host-side `write_atomic` for `run.toml`, keyframes and the ladder header, as the doc comment says |
+| baselines | `git diff 3f938a0 bb2e51a -- worlds crates/rh-bench/baselines` | `worlds/` empty; `allocations_v1.txt` unchanged since `a64bc59` |
+
+## 8. Mutation matrix, re-run (item 3)
+
+The 34 phase 2 Rust-code mutants, plus the r-series and 13 new mutants (n01 to n13) on the new code. K = killed by a named gate.
+
+| Group | Result |
+|---|---|
+| c01 to c19 (canonical parser) | 18 killed (c01, c03 to c19); the phase 2 survivors **c09, c12, c13, c15, c18 are now killed**; c02 survives as before (equivalent: the `i64`/`u64` range check rejects the same tokens). The differential gate also kills each of them |
+| w01 to w05 (writer) | 5 killed (**w03 now killed**) |
+| s01 to s04 (sealing) | **s01 killed**; s02 and s03 survive (equivalent in effect: the rename or `create_dir` fails anyway); s04 survives (a defensive name check; GAP-1 residue) |
+| t01, t02 (`tail` cursors) | killed |
+| x01 to x04 (sifter) | x03, x04 killed by the Rust tests; **x01 (chain arguments swapped) is killed by `twin_check` (`CHAIN`)**, not by a Rust test; x02 survives (equivalent: one binding per target) |
+| r01 to r04 (extinction, death payload) | killed (r04 by the `tail` display snapshot); r05 and r06 (`--expect-serial`) survive nextest and are killed by the `check_all` control |
+| n01 ladder keeps rungs past the keyframe | K (`replay::an_extended_run_directory...`) |
+| n02 ladder keeps a torn last line | S; **equivalent in effect**: my four tear cases resume equal under it |
+| n03 ladder-reaches-keyframe check off | **S in the repository's tests; K by my short-ladder probe** (the resume succeeds and the final `run.ladder` has a gap): GAP-9 |
+| n04 ladder identity check off | **S in the repository's tests; K by my foreign-ladder probe** (rc 0 instead of rc 2): GAP-9 |
+| n05 writer lock off | K (`tail_live`) |
+| n06, n07 `years`/`seed`, `manifest_hash` cross-checks off | K (`replay::an_edited_run_toml...`) |
+| n08 stream-provenance cross-check off | S; redundant behind the journal's history key and the world pin |
+| n09 `replay --into` inside the run | K |
+| n10 `tail` accepts an unknown kind | K (`tail_live::an_unknown_kind...`; my first stage list omitted that test) |
+| n11 `writer_gone` never true | K (`kill`) |
+| n12 input past the horizon accepted | K |
+| n13 journal against `INPUT` records cross-check off | K (`replay::a_journal_that_is_not_the_streams...`) |
+
+## 9. Defects and gaps found in phase 3
+
+### DEF-2 (medium to high): `replay --into DIR` deletes an existing `DIR`, including the run it replays
+
+Contract: MIN-7 ("replay into the run directory, or inside it, is refused") and T-12 (a replay writes a fresh directory). Cause: `crates/rh-golden/src/replay.rs` calls `std::fs::remove_dir_all(&dst)` on any existing `--into` after checking only that `dst` is not inside `src`.
+
+Repro (`c2356e7` and `bb2e51a`):
+```
+rh-cli run solo --years 60 --run-dir P/run --inputs worlds/solo/inputs.toml
+echo keep > P/other.txt
+rh-cli replay P/run --into P
+```
+Actual: `P` is emptied (the run, `other.txt` and the sibling directory are all gone) and the replay then fails ("run.toml: No such file"). `replay P/run --into U`, with `U` an unrelated non-empty directory, replays and deletes `U/precious.txt` without a word. Expected: refuse when `--into` is an ancestor of the run directory, and refuse (or require `--force`) when `--into` exists and is not empty or not a previous replay's output. Hits anyone who types `--into .` or `--into ..`.
+
+### DEF-3 (low): a kill during start-up can leave a directory that neither `--resume genesis` nor a fresh run accepts
+
+See §7.3. A kill in a window of a few milliseconds leaves `journal.sqlite` without `run.toml` or `run.ladder`; the user must delete the directory by hand. Expected: a fresh run treats a directory with a journal but no `run.toml` as not started, or `--resume genesis` starts it over.
+
+### DEF-4 (low): three refused or finished runs touch the directory (MAJ-2)
+
+See §7.4: the `--years` disagreement refusal leaves `journal.sqlite-shm`/`-wal` (the journal is opened before the check); a negative input tick creates the directory, `.writer.lock` and a journal before it is refused; a successful resume leaves empty `-shm`/`-wal` files that an unbroken run does not. Expected: validate before opening the journal, and checkpoint on close.
+
+### New gaps
+
+| # | Gap | Recommendation | Confidence |
+|---|---|---|---|
+| GAP-8 | A resume must repeat `--ladder monthly` (and the other run flags) even though `run.toml` records `rung`; forgetting it gives "another run's ladder (solo seed 1, monthly)", which reads as a foreign file | Read `rung` from `run.toml` on resume, or say "this run's ladder is monthly" | 60% |
+| GAP-9 | No repository test kills n03 (the ladder must reach the keyframe) or n04 (the ladder must be this run's). n03 is the guard against a lost fsync: without it a resume silently produces a `run.ladder` with a gap | Add the two cases from `p131_ladder.sh` (short ladder; foreign header) to `kill.rs` or `replay.rs` | 80% |
+| GAP-10 | `twin_check` does not compare every column. Changing any of these in a copy of a channel-C directory is caught by neither `twin_check` nor `check_segments`: `sift_match.seq`, `.kind`, `.timeline_id`; `sift_binding.timeline_id`; `sift_match_event.clause`, `.ordinal`, `.timeline_id`; every column of `pattern` (pack digest, budget, clauses, version, dedupe days); and `segment` fields other than `sim_year`, `a_canonical_digest` and `a_chain` (`record_count`, `first_seq`, `last_seq`, ticks, `world_seed`, `engine_build`, `canonical_digest` of channel C). The match's own columns (`match_id`, `pack`, `pattern_id`, `pattern_version`, `selection`, `on_complete`, `status`, `opened_tick`, the closing event and seq, the bindings' role and entity, the events' ids) are compared | Either compare them or state that channel C is derived and only `sift` regeneration (V-PLN-04) guards it | 70% |
+| GAP-11 | Two resumes after a `kill -9` (hamlet at 1.674 s from the year-20 keyframe; solo at 0.128 s from genesis) were refused with "another run is writing this run directory". Both happened while two or three heavy jobs ran on the machine. Not reproduced: 150 kills probed with `flock` right after the kill (0 held) and 300 solo kill and resume cycles (0 refusals). `try_lock` is released when the OS closes the descriptor, so a holder would have to be another process | If it recurs, capture `fuser .writer.lock`; a retry after a second would settle whether it is a transient. Unexplained | 40% |
+
+## 10. What phase 3 did not cover
+
+- The `--test-stall mid:<tick>` hook and the `STEP_DIGEST` and rung assertions of MIN-11: exercised only through `check_all`'s kill gate.
+- `rh-sifter`'s allow-list of pattern keys (MIN-1): I checked `lint_patterns.py`'s refusal of an unknown key, not the Rust sifter's own list (it embeds the pattern file; no CLI path reaches it).
+- A full sweep of every channel-C column: my first attempt (`p129b`) was stopped at the 30-minute limit under load, and I re-ran 19 chosen columns on a fresh 60-year directory (GAP-10).
+- Power loss (still: processes were killed, not the machine), a second platform, and GitHub Actions beyond reading the run times above.
+- Sifting after a killed `sift` run, and `tail --wait` against a writer that exits cleanly, beyond the repository's `tail_live` and `kill` tests.
