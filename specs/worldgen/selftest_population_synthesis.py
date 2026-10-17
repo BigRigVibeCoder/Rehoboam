@@ -2107,15 +2107,15 @@ def effect_world(g: Genesis, title: Title, s: Succession) -> dict[str, Any]:
 
 
 def effect_differential(ref_dir: Path, seeds: int) -> list[str]:
-    """Run every genealogical-law succession of the sweep through effect_ref.py; the mismatches."""
+    """Run every genealogical-law succession of both sweep configurations through effect_ref.py."""
     ref = _load("effect_ref", ref_dir / "effect_ref.py")
     golden = ref.load_golden(ref_dir / "effect_language_golden_v0.toml")
     failures: list[str] = []
     compared = 0
-    for law in GENEALOGICAL_LAWS:
+    for m, law in itertools.product(SWEEP_CONFIGS, GENEALOGICAL_LAWS):
         programs = golden.reg.programs["succession_laws"][law]
         for seed in range(1, seeds + 1):
-            g = build(with_law(MANOR, law, seed), synthesise=False)
+            g = build(with_law(m, law, seed), synthesise=False)
             for title in g.titles:
                 for s in title.successions:
                     golden.worlds["backfill"] = effect_world(g, title, s)
@@ -2130,10 +2130,13 @@ def effect_differential(ref_dir: Path, seeds: int) -> list[str]:
                     compared += 1
                     if line != s.line:
                         failures.append(
-                            f"law {law} seed {seed} title {title.k} at {s.tick}: the reference's "
-                            f"line {s.line} differs from effect_ref.py's {line}"
+                            f"{m.id} law {law} seed {seed} title {title.k} at {s.tick}: the "
+                            f"reference's line {s.line} differs from effect_ref.py's {line}"
                         )
-    print(f"EFFECT DIFFERENTIAL: {compared} successions of {len(GENEALOGICAL_LAWS)} laws compared")
+    print(
+        f"EFFECT DIFFERENTIAL: {compared} successions of {len(GENEALOGICAL_LAWS)} laws over "
+        f"{len(SWEEP_CONFIGS)} configurations compared"
+    )
     return failures
 
 
