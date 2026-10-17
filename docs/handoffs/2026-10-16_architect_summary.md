@@ -93,23 +93,21 @@ Resolved since the first version of this summary:
 
   | Role | Session | Work |
   |---|---|---|
-  | SPR-011 Developer | `session_01BNeZLa54C84WkCSFyGLyCw` | Engine prerequisites, `sprint/SPR-011-engine-prereqs` |
-  | SPR-011 Tester | `session_01TL91hSqyKqgnewrVi44NrR` | Phase 2a on `1d72e48` (T-00, T-01, T-03, T-04): DEF-1 to DEF-4 found; phase 2b on the done head |
-  | SPR-012 Tester | `session_01NmJhgWg2RtddDxjWoKF3VP` | Probe plan written from the contracts; waits for the head. The Developer launches when SPR-011 merges |
+  | SPR-011 Developer | `session_01BNeZLa54C84WkCSFyGLyCw` | **Merged** (PR #46, `afca1c6`); `VER-SPR-011` PASS |
+  | SPR-011 Tester | `session_01TL91hSqyKqgnewrVi44NrR` | Done: `VER-SPR-011-TEST` PASS (phases 2a, 2b, 3) |
+  | SPR-012 Developer | `session_01HayofV6CwcYjQMoz46fUHo` | `solo` lives and dies, `sprint/SPR-012-solo`; scope adds A-47 and A-49 |
+  | SPR-012 Tester | `session_01NmJhgWg2RtddDxjWoKF3VP` | Probe plan written from the contracts (with A-47, A-49); waits for the head |
   | SPR-013 spec drafter | `session_0127pPFgvbRfd3gRk2vQrxxY` | PR #45, merged |
-  | EVO-001 drafter | `session_01KHKcdcgSqTBuEw1RS6XvH8` | SPR-014's contract and `neutral` on `[[reads]]` (`6bc202e`); merges before the births spec |
-  | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | SPR-015's births, partnering, households, as `specs/systems/next/` (`421f2e1`) |
-  | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | Fixed-point `exp`/`ln` (`05.1` §6) and M2 F1 mortality, as `specs/demography/mortality_f1.toml`, folded into `next/` after the births spec |
-  | SPR-018 drafter | `session_01EZrn9bjDkDgj6kEQsYpCuD` | Worldgen-lite, `M1.regions` F0, `S3.migration` F0 (PR #52) |
+  | EVO-001 drafter | `session_01KHKcdcgSqTBuEw1RS6XvH8` | **Merged** (PR #49, `0398a4e`, `05.1` v1.12); `REV-EVO-001` closed after four rounds |
+  | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | Births (PR #50): round 3 approved; merging `main` after EVO-001, then the Architect verifies and merges. Q5 (tfr 4.9) and Q6 (V-SF-24/25 gating) then go to the director |
+  | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | **Merged** (PR #51, `513e281`, `05.1` v1.10); next: folding mortality into `next/` M2 after births merges |
+  | SPR-018 drafter | `session_01EZrn9bjDkDgj6kEQsYpCuD` | **Merged** (PR #52, `e9e0fe3`); `REV-SPR-018` closed |
 
-- **Review records** (each round's independent review with the Architect's rulings in §0), on review branches until the round closes, then merged like PR #43:
-  - `REV-EVO-001` (`review/EVO-001-r1`, PR #49);
-  - `REV-SPR-015` (`review/SPR-015-r1`, PR #50);
-  - `REV-SPR-016` (`review/SPR-016-r1`, PR #51);
-  - `REV-SPR-018` (`review/SPR-018-r1`, PR #52).
-- **`05.1` version lines:** SPR-011's audit, PR #51 (`exp`/`ln`) and PR #49 (EVO-001) each change `05.1`. The first to merge takes v1.10; each later one takes the next number and merges `main` first.
-- **M7.dynasty spec version:** EVO-001 and PR #41 both bump M7 to 0.3.2. The one that merges second takes 0.3.3; PR #41 also merges `main` and moves its gates to `--part core`.
-- **Messages to a working session:** send with the default priority or `now`. Four `next` messages to the SPR-011 Developer were not delivered.
+- **Review records:** `REV-SPR-016`, `REV-SPR-018` and `REV-EVO-001` are closed. `REV-SPR-015` (`review/SPR-015-r1`) closes when the births spec merges.
+- **`05.1` versions:** v1.10 is `exp`/`ln` (PR #51), v1.11 is SPR-011's rule 6, v1.12 is EVO-001's rule 2.
+- **M7.dynasty spec version:** EVO-001 took 0.3.2. PR #41 (effect language, awaiting D37) takes 0.3.3, merges `main` and moves its gates to `--part core` before it merges.
+- **Outcome-carrying commands** (`ScheduleDeath`, `Marry`) are submitted only by their sender's timer at the outcome's instant (REV-EVO-001 R9). D39 was withdrawn.
+- **Messages to a working session:** send with the default priority or `now`. A `next` message waits for the target's turn to end.
 
 - **PR #28 and PR #41 contain merge commits:** merge them with a merge commit, not a rebase.
 - **After SPR-008 merges:** dispatch `nightly.yml` on `main`, then give the director the commit and the nightly run for the cross-machine session (`worlds/smoke/README.md`).
