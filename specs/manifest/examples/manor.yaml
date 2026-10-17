@@ -1,0 +1,50 @@
+# Reference fixture for SPR-019 (population synthesis and the dynastic back-fill): a manor of 400 on a
+# flat valley with one lordly polity and two dynasties, House Ashcombe (three generations of ancestors)
+# holding the sovereign seat and House Thorne (two) a major seat under it. The exact reference
+# specs/worldgen/selftest_population_synthesis.py mirrors this file (python/tests/test_population_synthesis_cases.py
+# keeps the mirror honest) and pins its genesis at seeds 1 and 2. It sits between hamlet (rung 2) and the
+# dynastic fixture world of SPR-030 (BCK-002 A-06, the Architect's); it is not a rung of the ladder.
+# No cast: every person is synthesised (P1-P12) or back-filled (B1-B11). M3, M4, M6 and M8 of the template
+# are listed as not built in P1a's run header (SPR-011 ruling 3).
+manifest_version: 0
+registry_version: "0.2.0"
+world:
+  id: manor
+  display_name: "The Manor of Ash"
+  template: feudal_realm
+  seed: 1
+  calendar: {days_per_year: 360, months: 12, seasons: 4, epoch_label: "Year of Ash"}
+  horizon: {years: 300, label: historical}
+  fidelity_profile: {M2.demography: F1, M7.dynasty: F1}
+geography:
+  raster_resolution: 64
+  region_count: 2
+  heightmap_template: flat
+  climate: {zone: temperate_maritime, harvest_sigma: 0.15, autocorr: 0.1, spatial_share: 0.9, volcanic_rate: 0.0}
+  ecology: {livestock_kg_per_capita: 0, wild_prey_tonnes: 0}
+peoples:
+  - archetype: human
+    population: 400
+    class_shares: {commoner: 0.90, burgher: 0.05, elite: 0.05}
+    cultures:
+      - {id: ashfolk, name: "Ashfolk", naming_seed: "plain rural names, ash and river places", value_bias: {tradition: 0.4}}
+    faiths:
+      - {id: hearth, name: "Hearth custom", doctrine_tags: []}
+polities:
+  - id: manor_of_ash
+    name: "The Manor of Ash"
+    government: feudal_monarchy
+    succession_law: primogeniture
+    titles: {authority: Lord, successor: Heir}
+    dynasties:
+      - {id: ashcombe, name: "House Ashcombe", generations: 3}
+      - {id: thorne, name: "House Thorne", generations: 2}
+systems:
+  M2.demography: {e0: 30, tfr: 4.9, elite_fertility_mult: 1.2}
+  M7.dynasty: {majority_age: 16}   # B9's majority (tanistry, the stand-in rule, the root's first tenure); the Registry has no default yet (REV-SPR-019 R5)
+narrative:
+  pattern_packs: [succession, solitary_life]
+  default_style_card: historian
+presentation:
+  era_art: lofi_plain
+  palette: mono

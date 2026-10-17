@@ -82,6 +82,8 @@ fertility's hook (`eps_f`) will share, with its M4 in-coupling and its isolation
 spec (P1.5a): a rate read needs a neutral typed by the owner's column, M4 has none, and the frozen-mode lint refuses
 the spec at promotion otherwise. MR11 states the form with the factor exactly 1 until then.
 
+**A frozen bump and its next version (REV-SPR-019 R13).** A frozen spec may be bumped (a declaration-only bump such as M7 0.3.2 → 0.3.3 in PR #61) while a next version of it is a draft here. The `[[amends]]` records quote the frozen text byte for byte and every other frozen element must be preserved, so the draft breaks the moment the bump lands. The rule: of the bump and the next version, **whichever lands second re-derives the next version from the new frozen file** (copy the new frozen text, re-apply the draft's amendments and additions, regenerate the lock with the tool) in its own PR, before it is merged. The lock's digests do not change when the amended texts do not.
+
 **One draft per system id.** `next/` holds at most one next version per id, and only a frozen spec takes one, so a
 second slice of the same system is drafted standalone and folded into the draft once the first slice has merged (SPR-016's
 mortality was drafted as `specs/demography/mortality_f1.toml` under PR #51 and folded into the M2 draft after PR #50).
@@ -122,5 +124,6 @@ never changes a committed skeleton or the index until step 4.
 | File | What |
 |---|---|
 | `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) and F1 mortality (SPR-016, `[algorithm.mortality_f1]`, folded after PR #50) on the frozen rung-0 slice (0.2.2: 0.2.0 plus EVO-001's typed payloads and codes, and SPR-020's `roles`) |
+| `M7.dynasty.odd.toml` | 0.4.0 draft (SPR-019, PR #62): the frozen 0.3.2 with three `[[amends]]` records for rh-worldgen's dynastic back-fill (`specs/worldgen/population_synthesis.toml` `[algorithm.dynastic_backfill]`): `[initialization]` (the houses, genealogy, `house_member` rows and each title's pre-epoch tenure log by its law), `tenure.title` (a pre-epoch log, not one initial row), `house_member.house` (every agnatic descendant the back-fill writes, the dead included). Nothing else of 0.3.2 changes |
 | `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`) and mortality's two parameters with their defaults (`density_capacity`, `density_mortality_slope`); verbs `BIRTH`, `MARRIAGE` |
-| `amendments.lock.toml` | the nineteen amendments of the M2 draft (five texts, seven column meanings, seven parameter meanings; the mortality fold re-stated five and added `e0`'s), path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |
+| `amendments.lock.toml` | the nineteen amendments of the M2 draft (five texts, seven column meanings, seven parameter meanings; the mortality fold re-stated five and added `e0`'s; SPR-019 re-stated `[initialization]`) and the three of the M7 draft, path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |

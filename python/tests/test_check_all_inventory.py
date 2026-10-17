@@ -159,6 +159,7 @@ REQUIRED_GATES = (
     "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference "
     "--check; SPR-012 T-05)",
     "Golden vectors: M4 basket and price rule",
+    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference (SPR-019)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
@@ -190,6 +191,7 @@ REQUIRED_GATES = (
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
     "Manifest: household (rung 1; SPR-011 ruling 18)",
     "Manifest: invalid_draft_style must FAIL",
+    "Manifest: manor (the SPR-019 fixture: a dynastic manor)",
     "Manifest: solo",
     "Manifest: uz_job",
     "Manifest: val_khor",
@@ -580,6 +582,15 @@ REQUIRED_GATES = (
     "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the "
     "Registry by name (REV-SPR-020 R22, R26)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
+    "population synthesis positive control: a spec check value off by one must FAIL the "
+    "reference's spec check (SPR-019; REV-SPR-019 R5)",
+    "population synthesis positive control: an altered golden output must FAIL (SPR-019)",
+    "population synthesis positive control: conceptions inside the closed period must FAIL the "
+    "spacing invariant (SPR-019 B6)",
+    "population synthesis positive control: floors in place of the age-sex allocation must FAIL "
+    "INV-PS-01 (SPR-019 P3)",
+    "population synthesis positive control: floors in place of the couple-table rounding must "
+    "FAIL INV-PS-03 (SPR-019 P7)",
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
     "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)",
