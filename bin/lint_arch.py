@@ -123,6 +123,9 @@ PINNED_LABELS = MappingProxyType(
         # SPR-004 ruling A: the load-time front end reproduces the reference's float checks.
         "rh-manifest": ("tool", "tool"),
         "rh-sample": ("A", "machinery"),
+        # SPR-012: the first real system crate (M2.demography) and the worldgen stub (ruling 10).
+        "rh-sys-demography": ("A", "system"),
+        "rh-worldgen": ("A", "machinery"),
     }
 )
 SYSTEM_LABELS = ("A", "system")

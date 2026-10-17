@@ -1,0 +1,19 @@
+[package]
+name = "rh-sys-demography"
+description = "M2.demography: ageing, the rung-0 mortality schedule, death timers and the life-course log"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# SPR-012 T-05, T-07: the first real system crate (specs/systems/M2.demography.odd.toml, frozen 0.2.0).
+# Pinned in bin/lint_arch.py.
+[package.metadata.rehoboam]
+plane = "A"
+kind = "system"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }

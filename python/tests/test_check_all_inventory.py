@@ -118,6 +118,8 @@ REQUIRED_GATES = (
     "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality "
     "--check; SPR-016)",
     "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)",
+    "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference "
+    "--check; SPR-012 T-05)",
     "Golden vectors: M4 basket and price rule",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
@@ -183,7 +185,10 @@ REQUIRED_GATES = (
     "the samples (SPR-009)",
     "T-02b wall-clock positive control: a NaN median must be refused, never compared (SPR-009 "
     "DEF-3)",
+    "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0,"
+    " Table 19, e0 within 0.06 years, the q(15) band (SPR-012)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
+    "T-05 positive control: one altered schedule vector must FAIL (SPR-012)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
@@ -272,6 +277,7 @@ REQUIRED_GATES = (
     "(SPR-007 GAP-2)",
     "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)",
     "gen_hash_golden positive control: one changed hash must FAIL",
+    "gen_m2_reference positive control: one altered vector must FAIL (SPR-012 T-05)",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",

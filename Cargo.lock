@@ -928,6 +928,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rh-sys-demography"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+]
+
+[[package]]
 name = "rh-sys-smoke"
 version = "0.0.0"
 dependencies = [
