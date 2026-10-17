@@ -18,7 +18,7 @@ id = 1
 id = 2
 [[life_course]]
 person_id = 52998799569557452   # ash_root
-founder = 4
+founder = 5
 sex = 0
 mother_id = 0
 father_id = 0
@@ -41,21 +41,21 @@ father_id = 6759579853571863877
 birth_tick = -8187840
 [[life_course]]
 person_id = 2008906306131934606   # orm
-founder = 9
+founder = 4
 sex = 0
 mother_id = 0
 father_id = 0
 birth_tick = -11270880
 [[life_course]]
 person_id = 2852707390447582764   # osric
-founder = 6
+founder = 7
 sex = 0
 mother_id = 9020488354894702845
 father_id = 6740622430173101898
 birth_tick = -8706240
 [[life_course]]
 person_id = 5962764098100875085   # ash_root_wife
-founder = 5
+founder = 6
 sex = 1
 mother_id = 0
 father_id = 0
@@ -84,7 +84,7 @@ father_id = 0
 birth_tick = -18555840
 [[life_course]]
 person_id = 9074827264899753041   # wynn
-founder = 8
+founder = 9
 sex = 1
 mother_id = 9020488354894702845
 father_id = 6740622430173101898
@@ -119,7 +119,7 @@ father_id = 2008906306131934606
 birth_tick = -295200
 [[life_course]]
 person_id = 18145486546762629703   # aldwin
-founder = 7
+founder = 8
 sex = 0
 mother_id = 9020488354894702845
 father_id = 6740622430173101898

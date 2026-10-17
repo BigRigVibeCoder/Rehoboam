@@ -602,18 +602,16 @@ REQUIRED_GATES = (
     "provenance (REV-SPR-029 R2 P3)",
     "selftest_annals positive control: a fixture claim with no triggered edge to a succession or "
     "deposition must FAIL the possible-history check (REV-SPR-029 R26)",
-    "selftest_annals positive control: a fixture deposition on a year's first day must FAIL the "
-    "possible-history check (REV-SPR-029 R26)",
-    "selftest_annals positive control: a forged source on a sidecar row must FAIL provenance "
-    "(REV-SPR-029 R19 P7b)",
+    "selftest_annals positive control: a fixture deposition moved to a month's first day, its "
+    "claims with it, must FAIL the possible-history check (REV-SPR-029 R26, R37)",
+    "selftest_annals positive control: a forged source row on a sidecar row must FAIL provenance "
+    "(REV-SPR-029 R19 P7b, R37)",
     "selftest_annals positive control: a network module imported during the render must FAIL "
     "(V-NAR-07; REV-SPR-029 F16)",
     "selftest_annals positive control: a prologue row citing a keyframe row that does not exist "
     "must FAIL provenance (REV-SPR-029 R2 P4)",
-    "selftest_annals positive control: a prologue row citing another house's persons must FAIL "
-    "provenance (REV-SPR-029 R19 P13)",
-    "selftest_annals positive control: a prologue row relabelled with another prologue template "
-    "must FAIL provenance (REV-SPR-029 R19 P12)",
+    "selftest_annals positive control: a prologue row citing another house's root must FAIL "
+    "provenance (REV-SPR-029 R19 P13, R37)",
     "selftest_annals positive control: a row citing an unrelated event must FAIL provenance "
     "(REV-SPR-029 R2 P5)",
     "selftest_annals positive control: a row that drops its own event must FAIL provenance "
@@ -621,11 +619,15 @@ REQUIRED_GATES = (
     "selftest_annals positive control: a sentence with no sidecar row must FAIL provenance "
     "(V-NAR-05; SPR-029)",
     "selftest_annals positive control: a shared name left undisambiguated must FAIL injective "
-    "designation (REV-SPR-029 R24)",
+    "designation (REV-SPR-029 R24, R33)",
     "selftest_annals positive control: a slot outside DEATH's declared roles must FAIL (SPR-029)",
     "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)",
     "selftest_annals positive control: a template that reads world state must FAIL (ADR-0024; "
     "SPR-029)",
+    "selftest_annals positive control: a text shorter than the render must FAIL provenance "
+    "(REV-SPR-029 R34 P23)",
+    "selftest_annals positive control: an altered prologue text must FAIL provenance (REV-SPR-029 "
+    "R19 P12, R37)",
     "selftest_annals positive control: two rows with their contents exchanged must FAIL "
     "provenance (REV-SPR-029 R2 P6)",
     "selftest_envelope positive control: a motive on a triggered edge must FAIL (V-DATA-09; "

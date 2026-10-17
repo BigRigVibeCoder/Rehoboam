@@ -220,12 +220,12 @@ GENESIS: dict[str, tuple[int, str | int, str | int, Date, Date | None, str | Non
     "maud": (FEMALE, 0, 0, (-36, 3, 15), None, None),
     "hugh": (MALE, "thorne_root_wife", "thorne_root", (-40, 3, 15), None, "thorne"),
     "alys": (FEMALE, 0, 0, (-37, 3, 15), None, None),
+    "orm": (MALE, 0, 0, (-22, 4, 4), None, None),
     "ash_root": (MALE, 0, 0, (-60, 1, 1), (-12, 1, 1), "ashcombe"),
     "ash_root_wife": (FEMALE, 0, 0, (-58, 1, 1), (-15, 1, 1), None),
     "osric": (MALE, "maud", "edric", (-17, 3, 15), None, "ashcombe"),
     "aldwin": (MALE, "maud", "edric", (-14, 5, 2), None, "ashcombe"),
     "wynn": (FEMALE, "maud", "edric", (-19, 2, 2), None, "ashcombe"),
-    "orm": (MALE, 0, 0, (-22, 4, 4), None, None),
     "xan": (MALE, "wynn", "orm", (-1, 6, 6), None, None),
     "thorne_root": (MALE, 0, 0, (-65, 1, 1), (-8, 1, 1), "thorne"),
     "thorne_root_wife": (FEMALE, 0, 0, (-62, 1, 1), (-3, 1, 1), None),
@@ -236,7 +236,8 @@ GENESIS: dict[str, tuple[int, str | int, str | int, Date, Date | None, str | Non
 # Wynn, Orm, Xan and Tilda are the house-walk probe (REV-SPR-029 R18, annals_v0.md §4 rule 4):
 # Xan, a genesis grandson of Edric through a daughter, has no house_member row, so no house (no
 # walk into a genesis person's ancestry); his in-run son by Tilda walks to his father (no house)
-# and then to his mother, House Thorne.
+# and then to his mother, House Thorne. Orm is a cast member who shares Edric's name (the R33
+# golden case): both bearers and every child designated through either father carry a label.
 TENURES = (  # (title, holder, start (y, m, d), end (y, m, d) or None)
     (LORDSHIP, "ash_root", (-40, 1, 1), (-12, 1, 1)),
     (LORDSHIP, "edric", (-12, 1, 1), None),
@@ -349,12 +350,24 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
         causes=(motive(e_osric, None, 90, 40),),
     )
     tk = t(13, 2, 2)
-    seg.event(
+    e_recon = seg.event(
         tk,
         AGENDA,
         "FEUD_ENDED",
         roles=((ACTOR, P["aldwin"]), (TARGET, P["hugh"])),
         snaps=((P["aldwin"], 20 * ONE),),
+    )
+    # y14: Giles declares a feud against Aldwin; its only told edge, to the reconciliation, has a
+    # weight at or below zero (it inhibited the act), so no motive is chosen and the plain
+    # variant renders (REV-SPR-029 R31).
+    tk = t(14, 6, 6)
+    seg.event(
+        tk,
+        AGENDA,
+        "FEUD_DECLARED",
+        roles=((ACTOR, P["giles"]), (TARGET, P["aldwin"])),
+        snaps=((P["giles"], 58 * ONE),),
+        causes=(motive(e_recon, None, -40, 30),),
     )
     # y16: Hugh dies; Giles succeeds to the seat of Thorne in the same instant.
     tk = t(16, 11, 30)
@@ -546,6 +559,7 @@ manifest_hash = "sha256:afce94fcb48fdfff99f60be5bc6104222a04953e1da364f6cb06c847
 "{maud}" = "Maud"
 "{hugh}" = "Hugh Thorne"
 "{alys}" = "Alys"
+"{orm}" = "Edric Ashcombe"   # a shared name (annals_v0.md §4; REV-SPR-029 R33)
 
 [houses]
 "{ashcombe}" = "House Ashcombe"
@@ -615,7 +629,7 @@ def build() -> dict[Path, str]:
     out[d / "chronicle_A.txt"] = seg.text()
     out[d / "keyframe.toml"] = ashcombe_keyframe(seg)
     out[d / "names.toml"] = ASHCOMBE_NAMES.format(
-        **{k: P[k] for k in ("edric", "maud", "hugh", "alys")}, **HOUSE
+        **{k: P[k] for k in ("edric", "maud", "hugh", "alys", "orm")}, **HOUSE
     )
     out[d / "world.toml"] = ASHCOMBE_WORLD
     for name, untold in (("solitary", False), ("untold", True)):

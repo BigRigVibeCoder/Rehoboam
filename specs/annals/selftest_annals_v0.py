@@ -17,7 +17,8 @@ Checks (``--check``):
      the first field that differs; a ``P`` row comes only before the first year heading, cites no
      event and cites keyframe rows that exist (D50 as ruled). Controls: ``no-event-id``,
      ``row-drops-own``, ``body-as-prologue``, ``missing-kf-source``, ``unrelated-event``,
-     ``rows-swapped``, ``prologue-altered``, ``foreign-root``, ``forged-source``;
+     ``rows-swapped``, ``prologue-altered``, ``foreign-root``, ``forged-source``,
+     ``text-truncated``;
   2. template slots (annals_v0.md §3, ``lint_templates.py``); controls ``undeclared-slot`` and
      ``state-read``;
   3. no model (V-NAR-07): after rendering, no network or process module is loaded; the imports
@@ -175,6 +176,7 @@ CONTROLS = (
     "prologue-altered",
     "foreign-root",
     "forged-source",
+    "text-truncated",
     "undeclared-slot",
     "state-read",
     "network-import",
@@ -183,6 +185,7 @@ CONTROLS = (
     "fixture-claim-untriggered",
 )
 PLANTED_LINE = "Thus the chronicle ended, and the land was quiet."
+FORGED_ROW = 424242  # a life row no fixture holds, for the forged-source control (R37)
 HEX_PREFIX_MIN = 4  # the shortest id prefix a bare label may show (REV-SPR-029 R17)
 HASH_SEEDS = ("1", "12345")  # the other processes of check 6 (REV-SPR-029 R29)
 IMPORT_LINE = re.compile(r"^(?:import|from)\s+([A-Za-z_][\w.]*)")
@@ -334,9 +337,12 @@ class Event:
         edges = [(c, m, w) for c, code, m, w, _, told in self.causes if code == kind and told]
         if not edges:
             return None
-        if kind == MOTIVATED_BY:  # the largest weight, ties to the lower cause id; a motive only
-            c, m, w = max(edges, key=lambda e: (e[2], -e[0]))  # when that weight is positive (R20)
-            return c, m if w > 0 else None
+        if kind == MOTIVATED_BY:  # the largest positive weight, ties to the lower cause id (R20,
+            positive = [e for e in edges if e[2] > 0]  # R31): an edge of weight <= 0 never moved
+            if not positive:  # the actor, so none is chosen and the plain variant renders
+                return None
+            c, m, _ = max(positive, key=lambda e: (e[2], -e[0]))
+            return c, m
         return edges[0][0], edges[0][1]
 
     def untold(self, kind: int) -> int | None:
@@ -618,6 +624,8 @@ class Kinship:
         )
         for ev in chron.events.values():
             self.pool.update(ev.persons())
+        for row in chron.life.values():  # a LIFE_ENTRY's parents (R38): a birth's father is in
+            self.pool.update(p for p in (row.mother, row.father) if p)  # the pool
         named = Counter(world.persons[p] for p in self.pool if p in world.persons)
         self.shared = {n for n, k in named.items() if k > 1} if disambiguate else set()
 
@@ -685,7 +693,10 @@ class Kinship:
                     prov.sources.update({row.source, f"name/{parent}"})
                     prov.persons.add(parent)
                     child = "daughter" if row.sex else "son"
-                    return f"the {ordinal(rank)} {child} of {self.designate(parent, Provenance())}"
+                    phrase = f"the {ordinal(rank)} {child} of {self.w.persons[parent]}"
+                    if self.w.persons[parent] in self.shared:  # the parent stays bare; the
+                        phrase += f" ({self.label_of(pid, prov)})"  # person's own label (R33)
+                    return phrase
         return self.label_of(pid, prov)
 
 
@@ -1187,9 +1198,14 @@ def _plant_templates(t: Any, control: Control) -> None:  # noqa: ANN401
 
 def _plant_chronicle(chron: Chronicle, control: Control) -> None:
     """The fixture controls of check 5 (R26): a deposition on day 1; a claim with no cause."""
+    moved: set[int] = set()
     for ev in list(chron.events.values()):
-        if control.name == "fixture-deposed-day-one" and ev.kind == "DEPOSED":
+        triggered = {c for c, code, _, _, _, _ in ev.causes if code == TRIGGERED}
+        if control.name == "fixture-deposed-day-one" and (
+            ev.kind == "DEPOSED" or (ev.kind == "CLAIM_CREATED" and triggered & moved)
+        ):  # each deposition moves with the claims it creates (R37)
             chron.events[ev.id] = dataclasses.replace(ev, tick=ev.tick - MINUTES_PER_DAY)
+            moved.add(ev.id)
         if control.name == "fixture-claim-untriggered" and ev.kind == "CLAIM_CREATED":
             chron.events[ev.id] = dataclasses.replace(ev, causes=())
 
@@ -1198,8 +1214,45 @@ def _row_fields(line: str) -> list[str]:
     return line.split(" ")
 
 
-def _plant_sidecar(side: str, control: Control) -> str:
-    """The sidecar mutants of REV-SPR-029 F2 and G2: P1, P3, P4, P5, P6, P7b, P12, P13."""
+def _plant_text(text: str, side: str, control: Control) -> tuple[str, str]:
+    """The text mutants: no-event-id, prologue-altered (P12) and text-truncated (P23).
+
+    A sentence appended with no row; a prologue sentence's text altered; the last sentence and
+    its row dropped, so the text is shorter than the render (R34).
+    """
+    lines = text.splitlines()
+    if control.name == "no-event-id":
+        lines.append(PLANTED_LINE)
+    elif control.name == "prologue-altered":
+        n = next((i for i, line in enumerate(lines) if line.startswith("## ")), None)
+        if n is None or lines[n] != PROLOGUE_HEADING:
+            return text, side
+        lines[n + 1] = lines[n + 1].removesuffix(".") + ", so the record says."
+    elif control.name == "text-truncated":
+        n = max(i for i, line in enumerate(lines) if line and not line.startswith("#"))
+        lines = lines[:n]
+        side = (
+            "\n".join(
+                line
+                for line in side.splitlines()
+                if line[:2] not in {"S ", "P "} or int(_row_fields(line)[1]) != n + 1
+            )
+            + "\n"
+        )
+    else:
+        return text, side
+    return "\n".join(lines) + "\n", side
+
+
+def _other_root(r: Renderer, group: str) -> int | None:
+    """Another house's root (its earliest-born keyframe member), for the P13 control."""
+    others = {h for h in r.w.members.values() if f"house:{h}" != group}
+    rows = [r.w.kf_life[p] for p, h in r.w.members.items() if h in others and p in r.w.kf_life]
+    return min(rows, key=lambda row: (row.birth_tick, row.person)).person if rows else None
+
+
+def _plant_sidecar(side: str, control: Control, other_root: int | None) -> str:
+    """The sidecar mutants of REV-SPR-029 F2, G2 and R19: P1, P3, P4, P5, P6, P7b, P13."""
     lines = side.splitlines()
     srows = [i for i, line in enumerate(lines) if line.startswith("S ")]
     prows = [i for i, line in enumerate(lines) if line.startswith("P ")]
@@ -1209,7 +1262,9 @@ def _plant_sidecar(side: str, control: Control) -> str:
     f = _row_fields(lines[first])
     match control.name:
         case "row-drops-own":  # P1: a row cites its cause but not its own event
-            i = next(i for i in srows if "," in _row_fields(lines[i])[4])
+            i = next((i for i in srows if "," in _row_fields(lines[i])[4]), None)
+            if i is None:  # a group with no cited cause has no row to plant on
+                return side
             f = _row_fields(lines[i])
             ids = [int(e) for e in f[4][1:-1].split(",")]
             f[4] = "[" + ",".join(str(e) for e in ids if e != max(ids)) + "]"
@@ -1227,16 +1282,13 @@ def _plant_sidecar(side: str, control: Control) -> str:
         case "rows-swapped":  # P6: two rows with their contents exchanged
             a, b = _row_fields(lines[first]), _row_fields(lines[second])
             lines[first], lines[second] = " ".join([*a[:2], *b[2:]]), " ".join([*b[:2], *a[2:]])
-        case "prologue-altered" if prows:  # P12: a prologue row's template relabelled
+        case "foreign-root" if prows and other_root:  # P13: another house's root cited
             p = _row_fields(lines[prows[0]])
-            p[2] = "prologue.ancestor" if p[2] != "prologue.ancestor" else "prologue.house"
+            p[5] = f"[{other_root}]"
             lines[prows[0]] = " ".join(p)
-        case "foreign-root" if prows:  # P13: another person cited as the prologue's root
-            p = _row_fields(lines[prows[0]])
-            p[5] = "[1]"
-            lines[prows[0]] = " ".join(p)
-        case "forged-source":  # P7b: a source forged on a body row
-            f[6] = f[6][:-1] + (",forged/1]" if f[6] != "[]" else "forged/1]")
+        case "forged-source":  # P7b: a forged source row (a life row the chronicle has not)
+            forged = f"life/{FORGED_ROW}"
+            f[6] = f[6][:-1] + (f",{forged}]" if f[6] != "[]" else f"{forged}]")
             lines[first] = " ".join(f)
         case _:
             return side
@@ -1313,6 +1365,8 @@ def check_provenance(text: str, side: str, r: Renderer, group: str) -> list[str]
                 f"line {n}: the text differs from the render: {g!r} where the render gives {w!r}"
             )
             break
+    for n in range(len(got_lines) + 1, len(want_lines) + 1):  # a text shorter than the render
+        out.append(f"line {n}: missing: {want_lines[n - 1]!r}")  # (R34)
     for n in range(len(want_lines) + 1, len(got_lines) + 1):
         line = got_lines[n - 1]
         out.append(
@@ -1321,16 +1375,12 @@ def check_provenance(text: str, side: str, r: Renderer, group: str) -> list[str]
             else f"line {n}: an extra line: {line!r}"
         )
     got_side, want_side_lines = side.splitlines(), want_side.splitlines()
-    if got_side[:1] != want_side_lines[:1]:
-        got_head, want_head = (
-            dict(t.split("=", 1) for t in got_side[0].split(" ")[1:]),
-            dict(t.split("=", 1) for t in want_side_lines[0].split(" ")[1:]),
-        )
-        key = next((k for k in want_head if got_head.get(k) != want_head[k]), "the header")
-        out.append(
-            f"header: {key} differs: {got_head.get(key)}"
-            f" where the render gives {want_head.get(key)}"
-        )
+    if got_side[:1] != want_side_lines[:1]:  # the first differing token, by name (R37)
+        got_toks = got_side[0].split(" ") if got_side else []
+        want_toks = want_side_lines[0].split(" ")
+        n = next((i for i, w in enumerate(want_toks) if i >= len(got_toks) or got_toks[i] != w), 0)
+        got_tok = got_toks[n] if n < len(got_toks) else "nothing"
+        out.append(f"header: token {n} differs: {got_tok} where the render gives {want_toks[n]}")
     rows_got = [line for line in got_side if line[:2] in {"S ", "P "}]
     rows_want = [line for line in want_side_lines if line[:2] in {"S ", "P "}]
     out += _compare_rows(rows_got, rows_want, "sidecar")
@@ -1666,9 +1716,8 @@ def _render_one(run: Run, setup: Setup, world: str, group: str) -> tuple[str, Re
             run.determinism.append(
                 f"{world} {group}: the render under PYTHONHASHSEED={seed} differs"
             )
-    if setup.control.name == "no-event-id":
-        text += PLANTED_LINE + "\n"
-    side = _plant_sidecar(side, setup.control)
+    text, side = _plant_text(text, side, setup.control)
+    side = _plant_sidecar(side, setup.control, _other_root(r, group))
     run.provenance += [f"{world} {group}: {p}" for p in check_provenance(text, side, r, group)]
     run.injective += _check_injective(r, group)
     run.used.update(r.used)

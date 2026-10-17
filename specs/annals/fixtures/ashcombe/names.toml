@@ -13,6 +13,7 @@ manifest_hash = "sha256:afce94fcb48fdfff99f60be5bc6104222a04953e1da364f6cb06c847
 "9020488354894702845" = "Maud"
 "6759579853571863877" = "Hugh Thorne"
 "13404045530391465978" = "Alys"
+"2008906306131934606" = "Edric Ashcombe"   # a shared name (annals_v0.md §4; REV-SPR-029 R33)
 
 [houses]
 "3172275184034551431" = "House Ashcombe"
