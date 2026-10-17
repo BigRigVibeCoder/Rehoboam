@@ -1,9 +1,10 @@
 # Reference world, rung 1 of the complexity ladder (docs/11; BCK-002 A-06; SPR-011 ruling 18): one household.
-# A couple and their three children on a tiny map. In P1a it runs the same slice as solo (SPR-011 ruling 2): five founders
-# age and die, with no births, so the household dies out within about a century (V-SCALE-04). Partnering, births and
-# kinship come with P1.3; the household's food with P1b. Until then the couple are household members, not yet married
-# (person.spouse = 0), and the template's other systems are listed as not built in the run header (SPR-011 ruling 3).
-# M2 takes its Registry defaults (e0 = 30, beta = 1; SPR-011 ruling 8): systems sets nothing.
+# A couple, their three children and one unrelated founder on a tiny map. In P1.0 it ran the rung-0 slice (SPR-011
+# ruling 2): founders age and die, no births. From SPR-015 (M2 F1) the couple are married at genesis, the children are
+# theirs, and the unrelated founder Wulf makes a marriage possible (siblings never marry: kin within two degrees), so
+# the household is not childless by construction (REV-SPR-015 R8). Six people are still too few: it dies out in every
+# replica over the horizon (median extinction year 88; alive at 100 years in 39%, at 200 in 3%), and rung 1's test is
+# the distribution of extinction times, not persistence (REV-SPR-015 R17.5). The household's food comes with P1b. M2 takes its Registry defaults (e0 = 30, beta = 1, tfr = 4.9; SPR-011 ruling 8): systems sets nothing.
 manifest_version: 0
 registry_version: "0.2.0"
 world:
@@ -22,7 +23,7 @@ geography:
   ecology: {livestock_kg_per_capita: 0, wild_prey_tonnes: 0}
 peoples:
   - archetype: human
-    population: 5                # the couple and their three children: nobody else
+    population: 6                # the couple, their three children and Wulf: nobody else
     class_shares: {commoner: 1.0, burgher: 0.0, elite: 0.0}
     cultures:
       - {id: valefolk, name: "Valefolk", naming_seed: "plain rural names", value_bias: {tradition: 0.3}}
@@ -31,10 +32,13 @@ peoples:
 cast:
   - {id: oswin, name: "Oswin", sex: male, age_years: 34, household: oswin_house}    # ages: design values
   - {id: maren, name: "Maren", sex: female, age_years: 31, household: oswin_house}
+  - {id: wulf, name: "Wulf", sex: male, age_years: 19, household: wulf_house}       # unrelated: a possible husband for the daughter (SPR-015)
 households:
   - id: oswin_house
     head: oswin
-    children: {sons: 2, daughters: 1}   # ages drawn by rh-worldgen, uniform in [0, 18) years (SPR-011 ruling 10)
+    children: {sons: 2, daughters: 1}   # ages drawn by rh-worldgen, uniform in [0, 18) years (SPR-011 ruling 10); Oswin and Maren are their parents from SPR-015
+  - id: wulf_house
+    head: wulf
 systems: {}
 narrative:
   pattern_packs: [solitary_life]  # life_ends (SPR-011 ruling 14)
