@@ -2,17 +2,23 @@
 id: REV-EVO-001
 title: "Independent review of EVO-001, lifecycle queues and absent owners (PR #49)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [EVO-001, PRJ-002, SPR-014, BCK-002, REV-P1a, REV-SPR-017]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.3.0
+version: 1.0.0
 ---
 
-> **BLUF:** Round 2, on PR #49 at `b1c6890`: **approve after one small revision. 0 blockers, 1 major, 6 minors, 7 nits.** The smoke ladder is byte-identical to its baseline, and M7 and T1 now apply commands when their frozen texts say. R6 is ruled for shape (b), strengthened (§2.0 R9): an outcome-carrying command is submitted only by its sender's timer at the outcome's instant. DET-13 and ADR-0025 then stand as written, so D39 is withdrawn and nothing goes to the director. Round 1 found 1 blocker, 5 majors, 6 minors and 4 nits (§0, §1). Both rounds ran in sessions on a different model from the drafter's.
+> **BLUF: CLOSED, approved.** PR #49 took four rounds:
+> - **Round 1** (`6bc202e`): 1 blocker, 5 majors.
+> - **Round 2** (`b1c6890`): 1 major. R6 was ruled for shape (b), strengthened: an outcome-carrying command is submitted only by its sender's timer at the outcome's instant. DET-13 and ADR-0025 stand as written, and D39 is withdrawn.
+> - **Round 3** (`1d08b06`): 1 major (MAJ-7, wording). The reviewer traced both murders end to end and found no day lost.
+> - **Round 4** (`9be14c4`): verified by the Architect. The smoke ladder is untouched: no Rust change beyond a test comment, and both SPR-014 changes are now hash-neutral.
+>
+> `05.1` is amended as v1.12. Every review ran in a session on a different model from the drafter's.
 
 # REV-EVO-001: independent review of EVO-001
 
@@ -825,3 +831,14 @@ Probes were planted in copies of `specs/systems` and run with `--specs` (scripts
 - The smoke run at `--threads 4` / `--require-parallel 5`, and `rh-golden`.
 - SPR-014's behaviour (drain, drop, re-sample counters). Nothing is built yet, so R9 was checked by tracing the engine and the specs.
 - PR #50 (births) against R9.
+
+
+## 4. Round 4 (2026-10-17, `9be14c4`), verified by the Architect
+R15 to R19 are applied:
+- **R15:** `key_field = "person"` names `Command::person`, and smoke's payloads are back to `{ row: i64 }`; an empty timer `cause` adds no bytes to the hashed encoding.
+- **R16:** the substrate rule is advisory, and registration enforces it.
+- **R17:** M7's murder re-sample is uniform over the remaining day starts, and rolls to the next month when none remain.
+- **R18:** `SPR-999` is refused. The Architect accepts the drafter's reading (7/10): "exists" means a document under `CODEX/05_PROJECT/` or a PRJ plan row until the document lands.
+- **R19:** the nits.
+
+The Architect re-ran on `9be14c4`: `lint_odd` (8 specs), the smoke overlay lint (7 specs), both `gen_skeletons --check` runs, `gen_manifest --check`, and pytest (619 in a git worktree). `05.1` reads v1.10, v1.11, v1.12. The diff to `crates/` since `757141b` is one test comment. The drafter's full tier at `757141b` passed 337 checks; `--part core` at `9be14c4` passed 284.
