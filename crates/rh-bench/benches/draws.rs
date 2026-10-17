@@ -17,6 +17,10 @@
     missing_docs,
     reason = "the iai-callgrind macros generate undocumented items"
 )]
+#![allow(
+    clippy::disallowed_methods,
+    reason = "iai-callgrind's main! macro reads the command line (std::env::args; SPR-011 A-4)"
+)]
 
 use std::fmt::Display;
 use std::hint::black_box;
