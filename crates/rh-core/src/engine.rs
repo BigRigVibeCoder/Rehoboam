@@ -24,8 +24,11 @@
 //!    (queued for their owners, with the id of their cause). Only
 //!    the merge touches the agenda, the queues and the log, so the thread count never reaches an
 //!    id;
-//! 5. in `Bookkeeping`, after the phase's systems, runs the invariants: the core's own, then each
-//!    system's in id order. The first violation is fatal.
+//! 5. in `Bookkeeping`, first compacts the person ledger (the dead of the instant leave every
+//!    `person.*` column; SPR-011 ruling 5, `crate::ledger`), then runs the phase's systems, then the
+//!    invariants: the core's own (the ledger's among them), then each system's in id order. The
+//!    first violation is fatal. After every step that owns a ledger column, the core checks it
+//!    kept the ledger's row count and the life-course log's append-only rule.
 //!
 //! **Material inputs** (ADR-0025 item 3). [`Engine::submit_input`] queues an input with its
 //! dependency scope (a set of entities) for an instant at or after the next one; an earlier one is
@@ -74,6 +77,7 @@ use crate::access::Lag;
 use crate::agenda::{Agenda, Timer, TimerEntry};
 use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance};
+use crate::ledger::{Ledger, LifeCourseGuard};
 use crate::observe::{Boundary, JobRef, JobWork, Notice, Observer, Pass};
 use crate::phase::Phase;
 use crate::register::{Entry, Registered};
@@ -216,6 +220,9 @@ pub struct Engine {
     /// The host's observer, if attached (SPR-009 ruling 4): notices only, never state, so it is
     /// not part of [`EngineState`] and never changes a result.
     observer: Option<Arc<dyn Observer>>,
+    /// The person ledger and life-course log, when the world has them (SPR-011 ruling 5): which
+    /// columns the core compacts at `Bookkeeping` and checks after each step that owns one.
+    ledger: Option<Ledger>,
 }
 
 /// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
@@ -319,7 +326,11 @@ impl Engine {
             }
             by_system_id.insert(e.system_id, i);
         }
-        let poisoned = unsupported_lag(&registered.entries);
+        let (ledger, ledger_error) = match Ledger::of(&tables) {
+            Ok(ledger) => (ledger, None),
+            Err(e) => (None, Some(e)),
+        };
+        let poisoned = unsupported_lag(&registered.entries).or(ledger_error);
         Self {
             calendar,
             world_seed,
@@ -348,6 +359,7 @@ impl Engine {
             poisoned,
             dispatch: DispatchStats::default(),
             observer: None,
+            ledger,
         }
     }
 
@@ -784,6 +796,7 @@ impl Engine {
             | SimError::Event { system, .. }
             | SimError::Panic { system, .. }
             | SimError::Unsupported { system, .. }
+            | SimError::Ledger { system, .. }
             | SimError::System { system, .. } => ((*system).to_owned(), None),
             SimError::Observer { .. } => (OBSERVER.to_owned(), None),
         };
@@ -829,6 +842,13 @@ impl Engine {
             self.notify(t, Some(phase), Boundary::PhaseStart)?;
             if phase == Phase::Inputs {
                 tally.inputs = self.apply_inputs(t)?;
+            }
+            // SPR-011 ruling 5: the dead of this instant leave every person.* column before any
+            // Bookkeeping system, invariant or hash sees the tables.
+            if phase == Phase::Bookkeeping
+                && let Some(ledger) = &self.ledger
+            {
+                ledger.compact(&mut self.tables)?;
             }
             let mut due: BTreeMap<usize, Vec<TimerEntry>> = BTreeMap::new();
             for (key, timer) in self.agenda.pop_due(t, phase) {
@@ -1010,6 +1030,9 @@ impl Engine {
                 format!("an event carries tick {tick}, after the current instant {t}"),
             ));
         }
+        if let Some(ledger) = &self.ledger {
+            ledger.check(&self.tables)?;
+        }
         for e in &self.registered.entries {
             let results = guard(e.id, || Ok(e.model.invariants(&self.tables)))?;
             if let Some(r) = results.into_iter().find(|r| !r.holds) {
@@ -1035,6 +1058,7 @@ impl Engine {
     ) -> Result<(), SimError> {
         self.dispatch.record(jobs.len());
         self.check_owned_columns(jobs)?;
+        let guards = self.ledger_guards(jobs);
         let inputs: Vec<(Owned, Vec<QueuedCommand>)> = jobs
             .iter()
             .map(|job| {
@@ -1117,12 +1141,31 @@ impl Engine {
         if let Some(e) = first_error {
             return Err(e);
         }
+        for (job, g) in jobs.iter().zip(&guards) {
+            g.as_ref().map_or(Ok(()), |g| {
+                g.check(self.registered.entries[job.index].id, &self.tables)
+            })?;
+        }
         // After every owned column is back in the tables, so a failing observer loses none (DEF-1).
         self.notify(t, Some(phase), Boundary::LevelMerge)?;
         for (job, out) in jobs.iter().zip(outboxes) {
             self.merge(t, phase, job.index, out, tally)?;
         }
         Ok(())
+    }
+
+    /// What each job must preserve of the ledger columns it owns (SPR-011 ruling 5): `None` for a
+    /// job that owns none, or in a world without a ledger.
+    fn ledger_guards(&self, jobs: &[Job]) -> Vec<Option<LifeCourseGuard>> {
+        jobs.iter()
+            .map(|job| {
+                let e = &self.registered.entries[job.index];
+                self.ledger.as_ref().and_then(|ledger| {
+                    let g = ledger.guard(&self.tables, e.access.writes.iter().map(|w| w.column));
+                    (!g.is_empty()).then_some(g)
+                })
+            })
+            .collect()
     }
 
     /// Every column the level's jobs own exists (materialised in `new`). Checked for all before any

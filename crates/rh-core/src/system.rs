@@ -224,6 +224,16 @@ pub enum SimError {
         /// The panic message.
         message: String,
     },
+    /// A ledger rule broken (SPR-011 ruling 5, `crate::ledger`): a step changed the row count of a
+    /// `person.*` column (only the core's compaction removes rows), or wrote the life-course log
+    /// other than by appending and closing an open entry once; or the world has ledger columns
+    /// without the ones the core needs. Fatal.
+    Ledger {
+        /// The system whose step broke it (`rh-core` for a world the core cannot keep).
+        system: &'static str,
+        /// What was refused.
+        message: String,
+    },
     /// A system-specific failure.
     System {
         /// The system.
@@ -292,6 +302,7 @@ impl fmt::Display for SimError {
                 f,
                 "{system} reads {column} at lag {lag}, which the engine cannot yet run exactly (BCK-002 A-28)"
             ),
+            Self::Ledger { system, message } => write!(f, "{system}: ledger: {message}"),
             Self::Event { system, message } | Self::System { system, message } => {
                 write!(f, "{system}: {message}")
             }
