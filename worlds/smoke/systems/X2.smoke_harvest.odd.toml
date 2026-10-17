@@ -41,7 +41,6 @@ column = "weather.temp"
 owner = "X1.smoke_weather"
 lag = "lagged"
 use = "rate"
-required = false
 neutral = 0.0
 
 [scales]
@@ -114,7 +113,7 @@ via = "weather.temp"
 lag = "lagged"
 column = "weather.temp"
 form = "yield += clamp(temp, 0, 30) / 2"
-neutral = "0 degrees"
+neutral = "weather.temp = 0 (0 degrees)"
 output_bounds = ["0", "15"]
 data_range = "design value: the smoke world's temperatures, [-40, 60]"
 beyond_range = "clamped to [0, 30]"

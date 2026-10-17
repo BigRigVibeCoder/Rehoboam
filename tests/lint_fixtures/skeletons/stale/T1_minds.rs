@@ -17,6 +17,7 @@ pub enum RngPurpose {
     BreakAct = 6,  // key: (person, tick)
     BreakOutcome = 7,  // key: (actor, target, tick)
     AttackOutcome = 8,  // key: (actor, target, tick)
+    OutcomeDelay = 9,  // key: (person, tick)
 }
 impl RngPurpose {
     /// The purpose's name in the spec's `[[rng]]` table.
@@ -30,6 +31,7 @@ impl RngPurpose {
             Self::BreakAct => "break_act",
             Self::BreakOutcome => "break_outcome",
             Self::AttackOutcome => "attack_outcome",
+            Self::OutcomeDelay => "outcome_delay",
         }
     }
 }

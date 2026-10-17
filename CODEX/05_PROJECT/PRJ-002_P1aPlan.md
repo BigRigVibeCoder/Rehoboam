@@ -9,7 +9,7 @@ tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.5.1
+version: 0.5.2
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
@@ -41,7 +41,7 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-020 | P1.9 | Event envelope and Chronicle Writer: `EventDraft` roles, anchored snapshots, typed and motive edges; `event_role`, `event_snapshot`, `causal_edge` tables; DuckDB views; provenance of change; typed `[event_roles]` and `[motive_edges]` (A-24, part) | SPR-013 | C2 (event schema) with C3 (the event-log hash is in `state_hash`) | `05.2` §4.1a (exists); `schema.sql` (exists; role codes conflict with the Registry) | P1 |
 | SPR-021 | P1.7 (a) | M7 F1: titles, succession law, immediate succession (V-SAGA-19), titles inherited through the death path | SPR-014, SPR-015, SPR-017, SPR-020 | C3 | `M7.dynasty` (missing; drafting) | P1 |
 | SPR-022 | P1.7 (b) | M7 F1: ruler-exit hazards at the reference institutional state, feud stock after a regicide, claims, regencies, great-house dormancy (SIM-9) | SPR-021 | C3 | `M7.dynasty` (missing) | P1 |
-| SPR-023 | P3.2a (a) | Minds v0: named actors promoted by simulation criteria; HEXACO traits, ambition, relationships, opinion modifiers; `rh-minds` | SPR-014, SPR-015 | C3 | `T1.minds` (missing; drafting); `bevy_ecs` plane-A review (missing) | P1 |
+| SPR-023 | P3.2a (a) | Minds v0: named actors promoted by simulation criteria; HEXACO traits, ambition, relationships, opinion modifiers; `rh-minds` | SPR-014, SPR-015; SPR-021 (T1's identity reads of M7's seats, claims and houses require M7: EVO-001 R12) | C3 | `T1.minds` (missing; drafting); `bevy_ecs` plane-A review (missing) | P1 |
 | SPR-024 | P3.2a (b) | Minds v0: event-driven IAUS for a few decisions, with the Registry's typed `[considerations]` and `[response_curves]` (REV-P1a MAJ-6); same-instant agenda semantics (`05.1` §4.3) | SPR-023, SPR-017, SPR-021 (`seek_office` and `press_claim` send to M7, and the court sets need titles: REV-P1a MAJ-7) | C3 | `T1.minds` (missing) | P1 |
 | SPR-025 | P3.2a (c) | Minds v0: stress and mental breaks (V-SAGA-16); typed break table (A-24, part); grief damping and refractory period (red-team item 1) | SPR-024 | C3 | `T1.minds` (missing); `[mental_breaks]` typed (A-24) | P1 |
 | SPR-026 | P1.17 (a) | World Stream v1: live edge over a local socket, viewer cursors, `stream.subscribe` / `stream.status`, catch-up from sealed segments, channel C live | SPR-013 | C2 (IF-0); channel A unchanged | `05.10`, `05.9` IF-0 (exist, prose); wire format, `rh-protocol` (missing) | P1 |
@@ -147,14 +147,14 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 
 | Spec | Needed by | Status today |
 |---|---|---|
-| `M2.demography` rung-0 completion and freeze; Registry verbs, verb `tellability`, system `defaults`; probability-type ruling | SPR-011, SPR-012 | M2 draft (gaps listed in SPR-011); the rest missing |
-| Channel-A segment DDL (`specs/stream/channel_a_v0.sql`); `life_ends`; `household.yaml`, `hamlet.yaml` (A-06) | SPR-013 | Missing |
-| Channel C segment DDL (`specs/stream/channel_c_v0.sql`) (PR #37 Q10) | SPR-013 | Missing |
-| EVO: same-instant command delivery, the absent-owner registration rule, and the merge's rewrite of event-typed payload fields (`05.1` §2 rule 2; REV-P1a NEW-4; D36) | SPR-014 | EVO-001, PR #49 (round 2; D39 pending): `05.1` v1.10 applied with it. SPR-014's acceptance gains "the smoke ladder is unchanged" (REV-EVO-001 R1) |
-| M2 F1: fertility, partnering, households, kinship | SPR-015 | Missing |
+| `M2.demography` rung-0 completion and freeze; Registry verbs, verb `tellability`, system `defaults`; probability-type ruling | SPR-011, SPR-012 | Done: M2 frozen 0.2.0, Registry 0.2.0, `Prob32` in `05.1` v1.8 §6 (PR #37, D36) |
+| Channel-A segment DDL (`specs/stream/channel_a_v0.sql`); `life_ends`; `household.yaml`, `hamlet.yaml` (A-06) | SPR-013 | Done (PR #37) |
+| Channel C segment DDL (`specs/stream/channel_c_v0.sql`) (PR #37 Q10); the canonical text form v0; DATA-5 admission (`05.2` §4.0, D38) | SPR-013 | Done (PR #45); §4.0 awaits D38 |
+| EVO: same-instant command delivery, the absent-owner registration rule, and the merge's rewrite of event-typed payload fields (`05.1` §2 rule 2; REV-P1a NEW-4; D36) | SPR-014 | EVO-001, PR #49 (round 3; the Architect's R9 and R14): `05.1` §2 rule 2 applied with it, the version line set at merge. SPR-014's acceptance gains "the smoke ladder is unchanged" (REV-EVO-001 R1) and the drain bindings emitted into the skeletons (NIT-10) |
+| M2 F1: fertility, partnering, households, kinship | SPR-015 | Drafting (2026-10-17) |
 | M2 F1 mortality (infant sub-schedule, old-age tail, density modifier); fixed-point `exp`/`ln` ruling and reference | SPR-016 | Missing |
-| Effect-language grammar and golden cases, with the kinship relations (REV-P1a NEW-3) | SPR-017 | Drafting (`05.5` §2.1 is prose) |
-| `neutral` on `[[reads]]` in `lint_odd.py`'s schema and in M7's and T1's foreign reads: the effect language's loader needs it, and SPR-014's absent-owner rule supplies it (D36) | SPR-017 | PR #49 (EVO-001): `required` on every foreign read, `neutral` on the rate and mode reads of absent owners, enum codes on `[[owns]]`, typed `[[applies]]` with `drained_by` and `key`; M7 0.3.2, T1 0.3.2, M2 0.2.1 |
+| Effect-language grammar and golden cases, with the kinship relations (REV-P1a NEW-3) | SPR-017 | Final (PR #41, `REV-SPR-017` closed); awaits D37 |
+| `neutral` on `[[reads]]` in `lint_odd.py`'s schema and in M7's and T1's foreign reads: the effect language's loader needs it, and SPR-014's absent-owner rule supplies it (D36) | SPR-017 | PR #49 (EVO-001): `neutral` on every rate and mode read, identity reads require their owner (R12), enum codes on `[[owns]]`, typed `[[applies]]` with `drained_by`, `key` and `key_field`, outcome commands with their sender's timer; M7 0.3.2, T1 0.3.2, M2 0.2.1 |
 | `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018; SPR-032 (P1b, D33) | Missing |
 | Population synthesis, with the dynastic back-fill: pre-epoch life-course rows with parent links back to each dynasty's `generations`, and tenure rows for each title's past holders (REV-SPR-017 N5) | SPR-019 | Missing |
 | Role codes reconciled (`schema.sql` vs `[event_roles]`) | SPR-020 | Conflict |

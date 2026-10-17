@@ -49,20 +49,22 @@ when = "a Settle command is applied"
 [[commands]]
 target = "X7.smoke_market"
 command = "Audit"
-payload = "{ row }"
+payload = "{ row, person }"
 why = "a settled estate is audited by the market (DEF-2: the Activity siblings exchange commands)"
+# [[applies]] (EVO-001): the code passes the row in args and the key person in Command::person; SPR-014, which starts comparing
+# payloads and drain bindings with the code (REV-EVO-001 NIT-10), adds the person to args (no draw reads args: the ladder is unchanged).
 [[applies]]
 command = "Settle"
-payload = "{ row: i64 }"
+payload = "{ row: i64, person: PersonId }"
 from = ["X3.smoke_vital", "X5.smoke_polity", "X7.smoke_market"]
 drained_by = "Day/Activity"
 key = "any"
+key_field = "person"
 [[reads]]
 column = "person.alive"
 owner = "X3.smoke_vital"
 lag = "same_instant"
 use = "identity"
-required = true
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"

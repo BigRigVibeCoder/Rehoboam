@@ -1,7 +1,6 @@
-# Planted fixture for lint_odd.py's absent-owner checks on [[reads]] (EVO-001; REV-P1a NEW-4): `required`, and the typed
-# `neutral` of a rate or mode read whose owner may be absent (typed by the owner's [[owns]], or by the Registry [era_state] for
-# M6, which has no spec). Never a contract. Case `required_missing`: the identity read of M2 says neither required = true nor false; frozen, must FAIL
-# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/required_missing
+# Planted fixture for lint_odd.py's [[applies]] checks (PR #32; REV-P1a §7; typed payloads, drained_by and key by EVO-001).
+# Never a contract: M1.regions applies a command it also sends to itself, so one spec exercises both sides. Case `dup_command`: FixtureCmd has two [[applies]] entries, so its draining binding is ambiguous; must FAIL
+# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/dup_command
 odd_r = 2
 
 [system]
@@ -26,18 +25,20 @@ payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
 from = ["M1.regions"]
 drained_by = "Year/Environment"
 key = "living"
+key_field = "a"
+[[applies]]
+command = "FixtureCmd"
+payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
+from = ["M1.regions"]
+drained_by = "Year/Environment"
+key = "living"
+key_field = "a"
 
 [[commands]]
 target = "M1.regions"
 command = "FixtureCmd"
 payload = "{ a, b, c }"
 why = "planted"
-
-[[reads]]
-column = "person.alive"
-owner = "M2.demography"
-lag = "lagged"
-use = "identity"
 
 [scales]
 spatial = "region"

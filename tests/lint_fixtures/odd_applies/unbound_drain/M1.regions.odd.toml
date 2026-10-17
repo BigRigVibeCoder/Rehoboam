@@ -25,6 +25,7 @@ payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
 from = ["M1.regions"]
 drained_by = "Day/Agenda"
 key = "living"
+key_field = "a"
 
 [[commands]]
 target = "M1.regions"

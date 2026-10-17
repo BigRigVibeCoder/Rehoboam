@@ -5,9 +5,11 @@
 # Amended ruling 7 (Architect, 2026-10-16): a death fires at the start of a keyed day (a Day-pulse instant), not a keyed minute.
 # Frozen 2026-10-16: the director approved D30 and D36 at G0. SPR-012 (increment B) builds against it; any change is a
 # new spec_version through the Architect (C2).
-# 0.2.1 (2026-10-17, EVO-001, D39 pending; no mechanics changed): enum columns carry their codes (`values`); the [[applies]]
-# payloads are typed and name their drain binding (Day/Vital, SPR-014) and the living-key rule; a command carries no date
-# (05.1 §2 rule 2: a later outcome is its sender's timer), so `tick` leaves ScheduleDeath and Marry.
+# 0.2.1 (2026-10-17, EVO-001, the Architect's R9 and R12, merged with PR #49; no built mechanics or hashes changed: the unbuilt
+# drain loses 0.2.0's later-tick hold): enum columns carry their codes (`values`); the [[applies]] payloads are typed and name
+# their drain binding (Day/Vital, SPR-014), the living-key rule and the key field; both commands carry a sampled outcome
+# (`outcome = true`), so a command carries no date and `tick` leaves ScheduleDeath and Marry (05.1 §2 rule 2: the sender's
+# own timer submits them in the outcome's instant).
 # lint_odd.py checks this file against the Registry, the other specs and the test catalogue.
 odd_r = 2
 
@@ -199,10 +201,11 @@ fixed_point = false
 # Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4; typed by EVO-001): one payload per command, which every
 # sender uses. For P1.13 (SPR-014): M2 gains a Day/Vital binding that drains its queue each day start (not yet in
 # [[schedule]]: SPR-014 adds it; drained_by names it). A command carries no date (05.1 §2 rule 2): the drain applies it in
-# the Vital it arrives in, before the bindings that read M2 at same_instant (T1.minds, M7.dynasty). T1's murder and marriage,
-# sent at Agenda, arrive at the next day start; M7's background murder is M7's own timer at (the drawn day, Vital), which
-# submits when it fires. A ScheduleDeath or a death timer for a person already dead is dropped and counted
-# (commands.dropped_dead; key = "living" is rh-core's drop, the rest is apply_death's idempotence). In P1a every death and
+# the Vital it arrives in, before the bindings that read M2 at same_instant (T1.minds, M7.dynasty). Both carry a sampled
+# outcome (outcome = true), so each arrives from its sender's own timer, fired in this Vital's timer pass: T1's DEATH_DUE
+# and MARRY_DUE at (the next day start, Vital), M7's MURDER_DUE at (the drawn day, Vital); a material input re-samples
+# them through the sender (05.1 §2 rule 2; EVO-001 R9). A ScheduleDeath or a death timer for a person already dead is dropped and counted
+# (dropped{M2, kind, dead_key | dead}: key = "living" is rh-core's drop at take, the rest is apply_death's idempotence). In P1a every death and
 # marriage takes effect at a day start (round 3, BLK-1). cause = none, culprit = 0 and cause_event = None mean "no such".
 [[applies]]
 command = "ScheduleDeath"
@@ -210,14 +213,18 @@ payload = "{ victim: PersonId, cause: enum(person.death_cause), culprit: PersonI
 from = ["M7.dynasty", "T1.minds"]
 drained_by = "Day/Vital"
 key = "living"
-sprint = "P1.13 (SPR-014)"
+key_field = "victim"
+outcome = true
+sprint = "SPR-014"
 [[applies]]
 command = "Marry"
 payload = "{ a: PersonId, b: PersonId }"
 from = ["T1.minds"]
 drained_by = "Day/Vital"
 key = "living"
-sprint = "P1.13 (SPR-014)"
+key_field = "a"
+outcome = true
+sprint = "SPR-014"
 
 [[emits]]
 kind = "DEATH"

@@ -24,11 +24,14 @@
 # Round 4g (effect-language re-check, B3): title.founder is replaced by an append-only tenure log (tenure.*) that the
 # title's law may read (holders_of(title, 8)); `sortition` is keyed by the title too.
 # Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
-# 0.3.2 (2026-10-17, EVO-001, D39 pending): every [[reads]] entry says whether its owner is `required`, and the rate read of
-# M6 carries the machine-readable `neutral` SPR-014's absent-owner rule serves when M6 is absent (05.1 §2 rule 2; the effect
-# language's loader reads it, REV-SPR-017 round 3); enum columns carry their codes; the commands M7 applies are declared
-# in typed [[applies]] entries drained at Day/Agenda; ScheduleDeath carries no date: the background murder is M7's own
-# timer at (the drawn day, Vital), fired by a new Day/Vital binding (murder_due) that submits it (EVO-001 R6 (b)).
+# 0.3.2 (2026-10-17, EVO-001, the Architect's R9 and R12, merged with PR #49): the rate read of M6 and the mode read of T1's
+# person.named carry the machine-readable `neutral` SPR-014's absent-owner rule serves when the owner is absent (05.1 §2
+# rule 2; the effect language's loader reads it, REV-SPR-017 round 3); an identity read requires its owner (R12), so the
+# P1b identity reads of S7 (vow.vower, vow.status) are declared with S7 in P1b, not here, or M7 could not register in P1a;
+# enum columns carry their codes; the commands M7 applies are declared in typed [[applies]] entries drained at Day/Agenda,
+# each keyed by a named PersonId field; ScheduleDeath carries no date: the background murder is M7's own MURDER_DUE timer
+# at (the drawn day, Vital), keyed by exit_murder, re-sampled by M7 and carrying the culprit, fired in that Vital's timer
+# pass through a new Day/Vital binding (murder_due) and drained by M2 in the same Vital (EVO-001 R9, R10).
 odd_r = 2
 
 [system]
@@ -360,7 +363,9 @@ when = "The last living member of a house dies"
 target = "M2.demography"
 command = "ScheduleDeath"
 payload = "{ victim, cause, culprit, cause_event }"
-why = "A sovereign's background murder, with M2's declared payload ScheduleDeath {victim = the ruler, cause = murder, culprit = the murder_culprit draw or 0, cause_event = None (a hazard draw has no inciting event)}, submitted by M7's murder timer when it fires at (the drawn day, Vital) (EVO-001: a command carries no date; the timer is M7's, re-sampled by M7 on a material input); every death goes through M2's single death path (05.1 §2 rule 2)"
+timer = "MURDER_DUE"
+purpose = "exit_murder"
+why = "A sovereign's background murder, with M2's declared payload ScheduleDeath {victim = the ruler, cause = murder, culprit = the MURDER_DUE timer's payload (the murder_culprit draw or 0), cause_event = None (a hazard draw has no inciting event)}, submitted by the MURDER_DUE timer when it fires at (the drawn day, Vital) (EVO-001 R9: a command carries no date; the timer is M7's under exit_murder, re-sampled by M7 on a material input, see [[rng]]); every death goes through M2's single death path (05.1 §2 rule 2)"
 [[commands]]
 target = "T1.minds"
 command = "Promote"
@@ -383,38 +388,44 @@ why = "Property inheritance through the death path by the house's [inheritance_r
 
 # ----------------------------------------------------------------------------- lifecycle commands applied
 # Typed by EVO-001 (05.1 §2 rule 2); the semantics are apply_commands'. Each is keyed by a living person (the claimant, the
-# petitioner, the office holder): a command for someone dead is rh-core's drop (key = "living"); one for an ended claim is
-# apply_commands' own drop (StepCtx::drop_command, reason ended_claim).
+# petitioner, the office holder, named by key_field): a command for someone dead is rh-core's drop (key = "living",
+# dropped{M7, kind, dead_key}); one for an ended claim is apply_commands' own drop (StepCtx::drop_command, dropped{M7, kind, ended}).
 [[applies]]
 command = "PressClaim"
-payload = "{ claim: ClaimId }"
+payload = "{ claimant: PersonId, claim: ClaimId }"
 from = ["T1.minds"]
 drained_by = "Day/Agenda"
 key = "living"
+key_field = "claimant"
 [[applies]]
 command = "PetitionSeat"
 payload = "{ person: PersonId, target: u64 }"
 from = ["T1.minds"]
 drained_by = "Day/Agenda"
 key = "living"
+key_field = "person"
 [[applies]]
 command = "RenounceClaim"
-payload = "{ claim: ClaimId }"
+payload = "{ claimant: PersonId, claim: ClaimId }"
 from = ["T1.minds"]
 drained_by = "Day/Agenda"
 key = "living"
+key_field = "claimant"
 [[applies]]
 command = "Resign"
 payload = "{ person: PersonId, office: OfficeId }"
 from = ["T1.minds"]
 drained_by = "Day/Agenda"
 key = "living"
+key_field = "person"
 
 # ----------------------------------------------------------------------------- reads
-# Round 4 (NEW-4) and EVO-001: the reads below are declared unconditionally. M2 is required (registration refuses a world without it);
-# T1, S7 and M6 are not: SPR-014's registration rule drops and reports a read whose owner the world does not register, the dropped
-# column enumerates as an empty table (no named persons, no vows) and a keyed lookup returns the read's neutral (M6: exec_constraint = 0,
-# so m_ec = 1) or, for an identity read, the type's zero (05.1 §2 rule 2).
+# Round 4 (NEW-4) and EVO-001 (R12): the reads below are declared unconditionally. An identity read requires its owner, so a world
+# that registers M7 registers M2 (registration refuses one that does not, by name). A rate or mode read carries its neutral and is
+# dropped when its owner is absent: SPR-014's registration rule reports it, the dropped column enumerates as an empty table and a
+# keyed lookup returns the neutral (M6: exec_constraint = 0, so m_ec = 1; T1: named = false, nobody holds a mind, so dormancy sends
+# nothing). The S7 reads of the dormancy criterion (an active vow keeps its vower named) are identity reads of a P1b system and are
+# declared when S7 is specified (P1b; the [[couplings]] entry below keeps the rule).
 # Kinship (heirs, regents, dormancy distance, regrant kin) walks life_course.mother/father through kin(p, n) (SPR-017), read
 # at same_instant (round 4c, NEW-6): everyone born up to this instant's Vital slot is in it, the dead included (round 4, NEW-1). M7 rebuilds a children-by-parent
 # index over those columns at restore and on each birth: derived state, outside the plane-A hash and the keyframe. M2 is read at
@@ -425,104 +436,80 @@ column = "person.alive"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "person.death_cause"
 owner = "M2.demography"
 lag = "same_instant"
 use = "mode"
-required = true
+neutral = "none"
 [[reads]]
 column = "person.death_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "person.birth_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "person.sex"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "person.mother"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "person.father"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "life_course.person_id"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "life_course.mother"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "life_course.father"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "life_course.birth_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "life_course.sex"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
-required = true
 [[reads]]
 column = "person.named"
 owner = "T1.minds"
 lag = "lagged"
-use = "identity"
-required = false
-[[reads]]
-column = "vow.vower"
-owner = "S7.vows"
-lag = "lagged"
-use = "identity"
-required = false
-[[reads]]
-column = "vow.status"
-owner = "S7.vows"
-lag = "lagged"
-use = "identity"
-required = false
+use = "mode"
+neutral = false
 [[reads]]
 column = "polity.exec_constraint"
 owner = "M6.polity"
 lag = "lagged"
 use = "rate"
-required = false
 neutral = 0.0
 
 [scales]
 spatial = "houses, titles (sovereign, major, minor seats), offices and claims; a realm is a sovereign title and its vassal titles"
 temporal = "Day pulse (every day start; in P1a every birth and death fires at a day start, round 3 BLK-1): births, deaths, arbitration, deposition, interregnum and regency timers, queued commands; Month pulse for the sovereigns' exit hazards (drawn on the first day over the whole month; the event placed on a keyed day among days 2 to the last); Year pulse for regrants, vocations and dormancy"
 extent = "every house and title of the manifest: typically 1 to 20 houses, 5 to 200 titles; persons of great houses only for dormancy and vocations"
-restart = "Owned columns plus M7's pending timers (deposition, interregnum resolution, regency end) restore the system exactly"
+restart = "Owned columns plus M7's pending timers (MURDER_DUE with its culprit payload, deposition, interregnum resolution, regency end) restore the system exactly. The deposition, interregnum and regency timers' re-sample rule is stated by SPR-021 (REV-EVO-001 MIN-7)"
 
 [[fidelity_ladder]]
 level = "F0"
@@ -534,8 +521,9 @@ representation = "Succession-law enum, competing exit hazards of sovereigns at t
 status = "target"
 
 # ----------------------------------------------------------------------------- schedule
-# The death instant is a day boundary (round 3, BLK-1): M2's death timers fire in the timer pass of (day start, Vital),
-# and this Day/Polity binding runs later in the same instant, so on_death arbitrates there and then. The binding runs at
+# The death instant is a day boundary (round 3, BLK-1): every death takes effect through M2's apply_death in (day start, Vital),
+# from M2's own timer in the timer pass or from M2's Day/Vital drain of a ScheduleDeath that a sender's timer submitted in that
+# timer pass (EVO-001), and this Day/Polity binding runs later in the same instant, so on_death arbitrates there and then. The binding runs at
 # every day start (rh-core runs every binding whose pulse fires; a `when` clause is documentation) and does work only
 # where a birth or death happened in this instant's Vital slot or an M7 timer is due.
 [[schedule]]
@@ -551,8 +539,8 @@ when = "always (the first day of each month)"
 [[schedule]]
 pulse = "Day"
 phase = "Vital"
-steps = ["murder_due: fire due murder timers (drawn by exit_hazards): submit ScheduleDeath {the ruler, murder, the culprit draw or 0, None} to M2, which drains it in this same Vital before the bindings that read M2 (05.1 §2 rule 2; EVO-001 R6 (b))"]
-when = "every day start; work only when a murder timer is due"
+steps = ["murder_due: the fire of a due MURDER_DUE timer in this Vital's timer pass (M7's fire, which precedes every binding; the binding's own step is empty, and the fire must not be done in it, where it would run after M2's drain and lose a day): submit ScheduleDeath {the ruler, murder, the timer's culprit payload, None} to M2, which drains it in this same Vital before the bindings that read M2 (05.1 §2 rule 2; EVO-001 R9)"]
+when = "every day start; the binding exists so that M7's Vital timer pass has a level; its step does nothing"
 [[schedule]]
 pulse = "Day"
 phase = "Agenda"
@@ -572,7 +560,8 @@ when = "always"
 [[rng]]
 purpose = "exit_murder"
 key = ["ruler", "month"]
-use = "entity = the ruler, k = 0, t = the month's first instant: hits iff draw < p_m (Prob32 draw_hits, SPR-011 ruling 4)"
+use = "entity = the ruler, k = 0, t = the month's first instant: hits iff draw < p_m (Prob32 draw_hits, SPR-011 ruling 4). A hit is an M7 timer MURDER_DUE at (the drawn day, Vital) under this purpose (EVO-001 R9, R10): entity = the ruler, payload = the culprit drawn by murder_culprit at the month start (0 = none), cause = None. resample_timer (a material input in the ruler's scope, ADR-0025 item 3): the day is re-drawn among the month's remaining day starts after the input's instant at the ruler's new epoch, keyed as exit_day; the payload is kept; it never errors (no remaining day start: the timer is dropped and counted, dropped{M7, MURDER_DUE, resampled_out})"
+resample_on_fork = true
 [[rng]]
 purpose = "exit_deposition"
 key = ["ruler", "month"]
@@ -702,7 +691,7 @@ source = "design value (RT-2026-10-16 item 12); prototype 7's 0.35 is illustrati
 # ----------------------------------------------------------------------------- submodels
 [[submodels]]
 name = "exit_hazards"
-summary = "On the first day of each month, for each sovereign title (ascending TitleId) with a living holder: law multiplier L = primogeniture_hr (primogeniture, ultimogeniture), seniority_hr (seniority), 1 (elective, tanistry, partition, sortition); m_ec = 1 + (exec_constraint_hr - 1) x exec_constraint (1 when M6 is not registered); h_m = murder_hazard_base x L x m_ec x (predecessor_killed_or if predecessor_exit = murdered); h_d = deposition_hazard_ref x L x m_ec x (predecessor_deposed_hr if predecessor_exit in {murdered, deposed}). Widths (MAJ-3, NEW-2): every factor is a Q16_16 parameter or column; h is their product computed exactly in u128 from the Q16_16 bits; the month's probability is p = h x D_m / D over the whole month, D_m = days_in_month, D = days_per_year, rounded down once to Prob32 (32 fraction bits, SPR-011 ruling 4), so the rate per ruler-year is exact; only the placement of the event excludes the pulse instant (a keyed day among days 2 to the last). p = h x D_m / D is linear in h, not 1 - exp(-h x D_m / D): it overstates by at most x²/2 for x = h D_m / D (about h²/288 for a 30-day month), a relative excess of at most x/2, under 0.05% at the reference h = 0.01 and about 1.1% at the Registry's upper corner (h near 0.27); no transcendental is needed. At the lower corner (h = 6 x 10^-5 a year) p is about 2 x 10^4 Prob32 steps, so no hazard rounds to zero. Draws: exit_murder and exit_deposition against p_m and p_d; exit_day for the day; murder wins a tie of days. A murder sends an M7 murder timer at (that day, Vital), keyed by exit_murder, whose fire (murder_due) submits ScheduleDeath {victim = ruler, cause = murder, culprit = murder_culprit, cause_event = None}; M2 drains it in that same Vital (SPR-014; EVO-001) and the death takes effect there, before this binding. A deposition schedules M7's deposition timer at (that day's start, Polity) and stores it in exit_timer"
+summary = "On the first day of each month, for each sovereign title (ascending TitleId) with a living holder: law multiplier L = primogeniture_hr (primogeniture, ultimogeniture), seniority_hr (seniority), 1 (elective, tanistry, partition, sortition); m_ec = 1 + (exec_constraint_hr - 1) x exec_constraint (1 when M6 is not registered); h_m = murder_hazard_base x L x m_ec x (predecessor_killed_or if predecessor_exit = murdered); h_d = deposition_hazard_ref x L x m_ec x (predecessor_deposed_hr if predecessor_exit in {murdered, deposed}). Widths (MAJ-3, NEW-2): every factor is a Q16_16 parameter or column; h is their product computed exactly in u128 from the Q16_16 bits; the month's probability is p = h x D_m / D over the whole month, D_m = days_in_month, D = days_per_year, rounded down once to Prob32 (32 fraction bits, SPR-011 ruling 4), so the rate per ruler-year is exact; only the placement of the event excludes the pulse instant (a keyed day among days 2 to the last). p = h x D_m / D is linear in h, not 1 - exp(-h x D_m / D): it overstates by at most x²/2 for x = h D_m / D (about h²/288 for a 30-day month), a relative excess of at most x/2, under 0.05% at the reference h = 0.01 and about 1.1% at the Registry's upper corner (h near 0.27); no transcendental is needed. At the lower corner (h = 6 x 10^-5 a year) p is about 2 x 10^4 Prob32 steps, so no hazard rounds to zero. Draws: exit_murder and exit_deposition against p_m and p_d; exit_day for the day; murder wins a tie of days. A murder sends an M7 MURDER_DUE timer at (that day, Vital) under exit_murder, payload = the murder_culprit draw, whose fire (murder_due, in the timer pass) submits ScheduleDeath {victim = ruler, cause = murder, culprit = murder_culprit, cause_event = None}; M2 drains it in that same Vital (SPR-014; EVO-001) and the death takes effect there, before this binding. A deposition schedules M7's deposition timer at (that day's start, Polity) and stores it in exit_timer"
 earns_its_place_by = ["V-SF-06", "V-SF-06b", "V-SF-06d", "V-ERA-03"]
 [[submodels]]
 name = "on_birth"
@@ -710,7 +699,7 @@ summary = "MAJ-5: for each person born this instant (birth_tick = now; births ar
 earns_its_place_by = ["V-INV-12"]
 [[submodels]]
 name = "on_death"
-summary = "In the death instant's Day/Polity binding (every death is an M2 timer in the timer pass of this day start's Vital slot; round 3, BLK-1). The dead are the rows with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5); a read of a dead row after this instant is a bug. For each title whose holder died (ascending TitleId): predecessor_exit := murdered, other_violent or natural from person.death_cause; holder := 0; state := awaiting; cancel exit_timer; then run arbitrate on it in this same step (SAGA-13), so awaiting never leaves the step. A dead regent: the next regent by rule (REGENCY_ENDED, REGENCY_BEGUN). A dead office holder: office.holder := 0. A dead claimant: claim.status := void. A house whose last living member died: HOUSE_EXTINCT. Property: TransferHoldings to M4 (P1b)"
+summary = "In the death instant's Day/Polity binding (every death takes effect through M2's apply_death in this day start's Vital slot, from a timer fire or from M2's drain; round 3, BLK-1; EVO-001). The dead are the rows with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5); a read of a dead row after this instant is a bug. For each title whose holder died (ascending TitleId): predecessor_exit := murdered, other_violent or natural from person.death_cause; holder := 0; state := awaiting; cancel exit_timer; then run arbitrate on it in this same step (SAGA-13), so awaiting never leaves the step. A dead regent: the next regent by rule (REGENCY_ENDED, REGENCY_BEGUN). A dead office holder: office.holder := 0. A dead claimant: claim.status := void. A house whose last living member died: HOUSE_EXTINCT. Property: TransferHoldings to M4 (P1b)"
 earns_its_place_by = ["V-SAGA-19", "V-INV-03"]
 [[submodels]]
 name = "arbitrate"
@@ -833,6 +822,7 @@ lag = "applied at the next tick boundary"
 [isolation]
 forcing = [
   { input = "polity.exec_constraint", series = "step", note = "0 (reference) for 500 years, then 1 (an assembly) for 500 years, on the same seeds; also constants 0 and 1" },
+  { input = "person.named", series = "constant", note = "false throughout (T1.minds stubbed: nobody holds a mind, so dormancy sends nothing and the named-actor count is the fixture's); the coupled run with T1 live is V-SF-23's" },
   { input = "person.death_cause", series = "historical:fixture_regicides", note = "M2 live; scripted runs of consecutive murdered predecessors to exercise the feud stock, plus the fixture deaths of V-SAGA-19 (every titleholder through each death cause)" },
 ]
 horizon = "1,000 sim-years on the dynastic fixture world of G1a (a few great houses, 1 to 4 realms, each law in turn; M6 held at neutral; M2 live; T1.minds stubbed: no petitions, no pressed claims, no foreground murders), 32 seeds"

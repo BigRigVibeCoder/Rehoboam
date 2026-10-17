@@ -55,7 +55,8 @@ INSERT OR IGNORE INTO record_kind VALUES
     (4, 'LIFE_EXIT', 2),
     (5, 'STEP_DIGEST', 3),
     (6, 'KEYFRAME', 4);
--- Reserved for later formats (05.9 IF-0): DECISION_TRACE, ENCOUNTER. 0 is never a kind.
+-- Reserved for later formats (05.9 IF-0): DECISION_TRACE, ENCOUNTER. Kind 7 is reserved for RESIDENCE_INTERVAL, a
+-- non-event record of S3.migration's residence intervals; SPR-018 defines its fields (REV-SPR-018 R11). 0 is never a kind.
 
 CREATE TABLE IF NOT EXISTS verb (                 -- the Registry's [verbs] at sealing (R6)
     verb_id     USMALLINT NOT NULL PRIMARY KEY,    -- index in [verbs] sorted by name

@@ -1,6 +1,7 @@
-# Planted fixture for lint_odd.py's absent-owner checks on [[reads]] (EVO-001; REV-P1a NEW-4): `required`, and the typed
-# `neutral` of a rate or mode read whose owner may be absent (typed by the owner's [[owns]], or by the Registry [era_state] for
-# M6, which has no spec). Never a contract. Case `mistyped`: the rate read's neutral is a string on a q8_8 column; must FAIL
+# Planted fixture for lint_odd.py's absent-owner checks on [[reads]] (EVO-001; REV-P1a NEW-4; R12): an identity read requires
+# its owner and has no `neutral`; a rate or mode read of an owner that may be absent carries a typed `neutral` (typed by the
+# owner's [[owns]], or by the Registry [era_state] for M6, which has no spec; named by the in-coupling's prose). Never a
+# contract. Case `mistyped`: the rate read's neutral is a string on a q8_8 column; must FAIL
 # Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/mistyped
 odd_r = 2
 
@@ -26,6 +27,7 @@ payload = "{ a: PersonId, b: SimTime, c: enum(person.death_cause) }"
 from = ["M1.regions"]
 drained_by = "Year/Environment"
 key = "living"
+key_field = "a"
 
 [[commands]]
 target = "M1.regions"
@@ -38,13 +40,11 @@ column = "person.alive"
 owner = "M2.demography"
 lag = "lagged"
 use = "identity"
-required = true
 [[reads]]
 column = "polity.exec_constraint"
 owner = "M6.polity"
 lag = "lagged"
 use = "rate"
-required = false
 neutral = "zero"
 
 [[couplings]]

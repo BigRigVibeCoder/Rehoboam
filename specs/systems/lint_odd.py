@@ -16,23 +16,27 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     senders (`from`); every sender's [[commands]] entry for it carries a `payload` with the same field names in the same
     order, `from` lists exactly the specs that send it, and a command sent to a spec that declares [[applies]] must be
     one of them. A warning on a draft spec, an error on a frozen one,
-  - absent owners (EVO-001; REV-P1a NEW-4; REV-SPR-017 round 3; 05.1 §2 rule 2): every [[reads]] entry whose owner is
-    another system declares `required = true | false`. A required read's owner must be registered (registration refuses
-    a world without it, by name) and it declares no `neutral`. A read that is not required may be dropped at
-    registration: a `rate` or `mode` read then carries a machine-readable `neutral`, the value a keyed lookup returns
-    (an identity read may carry one; without it the type's zero is served). A neutral is typed by the column's type,
-    from the owner's [[owns]] `type` or the Registry [era_state] entry for an owner with no spec: a TOML integer in
-    the type's range, true/false, a member of the enum's codes, or a number inside q8_8/q16_16 (parsed as an exact
-    decimal). A rate read's neutral is also named in its in-coupling's `neutral` prose. A missing `required`, a missing
-    or untypeable neutral, is a warning on a draft spec and an error on a frozen one; a mistyped neutral is always an
-    error (a deliberate departure from warning-on-draft: a wrong value is never right),
+  - absent owners (EVO-001; REV-P1a NEW-4; REV-SPR-017 round 3; 05.1 §2 rule 2): an identity read of another system's
+    column always requires its owner (registration refuses a world without it, by name) and declares no `neutral`. A
+    `rate` or `mode` read of another system's column carries a machine-readable `neutral`, the value a keyed lookup
+    returns when the owner is absent and the read is dropped (the type's zero is never a fallback). A neutral is typed
+    by the column's type, from the owner's [[owns]] `type` or the Registry [era_state] entry for an owner with no spec:
+    a TOML integer in the type's range, true/false, a member of the enum's codes, or a number representable in
+    q8_8/q16_16 (an exact decimal that is a multiple of the step) and inside its range. A rate read's neutral is also
+    named in its in-coupling's `neutral` prose as `<column> = <value>`. A missing or untypeable neutral is a warning on
+    a draft spec and an error on a frozen one; a mistyped neutral is always an error (a deliberate departure from
+    warning-on-draft: a wrong value is never right),
   - enum codes (EVO-001): an enum column of [[owns]] carries its codes, `values = [...]` (code = position) or
     `registry = "<table>"` (the Registry table's `ids` list, else its keys in byte-wise ascending order, as verb_id),
-  - lifecycle commands, typed (EVO-001): each [[applies]] payload is `{ name: Type, ... }` in a closed vocabulary
-    (PersonId, EventRef, SimTime, the id types, u8..u64, i64, bool, q8_8, q16_16, enum(<entity.column>) naming an enum
-    column with codes); `drained_by = "<Pulse>/<Phase>"` names the one binding of [[schedule]] that takes the command
-    (a warning instead of an error when the entry carries `sprint`: a later sprint adds the binding); `key` is
-    "living" (the dead-person drop applies, 05.1 §2 rule 2) or "any" (the default),
+  - lifecycle commands, typed (EVO-001): each [[applies]] entry (one per command kind) has a payload `{ name: Type, ... }`
+    in a closed vocabulary (PersonId, EventRef, SimTime, the id types, u8..u64, i64, bool, q8_8, q16_16,
+    enum(<entity.column>) naming an enum column with codes; a field named *_event is an EventRef; no name repeats);
+    `drained_by = "<Pulse>/<Phase>"` names the one binding of [[schedule]] that takes the command (an escape: with
+    `sprint = "SPR-NNN"` an undeclared binding is a counted warning until that sprint's document is CLOSED, then an
+    error on a frozen spec); `key` is "living" (the dead-person drop applies, 05.1 §2 rule 2) or "any", stated;
+    `key_field` names the PersonId payload field the command is keyed by; `outcome = true` marks a command that
+    carries a sampled, dated outcome, and every sender's [[commands]] entry for it then names the sender's own
+    `timer` kind and the [[rng]] `purpose` it is re-sampled under (05.1 §2 rule 2: the sender's timer submits it),
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
@@ -85,6 +89,9 @@ PAYLOAD_ENUM = re.compile(r"^enum\(([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)\)$")
 PAYLOAD_FIELD = re.compile(r"^([a-z][a-z0-9_]*)\s*:\s*(\S+)$")
 BINDING = re.compile(r"^(" + "|".join(PULSES) + r")/(" + "|".join(PHASES) + r")$")
 KEY_RULES = ("living", "any")
+SPRINT_ID = re.compile(r"^SPR-\d{3}$")
+TIMER_KIND = re.compile(r"^[A-Z][A-Z0-9_]*$")
+FIXED_STEP = {"q8_8": 256, "q16_16": 65536}
 SERIES = ("constant", "step", "sine", "ramp", "historical")
 
 
@@ -196,15 +203,28 @@ def enum_codes(col_entry, reg):
     return names, None
 
 
-def mentions(prose, value):
-    """Whether the coupling's free-text `neutral` names ``value`` as a whole token (EVO-001)."""
+def names_value(prose, column, value):
+    """Whether the coupling's free-text `neutral` states ``<column> = <value>`` (the bare name or entity.column; EVO-001,
+    REV-EVO-001 NIT-8), so that a number elsewhere in the prose cannot stand in for it."""
     forms = {str(value)}
     if isinstance(value, bool):
         forms |= {"true", "false"} & {str(value).lower()}
     elif isinstance(value, (int, Decimal, float)):
         d = Decimal(str(value)).normalize()
         forms |= {format(d, "f"), str(value)}
-    return any(re.search(r"(?<![\w.])" + re.escape(f) + r"(?![\w.])", str(prose)) for f in forms)
+    bare = column.split(".", 1)[-1]
+    name = r"(?:" + re.escape(column) + "|" + re.escape(bare) + ")"
+    return any(re.search(r"(?<![\w.])" + name + r"\s*=\s*" + re.escape(f) + r"(?![\w.])", str(prose)) for f in forms)
+
+
+def closed_sprints():
+    """The sprint ids whose document in CODEX/05_PROJECT is CLOSED (the `sprint` escape of [[applies]] ends there)."""
+    out = set()
+    for f in (ROOT / "CODEX" / "05_PROJECT").glob("SPR-*.md"):
+        head = f.read_text(encoding="utf-8")[:2000]
+        if re.search(r"^status:\s*CLOSED\b", head, re.M):
+            out.add(f.name[:7])
+    return out
 
 
 def lint_applies(specs, errs, warns, enum_names=None):
@@ -213,25 +233,61 @@ def lint_applies(specs, errs, warns, enum_names=None):
     enum_names = enum_names or {}
     for tid, (tf, ts) in specs.items():
         strict = errs if ts.get("system", {}).get("status") == "frozen" else warns
-        applies = {a.get("command"): a for a in ts.get("applies", [])}
+        applies = {}
+        for a in ts.get("applies", []):
+            if a.get("command") in applies:
+                errs.append(f"{tf.name}: [[applies]] {a.get('command')} is declared twice; one draining binding per command kind (EVO-001)")
+            applies.setdefault(a.get("command"), a)
         bindings = {f"{sc.get('pulse')}/{sc.get('phase')}" for sc in ts.get("schedule", [])}
         for cmd, a in sorted(applies.items()):
             typed = payload_types(a.get("payload"))
+            names = []
             if typed is None:
                 strict.append(f"{tf.name}: [[applies]] {cmd} payload must be typed, \"{{ name: Type, ... }}\" (EVO-001)")
             else:
                 for name, t in typed:
                     if (why := payload_type_problem(t, enum_names)) is not None:
                         strict.append(f"{tf.name}: [[applies]] {cmd} field {name}: {why}")
+                    if name.endswith("_event") and t != "EventRef":
+                        errs.append(f"{tf.name}: [[applies]] {cmd} field {name} must be an EventRef (the merge rewrites event slots; EVO-001)")
+                    if name in names:
+                        errs.append(f"{tf.name}: [[applies]] {cmd} field {name} is repeated")
+                    names.append(name)
             drained = a.get("drained_by")
             if not isinstance(drained, str) or not BINDING.match(drained):
                 strict.append(f"{tf.name}: [[applies]] {cmd} needs drained_by = \"<Pulse>/<Phase>\", the one binding that takes it (EVO-001)")
             elif drained not in bindings:
-                (warns if a.get("sprint") else strict).append(
-                    f"{tf.name}: [[applies]] {cmd} is drained_by {drained}, which [[schedule]] does not declare"
-                    + (f" (added by {a.get('sprint')})" if a.get("sprint") else ""))
-            if a.get("key", "any") not in KEY_RULES:
+                sprint = a.get("sprint")
+                if sprint is not None and not (isinstance(sprint, str) and SPRINT_ID.match(sprint)):
+                    errs.append(f"{tf.name}: [[applies]] {cmd} sprint must be \"SPR-NNN\" (EVO-001)")
+                    sprint = None
+                if sprint is None or sprint in CLOSED_SPRINTS:
+                    strict.append(f"{tf.name}: [[applies]] {cmd} is drained_by {drained}, which [[schedule]] does not declare"
+                                  + (f" ({sprint} is CLOSED: declare the binding)" if sprint else ""))
+                else:
+                    warns.append(f"{tf.name}: ESCAPE [[applies]] {cmd} is drained_by {drained}, which [[schedule]] does not declare until {sprint}")
+            if a.get("key") is None:
+                strict.append(f"{tf.name}: [[applies]] {cmd} needs key = \"living\" | \"any\" (EVO-001)")
+            elif a.get("key") not in KEY_RULES:
                 errs.append(f"{tf.name}: [[applies]] {cmd} key must be \"living\" | \"any\" (EVO-001)")
+            kf = a.get("key_field")
+            if not isinstance(kf, str):
+                strict.append(f"{tf.name}: [[applies]] {cmd} needs key_field = \"<a PersonId payload field>\", the person it is keyed by (EVO-001)")
+            elif typed is not None and (kf, "PersonId") not in typed:
+                errs.append(f"{tf.name}: [[applies]] {cmd} key_field {kf} is not a PersonId field of the payload")
+            if not isinstance(a.get("outcome", False), bool):
+                errs.append(f"{tf.name}: [[applies]] {cmd} outcome must be true or false")
+            elif a.get("outcome"):
+                for sid, (sf, ss) in specs.items():
+                    for c in ss.get("commands", []):
+                        if c.get("target") == tid and c.get("command") == cmd:
+                            sp = errs if ss.get("system", {}).get("status") == "frozen" else warns
+                            timer, purpose = c.get("timer"), c.get("purpose")
+                            if not (isinstance(timer, str) and TIMER_KIND.match(timer)):
+                                sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome, so it needs timer = \"<KIND>\", the sender's own timer that submits it (EVO-001)")
+                            purposes = {g.get("purpose") for g in ss.get("rng", [])}
+                            if purpose not in purposes:
+                                sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome, so it needs purpose = one of its [[rng]] purposes, under which its timer is re-sampled (EVO-001)")
         senders = {}                              # command -> [(sender id, its [[commands]] entry)]
         for sid, (sf, ss) in specs.items():
             for c in ss.get("commands", []):
@@ -284,7 +340,10 @@ def neutral_problem(value, col_type, names=None):
             return f"neutral {shown} must be a TOML number for a {col_type} column"
         if col_type in FIXED_RANGE:
             lo, hi = FIXED_RANGE[col_type]
-            if not lo <= Decimal(str(value)) < hi:
+            d = Decimal(str(value))
+            if d * FIXED_STEP[col_type] != int(d * FIXED_STEP[col_type]):
+                return f"neutral {shown} is not representable in {col_type} (a multiple of 1/{FIXED_STEP[col_type]})"
+            if not lo <= d < hi:
                 return f"neutral {shown} is outside {col_type}'s range [{lo}, {hi})"
     else:
         return f"column type '{col_type}' has no neutral form"
@@ -301,6 +360,9 @@ def column_type(col, owner, owners_type, reg):
     if era is not None and era.get("owner") == owner:
         return era.get("type")
     return None
+
+
+CLOSED_SPRINTS = set()
 
 
 def lint(reg, specs, req_ids, test_ids, adr_ids):
@@ -399,24 +461,21 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
             ob = c.get("output_bounds")
             if ob is not None and (not isinstance(ob, list) or len(ob) != 2):
                 errs.append(f"{p}: in-coupling on {col}: output_bounds must be [min, max]")
-        # absent owners (EVO-001; 05.1 §2 rule 2): every foreign read says whether its owner is required; a read that is
-        # not required carries the neutral a keyed lookup returns once the read is dropped (mandatory for rate and mode)
+        # absent owners (EVO-001; 05.1 §2 rule 2; REV-EVO-001 R12): an identity read requires its owner and has no
+        # neutral; a rate or mode read carries the neutral a keyed lookup returns once the read is dropped
         for r in s.get("reads", []):
             col, owner, use = r.get("column"), r.get("owner"), r.get("use")
             if owner == sid:
                 continue
-            required = r.get("required")
-            if not isinstance(required, bool):
-                strict.append(f"{p}: read {col} from {owner} needs required = true | false (EVO-001; 05.1 §2 rule 2)")
-                required = False
-            if required:
+            if "required" in r:
+                errs.append(f"{p}: read {col} from {owner}: `required` is not a field; an identity read always requires its owner (EVO-001 R12)")
+            if use == "identity":
                 if "neutral" in r:
-                    errs.append(f"{p}: read {col} from {owner} is required, so it declares no neutral (its owner is never absent; EVO-001)")
+                    errs.append(f"{p}: read {col} from {owner} is an identity read, which requires its owner and declares no neutral (EVO-001)")
                 continue
             if "neutral" not in r:
-                if use in ("rate", "mode"):
-                    strict.append(f"{p}: read {col} from {owner} needs a neutral value, typed by the column "
-                                  f"(a {use} read whose owner a world may lack; EVO-001; 05.1 §2 rule 2)")
+                strict.append(f"{p}: read {col} from {owner} needs a neutral value, typed by the column "
+                              f"(a {use} read, dropped when its owner is absent; EVO-001; 05.1 §2 rule 2)")
                 continue
             value = r.get("neutral")
             ct = column_type(col, owner, owners_type, reg)
@@ -426,8 +485,8 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
             elif (why := neutral_problem(value, ct, enum_names.get(col))) is not None:
                 errs.append(f"{p}: read {col} from {owner}: {why} (EVO-001)")
             c = in_by_col.get(col)
-            if use == "rate" and c is not None and c.get("neutral") and not mentions(c.get("neutral"), value):
-                strict.append(f"{p}: in-coupling on {col}: its neutral prose does not name the read's neutral {value} (EVO-001)")
+            if use == "rate" and c is not None and c.get("neutral") and not names_value(c.get("neutral"), col, value):
+                strict.append(f"{p}: in-coupling on {col}: its neutral prose does not state {col.split('.', 1)[-1]} = {value} (EVO-001)")
         iso = s.get("isolation")
         if iso is None:
             strict.append(f"{p}: missing [isolation] (synthetic forcing for this system alone; docs/09 V-SF-22)")
@@ -602,6 +661,7 @@ def main() -> int:
         print(e)
         return 2
     reg, specs, req_ids, test_ids, adr_ids = load(extra, overlay, specs_dir)
+    CLOSED_SPRINTS.update(closed_sprints())
     overlay_errs = []
     if overlay is not None and specs_dir != SPECS:
         overlay_errs = replacement_problems(overlay, specs)
@@ -631,61 +691,79 @@ def main() -> int:
     b_errs, _ = lint(reg, probe, req_ids, test_ids, adr_ids)
     caught = [e for e in b_errs if "bad.odd.toml" in e or "also owned" in e]
     for needle in ("not among Registry levels", "snake_case", "not declared in the Registry", "missing section",
-                   "needs an in-coupling", "missing [isolation]", "needs required = true | false"):
+                   "needs an in-coupling", "missing [isolation]"):
         assert any(needle in e for e in caught), (needle, caught)
     if "M2.demography" in specs:
         assert any("also owned" in e for e in caught), caught
-    # self-check (EVO-001): the absent-owner rules on [[reads]], enum codes on [[owns]] and typed [[applies]] entries.
-    # frozen -> error, draft -> warning for the declarations; a wrong value is always an error.
+    # self-check (EVO-001): the absent-owner rules on [[reads]], enum codes on [[owns]], typed [[applies]] entries and
+    # the outcome timer on [[commands]]. frozen -> error, draft -> warning for the declarations; a wrong value is always
+    # an error.
     if "M2.demography" in specs:
-        base = {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F1"}, "owns": [], "params": [], "rng": [],
+        base = {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F1"}, "owns": [], "params": [], "rng": [{"purpose": "fix", "key": ["person"]}],
                 "schedule": [{"pulse": "Day", "phase": "Activity", "steps": ["x: y"]}]}
         rd = lambda col, owner, use, **kw: dict({"column": col, "owner": owner, "lag": "lagged", "use": use}, **kw)
+        ap = lambda **kw: dict({"command": "X", "payload": "{ a: PersonId }", "from": [], "drained_by": "Day/Activity", "key": "living", "key_field": "a"}, **kw)
         M2 = "M2.demography"
-        probes = [   # (status, reads, applies, needle, want_err)
-            ("frozen", [rd("person.alive", M2, "identity")], [], "needs required = true | false", True),
-            ("draft", [rd("person.alive", M2, "identity")], [], "needs required = true | false", False),
-            ("draft", [rd("person.alive", M2, "identity", required=True, neutral=False)], [], "is required, so it declares no neutral", True),
-            ("frozen", [rd("polity.exec_constraint", "M6.polity", "rate", required=False)], [], "needs a neutral value", True),
-            ("draft", [rd("person.death_cause", M2, "mode", required=False)], [], "needs a neutral value", False),
-            ("frozen", [rd("artifact.bearer", "S6.artifacts", "identity", required=False)], [], "", False),
-            ("draft", [rd("person.alive", M2, "identity", required=False, neutral=0)], [], "must be true or false for a bool column", True),
-            ("draft", [rd("person.death_tick", M2, "identity", required=False, neutral="0")], [], "must be a TOML integer for a i64 column", True),
-            ("draft", [rd("person.mother", M2, "identity", required=False, neutral=-5)], [], "is outside u64's range", True),
-            ("draft", [rd("person.sex", M2, "identity", required=False, neutral="not_a_sex")], [], "is not one of the enum's codes", True),
-            ("draft", [rd("person.death_cause", M2, "mode", required=False, neutral="none")], [], "", False),
-            ("draft", [rd("polity.exec_constraint", "M6.polity", "rate", required=False, neutral=Decimal("1e9"))], [], "is outside q8_8's range", True),
-            ("draft", [rd("polity.exec_constraint", "M6.polity", "rate", required=False, neutral="zero")], [], "must be a TOML number for a q8_8 column", True),
-            ("frozen", [rd("region.conditions", "M6.polity", "identity", required=False, neutral=0)], [], "cannot be typed", True),
-            ("draft", [rd("region.conditions", "M6.polity", "identity", required=False, neutral=0)], [], "cannot be typed", False),
-            ("frozen", [], [{"command": "X", "payload": "{ a, b }", "from": [], "drained_by": "Day/Activity"}], "payload must be typed", True),
-            ("frozen", [], [{"command": "X", "payload": "{ a: PersonId, b: Potato }", "from": [], "drained_by": "Day/Activity"}], "field b: type 'Potato' is not in the payload vocabulary", True),
-            ("frozen", [], [{"command": "X", "payload": "{ a: enum(person.death_cause), e: EventRef }", "from": [], "drained_by": "Day/Activity", "key": "living"}], "", False),
-            ("frozen", [], [{"command": "X", "payload": "{ a: enum(person.nope) }", "from": [], "drained_by": "Day/Activity"}], "names no enum column with codes", True),
-            ("frozen", [], [{"command": "X", "payload": "{ a: PersonId }", "from": []}], "needs drained_by", True),
-            ("frozen", [], [{"command": "X", "payload": "{ a: PersonId }", "from": [], "drained_by": "Day/Agenda"}], "is drained_by Day/Agenda, which [[schedule]] does not declare", True),
-            ("frozen", [], [{"command": "X", "payload": "{ a: PersonId }", "from": [], "drained_by": "Day/Agenda", "sprint": "SPR-999"}], "is drained_by Day/Agenda, which [[schedule]] does not declare", False),
-            ("draft", [], [{"command": "X", "payload": "{ a: PersonId }", "from": [], "drained_by": "Day/Activity", "key": "maybe"}], "key must be", True),
+        probes = [   # (status, reads, applies, commands, needle, want_err)
+            ("draft", [rd("person.alive", M2, "identity", neutral=False)], [], [], "is an identity read, which requires its owner and declares no neutral", True),
+            ("draft", [rd("person.alive", M2, "identity", required=True)], [], [], "`required` is not a field", True),
+            ("frozen", [rd("polity.exec_constraint", "M6.polity", "rate")], [], [], "needs a neutral value", True),
+            ("draft", [rd("person.death_cause", M2, "mode")], [], [], "needs a neutral value", False),
+            ("draft", [rd("person.death_cause", M2, "mode", neutral=0)], [], [], "must be a value name for a enum column", True),
+            ("draft", [rd("person.death_tick", M2, "mode", neutral="0")], [], [], "must be a TOML integer for a i64 column", True),
+            ("draft", [rd("person.mother", M2, "mode", neutral=-5)], [], [], "is outside u64's range", True),
+            ("draft", [rd("person.sex", M2, "mode", neutral="not_a_sex")], [], [], "is not one of the enum's codes", True),
+            ("draft", [rd("person.death_cause", M2, "mode", neutral="none")], [], [], "", False),
+            ("draft", [rd("polity.exec_constraint", "M6.polity", "mode", neutral=Decimal("1e9"))], [], [], "is outside q8_8's range", True),
+            ("draft", [rd("polity.exec_constraint", "M6.polity", "mode", neutral=Decimal("0.001"))], [], [], "is not representable in q8_8", True),
+            ("draft", [rd("polity.exec_constraint", "M6.polity", "mode", neutral=Decimal("127.999"))], [], [], "is not representable in q8_8", True),
+            ("draft", [rd("polity.exec_constraint", "M6.polity", "mode", neutral="zero")], [], [], "must be a TOML number for a q8_8 column", True),
+            ("frozen", [rd("region.conditions", "M6.polity", "mode", neutral=0)], [], [], "cannot be typed", True),
+            ("draft", [rd("region.conditions", "M6.polity", "mode", neutral=0)], [], [], "cannot be typed", False),
+            ("frozen", [], [ap(payload="{ a, b }")], [], "payload must be typed", True),
+            ("frozen", [], [ap(payload="{ a: PersonId, b: Potato }")], [], "field b: type 'Potato' is not in the payload vocabulary", True),
+            ("frozen", [], [ap(payload="{ a: PersonId, c: enum(person.death_cause), e: EventRef }")], [], "", False),
+            ("frozen", [], [ap(payload="{ a: PersonId, e: enum(person.nope) }")], [], "names no enum column with codes", True),
+            ("draft", [], [ap(payload="{ a: PersonId, cause_event: u64 }")], [], "field cause_event must be an EventRef", True),
+            ("draft", [], [ap(payload="{ a: PersonId, a: u64 }")], [], "field a is repeated", True),
+            ("frozen", [], [dict(ap(), drained_by=None)], [], "needs drained_by", True),
+            ("frozen", [], [ap(drained_by="Day/Agenda")], [], "is drained_by Day/Agenda, which [[schedule]] does not declare", True),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-999")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-999", False),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-006")], [], "(SPR-006 is CLOSED: declare the binding)", True),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="P1.13 (SPR-014)")], [], "sprint must be \"SPR-NNN\"", True),
+            ("frozen", [], [dict(ap(), key=None)], [], "needs key = ", True),
+            ("draft", [], [ap(key="maybe")], [], "key must be", True),
+            ("frozen", [], [dict(ap(), key_field=None)], [], "needs key_field", True),
+            ("draft", [], [ap(payload="{ a: PersonId, n: u64 }", key_field="n")], [], "key_field n is not a PersonId field", True),
+            ("frozen", [], [ap(), ap(drained_by="Day/Activity")], [], "is declared twice", True),
+            ("draft", [], [ap(outcome="yes")], [], "outcome must be true or false", True),
+            ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }"}], "carries an outcome, so it needs timer", True),
+            ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "nope"}], "needs purpose = one of its [[rng]] purposes", True),
+            ("frozen", [], [ap(outcome=True, **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "", False),
         ]
-        for status, reads, applies, needle, want_err in probes:
-            probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies)
+        for status, reads, applies, commands, needle, want_err in probes:
+            probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies, commands=commands)
+            CLOSED_SPRINTS.add("SPR-006")
             pe, pw = lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
-            mine = lambda xs: [e for e in xs if "probe.odd.toml" in e and ("neutral" in e or "required" in e or "[[applies]]" in e)]
+            mine = lambda xs: [e for e in xs if "probe.odd.toml" in e and ("neutral" in e or "required" in e or "[[applies]]" in e or "[[commands]]" in e)]
             if needle:
                 assert any(needle in e for e in (pe if want_err else pw)), (status, needle, pe, pw)
                 assert not any(needle in e for e in (pw if want_err else pe)), (status, needle, pe, pw)
             else:
-                assert not mine(pe) and not mine(pw), (status, reads, applies, mine(pe), mine(pw))
-        # an enum column without codes is reported at its owner; a rate read's neutral must be named by its coupling
+                assert not mine(pe) and not mine(pw), (status, reads, applies, commands, mine(pe), mine(pw))
+        # an enum column without codes is reported at its owner; a rate read's neutral must be stated by its coupling as
+        # `<column> = <value>` (a number elsewhere in the prose does not count: NIT-8)
+        cpl = lambda prose: [{"system": "M6.polity", "direction": "in", "column": "polity.exec_constraint", "form": "f", "neutral": prose,
+                              "output_bounds": ["0", "1"], "data_range": "d", "beyond_range": "b", "source": "s"}]
         probe_spec = dict(base, system=dict(base["system"], status="frozen"),
                           owns=[{"column": "mood.state", "entity": "mood", "type": "enum", "plane": "A"}],
-                          reads=[rd("polity.exec_constraint", "M6.polity", "rate", required=False, neutral=0)],
-                          couplings=[{"system": "M6.polity", "direction": "in", "column": "polity.exec_constraint", "form": "f",
-                                      "neutral": "exec_constraint = 1, an assembly", "output_bounds": ["0", "1"],
-                                      "data_range": "d", "beyond_range": "b", "source": "s"}])
+                          reads=[rd("polity.exec_constraint", "M6.polity", "rate", neutral=1)], couplings=cpl("m_ec = 1 + 0 x 1, so 1"))
         pe, _ = lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
-        for needle in ("enum column mood.state needs exactly one of values", "its neutral prose does not name the read's neutral 0"):
+        for needle in ("enum column mood.state needs exactly one of values", "its neutral prose does not state exec_constraint = 1"):
             assert any(needle in e for e in pe), (needle, pe)
+        probe_spec = dict(probe_spec, owns=[], couplings=cpl("exec_constraint = 1, an assembly"))
+        pe, _ = lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
+        assert not any("neutral prose" in e for e in pe), pe
     print(f"  self-check (broken spec rejected): {len(caught)} errors, e.g. {caught[0]}")
     print(f"{'PASS' if not errs else 'FAIL'}: {len(specs)} system specs linted ({len(warns)} warnings)")
     return 1 if errs else 0

@@ -37,6 +37,8 @@ when = "<condition>"
 target = "<SYS.id>"
 command = "<CommandName>"
 payload = "{ <field>, <field> }"             # the owner's [[applies]] field names, in its order
+# timer = "<KIND>"                         # with purpose: required when the owner marks the command outcome = true
+# purpose = "<rng purpose>"                #   (EVO-001 R9): this system's own timer submits the command when it fires
 why = "<reason>"
 
 [[applies]]                                # lifecycle commands this system owns and applies (05.1 §2 rule 2; EVO-001)
@@ -47,6 +49,9 @@ payload = "{ <field>: <Type>, ... }"       # typed: PersonId, EventRef, SimTime,
 from = ["<SYS.id>"]                        # exactly the specs that send it
 drained_by = "<Pulse>/<Phase>"             # the one binding of [[schedule]] that takes the queue
 key = "<living|any>"                       # living: rh-core drops a command whose key person is dead (A-30)
+key_field = "<a PersonId field>"           # the payload field that is the command's key person (Command::person)
+outcome = false                            # true: the command carries a sampled, dated outcome; each sender names
+                                           #   the timer that submits it and the purpose it is re-sampled under
 
 [[reads]]                                  # read set, through contract accessors only
 column = "<entity.column>"
@@ -55,13 +60,13 @@ lag = "<same_instant|start_of_day|previous_pulse|lagged>"
 use = "<identity|mode|rate>"               # identity: who/where/what; mode: switches a discrete regime;
                                            # rate: enters a rate, hazard, price or probability (needs an
                                            # in-coupling below and an [isolation] forcing; RT-2026-10-16)
-required = <true|false>                    # EVO-001 (05.1 §2 rule 2): true = registration refuses a world without
-                                           # this owner; false = the read is dropped when the owner is absent, its
-                                           # column enumerates as an empty table and a keyed lookup returns neutral
-neutral = <value>                          # required when required = false and use is rate or mode (optional for
-                                           # identity: the type's zero otherwise); typed by the column: an integer
-                                           # in range, true/false, one of the enum's codes, or a number inside
-                                           # q8_8/q16_16; a rate read's coupling prose names it; the lint checks it
+neutral = <value>                          # EVO-001 (05.1 §2 rule 2): on every rate or mode read of another system's
+                                           # column (never on an identity read, whose owner is required: a world
+                                           # without it is refused by name). The read is dropped when its owner is
+                                           # absent, its column enumerates as an empty table and a keyed lookup
+                                           # returns this value, typed by the column: an integer in range, true/false,
+                                           # one of the enum's codes, or a number representable in q8_8/q16_16; a rate
+                                           # read's in-coupling prose states `<column> = <value>`; the lint checks it
 
 [scales]
 spatial = ""

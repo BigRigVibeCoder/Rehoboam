@@ -25,6 +25,7 @@ payload = "{ a: PersonId, b: Potato, c: enum(person.death_cause) }"
 from = ["M1.regions"]
 drained_by = "Year/Environment"
 key = "living"
+key_field = "a"
 
 [[commands]]
 target = "M1.regions"
