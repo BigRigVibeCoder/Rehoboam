@@ -105,6 +105,7 @@ impl Stall {
 }
 
 /// The seal hook of a run: nothing, or a stall.
+#[derive(Clone, Copy, Debug)]
 pub struct Hook(pub Option<Stall>);
 
 impl Hook {
@@ -133,6 +134,24 @@ impl SealHook for Hook {
             Self::stall(&format!("sealed y{year:06}"));
         }
     }
+}
+
+/// Whether `path` is a live host's socket or lock beside a timeline's channels
+/// (`stream/t<id>/{A,C}.{sock,lock}`; SPR-026, `wire_v1.md` §1): the host's files, which no
+/// stream reader reads and no comparison of streams compares.
+#[must_use]
+pub fn is_host_file(path: &Path) -> bool {
+    let in_timeline = path
+        .parent()
+        .and_then(Path::file_name)
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.strip_prefix('t'))
+        .is_some_and(|d| d.len() == 10 && d.bytes().all(|b| b.is_ascii_digit()));
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    in_timeline && ["A.sock", "A.lock", "C.sock", "C.lock"].contains(&name)
 }
 
 /// The writer's lock file of a run directory: a run holds it exclusively for its whole length,
@@ -595,6 +614,34 @@ impl StreamHost {
             ));
         }
         Ok(())
+    }
+
+    /// Feeds a live edge from now on (SPR-026): the writer's [`StreamWriter::attach_live`], with
+    /// the run's stall hook moved to the seal thread under option (b).
+    ///
+    /// # Errors
+    /// [`Error`] from the writer.
+    pub fn attach_live(
+        &mut self,
+        policy: rh_stream::live::Policy,
+        clock: Option<std::sync::Arc<dyn rh_stream::writer::SealClock>>,
+        stall: Option<Stall>,
+    ) -> Result<rh_stream::live::LiveEdge, Error> {
+        self.writer
+            .attach_live(rh_stream::writer::LiveConfig {
+                policy,
+                clock,
+                hook: Box::new(Hook(stall)),
+            })
+            .map_err(|e| stream_error(&e))
+    }
+
+    /// Runs `f` once every closed year is sealed (the keyframe file; SPR-026).
+    ///
+    /// # Errors
+    /// [`Error`] from `f`, when it runs now.
+    pub fn after_seal(&mut self, f: rh_stream::writer::AfterSeal) -> Result<(), Error> {
+        self.writer.after_seal(f).map_err(|e| stream_error(&e))
     }
 
     /// Seals the open year and reports.

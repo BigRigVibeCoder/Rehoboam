@@ -25,7 +25,7 @@ use crate::bisect::{BisectArgs, Process, bisect};
 use rh_snapshot::hash::{Plane, empty_plane_hash};
 
 use crate::ladder::{Ladder, Rung, RungKind, compare};
-use crate::run::{Error, Inject, Outcome, RunArgs, run_reporting};
+use crate::run::{Error, Inject, Outcome, RunArgs};
 use crate::vitals::Vitals;
 
 /// Exit code: success, no divergence.
@@ -158,6 +158,12 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--resume" => args.resume = Some(PathBuf::from(value)),
             "--run-dir" => args.run_dir = Some(PathBuf::from(value)),
             "--inputs" => args.inputs = Some(PathBuf::from(value)),
+            "--test-poison" => {
+                args.poison = Some(
+                    i64::try_from(number("--test-poison")?)
+                        .map_err(|_| bad("--test-poison is too large"))?,
+                );
+            }
             "--test-stall" => {
                 args.stall = Some(
                     crate::stream::Stall::parse(value)
@@ -218,9 +224,21 @@ pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
 /// and reports. Returns the exit code.
 #[must_use]
 pub fn run_world(world: &str, words: &[String], repo: &Path) -> u8 {
+    run_world_live(world, words, repo, None)
+}
+
+/// [`run_world`] serving a live edge (`rh-cli run … --socket`; SPR-026): `live` is built by the
+/// host from the run's arguments.
+#[must_use]
+pub fn run_world_live(
+    world: &str,
+    words: &[String],
+    repo: &Path,
+    live: Option<crate::run::LiveHost>,
+) -> u8 {
     let result = parse_run(words, repo).and_then(|mut args| {
         world.clone_into(&mut args.world);
-        run_reporting(&args).map(|o| (args, o))
+        crate::run::run_live(&args, live).map(|o| (args, o))
     });
     match result {
         Ok((args, outcome)) => {

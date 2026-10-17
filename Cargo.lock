@@ -862,7 +862,9 @@ version = "0.0.0"
 dependencies = [
  "rh-golden",
  "rh-manifest",
+ "rh-protocol",
  "rh-registry",
+ "rh-stream",
  "serde_json",
 ]
 
@@ -892,6 +894,7 @@ dependencies = [
  "rh-core",
  "rh-ids",
  "rh-manifest",
+ "rh-protocol",
  "rh-registry",
  "rh-sifter",
  "rh-snapshot",

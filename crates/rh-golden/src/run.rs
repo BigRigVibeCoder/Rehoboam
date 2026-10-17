@@ -172,6 +172,10 @@ pub struct RunArgs {
     /// Replay: build the run from the history tuple and the journal at `journal` alone, journaling
     /// nothing (`rh-cli replay`; SPR-013 T-12, V-DET-04, V-DET-18).
     pub replay: bool,
+    /// A test hook that poisons the engine at the first instant at or after this tick
+    /// (`--test-poison`; SPR-026 T-03, A-42): an observer that panics, which the engine turns into
+    /// a fatal `SimError::Observer`. Never on a baseline.
+    pub poison: Option<i64>,
 }
 
 impl RunArgs {
@@ -203,9 +207,45 @@ impl RunArgs {
             stall: None,
             inputs: None,
             replay: false,
+            poison: None,
         }
     }
 }
+
+/// The planted poison of `--test-poison` (module docs of [`RunArgs::poison`]).
+struct Poison(i64);
+
+impl rh_core::observe::Observer for Poison {
+    #[allow(
+        clippy::panic,
+        reason = "the planted poison: the engine catches the panic and poisons itself (A-42 test)"
+    )]
+    fn notify(&self, notice: &rh_core::observe::Notice) {
+        if notice.boundary == rh_core::observe::Boundary::InstantStart
+            && notice.at.minutes() >= self.0
+        {
+            panic!(
+                "planted poison at tick {} (--test-poison)",
+                notice.at.minutes()
+            );
+        }
+    }
+}
+
+/// How a host serves the live edge of a run's World Stream (SPR-026; `rh-cli run --socket`):
+/// the window policy, the seal clock, and what to do with the edge once the stream exists, before
+/// its first record is pushed (start the socket server).
+pub struct LiveHost {
+    /// The window policy (D42: [`rh_stream::live::Policy::YearEnd`] by default).
+    pub policy: rh_stream::live::Policy,
+    /// The seal-latency clock.
+    pub clock: Option<Arc<dyn rh_stream::writer::SealClock>>,
+    /// Called once with the edge and the run directory.
+    pub on_edge: OnEdge,
+}
+
+/// What a host does with the live edge once the stream exists ([`LiveHost::on_edge`]).
+pub type OnEdge = Box<dyn FnOnce(rh_stream::live::LiveEdge, &Path) -> Result<(), Error>>;
 
 /// What a run leaves: its ladder and what the scheduler dispatched.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -467,11 +507,20 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
 ///
 /// # Errors
 /// As [`run`].
+pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
+    run_live(args, None)
+}
+
+/// [`run_reporting`] with a live edge served by `live` (SPR-026): the edge is built only here, so
+/// a headless run builds none.
+///
+/// # Errors
+/// As [`run`]; also a run with `live` but no run directory, and `live.on_edge`'s error.
 #[allow(
     clippy::too_many_lines,
     reason = "the run loop in one place: every stop's steps in their order (ladder, keyframe, stream)"
 )]
-pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
+pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error> {
     refuse_mutants()?;
     let smoke = args.world == SMOKE;
     if args.leak_thread && !smoke {
@@ -539,6 +588,16 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         }
     }
     let run_dir = args.run_dir.clone().map(RunDir);
+    if live.is_some() && run_dir.is_none() {
+        return Err(Error(
+            "a live edge is served from a run directory (--socket needs --run-dir)".to_owned(),
+        ));
+    }
+    if args.poison.is_some() && args.vitals {
+        return Err(Error(
+            "--test-poison plants its own observer and is refused with --vitals".to_owned(),
+        ));
+    }
     if run_dir.is_some() && world.stream.is_none() {
         return Err(Error(format!(
             "--run-dir streams a manifest world; {} has no World Stream (SPR-013 T-09)",
@@ -578,9 +637,13 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     let (mut engine, journal, identity, rows) = start(args, &world, &registered)?;
     // SPR-009 T-03: the host's clock-free observer; the engine carries no clock (ruling 4).
     let timing = args.vitals.then(|| Arc::new(Timing::default()));
+    let poison = args.poison.map(|t| Arc::new(Poison(t)));
     let attach = |e: &mut Engine| {
         if let Some(t) = &timing {
             e.set_observer(Some(t.clone()));
+        }
+        if let Some(p) = &poison {
+            e.set_observer(Some(p.clone()));
         }
     };
     attach(&mut engine);
@@ -634,6 +697,11 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         )?),
         _ => None,
     };
+    // SPR-026: the live edge, before the first record is pushed (the socket exists first).
+    if let (Some(l), Some(h), Some(dir)) = (live, host.as_mut(), &run_dir) {
+        let edge = h.attach_live(l.policy, l.clock, args.stall)?;
+        (l.on_edge)(edge, &dir.0)?;
+    }
     // The genesis keyframe (year 0) is written for a full run's --keyframes directory (SPR-008)
     // only. A run directory has none: every keyframe there has its KEYFRAME marker in channel A,
     // and a tick of years 0-9 is rebuilt from genesis, which the history tuple determines (the
@@ -708,12 +776,20 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
                 .zip(kf.as_ref().map(|(_, (_, header))| header));
             h.push(t, marker)?;
         }
-        if let (Some((year, (bytes, _))), Some(dir)) = (&kf, &keyframes) {
+        if let (Some((year, (bytes, _))), Some(dir)) = (kf, &keyframes) {
             // run.ladder reaches the keyframe before the keyframe exists (REV-SPR-013 MAJ-3 (b)).
             if let Some(log) = log.as_mut() {
                 log.sync()?;
             }
-            write_file(&keyframe_path(dir, *year), bytes)?;
+            let path = keyframe_path(dir, year);
+            match host.as_mut() {
+                // The file follows its year's segment: at once, or behind the seal in flight on a
+                // live edge's seal thread (SPR-026 T-02).
+                Some(h) => {
+                    h.after_seal(Box::new(move || write_file(&path, &bytes).map_err(|e| e.0)))?;
+                }
+                None => write_file(&path, &bytes)?,
+            }
         }
     }
     let stream = host.map(StreamHost::finish).transpose()?;
@@ -956,6 +1032,7 @@ fn stream_host(
 pub fn mutant_features() -> Vec<&'static str> {
     let mut m = rh_sys_demography::MUTANTS.to_vec();
     m.extend_from_slice(rh_stream::MUTANTS);
+    m.extend_from_slice(rh_protocol::MUTANTS);
     m
 }
 

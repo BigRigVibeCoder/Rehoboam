@@ -36,6 +36,8 @@ use rh_manifest::Registry;
 use rh_manifest::manifest;
 use rh_registry::ownership::{AccessSpec, Ownership};
 
+mod serve;
+
 const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]\n       rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]\n       rh-cli run <world> [--strict] [--seed S] --years N [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--vitals] [--run-dir D] [--inputs SCRIPT] [--expect-serial]\n       rh-cli tail <run-dir> [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K ...] [--canonical] [--wait]\n       rh-cli sift <run-dir>\n       rh-cli replay <run-dir> --into D [--from-keyframe TICK] [--threads T]   (D: absent, empty, or a previous replay's, holding .rh-replay)\n       rh-cli canonical parse < LINES | rh-cli canonical files F...\n       rh-cli ladder compare <a.ladder> <b.ladder>\n       rh-cli ladder cut-yearly <monthly.ladder> <out.ladder>\n       rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg A ...] [--seed S] [--years N] [--threads T] --work DIR [--out REPORT]";
 /// The repository the golden runs read `worlds/` from: this binary's own source tree, so a build
 /// of another revision runs that revision's world (SPR-008 T-03).
@@ -83,6 +85,10 @@ fn main() -> ExitCode {
         ["manifest", "schema", "--diff", reference] => schema_diff(reference),
         ["ownership", rest @ ..] => ownership(rest),
         ["run", "smoke", rest @ ..] => golden(rh_golden::cli::run_smoke, rest),
+        // SPR-026 T-03: the run serving channel A's live edge on its socket.
+        ["run", world, rest @ ..] if !world.starts_with('-') && rest.contains(&"--socket") => {
+            ExitCode::from(serve::run(world, rest, std::path::Path::new(DEFAULT_REPO)))
+        }
         // SPR-012 T-08: a manifest world under worlds/ (its world.toml).
         ["run", world, rest @ ..] if !world.starts_with('-') => {
             let words: Vec<String> = rest.iter().map(|s| (*s).to_owned()).collect();
