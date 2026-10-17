@@ -715,8 +715,15 @@ def lines_engine_cause() -> list[str]:
     _, h = state_hash(SYNTHETIC_WORLD, SYNTHETIC_STATE_CAUSE)
     rows = engine_rows(SYNTHETIC_STATE_CAUSE)["rh-core/agenda.timers"]
     chunks, root = table_digest("rh-core/agenda.timers", rows)
-    line = " ".join(["engine_cause_table", "rh-core/agenda.timers", str(len(rows)), f"{root:016x}",
-                     *(f"{c:016x}" for c in chunks)])
+    line = " ".join(
+        [
+            "engine_cause_table",
+            "rh-core/agenda.timers",
+            str(len(rows)),
+            f"{root:016x}",
+            *(f"{c:016x}" for c in chunks),
+        ]
+    )
     return [line, f"engine_cause {h:016x}"]
 
 
@@ -823,8 +830,16 @@ def render() -> str:
         "#   engine_cause_table, engine_cause: two timers with a cause (SPR-014 T-02)",
     ]
     return (
-        "\n".join([*header, *lines_xxh3(), *lines_tables(), *lines_planes(), *lines_engine(),
-                   *lines_engine_cause()])
+        "\n".join(
+            [
+                *header,
+                *lines_xxh3(),
+                *lines_tables(),
+                *lines_planes(),
+                *lines_engine(),
+                *lines_engine_cause(),
+            ]
+        )
         + "\n"
     )
 

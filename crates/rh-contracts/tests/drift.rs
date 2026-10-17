@@ -72,4 +72,8 @@ fn every_m2_accessor_matches_the_spec() {
             owns.values
         );
     }
+    println!(
+        "rh-contracts drift: {} M2 accessors match the spec",
+        COLUMNS.len()
+    );
 }

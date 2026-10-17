@@ -229,6 +229,9 @@ fn rows_enter_by_insert_sorted_aligned_and_visible_the_same_instant() {
         }
     }
     assert!(inserted > 0, "the property inserted no row");
+    println!(
+        "row insert: {inserted} rows inserted over 48 worlds, sorted, aligned and read the same instant"
+    );
 }
 
 /// A duplicate id is `SimError::Ledger`; so is a row that does not name each of the inserter's

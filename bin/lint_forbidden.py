@@ -404,7 +404,7 @@ RULES: tuple[Rule, ...] = (
     Rule(
         BUILD_ENV_RULE,
         # BCK-002 A-50 (SPR-014 T-07): only `env!("CARGO_PKG_...")` and its option_env! twin, the
-        # argument one plain literal; a concat!, a raw string or another name is refused.
+        # argument one plain literal ("..." or r"..."); a concat! or another name is refused.
         # Strings are blanked before rules match, so the literal is read from the source after the
         # match (_allow_package_env), as include!'s is.
         _rx(r"\b(?:option_)?env\s*!\s*[(\[{]"),
@@ -959,17 +959,15 @@ def _line_column(code: str, offset: int) -> tuple[int, int]:
 def _allow_package_env(lexed: Lexed, source: str, findings: list[Finding]) -> list[Finding]:
     """Drop the build-env findings whose argument is one literal naming a CARGO_PKG_* variable.
 
-    An env!/option_env! with any other argument (another name, a concat!, a raw string) keeps its
-    finding (BCK-002 A-50).
+    An env!/option_env! with any other argument (another name, a concat!, a second argument) keeps
+    its finding (BCK-002 A-50).
     """
     allowed = {
         _line_column(lexed.code, call.start)
         for call in find_includes(source, lexed.code, BUILD_ENV_MACRO)
         if call.literal is not None and PACKAGE_ENV.fullmatch(call.literal)
     }
-    return [
-        f for f in findings if f.rule != BUILD_ENV_RULE or (f.line, f.column) not in allowed
-    ]
+    return [f for f in findings if f.rule != BUILD_ENV_RULE or (f.line, f.column) not in allowed]
 
 
 def _follow_includes(

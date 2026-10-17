@@ -202,6 +202,10 @@ fn v_det_21_event_slots_carry_the_merged_id() {
         }
     }
     assert!(checked.0 > 0 && checked.1 > 0, "{checked:?}");
+    println!(
+        "V-DET-21 slots: {} commands and {} timers carry their sender's merged EventId at 1, 2, 4 and 8 threads",
+        checked.0, checked.1
+    );
 }
 
 // --- Refusals at submit (05.1 §2 rule 2; SPR-014 T-02) ----------------------------------------

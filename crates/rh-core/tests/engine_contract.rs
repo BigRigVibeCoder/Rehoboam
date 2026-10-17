@@ -925,4 +925,5 @@ fn a_draw_of_the_wrong_entity_kind_is_refused_by_name() {
         kind_run(2).0.unwrap_err().to_string(),
         "X1.kinds drew under purpose by_world, whose [[rng]] key is a world, with a person (BCK-002 A-50)"
     );
+    println!("A-50: a draw of the wrong entity kind is refused by name");
 }

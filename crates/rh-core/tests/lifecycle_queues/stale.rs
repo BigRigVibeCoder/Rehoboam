@@ -277,6 +277,9 @@ fn v_inv_15_drops_are_counted_and_never_applied() {
         .collect();
     assert_eq!(left, [ids()[3], ids()[4]]);
     assert_eq!(e.commands().len(), 0);
+    println!(
+        "V-INV-15: dead_key, dead and the dead timer counted, never applied; key = any applied"
+    );
     assert_eq!(
         e.dropped()
             .get(&("E1.life", DropKind::Command("Kill"), DropReason::DeadKey)),

@@ -278,6 +278,7 @@ fn queued_event_slots_and_timer_causes_survive_a_keyframe() {
             assert_eq!(ladder(&mut loaded, 60), ladder(&mut e, 60), "{size} {seed}");
         }
     }
+    println!("T-02 keyframes: queued EventRef fields and timer causes round-trip in 9 worlds");
 }
 
 /// T-03: the `dropped{…}` counter is a diagnostic. A run whose owner counts a planted extra drop
@@ -299,6 +300,7 @@ fn the_dropped_counter_changes_no_hash() {
             write_keyframe(&planted, anchor()).unwrap().1.state_hash,
         );
     }
+    println!("T-03 counter: a planted extra drop changes no state_hash in 3 worlds");
 }
 
 // --- T-05: inserted ledger rows through a keyframe --------------------------------------------
@@ -408,4 +410,5 @@ fn inserted_ledger_rows_survive_a_keyframe() {
             );
         }
     }
+    println!("T-05 keyframes: inserted ledger rows round-trip in 9 worlds");
 }

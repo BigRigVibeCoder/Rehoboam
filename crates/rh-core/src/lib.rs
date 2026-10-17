@@ -40,3 +40,12 @@ pub mod world;
 pub use phase::Phase;
 pub use system::Fixed;
 pub use time::Pulse;
+
+/// The `mutant-*` Cargo features compiled into this build (BCK-002 A-52): empty in every build a
+/// world or a baseline may come from. `rh-cli run` and `bin/regen_baseline.sh` refuse a build where
+/// it is not; `python/tests/test_mutant_features.py` checks that every `mutant-*` feature of the
+/// crate is listed here.
+pub const MUTANTS: &[&str] = &[
+    #[cfg(feature = "mutant-deliver-every-job")]
+    "mutant-deliver-every-job",
+];

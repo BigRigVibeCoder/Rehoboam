@@ -496,6 +496,7 @@ fn v_inv_03_commanded_deaths_take_the_single_death_path() {
         );
         assert!(e.dropped().is_empty());
     }
+    println!("V-INV-03: commanded deaths take the single death path in 3 worlds");
 }
 
 /// A natural death and a commanded death of one person in one slot apply once, the natural one

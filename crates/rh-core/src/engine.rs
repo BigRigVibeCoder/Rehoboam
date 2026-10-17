@@ -233,6 +233,9 @@ pub struct Engine {
     /// diagnostic, printed with the run's vitals, outside every plane hash and every keyframe
     /// (GOV-006 §3: observability never changes history). A restored engine counts from zero.
     dropped: BTreeMap<(&'static str, DropKind, DropReason), u64>,
+    /// The inboxes of the level being dispatched: a buffer kept across levels so that taking them
+    /// allocates nothing in steady state (V-PERF-11). Never state.
+    inboxes: Vec<Vec<QueuedCommand>>,
 }
 
 /// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
@@ -365,6 +368,7 @@ impl Engine {
             ledger,
             taken: Vec::new(),
             dropped: BTreeMap::new(),
+            inboxes: Vec::new(),
         }
     }
 
@@ -1126,8 +1130,11 @@ impl Engine {
     /// world with a ledger, a `key = "living"` command whose key person has no ledger row or has
     /// `person.alive = 0` in the tables as they stand at the level's start is dropped here, never
     /// delivered, and counted under `dropped{owner, kind, dead_key}` (BCK-002 A-30).
-    fn inboxes(&mut self, jobs: &[Job]) -> Vec<Vec<QueuedCommand>> {
-        let mut out = Vec::with_capacity(jobs.len());
+    ///
+    /// The inboxes go into `out` (cleared first), a buffer the engine keeps across levels, so a
+    /// level whose jobs have no commands allocates nothing (V-PERF-11).
+    fn fill_inboxes(&mut self, jobs: &[Job], out: &mut Vec<Vec<QueuedCommand>>) {
+        out.clear();
         for job in jobs {
             let Work::Step(binding) = &job.work else {
                 out.push(Vec::new());
@@ -1135,54 +1142,52 @@ impl Engine {
             };
             let owner = self.registered.entries[job.index].id;
             let decls = &self.registered.commands;
-            let inbox = self.commands.take_kinds(owner, |kind| {
+            let mut inbox = self.commands.take_kinds(owner, |kind| {
                 decls.get(kind).is_some_and(|d| {
                     d.owner == owner
                         && (d.drained_by == *binding || cfg!(feature = "mutant-deliver-every-job"))
                 })
             });
-            if inbox.is_empty() || self.ledger.is_none() {
-                out.push(inbox);
-                continue;
+            if !inbox.is_empty() && self.ledger.is_some() {
+                let ids = self.tables.get(crate::ledger::PERSON_ID);
+                let alive = self.tables.get(crate::ledger::PERSON_ALIVE);
+                let living = |person: u64| -> bool {
+                    ids.and_then(|ids| {
+                        ids.binary_search_by_key(&person, |v| v.cast_unsigned())
+                            .ok()
+                    })
+                    .and_then(|row| alive.and_then(|a| a.get(row)))
+                    .is_some_and(|&a| a != 0)
+                };
+                let dropped = &mut self.dropped;
+                inbox.retain(|c| {
+                    let rule = decls.get(c.command.kind).map(|d| d.key);
+                    let drop = rule == Some(KeyRule::Living) && !living(c.command.person.to_raw());
+                    if drop {
+                        *dropped
+                            .entry((
+                                owner,
+                                DropKind::Command(c.command.kind),
+                                DropReason::DeadKey,
+                            ))
+                            .or_default() += 1;
+                    }
+                    !drop
+                });
             }
-            let ids = self.tables.get(crate::ledger::PERSON_ID);
-            let alive = self.tables.get(crate::ledger::PERSON_ALIVE);
-            let living = |person: u64| -> bool {
-                ids.and_then(|ids| {
-                    ids.binary_search_by_key(&person, |v| v.cast_unsigned())
-                        .ok()
-                })
-                .and_then(|row| alive.and_then(|a| a.get(row)))
-                .is_some_and(|&a| a != 0)
-            };
-            let mut kept = Vec::with_capacity(inbox.len());
-            for c in inbox {
-                let rule = decls.get(c.command.kind).map(|d| d.key);
-                if rule == Some(KeyRule::Living) && !living(c.command.person.to_raw()) {
-                    *self
-                        .dropped
-                        .entry((
-                            owner,
-                            DropKind::Command(c.command.kind),
-                            DropReason::DeadKey,
-                        ))
-                        .or_default() += 1;
-                } else {
-                    kept.push(c);
-                }
-            }
-            out.push(kept);
+            out.push(inbox);
         }
-        out
     }
 
     /// What each job of a level takes to its thread: its owned columns (moved out of the tables),
     /// its inbox and its system's drawn pairs. Every inbox is taken, and every dead-person drop
     /// decided, before any column moves.
     fn job_inputs(&mut self, jobs: &[Job]) -> Vec<JobInput> {
-        let inboxes = self.inboxes(jobs);
-        jobs.iter()
-            .zip(inboxes)
+        let mut inboxes = std::mem::take(&mut self.inboxes);
+        self.fill_inboxes(jobs, &mut inboxes);
+        let inputs = jobs
+            .iter()
+            .zip(inboxes.drain(..))
             .map(|(job, inbox)| {
                 let e = &self.registered.entries[job.index];
                 let owned = e
@@ -1194,7 +1199,9 @@ impl Engine {
                 let taken = std::mem::take(&mut self.taken[job.index]);
                 (owned, inbox, taken)
             })
-            .collect()
+            .collect();
+        self.inboxes = inboxes;
+        inputs
     }
 
     /// Runs one level of jobs (in order on one thread, spread over several otherwise), returns

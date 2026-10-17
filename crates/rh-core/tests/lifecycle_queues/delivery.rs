@@ -263,4 +263,7 @@ fn v_det_21_delivery_to_the_one_draining_binding() {
     }
     assert!(same > 0, "the probe saw no same-instant delivery");
     assert!(waits > 0, "the probe saw no cross-instant wait");
+    println!(
+        "V-DET-21 delivery: {same} same-instant deliveries and {waits} cross-instant waits over 24 worlds, only to the drainer, equal at 1, 2, 4 and 8 threads"
+    );
 }

@@ -110,6 +110,9 @@ fn v_inv_04_absent_owner_reads_give_their_neutrals_and_sends_are_discarded() {
         Some(&5)
     );
     assert!(e.tables().get("price.level").is_none(), "never created");
+    println!(
+        "V-INV-04 stubs: q16_16 and enum neutrals served, 5 sends to the absent owner discarded and counted"
+    );
 }
 
 /// An identity read of an absent owner is refused by name (rule `absent-owner`), and so is a rate

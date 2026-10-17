@@ -218,6 +218,9 @@ pub struct Outcome {
     pub vitals: Option<Vitals>,
     /// What the stream writer did, for a run with a run directory (SPR-013 T-09).
     pub stream: Option<StreamSummary>,
+    /// The engine's `dropped{system, kind, reason}` counts at the end of the run (`05.1` §2 rule
+    /// 2; SPR-014 T-03): a diagnostic, printed with the vitals, never part of the ladder.
+    pub dropped: Vec<(String, String, &'static str, u64)>,
 }
 
 impl Outcome {
@@ -726,6 +729,13 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         dispatch: add(dispatched, engine.dispatch_stats()),
         vitals: timing.and_then(|t| t.vitals()),
         stream,
+        dropped: engine
+            .dropped()
+            .iter()
+            .map(|((system, kind, reason), n)| {
+                ((*system).to_owned(), kind.to_string(), reason.name(), *n)
+            })
+            .collect(),
     })
 }
 
@@ -954,7 +964,12 @@ fn stream_host(
 /// (BCK-002 A-52).
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
-    rh_sys_demography::MUTANTS.to_vec()
+    [
+        rh_core::MUTANTS,
+        rh_snapshot::MUTANTS,
+        rh_sys_demography::MUTANTS,
+    ]
+    .concat()
 }
 
 /// BCK-002 A-52: a build with a `mutant-*` feature compiled in never runs a world, so a mutant can
@@ -1269,6 +1284,7 @@ mod tests {
             },
             vitals: None,
             stream: None,
+            dropped: Vec::new(),
         }
     }
 

@@ -341,6 +341,14 @@ impl CommandQueues {
         if q.values().all(|c| !takes(c.command.kind)) {
             return Vec::new();
         }
+        if q.values().all(|c| takes(c.command.kind)) {
+            // The common case, as before SPR-014: the whole queue, with no partition.
+            return self
+                .queues
+                .remove(owner)
+                .map(|q| q.into_values().collect())
+                .unwrap_or_default();
+        }
         let (drained, kept): (BTreeMap<_, _>, BTreeMap<_, _>) = std::mem::take(q)
             .into_iter()
             .partition(|(_, c)| takes(c.command.kind));

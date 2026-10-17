@@ -988,6 +988,9 @@ fn v_inv_04_absent_owners_on_the_real_specs() {
         "{:?}",
         r.reports()
     );
+    println!(
+        "V-INV-04 real specs: {{M2}} and {{M2, M7}} register, {{M2, T1}} is refused by name, {{M2, M7, T1}} registers with no life_course.* snapshot"
+    );
 }
 
 /// SPR-014 T-01 (REV-EVO-001 NIT-10): registration compares a skeleton's `DRAINS` with its spec's
@@ -1027,4 +1030,5 @@ fn a_drain_that_differs_from_its_spec_is_refused_by_name() {
             "VIOLATION [spec] M2.demography: its spec's [[applies]] declares command Marry drained_by = Day/Vital, but its code drains nothing for it"
         ]
     );
+    println!("DRAINS: a drain that differs from its spec, or is missing, is refused by name");
 }
