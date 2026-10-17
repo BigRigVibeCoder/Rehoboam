@@ -363,6 +363,26 @@ worldgen_lite_template_control() {
   "$PY" -I specs/worldgen/selftest_worldgen_lite.py --templates "$planted"
 }
 
+# Population synthesis spec control (SPR-019, REV-SPR-019 R5): the spec file with one check value off by one; the exact
+# reference, which asserts the spec's constants and check values, must FAIL on it (selftest_population_synthesis.py --spec).
+population_synthesis_spec_control() {
+  local planted=target/rendered-fixtures/population_synthesis_stale_spec.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/hamlet_42_married = 1,/hamlet_42_married = 2,/' specs/worldgen/population_synthesis.toml > "$planted" || return 1
+  grep -q "hamlet_42_married = 2," "$planted" || { echo "control not planted: hamlet_42_married not found"; return 1; }
+  "$PY" -I specs/worldgen/selftest_population_synthesis.py --spec "$planted"
+}
+
+# Population synthesis golden control (SPR-019): the committed golden outputs with hamlet's leftover count changed; the
+# exact reference must FAIL on them (selftest_population_synthesis.py --golden).
+population_synthesis_golden_control() {
+  local planted=target/rendered-fixtures/population_synthesis_altered_golden.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^leftover 0 orphans 0$/s//leftover 1 orphans 0/' specs/worldgen/golden/population_synthesis_v0.txt > "$planted" || return 1
+  grep -q '^leftover 1 orphans 0$' "$planted" || { echo "control not planted: no 'leftover 0 orphans 0' line in the population-synthesis golden file"; return 1; }
+  "$PY" -I specs/worldgen/selftest_population_synthesis.py --golden "$planted"
+}
+
 # Wire-format golden control (SPR-026): the committed wire golden file with its first frame's hex changed; the
 # reference must FAIL with STALE: (selftest_wire_v1.py --check --golden).
 wire_golden_control() {
@@ -1010,6 +1030,7 @@ run "Manifest: aethelgard" pass "$PY" -I specs/manifest/manifest_v0.py validate 
 run "Manifest: uz_job" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/uz_job.yaml &&
 run "Manifest: household (rung 1; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/household.yaml &&
 run "Manifest: hamlet (rung 2; SPR-011 ruling 18)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/hamlet.yaml &&
+run "Manifest: manor (the SPR-019 fixture: a dynastic manor)" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/manor.yaml &&
 run "Manifest: invalid_draft_style must FAIL" fail "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid_draft_style.yaml &&
 run "Rust: lint (cargo clippy -D warnings)" pass cargo clippy --workspace --all-targets --locked --quiet -- -D warnings &&
 run "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)" pass cargo clippy -p rh-bench --all-targets --features count-alloc --locked --quiet -- -D warnings &&
@@ -1100,6 +1121,12 @@ run "M2 F1 reference positive control: a stale check value in the next M2 spec m
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
+run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference (SPR-019)" "pass:POPULATION SYNTHESIS: PASS" "$PY" -I specs/worldgen/selftest_population_synthesis.py &&
+run "population synthesis positive control: an altered golden output must FAIL (SPR-019)" "fail:STALE:" population_synthesis_golden_control &&
+run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
+run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
+run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
+run "population synthesis positive control: a spec check value off by one must FAIL the reference's spec check (SPR-019; REV-SPR-019 R5)" "fail:SPEC MISMATCH" population_synthesis_spec_control &&
 run "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality --check; SPR-016)" "pass:M2 F1 MORTALITY: PASS" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check &&
 run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)" "fail:1. rung 0 = beta 1: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control beta-one-power &&
 run "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 (SPR-016 MR7)" "fail:5. infant sub-schedule: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control infant-discontinuous &&
