@@ -37,6 +37,7 @@
 
 mod coalesce;
 mod envelope;
+mod event_ref;
 
 use core::fmt;
 
@@ -44,8 +45,9 @@ use rh_ids::{EntityRef, EventId, PlaceId};
 
 pub use coalesce::{coalesce, coalesce_draft};
 pub use envelope::{
-    CausalEdge, EVIDENCE_ONE, Edge, EdgeKind, EventRef, Origin, RoleId, RoleRow, Secrecy, Snapshot,
+    CausalEdge, EVIDENCE_ONE, Edge, EdgeKind, Origin, RoleId, RoleRow, Secrecy, Snapshot,
 };
+pub use event_ref::EventRef;
 
 /// Domain tag of [`EventLog::hash`], of [`Event::digest`] and of the names they hash: version 2,
 /// the event envelope (`envelope_v0.md` §6).

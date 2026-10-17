@@ -14,28 +14,10 @@ use core::fmt;
 
 use rh_ids::{EntityRef, EventId};
 
-use crate::DraftRef;
+use crate::EventRef;
 
 /// `Q8_8` raw bits of 1: the evidence of a deterministic edge (§5).
 pub const EVIDENCE_ONE: i16 = 256;
-
-/// A reference to an event in an event-typed slot (EVO-001; `05.1` §2 rule 2): one of the step's
-/// own earlier drafts, an id read from state, or none.
-///
-/// It is opaque: it has no integer conversion and cannot be used as a draw key. The merge
-/// replaces every [`EventRef::Draft`] with the id it assigns in the same merge (`05.1` §2 rule 4).
-/// `None` is not an edge: a draft's causal edges hold `Draft` or `Known` only.
-// SPR-014 T-02 owns this type's other uses (a timer's and a command's `cause`, payload fields);
-// SPR-020 T-02 uses it in causal edges. The definition is SPR-014 T-02's, word for word.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EventRef {
-    /// The step's own `n`-th draft.
-    Draft(DraftRef),
-    /// An event that already has its id.
-    Known(EventId),
-    /// No event.
-    None,
-}
 
 /// A role code: the index in the Registry's `[event_roles].ids` (§1). The first four are pinned
 /// by the loader (`Registry::problems`); a role is only ever appended.

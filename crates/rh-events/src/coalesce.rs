@@ -21,7 +21,8 @@ use std::collections::BTreeMap;
 
 use rh_ids::EventId;
 
-use crate::envelope::{CausalEdge, Edge, EdgeKind, EventRef};
+use crate::envelope::{CausalEdge, Edge, EdgeKind};
+use crate::event_ref::EventRef;
 use crate::{EventDraft, EventError, check_edge};
 
 /// Coalesces a draft's resolved edges in place (the merge's form of [`coalesce`]): when no two
