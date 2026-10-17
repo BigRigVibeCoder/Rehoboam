@@ -20,12 +20,19 @@
 //!
 //! The draw comes from the keyed RNG (ADR-0006: `H(world_seed, branch_salt(t), system_id, epoch,
 //! purpose, entity_id, t, k)`), built in `rh-ids` by SPR-002. `UniformDraw` is the interface:
-//! anything that yields uniform `u64` draws. Implementing it for `rh_ids::RngStream` needs a crate
-//! edge and waits for the first sprint that draws against a probability (BCK-002 A-21). This
-//! module does not depend on `rh-ids` and never creates randomness itself.
+//! anything that yields uniform `u64` draws; `rh_ids::RngStream` implements it (BCK-002 A-21,
+//! SPR-011 T-01), reading its next draw. This module never creates randomness itself.
 //!
-//! REF: `CODEX/05_PROJECT/SPR-010_FixedPoint.md` T-03; ADR-0006; `05.1` §6 items 2, 4.
+//! `draw_hits` and `chance` take either probability type, `Q16_16` or `Prob32` (SPR-011 ruling 4,
+//! `prob.rs`: the same mapping at 32 fraction bits), through the sealed [`Probability`] trait. The
+//! trait gives no conversion between them: a draw is compared with one probability of one type.
+//!
+//! REF: `CODEX/05_PROJECT/SPR-010_FixedPoint.md` T-03; `CODEX/05_PROJECT/SPR-011_WalkingSkeleton.md`
+//! T-01; ADR-0006; `05.1` §6 items 2, 4.
 
+use rh_ids::RngStream;
+
+use super::prob::Prob32;
 use super::q::Q16_16;
 
 /// A source of uniform `u64` draws: every value equally likely, draws independent.
@@ -39,9 +46,41 @@ pub trait UniformDraw {
     fn draw_u64(&mut self) -> u64;
 }
 
-/// Returns whether the draw `draw` hits the probability `p`: `draw / 2^64 < p` (module docs).
-#[must_use]
-pub const fn draw_hits(draw: u64, p: Q16_16) -> bool {
+/// The keyed stream's next draw: [`RngStream::next_u64`] (BCK-002 A-21). A stream from
+/// `StepCtx::stream` starts at draw 0, so the `n`-th call reads draw `n - 1` of its key.
+impl UniformDraw for RngStream {
+    fn draw_u64(&mut self) -> u64 {
+        self.next_u64()
+    }
+}
+
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for super::Q16_16 {}
+    impl Sealed for super::Prob32 {}
+}
+
+/// A probability a uniform draw can be compared with: `Q16_16` or `Prob32`. Sealed: the mapping
+/// of each type is exact and documented (this module, `prob.rs`), and no other type may join.
+pub trait Probability: Copy + sealed::Sealed {
+    /// Whether `draw / 2^64 < self`.
+    fn hit_by(self, draw: u64) -> bool;
+}
+
+impl Probability for Q16_16 {
+    fn hit_by(self, draw: u64) -> bool {
+        q16_hits(draw, self)
+    }
+}
+
+impl Probability for Prob32 {
+    fn hit_by(self, draw: u64) -> bool {
+        self.hits(draw)
+    }
+}
+
+/// `draw / 2^64 < p` for a `Q16_16` (module docs).
+const fn q16_hits(draw: u64, p: Q16_16) -> bool {
     let bits = p.to_bits();
     if bits <= 0 {
         false
@@ -53,17 +92,26 @@ pub const fn draw_hits(draw: u64, p: Q16_16) -> bool {
     }
 }
 
+/// Returns whether the draw `draw` hits the probability `p`: `draw / 2^64 < p` (module docs for
+/// `Q16_16`, `prob.rs` for `Prob32`).
+#[must_use]
+pub fn draw_hits<P: Probability>(draw: u64, p: P) -> bool {
+    p.hit_by(draw)
+}
+
 /// Takes one draw from `source` and returns whether it hits `p` (`draw_hits`).
 ///
 /// Exactly one draw is taken whatever `p` is, even for `p <= 0` or `p >= 1`, so the draw counter of
 /// a keyed RNG advances the same way on every branch of the history.
-pub fn chance<D: UniformDraw + ?Sized>(source: &mut D, p: Q16_16) -> bool {
+pub fn chance<D: UniformDraw + ?Sized, P: Probability>(source: &mut D, p: P) -> bool {
     draw_hits(source.draw_u64(), p)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Q16_16, UniformDraw, chance, draw_hits};
+    use rh_ids::{BranchSalt, PurposeId, RngStream, SystemId, SystemKey};
+
+    use super::{Prob32, Q16_16, UniformDraw, chance, draw_hits};
 
     /// A fixed sequence of draws: the trait's test double.
     struct Fixed(Vec<u64>);
@@ -104,5 +152,30 @@ mod tests {
         assert!(chance(&mut source, half)); // 2^47 < 2^63
         assert!(!chance(&mut source, half)); // 2^63 is not below 2^63
         assert!(source.0.is_empty());
+    }
+
+    #[test]
+    fn prob32_chance_takes_exactly_one_draw_per_call_whatever_p_is() {
+        let mut source = Fixed(vec![0, u64::MAX, (1 << 32) - 1, 1 << 32]);
+        assert!(!chance(&mut source, Prob32::ZERO)); // consumes 0 even though p = 0
+        assert!(chance(&mut source, Prob32::ONE)); // consumes u64::MAX
+        assert!(chance(&mut source, Prob32::EPSILON)); // 2^32 - 1 < 2^32
+        assert!(!chance(&mut source, Prob32::EPSILON)); // 2^32 is not below 2^32
+        assert!(source.0.is_empty());
+    }
+
+    #[test]
+    fn a_keyed_stream_is_a_uniform_draw_source_read_in_order() {
+        let key = SystemKey::new(7, BranchSalt::from_raw(0), SystemId::from_raw(3), 0)
+            .stream_key(PurposeId::of("death_time"), 11);
+        let mut stream = RngStream::from_stream_key(&key, 43_200);
+        for k in 0..5 {
+            assert_eq!(stream.draw_u64(), key.draw(43_200, k));
+        }
+        for p in [Prob32::ZERO, Prob32::ONE] {
+            let before = stream.position();
+            let _ = chance(&mut stream, p);
+            assert_eq!(stream.position(), before + 1, "one draw whatever p is");
+        }
     }
 }

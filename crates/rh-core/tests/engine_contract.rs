@@ -29,6 +29,7 @@ mod support;
 
 use rh_core::access::Lag;
 use rh_core::engine::Engine;
+use rh_core::fixed::{Prob32, Q16_16, draw_hits};
 use rh_core::register::{register, system_id};
 use rh_core::system::{PulseBinding, SimError, SpecPurpose, StepCtx};
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
@@ -538,6 +539,59 @@ fn a_stream_has_the_key_of_rng() {
         .map(|k| independent_draw_k("X1.d", 3, t, k).cast_signed())
         .to_vec();
     assert_eq!(e.tables().get("d.x").unwrap(), &expected);
+}
+
+/// SPR-011 T-01: `chance` is one keyed draw against a probability: `draw_hits(rng(p, e, k), q)`,
+/// for `Prob32` and `Q16_16` alike, at the edges 0 and 1 and in between.
+#[test]
+fn chance_is_one_keyed_draw_against_the_probability() {
+    const PROBS: [u64; 6] = [0, 1, 1 << 31, (1 << 32) - 1, 1 << 32, 2_863_311_531];
+    fn record(
+        _: &Stub,
+        _: PulseBinding,
+        v: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        let mut out = Vec::new();
+        for (k, bits) in (0_u64..).zip(PROBS) {
+            let p = Prob32::from_bits(bits).expect("a probability");
+            out.push(i64::from(c.chance(
+                &Draw::Noise,
+                RegionId::from_raw(3),
+                k,
+                p,
+            )?));
+        }
+        let q = Q16_16::from_bits(40_000);
+        out.push(i64::from(c.chance(
+            &Draw::Noise,
+            RegionId::from_raw(3),
+            6,
+            q,
+        )?));
+        v.write("d.x")?.extend(out);
+        Ok(())
+    }
+    let s = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .writes("d.x")
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(record);
+    let t = SimTime::from_minutes(1_440);
+    let mut e = engine(vec![s], t, 1);
+    e.advance_until(t, |_, _| {}).unwrap();
+    let mut expected: Vec<i64> = (0_u64..)
+        .zip(PROBS)
+        .map(|(k, bits)| {
+            let p = Prob32::from_bits(bits).expect("a probability");
+            i64::from(draw_hits(independent_draw_k("X1.d", 3, t, k), p))
+        })
+        .collect();
+    let q = Q16_16::from_bits(40_000);
+    expected.push(i64::from(draw_hits(independent_draw_k("X1.d", 3, t, 6), q)));
+    assert_eq!(e.tables().get("d.x").unwrap(), &expected);
+    assert_eq!(expected[0], 0, "p = 0 never hits");
+    assert_eq!(expected[4], 1, "p = 1 always hits");
 }
 
 /// SPR-008 (`05.1` §6 item 3): one stream per `(purpose, entity)` per step, never alongside

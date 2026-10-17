@@ -44,6 +44,7 @@ use rh_ids::{EntityKey, EntityRef, PurposeId, RngStream, SystemId, SystemKey};
 use crate::access::AccessSpec;
 use crate::agenda::{Agenda, TimerEntry, TimerId};
 use crate::command::{Command, QueuedCommand};
+use crate::fixed::{Probability, draw_hits};
 use crate::phase::Phase;
 use crate::time::{Pulse, SimTime};
 use crate::world::{SystemView, WorldTables};
@@ -472,6 +473,23 @@ impl<'a> StepCtx<'a> {
         self.take(purpose.name(), id, entity, Taken::Stream)?;
         let key = self.info.key.stream_key(id, entity);
         Ok(RngStream::from_stream_key(&key, self.t.minutes()))
+    }
+
+    /// One keyed Bernoulli trial: draw `k` of `purpose` for `entity` ([`StepCtx::rng`]) against
+    /// `p`, which hits iff `draw / 2^64 < p` (`rh_core::fixed::draw_hits`; a [`crate::fixed::Prob32`]
+    /// or a `Q16_16`). Exactly one draw is taken whatever `p` is, 0 and 1 included, so the stream is
+    /// read the same way on every branch (common random numbers, `05.1` §6 item 9; SPR-011 T-01).
+    ///
+    /// # Errors
+    /// As [`StepCtx::rng`].
+    pub fn chance<P: SpecPurpose>(
+        &self,
+        purpose: &P,
+        entity: impl EntityKey,
+        k: u64,
+        p: impl Probability,
+    ) -> Result<bool, SimError> {
+        Ok(draw_hits(self.rng(purpose, entity, k)?, p))
     }
 
     /// Records that this step uses `(id, entity)` as `how`, refusing a second use that the

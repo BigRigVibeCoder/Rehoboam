@@ -431,7 +431,12 @@ FIXED_POINT_COMPILE_FAIL='mix-q8-q16|expected `Q8_8`, found `Q16_16`
 mix-money-q16|expected `Money`, found `Q16_16`
 float-from|expected `Q16_16`, found `f64`
 float-into|the trait bound `f64: From<Q16_16>` is not satisfied
-float-cast|non-primitive cast: `Money` as `f64`'
+float-cast|non-primitive cast: `Money` as `f64`
+mix-prob-q16|expected `Prob32`, found `Q16_16`
+mix-prob-arith|expected `Q16_16`, found `Prob32`
+prob-into-q16|the trait bound `Q16_16: From<Prob32>` is not satisfied
+prob-float-from|expected `Prob32`, found `f64`
+prob-float-cast|non-primitive cast: `Prob32` as `f64`'
 fixed_point_compile_controls() {
   local fixture=tests/lint_fixtures/compile_fail/fixed_point/Cargo.toml crate text
   run "rh-core::fixed compile control: well-typed plane-A use compiles" pass \
