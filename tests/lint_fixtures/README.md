@@ -109,6 +109,11 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `odd_emits/overlay/`, `odd_emits/overlay.toml` | `specs/systems/lint_odd.py --extra-specs --overlay` (SPR-011 ruling 11) | a frozen spec emitting a kind only a world's Registry overlay declares | must succeed (`PASS: 7 system specs linted`) |
 | `odd_applies/mismatch/` | `specs/systems/lint_odd.py --extra-specs` (PR #32 `[[applies]]`; REV-P1a §7) | a frozen spec whose `[[commands]]` payload lists the `[[applies]]` fields in another order | `has payload fields ['a', 'c', 'b'], but [[applies]] declares ['a', 'b', 'c']` |
 | `odd_applies/match/` | as above | the same spec with matching payload fields | must succeed (`PASS: 7 system specs linted`) |
+| `odd_neutral/missing/` | `specs/systems/lint_odd.py --extra-specs` (`neutral` on `[[reads]]`; EVO-001, REV-P1a NEW-4) | a frozen spec reading M2's `person.alive` with no `neutral` | `ERROR M1.regions.odd.toml: read person.alive from M2.demography needs a neutral value` |
+| `odd_neutral/mistyped/` | as above | the same read with `neutral = 0` on a `bool` column | `neutral 0 must be true or false for a bool column` |
+| `odd_neutral/untyped/` | as above | a frozen read of `region.conditions` from M6, which has no spec and no `[era_state]` entry to type the neutral | `neutral of region.conditions cannot be typed` |
+| `odd_neutral/typed/` | as above | `person.alive` with `neutral = false` (typed by M2's spec) and `polity.exec_constraint` with `neutral = 0.0` (typed by the Registry `[era_state]`) | must succeed (`PASS: 7 system specs linted`) |
+| `odd_neutral/draft_missing/` | as above | the `missing` case on a draft spec | must succeed and warn `needs a neutral value` |
 | `sifting/life_ends_unanchored.toml` | `specs/sifting/lint_patterns.py` (V-SIFT-05; SPR-011 ruling 14) | `life_ends` with a `where` read that is not anchored to a bound event | `ERROR life_ends.e1: UNANCHORED state read` |
 
 Since SPR-003 GAP-9, every plane-A crate in the `arch/` and `compile_fail/plane_a_names_plane_*` fixtures declares `[lints] workspace = true` (each fixture root has a `[workspace.lints]` table), so each control fails only for the rule it plants.

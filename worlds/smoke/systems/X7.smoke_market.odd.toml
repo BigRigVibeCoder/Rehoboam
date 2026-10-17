@@ -55,11 +55,13 @@ column = "harvest.stock"
 owner = "X2.smoke_harvest"
 lag = "lagged"
 use = "identity"
+neutral = 0.0
 [[reads]]
 column = "person.alive"
 owner = "X3.smoke_vital"
 lag = "lagged"
 use = "identity"
+neutral = false
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"

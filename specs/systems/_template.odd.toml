@@ -43,6 +43,10 @@ lag = "<same_instant|start_of_day|previous_pulse|lagged>"
 use = "<identity|mode|rate>"               # identity: who/where/what; mode: switches a discrete regime;
                                            # rate: enters a rate, hazard, price or probability (needs an
                                            # in-coupling below and an [isolation] forcing; RT-2026-10-16)
+neutral = <value>                          # required when owner is another system (EVO-001): the value the step
+                                           # view returns when the world does not register the owner (05.1 §2
+                                           # rule 2), typed by the column: an integer, true/false, an enum value
+                                           # name, or a number for q8_8/q16_16/f32_field; the lint checks it
 
 [scales]
 spatial = ""

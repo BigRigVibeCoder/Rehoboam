@@ -69,7 +69,7 @@ python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C se
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
-python -I specs/systems/lint_odd.py
+python -I specs/systems/lint_odd.py   # system specs; a foreign [[reads]] entry needs a typed `neutral` (EVO-001), planted both ways in tests/lint_fixtures/odd_neutral/
 python -I bin/gen_skeletons.py --check     # committed rh-core skeletons = lint_odd.py --rust (SPR-005)
 python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml   # the smoke world's dummy specs, outside the real Registry (SPR-008)
 python -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check

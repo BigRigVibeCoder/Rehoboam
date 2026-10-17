@@ -1,0 +1,115 @@
+# Planted fixture for lint_odd.py's `neutral` check on [[reads]] (EVO-001; REV-P1a NEW-4). Never a contract: M1.regions
+# reads M2's person.alive (bool, typed by M2's spec) and M6's polity.exec_constraint (q8_8, typed by the Registry [era_state]
+# since M6 has no spec). Case `draft_missing`: a draft spec's read of person.alive has no neutral; warns and passes
+# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing
+odd_r = 2
+
+[system]
+id = "M1.regions"
+name = "Regions (lint fixture)"
+spec_version = "0.0.1"
+fidelity = "F0"
+status = "draft"
+crate = "rh-sys-regions"
+adrs = []
+requirements = []
+
+[purpose]
+statement = "Fixture only."
+role = "substrate"
+patterns = []
+not_yet = []
+
+[[applies]]
+command = "FixtureCmd"
+payload = "{ a: PersonId, b: SimTime (a day start), c: natural | other }"
+from = ["M1.regions"]
+
+[[commands]]
+target = "M1.regions"
+command = "FixtureCmd"
+payload = "{ a, b, c }"
+why = "planted"
+
+[[reads]]
+column = "person.alive"
+owner = "M2.demography"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "polity.exec_constraint"
+owner = "M6.polity"
+lag = "lagged"
+use = "identity"
+neutral = 0.0
+
+[scales]
+spatial = "region"
+temporal = "Year"
+extent = "n/a: fixture"
+restart = "n/a: fixture"
+
+[[schedule]]
+pulse = "Year"
+phase = "Environment"
+steps = ["noop: nothing"]
+when = "always"
+
+[[rng]]
+purpose = "fixture_draw"
+key = ["region", "year"]
+use = "n/a: fixture"
+
+[design]
+basic_principles = "n/a: fixture"
+emergence = "n/a: fixture"
+adaptation = "n/a: fixture"
+objectives = "n/a: fixture"
+learning = "n/a: fixture"
+prediction = "n/a: fixture"
+sensing = "n/a: fixture"
+interaction = "n/a: fixture"
+stochasticity = "n/a: fixture"
+collectives = "n/a: fixture"
+observation = "n/a: fixture"
+era_state = []
+scale_behaviour = "n/a: fixture"
+
+[initialization]
+state = "n/a: fixture"
+from_manifest = []
+
+[input_data]
+drivers = []
+
+[[params]]
+name = "route_cost_sea"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "route_cost_river"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "route_cost_land"
+meaning = "fixture"
+source = "design value"
+
+[[submodels]]
+name = "noop"
+summary = "nothing"
+earns_its_place_by = ["V-INV-01"]
+
+[[invariants]]
+id = "INV-M1-01"
+statement = "fixture"
+test = "V-INV-01"
+
+[isolation]
+forcing = []
+horizon = "n/a: fixture"
+expect = "n/a: fixture"
+
+[verification]
+tests = ["V-INV-01"]
+prototype = ""

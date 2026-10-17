@@ -25,12 +25,15 @@
 # Round 4d (from the effect-language spec, PR #41 §5.3): relations by their exact names, kin(p, n) and related(a, b, n);
 # DESPAIR_PACT's opinion effect is a declared self-send (OpinionModifier to T1), with T1's [[applies]].
 # Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
+# 0.3.2 (2026-10-17, EVO-001, approved with its PR; no mechanics changed): every [[reads]] entry carries a machine-readable `neutral`,
+# the value SPR-014's absent-owner rule serves when the owner is not registered (05.1 §2 rule 2) and the effect language's
+# loader reads (REV-SPR-017 round 3). No other content changed.
 odd_r = 2
 
 [system]
 id = "T1.minds"
 name = "Minds of named actors (minds v0)"
-spec_version = "0.3.1"
+spec_version = "0.3.2"
 fidelity = "F1"
 status = "frozen"
 crate = "rh-minds"
@@ -514,136 +517,163 @@ column = "person.alive"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = false
 [[reads]]
 column = "person.death_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "person.birth_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "person.sex"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = "male"
 [[reads]]
 column = "person.mother"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "person.father"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "life_course.person_id"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "life_course.mother"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "life_course.father"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "person.spouse"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "house_member.person"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "house_member.house"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "claim.rank"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "title.holder"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "title.liege"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "title.tier"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = "minor"
 [[reads]]
 column = "title.regent"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "office.holder"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "office.title"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "claim.claimant"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "claim.title"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "claim.status"
 owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
+neutral = "void"
 [[reads]]
 column = "vow.vower"
 owner = "S7.vows"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "vow.conflict"
 owner = "S7.vows"
 lag = "lagged"
 use = "rate"
+neutral = 0.0
 [[reads]]
 column = "artifact.bearer"
 owner = "S6.artifacts"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "artifact.location"
 owner = "S6.artifacts"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "artifact.rumour_reach"
 owner = "S6.artifacts"
 lag = "lagged"
 use = "rate"
+neutral = 0
 
 [scales]
 spatial = "named actor; candidate targets come from the actor's situation sets (relations, court, own claims, agenda goals), never from a scan of the world (GOV-003 §6 row 5)"

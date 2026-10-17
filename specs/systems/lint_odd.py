@@ -16,6 +16,13 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     senders (`from`); every sender's [[commands]] entry for it carries a `payload` with the same field names in the same
     order, `from` lists exactly the specs that send it, and a command sent to a spec that declares [[applies]] must be
     one of them. A warning on a draft spec, an error on a frozen one,
+  - neutral values (EVO-001; REV-P1a NEW-4; REV-SPR-017 round 3): every [[reads]] entry whose owner is another system
+    carries a machine-readable `neutral`, the value the step view returns when a world does not register the owner
+    (05.1 §2 rule 2, the absent-owner rule) and the value the Registry effect language's loader uses. It is typed by the
+    column's type: the owner's [[owns]] `type`, or the Registry [era_state] entry for an owner with no spec (a TOML
+    integer for an integer type, a boolean for bool, a value name for enum, a number for q8_8, q16_16 and f32_field).
+    A missing neutral, or one that cannot be typed, is a warning on a draft spec and an error on a frozen one; a
+    mistyped one is always an error,
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
@@ -55,6 +62,8 @@ TYPES = {"i64", "u64", "i32", "u32", "u16", "u8", "bool", "enum", "q8_8", "q16_1
 SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
 READ_USES = ("identity", "mode", "rate")
 IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_range", "source")
+INTEGER_TYPES = {"i64", "u64", "i32", "u32", "u16", "u8"}
+NUMBER_TYPES = {"q8_8", "q16_16", "f32_field"}
 SERIES = ("constant", "step", "sine", "ramp", "historical")
 
 
@@ -146,8 +155,36 @@ def lint_applies(specs, errs, warns):
                         f"{specs[s][0].name}: [[commands]] {cmd} to {tid} has payload fields {got}, but [[applies]] declares {want}")
 
 
+def neutral_problem(value, col_type):
+    """Why ``value`` is not a well-typed `neutral` for a column of ``col_type`` (EVO-001), or None."""
+    if col_type in INTEGER_TYPES:
+        ok, want = isinstance(value, int) and not isinstance(value, bool), "a TOML integer"
+    elif col_type == "bool":
+        ok, want = isinstance(value, bool), "true or false"
+    elif col_type == "enum":
+        ok, want = isinstance(value, str) and bool(SNAKE.match(value)), "a snake_case value name"
+    elif col_type in NUMBER_TYPES:
+        ok, want = isinstance(value, (int, float)) and not isinstance(value, bool), "a TOML number"
+    else:
+        return f"column type '{col_type}' has no neutral form"
+    return None if ok else f"neutral {value!r} must be {want} for a {col_type} column"
+
+
+def column_type(col, owner, owners_type, reg):
+    """The declared type of ``col`` (``entity.name``): the owner spec's [[owns]], else the Registry [era_state]
+    entry of the same name and owner (M6's exec_constraint before M6 has a spec). None if neither."""
+    if col in owners_type:
+        return owners_type[col]
+    name = col.split(".", 1)[-1]
+    era = reg.get("era_state", {}).get(name)
+    if era is not None and era.get("owner") == owner:
+        return era.get("type")
+    return None
+
+
 def lint(reg, specs, req_ids, test_ids, adr_ids):
     errs, warns = [], []
+    owners_type = {o.get("column"): o.get("type") for _, (_, s) in specs.items() for o in s.get("owns", [])}
     owners = {}                                   # column -> (system, plane)
     for sid, (f, s) in specs.items():
         for o in s.get("owns", []):
@@ -211,6 +248,20 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
                 errs.append(f"{p}: read {col} needs use = identity | mode | rate (RT-2026-10-16)")
         # couplings and isolation (RT-2026-10-16): detail is required once the spec is frozen
         strict = errs if hdr.get("status") == "frozen" else warns
+        # neutral values (EVO-001): a foreign read carries the value the step view returns when the owner is absent
+        for r in s.get("reads", []):
+            col, owner = r.get("column"), r.get("owner")
+            if owner == sid:
+                continue
+            if "neutral" not in r:
+                strict.append(f"{p}: read {col} from {owner} needs a neutral value, typed by the column (EVO-001; 05.1 §2 rule 2)")
+                continue
+            ct = column_type(col, owner, owners_type, reg)
+            if ct is None:
+                strict.append(f"{p}: neutral of {col} cannot be typed: {owner} has no spec declaring it and the Registry "
+                              "[era_state] has no entry for it (EVO-001)")
+            elif (why := neutral_problem(r.get("neutral"), ct)) is not None:
+                errs.append(f"{p}: read {col} from {owner}: {why} (EVO-001)")
         couplings = s.get("couplings", [])
         for c in couplings:
             if c.get("direction") not in ("in", "out"):
@@ -433,10 +484,36 @@ def main() -> int:
     b_errs, _ = lint(reg, probe, req_ids, test_ids, adr_ids)
     caught = [e for e in b_errs if "bad.odd.toml" in e or "also owned" in e]
     for needle in ("not among Registry levels", "snake_case", "not declared in the Registry", "missing section",
-                   "needs an in-coupling", "missing [isolation]"):
+                   "needs an in-coupling", "missing [isolation]", "needs a neutral value"):
         assert any(needle in e for e in caught), (needle, caught)
     if "M2.demography" in specs:
         assert any("also owned" in e for e in caught), caught
+    # self-check (EVO-001): a frozen spec with a foreign read and no neutral, or one that cannot be typed, is an error
+    # and a draft one warns; a mistyped neutral is always an error; the Registry [era_state] types an owner without a spec
+    if "M2.demography" in specs:
+        base = {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F1"}, "owns": [], "params": [], "rng": []}
+        probes = [
+            ("frozen", [{"column": "person.alive", "owner": "M2.demography", "lag": "lagged", "use": "identity"}], "needs a neutral value", True),
+            ("draft", [{"column": "person.alive", "owner": "M2.demography", "lag": "lagged", "use": "identity"}], "needs a neutral value", False),
+            ("frozen", [{"column": "person.alive", "owner": "M2.demography", "lag": "lagged", "use": "identity", "neutral": 0}], "must be true or false for a bool column", True),
+            ("draft", [{"column": "person.death_tick", "owner": "M2.demography", "lag": "lagged", "use": "identity", "neutral": "0"}], "must be a TOML integer for a i64 column", True),
+            ("frozen", [{"column": "person.sex", "owner": "M2.demography", "lag": "lagged", "use": "identity", "neutral": "Male"}], "must be a snake_case value name for a enum column", True),
+            ("frozen", [{"column": "region.conditions", "owner": "M6.polity", "lag": "lagged", "use": "identity", "neutral": 0}], "cannot be typed", True),
+            ("draft", [{"column": "region.conditions", "owner": "M6.polity", "lag": "lagged", "use": "identity", "neutral": 0}], "cannot be typed", False),
+            ("frozen", [{"column": "polity.exec_constraint", "owner": "M6.polity", "lag": "lagged", "use": "identity", "neutral": "zero"}], "must be a TOML number for a q8_8 column", True),
+        ]
+        for status, reads, needle, want_err in probes:
+            probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads)
+            pe, pw = lint(reg, {"M2.demography": specs["M2.demography"], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)},
+                          req_ids, test_ids, adr_ids)
+            assert any(needle in e for e in (pe if want_err else pw)), (status, needle, pe, pw)
+            assert not any(needle in e for e in (pw if want_err else pe)), (status, needle, pe, pw)
+        ok_reads = [{"column": "person.alive", "owner": "M2.demography", "lag": "lagged", "use": "identity", "neutral": False},
+                    {"column": "polity.exec_constraint", "owner": "M6.polity", "lag": "lagged", "use": "identity", "neutral": 0.0}]
+        pe, pw = lint(reg, {"M2.demography": specs["M2.demography"],
+                            "S5.daily_life": (Path("probe.odd.toml"), dict(base, system=dict(base["system"], status="frozen"), reads=ok_reads))},
+                      req_ids, test_ids, adr_ids)
+        assert not any("neutral" in e for e in pe + pw), (pe, pw)
     # self-check (SPR-011 ruling 11): a frozen spec emitting an unknown verb or another system's verb is an error;
     # a draft one only warns
     m2 = specs.get("M2.demography")

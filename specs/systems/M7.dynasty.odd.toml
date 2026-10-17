@@ -24,12 +24,15 @@
 # Round 4g (effect-language re-check, B3): title.founder is replaced by an append-only tenure log (tenure.*) that the
 # title's law may read (holders_of(title, 8)); `sortition` is keyed by the title too.
 # Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
+# 0.3.2 (2026-10-17, EVO-001, approved with its PR; no mechanics changed): every [[reads]] entry carries a machine-readable `neutral`,
+# the value SPR-014's absent-owner rule serves when the owner is not registered (05.1 §2 rule 2) and the effect language's
+# loader reads (REV-SPR-017 round 3). No other content changed.
 odd_r = 2
 
 [system]
 id = "M7.dynasty"
 name = "Succession and dynasts"
-spec_version = "0.3.1"
+spec_version = "0.3.2"
 fidelity = "F1"
 status = "frozen"
 crate = "rh-sys-dynasty"
@@ -381,81 +384,97 @@ column = "person.alive"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = false
 [[reads]]
 column = "person.death_cause"
 owner = "M2.demography"
 lag = "same_instant"
 use = "mode"
+neutral = "none"
 [[reads]]
 column = "person.death_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "person.birth_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "person.sex"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = "male"
 [[reads]]
 column = "person.mother"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "person.father"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "life_course.person_id"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "life_course.mother"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "life_course.father"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "life_course.birth_tick"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "life_course.sex"
 owner = "M2.demography"
 lag = "same_instant"
 use = "identity"
+neutral = "male"
 [[reads]]
 column = "person.named"
 owner = "T1.minds"
 lag = "lagged"
 use = "identity"
+neutral = false
 [[reads]]
 column = "vow.vower"
 owner = "S7.vows"
 lag = "lagged"
 use = "identity"
+neutral = 0
 [[reads]]
 column = "vow.status"
 owner = "S7.vows"
 lag = "lagged"
 use = "identity"
+neutral = "void"
 [[reads]]
 column = "polity.exec_constraint"
 owner = "M6.polity"
 lag = "lagged"
 use = "rate"
+neutral = 0.0
 
 [scales]
 spatial = "houses, titles (sovereign, major, minor seats), offices and claims; a realm is a sovereign title and its vassal titles"

@@ -355,6 +355,15 @@ REQUIRED_GATES = (
     "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
     "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling "
     "11)",
+    "lint_odd neutral control: a draft spec with a foreign read and no neutral warns and passes "
+    "(EVO-001)",
+    "lint_odd neutral control: a frozen spec whose foreign reads carry well-typed neutral values "
+    "passes (EVO-001)",
+    "lint_odd neutral positive control: a frozen spec with a foreign read and no neutral must FAIL "
+    "(EVO-001)",
+    "lint_odd neutral positive control: a neutral of the wrong type must FAIL (EVO-001)",
+    "lint_odd neutral positive control: a neutral that cannot be typed, frozen, must FAIL "
+    "(EVO-001)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",

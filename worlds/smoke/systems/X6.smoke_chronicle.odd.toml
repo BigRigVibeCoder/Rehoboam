@@ -54,11 +54,13 @@ column = "person.alive"
 owner = "X3.smoke_vital"
 lag = "same_instant"
 use = "identity"
+neutral = false
 [[reads]]
 column = "estate.heirs"
 owner = "X4.smoke_estate"
 lag = "lagged"
 use = "identity"
+neutral = 0
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"

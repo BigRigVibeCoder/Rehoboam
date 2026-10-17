@@ -61,6 +61,7 @@ column = "harvest.stock"
 owner = "X2.smoke_harvest"
 lag = "same_instant"
 use = "mode"
+neutral = 0.0
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"
