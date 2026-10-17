@@ -1,7 +1,7 @@
 # Planted fixture for lint_odd.py's absent-owner checks on [[reads]] (EVO-001; REV-P1a NEW-4; R12): an identity read requires
 # its owner and has no `neutral`; a rate or mode read of an owner that may be absent carries a typed `neutral` (typed by the
 # owner's [[owns]], or by the Registry [era_state] for M6, which has no spec; named by the in-coupling's prose). Never a
-# contract. Case `substrate_identity`: M3.agriculture is a substrate and reads M7's title.holder as identity, which would make it require a system a smaller world lacks; frozen, must FAIL
+# contract. Case `substrate_identity`: M3.agriculture is a substrate and reads M7's title.holder as identity, which would make it require a system a smaller world lacks; frozen, warns and passes (the rule is advisory, registration enforces it: REV-EVO-001 R16)
 # Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity
 odd_r = 2
 

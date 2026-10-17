@@ -795,7 +795,7 @@ fn m2_m7_and_t1_register_together_as_specified() {
     };
     let r = register(trio(), &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(r.ids(), world);
-    // M7 0.3.2 binds Day/Vital for its murder timer (EVO-001 R6 (b)): after M2 (it reads M2 at
+    // M7 0.3.2 binds Day/Vital for its murder timer (EVO-001 R9): after M2 (it reads M2 at
     // same_instant), before T1 (no edge either way; ties by id).
     assert_eq!(
         r.order(Phase::Vital),

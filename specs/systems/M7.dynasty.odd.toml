@@ -31,7 +31,9 @@
 # enum columns carry their codes; the commands M7 applies are declared in typed [[applies]] entries drained at Day/Agenda,
 # each keyed by a named PersonId field; ScheduleDeath carries no date: the background murder is M7's own MURDER_DUE timer
 # at (the drawn day, Vital), keyed by exit_murder, re-sampled by M7 and carrying the culprit, fired in that Vital's timer
-# pass through a new Day/Vital binding (murder_due) and drained by M2 in the same Vital (EVO-001 R9, R10).
+# pass through a new Day/Vital binding (murder_due) and drained by M2 in the same Vital (EVO-001 R9, R10). Round 4 (R17,
+# NIT-15): the re-sample draws among the month's day starts at or after the input, never cancelling while one remains, else
+# the next month's first day start; title.exit_timer keeps the MURDER_DUE id too, cancelled on death or loss of the title.
 odd_r = 2
 
 [system]
@@ -223,7 +225,7 @@ column = "title.exit_timer"
 entity = "title"
 type = "u64"
 plane = "A"
-meaning = "TimerId of a pending deposition or interregnum-resolution timer, or 0; cancelled when the holder dies first"
+meaning = "TimerId of a pending deposition or interregnum-resolution timer, or 0; cancelled when the holder dies first. The same slot keeps the TimerId of a pending MURDER_DUE timer for the title (at most one exit timer is pending per title: a month draws one exit_day, and when both hazards hit, murder wins the tie), cancelled when the holder dies or loses the title before it fires (REV-EVO-001 NIT-15)"
 fixed_point = false
 [[owns]]
 column = "polity.succession_institutionalisation"
@@ -539,7 +541,7 @@ when = "always (the first day of each month)"
 [[schedule]]
 pulse = "Day"
 phase = "Vital"
-steps = ["murder_due: the fire of a due MURDER_DUE timer in this Vital's timer pass (M7's fire, which precedes every binding; the binding's own step is empty, and the fire must not be done in it, where it would run after M2's drain and lose a day): submit ScheduleDeath {the ruler, murder, the timer's culprit payload, None} to M2, which drains it in this same Vital before the bindings that read M2 (05.1 §2 rule 2; EVO-001 R9)"]
+steps = ["murder_due: the fire of a due MURDER_DUE timer in this Vital's timer pass (M7's fire, which precedes every binding; the binding's own step is empty, and the fire must not be done in it, where it would run after M2's drain and lose a day): if the ruler is alive and still holds the title, submit ScheduleDeath {the ruler, murder, the timer's culprit payload, None} to M2, which drains it in this same Vital before the bindings that read M2 (05.1 §2 rule 2; EVO-001 R9); otherwise drop_timer(dead) (the timer is cancelled on death or loss of the title, title.exit_timer, so this is the same-instant race only: a natural death drawn for the same day start fires in M2's pass, before M7's; REV-EVO-001 NIT-15)"]
 when = "every day start; the binding exists so that M7's Vital timer pass has a level; its step does nothing"
 [[schedule]]
 pulse = "Day"
@@ -560,7 +562,7 @@ when = "always"
 [[rng]]
 purpose = "exit_murder"
 key = ["ruler", "month"]
-use = "entity = the ruler, k = 0, t = the month's first instant: hits iff draw < p_m (Prob32 draw_hits, SPR-011 ruling 4). A hit is an M7 timer MURDER_DUE at (the drawn day, Vital) under this purpose (EVO-001 R9, R10): entity = the ruler, payload = the culprit drawn by murder_culprit at the month start (0 = none), cause = None. resample_timer (a material input in the ruler's scope, ADR-0025 item 3): the day is re-drawn among the month's remaining day starts after the input's instant at the ruler's new epoch, keyed as exit_day; the payload is kept; it never errors (no remaining day start: the timer is dropped and counted, dropped{M7, MURDER_DUE, resampled_out})"
+use = "entity = the ruler, k = 0, t = the month's first instant: hits iff draw < p_m (Prob32 draw_hits, SPR-011 ruling 4). A hit is an M7 timer MURDER_DUE at (the drawn day, Vital) under this purpose (EVO-001 R9, R10): entity = the ruler, payload = the culprit drawn by murder_culprit at the month start (0 = none), cause = None. resample_timer (a material input in the ruler's scope, ADR-0025 item 3; R17): the day is re-drawn, under this purpose at the ruler's new epoch with k as exit_day uses it, uniformly among the month's day starts at or after the input's instant (the input's own day included when its day start is after the input; the timer, due at (k, Vital), is still pending at (k, Inputs)), so a re-sample never cancels a murder while a day start remains; a month with no remaining day start (an input in the last day's instants after its start) moves the murder to the next month's first day start. The hit itself is kept, deliberately (unlike M2's S11, which re-draws the hit with q'): the month's hazard was decided at the month start and the input changes only when the murder falls. The payload is kept; it never errors and drops nothing"
 resample_on_fork = true
 [[rng]]
 purpose = "exit_deposition"
@@ -691,7 +693,7 @@ source = "design value (RT-2026-10-16 item 12); prototype 7's 0.35 is illustrati
 # ----------------------------------------------------------------------------- submodels
 [[submodels]]
 name = "exit_hazards"
-summary = "On the first day of each month, for each sovereign title (ascending TitleId) with a living holder: law multiplier L = primogeniture_hr (primogeniture, ultimogeniture), seniority_hr (seniority), 1 (elective, tanistry, partition, sortition); m_ec = 1 + (exec_constraint_hr - 1) x exec_constraint (1 when M6 is not registered); h_m = murder_hazard_base x L x m_ec x (predecessor_killed_or if predecessor_exit = murdered); h_d = deposition_hazard_ref x L x m_ec x (predecessor_deposed_hr if predecessor_exit in {murdered, deposed}). Widths (MAJ-3, NEW-2): every factor is a Q16_16 parameter or column; h is their product computed exactly in u128 from the Q16_16 bits; the month's probability is p = h x D_m / D over the whole month, D_m = days_in_month, D = days_per_year, rounded down once to Prob32 (32 fraction bits, SPR-011 ruling 4), so the rate per ruler-year is exact; only the placement of the event excludes the pulse instant (a keyed day among days 2 to the last). p = h x D_m / D is linear in h, not 1 - exp(-h x D_m / D): it overstates by at most x²/2 for x = h D_m / D (about h²/288 for a 30-day month), a relative excess of at most x/2, under 0.05% at the reference h = 0.01 and about 1.1% at the Registry's upper corner (h near 0.27); no transcendental is needed. At the lower corner (h = 6 x 10^-5 a year) p is about 2 x 10^4 Prob32 steps, so no hazard rounds to zero. Draws: exit_murder and exit_deposition against p_m and p_d; exit_day for the day; murder wins a tie of days. A murder sends an M7 MURDER_DUE timer at (that day, Vital) under exit_murder, payload = the murder_culprit draw, whose fire (murder_due, in the timer pass) submits ScheduleDeath {victim = ruler, cause = murder, culprit = murder_culprit, cause_event = None}; M2 drains it in that same Vital (SPR-014; EVO-001) and the death takes effect there, before this binding. A deposition schedules M7's deposition timer at (that day's start, Polity) and stores it in exit_timer"
+summary = "On the first day of each month, for each sovereign title (ascending TitleId) with a living holder: law multiplier L = primogeniture_hr (primogeniture, ultimogeniture), seniority_hr (seniority), 1 (elective, tanistry, partition, sortition); m_ec = 1 + (exec_constraint_hr - 1) x exec_constraint (1 when M6 is not registered); h_m = murder_hazard_base x L x m_ec x (predecessor_killed_or if predecessor_exit = murdered); h_d = deposition_hazard_ref x L x m_ec x (predecessor_deposed_hr if predecessor_exit in {murdered, deposed}). Widths (MAJ-3, NEW-2): every factor is a Q16_16 parameter or column; h is their product computed exactly in u128 from the Q16_16 bits; the month's probability is p = h x D_m / D over the whole month, D_m = days_in_month, D = days_per_year, rounded down once to Prob32 (32 fraction bits, SPR-011 ruling 4), so the rate per ruler-year is exact; only the placement of the event excludes the pulse instant (a keyed day among days 2 to the last). p = h x D_m / D is linear in h, not 1 - exp(-h x D_m / D): it overstates by at most x²/2 for x = h D_m / D (about h²/288 for a 30-day month), a relative excess of at most x/2, under 0.05% at the reference h = 0.01 and about 1.1% at the Registry's upper corner (h near 0.27); no transcendental is needed. At the lower corner (h = 6 x 10^-5 a year) p is about 2 x 10^4 Prob32 steps, so no hazard rounds to zero. Draws: exit_murder and exit_deposition against p_m and p_d; exit_day for the day; murder wins a tie of days. A murder sends an M7 MURDER_DUE timer at (that day, Vital) under exit_murder, payload = the murder_culprit draw, whose fire (murder_due, in the timer pass) submits ScheduleDeath {victim = ruler, cause = murder, culprit = murder_culprit, cause_event = None}; M2 drains it in that same Vital (SPR-014; EVO-001) and the death takes effect there, before this binding. A deposition schedules M7's deposition timer at (that day's start, Polity). Either timer's id is stored in title.exit_timer, so on_death and a loss of the title cancel it (NIT-15)"
 earns_its_place_by = ["V-SF-06", "V-SF-06b", "V-SF-06d", "V-ERA-03"]
 [[submodels]]
 name = "on_birth"
@@ -800,7 +802,7 @@ lag = "applied at the next tick boundary"
 [[couplings]]
 system = "S7.vows"
 direction = "in"
-via = "an active vow keeps its vower named (dormancy criterion; P1b). In a world that does not register S7, SPR-014's registration rule drops the read and the neutral applies: no active vow"
+via = "an active vow keeps its vower named (dormancy criterion; P1b). The reads of vow.vower and vow.status are declared with S7 in P1b, not here (R12): as identity reads they would make every M7 world require S7, which requires S6 and T1, so M7's own [isolation] run (T1 stubbed) could not register; P1b decides whether to read them as mode reads with a neutral (no active vow) instead (REV-EVO-001 NIT-12)"
 lag = "start of instant (lagged)"
 [[couplings]]
 system = "S7.vows"

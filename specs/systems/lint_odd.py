@@ -26,19 +26,24 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     named in its in-coupling's `neutral` prose as `<column> = <value>`. A missing or untypeable neutral is a warning on
     a draft spec and an error on a frozen one; a mistyped neutral is always an error (a deliberate departure from
     warning-on-draft: a wrong value is never right). The lint prints, per spec, the owners its identity reads require
-    (NOTE lines), and a substrate (`[purpose] role = "substrate"`, a system that must run alone: M2 on `solo`) may
-    read as identity only another substrate's column, so it never requires a system a smaller world lacks,
+    (NOTE lines), and warns, as advice only, when a substrate (`[purpose] role = "substrate"`) reads as identity a
+    column of a system that is not a substrate, since that makes it require a system a smaller world may lack
+    (registration enforces the rule itself: a world lacking a required owner is refused by name; R12, R16),
   - enum codes (EVO-001): an enum column of [[owns]] carries its codes, `values = [...]` (code = position) or
     `registry = "<table>"` (the Registry table's `ids` list, else its keys in byte-wise ascending order, as verb_id),
   - lifecycle commands, typed (EVO-001): each [[applies]] entry (one per command kind) has a payload `{ name: Type, ... }`
     in a closed vocabulary (PersonId, EventRef, SimTime, the id types, u8..u64, i64, bool, q8_8, q16_16,
     enum(<entity.column>) naming an enum column with codes; a field named *_event is an EventRef; no name repeats);
     `drained_by = "<Pulse>/<Phase>"` names the one binding of [[schedule]] that takes the command (an escape: with
-    `sprint = "SPR-NNN"` an undeclared binding is a counted warning until that sprint's document is CLOSED, then an
-    error on a frozen spec); `key` is "living" (the dead-person drop applies, 05.1 §2 rule 2) or "any", stated;
-    `key_field` names the PersonId payload field the command is keyed by; `outcome = true` marks a command that
-    carries a sampled, dated outcome, and every sender's [[commands]] entry for it then names the sender's own
+    `sprint = "SPR-NNN"` naming a sprint that exists (a document under CODEX/05_PROJECT, or a row of a PRJ plan
+    until the document exists; any other id is an error, R18) an undeclared binding is a counted warning until that
+    sprint's document is CLOSED, then an error on a frozen spec); `key` is "living" (the dead-person drop applies,
+    05.1 §2 rule 2) or "any", stated; `key_field` names the PersonId payload field the command is keyed by, or
+    "person" for Command::person itself when the payload does not repeat it (R15); `outcome = true` marks a command
+    that carries a sampled, dated outcome, and every sender's [[commands]] entry for it then names the sender's own
     `timer` kind and the [[rng]] `purpose` it is re-sampled under (05.1 §2 rule 2: the sender's timer submits it),
+    and the sender binds the draining binding's pulse and phase, where its timer fires (a sender naming a timer
+    for a command that carries no outcome is warned),
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
@@ -229,6 +234,17 @@ def closed_sprints():
     return out
 
 
+def known_sprints():
+    """The sprint ids a `sprint` escape may name (REV-EVO-001 R18): a sprint document under CODEX/05_PROJECT, or, until
+    the document exists, a sprint row of a PRJ plan there (`| SPR-NNN |`). Any other id is refused."""
+    out = set()
+    for f in (ROOT / "CODEX" / "05_PROJECT").glob("SPR-*.md"):
+        out.add(f.name[:7])
+    for f in (ROOT / "CODEX" / "05_PROJECT").glob("PRJ-*.md"):
+        out.update(re.findall(r"^\|\s*(SPR-\d{3})\s*\|", f.read_text(encoding="utf-8"), re.M))
+    return out
+
+
 def lint_applies(specs, errs, warns, enum_names=None):
     """[[applies]] against the senders' [[commands]] (PR #32; REV-P1a §7), and each entry's typed payload, drained_by
     and key (EVO-001)."""
@@ -263,6 +279,9 @@ def lint_applies(specs, errs, warns, enum_names=None):
                 if sprint is not None and not (isinstance(sprint, str) and SPRINT_ID.match(sprint)):
                     errs.append(f"{tf.name}: [[applies]] {cmd} sprint must be \"SPR-NNN\" (EVO-001)")
                     sprint = None
+                elif sprint is not None and sprint not in KNOWN_SPRINTS:
+                    errs.append(f"{tf.name}: [[applies]] {cmd} sprint {sprint} names no sprint: no document under CODEX/05_PROJECT and no PRJ row (EVO-001 R18)")
+                    sprint = None
                 if sprint is None or sprint in CLOSED_SPRINTS:
                     strict.append(f"{tf.name}: [[applies]] {cmd} is drained_by {drained}, which [[schedule]] does not declare"
                                   + (f" ({sprint} is CLOSED: declare the binding)" if sprint else ""))
@@ -274,22 +293,29 @@ def lint_applies(specs, errs, warns, enum_names=None):
                 errs.append(f"{tf.name}: [[applies]] {cmd} key must be \"living\" | \"any\" (EVO-001)")
             kf = a.get("key_field")
             if not isinstance(kf, str):
-                strict.append(f"{tf.name}: [[applies]] {cmd} needs key_field = \"<a PersonId payload field>\", the person it is keyed by (EVO-001)")
-            elif typed is not None and (kf, "PersonId") not in typed:
-                errs.append(f"{tf.name}: [[applies]] {cmd} key_field {kf} is not a PersonId field of the payload")
+                strict.append(f"{tf.name}: [[applies]] {cmd} needs key_field = \"<a PersonId payload field>\" | \"person\", the person it is keyed by (EVO-001)")
+            elif typed is not None and (kf, "PersonId") not in typed and not (kf == "person" and "person" not in names):
+                errs.append(f"{tf.name}: [[applies]] {cmd} key_field {kf} is not a PersonId field of the payload (nor \"person\", Command::person itself)")
             if not isinstance(a.get("outcome", False), bool):
                 errs.append(f"{tf.name}: [[applies]] {cmd} outcome must be true or false")
-            elif a.get("outcome"):
+            else:
                 for sid, (sf, ss) in specs.items():
                     for c in ss.get("commands", []):
-                        if c.get("target") == tid and c.get("command") == cmd:
-                            sp = errs if ss.get("system", {}).get("status") == "frozen" else warns
-                            timer, purpose = c.get("timer"), c.get("purpose")
-                            if not (isinstance(timer, str) and TIMER_KIND.match(timer)):
-                                sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome, so it needs timer = \"<KIND>\", the sender's own timer that submits it (EVO-001)")
-                            purposes = {g.get("purpose") for g in ss.get("rng", [])}
-                            if purpose not in purposes:
-                                sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome, so it needs purpose = one of its [[rng]] purposes, under which its timer is re-sampled (EVO-001)")
+                        if c.get("target") != tid or c.get("command") != cmd:
+                            continue
+                        sp = errs if ss.get("system", {}).get("status") == "frozen" else warns
+                        timer, purpose = c.get("timer"), c.get("purpose")
+                        if not a.get("outcome"):
+                            if timer is not None or purpose is not None:
+                                warns.append(f"{sf.name}: [[commands]] {cmd} to {tid} names a timer, but the owner's [[applies]] says it carries no outcome (outcome = false): an undated request waits for the draining binding (EVO-001)")
+                            continue
+                        if not (isinstance(timer, str) and TIMER_KIND.match(timer)):
+                            sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome, so it needs timer = \"<KIND>\", the sender's own timer that submits it (EVO-001)")
+                        purposes = {g.get("purpose") for g in ss.get("rng", [])}
+                        if purpose not in purposes:
+                            sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome, so it needs purpose = one of its [[rng]] purposes, under which its timer is re-sampled (EVO-001)")
+                        if isinstance(drained, str) and BINDING.match(drained) and drained not in {f"{sc.get('pulse')}/{sc.get('phase')}" for sc in ss.get("schedule", [])}:
+                            sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome submitted by {sid}'s timer in the timer pass of {drained}, which {sid} does not bind in [[schedule]] (a timer fires at the level of its owner's first binding in the phase; the engine would raise SimError::Timer at the first fire; EVO-001 R9)")
         senders = {}                              # command -> [(sender id, its [[commands]] entry)]
         for sid, (sf, ss) in specs.items():
             for c in ss.get("commands", []):
@@ -365,6 +391,7 @@ def column_type(col, owner, owners_type, reg):
 
 
 CLOSED_SPRINTS = set()
+KNOWN_SPRINTS = set()
 
 
 def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None):
@@ -475,9 +502,9 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None):
             if owner == sid:
                 continue
             if use == "identity" and s.get("purpose", {}).get("role") == "substrate" and roles.get(owner) != "substrate":
-                strict.append(f"{p}: a substrate reads {col} from {owner} as identity, which requires {owner}"
-                              + (" (not a substrate)" if owner in roles else " (no spec, so its role is unknown)")
-                              + "; a substrate must run alone, so read it as rate or mode with a neutral (EVO-001 R12)")
+                warns.append(f"{p}: a substrate reads {col} from {owner} as identity, which requires {owner}"
+                             + (" (not a substrate)" if owner in roles else " (no spec, so its role is unknown)")
+                             + "; advisory: a substrate that must run alone reads it as rate or mode with a neutral, and registration refuses a world that lacks the owner (EVO-001 R12, R16)")
             if "required" in r:
                 errs.append(f"{p}: read {col} from {owner}: `required` is not a field; an identity read always requires its owner (EVO-001 R12)")
             if use == "identity":
@@ -673,6 +700,7 @@ def main() -> int:
         return 2
     reg, specs, req_ids, test_ids, adr_ids = load(extra, overlay, specs_dir)
     CLOSED_SPRINTS.update(closed_sprints())
+    KNOWN_SPRINTS.update(known_sprints())
     overlay_errs = []
     if overlay is not None and specs_dir != SPECS:
         overlay_errs = replacement_problems(overlay, specs)
@@ -742,25 +770,31 @@ def main() -> int:
             ("draft", [], [ap(payload="{ a: PersonId, a: u64 }")], [], "field a is repeated", True),
             ("frozen", [], [dict(ap(), drained_by=None)], [], "needs drained_by", True),
             ("frozen", [], [ap(drained_by="Day/Agenda")], [], "is drained_by Day/Agenda, which [[schedule]] does not declare", True),
-            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-999")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-999", False),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-014")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-014", False),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-999")], [], "sprint SPR-999 names no sprint: no document under CODEX/05_PROJECT and no PRJ row", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-006")], [], "(SPR-006 is CLOSED: declare the binding)", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="P1.13 (SPR-014)")], [], "sprint must be \"SPR-NNN\"", True),
             ("frozen", [], [dict(ap(), key=None)], [], "needs key = ", True),
             ("draft", [], [ap(key="maybe")], [], "key must be", True),
             ("frozen", [], [dict(ap(), key_field=None)], [], "needs key_field", True),
             ("draft", [], [ap(payload="{ a: PersonId, n: u64 }", key_field="n")], [], "key_field n is not a PersonId field", True),
+            ("frozen", [], [ap(payload="{ row: i64 }", key_field="person")], [], "", False),
+            ("draft", [], [ap(payload="{ person: u64 }", key_field="person")], [], "key_field person is not a PersonId field", True),
             ("frozen", [], [ap(), ap(drained_by="Day/Activity")], [], "is declared twice", True),
             ("draft", [], [ap(outcome="yes")], [], "outcome must be true or false", True),
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }"}], "carries an outcome, so it needs timer", True),
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "nope"}], "needs purpose = one of its [[rng]] purposes", True),
             ("frozen", [], [ap(outcome=True, **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "", False),
-            ("frozen", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", True),
+            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-014", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
+            ("frozen", [], [ap(**{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "names a timer, but the owner's [[applies]] says it carries no outcome", False),
+            ("frozen", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
             ("draft", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
             ("frozen", [rd("person.alive", M2, "identity")], [], [], "", False),
         ]
         for status, reads, applies, commands, needle, want_err in probes:
             probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies, commands=commands)
             CLOSED_SPRINTS.add("SPR-006")
+            KNOWN_SPRINTS.update({"SPR-006", "SPR-014"})
             pe, pw = lint(reg, {M2: specs[M2], "M7.dynasty": specs["M7.dynasty"], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids) if "M7.dynasty" in specs else lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
             pe = [e for e in pe if e.startswith("probe.odd.toml")]
             pw = [e for e in pw if e.startswith("probe.odd.toml")]

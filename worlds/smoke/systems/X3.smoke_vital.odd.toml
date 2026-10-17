@@ -55,7 +55,7 @@ when = "a dead row is revived"
 [[commands]]
 target = "X4.smoke_estate"
 command = "Settle"
-payload = "{ row, person }"
+payload = "{ row }"
 why = "a death leaves an estate to settle"
 [[reads]]
 column = "harvest.stock"

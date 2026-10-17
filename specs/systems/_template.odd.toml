@@ -49,7 +49,8 @@ payload = "{ <field>: <Type>, ... }"       # typed: PersonId, EventRef, SimTime,
 from = ["<SYS.id>"]                        # exactly the specs that send it
 drained_by = "<Pulse>/<Phase>"             # the one binding of [[schedule]] that takes the queue
 key = "<living|any>"                       # living: rh-core drops a command whose key person is dead (A-30)
-key_field = "<a PersonId field>"           # the payload field that is the command's key person (Command::person)
+key_field = "<a PersonId field>"           # the payload field that is the command's key person (Command::person),
+                                           #   or "person": Command::person itself, not repeated in the payload
 outcome = false                            # true: the command carries a sampled, dated outcome; each sender names
                                            #   the timer that submits it and the purpose it is re-sampled under
 

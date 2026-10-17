@@ -33,7 +33,8 @@
 # PersonId field; Marry and ScheduleDeath carry no date and a sampled outcome (EVO-001 R9): the decision schedules a T1
 # timer, MARRY_DUE or DEATH_DUE, at (the next day start, Vital) under the new purpose outcome_delay, whose fire in that
 # Vital's timer pass submits the command, and M2's drain applies it in the same Vital (the timing MAJ-4 asked for); the
-# Day/Vital `when` names apply_death (timer fire or drain) rather than the timer pass alone (REV-EVO-001 MIN-1).
+# Day/Vital `when` names apply_death (timer fire or drain) rather than the timer pass alone (REV-EVO-001 MIN-1). Round 4
+# (NIT-15): a due timer whose victim or partner is already dead is dropped (drop_timer), never submitted.
 odd_r = 2
 
 [system]
@@ -704,7 +705,7 @@ status = "n/a"
 [[schedule]]
 pulse = "Day"
 phase = "Vital"
-steps = ["outcome_due: the fire of due DEATH_DUE and MARRY_DUE timers in this Vital's timer pass (T1's fire, after M2's level, before every binding; not the binding's step): submit ScheduleDeath or Marry to M2, which drains them in this same Vital before this binding (05.1 §2 rule 2; EVO-001 R9)", "grief: for each death this instant, add grief stress to every named actor kin to the dead (derived kinship) or holding a liege or vassal row to them, saturating per instant; end the dead's rows and feuds; drop a dead actor's mind timers", "threshold: schedule a break for every actor whose stress crossed stress_threshold in this binding"]
+steps = ["outcome_due: the fire of due DEATH_DUE and MARRY_DUE timers in this Vital's timer pass (T1's fire, after M2's level, before every binding; not the binding's step): submit ScheduleDeath or Marry to M2, which drains them in this same Vital before this binding (05.1 §2 rule 2; EVO-001 R9); a DEATH_DUE whose victim is already dead, or a MARRY_DUE whose a or b is dead (a natural death drawn for the same day start fires in M2's pass, before T1's; the grief step drops a dead actor's mind timers, but a victim or partner who is not a named actor holds none), is dropped with drop_timer(dead), never submitted (REV-EVO-001 NIT-15)", "grief: for each death this instant, add grief stress to every named actor kin to the dead (derived kinship) or holding a liege or vassal row to them, saturating per instant; end the dead's rows and feuds; drop a dead actor's mind timers", "threshold: schedule a break for every actor whose stress crossed stress_threshold in this binding"]
 when = "every day start (rh-core runs every binding whose pulse fires); work only where M2's apply_death ran in this instant's Vital, in its timer pass (which precedes every binding, round 3, BLK-1) or in its Day/Vital drain (which precedes T1's Vital binding by the M2 -> T1 edge; EVO-001)"
 [[schedule]]
 pulse = "Day"
@@ -982,7 +983,7 @@ lag = "applied by M2's death path (BCK-002 A-30 sets the instant)"
 [[couplings]]
 system = "M7.dynasty"
 direction = "out"
-via = "PetitionSeat, PressClaim, RenounceClaim, Resign; M7 reads person.named and mind columns only as identity"
+via = "PetitionSeat, PressClaim, RenounceClaim, Resign; M7 reads person.named as a mode read with neutral = false (nobody holds a mind when T1 is absent, so M7's dormancy sends nothing; R12) and reads no mind column"
 lag = "applied at the next tick boundary"
 [[couplings]]
 system = "S7.vows"

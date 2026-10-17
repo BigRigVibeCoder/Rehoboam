@@ -42,7 +42,7 @@ when = "the yearly tax is levied"
 [[commands]]
 target = "X4.smoke_estate"
 command = "Settle"
-payload = "{ row, person }"
+payload = "{ row }"
 why = "a confiscation settles a living person's estate"
 [[reads]]
 column = "harvest.stock"

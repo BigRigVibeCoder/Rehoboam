@@ -49,13 +49,14 @@ when = "a Settle command is applied"
 [[commands]]
 target = "X7.smoke_market"
 command = "Audit"
-payload = "{ row, person }"
+payload = "{ row }"
 why = "a settled estate is audited by the market (DEF-2: the Activity siblings exchange commands)"
-# [[applies]] (EVO-001): the code passes the row in args and the key person in Command::person; SPR-014, which starts comparing
-# payloads and drain bindings with the code (REV-EVO-001 NIT-10), adds the person to args (no draw reads args: the ladder is unchanged).
+# [[applies]] (EVO-001): the payload is what the code puts in args (the row); the key person is Command::person itself, which
+# key_field = "person" names (REV-EVO-001 R15), so SPR-014, which starts comparing payloads and drain bindings with the code
+# (NIT-10), changes no smoke command's encoding and the smoke ladder stays as it is.
 [[applies]]
 command = "Settle"
-payload = "{ row: i64, person: PersonId }"
+payload = "{ row: i64 }"
 from = ["X3.smoke_vital", "X5.smoke_polity", "X7.smoke_market"]
 drained_by = "Day/Activity"
 key = "any"
