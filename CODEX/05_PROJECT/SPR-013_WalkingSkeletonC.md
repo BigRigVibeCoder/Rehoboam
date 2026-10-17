@@ -31,7 +31,7 @@ version: 1.0.0
 | `specs/sifting/patterns.solitary_life.toml` (`life_ends`) | Exists (PR #37) | — | — | T-11 |
 | `specs/stream/channel_c_v0.sql` (`sift_match`) | In review: PR #45 (draft; `selftest_channel_c.py`, with a `life_ends` SQL twin) | PR #37 Q10 | Architect | T-11 |
 | `household.yaml`, `hamlet.yaml` | Exist (PR #37) | — | — | T-13 |
-| DATA-5 tellability (PR #37 Q8) and the canonical text form with `segment.canonical_digest` (Q11) | In review: PR #45 (draft): `05.2` §4.0 (the admission rule, with the DATA-5 clarification for the director) and `specs/stream/canonical_v0.md` with `canonical_v0.py` and `golden/canonical_v0.txt` | — | Architect | T-09 |
+| DATA-5 tellability (PR #37 Q8) and the canonical text form with `segment.canonical_digest` (Q11) | In review: PR #45 (draft): `05.2` §4.0 (the admission rule; its DATA-5 amendment awaits D38, and P1.0 admits every draft) and `specs/stream/canonical_v0.md` with `canonical_v0.py` and `golden/canonical_v0.txt` | — | Architect | T-09 |
 
 ## Compliance (every task)
 
@@ -98,7 +98,7 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 |---|---|---|
 | 1 | SPR-012 not merged | Open |
 | 2 | `specs/stream/channel_c_v0.sql` does not exist (PR #37 Q10) | In review: PR #45 (draft) |
-| 3 | The canonical line grammar and the general DATA-5 tellability rule are not written (PR #37 Q8, Q11) | In review: PR #45 (draft); the DATA-5 clarification needs the director's ruling |
+| 3 | The canonical line grammar and the general DATA-5 tellability rule are not written (PR #37 Q8, Q11) | In review: PR #45 (draft). The DATA-5 amendment (`05.2` §4.0) awaits the director (D38); P1.0 admits every draft, so T-09 does not wait on it |
 
 ## Completion
 

@@ -646,7 +646,7 @@ run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selft
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
 run "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip (SPR-011 ruling 13)" "pass:CHANNEL A v0: PASS" "$PY" -I specs/stream/selftest_channel_a.py &&
 run "World Stream v0 channel-C segment schema: no floats, header, order, sealed round trip, digests, life_ends twin (SPR-013 T-11)" "pass:CHANNEL C v0: PASS" "$PY" -I specs/stream/selftest_channel_c.py &&
-run "channel-C self-test positive control: a float column in the DDL must FAIL" "fail:CHANNEL C v0: FAIL" channel_c_float_control &&
+run "channel-C self-test positive control: a float column in the DDL must FAIL" "fail:1. no float columns: FAIL" channel_c_float_control &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py
 status=$?
 chain_done=1

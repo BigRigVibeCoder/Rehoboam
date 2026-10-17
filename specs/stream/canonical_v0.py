@@ -7,12 +7,14 @@ channel_c_v0.sql R8) is the XXH3-128 of a segment's lines in ``seq`` order. This
 independent reference ``rh-stream`` (SPR-013 T-09) must agree with, as ``bin/gen_hash_golden.py``
 is for ``rh-snapshot``:
 
-- :func:`render` and :func:`parse` print and read one record; :func:`digest` hashes lines;
+- :func:`render` and :func:`parse` print and read one record, checking the grammar and the DDL's
+  domains (enum codes, the MATCH invariants); :func:`digest` hashes lines; :func:`digest_file`
+  checks and digests a whole canonical file;
 - :func:`match_id` is channel C's content-addressed MatchId (channel_c_v0.sql R5);
 - the self-test is a property round trip over generated records of every kind, idempotence of the
-  printer, and planted non-canonical lines that the parser must refuse;
+  printer, planted non-canonical lines and files that must be refused, and known answers;
 - the golden file ``specs/stream/golden/canonical_v0.txt`` holds hand-written and generated lines
-  with their segment digests and ``match_id`` vectors; the Rust printer, parser and digest must
+  with their digests and ``match_id`` vectors; the Rust printer, parser and digest must
   reproduce every line bit for bit.
 
 XXH3 comes from ``bin/gen_hash_golden.py``, the repository's standard-library XXH3-64/128
@@ -22,10 +24,10 @@ Usage:  python -I specs/stream/canonical_v0.py            (self-test, then rewri
         python -I specs/stream/canonical_v0.py --check    (self-test; exit 1 if the golden differs)
         python -I specs/stream/canonical_v0.py --check --golden PATH   (check another file; the
                                                            positive control uses a stale fixture)
-        python -I specs/stream/canonical_v0.py --digest FILE   (parse a canonical file and print the
-                                                           digest of its record lines; `#` lines are
-                                                           not records and not hashed)
-Exit:   0 ok, 1 stale golden file or a file that does not parse, 2 the self-test failed.
+        python -I specs/stream/canonical_v0.py --digest FILE   (check a canonical file, header to
+                                                           final LF, and print the digest of its
+                                                           record lines)
+Exit:   0 ok, 1 stale golden file or a file that is not canonical, 2 the self-test failed.
 Standard library only (GOV-003 §3).
 """
 
@@ -37,6 +39,7 @@ import itertools
 import random
 import re
 import sys
+import tempfile
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,7 +59,8 @@ MASK64 = (1 << 64) - 1
 HEX64_LEN = 16
 HEX128_LEN = 32
 DIGEST_LEN = 16
-# The bytes a string token writes unescaped (canonical_v0.md §2.5). Everything else is %XX.
+INT_MAX_CHARS = 20  # "-9223372036854775808" and "18446744073709551615" are 20 characters
+# The bytes a string token writes unescaped (canonical_v0.md §2). Everything else is %XX.
 SAFE = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-/:+@")
 INT = re.compile(r"0|-?[1-9][0-9]*")
 HEX64 = re.compile(r"[0-9a-f]{16}")
@@ -66,6 +70,9 @@ IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 CLAUSE = re.compile(r"e[0-9]+")
 NULL = "~"
 EMPTY = "%"
+LF = 0x0A
+CR = 0x0D
+ASCII_LIMIT = 0x80
 
 
 def _load(path: Path) -> ModuleType:
@@ -93,7 +100,7 @@ def xxh3_128(data: bytes) -> bytes:
 
 
 class CanonicalError(ValueError):
-    """A token, line or value that is not in the canonical form."""
+    """A token, line, file or value that is not in the canonical form or outside its domain."""
 
 
 @dataclass(frozen=True)
@@ -115,7 +122,7 @@ def _int_codec(name: str, lo: int, hi: int) -> Codec:
         return str(v)
 
     def parse(tok: str) -> object:
-        if not INT.fullmatch(tok):
+        if len(tok) > INT_MAX_CHARS or not INT.fullmatch(tok):
             raise CanonicalError(f"{name}: {tok!r} is not a canonical integer")
         v = int(tok)
         if not lo <= v <= hi:
@@ -126,6 +133,22 @@ def _int_codec(name: str, lo: int, hi: int) -> Codec:
         return rng.choice([lo, hi, 0 if lo <= 0 <= hi else lo, rng.randint(lo, hi)])
 
     return Codec(name, render, parse, gen)
+
+
+def _enum_codec(name: str, allowed: Sequence[int]) -> Codec:
+    """An integer code from the DDL's enumeration ``allowed`` (canonical_v0.md §3)."""
+    inner = _int_codec(name, 0, 255)
+    codes = frozenset(allowed)
+
+    def check(v: object) -> object:
+        if v not in codes:
+            raise CanonicalError(f"{name}: code {v!r} is not one of {sorted(codes)}")
+        return v
+
+    def gen(rng: random.Random) -> object:
+        return rng.choice(sorted(codes))
+
+    return Codec(name, lambda v: inner.render(check(v)), lambda t: check(inner.parse(t)), gen)
 
 
 def _optional(inner: Codec) -> Codec:
@@ -183,7 +206,11 @@ def _hex128_codec(name: str) -> Codec:
 
 def encode_str(s: str) -> str:
     """The string token of ``s``: UTF-8 bytes, unsafe ones as ``%XX``; the empty string is ``%``."""
-    out = "".join(chr(b) if b in SAFE else f"%{b:02X}" for b in s.encode("utf-8"))
+    try:
+        data = s.encode("utf-8")
+    except UnicodeEncodeError as e:
+        raise CanonicalError(f"string: {s!r} is not encodable as UTF-8: {e}") from None
+    out = "".join(chr(b) if b in SAFE else f"%{b:02X}" for b in data)
     return out or EMPTY
 
 
@@ -309,6 +336,9 @@ def _tuple_codec(name: str, parts: Sequence[Codec]) -> Codec:
     return Codec(name, render, parse, gen)
 
 
+Order = Callable[[tuple[object, ...]], str | None]
+
+
 def _list_codec(
     name: str,
     item: Codec,
@@ -360,9 +390,6 @@ def _any_order(_: tuple[object, ...]) -> str | None:
     return None
 
 
-Order = Callable[[tuple[object, ...]], str | None]
-
-
 def _ascending(index: int, what: str) -> Order:
     """Items strictly ascending by component ``index``."""
 
@@ -402,12 +429,29 @@ BLOB16 = _hex128_codec("blob16")
 STR = _str_codec("string")
 ROLE_VAR = _pattern_codec("role variable", IDENT)
 CLAUSE_NAME = _pattern_codec("clause", CLAUSE)
+# The DDL's enumerations (channel_a_v0.sql, channel_c_v0.sql; 05.1 §4.2 for the twelve phases).
+PHASE = _enum_codec("phase", range(12))
+INPUT_CLASS = _enum_codec("class", [0])
+SECRECY = _enum_codec("secrecy", range(4))
+ORIGIN = _enum_codec("origin", [0, 1, 3, 4])
+ENTITY_KIND = _enum_codec("entity_kind", range(5))
+EVENT_ROLE = _enum_codec("role", range(4))
+EDGE_KIND = _enum_codec("edge kind", range(9))
+LIFE_ORIGIN = _enum_codec("life origin", range(3))
+SEX = _enum_codec("sex", range(2))
+EXIT_KIND = _enum_codec("exit_kind", range(2))
+DEATH_CAUSE = _enum_codec("death_cause", range(6))
+SELECTION = _enum_codec("selection", range(3))
+ON_COMPLETE = _enum_codec("on_complete", range(3))
+STATUS = _enum_codec("status", [1])
 PAYLOAD = _list_codec("payload", I64, _any_order)
 EVENT_IDS = _list_codec("event ids", U64, _any_order)
-ROLES = _list_codec("roles", _tuple_codec("role", (U8, U64, U8)), _any_order)
-CAUSES = _list_codec("causes", _tuple_codec("cause", (U64, U8)), _ascending(0, "cause ids"), 0)
+ROLES = _list_codec("roles", _tuple_codec("role", (ENTITY_KIND, U64, EVENT_ROLE)), _any_order)
+CAUSES = _list_codec(
+    "causes", _tuple_codec("cause", (U64, EDGE_KIND)), _ascending(0, "cause ids"), 0
+)
 BINDINGS = _list_codec(
-    "bindings", _tuple_codec("binding", (ROLE_VAR, U8, U64)), _ascending(0, "roles"), 0
+    "bindings", _tuple_codec("binding", (ROLE_VAR, ENTITY_KIND, U64)), _ascending(0, "roles"), 0
 )
 EVENTS = _list_codec(
     "events", _tuple_codec("event", (CLAUSE_NAME, U64)), _events_order, 1, _renamed_clauses
@@ -420,7 +464,7 @@ KINDS: dict[str, Fields] = {
     "INPUT": (
         *HEADER,
         ("journal_seq", U64),
-        ("class", U8),
+        ("class", INPUT_CLASS),
         ("input_kind", STR),
         ("scope", STR),
         ("scope_id", OPT_U64),
@@ -431,15 +475,15 @@ KINDS: dict[str, Fields] = {
     "EVENT": (
         *HEADER,
         ("event_id", U64),
-        ("phase", U8),
+        ("phase", PHASE),
         ("verb_id", U16),
         ("verb", STR),
         ("act_classes", U64),
         ("place_id", OPT_U32),
         ("magnitude", I32),
         ("tellability", U8),
-        ("secrecy", U8),
-        ("origin", U8),
+        ("secrecy", SECRECY),
+        ("origin", ORIGIN),
         ("payload", PAYLOAD),
         ("roles", ROLES),
         ("causes", CAUSES),
@@ -447,8 +491,8 @@ KINDS: dict[str, Fields] = {
     "LIFE_ENTRY": (
         *HEADER,
         ("person_id", U64),
-        ("origin", U8),
-        ("sex", U8),
+        ("origin", LIFE_ORIGIN),
+        ("sex", SEX),
         ("mother_id", U64),
         ("father_id", U64),
         ("birth_tick", I64),
@@ -456,8 +500,8 @@ KINDS: dict[str, Fields] = {
     "LIFE_EXIT": (
         *HEADER,
         ("person_id", U64),
-        ("exit_kind", U8),
-        ("death_cause", U8),
+        ("exit_kind", EXIT_KIND),
+        ("death_cause", DEATH_CAUSE),
         ("event_id", OPT_U64),
     ),
     "STEP_DIGEST": (
@@ -482,9 +526,9 @@ KINDS: dict[str, Fields] = {
         ("pack", STR),
         ("pattern_id", STR),
         ("pattern_version", U16),
-        ("selection", U8),
-        ("on_complete", U8),
-        ("status", U8),
+        ("selection", SELECTION),
+        ("on_complete", ON_COMPLETE),
+        ("status", STATUS),
         ("opened_tick", I64),
         ("closed_by_event_id", U64),
         ("closed_by_seq", U64),
@@ -493,6 +537,7 @@ KINDS: dict[str, Fields] = {
     ),
 }
 CHANNEL = {kind: ("C" if kind == "MATCH" else "A") for kind in KINDS}
+CHANNELS = frozenset(CHANNEL.values())
 
 
 @dataclass(frozen=True)
@@ -506,6 +551,81 @@ class Record:
         """The value of field ``name``."""
         return self.fields[[n for n, _ in KINDS[self.kind]].index(name)]
 
+    def replace(self, **values: object) -> Record:
+        """A copy with the named fields replaced."""
+        names = [n for n, _ in KINDS[self.kind]]
+        fields = list(self.fields)
+        for name, value in values.items():
+            fields[names.index(name)] = value
+        return Record(self.kind, tuple(fields))
+
+
+def _check_match(rec: Record) -> str | None:
+    """The MATCH invariants of channel_c_v0.sql R6 (canonical_v0.md §3)."""
+    events = rec["events"]
+    assert isinstance(events, tuple)
+    ids = [e[1] for e in events if isinstance(e, tuple)]
+    if not ids:
+        return "a match binds at least one event"
+    if rec["closed_by_event_id"] not in ids:
+        return f"closed_by_event_id {rec['closed_by_event_id']} is not among the events {ids}"
+    opened, tick = rec["opened_tick"], rec["tick"]
+    assert isinstance(opened, int) and isinstance(tick, int)
+    if opened > tick:
+        return f"opened_tick {opened} is after the closing tick {tick}"
+    return None
+
+
+def _check_life_exit(rec: Record) -> str | None:
+    """A death has a cause; an emigration has none and no DEATH event (channel_a_v0.sql)."""
+    death = rec["exit_kind"] == 0
+    if death and rec["death_cause"] == 0:
+        return "a death (exit_kind 0) needs a death_cause other than 0 (none)"
+    if not death and (rec["death_cause"] != 0 or rec["event_id"] is not None):
+        return "an emigration (exit_kind 1) has death_cause 0 and no event_id"
+    return None
+
+
+# Record-level domain checks beyond the token grammar, applied by render and parse.
+KIND_CHECKS: dict[str, Callable[[Record], str | None]] = {
+    "MATCH": _check_match,
+    "LIFE_EXIT": _check_life_exit,
+}
+
+
+def _fix_match(rec: Record, rng: random.Random) -> Record:
+    """Make a generated MATCH obey its invariants."""
+    events = rec["events"]
+    assert isinstance(events, tuple)
+    if not events:
+        events = (("e1", rng.getrandbits(64)),)
+    ids = [e[1] for e in events if isinstance(e, tuple)]
+    tick = rec["tick"]
+    assert isinstance(tick, int)
+    opened = rng.choice([tick, max(tick - rng.randint(0, 1 << 20), -(1 << 63)), -(1 << 63)])
+    return rec.replace(events=events, closed_by_event_id=rng.choice(ids), opened_tick=opened)
+
+
+def _fix_life_exit(rec: Record, rng: random.Random) -> Record:
+    """Make a generated LIFE_EXIT obey its invariant."""
+    if rec["exit_kind"] == 0:
+        return rec.replace(death_cause=rng.randint(1, 5))
+    return rec.replace(death_cause=0, event_id=None)
+
+
+KIND_FIXES: dict[str, Callable[[Record, random.Random], Record]] = {
+    "MATCH": _fix_match,
+    "LIFE_EXIT": _fix_life_exit,
+}
+
+
+def _checked(rec: Record) -> Record:
+    check = KIND_CHECKS.get(rec.kind)
+    problem = check(rec) if check else None
+    if problem:
+        raise CanonicalError(f"{rec.kind}: {problem}")
+    return rec
+
 
 def render(rec: Record) -> str:
     """The canonical line of ``rec``, without its LF terminator."""
@@ -514,6 +634,7 @@ def render(rec: Record) -> str:
         raise CanonicalError(f"unknown kind {rec.kind!r}")
     if len(rec.fields) != len(spec):
         raise CanonicalError(f"{rec.kind}: {len(rec.fields)} fields, expected {len(spec)}")
+    _checked(rec)
     return " ".join([rec.kind, *(c.render(v) for (_, c), v in zip(spec, rec.fields, strict=True))])
 
 
@@ -527,7 +648,8 @@ def parse(line: str) -> Record:
         raise CanonicalError(f"unknown kind {tokens[0]!r}")
     if len(tokens) - 1 != len(spec):
         raise CanonicalError(f"{tokens[0]}: {len(tokens) - 1} fields, expected {len(spec)}")
-    return Record(tokens[0], tuple(c.parse(t) for (_, c), t in zip(spec, tokens[1:], strict=True)))
+    fields = tuple(c.parse(t) for (_, c), t in zip(spec, tokens[1:], strict=True))
+    return _checked(Record(tokens[0], fields))
 
 
 def digest(lines: Iterable[str]) -> bytes:
@@ -540,8 +662,18 @@ def _str_bytes(s: str) -> bytes:
     return len(b).to_bytes(4, "little") + b
 
 
-def match_id(pack: str, pattern_id: str, version: int, event_ids: Sequence[int]) -> int:
-    """Channel C's MatchId (channel_c_v0.sql R5): XXH3-64 over the pattern and its event tuple."""
+Binding = tuple[str, int, int]
+
+
+def match_id(
+    pack: str,
+    pattern_id: str,
+    version: int,
+    event_ids: Sequence[int],
+    bindings: Sequence[Binding],
+) -> int:
+    """Channel C's MatchId (channel_c_v0.sql R5): XXH3-64 over the pattern, events and bindings."""
+    ordered = sorted(bindings, key=lambda b: b[0].encode("utf-8"))
     body = (
         D_MATCH
         + _str_bytes(pack)
@@ -549,16 +681,87 @@ def match_id(pack: str, pattern_id: str, version: int, event_ids: Sequence[int])
         + version.to_bytes(2, "little")
         + len(event_ids).to_bytes(4, "little")
         + b"".join(e.to_bytes(8, "little") for e in event_ids)
+        + len(ordered).to_bytes(4, "little")
+        + b"".join(
+            _str_bytes(role) + kind.to_bytes(1, "little") + eid.to_bytes(8, "little")
+            for role, kind, eid in ordered
+        )
     )
     return xxh3_64(body)
+
+
+# --- Canonical files ----------------------------------------------------------------------------
+
+HEADER_LINE = re.compile(
+    r"#rehoboam/stream/canonical/v0 timeline=(?P<timeline>0|[1-9][0-9]*) channel=(?P<channel>[AC]) "
+    r"registry_version=(?P<registry>[^ ]+) format=(?P<format>[^ ]+)"
+)
+
+
+def header_line(timeline: int, channel: str, registry_version: str, segment_format: str) -> str:
+    """The header line of a canonical file (canonical_v0.md §1)."""
+    return (
+        f"#{FORMAT} timeline={timeline} channel={channel} "
+        f"registry_version={encode_str(registry_version)} format={encode_str(segment_format)}"
+    )
+
+
+def _file_lines(data: bytes, where: str) -> list[str]:
+    """The lines of a canonical file's bytes: ASCII, LF-terminated, no CR."""
+    if not data or data[-1] != LF:
+        raise CanonicalError(f"{where}: the file is empty or does not end with LF")
+    if any(b >= ASCII_LIMIT for b in data):
+        raise CanonicalError(f"{where}: the file holds a byte outside ASCII")
+    if CR in data:
+        raise CanonicalError(f"{where}: the file holds a carriage return")
+    return data[:-1].decode("ascii").split("\n")
+
+
+def _check_records(records: list[tuple[int, Record]], where: str, timeline: int, chan: str) -> None:
+    """One timeline, one channel, contiguous seq and non-decreasing ticks (R3)."""
+    for n, rec in records:
+        if CHANNEL[rec.kind] != chan:
+            raise CanonicalError(f"{where}:{n}: a {rec.kind} record in a channel-{chan} file")
+        if rec["timeline_id"] != timeline:
+            raise CanonicalError(f"{where}:{n}: timeline {rec['timeline_id']} is not {timeline}")
+    for (n, a), (m, b) in itertools.pairwise(records):
+        seq_a, seq_b, tick_a, tick_b = a["seq"], b["seq"], a["tick"], b["tick"]
+        assert isinstance(seq_a, int) and isinstance(seq_b, int)
+        assert isinstance(tick_a, int) and isinstance(tick_b, int)
+        if seq_b != seq_a + 1:
+            raise CanonicalError(f"{where}:{m}: seq {seq_b} does not follow {seq_a} (line {n})")
+        if tick_b < tick_a:
+            raise CanonicalError(f"{where}:{m}: tick {tick_b} is before {tick_a} (line {n})")
+
+
+def digest_file(path: Path) -> bytes:
+    """Check a canonical file (header, grammar, domains, order) and digest its record lines."""
+    where = str(path)
+    lines = _file_lines(path.read_bytes(), where)
+    header = HEADER_LINE.fullmatch(lines[0])
+    if header is None:
+        raise CanonicalError(f"{where}:1: not a canonical header line: {lines[0]!r}")
+    timeline, chan = int(header["timeline"]), header["channel"]
+    records: list[tuple[int, Record]] = []
+    for n, raw in enumerate(lines[1:], 2):
+        if raw.startswith("#"):
+            continue
+        try:
+            records.append((n, parse(raw)))
+        except CanonicalError as e:
+            raise CanonicalError(f"{where}:{n}: {e}") from None
+    _check_records(records, where, timeline, chan)
+    return digest(lines[n - 1] for n, _ in records)
 
 
 # --- Self-test ---------------------------------------------------------------------------------
 
 
 def generate(rng: random.Random, kind: str) -> Record:
-    """A random record of ``kind`` with canonical list orders."""
-    return Record(kind, tuple(c.gen(rng) for _, c in KINDS[kind]))
+    """A random record of ``kind`` with canonical list orders and in-domain values."""
+    rec = Record(kind, tuple(c.gen(rng) for _, c in KINDS[kind]))
+    fix = KIND_FIXES.get(kind)
+    return fix(rec, rng) if fix else rec
 
 
 # Lines the parser must refuse, with the reason (canonical_v0.md §5).
@@ -570,8 +773,12 @@ REFUSED: tuple[tuple[str, str], ...] = (
     ("LIFE_EXIT 0 01 0 7 0 1 ~", "a leading zero"),
     ("LIFE_EXIT 0 +1 0 7 0 1 ~", "a plus sign"),
     ("LIFE_EXIT 0 1 -0 7 0 1 ~", "minus zero"),
-    ("LIFE_EXIT 0 1 0 7 0 256 ~", "a u8 of 256"),
-    ("LIFE_EXIT 0 1 0 7 0 1 18446744073709551616", "a u64 past its range"),
+    ("LIFE_EXIT 0 1 0 7 0 6 ~", "a death_cause of 6"),
+    ("LIFE_EXIT 0 1 0 7 0 0 ~", "a death without a cause"),
+    ("LIFE_EXIT 0 1 0 7 1 1 ~", "an emigration with a death cause"),
+    ("LIFE_EXIT 0 1 0 7 1 0 3", "an emigration with a DEATH event"),
+    ("LIFE_EXIT 0 1 0 18446744073709551616 0 1 ~", "a u64 past its range"),
+    ("LIFE_EXIT 0 1 0 100000000000000000000000 0 1 ~", "a 24-digit integer"),
     ("LIFE_EXIT 0 1 0 7 0 1", "a missing field"),
     ("LIFE_EXIT 0 1 0 7 0 1 ~ 5", "an extra field"),
     ("LIFE_EXIT 0 ~ 0 7 0 1 ~", "NULL in a field that is not optional"),
@@ -588,9 +795,19 @@ REFUSED: tuple[tuple[str, str], ...] = (
     ("KEYFRAME 0 0 0 a\tb kf 0000000000000000 0", "an unescaped control byte"),
     ("KEYFRAME 0 0 0 é kf 0000000000000000 0", "a non-ASCII line"),
     ("KEYFRAME 0 0 0  kf 0000000000000000 0", "an empty string token"),
+    (
+        "INPUT 0 0 0 0 1 k s ~ p 00000000000000000000000000000000 00000000000000000000000000000000",
+        "an input class other than push",
+    ),
+    ("EVENT 0 0 0 1 12 0 DEATH 32768 ~ 0 128 0 0 [1] [] []", "a phase of 12"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 4 0 [1] [] []", "a secrecy of 4"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 2 [1] [] []", "the retired origin 2"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 1 [] []", "a payload that is not a list"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [1,] [] []", "a trailing comma"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7] []", "a role tuple with two parts"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [5/7/1] []", "an entity kind of 5"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/4] []", "a role code of 4"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [0/9]", "an edge kind of 9"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [3/1,2/1]", "causes out of order"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [2/1,2/1]", "a repeated cause"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [ ] [] []", "a space inside a list"),
@@ -602,11 +819,57 @@ REFUSED: tuple[tuple[str, str], ...] = (
         "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [1/1/1] [e1/1]",
         "a role that is not an identifier",
     ),
-    ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [] [e1/2,e2/1]", "event ids not ascending"),
-    ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [] [e1/1,e1/2]", "a repeated clause"),
+    ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [A/5/1] [e1/1]", "a binding to entity kind 5"),
+    ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 2 1 [] [e1/2,e2/1]", "event ids not ascending"),
+    ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 2 1 [] [e1/1,e1/2]", "a repeated clause"),
     ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [] [x1/1]", "a clause not named eN"),
+    ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [] []", "a match with no event"),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 2 1 [] [e1/1]",
+        "closed_by_event_id not among the events",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 1 1 1 [] [e1/1]",
+        "opened_tick after the closing tick",
+    ),
+    ("MATCH 0 0 0 0000000000000000 p q 1 3 0 1 0 1 1 [] [e1/1]", "a selection of 3"),
+    ("MATCH 0 0 0 0000000000000000 p q 1 0 3 1 0 1 1 [] [e1/1]", "an on_complete of 3"),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 0 0 1 1 [] [e1/1]",
+        "a partial match (status 0) in v0",
+    ),
 )
 ROUND_TRIP_RECORDS = 400
+VALID_FILE = (
+    "#rehoboam/stream/canonical/v0 timeline=0 channel=A registry_version=0.2.0 "
+    "format=rehoboam/stream/channel-a/v0\n"
+    "# a comment\n"
+    "LIFE_ENTRY 0 5 0 7 1 0 0 0 -100\n"
+    "LIFE_EXIT 0 6 1440 7 0 1 ~\n"
+)
+# Files `--digest` must refuse, with the reason (canonical_v0.md §1).
+REFUSED_FILES: tuple[tuple[bytes, str], ...] = (
+    (VALID_FILE.replace("\n", "\r\n").encode(), "CRLF line ends"),
+    (VALID_FILE.encode()[:-1], "a missing final LF"),
+    (VALID_FILE.encode() + b"\r", "a lone CR"),
+    (VALID_FILE.encode().replace(b"# a comment", b"# caf\xc3\xa9"), "a non-ASCII comment"),
+    (VALID_FILE.encode().split(b"\n", 1)[1], "a missing header"),
+    (
+        VALID_FILE.encode().replace(b"channel=A", b"channel=C"),
+        "channel-A records in a channel-C file",
+    ),
+    (VALID_FILE.encode().replace(b"LIFE_EXIT 0 6", b"LIFE_EXIT 0 7"), "a gap in seq"),
+    (VALID_FILE.encode().replace(b"LIFE_EXIT 0 6", b"LIFE_EXIT 1 6"), "a second timeline"),
+    (VALID_FILE.encode().replace(b"LIFE_EXIT 0 6 1440", b"LIFE_EXIT 0 6 -1"), "a tick going back"),
+    (
+        VALID_FILE.encode().replace(
+            b"LIFE_EXIT 0 6 1440 7 0 1 ~",
+            b"MATCH 0 6 1440 0000000000000000 p q 1 0 0 1 0 1 1 [] [e1/1]",
+        ),
+        "a MATCH in a channel-A file",
+    ),
+    (b"", "an empty file"),
+)
 
 
 def _round_trip(rng: random.Random) -> list[str]:
@@ -635,8 +898,27 @@ def _refusals() -> list[str]:
     return failures
 
 
+def _file_refusals() -> list[str]:
+    """``digest_file`` accepts the valid file and refuses every planted one."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "canonical.txt"
+        path.write_bytes(VALID_FILE.encode())
+        want = digest(line for line in VALID_FILE.split("\n") if line and not line.startswith("#"))
+        if digest_file(path) != want:
+            failures.append("digest_file: the valid file's digest is not its record lines' digest")
+        for data, why in REFUSED_FILES:
+            path.write_bytes(data)
+            try:
+                digest_file(path)
+            except CanonicalError:
+                continue
+            failures.append(f"digest_file accepted {why}")
+    return failures
+
+
 def _known_answers() -> list[str]:
-    """Fixed values the grammar pins: the empty digest, string escapes, the MatchId of a vector."""
+    """Fixed values the grammar pins: the empty digest, string escapes, a lone surrogate."""
     failures = []
     if digest([]).hex() != "99aa06d3014798d86001c324468d497f":
         failures.append("digest of no lines is not XXH3-128 of the empty string")
@@ -644,13 +926,18 @@ def _known_answers() -> list[str]:
         failures.append("string escaping of '' or '%'")
     if encode_str("a b/é") != "a%20b/%C3%A9":
         failures.append(f"string escaping: {encode_str('a b/é')!r}")
+    try:
+        render(Record("KEYFRAME", (0, 0, 0, "\ud800", "kf", 0, 0)))
+        failures.append("render accepted a lone surrogate")
+    except CanonicalError:
+        pass
     return failures
 
 
 def self_test() -> list[str]:
     """Return the failures of the self-test (empty when it passes)."""
     rng = random.Random(0x5013)
-    return [*_known_answers(), *_round_trip(rng), *_refusals()]
+    return [*_known_answers(), *_round_trip(rng), *_refusals(), *_file_refusals()]
 
 
 # --- The golden file --------------------------------------------------------------------------
@@ -660,125 +947,50 @@ DEATH, EXTINCTION = 0, 1
 DEATH_CLASS = 1 << 15
 TARGET = 1
 TRIGGERED = 1
-# life_ends matches of the hand-written segment:
+A_YEAR = (-10_368_000, -(1 << 40))
+# life_ends matches of the hand-written segment, in R4 order:
 # (seq, tick, closing event id, its channel-A seq, the deceased).
 LIFE_ENDS_VECTORS: tuple[tuple[int, int, int, int, int], ...] = (
     (0, 0, 0, 1, 0x1111),
-    (1, 216_000, 3, 9, 0x2222),
+    (2, 216_000, 3, 9, 0x2222),
 )
+BETRAYAL_BINDINGS: tuple[Binding, ...] = (("A", 1, 0x2222), ("B", 1, 0x3333))
+
+
+def _event(
+    seq: int, tick: int, eid: int, verb: tuple[int, str, int], rest: tuple[object, ...]
+) -> Record:
+    """An EVENT record: ``verb`` is (verb_id, name, tellability); ``rest`` follows the verb."""
+    verb_id, name, tellability = verb
+    phase, place, magnitude, secrecy, origin, payload, roles, causes = rest
+    fields = (0, seq, tick, eid, phase, verb_id, name, DEATH_CLASS if verb_id <= 1 else 1 << 4)
+    return Record(
+        "EVENT", (*fields, place, magnitude, tellability, secrecy, origin, payload, roles, causes)
+    )
 
 
 def _hand_written_a() -> list[Record]:
-    """Channel-A records of one synthetic instant sequence, with the grammar's edge cases."""
+    """Channel-A records of one synthetic instant sequence in R4 order, with the grammar's edges."""
+    d1 = (4, None, 0, 0, 0, (1,), ((1, 0x1111, TARGET),), ())
+    decree = (4, 12, -5, 3, 1, (), ((1, 0x2222, 0), (3, 9, 1)), ((0, TRIGGERED),))
+    extinction = (9, None, 0, 0, 0, (-1, 0, (1 << 63) - 1, -(1 << 63)), (), ((0, 0), (1, 5)))
+    d2 = (4, None, 0, 0, 0, (2,), ((1, 0x2222, TARGET), (1, 0x3333, 0)), ())
     return [
         Record(
-            "INPUT",
-            (0, 0, 0, 0, 0, "resample", "person", 0x1111, "script", D_TEST, b"\x01" * DIGEST_LEN),
+            "INPUT", (0, 0, 0, 0, 0, "resample", "person", 0x1111, "script", D_TEST, b"\x01" * 16)
         ),
-        Record(
-            "EVENT",
-            (
-                0,
-                1,
-                0,
-                0,
-                4,
-                DEATH,
-                "DEATH",
-                DEATH_CLASS,
-                None,
-                0,
-                128,
-                0,
-                0,
-                (1,),
-                ((1, 0x1111, TARGET),),
-                (),
-            ),
-        ),
-        Record("LIFE_ENTRY", (0, 2, 0, 0x1111, 1, 0, 0, 0, -10_368_000)),
-        Record("LIFE_ENTRY", (0, 3, 0, 0x2222, 1, 1, 0, 0, -(1 << 40))),
-        Record("LIFE_EXIT", (0, 4, 0, 0x1111, 0, 1, 0)),
+        _event(1, 0, 0, (DEATH, "DEATH", 128), d1),
+        Record("LIFE_ENTRY", (0, 2, 0, 0x1111, 1, 0, 0, 0, A_YEAR[0])),
+        Record("LIFE_EXIT", (0, 3, 0, 0x1111, 0, 1, 0)),
+        Record("LIFE_ENTRY", (0, 4, 0, 0x2222, 1, 1, 0, 0, A_YEAR[1])),
         Record("STEP_DIGEST", (0, 5, 0, 1, 0, 1, 0x0123_4567_89AB_CDEF, 0, MASK64)),
         Record(
             "INPUT",
-            (
-                0,
-                6,
-                43_200,
-                1,
-                0,
-                "ForkOverride",
-                "none",
-                None,
-                "Player",
-                b"\xff" * DIGEST_LEN,
-                D_TEST,
-            ),
+            (0, 6, 43_200, 1, 0, "ForkOverride", "none", None, "Player", b"\xff" * 16, D_TEST),
         ),
-        Record(
-            "EVENT",
-            (
-                0,
-                7,
-                43_200,
-                1,
-                4,
-                7,
-                "ISSUE_DECREE",
-                1 << 4,
-                12,
-                -5,
-                96,
-                3,
-                1,
-                (),
-                ((1, 0x2222, 0), (3, 9, 1)),
-                ((0, TRIGGERED),),
-            ),
-        ),
-        Record(
-            "EVENT",
-            (
-                0,
-                8,
-                43_200,
-                2,
-                9,
-                1,
-                "EXTINCTION",
-                DEATH_CLASS,
-                None,
-                0,
-                255,
-                0,
-                0,
-                (-1, 0, (1 << 63) - 1, -(1 << 63)),
-                (),
-                ((0, 0), (1, 5)),
-            ),
-        ),
-        Record(
-            "EVENT",
-            (
-                0,
-                9,
-                216_000,
-                3,
-                4,
-                DEATH,
-                "DEATH",
-                DEATH_CLASS,
-                None,
-                0,
-                128,
-                0,
-                0,
-                (2,),
-                ((1, 0x2222, TARGET), (1, 0x3333, 0)),
-                (),
-            ),
-        ),
+        _event(7, 43_200, 1, (7, "ISSUE_DECREE", 96), decree),
+        _event(8, 43_200, 2, (EXTINCTION, "EXTINCTION", 255), extinction),
+        _event(9, 216_000, 3, (DEATH, "DEATH", 128), d2),
         Record("LIFE_EXIT", (0, 10, 216_000, 0x2222, 0, 2, 3)),
         Record("LIFE_EXIT", (0, 11, 216_000, 0x3333, 1, 0, None)),
         Record("STEP_DIGEST", (0, 12, 216_000, 0, 0, 1, 1, 2, 3)),
@@ -794,79 +1006,77 @@ def _hand_written_a() -> list[Record]:
                 2,
             ),
         ),
-        Record("KEYFRAME", (0, 14, 216_000, "", 'a b%é/日本\t\n"\\', MASK64, MASK64)),
+        Record("KEYFRAME", (0, 14, 259_200, "", 'a b%é/日本\t\n"\\', MASK64, MASK64)),
     ]
+
+
+def _match(
+    header: tuple[int, int],
+    pattern: tuple[str, str, int],
+    closing: tuple[int, int, int, int, int],
+    bindings: tuple[Binding, ...],
+    events: tuple[tuple[str, int], ...],
+) -> Record:
+    """A MATCH record with its content-addressed id.
+
+    ``header`` is (seq, tick); ``closing`` is (selection, on_complete, opened_tick, closing event
+    id, its channel-A seq).
+    """
+    seq, tick = header
+    pack, pid, version = pattern
+    selection, on_complete, opened, event, a_seq = closing
+    mid = match_id(pack, pid, version, [e for _, e in events], bindings)
+    fields = (
+        0,
+        seq,
+        tick,
+        mid,
+        pack,
+        pid,
+        version,
+        selection,
+        on_complete,
+        1,
+        opened,
+        event,
+        a_seq,
+    )
+    return Record("MATCH", (*fields, bindings, events))
 
 
 def _hand_written_c() -> list[Record]:
-    """The life_ends matches of :func:`_hand_written_a`, with their content-addressed ids."""
-    out = []
-    for seq, tick, event, a_seq, person in LIFE_ENDS_VECTORS:
-        mid = match_id("solitary_life", "life_ends", 1, [event])
-        out.append(
-            Record(
-                "MATCH",
-                (
-                    0,
-                    seq,
-                    tick,
-                    mid,
-                    "solitary_life",
-                    "life_ends",
-                    1,
-                    0,
-                    0,
-                    1,
-                    tick,
-                    event,
-                    a_seq,
-                    (("A", 1, person),),
-                    (("e1", event),),
-                ),
-            )
+    """The matches of :func:`_hand_written_a` in R4 order: by closing seq, then pack."""
+    life_ends = ("solitary_life", "life_ends", 1)
+    out = {
+        seq: _match(
+            (seq, tick),
+            life_ends,
+            (0, 0, tick, event, a_seq),
+            (("A", 1, person),),
+            (("e1", event),),
         )
-    out.append(
-        Record(
-            "MATCH",
-            (
-                0,
-                2,
-                216_000,
-                match_id("betrayal", "trust_then_betrayal", 3, [1, 3]),
-                "betrayal",
-                "trust_then_betrayal",
-                3,
-                2,
-                2,
-                1,
-                43_200,
-                3,
-                9,
-                (("A", 1, 0x2222), ("B", 1, 0x3333)),
-                (("e1", 1), ("e2", 3)),
-            ),
-        )
-    )
-    return out
+        for seq, tick, event, a_seq, person in LIFE_ENDS_VECTORS
+    }
+    betrayal = ("betrayal", "trust_then_betrayal", 3)
+    events = (("e1", 1), ("e2", 3))
+    out[1] = _match((1, 216_000), betrayal, (2, 2, 43_200, 3, 9), BETRAYAL_BINDINGS, events)
+    return [out[k] for k in sorted(out)]
 
 
-MATCH_ID_VECTORS: tuple[tuple[str, str, int, tuple[int, ...]], ...] = (
-    ("solitary_life", "life_ends", 1, (0,)),
-    ("solitary_life", "life_ends", 1, (3,)),
-    ("betrayal", "trust_then_betrayal", 3, (1, 3)),
-    ("", "", 0, ()),
-    ("pé", "q", 65535, (MASK64,)),
+MATCH_ID_VECTORS: tuple[tuple[str, str, int, tuple[int, ...], tuple[Binding, ...]], ...] = (
+    ("solitary_life", "life_ends", 1, (0,), (("A", 1, 0x1111),)),
+    ("solitary_life", "life_ends", 1, (3,), (("A", 1, 0x2222),)),
+    ("solitary_life", "life_ends", 1, (3,), (("A", 1, 0x3333),)),
+    ("betrayal", "trust_then_betrayal", 3, (1, 3), BETRAYAL_BINDINGS),
+    ("", "", 0, (), ()),
+    ("pé", "q", 65535, (MASK64,), (("Z", 4, MASK64), ("a", 0, 0))),
 )
-GENERATED_PER_SEGMENT = 24
+GENERATED_LINES = 24
 
 
-def _segment(timeline: int, channel: str, year: int, records: Sequence[Record]) -> list[str]:
+def _block(head: str, records: Sequence[Record]) -> list[str]:
     lines = [render(r) for r in records]
-    return [
-        f"segment {timeline} {channel} {year} {len(lines)}",
-        *lines,
-        f"digest {digest(lines).hex()}",
-    ]
+    return [f"{head} {len(lines)}", *lines, f"digest {digest(lines).hex()}"]
 
 
 def render_golden() -> str:
@@ -874,20 +1084,21 @@ def render_golden() -> str:
     rng = random.Random(2026)
     a_kinds = [k for k in KINDS if CHANNEL[k] == "A"]
     header = [
-        "# World Stream canonical text form v0: golden lines, segment digests and MatchId vectors.",
+        "# World Stream canonical text form v0: golden lines, digests and MatchId vectors.",
         "# GENERATED by specs/stream/canonical_v0.py; do not edit. Grammar: canonical_v0.md.",
-        "# `segment <timeline> <channel> <sim_year> <n>` is followed by n canonical lines, then",
-        "# `digest <xxh3-128, 32 lowercase hex>`: canonical_digest over those lines, each with LF.",
-        "# `match_id <pack> <pattern_id> <version> <event ids> <xxh3-64>`: channel_c_v0.sql R5.",
+        "# `segment <timeline> <channel> <sim_year> <n>`: n canonical lines of one segment in R4",
+        "# order, then `digest <xxh3-128, 32 lowercase hex>`: canonical_digest (each line + LF).",
+        "# `lines <n>`: n generated lines in no particular order, then their digest the same way.",
+        "# The generated lines come from CPython 3.12's `random` with a fixed seed; another",
+        "# interpreter may generate different lines, which is why they are committed here.",
+        "# `match_id <pack> <pattern_id> <version> <event ids> <bindings> <xxh3-64>`: R5 vectors.",
     ]
     body = [
-        *_segment(0, "A", 0, _hand_written_a()),
-        *_segment(0, "C", 0, _hand_written_c()),
-        *_segment(
-            0, "A", 1, [generate(rng, rng.choice(a_kinds)) for _ in range(GENERATED_PER_SEGMENT)]
-        ),
-        *_segment(0, "C", 1, [generate(rng, "MATCH") for _ in range(GENERATED_PER_SEGMENT // 2)]),
-        *_segment(3, "A", 2, []),
+        *_block("segment 0 A 0", _hand_written_a()),
+        *_block("segment 0 C 0", _hand_written_c()),
+        *_block("lines", [generate(rng, rng.choice(a_kinds)) for _ in range(GENERATED_LINES)]),
+        *_block("lines", [generate(rng, "MATCH") for _ in range(GENERATED_LINES // 2)]),
+        *_block("segment 3 A 2", []),
     ]
     vectors = [
         " ".join(
@@ -897,26 +1108,13 @@ def render_golden() -> str:
                 encode_str(pid),
                 str(v),
                 EVENT_IDS.render(ids),
-                f"{match_id(pack, pid, v, ids):016x}",
+                BINDINGS.render(bindings),
+                f"{match_id(pack, pid, v, ids, bindings):016x}",
             ]
         )
-        for pack, pid, v, ids in MATCH_ID_VECTORS
+        for pack, pid, v, ids, bindings in MATCH_ID_VECTORS
     ]
     return "\n".join([*header, *body, *vectors]) + "\n"
-
-
-def digest_file(path: Path) -> bytes:
-    """Parse every record line of a canonical file (``#`` lines skipped) and return their digest."""
-    lines = []
-    for n, raw in enumerate(path.read_text(encoding="utf-8").split("\n")[:-1], 1):
-        if raw.startswith("#"):
-            continue
-        try:
-            parse(raw)
-        except CanonicalError as e:
-            raise CanonicalError(f"{path}:{n}: {e}") from None
-        lines.append(raw)
-    return digest(lines)
 
 
 def _check_golden(golden: Path, text: str) -> int:
@@ -957,7 +1155,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_SELFTEST
     print(
         f"self-test: {len(KINDS)} kinds x {ROUND_TRIP_RECORDS} records round-trip; "
-        f"{len(REFUSED)} planted lines refused"
+        f"{len(REFUSED)} planted lines and {len(REFUSED_FILES)} planted files refused"
     )
     if args.digest is not None:
         return _digest_command(args.digest)

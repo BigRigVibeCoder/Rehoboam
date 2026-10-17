@@ -16,7 +16,8 @@ Design rules:
 
 - A **line** is a sequence of **tokens** separated by exactly one space (0x20). It holds no other byte below 0x21 and no byte above 0x7E. It ends with one LF (0x0A); there is no CR. Where a line is quoted below, its LF is left out.
 - The first token is the **kind name** (`INPUT`, `EVENT`, `LIFE_ENTRY`, `LIFE_EXIT`, `STEP_DIGEST`, `KEYFRAME`, `MATCH`), then the kind's fields in the order of §3. Nothing else: no trailing fields, no comments on a record line.
-- A **canonical file** (what `rh-cli tail --canonical` writes, what `canonical_v0.py --digest` reads) is record lines, in `seq` order, plus any number of lines starting with `#`. A `#` line is a header or a comment: it is not a record and is never hashed. The first line of a file written by a tool is its header, `#rehoboam/stream/canonical/v0 timeline=<u32> channel=<A|C> registry_version=<string token> format=<string token>`, so a reader knows which dictionaries (the segment's `verb`, `record_kind`, `pattern` tables) the ids in the lines refer to. The header carries the Registry version; the record lines do not repeat it.
+- A **canonical file** (what `rh-cli tail --canonical` writes, what `canonical_v0.py --digest` reads) is: its **header line** first, then record lines in `seq` order, plus any number of comment lines starting with `#`. The header is `#rehoboam/stream/canonical/v0 timeline=<u32> channel=<A|C> registry_version=<string token> format=<string token>`, so a reader knows which timeline and channel the lines belong to and which dictionaries (the segment's `verb`, `record_kind`, `pattern` tables) their ids refer to. The header carries the Registry version; the record lines do not repeat it. Neither the header nor a comment is a record, and neither is hashed.
+- A reader of a canonical file (`--digest`, the Tester's oracle) checks the whole file before it hashes anything: the bytes are ASCII, the file ends with LF and holds no CR (a CRLF file is refused, not silently equal); the first line is the header; every record line parses (§2, §3); every record is of the header's channel and timeline; `seq` is contiguous (each record's `seq` is the previous one's plus one) and `tick` never decreases. A file that fails any of these has no digest.
 
 ## 2. Tokens
 
@@ -31,7 +32,7 @@ Design rules:
 | **clause** | `e[0-9]+` | A pattern clause's `bind` (`e1`) |
 | **list(T)** | `[` items joined by `,` `]`; the empty list is `[]` | No spaces inside. An item is an int or a **tuple**: components joined by `/` |
 
-Enumerations (`phase`, `secrecy`, `origin`, `class`, `entity_kind`, `role`, `exit_kind`, `death_cause`, `selection`, `on_complete`, `status`) are their integer codes, exactly the codes the segment DDL fixes; names would tie the line to a Registry version. Verbs appear twice on an `EVENT` line, as `verb_id` (the Registry index, `u16`) and as the verb's name (a string), so that a line is readable and lossless without the segment's `verb` dictionary; a parser given the dictionary checks the pair. Fixed-point quantities (`magnitude`, Q16_16 payload values) are their raw integers. Nothing is ever a float.
+Enumerations are their integer codes, exactly the codes the segment DDL fixes, and the parser refuses a code outside the DDL's domain: `phase` 0–11 (`05.1` §4.2, the twelve phases), `class` 0 (push), `secrecy` 0–3, `origin` 0, 1, 3, 4 (2 is retired), `entity_kind` 0–4, `role` 0–3 (`[event_roles]`), a cause's `kind` 0–8, a life entry's `origin` 0–2, `sex` 0–1, `exit_kind` 0–1, `death_cause` 0–5, `selection` 0–2, `on_complete` 0–2, `status` 1 (v0 writes complete matches only). Names would tie the line to a Registry version. Verbs appear twice on an `EVENT` line, as `verb_id` (the Registry index, `u16`) and as the verb's name (a string), so that a line is readable and lossless without the segment's `verb` dictionary; a parser given the dictionary checks the pair. Fixed-point quantities (`magnitude`, Q16_16 payload values) are their raw integers. Nothing is ever a float. An integer token longer than 20 characters is refused before it is converted.
 
 ## 3. Records
 
@@ -54,6 +55,10 @@ List orders, which the parser enforces:
 - `events`: in clause order (`ordinal`), with distinct clause names and strictly ascending event ids (kernel order, `05.4` §2.3 item 2).
 - `payload`: as emitted (its order is meaning; `DEATH`: `[cause]`).
 
+Record-level domain checks, which the parser (this reference and `rh-stream`'s, which must refuse the same lines) applies after the tokens:
+- `MATCH`: at least one event; `closed_by_event_id` is one of the events; `opened_tick` ≤ `tick`.
+- `LIFE_EXIT`: a death (`exit_kind` 0) has a `death_cause` other than 0; an emigration (`exit_kind` 1) has `death_cause` 0 and no `event_id`.
+
 Examples (from the golden file):
 
 ```text
@@ -61,7 +66,7 @@ EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369/1] []
 LIFE_EXIT 0 11 216000 13107 1 0 ~
 STEP_DIGEST 0 12 216000 0 0 1 0000000000000001 0000000000000002 0000000000000003
 KEYFRAME 0 14 216000 % a%20b%25%C3%A9/%E6%97%A5%E6%9C%AC%09%0A%22%5C ffffffffffffffff 18446744073709551615
-MATCH 0 0 0 e0d979477f64bc68 solitary_life life_ends 1 0 0 1 0 0 1 [A/1/4369] [e1/0]
+MATCH 0 0 0 ce0cbf3420904cae solitary_life life_ends 1 0 0 1 0 0 1 [A/1/4369] [e1/0]
 ```
 
 The first is a natural `DEATH` of person 4369 at tick 0 (phase 4 Vital, verb 0, act-class bit 15, no place, tellability 128, payload `[cause 1]`, one role: a person, the target, no causes). The fourth has an empty `keyframe_format` and a path holding a space, `%`, `é`, two CJK characters, a tab, a newline, a quote and a backslash.
@@ -81,18 +86,20 @@ Why this and not an alternative:
 
 ## 5. Refusals (what the parser rejects)
 
-The reference's self-test plants these and requires `CanonicalError`: a leading, trailing or doubled space; a CR; a leading zero, a `+`, `-0`; an int outside its type; a missing or extra field; `~` in a non-optional field; an unknown or lowercase kind; a hash in decimal, in uppercase or of the wrong length; a lowercase, truncated or non-UTF-8 escape; an escaped safe byte; an unescaped control byte; a non-ASCII line; an empty string token; a scalar where a list is due; a trailing comma; a tuple with the wrong arity; causes or bindings out of order or repeated; event ids not ascending; a repeated or misnamed clause; a space inside a list.
+The reference's self-test plants these and requires `CanonicalError`: a leading, trailing or doubled space; a CR; a leading zero, a `+`, `-0`; an int outside its type or longer than 20 characters; a missing or extra field; `~` in a non-optional field; an unknown or lowercase kind; a hash in decimal, in uppercase or of the wrong length; a lowercase, truncated or non-UTF-8 escape; an escaped safe byte; an unescaped control byte; a non-ASCII line; an empty string token; an enum code outside its domain (a phase of 12, a secrecy of 4, the retired origin 2, an entity kind of 5, a role of 4, an edge kind of 9, a death cause of 6, a selection or on_complete of 3, a partial match); a death without a cause, an emigration with one or with a DEATH event; a scalar where a list is due; a trailing comma; a tuple with the wrong arity; causes or bindings out of order or repeated; event ids not ascending; a repeated or misnamed clause; a space inside a list; a match with no event, with a closing event not among its events, or opened after it closed. It also plants whole files that `--digest` must refuse (§1): CRLF, a missing final LF, a lone CR, a non-ASCII byte, a missing header, a record of the other channel, a gap in `seq`, a second timeline, a tick going back, an empty file. A lone surrogate in a value is refused by the printer.
 
 ## 6. MatchId (channel C)
 
 ```text
-match_id = XXH3-64( "rehoboam/sift/match/v0" || str(pack) || str(pattern_id) || u16(pattern_version) || u32(n) || u64(event_id_1) || ... || u64(event_id_n) )
+match_id = XXH3-64( "rehoboam/sift/match/v0" || str(pack) || str(pattern_id) || u16(pattern_version)
+                    || u32(n) || u64(event_id_1) || ... || u64(event_id_n)
+                    || u32(m) || str(role_1) || u8(entity_kind_1) || u64(entity_id_1) || ... )
 ```
 
-with `str(s) = u32(len(bytes)) || UTF-8 bytes`, every integer little-endian, the event ids in clause order, seed 0 and the default secret. It is `05.4` §2.3 item 10's `H64(pattern_id, pattern_version, event_ids)` with the pack added (a pattern id is unique within its pack). It is content-addressed, so a re-sift and the SQL twin agree on it without sharing state (V-SIFT-01); bindings are not hashed because, for one pattern, they are a function of the event tuple. Vectors are in the golden file (`match_id` lines).
+with `str(s) = u32(len(bytes)) || UTF-8 bytes`, every integer little-endian, the event ids in clause order, the bindings in bytewise role order, seed 0 and the default secret. It is `05.4` §2.3 item 10's content-addressed MatchId with the pack added (a pattern id is unique within its pack) and the bindings added: one event can complete several matches of one pattern when several entities fill a role (a `DEATH` with two targets gives two `life_ends` matches), and without the bindings their ids would collide. It is content-addressed, so a re-sift and the SQL twin agree on it without sharing state (V-SIFT-01). Vectors are in the golden file (`match_id` lines).
 
 ## 7. Reference, golden file and gates
 
-- `python -I specs/stream/canonical_v0.py --check` runs the self-test (a property round trip over generated records of every kind, printer idempotence, the §5 refusals, the known answers of §4 and §2), then compares the committed golden file with the reference's rendering. The golden file holds a hand-written channel-A segment that exercises every kind and edge (a negative tick, NULLs, an empty payload, i64 extremes, every string escape), its `life_ends` matches, generated segments, an empty segment, and the MatchId vectors. `rh-stream`'s test (SPR-013 T-09) parses the golden file and reproduces every line and digest; `rh-sifter`'s (T-11) reproduces the `match_id` lines.
+- `python -I specs/stream/canonical_v0.py --check` runs the self-test (a property round trip over generated records of every kind, printer idempotence, the §5 refusals of lines and files, the known answers of §4 and §2), then compares the committed golden file with the reference's rendering. The golden file holds a hand-written channel-A segment in R4 order that exercises every kind and edge (a negative tick, NULLs, an empty payload, i64 extremes, every string escape), its three matches in channel C's R4 order (`life_ends` twice and a two-clause `trust_then_betrayal`), blocks of generated lines (`lines`, in no particular order; they come from CPython 3.12's `random` with a fixed seed, which is why they are committed), an empty segment, and the MatchId vectors. `rh-stream`'s test (SPR-013 T-09) parses the golden file and reproduces every line and digest; `rh-sifter`'s (T-11) reproduces the `match_id` lines.
 - `bin/check_all.sh` runs `--check` and a positive control: a stale copy of the golden file must FAIL with `STALE:` (`tests/lint_fixtures/golden/stale_canonical_v0.txt`).
-- `python -I specs/stream/canonical_v0.py --digest FILE` parses a canonical file and prints its digest, for the Tester: `rh-cli tail --canonical` of one segment, piped to a file, must give the segment's `canonical_digest`.
+- `python -I specs/stream/canonical_v0.py --digest FILE` checks a canonical file as §1 says and prints its digest, for the Tester: `rh-cli tail --canonical` of one segment, piped to a file, must give the segment's `canonical_digest`; the self-test's planted lines and files are the seed corpus of the parser fuzz.

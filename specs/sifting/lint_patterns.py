@@ -77,6 +77,8 @@ def lint(patterns: dict, reg: dict) -> list[str]:
         _unknown(set(p), PATTERN_KEYS, pid, errs)
         _unknown(set(p.get("emit", {})), EMIT_KEYS, f"{pid}.emit", errs)
         for var, role in p.get("roles", {}).items():
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", var):   # the canonical form's identifier (specs/stream/canonical_v0.md §2)
+                errs.append(f"{pid}: role variable '{var}' is not an identifier [A-Za-z_][A-Za-z0-9_]*")
             if role not in roles:
                 errs.append(f"{pid}: role {var}='{role}' not in Registry")
         for key, allowed in (("selection", SELECTIONS), ("on_complete", ON_COMPLETE)):
@@ -126,7 +128,7 @@ def lint(patterns: dict, reg: dict) -> list[str]:
             ev = c.get("bind")
             where = f"{pid}.{ev}"
             _unknown(set(c), CLAUSE_KEYS, where, errs)
-            if not ev or not re.fullmatch(r"e\d+", ev):
+            if not ev or not re.fullmatch(r"e[0-9]+", ev):   # ASCII digits only, as the canonical form (canonical_v0.md §2)
                 errs.append(f"{pid}: clause has invalid/missing bind")
                 continue
             selectors = [k for k in ("act", "verb", "match_event") if k in c]
@@ -172,7 +174,7 @@ def lint(patterns: dict, reg: dict) -> list[str]:
                 errs.append(f"{pid}.unless: between must name two bound clauses in kernel order, got {btw}")
                 continue
             ub = u.get("bind")
-            if ub is not None and not re.fullmatch(r"u\d+", ub):
+            if ub is not None and not re.fullmatch(r"u[0-9]+", ub):
                 errs.append(f"{pid}.unless: bind must look like 'uN', got {ub}")
             # an unless event arrives while btw[0] is bound and btw[1] is not: it may read only those anchors
             visible_u = set(bound[: bound.index(btw[0]) + 1]) | ({ub} if ub else set())

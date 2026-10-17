@@ -10,8 +10,9 @@ It loads ``specs/stream/channel_c_v0.sql`` into an in-memory DuckDB and checks:
      layout next to the channel-A segments, one Parquet file per table per sim-year, and read back:
      no float column in any written file, seq contiguous from 0 across segments, the R4 order
      holds (the order_violation view is empty), the segment rows chain, every match's canonical
-     line (canonical_v0.py) is rebuilt from the stored rows and the segments' canonical digests
-     match it (R8);
+     line (canonical_v0.py) is rebuilt from the stored rows alone (pack, semantics, bindings and
+     events included) and the segments' canonical digests match it (R8), and the channel-A digest
+     chain of every segment recomputes from the stored digests (R7);
   4. a SQL twin of ``life_ends`` over the channel-A tables gives the same matches: closing event,
      binding and content-addressed match id (V-SIFT-01 in miniature; R5);
   5. the order check refuses a planted swap of two records;
@@ -57,6 +58,7 @@ LATEST, CLEAR_BINDING, COMPLETE = 0, 0, 1
 PERSON = 1  # rh-ids EntityKind
 EMPTY_DIGEST = "99aa06d3014798d86001c324468d497f"
 D_TEST = b"\x00" * 16
+D_CHAIN = b"rehoboam/stream/channel-c/v0/a-chain"
 
 
 def _load(path: Path) -> ModuleType:
@@ -130,7 +132,9 @@ def life_ends_matches(run: object) -> list[Match]:
     out = []
     for seq, (a_seq, row) in enumerate(deaths):
         event_id, tick = row[4], row[2]
-        mid = int(CANON.match_id(PACK, PATTERN, VERSION, [event_id]))
+        mid = int(
+            CANON.match_id(PACK, PATTERN, VERSION, [event_id], [("A", PERSON, targets[event_id])])
+        )
         out.append((seq, tick, mid, event_id, a_seq, targets[event_id]))
     return out
 
@@ -167,14 +171,30 @@ def insert_matches(con: duckdb.DuckDBPyConnection, matches: list[Match]) -> None
         con.execute("INSERT INTO sift_binding VALUES (0, ?, 'A', ?, ?)", [mid, PERSON, person])
         con.execute("INSERT INTO sift_match_event VALUES (0, ?, 'e1', 0, ?)", [mid, event_id])
     con.execute(
-        "INSERT INTO pattern VALUES (?, ?, ?, ?, ?, 1, ['A'], 0, 333333, ?)",
+        "INSERT INTO pattern VALUES (?, ?, ?, ?, ?, 1, ['A'], [], 0, 333333, 1, ?)",
         [PACK, PATTERN, VERSION, LATEST, CLEAR_BINDING, D_TEST],
     )
 
 
+def a_digest(year: int) -> bytes:
+    """A stand-in for the channel-A segment digest of ``year`` (the self-test has no channel A)."""
+    return bytes(CANON.xxh3_128(b"channel A of year " + str(year).encode()))
+
+
+def a_chain(previous: bytes, digest: bytes) -> bytes:
+    """The channel-A digest chain of R7: XXH3-128(D_CHAIN || chain(y - 1) || a_digest(y))."""
+    return bytes(CANON.xxh3_128(D_CHAIN + previous + digest))
+
+
 def seal_year(con: duckdb.DuckDBPyConnection, d: Path, year: int, lines: list[str]) -> None:
-    """Seal one sim-year's segment: every table, empty or not, then the segment row (R7)."""
+    """Seal one sim-year's segment: every table, empty or not, then the segment row (R7).
+
+    The chain starts at ``a_chain(-1)`` and folds in every earlier year's stand-in digest.
+    """
     d.mkdir(parents=True)
+    chain = bytes(CANON.xxh3_128(D_CHAIN + (0).to_bytes(4, "little")))
+    for y in range(year + 1):
+        chain = a_chain(chain, a_digest(y))
     span = f"tick >= {year * YEAR} AND tick < {(year + 1) * YEAR}"
     con.execute(
         f"COPY (SELECT * FROM sift_match WHERE {span} ORDER BY seq) TO '{d}/sift_match.parquet'"
@@ -191,9 +211,9 @@ def seal_year(con: duckdb.DuckDBPyConnection, d: Path, year: int, lines: list[st
         f"INSERT INTO segment SELECT 0, 'C', {year}, '{FORMAT}', "
         "coalesce(min(seq), (SELECT count(*) FROM sift_match)), max(seq), count(*), "
         "min(tick), max(tick), 'test-sifter', 0, [?], 'test', '0.2.0', ?, 1, "
-        "(SELECT max(closed_by_seq) FROM sift_match), ?, ? "
+        "(SELECT max(closed_by_seq) FROM sift_match), ?, ?, ? "
         f"FROM sift_match WHERE {span}",
-        [PACK, D_TEST, D_TEST, digest],
+        [PACK, D_TEST, a_digest(year), chain, digest],
     )
     con.execute(f"COPY (SELECT * FROM segment WHERE sim_year = {year}) TO '{d}/segment.parquet'")
 
@@ -222,16 +242,30 @@ def read_back(ddl: str, root: Path) -> duckdb.DuckDBPyConnection:
     return con
 
 
+STORED = """
+SELECT m.timeline_id, m.seq, m.tick, m.match_id, m.pack, m.pattern_id, m.pattern_version,
+       m.selection, m.on_complete, m.status, m.opened_tick, m.closed_by_event_id, m.closed_by_seq,
+       (SELECT list(struct_pack(role := role, entity_kind := entity_kind, entity_id := entity_id)
+                    ORDER BY encode(role))
+          FROM sift_binding b WHERE b.timeline_id = m.timeline_id AND b.match_id = m.match_id),
+       (SELECT list(struct_pack(clause := clause, event_id := event_id) ORDER BY ordinal)
+          FROM sift_match_event e WHERE e.timeline_id = m.timeline_id AND e.match_id = m.match_id)
+FROM sift_match m ORDER BY m.seq
+"""
+
+
 def stored_lines(con: duckdb.DuckDBPyConnection) -> dict[int, list[str]]:
-    """The canonical MATCH lines rebuilt from the stored rows, per sim-year, in seq order."""
-    rows = con.execute(
-        "SELECT m.seq, m.tick, m.match_id, m.closed_by_event_id, m.closed_by_seq, b.entity_id "
-        "FROM sift_match m JOIN sift_binding b USING (timeline_id, match_id) ORDER BY m.seq"
-    ).fetchall()
+    """The canonical MATCH lines rebuilt from the stored rows alone, per sim-year, in seq order."""
     out: dict[int, list[str]] = {}
-    for row in rows:
-        m: Match = (row[0], row[1], row[2], row[3], row[4], row[5])
-        out.setdefault(row[1] // YEAR, []).append(str(CANON.render(match_record(m))))
+    for *scalars, bindings, events in con.execute(STORED).fetchall():
+        fields = (
+            *scalars,
+            tuple((b["role"], b["entity_kind"], b["entity_id"]) for b in bindings or []),
+            tuple((e["clause"], e["event_id"]) for e in events or []),
+        )
+        out.setdefault(scalars[2] // YEAR, []).append(
+            str(CANON.render(CANON.Record("MATCH", fields)))
+        )
     return out
 
 
@@ -251,24 +285,31 @@ def check_segments(ddl: str) -> bool:
         ]
         violations = con.execute("SELECT count(*) FROM order_violation").fetchone()
         segs = con.execute(
-            "SELECT sim_year, first_seq, last_seq, record_count, canonical_digest "
-            "FROM segment ORDER BY sim_year"
+            "SELECT sim_year, first_seq, last_seq, record_count, canonical_digest, "
+            "a_canonical_digest, a_chain FROM segment ORDER BY sim_year"
         ).fetchall()
         chained = segs[0][1] == 0 and all(a[1] + a[3] == b[1] for a, b in itertools.pairwise(segs))
         rebuilt = stored_lines(con)
-        digests_ok = all(bytes(CANON.digest(rebuilt.get(y, []))) == d for y, _, _, _, d in segs)
+        digests_ok = all(bytes(CANON.digest(rebuilt.get(s[0], []))) == s[4] for s in segs)
+        chain = bytes(CANON.xxh3_128(D_CHAIN + (0).to_bytes(4, "little")))
+        a_chains_ok = True
+        for s in segs:
+            chain = a_chain(chain, s[5])
+            a_chains_ok &= chain == s[6]
         per_dir = {len(list(d.glob("*.parquet"))) for d in dirs}
     print(
         f"   segments: {len(dirs)} sim-years, {len(files)} files ({per_dir} per segment), "
-        f"{len(matches)} matches, seq ranges {[(a, b) for _, a, b, _, _ in segs]}, "
+        f"{len(matches)} matches, seq ranges {[(s[1], s[2]) for s in segs]}, "
         f"float columns in files: {floats or 'none'}, order violations: {violations}, "
-        f"digests rebuilt from rows: {'equal' if digests_ok else 'DIFFER'}"
+        f"digests rebuilt from rows: {'equal' if digests_ok else 'DIFFER'}, "
+        f"channel-A chain: {'equal' if a_chains_ok else 'DIFFER'}"
     )
     return (
         not floats
         and violations == (0,)
         and chained
         and digests_ok
+        and a_chains_ok
         and per_dir == {FILES_PER_SEGMENT}
         and len(matches) == len(CHANNEL_A.FOUNDERS)
     )
@@ -289,7 +330,9 @@ def check_twin(ddl: str) -> bool:
     for table, rows in run.rows.items():
         con_a.executemany(f"INSERT INTO {table} VALUES ({', '.join('?' * len(rows[0]))})", rows)
     twin = con_a.execute(TWIN, [DEATH, TARGET]).fetchall()
-    twin_ids = [int(CANON.match_id(PACK, PATTERN, VERSION, [e])) for _, e, _, _ in twin]
+    twin_ids = [
+        int(CANON.match_id(PACK, PATTERN, VERSION, [e], [("A", PERSON, p)])) for _, e, _, p in twin
+    ]
     con_c = load(ddl)
     insert_matches(con_c, life_ends_matches(run))
     sifted = con_c.execute(
@@ -321,15 +364,15 @@ def check_empty_segment(ddl: str) -> bool:
     empty = bytes(CANON.digest([]))
     con.execute(
         "INSERT INTO segment VALUES (1, 'C', 7, ?, 5, NULL, 0, NULL, NULL, 'test-sifter', 0, [?], "
-        "'test', '0.2.0', ?, 1, 40, ?, ?)",
-        [FORMAT, PACK, D_TEST, D_TEST, empty],
+        "'test', '0.2.0', ?, 1, 40, ?, ?, ?)",
+        [FORMAT, PACK, D_TEST, D_TEST, D_TEST, empty],
     )
     accepted = con.execute("SELECT count(*) FROM segment").fetchone() == (1,)
     try:
         con.execute(
             "INSERT INTO segment VALUES (1, 'C', 8, ?, 5, 5, 0, NULL, NULL, 'test-sifter', 0, [?], "
-            "'test', '0.2.0', ?, 1, 40, ?, ?)",
-            [FORMAT, PACK, D_TEST, D_TEST, empty],
+            "'test', '0.2.0', ?, 1, 40, ?, ?, ?)",
+            [FORMAT, PACK, D_TEST, D_TEST, D_TEST, empty],
         )
         refused = False
     except duckdb.ConstraintException:

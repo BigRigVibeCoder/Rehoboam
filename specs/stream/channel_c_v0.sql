@@ -25,38 +25,49 @@
 --     event that completed it. Child rows (sift_binding, sift_match_event) hang off their MATCH by (timeline_id,
 --     match_id) and carry no seq.
 -- R4  Order. The sifter reads channel A in seq order and completes matches as it goes; channel C is written in that order:
---       key = (closed_by_seq, pack, pattern_id, pattern_version, event_ids),
---     where closed_by_seq is the channel-A seq of the completing event, strings compare bytewise, and event_ids (the
---     match's events in clause order, R6) compare lexicographically. Two completed matches never share the whole key:
---     a match is one pattern over one event tuple (match_id is content-addressed, R5). tick never decreases along seq,
---     because channel A's does. A DuckDB check is the order_violation view below.
--- R5  Identity. match_id = XXH3-64(D_MATCH || str(pack) || str(pattern_id) || u16(pattern_version) || u32(n) || u64(event_id) x n)
+--       key = (closed_by_seq, pack, pattern_id, pattern_version, event_ids, bindings),
+--     where closed_by_seq is the channel-A seq of the completing event, strings compare bytewise, event_ids (the match's
+--     events in clause order, R6) compare lexicographically, and bindings compare as the list of (role, entity_kind,
+--     entity_id) in bytewise role order. Two completed matches never share the whole key: a match is one pattern over
+--     one event tuple and one binding (one event can complete several matches of one pattern when several entities fill
+--     a role; match_id is content-addressed over the same key, R5). tick never decreases along seq, because channel A's
+--     does. A DuckDB check is the order_violation view below.
+-- R5  Identity.
+--       match_id = XXH3-64(D_MATCH || str(pack) || str(pattern_id) || u16(pattern_version)
+--                          || u32(n) || (u64(event_id)) x n                      -- the events in clause order
+--                          || u32(m) || (str(role) || u8(entity_kind) || u64(entity_id)) x m)   -- bindings, bytewise role order
 --     with D_MATCH = "rehoboam/sift/match/v0", str = u32 length || UTF-8 bytes, every integer little-endian, seed 0,
---     default secret (the engine's hash, rh_snapshot::hash::xxh3; the stdlib reference is bin/gen_hash_golden.py). It is
---     05.4 §2.3 item 10's H64(pattern_id, pattern_version, event_ids) with the pack added, since a pattern id is unique
---     within its pack only. It is stable across re-sifts and equal to the twin's: the twin check recomputes it in Python
---     from the twin's (pack, pattern, version, event ids) and compares (V-SIFT-01: match ids, bindings, event ids).
---     Bindings are not hashed: for one pattern they are a function of the event tuple.
+--     default secret (the engine's hash, rh_snapshot::hash::xxh3; the stdlib reference is bin/gen_hash_golden.py and
+--     specs/stream/canonical_v0.py match_id). It is 05.4 §2.3 item 10's content-addressed MatchId with the pack (a pattern
+--     id is unique within its pack only) and the bindings (one event tuple can carry several bindings) added; 05.4 is
+--     amended to match. It is stable across re-sifts and equal to the twin's: the twin check recomputes it in Python
+--     from the twin's (pack, pattern, version, event ids, bindings) and compares (V-SIFT-01: match ids, bindings,
+--     event ids).
 -- R6  Content. A MATCH record names its pattern (pack and id, the Registry's [pattern_packs] member and the pattern's
 --     `id`), its version, the declared semantics it was matched under (selection, on_complete; 05.4 §2.3, SIFT-8), its
 --     status, the opening and closing instants, the completing event and its channel-A seq, and, as child rows, the
 --     bindings (role variable -> entity) and the matched events (clause bind name -> event id, in clause order, which
---     is kernel order: strictly increasing event ids). dedupe and the pattern's other declarations are in the pattern
---     dictionary (R7), not repeated per row.
+--     is kernel order: strictly increasing event ids). dedupe, the firing budget and the pattern's other declarations
+--     are in the pattern dictionary (R7), not repeated per row.
 -- R7  Segments and self-description. One directory per (timeline, channel, sim-year), as channel A's R5:
 --       stream/t<timeline_id, 10 digits>/C/y<sim_year, 6 digits>/<table>.parquet
 --     with sim_year = floor(tick / minutes_per_year) of the closing tick. A sealed segment holds one file per table below,
 --     every one of them, empty or not: the record table, the two child tables, the dictionaries (record_kind, pattern)
 --     and its `segment` row. A sim-year the sifter has processed with no match still seals a segment (record_count = 0),
 --     so that `tail` can tell "no match" from "not sifted yet". Sealing is atomic: temporary file, fsync, rename;
---     segment.parquet is written last. The segment carries the pattern library it was sifted with (the DSL version and
---     each pack's digest, R8) and the channel-A segment it was derived from (its canonical digest), so that any
---     channel-C segment can be traced to its inputs.
+--     segment.parquet is written last. The segment carries the pattern library it was sifted with (R8) and the channel
+--     A it was derived from: the canonical digest of the channel-A segment of the same sim-year and the chain of all
+--     channel-A digests up to it,
+--       a_chain(y) = XXH3-128(D_CHAIN || a_chain(y - 1) || a_canonical_digest(y)),
+--       a_chain(-1) = XXH3-128(D_CHAIN || u32(timeline_id)),   D_CHAIN = "rehoboam/stream/channel-c/v0/a-chain",
+--     so that a channel-C segment pins every channel-A segment before it, not only its own year (as the journal's chain
+--     does for its rows, rh-snapshot journal.rs). All 16-byte digests are XXH3's canonical form.
 -- R8  Reproducibility (V-PLN-04, V-SIFT-01). Channel C is a function of (channel A, the pattern library, the sifter
 --     build): sifting the same run twice gives byte-identical files and equal `canonical_digest`s. The digest is the
 --     XXH3-128 of the records' canonical lines in seq order (specs/stream/canonical_v0.md; the MATCH line); an empty
---     segment digests the empty string. The pattern library is identified by the Registry pack id, the DSL version
---     and the XXH3-128 of each pack file's bytes.
+--     segment digests the empty string. The pattern library is identified by its packs' file digests (`pattern.pack_digest`,
+--     the XXH3-128 of each pack file's bytes, with the Registry pack id), not by a version number: v0 has no library
+--     version separate from the files. `segment.dsl_version` names the grammar the packs were compiled under (05.4 §2.2).
 
 -- ============================================================================================ dictionaries
 CREATE TABLE IF NOT EXISTS record_kind (          -- channel C's kind codes (R3); its own code space, constant in format v0
@@ -76,8 +87,10 @@ CREATE TABLE IF NOT EXISTS pattern (              -- the pattern library in forc
     on_complete     UTINYINT  NOT NULL,            -- 0 clear_binding, 1 consume, 2 keep
     clauses         UTINYINT  NOT NULL,            -- kernel clauses; 1 in v0 (single-clause patterns, SPR-011 ruling 14)
     roles           VARCHAR[] NOT NULL,            -- the pattern's role variables, bytewise order
+    dedupe_key      VARCHAR[] NOT NULL,            -- dedupe.key (role variables), empty when the pattern declares no dedupe
     dedupe_days     UINTEGER  NOT NULL,            -- dedupe.bucket_days, 0 when the pattern declares no dedupe
-    budget_per_century_per_100k UBIGINT NOT NULL,  -- firing_budget.per_century_per_100k (SIFT-8)
+    budget_num      UBIGINT   NOT NULL,            -- firing_budget.per_century_per_100k as the exact rational num/den
+    budget_den      UBIGINT   NOT NULL CHECK (budget_den > 0),   -- (budgets such as 0.5 and 0.2 are not integers; SIFT-8)
     pack_digest     BLOB      NOT NULL,            -- XXH3-128 of the pack file's bytes (16 bytes, canonical form)
     PRIMARY KEY (pack, pattern_id, pattern_version)
 );
@@ -93,14 +106,16 @@ CREATE TABLE IF NOT EXISTS segment (              -- one row per sealed segment;
     first_tick       BIGINT,                       -- NULL when record_count = 0
     last_tick        BIGINT,
     sifter_build     VARCHAR  NOT NULL,            -- rh-sifter's build id (the plane-C half of the provenance) ...
-    dsl_version      USMALLINT NOT NULL,           -- ... the pattern DSL version (0 = v0, 05.4 §2.2) ...
-    packs            VARCHAR[] NOT NULL,           -- ... and the packs sifted, in the manifest's order (each in `pattern`)
+    dsl_version      USMALLINT NOT NULL,           -- ... the pattern DSL grammar version (0 = v0, 05.4 §2.2) ...
+    packs            VARCHAR[] NOT NULL,           -- ... and the packs sifted, in the manifest's order (each in `pattern`,
+                                                   --     whose pack_digest values identify the library, R8)
     engine_build     VARCHAR  NOT NULL,            -- the history tuple of the channel A it was derived from (05.1 §6) ...
     registry_version VARCHAR  NOT NULL,
     manifest_hash    BLOB     NOT NULL,
     world_seed       UBIGINT  NOT NULL,
     a_last_seq       UBIGINT  NOT NULL,            -- ... the last channel-A seq read when this segment sealed ...
-    a_canonical_digest BLOB   NOT NULL,            -- ... and the channel-A segment (same timeline, sim-year) it closes with
+    a_canonical_digest BLOB   NOT NULL,            -- ... the channel-A segment (same timeline, sim-year) it closes with ...
+    a_chain          BLOB     NOT NULL,            -- ... and the chain of every channel-A digest up to it (R7)
     canonical_digest BLOB     NOT NULL,            -- R8: XXH3-128 of the MATCH canonical lines in seq order (16 bytes)
     PRIMARY KEY (timeline_id, channel, sim_year),
     CHECK ((record_count = 0 AND last_seq IS NULL AND first_tick IS NULL AND last_tick IS NULL)
@@ -155,23 +170,34 @@ CREATE OR REPLACE VIEW match_events_v AS
     SELECT timeline_id, match_id, list(event_id ORDER BY ordinal) AS event_ids
     FROM sift_match_event GROUP BY timeline_id, match_id;
 
+-- The bindings of each match as one list of (role, entity_kind, entity_id) in bytewise role order (the R4 key).
+CREATE OR REPLACE VIEW match_bindings_v AS
+    SELECT timeline_id, match_id,
+           list(struct_pack(role := role, entity_kind := entity_kind, entity_id := entity_id)
+                ORDER BY encode(role)) AS bindings
+    FROM sift_binding GROUP BY timeline_id, match_id;
+
 -- R4 holds iff this view is empty: a record whose seq order disagrees with the order key, or a gap in seq.
 CREATE OR REPLACE VIEW order_violation AS
     WITH h AS (
         SELECT m.timeline_id, m.seq, m.tick,
                row_number() OVER (PARTITION BY m.timeline_id
-                                  ORDER BY m.closed_by_seq, m.pack, m.pattern_id, m.pattern_version, e.event_ids) - 1 AS by_key,
+                                  ORDER BY m.closed_by_seq, encode(m.pack), encode(m.pattern_id), m.pattern_version,
+                                           e.event_ids, b.bindings) - 1 AS by_key,
                row_number() OVER (PARTITION BY m.timeline_id ORDER BY m.seq) - 1 AS by_seq
         FROM sift_match m
         LEFT JOIN match_events_v e ON e.timeline_id = m.timeline_id AND e.match_id = m.match_id
+        LEFT JOIN match_bindings_v b ON b.timeline_id = m.timeline_id AND b.match_id = m.match_id
     )
     SELECT * FROM h WHERE by_key <> by_seq OR seq <> by_seq;
 
 -- schema.sql's sift_match (plane C) as a view: its columns in order, except `score` (R2: significance is not in v0).
--- pattern_lib_version is the segment's DSL version (one per timeline's sift); bindings is the MAP schema.sql declares.
+-- pattern_lib_version is NULL: v0 identifies the library by its pack digests (R8), not by a number; the column stays
+-- so that the view has schema.sql's shape until P1.9 reconciles schema.sql's sift_match with this format.
+-- bindings is the MAP schema.sql declares.
 CREATE OR REPLACE VIEW sift_match_v AS
     SELECT m.timeline_id, m.match_id, m.pattern_id, m.pattern_version,
-           (SELECT max(dsl_version) FROM segment s WHERE s.timeline_id = m.timeline_id) AS pattern_lib_version,
+           NULL::USMALLINT AS pattern_lib_version,
            (SELECT map(list(role ORDER BY role), list(entity_id ORDER BY role))
               FROM sift_binding b WHERE b.timeline_id = m.timeline_id AND b.match_id = m.match_id) AS bindings,
            e.event_ids, m.status, m.opened_tick, m.tick AS closed_tick, m.closed_by_event_id
