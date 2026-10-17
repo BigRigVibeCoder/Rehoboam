@@ -15,8 +15,8 @@
 //!    nothing journaled. With `--from-keyframe TICK` (the last minute of a sim-year whose keyframe
 //!    the run wrote), it copies that keyframe and the sealed channel-A segments before it as well,
 //!    and resumes from the keyframe through the journal (V-DET-05);
-//! 3. compares the replay with the run: the whole ladder (a resumed run directory's ladder starts
-//!    from its keyframe's ladder sidecar), every channel-A segment's `canonical_digest` and file
+//! 3. compares the replay with the run: the whole ladder (a resumed replay keeps the run's
+//!    `run.ladder` up to the keyframe and appends its own rungs), every channel-A segment's `canonical_digest` and file
 //!    bytes, and every keyframe file. It prints `REPLAY EQUAL` or `REPLAY DIFFERS` with the first difference.
 //!
 //! In a run directory with a stream, the journal is cross-checked against channel A's `INPUT`
@@ -44,7 +44,7 @@ use rh_stream::writer::read_channel_a;
 
 use crate::dump;
 use crate::ladder::{Ladder, RungKind, compare};
-use crate::run::{Error, RunArgs, keyframe_path, ladder_sidecar, open_journal, run};
+use crate::run::{Error, RunArgs, keyframe_path, open_journal, run};
 use crate::stream::{RunDir, RunToml};
 
 /// `rh-cli replay`'s arguments.
@@ -296,10 +296,6 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
             let from = keyframe_path(&src.keyframes(), y);
             if from.is_file() {
                 copy(&from, &keyframe_path(&dst.keyframes(), y))?;
-                copy(
-                    &ladder_sidecar(&from),
-                    &ladder_sidecar(&keyframe_path(&dst.keyframes(), y)),
-                )?;
             }
         }
         // The sealed channel-A segments before the keyframe's year end: sim-years 0..year.
@@ -312,6 +308,8 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
                 copy(&src.stream().join(&rel), &dst.stream().join(&rel))?;
             }
         }
+        // The run's ladder up to the keyframe: the resumed replay keeps it and appends its own.
+        copy(&src.ladder(), &dst.ladder())?;
         run_args.resume = Some(kf);
     }
     let got = run(&run_args)?;
@@ -333,8 +331,8 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
             .map_err(|e| Error(format!("{}: {e}", src.ladder().display())))?,
     )
     .map_err(|e| Error(format!("{}: {e}", src.ladder().display())))?;
-    // A resumed run directory's ladder is the whole run's (its keyframe's sidecar and the resumed
-    // rungs; REV-SPR-013 MAJ-3), so both replays compare the whole ladder.
+    // A resumed run directory's ladder is the whole run's (its rungs up to the keyframe, then the
+    // resumed ones; REV-SPR-013 MAJ-3), so both replays compare the whole ladder.
     if let Some(d) = compare(&want, &got) {
         differences.push(format!("LADDER: {d}"));
     }
@@ -372,26 +370,7 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
     {
         differences.push(format!("STREAM: stream/{rel} is not byte-identical"));
     }
-    // Keyframes byte for byte. A keyframe's ladder sidecar carries the horizon of the run that
-    // wrote it (an extended run's earlier ones the shorter horizon), so it is checked as what it
-    // is for: its rungs are the run's ladder up to the keyframe.
-    let (mut ka, mut kb) = (files(&src.keyframes())?, files(&dst.keyframes())?);
-    for (rel, bytes) in std::mem::take(&mut ka) {
-        if rel.ends_with(".ladder") {
-            let prefix = std::str::from_utf8(&bytes)
-                .ok()
-                .and_then(|t| Ladder::parse(t).ok())
-                .map(|l| l.rungs);
-            if prefix.is_none_or(|p| want.rungs.get(..p.len()) != Some(&p[..])) {
-                differences.push(format!(
-                    "KEYFRAME: keyframes/{rel} is not the run's ladder up to its keyframe"
-                ));
-            }
-        } else {
-            ka.insert(rel, bytes);
-        }
-    }
-    kb.retain(|rel, _| !rel.ends_with(".ladder"));
+    let (ka, kb) = (files(&src.keyframes())?, files(&dst.keyframes())?);
     if let Some(rel) = ka
         .keys()
         .chain(kb.keys())

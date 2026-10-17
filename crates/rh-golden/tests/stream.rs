@@ -228,3 +228,50 @@ fn step_digests_carry_the_ladders_state_hash_at_every_month_pulse() {
         ladder.rungs.len()
     );
 }
+
+/// REV-SPR-013 MAJ-3 (b), option (a): a run directory's ladder bytes are linear in the rungs (no
+/// per-keyframe copies): after a 200-year run every ladder file of the directory together is at
+/// most 1.1 times `run.ladder`. A resume drops whatever follows the keyframe's rung, a partial line
+/// left by a kill included, and appends the rest: the whole run's ladder.
+#[test]
+fn the_run_directorys_ladder_is_linear_and_a_resume_drops_a_partial_line() {
+    fn ladder_bytes(at: &Path) -> u64 {
+        std::fs::read_dir(at)
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .map(|p| {
+                if p.is_dir() {
+                    ladder_bytes(&p)
+                } else if p.extension().is_some_and(|x| x == "ladder") {
+                    std::fs::metadata(&p).unwrap().len()
+                } else {
+                    0
+                }
+            })
+            .sum()
+    }
+    let dir = scratch("linear-ladder");
+    run(&args("solo", 200, 1, &dir)).unwrap();
+    let whole = std::fs::read(dir.join("run.ladder")).unwrap();
+    let total = ladder_bytes(&dir);
+    assert!(
+        total * 10 <= u64::try_from(whole.len()).unwrap() * 11,
+        "ladder files {total} bytes for a {}-byte run.ladder",
+        whole.len()
+    );
+    // A kill mid-write leaves a rung line cut short; the resume from year 150 drops it.
+    let mut torn = whole.clone();
+    torn.extend_from_slice(b"rung 201 1036");
+    std::fs::write(dir.join("run.ladder"), &torn).unwrap();
+    let mut resumed = args("solo", 200, 1, &dir);
+    resumed.resume = Some(keyframe_path(&dir.join("keyframes"), 150));
+    run(&resumed).unwrap();
+    assert!(
+        std::fs::read(dir.join("run.ladder")).unwrap() == whole,
+        "the resumed run.ladder is not the whole run's"
+    );
+    println!(
+        "T-09 MAJ-3: solo 200 years: {total} ladder bytes in the run directory for a {}-byte run.ladder; a resume over a torn line restores it",
+        whole.len()
+    );
+}

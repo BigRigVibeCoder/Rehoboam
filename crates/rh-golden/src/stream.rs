@@ -22,7 +22,9 @@
 //!
 //! **The run directory** (`--run-dir D`): `D/run.toml` (what the tools that read the stream need:
 //! the world, the seed, the horizon, the calendar and the history tuple), `D/journal.sqlite`,
-//! `D/keyframes/year-NNNN.rhkf`, `D/run.ladder` (unless `--out` names another file) and
+//! `D/keyframes/year-NNNN.rhkf`, `D/run.ladder` (written append-only as the run goes and synced
+//! before each keyframe, so a killed run's ladder reaches its newest keyframe; REV-SPR-013 MAJ-3),
+//! `D/.writer.lock` (held by the running writer) and
 //! `D/stream/t0000000000/A/y######/`. The engine never reads it: it is the host's.
 //!
 //! **Test hooks** (`--test-stall`, never on a baseline): the run prints a `STALL` line and blocks
@@ -167,8 +169,8 @@ pub fn writer_gone(dir: &Path) -> bool {
 }
 
 /// Writes `bytes` to `path` atomically: a temporary sibling, fsync, rename, fsync of the
-/// directory. The host's files of a run directory (`run.toml`, keyframes and their ladder
-/// sidecars); `rh-stream` writes only sealed segments (REV-SPR-013 MIN-3).
+/// directory. The host's files of a run directory (`run.toml`, the keyframes, the ladder's
+/// header); `rh-stream` writes only sealed segments (REV-SPR-013 MIN-3).
 ///
 /// # Errors
 /// [`Error`] naming the path.

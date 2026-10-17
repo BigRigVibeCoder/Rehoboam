@@ -556,13 +556,20 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     };
     ladder.header.journal = identity.map(|p| (p.inputs, dump::hex(&p.head)));
     ladder.header.until = args.until.filter(|&u| u < args.years);
-    // REV-SPR-013 MAJ-3 (b): a resumed run directory's ladder is the whole run's: the rungs up to
-    // the keyframe (its ladder sidecar) and the resumed ones.
-    if let (Some(_), Some(kf)) = (&run_dir, &args.resume)
-        && kf.as_path() != Path::new(GENESIS)
-    {
-        ladder.rungs = ladder_prefix(kf, &ladder.header)?;
-    }
+    // REV-SPR-013 MAJ-3 (b), the Architect's option (a): a run directory's run.ladder is written
+    // append-only as the run goes, synced before each keyframe; a resumed run keeps its rungs up
+    // to the keyframe and appends the rest, so it is always the whole run's ladder.
+    let mut log = match &run_dir {
+        None => None,
+        Some(dir) if args.resume.is_some() => {
+            let mpy = world.calendar.minutes_per_year();
+            let through = ((start.minutes() - 1).div_euclid(mpy) + 1) * mpy - 1;
+            let (log, prefix) = LadderLog::resume(&dir.ladder(), &ladder.header, through)?;
+            ladder.rungs = prefix;
+            Some(log)
+        }
+        Some(dir) => Some(LadderLog::create(&dir.ladder(), &ladder.header)?),
+    };
     let store = KeyframeStore::default();
     // Keyframes: the --keyframes directory of a full run (SPR-008), or the run directory's of
     // any streaming run, resumed ones included (their markers are part of channel A).
@@ -624,9 +631,11 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
             months.extend_from_slice(&digest.hash.to_le_bytes());
         }
         if let Some(index) = stop.rung {
-            ladder
-                .rungs
-                .push(rung(&digest, index, t, xxh3(&months), world.calendar));
+            let r = rung(&digest, index, t, xxh3(&months), world.calendar);
+            if let Some(log) = log.as_mut() {
+                log.append(&r)?;
+            }
+            ladder.rungs.push(r);
             months.clear();
         }
         if let Some((_, path)) = args.dump.as_ref().filter(|_| stop.dump) {
@@ -649,24 +658,18 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
             h.push(t, marker)?;
         }
         if let (Some((year, (bytes, _))), Some(dir)) = (&kf, &keyframes) {
-            // A run directory's keyframe carries the ladder so far, written first, so a keyframe on
-            // disk always has its prefix (REV-SPR-013 MAJ-3 (b)).
-            if run_dir.is_some() {
-                let prefix = Ladder {
-                    header: ladder.header.clone(),
-                    rungs: ladder.rungs.clone(),
-                    failed: None,
-                };
-                crate::stream::write_atomic(
-                    &ladder_sidecar(&keyframe_path(dir, *year)),
-                    prefix.render().as_bytes(),
-                )?;
+            // run.ladder reaches the keyframe before the keyframe exists (REV-SPR-013 MAJ-3 (b)).
+            if let Some(log) = log.as_mut() {
+                log.sync()?;
             }
             write_file(&keyframe_path(dir, *year), bytes)?;
         }
     }
     let stream = host.map(StreamHost::finish).transpose()?;
-    std::fs::write(&args.out, ladder.render()).map_err(|e| error("ladder")(&e))?;
+    match log {
+        Some(log) => log.finish(&ladder)?,
+        None => std::fs::write(&args.out, ladder.render()).map_err(|e| error("ladder")(&e))?,
+    }
     Ok(Outcome {
         ladder,
         dispatch: add(dispatched, engine.dispatch_stats()),
@@ -679,38 +682,125 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
 /// before its first keyframe; REV-SPR-013 MIN-4). Its sealed years are verified, not rewritten.
 pub const GENESIS: &str = "genesis";
 
-/// The ladder sidecar of a run directory's keyframe: the ladder up to the keyframe's year.
-#[must_use]
-pub fn ladder_sidecar(keyframe: &Path) -> PathBuf {
-    keyframe.with_extension("ladder")
+/// A run directory's `run.ladder`, written append-only as the run goes (REV-SPR-013 MAJ-3 (b),
+/// option (a)): the header first, then each rung as it is made, flushed and synced before each
+/// keyframe file is written, so the file always reaches at least the newest keyframe. Its size
+/// is linear in the rungs.
+struct LadderLog {
+    path: PathBuf,
+    file: std::io::BufWriter<std::fs::File>,
 }
 
-/// The rungs before a resumed run directory's keyframe, from its sidecar, checked to be this
-/// run's ladder (world, seed, rung kind and hash layout).
-fn ladder_prefix(keyframe: &Path, header: &Header) -> Result<Vec<Rung>, Error> {
-    let path = ladder_sidecar(keyframe);
-    let text = std::fs::read_to_string(&path).map_err(|e| {
-        Error(format!(
-            "{}: {e} (a run directory's keyframe has its ladder)",
-            path.display()
-        ))
-    })?;
-    let prefix = Ladder::parse(&text).map_err(|e| Error(format!("{}: {e}", path.display())))?;
-    let h = &prefix.header;
-    if h.world != header.world
-        || h.seed != header.seed
-        || h.rung != header.rung
-        || h.hash != header.hash
-    {
-        return Err(Error(format!(
-            "{}: the ladder sidecar is another run's ({} seed {}, {})",
-            path.display(),
-            h.world,
-            h.seed,
-            h.rung.name()
-        )));
+impl LadderLog {
+    fn open(path: &Path) -> Result<Self, Error> {
+        let file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .map_err(|e| Error(format!("{}: {e}", path.display())))?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            file: std::io::BufWriter::new(file),
+        })
     }
-    Ok(prefix.rungs)
+
+    /// A new run's ladder: its header, written atomically.
+    fn create(path: &Path, header: &Header) -> Result<Self, Error> {
+        let empty = Ladder {
+            header: header.clone(),
+            rungs: Vec::new(),
+            failed: None,
+        };
+        crate::stream::write_atomic(path, empty.render().as_bytes())?;
+        Self::open(path)
+    }
+
+    /// A resumed run's ladder: the existing rungs up to tick `through` (the keyframe's year end, or
+    /// -1 from genesis) are kept, checked to be this run's (world, seed, rung kind, hash layout)
+    /// and to reach the keyframe; everything after them, a partial line left by a kill included,
+    /// is dropped; the file is rewritten atomically with `header` (an extended run's horizon) and
+    /// those rungs, and the resumed rungs are appended.
+    fn resume(path: &Path, header: &Header, through: i64) -> Result<(Self, Vec<Rung>), Error> {
+        let fail = |what: String| Error(format!("{}: {what}", path.display()));
+        let text = std::fs::read_to_string(path).map_err(|e| fail(e.to_string()))?;
+        let mut cut = 0;
+        for line in text.split_inclusive('\n') {
+            // A rung line is `rung <index> <tick> ...`; the header's `rung yearly|monthly` is not.
+            let past = line
+                .strip_prefix("rung ")
+                .filter(|rest| !matches!(rest.trim_end(), "yearly" | "monthly"))
+                .is_some_and(|rest| {
+                    rest.split(' ')
+                        .nth(1)
+                        .and_then(|t| t.parse::<i64>().ok())
+                        .is_none_or(|t| t > through)
+                });
+            if !line.ends_with('\n') || past {
+                break;
+            }
+            cut += line.len();
+        }
+        let prefix = Ladder::parse(&text[..cut]).map_err(|e| fail(e.to_string()))?;
+        let h = &prefix.header;
+        if h.world != header.world
+            || h.seed != header.seed
+            || h.rung != header.rung
+            || h.hash != header.hash
+        {
+            return Err(fail(format!(
+                "another run's ladder ({} seed {}, {})",
+                h.world,
+                h.seed,
+                h.rung.name()
+            )));
+        }
+        if through >= 0 && prefix.rungs.last().is_none_or(|r| r.tick != through) {
+            return Err(fail(format!(
+                "the ladder does not reach the keyframe at tick {through}"
+            )));
+        }
+        let kept = Ladder {
+            header: header.clone(),
+            rungs: prefix.rungs,
+            failed: None,
+        };
+        crate::stream::write_atomic(path, kept.render().as_bytes())?;
+        Ok((Self::open(path)?, kept.rungs))
+    }
+
+    fn append(&mut self, r: &Rung) -> Result<(), Error> {
+        use std::io::Write as _;
+        self.file
+            .write_all(crate::ladder::render_rung(r).as_bytes())
+            .map_err(|e| Error(format!("{}: {e}", self.path.display())))
+    }
+
+    fn sync(&mut self) -> Result<(), Error> {
+        use std::io::Write as _;
+        self.file
+            .flush()
+            .and_then(|()| self.file.get_ref().sync_data())
+            .map_err(|e| Error(format!("{}: {e}", self.path.display())))
+    }
+
+    /// Appends a failure line if the run failed, syncs, and checks the file is `ladder`'s text.
+    fn finish(mut self, ladder: &Ladder) -> Result<(), Error> {
+        use std::io::Write as _;
+        if let Some((tick, message)) = &ladder.failed {
+            let one_line = message.replace(['\n', '\r'], " ");
+            writeln!(self.file, "failed {tick} {}", one_line.trim_end())
+                .map_err(|e| Error(format!("{}: {e}", self.path.display())))?;
+        }
+        self.sync()?;
+        let written = std::fs::read_to_string(&self.path)
+            .map_err(|e| Error(format!("{}: {e}", self.path.display())))?;
+        if written != ladder.render() {
+            return Err(Error(format!(
+                "{}: the appended ladder is not the run's ladder",
+                self.path.display()
+            )));
+        }
+        Ok(())
+    }
 }
 
 /// A new run needs a run directory that holds no run (REV-SPR-013 MAJ-2): no stream, no keyframe,
