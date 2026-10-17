@@ -97,8 +97,8 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 | # | Blocker | Status |
 |---|---|---|
 | 1 | SPR-012 not merged | Open |
-| 2 | `specs/stream/channel_c_v0.sql` does not exist (PR #37 Q10) | In review: PR #45 (draft) |
-| 3 | The canonical line grammar and the general DATA-5 tellability rule are not written (PR #37 Q8, Q11) | In review: PR #45 (draft). The DATA-5 amendment (`05.2` §4.0) awaits the director (D38); P1.0 admits every draft, so T-09 does not wait on it |
+| 2 | `specs/stream/channel_c_v0.sql` does not exist (PR #37 Q10) | Closed: PR #45 (reviewed) |
+| 3 | The canonical line grammar and the general DATA-5 tellability rule are not written (PR #37 Q8, Q11) | Closed: PR #45 (reviewed) for the grammar. The DATA-5 amendment (`05.2` §4.0) awaits the director (D38); P1.0 admits every draft, so T-09 does not wait on it |
 
 ## Completion
 
