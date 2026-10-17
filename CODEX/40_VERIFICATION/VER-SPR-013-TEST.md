@@ -391,3 +391,61 @@ See §7.4: the `--years` disagreement refusal leaves `journal.sqlite-shm`/`-wal`
 - A full sweep of every channel-C column: my first attempt (`p129b`) was stopped at the 30-minute limit under load, and I re-ran 19 chosen columns on a fresh 60-year directory (GAP-10).
 - Power loss (still: processes were killed, not the machine), a second platform, and GitHub Actions beyond reading the run times above.
 - Sifting after a killed `sift` run, and `tail --wait` against a writer that exits cleanly, beyond the repository's `tail_live` and `kill` tests.
+
+---
+
+# Phase 4: the fix batch (`e5082d0`)
+
+> **BLUF (phase 4): DEF-2, DEF-4 and GAP-9 are fixed; the lock change shows no refusal in 280 kill and resume cycles under `tail --wait` pollers, but my stress could not show the old code failing, so it does not prove the race fix.** `bin/check_all.sh` on a clean clone of `e5082d0`: **511 of 511**. One new low-severity gap (GAP-12).
+
+Head: `e5082d0` (includes `67a9d43`, the merge of main `f8054cb`, `ce6986d`). The two deviations the Architect accepted (`.writer.lock` content rewritten by a refused resume; a killed run's WAL folded before the horizon check) are not reported; I compare `.writer.lock` by name only.
+
+## 11. Verdicts and results
+
+| Item | Verdict | Basis |
+|---|---|---|
+| DEF-2 `replay --into` | **FIXED** | below |
+| DEF-4 refusals touch nothing | **FIXED** | below |
+| GAP-9 n03, n04 | **FIXED** | both killed by `replay::a_short_or_foreign_ladder_is_refused_by_name_on_resume`; n02 still survives as equivalent |
+| GAP-11 lock race | **NO REFUSAL OBSERVED; cause not demonstrated** | below |
+| Linear ladder after the merge | **HOLDS, one gap (GAP-12)** | 280 stress cycles + 30 torn-tail cycles |
+| `bin/check_all.sh` | **PASS, 511 of 511** | clean clone of `e5082d0`, `pull_request` shape with the PR title, body and base `f8054cb`. A first run failed with "No space left on device" (my disk, not the code); I freed space and re-ran the whole script |
+| CI | **PASS** | run 39049134951: part core 7 min 13 s in `check_all`, part golden 9 min 21 s, about 10 min 23 s wall |
+
+### DEF-2 (`p140_def2.sh`; whole-tree snapshot of names, modes and content hashes)
+
+| `--into` | Result |
+|---|---|
+| the run's parent; its grandparent; `parent/sibling/..`; `run/..`; a symlink to the parent | rc 2 "contains the run directory ... would delete the run"; tree **unchanged** |
+| the run directory; a directory inside it (existing or new) | rc 2 "is the run directory (or inside it)"; unchanged |
+| an unrelated non-empty directory holding `precious.txt` | rc 2 "exists, is not empty and is not a previous replay's output (no .rh-replay)"; unchanged |
+| an empty existing directory; an absent one | REPLAY EQUAL; the output holds `.rh-replay` ("rh-cli replay output") |
+| a previous replay's output, replayed into twice | REPLAY EQUAL each time |
+| **marker planted** (`.rh-replay` touched in a directory holding `notes.txt` and `sub/g`) | REPLAY EQUAL, and **both files are deleted**: the marker means replay-owned, as ruled. Anyone who copies or touches the marker into a directory loses its contents; a replay that was killed before it finished leaves the marker, so it is safe to reuse |
+| an ancestor of the run with a marker planted | refused (ancestor check comes first); unchanged |
+
+### DEF-4 (`p141_refuse.sh`; `.writer.lock` compared by name only)
+
+- Every refusal I tried leaves names and bytes unchanged, including the one that failed before: a resume with `--years 40` on a finished 60-year run. These are: new run into an existing directory; `--inject`, `--out`, `--journal` with `--run-dir`; replay into the run or inside it; resume at a bad tick, a missing keyframe, another seed or world; `tail --kind NOPE`; a missing founder.
+- **A negative input tick now leaves no directory at all** ("the input script has an input at tick -5, before genesis: nothing was written").
+- A resumed run has the **same file-name set** as an unbroken run of the same length (`find .` equal).
+- `--extend` 60 to 80: stream, keyframes and `run.ladder` equal to an unbroken 80-year run; same names; REPLAY EQUAL.
+
+### GAP-11 (`p142_stress.sh`, `p143_second.sh`, `p145_stress_old.sh`)
+
+- **Stress:** three `tail --wait --canonical` pollers on the directory (restarted whenever one exits), a run killed with `kill -9` at 60 to 390 ms, then a resume at once. 220 `solo` cycles and 60 `hamlet` cycles: **all 280 end equal to the unbroken run (stream, keyframes, `run.ladder`), 0 lock refusals.** The script captures `fuser` and `ps` on any refusal; none was needed.
+- **Control, not discriminating:** the same stress on the previous head `bb2e51a` (150 `solo` cycles) also gave **0 refusals**. I never reproduced the two original refusals either, so this probe cannot show that the retry removed them. Treat the fix as reasoned, not demonstrated.
+- **Genuine second writer** (`hamlet` running; a second `run --resume genesis` into the same directory): rc 2 "another run is writing this run directory (held by pid 15754 (running))", the pid being the first writer's; a fresh run is refused as "already holds a run"; the first writer finishes with a ladder and tree equal to the unbroken run. The lock file reads `pid N` and `started ...`.
+- Small wording defect: `replay` of the directory of a **running** writer says "the run was killed and not resumed", which is wrong while the writer is alive.
+
+### Linear ladder after the merge
+
+280 stress cycles (above) plus 30 torn-tail cycles on `hamlet`: 29 equal; the one failure is GAP-12.
+
+### GAP-12 (low): a torn keyframe rung is accepted by a resume and corrupts `run.ladder`
+
+The ladder is synced before each keyframe, so power loss cannot tear the rung at the keyframe's tick; but if it were torn (storage that lies about `fsync`, or a hand edit), the resume does not notice. Repro: kill a `hamlet` run with `--test-stall sealed:110`, cut `run.ladder` to the end of the year-110 rung group minus 1, 66 or 200 bytes, and resume from the year-110 keyframe: rc 0, but the final `run.ladder` differs from the unbroken run's (rung 1320 lacks its last `root` lines; `replay` reports "first differing rung: 1320"). Cutting exactly at the end of the group, or anywhere after it, resumes equal. The "ladder reaches the keyframe" check compares the last rung's tick, not that the rung is complete. Recommendation: parse the rung's `root` lines against the table count (or the rung's own digest). Confidence 70%.
+
+### Not done
+
+Not run in phase 4: the full mutant matrix (only n02 to n04), the 1,000-year `solo`/`household`/`hamlet` probes, power loss, and a stress with more than three pollers.
