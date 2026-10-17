@@ -30,7 +30,7 @@ slice** (`lint_next` in `lint_odd.py`):
 | `[[schedule]]` | every `(pulse, phase)` binding with the same `when` or an amendment, and every frozen step, equal or amended (steps may be added) |
 | `[[emits]]` | every kind, its frozen `when` equal or amended |
 | `[initialization]` | the frozen `state` text equal, or amended |
-| `[[params]]` | every name; a frozen `default` keeps its value; the same `meaning` or an amendment (REV-SPR-015 round 3 NIT-5) |
+| `[[params]]` | every name; a frozen `default` keeps its value; the same `meaning` or an amendment (REV-SPR-015 round 3 NIT-5). In both modes an entry is q16_16 unless it declares `type = "count"`, an integer with integer bounds and default (`u64` in the skeleton; SPR-016 MR2) |
 | `[verification]` | every frozen test id stays in `tests` (new ones may be added; the `prototype` may change) |
 | `[[couplings]]` | every frozen `(system, direction)` pair stays (new couplings may be added) |
 
@@ -76,9 +76,15 @@ table for a sentence that changes what a frozen step computes and demands the am
 A draft spec that still reads a column from the owner it had before the next version claimed it (S6's
 `household.head` from M4 today) warns in `--next` mode and names the follow-up; a frozen reader errs as always.
 
+**Follow-ups recorded here.** Mortality's entitlement read (REV-SPR-016-FOLD R2): the read of M4's household
+entitlement ratio (`household.food_entitlement_ratio`, provisional name) that `[algorithm.mortality_f1]` MR11 and
+fertility's hook (`eps_f`) will share, with its M4 in-coupling and its isolation forcing, is deferred to M4's first
+spec (P1.5a): a rate read needs a neutral typed by the owner's column, M4 has none, and the frozen-mode lint refuses
+the spec at promotion otherwise. MR11 states the form with the factor exactly 1 until then.
+
 **One draft per system id.** `next/` holds at most one next version per id, and only a frozen spec takes one, so a
-second slice of the same system (SPR-016's mortality, `specs/demography/mortality_f1.toml`) cannot be linted here
-until the first next version has superseded the file; it folds into the then-frozen version's next draft.
+second slice of the same system is drafted standalone and folded into the draft once the first slice has merged (SPR-016's
+mortality was drafted as `specs/demography/mortality_f1.toml` under PR #51 and folded into the M2 draft after PR #50).
 
 A `--overlay FILE` given with `--next` may add `[verbs]` and may **replace** the `[systems]` entry
 of a system that has a next-version spec (never another), keeping `fidelity_levels`, every
@@ -101,7 +107,12 @@ probes) run only on a clean set, so a broken spec can never bury its diagnostic 
 4. In that sprint's PR the Architect moves the file over `specs/systems/<id>.odd.toml`, merges
    the delta into `specs/manifest/registry_v0.toml`, regenerates the skeleton, sets
    `status = "frozen"` and empties this directory. `bin/gen_skeletons.py --check` and the ordinary
-   lint take over.
+   lint take over. Promotion checklist (REV-SPR-016-FOLD R6): update the two `CLAUDE.md` lines that
+   say "next-version spec" (births' reference) and "specs/systems/next while it is a draft"
+   (mortality's); both references then read the promoted spec through their fallback path, which
+   stays live. For M2's 0.3.0 that PR is **SPR-016's**, which merges after SPR-015's (R3): SPR-015
+   builds against the draft under the interim rule of its `[algorithm.parameters_f1]` P1
+   (`mortality_rung0` for everyone, β ≠ 1 refused).
 
 `bin/gen_skeletons.py` and `gen_manifest.py` read `specs/systems/*.odd.toml` only: a next version
 never changes a committed skeleton or the index until step 4.
@@ -110,6 +121,6 @@ never changes a committed skeleton or the index until step 4.
 
 | File | What |
 |---|---|
-| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) on the frozen rung-0 slice (0.2.1: 0.2.0 plus EVO-001's typed payloads and codes) |
-| `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`); verbs `BIRTH`, `MARRIAGE` |
-| `amendments.lock.toml` | the eighteen amendments of the M2 draft (five texts, seven column meanings, six parameter meanings), path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |
+| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) and F1 mortality (SPR-016, `[algorithm.mortality_f1]`, folded after PR #50) on the frozen rung-0 slice (0.2.1: 0.2.0 plus EVO-001's typed payloads and codes) |
+| `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`) and mortality's two parameters with their defaults (`density_capacity`, `density_mortality_slope`); verbs `BIRTH`, `MARRIAGE` |
+| `amendments.lock.toml` | the nineteen amendments of the M2 draft (five texts, seven column meanings, seven parameter meanings; the mortality fold re-stated five and added `e0`'s), path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |

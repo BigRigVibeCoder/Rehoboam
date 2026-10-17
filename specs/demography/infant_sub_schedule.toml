@@ -1,4 +1,5 @@
-# The infant sub-schedule of M2 F1 mortality (specs/demography/mortality_f1.toml, F7): how the deaths of
+# The infant sub-schedule of M2 F1 mortality ([algorithm.mortality_f1] MR7 of the M2 spec, in
+# specs/systems/next while it is a draft): how the deaths of
 # the first year of life are spread over its twelve months. Brass (1971) gives l(0) = 1 and l(1) only and
 # says the first year needs its own sub-schedule (R12 §9: Ys(0) is -infinity; age 1 is weak, p. 86,
 # endogenous neonatal deaths). Rung 0 interpolates l linearly through year 0, a flat hazard; historical
