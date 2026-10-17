@@ -1,0 +1,172 @@
+# Planted fixture for lint_odd.py's event-envelope checks (SPR-020; specs/chronicle/envelope_v0.md §2, §4, §7).
+# Never a contract: the overlay fixture of odd_emits with owned columns and envelope declarations. Case `no_source`: a snapshot without from.
+# Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_envelope/no_source --overlay tests/lint_fixtures/odd_emits/overlay.toml
+odd_r = 2
+
+[system]
+id = "M3.agriculture"
+name = "Agriculture (lint fixture)"
+spec_version = "0.0.1"
+fidelity = "F0"
+status = "frozen"
+crate = "rh-sys-agriculture"
+adrs = []
+requirements = []
+
+[purpose]
+statement = "Fixture only."
+role = "substrate"
+patterns = []
+not_yet = []
+
+[[emits]]
+kind = "X_FIXTURE_FORMED"
+when = "declared by the overlay, not the Registry"
+roles = ["actor", "target", "witness"]
+motives = ["RETALIATION_FOR"]
+snapshots = [
+  { attr = "fear", of = "actor", from = "field.fear_level" },
+  { attr = "trust", of = "target", partner = "actor", from = "field.fear_level" },
+  { attr = "weather", of = "event" },
+]
+
+[[owns]]
+column = "field.fear_level"
+entity = "field"
+type = "q8_8"
+plane = "A"
+meaning = "fixture: the source of the fear snapshot"
+fixed_point = true
+[[owns]]
+column = "field.flooded"
+entity = "field"
+type = "bool"
+plane = "A"
+meaning = "fixture: a bool column"
+fixed_point = false
+[[owns]]
+column = "field.sky"
+entity = "field"
+type = "enum"
+values = ["clear", "overcast", "rain", "storm", "snow", "fog", "heat"]
+plane = "A"
+meaning = "fixture: the weather enum, the Registry attribute's values in order"
+fixed_point = false
+[[owns]]
+column = "field.ruin"
+entity = "field"
+type = "q8_8"
+plane = "A"
+meaning = "fixture: a transformation state whose cause is stored with it (SAGA-15)"
+fixed_point = true
+cause_column = "field.ruin_cause"
+[[owns]]
+column = "field.ruin_cause"
+entity = "field"
+type = "u64"
+plane = "A"
+meaning = "fixture: EventId of the event that last changed field.ruin; 0 = none"
+fixed_point = false
+
+[scales]
+spatial = "region"
+temporal = "Year"
+extent = "n/a: fixture"
+restart = "n/a: fixture"
+
+[[schedule]]
+pulse = "Year"
+phase = "Environment"
+steps = ["noop: nothing"]
+when = "always"
+
+[[rng]]
+purpose = "fixture_draw"
+key = ["region", "year"]
+use = "n/a: fixture"
+
+[design]
+basic_principles = "n/a: fixture"
+emergence = "n/a: fixture"
+adaptation = "n/a: fixture"
+objectives = "n/a: fixture"
+learning = "n/a: fixture"
+prediction = "n/a: fixture"
+sensing = "n/a: fixture"
+interaction = "n/a: fixture"
+stochasticity = "n/a: fixture"
+collectives = "n/a: fixture"
+observation = "n/a: fixture"
+era_state = []
+scale_behaviour = "n/a: fixture"
+
+[initialization]
+state = "n/a: fixture"
+from_manifest = []
+
+[input_data]
+drivers = []
+
+[[params]]
+name = "anomaly_regime_corr"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "anomaly_regime_rate"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "anomaly_regime_years"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "autocorr"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "crop_corr_spring_spring"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "crop_corr_winter_spring"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "harvest_sigma"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "seed_yield_ratio"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "spatial_share"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "volcanic_rate"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "yield_cv_tech_floor"
+meaning = "fixture"
+source = "design value"
+
+[[submodels]]
+name = "noop"
+summary = "nothing"
+earns_its_place_by = ["V-INV-01"]
+
+[[invariants]]
+id = "INV-M3-01"
+statement = "fixture"
+test = "V-INV-01"
+
+[isolation]
+forcing = []
+horizon = "n/a: fixture"
+expect = "n/a: fixture"
+
+[verification]
+tests = ["V-INV-01"]
+prototype = ""

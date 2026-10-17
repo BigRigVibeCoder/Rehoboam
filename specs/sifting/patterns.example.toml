@@ -40,7 +40,7 @@ firing_budget = { per_century_per_100k = 0.5 }
   [[pattern.clause]]
   bind = "e1"
   act = ["coerce", "harm", "purge"]
-  initiator = "A"
+  actor = "A"
   target = "S"
   where = ["succession_rank(S, A)@e1 == 1", "fear(A)@e1 >= 0.6"]
   require_edge = { into = "e1", kind = "motivated_by", from_state = "fear(A)" }
@@ -58,19 +58,19 @@ firing_budget = { per_century_per_100k = 20 }
   [[pattern.clause]]
   bind = "e1"
   act = ["aid", "promise"]
-  initiator = "A"
+  actor = "A"
   target = "B"
   where = ["trust(B, A)@e1 >= 0.6"]
   [[pattern.clause]]
   bind = "e2"
   act = ["harm", "betray", "conceal"]
-  initiator = "A"
+  actor = "A"
   target = "B"
   after = "e1"
   within_days = 3650
   [[pattern.unless]]
   act = ["aid"]
-  initiator = "B"
+  actor = "B"
   target = "A"
   between = ["e1", "e2"]
   [pattern.emit]
@@ -90,12 +90,12 @@ firing_budget = { per_century_per_100k = 10 }
   [[pattern.clause]]
   bind = "e1"
   act = ["harm"]
-  initiator = "X"
+  actor = "X"
   target = "V"
   [[pattern.clause]]
   bind = "e2"
   act = ["harm", "depose", "accuse"]
-  initiator = "R"
+  actor = "R"
   target = "X"
   after = "e1"
   within_days = 18000
@@ -116,7 +116,7 @@ threatened_role = "S"
   [[pattern.clause]]
   bind = "e1"
   act = ["test"]
-  initiator = "I"
+  actor = "I"
   target = "S"
   where = ["test_result(S)@e1 == 'positive'", "hive_member(S)@e1 == false"]
   [[pattern.clause]]
@@ -141,12 +141,12 @@ firing_budget = { per_century_per_100k = 5 }
   [[pattern.clause]]
   bind = "e1"
   act = ["reveal", "aid", "harm"]
-  initiator = "M"
+  actor = "M"
   where = ["used_hive_only_knowledge(M)@e1 == true"]
   [[pattern.clause]]
   bind = "e2"
   act = ["discover", "accuse"]
-  initiator = "O"
+  actor = "O"
   target = "M"
   after = "e1"
   within_days = 30
@@ -187,11 +187,11 @@ surface_from = "e2"
   [[pattern.clause]]
   bind = "e1"
   act = ["flee"]
-  initiator = "G"
+  actor = "G"
   [[pattern.clause]]
   bind = "e2"
   act = ["aid"]
-  initiator = "H"
+  actor = "H"
   target = "G"
   after = "e1"
   within_days = 365
@@ -199,12 +199,12 @@ surface_from = "e2"
   [[pattern.clause]]
   bind = "e3"
   act = ["harm", "betray"]
-  initiator = "H"
+  actor = "H"
   target = "G"
   after = "e2"
   within_days = 365
   [[pattern.unless]]
   bind = "u1"
   act = ["flee"]
-  initiator = "G"
+  actor = "G"
   between = ["e1", "e3"]

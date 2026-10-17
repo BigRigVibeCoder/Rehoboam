@@ -134,21 +134,32 @@ fixed_point = false
 [[emits]]
 kind = "ARTIFACT_FORGED"
 when = "A Forge command from T1.minds (a named actor's completed plan) or a mythic catalyst creates an artifact"
+roles = ["actor", "instrument"]   # actor: the forger; instrument: the new artifact
 [[emits]]
 kind = "ARTIFACT_PASSED"
 when = "The bearer changes, with mode inheritance (the bearer's death path), theft, gift, trade, or loss (it stays where its bearer fell or was dropped); every bearer change is this event, linked to the previous chain event; the motive edges of the act are attached"
+roles = ["actor", "target", "instrument"]   # actor: the giver (or thief); target: the receiver; instrument: the artifact
+motives = ["GREED_FOR", "LOYALTY_TO", "VOW_OF"]
+snapshots = [{ attr = "contaminants", of = "event", from = "artifact.contaminants" }]
 [[emits]]
 kind = "ARTIFACT_USED"
 when = "The artifact is the instrument of an act (it is also the instrument role in that act's event); its charge, condition and contaminants change with the act, and condition_cause takes the act's EventId"
+roles = ["actor", "instrument"]
+snapshots = [{ attr = "contaminants", of = "event", from = "artifact.contaminants" }]
 [[emits]]
 kind = "ARTIFACT_FOUND"
 when = "A Search command succeeds at the place where a placed or lost artifact lies"
+roles = ["actor", "instrument"]
 [[emits]]
 kind = "ARTIFACT_DESTROYED"
 when = "A Destroy command succeeds (a vow fulfilled, a deliberate act); terminal"
+roles = ["actor", "instrument"]
+motives = ["VOW_OF"]
 [[emits]]
 kind = "BEARER_CORRUPTED"
 when = "A bearer's exposure first crosses corruption_threshold (at most once per bearer-artifact pair)"
+roles = ["actor", "instrument"]
+motives = ["CORRUPTION_BY"]
 
 [[commands]]
 target = "T1.minds"

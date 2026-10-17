@@ -1,7 +1,8 @@
 """
 Lint for Rehoboam sifting patterns (DSL v0). Enforces:
   * a closed key set: unknown keys are errors, so nothing is silently ignored;
-  * act classes, roles and verbs exist in the Registry;
+  * act classes, roles and verbs exist in the Registry; a clause binds a cast member by its Registry [event_roles]
+    name (`actor`, `target`, `witness`, `instrument`), to one of the pattern's role variables (SPR-020, envelope_v0.md §1);
   * every state read is a Registry-declared attribute, ANCHORED to a bound event (`attr(...)@eN`), with the right arity;
   * enum comparisons use declared symbolic values;
   * `after`, `between` and `require_edge` reference bound events; `require_edge.from_state` is anchored or names an attribute;
@@ -26,8 +27,9 @@ ON_COMPLETE = {"clear_binding", "consume", "keep"}
 DEDUPE_KEYS = {"key", "bucket_days"}
 BUDGET_KEYS = {"per_century_per_100k"}
 HAZARD_KEYS = {"system", "hazard"}
-CLAUSE_KEYS = {"bind", "act", "verb", "match_event", "initiator", "target", "where", "after", "within_days", "require_edge"}
-UNLESS_KEYS = {"bind", "act", "verb", "initiator", "target", "between", "where"}
+# A clause's cast keys are the Registry [event_roles] ids (actor, target, ...), read from the Registry at lint time.
+CLAUSE_KEYS = {"bind", "act", "verb", "match_event", "where", "after", "within_days", "require_edge"}
+UNLESS_KEYS = {"bind", "act", "verb", "between", "where"}
 EDGE_KEYS = {"from", "into", "kind", "from_state"}
 EMIT_KEYS = {"match_event"}
 EDGE_KINDS = {"contingent", "triggered", "relayed_knowledge", "motivated_by", "enabled", "probabilistic", "player", "oracle", "director"}
@@ -67,6 +69,8 @@ def _check_reads(expr: str, visible: set[str], attrs: dict, where: str, errs: li
 def lint(patterns: dict, reg: dict) -> list[str]:
     acts = set(reg["act_classes"]["ids"])
     roles = set(reg["roles"]["ids"])
+    cast_keys = set(reg["event_roles"]["ids"])           # the clause keys that bind a cast member (envelope_v0.md §1)
+    clause_keys, unless_keys = CLAUSE_KEYS | cast_keys, UNLESS_KEYS | cast_keys
     verbs = set(reg.get("verbs", {}).keys())
     attrs = reg.get("attributes", {})
     errs: list[str] = []
@@ -127,7 +131,10 @@ def lint(patterns: dict, reg: dict) -> list[str]:
         for c in clauses:
             ev = c.get("bind")
             where = f"{pid}.{ev}"
-            _unknown(set(c), CLAUSE_KEYS, where, errs)
+            _unknown(set(c), clause_keys, where, errs)
+            for k in sorted(cast_keys & set(c)):
+                if c[k] not in p.get("roles", {}):
+                    errs.append(f"{where}: {k} = {c[k]!r} is not one of the pattern's role variables")
             if not ev or not re.fullmatch(r"e[0-9]+", ev):   # ASCII digits only, as the canonical form (canonical_v0.md §2)
                 errs.append(f"{pid}: clause has invalid/missing bind")
                 continue
@@ -165,7 +172,10 @@ def lint(patterns: dict, reg: dict) -> list[str]:
         if sf is not None and (sf not in bound or sf == bound[-1]):
             errs.append(f"{pid}.surface_from: '{sf}' must name a bound clause other than the last")
         for u in p.get("unless", []):
-            _unknown(set(u), UNLESS_KEYS, f"{pid}.unless", errs)
+            _unknown(set(u), unless_keys, f"{pid}.unless", errs)
+            for k in sorted(cast_keys & set(u)):
+                if u[k] not in p.get("roles", {}):
+                    errs.append(f"{pid}.unless: {k} = {u[k]!r} is not one of the pattern's role variables")
             for a in u.get("act", []):
                 if a not in acts:
                     errs.append(f"{pid}.unless: act class '{a}' not in Registry")
@@ -191,21 +201,27 @@ def main(argv: list[str]) -> int:
     draft = {"pattern": [{"id": "draft_tyrant_cleansing_order", "roles": {"S": "authority", "H": "successor"},
                           "selection": "latest", "on_complete": "clear_binding",
                           "firing_budget": {"per_century_per_100k": 1},
-                          "clause": [{"bind": "e1", "act": ["coerce"], "initiator": "S", "target": "H",
+                          "clause": [{"bind": "e1", "act": ["coerce"], "actor": "S", "target": "H",
                                       "where": ["psychology(S, 'paranoia') > 80"]}]}]}
     typo = {"pattern": [{"id": "typo", "roles": {"A": "authority"}, "selection": "all", "on_complete": "keep",
                          "firing_budget": {"per_century_per_100k": 1},
                          "clause": [{"bind": "e1", "act": ["harm"], "edge": {"to": "e1", "kind": "motivated_by"}}]}]}
     implicit = {"pattern": [{"id": "implicit", "roles": {"A": "any"}, "selection": "first",
-                             "clause": [{"bind": "e1", "act": ["harm"], "initiator": "A"}]}]}
+                             "clause": [{"bind": "e1", "act": ["harm"], "actor": "A"}]}]}
     three = {"pattern": [{"id": "three", "roles": {"A": "any", "B": "any"}, "firing_budget": {"per_century_per_100k": 1},
                           "selection": "latest", "on_complete": "clear_binding",
-                          "clause": [{"bind": "e1", "act": ["aid"], "initiator": "A"},
-                                     {"bind": "e2", "act": ["aid"], "initiator": "B", "target": "A"},
-                                     {"bind": "e3", "act": ["harm"], "initiator": "B", "target": "A"}],
-                          "unless": [{"bind": "u1", "act": ["flee"], "initiator": "A", "between": ["e1", "e3"],
+                          "clause": [{"bind": "e1", "act": ["aid"], "actor": "A"},
+                                     {"bind": "e2", "act": ["aid"], "actor": "B", "target": "A"},
+                                     {"bind": "e3", "act": ["harm"], "actor": "B", "target": "A"}],
+                          "unless": [{"bind": "u1", "act": ["flee"], "actor": "A", "between": ["e1", "e3"],
                                       "where": ["trust(A, B)@e2 >= 0.5"]}]}]}
+    old_key = {"pattern": [{"id": "old_key", "roles": {"A": "any"}, "selection": "latest", "on_complete": "clear_binding",
+                            "firing_budget": {"per_century_per_100k": 1},
+                            "clause": [{"bind": "e1", "act": ["harm"], "initiator": "A", "target": "B"}]}]}
     d_errs, t_errs, s_errs, m_errs = lint(draft, reg), lint(typo, reg), lint(implicit, reg), lint(three, reg)
+    o_errs = lint(old_key, reg)
+    assert any("unknown key 'initiator'" in e for e in o_errs), o_errs      # the cast keys are [event_roles] ids (SPR-020)
+    assert any("target = 'B' is not one of the pattern's role variables" in e for e in o_errs), o_errs
     assert any("not declared" in e or "UNANCHORED" in e for e in d_errs), d_errs
     assert any("unknown key 'edge'" in e for e in t_errs), t_errs
     assert any("selection" in e for e in s_errs) and any("firing_budget" in e for e in s_errs), s_errs

@@ -35,6 +35,7 @@ fixed_point = false
 [[emits]]                                  # events this system emits into channel A of the World Stream
 kind = "ENCOUNTER"
 when = "F2 only: a consequential encounter (tie formed, contact for M5, crime)"
+roles = ["actor", "target"]
 
 [[commands]]                               # lifecycle commands to other owners (05.1 §2 single-writer rule)
 target = "S1.culture"

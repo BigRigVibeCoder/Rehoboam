@@ -46,9 +46,11 @@ fixed_point = false
 [[emits]]
 kind = "CENSUS"
 when = "the monthly census"
+roles = []
 [[emits]]
 kind = "CENSUS_NOTE"
 when = "after each census, caused by it"
+roles = []                   # its triggered edge to the CENSUS stays
 [[reads]]
 column = "person.alive"
 owner = "X3.smoke_vital"
