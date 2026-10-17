@@ -282,8 +282,7 @@ REQUIRED_GATES = (
     "event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)",
     "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter "
     "(SPR-013 T-11)",
-    "V-SIFT-05 positive control: life_ends with an unanchored state read must FAIL (SPR-013 "
-    "T-11)",
+    "V-SIFT-05 positive control: life_ends with an unanchored state read must FAIL (SPR-013 T-11)",
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
