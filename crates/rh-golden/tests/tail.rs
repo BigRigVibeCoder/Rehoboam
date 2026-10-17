@@ -182,7 +182,9 @@ fn tail_never_writes_to_the_run_directory() {
     assert_eq!(tree(&dir), before, "tail changed the run directory");
 }
 
-/// Compares `text` with the committed snapshot `name` (or rewrites it).
+/// Compares `text` with the committed snapshot `name` byte for byte, or rewrites it under
+/// `RH_UPDATE_SNAPSHOTS=1` (never in CI; a rewrite is reviewed in the diff). A missing snapshot is
+/// a failure, never a silent create (the Architect's file-snapshot ruling, SPR-013 T-10).
 fn snapshot(name: &str, text: &str) {
     let dir = std::env::var_os("RH_TAIL_SNAPSHOTS").map_or_else(
         || Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
@@ -190,11 +192,20 @@ fn snapshot(name: &str, text: &str) {
     );
     let path = dir.join(format!("{name}.txt"));
     if std::env::var_os("RH_UPDATE_SNAPSHOTS").is_some() {
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "RH_UPDATE_SNAPSHOTS is refused in CI: snapshots are rewritten locally and reviewed"
+        );
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(&path, text).unwrap();
         return;
     }
-    let want = std::fs::read_to_string(&path).unwrap_or_default();
+    let Ok(want) = std::fs::read_to_string(&path) else {
+        panic!(
+            "SNAPSHOT {name} is missing ({}): rerun with RH_UPDATE_SNAPSHOTS=1 and commit it",
+            path.display()
+        );
+    };
     if want != text {
         let line = want
             .lines()
@@ -202,11 +213,12 @@ fn snapshot(name: &str, text: &str) {
             .position(|(a, b)| a != b)
             .unwrap_or(want.lines().count().min(text.lines().count()));
         panic!(
-            "SNAPSHOT {name} differs at line {}:\n  committed: {:?}\n  tail:      {:?}\n\
+            "SNAPSHOT {name} differs at line {n}:\n--- committed {}\n+++ tail\n@@ -{n} +{n} @@\n-{}\n+{}\n\
              rerun with RH_UPDATE_SNAPSHOTS=1 and review the diff",
-            line + 1,
-            want.lines().nth(line),
-            text.lines().nth(line)
+            path.display(),
+            want.lines().nth(line).unwrap_or("(end of file)"),
+            text.lines().nth(line).unwrap_or("(end of file)"),
+            n = line + 1,
         );
     }
 }

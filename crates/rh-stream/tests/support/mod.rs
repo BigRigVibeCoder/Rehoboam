@@ -11,9 +11,9 @@
 use std::path::PathBuf;
 
 use rh_stream::record::{
-    Body, Cause, Event, Input, Keyframe, LifeEntry, LifeExit, Role, StepDigest,
+    Body, Cause, Event, Input, Keyframe, LifeEntry, LifeExit, Role, Snapshot, StepDigest,
 };
-use rh_stream::segment::{Dictionaries, Provenance, VerbEntry};
+use rh_stream::segment::{AttributeEntry, Dictionaries, Provenance, VerbEntry};
 
 /// A 360-day calendar's minutes per year.
 pub const MPY: i64 = 518_400;
@@ -44,6 +44,20 @@ pub fn dictionaries() -> Dictionaries {
             },
         ],
         act_classes: vec!["death".to_owned()],
+        event_roles: ["actor", "target", "witness", "instrument"]
+            .map(str::to_owned)
+            .to_vec(),
+        motive_edges: vec!["RETALIATION_FOR".to_owned(), "JEALOUSY_OF".to_owned()],
+        attributes: vec![
+            AttributeEntry {
+                name: "stress".to_owned(),
+                ty: "q8_8".to_owned(),
+            },
+            AttributeEntry {
+                name: "trust".to_owned(),
+                ty: "q8_8".to_owned(),
+            },
+        ],
     }
 }
 
@@ -59,6 +73,34 @@ pub fn provenance() -> Provenance {
     }
 }
 
+/// The snapshots of a death of `id`: none for an even id; `stress` of the deceased; one in three
+/// also `trust` towards a partner (a NULL partner sorts first).
+fn snapshots(id: u64) -> Vec<Snapshot> {
+    if id.is_multiple_of(2) {
+        return Vec::new();
+    }
+    let value = i32::try_from(id % 65_536).unwrap_or(0) - 32_768;
+    let mut out = vec![Snapshot {
+        attr_id: 0,
+        entity_kind: 1,
+        entity_id: id,
+        partner_kind: None,
+        partner_id: None,
+        value,
+    }];
+    if id.is_multiple_of(3) {
+        out.push(Snapshot {
+            attr_id: 1,
+            entity_kind: 1,
+            entity_id: id,
+            partner_kind: Some(1),
+            partner_id: Some(id ^ 0xFF),
+            value: 256,
+        });
+    }
+    out
+}
+
 fn mix(mut z: u64) -> u64 {
     z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
@@ -69,7 +111,10 @@ fn mix(mut z: u64) -> u64 {
 /// The `(tick, body)` records of a synthetic run, in no particular order within an instant: the
 /// founders' entries at tick 0, one input, each death (a `DEATH` event and its `LIFE_EXIT`, the
 /// last one followed by `EXTINCTION`), a digest at every month start and a keyframe marker at
-/// each year's last minute. `event_id`s count in emission order.
+/// each year's last minute. `event_id`s count in emission order. The envelope's child rows are
+/// exercised too (SPR-020): a death of an odd id carries a `stress` snapshot, one in three also a
+/// relational `trust` snapshot, and every third death after the first a `motivated_by` edge to the
+/// death before it.
 #[must_use]
 pub fn history(seed: u64, persons: u64, years: i64) -> Vec<(i64, Body)> {
     let mut out = Vec::new();
@@ -131,7 +176,19 @@ pub fn history(seed: u64, persons: u64, years: i64) -> Vec<(i64, Body)> {
                     entity_id: id,
                     role: 1,
                 }],
-                causes: Vec::new(),
+                snapshots: snapshots(id),
+                causes: if event_id > 0 && i % 3 == 2 {
+                    vec![Cause {
+                        cause_id: event_id - 1,
+                        kind: 3,
+                        motive: Some(u16::from(id % 2 == 0)),
+                        weight: -128,
+                        evidence: 64,
+                        cause_told: id % 4 != 1,
+                    }]
+                } else {
+                    Vec::new()
+                },
             }),
         ));
         out.push((
@@ -159,10 +216,8 @@ pub fn history(seed: u64, persons: u64, years: i64) -> Vec<(i64, Body)> {
                     origin: 0,
                     payload: Vec::new(),
                     roles: Vec::new(),
-                    causes: vec![Cause {
-                        cause_id: event_id,
-                        kind: 1,
-                    }],
+                    snapshots: Vec::new(),
+                    causes: vec![Cause::triggered(event_id)],
                 }),
             ));
         }

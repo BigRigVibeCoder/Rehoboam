@@ -39,7 +39,7 @@ use rh_snapshot::state::state_hash;
 use rh_stream::convert::{LifeTracker, event_body, input_body};
 use rh_stream::record::{Body, Channel, Keyframe, StepDigest};
 use rh_stream::seal::SealHook;
-use rh_stream::segment::{Dictionaries, Provenance, VerbEntry};
+use rh_stream::segment::{AttributeEntry, Dictionaries, Provenance, VerbEntry};
 use rh_stream::writer::{StreamWriter, Summary, WriterConfig};
 
 use crate::run::Error;
@@ -147,10 +147,36 @@ pub fn dictionaries(registry: &rh_manifest::Registry) -> Result<Dictionaries, Er
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
+    let ids = |section: &str| -> Result<Vec<String>, Error> {
+        registry
+            .sections
+            .get(section)
+            .and_then(|v| v.get("ids"))
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| Error(format!("the Registry has no [{section}] ids")))?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| Error(format!("[{section}]: an id that is not a string")))
+            })
+            .collect()
+    };
     Ok(Dictionaries {
         registry_version: registry.registry_version.clone(),
         verbs,
         act_classes: classes.clone(),
+        event_roles: ids("event_roles")?,
+        motive_edges: ids("motive_edges")?,
+        // `[attributes]` sorted by name: the map's order (envelope_v0.md §2).
+        attributes: registry
+            .attributes
+            .iter()
+            .map(|(name, a)| AttributeEntry {
+                name: name.clone(),
+                ty: a.ty.clone(),
+            })
+            .collect(),
     })
 }
 

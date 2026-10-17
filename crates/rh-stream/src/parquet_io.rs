@@ -5,7 +5,8 @@
 //! `parquet`'s low-level column writers (no Arrow), [`read_table`] decodes one and refuses a file
 //! whose schema is not exactly the expected one. The column types are the DDL's (`DuckDB` names):
 //! `UTINYINT`, `USMALLINT`, `UINTEGER`, `UBIGINT`, `INTEGER`, `BIGINT`, `BOOLEAN`, `VARCHAR`,
-//! `BLOB`, `BIGINT[]`, `VARCHAR[]`, and nullable `UINTEGER`, `UBIGINT`, `BIGINT`, with the
+//! `BLOB`, `BIGINT[]`, `VARCHAR[]`, `SMALLINT`, and nullable `UTINYINT`, `USMALLINT`, `UINTEGER`,
+//! `UBIGINT`, `BIGINT`, with the
 //! Parquet logical types `DuckDB` reads back as those types. There is no float type (R2), so no
 //! float column can be declared.
 //!
@@ -56,6 +57,8 @@ pub enum ColumnType {
     U32,
     /// `UBIGINT NOT NULL`.
     U64,
+    /// `SMALLINT NOT NULL`.
+    I16,
     /// `INTEGER NOT NULL`.
     I32,
     /// `BIGINT NOT NULL`.
@@ -70,6 +73,10 @@ pub enum ColumnType {
     ListI64,
     /// `VARCHAR[] NOT NULL` (elements not null).
     ListStr,
+    /// `UTINYINT`, nullable.
+    OptU8,
+    /// `USMALLINT`, nullable.
+    OptU16,
     /// `UINTEGER`, nullable.
     OptU32,
     /// `UBIGINT`, nullable.
@@ -83,8 +90,9 @@ impl ColumnType {
     #[must_use]
     pub const fn duckdb(self) -> &'static str {
         match self {
-            Self::U8 => "UTINYINT",
-            Self::U16 => "USMALLINT",
+            Self::U8 | Self::OptU8 => "UTINYINT",
+            Self::U16 | Self::OptU16 => "USMALLINT",
+            Self::I16 => "SMALLINT",
             Self::U32 | Self::OptU32 => "UINTEGER",
             Self::U64 | Self::OptU64 => "UBIGINT",
             Self::I32 => "INTEGER",
@@ -107,7 +115,10 @@ impl ColumnType {
             Self::U16 => int("required", "int32", "16,false"),
             Self::U32 => int("required", "int32", "32,false"),
             Self::U64 => int("required", "int64", "64,false"),
+            Self::OptU8 => int("optional", "int32", "8,false"),
+            Self::OptU16 => int("optional", "int32", "16,false"),
             Self::OptU32 => int("optional", "int32", "32,false"),
+            Self::I16 => int("required", "int32", "16,true"),
             Self::OptU64 => int("optional", "int64", "64,false"),
             Self::I32 => format!("required int32 {name};"),
             Self::I64 => format!("required int64 {name};"),
@@ -145,6 +156,8 @@ pub enum Column {
     U32(Vec<u32>),
     /// `UBIGINT`.
     U64(Vec<u64>),
+    /// `SMALLINT`.
+    I16(Vec<i16>),
     /// `INTEGER`.
     I32(Vec<i32>),
     /// `BIGINT`.
@@ -159,6 +172,10 @@ pub enum Column {
     ListI64(Vec<Vec<i64>>),
     /// `VARCHAR[]`.
     ListStr(Vec<Vec<String>>),
+    /// Nullable `UTINYINT`.
+    OptU8(Vec<Option<u8>>),
+    /// Nullable `USMALLINT`.
+    OptU16(Vec<Option<u16>>),
     /// Nullable `UINTEGER`.
     OptU32(Vec<Option<u32>>),
     /// Nullable `UBIGINT`.
@@ -176,6 +193,7 @@ impl Column {
             ColumnType::U16 => Self::U16(Vec::new()),
             ColumnType::U32 => Self::U32(Vec::new()),
             ColumnType::U64 => Self::U64(Vec::new()),
+            ColumnType::I16 => Self::I16(Vec::new()),
             ColumnType::I32 => Self::I32(Vec::new()),
             ColumnType::I64 => Self::I64(Vec::new()),
             ColumnType::Bool => Self::Bool(Vec::new()),
@@ -183,6 +201,8 @@ impl Column {
             ColumnType::Blob => Self::Blob(Vec::new()),
             ColumnType::ListI64 => Self::ListI64(Vec::new()),
             ColumnType::ListStr => Self::ListStr(Vec::new()),
+            ColumnType::OptU8 => Self::OptU8(Vec::new()),
+            ColumnType::OptU16 => Self::OptU16(Vec::new()),
             ColumnType::OptU32 => Self::OptU32(Vec::new()),
             ColumnType::OptU64 => Self::OptU64(Vec::new()),
             ColumnType::OptI64 => Self::OptI64(Vec::new()),
@@ -197,6 +217,7 @@ impl Column {
             Self::U16(_) => ColumnType::U16,
             Self::U32(_) => ColumnType::U32,
             Self::U64(_) => ColumnType::U64,
+            Self::I16(_) => ColumnType::I16,
             Self::I32(_) => ColumnType::I32,
             Self::I64(_) => ColumnType::I64,
             Self::Bool(_) => ColumnType::Bool,
@@ -204,6 +225,8 @@ impl Column {
             Self::Blob(_) => ColumnType::Blob,
             Self::ListI64(_) => ColumnType::ListI64,
             Self::ListStr(_) => ColumnType::ListStr,
+            Self::OptU8(_) => ColumnType::OptU8,
+            Self::OptU16(_) => ColumnType::OptU16,
             Self::OptU32(_) => ColumnType::OptU32,
             Self::OptU64(_) => ColumnType::OptU64,
             Self::OptI64(_) => ColumnType::OptI64,
@@ -218,6 +241,7 @@ impl Column {
             Self::U16(v) => v.len(),
             Self::U32(v) => v.len(),
             Self::U64(v) => v.len(),
+            Self::I16(v) => v.len(),
             Self::I32(v) => v.len(),
             Self::I64(v) => v.len(),
             Self::Bool(v) => v.len(),
@@ -225,6 +249,8 @@ impl Column {
             Self::Blob(v) => v.len(),
             Self::ListI64(v) => v.len(),
             Self::ListStr(v) => v.len(),
+            Self::OptU8(v) => v.len(),
+            Self::OptU16(v) => v.len(),
             Self::OptU32(v) => v.len(),
             Self::OptU64(v) => v.len(),
             Self::OptI64(v) => v.len(),
@@ -371,6 +397,10 @@ fn write_column(
             let x: Vec<i64> = v.iter().map(|&a| a.cast_signed()).collect();
             col.typed::<Int64Type>().write_batch(&x, None, None)?;
         }
+        Column::I16(v) => {
+            let x: Vec<i32> = v.iter().map(|&a| i32::from(a)).collect();
+            col.typed::<Int32Type>().write_batch(&x, None, None)?;
+        }
         Column::I32(v) => {
             col.typed::<Int32Type>().write_batch(v, None, None)?;
         }
@@ -399,6 +429,18 @@ fn write_column(
             let x: Vec<ByteArray> = v.iter().flatten().map(|s| bytes_of(s.as_bytes())).collect();
             col.typed::<ByteArrayType>()
                 .write_batch(&x, Some(&defs), Some(&reps))?;
+        }
+        Column::OptU8(v) => {
+            let (values, defs) = opt(v);
+            let x: Vec<i32> = values.iter().map(|&a| i32::from(a)).collect();
+            col.typed::<Int32Type>()
+                .write_batch(&x, Some(&defs), None)?;
+        }
+        Column::OptU16(v) => {
+            let (values, defs) = opt(v);
+            let x: Vec<i32> = values.iter().map(|&a| i32::from(a)).collect();
+            col.typed::<Int32Type>()
+                .write_batch(&x, Some(&defs), None)?;
         }
         Column::OptU32(v) => {
             let (values, defs) = opt(v);
@@ -468,11 +510,16 @@ fn push(col: &mut Column, f: &Field) -> Option<()> {
         (Column::U16(v), Field::UShort(x)) => v.push(*x),
         (Column::U32(v), Field::UInt(x)) => v.push(*x),
         (Column::U64(v), Field::ULong(x)) => v.push(*x),
+        (Column::I16(v), Field::Short(x)) => v.push(*x),
         (Column::I32(v), Field::Int(x)) => v.push(*x),
         (Column::I64(v), Field::Long(x)) => v.push(*x),
         (Column::Bool(v), Field::Bool(x)) => v.push(*x),
         (Column::Str(v), Field::Str(x)) => v.push(x.clone()),
         (Column::Blob(v), Field::Bytes(x)) => v.push(x.data().to_vec()),
+        (Column::OptU8(v), Field::UByte(x)) => v.push(Some(*x)),
+        (Column::OptU8(v), Field::Null) => v.push(None),
+        (Column::OptU16(v), Field::UShort(x)) => v.push(Some(*x)),
+        (Column::OptU16(v), Field::Null) => v.push(None),
         (Column::OptU32(v), Field::UInt(x)) => v.push(Some(*x)),
         (Column::OptU32(v), Field::Null) => v.push(None),
         (Column::OptU64(v), Field::ULong(x)) => v.push(Some(*x)),

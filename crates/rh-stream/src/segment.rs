@@ -1,16 +1,16 @@
 //! Channel-A segments: records to Parquet tables and back (`specs/stream/channel_a_v0.sql`).
 //!
 //! A segment is one sim-year of one timeline's channel A (R5): every table of [`CHANNEL_A`],
-//! empty or not, the dictionaries in force (`record_kind`, `verb`, `act_class`, R6) and its
-//! `segment` row, written last. [`encode`] turns the records into the files, in the order they
+//! empty or not, the dictionaries in force (`record_kind`, `verb`, `act_class`, `event_role_kind`,
+//! `motive_edge_kind`, `attribute`, R6) and its `segment` row, written last: 16 files. [`encode`] turns the records into the files, in the order they
 //! are sealed; [`decode`] reads them back into the records and checks everything a reader can
 //! check: the exact table set, the schema of every file, each table's kind code, contiguous `seq`
 //! from `first_seq`, the R4 order, child rows that hang off an event of the segment with
-//! contiguous ordinals, the verb pair of every event against the dictionary, and the canonical
-//! digest recomputed from the records.
+//! contiguous ordinals, the verb pair of every event and every role, attribute and motive code
+//! against the dictionaries, and the canonical digest recomputed from the records.
 //!
-//! The table set is data ([`CHANNEL_A`]), so a format that adds a child table (the SPR-020
-//! envelope, PR #61) adds an entry and its rows, not a new writer.
+//! The shape is the SPR-020 event envelope's (`specs/chronicle/envelope_v0.md`, amended into v0
+//! before any build wrote a segment): `event_snapshot` child rows and the typed `causal_edge`.
 //!
 //! REF: `specs/stream/channel_a_v0.sql` R1–R7; SPR-011 rulings 11–13.
 
@@ -25,7 +25,7 @@ use crate::StreamError;
 use crate::canonical;
 use crate::parquet_io::{Column, ColumnSpec, ColumnType as T, read_table, write_table};
 use crate::record::{
-    Body, Cause, Event, Header, Input, Keyframe, Kind, LifeEntry, LifeExit, Record, Role,
+    Body, Cause, Event, Header, Input, Keyframe, Kind, LifeEntry, LifeExit, Record, Role, Snapshot,
     StepDigest, sim_year,
 };
 
@@ -76,6 +76,21 @@ pub const VERB: TableSpec = TableSpec {
 pub const ACT_CLASS: TableSpec = TableSpec {
     name: "act_class",
     columns: &[c("act_class_id", T::U8), c("name", T::Str)],
+};
+/// `event_role_kind`: `[event_roles].ids` in list order.
+pub const EVENT_ROLE_KIND: TableSpec = TableSpec {
+    name: "event_role_kind",
+    columns: &[c("role", T::U8), c("name", T::Str)],
+};
+/// `motive_edge_kind`: `[motive_edges].ids` in list order.
+pub const MOTIVE_EDGE_KIND: TableSpec = TableSpec {
+    name: "motive_edge_kind",
+    columns: &[c("motive", T::U16), c("name", T::Str)],
+};
+/// `attribute`: `[attributes]` sorted by name.
+pub const ATTRIBUTE: TableSpec = TableSpec {
+    name: "attribute",
+    columns: &[c("attr_id", T::U16), c("name", T::Str), c("type", T::Str)],
 };
 /// `segment` (channel A).
 pub const SEGMENT_A: TableSpec = TableSpec {
@@ -149,6 +164,20 @@ pub const EVENT_ROLE: TableSpec = TableSpec {
         c("role", T::U8),
     ],
 };
+/// `event_snapshot`.
+pub const EVENT_SNAPSHOT: TableSpec = TableSpec {
+    name: "event_snapshot",
+    columns: &[
+        c("timeline_id", T::U32),
+        c("event_id", T::U64),
+        c("attr_id", T::U16),
+        c("entity_kind", T::U8),
+        c("entity_id", T::U64),
+        c("partner_kind", T::OptU8),
+        c("partner_id", T::OptU64),
+        c("value", T::I32),
+    ],
+};
 /// `causal_edge`.
 pub const CAUSAL_EDGE: TableSpec = TableSpec {
     name: "causal_edge",
@@ -157,6 +186,10 @@ pub const CAUSAL_EDGE: TableSpec = TableSpec {
         c("cause_id", T::U64),
         c("effect_id", T::U64),
         c("kind", T::U8),
+        c("motive", T::OptU16),
+        c("weight", T::I16),
+        c("evidence", T::I16),
+        c("cause_told", T::Bool),
     ],
 };
 /// `life_course_entry`.
@@ -222,20 +255,36 @@ pub const KEYFRAME_MARKER: TableSpec = TableSpec {
 
 /// Every table of a channel-A v0 segment, in the order they are sealed: the dictionaries, the
 /// record and child tables, and `segment` last (R5).
-pub const CHANNEL_A: [TableSpec; 12] = [
+pub const CHANNEL_A: [TableSpec; 16] = [
     ACT_CLASS,
+    ATTRIBUTE,
     CAUSAL_EDGE,
     EVENT,
     EVENT_ROLE,
+    EVENT_ROLE_KIND,
+    EVENT_SNAPSHOT,
     INPUT,
     KEYFRAME_MARKER,
     LIFE_ENTRY,
     LIFE_EXIT,
+    MOTIVE_EDGE_KIND,
     RECORD_KIND,
     STEP_DIGEST,
     VERB,
     SEGMENT_A,
 ];
+
+/// The attribute types an `attribute` row may name (how `event_snapshot.value` is read).
+pub const ATTRIBUTE_TYPES: [&str; 4] = ["q8_8", "int", "bool", "enum"];
+
+/// One `attribute` row: a Registry attribute at sealing (R6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AttributeEntry {
+    /// Its name; its id is its index in [`Dictionaries::attributes`].
+    pub name: String,
+    /// One of [`ATTRIBUTE_TYPES`].
+    pub ty: String,
+}
 
 /// One `verb` row: a Registry verb at sealing (R6).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -254,7 +303,8 @@ pub struct VerbEntry {
     pub aggregate: bool,
 }
 
-/// The dictionaries a segment carries (R6): the Registry's verbs and act classes at sealing.
+/// The dictionaries a segment carries (R6): the Registry's verbs, act classes, event roles, motive
+/// edges and attributes at sealing.
 /// The host builds them from the Registry (a tool crate); plane A only carries them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Dictionaries {
@@ -264,6 +314,12 @@ pub struct Dictionaries {
     pub verbs: Vec<VerbEntry>,
     /// `[act_classes].ids` in list order: bit i is `act_classes[i]`.
     pub act_classes: Vec<String>,
+    /// `[event_roles].ids` in list order: role code i is `event_roles[i]`.
+    pub event_roles: Vec<String>,
+    /// `[motive_edges].ids` in list order: motive i is `motive_edges[i]`.
+    pub motive_edges: Vec<String>,
+    /// `[attributes]` sorted by name: `attr_id` i is `attributes[i]`.
+    pub attributes: Vec<AttributeEntry>,
 }
 
 impl Dictionaries {
@@ -321,6 +377,42 @@ impl Dictionaries {
             return Err(StreamError::Dictionary(
                 "verbs are not in strictly ascending name order".to_owned(),
             ));
+        }
+        if self.event_roles.len() > 256 || self.motive_edges.len() > 65_536 {
+            return Err(StreamError::Dictionary(
+                "event roles or motive edges overflow their codes".to_owned(),
+            ));
+        }
+        for (what, names) in [
+            ("event roles", &self.event_roles),
+            ("motive edges", &self.motive_edges),
+        ] {
+            let distinct: BTreeSet<&String> = names.iter().collect();
+            if distinct.len() != names.len() || names.iter().any(String::is_empty) {
+                return Err(StreamError::Dictionary(format!(
+                    "{what}: names repeat or are empty"
+                )));
+            }
+        }
+        if self.attributes.len() > 65_536
+            || self
+                .attributes
+                .windows(2)
+                .any(|w| w[0].name.as_bytes() >= w[1].name.as_bytes())
+        {
+            return Err(StreamError::Dictionary(
+                "attributes are not in strictly ascending name order".to_owned(),
+            ));
+        }
+        if let Some(a) = self
+            .attributes
+            .iter()
+            .find(|a| !ATTRIBUTE_TYPES.contains(&a.ty.as_str()))
+        {
+            return Err(StreamError::Dictionary(format!(
+                "attribute {}: type {} is not one of {ATTRIBUTE_TYPES:?}",
+                a.name, a.ty
+            )));
         }
         Ok(())
     }
@@ -439,6 +531,37 @@ fn check_verb(e: &Event, dictionaries: &Dictionaries) -> Result<(), StreamError>
             e.event_id, e.verb
         )));
     }
+    if let Some(r) = e
+        .roles
+        .iter()
+        .find(|r| usize::from(r.role) >= dictionaries.event_roles.len())
+    {
+        return Err(bad(format!(
+            "event {}: role {} is not in the event_role_kind dictionary",
+            e.event_id, r.role
+        )));
+    }
+    if let Some(x) = e
+        .snapshots
+        .iter()
+        .find(|x| usize::from(x.attr_id) >= dictionaries.attributes.len())
+    {
+        return Err(bad(format!(
+            "event {}: attribute {} is not in the attribute dictionary",
+            e.event_id, x.attr_id
+        )));
+    }
+    if let Some(m) = e
+        .causes
+        .iter()
+        .filter_map(|c| c.motive)
+        .find(|&m| usize::from(m) >= dictionaries.motive_edges.len())
+    {
+        return Err(bad(format!(
+            "event {}: motive {m} is not in the motive_edge_kind dictionary",
+            e.event_id
+        )));
+    }
     Ok(())
 }
 
@@ -490,6 +613,7 @@ pub fn encode(
     tables.insert(RECORD_KIND.name, record_kind_columns());
     tables.insert(VERB.name, verb_columns(dictionaries));
     tables.insert(ACT_CLASS.name, act_class_columns(dictionaries)?);
+    tables.extend(envelope_columns(dictionaries)?);
     tables.insert(SEGMENT_A.name, segment_columns(&row));
     CHANNEL_A
         .iter()
@@ -531,6 +655,37 @@ fn act_class_columns(d: &Dictionaries) -> Result<Vec<Column>, StreamError> {
         .map(|i| u8::try_from(i).map_err(|_| bad("too many act classes")))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(vec![Column::U8(ids), Column::Str(d.act_classes.clone())])
+}
+
+/// The `event_role_kind`, `motive_edge_kind` and `attribute` dictionaries.
+fn envelope_columns(d: &Dictionaries) -> Result<[(&'static str, Vec<Column>); 3], StreamError> {
+    let roles = (0..d.event_roles.len())
+        .map(|i| u8::try_from(i).map_err(|_| bad("too many event roles")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let motives = (0..d.motive_edges.len())
+        .map(|i| u16::try_from(i).map_err(|_| bad("too many motive edges")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let attrs = (0..d.attributes.len())
+        .map(|i| u16::try_from(i).map_err(|_| bad("too many attributes")))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok([
+        (
+            EVENT_ROLE_KIND.name,
+            vec![Column::U8(roles), Column::Str(d.event_roles.clone())],
+        ),
+        (
+            MOTIVE_EDGE_KIND.name,
+            vec![Column::U16(motives), Column::Str(d.motive_edges.clone())],
+        ),
+        (
+            ATTRIBUTE.name,
+            vec![
+                Column::U16(attrs),
+                Column::Str(d.attributes.iter().map(|a| a.name.clone()).collect()),
+                Column::Str(d.attributes.iter().map(|a| a.ty.clone()).collect()),
+            ],
+        ),
+    ])
 }
 
 fn segment_columns(r: &SegmentRow) -> Vec<Column> {
@@ -653,6 +808,28 @@ impl Tables {
                 Column::U8(roles.iter().map(|r| r.3.role).collect()),
             ],
         );
+        // Snapshots by (event_id, key), which ascend within each event.
+        let snaps: Vec<(u32, u64, Snapshot)> = e
+            .iter()
+            .flat_map(|(h, x)| {
+                x.snapshots
+                    .iter()
+                    .map(move |s| (h.timeline_id, x.event_id, *s))
+            })
+            .collect();
+        m.insert(
+            EVENT_SNAPSHOT.name,
+            vec![
+                Column::U32(snaps.iter().map(|r| r.0).collect()),
+                Column::U64(snaps.iter().map(|r| r.1).collect()),
+                Column::U16(snaps.iter().map(|r| r.2.attr_id).collect()),
+                Column::U8(snaps.iter().map(|r| r.2.entity_kind).collect()),
+                Column::U64(snaps.iter().map(|r| r.2.entity_id).collect()),
+                Column::OptU8(snaps.iter().map(|r| r.2.partner_kind).collect()),
+                Column::OptU64(snaps.iter().map(|r| r.2.partner_id).collect()),
+                Column::I32(snaps.iter().map(|r| r.2.value).collect()),
+            ],
+        );
         let edges: Vec<(u32, Cause, u64)> = e
             .iter()
             .flat_map(|(h, x)| {
@@ -668,6 +845,10 @@ impl Tables {
                 Column::U64(edges.iter().map(|r| r.1.cause_id).collect()),
                 Column::U64(edges.iter().map(|r| r.2).collect()),
                 Column::U8(edges.iter().map(|r| r.1.kind).collect()),
+                Column::OptU16(edges.iter().map(|r| r.1.motive).collect()),
+                Column::I16(edges.iter().map(|r| r.1.weight).collect()),
+                Column::I16(edges.iter().map(|r| r.1.evidence).collect()),
+                Column::Bool(edges.iter().map(|r| r.1.cause_told).collect()),
             ],
         );
         let n = &self.entry;
@@ -782,6 +963,24 @@ fn col_list_str(c: &Column) -> Result<&[Vec<String>], StreamError> {
         _ => Err(bad("a column of the wrong type")),
     }
 }
+fn col_i16(c: &Column) -> Result<&[i16], StreamError> {
+    match c {
+        Column::I16(v) => Ok(v),
+        _ => Err(bad("a column of the wrong type")),
+    }
+}
+fn col_opt_u8(c: &Column) -> Result<&[Option<u8>], StreamError> {
+    match c {
+        Column::OptU8(v) => Ok(v),
+        _ => Err(bad("a column of the wrong type")),
+    }
+}
+fn col_opt_u16(c: &Column) -> Result<&[Option<u16>], StreamError> {
+    match c {
+        Column::OptU16(v) => Ok(v),
+        _ => Err(bad("a column of the wrong type")),
+    }
+}
 fn col_opt_u32(c: &Column) -> Result<&[Option<u32>], StreamError> {
     match c {
         Column::OptU32(v) => Ok(v),
@@ -848,6 +1047,11 @@ pub fn decode(
         table(VERB.name)?,
         table(ACT_CLASS.name)?,
         table(RECORD_KIND.name)?,
+        [
+            table(EVENT_ROLE_KIND.name)?,
+            table(MOTIVE_EDGE_KIND.name)?,
+            table(ATTRIBUTE.name)?,
+        ],
         &row.registry_version,
     )?;
     let mut records = Vec::new();
@@ -855,6 +1059,7 @@ pub fn decode(
     decode_events(
         table(EVENT.name)?,
         table(EVENT_ROLE.name)?,
+        table(EVENT_SNAPSHOT.name)?,
         table(CAUSAL_EDGE.name)?,
         &dictionaries,
         row.timeline_id,
@@ -946,6 +1151,7 @@ fn decode_dictionaries(
     verb: &[Column],
     act: &[Column],
     kinds: &[Column],
+    [roles, motives, attrs]: [&Vec<Column>; 3],
     registry_version: &str,
 ) -> Result<Dictionaries, StreamError> {
     if kinds.to_vec() != record_kind_columns() {
@@ -977,10 +1183,46 @@ fn decode_dictionaries(
     {
         return Err(bad("act_class ids are not 0..n"));
     }
+    let indexed = |ids: Vec<usize>, what: &str| {
+        if ids.iter().enumerate().any(|(i, &x)| x != i) {
+            Err(bad(format!("{what} ids are not 0..n")))
+        } else {
+            Ok(())
+        }
+    };
+    indexed(
+        col_u8(&roles[0])?.iter().map(|&x| usize::from(x)).collect(),
+        "event_role_kind",
+    )?;
+    indexed(
+        col_u16(&motives[0])?
+            .iter()
+            .map(|&x| usize::from(x))
+            .collect(),
+        "motive_edge_kind",
+    )?;
+    indexed(
+        col_u16(&attrs[0])?
+            .iter()
+            .map(|&x| usize::from(x))
+            .collect(),
+        "attribute",
+    )?;
+    let (names, types) = (col_str(&attrs[1])?, col_str(&attrs[2])?);
     let d = Dictionaries {
         registry_version: registry_version.to_owned(),
         verbs,
         act_classes: col_str(&act[1])?.to_vec(),
+        event_roles: col_str(&roles[1])?.to_vec(),
+        motive_edges: col_str(&motives[1])?.to_vec(),
+        attributes: names
+            .iter()
+            .zip(types)
+            .map(|(name, ty)| AttributeEntry {
+                name: name.clone(),
+                ty: ty.clone(),
+            })
+            .collect(),
     };
     d.check()?;
     Ok(d)
@@ -1016,9 +1258,17 @@ fn decode_inputs(c: &[Column], out: &mut Vec<Record>) -> Result<(), StreamError>
     Ok(())
 }
 
+/// An event's child rows: its cast, snapshots and causes.
+type Children = (Vec<Role>, Vec<Snapshot>, Vec<Cause>);
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "the event table and its three child tables, column by column in DDL order"
+)]
 fn decode_events(
     c: &[Column],
     roles: &[Column],
+    snaps: &[Column],
     edges: &[Column],
     dictionaries: &Dictionaries,
     timeline: u32,
@@ -1037,8 +1287,10 @@ fn decode_events(
         col_u8(&c[12])?,
         col_list_i64(&c[13])?,
     );
-    let mut by_event: BTreeMap<u64, (Vec<Role>, Vec<Cause>)> =
-        id.iter().map(|&e| (e, (Vec::new(), Vec::new()))).collect();
+    let mut by_event: BTreeMap<u64, Children> = id
+        .iter()
+        .map(|&e| (e, (Vec::new(), Vec::new(), Vec::new())))
+        .collect();
     if by_event.len() != id.len() {
         return Err(bad("an event id appears twice"));
     }
@@ -1072,11 +1324,44 @@ fn decode_events(
             role: rr[i],
         });
     }
-    let (et, ec, ee, ek) = (
+    let (st, se_, sa, sk, si, spk, spi, sv) = (
+        col_u32(&snaps[0])?,
+        col_u64(&snaps[1])?,
+        col_u16(&snaps[2])?,
+        col_u8(&snaps[3])?,
+        col_u64(&snaps[4])?,
+        col_opt_u8(&snaps[5])?,
+        col_opt_u64(&snaps[6])?,
+        col_i32(&snaps[7])?,
+    );
+    for i in 0..st.len() {
+        let slot = by_event
+            .get_mut(&se_[i])
+            .filter(|_| st[i] == timeline)
+            .ok_or_else(|| {
+                bad(format!(
+                    "an event_snapshot row of no event of the segment ({})",
+                    se_[i]
+                ))
+            })?;
+        slot.1.push(Snapshot {
+            attr_id: sa[i],
+            entity_kind: sk[i],
+            entity_id: si[i],
+            partner_kind: spk[i],
+            partner_id: spi[i],
+            value: sv[i],
+        });
+    }
+    let (et, ec, ee, ek, em, ew, ev, eo) = (
         col_u32(&edges[0])?,
         col_u64(&edges[1])?,
         col_u64(&edges[2])?,
         col_u8(&edges[3])?,
+        col_opt_u16(&edges[4])?,
+        col_i16(&edges[5])?,
+        col_i16(&edges[6])?,
+        col_bool(&edges[7])?,
     );
     for i in 0..et.len() {
         let slot = by_event
@@ -1088,9 +1373,13 @@ fn decode_events(
                     ee[i]
                 ))
             })?;
-        slot.1.push(Cause {
+        slot.2.push(Cause {
             cause_id: ec[i],
             kind: ek[i],
+            motive: em[i],
+            weight: ew[i],
+            evidence: ev[i],
+            cause_told: eo[i],
         });
     }
     for (i, header) in h.into_iter().enumerate() {
@@ -1100,7 +1389,7 @@ fn decode_events(
                 id[i], vb[i]
             ))
         })?;
-        let (roles, causes) = by_event.remove(&id[i]).unwrap_or_default();
+        let (roles, snapshots, causes) = by_event.remove(&id[i]).unwrap_or_default();
         let e = Event {
             event_id: id[i],
             phase: ph[i],
@@ -1114,6 +1403,7 @@ fn decode_events(
             origin: or[i],
             payload: pa[i].clone(),
             roles,
+            snapshots,
             causes,
         };
         check_verb(&e, dictionaries)?;

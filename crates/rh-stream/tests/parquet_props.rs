@@ -60,7 +60,7 @@ fn golden_files() -> Vec<(String, Vec<u8>)> {
 /// The pinned XXH3-128 of the golden segment's files (see the module docs). A change here is a
 /// change of the segment bytes: a new `parquet`, a changed property or a changed format. It is
 /// updated only together with the reason, in the PR that makes the change.
-const GOLDEN_SEGMENT_BYTES: &str = "ee00e7bc4a9b2f5610438c3c743e49a2";
+const GOLDEN_SEGMENT_BYTES: &str = "8f0799bae0b2c24ded75efec76e95a82";
 
 fn files_digest(files: &[(String, Vec<u8>)]) -> String {
     let mut b = Vec::new();

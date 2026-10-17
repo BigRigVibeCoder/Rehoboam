@@ -239,6 +239,10 @@ REQUIRED_GATES = (
     " V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)",
     "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, "
     "streaming, and streaming with a stopped tail attached, reported",
+    "V-DATA-10 subset on the envelope fixture: DuckDB reads its event_snapshot rows and typed "
+    "causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and "
+    "constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; "
+    "SPR-020 shape)",
     "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's "
     "and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, "
     "and the reference's canonical digests (SPR-013 T-09)",
@@ -613,6 +617,8 @@ REQUIRED_GATES = (
     "tail by name: a tail started before a run's first seal and following it prints the "
     "after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 "
     "sealed)",
+    "tail snapshot positive control: a missing snapshot must FAIL, never be created silently "
+    "(SPR-013 T-10; the file-snapshot ruling)",
     "tail snapshot positive control: a stale snapshot must FAIL with the first differing line "
     "(SPR-013 T-10)",
     "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)",

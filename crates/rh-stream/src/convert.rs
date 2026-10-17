@@ -4,8 +4,10 @@
 //! - [`event_body`]: an `rh-events` event as an `EVENT` record, with the verb's id, act classes
 //!   and tellability from the dictionaries, its subjects as roles (ruling 11: the deceased of a
 //!   `DEATH` is its `target`; a natural death has no actor; `EXTINCTION` has no role), and its
-//!   untyped causes as `triggered` edges (kind 1) in ascending order. P1.0 admits every draft
-//!   (`05.2` §4.0), so every event is a record.
+//!   untyped causes as deterministic, told `triggered` edges (kind 1, no motive, weight 0,
+//!   evidence 1) in ascending order. The cast is in ordinal order (role code, then entity;
+//!   `envelope_v0.md` §1). M2's events declare no snapshot, so none is written. P1.0 admits every
+//!   draft (`05.2` §4.0), so every event is a record.
 //! - [`input_body`]: a journal row as an `INPUT` record, linked to the journal by its row digest.
 //! - [`LifeTracker`]: the `LIFE_ENTRY` and `LIFE_EXIT` records of the life-course log
 //!   (`life_course.*`), which is append-only (SPR-011 ruling 5): a row beyond the last one seen is
@@ -67,6 +69,17 @@ pub fn event_body(e: &rh_events::Event, dictionaries: &Dictionaries) -> Result<B
         )));
     }
     let causes: BTreeSet<u64> = e.causes.iter().map(|c| c.to_raw()).collect();
+    let mut cast: Vec<Role> = e
+        .subjects
+        .iter()
+        .zip(roles)
+        .map(|(s, &role)| Role {
+            entity_kind: s.kind() as u8,
+            entity_id: s.raw(),
+            role,
+        })
+        .collect();
+    cast.sort_by_key(Role::order_key);
     Ok(Body::Event(Event {
         event_id: e.id.to_raw(),
         phase: e.phase,
@@ -79,23 +92,9 @@ pub fn event_body(e: &rh_events::Event, dictionaries: &Dictionaries) -> Result<B
         secrecy: 0,
         origin: 0,
         payload: e.payload.clone(),
-        roles: e
-            .subjects
-            .iter()
-            .zip(roles)
-            .map(|(s, &role)| Role {
-                entity_kind: s.kind() as u8,
-                entity_id: s.raw(),
-                role,
-            })
-            .collect(),
-        causes: causes
-            .into_iter()
-            .map(|cause_id| Cause {
-                cause_id,
-                kind: TRIGGERED,
-            })
-            .collect(),
+        roles: cast,
+        snapshots: Vec::new(),
+        causes: causes.into_iter().map(Cause::triggered).collect(),
     }))
 }
 

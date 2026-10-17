@@ -4,8 +4,10 @@
 //!   `life_ends`, gives the golden channel-C file's two `life_ends` matches: their `MatchId`s,
 //!   closing seqs, bindings and events (the `match_id` vectors `rh-sifter` must reproduce,
 //!   `canonical_v0.md` §7).
-//! - A `DEATH` with two targets completes two matches, in bytewise binding order; an actor
-//!   constraint binds the actor; an event of another verb completes none.
+//! - A `DEATH` with an actor and a target completes one match binding the target (only a witness
+//!   may repeat in a cast, `envelope_v0.md` §1, so a role binds one entity); an actor constraint
+//!   binds the actor; two deaths complete two matches in seq order; an event of another verb
+//!   completes none.
 //! - v0 refuses what it cannot honour (a second clause, `where`, `dedupe`, `unless`, an unknown
 //!   role, no budget) instead of ignoring it.
 #![allow(
@@ -56,6 +58,9 @@ fn segment(records: Vec<Record>) -> SegmentA {
                     }
                 })
                 .collect(),
+            event_roles: Vec::new(),
+            motive_edges: Vec::new(),
+            attributes: Vec::new(),
         },
         records,
     }
@@ -110,15 +115,18 @@ fn the_golden_segment_sifts_to_the_golden_life_ends_matches() {
 }
 
 #[test]
-fn several_targets_complete_several_matches_in_binding_order() {
+fn each_death_completes_one_match_binding_its_target() {
     let patterns = compile_pack("solitary_life", PACK).unwrap();
-    let line = "EVENT 0 5 100 7 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/900/1,1/12/1,1/77/0] []";
-    let other = "EVENT 0 6 100 8 4 7 ISSUE_DECREE 16 ~ 0 96 0 0 [] [1/900/1] []";
-    let got = sift_segment(
-        &segment(vec![parse(line).unwrap(), parse(other).unwrap()]),
-        &patterns,
-        4,
-    );
+    let murder = "EVENT 0 5 100 7 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/77/0,1/12/1] [] []";
+    let natural = "EVENT 0 6 100 8 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/900/1] [] []";
+    let other = "EVENT 0 7 100 9 4 7 ISSUE_DECREE 16 ~ 0 96 0 0 [] [1/900/0] [] []";
+    let records = || {
+        [murder, natural, other]
+            .iter()
+            .map(|l| parse(l).unwrap())
+            .collect::<Vec<_>>()
+    };
+    let got = sift_segment(&segment(records()), &patterns, 4);
     let ids: Vec<(u64, u64)> = got
         .iter()
         .map(|r| match &r.body {
@@ -129,12 +137,12 @@ fn several_targets_complete_several_matches_in_binding_order() {
     assert_eq!(
         ids,
         vec![(4, 12), (5, 900)],
-        "two targets, ordered by binding; the actor is not a target"
+        "one match per death, binding its target, in seq order; the actor and the decree bind none"
     );
     let actor = PACK.replace("target = \"A\"", "actor = \"A\"");
     let p = compile_pack("solitary_life", &actor).unwrap();
-    let got = sift_segment(&segment(vec![parse(line).unwrap()]), &p, 0);
-    assert_eq!(got.len(), 1);
+    let got = sift_segment(&segment(records()), &p, 0);
+    assert_eq!(got.len(), 1, "only the murder has an actor");
 }
 
 #[test]

@@ -20,7 +20,7 @@
 use rh_stream::canonical::{self, digest, digest_file, match_id, parse, render};
 use rh_stream::record::{
     Binding, Body, Cause, ClauseEvent, Event, Header, Input, Keyframe, Kind, LifeEntry, LifeExit,
-    Match, Record, Role, StepDigest,
+    Match, Record, Role, Snapshot, StepDigest,
 };
 
 const GOLDEN: &str = include_str!("../../../specs/stream/golden/canonical_v0.txt");
@@ -182,11 +182,45 @@ fn record(g: &mut Gen, kind: Kind, size: u64) -> Record {
             row_digest: g.blob(),
         }),
         Kind::Event => {
-            let mut causes: Vec<u64> = (0..g.len(size)).map(|_| g.u64()).collect();
+            // The envelope's domains (envelope_v0.md §1, §4, §5): a cast in ordinal order with
+            // every role but witness at most once, snapshots strictly ascending by key with both
+            // partner fields or neither, and causes before the event with each kind's rules.
+            let event_id = g.u64();
+            let mut cast: Vec<Role> = (0..g.len(size))
+                .map(|_| Role {
+                    entity_kind: g.u8(6),
+                    entity_id: g.u64(),
+                    role: g.u8(4),
+                })
+                .collect();
+            cast.sort_by_key(Role::order_key);
+            cast.dedup_by(|b, a| {
+                a.order_key() == b.order_key() || (a.role == b.role && a.role != 2)
+            });
+            let mut snapshots: Vec<Snapshot> = (0..g.len(size))
+                .map(|_| {
+                    let partner = g.below(2) == 0;
+                    Snapshot {
+                        attr_id: u16::try_from(g.below(65_536)).unwrap(),
+                        entity_kind: g.u8(6),
+                        entity_id: g.u64(),
+                        partner_kind: partner.then(|| g.u8(6)),
+                        partner_id: partner.then(|| g.u64()),
+                        value: i32::try_from(g.below(1 << 32).cast_signed() - (1 << 31)).unwrap(),
+                    }
+                })
+                .collect();
+            snapshots.sort_by_key(Snapshot::key);
+            snapshots.dedup_by_key(|x| x.key());
+            let mut causes: Vec<u64> = if event_id == 0 {
+                Vec::new()
+            } else {
+                (0..g.len(size)).map(|_| g.below(event_id)).collect()
+            };
             causes.sort_unstable();
             causes.dedup();
             Body::Event(Event {
-                event_id: g.u64(),
+                event_id,
                 phase: g.u8(12),
                 verb_id: u16::try_from(g.below(65_536)).unwrap(),
                 verb: g.string(),
@@ -197,18 +231,30 @@ fn record(g: &mut Gen, kind: Kind, size: u64) -> Record {
                 secrecy: g.u8(4),
                 origin: g.pick(&[0, 1, 3, 4]),
                 payload: (0..g.len(size)).map(|_| g.i64()).collect(),
-                roles: (0..g.len(size))
-                    .map(|_| Role {
-                        entity_kind: g.u8(5),
-                        entity_id: g.u64(),
-                        role: g.u8(4),
-                    })
-                    .collect(),
+                roles: cast,
+                snapshots,
                 causes: causes
                     .into_iter()
-                    .map(|cause_id| Cause {
-                        cause_id,
-                        kind: g.u8(9),
+                    .map(|cause_id| {
+                        let kind = g.u8(6);
+                        let motivated = kind == 3;
+                        Cause {
+                            cause_id,
+                            kind,
+                            motive: (motivated && g.below(2) == 0)
+                                .then(|| u16::try_from(g.below(65_536)).unwrap()),
+                            weight: if motivated {
+                                i16::try_from(g.below(1 << 16).cast_signed() - (1 << 15)).unwrap()
+                            } else {
+                                0
+                            },
+                            evidence: if kind <= 1 {
+                                256
+                            } else {
+                                i16::try_from(g.below(257)).unwrap()
+                            },
+                            cause_told: g.below(2) == 0,
+                        }
                     })
                     .collect(),
             })
@@ -321,11 +367,280 @@ fn random_records_of_every_kind_round_trip_over_seeds_and_sizes() {
     println!("T-09 canonical property: {n} records round-trip over 12 seeds and 4 sizes");
 }
 
+/// The reference self-test's planted lines (`canonical_v0.py` `REFUSED`, SPR-020 shape), each with its
+/// reason; the cast of 257 rows is built in [`planted_non_canonical_lines_are_refused`].
+const REFERENCE_REFUSED: &[(&str, &str)] = &[
+    ("LIFE_EXIT 0 1 0 7 0 1 ~ ", "a trailing space"),
+    (" LIFE_EXIT 0 1 0 7 0 1 ~", "a leading space"),
+    ("LIFE_EXIT 0 1  0 7 0 1 ~", "two spaces between tokens"),
+    ("LIFE_EXIT 0 1 0 7 0 1 ~\r", "a carriage return"),
+    ("LIFE_EXIT 0 01 0 7 0 1 ~", "a leading zero"),
+    ("LIFE_EXIT 0 +1 0 7 0 1 ~", "a plus sign"),
+    ("LIFE_EXIT 0 1 -0 7 0 1 ~", "minus zero"),
+    ("LIFE_EXIT 0 1 0 7 0 6 ~", "a death_cause of 6"),
+    ("LIFE_EXIT 0 1 0 7 0 0 ~", "a death without a cause"),
+    (
+        "LIFE_EXIT 0 1 0 7 1 1 ~",
+        "an emigration with a death cause",
+    ),
+    (
+        "LIFE_EXIT 0 1 0 7 1 0 3",
+        "an emigration with a DEATH event",
+    ),
+    (
+        "LIFE_EXIT 0 1 0 18446744073709551616 0 1 ~",
+        "a u64 past its range",
+    ),
+    (
+        "LIFE_EXIT 0 1 0 100000000000000000000000 0 1 ~",
+        "a 24-digit integer",
+    ),
+    ("LIFE_EXIT 0 1 0 7 0 1", "a missing field"),
+    ("LIFE_EXIT 0 1 0 7 0 1 ~ 5", "an extra field"),
+    (
+        "LIFE_EXIT 0 ~ 0 7 0 1 ~",
+        "NULL in a field that is not optional",
+    ),
+    (
+        "LIFE_EXIT 0 1 9223372036854775808 7 0 1 ~",
+        "an i64 past its range",
+    ),
+    ("DEATH 0 1 0 7 0 1 ~", "an unknown kind"),
+    ("life_exit 0 1 0 7 0 1 ~", "a lowercase kind"),
+    ("STEP_DIGEST 0 0 0 3 0 0 0 0 0", "a hash written in decimal"),
+    (
+        "STEP_DIGEST 0 0 0 3 0 0 00000000000000AB 0000000000000000 0000000000000000",
+        "uppercase hex",
+    ),
+    (
+        "STEP_DIGEST 0 0 0 3 0 0 000000000000000 0000000000000000 0000000000000000",
+        "15 hex digits",
+    ),
+    (
+        "KEYFRAME 0 0 0 a%2fb kf 0000000000000000 0",
+        "a lowercase hex escape",
+    ),
+    (
+        "KEYFRAME 0 0 0 %41 kf 0000000000000000 0",
+        "an escaped safe byte",
+    ),
+    (
+        "KEYFRAME 0 0 0 %FF kf 0000000000000000 0",
+        "an escape that is not UTF-8",
+    ),
+    (
+        "KEYFRAME 0 0 0 a%2 kf 0000000000000000 0",
+        "a truncated escape",
+    ),
+    (
+        "KEYFRAME 0 0 0 a\tb kf 0000000000000000 0",
+        "an unescaped control byte",
+    ),
+    ("KEYFRAME 0 0 0 é kf 0000000000000000 0", "a non-ASCII line"),
+    (
+        "KEYFRAME 0 0 0  kf 0000000000000000 0",
+        "an empty string token",
+    ),
+    (
+        "INPUT 0 0 0 0 1 k s ~ p 00000000000000000000000000000000 00000000000000000000000000000000",
+        "an input class other than push",
+    ),
+    (
+        "EVENT 0 0 0 1 12 0 DEATH 32768 ~ 0 128 0 0 [1] [] [] []",
+        "a phase of 12",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 4 0 [1] [] [] []",
+        "a secrecy of 4",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 2 [1] [] [] []",
+        "the retired origin 2",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 1 [] [] []",
+        "a payload that is not a list",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [1,] [] [] []",
+        "a trailing comma",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7] [] []",
+        "a role tuple with two parts",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [6/7/1] [] []",
+        "an entity kind of 6",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/0,1/8/0] [] []",
+        "two actors",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/1,1/8/1] [] []",
+        "two targets",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/~/5/256/1]",
+        "a triggered edge with a weight",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/~/0/0/1]",
+        "a triggered edge with evidence 0",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/0/~/0/255/1]",
+        "a contingent edge with evidence below 1",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/4] [] []",
+        "a role code of 4",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/1,1/8/0] [] []",
+        "roles out of role-code order",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/8/2,1/7/2] [] []",
+        "witnesses out of entity order",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/1,1/7/1] [] []",
+        "a repeated cast row",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/9/~/0/256/1]",
+        "an edge kind of 9",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/6/~/0/256/1]",
+        "an edge of kind 6 (player), which has no writer (R22 NIT-5)",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [1/1/~/0/256/1]",
+        "a cause at the event's own id (a forward cause; R22 NIT-5)",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/~/0/256/1,2/1/~/0/256/1]",
+        "a cause after the event (a forward cause)",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1]",
+        "a cause tuple with two parts (the P1.0 shape)",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/2/0/256/1]",
+        "a motive on a triggered edge",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/3/~/0/257/1]",
+        "an evidence of 257",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/3/~/-32769/256/1]",
+        "a weight below i16",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/~/0/256/2]",
+        "a cause_told of 2",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [3/1/~/0/256/1,2/1/~/0/256/1]",
+        "causes out of order",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [2/1/~/0/256/1,2/1/~/0/256/1]",
+        "a repeated cause",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/~/8/100] []",
+        "a partner id without a kind",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/1/~/100] []",
+        "a partner kind without an id",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/6/7/~/~/100] []",
+        "a snapshot entity kind of 6",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/8/~/~/100,25/1/7/~/~/100] []",
+        "snapshots out of order",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/1/8/100,25/1/7/~/~/100] []",
+        "a snapshot with a partner before the same key without one",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/~/~/100,25/1/7/~/~/100] []",
+        "a repeated snapshot",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/~/~/2147483648] []",
+        "a snapshot value past i32",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [ ] [] [] []",
+        "a space inside a list",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [B/1/1,A/1/2] [e1/1]",
+        "bindings out of order",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [1/1/1] [e1/1]",
+        "a role that is not an identifier",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [A/6/1] [e1/1]",
+        "a binding to entity kind 6",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 2 1 [] [e1/2,e2/1]",
+        "event ids not ascending",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 2 1 [] [e1/1,e1/2]",
+        "a repeated clause",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [] [x1/1]",
+        "a clause not named eN",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [] []",
+        "a match with no event",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 2 1 [] [e1/1]",
+        "closed_by_event_id not among the events",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 1 1 1 [] [e1/1]",
+        "opened_tick after the closing tick",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 3 0 1 0 1 1 [] [e1/1]",
+        "a selection of 3",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 3 1 0 1 1 [] [e1/1]",
+        "an on_complete of 3",
+    ),
+    (
+        "MATCH 0 0 0 0000000000000000 p q 1 0 0 0 0 1 1 [] [e1/1]",
+        "a partial match (status 0) in v0",
+    ),
+];
+
 /// `canonical_v0.md` §5's planted lines: each is refused.
 #[test]
 fn planted_non_canonical_lines_are_refused() {
     let good = [
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369/1] []",
+        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369/1] [] []",
+        "EVENT 0 9 216000 3 4 0 DEATH 32768 ~ 0 128 0 0 [2] [1/13107/0,1/8738/1] [25/1/13107/~/~/16128] [0/1/~/0/256/1,1/3/0/128/64/1]",
         "LIFE_EXIT 0 11 216000 13107 1 0 ~",
         "STEP_DIGEST 0 12 216000 0 0 1 0000000000000001 0000000000000002 0000000000000003",
         "MATCH 0 0 0 ce0cbf3420904cae solitary_life life_ends 1 0 0 1 0 0 1 [A/1/4369] [e1/0]",
@@ -362,18 +677,6 @@ fn planted_non_canonical_lines_are_refused() {
         "INPUT 0 0 0 0 0 résample person 4369 script 00000000000000000000000000000000 01010101010101010101010101010101",
         "INPUT 0 0 0 0 0  person 4369 script 00000000000000000000000000000000 01010101010101010101010101010101",
         "INPUT 0 0 0 0 1 resample person 4369 script 00000000000000000000000000000000 01010101010101010101010101010101",
-        "EVENT 0 1 0 0 12 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369/1] []",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 4 0 [1] [1/4369/1] []",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 2 [1] [1/4369/1] []",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [5/4369/1] []",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369/4] []",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369/1] [0/9]",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 1 [1/4369/1] []",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1,] [1/4369/1] []",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369] []",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369/1] [3/1,2/1]",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1] [1/4369/1] [2/1,2/1]",
-        "EVENT 0 1 0 0 4 0 DEATH 32768 ~ 0 128 0 0 [1, 2] [1/4369/1] []",
         "LIFE_EXIT 0 11 216000 13107 0 6 ~",
         "LIFE_EXIT 0 11 216000 13107 0 0 ~",
         "LIFE_EXIT 0 11 216000 13107 1 1 ~",
@@ -397,7 +700,29 @@ fn planted_non_canonical_lines_are_refused() {
     for b in bad {
         assert!(parse(b).is_err(), "accepted {b:?}");
     }
-    println!("T-09 canonical: {} planted lines refused", bad.len());
+    for (line, why) in REFERENCE_REFUSED {
+        assert!(parse(line).is_err(), "accepted {why}: {line:?}");
+    }
+    let cast: Vec<String> = (0..257).map(|i| format!("1/{i}/2")).collect();
+    let big = format!(
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [{}] [] []",
+        cast.join(",")
+    );
+    assert!(parse(&big).is_err(), "accepted a cast of 257 rows");
+    let fine = format!(
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [{}] [] []",
+        cast[..256].join(",")
+    );
+    assert_eq!(
+        render(&parse(&fine).unwrap()).unwrap(),
+        fine,
+        "a cast of 256 witnesses"
+    );
+    println!(
+        "T-09 canonical: {} planted lines refused ({} of them the reference's, SPR-020 shape)",
+        bad.len() + REFERENCE_REFUSED.len() + 1,
+        REFERENCE_REFUSED.len() + 1
+    );
 }
 
 /// `canonical_v0.md` §1's planted files: each is refused, and a good one digests to its lines'.

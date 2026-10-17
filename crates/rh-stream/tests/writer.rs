@@ -273,3 +273,40 @@ fn a_tampered_segment_is_refused() {
         assert!(segment::decode(&files, MPY).is_err(), "{what} accepted");
     }
 }
+
+/// The envelope fixture (SPR-020 shape): a synthetic run whose deaths carry `stress` and
+/// relational `trust` snapshots and `motivated_by` edges (some untold), kept at
+/// `target/tmp/rh-stream/envelope_fixture` so that `specs/stream/check_segments.py` reads its
+/// `event_snapshot` and typed `causal_edge` rows with `DuckDB` (`bin/check_all.sh`). The M2 worlds
+/// write none of those rows, so this is what exercises them outside rh-stream.
+#[test]
+fn the_envelope_fixture_carries_snapshots_and_typed_edges() {
+    let dir = scratch("envelope_fixture");
+    let root = dir.join("stream");
+    run(&root, 20_261_017, 90, 4);
+    let segs = read_channel_a(&root, 0, MPY).unwrap();
+    let (mut snaps, mut partnered, mut motivated, mut untold) = (0, 0, 0, 0);
+    for r in segs.iter().flat_map(|s| &s.records) {
+        if let Body::Event(e) = &r.body {
+            snaps += e.snapshots.len();
+            partnered += e
+                .snapshots
+                .iter()
+                .filter(|x| x.partner_id.is_some())
+                .count();
+            motivated += e.causes.iter().filter(|c| c.kind == 3).count();
+            untold += e.causes.iter().filter(|c| !c.cause_told).count();
+        }
+    }
+    assert!(
+        snaps > 0 && partnered > 0 && motivated > 0 && untold > 0,
+        "the fixture misses a path: {snaps} snapshots, {partnered} with a partner, {motivated} \
+         motivated_by edges, {untold} untold"
+    );
+    println!(
+        "T-09 envelope fixture: {} segments, {snaps} snapshots ({partnered} relational), \
+         {motivated} motivated_by edges ({untold} untold) in {}",
+        segs.len(),
+        dir.display()
+    );
+}

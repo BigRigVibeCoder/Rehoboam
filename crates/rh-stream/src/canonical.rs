@@ -18,7 +18,7 @@ use rh_snapshot::hash::{xxh3, xxh3_128};
 
 use crate::record::{
     Binding, Body, Cause, Channel, ClauseEvent, Event, Header, Input, Keyframe, Kind, LifeEntry,
-    LifeExit, Match, Record, Role, StepDigest,
+    LifeExit, Match, Record, Role, Snapshot, StepDigest,
 };
 
 /// The canonical form's version line (`canonical_v0.md` §1).
@@ -174,6 +174,7 @@ macro_rules! int_parser {
 
 int_parser!(p_i64, i64, "i64");
 int_parser!(p_i32, i32, "i32");
+int_parser!(p_i16, i16, "i16");
 int_parser!(p_u64, u64, "u64");
 int_parser!(p_u32, u32, "u32");
 int_parser!(p_u16, u16, "u16");
@@ -291,9 +292,24 @@ const PHASES: [u8; 12] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const ZERO: [u8; 1] = [0];
 const SECRECY: [u8; 4] = [0, 1, 2, 3];
 const ORIGIN: [u8; 4] = [0, 1, 3, 4];
-const ENTITY_KIND: [u8; 5] = [0, 1, 2, 3, 4];
+/// 5 = artifact, reserved for S6 (`envelope_v0.md` §1).
+const ENTITY_KIND: [u8; 6] = [0, 1, 2, 3, 4, 5];
 const ROLE: [u8; 4] = [0, 1, 2, 3];
 const EDGE_KIND: [u8; 9] = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+/// `player`, `oracle`, `director`: in the DDL's domain, no writer until the input-event format
+/// exists (`envelope_v0.md` §5; REV-SPR-020 R22 NIT-5).
+const UNWRITTEN_KINDS: [u8; 3] = [6, 7, 8];
+/// `contingent`, `triggered`, `player`, `oracle`, `director`: evidence is 1.
+const DETERMINISTIC_KINDS: [u8; 5] = [0, 1, 6, 7, 8];
+/// The one edge kind that may carry a motive and a weight.
+const MOTIVATED_BY: u8 = 3;
+/// The one role that may repeat on an event.
+const WITNESS: u8 = 2;
+/// `q8_8` raw bits of 1.
+const EVIDENCE_ONE: i16 = 256;
+/// The ordinal is a u8.
+const MAX_CAST: usize = 256;
+const CAUSE_TOLD: [u8; 2] = [0, 1];
 const LIFE_ORIGIN: [u8; 3] = [0, 1, 2];
 const SEX: [u8; 2] = [0, 1];
 const EXIT_KIND: [u8; 2] = [0, 1];
@@ -312,24 +328,7 @@ fn check(rec: &Record) -> Result<()> {
         Body::Input(i) => {
             check_code("class", i.class, &ZERO)?;
         }
-        Body::Event(e) => {
-            check_code("phase", e.phase, &PHASES)?;
-            check_code("secrecy", e.secrecy, &SECRECY)?;
-            check_code("origin", e.origin, &ORIGIN)?;
-            for r in &e.roles {
-                check_code("entity_kind", r.entity_kind, &ENTITY_KIND)?;
-                check_code("role", r.role, &ROLE)?;
-            }
-            for c in &e.causes {
-                check_code("edge kind", c.kind, &EDGE_KIND)?;
-            }
-            if let Some(w) = e.causes.windows(2).find(|w| w[0].cause_id >= w[1].cause_id) {
-                return err(format!(
-                    "causes: cause ids not strictly ascending: {} then {}",
-                    w[0].cause_id, w[1].cause_id
-                ));
-            }
-        }
+        Body::Event(e) => check_event(e)?,
         Body::LifeEntry(e) => {
             check_code("life origin", e.origin, &LIFE_ORIGIN)?;
             check_code("sex", e.sex, &SEX)?;
@@ -350,6 +349,107 @@ fn check(rec: &Record) -> Result<()> {
         }
         Body::StepDigest(_) | Body::Keyframe(_) => {}
         Body::Match(m) => check_match(m, rec.header.tick)?,
+    }
+    Ok(())
+}
+
+/// The envelope's domains (`envelope_v0.md` §1, §4, §5): what `EventLog::append` refuses, the
+/// parser refuses (§3).
+fn check_event(e: &Event) -> Result<()> {
+    check_code("phase", e.phase, &PHASES)?;
+    check_code("secrecy", e.secrecy, &SECRECY)?;
+    check_code("origin", e.origin, &ORIGIN)?;
+    for r in &e.roles {
+        check_code("entity_kind", r.entity_kind, &ENTITY_KIND)?;
+        check_code("role", r.role, &ROLE)?;
+    }
+    if let Some(w) = e
+        .roles
+        .windows(2)
+        .find(|w| w[0].order_key() >= w[1].order_key())
+    {
+        return err(format!(
+            "roles (by role code, then entity) not strictly ascending: {:?} then {:?}",
+            w[0].order_key(),
+            w[1].order_key()
+        ));
+    }
+    if e.roles.len() > MAX_CAST {
+        return err(format!(
+            "a cast of {} rows; the ordinal is a u8 (at most {MAX_CAST})",
+            e.roles.len()
+        ));
+    }
+    if let Some(w) = e
+        .roles
+        .windows(2)
+        .find(|w| w[0].role == w[1].role && w[0].role != WITNESS)
+    {
+        return err(format!(
+            "role {} filled twice; only witness ({WITNESS}) may repeat",
+            w[0].role
+        ));
+    }
+    for x in &e.snapshots {
+        check_code("entity_kind", x.entity_kind, &ENTITY_KIND)?;
+        if let Some(k) = x.partner_kind {
+            check_code("entity_kind", k, &ENTITY_KIND)?;
+        }
+        if x.partner_kind.is_some() != x.partner_id.is_some() {
+            return err(format!(
+                "snapshot {:?}: partner_kind and partner_id are both NULL or both set",
+                x.key()
+            ));
+        }
+    }
+    if let Some(w) = e.snapshots.windows(2).find(|w| w[0].key() >= w[1].key()) {
+        return err(format!(
+            "snapshot keys not strictly ascending: {:?} then {:?}",
+            w[0].key(),
+            w[1].key()
+        ));
+    }
+    for c in &e.causes {
+        check_code("edge kind", c.kind, &EDGE_KIND)?;
+        if !(0..=EVIDENCE_ONE).contains(&c.evidence) {
+            return err(format!("evidence: {} is outside [0, 256]", c.evidence));
+        }
+        if c.cause_id >= e.event_id {
+            return err(format!(
+                "cause {}: not earlier than event {} (ForwardCause)",
+                c.cause_id, e.event_id
+            ));
+        }
+        if UNWRITTEN_KINDS.contains(&c.kind) {
+            return err(format!(
+                "cause {}: kind {} (player, oracle, director) has no writer in P1a",
+                c.cause_id, c.kind
+            ));
+        }
+        if c.motive.is_some() && c.kind != MOTIVATED_BY {
+            return err(format!(
+                "cause {}: a motive refines motivated_by (kind {MOTIVATED_BY}) only",
+                c.cause_id
+            ));
+        }
+        if c.kind != MOTIVATED_BY && c.weight != 0 {
+            return err(format!(
+                "cause {}: weight is 0 on every kind but motivated_by",
+                c.cause_id
+            ));
+        }
+        if DETERMINISTIC_KINDS.contains(&c.kind) && c.evidence != EVIDENCE_ONE {
+            return err(format!(
+                "cause {}: evidence is 1 ({EVIDENCE_ONE}) on a deterministic kind",
+                c.cause_id
+            ));
+        }
+    }
+    if let Some(w) = e.causes.windows(2).find(|w| w[0].cause_id >= w[1].cause_id) {
+        return err(format!(
+            "causes: cause ids not strictly ascending: {} then {}",
+            w[0].cause_id, w[1].cause_id
+        ));
     }
     Ok(())
 }
@@ -410,6 +510,10 @@ fn check_match(m: &Match, tick: i64) -> Result<()> {
 ///
 /// # Errors
 /// [`CanonicalError`] when a value is outside its DDL domain or a list is out of order.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one arm per record kind, its fields in canonical_v0.md §3's order"
+)]
 pub fn render(rec: &Record) -> Result<String> {
     check(rec)?;
     let h = &rec.header;
@@ -445,7 +549,28 @@ pub fn render(rec: &Record) -> Result<String> {
             render_list(&e.roles, |r| {
                 format!("{}/{}/{}", r.entity_kind, r.entity_id, r.role)
             }),
-            render_list(&e.causes, |c| format!("{}/{}", c.cause_id, c.kind)),
+            render_list(&e.snapshots, |x| {
+                format!(
+                    "{}/{}/{}/{}/{}/{}",
+                    x.attr_id,
+                    x.entity_kind,
+                    x.entity_id,
+                    r_opt(x.partner_kind),
+                    r_opt(x.partner_id),
+                    x.value
+                )
+            }),
+            render_list(&e.causes, |c| {
+                format!(
+                    "{}/{}/{}/{}/{}/{}",
+                    c.cause_id,
+                    c.kind,
+                    r_opt(c.motive),
+                    c.weight,
+                    c.evidence,
+                    u8::from(c.cause_told)
+                )
+            }),
         ]),
         Body::LifeEntry(e) => t.extend([
             e.person_id.to_string(),
@@ -499,7 +624,7 @@ pub fn render(rec: &Record) -> Result<String> {
 const fn arity(kind: Kind) -> usize {
     3 + match kind {
         Kind::Input => 8,
-        Kind::Event => 13,
+        Kind::Event => 14,
         Kind::LifeEntry | Kind::StepDigest => 6,
         Kind::LifeExit | Kind::Keyframe => 4,
         Kind::Match => 12,
@@ -594,13 +719,31 @@ fn parse_event(f: &[&str]) -> Result<Event> {
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    let causes = list_items("causes", f[12])?
+    let snapshots = list_items("snapshots", f[12])?
         .into_iter()
         .map(|it| {
-            let p = tuple_parts("cause", it, 2)?;
+            let p = tuple_parts("snapshot", it, 6)?;
+            Ok(Snapshot {
+                attr_id: p_u16(p[0])?,
+                entity_kind: code("entity_kind", p[1], &ENTITY_KIND)?,
+                entity_id: p_u64(p[2])?,
+                partner_kind: p_opt(p[3], p_u8)?,
+                partner_id: p_opt(p[4], p_u64)?,
+                value: p_i32(p[5])?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let causes = list_items("causes", f[13])?
+        .into_iter()
+        .map(|it| {
+            let p = tuple_parts("cause", it, 6)?;
             Ok(Cause {
                 cause_id: p_u64(p[0])?,
                 kind: code("edge kind", p[1], &EDGE_KIND)?,
+                motive: p_opt(p[2], p_u16)?,
+                weight: p_i16(p[3])?,
+                evidence: p_i16(p[4])?,
+                cause_told: code("cause_told", p[5], &CAUSE_TOLD)? == 1,
             })
         })
         .collect::<Result<Vec<_>>>()?;
@@ -620,6 +763,7 @@ fn parse_event(f: &[&str]) -> Result<Event> {
             .map(p_i64)
             .collect::<Result<Vec<_>>>()?,
         roles,
+        snapshots,
         causes,
     })
 }

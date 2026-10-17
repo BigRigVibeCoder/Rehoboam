@@ -159,10 +159,12 @@ pub struct Input {
     pub row_digest: [u8; 16],
 }
 
-/// One `event_role` child row, its ordinal being its position in [`Event::roles`].
+/// One `event_role` child row, its ordinal being its position in [`Event::roles`]: the cast is
+/// ordered by `role`, then `(entity_kind, entity_id)` (`envelope_v0.md` §1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Role {
-    /// `rh-ids` `EntityKind`: 0 world, 1 person, 2 household, 3 settlement, 4 region.
+    /// `rh-ids` `EntityKind`: 0 world, 1 person, 2 household, 3 settlement, 4 region; 5 artifact
+    /// (reserved for S6).
     pub entity_kind: u8,
     /// The entity's raw id.
     pub entity_id: u64,
@@ -170,13 +172,77 @@ pub struct Role {
     pub role: u8,
 }
 
-/// One `causal_edge` child row of an event (the effect).
+impl Role {
+    /// The ordinal order's key: role code, then entity.
+    #[must_use]
+    pub const fn order_key(&self) -> (u8, u8, u64) {
+        (self.role, self.entity_kind, self.entity_id)
+    }
+}
+
+/// One `event_snapshot` child row: an anchored attribute value (`envelope_v0.md` §4). Field order
+/// is the key order (a `None` partner before any partner), then the value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Snapshot {
+    /// The attribute's index in the Registry's `[attributes]` sorted by name.
+    pub attr_id: u16,
+    /// The first argument's entity kind (0 with id 0: the event itself).
+    pub entity_kind: u8,
+    /// The first argument's raw id.
+    pub entity_id: u64,
+    /// The partner's entity kind, for a relational attribute (both set or both `None`).
+    pub partner_kind: Option<u8>,
+    /// The partner's raw id.
+    pub partner_id: Option<u64>,
+    /// `q8_8` raw bits, bool 0/1, enum index, or an int.
+    pub value: i32,
+}
+
+impl Snapshot {
+    /// The row's key (`event_snapshot`: one row per key).
+    #[must_use]
+    pub const fn key(&self) -> (u16, u8, u64, Option<u8>, Option<u64>) {
+        (
+            self.attr_id,
+            self.entity_kind,
+            self.entity_id,
+            self.partner_kind,
+            self.partner_id,
+        )
+    }
+}
+
+/// One `causal_edge` child row of an event (the effect), typed (`envelope_v0.md` §5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Cause {
     /// The cause's event id (smaller than the effect's).
     pub cause_id: u64,
-    /// `schema.sql`'s edge kind; P1.0 writes 1 (triggered, ruling 11).
+    /// `schema.sql`'s edge kind, 0-5 written (6-8 have no writer in P1a); SPR-006's untyped causes
+    /// are 1 (triggered).
     pub kind: u8,
+    /// The `[motive_edges]` index, set only on kind 3 (`motivated_by`).
+    pub motive: Option<u16>,
+    /// `q8_8` raw bits, 0 unless kind 3.
+    pub weight: i16,
+    /// `q8_8` raw bits in [0, 256]; 256 on a deterministic kind.
+    pub evidence: i16,
+    /// The cause has an `EVENT` record (true on every P1a edge).
+    pub cause_told: bool,
+}
+
+impl Cause {
+    /// A deterministic `triggered` edge, told: what P1a's untyped causes are.
+    #[must_use]
+    pub const fn triggered(cause_id: u64) -> Self {
+        Self {
+            cause_id,
+            kind: 1,
+            motive: None,
+            weight: 0,
+            evidence: 256,
+            cause_told: true,
+        }
+    }
 }
 
 /// `EVENT` (`schema.sql` event, plus the header and the payload).
@@ -204,8 +270,10 @@ pub struct Event {
     pub origin: u8,
     /// The integer payload as emitted.
     pub payload: Vec<i64>,
-    /// The roles, in ordinal order.
+    /// The cast, in ordinal order (role code, then entity).
     pub roles: Vec<Role>,
+    /// The snapshots, strictly ascending by key.
+    pub snapshots: Vec<Snapshot>,
     /// The causes, strictly ascending by `cause_id`.
     pub causes: Vec<Cause>,
 }

@@ -3,17 +3,19 @@
 Reads every sealed table of ``<run-dir>/stream/t*/A/y*/`` with DuckDB, independently of
 ``rh-stream``'s reader, and checks:
 
-  1. every segment holds exactly the format's twelve files, and each file's columns, read by DuckDB,
-     have exactly the names and types of its table in ``specs/stream/channel_a_v0.sql``; a column
-     that ``specs/chronicle/schema.sql`` also has (``event``, ``event_role``, ``causal_edge``) has
-     schema.sql's type; no column is a float (R2);
+  1. every segment holds exactly the format's sixteen files (the SPR-020 envelope's shape), and each
+     file's columns, read by DuckDB, have exactly the names and types of its table in
+     ``specs/stream/channel_a_v0.sql``; a column that ``specs/chronicle/schema.sql`` also has
+     (``event``, ``event_role``, ``event_snapshot``, ``causal_edge``) has schema.sql's type; no
+     column is a float (R2);
   2. every row loads into the DDL's tables (its PRIMARY KEY, UNIQUE and CHECK constraints), and
      ``life_course_v`` rebuilds schema.sql's ``life_course`` with its exact columns and types;
   3. ``seq`` is contiguous from 0 across the segments, each segment row agrees with its records, and
      the R4 order holds (``order_violation`` is empty); role ordinals are contiguous from 0;
   4. each segment's ``canonical_digest`` equals the digest that ``specs/stream/canonical_v0.py``,
      the standard-library reference, computes from the rows (the canonical line of every record,
-     rebuilt from its table, its child rows and the segment's verb dictionary).
+     rebuilt from its table, its child rows (roles, snapshots, typed causes) and the segment's
+     verb dictionary).
 
 ``--plant float-column`` and ``--plant digest`` copy the run directory, plant a DOUBLE column in
 one segment's ``step_digest.parquet`` or alter one ``canonical_digest``, and check the copy: each
@@ -42,19 +44,24 @@ SCHEMA = HERE.parents[1] / "specs" / "chronicle" / "schema.sql"
 CANONICAL = HERE / "canonical_v0.py"
 TABLES = (
     "act_class",
+    "attribute",
     "causal_edge",
     "event",
     "event_role",
+    "event_role_kind",
+    "event_snapshot",
     "input",
     "keyframe_marker",
     "life_course_entry",
     "life_course_exit",
+    "motive_edge_kind",
     "record_kind",
     "segment",
     "step_digest",
     "verb",
 )
 FLOAT_TYPES = ("FLOAT", "REAL", "DOUBLE")
+DICTIONARIES = ("event_role_kind", "motive_edge_kind", "attribute")
 EXIT_OK, EXIT_FAIL, EXIT_UNREADABLE = 0, 1, 2
 
 
@@ -119,7 +126,10 @@ def load_rows(root: Path, con: duckdb.DuckDBPyConnection) -> None:
         if table in ("record_kind", "verb", "act_class"):
             continue
         files = f"{root}/stream/t*/A/y*/{table}.parquet"
-        con.execute(f"INSERT INTO {table} SELECT * FROM read_parquet('{files}')")
+        # Every segment carries the envelope's dictionaries: loaded once each, so two segments
+        # that disagree on a code break its PRIMARY KEY.
+        distinct = "DISTINCT " if table in DICTIONARIES else ""
+        con.execute(f"INSERT INTO {table} SELECT {distinct}* FROM read_parquet('{files}')")
 
 
 def check_order(con: duckdb.DuckDBPyConnection) -> list[str]:
@@ -171,11 +181,19 @@ def _lines(seg: Path) -> list[str]:
         "ORDER BY event_id, ordinal"
     ).fetchall():
         roles.setdefault(e, []).append((k, i, r))
-    causes: dict[int, list[tuple[int, int]]] = {}
-    for c, e, k in con.execute(
-        f"SELECT cause_id, effect_id, kind FROM {t['causal_edge']} ORDER BY effect_id, cause_id"
+    snapshots: dict[int, list[tuple[object, ...]]] = {}
+    for e, *snap in con.execute(
+        "SELECT event_id, attr_id, entity_kind, entity_id, partner_kind, partner_id, value "
+        f"FROM {t['event_snapshot']} ORDER BY event_id, attr_id, entity_kind, entity_id, "
+        "partner_kind NULLS FIRST, partner_id NULLS FIRST"
     ).fetchall():
-        causes.setdefault(e, []).append((c, k))
+        snapshots.setdefault(e, []).append(tuple(snap))
+    causes: dict[int, list[tuple[object, ...]]] = {}
+    for c, e, k, motive, weight, evidence, told in con.execute(
+        "SELECT cause_id, effect_id, kind, motive, weight, evidence, cause_told "
+        f"FROM {t['causal_edge']} ORDER BY effect_id, cause_id"
+    ).fetchall():
+        causes.setdefault(e, []).append((c, k, motive, weight, evidence, int(told)))
     records: list[tuple[int, object]] = []
     head = "timeline_id, seq, tick"
     for row in con.execute(
@@ -204,6 +222,7 @@ def _lines(seg: Path) -> list[str]:
             orig,
             tuple(payload),
             tuple(roles.get(eid, [])),
+            tuple(snapshots.get(eid, [])),
             tuple(causes.get(eid, [])),
         )
         records.append((seq, CANON.Record("EVENT", fields)))
