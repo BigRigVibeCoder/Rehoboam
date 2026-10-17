@@ -9,9 +9,9 @@ window smoke seed 1 warm-up 2 years, measured 1 year(s), no inputs
 budget threads 1 ticks 8801 allocations 819201 growths 856 shrinks 0 max_per_tick 281
 budget threads 4 ticks 8801 allocations 827961 growths 856 shrinks 730 max_per_tick 305
 window-rungs solo,household,hamlet warm-up 2 years, measured 1 year(s), no inputs, manifest seeds
-rung solo seed 1 threads 1 ticks 360 allocations 32448 growths 2616 shrinks 0 max_per_tick 152
-rung household seed 7 threads 1 ticks 360 allocations 32539 growths 2984 shrinks 0 max_per_tick 172
-rung hamlet seed 42 threads 1 ticks 360 allocations 35952 growths 4072 shrinks 0 max_per_tick 179
+rung solo seed 1 threads 1 ticks 360 allocations 21420 growths 2616 shrinks 0 max_per_tick 103
+rung household seed 7 threads 1 ticks 360 allocations 21492 growths 2984 shrinks 0 max_per_tick 123
+rung hamlet seed 42 threads 1 ticks 360 allocations 24886 growths 4072 shrinks 0 max_per_tick 130
 site - | instant setup and inputs | allocations 87969 growths 0
 site Activity | level dispatch | allocations 4883 growths 0
 site Activity | merge | allocations 1058 growths 489
