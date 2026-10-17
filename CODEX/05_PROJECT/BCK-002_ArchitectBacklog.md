@@ -9,7 +9,7 @@ tags: [backlog, project-management]
 related: [BCK-001, AGT-001, GOV-007]
 created: 2026-10-16
 updated: 2026-10-17
-version: 1.16.0
+version: 1.17.0
 ---
 
 > **BLUF:** The Architect's own work stream, run in parallel with development: operating-model upkeep, audit tooling, gate preparation, and documentation debt.
@@ -74,3 +74,4 @@ version: 1.16.0
 | A-54 | A typed list of planned systems in the Registry, replacing `lint_odd.py`'s hard-coded exemption of `S1.culture`, `S2.technology` and `S3.migration` (two places). The validator and the Rust loader read the same list, so a foreign read or send to a planned-but-unbuilt owner is accepted by one rule everywhere, and a typo in an owner's name is refused (Architect ruling on SPR-013's `S1.culture` question) | Before the next spec that reads a planned system's column | Open |
 | A-55 | A typed `payload = [...]` list on `[[emits]]` in `lint_odd.py` (names and types of the payload's items, in order), declared for M2, M7 and T1 (M7: the title on `SUCCEED`, `DEPOSED`, `INTERREGNUM_CRISIS`, `REGENCY_*`, `SEAT_GRANTED` and `CLAIM_*`; the house on `HOUSE_EXTINCT`). Rust skeletons emit it; `emit` checks it. It replaces the annals' quotation of the `when` text (REV-SPR-029 R15, decision 2 and 3), so succession sentences can name the title | Before SPR-021 (its spec prep) | Open |
 | A-56 | **House membership in M7: one rule for genesis, birth and the long run** (REV-SPR-029 R18, REV-SPR-030 R1c).<ul><li>SPR-019's back-fill writes membership agnatically, but M7's `on_birth` falls back to the mother's house.</li><li>Cognatic `on_birth` membership saturates a world: on `kingdom_10k` the member share reaches about 98% by year ~300. Long-run growth then hangs on `elite_fertility_mult` × (1 − `vocation_holy_orders`) (REV-SPR-030 F1).</li></ul>Decide, with D40's pre-registered revisit, whether membership stays cognatic, becomes agnatic, or is bounded by degree from a title's line. Then make the back-fill, `on_birth` and the annals' `house_of` agree. Changing a frozen spec goes through `specs/systems/next` with an amendment | Before SPR-021's plan | Open |
+| A-57 | **M7 dormancy precedence for a far adult heir** (REV-SPR-030 R18): under M7 0.3.4, an adult heir or second-in-line beyond `dormancy_degrees` of the holder meets both the Demote criterion (beyond the degrees) and the Promote criterion ("is a ruling house's heir"; on_birth's first or second in the line). State which wins, and how the named set and the dormancy counts are then computed. Decide with A-56 | Before SPR-021's plan | Open |

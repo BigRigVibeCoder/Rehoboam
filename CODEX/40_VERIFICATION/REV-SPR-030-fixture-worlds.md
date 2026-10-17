@@ -9,7 +9,7 @@ tags: [verification]
 related: [PRJ-002, SPR-030, SPR-019, SPR-021, SPR-022, SPR-015, REV-SPR-019, REV-SPR-029, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.1.0
+version: 0.2.0
 ---
 
 > **BLUF: round 1 on `c9efce8`. Changes are needed: 1 blocker, 3 majors, 7 minors and 2 nits.**
@@ -54,6 +54,29 @@ version: 0.1.0
 
 **Round 2:** the drafter applies R1–R13, regenerates the goldens with the tools, runs `check_all --part core` with the gate timings, and pushes once. An independent check follows, with the reviewer's `work/` scripts.
 
+## 0b. Architect rulings, round 2 (2026-10-17)
+
+Round 2 was reviewed on `c442adb` by the round-1 reviewer, with its scripts (§2).
+- R4, R6, R9 and R12 hold fully, and the rest hold partly.
+- The projection reproduces the round-1 sketch to the person, and the named-at-start recount matches exactly.
+- Every genesis plant and CRN mutant fails.
+- The PR-tier gates fell from about 236 s to 96 s.
+- The one real defect is the nightly CRN job, which fails every night.
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R14 | G1 (MAJ) | **Accepted.**<ul><li>The position-keyed mutant sets `order = sorted(alive)` at the input, so no one dead before T_IN is re-killed.</li><li>VALID also requires power: a post-input window of at least 5 sim-years and at least 100 informative pairs in U.</li><li>Choose each seed's target and T_IN to meet it: the primogeniture sovereign, else the tanistry sovereign, else the next seed. Pin the choice in the golden.</li><li>Each control asserts its own expected reason, not any failure.</li><li>The nightly command must pass. Run it before you push</li></ul> | 90% |
+| R15 | G2 | **Accepted.** The partnering clause covers only U persons whose N4 candidate lists contain no S person, in either run, over the window. A differing marriage outside that set is reported with the S person responsible, not gated | 75% |
+| R16 | G3 | **Accepted.** S is completed after the runs:<ul><li>everyone named at any instant in either run, from the Promote and Demote records;</li><li>every member of every house of the target's realm.</li></ul>Report \|U\| after the extension. It must stay at least 100 by R14 | 65% |
+| R17 | G4 | **Accepted.**<ul><li>The capped case is "+4% / −9% over 1,000 years" (peak 10,415, year 1,000: 9,080).</li><li>State the knife edge: the saturated member NRR is 0.8 × 1.2449 = 0.9959, a 0.4% margin inside the model's own error.</li><li>Interpolate the sensitivity lines at the horizon, year 1,000, not year 1,028</li></ul> | 95% |
+| R18 | G5 | **Accepted.**<ul><li>Report the dormancy counts excluding the full (named) set.</li><li>Correct the BLUF and D-01 claims about dormant members in every house (carrow has none at seeds 1–2), and `kingdom_10k.yaml`'s header (the full rule).</li><li>M7's precedence for a far adult heir, who meets both Demote and Promote, is filed as BCK-002 A-57 for SPR-021</li></ul> | 90% |
+| R19 | G6 | **Accepted.** `--control dormancy-one` compares the counts without the label, or pins the expected narrow count at degree 1. The reviewer's `mut_degrees_ignored` plant must then fail | 95% |
+| R20 | G7 | **Accepted, the round-1 suggestion withdrawn.** T1's isolation court cannot observe V-INV-03's consequence set. The agenda-action path falls back to the `kingdom_10k` 1,000-year G1a runs at seeds 1–3, with the gap reported if those show none. Add the line refilling when an agnate within three steps comes of age to the contest routes | 80% |
+| R21 | G8 | **Accepted.** Fix §3.2:<ul><li>co-parents are 2 steps, so an in-married wife is kin by a shared child;</li><li>saturation adds the wife and mother as members (about 2 per holder);</li><li>one expected range for the named, not two</li></ul> | 85% |
+| R22 | G9 | **Accepted.**<ul><li>T1 0.3.3.</li><li>The seeds in `twin_vales.yaml`.</li><li>Remove the dead `PR_SEEDS`, or make `check_all` use it.</li><li>`members_k <house>: …` with a separator.</li><li>The golden's line count.</li><li>State the T_IN fallback when the target's run-A death is not an M2 death.</li></ul>The optional savings (the effect control sharing the gate's run; snapshotting run A) are welcome if cheap | 90% |
+
+**Round 3:** the drafter applies R14–R22 and merges main once SPR-013 has landed, reconciling the population-synthesis control placement. The drafter runs `check_all --part core` and the nightly CRN and fixture commands, then pushes once. The Architect then verifies with the reviewer's `_r2` scripts.
+
 ## 1. The review (round 1, independent reviewer)
 
 Copy reviewed: a git archive of `c9efce8` in the Architect's scratchpad, `fixtures_review/src/`. The scripts are in `fixtures_review/work/`; run each from the base directory as `python3 -I -B work/X.py src`.
@@ -97,3 +120,30 @@ Copy reviewed: a git archive of `c9efce8` in the Architect's scratchpad, `fixtur
 | mypy | 1.7 s | |
 | V-WC-04 parity | 18.0 s | the two manifests add about 0.6 s |
 | **New in part core** | **about 77 s** | |
+
+## 2. The review (round 2, the round-1 reviewer)
+
+Copy reviewed: a git archive of `c442adb` (`fixtures_review_r2/src/`). The scripts are in `fixtures_review_r2/work/`.
+
+**Verdict: changes needed, but small (1 MAJ, 7 MIN, 1 NIT).**
+
+**Holds:**
+- R4, R6, R9 and R12.
+- The projection: the uncapped peak is 12,607 at year 294, and about 11,440 at year 1,000.
+- The four genesis plants fail, in the PR tier too.
+- The recount of the full reading matches: 33/35/26 and 65/71.
+- The exact-identity gate catches row-index, swap-remove, a skipped S11 and a 1% re-key.
+- The population-synthesis controls fail for their own reasons.
+- The PR-tier gates: about 236 s before, 96 s after.
+
+| # | Sev. | Finding |
+|---|---|---|
+| G1 | MAJ | The nightly `--seeds 1,2 --controls` fails ("CONTROL PASSED: seed 2 [swap-remove-after-input]"), for two reasons: the position vector keeps persons who died before T_IN and re-kills them, and seed 2's 1.3-year window (39 pairs) gives no power |
+| G2 | MIN | The partnering clause does not follow from N4: a changed S eligibility cascades to later U women's matches |
+| G3 | MIN | S is fixed at genesis, but exact identity needs it complete: later-named members of the realm's other houses |
+| G4 | MIN | "Capped within 4%" is false: +4.2%, then −9.2% at year 1,000. The 0.4% knife edge is unstated, and the sensitivity lines are at year 1,028 |
+| G5 | MIN | The full and dormant counts overlap (far adult heirs): 1–7 persons. M7's Demote/Promote precedence is ambiguous. The BLUF, D-01 and the `kingdom_10k.yaml` header are false |
+| G6 | MIN | `--control dormancy-one` is vacuous: the compared line prints the degree itself |
+| G7 | MIN | The T1 isolation fallback (the round-1 suggestion) cannot observe V-INV-03's consequences |
+| G8 | MIN | §3.2: the kinship and membership text is inconsistent |
+| G9 | NIT | Stale text; a dead `PR_SEEDS`; an ambiguous `members_k`; the golden's line count; the T_IN rule for a non-M2 death |
