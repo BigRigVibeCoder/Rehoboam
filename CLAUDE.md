@@ -127,6 +127,7 @@ python -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200
 cargo nextest run -p rh-golden --release --test solo   # solo: resume through 10-year keyframes = continuous, thread invariance, the manifest pin, Ada, the input re-sampling her pending death (SPR-012 T-08)
 cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
 python -I bin/check_all_selftest.py verdict --or-true   # must FAIL: check_all's own verdict fails a gate hidden by || true (VER-SPR-008-TEST GAP-3)
+python -I bin/check_test_hooks.py   # no --test-* hook (poison, stall, pace) in bin/regen_baseline.sh, bin/golden_nightly.sh or a golden or baseline `rh-cli run` line of check_all (SPR-026); --plant must FAIL
 bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02) for smoke, solo, household and hamlet, the yearly cut = the baseline (GAP-6), V-SCALE-01/04 at 1,000 years, the V-INV-02 debug soak, V-DET-11 x 64
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)

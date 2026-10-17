@@ -41,13 +41,28 @@ fn host(world: &str, dir: &Path, extra: &[&str]) -> Host {
     Host::start(&args)
 }
 
-/// Reads a subscription from seq 0 to its end: (records received, the end's reason).
+/// Reads a subscription from seq 0 to its end: (the seq after the last record, the end's reason).
+/// A fast host may have sealed seq 0 already: then from the window's first seq, which the
+/// `behind_live_edge` refusal names (contiguous from there to `stream.end` all the same).
 fn drain(c: &mut Client) -> (u64, String) {
-    drain_from(c, &json!({"seq": 0}))
+    let mut from = 0;
+    loop {
+        let (reply, _) = c.call("stream.subscribe", Some(json!({"from": {"seq": from}})));
+        match control::reply_reason(&reply) {
+            Some("behind_live_edge") => {
+                from = reply["error"]["data"]["live_first_seq"].as_u64().unwrap();
+            }
+            _ => return drain_answered(c, &reply, &json!({"seq": from})),
+        }
+    }
 }
 
 fn drain_from(c: &mut Client, from: &Value) -> (u64, String) {
     let (reply, _) = c.call("stream.subscribe", Some(json!({ "from": from })));
+    drain_answered(c, &reply, from)
+}
+
+fn drain_answered(c: &mut Client, reply: &Value, from: &Value) -> (u64, String) {
     let mut next = reply["result"]["first_seq"]
         .as_u64()
         .unwrap_or_else(|| panic!("{reply}"));
@@ -337,8 +352,16 @@ fn a_poisoned_engine_ends_every_subscription_aborted_and_seals_no_partial_year()
     let (_, reason) = drain(&mut c);
     assert_eq!(reason, "aborted");
     drop(c);
-    let (code, lines, _) = h.finish();
+    let (code, lines, err) = h.finish();
     assert_eq!(code, 1, "the simulation failed: {lines:?}");
+    // The abort names the hook, on stderr and in the ladder's failed line (the poison ruling).
+    assert!(err.contains("(--test-poison)"), "{err}");
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.contains("FAILED at tick") && l.contains("(--test-poison)")),
+        "{lines:?}"
+    );
     let a = dir.join("stream/t0000000000/A");
     assert!(a.join("y000029").is_dir(), "the completed years are sealed");
     assert!(

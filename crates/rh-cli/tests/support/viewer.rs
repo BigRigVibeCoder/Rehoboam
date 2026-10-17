@@ -34,8 +34,9 @@ pub enum Mode {
     Playback { years_per_sec: u64 },
     /// Subscribed, never reads until the run is over (another connection says `finished`).
     Stalled,
-    /// Stops reading until another connection's `stream.status` shows two more sealed years, the
-    /// sleep doubling until the host's window has passed what its socket holds; then catches up.
+    /// Reads live to sim-year 2, then stops reading until the run is over (another connection
+    /// says `finished`); then catches up: what its socket held, `stream.behind` once the host's
+    /// window has passed its cursor, the sealed years, the live window, `stream.end`.
     Sleeper,
     /// Reads to sim-year 5, stops until the tip is 10 sim-years ahead, then jumps to live.
     Jumper,
@@ -83,7 +84,6 @@ pub struct Viewer {
     nonce: Option<u64>,
     pub report: Report,
     started: Instant,
-    sleep_years: i64,
     slept: bool,
     jumped: bool,
 }
@@ -115,7 +115,6 @@ impl Viewer {
                 ..Report::default()
             },
             started: Instant::now(),
-            sleep_years: 2,
             slept: false,
             jumped: false,
         }
@@ -253,21 +252,17 @@ impl Viewer {
                 self.slept = true;
             }
             Mode::Sleeper
-                if self.report.behinds == 0
+                if !self.slept
                     && year >= 2
                     && self.lp.state == rh_protocol::cursor::State::Live =>
             {
-                let base = self
+                while self
                     .status()
-                    .and_then(|s| s["sealed"]["last_year"].as_i64())
-                    .unwrap_or(0);
-                while self.status().is_some_and(|s| {
-                    s["sealed"]["last_year"].as_i64().unwrap_or(0) < base + self.sleep_years
-                        && s["pace"]["state"] != "finished"
-                }) {
-                    std::thread::sleep(Duration::from_millis(2));
+                    .is_some_and(|s| s["pace"]["state"] != "finished")
+                {
+                    std::thread::sleep(Duration::from_millis(20));
                 }
-                self.sleep_years *= 2;
+                self.slept = true;
             }
             Mode::Jumper
                 if !self.jumped

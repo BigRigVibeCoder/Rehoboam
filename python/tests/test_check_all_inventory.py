@@ -291,6 +291,10 @@ REQUIRED_GATES = (
     "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, "
     "streaming, and streaming with a tail stopped mid-run (after it printed a sealed "
     "segment), within twice streaming plus 1 s",
+    "Test hooks positive control: --test-poison planted in regen_baseline.sh's solo run "
+    "must FAIL (SPR-026)",
+    "Test hooks: no --test-* flag in a baseline or golden rh-cli run command line (SPR-026; "
+    "the poison ruling)",
     "V-DATA-10 subset on the envelope fixture: DuckDB reads its event_snapshot rows and "
     "typed causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and "
     "constraints, and the reference recomputes every canonical_digest from them (SPR-013 "

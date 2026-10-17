@@ -1038,7 +1038,12 @@ class Host:
             )
             return [encode_frame(control_frame(error(None, reason, **extra)))]
         del length
-        return [encode_frame(control_frame(self._answer(conn, frame.payload)))]
+        answer = self._answer(conn, frame.payload)
+        if answer.get("id") is None:
+            # An answer with a null id (no request id could be read) closes the connection, as a
+            # header refusal does (the Architect's C16 ruling).
+            conn.closed = True
+        return [encode_frame(control_frame(answer))]
 
     def _answer(self, conn: Connection, payload: bytes) -> Json:
         try:
@@ -1914,11 +1919,17 @@ def _dispatch_cases() -> list[tuple[str, bytes]]:
 
 def dispatch_transcript() -> list[tuple[str, bytes, bytes]]:
     """Each planted request and the host's reply bytes, on a fresh connection."""
+    return [(name, data, reply) for name, data, reply, _ in _dispatched()]
+
+
+def _dispatched() -> list[tuple[str, bytes, bytes, bool]]:
+    """Each planted request, the host's reply bytes, and whether the host closed the connection."""
     out = []
     for name, data in _dispatch_cases():
         host = Host(Writer("A", []))
-        replies = host.dispatch(host.connect(), data)
-        out.append((name, data, b"".join(replies)))
+        conn = host.connect()
+        replies = host.dispatch(conn, data)
+        out.append((name, data, b"".join(replies), conn.closed))
     return out
 
 
@@ -1941,16 +1952,44 @@ EXPECTED_REASONS = {
 }
 
 
+# Whether the host closes the connection after its answer, one case per class (C16): a refusal of
+# the header or the frame, and every answer whose id is null (parse_error, invalid_request, a float
+# anywhere), closes; an answer to a request with an id (a result, or method_not_found,
+# invalid_params, future_seq, not_subscribed) leaves the connection open.
+EXPECTED_CLOSED = {
+    "dispatch_status": False,
+    "dispatch_player_act": False,
+    "dispatch_timeline_fork": False,
+    "dispatch_stream_pace": False,
+    "dispatch_status_with_param": False,
+    "dispatch_subscribe_filter": False,
+    "dispatch_subscribe_float": True,
+    "dispatch_subscribe_future": False,
+    "dispatch_unsubscribe_none": False,
+    "dispatch_notification": True,
+    "dispatch_batch": True,
+    "dispatch_not_json": True,
+    "dispatch_version_2": True,
+    "dispatch_records_from_viewer": True,
+    "dispatch_oversize": True,
+}
+
+
 def _dispatch_checks() -> list[str]:
     """The host answers only the three methods; everything else is the read-only refusal."""
     problems = []
-    for name, _, reply in dispatch_transcript():
+    for name, _, reply, closed in _dispatched():
         frame, used = decode_frame(reply)
         _, obj = decode_control(frame.payload)
         if used != len(reply):
             problems.append(f"{name}: more than one reply frame")
         if _reason(obj) != EXPECTED_REASONS[name]:
             problems.append(f"{name}: {_reason(obj)}, expected {EXPECTED_REASONS[name]}")
+        if closed != EXPECTED_CLOSED[name]:
+            want = "close" if EXPECTED_CLOSED[name] else "keep open"
+            problems.append(f"{name}: the host should answer and {want} the connection")
+        if closed != (obj.get("id") is None):
+            problems.append(f"{name}: closed={closed} but the answer's id is {obj.get('id')!r}")
     err = error(7, "method_not_found")["error"]
     assert isinstance(err, dict)
     if err["message"] != READ_ONLY_MESSAGE:

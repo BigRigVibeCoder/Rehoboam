@@ -3,15 +3,15 @@
 //!
 //! - **V-STR-01 / V-STR-03.** A world runs headless, then with four viewers attached: `rh-cli tail
 //!   --live` at the edge, a scripted 100x playback (100 sim-years a second), a rewinder that
-//!   re-subscribes from old seqs, and a stalled viewer (connected, never reads until the run is
+//!   re-subscribes from old seqs (300 seqs a pass, back 100), and a stalled viewer (connected, never reads until the run is
 //!   over). Every sealed segment is byte-identical to the headless run's, the ladder is the
 //!   baseline, `tail --live` printed exactly the sealed lines, and every viewer got `0..next_seq`.
 //!   Wall time with and without viewers is printed (the gate is SPR-030's V-PERF-09). The stalled
 //!   viewer's first read after the run, past the frames its socket held, is `stream.behind`.
 //! - **V-STR-05, catch-up and jump.** A sleeper stops reading until another connection's
-//!   `stream.status` shows two more sealed years (doubling until the window has passed what its
-//!   socket holds): it is sent behind (asserted), reads the sealed years through `rh-cli tail
-//!   --canonical --from-seq --to-seq`, resubscribes and reaches `stream.end` with `0..next_seq`,
+//!   `stream.status` shows the run finished, from sim-year 2 (solo runs 600 paced sim-years here,
+//!   about 590 KB unread, far more than a Unix socket holds): it is sent behind (asserted), reads
+//!   the sealed years through `rh-cli tail --canonical --from-seq --to-seq`, resubscribes and reaches `stream.end` with `0..next_seq`,
 //!   its per-year XXH3-128 of the bodies received live equal to every `stream.sealed` digest and
 //!   every `segment.canonical_digest`. A jumper jumps to live from 10 sim-years behind:
 //!   `first_seq` is the tip at the answer, nothing duplicated after it.
@@ -71,11 +71,17 @@ fn stream_files(dir: &Path) -> BTreeMap<String, Vec<u8>> {
     out
 }
 
+/// V-STR-01's host, headless and live, sleeps 1 ms at each stop (`--test-pace-ms`; at least 12
+/// a sim-year): about 2.5 s for 200 sim-years however fast the disk, so the stalled viewer
+/// subscribes while the run is young and the wall times compare like with like.
+const PACE: [&str; 2] = ["--test-pace-ms", "1"];
+
 fn headless(world: &str, dir: &Path) -> Duration {
     let t = Instant::now();
     let out = Command::new(BIN)
         .args(["run", world, "--years", "200", "--run-dir"])
         .arg(dir)
+        .args(PACE)
         .output()
         .unwrap();
     assert!(
@@ -138,11 +144,15 @@ fn rewinder(sock: &Path, run_dir: &Path) -> (u64, u64, BTreeMap<u64, String>) {
     let mut c = Client::connect(sock);
     let mut seen: BTreeMap<u64, String> = BTreeMap::new();
     let (mut from, mut rewinds) = (0u64, 0u64);
+    let mut rewound_at: Option<u64> = None;
     loop {
         let (reply, _) = c.call("stream.subscribe", Some(json!({"from": {"seq": from}})));
         if let Some(reason) = rh_protocol::control::reply_reason(&reply) {
             assert_eq!(reason, "behind_live_edge", "{reply}");
             let s = reply["error"]["data"]["sealed_last_seq"].as_u64().unwrap();
+            // At most 300 seqs per pass, then a rewind of 100; past the last sealed seq, once per
+            // sealed tip (then on to the window). The rewinds do not depend on the host's speed.
+            let to = s.min(from + 299);
             let out = Command::new(BIN)
                 .args(["tail"])
                 .arg(run_dir)
@@ -151,7 +161,7 @@ fn rewinder(sock: &Path, run_dir: &Path) -> (u64, u64, BTreeMap<u64, String>) {
                     "--from-seq",
                     &from.to_string(),
                     "--to-seq",
-                    &s.to_string(),
+                    &to.to_string(),
                 ])
                 .output()
                 .unwrap();
@@ -168,7 +178,13 @@ fn rewinder(sock: &Path, run_dir: &Path) -> (u64, u64, BTreeMap<u64, String>) {
                     "seq {seq}"
                 );
             }
-            from = s + 1;
+            if to < s || rewound_at != Some(s) {
+                rewinds += 1;
+                rewound_at = Some(s);
+                from = (to + 1).saturating_sub(100);
+            } else {
+                from = s + 1;
+            }
             continue;
         }
         let mut cursor = from;
@@ -224,6 +240,8 @@ fn v_str_01_and_03_four_viewers_change_no_byte_of_the_stream() {
             "--socket",
             "--linger",
             "60",
+            PACE[0],
+            PACE[1],
         ]);
         let sock = a_sock(&dir);
         support::wait_socket(&sock);
@@ -289,7 +307,9 @@ fn v_str_01_and_03_four_viewers_change_no_byte_of_the_stream() {
         }
         assert!(
             rewinds > 2 && rew_end == next && u64::try_from(rew_seen.len()).unwrap() == next,
-            "rewinder"
+            "{world}: the rewinder rewound {rewinds} time(s), ended at seq {rew_end} and saw {} \
+             distinct seqs; the stream has {next}",
+            rew_seen.len()
         );
         // The stalled viewer: what its socket held, then stream.behind; then everything from disk.
         let st = &reports[1];
@@ -330,11 +350,16 @@ fn v_str_01_and_03_four_viewers_change_no_byte_of_the_stream() {
 fn v_str_05_a_sleeper_catches_up_and_a_jumper_jumps_to_live() {
     let dir = scratch("vstr05");
     let d = dir.display().to_string();
+    // 600 sim-years, paced (about 20 s): what the sleeper leaves unread is about 590 KB of solo's
+    // stream, far past a Unix socket's send buffer, so the host blocks behind its window however
+    // fast its disk and however late a loaded runner starts the sleeper.
     let host = Host::start(&[
         "run",
         "solo",
         "--years",
-        "200",
+        "600",
+        PACE[0],
+        PACE[1],
         "--run-dir",
         &d,
         "--socket",

@@ -232,7 +232,7 @@ fn every_refuse_line_is_refused_naming_its_reason() {
 
 #[test]
 fn every_dispatch_line_is_answered_byte_for_byte_on_a_fresh_connection() {
-    let mut n = 0;
+    let (mut n, mut closed) = (0, 0);
     for line in golden().iter().filter(|l| l.starts_with("dispatch ")) {
         let parts: Vec<&str> = line.split(' ').collect();
         let (name, request, want) = (parts[1], unhex(parts[2]), parts[3]);
@@ -240,10 +240,32 @@ fn every_dispatch_line_is_answered_byte_for_byte_on_a_fresh_connection() {
         let reply = control::dispatch(&mut conn, &EmptyHost, &request);
         assert_eq!(hex(&reply.frames.concat()), want, "dispatch {name}");
         assert_eq!(reply.frames.len(), 1, "dispatch {name}: one reply frame");
+        // C16: the connection closes after a header or frame refusal and after every answer whose
+        // id is null; an answer to a request with an id leaves it open (selftest_wire_v1.py's
+        // EXPECTED_CLOSED, one case per class).
+        let want_close = matches!(
+            name,
+            "dispatch_subscribe_float"
+                | "dispatch_notification"
+                | "dispatch_batch"
+                | "dispatch_not_json"
+                | "dispatch_version_2"
+                | "dispatch_records_from_viewer"
+                | "dispatch_oversize"
+        );
+        assert_eq!(
+            reply.close, want_close,
+            "dispatch {name}: closes the connection"
+        );
         n += 1;
+        closed += usize::from(want_close);
     }
     assert_eq!(n, 15, "the golden file's dispatch lines");
-    println!("wire_v1 conformance: {n} dispatch answers byte for byte on a fresh connection");
+    println!(
+        "wire_v1 conformance: {n} dispatch answers byte for byte on a fresh connection; {closed} \
+         close it (C16), {} keep it open",
+        n - closed
+    );
 }
 
 fn event(line: &str) -> Event {

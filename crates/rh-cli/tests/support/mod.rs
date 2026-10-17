@@ -37,7 +37,10 @@ static NEXT: AtomicU32 = AtomicU32::new(0);
 /// directory itself does not exist yet.
 pub fn scratch(name: &str) -> PathBuf {
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let base = PathBuf::from(format!("/tmp/rhl{}-{n}", std::process::id()));
+    // `RH_TEST_SCRATCH` moves the scratch directories (e.g. to /dev/shm, a disk whose fsync is as
+    // fast as CI's, to reproduce its timings); short, for the 107-byte socket path limit.
+    let root = std::env::var("RH_TEST_SCRATCH").unwrap_or_else(|_| "/tmp".to_owned());
+    let base = PathBuf::from(format!("{root}/rhl{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
     base.join(name)
