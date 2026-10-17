@@ -1,6 +1,6 @@
 # Your decisions, in one place
 
-*Updated 2026-10-17: All open gating decisions ratified by Director (D37 effect language, D48 wave-4 plans SPR-014/SPR-020/SPR-026, D38 tellability ceiling, D40 & D41 births, D42 & D43 World Stream v1 wire, D44 causal edges, D46 popsynth, D47 control.sock, D49 Plane-C names, D50 prologue keyframe attribution). G0 passed (`VER-G0`). Full reasoning is in [`12_open_questions.md`](12_open_questions.md) and [`06_adr/`](06_adr/README.md). Every ruling is recorded in [`decisions-log.md`](decisions-log.md).*
+*Updated 2026-10-17 (late morning): the director ruled D37, D38, D40–D44 and D47–D50. D46 (population synthesis marginals) and D29 (image provider, P3) remain. D48 (the wave-4 sprint plans: SPR-014, SPR-020, SPR-026) is new; D44 (the event envelope, PR #61) is new; D42, D43 and D47 (the World Stream v1 wire, PR #60) are new; D40 and D41 (the births spec, PR #50) earlier. G0 passed (`VER-G0`); D37 (the effect language) and D38 (DATA-5) wait on you. 2026-10-16 (evening): D30 to D36 approved at G0. Earlier: D30 to D36, the P1a plan, waited for G0. Earlier: your rulings (D28: the saga engine). The SPR items below are unchanged. Full reasoning is in [`12_open_questions.md`](12_open_questions.md) and [`06_adr/`](06_adr/README.md). Every ruling is recorded in [`decisions-log.md`](decisions-log.md).*
 
 **How to answer:** reply in chat with the ID and your choice. Anything you don't answer keeps its default, and work proceeds on it.
 
@@ -8,24 +8,24 @@
 
 | ID | Question | Recommendation (default if unanswered) | Needed by |
 |---|---|---|---|
+| D46 | **Population synthesis v0: defer P1.2's "IPF from manifest marginals" to the `population` marginal alone?** SPR-019's spec (PR #62) synthesises the anonymous rest of a people from the compiled M2 schedule: age and sex from its stationary population, marriage and children from M2 F1's own constants. Class, culture and faith marginals have no owning system in P1a (M4 F0 and S1 are P1b), so no manifest field is added in v0. The founders with pre-epoch births, the genealogical kin and the three-generation houses are built as written. `hamlet`'s golden moves when SPR-019 is built (announced then) | **Approve the deferral.** Optional `peoples[].age_structure`, class and culture shares arrive with their owners in P1b, with the Rust loader's parity fixtures. Confidence: 75% | Before SPR-019 (P1.2) is planned |
 | D29 | **Which image provider, and what monthly budget?** The graphic chronicle renders storyboard panels in batch after a saga is compiled (`05.11` §6; `12` Q24). | **A serverless API, in batch, no GPU VM.** Choose among fal.ai, Replicate and Together AI (FLUX.1 [dev] or SDXL) by a two-week trial on the same 50 panels at the start of P3. About $0.005–0.015 per panel, ≈ $1 per season (estimate, verify at P3). Default ceiling: $10 a month. Confidence: medium | Start of P3 (nothing earlier depends on it) |
 
 ## Decided on 2026-10-17
 
 | ID | Ruling |
 |---|---|
-| D37 | **Approved: Registry effect language v0 (PR #41).** Approved with D14 (title blood counts last 16 holders on tenure log), D4 (sex rules of succession laws), and D12 (lineage depth 3, max 4,096 candidates) as drafted. Unblocks M7 succession sprint and PR #41 merge. |
-| D48 | **Approved: Wave-4 sprint plans SPR-014, SPR-020, and SPR-026 (PR #68).** Wave 4 of P1a unblocked: SPR-014 (lifecycle queues & mortality drain), SPR-020 (event envelope & roles, C3 baseline move), SPR-026 (World Stream v1 wire format & `rh-protocol`). Order: SPR-014, then SPR-020; SPR-026 in parallel/after. Start upon SPR-013 merge. |
-| D38 | **Approved: Amend DATA-5 with a tellability ceiling.** Commoner life events admitted as chronicle rows while living population at start of year $\le$ 10,000 (`tellable_up_to` in P1a). World-ending verbs (tellability 255) always admitted. Recorded against DATA-5 in `docs/03`. |
-| D40 | **Approved: Default fertility at tfr 4.9 with early near-universal marriage pattern for P1a.** Revisit on dynastic fixture world in SPR-030. |
-| D41 | **Approved: Births checks V-SF-24 and V-SF-25 reported at G1a, gated from G1b.** Settlement rule (INV-M2-13) remains an invariant gating every run. |
-| D42 | **Approved: World Stream live-edge window Option (b).** Live-edge window bounded to current sim-year and previous one, plus lateness of any seal slower than a sim-year. PERF-5 and V-PERF-09 amended. |
-| D43 | **Approved: Live edge carries canonical text lines (amend ADR-0031 §1 item 4).** stdlib reference, verifiable line-by-line against sealed digest, stdlib viewers without columnar decode overhead on local socket. Arrow remains format at rest. |
-| D44 | **Approved: DATA-2 causal edges amended to nine kinds.** Code 7 (`oracle`) retained for Oracle consult causality; V-DATA-09 amended to "only the nine kinds". |
-| D46 | **Approved: Population synthesis v0 deferral.** Defer IPF from manifest marginals to `population` marginal alone for P1a; class/culture shares arrive in P1b. |
-| D47 | **Approved: Roadmap text fix.** Move "tip and scheduled inputs" from P1.17 to P2 in `docs/11` (on `control.sock`). |
-| D49 | **Approved: Plane-C deterministic name generator at P2.8.** Generated as $H(\text{world\_seed}, \text{person\_id}, \text{"name"})$ over culture name base; Plane A stores zero strings. Kinship fallback for G1a. |
-| D50 | **Approved: V-NAR-05 wording amendment for annals prologue.** Pre-epoch prologue sentences cite keyframe rows (`kf:life/<pid>`), not event IDs. |
+| D37 | **Approved: the Registry effect language v0 (PR #41)**, with D14 (title blood over the last 16 holders on M7's tenure log), D4 (the sex rules of the succession laws) and D12 (the bounds: lineage height 3, at most 4,096 candidates). The Architect merges PR #41 once it is brought up to `main` (M7 0.3.4), which unblocks M7 succession; SPR-017 can be planned |
+| D38 | **Approved: DATA-5 amended with a tellability ceiling** (`tellable_up_to` = 10,000 in P1a; `05.2` §4.0). Commoner life events become event rows up to the ceiling; world-ending verbs (tellability 255), named participants and material inputs are always admitted. Every draft still gets an EventId, so plane A is unchanged. Recorded against DATA-5 in `docs/03` |
+| D40 | **Approved: tfr 4.9 with the early, near-universal marriage pattern** as P1a's births baseline. Pre-registered: revisit both on the dynastic fixture world in SPR-030 (a change then is C3 on every golden world) |
+| D41 | **Approved: V-SF-24 and V-SF-25 are reported at G1a and gate from G1b** (`docs/09`) |
+| D42 | **Approved: option (b).** The live-edge window is the current sim-year and the previous one, plus the lateness of any seal slower than a sim-year. PERF-5 and V-PERF-09 amended (`specs/stream/wire_v1.md` §6.1) |
+| D43 | **Approved: canonical text lines on the live edge**, for line-by-line digest verification and stdlib viewers; Arrow and Parquet stay the format at rest. ADR-0031 §1 item 4 amended |
+| D44 | **Approved: nine causal edge kinds**, keeping `oracle` (code 7). DATA-2 and V-DATA-09 amended |
+| D47 | **Approved: "tip and scheduled inputs" moves from P1.17 to P2** in `docs/11` (now in P2.7, over `control.sock`, STR-4), matching PRJ-002 |
+| D48 | **Approved: the wave-4 sprint plans** SPR-014 (lifecycle queues), SPR-020 (the event envelope, with its C3 baseline moves announced before the merge) and SPR-026 (World Stream v1). Order: SPR-014, then SPR-020; SPR-026 in between or after. They start when SPR-013 merges |
+| D49 | **Approved: names for persons come from a deterministic plane-C generator at P2.8** (`H(seed, person_id, "name")`); plane A stores no name strings in the state hash. G1a reads with the annals' kinship fallback (SPR-029) |
+| D50 | **Approved: V-NAR-05 amended.** A prologue sentence before a house's first chronicle sentence maps to the keyframe rows it was rendered from (`kf:life/…`, `kf:tenure/…`), not to event IDs (SPR-029) |
 
 ## Decided on 2026-10-16
 
