@@ -103,6 +103,13 @@ struct DeclaredEmit {
     kind: String,
 }
 
+/// `[initialization]`: only the manifest sections genesis initialises from (SPR-012 T-06).
+#[derive(Debug, Default, Deserialize)]
+struct DeclaredInitialization {
+    #[serde(default)]
+    from_manifest: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct SpecFile {
     system: SpecHeader,
@@ -118,6 +125,8 @@ struct SpecFile {
     commands: Vec<DeclaredCommand>,
     #[serde(default)]
     emits: Vec<DeclaredEmit>,
+    #[serde(default)]
+    initialization: DeclaredInitialization,
 }
 
 /// The ownership-relevant part of one system spec.
@@ -141,6 +150,9 @@ pub struct SystemSpec {
     pub commands: Vec<DeclaredCommand>,
     /// The event kinds it emits (`[[emits]] kind`), in spec order (SPR-006).
     pub emits: Vec<String>,
+    /// The manifest sections `[initialization] from_manifest` names, in spec order: genesis
+    /// writes the system's columns from those sections only (SPR-011 ruling 10; SPR-012 T-06).
+    pub from_manifest: Vec<String>,
 }
 
 impl SystemSpec {
@@ -160,6 +172,7 @@ impl SystemSpec {
             schedule: f.schedule.into_iter().map(|b| (b.pulse, b.phase)).collect(),
             commands: f.commands,
             emits: f.emits.into_iter().map(|e| e.kind).collect(),
+            from_manifest: f.initialization.from_manifest,
         })
     }
 
@@ -212,6 +225,7 @@ impl SystemSpec {
                 .map(|c| (c.target.clone(), c.command.clone()))
                 .collect(),
             emits: self.emits.clone(),
+            from_manifest: self.from_manifest.clone(),
         }
     }
 }
@@ -503,6 +517,7 @@ mod tests {
             schedule: vec![],
             commands: vec![],
             emits: vec![],
+            from_manifest: vec![],
         };
         let t = Ownership::build(
             &[

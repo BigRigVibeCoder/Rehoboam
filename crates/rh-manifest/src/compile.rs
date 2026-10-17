@@ -271,7 +271,10 @@ fn demography(
     for name in DEMOGRAPHY_READS {
         let (path, value) = if let Some(a) = set.and_then(|s| s.get(name)) {
             if let Some(message) = outside_bounds(def.and_then(|d| d.bound_literals.get(name)), a) {
+                // Reported once (VER-SPR-011-TEST GAP-9): a literal refused here, an exponent past
+                // the bound included, is not converted and refused again below.
                 errors.push(format!("systems.{DEMOGRAPHY}.{name}"), message);
+                continue;
             }
             (format!("systems.{DEMOGRAPHY}.{name}"), to_q16_16(&a.exact))
         } else if let Some(exact) = def.and_then(|d| d.default_literals.get(name)) {
