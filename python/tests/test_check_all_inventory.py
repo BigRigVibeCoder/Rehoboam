@@ -428,11 +428,15 @@ REQUIRED_GATES = (
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
+    "population synthesis positive control: a spec check value off by one must FAIL the "
+    "reference's spec check (SPR-019; REV-SPR-019 R5)",
     "population synthesis positive control: an altered golden output must FAIL (SPR-019)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
-    "population synthesis positive control: floors in place of the allocations must FAIL the "
-    "marginals (SPR-019 P3, P7)",
+    "population synthesis positive control: floors in place of the age-sex allocation must FAIL "
+    "INV-PS-01 (SPR-019 P3)",
+    "population synthesis positive control: floors in place of the couple-table rounding must "
+    "FAIL INV-PS-03 (SPR-019 P7)",
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "

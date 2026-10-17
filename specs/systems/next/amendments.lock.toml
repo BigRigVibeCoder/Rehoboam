@@ -7,7 +7,7 @@
 "algorithm.mortality_rung0.steps.S12" = "sha256:d40341e72e2aefe9e98f0e299def8f06cdca8da798525c8d6877f588f812ac8d"
 "algorithm.mortality_rung0.steps.S2" = "sha256:30ad9c5343cb62758bf446cbad89fe85ea1b686901646914ef7af9681fce1f70"
 "emits.EXTINCTION.when" = "sha256:3e7663ca3c969ba2806a494b73ea95a9712d28e86b5ccfdaf758236d764dce48"
-"initialization.state" = "sha256:5343903b05df2606b0f3c5eecc25906fa633afecc13ba003c20e7b961f40ede6"
+"initialization.state" = "sha256:4dbdd368fd7470dbcadf000d0ed4c5009d72ca0a4b7d0eaa38ef203b0ef6f1c2"
 "invariants.INV-M2-03.statement" = "sha256:0360341e475d4cd6fb5f34b9ed30993212d6c2b4ab7ce2fca30355306c8b9e13"
 "owns.life_course.origin.meaning" = "sha256:4fea8dc0b4f98df973ca7b02379de4f02479479f2c45cecaa1264ea7dc478066"
 "owns.person.birth_tick.meaning" = "sha256:fdb05ea3070a4a18a51f6c44862005e4fe832e3139ba2c5caeff594f7d19b0c6"
@@ -23,3 +23,8 @@
 "params.eps_f.meaning" = "sha256:b80679a94a1e3f819a2c8827955a085263aedb9942600c0dbdae96024d6a5cad"
 "params.eps_m.meaning" = "sha256:fbbfa01fa2bac7fd5377a47505a2bf93da781ba2e9266e0fcce477c8cd6c157f"
 "params.tfr.meaning" = "sha256:90a537f40ae93109a0495452bfabfecce1248e63834382e6789716885006e26a"
+
+[amendments."M7.dynasty"]
+"initialization.state" = "sha256:060c5ebff896fc5cbb95866d445b7248f763afd45f56aae6b114efd93253fa6a"
+"owns.house_member.house.meaning" = "sha256:b0b841c000d758ba2bb7eb0d25f5146180c5cf799bbd09721fdf6d85aa82830c"
+"owns.tenure.title.meaning" = "sha256:e320a3e6381c5f7d50a2f72aa168352316027b08cebfe58b199792e75a5a8ac1"

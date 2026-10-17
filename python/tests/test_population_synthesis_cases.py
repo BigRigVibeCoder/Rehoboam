@@ -56,6 +56,10 @@ def _check(case: Any, doc: dict[str, Any], ref: ModuleType) -> None:  # noqa: AN
     assert str(case.tfr) == str(m2.get("tfr", ref.TFR_DEFAULT))
     mult = m2.get("elite_fertility_mult", ref.MULT_DEFAULT)
     assert str(case.elite_fertility_mult) == str(mult)
+    assert str(case.brass_beta) == str(m2.get("brass_beta", ref.BETA_DEFAULT))
+    m7 = doc.get("systems", {}).get("M7.dynasty")
+    majority = str(m7["majority_age"]) if m7 and "majority_age" in m7 else None
+    assert case.majority_age == majority
     polities = [
         (
             p["id"],

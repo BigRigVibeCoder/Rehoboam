@@ -41,7 +41,7 @@ polities:
       - {id: thorne, name: "House Thorne", generations: 2}
 systems:
   M2.demography: {e0: 30, tfr: 4.9, elite_fertility_mult: 1.2}
-  M7.dynasty: {}
+  M7.dynasty: {majority_age: 16}   # B9's majority (tanistry, the stand-in rule, the root's first tenure); the Registry has no default yet (REV-SPR-019 R5)
 narrative:
   pattern_packs: [succession, solitary_life]
   default_style_card: historian
