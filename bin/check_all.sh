@@ -58,6 +58,15 @@ run() {
   if [ -n "${PART:-}" ] && [ "${current_part:-}" != "$PART" ]; then return 0; fi
   local name="$1" expect="$2"; shift 2
   n=$((n+1))
+  # VER-SPR-012-TEST GAP-6: an expectation with empty text would match any output (a fail: with no
+  # text accepts any failure). It is a harness error, refused before the gate runs.
+  case "$expect" in
+    pass:|fail:)
+      echo "| $n | $name | **FAIL** (HARNESS ERROR: empty $expect expectation) | 0 |" >> "$REPORT"
+      echo "FAIL  $name (HARNESS ERROR: \"$expect\" with no text matches any output)"
+      failed="$name"
+      return 1 ;;
+  esac
   local t0 out rc
   t0=$(date +%s)
   out="$("$@" 2>&1)"; rc=$?
@@ -985,6 +994,7 @@ run "check_all chain: no run line ends in || true, || : or || exit (check_all_se
 run "check_all chain positive control: a run line mutated with || true must FAIL the lint (VER-SPR-008-TEST GAP-3)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-true &&
 run "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint (VER-SPR-008-TEST GAP-7)" "fail:OR-TRUE ON A RUN LINE" "$PY" -I bin/check_all_selftest.py lint bin/check_all.sh --plant-or-exit &&
 run "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-exit &&
+run "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness error, not match any failure (VER-SPR-012-TEST GAP-6)" "fail:HARNESS ERROR" "$PY" -I bin/check_all_selftest.py verdict --empty-fail &&
 run "check_all verdict per part: --part core passes while only a golden-part gate fails (check_all_selftest; SPR-009 review 2b)" "pass:Verdict: PASS (1 checks, part core)" "$PY" -I bin/check_all_selftest.py verdict --part-core &&
 run "check_all verdict per part positive control: --part golden fails at its failing gate (SPR-009 review 2b)" 'fail:Verdict: FAIL at "planted failing golden gate"' "$PY" -I bin/check_all_selftest.py verdict --part-golden &&
 run "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL (the chain exited early" "$PY" -I bin/check_all_selftest.py verdict --early-exit &&

@@ -284,6 +284,8 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-3)",
     "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; "
     "VER-SPR-008-TEST GAP-3, GAP-7)",
+    "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness"
+    " error, not match any failure (VER-SPR-012-TEST GAP-6)",
     "check_all positive control: the old PWD-joined golden path under an absolute "
     "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
     "check_all verdict per part positive control: --part golden fails at its failing gate "
@@ -525,6 +527,42 @@ def test_every_chained_gate_is_in_the_inventory() -> None:
     """A new gate must be added to the inventory in the same change, or it is unguarded."""
     chained = {m.group("name") for line in _chain_lines() if (m := RUN_NAME.match(line))}
     assert sorted(chained - set(REQUIRED_GATES)) == []
+
+
+def _first_word(rest: str) -> str:
+    """Return the first shell word of ``rest``: bare, single-quoted, or double-quoted."""
+    if rest.startswith("'"):
+        return rest[1:].split("'", 1)[0]
+    if not rest.startswith('"'):
+        return rest.split(" ", 1)[0]
+    out, i = [], 1
+    while i < len(rest) and rest[i] != '"':
+        if rest[i] == "\\" and i + 1 < len(rest):
+            i += 1
+        out.append(rest[i])
+        i += 1
+    return "".join(out)
+
+
+def test_every_gate_states_a_non_empty_expectation() -> None:
+    """VER-SPR-012-TEST GAP-6: a `pass:` or `fail:` with no text matches any output.
+
+    Every `run` line of the script (the chain and the control loops) names an expectation that is
+    `pass`, `fail`, or `pass:`/`fail:` followed by text; `run` itself refuses an empty text as a
+    harness error (bin/check_all_selftest.py verdict --empty-fail).
+    """
+    seen = 0
+    for line in SCRIPT.read_text(encoding="utf-8").splitlines():
+        if not RUN_NAME.match(line):
+            continue
+        match = RUN_NAME.match(line)
+        assert match is not None
+        expect = _first_word(line[match.end() :].strip())
+        assert expect in {"pass", "fail"} or (
+            expect.startswith(("pass:", "fail:")) and len(expect) > len("pass:")
+        ), f"{line.strip()[:80]}: expectation {expect!r}"
+        seen += 1
+    assert seen > 300, f"only {seen} run lines read"
 
 
 def test_every_control_loop_is_called_from_the_chain() -> None:
