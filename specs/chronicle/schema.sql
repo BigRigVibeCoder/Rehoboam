@@ -163,7 +163,7 @@ CREATE TABLE IF NOT EXISTS sig_component (        -- plane C: retroactive signif
 
 CREATE TABLE IF NOT EXISTS sift_match (           -- plane C: separate MatchId space, never interleaved with EventIds
     timeline_id         UINTEGER  NOT NULL,
-    match_id            UBIGINT   NOT NULL,    -- H64(pattern_id, pattern_version, event_ids): content-addressed, stable across re-sifts and equal to the twin's
+    match_id            UBIGINT   NOT NULL,    -- H64(pack, pattern_id, pattern_version, event_ids, bindings): content-addressed (specs/stream/channel_c_v0.sql R5), stable across re-sifts and equal to the twin's
     pattern_id          VARCHAR   NOT NULL,
     pattern_version     USMALLINT NOT NULL,
     pattern_lib_version USMALLINT NOT NULL,
