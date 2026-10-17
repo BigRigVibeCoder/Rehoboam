@@ -866,9 +866,14 @@ version = "0.0.0"
 dependencies = [
  "rh-core",
  "rh-ids",
+ "rh-manifest",
  "rh-registry",
  "rh-snapshot",
+ "rh-sys-demography",
  "rh-sys-smoke",
+ "rh-worldgen",
+ "serde",
+ "toml",
 ]
 
 [[package]]
@@ -928,6 +933,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rh-sys-demography"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-registry",
+]
+
+[[package]]
 name = "rh-sys-smoke"
 version = "0.0.0"
 dependencies = [
@@ -936,6 +951,18 @@ dependencies = [
  "rh-ids",
  "rh-registry",
  "rh-sample",
+]
+
+[[package]]
+name = "rh-worldgen"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-registry",
+ "rh-snapshot",
+ "rh-sys-demography",
 ]
 
 [[package]]

@@ -58,6 +58,7 @@ All are recorded in `docs/decisions-log.md`:
 |---|---|---|
 | **The laptop:** RUN-001 (BCK-002 A-16) and one `adjutant` session of about 2 hours, for SPR-008 T-02 and SPR-009 T-04 | I will ping you when SPR-008 is ready | — |
 | **D37, the Registry effect language v0** (PR #41, v0.5.0, 558 golden cases), with D14 (title blood over the last 16 holders, which needs worldgen to back-fill pre-epoch history in SPR-019), D4 (sex rules) and D12 (bounds) | Approve. Four review rounds on a different model from the drafter's ended with 0 blockers and 0 majors (`REV-SPR-017`) | 75% |
+| **Seven more decisions** in `docs/decisions_pending.md`: D38 (tellability ceiling), D40 and D41 (births), D42 and D43 (the World Stream's window and live-edge format), D44 (eight or nine edge kinds), D47 (tip and scheduled inputs to P2) | Each row carries my recommendation and its confidence | — |
 
 Resolved since the first version of this summary:
 - you approved the P1a plan, D30 to D36 (PRJ-002 and SPR-011 approved; PR #32 and PR #37 merged in that order);
@@ -95,20 +96,22 @@ Resolved since the first version of this summary:
   |---|---|---|
   | SPR-011 Developer | `session_01BNeZLa54C84WkCSFyGLyCw` | **Merged** (PR #46, `afca1c6`); `VER-SPR-011` PASS |
   | SPR-011 Tester | `session_01TL91hSqyKqgnewrVi44NrR` | Done: `VER-SPR-011-TEST` PASS (phases 2a, 2b, 3) |
-  | SPR-012 Developer | `session_01HayofV6CwcYjQMoz46fUHo` | `solo` lives and dies, `sprint/SPR-012-solo` (PR #56); scope adds A-47 and A-49. T-05 to T-08 pushed, with deviations 1–5 accepted (the audit records them) |
-  | SPR-012 Tester | `session_01NmJhgWg2RtddDxjWoKF3VP` | Probe plan written from the contracts (with A-47, A-49); waits for the head |
+  | SPR-012 Developer | `session_01HayofV6CwcYjQMoz46fUHo` | **Merged** (PR #56, `df4a7f4`); `VER-SPR-012` PASS; the `solo` golden world is in. Follow-ups are BCK-002 A-51 to A-53 (in SPR-013) |
+  | SPR-012 Tester | `session_01NmJhgWg2RtddDxjWoKF3VP` | Done: `VER-SPR-012-TEST` PASS (phases 2 and 3) |
+  | SPR-013 Developer | `session_011cUYDDsqzBiw2U3E24chq4` | The stream, sifter, replay and rungs 1–2, `sprint/SPR-013-stream`; scope adds A-51 to A-53. `parquet` =60.0.0 approved (`rh-stream` only); file I/O allowed only in `rh-stream`'s seal module |
+  | SPR-013 Tester | `session_014BNc1EBcpkwnVMX4uMa9NX` | Phase 1 done; waits for the head |
   | SPR-013 spec drafter | `session_0127pPFgvbRfd3gRk2vQrxxY` | PR #45, merged |
   | EVO-001 drafter | `session_01KHKcdcgSqTBuEw1RS6XvH8` | **Merged** (PR #49, `0398a4e`, `05.1` v1.12); `REV-EVO-001` closed after four rounds |
   | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | **Merged** (PR #50): the next M2 0.3.0 in `specs/systems/next/`; `REV-SPR-015` closed after three rounds. Q5 and Q6 went to the director as D40 and D41
-  | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | **Merged** (PR #51, `513e281`, `05.1` v1.10); now folding `mortality_f1.toml` into the next M2 as a new `[algorithm.*]` table
+  | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | **Merged** (PR #51, `513e281`; the fold, PR #59, `e890ae9`): mortality is `[algorithm.mortality_f1]` in the next M2; `REV-SPR-016-FOLD` closed. The next M2 0.3.0 is promoted in SPR-016's PR
   | SPR-018 drafter | `session_01EZrn9bjDkDgj6kEQsYpCuD` | **Merged** (PR #52, `e9e0fe3`); `REV-SPR-018` closed |
   | SPR-019 drafter (Fable) | `session_01Kw2QAtEyRCehcyDsgxsZrm` | Population synthesis and the dynastic back-fill, `arch/SPR-019-popsynth` |
-  | SPR-020 drafter (Fable) | `session_01BuhAx8LwsfCjcUR5BDhFJQ` | The event envelope and the role-code reconciliation, `arch/SPR-020-envelope` |
-  | SPR-026 drafter (Fable) | `session_01Kzu8vtatp9Zszm6brUQ8BM` | The World Stream v1 wire format and `rh-protocol`, `arch/SPR-026-stream-v1` |
+  | SPR-020 drafter (Fable) | `session_01BuhAx8LwsfCjcUR5BDhFJQ` | **Merged** (PR #61, `4e941ef`): the event envelope (`specs/chronicle/envelope_v0.md`) and the Registry's role vocabulary; `REV-SPR-020` closed after four rounds; D44 went to the director. The implementation sprint is C3 (all four baselines move) |
+  | SPR-026 drafter (Fable) | `session_01Kzu8vtatp9Zszm6brUQ8BM` | **Merged** (PR #60, `a53cac2`): the World Stream v1 wire and `rh-protocol`; `REV-SPR-026` closed after three rounds; D42, D43 and D47 went to the director |
 
-- **Review records:** `REV-SPR-015`, `REV-SPR-016`, `REV-SPR-018` and `REV-EVO-001` are closed.
-- **`05.1` versions:** v1.10 is `exp`/`ln` (PR #51), v1.11 is SPR-011's rule 6, v1.12 is EVO-001's rule 2.
-- **M7.dynasty spec version:** EVO-001 took 0.3.2. PR #41 (effect language, awaiting D37) takes 0.3.3, merges `main` and moves its gates to `--part core` before it merges.
+- **Review records:** `REV-SPR-015`, `REV-SPR-016`, `REV-SPR-016-FOLD`, `REV-SPR-018`, `REV-SPR-020`, `REV-SPR-026` and `REV-EVO-001` are closed. Open, with rulings on its review branch: `REV-SPR-019` (`review/SPR-019-r1`, round 2).
+- **`05.1` versions:** v1.10 is `exp`/`ln` (PR #51), v1.11 is SPR-011's rule 6, v1.12 is EVO-001's rule 2, v1.13 is SPR-020's rule 4 (an origin propagates through every hop).
+- **M7.dynasty spec version:** EVO-001 took 0.3.2. PR #61 (the SPR-020 envelope) took 0.3.3 for M7 and T1, and 0.2.2 for M2. PR #41 (the effect language, awaiting D37) takes 0.3.4, merges `main` and moves its gates to `--part core`. SPR-019's M7 changes go to a `next/M7.dynasty.odd.toml` draft 0.4.0 (REV-SPR-019 R4), which carries 0.3.3's `roles`.
 - **Outcome-carrying commands** (`ScheduleDeath`, `Marry`) are submitted only by their sender's timer at the outcome's instant (REV-EVO-001 R9). D39 was withdrawn.
 - **Messages to a working session:** send with the default priority or `now`. A `next` message waits for the target's turn to end.
 

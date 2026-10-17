@@ -9,7 +9,18 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     neutral value, and every rate or mode read needs a synthetic forcing in [isolation] (docs/09 V-SF-22/23).
     Missing coupling detail is a warning on a draft spec and an error on a frozen one,
   - the event vocabulary (SPR-011 ruling 11): every [[emits]] kind is a Registry verb whose emitted_by is the
-    spec's system, and every verb the Registry gives to a system with a spec is in that spec's [[emits]].
+    spec's system, and every verb the Registry gives to a system with a spec is in that spec's [[emits]];
+  - the event envelope (SPR-020; specs/chronicle/envelope_v0.md §2, §4, §7): an [[emits]] entry's `roles` are Registry
+    [event_roles] ids, each once (witness may repeat on an event, not in the list); its `motives` are [motive_edges] ids;
+    each of its `snapshots` names a Registry attribute, the role (`of`) it is read of (or "event"), a `partner` role for
+    a two-argument attribute, and the owned or read column (`from`) it is filled from, whose type matches the
+    attribute's; a `cause_column` on an [[owns]] state column names an owned `event_ref` column of the same entity
+    (SAGA-15; an Option<EventId>, none by default, so no id is reserved: REV-SPR-020 R17); an event_ref column
+    declares no `default` (R26).
+    A missing `roles` is an error on a frozen spec and a warning on a draft; a wrong value is always an error
+    (REV-SPR-020 R7). `of = "witness"` is refused (a witness is many); a repeated motive or snapshot key is an error;
+    an `algorithm.<name>` source declares its `type`, checked like a column's; a foreign enum source's codes are
+    compared with the attribute's values. A `cause_column` needs the state column's declared `default`.
     A warning on a draft spec, an error on a frozen one,
   - parameter defaults (SPR-011 ruling 8): a [[params]] `default` equals the Registry's `defaults` entry, both ways,
   - lifecycle commands (PR #32; REV-P1a §7): each [[applies]] of a spec names a command, its payload fields and its
@@ -104,10 +115,15 @@ REQUIRED = ["system", "purpose", "scales", "schedule", "rng", "design", "initial
             "params", "submodels", "invariants", "verification"]
 DESIGN_KEYS = ["basic_principles", "emergence", "adaptation", "objectives", "learning", "prediction", "sensing",
                "interaction", "stochasticity", "collectives", "observation", "era_state", "scale_behaviour"]
-TYPES = {"i64", "u64", "i32", "u32", "u16", "u8", "bool", "enum", "q8_8", "q16_16", "f32_field"}
+TYPES = {"i64", "u64", "i32", "u32", "u16", "u8", "bool", "enum", "q8_8", "q16_16", "f32_field", "event_ref"}
+# event_ref: an Option<EventId>, none by default; the type of a cause column (envelope_v0.md §7, REV-SPR-020 R17). Its
+# hashed and keyframe encoding is opt(u64), so a present cause may be EventId 0 (the first event) and none is distinct.
 SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
 READ_USES = ("identity", "mode", "rate")
 IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_range", "source")
+# A snapshot's source column type per Registry attribute type (envelope_v0.md §4 item 5).
+SNAPSHOT_SOURCE_TYPES = {"q8_8": {"q8_8"}, "bool": {"bool"}, "int": {"u8", "u16", "u32", "i32", "i64"}, "enum": {"enum"}}
+SNAPSHOT_KEYS = {"attr", "of", "partner", "from", "type"}
 INTEGER_TYPES = {"i64", "u64", "i32", "u32", "u16", "u8"}
 NUMBER_TYPES = {"q8_8", "q16_16", "f32_field"}
 INT_RANGE = {"u8": (0, 2**8 - 1), "u16": (0, 2**16 - 1), "u32": (0, 2**32 - 1), "u64": (0, 2**64 - 1),
@@ -218,7 +234,32 @@ def semver(text):
 
 AMEND_PATH = re.compile(r"^(params\.(?P<param>[a-z0-9_]+)\.meaning|invariants\.(?P<inv>[A-Za-z0-9_-]+)\.statement|algorithm\.(?P<alg>[a-z0-9_]+)\.steps\.(?P<step>[A-Za-z0-9]+)|"
                         r"emits\.(?P<kind>[A-Z_]+)\.when|initialization\.state|schedule\.(?P<pulse>[A-Za-z]+)/(?P<phase>[A-Za-z]+)\.steps\.(?P<sname>[a-z_]+)|"
-                        r"schedule\.(?P<wpulse>[A-Za-z]+)/(?P<wphase>[A-Za-z]+)\.when|owns\.(?P<col>[a-z_]+\.[a-z_]+)\.meaning|rng\.(?P<rpurpose>[a-z_]+)\.use)$")
+                        r"schedule\.(?P<wpulse>[A-Za-z]+)/(?P<wphase>[A-Za-z]+)\.when|owns\.(?P<col>[a-z_]+\.[a-z_]+)\.meaning|rng\.(?P<rpurpose>[a-z_]+)\.use|"
+                        r"emits\.(?P<skind>[A-Z_]+)\.snapshots|owns\.(?P<dcol>[a-z_]+\.[a-z_]+)\.default|owns\.(?P<ccol>[a-z_]+\.[a-z_]+)\.cause_column)$")
+# The last three are the envelope's (SPR-020; REV-SPR-020 R15): a next version keeps a frozen kind's snapshots and a
+# frozen column's default and cause_column equal unless a record amends them; roles and motives may only grow.
+
+
+def snapshots_text(entry):
+    """The text of an [[emits]] entry's snapshots, for an `[[amends]] of = "emits.<KIND>.snapshots"` record: each
+    snapshot as `attr of ROLE [with PARTNER] from SOURCE [as TYPE]`, joined by `; `, in declaration order; `none`."""
+    rows = []
+    for x in entry.get("snapshots", []):
+        if not isinstance(x, dict):
+            return "malformed"
+        text = f"{x.get('attr')} of {x.get('of')}"
+        if x.get("partner"):
+            text += f" with {x.get('partner')}"
+        text += f" from {x.get('from')}"
+        if x.get("type"):
+            text += f" as {x.get('type')}"
+        rows.append(text)
+    return "; ".join(rows) if rows else "none"
+
+
+def owns_field_text(column, key):
+    """The text of an [[owns]] column's `default` or `cause_column`: the value as written, or `none`."""
+    return "none" if key not in column else str(column[key])
 
 
 def text_at(spec, m):
@@ -230,6 +271,11 @@ def text_at(spec, m):
         return next((st for st in steps if str(st).startswith(m.group("step") + " ")), None)
     if m.group("kind"):
         return next((e.get("when") for e in spec.get("emits", []) if e.get("kind") == m.group("kind")), None)
+    if m.group("skind"):
+        return next((snapshots_text(e) for e in spec.get("emits", []) if e.get("kind") == m.group("skind")), None)
+    if m.group("dcol") or m.group("ccol"):
+        col, key = (m.group("dcol"), "default") if m.group("dcol") else (m.group("ccol"), "cause_column")
+        return next((owns_field_text(o, key) for o in spec.get("owns", []) if o.get("column") == col), None)
     if m.group("pulse"):
         for x in spec.get("schedule", []):
             if (x.get("pulse"), x.get("phase")) == (m.group("pulse"), m.group("phase")):
@@ -258,7 +304,8 @@ def amendments(fs, ns, p, errs):
         if m is None:
             errs.append(f"{p}: [[amends]] of = {of!r} is not a path this lint knows (invariants.<id>.statement, "
                         "algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state, schedule.<Pulse>/<Phase>.steps.<name>, "
-                        "schedule.<Pulse>/<Phase>.when, owns.<entity.column>.meaning, rng.<purpose>.use, params.<name>.meaning)")
+                        "schedule.<Pulse>/<Phase>.when, owns.<entity.column>.meaning, rng.<purpose>.use, params.<name>.meaning, "
+                        "emits.<KIND>.snapshots, owns.<entity.column>.default, owns.<entity.column>.cause_column)")
             continue
         if not a.get("reason"):
             errs.append(f"{p}: [[amends]] {of} needs a reason")
@@ -390,6 +437,10 @@ def lint_next(frozen, specs, errs):
                     errs.append(f"{p}: frozen column {col} changed {k}: {o.get(k)!r} -> {n.get(k)!r}")
             if n.get("meaning") != o.get("meaning") and f"owns.{col}.meaning" not in amended:
                 errs.append(f"{p}: frozen column {col} changed its meaning without an [[amends]] record")
+            for key in ("default", "cause_column"):   # SPR-020; REV-SPR-020 R15: equal unless amended
+                if owns_field_text(n, key) != owns_field_text(o, key) and f"owns.{col}.{key}" not in amended:
+                    errs.append(f"{p}: frozen column {col} changed its {key} without an [[amends]] record "
+                                f"({owns_field_text(o, key)} -> {owns_field_text(n, key)}; envelope_v0.md §7)")
         for name, table in fs.get("algorithm", {}).items():
             got = ns.get("algorithm", {}).get(name)
             if got is None:
@@ -470,12 +521,23 @@ def lint_next(frozen, specs, errs):
             if bindings[key].get("when") != x.get("when") and f"schedule.{key[0]}/{key[1]}.when" not in amended:
                 errs.append(f"{p}: frozen schedule binding {key} changed its `when` without an [[amends]] record")
         whens = {e.get("kind"): e.get("when", "") for e in ns.get("emits", [])}
+        next_emits = {e.get("kind"): e for e in ns.get("emits", [])}
         for e in fs.get("emits", []):
             k = e.get("kind")
             if k not in whens:
                 errs.append(f"{p}: frozen [[emits]] {k} is missing")
-            elif e.get("when", "") != whens[k] and f"emits.{k}.when" not in amended:
+                continue
+            if e.get("when", "") != whens[k] and f"emits.{k}.when" not in amended:
                 errs.append(f"{p}: frozen [[emits]] {k} changed its `when` without an [[amends]] record (REV-SPR-015 R15: equal text or an amendment; a prefix or suffix is a change)")
+            # the envelope declarations (SPR-020; REV-SPR-020 R15): roles and motives may only grow; snapshots stay equal
+            # unless an [[amends]] record changes them (a next version that captures a new attribute records why)
+            for key in ("roles", "motives"):
+                lost = [x for x in e.get(key, []) if x not in next_emits[k].get(key, [])]
+                if lost:
+                    errs.append(f"{p}: frozen [[emits]] {k} narrowed its {key}: {lost} dropped (a next version may only add; envelope_v0.md §2)")
+            if snapshots_text(e) != snapshots_text(next_emits[k]) and f"emits.{k}.snapshots" not in amended:
+                errs.append(f"{p}: frozen [[emits]] {k} changed its snapshots without an [[amends]] record "
+                            f"({snapshots_text(e)} -> {snapshots_text(next_emits[k])}; envelope_v0.md §4)")
         was, now = fs.get("initialization", {}).get("state", ""), ns.get("initialization", {}).get("state", "")
         if was != now and "initialization.state" not in amended:
             errs.append(f"{p}: frozen [initialization] state changed without an [[amends]] record (equal text or an amendment)")
@@ -746,6 +808,7 @@ def column_type(col, owner, owners_type, reg):
 
 CLOSED_SPRINTS = set()
 KNOWN_SPRINTS = set()
+ALL_OWNED_TYPES = {}   # column -> type over every spec of the run (for a snapshot read from a foreign column)
 
 
 def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
@@ -756,6 +819,8 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
     notes = notes if notes is not None else []
     roles = {sid: s.get("purpose", {}).get("role") for sid, (_, s) in specs.items()}
     owners_type = {o.get("column"): o.get("type") for _, (_, s) in specs.items() for o in s.get("owns", [])}
+    ALL_OWNED_TYPES.clear()
+    ALL_OWNED_TYPES.update(owners_type)
     enum_names = {}                               # enum column -> its code names (EVO-001)
     for _, (_, s) in specs.items():
         for o in s.get("owns", []):
@@ -941,6 +1006,19 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
         for x in s.get("params", []):
             if not x.get("source"):
                 errs.append(f"{p}: parameter '{x.get('name')}' needs a source (a reference or 'design value')")
+        # parameter type (SPR-016 MR2; REV-SPR-016-FOLD MIN-4): a [[params]] entry is q16_16 unless it declares
+        # type = "count", an integer (u64 in the skeleton); a count's Registry bounds and default are integers
+        for x in s.get("params", []):
+            t = x.get("type")
+            if t is None:
+                continue
+            if t != "count":
+                errs.append(f"{p}: parameter '{x.get('name')}' has type '{t}'; the only declared type is 'count' "
+                            "(an integer); without `type` a parameter is q16_16")
+                continue
+            values = list(sysdef.get("params", {}).get(x.get("name"), [])) + ([x["default"]] if "default" in x else [])
+            if not all(isinstance(v, int) and not isinstance(v, bool) for v in values):
+                errs.append(f"{p}: count parameter '{x.get('name')}' needs integer Registry bounds and default (SPR-016 MR2)")
         # defaults (SPR-011 ruling 8): the spec mirrors the Registry's defaults exactly, both ways
         reg_defaults = sysdef.get("defaults", {})
         for x in s.get("params", []):
@@ -962,6 +1040,7 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
                 strict_emits.append(f"{p}: emits {k}, which the Registry gives to {verbs[k].get('emitted_by')}")
         for k in sorted(v for v, d in verbs.items() if d.get("emitted_by") == sid and v not in emitted):
             strict_emits.append(f"{p}: the Registry gives verb {k} to {sid}, but [[emits]] does not declare it")
+        lint_envelope(p, s, reg, enum_names, errs, warns, hdr.get("status") == "frozen")   # SPR-020: roles, motives, snapshots, cause_column
         # submodels earn their place
         for sm in s.get("submodels", []):
             ep = sm.get("earns_its_place_by", [])
@@ -985,6 +1064,123 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
                 errs.append(f"{p}: coupling to unknown system {c.get('system')}")
     lint_applies(specs, errs, warns, enum_names, next_ids)
     return errs, warns
+
+
+def default_problem(value, ct, enum_codes_of_column):
+    """Why ``value`` is not a well-typed default for a column of type ``ct`` (envelope_v0.md §7), or None."""
+    return neutral_problem(value, ct, enum_codes_of_column)
+
+
+def lint_envelope(p, s, reg, enum_names, errs, warns, frozen=False):
+    """The event envelope's declarations (SPR-020; envelope_v0.md §2, §4, §7): [[emits]] `roles`, `motives` and
+    `snapshots` against the Registry [event_roles], [motive_edges] and [attributes] and the spec's own [[owns]] and
+    [[reads]]; `cause_column` on an [[owns]] state column. A wrong value is an error on any spec; a missing `roles` is a
+    warning until SPR-020 closes."""
+    role_ids = reg.get("event_roles", {}).get("ids", [])
+    motive_ids = reg.get("motive_edges", {}).get("ids", [])
+    attrs = reg.get("attributes", {})
+    own = {o.get("column"): o for o in s.get("owns", [])}
+    readable = set(own) | {r.get("column") for r in s.get("reads", [])}
+    algorithms = set(s.get("algorithm", {}))
+    all_types = dict(ALL_OWNED_TYPES)
+    for o in s.get("owns", []):
+        if o.get("type") == "event_ref" and "default" in o:
+            errs.append(f"{p}: {o.get('column')} is an event_ref, whose default is none by definition: drop `default` (REV-SPR-020 R26)")
+        cc = o.get("cause_column")
+        if cc is None:
+            continue
+        col, entity = o.get("column"), o.get("entity")
+        target = own.get(cc)
+        if cc == col or target is None:
+            errs.append(f"{p}: {col} cause_column {cc} must name another column this spec owns (SAGA-15; envelope_v0.md §7)")
+        elif target.get("type") != "event_ref" or target.get("entity") != entity:
+            errs.append(f"{p}: {col} cause_column {cc} must be an event_ref (an Option<EventId>, none by default; REV-SPR-020 R17) of the same entity {entity}")
+        if "default" not in o:
+            errs.append(f"{p}: {col} has a cause_column, so it needs a declared default (the state rh-core compares against; envelope_v0.md §7, REV-SPR-020 R2)")
+        else:
+            why = default_problem(o.get("default"), o.get("type"), enum_names.get(col))
+            if why is not None:
+                errs.append(f"{p}: {col} default: {why}")
+    for e in s.get("emits", []):
+        where = f"{p}: [[emits]] {e.get('kind')}"
+        roles = e.get("roles")
+        if roles is None:
+            (errs if frozen else warns).append(f"{where} declares no roles: the [event_roles] it fills (SPR-020; an error on a frozen spec)")
+            roles = []
+        elif not (isinstance(roles, list) and all(isinstance(r, str) for r in roles)):
+            errs.append(f"{where}: roles must be a list of [event_roles] ids")
+            roles = []
+        for r in roles:
+            if r not in role_ids:
+                errs.append(f"{where}: role '{r}' is not in the Registry [event_roles] {role_ids}")
+        dup = sorted({r for r in roles if roles.count(r) > 1})
+        if dup:
+            errs.append(f"{where}: role(s) {dup} listed twice (a role is listed once; only witness may repeat on an event)")
+        motives = e.get("motives", [])
+        if not (isinstance(motives, list) and all(isinstance(m, str) for m in motives)):
+            errs.append(f"{where}: motives must be a list of [motive_edges] ids")
+            motives = []
+        for m in motives:
+            if m not in motive_ids:
+                errs.append(f"{where}: motive '{m}' is not in the Registry [motive_edges] {motive_ids}")
+        dup_m = sorted({m for m in motives if motives.count(m) > 1})
+        if dup_m:
+            errs.append(f"{where}: motive(s) {dup_m} listed twice")
+        seen_snapshots = set()
+        for sn in e.get("snapshots", []):
+            if not isinstance(sn, dict):
+                errs.append(f"{where}: a snapshot is a table {{ attr, of, [partner], from }}")
+                continue
+            unknown = sorted(set(sn) - SNAPSHOT_KEYS)
+            if unknown:
+                errs.append(f"{where}: snapshot has unknown key(s) {unknown}")
+            name, of, partner, src = sn.get("attr"), sn.get("of"), sn.get("partner"), sn.get("from")
+            a = attrs.get(name)
+            if a is None:
+                errs.append(f"{where}: snapshot attr '{name}' is not in the Registry [attributes]")
+                continue
+            args = a.get("args", [])
+            sw = f"{where}: snapshot {name}"
+            key = (name, of, partner)
+            if key in seen_snapshots:
+                errs.append(f"{sw} of {of} is declared twice")
+            seen_snapshots.add(key)
+            if of == "witness" or partner == "witness":
+                errs.append(f"{sw}: a snapshot of witness is undefined (a witness is many; envelope_v0.md §4 item 3)")
+            if args[:1] == ["event"]:
+                if of != "event":
+                    errs.append(f"{sw} is an attribute of the event; of must be \"event\"")
+            elif of not in roles:
+                errs.append(f"{sw}: of = {of!r} is not one of the kind's roles {roles} (the entity it is read of)")
+            if len(args) >= 2 and args[1] != "event":
+                if partner not in roles:
+                    errs.append(f"{sw} takes {args[1]} as a second argument: partner must be one of the kind's roles {roles}")
+            elif partner is not None:
+                errs.append(f"{sw} has one argument; partner does not apply")
+            if any(x == "event" for x in args[1:]) or (args[:1] == ["event"] and len(args) > 1):
+                errs.append(f"{sw} names another event as an argument, which has no encoding before the knowledge tables (P1b)")
+            if src is None:
+                errs.append(f"{sw} needs from = \"<entity.column>\" (an owned or read column) or \"algorithm.<name>\"")
+            elif str(src).startswith("algorithm."):
+                if str(src)[len("algorithm."):] not in algorithms:
+                    errs.append(f"{sw}: from = {src} names no [algorithm.*] table of this spec")
+                at = sn.get("type")
+                if at is None:
+                    errs.append(f"{sw}: from = {src} computes a value, so the snapshot declares its type (a column type; REV-SPR-020 R7)")
+                elif at not in SNAPSHOT_SOURCE_TYPES.get(a.get("type"), set()):
+                    errs.append(f"{sw} is a {a.get('type')} attribute; from = {src} yields a {at} (envelope_v0.md §4 item 5)")
+            elif src not in readable:
+                errs.append(f"{sw}: from = {src} is neither owned by this spec nor one of its [[reads]]")
+            else:
+                ct = own[src].get("type") if src in own else None
+                if ct is None:
+                    ct = column_type(src, next((r.get("owner") for r in s.get("reads", []) if r.get("column") == src), None), all_types, reg)
+                if ct is not None and ct not in SNAPSHOT_SOURCE_TYPES.get(a.get("type"), set()):
+                    errs.append(f"{sw} is a {a.get('type')} attribute; from = {src} is a {ct} column (envelope_v0.md §4 item 5)")
+                if a.get("type") == "enum":
+                    names = enum_codes(own[src], reg)[0] if src in own else enum_names.get(src)
+                    if names is not None and names != list(a.get("values", [])):
+                        errs.append(f"{sw}: the enum column {src} codes {names} differ from the attribute's values {a.get('values')}")
 
 
 def brief(sid, specs, reg):
@@ -1028,7 +1224,9 @@ def rust(sid, specs):
               "    pub const fn name(self) -> &'static str {", "        match self {"]
     lines += [f'            Self::{camel(g["purpose"])} => "{g["purpose"]}",' for g in s["rng"]]
     lines += ["        }", "    }", "}", "pub struct Params {"]
-    lines += [f"    pub {x['name']}: Fixed,  // bounds checked against the Registry at load" for x in s["params"]]
+    # a count parameter (type = "count", SPR-016 MR2) is a u64; every other parameter is q16_16 (Fixed)
+    lines += [f"    pub {x['name']}: {'u64' if x.get('type') == 'count' else 'Fixed'},  "
+              "// bounds checked against the Registry at load" for x in s["params"]]
     lines += ["}"]
     return "\n".join(lines)
 
@@ -1190,6 +1388,37 @@ def main() -> int:
         bad = copy.deepcopy(ns)
         bad["owns"][0]["type"] = "u8" if bad["owns"][0].get("type") != "u8" else "u16"
         probes.append((bad, "changed type"))
+        # SPR-020; REV-SPR-020 R15: a narrowed cast, a narrowed motive list, changed snapshots, a changed default and a
+        # changed cause_column of the frozen slice must be rejected (the first two may only grow; the rest need a record)
+        cast_kind = next((e for e in fz.get("emits", []) if e.get("roles")), None)
+        if cast_kind is not None:
+            bad = copy.deepcopy(ns)
+            for e in bad["emits"]:
+                if e.get("kind") == cast_kind.get("kind"):
+                    e["roles"] = list(cast_kind["roles"])[:-1]
+            probes.append((bad, "narrowed its roles"))
+        motive_kind = next((e for e in fz.get("emits", []) if e.get("motives")), None)
+        if motive_kind is not None:
+            bad = copy.deepcopy(ns)
+            for e in bad["emits"]:
+                if e.get("kind") == motive_kind.get("kind"):
+                    e["motives"] = list(motive_kind["motives"])[:-1]
+            probes.append((bad, "narrowed its motives"))
+        bad = copy.deepcopy(ns)
+        for e in bad["emits"]:
+            if e.get("kind") == fz["emits"][0].get("kind"):
+                e["snapshots"] = [{"attr": "planted", "of": "actor", "from": "planted.column"}]
+        probes.append((bad, "changed its snapshots without an [[amends]] record"))
+        bad = copy.deepcopy(ns)
+        for o in bad["owns"]:
+            if o.get("column") == fz["owns"][0].get("column"):
+                o["default"] = "planted"
+        probes.append((bad, "changed its default without an [[amends]] record"))
+        bad = copy.deepcopy(ns)
+        for o in bad["owns"]:
+            if o.get("column") == fz["owns"][0].get("column"):
+                o["cause_column"] = "planted.cause"
+        probes.append((bad, "changed its cause_column without an [[amends]] record"))
         bad = copy.deepcopy(ns)
         bad["rng"].insert(0, {"purpose": "planted_first", "key": ["person"]})
         probes.append((bad, "must stay at position 0"))
@@ -1265,8 +1494,9 @@ def main() -> int:
             assert any("is not in" in e and f"steps.{step_label(target)}" in e for e in pe), pe
             assert any("no longer makes" in e and meaning_of in e for e in pe), pe
             lock_probes += 1
-        for probe_lock, needle in (({**want, next(iter(want)): "sha256:planted"}, "changed its text since"),
-                                   ({k: v for k, v in list(want.items())[1:]}, "is not in")):
+        # REV-SPR-020 R26 (NIT-7): a next version with no amendment has nothing to plant in the lock
+        for probe_lock, needle in ((({**want, next(iter(want)): "sha256:planted"}, "changed its text since"),
+                                    ({k: v for k, v in list(want.items())[1:]}, "is not in")) if want else ()):
             pe = []
             compare_lock(sid, want, probe_lock, nf.name, pe)
             assert any(needle in e for e in pe), (needle, pe)

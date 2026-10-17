@@ -1,0 +1,16 @@
+[package]
+name = "rh-protocol"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rehoboam]
+plane = "tool"
+kind = "tool"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = "=1.0.228"
+tokio = "=1.53.3"

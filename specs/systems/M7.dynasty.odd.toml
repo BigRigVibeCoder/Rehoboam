@@ -34,12 +34,16 @@
 # pass through a new Day/Vital binding (murder_due) and drained by M2 in the same Vital (EVO-001 R9, R10). Round 4 (R17,
 # NIT-15): the re-sample draws among the month's day starts at or after the input, never cancelling while one remains, else
 # the next month's first day start; title.exit_timer keeps the MURDER_DUE id too, cancelled on death or loss of the title.
+# 0.3.3 (2026-10-17, SPR-020, the event envelope; specs/chronicle/envelope_v0.md; no mechanics changed): every [[emits]] entry
+# declares the Registry [event_roles] it fills, checked by lint_odd.py. Note for the next version: SUCCEED's edge to the death or
+# deposition is a `triggered` edge under the envelope contract (a motive needs a mind); the frozen `when` and INV text say
+# "motive edge" and are amended at M7's next version (SPR-021), not here.
 odd_r = 2
 
 [system]
 id = "M7.dynasty"
 name = "Succession and dynasts"
-spec_version = "0.3.2"
+spec_version = "0.3.3"
 fidelity = "F1"
 status = "frozen"
 crate = "rh-sys-dynasty"
@@ -287,9 +291,9 @@ fixed_point = false
 [[owns]]
 column = "claim.cause_event"
 entity = "claim"
-type = "u64"
+type = "event_ref"
 plane = "A"
-meaning = "EventId of the SUCCEED or DEPOSED event that created it (provenance)"
+meaning = "The SUCCEED or DEPOSED event that created it (provenance), an Option<EventId> set in the same step as the event through ctx.set_cause with its DraftRef (envelope_v0.md §7, REV-SPR-020 R25)"
 fixed_point = false
 [[owns]]
 column = "claim.rank"
@@ -332,33 +336,43 @@ fixed_point = false
 [[emits]]
 kind = "SUCCEED"
 when = "Arbitration names a holder (immediate succession, the regrant of a title held in demesne excepted, which is SEAT_GRANTED); roles: actor = the successor, target = the predecessor; motive edge to the death or deposition"
+roles = ["actor", "target"]   # actor: the successor; target: the predecessor. Its edge to the death or deposition is `triggered` (a motive needs a mind; envelope_v0.md §3, for the next version)
 [[emits]]
 kind = "INTERREGNUM_CRISIS"
 when = "Arbitration of a sovereign title finds no candidate, or no candidate leads the runner-up by contest_margin; the title is held by the declared interregnum until its resolution timer"
+roles = []                   # a title is not an entity: the payload names it
 [[emits]]
 kind = "DEPOSED"
 when = "A sovereign's deposition timer fires: actor = the leading pressed claimant (or none), target = the ruler, who lives and gains a claim"
+roles = ["actor", "target"]   # actor: the leading pressed claimant, when there is one; target: the ruler
 [[emits]]
 kind = "REGENCY_BEGUN"
 when = "A successor under majority_age succeeds: the regent is named by rule"
+roles = ["actor", "target"]   # actor: the regent; target: the minor holder
 [[emits]]
 kind = "REGENCY_ENDED"
 when = "The holder reaches majority_age, or a regent dies and the next is named (a new REGENCY_BEGUN follows)"
+roles = ["actor", "target"]   # actor: the regent who stood down (or died); target: the holder
 [[emits]]
 kind = "CLAIM_CREATED"
 when = "A succession passes over the legal heir (the heir gains a claim) or a ruler is deposed (the deposed gains one)"
+roles = ["actor", "target"]   # actor: the claimant; target: the holder the claim is against, when one holds the title
 [[emits]]
 kind = "CLAIM_PRESSED"
 when = "A PressClaim command from T1.minds is applied"
+roles = ["actor", "target"]   # actor: the claimant; target: the holder
 [[emits]]
 kind = "CLAIM_RENOUNCED"
 when = "A RenounceClaim command is applied"
+roles = ["actor"]             # actor: the claimant
 [[emits]]
 kind = "SEAT_GRANTED"
 when = "A title held in demesne or a vacant office is granted to a petitioner or an eligible kin (finite seats, re-grant)"
+roles = ["actor", "target"]   # actor: the granting holder; target: the grantee
 [[emits]]
 kind = "HOUSE_EXTINCT"
 when = "The last living member of a house dies"
+roles = ["target"]            # target: the last member, whose death ended the house
 
 # ----------------------------------------------------------------------------- lifecycle commands sent
 [[commands]]

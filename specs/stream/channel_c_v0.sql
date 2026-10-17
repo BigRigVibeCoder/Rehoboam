@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS sift_binding (         -- child rows of MATCH: role v
     timeline_id UINTEGER NOT NULL,
     match_id    UBIGINT  NOT NULL,
     role        VARCHAR  NOT NULL,                 -- the pattern's role variable, e.g. 'A'
-    entity_kind UTINYINT NOT NULL,                 -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region
+    entity_kind UTINYINT NOT NULL,                 -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region; 5 artifact, reserved (S6; envelope_v0.md §1)
     entity_id   UBIGINT  NOT NULL,
     PRIMARY KEY (timeline_id, match_id, role)
 );

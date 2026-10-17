@@ -71,6 +71,14 @@ workspace crates, of every dependency kind (normal, build and dev):
                      edge, are not default features, and are required by no target of
                      ALLOCATOR_CRATE but a bench.
 
+    protocol-leaf    rh-protocol, the wire-format crate (SPR-026; specs/stream/wire_v1.md §7), is a
+                     tool-plane leaf pinned by name: it depends on no workspace crate, of any
+                     dependency kind, so a viewer holding the wire types has no path to the
+                     engine; its third-party dependencies are exactly PROTOCOL_EXTERNAL_DEPS
+                     (serde and serde_json; proptest as a dev-dependency), so no transport or
+                     runtime can enter through it (REV-SPR-026 R7); and the plane-A closure keeps
+                     every plane-A crate from depending on it, so the engine cannot name a frame.
+
     engine-purity    The engine only engines (ADR-0035 §6; docs/13 §3; V-INSP-05; BCK-002 A-14). No
                      engine crate (ENGINE_CRATES, every rh-sys-* and rh-contract-* crate, and
                      every plane-A crate) reaches a crate on ENGINE_DENY_LIST, the one deny-list
@@ -123,7 +131,22 @@ PINNED_LABELS = MappingProxyType(
         # SPR-004 ruling A: the load-time front end reproduces the reference's float checks.
         "rh-manifest": ("tool", "tool"),
         "rh-sample": ("A", "machinery"),
+        # SPR-026 (specs/stream/wire_v1.md §7): the wire-format crate is a tool-plane leaf, so no
+        # plane-A crate can depend on it (plane-A-closure) and it depends on no member
+        # (protocol-leaf): the engine cannot name a frame, and a viewer cannot reach the engine.
+        "rh-protocol": ("tool", "tool"),
+        # SPR-012: the first real system crate (M2.demography) and the worldgen stub (ruling 10).
+        "rh-sys-demography": ("A", "system"),
+        "rh-worldgen": ("A", "machinery"),
     }
+)
+PROTOCOL_CRATE = "rh-protocol"
+PROTOCOL_LEAF_RULE = "protocol-leaf"
+# REV-SPR-026 R7: the exact third-party allow-list of the wire-format leaf, by dependency kind. A
+# socket or an async runtime (tokio, mio, socket2) in the crate that spells the wire would put the
+# transport where a viewer's types are; the host owns the socket (specs/stream/wire_v1.md §7).
+PROTOCOL_EXTERNAL_DEPS = MappingProxyType(
+    {"normal": frozenset({"serde", "serde_json"}), "dev": frozenset({"proptest"})}
 )
 SYSTEM_LABELS = ("A", "system")
 CONTRACT_CRATE = "rh-contracts"
@@ -184,6 +207,17 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
         "arrow-schema": (
             frozenset({"rh-snapshot"}),
             ARROW_NOTE,
+            NO_DEFAULT_FEATURES,
+            NO_FEATURES,
+        ),
+        "arc-swap": (
+            frozenset({"rh-stream"}),
+            "no floats: an ArcSwap of the World Stream live edge's immutable snapshot (w0, s, "
+            "last_year, chunk list, seal log), published by the writer and loaded by the serving "
+            "threads without a lock, so the writer never waits (specs/stream/wire_v1.md §6.2; "
+            "REV-SPR-026 R22: pre-approved for rh-stream alone). MIT OR Apache-2.0, no "
+            "dependencies, default features off; the exact pin is SPR-026's, at a version at "
+            "least two weeks old. It holds no simulation state",
             NO_DEFAULT_FEATURES,
             NO_FEATURES,
         ),
@@ -294,7 +328,8 @@ UNSAFE_TOKEN = re.compile(r"\bunsafe\b")
 
 # REF: docs/13 §3 ("The engine only engines"); ADR-0035 §6; 05.0 §6; docs/09 V-INSP-05; EVO-4;
 # BCK-002 A-14 (SPR-011 T-00). The engine crates: the union of the lists in docs/13 §3, 05.0 §6 and
-# ADR-0035 §6, planned ones included, and SPR-011's new rh-stream. Every crate named rh-sys-* or
+# ADR-0035 §6, planned ones included, SPR-011's new rh-stream and SPR-026's rh-protocol (it runs in
+# the engine host's process; specs/stream/wire_v1.md §7). Every crate named rh-sys-* or
 # rh-contract-*, and every crate whose effective plane is A, is an engine crate too, so a new
 # plane-A crate cannot be left out of the rule by forgetting to list it. rh-bench and rh-golden are
 # not engine crates, by design: they are tool crates that measure and replay the engine from outside
@@ -308,16 +343,24 @@ ENGINE_CRATES = frozenset(
         "rh-ids",
         "rh-manifest",
         "rh-minds",
+        "rh-protocol",
         "rh-registry",
         "rh-sample",
         "rh-server",
         "rh-sifter",
         "rh-snapshot",
         "rh-stream",
+        "rh-sys-demography",
+        "rh-sys-smoke",
         "rh-worldgen",
     }
 )
 ENGINE_CRATE_PREFIXES = (SYSTEM_CRATE_PREFIX, CONTRACT_CRATE_PREFIX)
+# The workspace crates that are not engine crates, by design (see ENGINE_CRATES): tool crates that
+# measure and replay the engine from outside. Every workspace member is on exactly one of the two
+# lists (python/tests/test_lint_arch.py; VER-SPR-011-TEST GAP-1, BCK-002 A-49), so a new crate must
+# be placed by a reviewed edit rather than fall through.
+NON_ENGINE_CRATES = frozenset({"rh-bench", "rh-golden"})
 # THE engine-purity deny-list, defined here and nowhere else (python/tests checks that): package
 # name -> what it is. docs/13 §3 names the categories (media, HTTP-UI, LLM client) and nine
 # examples; the rest are the common crates of the same categories. Matched by package name over the
@@ -719,6 +762,42 @@ def check_external_deps(crate: Crate) -> list[Violation]:
     return found
 
 
+def check_protocol_leaf(crate: Crate, members: frozenset[str]) -> list[Violation]:
+    """SPR-026: rh-protocol depends on no workspace crate, of any dependency kind (wire_v1.md §7).
+
+    The crate that spells the wire must give a viewer no path to rh-core, rh-stream or
+    rh-snapshot, and must stay testable from its golden file alone; a dev-dependency is refused
+    too, so the conformance test cannot quietly grow an engine.
+    """
+    if crate.name != PROTOCOL_CRATE:
+        return []
+    found = [
+        Violation(
+            PROTOCOL_LEAF_RULE,
+            crate.name,
+            f"depends on workspace crate {edge.target}{_via(edge)}; rh-protocol is a leaf: it "
+            "depends on no member of the workspace, so that a viewer holding the wire types has "
+            "no path to the engine (specs/stream/wire_v1.md §7)",
+        )
+        for edge in crate.edges
+        if edge.target in members
+    ]
+    allowed = ", ".join(
+        f"{t} ({k})" for k, ts in sorted(PROTOCOL_EXTERNAL_DEPS.items()) for t in sorted(ts)
+    )
+    found += [
+        Violation(
+            PROTOCOL_LEAF_RULE,
+            crate.name,
+            f"depends on third-party crate {edge.target}{_via(edge)}; rh-protocol's allow-list "
+            f"is exactly {allowed} (specs/stream/wire_v1.md §7; REV-SPR-026 R7)",
+        )
+        for edge in crate.external
+        if edge.target not in PROTOCOL_EXTERNAL_DEPS.get(edge.kind, frozenset())
+    ]
+    return found
+
+
 def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:
     """Check one workspace edge against V-INSP-03, V-PLN-01 and the plane-A closure."""
     found: list[Violation] = []
@@ -946,6 +1025,8 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     violations += [v for crate in crates if crate.declared_ok for v in check_rng_crates(crate)]
     violations += [v for crate in crates if crate.declared_ok for v in check_external_deps(crate)]
     violations += [v for crate in crates if crate.declared_ok for v in check_lints(crate)]
+    members = frozenset(by_name)
+    violations += [v for crate in crates for v in check_protocol_leaf(crate, members)]
     for crate in crates:
         for edge in crate.edges:
             target = by_name.get(edge.target)

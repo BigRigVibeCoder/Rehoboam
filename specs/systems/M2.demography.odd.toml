@@ -11,12 +11,15 @@
 # (`outcome = true`), so a command carries no date and `tick` leaves ScheduleDeath and Marry (05.1 §2 rule 2: the sender's
 # own timer submits them in the outcome's instant).
 # lint_odd.py checks this file against the Registry, the other specs and the test catalogue.
+# 0.2.2 (2026-10-17, SPR-020, the event envelope; specs/chronicle/envelope_v0.md; no mechanics or hashes changed by this text):
+# every [[emits]] entry declares the Registry [event_roles] it fills (DEATH: target the deceased, actor a culprit; EXTINCTION:
+# none), checked by lint_odd.py; the engine's role codes arrive with SPR-020.
 odd_r = 2
 
 [system]
 id = "M2.demography"
 name = "Demography"
-spec_version = "0.2.1"
+spec_version = "0.2.2"
 fidelity = "F1"
 status = "frozen"                          # 2026-10-16, director D30/D36
 crate = "rh-sys-demography"
@@ -229,9 +232,11 @@ sprint = "SPR-014"
 [[emits]]
 kind = "DEATH"
 when = "apply_death, when a death timer fires or the Day/Vital drain applies a ScheduleDeath (SPR-014; EVO-001): alive = 0, death tick, death cause, life-course exit. Roles: the deceased is target; there is no actor for a natural death (a ScheduleDeath's culprit is actor, P1.13). Payload: [death_cause code]. Causes: none for a natural death. Admitted under DATA-5 as the tellable act class death at rungs 0-2 (SPR-011 ruling 11)"
+roles = ["actor", "target"]   # target: the deceased; actor: the culprit of a caused death (ScheduleDeath.culprit, P1.13), none for a natural one (envelope_v0.md §3)
 [[emits]]
 kind = "EXTINCTION"
 when = "apply_death leaves no ledger row with alive = 1: emitted once, right after that DEATH, in the same fire, with the DEATH as its one cause (a draft-local cause, written as a triggered edge; SPR-011 rulings 11, 17). No roles; payload: [] . At rung 0 (no births or immigration) it happens at most once per run; the run continues to its requested end (V-SCALE-04)"
+roles = []                   # no cast; its one cause is the DEATH (triggered)
 
 [scales]
 spatial = "person"

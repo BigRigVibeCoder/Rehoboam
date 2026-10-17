@@ -103,15 +103,22 @@ fixed_point = true
 [[emits]]
 kind = "VOW_SWORN"
 when = "A SwearVow command from T1.minds is applied (the vower's own IAUS choice), or the grudge rule forms a GRUDGE"
+roles = ["actor", "target"]   # actor: the vower; target: the beneficiary or the enemy
+snapshots = [{ attr = "vow_public", of = "actor", from = "vow.public" }]
 [[emits]]
 kind = "VOW_FULFILLED"
 when = "The vow's completion predicate holds at the end of an instant (its target dead by the vower's or an ally's act; the relic borne by the vower or destroyed; the title held)"
+roles = ["actor", "target"]
+motives = ["VOW_OF"]
 [[emits]]
 kind = "VOW_BROKEN"
 when = "Strain exceeds resolve (abandoned, or betrayed: the vower harms or deserts the vow's beneficiary), or the vower acts against the vow; a VOW_OF motive edge points to the oath"
+roles = ["actor", "target"]
+motives = ["VOW_OF"]
 [[emits]]
 kind = "VOW_VOIDED"
 when = "The vower dies with the vow active (the death path, same instant)"
+roles = ["actor"]             # the dead vower; its edge to the death is triggered
 
 [[commands]]
 target = "T1.minds"
