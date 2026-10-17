@@ -317,6 +317,8 @@ ENGINE_CRATES = frozenset(
         "rh-sifter",
         "rh-snapshot",
         "rh-stream",
+        "rh-sys-demography",
+        "rh-sys-smoke",
         "rh-worldgen",
     }
 )
