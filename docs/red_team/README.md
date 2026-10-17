@@ -20,6 +20,7 @@ This keeps in-flight sprints from building on specs that change underneath them.
 | `RT-2026-10-16-primary-source-calibration-report.md` | Formal calibration report grounding demography and inequality in published historical papers |
 | `RT-2026-10-16-G0-dispositions.md` | The G0 dispositions of batches 01 to 04, with the director's rulings on Laws 2 and 3 and item 15 (2026-10-16) |
 | `DISPOSITION_LEDGER.md` | The red team's master ledger of all 34 findings (RT-001 through RT-034), Architect rulings, and phase revisit hooks |
+| `RT-2026-10-17-voxel-engine-synthesis-and-architect-analysis.md` | Technical synthesis of the Architect's voxel engine analysis, Bevy vs. Veloren/Luanti trade study, and Decision D51 ratification proposal |
 | `PHILOSOPHY_AND_BACKLOG.md` | The red team's operating charter, 5 Immutable Laws, autopsies of seven earlier engines, and 25-item action backlog |
 | `RT-2026-10-16-simulation-bug-autopsy-and-code-theft.md` | Autopsy of ten simulation bugs in earlier engines, the "still wanted" papers audit, and algorithms and schemas to reuse |
 | `RT-2026-10-16-bleeding-edge-frontiers.md` | Four proposed frontiers: social practices, mythic domains, the comic beat grammar and the dynastic thermostat |
