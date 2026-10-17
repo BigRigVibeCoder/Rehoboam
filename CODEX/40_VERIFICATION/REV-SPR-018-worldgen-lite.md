@@ -2,17 +2,22 @@
 id: REV-SPR-018
 title: "Independent review of the worldgen-lite, M1.regions F0 and S3.migration F0 specs (PR #52)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-018, SPR-015, SPR-013, SPR-019, REV-SPR-015, EVO-001]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.1.0
+version: 1.0.0
 ---
 
-> **BLUF:** Round 1 on PR #52 at `45e74d7`: **no blocker; three majors to fix before merge**, plus seven minors and the nits. The algorithm is sound. An independent re-implementation of W1–W9, written from the spec text alone, reproduced every number in the golden file, including both bench 4 digests. S3's same-instant read is scheduled legally, and the implicit interval end agrees with SPR-011 ruling 5. The majors are these: the `hamlet` golden case uses the wrong raster size; the founder order is not ruling 10's; and no world registers S3, so it would run on no rung. The Architect's rulings are in §0. The review ran in a session on a different model from the drafter's.
+> **BLUF: CLOSED, approved.** PR #52 took three rounds:
+> - **Round 1** (`45e74d7`): no blocker and three majors: the `hamlet` golden case's raster size, the founder order, and S3 registered by no world.
+> - **Round 2** (`d18973e`): no blocker and no major. The new W6, re-implemented from the text alone, reproduces all ten golden geography cases, and the residence lines match in ruling 10's order.
+> - **Round 3** (`f27b33b`): verified by the Architect. Every golden case states its graph's components; the validator change, S3's Registry change and the kind 7 record are explicit SPR-018 deliverables in PRJ-002.
+>
+> Every review ran in a session on a different model from the drafter's.
 
 # REV-SPR-018: independent review of worldgen-lite, M1 F0 and S3 F0
 
@@ -243,3 +248,133 @@ The scripts are in `/tmp/claude-0/-home-user-Rehoboam/78f410bc-aa41-55ce-883d-f1
 | `hamlet_res.py` | Compares hamlet's residence under R0 order with the reference's numbering |
 
 Each script takes the copy's root as its first argument.
+
+
+## 2. Round 2 (2026-10-17, `d18973e`), with round 3 verified by the Architect
+
+### 2.0 Architect rulings, round 2
+
+| # | Finding | Ruling |
+|---|---|---|
+| R12 | R9 partly applied | The two validator refusals (Python and Rust, V-WC-04 parity) belong to the sprint and are written into PRJ-002's SPR-018 row as deliverables. S3's `default_systems` and the `registry_version` bump, and the kind 7 record's fields, are listed there too |
+| R13 | NEW-1 | The `[isolation]` claim is corrected. Every golden case prints `graph components N connected yes|no`, and the reference asserts the desert_fringe R = 128, K = 4 claim for seeds 1–8 (connected except seed 3) |
+| R14 | NEW-2, nits | The comment list is corrected; S3 no longer says `birth_tick = now`; the `[isolation]` horizon names exactly what the reference sweeps; kind 7 is named as reserved on `main` |
+
+### 2.1 Round 3 (`f27b33b`), verified by the Architect
+The reference passes, 10 cases. All 10 golden cases carry a components line: archipelago has 6 components and is disconnected, the others have 1. The corrected comment list and the PRJ-002 row are in place, and `lint_odd.py` passes (8 specs). The drafter's `--part core` passes 233 checks.
+
+### 2.2 The review (round 2, independent reviewer)
+
+Reviewer: independent (Opus 5.5), 2026-10-17. Copy reviewed: `git archive d18973e` in `worldgen_review_r2/src`. The repository was not changed.
+
+> **BLUF:** **No blocker and no major.** Ten of the eleven rulings are APPLIED. R9 is PARTLY APPLIED: the rules are in the spec, but the validator still accepts both cases (the change is deferred to the sprint).
+>
+> I re-implemented the new W6 from the spec text alone, and it reproduces all 10 golden geography cases. That includes the archipelago case, now split into 6 land components with 0 unregioned cells. From the YAML in ruling-10 order, I independently recomputed all 9 residence lines, and they match. Hamlet at R = 256 matches the expected numbers exactly.
+>
+> **Two new minor findings, both text only:**
+> - NEW-1: M1's `[isolation].expect` claims a connected graph for desert_fringe seeds 1–8. Under the new W6 (R5), seed 3 is now disconnected.
+> - NEW-2: the M1 facts comment lists the wrong settlements for hamlet's 14 anonymous founders.
+>
+> **Three nits.**
+>
+> **The merge of main is clean.** It brings exactly `80343bf` and nothing else.
+
+### Ruling status
+
+| # | Status | Evidence |
+|---|---|---|
+| R1 | APPLIED | **Golden lines 27–36, case `desert_fringe 42 256 4`:** land 53859; edges `1-3 1-4 2-3 2-4 3-4`; routes `148 121 78 113 136`; region sizes 27691/6711/5996/13461; seats 18078 55338 54904 26409. My independent `w6new.py` reproduces every field, including both SHA-256s.<br>**R = 128:** kept as a separately named case (`selftest_worldgen_lite.py` CASES: "hamlet's template and seed at a smaller raster").<br>**`[isolation]`:** includes R = 256. But see NEW-2 for the facts comment. |
+| R2 | APPLIED | **Order:** `Population.founder_order` (`selftest_worldgen_lite.py:473`) follows ruling 10: cast, then children and servants, then the rest. S3 R0 and R3 (`S3.migration.odd.toml:162,164`) state the order.<br>**Independent check:** `residence.py` derives the order from the YAML. It matches solo, household, hamlet@256, hamlet@128 and all 6 synthetic lines.<br>**Hamlet@256:** friends k = 2..5 draw `[4, 2, 1, 3]`; k = 6..45 all take Job's settlement 1; per-settlement counts 50/4/2/4. This is round 1's R0 prediction. |
+| R3 | APPLIED | **Text:** the S3 header (`:9-11`), `[initialization]`, the PRJ-002 SPR-018 row and companion §6 item 4 all say it.<br>**Registry:** `registry_v0.toml` is unchanged (no bump; S3 is in no template). |
+| R4 | APPLIED | **Selector `person.residence = 0`:** in the step (`:134`), R4 (`:165`), the submodel (`:182`), the column meaning (`:51`), sensing (`:148`) and `scale_behaviour`.<br>**Read removed:** the `person.birth_tick` read is gone; the `same_instant` read of `person.mother` keeps the M2→S3 edge.<br>**Residue:** NIT-A. |
+| R5 | APPLIED | **Spec text:** W6 (`M1.regions.odd.toml:240`) says one seed per seedless 4-component, in order of lowest cell, then farthest-point over L. W7, INV-M1-02 (`:292`) and `not_yet` (`:35`) match.<br>**Independent check:** my re-implementation, written from the text, gives for `archipelago 7 96 6`: 6 components; seeds `3635 963 5697 6337 7990 8974`; regions `21c5c727…`; land_cells `953 1029 177 121 177 138`; 0 edges; 0 unregioned. All equal to the golden file, and all 10 cases match.<br>**Consequence:** NEW-1. |
+| R6 | APPLIED | `docs/08:239`, row 4: the bench measures the genesis pass, and the per-step budget waits for M3 (P1b). |
+| R7 | APPLIED | The scope (founders and the born; SPR-019's back-filled ancestors exempt) is stated in INV-S3-01 (`:186-187`), R5, `[initialization]` and the `docs/09:264` V-DATA-04 row. |
+| R8 | APPLIED | **S3's side:** the `interaction` field (`:149`) and the M2 "out" coupling state a lagged mode read, the husband candidates restricted to the bride's settlement, and neutral 0 meaning no restriction; companion §4 says the same.<br>**M2's side:** the births branch (`13fbb70`) matches (`use = "mode"`, `neutral = 0`). |
+| R9 | PARTLY APPLIED | **Applied:** R2 and R3 (`:163-164`) define the head's household (`household` absent, or h) and the membership. The reference's `Population.check` (`:462`) raises on both bad cases.<br>**Not applied:** `manifest_v0.py` still accepts both. My probes `manifests/two_heads.yaml` (Job heads two households) and `head_names_other.yaml` (eliphaz heads eliphaz_house but names job_house) both print `VALID … 0 errors`.<br>**Where it went:** the refusals are deferred to the SPR-018 sprint (S3 R2; companion §6 item 1). No SPR-018 sprint document exists yet to carry them.<br>**Recommendation:** accept the deferral, because V-WC-04 parity argues for changing Python and Rust together. Write it into SPR-018's task acceptance with two must-FAIL manifests. Confidence 7/10. |
+| R10 | APPLIED | **Controls:** they expect `STALE:` (`check_all.sh:864-865`, `tests/lint_fixtures/README.md:112-113`), and both do fail with STALE.<br>**Companion:** the reservation claim is fixed.<br>**W8:** u64 sums are stated.<br>**Reference:** it checks the Registry template ids, founder-id distinctness (the only rehash trigger in `rh-ids`), widths of 0 per mille and the R = 64 sweep.<br>**Cost figures:** fixed (8 × 10^10; 3.6 × 10^8).<br>**S6:** the coupling is added.<br>**Residue:** the accumulator check (`:559`) is still vacuous (about 2^22 against 2^63); NIT-B. |
+| R11 | APPLIED | **Q1:** S3 `not_yet` (`:39`).<br>**Q2:** `schema.sql:128`.<br>**Q3:** the `docs/09:264` row.<br>**Q4:** companion §7 row 7.<br>**Q5:** see R5.<br>**Residue:** NIT-C. |
+
+### New findings
+
+#### NEW-1 (MIN, 95%): M1's isolation claim is false for desert_fringe seed 3 under the new W6
+
+- **Where:** `specs/systems/M1.regions.odd.toml:330`, which reads: "desert_fringe at R = 256 (hamlet) and at R = 128 gives 4 regions and a connected graph for seeds 1 to 8 … REV-SPR-018 §1 confirmed both".
+- **Why it changed:**
+  - Round 1 confirmed this under the old W6, which left seed 3's island unregioned.
+  - Under R5, seed 3 has 2 land components at R = 64, 128 and 256. The island (22, 141 and 575 cells) now takes region 2, which has no edge.
+  - The edges are `(1,3) (1,4) (3,4)` at both R = 128 and R = 256, so the graph is disconnected (`indep2/sweep2.py desert`).
+- **Why nothing caught it:** the reference never checks connectivity, so it passes. A V-SF-22 isolation test written from this text would fail on seed 3.
+- **Fix:** name seed 3 as the R5 exception. Its island is a settlement with no route until F1's sea mode.
+- **For the Architect:** this is R5's intended trade-off, made visible. In a 4-region world, a 141-cell island takes one of the four settlements, and with R8 it has its own marriage pool.
+- **The rest of the sweep is clean:** 7 templates × R = 64, 128 and 256 × K = 1, 4 and 64 × seeds 1–8, with no refusal. Only archipelago and desert_fringe seed 3 are disconnected or have leftover land, and leftover land appears only when K is below the component count.
+
+#### NEW-2 (MIN, 99%): the hamlet facts comment lists the wrong settlements for the 14 anonymous founders
+
+- **Where:** `M1.regions.odd.toml:251`. It says "the 14 others 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2".
+- **What is right:**
+  - The golden line (`worldgen_lite_v0.txt:36`, positions 46–59) and my independent computation give `1 2 1 2 4 3 2 1 1 4 1 1 4 1`. Per settlement, that is 50/4/2/4.
+  - The comment's list is a window offset into the run of 1s.
+  - The comment also credits round 1's re-implementation with these numbers, but round 1 never computed this list.
+- **Why it matters:** the comment heads "Facts … the plan's acceptance criteria may use".
+
+#### NITs
+
+- **NIT-A:** `S3.migration.odd.toml:221`, the M2 "in" coupling, still reads "(person.birth_tick = now, person.mother); same_instant reads". R4 removed the `birth_tick` read.
+- **NIT-B:** `M1.regions.odd.toml:329`, `[isolation].horizon`, says "the reference runs the R = 64 part on every check". `check_sweep` runs K = 1 and 4 only (`SWEEP_REGIONS`, `selftest:90`), not K = 64.
+- **NIT-C:** main has since reserved channel-A kind 7, RESIDENCE_INTERVAL (`7fb71c7`, not yet merged into the PR). On the next merge of main, two texts should name kind 7:
+  - `worldgen_lite.md:71`, which says "only DECISION_TRACE and ENCOUNTER are reserved";
+  - S3 `not_yet` (`:39`), which says "the Architect reserves its record-kind number".
+
+#### Observations (low, no fix needed in this PR)
+
+- **R4's premise needs an owner.** R4 assumes that SPR-014's row insert writes the type's zero into other owners' columns. That is asserted in this PR and in ruling R4, but neither EVO-001 nor PRJ-002's SPR-014 row states it yet. Carry it into SPR-014's contract.
+- **Hard-coded rung populations.** The reference hard-codes them (`selftest:660-671`). I checked them against `solo.yaml`, `household.yaml` and `hamlet.yaml`, and they are equal today. But a manifest edit would not regenerate the golden file.
+- **Untested paths:**
+  - No golden case covers a head with no `household` field (the `order[head] = …` branch).
+  - `birth_sequence` never exercises R4's selector, for example a founder with `birth_tick = 0`.
+
+### Merge of main (80343bf)
+
+- **Clean merge:** `f93490e` has parents `45e74d7` and `80343bf`. `git show --cc` shows no conflict hunk.
+- **Nothing unexpected:**
+  - `git diff 45e74d7 f93490e` is byte-identical to `git diff 132e17d 80343bf`.
+  - That diff touches two files: the SPR-012 T-05 acceptance text (version 1.0.1) and the handoff session table.
+- **Still merges onto current main:** `git merge-tree` of `d18973e` onto `7fb71c7` is clean.
+
+### Checks run on the copy
+
+| Check | Result |
+|---|---|
+| `selftest_worldgen_lite.py` | `WORLDGEN-LITE: PASS (10 cases, 109 lines)`, 4.5 s |
+| Golden control | Fails (rc 1) with `STALE: … line 9` |
+| Template control | Fails (rc 1) with `STALE: … line 8` |
+| `lint_odd.py` | `PASS: 8 system specs linted (6 warnings)` |
+| `gen_skeletons --check` | 8 up to date |
+| The 13 fixture commands from the README / `check_all` | All behave as expected; the stale control flags `M2_demography.rs` only |
+| Smoke-world lint and skeletons | Pass |
+| The six example manifests | Validate |
+| `gen_manifest --check` | Clean |
+| Chronicle self-test | Passes |
+| venv: inventory pytest | 12 passed |
+| venv: `ruff check`, `ruff format --check`, mypy | Clean (mypy: 39 files) |
+| Bench 4 digests | Reproduced |
+| `templates_v0.toml`, `registry_v0.toml` | Unchanged |
+
+**Not run:**
+- No cargo, no full `check_all.sh` and no `perf_gate.py`.
+- The sweep did not go to R = 512.
+
+### Reproduction
+
+Scripts are in `/tmp/claude-0/-home-user-Rehoboam/78f410bc-aa41-55ce-883d-f1b2ebd2cbcd/scratchpad/worldgen_review_r2/indep2/`. Each takes the copy's root as its first argument.
+
+| Script | What it does |
+|---|---|
+| `w6new.py` | The round-2 W6, written from the text, on top of round 1's `wg_indep.py` |
+| `cmp_golden.py` | Compares all 10 cases with the golden file |
+| `sweep2.py desert` | The desert_fringe connectivity check behind NEW-1 |
+| `sweep2.py sweep` | The full sweep; output in `sweep.out` |
+| `residence.py` | Ruling-10 order from the YAML, compared with every golden residence line |
+
+The R9 probe manifests are in `manifests/`.
