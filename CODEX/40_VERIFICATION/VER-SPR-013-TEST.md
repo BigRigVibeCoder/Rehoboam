@@ -5,7 +5,7 @@ type: reference
 status: OPEN
 owner: tester
 agents: [tester]
-tags: [verification, testing, determinism, contracts]
+tags: [verification, testing, determinism]
 related: [SPR-013, SPR-011, VER-SPR-012-TEST, AGT-003-DET, AGT-003-IF, ADR-0024, ADR-0025, ADR-0026]
 created: 2026-10-17
 updated: 2026-10-17
