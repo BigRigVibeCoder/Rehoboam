@@ -21,8 +21,58 @@ use std::collections::BTreeMap;
 
 use rh_ids::EventId;
 
-use crate::envelope::{Edge, EdgeKind};
-use crate::{EventError, check_edge};
+use crate::envelope::{CausalEdge, Edge, EdgeKind, EventRef};
+use crate::{EventDraft, EventError, check_edge};
+
+/// Coalesces a draft's resolved edges in place (the merge's form of [`coalesce`]): when no two
+/// edges name one cause, each edge is its own coalesced edge (a lone `motivated_by` edge of
+/// weight 0 loses its motive, by the sign rule) and nothing is allocated; otherwise the edges go
+/// through [`coalesce`]. Edges whose cause is not a known id are left for
+/// [`crate::EventLog::append`] to refuse.
+///
+/// # Errors
+/// As [`coalesce`].
+pub fn coalesce_draft(
+    draft: &mut EventDraft,
+    motive_index: impl Fn(&str) -> Option<usize>,
+) -> Result<(), EventError> {
+    let known = |c: &CausalEdge| match c.cause {
+        EventRef::Known(id) => Some(id),
+        EventRef::Draft(_) | EventRef::None => None,
+    };
+    if draft.causes.iter().any(|c| known(c).is_none()) {
+        return Ok(());
+    }
+    let repeated = draft
+        .causes
+        .iter()
+        .enumerate()
+        .any(|(i, a)| draft.causes[..i].iter().any(|b| known(a) == known(b)));
+    if !repeated {
+        for c in &mut draft.causes {
+            if c.kind == EdgeKind::MotivatedBy && c.weight == 0 {
+                c.motive = None;
+            }
+        }
+        return Ok(());
+    }
+    let edges = draft
+        .causes
+        .iter()
+        .filter_map(|c| known(c).map(|id| c.resolved(id)))
+        .collect();
+    draft.causes = coalesce(draft.kind, edges, motive_index)?
+        .into_iter()
+        .map(|e| CausalEdge {
+            cause: EventRef::Known(e.cause),
+            kind: e.kind,
+            motive: e.motive,
+            weight: e.weight,
+            evidence: e.evidence,
+        })
+        .collect();
+    Ok(())
+}
 
 /// Coalesces `edges` (of an event of `kind`) to one per cause, sorted by cause id.
 ///

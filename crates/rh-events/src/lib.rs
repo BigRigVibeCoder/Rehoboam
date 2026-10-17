@@ -42,7 +42,7 @@ use core::fmt;
 
 use rh_ids::{EntityRef, EventId, PlaceId};
 
-pub use coalesce::coalesce;
+pub use coalesce::{coalesce, coalesce_draft};
 pub use envelope::{
     CausalEdge, EVIDENCE_ONE, Edge, EdgeKind, EventRef, Origin, RoleId, RoleRow, Secrecy, Snapshot,
 };
@@ -639,7 +639,7 @@ impl EventLog {
             };
             causes.push(c.resolved(cause));
         }
-        causes.sort_by_key(|e| e.cause);
+        causes.sort_unstable_by_key(|e| e.cause);
         for e in &causes {
             if e.cause >= id {
                 return Err(EventError::ForwardCause {
@@ -717,7 +717,14 @@ impl Event {
     /// The admission flag is not hashed (`05.2` §4.0).
     #[must_use]
     pub fn digest(&self) -> u64 {
-        let mut words = vec![
+        // Sized exactly, so the digest never regrows its buffer (V-PERF-11).
+        let n = 14
+            + 3 * self.roles.len()
+            + 7 * self.snapshots.len()
+            + 6 * self.causes.len()
+            + self.payload.len();
+        let mut words = Vec::with_capacity(n);
+        words.extend([
             self.id.to_raw(),
             sx(self.tick),
             u64::from(self.phase),
@@ -729,7 +736,7 @@ impl Event {
             u64::from(self.secrecy.code()),
             u64::from(self.origin.code()),
             self.roles.len() as u64,
-        ];
+        ]);
         for r in &self.roles {
             words.extend([
                 u64::from(r.role.0),

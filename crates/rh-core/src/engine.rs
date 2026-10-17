@@ -70,7 +70,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
-use rh_events::{CausalEdge, Event, EventDraft, EventLog, EventRef, Origin};
+use rh_events::{Event, EventDraft, EventLog, EventRef, Origin};
 use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
 
 use crate::access::Lag;
@@ -1274,39 +1274,20 @@ impl Engine {
                 system: e.id,
                 message: err.to_string(),
             };
-            // Resolve every draft-local cause to the id this merge gave it, then coalesce to one
-            // edge per cause (envelope §5). INVARIANT: `StepCtx::emit` admits only references to
-            // earlier drafts, so every `Draft` resolves; a `Draft` left unresolved (or a `None`)
-            // stays and `append` refuses it.
-            let mut resolved = Vec::with_capacity(draft.causes.len());
-            let mut unresolved = Vec::new();
-            for edge in draft.causes {
-                let id = match edge.cause {
-                    EventRef::Known(id) => Some(id),
-                    EventRef::Draft(r) => ids.get(r.0).copied(),
-                    EventRef::None => None,
-                };
-                match id {
-                    Some(id) => resolved.push(edge.resolved(id)),
-                    None => unresolved.push(edge),
+            // Resolve every draft-local cause to the id this merge gave it, in place, then
+            // coalesce to one edge per cause (envelope §5). INVARIANT: `StepCtx::emit` admits
+            // only references to earlier drafts, so every `Draft` resolves; one that does not
+            // (or a `None`) stays and `append` refuses it.
+            for edge in &mut draft.causes {
+                if let EventRef::Draft(r) = edge.cause
+                    && let Some(&id) = ids.get(r.0)
+                {
+                    edge.cause = EventRef::Known(id);
                 }
             }
             let motives = &self.registered.motives;
-            let coalesced = rh_events::coalesce(draft.kind, resolved, |m| {
-                motives.iter().position(|x| x == m)
-            })
-            .map_err(event_error)?;
-            draft.causes = coalesced
-                .into_iter()
-                .map(|edge| CausalEdge {
-                    cause: EventRef::Known(edge.cause),
-                    kind: edge.kind,
-                    motive: edge.motive,
-                    weight: edge.weight,
-                    evidence: edge.evidence,
-                })
-                .chain(unresolved)
-                .collect();
+            rh_events::coalesce_draft(&mut draft, |m| motives.iter().position(|x| x == m))
+                .map_err(event_error)?;
             let admitted = self.admission.is_none_or(|admit| admit(&draft));
             let id = self
                 .events
