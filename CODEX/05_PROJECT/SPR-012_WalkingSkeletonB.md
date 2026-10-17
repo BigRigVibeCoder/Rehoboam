@@ -8,8 +8,8 @@ agents: [coder, tester]
 tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-002, SPR-011, SPR-013, SPR-008, ADR-0025, ADR-0026, ADR-0031]
 created: 2026-10-16
-updated: 2026-10-16
-version: 1.0.0
+updated: 2026-10-17
+version: 1.0.1
 ---
 
 > **BLUF:** Increment B of the walking skeleton (WP P1.0): `solo` lives and dies. The M2 rung-0 mortality schedule in fixed point, the `rh-worldgen` stub that writes founders, `rh-sys-demography` (the first real system crate) and `rh-cli run <world>` with the `solo` golden ladder. Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-STAT (one Tester session may hold both roles, on a different model from the Developer's). About 3 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). SPR-011's rulings 1–19 bind this sprint and are not repeated here.
@@ -50,7 +50,7 @@ version: 1.0.0
 
 #### T-05: The M2 rung-0 schedule in fixed point (ruling 7)
 - **Deliverable:** In `rh-sys-demography`: the Brass General Standard as exact decimals, K from e₀ by bisection, l on the monthly grid, monthly death probabilities as `Prob32`. `bin/gen_m2_reference.py` (Python `fractions`, the same algorithm and rounding) with `--check`, and golden vectors in `crates/rh-sys-demography/tests/golden/m2_schedule_v1.txt`.
-- **Acceptance:** Bit-equal to the reference at e₀ ∈ {20, 23.441086, 30, 36.569855, 43.45915, 60, 85}. At the standard's own e₀ (43.45915, the trapezoid on the standard grid; corrected from 43.44 by the skeleton-spec drafter), K = 1 within one unit. At the e₀ values that Brass Table 19's α rows imply, l(x) matches Table 19 within 1 per 10,000 (the `selftest_brass.py` tolerance). The e₀ recomputed from the fixed-point schedule is within 0.06 years of the input. q(15) ∈ [0.35, 0.55] exactly when e₀ ∈ [23.441086, 36.569855] (V-SF-02's identity at the schedule level).
+- **Acceptance:** Bit-equal to the reference at e₀ ∈ {20, 23.441086, 30, 36.569855, 43.45915, 60, 85}. At the standard's own e₀ (43.45915, the trapezoid on the standard grid; corrected from 43.44 by the skeleton-spec drafter), K = 1 within one unit. At the e₀ values that Brass Table 19's α rows imply, l(x) matches Table 19 within 1 per 10,000 (the `selftest_brass.py` tolerance). The implied e₀ of a row is the trapezoid e₀ of its β = 1 schedule on M2's age grid, rounded to `Q16_16` half to even, as `selftest_m2_rung0.py` check 4 computes it; the tool computes these inputs and the golden file carries them. The published two-decimal `golden_e0` values are not inputs to this comparison: they bound the recomputed e₀ (within 0.06 years) only (Architect ruling, 2026-10-17). The e₀ recomputed from the fixed-point schedule is within 0.06 years of the input. q(15) ∈ [0.35, 0.55] exactly when e₀ ∈ [23.441086, 36.569855] (V-SF-02's identity at the schedule level).
 - **Status:** [ ] not started
 
 #### T-06: The `rh-worldgen` stub (ruling 10)

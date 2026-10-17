@@ -94,10 +94,15 @@ Resolved since the first version of this summary:
   | Role | Session | Work |
   |---|---|---|
   | SPR-011 Developer | `session_01BNeZLa54C84WkCSFyGLyCw` | Engine prerequisites, `sprint/SPR-011-engine-prereqs` |
-  | SPR-011 Tester | `session_01TL91hSqyKqgnewrVi44NrR` | Probe plan written; waits for the head |
+  | SPR-011 Tester | `session_01TL91hSqyKqgnewrVi44NrR` | Phase 2a on `1d72e48` (T-00, T-01, T-03, T-04): DEF-1 to DEF-4 found; phase 2b on the done head |
+  | SPR-012 Tester | `session_01NmJhgWg2RtddDxjWoKF3VP` | Probe plan written from the contracts; waits for the head. The Developer launches when SPR-011 merges |
   | SPR-013 spec drafter | `session_0127pPFgvbRfd3gRk2vQrxxY` | PR #45, merged |
-  | EVO-001 drafter | `session_01KHKcdcgSqTBuEw1RS6XvH8` | SPR-014's contract and `neutral` on `[[reads]]` |
-  | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | SPR-015's births, partnering, households |
+  | EVO-001 drafter | `session_01KHKcdcgSqTBuEw1RS6XvH8` | SPR-014's contract and `neutral` on `[[reads]]` (`6bc202e`); merges before the births spec |
+  | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | SPR-015's births, partnering, households, as `specs/systems/next/` (`421f2e1`) |
+  | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | Fixed-point `exp`/`ln` (`05.1` §6) and M2 F1 mortality, as `specs/demography/mortality_f1.toml`, folded into `next/` after the births spec |
+
+- **M7.dynasty spec version:** EVO-001 and PR #41 both bump M7 to 0.3.2. The one that merges second takes 0.3.3; PR #41 also merges `main` and moves its gates to `--part core`.
+- **Messages to a working session:** send with the default priority or `now`. Four `next` messages to the SPR-011 Developer were not delivered.
 
 - **PR #28 and PR #41 contain merge commits:** merge them with a merge commit, not a rebase.
 - **After SPR-008 merges:** dispatch `nightly.yml` on `main`, then give the director the commit and the nightly run for the cross-machine session (`worlds/smoke/README.md`).
