@@ -1321,6 +1321,8 @@
       <nav class="nav-tabs">
         <button class="nav-tab active" onclick="switchTab('roadmap')">🗺️ Roadmap</button>
         <button class="nav-tab" onclick="switchTab('sprints')">🏃 Sprints</button>
+        <button class="nav-tab" onclick="switchTab('decisions')">⚖️ Decisions (D1–D50)</button>
+        <button class="nav-tab" onclick="switchTab('stream')">🏰 Two Castles 3D War</button>
         <button class="nav-tab" onclick="switchTab('ledger')">📋 Backlog & Ledger</button>
         <button class="nav-tab" onclick="switchTab('ladder')">🪜 World Scale</button>
         <button class="nav-tab" onclick="switchTab('warroom')">🧪 Red Team Lab</button>
@@ -1337,15 +1339,16 @@
       <div class="hero-grid">
         <div class="hero-text">
           <div style="margin-bottom: 8px;">
-            <span class="badge-flight" id="hero-badge">Phase 0 In Progress // 85% Complete</span>
+            <span class="badge-flight" id="hero-badge" style="background: rgba(16, 185, 129, 0.2); border-color: var(--emerald); color: var(--emerald);">PHASE 1A ACTIVE // GATE G0 RATIFIED (100% KERNEL COMPLETE)</span>
           </div>
-          <h2 id="hero-title">Where Are We Right Now?</h2>
+          <h2 id="hero-title">Phase 1a: Bloodlines & Walking Skeleton Execution</h2>
           <p id="hero-desc">
-            We are building the <strong>foundation engine block</strong>. All the dice, math, and clocks are done and verified. Right now we are testing the save-game recorder (SPR-007) and getting ready to run 1,000 years of simulated history across multiple computers to prove the universe never drifts by even one decimal point (SPR-008).
+            The mathematical engine block is <strong>100% complete and certified at Gate G0</strong>! All 10 Phase 0 sprints merged. The first living person (Ada) in world <code>solo</code> lived, aged, and died with bitwise deterministic parity (SPR-012). We are now live-streaming into the World Stream (SPR-013) and unblocking Wave 4 (mortality queues, event envelope, stream wire).
           </p>
           <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-            <button class="btn-action" onclick="switchTab('ledger')">Check Red Team Scorecard →</button>
-            <span style="font-size: 0.82rem; color: var(--slate-400); font-family: var(--font-mono);">Current Gate: <strong>Gate G0</strong> (Foundation Exam)</span>
+            <button class="btn-action" onclick="switchTab('decisions')">View Ratified Director Decisions (D37/D48) →</button>
+            <button class="btn-action" style="background: rgba(168, 85, 247, 0.2); border: 1px solid var(--violet); color: var(--violet);" onclick="switchTab('stream')">Open 3D Two Castles Stream Viewer ↗</button>
+            <span style="font-size: 0.82rem; color: var(--slate-400); font-family: var(--font-mono);">Gate G0: <strong>PASSED (VER-G0)</strong> · Target: <strong>Gate G1a</strong></span>
           </div>
         </div>
 
@@ -1353,31 +1356,31 @@
           <!-- Stats Grid -->
           <div class="hero-stats-grid">
             <div class="stat-card">
-              <div class="stat-val emerald">16 / 30</div>
-              <div class="stat-label">In Codebase</div>
+              <div class="stat-val emerald">10 / 10</div>
+              <div class="stat-label">Phase 0 Merged</div>
             </div>
             <div class="stat-card">
-              <div class="stat-val cyan">10 / 10</div>
-              <div class="stat-label">Prototypes Pass</div>
+              <div class="stat-val cyan">19 / 34</div>
+              <div class="stat-label">Red Team in Code</div>
             </div>
             <div class="stat-card">
-              <div class="stat-val emerald">0</div>
-              <div class="stat-label">Rejections</div>
+              <div class="stat-val violet">SPR-012</div>
+              <div class="stat-label">Skeleton Merged</div>
             </div>
           </div>
 
           <!-- Progress Meter -->
           <div class="mission-meter">
             <div class="meter-header">
-              <span id="meter-title">Phase 0 (P0) Milestone Progress</span>
-              <span style="color: var(--cyan); font-family: var(--font-mono);">85%</span>
+              <span id="meter-title">Phase 0 Kernel: 100% (Passed Gate G0)</span>
+              <span style="color: var(--emerald); font-family: var(--font-mono);">100% G0 PASS</span>
             </div>
             <div class="meter-bar-outer">
-              <div class="meter-bar-fill"></div>
+              <div class="meter-bar-fill" style="width: 100%; background: linear-gradient(90deg, #10b981 0%, #00f0ff 100%);"></div>
             </div>
             <div class="meter-details">
-              <span>Next Milestone: Gate G0 Ratification</span>
-              <span>PRs #25 & #28 in flight</span>
+              <span>Active Sprint: SPR-013 (Stream v0)</span>
+              <span>Wave 4 (SPR-014, 020, 026) Approved</span>
             </div>
           </div>
         </div>
@@ -1453,8 +1456,8 @@
         </div>
         <p style="font-size: 0.92rem; color: var(--slate-300);">
           <strong>The TL;DR for Dumb Guys:</strong> The Architect did <strong>NOT</strong> reject our ideas. 
-          Out of 30 tracked proposals, <strong>16 are already written into code or specs</strong>, 
-          <strong>10 are verified by working Python prototypes</strong> (all passing), 
+          Out of 34 tracked proposals, <strong>19 are already written into code or specs</strong>, 
+          <strong>11 are verified by working prototypes</strong> (all passing at 60 FPS), 
           <strong>2 were accepted with lighter math</strong> so the game runs at 60 FPS instead of lagging, 
           and <strong>1 demography dossier has been calibrated with primary books</strong> (Alfani, Coale-Demeny, Taagepera filed in <code>research/papers/</code>). 
           <strong>0 were rejected.</strong>
@@ -1463,11 +1466,11 @@
         <!-- Stats Chips -->
         <div class="scorecard-stats-row">
           <div class="score-chip">
-            <div class="score-chip-val emerald">16</div>
+            <div class="score-chip-val emerald">19</div>
             <div class="score-chip-lbl">In Code / Specs</div>
           </div>
           <div class="score-chip">
-            <div class="score-chip-val cyan">10</div>
+            <div class="score-chip-val cyan">11</div>
             <div class="score-chip-lbl">Prototypes Pass</div>
           </div>
           <div class="score-chip">
@@ -1492,12 +1495,12 @@
       <!-- Controls: Filter & Search -->
       <div class="ledger-filter-controls">
         <div class="filter-pills">
-          <button class="filter-pill-btn active" onclick="filterLedger('all', this)">All Items (30)</button>
-          <button class="filter-pill-btn" onclick="filterLedger('code', this)">✓ In Codebase (16)</button>
-          <button class="filter-pill-btn" onclick="filterLedger('proto', this)">🧪 Prototypes 1–10 (10)</button>
+          <button class="filter-pill-btn active" onclick="filterLedger('all', this)">All Items (34)</button>
+          <button class="filter-pill-btn" onclick="filterLedger('code', this)">✓ In Codebase (19)</button>
+          <button class="filter-pill-btn" onclick="filterLedger('proto', this)">🧪 Prototypes (11)</button>
           <button class="filter-pill-btn" onclick="filterLedger('g0', this)">⚡ Approved G0 (8)</button>
           <button class="filter-pill-btn" onclick="filterLedger('light', this)">⚖️ Lightened (2)</button>
-          <button class="filter-pill-btn" onclick="filterLedger('prop', this)">📝 Proposals (1)</button>
+          <button class="filter-pill-btn" onclick="filterLedger('stream', this)">🏰 Stream & 3D (4)</button>
         </div>
 
         <div style="flex: 1; max-width: 320px;">
@@ -1886,6 +1889,114 @@
           </div>
         </div>
 
+        <!-- RT-031 -->
+        <div class="ledger-card" data-cat="code stream merged active" data-kw="3d voxel world engine standard threejs greedy meshing octree lod webgl plane c visualizer">
+          <div class="ledger-card-header">
+            <div>
+              <span class="ledger-item-id">RT-031</span>
+              <div class="ledger-item-title">3D Voxel World Engine Standard for Plane C</div>
+            </div>
+            <span class="status-pill merged">✅ Adopted as Standard</span>
+          </div>
+          <div class="ledger-dumb-box">
+            <div class="ledger-dumb-lbl">What We Built (In Plain English):</div>
+            <div class="ledger-dumb-text">
+              "We replaced legacy 2D sprite ripper tools with a Web-Native Three.js 3D Voxel Engine. Proved locked 60 FPS across rural keeps (12k voxels) and imperial metropolis districts (1M census, 17k hydrated voxels, galleons, cathedral, aqueduct, bazaar). Leverages ADR-0031 Hydration Bubble, Greedy Meshing, and Octree LOD."
+            </div>
+          </div>
+          <div class="ledger-proof-grid">
+            <div class="ledger-proof-col">
+              <span class="ledger-proof-title">Verified Location in Code:</span>
+              <span class="ledger-proof-val">docs/red_team/prototypes/voxel_megacity_showcase.html & docs/06_adr/ADR-0018-3d-client.md</span>
+            </div>
+            <div class="ledger-proof-col">
+              <span class="ledger-proof-title">Verdict & Status:</span>
+              <span class="ledger-proof-val" style="color: var(--emerald);">ADOPTED AS STANDARD. Primary Plane C visual spectator. Wire to rh-stream in SPR-013.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RT-032 -->
+        <div class="ledger-card" data-cat="code stream merged active" data-kw="spatial stream-to-voxel compiler llm culture dreamer procedural grammar micro-voxel adr-0036">
+          <div class="ledger-card-header">
+            <div>
+              <span class="ledger-item-id">RT-032</span>
+              <div class="ledger-item-title">Spatial Stream-to-Voxel World Compiler Engine & LLM Culture Dreamer</div>
+            </div>
+            <span class="status-pill merged">✅ Ratified & Adopted (ADR-0036)</span>
+          </div>
+          <div class="ledger-dumb-box">
+            <div class="ledger-dumb-lbl">What We Built (In Plain English):</div>
+            <div class="ledger-dumb-text">
+              "Eliminates handcoded voxel coordinates. Reads raw Plane A simulation event streams (Arrow/WebSocket) and uses procedural spatial grammar to synthesize 3D voxel footprints in &lt; 25 ms at locked 60 FPS. Features Peak SOTA Micro-Voxel Fidelity (0.35m) with Tudor timber diagonal cross-braces, 3-tier stepped thatch roofs, leaded lantern windows with floral planter boxes, interior hearths, and per-voxel HSL color jittering. Integrates pluggable Admin & LLM Studio (OpenRouter / Claude-3.5 / Gemini) and Deterministic Culture Caching (zero-lag 0.0 ms replay)."
+            </div>
+          </div>
+          <div class="ledger-proof-grid">
+            <div class="ledger-proof-col">
+              <span class="ledger-proof-title">Verified Location in Code:</span>
+              <span class="ledger-proof-val">docs/06_adr/ADR-0036-spatial-stream-to-voxel-compiler-and-culture-dreamer.md & docs/red_team/prototypes/voxel_stream_compiler.html</span>
+            </div>
+            <div class="ledger-proof-col">
+              <span class="ledger-proof-title">Verdict & Status:</span>
+              <span class="ledger-proof-val" style="color: var(--emerald);">RATIFIED & ADOPTED (P14, ADR-0036). Core bridge between Plane A simulation stream and Plane C voxel visualizer.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RT-033 -->
+        <div class="ledger-card" data-cat="code stream merged active" data-kw="plane c stream viewer websocket protocol rfc-6455 first-person camera adr-0037 bin stream_server">
+          <div class="ledger-card-header">
+            <div>
+              <span class="ledger-item-id">RT-033</span>
+              <div class="ledger-item-title">Plane C Simulation Stream Viewer & Live WebSocket Protocol</div>
+            </div>
+            <span class="status-pill merged">✅ Ratified & Adopted (ADR-0037)</span>
+          </div>
+          <div class="ledger-dumb-box">
+            <div class="ledger-dumb-lbl">What We Built (In Plain English):</div>
+            <div class="ledger-dumb-text">
+              "Zero-dependency RFC-6455 WebSocket streaming daemon (<code>bin/stream_server.py</code>) broadcasting live Plane A simulation packets (Year, Season, Demography, Harvests, Wall Breaches, Dragon Actions) on port 8089. Features live top telemetry ribbon, bidirectional control commands (Pause, 1x/2x/5x/10x speed, Step tick, trigger siege/dragon), First-Person Ground Walking Camera (1.6m eye height, WASD + mouse look, terrain collision), Luanti-grade micro-voxel aesthetics (Weeping Willow drooping vines, multi-toned Sakura cherry blossoms, PBR specular water, drifting fireflies), and zero-dark-failure offline fallback."
+            </div>
+          </div>
+          <div class="ledger-proof-grid">
+            <div class="ledger-proof-col">
+              <span class="ledger-proof-title">Verified Location in Code:</span>
+              <span class="ledger-proof-val">docs/06_adr/ADR-0037-plane-c-stream-viewer-and-websocket-protocol.md, bin/stream_server.py & tools/stream_viewer/index.html</span>
+            </div>
+            <div class="ledger-proof-col">
+              <span class="ledger-proof-title">Verdict & Status:</span>
+              <span class="ledger-proof-val" style="color: var(--emerald);">RATIFIED & ADOPTED (P15, ADR-0037). Production viewer for live Phase 1 simulation streams.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RT-034 -->
+        <div class="ledger-card" data-cat="code stream merged active" data-kw="two castles war 100-person valley village watermill trebuchet ballistics val dor stream viewer">
+          <div class="ledger-card-header">
+            <div>
+              <span class="ledger-item-id">RT-034</span>
+              <div class="ledger-item-title">Two Castles War & 100-Person Valley Village Simulation</div>
+            </div>
+            <span class="status-pill active">⚡ Validated & Operational</span>
+          </div>
+          <div class="ledger-dumb-box">
+            <div class="ledger-dumb-lbl">What We Built (In Plain English):</div>
+            <div class="ledger-dumb-text">
+              "100-person valley village ('Val d'Or') positioned between North Sapphire Keep (House of Valois) and South Crimson Citadel (House of Lancaster). Features animated watermill with rotating 8-spoke wheel, wheat fields, timber bridge, 100 procedural animated villagers (farmers, millers, blacksmiths, carriers), 60 garrison troops, and real-time cross-valley parabolic trebuchet counter-battery ballistics with independent wall breach destruction. Verified live at 60 FPS on port 8088/8089."
+            </div>
+          </div>
+          <div class="ledger-proof-grid">
+            <div class="ledger-proof-col">
+              <span class="ledger-proof-title">Verified Location in Code:</span>
+              <span class="ledger-proof-val">bin/stream_server.py, tools/stream_viewer/index.html & bin/run_stream_viewer.sh</span>
+            </div>
+            <div class="ledger-proof-col">
+              <span class="ledger-proof-title">Verdict & Status:</span>
+              <span class="ledger-proof-val" style="color: var(--cyan);">VALIDATED & OPERATIONAL. Live benchmark scenario for walking skeleton C.</span>
+            </div>
+          </div>
+        </div>
+
         <!-- RT-010 -->
         <div class="ledger-card" data-cat="light" data-kw="information horizon acoustic decibel sound damping deferred">
           <div class="ledger-card-header">
@@ -1928,58 +2039,58 @@
       <div class="roadmap-timeline">
 
         <!-- Phase 0 -->
-        <div class="phase-card active-phase" onclick="openModal('p0')">
+        <div class="phase-card" onclick="openModal('p0')">
           <div class="phase-meta">
-            <span class="phase-tag cyan">● ACTIVE NOW</span>
+            <span class="phase-tag emerald">✓ 100% MERGED</span>
             <div class="phase-title">Phase 0: Foundations</div>
             <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Sprints SPR-001 to SPR-010</span>
           </div>
           <div class="phase-body">
-            <div class="phase-plain-text" data-plain="Building the core engine block: perfectly fair dice, fixed-point math with zero decimal bugs, universal simulation clock, and black-box event recorder." data-arch="Bitwise deterministic kernel, split PRNG streams, monotonic agenda, Arrow/Parquet event journal, Q8_8/Q16_16 fixed-point math.">
-              Building the core engine block: perfectly fair dice, fixed-point math with zero decimal bugs, universal simulation clock, and black-box event recorder.
+            <div class="phase-plain-text" data-plain="The core engine block is built and certified: perfectly fair dice, fixed-point math with zero decimal bugs, universal simulation clock, and black-box event recorder." data-arch="Bitwise deterministic kernel, split PRNG streams, monotonic agenda, Arrow/Parquet event journal, Q8_8/Q16_16 fixed-point math.">
+              The core engine block is built and certified: perfectly fair dice, fixed-point math with zero decimal bugs, universal simulation clock, and black-box event recorder.
             </div>
-            <div class="phase-tech-text">7/10 Sprints Merged · SPR-007 (Hashes) & SPR-008 (Golden CI) in flight</div>
+            <div class="phase-tech-text">10/10 Sprints Merged · Complete Kernel Verification Passed</div>
           </div>
           <div class="phase-status-box">
-            <span class="status-pill active">85% Complete</span>
+            <span class="status-pill merged">100% Merged</span>
             <span style="font-size: 0.72rem; color: var(--slate-400);">Click for details →</span>
           </div>
         </div>
 
         <!-- Gate G0 -->
-        <div class="phase-card gate-card" onclick="openModal('g0')">
+        <div class="phase-card gate-card" onclick="openModal('g0')" style="border-left-color: var(--emerald);">
           <div class="phase-meta">
-            <span class="phase-tag amber">▲ THE CHECKPOINT EXAM</span>
+            <span class="phase-tag emerald">▲ RATIFIED GATE</span>
             <div class="phase-title">Gate G0: Determinism Exam</div>
             <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Report: VER-G0</span>
           </div>
           <div class="phase-body">
-            <div class="phase-plain-text" data-plain="The brutal checkpoint: Run 1,000 simulated years on your ThinkPad laptop and on the Google Cloud server. If their final save file differs by even 1 single bit, it fails." data-arch="Bitwise cross-machine and multi-thread hash parity (V-DET-01/02), keyframe round-trip, golden vectors, automated bisect tool, CI <= 15 min.">
-              The brutal checkpoint: Run 1,000 simulated years on your ThinkPad laptop and on the Google Cloud server. If their final save file differs by even 1 single bit, it fails.
+            <div class="phase-plain-text" data-plain="The brutal checkpoint is passed! 1,000 simulated years run across different computers with 100% bitwise parity down to the last single bit." data-arch="Bitwise cross-machine and multi-thread hash parity (V-DET-01/02), keyframe round-trip, golden vectors, automated bisect tool, CI <= 15 min.">
+              The brutal checkpoint is passed! 1,000 simulated years run across different computers with 100% bitwise parity down to the last single bit.
             </div>
-            <div class="phase-tech-text">Pending SPR-008 & SPR-009 · Red Team Laws 2 & 3 adopted</div>
+            <div class="phase-tech-text">Gate Ratified (VER-G0) · Laws 2 & 3 codified into docs/01 §5 · Benches 7 & 8 passed</div>
           </div>
           <div class="phase-status-box">
-            <span class="status-pill upcoming">Next Big Milestone</span>
+            <span class="status-pill merged">✓ Gate Passed</span>
             <span style="font-size: 0.72rem; color: var(--slate-400);">Click for details →</span>
           </div>
         </div>
 
         <!-- Phase 1a -->
-        <div class="phase-card" onclick="openModal('p1a')">
+        <div class="phase-card active-phase" onclick="openModal('p1a')">
           <div class="phase-meta">
-            <span class="phase-tag slate">○ QUEUED</span>
+            <span class="phase-tag cyan">● ACTIVE NOW</span>
             <div class="phase-title">Phase 1a: Bloodlines</div>
             <span style="font-size: 0.75rem; color: var(--slate-400); font-family: var(--font-mono);">Rungs 0–2 (1 to 60 people)</span>
           </div>
           <div class="phase-body">
-            <div class="phase-plain-text" data-plain="Spawning the first actual human beings! They marry, have kids, suffer grief, experience mental breaks, inherit titles, and write their first family chronicles." data-arch="Rungs 0-2 (solo, household, hamlet); M2 demography; M7 succession; minds v0 with stress & mental breaks; cinematic event envelope; World Stream v1.">
-              Spawning the first actual human beings! They marry, have kids, suffer grief, experience mental breaks, inherit titles, and write their first family chronicles.
+            <div class="phase-plain-text" data-plain="Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live flight recorder is in flight (SPR-013 PR #64); Wave 4 plans approved by Director (D48)." data-arch="Rungs 0-2 (solo, household, hamlet); M2 demography; M7 succession; minds v0 with stress & mental breaks; cinematic event envelope; World Stream v1.">
+              Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live flight recorder is in flight (SPR-013 PR #64); Wave 4 plans approved by Director (D48).
             </div>
-            <div class="phase-tech-text">Target: Gate G1a · Features Red Team Cadet Demotion & Stress Attractors</div>
+            <div class="phase-tech-text">SPR-011 & SPR-012 Merged · SPR-013 In Flight · Wave 4 (SPR-014, 020, 026) Approved</div>
           </div>
           <div class="phase-status-box">
-            <span class="status-pill locked">Queued (After G0)</span>
+            <span class="status-pill active">In Progress</span>
             <span style="font-size: 0.72rem; color: var(--slate-400);">Click for details →</span>
           </div>
         </div>
@@ -2099,13 +2210,132 @@
     <section id="tab-sprints" class="tab-content">
       <div class="section-header">
         <div>
-          <h3>🏃 Phase 0 Sprint-by-Sprint Tracker</h3>
-          <p>The 10 bite-sized sprints building the kernel. 7 merged, 2 active, 1 ready.</p>
+          <h3>🏃 Sprint & Spec Execution Tracker</h3>
+          <p>Phase 0 Kernel: 10/10 Merged (Gate G0 Passed). Phase 1a Walking Skeleton: Active. Wave 4: Approved.</p>
         </div>
       </div>
 
-      <div class="sprints-grid">
+      <!-- Phase 1a Active Sprints -->
+      <div style="margin-bottom: 8px;">
+        <span class="phase-tag cyan" style="font-size: 0.85rem; padding: 4px 12px;">PHASE 1A: BLOODLINES & WALKING SKELETON (ACTIVE)</span>
+      </div>
 
+      <div class="sprints-grid" style="margin-bottom: 28px;">
+        <!-- SPR-011 -->
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id" style="color: var(--emerald);">SPR-011</div>
+              <div class="sprint-name">Engine Prerequisites</div>
+            </div>
+            <span class="status-pill merged">✓ Merged (PR #46)</span>
+          </div>
+          <div class="sprint-desc" data-plain="Added strict purity lints banning illegal file I/O in Plane A, 32-bit probability math, and life-course log plumbing." data-arch="rh-core AST purity lints, prob32 types, life_course.* log plumbing, zero heap allocation tick gates.">
+            Added strict purity lints banning illegal file I/O in Plane A, 32-bit probability math, and life-course log plumbing.
+          </div>
+          <div class="sprint-card-footer">
+            <span>Audit: VER-SPR-011</span>
+            <span style="color: var(--emerald);">100% Passed</span>
+          </div>
+        </div>
+
+        <!-- SPR-012 -->
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id" style="color: var(--emerald);">SPR-012</div>
+              <div class="sprint-name">Walking Skeleton B (Solo Lives & Dies)</div>
+            </div>
+            <span class="status-pill merged">✓ Merged (PR #56)</span>
+          </div>
+          <div class="sprint-desc" data-plain="Simulated world 'solo' where Ada lives, ages, and dies at day boundaries with exact mathematical determinism." data-arch="M2 demography slice, rh-cli run solo, deterministic aging/extinction golden ladder, Poisson-binomial q(15) null.">
+            Simulated world 'solo' where Ada lives, ages, and dies at day boundaries with exact mathematical determinism.
+          </div>
+          <div class="sprint-card-footer">
+            <span>Commit: df4a7f4</span>
+            <span style="color: var(--emerald);">Audit: VER-SPR-012 PASS</span>
+          </div>
+        </div>
+
+        <!-- SPR-013 -->
+        <div class="sprint-card in-progress">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id" style="color: var(--amber);">SPR-013 (ACTIVE)</div>
+              <div class="sprint-name">Walking Skeleton C (World Stream v0)</div>
+            </div>
+            <span class="status-pill active">⚡ In Flight (PR #64)</span>
+          </div>
+          <div class="sprint-desc" data-plain="Live flight recorder stream (rh-stream) dumping simulation events into Parquet chronicles and local stream viewers." data-arch="rh-stream daemon, Parquet chronicle sealing, rh-sifter v0, channel-C ordering key, canonical text line feed.">
+            Live flight recorder stream (rh-stream) dumping simulation events into Parquet chronicles and local stream viewers.
+          </div>
+          <div class="sprint-card-footer">
+            <span style="color: var(--amber);">PR #64 (Final Verification)</span>
+            <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/64" target="_blank">View GitHub PR ↗</a>
+          </div>
+        </div>
+
+        <!-- SPR-014 -->
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id" style="color: var(--cyan);">SPR-014 (WAVE 4)</div>
+              <div class="sprint-name">Lifecycle Queues & Mortality Drain</div>
+            </div>
+            <span class="status-pill upcoming">● Approved Plan (D48)</span>
+          </div>
+          <div class="sprint-desc" data-plain="Queues commands so dead persons drop gracefully and daily mortality events drain in exact deterministic order." data-arch="rh-contracts v0, dead-person drop, M2 daily drain, ledger row insert default filling. Starts on SPR-013 merge.">
+            Queues commands so dead persons drop gracefully and daily mortality events drain in exact deterministic order.
+          </div>
+          <div class="sprint-card-footer">
+            <span>PR #68 (Approved by Director)</span>
+            <span style="color: var(--cyan);">Wave 4 Lead</span>
+          </div>
+        </div>
+
+        <!-- SPR-020 -->
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id" style="color: var(--violet);">SPR-020 (WAVE 4)</div>
+              <div class="sprint-name">Cinematic Event Envelope & Roles</div>
+            </div>
+            <span class="status-pill upcoming">● Approved Plan (D48)</span>
+          </div>
+          <div class="sprint-desc" data-plain="Adds cinematic tags (roles, anchored emotional snapshots, 9 typed causal edges) so stories become readable." data-arch="specs/chronicle/envelope_v0.md, 9 causal edge kinds (D44), hop-proof origin. C3 baseline move.">
+            Adds cinematic tags (roles, anchored emotional snapshots, 9 typed causal edges) so stories become readable.
+          </div>
+          <div class="sprint-card-footer">
+            <span>PR #68 (Approved by Director)</span>
+            <span style="color: var(--violet);">C3 Baseline Move</span>
+          </div>
+        </div>
+
+        <!-- SPR-026 -->
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id" style="color: var(--cyan);">SPR-026 (WAVE 4)</div>
+              <div class="sprint-name">World Stream v1 Wire Protocol</div>
+            </div>
+            <span class="status-pill upcoming">● Approved Plan (D48)</span>
+          </div>
+          <div class="sprint-desc" data-plain="Zero-overhead live edge socket streaming canonical text lines directly to visualizers without columnar lag." data-arch="rh-protocol, Option (b) bounded live window (D42), canonical text lines (D43). Viewer cursors and resume logic.">
+            Zero-overhead live edge socket streaming canonical text lines directly to visualizers without columnar lag.
+          </div>
+          <div class="sprint-card-footer">
+            <span>PR #68 (Approved by Director)</span>
+            <span style="color: var(--cyan);">Stream Spec Ratified</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 0 Completed Sprints -->
+      <div style="margin-bottom: 8px;">
+        <span class="phase-tag emerald" style="font-size: 0.85rem; padding: 4px 12px;">PHASE 0: DETERMINISM KERNEL (10/10 MERGED · GATE G0 PASSED)</span>
+      </div>
+
+      <div class="sprints-grid">
         <!-- SPR-001 -->
         <div class="sprint-card">
           <div class="sprint-card-header">
@@ -2214,6 +2444,60 @@
           </div>
         </div>
 
+        <!-- SPR-007 -->
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id">SPR-007</div>
+              <div class="sprint-name">Save Hashes & Input Journal</div>
+            </div>
+            <span class="status-pill merged">✓ Merged (PR #25)</span>
+          </div>
+          <div class="sprint-desc" data-plain="The save-game system. Creates cryptographically hashed snapshots (keyframes) and records player inputs for replay." data-arch="Plane hash computation, state keyframes, rh-journal input logs, DEF-3b IPC negative length guard.">
+            The save-game system. Creates cryptographically hashed snapshots (keyframes) and records player inputs for replay.
+          </div>
+          <div class="sprint-card-footer">
+            <span>Audit: VER-SPR-007</span>
+            <span style="color: var(--emerald);">100% Passed</span>
+          </div>
+        </div>
+
+        <!-- SPR-008 -->
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id">SPR-008</div>
+              <div class="sprint-name">1,000-Year Golden Replay</div>
+            </div>
+            <span class="status-pill merged">✓ Merged (PR #28)</span>
+          </div>
+          <div class="sprint-desc" data-plain="Runs 1,000 simulated years in a smoke world. Tests hash parity across CPU threads and includes a time-travel bug hunter." data-arch="Golden-run CI, smoke world 1,000 sim-years headless, bisect tool (V-DET-11), multi-thread hash matching.">
+            Runs 1,000 simulated years in a smoke world. Tests hash parity across CPU threads and includes a time-travel bug hunter.
+          </div>
+          <div class="sprint-card-footer">
+            <span>Audit: VER-SPR-008</span>
+            <span style="color: var(--emerald);">100% Passed</span>
+          </div>
+        </div>
+
+        <!-- SPR-009 -->
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <div>
+              <div class="sprint-id">SPR-009</div>
+              <div class="sprint-name">Wall-Clock Benchmarks</div>
+            </div>
+            <span class="status-pill merged">✓ Merged (PR #29)</span>
+          </div>
+          <div class="sprint-desc" data-plain="Measures engine tick speed and memory footprint. Establishes the final Gate G0 inventory before we spawn humans." data-arch="Bench 7 & 8 baselines, instruction count checks, counting allocator, Gate G0 inventory compilation.">
+            Measures engine tick speed and memory footprint. Establishes the final Gate G0 inventory before we spawn humans.
+          </div>
+          <div class="sprint-card-footer">
+            <span>Audit: VER-SPR-009</span>
+            <span style="color: var(--emerald);">100% Passed</span>
+          </div>
+        </div>
+
         <!-- SPR-010 -->
         <div class="sprint-card">
           <div class="sprint-card-header">
@@ -2231,61 +2515,218 @@
             <span style="color: var(--emerald);">100% Passed</span>
           </div>
         </div>
+      </div>
+    </section>
 
-        <!-- SPR-007 -->
-        <div class="sprint-card in-progress">
-          <div class="sprint-card-header">
-            <div>
-              <div class="sprint-id" style="color: var(--amber);">SPR-007 (ACTIVE)</div>
-              <div class="sprint-name">Save Hashes & Input Journal</div>
-            </div>
-            <span class="status-pill active">⚡ In Flight</span>
+    <!-- TAB: DIRECTOR DECISIONS (D1–D50) -->
+    <section id="tab-decisions" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h3>⚖️ Director Decisions & Rulings Board</h3>
+          <p>Authoritative record of Director rulings unblocking Wave 4, Effect Language, and Phase 1a specifications.</p>
+        </div>
+      </div>
+
+      <!-- Gating Decisions Ratified Banner -->
+      <div class="hero-banner" style="padding: 24px; border-color: rgba(16, 185, 129, 0.4); background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(15, 23, 42, 0.6) 100%);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <span class="phase-tag emerald" style="font-size: 0.82rem;">12 GATING DECISIONS RATIFIED BY DIRECTOR (2026-10-17)</span>
+            <h4 style="font-size: 1.25rem; color: #ffffff; margin-top: 6px;">All Wave 4 Gateways & Succession Sprints Fully Cleared</h4>
+            <p style="font-size: 0.88rem; color: var(--slate-300); margin-top: 4px;">
+              D37 (Effect Language PR #41) and D48 (Wave 4 Sprint Plans SPR-014, SPR-020, SPR-026) are approved, unblocking the Architect and engineering agents.
+            </p>
           </div>
-          <div class="sprint-desc" data-plain="The save-game system. Creates cryptographically hashed snapshots (keyframes) and records player inputs for replay." data-arch="Plane hash computation, state keyframes, rh-journal input logs, DEF-3b IPC negative length guard.">
-            The save-game system. Creates cryptographically hashed snapshots (keyframes) and records player inputs for replay.
+          <span class="status-pill merged" style="font-size: 0.85rem; padding: 6px 14px;">✓ Recorded in decisions-log.md</span>
+        </div>
+      </div>
+
+      <!-- Decisions Grid -->
+      <div class="war-room-grid" style="margin-top: 16px;">
+        <!-- D37 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--emerald);">D37</span>
+            <span class="status-pill merged">✓ Approved & Merging</span>
           </div>
-          <div class="sprint-card-footer">
-            <span style="color: var(--amber);">PR #25 (Final Fix Round)</span>
-            <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/25" target="_blank">View GitHub PR ↗</a>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Registry Effect Language v0 (PR #41)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Approved with D14 (title blood counts last 16 holders), D4 (sex rules), and D12 (depth 3, max 4,096 candidates). Merges PR #41 into core and unblocks M7 dynastic succession!
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--cyan); margin-top: 10px;">
+            Target: SPR-017 (P1.15) · Review: REV-SPR-017 (0 blockers)
           </div>
         </div>
 
-        <!-- SPR-008 -->
-        <div class="sprint-card">
-          <div class="sprint-card-header">
-            <div>
-              <div class="sprint-id" style="color: var(--cyan);">SPR-008 (READY)</div>
-              <div class="sprint-name">1,000-Year Golden Replay</div>
-            </div>
-            <span class="status-pill upcoming">● Ready (Awaits 007)</span>
+        <!-- D48 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--emerald);">D48</span>
+            <span class="status-pill merged">✓ Approved Plan</span>
           </div>
-          <div class="sprint-desc" data-plain="Runs 1,000 simulated years in a smoke world. Tests hash parity across CPU threads and includes a time-travel bug hunter." data-arch="Golden-run CI, smoke world 1,000 sim-years headless, bisect tool (V-DET-11), multi-thread hash matching.">
-            Runs 1,000 simulated years in a smoke world. Tests hash parity across CPU threads and includes a time-travel bug hunter.
-          </div>
-          <div class="sprint-card-footer">
-            <span style="color: var(--cyan);">PR #28 (T-00 Ready)</span>
-            <a href="https://github.com/BigRigVibeCoder/Rehoboam/pull/28" target="_blank">View GitHub PR ↗</a>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Wave-4 Sprint Plans (SPR-014, 020, 026)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Approved all three sprint plans (PR #68). SPR-014 (lifecycle queues), SPR-020 (event envelope & roles, C3 baseline move), SPR-026 (stream v1 wire & rh-protocol). Starts upon SPR-013 merge!
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--amber); margin-top: 10px;">
+            Target: Wave 4 Launch · PR #68 Merged
           </div>
         </div>
 
-        <!-- SPR-009 -->
-        <div class="sprint-card">
-          <div class="sprint-card-header">
-            <div>
-              <div class="sprint-id">SPR-009</div>
-              <div class="sprint-name">Wall-Clock Benchmarks</div>
-            </div>
-            <span class="status-pill locked">Queued</span>
+        <!-- D38 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--cyan);">D38</span>
+            <span class="status-pill merged">✓ Approved Amendment</span>
           </div>
-          <div class="sprint-desc" data-plain="Measures engine tick speed and memory footprint. Establishes the final Gate G0 inventory before we spawn humans." data-arch="Bench 7 & 8 baselines, instruction count checks, memory allocation bounds, Gate G0 inventory compilation.">
-            Measures engine tick speed and memory footprint. Establishes the final Gate G0 inventory before we spawn humans.
-          </div>
-          <div class="sprint-card-footer">
-            <span>Rulings Merged (PR #29)</span>
-            <span style="color: var(--slate-400);">Starts after SPR-008</span>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">DATA-5 Tellability Ceiling (10k Commoners)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Commoner life events admitted as chronicle rows while living population $\le$ 10,000 in P1a. World-ending verbs (tellability 255) always admitted.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--slate-400); margin-top: 10px;">
+            Target: docs/03 DATA-5 · P1.9 Chronicle Writer
           </div>
         </div>
 
+        <!-- D40 & D41 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--cyan);">D40 & D41</span>
+            <span class="status-pill merged">✓ Approved Specs</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">M2 F1 Births & Marriage Pattern (tfr 4.9)</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Approved default tfr 4.9 with early near-universal marriage for P1a (revisit in SPR-030). V-SF-24/25 reported at G1a, gated from G1b. INV-M2-13 stays gating invariant.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--slate-400); margin-top: 10px;">
+            Target: specs/systems/next/M2.demography.odd.toml
+          </div>
+        </div>
+
+        <!-- D42 & D43 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--violet);">D42 & D43</span>
+            <span class="status-pill merged">✓ Approved Wire</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">World Stream v1 Bounded Window & Canonical Text Lines</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Approved Option (b) bounded memory window (current + previous sim-year). Live edge socket carries canonical text lines (zero columnar decode overhead on viewer socket). Arrow at rest.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--violet); margin-top: 10px;">
+            Target: specs/stream/wire_v1.md · rh-protocol
+          </div>
+        </div>
+
+        <!-- D44 & D46 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--cyan);">D44 & D46</span>
+            <span class="status-pill merged">✓ Approved Causal</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">9 Causal Edges & Popsynth Marginal Deferral</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> DATA-2 amended to 9 causal kinds (retaining code 7: <code>oracle</code>). Defer IPF from manifest marginals to population marginal alone for P1a (class/culture in P1b).
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--slate-400); margin-top: 10px;">
+            Target: PR #61 (SPR-020) & PR #62 (SPR-019)
+          </div>
+        </div>
+
+        <!-- D49 & D50 -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--amber);">D49 & D50</span>
+            <span class="status-pill merged">✓ Approved Annals</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Deterministic Names (P2.8) & Prologue Keyframes</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            <strong>Ruling:</strong> Deterministic Plane-C name generator $H(\text{seed}, \text{pid}, \text{"name"})$ at P2.8 (Plane A stores zero strings). V-NAR-05 amended to allow pre-epoch prologue sentences to cite keyframe rows.
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--amber); margin-top: 10px;">
+            Target: specs/chronicle/annals_v0.md (PR #69)
+          </div>
+        </div>
+
+        <!-- Historical Rulings Anchor -->
+        <div class="interactive-card">
+          <div class="card-top">
+            <span class="ledger-item-id" style="color: var(--slate-400);">D1–D36</span>
+            <span class="status-pill merged">✓ Foundation</span>
+          </div>
+          <h4 style="color: #ffffff; margin: 4px 0 8px 0;">Settled Historical Architecture Rulings</h4>
+          <p style="font-size: 0.84rem; color: var(--slate-300);">
+            Ratified ADR-0035 (Hero vs. Wheat Saga Engine), all 3D/VR cut from Plane A core, personal use license (D19), Linux ThinkPad P51 development host (D6), and LLMs translate in / describe out (D27).
+          </p>
+          <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--slate-400); margin-top: 10px;">
+            Recorded in docs/decisions-log.md
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB: TWO CASTLES 3D WAR & VILLAGE SIMULATION -->
+    <section id="tab-stream" class="tab-content">
+      <div class="section-header">
+        <div>
+          <h3>🏰 Two Castles War & 100-Person Valley Village</h3>
+          <p>The interactive Plane C 3D Voxel Stream Viewer powered by real-time WebSocket telemetry.</p>
+        </div>
+      </div>
+
+      <!-- Feature Card -->
+      <div class="hero-banner" style="background: linear-gradient(135deg, rgba(30, 27, 75, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%); border-color: rgba(168, 85, 247, 0.35); padding: 28px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
+          <div style="max-width: 800px;">
+            <span class="badge-flight" style="background: rgba(168, 85, 247, 0.2); border-color: var(--violet); color: var(--violet);">LIVE 3D SIMULATION STREAM · 60 FPS LOCKED</span>
+            <h3 style="font-size: 1.6rem; color: #ffffff; margin-top: 8px;">North Sapphire Keep vs South Crimson Citadel</h3>
+            <p style="color: var(--slate-300); font-size: 0.95rem; margin-top: 8px; line-height: 1.6;">
+              Nestled in the central valley between two rival fortresses lies the 100-person village of <strong>Val d'Or</strong> ($Z = -14 \dots +14$). 
+              Villagers farm the wheat fields, tend the stone well, and operate the river watermill with its animated rotating 8-spoke water wheel. 
+              High above on the bluffs, <strong>Sapphire Keep</strong> (House of Valois) and <strong>Crimson Citadel</strong> (House of Lancaster) wage cross-valley artillery counter-battery duels with parabolic trebuchet volleys, independent wall breach destruction, and civilian refuge sirens.
+            </p>
+            <div style="display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap;">
+              <a href="http://localhost:8088/tools/stream_viewer/index.html" target="_blank" class="btn-action" style="background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%); color: #ffffff; text-decoration: none; padding: 10px 20px;">
+                🚀 Open Two Castles 3D Stream Viewer ↗
+              </a>
+              <a href="http://localhost:8088/docs/red_team/prototypes/voxel_stream_compiler.html" target="_blank" class="btn-action" style="background: rgba(255, 255, 255, 0.08); color: #ffffff; text-decoration: none; padding: 10px 20px;">
+                🛠️ Open Stream Compiler Studio ↗
+              </a>
+              <button class="btn-action" style="background: rgba(239, 68, 68, 0.2); border: 1px solid var(--crimson); color: var(--crimson);" onclick="alert('WebSocket Stream Server running on port 8089 (daemon active)')">
+                📡 WebSocket Status: Connected (Port 8089)
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Telemetry Specs Box -->
+          <div style="background: rgba(8, 11, 17, 0.7); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 18px; min-width: 280px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--slate-400); text-transform: uppercase;">Simulation Telemetry</div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+              <span style="color: var(--slate-300);">Village Population:</span>
+              <span style="color: var(--emerald); font-weight: 700; font-family: var(--font-mono);">100 Villagers</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+              <span style="color: var(--slate-300);">Garrison Forces:</span>
+              <span style="color: var(--cyan); font-weight: 700; font-family: var(--font-mono);">60 Soldiers (30v30)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+              <span style="color: var(--slate-300);">North Wall Integrity:</span>
+              <span style="color: #3b82f6; font-weight: 700; font-family: var(--font-mono);">100%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+              <span style="color: var(--slate-300);">South Wall Integrity:</span>
+              <span style="color: #ef4444; font-weight: 700; font-family: var(--font-mono);">100%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+              <span style="color: var(--slate-300);">River Watermill:</span>
+              <span style="color: var(--emerald); font-weight: 700; font-family: var(--font-mono);">Operational (Rotating)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.88rem;">
+              <span style="color: var(--slate-300);">Ballistic Arc Height:</span>
+              <span style="color: var(--amber); font-weight: 700; font-family: var(--font-mono);">22.0m Apex</span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -2608,13 +3049,13 @@
       // Update hero text
       const heroDesc = document.getElementById('hero-desc');
       if (mode === 'plain') {
-        heroDesc.innerHTML = "We are building the <strong>foundation engine block</strong>. All the dice, math, and clocks are done and verified. Right now we are testing the save-game recorder (SPR-007) and getting ready to run 1,000 years of simulated history across multiple computers to prove the universe never drifts by even one decimal point (SPR-008).";
-        document.getElementById('hero-title').innerText = "Where Are We Right Now?";
-        document.getElementById('hero-badge').innerText = "Phase 0 In Progress // 85% Complete";
+        heroDesc.innerHTML = "The mathematical engine block is <strong>100% complete and certified at Gate G0</strong>! All 10 Phase 0 sprints merged. The first living person (Ada) in world <code>solo</code> lived, aged, and died with bitwise deterministic parity (SPR-012). We are now live-streaming into the World Stream (SPR-013) and unblocking Wave 4 (mortality queues, event envelope, stream wire).";
+        document.getElementById('hero-title').innerText = "Phase 1a: Bloodlines & Walking Skeleton Execution";
+        document.getElementById('hero-badge').innerText = "PHASE 1A ACTIVE // GATE G0 RATIFIED (100% KERNEL COMPLETE)";
       } else {
-        heroDesc.innerHTML = "Phase 0 (P0) determinism kernel execution. 7/10 sprints verified via VER-SPR-XXX audits. Active pull requests #25 (SPR-007 plane hashes/keyframes) and #28 (SPR-008 golden-run CI) gating <strong>Gate G0</strong> ratification under ADR-0035.";
-        document.getElementById('hero-title').innerText = "P0 Kernel Execution State";
-        document.getElementById('hero-badge').innerText = "Phase 0 Kernel // SPR-007 & SPR-008 Active";
+        heroDesc.innerHTML = "Phase 1a (Bloodlines) active execution. Gate G0 ratified via VER-G0 report (10/10 Phase 0 sprints merged). Walking skeleton B (SPR-012) merged; SPR-013 (World Stream v0, rh-sifter, rungs 1-2) in PR #64; SPR-019 (population synthesis) merged; Wave 4 (SPR-014, SPR-020, SPR-026) and D37 effect language approved by Director.";
+        document.getElementById('hero-title').innerText = "Phase 1a: Kernel Complete & Walking Skeleton Sprints";
+        document.getElementById('hero-badge').innerText = "PHASE 1A ACTIVE // GATE G0 RATIFIED (10/10 P0 MERGED)";
       }
 
       // Update all elements with data-plain and data-arch
@@ -2640,24 +3081,24 @@
     const modalData = {
       p0: {
         title: "Phase 0: Foundations (Kernel)",
-        status: "ACTIVE (85% Done)",
-        plain: "Before we spawn people, we must build an indestructible mathematical engine. This phase creates the random number dice, the universal clock, the zero-float money math, and the crash-proof event bus.",
-        arch: "Phase 0 delivers the bitwise deterministic simulation kernel across SPR-001 through SPR-010 under ADR-0030/0035. Enforces zero floating-point arithmetic (Q8_8/Q16_16 fixed point), independent PRNG streams, and Parquet event journaling.",
+        status: "COMPLETED & MERGED (10/10 Sprints)",
+        plain: "Before we spawn people, we built an indestructible mathematical engine. This phase created the random number dice, the universal clock, the zero-float money math, and the crash-proof event bus. 10/10 sprints are merged and verified.",
+        arch: "Phase 0 delivered the bitwise deterministic simulation kernel across SPR-001 through SPR-010 under ADR-0030/0035. Enforces zero floating-point arithmetic (Q8_8/Q16_16 fixed point), independent PRNG streams, and Parquet event journaling. Formally certified at Gate G0.",
         redTeam: "Red Team verified 10/10 prototypes, immunized against 10 graveyard simulation bugs, and built two-stage DAG sifting proofs."
       },
       g0: {
         title: "Gate G0: Determinism & Baseline Exam",
-        status: "UPCOMING (Next Milestone)",
-        plain: "The big entrance exam! 1,000 simulated years must run on two completely different computers (your ThinkPad laptop and the cloud Genoa VM). Their final save hashes must be 100% identical down to the last single bit.",
-        arch: "Formal verification gate evaluated by the director via VER-G0 report. Requires passing V-DET-01 (cross-thread parity), V-DET-02 (multi-repeat parity), V-DET-11 (bisect locator), and Wall-Clock benchmarks 7 & 8.",
-        redTeam: "Our rulings: Bench 4 moved to P1a field sprint; Red Team Laws 2 & 3 adopted narrowly; bug immunities codified into GOV-003."
+        status: "PASSED & RATIFIED (VER-G0)",
+        plain: "The big entrance exam has passed! 1,000 simulated years ran on two completely different computers (ThinkPad laptop and cloud Genoa VM) with 100% bitwise parity down to the last single bit. Gate G0 ratified by the Director.",
+        arch: "Formal verification gate evaluated by the director via VER-G0 report. Passed V-DET-01 (cross-thread parity), V-DET-02 (multi-repeat parity), V-DET-11 (bisect locator), and Wall-Clock benchmarks 7 & 8.",
+        redTeam: "Red Team Laws 2 & 3 codified into docs/01 §5; bug immunities codified into GOV-003 §6; Bench 4 moved to P1a field sprint."
       },
       p1a: {
         title: "Phase 1a: Bloodlines (Rungs 0–2)",
-        status: "QUEUED (Starts after G0)",
-        plain: "The first living humans! We simulate 1 person alone in a valley, then a 5-person family farm, then a 60-person hamlet. They marry, grieve, go mad, inherit land, and write family history.",
-        arch: "Rungs 0–2 (solo, household, hamlet); M2 demography; M7 succession and dynasts; minds v0 with stress & mental breaks; cinematic event envelope; World Stream v1.",
-        redTeam: "Cadet demotion rule will prevent royal bloat without magic culling; cognitive dissonance attractor governs mental breaks."
+        status: "ACTIVE NOW (Walking Skeletons B & C)",
+        plain: "Spawning the first actual human beings! Solo lived and died (SPR-012 merged); World Stream live flight recorder is in PR #64 (SPR-013); Wave 4 plans approved by Director (D48); Population synthesis merged (SPR-019).",
+        arch: "Rungs 0–2 (solo, household, hamlet); M2 demography; M7 succession and dynasts; minds v0 with stress & mental breaks; cinematic event envelope; World Stream v1. SPR-011 and SPR-012 merged onto main.",
+        redTeam: "Cadet demotion rule prevents royal bloat without magic culling; cognitive dissonance attractor governs mental breaks; Two Castles 3D Stream Viewer operational."
       },
       g1a: {
         title: "Gate G1a: Dynasty Exam",
