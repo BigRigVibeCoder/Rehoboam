@@ -117,7 +117,7 @@ version: 0.1.0
     - an engine that hands the inbox to every job (EVO-001 option D1) fails with "delivered to a non-draining job";
     - a skeleton whose `DRAINS` differs from its spec is refused at registration under rule `spec`, naming the command and both bindings.
   - **Skeleton checks:** `gen_skeletons.py --check` is green on the real and the smoke specs, and the stale-skeleton control still fails for its one reason.
-- **Status:** [ ] not started
+- **Status:** [x] done (0ea28df)
 
 #### T-02: Event-typed slots in commands and timers (rule 2 part 6; rule 4; R5, R15; REV-SPR-017 N3)
 - **Deliverable:**
@@ -145,7 +145,7 @@ version: 0.1.0
     - `bin/gen_hash_golden.py --check` and `rh-snapshot --test golden` pass, with `rh_snapshot_hash_v1.txt` unchanged: a timer without a cause hashes as before;
     - a planted encoder that writes `u8 0` for an absent cause fails the golden test at its first differing vector. The round-3 reviewer measured that this encoding moves `agenda.timers` at 849 smoke rungs.
   - **Smoke's command rows** in `rh-core/engine.commands` are byte-identical. They are non-empty at 307 rungs of the smoke ladder.
-- **Status:** [ ] not started
+- **Status:** [x] done (0ea28df, 20c9ad4, 3329fc2, 87809eb, 8de3783)
 
 #### T-03: The dead-person drop, the owner's drops and the queue age (rule 2 parts 3–4; A-30, A-31; R1, R3, R11; NIT-15)
 - **Deliverable:**
@@ -168,7 +168,7 @@ version: 0.1.0
     - a planted `living` command for a dead person is counted, not applied;
     - a stub `apply_death` that is not idempotent trips V-INV-01's "exit fields written once".
   - **The counter changes no hash.** A run with a planted extra drop gives the same ladder (an observer-invariance check in the style of `rh-snapshot --test observer`).
-- **Status:** [ ] not started
+- **Status:** [x] done (0ea28df, b52ebde, 3329fc2)
 
 #### T-04: Absent owners (rule 2 part 5; REV-P1a NEW-4; R4, R12, R16; V-INV-04)
 - **Deliverable:**
@@ -198,7 +198,7 @@ version: 0.1.0
     - two `[[applies]]` owners for one command;
     - a non-owner applying a command;
     - a send to a registered owner that does not declare the command.
-- **Status:** [ ] not started
+- **Status:** [x] done (0ea28df, 4a96bb1)
 
 #### T-05: M2's `Day`/`Vital` drain and the ledger row insert (REV-P1a MAJ-4, NEW-6, NEW-7; `next/M2` lines 84–87; REV-SPR-015 R11)
 - **Deliverable:**
@@ -225,7 +225,7 @@ version: 0.1.0
     - a duplicate id is refused;
     - a keyframe round trip holds.
   - **Lint and registration.** M2 registers against 0.2.3 under rule `spec`. `lint_odd.py` passes with no `SPR-014` escape left in a frozen spec.
-- **Status:** [ ] not started
+- **Status:** [x] done (0ea28df, 3329fc2, 1753bed, 3a1943f (M2 0.2.3))
 
 #### T-06: `rh-contracts` v0 for M2's columns (C2; `docs/13` §4.1; PRJ-002)
 - **Deliverable:** `rh_contracts::m2`, one typed read accessor per M2 `[[owns]]` column.
@@ -238,7 +238,7 @@ version: 0.1.0
   - The drift test passes. Its planted control, a fixture spec with an enum's values reordered, fails naming the column.
   - `lint_arch` passes: `rh-contracts` is (A, contract) and depends only on plane-A crates.
   - The stub readers of T-03 and T-04 read M2's columns only through the crate: the consumer contract test that `docs/13` §4.3 requires.
-- **Status:** [ ] not started
+- **Status:** [x] done (b38bec1)
 
 #### T-07: BCK-002 A-50: the build environment and the entity kind of a draw (VER-SPR-011-TEST GAP-5, GAP-7)
 - **Deliverable:**
@@ -250,7 +250,7 @@ version: 0.1.0
   - The planted `env!("HOME")` fails with the rule's name, and a `CARGO_PKG_VERSION` use passes.
   - A stub drawing a `person`-keyed purpose with a `RegionId` is refused by name.
   - All four golden ladders are unchanged: every existing draw passes the kind check.
-- **Status:** [ ] not started
+- **Status:** [x] done (de169c6)
 
 #### T-08: Every ladder unchanged but for the cursor; the gates and the docs (R1 and EVO-001 §5 as amended)
 - **Deliverable:**
@@ -266,7 +266,7 @@ version: 0.1.0
   - **Parallelism floors.** SPR-013 states `--require-parallel` floors for `household` and `hamlet`. M2's daily single-job `Day`/`Vital` levels may dilute that fraction. If a floor no longer holds, the Architect restates it with the measured figure; it is never lowered silently.
   - **Performance.** V-PERF-04 and V-PERF-11 are green. The empty daily drain should allocate nothing in steady state. If a recorded count moves, the tool regenerates the baseline in a `[perf-baseline]` commit with a reason line (SPR-009 ruling 3), and the audit explains it.
   - **CI time.** Both CI parts finish in 12 minutes or less; the times are in the PR.
-- **Status:** [ ] not started
+- **Status:** [~] in progress (a37c1d5, 96f768b, 72791f9, 9bd277e; the `[C3]` regeneration is the final commit)
 
 ## Out of scope (explicit)
 - **M7 and T1 code** (SPR-021, SPR-023) and V-INV-15's court soak; V-SAGA-19 (SPR-021).
@@ -326,5 +326,5 @@ version: 0.1.0
 - [ ] Tester verdicts are PASS.
 - [ ] Architect audit `VER-SPR-014` is PASS.
 - [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the declared class (C3), and no file under `worlds/*/baselines/` changed.
+- [ ] Merge route matches the declared class (C3); under `worlds/*/baselines/` only `solo`, `household` and `hamlet` change, in the final `[C3]` commit, by `bin/regen_baseline.sh` (amended 2026-10-17, the Architect's option A).
 - [ ] BCK-002 A-30, A-31 and A-50 are closed; M2 0.2.3 is on `main` with no `SPR-014` escape left.
