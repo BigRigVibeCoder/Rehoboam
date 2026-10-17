@@ -3,8 +3,10 @@
 //! `worlds/<id>/world.toml` pins the SHA-256 of the manifest it points at, so the one committed copy
 //! of a manifest cannot drift under its baseline; the hex digest is also the run's `manifest_hash`,
 //! a term of the history tuple (DET-1). Written out here (about sixty lines, checked against the
-//! FIPS 180-4 and NIST CAVP vectors below) rather than adding a dependency for one hash in a tool
-//! crate.
+//! FIPS 180-4 and NIST CAVP vectors below: the empty string, a short message, two long messages and
+//! one million 'a's, run in `--part core` with rh-golden's unit tests) rather than adding a
+//! dependency for one hash in a tool crate: `sha2` would bring about eight crates into the lock,
+//! and the pin only detects drift, it is not a security boundary (Architect, SPR-012).
 
 const K: [u32; 64] = [
     0x428a_2f98,
@@ -175,6 +177,11 @@ mod tests {
         assert_eq!(
             hex(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
             "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+        );
+        // FIPS 180-4's long message (896 bits, two blocks after padding).
+        assert_eq!(
+            hex(b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"),
+            "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
         );
         assert_eq!(
             hex(&vec![b'a'; 1_000_000]),
