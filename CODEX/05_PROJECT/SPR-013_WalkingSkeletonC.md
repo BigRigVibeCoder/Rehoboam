@@ -8,8 +8,8 @@ agents: [coder, tester]
 tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-002, SPR-011, SPR-012, SPR-007, SPR-009, ADR-0006, ADR-0024, ADR-0030, ADR-0035]
 created: 2026-10-16
-updated: 2026-10-16
-version: 1.0.0
+updated: 2026-10-17
+version: 1.0.1
 ---
 
 > **BLUF:** Increment C of the walking skeleton (WP P1.0): World Stream v0 and the sealed Parquet chronicle (`rh-stream`), `rh-cli tail`, the `life_ends` pattern with its DuckDB twin (`rh-sifter` v0), journal replay end to end, and rungs 1 and 2 (`household`, `hamlet`) on the same binary. Developers: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3.5 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). SPR-011's rulings 1–19 bind this sprint and are not repeated here.
@@ -72,7 +72,7 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 
 #### T-13: Rungs 1 and 2 on the same binary (rulings 16–19)
 - **Deliverable:** `worlds/household/` and `worlds/hamlet/`, pointing at A-06's manifests, with input scripts and baselines. The PR-tier and nightly jobs of ruling 16. Nightly V-SCALE jobs. The keyframe-size report.
-- **Acceptance:** One `rh-cli` build runs all three rungs; only the manifest changes. V-SCALE-01 at N ∈ {1, 5, 60}: 0 invariant violations, equal hashes across threads, exact replay. V-SCALE-04: each world reaches zero population, emits one `EXTINCTION`, and its chronicle, tail and replay stay consistent after it. V-WC-04: both manifests validate in Python and in Rust (`manifest_parity.py`). V-DET-01/02 nightly on all three rungs. V-INV-02: a 1,000-year debug soak with invariants on, 0 violations. V-PERF-11: steady-state allocations per tick recorded for each rung as its budget (SPR-009's counting allocator). Keyframe sizes per rung reported.
+- **Acceptance:** One `rh-cli` build runs all three rungs; only the manifest changes. V-SCALE-01 at N ∈ {1, 5, 60}: 0 invariant violations, equal hashes across threads, exact replay. V-SCALE-04: each world reaches zero population, emits one `EXTINCTION`, and its chronicle, tail and replay stay consistent after it. V-WC-04: both manifests validate in Python and in Rust (`manifest_parity.py`). V-DET-01/02 nightly on all three rungs. V-INV-02: a 1,000-year debug soak with invariants on, 0 violations. V-PERF-11: steady-state allocations per tick recorded for each rung as its budget (SPR-009's counting allocator). Keyframe sizes per rung reported. The `household` and `hamlet` golden runs carry `--require-parallel` with a stated floor, as `smoke` does: `solo` is a one-person world, so its thread invariance cannot fail (`VER-SPR-012` GAP-2, GAP-7).
 - **Status:** [ ] not started
 
 ## Out of scope (explicit)
