@@ -49,7 +49,15 @@ when = "an hourly price move is large, or a daily trade happens"
 [[commands]]
 target = "X4.smoke_estate"
 command = "Settle"
+payload = "{ row }"
 why = "a market default settles a living person's estate"
+[[applies]]
+command = "Audit"
+payload = "{ row: i64 }"
+from = ["X4.smoke_estate"]
+drained_by = "Day/Activity"
+key = "any"
+key_field = "person"
 [[reads]]
 column = "harvest.stock"
 owner = "X2.smoke_harvest"

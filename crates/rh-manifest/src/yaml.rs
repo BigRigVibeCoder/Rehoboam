@@ -40,8 +40,9 @@ pub enum Value {
         /// The scalar as written.
         text: String,
     },
-    /// A float.
-    Float(f64),
+    /// A float: the value `PyYAML` constructs, and the scalar's text as written, from which the
+    /// exact decimal is read when the number enters plane A (`crate::exact`; `05.5` §3.2).
+    Float(f64, String),
     /// A string.
     Str(String),
     /// A YAML timestamp (`2026-10-16`); Python builds a date or datetime from it, which no
@@ -61,7 +62,7 @@ impl Value {
             Value::Null => "NoneType",
             Value::Bool(_) => "bool",
             Value::Int(_) | Value::BigInt { .. } => "int",
-            Value::Float(_) => "float",
+            Value::Float(..) => "float",
             Value::Str(_) => "str",
             Value::Timestamp(_) => "date",
             Value::Seq(_) => "list",
@@ -91,7 +92,7 @@ impl Value {
         match self {
             Value::Bool(b) => Some(f64::from(u8::from(*b))),
             Value::Int(i) => Some(*i as f64),
-            Value::Float(f) => Some(*f),
+            Value::Float(f, _) => Some(*f),
             _ => None,
         }
     }
@@ -106,7 +107,7 @@ impl fmt::Display for Value {
             Value::Bool(false) => f.write_str("False"),
             Value::Int(i) => write!(f, "{i}"),
             Value::BigInt { text, .. } => f.write_str(text),
-            Value::Float(x) => f.write_str(&crate::pyfmt::float_repr(*x)),
+            Value::Float(x, _) => f.write_str(&crate::pyfmt::float_repr(*x)),
             Value::Str(s) => f.write_str(s),
             Value::Timestamp(s) => write!(f, "date({s})"),
             Value::Seq(_) => f.write_str("[...]"),
@@ -883,7 +884,7 @@ fn scalar(text: &str, style: ScalarStyle, tag: Option<&Tag>) -> Result<Value, St
                 .map(Value::Bool)
                 .ok_or_else(|| format!("invalid boolean '{text}'")),
             "int" => int_value(text),
-            "float" => float_value(text).map(Value::Float),
+            "float" => float_value(text).map(|v| Value::Float(v, text.to_owned())),
             _ => Err(format!(
                 "could not determine a constructor for the tag '{t}'"
             )),
@@ -902,7 +903,7 @@ fn resolve_plain(s: &str) -> Result<Value, String> {
         return Ok(Value::Bool(b));
     }
     if is_float(s) {
-        return float_value(s).map(Value::Float);
+        return float_value(s).map(|v| Value::Float(v, s.to_owned()));
     }
     if is_int(s) {
         return int_value(s);
@@ -1181,14 +1182,17 @@ mod tests {
         assert_eq!(one("yes"), Value::Bool(true));
         assert_eq!(one("Off"), Value::Bool(false));
         assert_eq!(one("1.0e9"), Value::Str("1.0e9".to_owned()));
-        assert_eq!(one("1.0e+9"), Value::Float(1.0e9));
+        assert_eq!(one("1.0e+9"), Value::Float(1.0e9, "1.0e+9".to_owned()));
         assert_eq!(one("1e9"), Value::Str("1e9".to_owned()));
         assert_eq!(one("010"), Value::Int(8));
         assert_eq!(one("0x1F"), Value::Int(31));
         assert_eq!(one("1_000"), Value::Int(1000));
         assert_eq!(one("1:30"), Value::Int(90));
-        assert_eq!(one(".5"), Value::Float(0.5));
-        assert_eq!(one("-.inf"), Value::Float(f64::NEG_INFINITY));
+        assert_eq!(one(".5"), Value::Float(0.5, ".5".to_owned()));
+        assert_eq!(
+            one("-.inf"),
+            Value::Float(f64::NEG_INFINITY, "-.inf".to_owned())
+        );
         assert_eq!(one("~"), Value::Null);
         assert_eq!(one(""), Value::Null);
         assert_eq!(one("'yes'"), Value::Str("yes".to_owned()));

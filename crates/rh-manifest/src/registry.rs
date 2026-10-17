@@ -12,6 +12,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+
+use crate::exact::{Decimal, DecimalError};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -113,6 +115,9 @@ pub struct IdList {
     pub ids: Vec<String>,
 }
 
+/// The exact decimal values of a parameter's bounds, `(lo, hi)` (SPR-011 G-2).
+pub type ExactBounds = (Result<Decimal, DecimalError>, Result<Decimal, DecimalError>);
+
 /// One simulation system: `[systems."M2.demography"]`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -129,6 +134,16 @@ pub struct SystemDef {
     /// one of `params` and each value lies inside its bounds ([`Registry::problems`]).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub defaults: BTreeMap<String, Number>,
+    /// The exact decimal value of each default's literal as written, which is what reaches plane A
+    /// (`crate::exact`; `05.5` §3.2). Filled by [`Registry::from_toml`] from the TOML text; a
+    /// Registry built otherwise has none, and compiling a default without one is a load error.
+    #[serde(skip)]
+    pub default_literals: BTreeMap<String, Result<Decimal, DecimalError>>,
+    /// The exact decimal values of each parameter's bounds as written, `(lo, hi)`, so a compiled
+    /// value is checked against the bounds exactly, not as floats (SPR-011 G-2). Filled like
+    /// `default_literals`.
+    #[serde(skip)]
+    pub bound_literals: BTreeMap<String, ExactBounds>,
 }
 
 /// An archetype of being: `[archetypes.apex_predator]`.
@@ -380,14 +395,70 @@ impl Registry {
     /// [`RegistryError::Parse`] for bad TOML or an unknown section or field;
     /// [`RegistryError::Inconsistent`] when [`Registry::problems`] finds anything.
     pub fn from_toml(text: &str) -> Result<Self, RegistryError> {
-        let reg: Registry =
+        let mut reg: Registry =
             toml::from_str(text).map_err(|e| RegistryError::Parse(e.to_string()))?;
+        reg.read_default_literals(text)?;
         let problems = reg.problems();
         if problems.is_empty() {
             Ok(reg)
         } else {
             Err(RegistryError::Inconsistent(problems))
         }
+    }
+
+    /// Fills each system's [`SystemDef::default_literals`] and [`SystemDef::bound_literals`] from
+    /// the TOML text: the literal of every `defaults` entry and `params` bound, as `toml` keeps it
+    /// (SPR-011 ruling 9; G-2).
+    fn read_default_literals(&mut self, text: &str) -> Result<(), RegistryError> {
+        use toml::de::{DeTable, DeValue};
+        // The exact value of one TOML number; an integer's is that of the parsed Number.
+        fn exact(value: &DeValue<'_>, number: Option<Number>) -> Result<Decimal, DecimalError> {
+            match (value, number) {
+                (DeValue::Float(f), _) => Decimal::parse_toml_float(f.as_str()),
+                (DeValue::Integer(_), Some(Number::Int(i))) => Ok(Decimal::from_int(i128::from(i))),
+                (other, _) => Err(DecimalError::Syntax(format!("{other:?}"))),
+            }
+        }
+        let table = DeTable::parse(text).map_err(|e| RegistryError::Parse(e.to_string()))?;
+        let Some(DeValue::Table(systems)) =
+            table.get_ref().get("systems").map(toml::Spanned::get_ref)
+        else {
+            return Ok(());
+        };
+        for (id, def) in &mut self.systems {
+            let Some(DeValue::Table(entry)) = systems.get(id.as_str()).map(toml::Spanned::get_ref)
+            else {
+                continue;
+            };
+            if let Some(DeValue::Table(defaults)) =
+                entry.get("defaults").map(toml::Spanned::get_ref)
+            {
+                for (name, value) in defaults {
+                    let number = def.defaults.get(name.get_ref().as_ref()).copied();
+                    def.default_literals
+                        .insert(name.get_ref().to_string(), exact(value.get_ref(), number));
+                }
+            }
+            if let Some(DeValue::Table(params)) = entry.get("params").map(toml::Spanned::get_ref) {
+                for (name, value) in params {
+                    let (DeValue::Array(pair), Some(bounds)) =
+                        (value.get_ref(), def.params.get(name.get_ref().as_ref()))
+                    else {
+                        continue;
+                    };
+                    let (Some(lo), Some(hi)) = (pair.first(), pair.get(1)) else {
+                        continue;
+                    };
+                    let literals = (
+                        exact(lo.get_ref(), Some(bounds.lo)),
+                        exact(hi.get_ref(), Some(bounds.hi)),
+                    );
+                    def.bound_literals
+                        .insert(name.get_ref().to_string(), literals);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Reads, parses and checks a Registry file.

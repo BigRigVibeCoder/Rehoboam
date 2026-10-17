@@ -934,6 +934,11 @@ fn check_v_det_12(lines: &[&str]) -> Result<(), String> {
 }
 
 #[test]
+// LINT-ALLOW(forbidden-api): a test reads an environment override for its golden file; tests never link into the engine (SPR-011 A-4)
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test reads an environment override for its golden file"
+)]
 fn v_det_12_golden_event_log() {
     let events = run(life_engine(7, 48, 4, false, 1), 2).events;
     let mut text = String::from(

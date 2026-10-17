@@ -46,6 +46,10 @@ fn ok<T, E: Display>(r: Result<T, E>) -> T {
     clippy::panic,
     reason = "a malformed RH_WALL_ROWS must stop the run, not measure the wrong size"
 )]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "tool plane: command-line arguments and environment overrides (SPR-011 A-4)"
+)]
 fn sizes() -> Vec<usize> {
     match std::env::var("RH_WALL_ROWS") {
         Ok(list) => list

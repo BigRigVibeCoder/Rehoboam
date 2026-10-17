@@ -39,6 +39,10 @@ const DEFAULT_REGISTRY: &str = concat!(
     "/../../specs/manifest/registry_v0.toml"
 );
 
+#[allow(
+    clippy::disallowed_methods,
+    reason = "tool plane: command-line arguments and environment overrides (SPR-011 A-4)"
+)]
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args

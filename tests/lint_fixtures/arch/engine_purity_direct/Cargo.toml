@@ -1,0 +1,11 @@
+# Positive control for bin/lint_arch.py, rule engine-purity (V-INSP-05; SPR-011 T-00); not in the
+# Rehoboam workspace. The engine crate rh-cli depends directly on a crate named reqwest (a local
+# stand-in under vendor/, outside the workspace, so the control runs offline): must FAIL.
+[workspace]
+members = ["rh-cli"]
+exclude = ["vendor"]
+resolver = "3"
+
+# Every crate inherits these lints (bin/lint_arch.py rules lints and unsafe-allow).
+[workspace.lints.rust]
+unsafe_code = "forbid"

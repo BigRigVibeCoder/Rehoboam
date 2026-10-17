@@ -86,6 +86,38 @@ impl<V: JsonSchema> JsonSchema for OrderedMap<V> {
     }
 }
 
+/// A number a manifest authors for a system parameter (`systems.<id>.<param>`): the float the
+/// reference validates against the Registry bounds, and the exact decimal of the literal as
+/// written, which is all that reaches plane A (`crate::exact`; `05.5` §3.2; SPR-011 ruling 9).
+/// It serialises, and appears in the JSON Schema, as the float it validates as.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Authored {
+    /// The value as Python's `float()` gives it: what validation compares with the bounds.
+    pub value: f64,
+    /// The literal's exact decimal value, or why it has none (an infinity, NaN).
+    pub exact: Result<crate::exact::Decimal, crate::exact::DecimalError>,
+}
+
+impl Serialize for Authored {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_f64(self.value)
+    }
+}
+
+impl JsonSchema for Authored {
+    fn inline_schema() -> bool {
+        f64::inline_schema()
+    }
+
+    fn schema_name() -> Cow<'static, str> {
+        f64::schema_name()
+    }
+
+    fn json_schema(g: &mut SchemaGenerator) -> Schema {
+        f64::json_schema(g)
+    }
+}
+
 // ----------------------------------------------------------------------------- schema helpers
 
 /// Adds a discriminator property (`"kind": {"const": "wager"}`) to a model's schema, required,
@@ -840,7 +872,7 @@ pub struct Manifest {
     #[schemars(default)]
     pub agents: Vec<Agent>,
     /// System id -> {param: value}; params bounded by Registry.
-    pub systems: OrderedMap<OrderedMap<f64>>,
+    pub systems: OrderedMap<OrderedMap<Authored>>,
     #[schemars(default, inner(pattern(SLUG_PATTERN)))]
     pub institutions: Vec<String>,
     #[schemars(default, inner(pattern(SLUG_PATTERN)))]

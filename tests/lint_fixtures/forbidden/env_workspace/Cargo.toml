@@ -1,0 +1,7 @@
+# Positive and negative control for the env rule of bin/lint_forbidden.py (SPR-011 A-4;
+# tests/lint_fixtures/README.md); not in the Rehoboam workspace. rh-core reads the environment in
+# src/ (must FAIL) and in tests/ (a golden-file override: exempt, never reported), and calls an
+# `args` method on a builder in src/ (not std::env: never reported).
+[workspace]
+members = ["rh-core"]
+resolver = "3"

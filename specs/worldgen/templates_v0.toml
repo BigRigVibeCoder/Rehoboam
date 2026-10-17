@@ -1,0 +1,68 @@
+# Worldgen-lite heightmap templates, version 0 (SPR-018; P1.1a). Data read by [algorithm.worldgen_lite] of
+# specs/systems/M1.regions.odd.toml (steps W1-W4) and by specs/worldgen/selftest_worldgen_lite.py, the exact reference.
+# One table per id of the Registry's [heightmap_templates]. Every number is an integer: heights are u16 elevation units
+# (0..65535; a negative height is a pit), positions and radii are per-mille of the raster side, so a template is the same
+# shape at every raster_resolution. Design values (FMG's templates are the precedent, docs/14 §B; R06 §4): they shape a
+# few regions, settlements and routes, not a climate. Changing any number changes every rung's genesis: a C3 change.
+version = "worldgen-lite-templates-v0"
+
+# Rung 0 and rung 1 (solo, household): one valley, all land, one region.
+[templates.flat]
+base = 30000
+sea_level = 0
+smooth_passes = 0
+ops = []
+
+[templates.continental_plains]
+base = 26000
+sea_level = 20000
+smooth_passes = 1
+ops = [
+  { kind = "dome", count = 3, height = [3000, 9000],   radius = [300, 600], x = [100, 900], y = [100, 900] },
+  { kind = "dome", count = 2, height = [-9000, -4000], radius = [120, 250], x = [50, 950],  y = [50, 950] },
+]
+
+[templates.mountain_valleys]
+base = 24000
+sea_level = 20000
+smooth_passes = 2
+ops = [
+  { kind = "dome", count = 12, height = [12000, 30000], radius = [60, 160], x = [50, 950], y = [50, 950] },
+  { kind = "dome", count = 3,  height = [-7000, -3000], radius = [100, 200], x = [100, 900], y = [100, 900] },
+]
+
+[templates.archipelago]
+base = 14000
+sea_level = 20000
+smooth_passes = 1
+ops = [
+  { kind = "dome", count = 12, height = [10000, 22000], radius = [80, 180], x = [50, 950], y = [50, 950] },
+]
+
+[templates.caldera_with_passes]
+base = 23000
+sea_level = 20000
+smooth_passes = 1
+ops = [
+  { kind = "ring", count = 1, height = [20000, 28000],  radius = [330, 380], width = [60, 100], x = [450, 550], y = [450, 550] },
+  { kind = "dome", count = 3, height = [-24000, -16000], radius = [40, 70],  x = [150, 850], y = [150, 850] },
+]
+
+[templates.river_delta_city]
+base = 21500
+sea_level = 20000
+smooth_passes = 1
+ops = [
+  { kind = "dome", count = 1, height = [15000, 20000], radius = [400, 500], x = [50, 250],  y = [400, 600] },
+  { kind = "dome", count = 6, height = [-6000, -2500], radius = [40, 90],   x = [500, 950], y = [300, 700] },
+]
+
+# Rung 2 (hamlet): Job's pastures and the friends' towns on the edge of a desert, a sea to the east.
+[templates.desert_fringe]
+base = 23000
+sea_level = 20000
+smooth_passes = 1
+ops = [
+  { kind = "dome", count = 1, height = [-9000, -6000], radius = [500, 700], x = [900, 1000], y = [0, 1000] },
+  { kind = "dome", count = 5, height = [2000, 6000],   radius = [80, 200],  x = [0, 700],    y = [0, 1000] },
+]
