@@ -68,3 +68,9 @@ RH_GOLDEN_V_DET_11_CASES=64 cargo nextest run -p rh-golden --release --locked --
 # python3 serves: the nightly job has no python/.venv (REV-SPR-016 round 2).
 "${PYTHON:-python3}" -I specs/numerics/exp_ln_v0.py --check --exhaustive
 echo "exp/ln v0: the exhaustive sweep is faithful and the golden file is current"
+# SPR-030 (REV-SPR-030 R10): the fixture worlds' every case (the PR tier renders kingdom_10k at seed 1 only) and
+# the CRN pairing protocol at seeds 1 to 3 with its controls (the PR tier runs seed 1; a seed whose sovereigns leave
+# no 5-year window after the input is pinned as skipped, REV-SPR-030 R14). Standard-library references.
+"${PYTHON:-python3}" -I specs/worldgen/selftest_fixture_worlds.py --tier nightly
+"${PYTHON:-python3}" -I specs/determinism/selftest_crn_pairing.py --seeds 1,2,3 --controls
+echo "SPR-030 fixture worlds and CRN pairing: every case equals the golden outputs; every control fails as required"
