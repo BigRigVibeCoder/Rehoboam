@@ -567,12 +567,18 @@ class Host:
         """Apply the queue in order; each command's answer is the cell right after it (L2).
 
         A queued ``control.status`` is returned, to be answered with the snapshot published at
-        the end of the decision point.
+        the end of the decision point, and it ends its connection's batch (M2): that connection's
+        later requests stay queued, in order, for the next decision point, which follows at
+        once; other connections' requests are applied as usual.
         """
-        deferred = []
+        deferred, kept, held = [], [], set[int]()
         for p in self.pending:
+            if p.conn.number in held:
+                kept.append(p)  # behind its connection's status: the next decision point's
+                continue
             if p.method == "control.status":
                 deferred.append(p)
+                held.add(p.conn.number)
                 continue
             before = self.cell.effective()
             try:
@@ -585,7 +591,7 @@ class Host:
             if self.cell.effective() != before and not owed:
                 self._anchor()  # the effective rate changed (K4); the control keeps a stale anchor
             self._fill(p, reply)
-        self.pending.clear()
+        self.pending = kept
         return deferred
 
     def _apply(self, p: Pending) -> Json:
@@ -658,7 +664,8 @@ class Host:
         """The decision point (control_v1.md §3.3 item 1): apply, re-check a step, publish.
 
         Atomic (L1): nothing is submitted between taking the queue and publishing; a queued
-        status is answered last, with the published snapshot (L2).
+        status is answered last, with the published snapshot (L2), and its connection's later
+        requests wait for the next decision point (M2).
         """
         deferred = self._apply_pending()
         if self._step_reached():
@@ -1017,6 +1024,15 @@ SCENARIOS: tuple[Scenario, ...] = (
                 920 * MS, "c", "control.status"
             ),  # at the instant's end: the published tip (L3)
             Command(S, "a", "control.resume"),
+            Command(1100 * MS, "a", "control.pause"),
+            Command(1200 * MS, "a", "control.step", {"until": "instant"}),
+            Command(1205 * MS, "d", "control.pace", {"band": "1y"}),  # in the reaching instant,
+            Command(1205 * MS, "d", "control.status"),  # a status behind it: paused (M1, P19)
+            Command(1300 * MS, "a", "control.step", {"until": "instant"}),
+            Command(1305 * MS, "e", "control.pause"),  # a pipelined triple mid-instant (M2):
+            Command(1305 * MS, "e", "control.status"),  # the status ends e's batch, paused, 1y
+            Command(1305 * MS, "e", "control.pace", {"band": "max"}),  # the next item 1's
+            Command(1400 * MS, "a", "control.resume"),
         ),
     ),
 )
@@ -1053,6 +1069,8 @@ def simulate(sc: Scenario, control: str | None = None) -> Run:
         while queue and queue[0].at_ns <= host.clock.now_ns:
             _issue(run, conns, queue.pop(0))
         host.before_instant()
+        if host.pending:  # requests held behind a status (M2): the next decision point at once
+            continue
         deadline = host.deadline()
         if deadline is None:  # paused: the host waits for the next command
             if not queue:
@@ -1818,7 +1836,7 @@ def _atomic_checks(run: Run) -> list[str]:
     pipelined = _pace_of(statuses[0][1])
     if pipelined["state"] != "paused":
         problems.append(f"L1: a status pipelined behind a pause answered {pipelined}")
-    reached = _result(_replies(run, "control.step", "a")[-1][1])
+    reached = _result(next(r for c, r in _replies(run, "control.step", "a") if c.at_ns == 800 * MS))
     if (reached["state"], reached["step"], reached["changed"]) != ("paused", None, True):
         problems.append(f"L2: a step reached at once answered {reached}")
     queued_status = _pace_of(statuses[1][1])
@@ -1830,7 +1848,73 @@ def _atomic_checks(run: Run) -> list[str]:
         910 * MS
     ):
         problems.append(f"L3: a status at an instant's end answered tip {end_status['tick']}")
+    return problems + _batch_checks(run, statuses, by_release)
+
+
+def _batch_checks(
+    run: Run, statuses: list[tuple[Command, Json]], by_release: dict[int, int]
+) -> list[str]:
+    """M1 and M2: a status behind a pace in a reaching instant; a status ends its batch.
+
+    P19: d's status, queued behind d's pace in the instant that reaches a's step, is answered
+    ``paused, step: null`` at the reaching instant's tip (the pace itself answers the cell right
+    after it: ``running`` with the step pending). The triple: e's pause is applied in the item 1
+    after the instant it landed in, e's status is answered after that publish (``paused``, the
+    band before e's pace), and e's pace is applied at the next item 1, after the status; e's
+    answers are in arrival order and d's and a's are unaffected.
+    """
+    problems = []
+    pace_d = _result(_replies(run, "control.pace", "d")[0][1])
+    if (pace_d["state"], pace_d["band"], pace_d["changed"]) != ("running", "1y", True) or (
+        pace_d["step"] is None
+    ):
+        problems.append(f"P19: d's pace in the reaching instant answered {pace_d}")
+    p19 = _pace_of(statuses[3][1])
+    if (p19["state"], p19["step"], p19["band"], p19["tick"]) != (
+        "paused",
+        None,
+        "1y",
+        by_release.get(1200 * MS),
+    ):
+        problems.append(f"P19: a status behind a pace in the reaching instant answered {p19}")
+    return problems + _triple_checks(run, statuses[4])
+
+
+def _triple_checks(run: Run, status: tuple[Command, Json]) -> list[str]:
+    """M2: e's (pause, status, pace) pipelined into a reaching instant, on one connection."""
+    problems = []
+    pause_e = _result(_replies(run, "control.pause", "e")[0][1])
+    if (pause_e["state"], pause_e["step"], pause_e["changed"]) != ("paused", None, True):
+        problems.append(f"M2: e's pause landing in the reaching instant answered {pause_e}")
+    status_e = _pace_of(status[1])
+    if (status_e["state"], status_e["band"], status_e["step"]) != ("paused", "1y", None):
+        problems.append(f"M2: e's status behind its pause answered {status_e}")
+    pace_cmd, pace_reply = _replies(run, "control.pace", "e")[0]
+    pace_e = _result(pace_reply)
+    if (pace_e["state"], pace_e["band"], pace_e["changed"]) != ("paused", "max", True):
+        problems.append(f"M2: e's pace behind its status answered {pace_e}")
+    for conn in ("d", "e"):
+        order = _answer_order(run, conn)
+        if -1 in order or order != sorted(order):
+            problems.append(f"M2: {conn}'s answers were not given in arrival order: {order}")
+    if not _pending_seq(run, status[0]) < _pending_seq(run, pace_cmd):
+        problems.append("M2: e's pace was not answered after e's status")
+    log = run.host.run_log
+    step_lines = [ln for ln in log if " control.step:" in ln or " step.reached " in ln]
+    if " step.reached " in step_lines[-1]:
+        problems.append("M2: the step e's pause landed in wrote step.reached")
+    e_lines = [ln for ln in log if " conn=5 " in ln]
+    if [ln.split()[5] for ln in e_lines] != ["control.pause", "control.pace"]:
+        problems.append(f"M2: e's run-log lines are {e_lines}")
     return problems
+
+
+def _pending_seq(run: Run, cmd: Command) -> int:
+    """The host's answer counter for a scripted command's answer."""
+    for c, outcome in run.issued:
+        if c is cmd and isinstance(outcome, Pending) and outcome.answered_seq is not None:
+            return outcome.answered_seq
+    return -1
 
 
 def _engine_lines_checks(run: Run, name: str) -> list[str]:

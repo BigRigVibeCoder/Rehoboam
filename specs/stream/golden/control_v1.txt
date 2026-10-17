@@ -1139,15 +1139,15 @@ clock 1060000000 1512000 36
 clock 1070000000 1555200 37
 clock 1080000000 1598400 38
 clock 1090000000 1641600 39
-clock 1100000000 1684800 40
-clock 1110000000 1728000 41
-clock 1120000000 1771200 42
-clock 1130000000 1814400 43
-clock 1140000000 1857600 44
-clock 1150000000 1900800 45
-clock 1160000000 1944000 46
-clock 1170000000 1987200 47
-clock 1180000000 2030400 48
+clock 1200000000 1684800 40
+clock 1300000000 1728000 41
+clock 1400000000 1771200 42
+clock 1410000000 1814400 43
+clock 1420000000 1857600 44
+clock 1430000000 1900800 45
+clock 1440000000 1944000 46
+clock 1450000000 1987200 47
+clock 1460000000 2030400 48
 answer 5000000 a control.pause max paused - 0 3 True
 answer 6000000 b control.pause max paused - 0 3 False
 answer 100000000 a control.step max running 216000 0 3 True
@@ -1168,6 +1168,15 @@ answer 900000000 a control.resume max running - 1123200 84 True
 answer 915000000 b control.pause max paused - 1209600 90 True
 answer 920000000 c control.status max running - 1166400 87 -
 answer 1000000000 a control.resume max running - 1209600 90 True
+answer 1100000000 a control.pause max paused - 1641600 121 True
+answer 1200000000 a control.step max running 1684800 1641600 121 True
+answer 1205000000 d control.pace 1y running 1684800 1684800 124 True
+answer 1205000000 d control.status 1y paused - 1684800 124 -
+answer 1300000000 a control.step 1y running 1728000 1684800 124 True
+answer 1305000000 e control.pause 1y paused - 1728000 127 True
+answer 1305000000 e control.status 1y paused - 1728000 127 -
+answer 1305000000 e control.pace max paused - 1728000 127 True
+answer 1400000000 a control.resume max running - 1728000 127 True
 log host 0 start ~ 1
 log pace 0 max running ~ host.start 1 conn=- pid=-
 log pace 10000000 max paused 0 control.pause 1 conn=1 pid=-
@@ -1186,5 +1195,13 @@ log pace 800000000 max paused 1123200 step.reached 1 conn=- pid=-
 log pace 900000000 max running 1123200 control.resume 1 conn=1 pid=-
 log pace 920000000 max paused 1209600 control.pause 1 conn=2 pid=-
 log pace 1000000000 max running 1209600 control.resume 1 conn=1 pid=-
-log host 1190000000 finish 2030400 1
+log pace 1100000000 max paused 1641600 control.pause 1 conn=1 pid=-
+log pace 1200000000 max running 1641600 control.step:1684800 1 conn=1 pid=-
+log pace 1210000000 1y running 1684800 control.pace 1 conn=4 pid=-
+log pace 1210000000 1y paused 1684800 step.reached 1 conn=- pid=-
+log pace 1300000000 1y running 1684800 control.step:1728000 1 conn=1 pid=-
+log pace 1310000000 1y paused 1728000 control.pause 1 conn=5 pid=-
+log pace 1310000000 max paused 1728000 control.pace 1 conn=5 pid=-
+log pace 1400000000 max running 1728000 control.resume 1 conn=1 pid=-
+log host 1470000000 finish 2030400 1
 invariance 7184b2c3b223981f4dc027e0cd8c5a761889d5f88c30325a015fe8fc4d732ea3 993600,2030400 dcefc1ceec40e80a d16f4d04c9fa4665
