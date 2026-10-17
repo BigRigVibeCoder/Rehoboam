@@ -75,8 +75,9 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
-    "Family annals v0: provenance re-derived, template slots, no model, calendar, a possible "
-    "history, determinism, coverage, injective designation, golden annals and manifests "
+    "Family annals v0: provenance re-derived by a whole-group re-render, template slots, no "
+    "model, calendar, a possible history under M7's rules, determinism in two processes, "
+    "coverage, injective designation, a canonical extract digest, golden annals and manifests "
     "(selftest_annals_v0 --check; SPR-029)",
     "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden "
     "vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)",
@@ -533,6 +534,8 @@ REQUIRED_GATES = (
     "Registry by name (REV-SPR-020 R22, R26)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
     "lint_templates positive control: a cause slot in a label must FAIL (SPR-029)",
+    "lint_templates positive control: a control character in a template text must FAIL "
+    "(REV-SPR-029 R27)",
     "lint_templates positive control: a father slot on a kind other than BIRTH must FAIL "
     "(REV-SPR-029 R6)",
     "lint_templates positive control: a kind whose last variant is conditional must FAIL (SPR-029)",
@@ -542,6 +545,10 @@ REQUIRED_GATES = (
     "emitting [[emits]] must FAIL (REV-SPR-029 F12)",
     "lint_templates positive control: a payload slot the layout does not declare must FAIL "
     "(SPR-029)",
+    "lint_templates positive control: a prologue slot outside its own template's vocabulary must "
+    "FAIL (REV-SPR-029 R27)",
+    "lint_templates positive control: a prologue template with an unknown id must FAIL "
+    "(REV-SPR-029 R27)",
     "lint_templates positive control: a slot naming a role the kind does not declare must FAIL "
     "(SPR-029)",
     "lint_templates positive control: a slot that reads world state must FAIL (ADR-0024; SPR-029)",
@@ -576,16 +583,28 @@ REQUIRED_GATES = (
     "small-scale V-DET-01/02 (SPR-008 T-01)",
     "selftest_annals positive control: a body sentence retagged as a prologue row must FAIL "
     "provenance (REV-SPR-029 R2 P3)",
+    "selftest_annals positive control: a fixture claim with no triggered edge to a succession or "
+    "deposition must FAIL the possible-history check (REV-SPR-029 R26)",
+    "selftest_annals positive control: a fixture deposition on a year's first day must FAIL the "
+    "possible-history check (REV-SPR-029 R26)",
+    "selftest_annals positive control: a forged source on a sidecar row must FAIL provenance "
+    "(REV-SPR-029 R19 P7b)",
     "selftest_annals positive control: a network module imported during the render must FAIL "
     "(V-NAR-07; REV-SPR-029 F16)",
     "selftest_annals positive control: a prologue row citing a keyframe row that does not exist "
     "must FAIL provenance (REV-SPR-029 R2 P4)",
+    "selftest_annals positive control: a prologue row citing another house's persons must FAIL "
+    "provenance (REV-SPR-029 R19 P13)",
+    "selftest_annals positive control: a prologue row relabelled with another prologue template "
+    "must FAIL provenance (REV-SPR-029 R19 P12)",
     "selftest_annals positive control: a row citing an unrelated event must FAIL provenance "
     "(REV-SPR-029 R2 P5)",
     "selftest_annals positive control: a row that drops its own event must FAIL provenance "
     "(REV-SPR-029 R2 P1)",
     "selftest_annals positive control: a sentence with no sidecar row must FAIL provenance "
     "(V-NAR-05; SPR-029)",
+    "selftest_annals positive control: a shared name left undisambiguated must FAIL injective "
+    "designation (REV-SPR-029 R24)",
     "selftest_annals positive control: a slot outside DEATH's declared roles must FAIL (SPR-029)",
     "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)",
     "selftest_annals positive control: a template that reads world state must FAIL (ADR-0024; "

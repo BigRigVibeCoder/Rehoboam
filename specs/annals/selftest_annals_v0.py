@@ -12,43 +12,47 @@ listed with their digests in an annals manifest.
 
 Checks (``--check``):
 
-  1. provenance (V-NAR-05; REV-SPR-029 R2): the sidecar is re-derived from the chronicle, the
-     templates and the extract: every in-scope event of the group is the own event of exactly one
-     ``S`` row, of its kind's template; a row's events are its own event plus the told causes its
-     sentence cites; ``P`` rows come only before the first year heading, with no events, and every
-     ``kf:`` source exists in the extract; a row's persons are its cast plus the parents designation
-     reaches; every sentence line has one row and every row a line. Controls: ``no-event-id``,
+  1. provenance (V-NAR-05; REV-SPR-029 R2, R19): the group is re-rendered from its inputs and
+     the text and the sidecar are compared line by line and field by field, in list order, naming
+     the first field that differs; a ``P`` row comes only before the first year heading, cites no
+     event and cites keyframe rows that exist (D50 as ruled). Controls: ``no-event-id``,
      ``row-drops-own``, ``body-as-prologue``, ``missing-kf-source``, ``unrelated-event``,
-     ``rows-swapped``;
+     ``rows-swapped``, ``prologue-altered``, ``foreign-root``, ``forged-source``;
   2. template slots (annals_v0.md §3, ``lint_templates.py``); controls ``undeclared-slot`` and
      ``state-read``;
   3. no model (V-NAR-07): after rendering, no network or process module is loaded; the imports
      of this file are the standard library and the sibling references; control ``network-import``;
   4. the calendar (05.1 §4.1): known answers for 360- and 365-day years, before and after the
-     epoch; ordinal and cardinal words; the q8_8 rendering;
-  5. the fixtures: every ``EVENT`` agrees with the dictionary the chronicle header names (verb id,
-     act classes, tellability, snapshot attributes), and the chronicle is a possible history under
-     M2's and M7's rules (annals_v0.md §12);
-  6. determinism: two renders are byte-equal and the digest recomputes from the files;
+     epoch; ordinal and cardinal words to 999,999; the q8_8 rendering;
+  5. the fixtures: every ``EVENT`` agrees with the dictionary the chronicle header names, and
+     the chronicle is a possible history under M2's and M7's rules (annals_v0.md §12); controls
+     ``fixture-deposed-day-one`` and ``fixture-claim-untriggered``;
+  6. determinism: a render in this process equals renders in two other processes under different
+     ``PYTHONHASHSEED`` values, and every committed sidecar's digest recomputes from the files;
   7. coverage: every in-scope kind is exercised by the fixtures (unexercised variants are reported);
   8. golden annals: the committed text, sidecar and manifest of every fixture equal the render
      (``STALE:`` names the first file that differs; ``--write`` regenerates them);
-  9. designation is injective: no two persons of one annal share a designation.
+  9. designation is injective: no two persons of one annal share a designation, and a planted
+     shared name is disambiguated with the compact label; control ``shared-name``;
+ 10. the extract digest is canonical: a shuffled extract gives the same digest.
 
 Run: python -I specs/annals/selftest_annals_v0.py --check [--golden-dir DIR] [--control NAME]
      python -I specs/annals/selftest_annals_v0.py --write
-     python -I specs/annals/selftest_annals_v0.py render --world DIR \\
-         --group house:<id>|year|line:<id> [--sidecar]
+     python -I specs/annals/selftest_annals_v0.py render --world DIR \
+         --group house:<id>|year|line:<id> [--sidecar] [--out FILE]
      python -I specs/annals/selftest_annals_v0.py verify --text FILE --sidecar FILE
 """
 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib
 import importlib.util
+import os
 import re
 import sys
+import tempfile
 import tomllib
 from collections import Counter
 from dataclasses import dataclass, field
@@ -69,14 +73,15 @@ REGISTRY_DELTA = ROOT / "specs" / "systems" / "next" / "registry_delta.toml"
 FORMAT = "rehoboam/annals/v0"
 MANIFEST_FORMAT = "rehoboam/annals/manifest/v0"
 EXTRACT_FORMAT = "rehoboam/annals/keyframe-extract/v0"
-RENDERER = "annals_v0/0.2.0"
+RENDERER = "annals_v0/0.3.0"
 D_ANNALS = b"rehoboam/annals/v0"
+D_EXTRACT = b"rehoboam/annals/keyframe-extract/v0"
 EXIT_OK, EXIT_STALE, EXIT_SELFTEST = 0, 1, 2
 
 MINUTES_PER_DAY = 1440
 MONTHS = {360: (30,) * 12, 365: (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)}
 GESTATION_MONTHS = 9  # M2 0.3.0 F9: a birth in the ninth month after its conception
-WORDS_LIMIT = 1000  # the words table's range
+WORDS_LIMIT = 1_000_000  # the words table's range (REV-SPR-029 R25)
 UNITS = (
     "",
     "one",
@@ -112,6 +117,7 @@ ORDINAL_UNITS = {
 ACTOR, TARGET, WITNESS, INSTRUMENT = 0, 1, 2, 3
 ROLE_CODES = {"actor": ACTOR, "target": TARGET, "instrument": INSTRUMENT}
 PERSON = 1
+BORN, FOUNDER = 0, 1  # life-course origins
 EDGE_CODES = {"contingent": 0, "triggered": 1, "motivated_by": 3}
 TRIGGERED, MOTIVATED_BY = 1, 3
 ONE = 256
@@ -130,18 +136,23 @@ M7_KINDS = frozenset(
         "CLAIM_RENOUNCED",
     }
 )
-CLAIM_CAUSES = frozenset({"SUCCEED", "DEPOSED", "INTERREGNUM_CRISIS"})
+CLAIM_CAUSES = frozenset({"SUCCEED", "DEPOSED"})  # M7: a passed-over heir, or a deposition
+DEPOSITION_FIRST_DAY = 2  # M7: a deposition timer fires on days 2 to the last of its month
 FIXTURE_WORLDS = ("ashcombe", "solitary", "untold")
+PROLOGUE_HEADING = "## Before the chronicle began"
+MANIFEST_HASH = re.compile(r"sha256:[0-9a-f]{64}")
 # Modules the renderer may import (V-NAR-07): the standard library and the sibling references.
 ALLOWED_IMPORTS = frozenset(
     {
         "argparse",
+        "dataclasses",
         "importlib",
+        "os",
         "re",
         "sys",
+        "tempfile",
         "tomllib",
         "collections",
-        "dataclasses",
         "decimal",
         "pathlib",
         "types",
@@ -161,12 +172,19 @@ CONTROLS = (
     "missing-kf-source",
     "unrelated-event",
     "rows-swapped",
+    "prologue-altered",
+    "foreign-root",
+    "forged-source",
     "undeclared-slot",
     "state-read",
     "network-import",
+    "shared-name",
+    "fixture-deposed-day-one",
+    "fixture-claim-untriggered",
 )
 PLANTED_LINE = "Thus the chronicle ended, and the land was quiet."
 HEX_PREFIX_MIN = 4  # the shortest id prefix a bare label may show (REV-SPR-029 R17)
+HASH_SEEDS = ("1", "12345")  # the other processes of check 6 (REV-SPR-029 R29)
 IMPORT_LINE = re.compile(r"^(?:import|from)\s+([A-Za-z_][\w.]*)")
 MIN_ROWS_FOR_MUTANTS = 2
 
@@ -223,20 +241,30 @@ class Calendar:
         return year * len(MONTHS[self.days_per_year]) + month - 1
 
 
-def cardinal(n: int) -> str:
-    """``zero`` to ``nine hundred and ninety-nine`` in words."""
-    if not 0 <= n < WORDS_LIMIT:
-        raise AnnalsError(f"no words for {n}")
+def _below_thousand(n: int) -> str:
     hundreds, rest = divmod(n, 100)
     tens, units = divmod(rest, 10)
     small = UNITS[rest] if rest < len(UNITS) else TENS[tens] + (f"-{UNITS[units]}" if units else "")
     if hundreds == 0:
-        return small or "zero"
+        return small
     return f"{UNITS[hundreds]} hundred" + (f" and {small}" if small else "")
 
 
+def cardinal(n: int) -> str:
+    """``zero`` to ``nine hundred and ninety-nine thousand nine hundred and ninety-nine``."""
+    if not 0 <= n < WORDS_LIMIT:
+        raise AnnalsError(f"no words for {n}: the words run to {WORDS_LIMIT - 1}")
+    thousands, rest = divmod(n, 1000)
+    if thousands == 0:
+        return _below_thousand(rest) or "zero"
+    words = f"{_below_thousand(thousands)} thousand"
+    if rest == 0:
+        return words
+    return words + (" and " if rest < 100 else " ") + _below_thousand(rest)  # noqa: PLR2004
+
+
 def ordinal(n: int) -> str:
-    """``first``, ``twelfth``, ``twenty-first``, ``one hundred and third`` in words (n >= 1)."""
+    """``first``, ``twenty-first``, ``one thousand and first``, ``two thousandth`` (n >= 1)."""
     words = cardinal(n)
     sep = "-" if "-" in words.split()[-1] else " "
     head, _, last = words.rpartition(sep)
@@ -306,9 +334,9 @@ class Event:
         edges = [(c, m, w) for c, code, m, w, _, told in self.causes if code == kind and told]
         if not edges:
             return None
-        if kind == MOTIVATED_BY:  # the strongest contributor, ties to the lower cause id (R8)
-            c, m, _ = min(edges, key=lambda e: (-abs(e[2]), e[0]))
-            return c, m
+        if kind == MOTIVATED_BY:  # the largest weight, ties to the lower cause id; a motive only
+            c, m, w = max(edges, key=lambda e: (e[2], -e[0]))  # when that weight is positive (R20)
+            return c, m if w > 0 else None
         return edges[0][0], edges[0][1]
 
     def untold(self, kind: int) -> int | None:
@@ -335,12 +363,14 @@ class LifeRow:
     """A life-course row: a ``LIFE_ENTRY`` record, or a keyframe row for a house prologue."""
 
     person: int
+    origin: int  # 0 born, 1 founder, 2 immigrant
     sex: int
     mother: int
     father: int
     birth_tick: int
     exit_tick: int | None
     source: str  # ``life/<pid>`` (channel A) or ``kf:life/<pid>`` (the keyframe extract)
+    founder: int | None = None  # the founder index k of founder(seed, k), from the extract
 
 
 @dataclass(frozen=True)
@@ -376,12 +406,18 @@ class World:
     persons: dict[int, str] = field(default_factory=dict)
     houses: dict[int, str] = field(default_factory=dict)
     titles: dict[int, str] = field(default_factory=dict)
-    extract_digest: str = "-"
+    keyframe: str = "-"
     state_hash: str = "-"
+    house_ids: list[int] = field(default_factory=list)
+    title_ids: list[int] = field(default_factory=list)
     kf_life: dict[int, LifeRow] = field(default_factory=dict)
-    founders: dict[int, int] = field(default_factory=dict)  # person -> founder index k
     members: dict[int, int] = field(default_factory=dict)  # person -> house
     tenures: list[Tenure] = field(default_factory=list)
+
+    @property
+    def extract_digest(self) -> str:
+        """XXH3-64 of the extract's canonical form, 16 hex digits; ``-`` without an extract."""
+        return extract_digest(self) if self.keyframe != "-" else "-"
 
 
 @dataclass(frozen=True)
@@ -445,6 +481,7 @@ def load_chronicle(path: Path, dictionary: Dictionary) -> Chronicle:
             pid = int(rec["person_id"])
             chron.life[pid] = LifeRow(
                 pid,
+                int(rec["origin"]),
                 int(rec["sex"]),
                 int(rec["mother_id"]),
                 int(rec["father_id"]),
@@ -461,28 +498,29 @@ def _int_map(table: object) -> dict[int, str]:
     return {int(k): str(v) for k, v in table.items()} if isinstance(table, dict) else {}
 
 
-def _keyframe(w: World, path: Path) -> None:
-    data = path.read_bytes()
-    kf = tomllib.loads(data.decode("utf-8"))
+def _keyframe(w: World, kf: dict[str, Any], where: str) -> None:
     extract = kf.get("extract", {})
     if extract.get("format") != EXTRACT_FORMAT:
-        raise AnnalsError(f"{path}: [extract] format must be {EXTRACT_FORMAT!r}")
-    w.extract_digest = f"{int(_canon.xxh3_64(data)):016x}"
+        raise AnnalsError(f"{where}: [extract] format must be {EXTRACT_FORMAT!r}")
+    w.keyframe = str(extract.get("keyframe", "-"))
     w.state_hash = str(extract.get("state_hash", "-"))
+    w.house_ids = sorted(int(h["id"]) for h in kf.get("house", []))
+    w.title_ids = sorted(int(t["id"]) for t in kf.get("title", []))
     for row in kf.get("life_course", []):
         pid = int(row["person_id"])
         exit_tick = row.get("exit_tick")
+        founder = row.get("founder")
         w.kf_life[pid] = LifeRow(
             pid,
+            FOUNDER,
             int(row["sex"]),
             int(row["mother_id"]),
             int(row["father_id"]),
             int(row["birth_tick"]),
             None if exit_tick is None else int(exit_tick),
             f"kf:life/{pid}",
+            None if founder is None else int(founder),
         )
-        if "founder" in row:
-            w.founders[pid] = int(row["founder"])
     for row in kf.get("house_member", []):
         w.members[int(row["person"])] = int(row["house"])
     for row in kf.get("tenure", []):
@@ -498,6 +536,30 @@ def _keyframe(w: World, path: Path) -> None:
     w.tenures.sort(key=lambda t: (t.title, t.start))
 
 
+def _opt(v: int | None) -> str:
+    """``~`` for an absent value, else its decimal form."""
+    return "~" if v is None else str(v)
+
+
+def extract_digest(w: World) -> str:
+    """XXH3-64 of the extract's canonical form: fixed table order, rows sorted by key (R23)."""
+    lines = [f"extract {w.keyframe} {w.state_hash}"]
+    lines += [f"house {h}" for h in w.house_ids]
+    lines += [f"title {t}" for t in w.title_ids]
+    for r in sorted(w.kf_life.values(), key=lambda r: r.person):
+        lines.append(
+            f"life {r.person} {r.sex} {r.mother} {r.father} {r.birth_tick}"
+            f" {_opt(r.exit_tick)} {_opt(r.founder)}"
+        )
+    lines += [f"member {p} {h}" for p, h in sorted(w.members.items())]
+    lines += [
+        f"tenure {t.title} {t.holder} {t.start} {_opt(t.end)}"
+        for t in sorted(w.tenures, key=lambda t: (t.title, t.start))
+    ]
+    data = D_EXTRACT + b"".join(line.encode("ascii") + b"\n" for line in lines)
+    return f"{int(_canon.xxh3_64(data)):016x}"
+
+
 def load_world(directory: Path) -> World:
     """The fixture directory: ``world.toml``, ``names.toml`` and, if present, ``keyframe.toml``."""
     meta = tomllib.loads((directory / "world.toml").read_text(encoding="utf-8"))["world"]
@@ -506,12 +568,14 @@ def load_world(directory: Path) -> World:
     if names_path.exists():
         names = tomllib.loads(names_path.read_text(encoding="utf-8"))
         w.manifest_hash = str(names.get("world", {}).get("manifest_hash", "-"))
+        if not MANIFEST_HASH.fullmatch(w.manifest_hash):
+            raise AnnalsError(f"{names_path}: manifest_hash must be sha256:<64 hex digits>")
         w.persons = _int_map(names.get("persons"))
         w.houses = _int_map(names.get("houses"))
         w.titles = _int_map(names.get("titles"))
     kf_path = directory / "keyframe.toml"
     if kf_path.exists():
-        _keyframe(w, kf_path)
+        _keyframe(w, tomllib.loads(kf_path.read_text(encoding="utf-8")), str(kf_path))
     return w
 
 
@@ -530,7 +594,7 @@ def load_dictionary(registry: Path = REGISTRY, delta: Path | None = REGISTRY_DEL
     return Dictionary(version, verbs, sorted(verbs), list(reg["act_classes"]["ids"]), attrs)
 
 
-# --- designation and houses (annals_v0.md §4; one function for both: R4, R6) ----------------------
+# --- designation and houses (annals_v0.md §4; one function for both: R4, R6, R18) -----------------
 
 
 @dataclass
@@ -544,36 +608,33 @@ class Provenance:
 class Kinship:
     """The life-course rows (channel A first, then the keyframe) and the names, read-only."""
 
-    def __init__(self, world: World, chron: Chronicle) -> None:
-        """Bind the rows a designation may read."""
+    def __init__(self, world: World, chron: Chronicle, *, disambiguate: bool = True) -> None:
+        """Bind the rows a designation may read; the label pool is the run's persons (R28)."""
         self.w = world
         self.c = chron
         self.rows: dict[int, LifeRow] = {**world.kf_life, **chron.life}
-        self.pool: set[int] = set()  # the persons of the annal being rendered (§4 rule 4)
-
-    def label_of(self, pid: int, prov: Provenance) -> str:
-        """``Founder #k`` from the extract, else ``p-`` and the shortest unique hex prefix (R17)."""
-        if pid in self.w.founders:
-            prov.sources.add(f"kf:life/{pid}")
-            return f"Founder #{self.w.founders[pid]}"
-        own = f"{pid:016x}"
-        others = [f"{p:016x}" for p in self.pool if p != pid]
-        n = HEX_PREFIX_MIN
-        while any(o.startswith(own[:n]) for o in others) and n < len(own):
-            n += 1
-        return f"p-{own[:n]}"
+        self.pool: set[int] = (
+            set(world.kf_life) | set(world.members) | set(chron.life) | set(chron.exits)
+        )
+        for ev in chron.events.values():
+            self.pool.update(ev.persons())
+        named = Counter(world.persons[p] for p in self.pool if p in world.persons)
+        self.shared = {n for n, k in named.items() if k > 1} if disambiguate else set()
 
     def row(self, pid: int) -> LifeRow | None:
         """The person's life-course row: channel A's ``LIFE_ENTRY`` first, else the keyframe's."""
         return self.c.life.get(pid) or self.w.kf_life.get(pid)
 
     def house_of(self, pid: int, prov: Provenance) -> int | None:
-        """M7's rule: the keyframe row; else the father's house if he has one; else the mother's."""
+        """§4 rule 4, M7's on_birth: the keyframe row; else the father's house, else the mother's.
+
+        Only a birth during the run walks to a parent; any other origin without a row has none.
+        """
         if pid in self.w.members:
             prov.sources.add(f"kf:member/{pid}")
             return self.w.members[pid]
-        row = self.row(pid)
-        if row is None:
+        row = self.c.life.get(pid)
+        if row is None or row.origin != BORN:
             return None
         prov.sources.add(row.source)
         for parent in (row.father, row.mother):
@@ -581,6 +642,19 @@ class Kinship:
             if house is not None:
                 return house
         return None
+
+    def label_of(self, pid: int, prov: Provenance) -> str:
+        """``Founder #k`` (1-based) from the extract, else ``p-`` and a unique hex prefix."""
+        row = self.w.kf_life.get(pid)
+        if row is not None and row.founder is not None:
+            prov.sources.add(row.source)
+            return f"Founder #{row.founder + 1}"
+        own = f"{pid:016x}"
+        others = [f"{p:016x}" for p in self.pool if p != pid]
+        n = HEX_PREFIX_MIN
+        while any(o.startswith(own[:n]) for o in others) and n < len(own):
+            n += 1
+        return f"p-{own[:n]}"
 
     def rank(self, pid: int, parent: int, sex: int, prov: Provenance) -> int | None:
         """The person's birth order among the parent's children of the same sex, by birth tick."""
@@ -595,12 +669,12 @@ class Kinship:
         return siblings.index(me) + 1
 
     def designate(self, pid: int, prov: Provenance) -> str:
-        """A name; else the Nth son or daughter of a named father, then mother; else the id."""
+        """A name; else the Nth son or daughter of a named father, then mother; else the label."""
         prov.persons.add(pid)
         name = self.w.persons.get(pid)
         if name is not None:
             prov.sources.add(f"name/{pid}")
-            return name
+            return f"{name} ({self.label_of(pid, prov)})" if name in self.shared else name
         row = self.row(pid)
         if row is not None:
             for parent in (row.father, row.mother):
@@ -611,7 +685,7 @@ class Kinship:
                     prov.sources.update({row.source, f"name/{parent}"})
                     prov.persons.add(parent)
                     child = "daughter" if row.sex else "son"
-                    return f"the {ordinal(rank)} {child} of {self.w.persons[parent]}"
+                    return f"the {ordinal(rank)} {child} of {self.designate(parent, Provenance())}"
         return self.label_of(pid, prov)
 
 
@@ -647,13 +721,15 @@ class Renderer:
         world: World,
         chron: Chronicle,
         dictionary: Dictionary,
+        *,
+        disambiguate: bool = True,
     ) -> None:
         """Bind the templates, the world (names, calendar, extract), chronicle and dictionary."""
         self.t = templates
         self.w = world
         self.c = chron
         self.d = dictionary
-        self.kin = Kinship(world, chron)
+        self.kin = Kinship(world, chron, disambiguate=disambiguate)
         self.attr_ids = {name: i for i, (name, _, _) in dictionary.attrs.items()}
         self.used: Counter[str] = Counter()
 
@@ -715,7 +791,9 @@ class Renderer:
         if variant is not None:
             return self.fill(str(variant["label"]), ev, s)
         entry = self.t.labels.get(ev.kind)
-        return self.fill(str(entry["label"]), ev, s) if entry else f"event {ev.id}"
+        if entry is None:
+            raise AnnalsError(f"event {ev.id}: no template or [[label]] names a {ev.kind} (R27)")
+        return self.fill(str(entry["label"]), ev, s)
 
     def _cause_slot(self, kind: str, ev: Event, s: Sentence) -> str:
         found = ev.cause(EDGE_CODES[kind])
@@ -840,12 +918,14 @@ class Renderer:
     # -- groups (annals_v0.md §5) and prologues (§6)
 
     def group_events(self, members: set[int] | None) -> list[Event]:
-        """The group's events in id order: a member's, or castless with a told edge into them."""
+        """The group's events in id order: a member's, or castless with a told edge in (R22)."""
         events = sorted(self.c.events.values(), key=lambda e: e.id)
         if members is None:
             return events
-        chosen = {ev.id for ev in events if set(ev.persons()) & members}
-        chosen |= {ev.id for ev in events if not ev.persons() and ev.triggered_by(chosen)}
+        chosen: set[int] = set()
+        for ev in events:  # ascending ids: a joined castless event counts for later ones
+            if set(ev.persons()) & members or (not ev.persons() and ev.triggered_by(chosen)):
+                chosen.add(ev.id)
         return [ev for ev in events if ev.id in chosen]
 
     def house_members(self, house: int) -> set[int]:
@@ -874,6 +954,13 @@ class Renderer:
         self.used[pid] += 1
         return s
 
+    def _named(self, table: dict[int, str], key: int, what: str) -> str:
+        if key not in table:
+            raise AnnalsError(
+                f"{what} {key} has no name in the names file (R27: no raw id in the text)"
+            )
+        return table[key]
+
     def prologue(self, house: int, members: set[int]) -> list[Sentence]:
         """The house's opening from the keyframe extract: living count, ancestors and tenures."""
         cal = self.w.calendar
@@ -882,14 +969,8 @@ class Renderer:
         )
         prov = Provenance(set(living), {f"house/{house}", *(f"kf:life/{p}" for p in living)})
         count = f"{cardinal(len(living))} living member" + ("" if len(living) == 1 else "s")
-        house_name = self.w.houses.get(house, f"house #{house}")
-        out = [
-            self._prologue_sentence(
-                "prologue.house",
-                {"house": house_name, "living": count},
-                Sentence("", "", 0, prov=prov),
-            )
-        ]
+        values = {"house": self._named(self.w.houses, house, "house"), "living": count}
+        out = [self._prologue_sentence("prologue.house", values, Sentence("", "", 0, prov=prov))]
         for pid in sorted(members):
             row = self.w.kf_life.get(pid)
             if row is None or row.exit_tick is None:
@@ -912,7 +993,7 @@ class Renderer:
             )
             values = {
                 "holder": self.kin.designate(ten.holder, s.prov),
-                "title": self.w.titles.get(ten.title, f"title #{ten.title}"),
+                "title": self._named(self.w.titles, ten.title, "title"),
                 "start_date": full_date(ten.start, cal),
             }
             if ten.end is None:
@@ -952,29 +1033,14 @@ def group_of(r: Renderer, group: str) -> tuple[str, set[int] | None, list[Senten
     house = int(arg)
     members = r.house_members(house)
     return (
-        f"The annals of {r.w.houses.get(house, f'house #{house}')}",
+        f"The annals of {r._named(r.w.houses, house, 'house')}",
         members,
         r.prologue(house, members),
     )
 
 
-def annal_persons(r: Renderer, members: set[int] | None) -> set[int]:
-    """Every person an annal may designate: members, its events' and their causes' cast, fathers."""
-    pool = set(members or ())
-    for ev in r.group_events(members):
-        pool.update(ev.persons())
-        for c, _, _, _, _, told in ev.causes:
-            if told and c in r.c.events:
-                pool.update(r.c.events[c].persons())
-        row = r._father_row(ev) if ev.kind == "BIRTH" else None
-        if row is not None:
-            pool.add(row.father)
-    return pool
-
-
 def render(r: Renderer, group: str) -> Annal:
     """Render one group: a house (``house:<id>``), a line (``line:<pid>``) or all (``year``)."""
-    r.kin.pool = annal_persons(r, group_of(r, group)[1])
     title, members, prologue = group_of(r, group)
     annal = Annal(title, group)
     scope = set(r.t.scope)
@@ -987,7 +1053,7 @@ def render(r: Renderer, group: str) -> Annal:
         rows.append(s.row(len(lines)))
 
     if prologue:
-        lines.extend(("", "## Before the chronicle began"))
+        lines.extend(("", PROLOGUE_HEADING))
         for s in prologue:
             emit(s)
     chosen = r.group_events(members)
@@ -1054,10 +1120,12 @@ def render_group(
     group: str,
     templates: Any,  # noqa: ANN401
     dictionary: Dictionary,
+    *,
+    disambiguate: bool = True,
 ) -> tuple[str, str, Renderer]:
     """Load a fixture directory and render one group: ``(text, sidecar, renderer)``."""
     chron = load_chronicle(world_dir / "chronicle_A.txt", dictionary)
-    r = Renderer(templates, load_world(world_dir), chron, dictionary)
+    r = Renderer(templates, load_world(world_dir), chron, dictionary, disambiguate=disambiguate)
     annal = render(r, group)
     text, side = finish(annal, r, templates_digest(templates.path))
     return text, side, r
@@ -1076,7 +1144,7 @@ def manifest(world: str, groups: dict[str, str], r: Renderer, tdigest: int) -> s
 
 
 def fixture_groups(world: str) -> tuple[str, ...]:
-    """The groups a fixture renders: each house of its extract, a named person's line, the years."""
+    """The groups a fixture renders: each house of the extract, the least named id's line, years."""
     w = load_world(FIXTURES / world)
     groups = tuple(f"house:{h}" for h in sorted(set(w.members.values())))
     if w.members:
@@ -1117,64 +1185,108 @@ def _plant_templates(t: Any, control: Control) -> None:  # noqa: ANN401
         natural["text"] = str(natural["text"]) + " The title passed to {state.title.holder}."
 
 
+def _plant_chronicle(chron: Chronicle, control: Control) -> None:
+    """The fixture controls of check 5 (R26): a deposition on day 1; a claim with no cause."""
+    for ev in list(chron.events.values()):
+        if control.name == "fixture-deposed-day-one" and ev.kind == "DEPOSED":
+            chron.events[ev.id] = dataclasses.replace(ev, tick=ev.tick - MINUTES_PER_DAY)
+        if control.name == "fixture-claim-untriggered" and ev.kind == "CLAIM_CREATED":
+            chron.events[ev.id] = dataclasses.replace(ev, causes=())
+
+
+def _row_fields(line: str) -> list[str]:
+    return line.split(" ")
+
+
 def _plant_sidecar(side: str, control: Control) -> str:
-    """The sidecar mutants of REV-SPR-029 F2 (P1, P3, P4, P5, P6), applied to the file's rows."""
+    """The sidecar mutants of REV-SPR-029 F2 and G2: P1, P3, P4, P5, P6, P7b, P12, P13."""
     lines = side.splitlines()
-    rows = [i for i, line in enumerate(lines) if line.startswith("S ")]
-    if len(rows) < MIN_ROWS_FOR_MUTANTS:
+    srows = [i for i, line in enumerate(lines) if line.startswith("S ")]
+    prows = [i for i, line in enumerate(lines) if line.startswith("P ")]
+    if len(srows) < MIN_ROWS_FOR_MUTANTS:
         return side
-    first, second = rows[0], rows[1]
-    tag, n, tid, ver, events, persons, sources = lines[first].split(" ")
+    first, second = srows[0], srows[1]
+    f = _row_fields(lines[first])
     match control.name:
-        case "row-drops-own":
-            own = min(int(e) for e in events[1:-1].split(","))
-            events = "[" + ",".join(e for e in events[1:-1].split(",") if int(e) != own) + "]"
-        case "body-as-prologue":
-            tag, sources = "P", "[kf:life/1]"
-        case "missing-kf-source":
-            prow = next((i for i, line in enumerate(lines) if line.startswith("P ")), first)
-            lines[prow] = lines[prow].rsplit(" ", 1)[0] + " [kf:life/99999]"
-            return "\n".join(lines) + "\n"
-        case "unrelated-event":
-            events = events[:-1] + ",999999]"
-        case "rows-swapped":
-            a, b = lines[first].split(" "), lines[second].split(" ")
-            lines[first] = " ".join([a[0], a[1], *b[2:]])
-            lines[second] = " ".join([b[0], b[1], *a[2:]])
-            return "\n".join(lines) + "\n"
+        case "row-drops-own":  # P1: a row cites its cause but not its own event
+            i = next(i for i in srows if "," in _row_fields(lines[i])[4])
+            f = _row_fields(lines[i])
+            ids = [int(e) for e in f[4][1:-1].split(",")]
+            f[4] = "[" + ",".join(str(e) for e in ids if e != max(ids)) + "]"
+            lines[i] = " ".join(f)
+        case "body-as-prologue":  # P3: a body sentence retagged as a prologue row
+            f[0], f[6] = "P", "[kf:life/1]"
+            lines[first] = " ".join(f)
+        case "missing-kf-source":  # P4: a prologue row citing a keyframe row that does not exist
+            i = prows[0] if prows else first
+            lines[i] = lines[i].rsplit(" ", 1)[0] + " [kf:life/99999]"
+        case "unrelated-event":  # P5: an existing, unrelated event cited
+            own = int(f[4][1:-1].split(",")[-1])
+            f[4] = f[4][:-1] + f",{0 if own != 0 else 1}]"
+            lines[first] = " ".join(f)
+        case "rows-swapped":  # P6: two rows with their contents exchanged
+            a, b = _row_fields(lines[first]), _row_fields(lines[second])
+            lines[first], lines[second] = " ".join([*a[:2], *b[2:]]), " ".join([*b[:2], *a[2:]])
+        case "prologue-altered" if prows:  # P12: a prologue row's template relabelled
+            p = _row_fields(lines[prows[0]])
+            p[2] = "prologue.ancestor" if p[2] != "prologue.ancestor" else "prologue.house"
+            lines[prows[0]] = " ".join(p)
+        case "foreign-root" if prows:  # P13: another person cited as the prologue's root
+            p = _row_fields(lines[prows[0]])
+            p[5] = "[1]"
+            lines[prows[0]] = " ".join(p)
+        case "forged-source":  # P7b: a source forged on a body row
+            f[6] = f[6][:-1] + (",forged/1]" if f[6] != "[]" else "forged/1]")
+            lines[first] = " ".join(f)
         case _:
             return side
-    lines[first] = " ".join([tag, n, tid, ver, events, persons, sources])
     return "\n".join(lines) + "\n"
 
 
-Row = tuple[str, str, int, list[int], list[int], list[str]]
-
-
-def _parse_rows(side: str) -> dict[int, Row]:
-    rows: dict[int, Row] = {}
-    for line in side.splitlines():
-        if line[:2] not in {"S ", "P "}:
+def _compare_rows(got: list[str], want: list[str], what: str) -> list[str]:
+    """Field by field, in list order: the first field that differs, by name (R19)."""
+    names = ("tag", "line", "template", "version", "events", "persons", "sources")
+    out: list[str] = []
+    for g, w in zip(got, want, strict=False):
+        gf, wf = _row_fields(g), _row_fields(w)
+        if gf == wf:
             continue
-        tag, n, tid, ver, events, persons, sources = line.split(" ")
-        rows[int(n)] = (
-            tag,
-            tid,
-            int(ver),
-            [int(e) for e in events[1:-1].split(",") if e],
-            [int(p) for p in persons[1:-1].split(",") if p],
-            [s for s in sources[1:-1].split(",") if s],
-        )
-    return rows
+        for name, a, b in zip(names, gf, wf, strict=False):
+            if a != b:
+                out.append(f"{what} line {gf[1]}: {name} differs: {a} where the render gives {b}")
+                break
+        else:
+            out.append(f"{what} line {gf[1]}: the row differs: {g!r} where the render gives {w!r}")
+    if len(got) != len(want):
+        out.append(f"{what}: {len(got)} rows where the render gives {len(want)}")
+    return out
 
 
-def _expected_row(r: Renderer, ev: Event) -> tuple[str, set[int], set[int], str]:
-    """From the chronicle and the templates alone: the variant, cited events, persons and text."""
-    variant = r.variant(ev)
-    assert variant is not None
-    s = Sentence("", "", 0, {ev.id})
-    text = r.fill(str(variant["text"]), ev, s)  # the same substitution, into a scratch sentence
-    return str(variant["id"]), s.events, s.prov.persons, text[:1].upper() + text[1:]
+def _check_prologue_rules(text: str, side: str, w: World) -> list[str]:
+    """D50 as ruled: ``P`` rows before the first year heading, no events, existing keyframe rows."""
+    lines = text.splitlines()
+    years = [
+        n for n, line in enumerate(lines, 1) if line.startswith("## ") and line != PROLOGUE_HEADING
+    ]
+    first_year = years[0] if years else len(lines) + 1
+    out: list[str] = []
+    for line in side.splitlines():
+        if not line.startswith("P "):
+            continue
+        _, n, _, _, events, _, sources = _row_fields(line)
+        if int(n) >= first_year:
+            out.append(f"line {n}: a prologue row after the first year heading")
+        if events != "[]":
+            out.append(f"line {n}: a prologue row cites events {events}")
+        kf = [s for s in sources[1:-1].split(",") if s.startswith("kf:")]
+        if not kf:
+            out.append(f"line {n}: a prologue sentence cites no keyframe row")
+        out += [
+            f"line {n}: source {s} is not a row of the keyframe extract"
+            for s in kf
+            if not _kf_source_exists(s, w)
+        ]
+    return out
 
 
 def _kf_source_exists(source: str, w: World) -> bool:
@@ -1186,85 +1298,50 @@ def _kf_source_exists(source: str, w: World) -> bool:
     if kind == "kf:tenure":
         title, _, start = rest.partition("/")
         return any(t.title == int(title) and t.start == int(start) for t in w.tenures)
-    return True
-
-
-def _check_prologue_row(n: int, row: Row, first_year: int) -> list[str]:
-    _, _, _, events, _, sources = row
-    out = []
-    if n >= first_year:
-        out.append(f"line {n}: a prologue row after the first year heading")
-    if events:
-        out.append(f"line {n}: a prologue row cites events {events}")
-    if not any(s.startswith("kf:") for s in sources):
-        out.append(f"line {n}: a prologue sentence cites no keyframe row")
-    return out
-
-
-def _check_body_row(n: int, line: str, row: Row, r: Renderer) -> tuple[list[str], int | None]:
-    _, tid, _, events, persons, _ = row
-    kind_of = {str(e["id"]): kind for kind, entries in r.t.by_kind.items() for e in entries}
-    own = [e for e in events if e in r.c.events and kind_of.get(tid) == r.c.events[e].kind]
-    if len(own) != 1:
-        return [
-            f"line {n}: the row's events {events} hold no single own event of template {tid}'s kind"
-        ], None
-    out = []
-    want_tid, want_events, want_persons, want_text = _expected_row(r, r.c.events[own[0]])
-    if tid != want_tid:
-        out.append(f"line {n}: template {tid} where event {own[0]} renders through {want_tid}")
-    if line != want_text:
-        out.append(f"line {n}: the text is not the rendering of event {own[0]} through {tid}")
-    if set(events) != want_events:
-        out.append(
-            f"line {n}: events {sorted(events)} differ from the own event and its cited told "
-            f"causes {sorted(want_events)}"
-        )
-    if set(persons) != want_persons:
-        out.append(
-            f"line {n}: persons {sorted(persons)} differ from the cast and the parents designation "
-            f"reaches {sorted(want_persons)}"
-        )
-    return out, own[0]
+    return False
 
 
 def check_provenance(text: str, side: str, r: Renderer, group: str) -> list[str]:
-    """V-NAR-05 (R2): the sidecar re-derived from the chronicle, the templates and the extract."""
-    rows = _parse_rows(side)
-    problems: list[str] = []
-    lines = text.splitlines()
-    year_headings = [
-        n for n, line in enumerate(lines, 1) if line.startswith("## ") and "chronicle" not in line
-    ]
-    first_year = year_headings[0] if year_headings else len(lines) + 1
-    seen_own: Counter[int] = Counter()
-    for n, line in enumerate(lines, 1):
-        if not line or line.startswith("#"):
-            continue
-        row = rows.pop(n, None)
-        if row is None:
-            problems.append(f"line {n} has no sidecar row: {line!r}")
-            continue
-        if row[0] == "P":
-            problems += _check_prologue_row(n, row, first_year)
-        else:
-            found, own = _check_body_row(n, line, row, r)
-            problems += found
-            if own is not None:
-                seen_own[own] += 1
-        problems += [
-            f"line {n}: source {s} is not a row of the keyframe extract"
-            for s in row[5]
-            if not _kf_source_exists(s, r.w)
-        ]
-    problems.extend(f"sidecar row for line {n} has no sentence" for n in sorted(rows))
-    _, members, _ = group_of(r, group)
-    for ev in r.group_events(members):
-        if ev.kind in set(r.t.scope) and seen_own[ev.id] != 1:
-            problems.append(
-                f"event {ev.id} ({ev.kind}) is the own event of {seen_own[ev.id]} rows, not one"
+    """V-NAR-05 (R19): the group re-rendered from its inputs; text and sidecar compared in order."""
+    want_text, want_side = finish(render(r, group), r, templates_digest(r.t.path))
+    out: list[str] = []
+    got_lines, want_lines = text.splitlines(), want_text.splitlines()
+    rows = {int(_row_fields(line)[1]) for line in side.splitlines() if line[:2] in {"S ", "P "}}
+    for n, (g, w) in enumerate(zip(got_lines, want_lines, strict=False), 1):
+        if g != w:
+            out.append(
+                f"line {n}: the text differs from the render: {g!r} where the render gives {w!r}"
             )
-    return problems
+            break
+    for n in range(len(want_lines) + 1, len(got_lines) + 1):
+        line = got_lines[n - 1]
+        out.append(
+            f"line {n} has no sidecar row: {line!r}"
+            if n not in rows
+            else f"line {n}: an extra line: {line!r}"
+        )
+    got_side, want_side_lines = side.splitlines(), want_side.splitlines()
+    if got_side[:1] != want_side_lines[:1]:
+        got_head, want_head = (
+            dict(t.split("=", 1) for t in got_side[0].split(" ")[1:]),
+            dict(t.split("=", 1) for t in want_side_lines[0].split(" ")[1:]),
+        )
+        key = next((k for k in want_head if got_head.get(k) != want_head[k]), "the header")
+        out.append(
+            f"header: {key} differs: {got_head.get(key)}"
+            f" where the render gives {want_head.get(key)}"
+        )
+    rows_got = [line for line in got_side if line[:2] in {"S ", "P "}]
+    rows_want = [line for line in want_side_lines if line[:2] in {"S ", "P "}]
+    out += _compare_rows(rows_got, rows_want, "sidecar")
+    for what in ("# omitted:", "# castless:", "digest "):
+        gl = next((line for line in got_side if line.startswith(what)), None)
+        wl = next((line for line in want_side_lines if line.startswith(what)), None)
+        if gl != wl:
+            out.append(
+                f"sidecar: {what.strip(' :#')} line differs: {gl!r} where the render gives {wl!r}"
+            )
+    return out + _check_prologue_rules(text, side, r.w)
 
 
 def check_calendar() -> list[str]:
@@ -1297,19 +1374,34 @@ def check_calendar() -> list[str]:
         (32, "thirty-second"),
         (100, "one hundredth"),
         (111, "one hundred and eleventh"),
+        (1000, "one thousandth"),
+        (1001, "one thousand and first"),
+        (1100, "one thousand one hundredth"),
+        (2024, "two thousand and twenty-fourth"),
+        (999_999, "nine hundred and ninety-nine thousand nine hundred and ninety-ninth"),
     ]
     out += [
         f"ordinal({n}) = {ordinal(n)!r}, not {want!r}" for n, want in words if ordinal(n) != want
     ]
-    cardinals = ((0, "zero"), (1, "one"), (21, "twenty-one"))
+    cardinals = (
+        (0, "zero"),
+        (1, "one"),
+        (21, "twenty-one"),
+        (1000, "one thousand"),
+        (1001, "one thousand and one"),
+        (1100, "one thousand one hundred"),
+        (2024, "two thousand and twenty-four"),
+        (999_999, "nine hundred and ninety-nine thousand nine hundred and ninety-nine"),
+    )
     out += [f"cardinal({n}) = {cardinal(n)!r}" for n, want in cardinals if cardinal(n) != want]
     if q8_8(16128) != "63.0" or q8_8(64) != "0.25" or q8_8(-384) != "-1.5":
         out.append("q8_8 rendering")
-    try:
-        Calendar(364, "Y")
-        out.append("a 364-day calendar was accepted")
-    except AnnalsError:
-        pass
+    for bad in (lambda: Calendar(364, "Y"), lambda: cardinal(WORDS_LIMIT)):
+        try:
+            bad()
+            out.append("a 364-day calendar or a number past the words' range was accepted")
+        except AnnalsError:
+            pass
     return out
 
 
@@ -1328,8 +1420,8 @@ def check_dictionary(chron: Chronicle, d: Dictionary) -> list[str]:
         got = (rec["verb_id"], rec["act_classes"], rec["tellability"])
         if got != want:
             out.append(
-                f"event {rec['event_id']} ({verb}): (verb_id, act_classes, tellability) {got} "
-                f"is not {want}"
+                f"event {rec['event_id']} ({verb}): (verb_id, act_classes, tellability)"
+                f" {got} is not {want}"
             )
         out += [
             f"event {rec['event_id']}: snapshot attribute {a} is unknown"
@@ -1416,7 +1508,11 @@ class History:
             self.holders[title] = None
 
     def deposed(self, ev: Event, title: int, actor: int | None, target: int | None) -> None:
-        """A deposer holds an unrenounced claim; the deposed gains one in the instant."""
+        """A deposition on day 2 or later; the deposer holds a claim; the deposed gains one."""
+        if self.cal.date(ev.tick)[2] < DEPOSITION_FIRST_DAY:
+            self.problems.append(
+                f"event {ev.id}: a deposition on day 1 (M7's timer fires on days 2 to the last)"
+            )
         if actor is not None and title not in self.claims.get(actor, set()):
             self.problems.append(
                 f"event {ev.id}: the deposer holds no unrenounced claim to title {title}"
@@ -1426,7 +1522,7 @@ class History:
         self.holders[title] = None
 
     def claim(self, ev: Event, title: int, actor: int | None) -> None:
-        """A claim arises from a succession, a deposition or an interregnum it is triggered by."""
+        """A claim arises only from a succession that passed the heir over or from a deposition."""
         causes = {
             self.c.events[c].kind
             for c, code, _, _, _, told in ev.causes
@@ -1434,8 +1530,8 @@ class History:
         }
         if not causes & CLAIM_CAUSES:
             self.problems.append(
-                f"event {ev.id}: a claim created with no triggered edge to a succession, "
-                "deposition or interregnum"
+                f"event {ev.id}: a claim created with no triggered edge to a succession or a "
+                "deposition (M7's when)"
             )
         if actor is not None:
             self.claims.setdefault(actor, set()).add(title)
@@ -1493,12 +1589,25 @@ class Setup:
     golden: Path
 
 
+def annal_persons(r: Renderer, members: set[int] | None) -> set[int]:
+    """Every person an annal designates: members, its events' and their causes' cast, fathers."""
+    pool = set(members or ())
+    for ev in r.group_events(members):
+        pool.update(ev.persons())
+        for c, _, _, _, _, told in ev.causes:
+            if told and c in r.c.events:
+                pool.update(r.c.events[c].persons())
+        row = r._father_row(ev) if ev.kind == "BIRTH" else None
+        if row is not None:
+            pool.add(row.father)
+    return pool
+
+
 def _check_injective(r: Renderer, group: str) -> list[str]:
-    """No two persons of one annal share a designation (R6)."""
-    persons = annal_persons(r, group_of(r, group)[1])
+    """No two persons of one annal share a designation (R6, R24)."""
     seen: dict[str, int] = {}
     out: list[str] = []
-    for pid in sorted(persons):
+    for pid in sorted(annal_persons(r, group_of(r, group)[1])):
         text = r.kin.designate(pid, Provenance())
         if text in seen:
             out.append(f"{group}: persons {seen[text]} and {pid} share the designation {text!r}")
@@ -1506,14 +1615,57 @@ def _check_injective(r: Renderer, group: str) -> list[str]:
     return out
 
 
+def _check_shared_name(d: Dictionary) -> list[str]:
+    """A planted shared name is disambiguated with each person's compact label (R24)."""
+    world = load_world(FIXTURES / "ashcombe")
+    chron = load_chronicle(FIXTURES / "ashcombe" / "chronicle_A.txt", d)
+    named = sorted(world.persons)
+    world.persons[named[1]] = world.persons[named[0]]
+    kin = Kinship(world, chron)
+    name = world.persons[named[0]]
+    got = [kin.designate(p, Provenance()) for p in named[:2]]
+    want = [f"{name} ({kin.label_of(p, Provenance())})" for p in named[:2]]
+    if got != want or got[0] == got[1]:
+        return [f"a shared name {name!r} rendered as {got[0]!r} and {got[1]!r}, not {want}"]
+    return []
+
+
+def _other_process(world: str, group: str, seed: str) -> tuple[str, str]:
+    """Render ``group`` in another interpreter under ``PYTHONHASHSEED=seed`` (R29)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        text, side = Path(tmp) / "text", Path(tmp) / "side"
+        argv = [
+            sys.executable,
+            "-B",
+            "-s",
+            str(Path(__file__)),
+            "render",
+            "--world",
+            str(FIXTURES / world),
+            "--group",
+            group,
+            "--out",
+            str(text),
+            "--sidecar-out",
+            str(side),
+        ]
+        env = {"PYTHONHASHSEED": seed, "PATH": os.environ.get("PATH", "")}
+        rc = os.spawnve(os.P_WAIT, sys.executable, argv, env)
+        if rc != 0:
+            raise AnnalsError(f"the render in another process exited {rc}")
+        return text.read_text(encoding="utf-8"), side.read_text(encoding="utf-8")
+
+
 def _render_one(run: Run, setup: Setup, world: str, group: str) -> tuple[str, Renderer]:
-    """Render a group twice, plant the control, run the per-group checks; the sidecar's digest."""
+    """Render a group, plant the control, run the per-group checks; return the sidecar's digest."""
     if setup.control.name == "network-import":
         importlib.import_module("urllib.request")
     text, side, r = render_group(FIXTURES / world, group, setup.t, setup.d)
-    again = render_group(FIXTURES / world, group, setup.t, setup.d)
-    if (again[0], again[1]) != (text, side):
-        run.determinism.append(f"{world} {group}: two renders differ")
+    for seed in HASH_SEEDS:
+        if _other_process(world, group, seed) != (text, side):
+            run.determinism.append(
+                f"{world} {group}: the render under PYTHONHASHSEED={seed} differs"
+            )
     if setup.control.name == "no-event-id":
         text += PLANTED_LINE + "\n"
     side = _plant_sidecar(side, setup.control)
@@ -1565,13 +1717,29 @@ def check_modules() -> list[str]:
     ]
 
 
-def _check_fixtures(d: Dictionary) -> list[str]:
+def _check_fixtures(d: Dictionary, control: Control) -> list[str]:
     problems: list[str] = []
     for world in FIXTURE_WORLDS:
         w = load_world(FIXTURES / world)
         chron = load_chronicle(FIXTURES / world / "chronicle_A.txt", d)
+        _plant_chronicle(chron, control)
         problems += [f"{world}: {p}" for p in check_dictionary(chron, d) + History(chron, w).run()]
     return problems
+
+
+def check_extract_canonical() -> list[str]:
+    """R23: the extract digest does not depend on the order of the TOML's rows."""
+    path = FIXTURES / "ashcombe" / "keyframe.toml"
+    kf = tomllib.loads(path.read_text(encoding="utf-8"))
+    straight = World("x", Calendar(360, "Y"))
+    _keyframe(straight, kf, str(path))
+    shuffled = World("x", Calendar(360, "Y"))
+    _keyframe(
+        shuffled, {k: (v[::-1] if isinstance(v, list) else v) for k, v in kf.items()}, str(path)
+    )
+    if straight.extract_digest != shuffled.extract_digest:
+        return ["the extract digest changed when the rows were reordered"]
+    return []
 
 
 def self_test(control: Control, golden: Path) -> Run:
@@ -1590,14 +1758,37 @@ def self_test(control: Control, golden: Path) -> Run:
         _render_world(run, setup, world)
     run.results.insert(0, ("1. provenance (V-NAR-05)", run.provenance))
     run.results.insert(2, ("3. no model (V-NAR-07)", check_imports() + check_modules()))
-    run.add("5. the fixtures: the dictionary, a possible history", _check_fixtures(setup.d))
-    run.add("6. determinism (byte-equal renders, the digest recomputes)", run.determinism)
+    run.add(
+        "5. the fixtures: the dictionary, a possible history", _check_fixtures(setup.d, control)
+    )
+    run.add("6. determinism (two other processes, the digest recomputes)", run.determinism)
     unexercised = [
         f"kind {k} is not exercised by any fixture" for k in t.scope if k not in run.kinds_used
     ]
     run.add("7. coverage: every in-scope kind rendered", unexercised)
-    run.add("9. designation is injective", run.injective)
+    shared = (
+        _check_shared_name(setup.d)
+        if control.name != "shared-name"
+        else _shared_name_control(setup.d)
+    )
+    run.add("9. designation is injective", run.injective + shared)
+    run.add("10. the extract digest is canonical", check_extract_canonical())
     return run
+
+
+def _shared_name_control(d: Dictionary) -> list[str]:
+    """The ``shared-name`` control: two persons named Maud with disambiguation off (R24)."""
+    world = load_world(FIXTURES / "ashcombe")
+    named = sorted(world.persons)
+    world.persons[named[1]] = world.persons[named[0]]
+    r = Renderer(
+        _lint.load_templates(TEMPLATES),
+        world,
+        load_chronicle(FIXTURES / "ashcombe" / "chronicle_A.txt", d),
+        d,
+        disambiguate=False,
+    )
+    return _check_injective(r, "year")
 
 
 def write_golden(golden: Path) -> None:
@@ -1647,6 +1838,19 @@ def _report(run: Run, t: Any, control: Control) -> int:  # noqa: ANN401
     return EXIT_OK
 
 
+def _render_command(args: argparse.Namespace) -> int:
+    text, side, _ = render_group(
+        args.world, args.group, _lint.load_templates(TEMPLATES), load_dictionary()
+    )
+    if args.out is not None:
+        args.out.write_text(text, encoding="utf-8")
+    if args.sidecar_out is not None:
+        args.sidecar_out.write_text(side, encoding="utf-8")
+    if args.out is None and args.sidecar_out is None:
+        sys.stdout.write(side if args.sidecar else text)
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     """Command line: ``--check``, ``--write``, ``render`` or ``verify``."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
@@ -1655,20 +1859,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--golden-dir", type=Path, default=GOLDEN)
     parser.add_argument("--control", choices=CONTROLS)
     sub = parser.add_subparsers(dest="command")
-    rp = sub.add_parser("render", help="render one group of a fixture directory to stdout")
+    rp = sub.add_parser("render", help="render one group of a fixture directory")
     rp.add_argument("--world", type=Path, required=True)
     rp.add_argument("--group", default="year")
     rp.add_argument("--sidecar", action="store_true", help="print the sidecar instead of the text")
+    rp.add_argument("--out", type=Path, help="write the text here instead of stdout")
+    rp.add_argument("--sidecar-out", type=Path, help="write the sidecar here")
     vp = sub.add_parser("verify", help="recompute a committed sidecar's digest")
     vp.add_argument("--text", type=Path, required=True)
     vp.add_argument("--sidecar", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "render":
-        text, side, _ = render_group(
-            args.world, args.group, _lint.load_templates(TEMPLATES), load_dictionary()
-        )
-        sys.stdout.write(side if args.sidecar else text)
-        return EXIT_OK
+        return _render_command(args)
     if args.command == "verify":
         problems = verify(args.text, args.sidecar)
         print("\n".join(problems) if problems else f"OK: {args.sidecar} digest recomputes")

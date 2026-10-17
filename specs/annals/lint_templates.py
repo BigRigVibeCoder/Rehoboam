@@ -44,20 +44,15 @@ CAUSE_KINDS = ("triggered", "contingent", "motivated_by")
 EDGE_KINDS = frozenset(CAUSE_KINDS)
 WHEN_KEYS = frozenset({"has", "lacks", "payload", "edge", "motive"})
 MOTIVE_CONDITIONS = frozenset({"named", "unnamed"})
-PROLOGUE_SLOTS = frozenset(
-    {
-        "house",
-        "living",
-        "person",
-        "birth_date",
-        "death_date",
-        "holder",
-        "title",
-        "start_date",
-        "end_date",
-    }
-)
-PROLOGUE_IDS = ("prologue.house", "prologue.ancestor", "prologue.tenure", "prologue.tenure.open")
+# Each prologue template has its own vocabulary of keyframe-extract slots (REV-SPR-029 R27).
+PROLOGUE_SLOTS: dict[str, frozenset[str]] = {
+    "prologue.house": frozenset({"house", "living"}),
+    "prologue.ancestor": frozenset({"person", "birth_date", "death_date"}),
+    "prologue.tenure": frozenset({"holder", "title", "start_date", "end_date"}),
+    "prologue.tenure.open": frozenset({"holder", "title", "start_date"}),
+}
+PROLOGUE_IDS = tuple(PROLOGUE_SLOTS)
+CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 SLOT_RE = re.compile(r"[a-z_]+(?:\.[a-zA-Z_]+)*")
 PAYLOAD_CLAUSE = re.compile(r"Payload: \[[^\]]*\]")
 WITNESS = "witness"
@@ -119,6 +114,7 @@ class Templates:
     by_kind: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     labels: dict[str, dict[str, Any]] = field(default_factory=dict)
     prologue: dict[str, dict[str, Any]] = field(default_factory=dict)
+    problems: list[str] = field(default_factory=list)  # found while loading (duplicate labels)
 
 
 def slot_fields(text: str) -> list[tuple[str, str | None, str | None]]:
@@ -239,7 +235,10 @@ def load_templates(path: Path = TEMPLATES) -> Templates:
             t.by_kind.setdefault(str(entry.get("kind", "")), []).append(entry)
     for entry in raw.get("label", []):
         if isinstance(entry, dict):
-            t.labels[str(entry.get("kind", ""))] = entry
+            kind = str(entry.get("kind", ""))
+            if kind in t.labels:
+                t.problems.append(f"[[label]] {kind}: duplicate kind")
+            t.labels[kind] = entry
     for entry in raw.get("prologue", []):
         if isinstance(entry, dict):
             t.prologue[str(entry.get("id", ""))] = entry
@@ -422,7 +421,7 @@ def _slot_problem(slot: Slot, kind: str, emit: Emit, t: Templates, *, label: boo
 def _check_text(text: object, kind: str, emit: Emit, t: Templates, *, label: bool) -> list[str]:
     if not isinstance(text, str) or not text:
         return ["text must be a non-empty string"]
-    out: list[str] = []
+    out: list[str] = _control_chars(text)
     try:
         fields = slot_fields(text)
     except ValueError as e:
@@ -479,6 +478,12 @@ def _check_when(when: object, kind: str, emit: Emit, t: Templates) -> list[str]:
     return out
 
 
+def _control_chars(text: str) -> list[str]:
+    """A control character in a text or label is refused (R27: annals are plain lines)."""
+    m = CONTROL_CHARS.search(text)
+    return [] if m is None else [f"text carries a control character U+{ord(m.group()):04X}"]
+
+
 def _check_templates(t: Templates, emits: dict[str, Emit], errs: list[str]) -> None:
     seen: set[str] = set()
     for kind, entries in t.by_kind.items():
@@ -512,7 +517,7 @@ def _check_labels(t: Templates, emits: dict[str, Emit], errs: list[str]) -> None
         if emit is None:
             errs.append(f"[[label]] {kind}: no system declares it in [[emits]]")
             continue
-        if kind in t.scope:
+        if kind in t.scope and kind in t.by_kind:  # a kind with no template is reported once
             errs.append(f"[[label]] {kind}: an in-scope kind takes its label from its templates")
         if not isinstance(entry.get("version"), int):
             errs.append(f"[[label]] {kind}: version must be an integer")
@@ -531,17 +536,25 @@ def _check_prologue(t: Templates, errs: list[str]) -> None:
         if pid not in t.prologue:
             errs.append(f"prologue template {pid} is missing")
     for pid, entry in t.prologue.items():
+        if pid not in PROLOGUE_SLOTS:
+            errs.append(f"prologue template {pid}: not a known prologue id {list(PROLOGUE_IDS)}")
+            continue
+        if not isinstance(entry.get("version"), int):
+            errs.append(f"prologue template {pid}: version must be an integer")
         text = entry.get("text")
-        fields = slot_fields(text) if isinstance(text, str) else []
-        for name, conversion, spec in fields:
+        if not isinstance(text, str) or not text:
+            errs.append(f"prologue template {pid}: text must be a non-empty string")
+            continue
+        errs.extend(f"prologue template {pid}: {p}" for p in _control_chars(text))
+        for name, conversion, spec in slot_fields(text):
             if conversion is not None or spec:
                 errs.append(
                     f"prologue template {pid}: slot {name!r} carries a conversion or format spec"
                 )
-            elif name not in PROLOGUE_SLOTS:
+            elif name not in PROLOGUE_SLOTS[pid]:
                 errs.append(
-                    f"prologue template {pid}: slot {name!r} is not in the keyframe-extract "
-                    f"vocabulary {sorted(PROLOGUE_SLOTS)}"
+                    f"prologue template {pid}: slot {name!r} is not in its vocabulary "
+                    f"{sorted(PROLOGUE_SLOTS[pid])}"
                 )
 
 
@@ -549,7 +562,7 @@ def check(t: Templates, specs: Specs | dict[str, Emit], reg: dict[str, Any]) -> 
     """Every problem of the template set, in a stable order (empty when it passes)."""
     if isinstance(specs, dict):
         specs = Specs(specs)
-    errs: list[str] = list(specs.problems)
+    errs: list[str] = list(specs.problems) + list(t.problems)
     _check_meta(t, errs)
     _check_enums(t, reg, specs, errs)
     _check_payloads(t, specs.emits, errs)

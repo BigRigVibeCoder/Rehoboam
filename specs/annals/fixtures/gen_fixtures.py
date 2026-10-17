@@ -202,26 +202,41 @@ P = {
         "ysolde",
         "cedric",
         "wulf",
+        "wynn",
+        "orm",
+        "xan",
+        "tilda",
+        "bram",
     )
 }
 HOUSE = {"ashcombe": pid("house:ashcombe"), "thorne": pid("house:thorne")}
 # birth years (index; negative before the epoch) of the genesis persons, and the dead's death years
 Date = tuple[int, int, int]
+# The order is the founder order: founder k is the k-th entry, the manifest's cast first (as
+# rh-worldgen issues founder(seed, k), SPR-019 D-02; REV-SPR-029 R26), then the back-fill.
 GENESIS: dict[str, tuple[int, str | int, str | int, Date, Date | None, str | None]] = {
     # name: (sex, mother, father, birth (y, m, d), death (y, m, d) or None, house or None)
-    "ash_root": (MALE, 0, 0, (-60, 1, 1), (-12, 1, 1), "ashcombe"),
-    "ash_root_wife": (FEMALE, 0, 0, (-58, 1, 1), (-15, 1, 1), None),
     "edric": (MALE, "ash_root_wife", "ash_root", (-38, 3, 15), None, "ashcombe"),
     "maud": (FEMALE, 0, 0, (-36, 3, 15), None, None),
-    "osric": (MALE, "maud", "edric", (-17, 3, 15), None, "ashcombe"),
-    "aldwin": (MALE, "maud", "edric", (-14, 5, 2), None, "ashcombe"),
-    "thorne_root": (MALE, 0, 0, (-65, 1, 1), (-8, 1, 1), "thorne"),
-    "thorne_root_wife": (FEMALE, 0, 0, (-62, 1, 1), (-3, 1, 1), None),
     "hugh": (MALE, "thorne_root_wife", "thorne_root", (-40, 3, 15), None, "thorne"),
     "alys": (FEMALE, 0, 0, (-37, 3, 15), None, None),
+    "ash_root": (MALE, 0, 0, (-60, 1, 1), (-12, 1, 1), "ashcombe"),
+    "ash_root_wife": (FEMALE, 0, 0, (-58, 1, 1), (-15, 1, 1), None),
+    "osric": (MALE, "maud", "edric", (-17, 3, 15), None, "ashcombe"),
+    "aldwin": (MALE, "maud", "edric", (-14, 5, 2), None, "ashcombe"),
+    "wynn": (FEMALE, "maud", "edric", (-19, 2, 2), None, "ashcombe"),
+    "orm": (MALE, 0, 0, (-22, 4, 4), None, None),
+    "xan": (MALE, "wynn", "orm", (-1, 6, 6), None, None),
+    "thorne_root": (MALE, 0, 0, (-65, 1, 1), (-8, 1, 1), "thorne"),
+    "thorne_root_wife": (FEMALE, 0, 0, (-62, 1, 1), (-3, 1, 1), None),
     "giles": (MALE, "alys", "hugh", (-20, 7, 7), None, "thorne"),
     "ysolde": (FEMALE, "alys", "hugh", (-16, 3, 15), None, "thorne"),
+    "tilda": (FEMALE, "alys", "hugh", (-5, 9, 9), None, "thorne"),
 }
+# Wynn, Orm, Xan and Tilda are the house-walk probe (REV-SPR-029 R18, annals_v0.md §4 rule 4):
+# Xan, a genesis grandson of Edric through a daughter, has no house_member row, so no house (no
+# walk into a genesis person's ancestry); his in-run son by Tilda walks to his father (no house)
+# and then to his mother, House Thorne.
 TENURES = (  # (title, holder, start (y, m, d), end (y, m, d) or None)
     (LORDSHIP, "ash_root", (-40, 1, 1), (-12, 1, 1)),
     (LORDSHIP, "edric", (-12, 1, 1), None),
@@ -361,9 +376,18 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
     tk = t(18, 8, 8)
     e_alys = seg.event(tk, VITAL, "DEATH", (ACCIDENT,), ((TARGET, P["alys"]),))
     seg.exit(tk, P["alys"], ACCIDENT, e_alys)
+    # y20-21: the house-walk probe (R18): Xan, houseless, marries Tilda of Thorne; their son is
+    # born the next year and walks to House Thorne through his mother. He dies in infancy (y24)
+    # and Tilda in y31, so House Thorne is still extinguished with Giles in y33.
+    tk = t(20, 4, 4)
+    seg.event(tk, VITAL, "MARRIAGE", roles=((ACTOR, P["xan"]), (TARGET, P["tilda"])))
+    tk = t(21, 2, 2)
+    seg.event(tk, VITAL, "BIRTH", (MALE, 1), ((ACTOR, P["tilda"]), (TARGET, P["bram"])))
+    seg.entry(tk, P["bram"], BORN, MALE, P["tilda"], P["xan"], tk)
     # y22: a deposition timer fires with no pressed claimant: Cedric is deposed and gains a claim;
-    # his brother Wulf (13) succeeds under a regency.
-    tk = t(22, 3, 1)
+    # his brother Wulf (13) succeeds under a regency. The timer fires on day 2 or later (M7:
+    # successions and depositions are never on a year's first day; R26).
+    tk = t(22, 3, 2)
     e_dep1 = seg.event(tk, POLITY, "DEPOSED", (LORDSHIP,), ((TARGET, P["cedric"]),))
     e_wulf_succ = seg.event(
         tk,
@@ -393,6 +417,9 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
     # pressed claimant, deposes Wulf and succeeds; Wulf gains a claim and renounces it in y27.
     tk = t(23, 1, 9)
     seg.event(tk, POLITY, "CLAIM_PRESSED", (LORDSHIP,), ((ACTOR, P["cedric"]), (TARGET, P["wulf"])))
+    tk = t(24, 3, 3)
+    e_bram = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, P["bram"]),))
+    seg.exit(tk, P["bram"], NATURAL, e_bram)
     tk = t(25, 9, 1)
     seg.event(tk, POLITY, "REGENCY_ENDED", (LORDSHIP,), ((ACTOR, P["ysolde"]), (TARGET, P["wulf"])))
     tk = t(26, 5, 5)
@@ -417,23 +444,19 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
     )
     tk = t(27, 3, 3)
     seg.event(tk, POLITY, "CLAIM_RENOUNCED", (LORDSHIP,), ((ACTOR, P["wulf"]),))
-    # y30: Ysolde dies. y33: Giles dies childless: the seat of Thorne finds no clear heir (an
-    # interregnum, castless), the heir passed over gains a claim to the vacant seat, and House
-    # Thorne is extinguished with him. y34: the interregnum resolves in Cedric's favour.
+    # y30: Ysolde dies; y31: Tilda. y33: Giles dies childless: the seat of Thorne finds no clear
+    # heir (an interregnum, castless) and House Thorne is extinguished with him. No claim arises:
+    # M7 creates claims only for a passed-over heir or at a deposition (R26). y34: the
+    # interregnum resolves in Cedric's favour.
     tk = t(30, 6, 6)
     e_ysolde = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, P["ysolde"]),))
     seg.exit(tk, P["ysolde"], NATURAL, e_ysolde)
+    tk = t(31, 8, 8)
+    e_tilda = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, P["tilda"]),))
+    seg.exit(tk, P["tilda"], NATURAL, e_tilda)
     tk = t(33, 6, 6)
     e_giles = seg.event(tk, VITAL, "DEATH", (NATURAL,), ((TARGET, P["giles"]),))
     e_inter = seg.event(tk, POLITY, "INTERREGNUM_CRISIS", (THORNE_SEAT,), causes=(told(e_giles),))
-    seg.event(
-        tk,
-        POLITY,
-        "CLAIM_CREATED",
-        (THORNE_SEAT,),
-        ((ACTOR, P["cedric"]),),
-        causes=(told(e_inter),),
-    )
     seg.event(
         tk,
         POLITY,
@@ -466,8 +489,8 @@ def ashcombe_keyframe(seg: Segment) -> str:
         "# The keyframe extract of the ashcombe fixture (annals_v0.md §1, §6): the rows of the",
         "# genesis",
         "# keyframe a house prologue reads, because the back-filled dead have no channel-A record",
-        "# (REV-SPR-019 R1). `founder` is the founder index k of founder(seed, k) (SPR-019 D-02),",
-        "# the id fallback's label (annals_v0.md §4). GENERATED by gen_fixtures.py; do not edit.",
+        "# (REV-SPR-019 R1). `founder` is the founder index k of founder(seed, k) (SPR-019 D-02;",
+        "# the cast first), shown as `Founder #k+1` (annals_v0.md §4). GENERATED; do not edit.",
         "[extract]",
         'format = "rehoboam/annals/keyframe-extract/v0"',
         'keyframe = "kf/y000000/t000000000.arrow"   # the genesis keyframe the rows came from',
@@ -478,7 +501,7 @@ def ashcombe_keyframe(seg: Segment) -> str:
         out += ["[[house]]", f"id = {HOUSE[key]}   # {key}"]
     for title in (LORDSHIP, THORNE_SEAT):
         out += ["[[title]]", f"id = {title}"]
-    founders = {name: k for k, name in enumerate(GENESIS)}  # founder k: the scripted genesis order
+    founders = {name: k for k, name in enumerate(GENESIS)}  # founder k: the cast first (R26)
     for name, (sex, mother, father, birth, death, _) in sorted(
         GENESIS.items(), key=lambda kv: P[kv[0]]
     ):
@@ -515,8 +538,8 @@ ASHCOMBE_NAMES = """# The plane-C names file of the ashcombe fixture (annals_v0.
 # (house k is the k-th dynasty, SPR-019 B1). Titles: the polity's labels. Keys are the ids'
 # decimal text. GENERATED by gen_fixtures.py; do not edit.
 [world]
-manifest = "specs/manifest/examples/manor.yaml"   # the shape; the ids here are illustrative
-manifest_hash = "7c4a8d09ca3762af61e59520943dc26494f8941b"   # illustrative
+manifest = "specs/manifest/examples/manor.yaml"   # the shape; ids and the hash are illustrative
+manifest_hash = "sha256:afce94fcb48fdfff99f60be5bc6104222a04953e1da364f6cb06c84738d1a2e0"
 
 [persons]
 "{edric}" = "Edric Ashcombe"
@@ -559,7 +582,7 @@ SOLITARY_NAMES = """# The cast of solo.yaml: Ada is cast member 0, so founder 0 
 # GENERATED.
 [world]
 manifest = "specs/manifest/examples/solo.yaml"
-manifest_hash = "1f0c52a43606ad0befdcc0adfe23627d83400684af525f12832a77f00abcf8c6"
+manifest_hash = "sha256:1f0c52a43606ad0befdcc0adfe23627d83400684af525f12832a77f00abcf8c6"
 
 [persons]
 "{ada}" = "Ada"

@@ -3,7 +3,7 @@
 # GENERATED.
 [world]
 manifest = "specs/manifest/examples/solo.yaml"
-manifest_hash = "1f0c52a43606ad0befdcc0adfe23627d83400684af525f12832a77f00abcf8c6"
+manifest_hash = "sha256:1f0c52a43606ad0befdcc0adfe23627d83400684af525f12832a77f00abcf8c6"
 
 [persons]
 "1328186490420642308" = "Ada"

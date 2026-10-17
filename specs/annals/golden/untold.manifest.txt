@@ -1,3 +1,3 @@
 #rehoboam/annals/manifest/v0 world=untold chronicle_digest=86ef568654caaf774c909b995b5d7bf6 templates=0.2.0 templates_digest=d78ab0226a3e2fa2
-group year ed99806feb648229
-digest e0c672ea46505d3d
+group year 75f3e89df9f08e66
+digest 1b49f3ca28df5c14

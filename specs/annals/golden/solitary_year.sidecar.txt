@@ -1,4 +1,4 @@
-#rehoboam/annals/v0 world=solitary group=year timeline=0 chronicle_digest=dc0d277e20275f23f7503a382de3984b registry_version=0.2.0+next keyframe_extract=- state_hash=- manifest_hash=1f0c52a43606ad0befdcc0adfe23627d83400684af525f12832a77f00abcf8c6 templates=0.2.0 templates_digest=d78ab0226a3e2fa2 renderer=annals_v0/0.2.0 calendar=365
+#rehoboam/annals/v0 world=solitary group=year timeline=0 chronicle_digest=dc0d277e20275f23f7503a382de3984b registry_version=0.2.0+next keyframe_extract=- state_hash=- manifest_hash=sha256:1f0c52a43606ad0befdcc0adfe23627d83400684af525f12832a77f00abcf8c6 templates=0.2.0 templates_digest=d78ab0226a3e2fa2 renderer=annals_v0/0.3.0 calendar=365
 S 5 death.natural 1 [0] [1328186490420642308] [name/1328186490420642308]
 S 6 extinction 1 [0,1] [1328186490420642308] [name/1328186490420642308]
-digest 87c88089bccf481f
+digest ec897c9bebd91eef
