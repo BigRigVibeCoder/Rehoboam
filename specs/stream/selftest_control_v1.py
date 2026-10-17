@@ -6,17 +6,19 @@ The contract is ``specs/stream/control_v1.md``: the pace command over ``control.
 with, as ``selftest_wire_v1.py`` is for the stream sockets:
 
 - :data:`METHODS` is the method table (exactly five), :data:`RESERVED` the P2 names refused by
-  name (IF-3's spellings, REV round 1 C12), :data:`ERRORS` the error model with this socket's codes;
+  name (IF-3's spellings), :data:`ERRORS` the error model with this socket's codes;
 - :class:`Engine` is a simulated engine: a deterministic record generator that knows nothing of
-  the pace; :class:`Host` holds the governor's cell, applies commands at the engine's decision
-  points (before and after an instant; C1), sleeps by control_v1.md §3.3's rule in integers over a
-  :class:`FakeClock`, writes the run log and answers the socket;
+  the pace; :class:`Host` holds the governor's cell and a queue of validated commands, applies the
+  queue at the engine's one decision point (before an instant), re-checks a pending step there,
+  publishes the snapshot ``control.status`` reads, sleeps by control_v1.md §3.3's rule in integers
+  over a :class:`FakeClock`, writes the run log and answers every command on its own reply slot;
 - :func:`simulate` drives a host through a scripted command sequence over the fake clock, each
-  instant taking wall time so that commands can land mid-instant, and the self-test asserts
-  **pace invariance** (control_v1.md §0 fact 2): every paced run produces the headless run's
-  channel-A bytes, digests, keyframes, ladder and journal, while the governor really slept, a
-  pause really held the tip, a step stopped after Bookkeeping of its target, a flood of no-change
-  commands never starved the run (C2), and the answers report the state the engine applied (C1);
+  instant taking wall time (its records appended, and the tip moved, at its end), so that commands
+  land while an instant computes; the self-test asserts **pace invariance** (control_v1.md §0
+  fact 2): every paced run produces the headless run's channel-A bytes, digests, keyframes, ladder
+  and journal, while the governor really slept, a pause really held the tip, a step stopped after
+  Bookkeeping of its target, a flood of no-change commands never starved the run, a command landing
+  in a step's reaching instant won, and every answer reports the state the engine applied;
 - the golden file ``specs/stream/golden/control_v1.txt`` holds one frame of every message, the
   host's answers to planted requests, each scenario's clock, answer and run-log lines, and the
   invariant digest every scenario reproduced.
@@ -82,8 +84,8 @@ CONTROL_MESSAGE = (
     "this socket carries the control channel; v1 accepts the pace command only (control.status, "
     "control.pace, control.pause, control.resume, control.step) and no input"
 )
-# control_v1.md §5.1: the P2 operations under IF-3's names (05.9 IF-3; C12), refused by name with
-# the detail a v1 host answers them with.
+# control_v1.md §5.1: the P2 operations under IF-3's names (05.9 IF-3), refused by name with the
+# detail a v1 host answers them with.
 RESERVED: dict[str, str] = {
     "timeline.run": (
         "v1 spells timeline.run(band) as control.pace (W30); the IF-3 name arrives with rh-server "
@@ -318,9 +320,8 @@ class FakeClock:
 class Cell:
     """The governor's cell as the engine applied it (control_v1.md §3.3).
 
-    ``generation`` counts the changes the engine applied (C1, C2): a command that changes nothing
-    leaves it alone. A reached step is written only when no command landed since the engine's last
-    read (the compare-and-swap on the generation it read; here, an empty queue).
+    Only the engine writes it, at its decision point. The anchor is reset whenever the effective
+    rate changes (K4): a band change, a run-state change, a step's start, end or clearing.
     """
 
     band: str = "max"
@@ -328,7 +329,34 @@ class Cell:
     step_target: int | None = None
     anchor_tick: int = FIRST_TICK
     anchor_wall_ns: int = 0
-    generation: int = 0
+
+    def effective(self) -> tuple[str, int | None]:
+        """The state and the rate the governor sleeps by: a pending step runs at ``max``."""
+        return self.state, (None if self.step_target is not None else rate(self.band))
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    """What the engine publishes at its decision point; what ``control.status`` reads (K6)."""
+
+    band: str
+    state: str
+    step_target: int | None
+    tip: int | None
+    next_seq: int
+    next_tick: int | None
+    end: str | None
+
+    def pace(self) -> Json:
+        """The pace object (control_v1.md §4) of this snapshot."""
+        step = None if self.step_target is None else {"until_tick": self.step_target}
+        return {
+            "band": self.band,
+            "next_seq": self.next_seq,
+            "state": self.state,
+            "step": step,
+            "tick": self.tip,
+        }
 
 
 class Refused(Exception):  # noqa: N818 - a refusal, not an error of the reference
@@ -350,14 +378,15 @@ class Connection:
 
 @dataclass
 class Pending:
-    """A validated command waiting for the engine's next decision point (C1)."""
+    """A validated request on its own reply slot, waiting for the engine's decision point (K2)."""
 
     conn: Connection
     rid: int | str
     method: str
     until: int | str | None = None  # control.step's request, resolved at application
     band: str | None = None
-    reply: Json | None = None  # set when the engine applies or refuses it
+    reply: Json | None = None  # the slot: set when the engine applies or refuses it
+    applied_at_ns: int | None = None
 
 
 def error(rid: int | str | None, reason: str, **data: object) -> Json:
@@ -411,11 +440,14 @@ def no_params(params: object) -> None:
 class Host:
     """The control socket's server over a simulated engine and a fake clock.
 
-    Serving threads validate a request and queue it (:meth:`submit`); the engine's loop applies
-    the queue at its decision points, before an instant (:meth:`before_instant`) and after one
-    (:meth:`after_instant`), and the answer reports the state the engine applied (C1). A command
-    that changes nothing is answered at once and touches neither the anchor nor the generation
-    (C2). ``control`` names a planted fault (control_v1.md §9); None is the honest host.
+    Serving threads validate a request and queue it (:meth:`submit`), each on its own reply slot;
+    the engine's loop applies the queue at its one decision point, before an instant
+    (:meth:`before_instant`), re-checks a pending step there and publishes the snapshot. A
+    request that changes nothing against the published state while the queue is empty is answered
+    at once (K3); every other request is answered by the engine when it applies it, whether it
+    changed something, changed nothing or was refused. A connection's requests are served one at
+    a time, in request order. ``control`` names a planted fault (control_v1.md §9); None is the
+    honest host.
     """
 
     engine: Engine
@@ -431,14 +463,15 @@ class Host:
     connections_opened: int = 0
     released: list[tuple[int, int, int]] = field(default_factory=list)  # (wall_ns, tick, k)
     end: str | None = None
-    mid_instant: bool = False
+    published: Snapshot = field(init=False)
 
     def __post_init__(self) -> None:
-        """Log the host's start and its start pace (control_v1.md §8.1)."""
+        """Log the host's start and its start pace (control_v1.md §8.1); publish the snapshot."""
         if self.start_paused:
             self.cell.state = "paused"
         self._log_host("start")
         self._log_pace("host.start", None)
+        self.publish()
 
     # -- the run log ------------------------------------------------------------------------
     def _tip_token(self) -> str:
@@ -455,53 +488,44 @@ class Host:
             f"host {self.clock.now_ns} {event} {self._tip_token()} {self.run_nonce}"
         )
 
-    # -- the cell ---------------------------------------------------------------------------
+    # -- the cell and the snapshot ----------------------------------------------------------
     def _anchor(self) -> None:
         tip = self.engine.tip
         self.cell.anchor_tick = FIRST_TICK if tip is None else tip
         self.cell.anchor_wall_ns = self.clock.now_ns
 
-    def _bump(self) -> None:
-        self.cell.generation += 1
-
-    def pace_object(self) -> Json:
-        """The pace object every command returns (control_v1.md §4): the applied state."""
+    def snapshot(self) -> Snapshot:
+        """The cell and the engine's tip as they stand now."""
         c = self.cell
-        step = None if c.step_target is None else {"until_tick": c.step_target}
-        return {
-            "band": c.band,
-            "next_seq": self.engine.next_seq,
-            "state": c.state,
-            "step": step,
-            "tick": self.engine.tip,
-        }
+        return Snapshot(
+            c.band,
+            c.state,
+            c.step_target,
+            self.engine.tip,
+            self.engine.next_seq,
+            self.engine.next_tick,
+            self.end,
+        )
 
-    def _desired(self) -> tuple[str, str, int | str | None]:
-        """The cell with the queued commands folded in: what the next command is judged against."""
-        band, state = self.cell.band, self.cell.state
-        step: int | str | None = self.cell.step_target
-        for p in self.pending:
-            if p.method == "control.pace":
-                band = str(p.band)
-            elif p.method == "control.pause":
-                state, step = "paused", None
-            elif p.method == "control.resume":
-                state, step = "running", None
-            elif p.method == "control.step":
-                state, step = "running", p.until
-        return band, state, step
+    def publish(self) -> None:
+        """Publish the snapshot ``control.status`` reads (control_v1.md §3.3)."""
+        self.published = self.snapshot()
 
-    def _is_change(self, method: str, band: str | None, until: int | str | None) -> bool:
-        d_band, d_state, d_step = self._desired()
+    def _changes_published(self, method: str, band: str | None, until: int | str | None) -> bool:
+        """Whether a command would change the published (applied) state (K3)."""
+        p = self.published
         if method == "control.pace":
-            return band != d_band
+            return band != p.band
         if method == "control.pause":
-            return d_state != "paused"
+            return p.state != "paused"
         if method == "control.resume":
-            return d_state != "running" or d_step is not None
-        return d_state != "running" or d_step != until
+            return p.state != "running" or p.step_target is not None
+        return p.state != "running" or until == "instant" or p.step_target != until
 
-    # -- commands: the serving thread's side ------------------------------------------------
+    def _inflight(self, conn: Connection) -> bool:
+        return any(p.conn is conn for p in self.pending)
+
+    # -- requests: the serving thread's side ------------------------------------------------
     def submit(
         self,
         conn: Connection,
@@ -510,29 +534,45 @@ class Host:
         band: str | None = None,
         until: int | str | None = None,
     ) -> Pending:
-        """Queue a validated command for the engine, or answer it at once (C1, C2)."""
+        """Queue a validated request on its own slot, or answer it at once (K2, K3).
+
+        Answered at once: after the run ended (``run_finished``); a ``control.status`` or a
+        no-change command on a connection with nothing in flight while the queue is empty, from
+        the published snapshot. Everything else waits for the engine.
+        """
         p = Pending(conn, rid, method, until, band)
-        if self.cell.state == "finished":
+        if method == "control.status" and not self._inflight(conn):
+            p.reply = W.response(rid, self.status())  # never waits; still answered after the end
+        elif self.cell.state == "finished":
             p.reply = error(rid, "run_finished", end=self.end)
-        elif not self._is_change(method, band, until):
-            p.reply = W.response(rid, {**self.pace_object(), "changed": False})
+        elif self.pending or self._inflight(conn):
+            self.pending.append(p)
+        elif not self._changes_published(method, band, until):
+            p.reply = W.response(rid, {**self.published.pace(), "changed": False})
         else:
-            self.pending.append(p)  # the engine bumps the generation when it applies the change
+            self.pending.append(p)
         return p
 
-    # -- commands: the engine's side --------------------------------------------------------
+    # -- requests: the engine's side --------------------------------------------------------
     def _apply_pending(self) -> None:
-        """Apply the queued commands in order; each answer carries the tip it took effect at."""
+        """Apply the queue in order; every answer carries the tip the command took effect at."""
         for p in self.pending:
+            before = self.cell.effective()
             try:
                 result = self._apply(p)
             except Refused as r:
                 p.reply = error(p.rid, r.reason, **r.data)
             else:
                 p.reply = W.response(p.rid, result)
+            owed = self.control == "paused-time-owed" and p.method == "control.resume"
+            if self.cell.effective() != before and not owed:
+                self._anchor()  # the effective rate changed (K4); the control keeps a stale anchor
+            p.applied_at_ns = self.clock.now_ns
         self.pending.clear()
 
     def _apply(self, p: Pending) -> Json:
+        if p.method == "control.status":
+            return self.status()
         if p.method == "control.pace":
             return self._pace(p)
         if p.method == "control.pause":
@@ -546,34 +586,26 @@ class Host:
         changed = band != self.cell.band
         if changed:
             self.cell.band = band
-            self._anchor()  # the band changed (C2)
-            self._bump()
             if self.control == "pace-in-journal":
                 self.engine.journal.append(f"pace {band}")  # STR-5 broken: the pace as an input
             self._log_pace("control.pace", p.conn)
-        return {**self.pace_object(), "changed": changed}
+        return {**self.snapshot().pace(), "changed": changed}
 
     def _pause(self, p: Pending) -> Json:
         changed = self.cell.state == "running"
         if changed:
             self.cell.state, self.cell.step_target = "paused", None
-            self._anchor()  # the run state changed (C2)
-            self._bump()
             if self.control == "pause-writes-record":
                 self.engine.append("PAUSE", self.engine.tip or FIRST_TICK)  # W35 broken
             self._log_pace("control.pause", p.conn)
-        return {**self.pace_object(), "changed": changed}
+        return {**self.snapshot().pace(), "changed": changed}
 
     def _resume(self, p: Pending) -> Json:
-        was_paused, had_step = self.cell.state == "paused", self.cell.step_target is not None
-        changed = was_paused or had_step
+        changed = self.cell.state == "paused" or self.cell.step_target is not None
         if changed:
             self.cell.state, self.cell.step_target = "running", None
-            self._bump()
-            if was_paused and self.control != "paused-time-owed":
-                self._anchor()  # the run state changed; paused time is not owed
             self._log_pace("control.resume", p.conn)
-        return {**self.pace_object(), "changed": changed}
+        return {**self.snapshot().pace(), "changed": changed}
 
     def _step(self, p: Pending) -> Json:
         nxt = self.engine.next_tick
@@ -585,24 +617,19 @@ class Host:
             raise Refused("past_tick", tip_tick=tip)  # C9: before the first instant, only below it
         changed = self.cell.step_target != target or self.cell.state != "running"
         if changed:
-            if self.cell.state != "running":
-                self._anchor()  # the run state changed
             self.cell.state, self.cell.step_target = "running", target
-            self._bump()
             self._log_pace(f"control.step:{target}", p.conn)
-            if nxt > target:
-                self._reach(p.conn)  # no instant lies at or below the target: paused at once
-        return {**self.pace_object(), "changed": changed}
+        return {**self.snapshot().pace(), "changed": changed}
 
-    def _reach(self, conn: Connection | None = None) -> None:
+    def _reach(self) -> None:
+        """The engine's own pause at a step's target (control_v1.md §3.3 item 1)."""
         self.cell.state, self.cell.step_target = "paused", None
         self._anchor()
-        self._bump()
-        self._log_pace("step.reached", conn)
+        self._log_pace("step.reached", None)
 
     def _step_reached(self) -> bool:
         target, nxt = self.cell.step_target, self.engine.next_tick
-        if target is None:
+        if target is None or self.cell.state != "running":
             return False
         if self.control == "step-overshoot":
             return self.engine.tip is not None and self.engine.tip > target  # W37 broken
@@ -610,47 +637,50 @@ class Host:
 
     # -- the engine's loop ------------------------------------------------------------------
     def before_instant(self) -> None:
-        """Decision point 1 (control_v1.md §3.3 items 1 and 2): apply, re-check a pending step."""
+        """The decision point (control_v1.md §3.3 item 1): apply, re-check a step, publish."""
         self._apply_pending()
-        if self._step_reached() and self.cell.state == "running":
+        if self._step_reached():
             self._reach()
+        self.publish()
 
     def deadline(self) -> int | None:
         """The wall clock at which the next instant may run; None when paused or finished."""
-        c, tick = self.cell, self.engine.next_tick
-        if c.state != "running" or tick is None:
+        state, r = self.cell.effective()
+        tick = self.engine.next_tick
+        if state != "running" or tick is None:
             return None
-        r = None if c.step_target is not None else rate(c.band)  # a step runs at max
-        return deadline_ns(c.anchor_wall_ns, c.anchor_tick, tick, r)
+        return deadline_ns(self.cell.anchor_wall_ns, self.cell.anchor_tick, tick, r)
 
     def run_instant(self) -> int:
-        """Item 4: the engine runs one instant; the clock advances by its compute time."""
-        self.mid_instant = True
-        hint = self.cell.band if self.control == "band-in-hash" else None
-        tick = self.engine.run_instant(hint)
-        self.released.append((self.clock.now_ns, tick, self.engine.instants_run))
+        """Item 4: the engine computes one instant; its records land, and the tip moves, at its end.
+
+        The clock advances by the instant's compute first (commands landing meanwhile were queued
+        by :func:`simulate` before this call), then the records are appended (K1).
+        """
+        k, tick = self.engine.instants_run + 1, self.engine.next_tick
+        self.released.append((self.clock.now_ns, FIRST_TICK if tick is None else tick, k))
         self.clock.now_ns += INSTANT_WALL_NS
-        self.mid_instant = False
-        return tick
+        hint = self.cell.band if self.control == "band-in-hash" else None
+        return self.engine.run_instant(hint)
 
     def after_instant(self) -> None:
-        """Decision point 2 (item 5): a reached step pauses by CAS, else the commands win."""
+        """After the last instant the run finishes (C14, K5); otherwise item 1 follows."""
         if self.engine.finished:
             self.finish()
-            return
-        if not self.pending:  # nothing landed since item 1: the compare-and-swap succeeds
-            if self._step_reached():
-                self._reach()
-        else:
-            self._apply_pending()  # a command landed mid-instant: it wins, no step.reached here
 
     def finish(self, reason: str = "finished") -> None:
-        """The run ended (C14): never held; a pending step is dropped; queued commands refused."""
+        """The run ended, in one critical section (K5).
+
+        The queue is drained with ``run_finished``, the cell says ``finished``, a pending step is
+        dropped with no ``step.reached``, and every later request is refused at submission.
+        """
         self.cell.state, self.cell.step_target, self.end = "finished", None, reason
-        self._log_host("finish" if reason == "finished" else "abort")
         for p in self.pending:
             p.reply = error(p.rid, "run_finished", end=reason)
+            p.applied_at_ns = self.clock.now_ns
         self.pending.clear()
+        self._log_host("finish" if reason == "finished" else "abort")
+        self.publish()
 
     # -- the socket -------------------------------------------------------------------------
     def connect(self) -> Connection:
@@ -668,23 +698,28 @@ class Host:
             self.connections.remove(conn)
 
     def status(self) -> Json:
-        """The ``control.status`` result (control_v1.md §4.1): the published snapshot, no wait."""
+        """The ``control.status`` result (control_v1.md §4.1) from the published snapshot (K6).
+
+        Called by the engine while it applies a queue, it reads the snapshot being built, so a
+        status queued behind a command on its connection reports that command's effect.
+        """
+        snap = self.published if not self.pending else self.snapshot()
         return {
             "calendar": {"minutes_per_year": MINUTES_PER_YEAR},
             "control": {"format": CONTROL_FORMAT, "version": CONTROL_VERSION},
             "controllers": len(self.connections),
-            "end": None if self.end is None else {"reason": self.end},
+            "end": None if snap.end is None else {"reason": snap.end},
             "history": dict(HISTORY),
-            "pace": self.pace_object(),
+            "pace": snap.pace(),
             "run_nonce": self.run_nonce,
             "timeline_id": TIMELINE,
-            "tip": {"next_seq": self.engine.next_seq, "tick": self.engine.tip},
+            "tip": {"next_seq": snap.next_seq, "tick": snap.tip},
         }
 
     def dispatch(self, conn: Connection, data: bytes) -> list[bytes]:
         """Answer one frame from a controller on an idle host (between instants).
 
-        The header is judged first; a command is queued and, the engine being at a decision
+        The header is judged first; a request is queued and, the engine being at its decision
         point (its governor wait is interruptible), applied at once; the reply reports it.
         """
         try:
@@ -746,9 +781,6 @@ class Host:
         self, conn: Connection, rid: int | str, method: str, params: object
     ) -> Json | Pending:
         try:
-            if method == "control.status":
-                no_params(params)
-                return W.response(rid, self.status())  # type: ignore[no-any-return]
             if method == "control.pace":
                 return self.submit(conn, rid, method, band=band_param(params))
             if method == "control.step":
@@ -781,14 +813,14 @@ class Scenario:
 
 @dataclass
 class Run:
-    """What a simulated run produced: the host, and each command's answer in issue order."""
+    """What a simulated run produced: the host, and each command's slot in issue order."""
 
     host: Host
     issued: list[tuple[Command, Pending | Json]] = field(default_factory=list)
 
     @property
     def replies(self) -> list[tuple[Command, Json]]:
-        """Each command and its answer (every answer exists once the run is over)."""
+        """Each command and its answer (every slot is filled once the run is over)."""
         out = []
         for cmd, outcome in self.issued:
             reply = outcome.reply if isinstance(outcome, Pending) else outcome
@@ -796,13 +828,23 @@ class Run:
             out.append((cmd, reply))
         return out
 
+    def applied_at(self, cmd: Command) -> int:
+        """When the engine applied ``cmd`` (fake clock), or its issue time if answered at once."""
+        for c, outcome in self.issued:
+            if c is cmd:
+                at = outcome.applied_at_ns if isinstance(outcome, Pending) else None
+                return cmd.at_ns if at is None else at
+        raise KeyError(cmd)
+
 
 S = NS_PER_S
 MS = 1_000_000
+W_NS = INSTANT_WALL_NS
 YEAR1 = FIRST_TICK + MINUTES_PER_YEAR
 STEP_TICK = FIRST_TICK + 15 * INSTANT_MINUTES  # instant 15, mid-year 2
 STEP_TICK_OFF = STEP_TICK + 2_000  # between instants 15 and 16: stops after 15 (W37)
 STEP_TICK_LATER = STEP_TICK + 3 * INSTANT_MINUTES  # instant 18
+BEYOND = HORIZON_YEARS * MINUTES_PER_YEAR + 1  # a tick past the horizon
 
 
 def _tick(k: int) -> int:
@@ -868,13 +910,21 @@ SCENARIOS: tuple[Scenario, ...] = (
             Command(2 * S, "a", "control.resume"),
         ),
     ),
-    Scenario(  # C1: commands landing mid-instant
+    Scenario(  # K1: commands landing while an instant computes, three of them in a step's
+        # reaching instant (a resume, a pause, a no-change command), and one at a release time
         "mid-instant",
         (
-            Command(5 * MS, "a", "control.pause"),
-            Command(100 * MS, "a", "control.resume"),
-            Command(105 * MS, "a", "control.step", {"until": "instant"}),
-            Command(S, "a", "control.resume"),
+            Command(5 * MS, "a", "control.pause"),  # in instant 0: applied after it
+            Command(100 * MS, "a", "control.step", {"until": "instant"}),  # instant 1 at max
+            Command(105 * MS, "a", "control.resume"),  # in the reaching instant: clears the step
+            Command(150 * MS, "a", "control.status"),  # between instants, running at max
+            Command(200 * MS, "a", "control.pause"),  # at the decision point's time: before 11
+            Command(300 * MS, "a", "control.step", {"until": "instant"}),  # instant 12
+            Command(305 * MS, "a", "control.pause"),  # in the reaching instant: wins
+            Command(400 * MS, "a", "control.step", {"until": "instant"}),  # instant 13
+            Command(405 * MS, "a", "control.pace", {"band": "max"}),  # no change, answered at once
+            Command(405 * MS, "a", "control.status"),  # the published snapshot, mid-instant
+            Command(500 * MS, "a", "control.resume"),
         ),
     ),
     Scenario(  # C2: a flood of no-change commands at 1y must not starve the run
@@ -898,25 +948,62 @@ SCENARIOS: tuple[Scenario, ...] = (
         (Command(S // 2, "a", "control.resume"),),
         start_paused=True,
     ),
+    Scenario(  # K4: a step started while running and cleared by a resume re-anchors the band
+        "step-clear",
+        (
+            Command(0, "a", "control.pace", {"band": "1y"}),
+            Command(200 * MS, "a", "control.step", {"until": {"tick": _tick(30)}}),
+            Command(295 * MS, "a", "control.resume"),
+        ),
+    ),
+    Scenario(  # K5: a step beyond the horizon, a pause landing in the last instant
+        "finish-race",
+        (
+            Command(0, "a", "control.step", {"until": {"tick": BEYOND}}),
+            Command(47 * W_NS + 5 * MS, "a", "control.pause"),
+        ),
+    ),
+    Scenario(  # K3: the queue fold: P4, P5, P13, P16
+        "queue-fold",
+        (
+            Command(5 * MS, "a", "control.pause"),  # in instant 0
+            Command(6 * MS, "b", "control.pause"),  # queued behind a's: paused, changed false (P4)
+            Command(100 * MS, "a", "control.step", {"until": {"tick": _tick(5)}}),
+            Command(
+                100 * MS, "b", "control.step", {"until": {"tick": _tick(5)}}
+            ),  # same: false (P5)
+            Command(300 * MS, "c", "control.resume"),
+            Command(400 * MS, "c", "control.pause"),  # pipelined on one connection (P13)
+            Command(400 * MS, "c", "control.pause"),  # answered after the first, changed false
+            Command(500 * MS, "a", "control.step", {"until": "instant"}),
+            Command(500 * MS, "b", "control.step", {"until": "instant"}),  # the target shown (P16)
+            Command(600 * MS, "a", "control.resume"),
+        ),
+    ),
 )
 
 
 def _issue(run: Run, conns: dict[str, Connection], cmd: Command) -> None:
-    """A controller sends ``cmd``: validated now; applied at the engine's next decision point."""
+    """A controller sends ``cmd``: validated now; applied at the engine's decision point."""
     host = run.host
-    conn = conns.setdefault(cmd.conn, host.connect())
+    if cmd.conn not in conns:
+        conns[cmd.conn] = host.connect()
     rid = len(run.issued) + 1
     data = W.encode_frame(W.control_frame(W.request(rid, cmd.method, cmd.params)))
     frame, _ = W.decode_frame(data)
-    outcome = host._answer(conn, frame.payload)
+    outcome = host._answer(conns[cmd.conn], frame.payload)
     run.issued.append((cmd, outcome))
 
 
 def simulate(sc: Scenario, control: str | None = None) -> Run:
     """Drive a host through ``sc`` over the fake clock; the engine runs to its horizon.
 
-    Commands land at their wall time; one that lands mid-instant waits for the instant's end
-    (C1); one that lands during a governor wait ends the wait (control_v1.md §3.3 item 3).
+    The delivery rule (control_v1.md §9): at a decision point at time ``now``, every command with
+    ``at_ns <= now`` is delivered and applied before the instant; a governor wait is cut by a
+    command with ``at_ns < deadline``, which is then delivered at a new decision point; a command
+    with ``release <= at_ns <= release + INSTANT_WALL_NS`` lands while the instant computes (a
+    command at exactly the release time the engine waited for lands during the instant) and is
+    applied at the decision point after it.
     """
     host = Host(Engine(), FakeClock(), control, start_paused=sc.start_paused)
     run, conns = Run(host), dict[str, Connection]()
@@ -936,11 +1023,11 @@ def simulate(sc: Scenario, control: str | None = None) -> Run:
             continue
         host.clock.sleep_until(deadline)
         start = host.clock.now_ns
-        host.run_instant()
-        while queue and start < queue[0].at_ns <= host.clock.now_ns:  # landed mid-instant
+        while queue and queue[0].at_ns <= start + INSTANT_WALL_NS:  # lands while it computes
             _issue(run, conns, queue.pop(0))
+        host.run_instant()
         host.after_instant()
-    while queue:  # after the end: run_finished
+    while queue:  # after the end: run_finished at submission
         _issue(run, conns, queue.pop(0))
     return run
 
@@ -974,6 +1061,14 @@ def _result(reply: Json) -> Json:
     return res
 
 
+def _pace_of(reply: Json) -> Json:
+    """The pace object of an answer: a command's result, or a status result's ``pace``."""
+    res = _result(reply)
+    pace = res.get("pace", res)
+    assert isinstance(pace, dict)
+    return pace
+
+
 def _fresh_host(
     years: int = 1,
     finished: bool = False,
@@ -993,6 +1088,7 @@ def _fresh_host(
             host.after_instant()
     if with_step:
         _ask(host, 100, "control.step", {"until": {"tick": _tick(HORIZON_YEARS * 12 - 1)}})
+    host.before_instant()
     return host
 
 
@@ -1076,7 +1172,7 @@ def _messages() -> list[tuple[str, Json]]:
     host = _fresh_host()
     host.connect()  # a status is answered on a connection, so controllers >= 1 (C22)
     status = host.status()
-    pace = {**host.pace_object(), "changed": True}
+    pace = {**host.published.pace(), "changed": True}
     return [
         ("status_request", W.request(1, "control.status")),
         ("status_result", W.response(1, status)),
@@ -1362,14 +1458,13 @@ def _host_checks() -> list[str]:
     second = _result(_ask(host, 2, "control.pause"))["changed"]
     if first is not True or second is not False:
         problems.append("pause is not idempotent with changed")
-    beyond = HORIZON_YEARS * MINUTES_PER_YEAR + 1
-    res = _result(_ask(host, 3, "control.step", {"until": {"tick": beyond}}))
-    if res["state"] != "running" or res["step"] != {"until_tick": beyond}:
+    res = _result(_ask(host, 3, "control.step", {"until": {"tick": BEYOND}}))
+    if res["state"] != "running" or res["step"] != {"until_tick": BEYOND}:
         problems.append("a step beyond the horizon runs to the end")
-    gen = host.cell.generation
-    _ask(host, 4, "control.step", {"until": {"tick": beyond}})
-    if host.cell.generation != gen:
-        problems.append("a no-change command bumped the generation (C2)")
+    anchor = (host.cell.anchor_tick, host.cell.anchor_wall_ns)
+    _ask(host, 4, "control.step", {"until": {"tick": BEYOND}})
+    if (host.cell.anchor_tick, host.cell.anchor_wall_ns) != anchor:
+        problems.append("a no-change command re-anchored (C2)")
     return problems
 
 
@@ -1408,6 +1503,7 @@ def _governor_checks() -> list[str]:
 
 
 RECORD_KINDS = frozenset({"EVENT", "STEP_DIGEST", "KEYFRAME"})
+INSTANT_1 = 2  # `released` numbers instants from 1, so instant 1 (tick 43200) is k = 2
 
 
 def _same_history(run: Run, ref: Engine, name: str) -> list[str]:
@@ -1466,8 +1562,16 @@ def _slept(run: Run, name: str) -> list[str]:
     return problems
 
 
-def _replies(run: Run, method: str) -> list[tuple[int, Json]]:
-    return [(c.at_ns, r) for c, r in run.replies if c.method == method]
+def _replies(run: Run, method: str, conn: str | None = None) -> list[tuple[Command, Json]]:
+    return [(c, r) for c, r in run.replies if c.method == method and conn in (None, c.conn)]
+
+
+def _resume_exact(run: Run, cmd: Command, reply: Json, band: str) -> list[str]:
+    """After a resume, the next instants run exactly at the band's deadline from (tip, applied)."""
+    tip = _pace_of(reply)["tick"]
+    assert isinstance(tip, int)
+    at = run.applied_at(cmd)
+    return _exact_releases(run, band, at, tip, at)
 
 
 def _held(run: Run) -> list[str]:
@@ -1475,29 +1579,20 @@ def _held(run: Run) -> list[str]:
     problems = []
     statuses = _replies(run, "control.status")
     pairs = zip(_replies(run, "control.pause"), _replies(run, "control.resume"), strict=False)
-    for (p_at, p_reply), (r_at, r_reply) in pairs:
+    for (p_cmd, p_reply), (r_cmd, r_reply) in pairs:
+        p_at, r_at = run.applied_at(p_cmd), run.applied_at(r_cmd)
         if any(p_at < w < r_at for w, _, _ in run.host.released):
             problems.append("an instant ran while paused")
-        seqs = set()
-        for at, st in statuses:
-            if p_at <= at <= r_at:
-                tip = _result(st)["tip"]
-                assert isinstance(tip, dict)
-                seqs.add(int(str(tip["next_seq"])))
+        seqs = {int(str(_pace_of(st)["next_seq"])) for c, st in statuses if p_at <= c.at_ns <= r_at}
         p_res, r_res = _result(p_reply), _result(r_reply)
         seqs |= {int(str(p_res["next_seq"])), int(str(r_res["next_seq"]))}
         if len(seqs) > 1:
             problems.append("a pause wrote a record: next_seq moved while paused")
         if p_res["tick"] != r_res["tick"]:
             problems.append("the tip moved while paused")
-        after = [w for w, _, _ in run.host.released if w >= r_at]
-        tip_at_resume = r_res["tick"]
-        assert isinstance(tip_at_resume, int)
-        exact = _exact_releases(run, "1y", r_at, tip_at_resume, r_at)
+        exact = _resume_exact(run, r_cmd, r_reply, "1y")
         if exact:
             problems.append(f"paused time was owed: {exact[0]}")
-        if not after:
-            problems.append("nothing ran after the resume")
     return problems
 
 
@@ -1507,7 +1602,7 @@ def _stepped(run: Run) -> list[str]:
     reached = [
         (int(ln.split()[1]), ln.split()[4]) for ln in run.host.run_log if " step.reached " in ln
     ]
-    for at, reply in _replies(run, "control.step"):
+    for cmd, reply in _replies(run, "control.step"):
         if _reason(reply) != "ok":
             continue  # reported once by the invariance check
         res = _result(reply)
@@ -1515,6 +1610,7 @@ def _stepped(run: Run) -> list[str]:
         target = step["until_tick"] if isinstance(step, dict) else tick
         assert isinstance(target, int)
         want = target - (target - FIRST_TICK) % INSTANT_MINUTES
+        at = run.applied_at(cmd)
         hit = next((tip for w, tip in reached if w >= at), None)
         if hit is None or hit == "~":
             problems.append(f"the step to {target} never paused")
@@ -1526,25 +1622,23 @@ def _stepped(run: Run) -> list[str]:
 
 
 def _step_scenario_checks(run: Run) -> list[str]:
-    """The step scenario's exact answers: the resume at 1y re-anchors at the tip (C3's mutants)."""
+    """The step scenario's exact answers: the resume at 1y re-anchors at the tip."""
     problems = _stepped(run)
-    resume_at, resume_reply = _replies(run, "control.resume")[-1]
-    tip = _result(resume_reply)["tick"]
-    assert isinstance(tip, int)
+    cmd, reply = _replies(run, "control.resume")[-1]
+    tip = _result(reply)["tick"]
     if tip != STEP_TICK_LATER:
         problems.append(f"the last resume answered tip {tip}, expected {STEP_TICK_LATER}")
-    problems += _exact_releases(run, "1y", resume_at, tip, resume_at)
+    problems += _resume_exact(run, cmd, reply, "1y")
     return problems
 
 
 def _contest_checks(run: Run) -> list[str]:
     """C3: a pause clears a step, a resume clears a step, a later step replaces the target."""
     problems = []
-    by_method = {m: _replies(run, m) for m in ("control.pause", "control.resume", "control.step")}
-    pause_b = _result(by_method["control.pause"][1][1])
+    pause_b = _result(_replies(run, "control.pause", "b")[0][1])
     if pause_b["step"] is not None or pause_b["state"] != "paused":
         problems.append("a pause left the step pending")
-    steps = [_result(r) for _, r in by_method["control.step"]]
+    steps = [_result(r) for _, r in _replies(run, "control.step")]
     if any(s["state"] != "running" for s in steps[:3]):
         problems.append("a step did not run")
     reached = [int(ln.split()[4]) for ln in run.host.run_log if " step.reached " in ln]
@@ -1556,20 +1650,104 @@ def _contest_checks(run: Run) -> list[str]:
 
 
 def _mid_instant_checks(run: Run) -> list[str]:
-    """C1: answers report the state the engine applied, at the tip it applied it."""
+    """K1: a command landing while an instant computes is applied after it and wins a step."""
     problems = []
-    pause = _result(_replies(run, "control.pause")[0][1])
-    if pause["tick"] != FIRST_TICK or pause["state"] != "paused":
-        problems.append(f"a pause landing mid-instant 0 answered {pause}")
-    if run.host.released[1][0] < 100 * MS:
+    pauses = _replies(run, "control.pause")
+    first = _result(pauses[0][1])
+    if first["tick"] != FIRST_TICK or first["state"] != "paused":
+        problems.append(f"a pause landing in instant 0 answered {first}")
+    second = [w for w, _, k in run.host.released if k == INSTANT_1]
+    if second and second[0] < 100 * MS:
         problems.append("instant 1 ran while paused")
-    step = _result(_replies(run, "control.step")[0][1])
-    if step["tick"] != _tick(1) or step["step"] != {"until_tick": _tick(2)}:
-        problems.append(f"a step landing mid-instant 1 answered {step}")
-    reached = [int(ln.split()[4]) for ln in run.host.run_log if " step.reached " in ln]
-    if reached != [_tick(2)]:
-        problems.append(f"the mid-instant step paused at {reached}, expected {[_tick(2)]}")
+    resume = _result(_replies(run, "control.resume")[0][1])
+    if resume["state"] != "running" or resume["step"] is not None or resume["tick"] != _tick(1):
+        problems.append(f"a resume landing in the reaching instant answered {resume}")
+    tie = _result(pauses[1][1])
+    if tie["tick"] != _tick(10) or tie["state"] != "paused":
+        problems.append(f"a pause at exactly a decision point's time answered {tie}")
+    win = _result(pauses[2][1])
+    if win["tick"] != _tick(11) or win["state"] != "paused" or win["step"] is not None:
+        problems.append(f"a pause landing in the reaching instant answered {win}")
+    log = run.host.run_log
+    reached = [int(ln.split()[4]) for ln in log if " step.reached " in ln]
+    if reached != [_tick(12)]:
+        problems.append(f"step.reached was written at {reached}, expected only {[_tick(12)]}")
+    nochange = _result(_replies(run, "control.pace")[0][1])
+    if nochange["changed"] is not False or nochange["tick"] != _tick(11):
+        problems.append(f"a no-change command in the reaching instant answered {nochange}")
+    status = _pace_of(_replies(run, "control.status")[1][1])
+    if status["tick"] != _tick(11) or status["step"] != {"until_tick": _tick(12)}:
+        problems.append(f"a status read mid-instant did not show the published snapshot: {status}")
     return problems
+
+
+def _clear_checks(run: Run) -> list[str]:
+    """K4: a resume that clears a step re-anchors the band at (tip, now)."""
+    cmd, reply = _replies(run, "control.resume")[0]
+    res = _result(reply)
+    problems = []
+    if res["step"] is not None or res["state"] != "running":
+        problems.append(f"the clearing resume answered {res}")
+    problems += _resume_exact(run, cmd, reply, "1y")
+    at = run.applied_at(cmd)
+    nxt = [w for w, _, _ in run.host.released if w > at]
+    if nxt and nxt[0] - at != ceil_div(INSTANT_MINUTES * S, rate("1y") or 1):
+        problems.append(f"the first instant after the clearing came {nxt[0] - at} ns later")
+    return problems
+
+
+def _finish_checks(run: Run) -> list[str]:
+    """K5: the end is never held; a pause landing in the last instant is run_finished."""
+    problems = []
+    _, pause = _replies(run, "control.pause")[0]
+    if _reason(pause) != "run_finished":
+        problems.append(f"a pause landing in the last instant was answered {_reason(pause)}")
+    log = run.host.run_log
+    if any(" step.reached " in ln for ln in log):
+        problems.append("the finish wrote step.reached")
+    if any(" control.pause " in ln for ln in log):
+        problems.append("the finish applied the queue")
+    if log[-1].split()[2] != "finish":
+        problems.append("the run log does not end with finish")
+    return problems
+
+
+def _fold_checks(run: Run) -> list[str]:
+    """K3: P4, P5, P13, P16 against the applied state, in request order."""
+    problems = []
+    pauses = _replies(run, "control.pause")
+    p4 = _result(pauses[1][1])
+    if (p4["state"], p4["changed"]) != ("paused", False):
+        problems.append(f"P4: b's pause behind a's answered {p4}")
+    steps = _replies(run, "control.step")
+    p5a, p5b = _result(steps[0][1]), _result(steps[1][1])
+    if p5a["changed"] is not True or (p5b["changed"], p5b["step"]) != (
+        False,
+        {"until_tick": _tick(5)},
+    ):
+        problems.append(f"P5: identical steps answered {p5a} and {p5b}")
+    c_pauses = [r for c, r in pauses if c.conn == "c"]
+    p13 = [_result(r)["changed"] for r in c_pauses]
+    if p13 != [True, False]:
+        problems.append(f"P13: pipelined pauses answered changed {p13}")
+    c_cmds = [outcome for c, outcome in run.issued if c.conn == "c"]
+    rids = [o.rid if isinstance(o, Pending) else o.get("id") for o in c_cmds]
+    if rids != sorted(rids, key=lambda x: int(str(x))):
+        problems.append("P13: a connection's answers are out of request order")
+    p16a, p16 = _result(steps[2][1]), _result(steps[3][1])
+    if p16["step"] is None or p16["step"] != p16a["step"] or p16["changed"] is not False:
+        problems.append(f"P16: b's step instant behind a's answered {p16}")
+    return problems
+
+
+def _engine_lines_checks(run: Run, name: str) -> list[str]:
+    """The engine's own lines (step.reached, host.start) carry conn=- (K10)."""
+    bad = [
+        ln
+        for ln in run.host.run_log
+        if (" step.reached " in ln or " host.start " in ln) and " conn=- pid=- " not in ln + " "
+    ]
+    return [f"{name}: an engine line carries a controller's identity: {bad[0]!r}"] if bad else []
 
 
 def _invariance_checks(control: str | None = None) -> list[str]:
@@ -1581,15 +1759,20 @@ def _invariance_checks(control: str | None = None) -> list[str]:
         "step": _step_scenario_checks,
         "step-contest": _contest_checks,
         "mid-instant": _mid_instant_checks,
+        "step-clear": _clear_checks,
+        "finish-race": _finish_checks,
+        "queue-fold": _fold_checks,
     }
     for sc in SCENARIOS:
         run = simulate(sc, control)
         problems += _same_history(run, ref, sc.name)
         problems += _slept(run, sc.name)
+        problems += _engine_lines_checks(run, sc.name)
         if sc.name in extra:
             problems += [f"{sc.name}: {p}" for p in extra[sc.name](run)]
-        if any(_reason(r) != "ok" for _, r in run.replies):
-            problems.append(f"{sc.name}: a scripted command was refused")
+        refused = [c for c, r in run.replies if _reason(r) != "ok"]
+        if refused and sc.name != "finish-race":
+            problems.append(f"{sc.name}: a scripted command was refused: {refused[0]}")
     return problems
 
 
@@ -1619,8 +1802,6 @@ def _run_log_checks() -> list[str]:
             problems.append(f"{sc.name}: the host lines are not start, pace, ..., finish")
         if any(len(ln.split()) not in {5, 9} for ln in log):
             problems.append(f"{sc.name}: a run-log line has the wrong field count")
-        if any(" step.reached " in ln for ln in log[-2:]) and sc.name == "step":
-            problems.append(f"{sc.name}: a step reached at the end (C14)")
     return problems
 
 
@@ -1632,9 +1813,10 @@ def self_test(control: str | None = None) -> list[str]:
     if control == "extra-method":
         METHODS = METHODS | {"control.seek"}  # a sixth method on the control table
     invariance: Check = (
-        "pace invariance: eleven scenarios reproduce the headless run's bytes, digests, keyframes, "
-        "ladder and journal; the governor slept, no flood starved it; a pause held the tip; a step "
-        "stopped after Bookkeeping of its target; answers report the applied state",
+        "pace invariance: fourteen scenarios reproduce the headless run's bytes, digests, "
+        "keyframes, ladder and journal; the governor slept, no flood starved it; a pause held the "
+        "tip; a step stopped after Bookkeeping of its target; a command landing in a reaching "
+        "instant won; the end was never held; answers report the applied state in request order",
         lambda: _invariance_checks(control=control),
     )
     checks: list[Check] = [
@@ -1663,13 +1845,13 @@ def self_test(control: str | None = None) -> list[str]:
 
 
 # ------------------------------------------------------------------------------------------ golden
-def _answer_token(cmd: Command, reply: Json) -> str:
+def _answer_token(reply: Json) -> str:
     if _reason(reply) != "ok":
         return _reason(reply)
-    res = _result(reply)
+    res = _pace_of(reply)
     step = res["step"]
     until = step["until_tick"] if isinstance(step, dict) else "-"
-    changed = res.get("changed", "-")
+    changed = _result(reply).get("changed", "-")
     tick = "~" if res["tick"] is None else res["tick"]
     return f"{res['band']} {res['state']} {until} {tick} {res['next_seq']} {changed}"
 
@@ -1686,12 +1868,13 @@ def render_golden() -> str:
         "#   from a clock at 0 (`_finished`: the whole horizon; `_with_step`: a step to the last",
         "#   instant pending; `_genesis`, `_before_first`: no instant yet) (control_v1.md §4-5).",
         "# `scenario <name>` then `clock <wall_ns> <tick> <k>` per instant released (the fake wall",
-        "#   clock when instant k started; each instant takes 10 ms; control_v1.md §3.3), `answer",
-        "#   <at_ns> <conn> <method> <band> <state> <until|-> <tick> <next_seq> <changed>` or",
-        "#   `answer <at_ns> <conn> <method> <reason>` per scripted command (C1: the applied",
-        "#   state),",
-        "#   and `log <run-log line>` lines (control_v1.md §8.1); rh-golden's governor test",
-        "#   reproduces the clock and answer lines.",
+        "#   clock when instant k started computing; an instant takes 10 ms and its records land,",
+        "#   and the tip moves, at its end; control_v1.md §3.3 and §9's delivery rule), `answer",
+        "#   <at_ns> <conn> <method> <band> <state> <until|-> <tick> <next_seq> <changed|->` or",
+        "#   `answer <at_ns> <conn> <method> <reason>` per scripted command, status reads included",
+        "#   (the applied state, or the published snapshot for a status), and `log <run-log line>`",
+        "#   lines (control_v1.md §8.1); rh-golden's governor test reproduces the clock and answer",
+        "#   lines.",
         "# `invariance <sha256 of the channel-A lines> <keyframe ticks> <journal head> <ladder>`:",
         "#   what every scenario produced, equal to the headless run's (control_v1.md §0 fact 2).",
     ]
@@ -1707,9 +1890,7 @@ def render_golden() -> str:
         body.append(f"scenario {sc.name}")
         body.extend(f"clock {w} {t} {k}" for w, t, k in run.host.released)
         body.extend(
-            f"answer {c.at_ns} {c.conn} {c.method} {_answer_token(c, r)}"
-            for c, r in run.replies
-            if c.method != "control.status"
+            f"answer {c.at_ns} {c.conn} {c.method} {_answer_token(r)}" for c, r in run.replies
         )
         body.extend(f"log {ln}" for ln in run.host.run_log)
         ref = ref or run.host.engine
