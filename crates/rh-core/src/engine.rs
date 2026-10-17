@@ -24,8 +24,11 @@
 //!    (queued for their owners, with the id of their cause). Only
 //!    the merge touches the agenda, the queues and the log, so the thread count never reaches an
 //!    id;
-//! 5. in `Bookkeeping`, after the phase's systems, runs the invariants: the core's own, then each
-//!    system's in id order. The first violation is fatal.
+//! 5. in `Bookkeeping`, first compacts the person ledger (the dead of the instant leave every
+//!    `person.*` column; SPR-011 ruling 5, `crate::ledger`), then runs the phase's systems, then the
+//!    invariants: the core's own (the ledger's among them), then each system's in id order. The
+//!    first violation is fatal. After every step that owns a ledger column, the core checks it
+//!    kept the ledger's row count and the life-course log's append-only rule.
 //!
 //! **Material inputs** (ADR-0025 item 3). [`Engine::submit_input`] queues an input with its
 //! dependency scope (a set of entities) for an instant at or after the next one; an earlier one is
@@ -48,6 +51,11 @@
 //! `EventId`s. The same systems run at an erroring instant at every thread count, and the first
 //! error in canonical order is the one reported.
 //!
+//! **Observer** (SPR-009 ruling 4). A host may attach an [`Observer`] ([`Engine::set_observer`]),
+//! which receives a [`Notice`] at every instant, phase, level and job boundary: sim time, phase and
+//! binding, never a clock and never state. It is how the host times systems without plane A ever
+//! reading a clock, and attaching it changes no result ([`crate::observe`]).
+//!
 //! No wall clock, no unkeyed RNG, no hash-map iteration (GOV-003 §2). Threads come from
 //! `std::thread::scope`; no third-party dependency.
 //!
@@ -60,6 +68,7 @@ use core::fmt;
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::panic::AssertUnwindSafe;
+use std::sync::Arc;
 
 use rh_events::{Event, EventLog};
 use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
@@ -68,17 +77,24 @@ use crate::access::Lag;
 use crate::agenda::{Agenda, Timer, TimerEntry};
 use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance};
+use crate::ledger::{Ledger, LifeCourseGuard};
+use crate::observe::{Boundary, JobRef, JobWork, Notice, Observer, Pass};
 use crate::phase::Phase;
 use crate::register::{Entry, Registered};
+use crate::schedule::Node;
 use crate::state::{EngineState, RestoreError, check_epochs, check_inputs, check_timers};
 use crate::system::{
-    InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx,
+    InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx, Taken,
 };
 use crate::time::{Calendar, Pulse, SimTime};
 use crate::world::{Column, SystemView, WorldTables};
 
 /// The name the core's own invariants and errors carry.
 pub const CORE: &str = "rh-core";
+
+/// The name a crash artifact gives the host's observer when it panicked (SPR-009 DEF-1). A replay
+/// runs without the host's observer, so such an artifact replays as no failure.
+pub const OBSERVER: &str = "observer";
 
 /// A material input as P0 knows it: its dependency scope (ADR-0025 item 3). The host expands a
 /// household, settlement or region scope into the entities it covers.
@@ -198,6 +214,44 @@ pub struct Engine {
     last_keyframe: Option<String>,
     /// The error that stopped the run, if any. A poisoned engine never runs again (SPR-005 G-d).
     poisoned: Option<SimError>,
+    /// How many levels ran and how many of them held more than one job (SPR-008 DEF-2). An
+    /// observation of the scheduler, never part of the state, a keyframe or a hash.
+    dispatch: DispatchStats,
+    /// The host's observer, if attached (SPR-009 ruling 4): notices only, never state, so it is
+    /// not part of [`EngineState`] and never changes a result.
+    observer: Option<Arc<dyn Observer>>,
+    /// The person ledger and life-course log, when the world has them (SPR-011 ruling 5): which
+    /// columns the core compacts at `Bookkeeping` and checks after each step that owns one.
+    ledger: Option<Ledger>,
+    /// The `(purpose, entity)` pairs each system (by entry index) has drawn from at the current
+    /// instant, lent to each of its jobs in turn and cleared at every instant (BCK-002 A-37).
+    /// Bookkeeping of the step guard, never state: an instant always starts it empty. One slot
+    /// per system, built once, so an instant with no draws allocates nothing (V-PERF-11).
+    taken: Vec<Taken>,
+}
+
+/// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
+/// evidence that a thread-count comparison exercises parallel levels at all. It depends on the
+/// schedule and the instants run, never on the thread count, and is not part of the state.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DispatchStats {
+    /// Levels run (timer-pass and binding levels, each split level counted once).
+    pub levels: u64,
+    /// Levels that held two or more jobs: the ones several threads can share.
+    pub parallel_levels: u64,
+    /// The most jobs any level held.
+    pub max_jobs: usize,
+}
+
+impl DispatchStats {
+    /// Counts one level of `jobs` jobs.
+    fn record(&mut self, jobs: usize) {
+        self.levels += 1;
+        if jobs > 1 {
+            self.parallel_levels += 1;
+        }
+        self.max_jobs = self.max_jobs.max(jobs);
+    }
 }
 
 /// One system's work in one pass: its due timers, or one firing binding.
@@ -215,12 +269,17 @@ struct Job {
 /// The columns one system owns, moved out of the tables for its step.
 type Owned = BTreeMap<&'static str, Column>;
 
+/// What one job takes to its thread: its owned columns, its command inbox, and the pairs its
+/// system has drawn from at this instant (BCK-002 A-37).
+type JobInput = (Owned, Vec<QueuedCommand>, Taken);
+
 /// The result of one job.
 struct JobOutcome {
     owned: Owned,
     result: Result<(), SimError>,
     untaken: Vec<QueuedCommand>,
     out: Outbox,
+    taken: Taken,
 }
 
 /// Counts for the per-instant diagnostic record.
@@ -277,7 +336,11 @@ impl Engine {
             }
             by_system_id.insert(e.system_id, i);
         }
-        let poisoned = unsupported_lag(&registered.entries);
+        let (ledger, ledger_error) = match Ledger::of(&tables) {
+            Ok(ledger) => (ledger, None),
+            Err(e) => (None, Some(e)),
+        };
+        let poisoned = unsupported_lag(&registered.entries).or(ledger_error);
         Self {
             calendar,
             world_seed,
@@ -304,6 +367,10 @@ impl Engine {
             journal_head: None,
             last_keyframe: None,
             poisoned,
+            dispatch: DispatchStats::default(),
+            observer: None,
+            ledger,
+            taken: Vec::new(),
         }
     }
 
@@ -445,6 +512,32 @@ impl Engine {
         self.last_keyframe = keyframe;
     }
 
+    /// Attaches the host's observer, or detaches it with `None` (SPR-009 ruling 4; [`crate::observe`]).
+    /// It receives boundary notices with no clock and no state; attached or not, every result is
+    /// the same.
+    pub fn set_observer(&mut self, observer: Option<Arc<dyn Observer>>) {
+        self.observer = observer;
+    }
+
+    /// Sends one notice from the engine's own thread, if an observer is attached. A panic in the
+    /// observer is a fatal [`SimError::Observer`] (DEF-1), which poisons the engine like any other.
+    fn notify(
+        &self,
+        at: SimTime,
+        phase: Option<Phase>,
+        boundary: Boundary,
+    ) -> Result<(), SimError> {
+        let notice = Notice {
+            at,
+            phase,
+            worker: 0,
+            boundary,
+        };
+        self.observer
+            .as_deref()
+            .map_or(Ok(()), |o| observe(o, &notice))
+    }
+
     /// Sets the timeline id (0, the canonical timeline, by default).
     pub fn set_timeline(&mut self, timeline: TimelineId) {
         self.timeline = timeline;
@@ -536,6 +629,12 @@ impl Engine {
     #[must_use]
     pub fn crash_artifact(&self) -> Option<&CrashArtifact> {
         self.crash.as_ref()
+    }
+
+    /// What the scheduler has dispatched so far (SPR-008 DEF-2).
+    #[must_use]
+    pub const fn dispatch_stats(&self) -> DispatchStats {
+        self.dispatch
     }
 
     /// The last diagnostic records, oldest first.
@@ -701,13 +800,16 @@ impl Engine {
             | SimError::UnownedWrite { system, .. }
             | SimError::MissingColumn { system, .. }
             | SimError::UndeclaredPurpose { system, .. }
+            | SimError::StreamReuse { system, .. }
             | SimError::Timer { system, .. }
             | SimError::UndeclaredCommand { system, .. }
             | SimError::UndeclaredEvent { system, .. }
             | SimError::Event { system, .. }
             | SimError::Panic { system, .. }
             | SimError::Unsupported { system, .. }
+            | SimError::Ledger { system, .. }
             | SimError::System { system, .. } => ((*system).to_owned(), None),
+            SimError::Observer { .. } => (OBSERVER.to_owned(), None),
         };
         CrashArtifact {
             timeline: self.timeline.to_raw(),
@@ -729,6 +831,13 @@ impl Engine {
     }
 
     fn run_instant(&mut self, t: SimTime) -> Result<(), SimError> {
+        // The instant is the current one before its first notice, so a failure there (an observer
+        // panic at InstantStart) names this instant, not the last (VER-SPR-009-TEST OBS-1).
+        self.at = (t, Phase::Inputs);
+        self.taken
+            .resize_with(self.registered.entries.len(), Taken::default);
+        self.taken.iter_mut().for_each(Taken::clear);
+        self.notify(t, None, Boundary::InstantStart)?;
         let fired: Vec<Pulse> = self
             .calendar
             .pulses_at(t)
@@ -744,8 +853,16 @@ impl Engine {
         let mut tally = Tally::default();
         for phase in Phase::ALL {
             self.at = (t, phase);
+            self.notify(t, Some(phase), Boundary::PhaseStart)?;
             if phase == Phase::Inputs {
                 tally.inputs = self.apply_inputs(t)?;
+            }
+            // SPR-011 ruling 5: the dead of this instant leave every person.* column before any
+            // Bookkeeping system, invariant or hash sees the tables.
+            if phase == Phase::Bookkeeping
+                && let Some(ledger) = &self.ledger
+            {
+                ledger.compact(&mut self.tables)?;
             }
             let mut due: BTreeMap<usize, Vec<TimerEntry>> = BTreeMap::new();
             for (key, timer) in self.agenda.pop_due(t, phase) {
@@ -761,7 +878,7 @@ impl Engine {
             // The timer pass, then the firing bindings (SPR-005 DEF-7). Both run the canonical
             // order: dependency levels over every binding, each level coarser pulse first, then id.
             let plan = self.registered.schedule().phase(phase).clone();
-            let mut passes: Vec<Vec<Vec<Job>>> = Vec::new();
+            let mut passes: Vec<(Pass, Vec<Vec<Job>>)> = Vec::new();
             // Timer pass: each owner once, at the level of its first binding in the phase, with
             // its timers in key order.
             let timer_pass: Vec<Vec<Job>> = plan
@@ -789,39 +906,15 @@ impl Engine {
                     ),
                 });
             }
-            passes.push(timer_pass);
-            // Binding pass: a level is split wherever a system's second binding appears, so one
-            // system's bindings never run at once (they share its columns); each split is a level
-            // for the merge. The split depends on the schedule only, never on the thread count.
-            let mut binding_pass: Vec<Vec<Job>> = Vec::new();
-            for level in &plan.levels {
-                let mut groups: Vec<Vec<Job>> = vec![Vec::new()];
-                for n in level.iter().filter(|n| fired.contains(&n.pulse)) {
-                    let repeats = groups
-                        .last()
-                        .is_some_and(|g| g.iter().any(|j| j.index == n.system));
-                    if repeats {
-                        groups.push(Vec::new());
-                    }
-                    if let Some(g) = groups.last_mut() {
-                        g.push(Job {
-                            index: n.system,
-                            work: Work::Step(PulseBinding {
-                                pulse: n.pulse,
-                                phase,
-                            }),
-                        });
-                    }
-                }
-                binding_pass.extend(groups.into_iter().filter(|g| !g.is_empty()));
-            }
-            passes.push(binding_pass);
-            for jobs in passes.into_iter().flatten() {
-                self.run_level(t, phase, &snapshot, &jobs, &mut tally)?;
-            }
+            passes.push((Pass::Timers, timer_pass));
+            // Binding pass: a level is split wherever a system's second binding appears.
+            let binding_pass = binding_pass(&plan.levels, &fired, phase);
+            passes.push((Pass::Bindings, binding_pass));
+            self.run_passes((t, phase), &snapshot, passes, &mut tally)?;
             if phase == Phase::Bookkeeping {
                 self.check_invariants(t)?;
             }
+            self.notify(t, Some(phase), Boundary::PhaseEnd)?;
         }
         let pulses: Vec<&str> = fired.iter().map(|p| p.name()).collect();
         self.record(format!(
@@ -833,6 +926,30 @@ impl Engine {
             tally.events,
             self.agenda.len()
         ));
+        self.notify(t, None, Boundary::InstantEnd)?;
+        Ok(())
+    }
+
+    /// Runs the passes of one phase level by level, each level between its observer notices.
+    fn run_passes(
+        &mut self,
+        (t, phase): (SimTime, Phase),
+        snapshot: &WorldTables,
+        passes: Vec<(Pass, Vec<Vec<Job>>)>,
+        tally: &mut Tally,
+    ) -> Result<(), SimError> {
+        for (pass, levels) in passes {
+            for (level, jobs) in levels.iter().enumerate() {
+                let start = Boundary::LevelStart {
+                    pass,
+                    level,
+                    jobs: jobs.len(),
+                };
+                self.notify(t, Some(phase), start)?;
+                self.run_level((t, phase), snapshot, jobs, tally)?;
+                self.notify(t, Some(phase), Boundary::LevelEnd)?;
+            }
+        }
         Ok(())
     }
 
@@ -927,6 +1044,9 @@ impl Engine {
                 format!("an event carries tick {tick}, after the current instant {t}"),
             ));
         }
+        if let Some(ledger) = &self.ledger {
+            ledger.check(&self.tables)?;
+        }
         for e in &self.registered.entries {
             let results = guard(e.id, || Ok(e.model.invariants(&self.tables)))?;
             if let Some(r) = results.into_iter().find(|r| !r.holds) {
@@ -945,14 +1065,140 @@ impl Engine {
     /// merges the level's buffers in job order (ruling 1).
     fn run_level(
         &mut self,
-        t: SimTime,
-        phase: Phase,
+        (t, phase): (SimTime, Phase),
         snapshot: &WorldTables,
         jobs: &[Job],
         tally: &mut Tally,
     ) -> Result<(), SimError> {
-        // Every owned column exists (materialised in `new`); check them all before moving any, so a
-        // missing one fails the step without disturbing the tables (SPR-005 G-c).
+        self.dispatch.record(jobs.len());
+        self.check_owned_columns(jobs)?;
+        let guards = self.ledger_guards(jobs, phase);
+        let inputs: Vec<JobInput> = jobs
+            .iter()
+            .map(|job| {
+                let e = &self.registered.entries[job.index];
+                let owned = e
+                    .access
+                    .writes
+                    .iter()
+                    .filter_map(|w| self.tables.take(w.column).map(|rows| (w.column, rows)))
+                    .collect();
+                let taken = std::mem::take(&mut self.taken[job.index]);
+                (owned, self.commands.take(e.id), taken)
+            })
+            .collect();
+        let workers = self.threads.min(jobs.len()).max(1);
+        let outcomes: Vec<JobOutcome> = {
+            let observer = self.observer.as_deref();
+            let tables = &self.tables;
+            let agenda = &self.agenda;
+            let entries = &self.registered.entries;
+            let epochs = &self.epochs;
+            let (world_seed, branch_salt) = (self.world_seed, self.branch_salt);
+            let key = |e: &Entry| SystemKey::new(world_seed, branch_salt, e.system_id, 0);
+            let run = |k: usize, job: &Job, (cols, inbox, taken): JobInput| {
+                let e = &entries[job.index];
+                let notice = |boundary| Notice {
+                    at: t,
+                    phase: Some(phase),
+                    worker: k % workers,
+                    boundary,
+                };
+                let job_ref = job_ref(e.id, job, k);
+                // DEF-1: an observer panic is this job's fatal error; the job's columns still go
+                // back to the tables with the others.
+                let started =
+                    observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobStart(job_ref))));
+                let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
+                let info = JobInfo {
+                    system: e.id,
+                    system_id: e.system_id,
+                    key: key(e),
+                    world_seed,
+                    branch_salt,
+                    epochs,
+                    purposes: &e.purposes,
+                    access: &e.access,
+                    bindings: &e.bindings,
+                    agenda,
+                };
+                let mut ctx = StepCtx::new(info, t, phase, inbox, taken);
+                // A failed JobStart skips the step; the instant is lost either way.
+                let result = started.and_then(|()| match &job.work {
+                    Work::Timers(timers) => timers.iter().try_for_each(|timer| {
+                        guard(e.id, || e.model.fire(timer, &mut view, &mut ctx))
+                    }),
+                    Work::Step(binding) => {
+                        guard(e.id, || e.model.step(*binding, &mut view, &mut ctx))
+                    }
+                });
+                let (untaken, out, taken) = ctx.finish();
+                let ended =
+                    observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobEnd(job_ref))));
+                let result = result.and(ended);
+                JobOutcome {
+                    owned: view.into_owned(),
+                    result,
+                    untaken,
+                    out,
+                    taken,
+                }
+            };
+            dispatch(self.threads, jobs, inputs, run)
+        };
+        let mut first_error = None;
+        let mut outboxes = Vec::with_capacity(outcomes.len());
+        for (job, o) in jobs.iter().zip(outcomes) {
+            for (name, rows) in o.owned {
+                self.tables.insert(name, rows);
+            }
+            self.commands
+                .restore(self.registered.entries[job.index].id, o.untaken);
+            self.taken[job.index] = o.taken;
+            if first_error.is_none() {
+                first_error = o.result.err();
+            }
+            outboxes.push(o.out);
+        }
+        if let Some(e) = first_error {
+            return Err(e);
+        }
+        // `guards` is empty without a ledger: the zip pairs nothing (DEF-4).
+        for (job, g) in jobs.iter().zip(&guards) {
+            g.as_ref().map_or(Ok(()), |g| {
+                g.check(self.registered.entries[job.index].id, &self.tables)
+            })?;
+        }
+        // After every owned column is back in the tables, so a failing observer loses none (DEF-1).
+        self.notify(t, Some(phase), Boundary::LevelMerge)?;
+        for (job, out) in jobs.iter().zip(outboxes) {
+            self.merge(t, phase, job.index, out, tally)?;
+        }
+        Ok(())
+    }
+
+    /// What each job must preserve of the ledger columns it owns (SPR-011 ruling 5): `None` for a
+    /// job that owns none, or in a world without a ledger.
+    /// A world without a ledger pays nothing: no guard and no allocation (DEF-4, V-PERF-11).
+    fn ledger_guards(&self, jobs: &[Job], phase: Phase) -> Vec<Option<LifeCourseGuard>> {
+        if self.ledger.is_none() {
+            return Vec::new();
+        }
+        jobs.iter()
+            .map(|job| {
+                let e = &self.registered.entries[job.index];
+                self.ledger.as_ref().and_then(|ledger| {
+                    let writes = e.access.writes.iter().map(|w| w.column);
+                    let g = ledger.guard(&self.tables, writes, phase);
+                    (!g.is_empty()).then_some(g)
+                })
+            })
+            .collect()
+    }
+
+    /// Every column the level's jobs own exists (materialised in `new`). Checked for all before any
+    /// is moved, so a missing one fails the step without disturbing the tables (SPR-005 G-c).
+    fn check_owned_columns(&self, jobs: &[Job]) -> Result<(), SimError> {
         for job in jobs {
             let e = &self.registered.entries[job.index];
             if let Some(w) = e
@@ -966,74 +1212,6 @@ impl Engine {
                     column: w.column.to_owned(),
                 });
             }
-        }
-        let inputs: Vec<(Owned, Vec<QueuedCommand>)> = jobs
-            .iter()
-            .map(|job| {
-                let e = &self.registered.entries[job.index];
-                let owned = e
-                    .access
-                    .writes
-                    .iter()
-                    .filter_map(|w| self.tables.take(w.column).map(|rows| (w.column, rows)))
-                    .collect();
-                (owned, self.commands.take(e.id))
-            })
-            .collect();
-        let outcomes: Vec<JobOutcome> = {
-            let tables = &self.tables;
-            let agenda = &self.agenda;
-            let entries = &self.registered.entries;
-            let key = |e: &Entry| SystemKey::new(self.world_seed, self.branch_salt, e.system_id, 0);
-            let run = |job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| -> JobOutcome {
-                let e = &entries[job.index];
-                let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
-                let info = JobInfo {
-                    system: e.id,
-                    system_id: e.system_id,
-                    key: key(e),
-                    purposes: &e.purposes,
-                    access: &e.access,
-                    bindings: &e.bindings,
-                    agenda,
-                };
-                let mut ctx = StepCtx::new(info, t, phase, inbox);
-                let result = match &job.work {
-                    Work::Timers(timers) => timers.iter().try_for_each(|timer| {
-                        guard(e.id, || e.model.fire(timer, &mut view, &mut ctx))
-                    }),
-                    Work::Step(binding) => {
-                        guard(e.id, || e.model.step(*binding, &mut view, &mut ctx))
-                    }
-                };
-                let (untaken, out) = ctx.finish();
-                JobOutcome {
-                    owned: view.into_owned(),
-                    result,
-                    untaken,
-                    out,
-                }
-            };
-            dispatch(self.threads, jobs, inputs, run)
-        };
-        let mut first_error = None;
-        let mut outboxes = Vec::with_capacity(outcomes.len());
-        for (job, o) in jobs.iter().zip(outcomes) {
-            for (name, rows) in o.owned {
-                self.tables.insert(name, rows);
-            }
-            self.commands
-                .restore(self.registered.entries[job.index].id, o.untaken);
-            if first_error.is_none() {
-                first_error = o.result.err();
-            }
-            outboxes.push(o.out);
-        }
-        if let Some(e) = first_error {
-            return Err(e);
-        }
-        for (job, out) in jobs.iter().zip(outboxes) {
-            self.merge(t, phase, job.index, out, tally)?;
         }
         Ok(())
     }
@@ -1100,6 +1278,48 @@ impl Engine {
     }
 }
 
+/// The binding pass of one phase: the bindings that fire at this instant, level by level, a level
+/// split wherever one system's second binding appears, so one system's bindings never run at once
+/// (they share its columns); each split is a level for the merge. The split depends on the
+/// schedule only, never on the thread count (SPR-005 DEF-7).
+fn binding_pass(levels: &[Vec<Node>], fired: &[Pulse], phase: Phase) -> Vec<Vec<Job>> {
+    let mut pass: Vec<Vec<Job>> = Vec::new();
+    for level in levels {
+        let mut groups: Vec<Vec<Job>> = vec![Vec::new()];
+        for n in level.iter().filter(|n| fired.contains(&n.pulse)) {
+            let repeats = groups
+                .last()
+                .is_some_and(|g| g.iter().any(|j| j.index == n.system));
+            if repeats {
+                groups.push(Vec::new());
+            }
+            if let Some(g) = groups.last_mut() {
+                g.push(Job {
+                    index: n.system,
+                    work: Work::Step(PulseBinding {
+                        pulse: n.pulse,
+                        phase,
+                    }),
+                });
+            }
+        }
+        pass.extend(groups.into_iter().filter(|g| !g.is_empty()));
+    }
+    pass
+}
+
+/// What an observer is told about job `k` of a level (SPR-009 ruling 4): no state, only names.
+fn job_ref(system: &'static str, job: &Job, k: usize) -> JobRef {
+    JobRef {
+        system,
+        work: match &job.work {
+            Work::Timers(timers) => JobWork::Timers(timers.len()),
+            Work::Step(binding) => JobWork::Binding(*binding),
+        },
+        index: k,
+    }
+}
+
 /// Runs `run` on every job with its input: in order on one thread, or spread over `threads`
 /// workers (job k on worker k % threads, each keeping its jobs in order). Returns the outcomes in
 /// job order whatever the thread count.
@@ -1107,11 +1327,16 @@ fn dispatch<I: Send, O: Send>(
     threads: usize,
     jobs: &[Job],
     inputs: Vec<I>,
-    run: impl Fn(&Job, I) -> O + Sync,
+    run: impl Fn(usize, &Job, I) -> O + Sync,
 ) -> Vec<O> {
     let threads = threads.min(jobs.len());
     if threads <= 1 {
-        return jobs.iter().zip(inputs).map(|(j, i)| run(j, i)).collect();
+        return jobs
+            .iter()
+            .zip(inputs)
+            .enumerate()
+            .map(|(k, (j, i))| run(k, j, i))
+            .collect();
     }
     let mut per_worker: Vec<Vec<(usize, &Job, I)>> = (0..threads).map(|_| Vec::new()).collect();
     for (k, (j, input)) in jobs.iter().zip(inputs).enumerate() {
@@ -1124,7 +1349,7 @@ fn dispatch<I: Send, O: Send>(
             .map(|work| {
                 scope.spawn(move || {
                     work.into_iter()
-                        .map(|(k, j, input)| (k, run(j, input)))
+                        .map(|(k, j, input)| (k, run(k, j, input)))
                         .collect::<Vec<_>>()
                 })
             })
@@ -1156,6 +1381,24 @@ fn guard<T>(
             system,
             message: panic_message(payload.as_ref()),
         })
+    })
+}
+
+/// Delivers one notice to the host's observer under the same discipline as system code: a panic
+/// becomes a fatal [`SimError::Observer`] naming the notice (SPR-009 DEF-1), never an unwind out of
+/// [`Engine::advance_until`]. The text never names the worker, so it is the same at every thread
+/// count; a job notice's [`JobRef`] already names the job by its index in the level.
+fn observe(observer: &dyn Observer, notice: &Notice) -> Result<(), SimError> {
+    std::panic::catch_unwind(AssertUnwindSafe(|| observer.notify(notice))).map_err(|payload| {
+        SimError::Observer {
+            notice: format!(
+                "{:?} at {} in {}",
+                notice.boundary,
+                notice.at,
+                notice.phase.map_or("no phase", Phase::name)
+            ),
+            message: panic_message(payload.as_ref()),
+        }
     })
 }
 

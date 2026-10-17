@@ -3,26 +3,35 @@
 Refs: SPR-001 T-04; docs/09 V-INSP-03 (EVO-1), V-PLN-01 (DET-12); docs/13 §3; ADR-0024.
 """
 
+import re
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from lint_arch import (
+    ENGINE_CRATES,
+    ENGINE_DENY_LIST,
     EXIT_OK,
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
     FLOAT_YIELDING_APIS,
+    NON_ENGINE_CRATES,
     PLANE_A_EXTERNAL_DEPS,
     UNKEYED_RNG_CRATES,
     Crate,
     Edge,
+    LockPackage,
     WorkspaceError,
+    check_allocator_sources,
     check_clippy_configs,
+    check_engine_purity,
     check_workspace,
     crates_from_metadata,
     load_metadata,
     main,
     read_lints,
+    read_lock,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -168,6 +177,7 @@ PINNED = {
     "rh-cli": ("tool", "tool"),
     "rh-manifest": ("tool", "tool"),
     "rh-sample": ("A", "machinery"),
+    "rh-protocol": ("tool", "tool"),
 }
 
 
@@ -175,8 +185,50 @@ PINNED = {
 def test_each_pinned_crate_must_keep_its_labels(name: str) -> None:
     """The SPR-001 crates, rh-manifest and rh-sample cannot be relabelled, even to a valid one."""
     relabel = ("A", "core") if PINNED[name] != ("A", "core") else ("A", "machinery")
-    crates = [crate(name, *relabel) if c.name == name else c for c in engine(crate("rh-sample"))]
+    base = engine(crate("rh-sample"), crate("rh-protocol", "tool", "tool"))
+    crates = [crate(name, *relabel) if c.name == name else c for c in base]
     assert ("metadata", name) in found(crates)
+
+
+@pytest.mark.parametrize("dep_kind", ["normal", "build", "dev"])
+def test_rh_protocol_is_a_leaf_of_every_dependency_kind(dep_kind: str) -> None:
+    """SPR-026 (wire_v1.md §7): rh-protocol depends on no member, not even as a dev-dependency."""
+    leaf = crate("rh-protocol", plane="tool", kind="tool", deps=("rh-ids",), dep_kind=dep_kind)
+    assert ("protocol-leaf", "rh-protocol") in found(engine(leaf))
+    assert found(engine(crate("rh-protocol", plane="tool", kind="tool"))) == []
+
+
+@pytest.mark.parametrize(
+    ("target", "dep_kind", "ok"),
+    [
+        ("serde", "normal", True),
+        ("serde_json", "normal", True),
+        ("proptest", "dev", True),
+        ("proptest", "normal", False),
+        ("serde", "build", False),
+        ("tokio", "normal", False),
+        ("mio", "dev", False),
+    ],
+)
+def test_rh_protocol_takes_exactly_its_third_party_allow_list(
+    target: str, dep_kind: str, ok: bool
+) -> None:
+    """REV-SPR-026 R7: serde and serde_json, proptest as a dev-dependency, nothing else."""
+    leaf = replace(
+        crate("rh-protocol", plane="tool", kind="tool"), external=(Edge(target, dep_kind),)
+    )
+    assert (("protocol-leaf", "rh-protocol") in found(engine(leaf))) is not ok
+
+
+def test_rh_protocol_is_pinned_to_the_tool_plane_and_closed_to_plane_a() -> None:
+    """Relabelling rh-protocol is refused; a plane-A crate depending on it breaks the closure."""
+    assert PINNED["rh-protocol"] == ("tool", "tool")
+    relabelled = crate("rh-protocol", plane="A", kind="machinery")
+    assert ("metadata", "rh-protocol") in found(engine(relabelled))
+    stream = crate("rh-stream", deps=("rh-protocol",))
+    rules = found(engine(crate("rh-protocol", plane="tool", kind="tool"), stream))
+    assert ("plane-A-closure", "rh-stream") in rules
+    assert ("protocol-leaf", "rh-protocol") not in rules
 
 
 def test_a_relabelled_crate_does_not_open_an_edge() -> None:
@@ -406,6 +458,11 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("plane_a_libm_features", "plane-A-external"),
         ("plane_a_libm_target_edge", "plane-A-external"),
         ("relabelled_sample", "metadata"),
+        ("engine_purity_direct", "engine-purity"),
+        ("engine_purity_transitive", "engine-purity"),
+        ("protocol_depends_on_plane_a", "protocol-leaf"),
+        ("plane_a_to_protocol", "plane-A-closure"),
+        ("protocol_third_party", "protocol-leaf"),
     ],
 )
 def test_main_catches_each_fixture(
@@ -728,3 +785,221 @@ def test_float_yielding_apis_name_reviewed_dependencies() -> None:
         for token in FLOAT_YIELDING_APIS[name]
     }
     assert {"Float64", "Float64Array", "Float32Type", "Float64Builder", "f16", "half"} <= arrow
+
+
+def test_a_checkout_under_a_target_directory_is_still_scanned(tmp_path: Path) -> None:
+    """Review 4: only a target/ below the crate is skipped, never one above the checkout."""
+    directory = tmp_path / "target" / "checkout" / "crates" / "rh-tool"
+    (directory / "src").mkdir(parents=True)
+    (directory / "src" / "lib.rs").write_text(
+        "#[global_allocator]\nstatic A: std::alloc::System = std::alloc::System;\n",
+        encoding="utf-8",
+    )
+    (directory / "target" / "debug").mkdir(parents=True)
+    (directory / "target" / "debug" / "built.rs").write_text("#[global_allocator]\n")
+    # GAP-21: a source directory named `target` inside src/ is code, and is scanned.
+    (directory / "src" / "target").mkdir()
+    (directory / "src" / "target" / "alloc.rs").write_text("#[global_allocator]\n")
+    tool = replace(crate("rh-tool", plane="tool", kind="tool"), directory=directory)
+    found = [(v.rule, v.crate, v.message.split(" ", 1)[0]) for v in check_allocator_sources(tool)]
+    assert found == [
+        ("global-allocator", "rh-tool", "src/lib.rs"),
+        ("global-allocator", "rh-tool", "src/target/alloc.rs"),
+    ]
+
+
+# --- Engine purity (V-INSP-05; BCK-002 A-14; SPR-011 T-00) ---------------------------------------
+
+
+def third_party(name: str, *deps: str, kind: str = "normal") -> Crate:
+    """A plane-A crate whose third-party edges go to ``deps``, all of one kind."""
+    return Crate(name, "A", "machinery", (), tuple(Edge(d, kind, req="=1.0.0") for d in deps))
+
+
+def locked(name: str, *deps: str, version: str = "1.0.0") -> LockPackage:
+    """A Cargo.lock package."""
+    return LockPackage(name, version, deps)
+
+
+def purity(crates: list[Crate], lock: list[LockPackage] | None) -> list[tuple[str, str]]:
+    """Return (crate, first words of the message) for every engine-purity violation."""
+    return [(v.crate, v.message.split(";")[0]) for v in check_engine_purity(crates, lock)]
+
+
+def test_the_repository_has_no_engine_purity_violation() -> None:
+    """V-INSP-05 on the workspace itself, through its Cargo.lock."""
+    crates = crates_from_metadata(load_metadata(REPO / "Cargo.toml"))
+    lock = read_lock(REPO / "Cargo.lock")
+    assert lock, "the repository's Cargo.lock is missing or empty"
+    assert check_engine_purity(crates, lock) == []
+
+
+def test_a_direct_deny_listed_dependency_fails() -> None:
+    """A normal edge from a plane-A crate to a deny-listed crate is reported with its path."""
+    assert purity([third_party("rh-core", "image")], [locked("image")]) == [
+        ("rh-core", "engine crate depends on image (media (images)) through rh-core -> image")
+    ]
+
+
+def test_a_transitive_deny_listed_dependency_fails() -> None:
+    """The lock carries the edge: rh-core -> foo -> bar -> async-openai."""
+    lock = [locked("foo", "bar 2.0.0"), locked("bar", "async-openai", version="2.0.0")]
+    lock += [locked("bar", version="3.0.0"), locked("async-openai")]
+    assert purity([third_party("rh-core", "foo")], lock) == [
+        (
+            "rh-core",
+            "engine crate depends on async-openai (LLM client) through rh-core -> foo -> bar -> "
+            "async-openai",
+        )
+    ]
+
+
+def test_a_build_dependency_counts() -> None:
+    """Build scripts are engine code too (`docs/13` §3 says normal and build)."""
+    assert purity([third_party("rh-core", "cpal", kind="build")], [locked("cpal")]) != []
+
+
+def test_dev_dependencies_pass_directly_and_inside_the_workspace() -> None:
+    """Test code does not ship: a dev edge of an engine crate, or of a member it reaches, passes."""
+    ids = Crate("rh-ids", "A", "machinery", (), (Edge("reqwest", "dev", req="=1.0.0"),))
+    core = Crate("rh-core", "A", "core", (Edge("rh-ids", "normal"),), ())
+    assert purity([core, ids], [locked("reqwest")]) == []
+
+
+def test_a_path_through_a_workspace_member_fails() -> None:
+    """rh-cli -> rh-golden (a tool crate, not engine) -> rh-tts -> tokenizers."""
+    tts = Crate("rh-tts", "tool", "tool", (), (Edge("tokenizers", "normal", req="1"),))
+    golden = Crate("rh-golden", "tool", "tool", (Edge("rh-tts", "normal"),), ())
+    cli = Crate("rh-cli", "tool", "tool", (Edge("rh-golden", "normal"),), ())
+    found = purity([cli, golden, tts], [locked("tokenizers")])
+    assert found == [
+        (
+            "rh-cli",
+            "engine crate depends on tokenizers (LLM tokenizer) through rh-cli -> rh-golden -> "
+            "rh-tts -> tokenizers",
+        )
+    ]
+
+
+def test_a_viewer_is_not_an_engine_crate() -> None:
+    """rh-tui is a viewer of the stream (05.0 §6): a tool crate off the list may use media."""
+    tui = Crate("rh-tui", "tool", "tool", (), (Edge("image", "normal", req="1"),))
+    assert purity([tui], [locked("image")]) == []
+
+
+def test_every_plane_a_crate_is_an_engine_crate() -> None:
+    """A new plane-A crate is checked without anyone listing it."""
+    assert purity([third_party("rh-newcrate", "rodio")], [locked("rodio")]) != []
+
+
+def test_a_missing_lock_or_an_unlocked_dependency_fails_closed() -> None:
+    """Never fail open: without the lock, or with a stale one, the walk would be incomplete."""
+    assert purity([third_party("rh-core", "foo")], None) == [
+        (
+            "workspace",
+            "no Cargo.lock beside the workspace manifest: the transitive dependencies of the "
+            "engine crates are not checked (V-INSP-05)",
+        )
+    ]
+    assert purity([third_party("rh-core", "foo")], []) == [
+        (
+            "rh-core",
+            "its dependency foo is not in Cargo.lock, so what it depends on is not checked "
+            "(V-INSP-05)",
+        )
+    ]
+
+
+def test_read_lock_reads_packages_and_refuses_a_malformed_lock(tmp_path: Path) -> None:
+    """The lock is parsed as TOML; a malformed file is unreadable (exit 2), not empty."""
+    lock = tmp_path / "Cargo.lock"
+    assert read_lock(lock) is None
+    lock.write_text(
+        'version = 4\n[[package]]\nname = "a"\nversion = "1.0.0"\ndependencies = ["b"]\n'
+    )
+    assert read_lock(lock) == (LockPackage("a", "1.0.0", ("b",)),)
+    lock.write_text('[[package]]\nname = "a"\n')
+    with pytest.raises(WorkspaceError):
+        read_lock(lock)
+
+
+def test_the_dev_dependency_fixture_passes() -> None:
+    """The negative control: a dev edge of rh-cli and a viewer's normal edge."""
+    assert main(["--manifest-path", str(ARCH_FIXTURES / "engine_purity_dev" / "Cargo.toml")]) == 0
+
+
+def test_the_deny_list_holds_the_named_examples_and_is_sorted() -> None:
+    """docs/13 §3 and ADR-0035 §6 name nine examples; the constant holds them all."""
+    examples = {"image", "rodio", "cpal", "symphonia", "reqwest", "axum", "tower-http"}
+    assert examples | {"async-openai", "tokenizers"} <= set(ENGINE_DENY_LIST)
+    assert list(ENGINE_DENY_LIST) == sorted(ENGINE_DENY_LIST)
+
+
+def test_the_engine_set_covers_the_documented_lists() -> None:
+    """Every crate the three documents name as engine is in ENGINE_CRATES (SPR-011 T-00)."""
+    sentences = {
+        "docs/13_agentic_development_playbook.md": "**The engine only engines",
+        "docs/05_architecture/05.0_overview.md": "**Engine crates:**",
+        "docs/06_adr/ADR-0035-legends-over-ledgers-saga-engine.md": "**No presentation code",
+    }
+    for doc, marker in sentences.items():
+        text = (REPO / doc).read_text(encoding="utf-8")
+        line = next(line for line in text.splitlines() if marker in line)
+        named = set(re.findall(r"`(rh-[a-z-]+)\*?`", line)) - {"rh-sys-", "rh-contract-"}
+        assert named, doc
+        assert named <= ENGINE_CRATES, (doc, sorted(named - ENGINE_CRATES))
+
+
+def test_the_deny_list_is_defined_once() -> None:
+    """One deny-list in one place (docs/13 §3; G-3).
+
+    No tracked file names any entry as a quoted string, except the one definition, its fixtures and
+    this file's tests of the rule, and lint_arch.py defines each entry exactly once. Every text file
+    the repository tracks is read (`git ls-files`), whatever its suffix.
+    """
+    own = REPO / "bin" / "lint_arch.py"
+    text = own.read_text(encoding="utf-8")
+    for name in ENGINE_DENY_LIST:
+        assert text.count(f'"{name}":') == 1, name
+    tracked = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "-z"], capture_output=True, check=True
+    ).stdout.decode("utf-8")
+    exempt = {"bin/lint_arch.py", "python/tests/test_lint_arch.py"}
+    checked = 0
+    for relative in filter(None, tracked.split("\0")):
+        if relative in exempt or relative.startswith("tests/lint_fixtures/"):
+            continue
+        try:
+            body = (REPO / relative).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
+            continue  # binary files, or one deleted in the working tree
+        checked += 1
+        for name in ENGINE_DENY_LIST:
+            for quote in ('"', "'"):
+                assert f"{quote}{name}{quote}" not in body, (
+                    f"{relative} names deny-listed {name}: a second list?"
+                )
+    assert checked > 300, f"only {checked} tracked text files read"
+
+
+def test_every_workspace_member_is_on_exactly_one_engine_list() -> None:
+    """GAP-1 (BCK-002 A-49): each crate under crates/ is an engine crate or a named non-engine one.
+
+    A new crate on neither list would skip the engine-purity rule silently; on both, the lists
+    contradict each other. SPR-012's two crates are engine crates.
+    """
+    members = sorted(p.parent.name for p in (REPO / "crates").glob("*/Cargo.toml"))
+    assert members, "no workspace members found"
+    for name in members:
+        on = (name in ENGINE_CRATES) + (name in NON_ENGINE_CRATES)
+        assert on == 1, f"{name} is on {on} of ENGINE_CRATES and NON_ENGINE_CRATES"
+    assert {"rh-worldgen", "rh-sys-demography"} <= ENGINE_CRATES
+    assert {"rh-bench", "rh-golden"} == NON_ENGINE_CRATES
+
+
+def test_the_whole_deny_list_equals_the_committed_golden_list() -> None:
+    """GAP-2 (BCK-002 A-49): removing or adding any entry (hyper, tts included) fails here."""
+    golden = REPO / "tests" / "lint_fixtures" / "arch" / "engine_deny_list.txt"
+    lines = golden.read_text(encoding="utf-8").splitlines()
+    names = [line for line in lines if line and not line.startswith("#")]
+    assert names == list(ENGINE_DENY_LIST)

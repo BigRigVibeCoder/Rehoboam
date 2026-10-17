@@ -12,13 +12,14 @@
 //! Messages follow Pydantic's wording but are not guaranteed identical.
 
 use super::types::{
-    ActivityResolution, Agent, Artifact, Calendar, CastMember, Catalyst, Children, ClassShares,
-    Climate, ClimateShock, CovertOutbreak, CreatureParams, CreaturePeople, Culture,
+    ActivityResolution, Agent, Artifact, Authored, Calendar, CastMember, Catalyst, Children,
+    ClassShares, Climate, ClimateShock, CovertOutbreak, CreatureParams, CreaturePeople, Culture,
     DynasticTension, DynasticTensionInitial, Dynasty, Ecology, Faith, Focus, FocusResolution,
     Geography, Horizon, HorizonLabel, Household, HumanPeople, Manifest, Milestone, Narrative,
     OffMapActor, OrderedMap, OverlayEffect, People, Polity, Presentation, Trajectory, Wager,
     WagerStage, WorldMeta,
 };
+use crate::exact::{Decimal, DecimalError};
 use crate::yaml::Value;
 use std::fmt;
 
@@ -190,11 +191,11 @@ fn int(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<i128>, le: Option<i128
             negative: *negative,
         },
         Value::Bool(b) => Parsed::Exact(i128::from(*b)),
-        Value::Float(f) if !f.is_finite() => {
+        Value::Float(f, _) if !f.is_finite() => {
             cx.err(loc, "finite_number", "Input should be a finite number");
             return None;
         }
-        Value::Float(f) if f.fract() != 0.0 => {
+        Value::Float(f, _) if f.fract() != 0.0 => {
             cx.err(
                 loc,
                 "int_from_float",
@@ -202,7 +203,7 @@ fn int(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<i128>, le: Option<i128
             );
             return None;
         }
-        Value::Float(f) if *f >= TWO_POW_63 || *f < -TWO_POW_63 => {
+        Value::Float(f, _) if *f >= TWO_POW_63 || *f < -TWO_POW_63 => {
             cx.err(
                 loc,
                 "int_parsing_size",
@@ -210,7 +211,7 @@ fn int(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<i128>, le: Option<i128
             );
             return None;
         }
-        Value::Float(f) => Parsed::Exact(i128::from(*f as i64)),
+        Value::Float(f, _) => Parsed::Exact(i128::from(*f as i64)),
         Value::Str(s) => {
             if let Some(n) = parse_int_str(s) {
                 n
@@ -306,13 +307,27 @@ fn int64(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<i64>, le: Option<i64
     }
 }
 
+/// A system parameter: validated as [`float`] does, and kept with the exact decimal of its
+/// literal for plane A (`05.5` §3.2; SPR-011 ruling 9).
+fn authored(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<Authored> {
+    let value = float(cx, v, loc, None, None)?;
+    let exact = match v {
+        Value::Float(_, text) => Decimal::parse_yaml_float(text),
+        Value::Int(i) => Ok(Decimal::from_int(*i)),
+        Value::Bool(b) => Ok(Decimal::from_int(i128::from(*b))),
+        Value::BigInt { text, .. } | Value::Str(text) => Decimal::parse_python_float(text),
+        _ => Err(DecimalError::Syntax(v.to_string())),
+    };
+    Some(Authored { value, exact })
+}
+
 #[allow(
     clippy::cast_precision_loss,
     reason = "Python converts int to float the same way"
 )]
 fn float(cx: &mut Cx, v: &Value, loc: &[String], ge: Option<f64>, le: Option<f64>) -> Option<f64> {
     let x = match v {
-        Value::Float(f) => *f,
+        Value::Float(f, _) => *f,
         Value::Int(i) => *i as f64,
         // Python's float(n) for a big integer: exact up to f64's range, an error beyond it.
         Value::BigInt { text, .. } => match parse_float_str(text) {
@@ -372,9 +387,9 @@ fn boolean(cx: &mut Cx, v: &Value, loc: &[String]) -> Option<bool> {
             parsing(cx);
             None
         }
-        Value::Float(f) if *f == 0.0 => Some(false),
-        Value::Float(f) if *f == 1.0 => Some(true),
-        Value::Float(f) if f.is_finite() && f.fract() == 0.0 => {
+        Value::Float(f, _) if *f == 0.0 => Some(false),
+        Value::Float(f, _) if *f == 1.0 => Some(true),
+        Value::Float(f, _) if f.is_finite() && f.fract() == 0.0 => {
             parsing(cx);
             None
         }
@@ -489,7 +504,7 @@ fn lit_int(cx: &mut Cx, v: &Value, loc: &[String], allowed: &[i64]) -> Option<i6
     let hit = allowed.iter().copied().find(|&a| match v {
         Value::Int(i) => *i == i128::from(a),
         Value::Bool(b) => i64::from(*b) == a,
-        Value::Float(f) => f.fract() == 0.0 && (*f - a as f64).abs() < 0.5,
+        Value::Float(f, _) => f.fract() == 0.0 && (*f - a as f64).abs() < 0.5,
         _ => false,
     });
     if hit.is_none() {
@@ -774,7 +789,7 @@ fn root(cx: &mut Cx, v: &Value) -> Option<Manifest> {
     let agents = o.opt(cx, "agents", Vec::new, |cx, v, l| list(cx, v, l, 0, agent));
     let systems = o.req(cx, "systems", |cx, v, l| {
         dict(cx, v, l, Key::Str, |cx, v, l| {
-            dict(cx, v, l, Key::Str, |cx, v, l| float(cx, v, l, None, None))
+            dict(cx, v, l, Key::Str, authored)
         })
     });
     let institutions = o.opt(cx, "institutions", Vec::new, |cx, v, l| {

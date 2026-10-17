@@ -1,0 +1,152 @@
+# ODD-R v2 system spec (ADR-0033) of a DUMMY system of the smoke world (SPR-008 rulings 1-3).
+# It never enters the real Registry: its id is in worlds/smoke/registry_overlay.toml only, and bin/check_all.sh
+# lints it with lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml.
+# Its numbers are design values that keep a 1,000-year run bounded and busy; nothing here is calibrated.
+odd_r = 2
+params = []
+
+[system]
+id = "X7.smoke_market"
+name = "Smoke world: market"
+spec_version = "0.1.0"
+fidelity = "F0"
+status = "frozen"
+crate = "rh-sys-smoke"
+adrs = ["ADR-0006", "ADR-0024", "ADR-0025", "ADR-0033"]
+requirements = ["DET-4", "DET-5"]
+
+[purpose]
+statement = "Moves a fixed-point price per region every day beside the weather, and every day beside the estates applies the Audit commands sent to it, trades, and sends some living persons' estates to be settled. It exists so that two phases hold two independent bindings in one scheduler level every day: the thread-count comparison then dispatches parallel levels (VER-SPR-008 DEF-2). Daily, not hourly: the engine spawns threads for every level that holds two jobs, and hourly parallel levels made a 1,000-year run at 4 threads take about 25 minutes."
+role = "substrate"
+patterns = []
+not_yet = ["Not a model: a dummy system that exercises the engine for the golden run"]
+
+[[owns]]
+column = "market.price"
+entity = "region"
+type = "q16_16"
+plane = "A"
+meaning = "Price per region, Q16.16 bits"
+fixed_point = true
+[[owns]]
+column = "market.ticks"
+entity = "world"
+type = "i64"
+plane = "A"
+meaning = "Hours ticked (one row)"
+fixed_point = false
+[[owns]]
+column = "market.audits"
+entity = "world"
+type = "i64"
+plane = "A"
+meaning = "Audit commands applied (one row)"
+fixed_point = false
+
+[[emits]]
+kind = "TRADE"
+when = "an hourly price move is large, or a daily trade happens"
+roles = ["target"]            # the region
+[[commands]]
+target = "X4.smoke_estate"
+command = "Settle"
+payload = "{ row }"
+why = "a market default settles a living person's estate"
+[[applies]]
+command = "Audit"
+payload = "{ row: i64 }"
+from = ["X4.smoke_estate"]
+drained_by = "Day/Activity"
+key = "any"
+key_field = "person"
+[[reads]]
+column = "harvest.stock"
+owner = "X2.smoke_harvest"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "person.alive"
+owner = "X3.smoke_vital"
+lag = "lagged"
+use = "identity"
+
+[scales]
+spatial = "The smoke world: 4 regions and 64 person rows"
+temporal = "Day pulse (tick and trade)"
+extent = "1,000 sim-years in CI (SPR-008 ruling 5)"
+restart = "Its owned columns"
+
+[[fidelity_ladder]]
+level = "F0"
+representation = "The dummy rules below"
+status = "available"
+
+[[schedule]]
+pulse = "Day"
+phase = "Environment"
+steps = ["tick: move each region's price by a keyed step; emit TRADE on a large move"]
+when = "always"
+[[schedule]]
+pulse = "Day"
+phase = "Activity"
+steps = ["trade: apply the queued Audit commands, trade, and send Settle for a few living persons"]
+when = "always"
+
+[[rng]]
+purpose = "price_step"
+key = ["region", "day"]
+use = "the daily price step per region"
+[[rng]]
+purpose = "default_pick"
+key = ["person", "day"]
+use = "which living persons' estates the market sends to be settled"
+
+[design]
+basic_principles = "n/a: a dummy system of the smoke world (SPR-008); it exists to exercise the engine, not to model anything"
+emergence = "n/a: no modelled behaviour; only the engine's determinism is under test"
+adaptation = "n/a: no agents adapt"
+objectives = "n/a: no agents with objectives"
+learning = "n/a: no learning"
+prediction = "n/a: no prediction"
+sensing = "Reads only its declared columns, through the engine's SystemView"
+interaction = "Through declared reads, lifecycle commands and events only (05.1 §2)"
+stochasticity = "Keyed draws only (ADR-0006), under the purposes in [[rng]]"
+collectives = "n/a: no collectives"
+observation = "The hash ladder of the smoke run (SPR-008 ruling 4); no plane-B or plane-C output"
+era_state = []
+scale_behaviour = "n/a: one fixed scale; the smoke world is small on purpose"
+
+[initialization]
+state = "Every region's price at 100; ticks 0; audits 0"
+from_manifest = []
+
+[input_data]
+drivers = []
+
+[[submodels]]
+name = "tick"
+summary = "price += (u mod 33 - 16)/64 - (price - 100)/128, clamped to [1, 1,000]; ticks += 1; emit TRADE when |step| >= 15/64"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+[[submodels]]
+name = "trade"
+summary = "audits += the Audit commands applied; for each living person, Settle with chance 1/256; emit TRADE for the day"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+
+[[invariants]]
+id = "INV-X7-01"
+statement = "Every price lies in [1, 1,000]"
+test = "V-DET-02"
+[[invariants]]
+id = "INV-X7-02"
+statement = "The audit count is non-negative"
+test = "V-DET-02"
+
+
+[isolation]
+forcing = []
+horizon = "1,000 sim-years"
+expect = "Prices stay inside [1, 1,000]; audits and settlements continue"
+
+[verification]
+tests = ["V-DET-01", "V-DET-02", "V-DET-11"]
+prototype = ""

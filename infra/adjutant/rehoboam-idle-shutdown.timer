@@ -1,0 +1,10 @@
+# RUN-002 §3: run the idle check every 5 minutes, starting 10 minutes after boot.
+[Unit]
+Description=Check every 5 minutes whether adjutant is idle
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

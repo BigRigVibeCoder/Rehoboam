@@ -1,5 +1,10 @@
--- Rehoboam Chronicle schema v0.4 (DuckDB dialect; the system of record is Parquet with the same columns).
--- Spec: docs/05_architecture/05.2 §4 and §6, 05.4 §2.3, ADR-0007, ADR-0024 (planes), ADR-0025, ADR-0026.
+-- Rehoboam Chronicle schema v0.5 (DuckDB dialect; the system of record is Parquet with the same columns).
+-- Spec: docs/05_architecture/05.2 §4, §4.1a and §6, 05.4 §2.3, ADR-0007, ADR-0024 (planes), ADR-0025, ADR-0026, ADR-0035 §7a.
+-- v0.5 (SPR-020, the event envelope; specs/chronicle/envelope_v0.md): event_role carries the Registry [event_roles] code
+--   (actor 0, target 1, witness 2, instrument 3) and is channel A's child table column for column; abstract_role is gone
+--   (a pattern role's domain is an anchored bool attribute, captured as a snapshot: REV-SPR-020 R1); event_snapshot carries
+--   entity kinds; causal_edge carries the motive, a fixed-point weight and evidence, and cause_told; the plane-B
+--   "what last happened here?" macros.
 -- Conventions:
 --   * Timeline-scoped composite keys.
 --   * event_id: one counter per timeline, from 0, assigned at the scheduler's level merge (rh-events; 05.1 §2 rule 4).
@@ -25,34 +30,49 @@ CREATE TABLE IF NOT EXISTS event (                -- plane A
     PRIMARY KEY (timeline_id, event_id)
 );
 
+-- The cast and the instrument (envelope_v0.md §1): the same columns as specs/stream/channel_a_v0.sql's event_role.
 CREATE TABLE IF NOT EXISTS event_role (           -- plane A
-    timeline_id    UINTEGER NOT NULL,
-    event_id       UBIGINT  NOT NULL,
-    entity_id      UBIGINT  NOT NULL,          -- PersonId = H64(mother_id, parity) etc. (ADR-0026)
-    concrete_role  UTINYINT NOT NULL,          -- 0 initiator, 1 target, 2 partner, 3 bystander, 4 instrument
-    abstract_role  UTINYINT NOT NULL           -- Registry roles: authority, successor, kin, ally, rival, ...
+    timeline_id  UINTEGER NOT NULL,
+    event_id     UBIGINT  NOT NULL,
+    ordinal      UTINYINT NOT NULL,            -- position among the event's cast: by role code, then entity (envelope_v0.md §1)
+    entity_kind  UTINYINT NOT NULL,            -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region; 5 artifact, reserved (S6)
+    entity_id    UBIGINT  NOT NULL,            -- PersonId = H64(mother_id, parity) etc. (ADR-0026)
+    role         UTINYINT NOT NULL,            -- Registry [event_roles] index: 0 actor, 1 target, 2 witness, 3 instrument; every role at
+                                               -- most once per event except witness. A pattern's abstract role (authority, kin, ...;
+                                               -- Registry [roles]) is a [role_domains] bool attribute captured as a snapshot (R1)
+    PRIMARY KEY (timeline_id, event_id, ordinal)
 );
 
 -- Anchored state: exactly the attribute values that rules and patterns read AT EMISSION (fixes the draft's temporal bug).
--- Attributes are typed in the Registry `[attributes]` section; the pattern form is attr(args)@eN.
+-- Attributes are typed in the Registry `[attributes]` section; the pattern form is attr(args)@eN. Which attributes an event
+-- carries, read when and by whom: envelope_v0.md §4 (the emitter's declared snapshots, filled from its own view at emit).
 CREATE TABLE IF NOT EXISTS event_snapshot (       -- plane A
-    timeline_id UINTEGER  NOT NULL,
-    event_id    UBIGINT   NOT NULL,
-    entity_id   UBIGINT   NOT NULL,            -- first attribute argument, e.g. B in trust(B, A)
-    attr_id     USMALLINT NOT NULL,            -- Registry attribute
-    partner_id  UBIGINT,                       -- second argument for relational attributes, e.g. A in trust(B, A); NULL otherwise
-    value       INTEGER   NOT NULL             -- q8_8 fixed point (value/256), bool 0/1, enum index, or raw int
+    timeline_id  UINTEGER  NOT NULL,
+    event_id     UBIGINT   NOT NULL,
+    attr_id      USMALLINT NOT NULL,           -- Registry [attributes] index, sorted by name
+    entity_kind  UTINYINT  NOT NULL,           -- the first argument's entity kind; 0 with entity_id 0 = the event itself (weather, cell_x)
+    entity_id    UBIGINT   NOT NULL,           -- first attribute argument, e.g. B in trust(B, A)
+    partner_kind UTINYINT,                     -- second argument for relational attributes, e.g. A in trust(B, A); NULL otherwise
+    partner_id   UBIGINT,                      -- (both NULL or both set)
+    value        INTEGER   NOT NULL            -- q8_8 raw bits (value/256), bool 0/1, enum index in the attribute's values, or an int
 );
+-- One row per (timeline_id, event_id, attr_id, entity_kind, entity_id, partner_kind, partner_id); no PRIMARY KEY because the
+-- partner columns are nullable (DuckDB refuses a NULL in a key). The writer's rows are sorted and distinct by that key
+-- (envelope_v0.md §4 item 6; the canonical form refuses a repeated or unordered snapshot).
 
--- Typed causality (R02 §R2): contingency only from explicit unlocking; utility contributors are motivated_by.
+-- Typed causality (R02 §R2; envelope_v0.md §5): contingency only from explicit unlocking; utility contributors are motivated_by,
+-- with a Registry [motive_edges] motive where the contributor is a named motive. One edge per (effect, cause); cause_id < effect_id.
 CREATE TABLE IF NOT EXISTS causal_edge (          -- plane A
-    timeline_id UINTEGER NOT NULL,
-    cause_id    UBIGINT  NOT NULL,
-    effect_id   UBIGINT  NOT NULL,
-    kind        UTINYINT NOT NULL,             -- 0 contingent, 1 triggered, 2 relayed_knowledge, 3 motivated_by,
-                                               -- 4 enabled, 5 probabilistic, 6 player, 7 oracle, 8 director (05.4 §4)
-    weight      SMALLINT DEFAULT 0,
-    evidence    VARCHAR                         -- optional short provenance key
+    timeline_id UINTEGER  NOT NULL,
+    cause_id    UBIGINT   NOT NULL,
+    effect_id   UBIGINT   NOT NULL,
+    kind        UTINYINT  NOT NULL,            -- 0 contingent, 1 triggered, 2 relayed_knowledge, 3 motivated_by,
+                                               -- 4 enabled, 5 probabilistic, 6 player, 7 oracle, 8 director (05.4 §4; DATA-2, D-item 1)
+    motive      USMALLINT,                     -- Registry [motive_edges] index (RETALIATION_FOR 0, ...); NULL unless kind = 3
+    weight      SMALLINT  NOT NULL DEFAULT 0,  -- q8_8 raw bits, signed: a motivated_by contributor's contribution; 0 on other kinds
+    evidence    SMALLINT  NOT NULL DEFAULT 256,-- q8_8 raw bits in [0, 256]: 1 for a deterministic link, the fidelity, share or margin otherwise
+    cause_told  BOOLEAN   NOT NULL DEFAULT true,   -- the cause has an event row (05.2 §4.0; every P1a cause is told); not hashed
+    PRIMARY KEY (timeline_id, effect_id, cause_id)
 );
 
 -- Per-actor knowledge: witnessed, faction-internal and secret events, and testimony hops between named actors only.
@@ -125,7 +145,7 @@ CREATE TABLE IF NOT EXISTS life_course (          -- plane A
 CREATE TABLE IF NOT EXISTS life_interval (        -- plane A: residence, occupation, faction, marriage spells
     timeline_id UINTEGER  NOT NULL,
     person_id   UBIGINT   NOT NULL,
-    kind        UTINYINT  NOT NULL,            -- 0 residence (region), 1 occupation, 2 faction, 3 marriage (partner id)
+    kind        UTINYINT  NOT NULL,            -- 0 residence (settlement id; the region through M1, REV-SPR-018 R11), 1 occupation, 2 faction, 3 marriage (partner id)
     value       BIGINT    NOT NULL,
     valid_from  BIGINT    NOT NULL,
     valid_to    BIGINT
@@ -163,7 +183,7 @@ CREATE TABLE IF NOT EXISTS sig_component (        -- plane C: retroactive signif
 
 CREATE TABLE IF NOT EXISTS sift_match (           -- plane C: separate MatchId space, never interleaved with EventIds
     timeline_id         UINTEGER  NOT NULL,
-    match_id            UBIGINT   NOT NULL,    -- H64(pattern_id, pattern_version, event_ids): content-addressed, stable across re-sifts and equal to the twin's
+    match_id            UBIGINT   NOT NULL,    -- H64(pack, pattern_id, pattern_version, event_ids, bindings): content-addressed (specs/stream/channel_c_v0.sql R5), stable across re-sifts and equal to the twin's
     pattern_id          VARCHAR   NOT NULL,
     pattern_version     USMALLINT NOT NULL,
     pattern_lib_version USMALLINT NOT NULL,
@@ -198,7 +218,11 @@ CREATE TABLE IF NOT EXISTS input_journal (
     tick          BIGINT   NOT NULL,
     seq           UINTEGER NOT NULL,
     input_class   UTINYINT NOT NULL,           -- 0 push (the only class; pull inputs retired by ADR-0034)
-    kind          VARCHAR  NOT NULL,
+    kind          VARCHAR  NOT NULL,           -- IF-2 InputKind. Its origin on plane A (event.origin and the Timer and QueuedCommand
+                                               -- origin of its consequences; envelope_v0.md §2): OracleMove, OracleWhisper, OraclePierce,
+                                               -- OracleOmen, OracleWard -> 3 oracle; PlayerAction, SpeechAct -> 1 player; ForkOverride ->
+                                               -- 4 director; ManifestSet, SettingChange, ConsoleMode are not material and reach no plane-A job.
+                                               -- The producer does not decide it: a system-produced OracleMove is oracle.
     scope_kind    UTINYINT NOT NULL,           -- 0 none, 1 person, 2 household, 3 settlement, 4 region
     scope_id      UBIGINT,
     pull_key      BLOB,                        -- reserved, always NULL (ADR-0034)
@@ -255,13 +279,13 @@ CREATE TABLE IF NOT EXISTS keyframe (
 CREATE OR REPLACE MACRO has_act(bits, mask) AS (bits & mask) <> 0;
 
 CREATE OR REPLACE VIEW ttb_ev AS
-WITH initiator AS (
-    SELECT r.timeline_id, r.event_id, r.entity_id AS a FROM event_role r WHERE r.concrete_role = 0
+WITH actor AS (                                   -- role codes: the Registry [event_roles] index (envelope_v0.md §1)
+    SELECT r.timeline_id, r.event_id, r.entity_id AS a FROM event_role r WHERE r.role = 0
 ), target AS (
-    SELECT r.timeline_id, r.event_id, r.entity_id AS b FROM event_role r WHERE r.concrete_role = 1
+    SELECT r.timeline_id, r.event_id, r.entity_id AS b FROM event_role r WHERE r.role = 1
 )
 SELECT e.timeline_id, e.event_id, e.tick, e.act_classes, i.a, t.b
-FROM event e JOIN initiator i USING (timeline_id, event_id) JOIN target t USING (timeline_id, event_id);
+FROM event e JOIN actor i USING (timeline_id, event_id) JOIN target t USING (timeline_id, event_id);
 
 CREATE OR REPLACE VIEW ttb_e1 AS
 SELECT ev.* FROM ttb_ev ev
@@ -272,7 +296,7 @@ WHERE has_act(ev.act_classes, (1<<1) | (1<<2)) AND s.value >= 154;
 CREATE OR REPLACE VIEW ttb_e2 AS
 SELECT ev.* FROM ttb_ev ev WHERE has_act(ev.act_classes, (1<<0) | (1<<3) | (1<<5));
 
-CREATE OR REPLACE VIEW ttb_unless AS              -- keyed to the binding it cancels: (A, B) = (target, initiator)
+CREATE OR REPLACE VIEW ttb_unless AS              -- keyed to the binding it cancels: (A, B) = (target, actor)
 SELECT ev.timeline_id, ev.event_id, ev.tick, ev.b AS a, ev.a AS b FROM ttb_ev ev WHERE has_act(ev.act_classes, 1<<1);
 
 CREATE OR REPLACE VIEW twin_trust_then_betrayal_all AS
@@ -331,3 +355,39 @@ SELECT event_id, min(depth) AS depth FROM walk GROUP BY event_id;
 CREATE OR REPLACE MACRO title_holder_at(tl, title_attr, t) AS TABLE
 SELECT entity_id, value FROM state_interval
 WHERE timeline_id = tl AND attr_id = title_attr AND valid_from <= t AND (valid_to IS NULL OR valid_to > t);
+
+-- ---------------------------------------------------------------------------------------------
+-- "What last happened here?" (SAGA-15; envelope_v0.md §7): a plane-B index over the chronicle, by place, cell or entity.
+-- There is no last-mutating-event column on any tile or entity in plane A; these macros are the whole index.
+-- Ties at one tick resolve by the larger event_id (emission order); the chronicle holds admitted events only.
+-- ---------------------------------------------------------------------------------------------
+-- Usage: SELECT * FROM last_event_at_place(<timeline_id>, <place_id>, <tick>);
+CREATE OR REPLACE MACRO last_event_at_place(tl, place, t) AS TABLE
+SELECT event_id, tick, verb_id FROM event
+WHERE timeline_id = tl AND place_id = place AND tick <= t
+ORDER BY tick DESC, event_id DESC LIMIT 1;
+
+-- The events at a place in a tick window [t0, t1], newest first, for the inspector.
+CREATE OR REPLACE MACRO events_at_place(tl, place, t0, t1) AS TABLE
+SELECT event_id, tick, verb_id FROM event
+WHERE timeline_id = tl AND place_id = place AND tick >= t0 AND tick <= t1
+ORDER BY tick DESC, event_id DESC;
+
+-- By cell, through the cell_x and cell_y snapshots (their attr_ids are the Registry indexes, passed in; the rows are
+-- "of the event": entity_kind 0, entity_id 0).
+CREATE OR REPLACE MACRO last_event_in_cell(tl, attr_x, attr_y, x, y, t) AS TABLE
+SELECT e.event_id, e.tick, e.verb_id
+FROM event e
+JOIN event_snapshot sx ON sx.timeline_id = e.timeline_id AND sx.event_id = e.event_id AND sx.attr_id = attr_x
+                       AND sx.entity_kind = 0 AND sx.entity_id = 0 AND sx.value = x
+JOIN event_snapshot sy ON sy.timeline_id = e.timeline_id AND sy.event_id = e.event_id AND sy.attr_id = attr_y
+                       AND sy.entity_kind = 0 AND sy.entity_id = 0 AND sy.value = y
+WHERE e.timeline_id = tl AND e.tick <= t
+ORDER BY e.tick DESC, e.event_id DESC LIMIT 1;
+
+-- By entity: the latest event in whose cast the entity appears, with its role.
+CREATE OR REPLACE MACRO last_event_for(tl, kind, id, t) AS TABLE
+SELECT e.event_id, e.tick, e.verb_id, r.role
+FROM event e JOIN event_role r ON r.timeline_id = e.timeline_id AND r.event_id = e.event_id
+WHERE e.timeline_id = tl AND r.entity_kind = kind AND r.entity_id = id AND e.tick <= t
+ORDER BY e.tick DESC, e.event_id DESC, r.role ASC LIMIT 1;

@@ -40,21 +40,22 @@ fixed_point = false
 [[owns]]
 column = "artifact.origin_event"
 entity = "artifact"
-type = "u64"
+type = "event_ref"
 plane = "A"
-meaning = "EventId of the artifact's origin: its placement at world creation (manifest, journaled), the catalyst input that introduced it, or ARTIFACT_FORGED. No event may reference the artifact before it"
+meaning = "The artifact's origin event, an Option<EventId>: ARTIFACT_FORGED, set in the forging step through ctx.set_cause with the draft's DraftRef (envelope_v0.md §7, REV-SPR-020 R25); none for a placement at world creation (manifest, journaled) or a catalyst input, which are inputs, not events. No event may reference the artifact before it"
 fixed_point = false
 [[owns]]
 column = "artifact.chain_head"
 entity = "artifact"
-type = "u64"
+type = "event_ref"
 plane = "A"
-meaning = "EventId of the latest event in its bearer chain (forged, passed, found, used, destroyed); each new chain event links to the previous one by a contingent causal edge, so the chain is unbroken and readable backwards"
+meaning = "The latest event in its bearer chain (forged, passed, found, used, destroyed), an Option<EventId> set in the same step as the event through ctx.set_cause with its DraftRef (envelope_v0.md §7, REV-SPR-020 R25); each new chain event links to the previous one by a contingent causal edge, so the chain is unbroken and readable backwards"
 fixed_point = false
 [[owns]]
 column = "artifact.kind"
 entity = "artifact"
 type = "enum"
+registry = "artifact_kinds"
 plane = "A"
 meaning = "Registry [artifact_kinds] id (relic, crown, weapon, ring, tome, heirloom); sets kind_strength, the overlay pushed and whether it is regalia"
 fixed_point = false
@@ -62,6 +63,7 @@ fixed_point = false
 column = "artifact.state"
 entity = "artifact"
 type = "enum"
+values = ["borne", "placed", "lost", "destroyed"]
 plane = "A"
 meaning = "borne | placed | lost | destroyed. borne: bearer set, location 0. placed or lost: location set, bearer 0 (lost = nobody's knowledge row names the place). destroyed: both 0; terminal"
 fixed_point = false
@@ -84,28 +86,34 @@ column = "artifact.charge"
 entity = "artifact"
 type = "q8_8"
 plane = "A"
-meaning = "Physical state: remaining charge in [0, 1] for artifacts that spend one (a relic's power); 1 for those that do not"
+meaning = "Physical state: remaining charge in [0, 1] for artifacts that spend one (a relic's power); 1 for those that do not. Spent by ARTIFACT_USED, whose id the merge writes to condition_cause"
 fixed_point = true
+default = 1.0
+cause_column = "artifact.condition_cause"
 [[owns]]
 column = "artifact.condition"
 entity = "artifact"
 type = "q8_8"
 plane = "A"
-meaning = "Physical state: wear or condition in [0, 1], 0 = broken"
+meaning = "Physical state: wear or condition in [0, 1], 0 = broken. Worn by ARTIFACT_USED and ARTIFACT_DESTROYED, whose id the merge writes to condition_cause"
 fixed_point = true
+default = 1.0
+cause_column = "artifact.condition_cause"
 [[owns]]
 column = "artifact.contaminants"
 entity = "artifact"
 type = "u16"
 plane = "A"
-meaning = "Physical state: bitflags of Registry [contaminants] (blood, ash, poison, ...); evidence for discovery (SAGA-4) and an envelope snapshot"
+meaning = "Physical state: bitflags of Registry [contaminants] (blood, ash, poison, ...); evidence for discovery (SAGA-4) and an envelope snapshot. Set by ARTIFACT_USED, whose id the merge writes to condition_cause"
 fixed_point = false
+default = 0
+cause_column = "artifact.condition_cause"
 [[owns]]
 column = "artifact.condition_cause"
 entity = "artifact"
-type = "u64"
+type = "event_ref"
 plane = "A"
-meaning = "EventId of the event that last changed condition, contaminants, charge or a curse: the cause is stored with the state (the Legends reverse key, SAGA-15)"
+meaning = "The event that last changed condition, contaminants or charge, an Option<EventId>: the cause is stored with the state (the Legends reverse key, SAGA-15) and is the cause_column of those three columns. Set only through ctx.set_cause(column, row, EventRef) with the act's DraftRef (or a Known id), which the merge rewrites to the EventId (envelope_v0.md §7, REV-SPR-020 R2); never typed as an id in the step. None by default, so no id is reserved (R17)"
 fixed_point = false
 [[owns]]
 column = "artifact.bearer_since"
@@ -132,21 +140,32 @@ fixed_point = false
 [[emits]]
 kind = "ARTIFACT_FORGED"
 when = "A Forge command from T1.minds (a named actor's completed plan) or a mythic catalyst creates an artifact"
+roles = ["actor", "instrument"]   # actor: the forger; instrument: the new artifact
 [[emits]]
 kind = "ARTIFACT_PASSED"
 when = "The bearer changes, with mode inheritance (the bearer's death path), theft, gift, trade, or loss (it stays where its bearer fell or was dropped); every bearer change is this event, linked to the previous chain event; the motive edges of the act are attached"
+roles = ["actor", "target", "instrument"]   # actor: the giver (or thief); target: the receiver; instrument: the artifact
+motives = ["GREED_FOR", "LOYALTY_TO", "VOW_OF"]
+snapshots = [{ attr = "contaminants", of = "event", from = "artifact.contaminants" }]
 [[emits]]
 kind = "ARTIFACT_USED"
-when = "The artifact is the instrument of an act (it is also the instrument role in that act's event); its charge, condition and contaminants change with the act, and condition_cause takes the act's EventId"
+when = "The artifact is the instrument of an act (it is also the instrument role in that act's event); its charge, condition and contaminants change with the act, and condition_cause is set to the act through ctx.set_cause (the ARTIFACT_USED draft's DraftRef, rewritten at the merge)"
+roles = ["actor", "instrument"]
+snapshots = [{ attr = "contaminants", of = "event", from = "artifact.contaminants" }]
 [[emits]]
 kind = "ARTIFACT_FOUND"
 when = "A Search command succeeds at the place where a placed or lost artifact lies"
+roles = ["actor", "instrument"]
 [[emits]]
 kind = "ARTIFACT_DESTROYED"
 when = "A Destroy command succeeds (a vow fulfilled, a deliberate act); terminal"
+roles = ["actor", "instrument"]
+motives = ["VOW_OF"]
 [[emits]]
 kind = "BEARER_CORRUPTED"
 when = "A bearer's exposure first crosses corruption_threshold (at most once per bearer-artifact pair)"
+roles = ["actor", "instrument"]
+motives = ["CORRUPTION_BY"]
 
 [[commands]]
 target = "T1.minds"
@@ -285,7 +304,7 @@ summary = "At the bearer's death instant: with a keyed draw (loss_on_death) the 
 earns_its_place_by = ["V-SAGA-02", "V-SAGA-10"]
 [[submodels]]
 name = "apply_commands"
-summary = "Transfer (gift, trade; theft resolved with theft_outcome against theft_success), Use (the act's instrument: charge, condition and contaminants change, condition_cause := the act's EventId; ARTIFACT_USED), Search (search_find against find_chance at the artifact's place), Destroy, Forge (new id H64(seed, \"artifact\", forge_event, k); origin_event := the forging event). Every applied command emits its event, links it to chain_head by a contingent edge and advances chain_head; a change of bearer resets bearer_since and exposure. A command naming an artifact whose origin event is later than now is refused"
+summary = "Transfer (gift, trade; theft resolved with theft_outcome against theft_success), Use (the act's instrument: charge, condition and contaminants change, condition_cause set through ctx.set_cause to the ARTIFACT_USED draft, rewritten at the merge; ARTIFACT_USED), Search (search_find against find_chance at the artifact's place), Destroy, Forge (new id H64(seed, \"artifact\", forge_event, k); origin_event := the forging event). Every applied command emits its event, links it to chain_head by a contingent edge and advances chain_head; a change of bearer resets bearer_since and exposure. A command naming an artifact whose origin event is later than now is refused"
 earns_its_place_by = ["V-SAGA-02", "V-SAGA-13"]
 [[submodels]]
 name = "influence"
@@ -314,7 +333,7 @@ statement = "No event references an artifact before its origin_event; every bear
 test = "V-SAGA-17"
 [[invariants]]
 id = "INV-S6-06"
-statement = "Every non-default physical or transformation state (condition below 1, any contaminant, spent charge, a curse) has a condition_cause that resolves to an existing, earlier event"
+statement = "Every non-default physical or transformation state (condition below 1, any contaminant, spent charge, a curse) has a condition_cause that resolves to an existing, earlier event (rh-core checks it after every merge against the declared defaults: envelope_v0.md §7)"
 test = "V-SAGA-21"
 [[invariants]]
 id = "INV-S6-04"

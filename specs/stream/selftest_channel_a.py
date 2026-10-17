@@ -9,11 +9,14 @@ It loads ``specs/stream/channel_a_v0.sql`` into an in-memory DuckDB and checks:
      three deaths and the extinction, a keyframe marker) is written as sealed segments in the R5
      layout, one Parquet file per table per sim-year, and read back: no float column in any
      written file, seq contiguous from 0 across segments, the R4 in-instant order holds (the
-     order_violation view is empty), the segment rows chain, and life_course_v rebuilds
-     schema.sql's life_course;
-  4. the order check refuses a planted swap of two records;
+     order_violation view is empty), every event's role ordinals are 0..n-1 (contiguous), the
+     segment rows chain, and life_course_v rebuilds schema.sql's life_course;
+  4. the order check refuses a planted swap of two records, and the ordinal check a planted gap;
   5. life_course_v has exactly the columns of specs/chronicle/schema.sql's life_course, in order and
-     with the same types (REV-P1a NEW-7 added sex to both).
+     with the same types (REV-P1a NEW-7 added sex to both);
+  6. the three child tables (event_role, event_snapshot, causal_edge) have exactly the columns of
+     schema.sql's, in order and type: the chronicle and the stream share one envelope (SPR-020,
+     specs/chronicle/envelope_v0.md §1).
 
 Run: python -I specs/stream/selftest_channel_a.py
 """
@@ -44,8 +47,16 @@ RECORD_TABLES = {
     "step_digest": "STEP_DIGEST",
     "keyframe_marker": "KEYFRAME",
 }
-CHILD_TABLES = ("event_role", "causal_edge")
-DICTIONARIES = ("verb", "act_class", "record_kind")
+CHILD_TABLES = ("event_role", "event_snapshot", "causal_edge")
+DICTIONARIES = (
+    "verb",
+    "act_class",
+    "record_kind",
+    "event_role_kind",
+    "motive_edge_kind",
+    "attribute",
+)
+FILES_PER_SEGMENT = 16  # 6 record tables + 3 child tables + 6 dictionaries + the segment row
 FLOAT_TYPES = ("FLOAT", "REAL", "DOUBLE")
 YEAR = 360 * 1440  # minutes per year, 360-day calendar
 MONTH = 30 * 1440
@@ -53,6 +64,7 @@ MONTHS = 24
 DEATH, EXTINCTION = 0, 1  # verb ids of the synthetic dictionary (sorted by name)
 TARGET = 1  # [event_roles] index of target
 TRIGGERED = 1  # causal_edge kind
+EVIDENCE_ONE = 256  # q8_8 raw bits of 1: a deterministic link (envelope_v0.md §5)
 FOUNDERS = (0x1111, 0x2222, 0x3333)
 DEATH_TICKS = {0x2222: 5 * MONTH + 777, 0x1111: 14 * MONTH + 3, 0x3333: 20 * MONTH + 41}
 INPUT_TICK = 3 * MONTH + 100
@@ -140,7 +152,16 @@ def instant(run: Run, tick: int, living: set[int], deaths: list[int]) -> None:
         run.event_id += 1
         if not living:
             run.record("event", tick, run.event_id, 4, EXTINCTION, 1 << 15, None, 0, 255, 0, 0, [])
-            run.child("causal_edge", run.event_id - 1, run.event_id, TRIGGERED)
+            run.child(
+                "causal_edge",
+                run.event_id - 1,
+                run.event_id,
+                TRIGGERED,
+                None,
+                0,
+                EVIDENCE_ONE,
+                True,
+            )
             run.event_id += 1
     if tick == 0:
         for p in FOUNDERS:
@@ -170,6 +191,12 @@ def write_segments(con: duckdb.DuckDBPyConnection, run: Run, root: Path) -> list
     con.execute("INSERT INTO verb VALUES (0, 'DEATH', 32768, 128, 'M2.demography', false)")
     con.execute("INSERT INTO verb VALUES (1, 'EXTINCTION', 32768, 255, 'M2.demography', false)")
     con.execute("INSERT INTO act_class VALUES (15, 'death')")
+    con.executemany(
+        "INSERT INTO event_role_kind VALUES (?, ?)",
+        list(enumerate(["actor", "target", "witness", "instrument"])),
+    )
+    con.execute("INSERT INTO motive_edge_kind VALUES (0, 'RETALIATION_FOR')")
+    con.execute("INSERT INTO attribute VALUES (0, 'stress', 'q8_8')")
     dirs = []
     for (year,) in con.execute(
         f"SELECT DISTINCT tick // {YEAR} FROM record_header ORDER BY 1"
@@ -184,6 +211,10 @@ def write_segments(con: duckdb.DuckDBPyConnection, run: Run, root: Path) -> list
         ids = f"SELECT event_id FROM event WHERE {span}"
         con.execute(
             f"COPY (SELECT * FROM event_role WHERE event_id IN ({ids})) TO '{d}/event_role.parquet'"
+        )
+        con.execute(
+            f"COPY (SELECT * FROM event_snapshot WHERE event_id IN ({ids})) "
+            f"TO '{d}/event_snapshot.parquet'"
         )
         con.execute(
             f"COPY (SELECT * FROM causal_edge WHERE effect_id IN ({ids})) "
@@ -228,6 +259,7 @@ def check_segments() -> bool:
             if any(x in ty.upper() for x in FLOAT_TYPES)
         ]
         violations = con.execute("SELECT count(*) FROM order_violation").fetchone()
+        gaps = con.execute(ORDINAL_GAPS).fetchone()
         segs = con.execute(
             "SELECT first_seq, last_seq, record_count FROM segment ORDER BY sim_year"
         ).fetchall()
@@ -241,13 +273,29 @@ def check_segments() -> bool:
             f"   segments: {len(dirs)} sim-years, {len(files)} files ({per_dir} per segment), "
             f"seq ranges {[(a, b) for a, b, _ in segs]}, "
             f"float columns in files: {floats or 'none'}, "
-            f"order violations: {violations}"
+            f"order violations: {violations}, events with a role-ordinal gap: {gaps}"
         )
-    return not floats and violations == (0,) and chained and lc == want and per_dir == {12}
+    return (
+        not floats
+        and violations == (0,)
+        and gaps == (0,)
+        and chained
+        and lc == want
+        and per_dir == {FILES_PER_SEGMENT}
+    )
+
+
+# Events whose event_role ordinals are not 0..n-1 (channel_a_v0.sql: contiguous from 0).
+ORDINAL_GAPS = """
+SELECT count(*) FROM (
+    SELECT min(ordinal) AS lo, max(ordinal) AS hi, count(*) AS n
+    FROM event_role GROUP BY timeline_id, event_id
+) WHERE lo <> 0 OR hi <> n - 1
+"""
 
 
 def check_order_control() -> bool:
-    """Check 4: swapping the seq of two records of one instant is an order violation."""
+    """Check 4: a planted seq swap is an order violation; a planted role-ordinal gap is caught."""
     run = synthetic_run()
     con = load(DDL.read_text(encoding="utf-8"))
     for table, rows in run.rows.items():
@@ -259,8 +307,16 @@ def check_order_control() -> bool:
     con.execute(f"UPDATE life_course_exit SET seq = {death} WHERE seq = {first_exit[0]}")
     con.execute(f"UPDATE event SET seq = {first_exit[0]} WHERE seq = {death}")
     swapped = con.execute("SELECT count(*) FROM order_violation").fetchone()
-    print(f"   order control: clean {clean}, after swapping an exit before its DEATH {swapped}")
-    return clean == (0,) and swapped is not None and swapped[0] > 0
+    no_gap = con.execute(ORDINAL_GAPS).fetchone()
+    con.execute("UPDATE event_role SET ordinal = 2 WHERE ordinal = 0 AND event_id = 0")
+    gap = con.execute(ORDINAL_GAPS).fetchone()
+    print(
+        f"   order control: clean {clean}, after swapping an exit before its DEATH {swapped}; "
+        f"role-ordinal gaps: clean {no_gap}, after moving an ordinal 0 to 2: {gap}"
+    )
+    return (
+        clean == (0,) and swapped is not None and swapped[0] > 0 and no_gap == (0,) and gap == (1,)
+    )
 
 
 def columns(con: duckdb.DuckDBPyConnection, table: str) -> list[tuple[str, str]]:
@@ -282,6 +338,19 @@ def check_chronicle_view() -> bool:
     return view == table
 
 
+def check_child_tables() -> bool:
+    """Check 6: the child tables are schema.sql's, column for column (one envelope, SPR-020)."""
+    stream = load(DDL.read_text(encoding="utf-8"))
+    chronicle = load(CHRONICLE.read_text(encoding="utf-8"))
+    ok = True
+    for table in CHILD_TABLES:
+        a, b = columns(stream, table), columns(chronicle, table)
+        same = a == b
+        ok &= same
+        print(f"   {table}: {[c for c, _ in a]}{'' if same else f' differs from schema.sql {b}'}")
+    return ok
+
+
 def main() -> int:
     """Run every check and print PASS or FAIL."""
     checks = [
@@ -290,6 +359,7 @@ def main() -> int:
         ("3. sealed segments round-trip", check_segments),
         ("4. order positive control", check_order_control),
         ("5. life_course_v = schema.sql life_course", check_chronicle_view),
+        ("6. child tables = schema.sql child tables", check_child_tables),
     ]
     ok = True
     for name, fn in checks:

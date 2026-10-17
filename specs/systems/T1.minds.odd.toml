@@ -25,12 +25,25 @@
 # Round 4d (from the effect-language spec, PR #41 §5.3): relations by their exact names, kin(p, n) and related(a, b, n);
 # DESPAIR_PACT's opinion effect is a declared self-send (OpinionModifier to T1), with T1's [[applies]].
 # Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
+# 0.3.2 (2026-10-17, EVO-001, the Architect's R9 and R12, merged with PR #49): the rate reads of S6 and S7 carry the
+# machine-readable `neutral` SPR-014's absent-owner rule serves (05.1 §2 rule 2; the effect language's loader reads it,
+# REV-SPR-017 round 3); an identity read requires its owner (R12), so a world that registers minds registers M2 and M7, and
+# the P1b identity reads of S6 and S7 (vow.vower, artifact.bearer, artifact.location) are declared with those specs in P1b,
+# not here; enum columns carry their codes; the [[applies]] payloads are typed, drained at Day/Agenda and keyed by a named
+# PersonId field; Marry and ScheduleDeath carry no date and a sampled outcome (EVO-001 R9): the decision schedules a T1
+# timer, MARRY_DUE or DEATH_DUE, at (the next day start, Vital) under the new purpose outcome_delay, whose fire in that
+# Vital's timer pass submits the command, and M2's drain applies it in the same Vital (the timing MAJ-4 asked for); the
+# Day/Vital `when` names apply_death (timer fire or drain) rather than the timer pass alone (REV-EVO-001 MIN-1). Round 4
+# (NIT-15): a due timer whose victim or partner is already dead is dropped (drop_timer), never submitted.
+# 0.3.3 (2026-10-17, SPR-020, the event envelope; specs/chronicle/envelope_v0.md; no mechanics changed): every [[emits]] entry
+# declares the Registry [event_roles] it fills, the [motive_edges] its motivated_by edges may carry and the one anchored snapshot
+# of P1a, stress(actor) read from mind.stress at emit on its seven acts, the pre-act value (envelope_v0.md §4), checked by lint_odd.py.
 odd_r = 2
 
 [system]
 id = "T1.minds"
 name = "Minds of named actors (minds v0)"
-spec_version = "0.3.1"
+spec_version = "0.3.3"
 fidelity = "F1"
 status = "frozen"
 crate = "rh-minds"
@@ -152,6 +165,7 @@ fixed_point = false
 column = "mind.break_state"
 entity = "mind"
 type = "enum"
+values = ["calm", "pending", "refractory"]
 plane = "A"
 meaning = "calm | pending (a break timer is scheduled) | refractory (a break fired; no new break until refractory_until)"
 fixed_point = false
@@ -201,6 +215,7 @@ fixed_point = false
 column = "relation.kind"
 entity = "relation"
 type = "enum"
+registry = "relation_kinds"
 plane = "A"
 meaning = "Registry [relation_kinds] id: liege or vassal in a row; the kinship ids of the same table name the derived kinds, and every kind's closeness scales grief"
 fixed_point = false
@@ -229,6 +244,7 @@ fixed_point = false
 column = "opinion.kind"
 entity = "opinion"
 type = "enum"
+registry = "opinion_modifiers"
 plane = "A"
 meaning = "Registry [opinion_modifiers] id"
 fixed_point = false
@@ -264,6 +280,7 @@ fixed_point = false
 column = "thought.overlay"
 entity = "thought"
 type = "enum"
+registry = "overlays"
 plane = "A"
 meaning = "Registry [overlays] id; [overlay_traits] maps it to trait deltas. One row per (holder, overlay)"
 fixed_point = false
@@ -299,6 +316,7 @@ fixed_point = false
 column = "goal.kind"
 entity = "goal"
 type = "enum"
+registry = "vow_kinds"
 plane = "A"
 meaning = "Registry [vow_kinds] id"
 fixed_point = false
@@ -348,6 +366,7 @@ fixed_point = false
 column = "feud.status"
 entity = "feud"
 type = "enum"
+values = ["active", "ended"]
 plane = "A"
 meaning = "active | ended (FEUD_ENDED: reconciled, or a party died). Ended is absorbing"
 fixed_point = false
@@ -398,36 +417,60 @@ fixed_point = false
 [[emits]]
 kind = "MENTAL_BREAK"
 when = "A break timer fires: the actor drops rational self-preservation for one act (SAGA-11); its motive edge points to the event that pushed stress over the threshold"
+roles = ["actor"]
+motives = ["GRIEF_FOR", "RETALIATION_FOR", "AMBITION_FOR", "JEALOUSY_OF", "VOW_OF"]   # the motivated_by edge to the event that pushed stress over the threshold
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]   # stress(actor)@eN (envelope_v0.md §4)
 [[emits]]
 kind = "MURDER_ATTEMPT"
-when = "The act of an ASSASSINATION_ATTEMPT break, or a feud's attack option chosen by IAUS; the outcome (success or failure) is in the event; success sends ScheduleDeath to M2, and the victim dies at the next day start (the attempt-to-death delay is one day; round 3, MAJ-4)"
+when = "The act of an ASSASSINATION_ATTEMPT break, or a feud's attack option chosen by IAUS; the outcome (success or failure) is in the event; success schedules a DEATH_DUE timer at (the next day start, Vital) whose fire submits ScheduleDeath to M2, and the victim dies at the next day start (the attempt-to-death delay is one day; round 3, MAJ-4; EVO-001 R9)"
+roles = ["actor", "target"]
+motives = ["RETALIATION_FOR", "AMBITION_FOR", "JEALOUSY_OF", "VOW_OF"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "FLED"
 when = "The act of a FLIGHT break (P1a: the actor resigns every office and leaves the court; P1b: the actor becomes a fugitive, SAGA-14)"
+roles = ["actor"]
+motives = ["FEAR_OF"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "HOLDINGS_BURNED"
 when = "The act of a BURN_HOLDINGS break (available only when M4 is registered, P1b)"
+roles = ["actor"]
+motives = ["GRIEF_FOR", "RETALIATION_FOR"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "DESPAIR_PACT"
 when = "The act of a PACT_OF_DESPAIR break: a bond with a stressed named relation and the renunciation of the actor's claims"
+roles = ["actor", "target"]   # actor: the breaking actor; target: the stressed relation
+motives = ["GRIEF_FOR", "LOYALTY_TO"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "FEUD_DECLARED"
 when = "IAUS chooses the feud decision's declare option against a target"
+roles = ["actor", "target"]
+motives = ["RETALIATION_FOR", "JEALOUSY_OF", "AMBITION_FOR"]   # to feud.cause_event
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 [[emits]]
 kind = "FEUD_ENDED"
 when = "IAUS chooses the reconcile option, or a party dies (the death path)"
+roles = ["actor", "target"]   # the party who reconciled (or died: the death path) and the other party
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]   # the pre-act value (envelope_v0.md §4)
 
 # ----------------------------------------------------------------------------- lifecycle commands sent
 [[commands]]
 target = "M2.demography"
 command = "Marry"
-payload = "{ a, b, tick }"
-why = "The marry decision proposes, with M2's declared payload Marry {a, b, tick = the next day start}; M2 owns marriages (P1.3) and writes person.spouse when it applies the command"
+payload = "{ a, b }"
+timer = "MARRY_DUE"
+purpose = "outcome_delay"
+why = "The marry decision at Agenda d schedules a T1 timer MARRY_DUE at (d + 1 day start, Vital) under outcome_delay (entity = a, payload = b, cause = None), whose fire in that Vital's timer pass submits Marry {a, b} with M2's declared payload, and M2's Day/Vital binding drains it in the same Vital (EVO-001 R9: a command carries no date, and a decided outcome due later is the decider's timer); M2 owns marriages (P1.3) and writes person.spouse when it applies the command"
 [[commands]]
 target = "M2.demography"
 command = "ScheduleDeath"
-payload = "{ victim, tick, cause, culprit, cause_event }"
-why = "A successful MURDER_ATTEMPT kills only through the single death path (05.1 §2 rule 2), with M2's declared payload ScheduleDeath {victim, tick = the next day start, cause = murder, culprit = the actor, cause_event = the MURDER_ATTEMPT}"
+payload = "{ victim, cause, culprit, cause_event }"
+timer = "DEATH_DUE"
+purpose = "outcome_delay"
+why = "A successful MURDER_ATTEMPT at Agenda d kills only through the single death path (05.1 §2 rule 2): it schedules a T1 timer DEATH_DUE at (d + 1 day start, Vital) under outcome_delay (entity = the victim, payload = the actor, cause = the MURDER_ATTEMPT as a DraftRef, rewritten to its EventId at the merge), whose fire in that Vital's timer pass submits ScheduleDeath {victim, cause = murder, culprit = the actor, cause_event = the timer's cause} with M2's declared payload, and M2's Day/Vital binding drains it in the same Vital (EVO-001 R9), so the victim dies at the next day start"
 [[commands]]
 target = "T1.minds"
 command = "OpinionModifier"
@@ -436,18 +479,22 @@ why = "A self-send (round 4d): DESPAIR_PACT's opinion effect, the DESPAIR_PACT_W
 [[commands]]
 target = "M7.dynasty"
 command = "PetitionSeat"
+payload = "{ person, target }"
 why = "The seek_office decision asks for a vacant office or a seat held in demesne; M7 grants by its rule"
 [[commands]]
 target = "M7.dynasty"
 command = "PressClaim"
+payload = "{ claimant, claim }"
 why = "The press_claim decision; M7 owns claims"
 [[commands]]
 target = "M7.dynasty"
 command = "RenounceClaim"
+payload = "{ claimant, claim }"
 why = "A PACT_OF_DESPAIR renounces the actor's claims"
 [[commands]]
 target = "M7.dynasty"
 command = "Resign"
+payload = "{ person, office }"
 why = "FLIGHT resigns the actor's offices; M7 owns offices"
 [[commands]]
 target = "M4.economy"
@@ -472,38 +519,68 @@ command = "Destroy"
 why = "pursue_goal for DESTROY_RELIC (P1b)"
 
 # ----------------------------------------------------------------------------- lifecycle commands applied
-# For PR #37's [[applies]] lint (round 4d). Each payload is the one every sender uses.
+# For PR #37's [[applies]] lint (round 4d); typed by EVO-001 (05.1 §2 rule 2). Each payload is the one every sender uses.
+# All are drained by the Day/Agenda binding (apply_commands and promote). Keyed by the holder, bearer or person named by
+# key_field, who must be living (key = "living": rh-core drops a command for someone dead, dropped{T1, kind, dead_key});
+# ClearGoal clears what may belong to a dead holder, so it takes any key. kind, overlay and the event slots are typed by the columns and the merge rewrite.
 [[applies]]
 command = "OpinionModifier"
-payload = "{ holder, about, kind, magnitude, source_event }"
+payload = "{ holder: PersonId, about: PersonId, kind: enum(opinion.kind), magnitude: q8_8, source_event: EventRef }"
 from = ["M7.dynasty", "S7.vows", "T1.minds"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "holder"
 [[applies]]
 command = "AgendaGoal"
-payload = "{ vow, holder, kind, target, priority }"
+payload = "{ vow: VowId, holder: PersonId, kind: enum(goal.kind), target: u64, priority: q8_8 }"
 from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "holder"
 [[applies]]
 command = "ClearGoal"
-payload = "{ vow, holder }"
+payload = "{ vow: VowId, holder: PersonId }"
 from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "any"
+key_field = "holder"
 [[applies]]
 command = "ApplyThought"
-payload = "{ holder, overlay, delta, source_event }"
+payload = "{ holder: PersonId, overlay: enum(thought.overlay), delta: q8_8, source_event: EventRef }"
 from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "holder"
 [[applies]]
 command = "ApplyInfluence"
-payload = "{ bearer, overlay, delta }"
+payload = "{ bearer: PersonId, overlay: enum(thought.overlay), delta: q8_8 }"
 from = ["S6.artifacts"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "bearer"
 [[applies]]
 command = "Promote"
-payload = "{ person }"
+payload = "{ person: PersonId }"
 from = ["M7.dynasty"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "person"
 [[applies]]
 command = "Demote"
-payload = "{ person }"
+payload = "{ person: PersonId }"
 from = ["M7.dynasty"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "person"
 
 # ----------------------------------------------------------------------------- reads
-# Round 4 (NEW-4): the reads below are declared unconditionally (round 4, NEW-4); the rh-core registration rule that SPR-014 adds drops and reports a read whose owner the world does not register, and gives the view the coupling's neutral value
+# Round 4 (NEW-4) and EVO-001 (R12): the reads below are declared unconditionally. An identity read requires its owner, so a world
+# that registers minds registers M2 and M7 (registration refuses one that does not, by name; SPR-023 develops against a stub M7 owner,
+# as [isolation] says, and integrates into real worlds after SPR-021).
+# A rate read carries its neutral and is dropped when its owner is absent: SPR-014's registration rule reports it, the dropped
+# column enumerates as an empty table (no vows, no artifacts) and a keyed lookup returns the neutral (S7: vow conflict 0, so
+# s_vow = 0; S6: rumour_reach 0, so the seek consideration is as at R = 0). The P1b identity reads of S6 and S7 (the vower, the
+# bearer and the place of an artifact) are declared when those specs are frozen (P1b); the [[couplings]] entries keep the rules.
 # Kinship walks life_course.mother/father through kin(p, n) (SPR-017), read at same_instant (round 4c, NEW-6: the log is append-only and written only by M2 in Vital, so same_instant is exact and avoids P0's per-instant clone of a lagged column) (round 4, NEW-1). minds rebuilds a
 # children-by-parent index over those columns at restore and on each birth: derived state, outside the plane-A hash and
 # the keyframe. Neutral values (S7: vow conflict 0, so s_vow = 0, and no goals; S6: rumour_reach 0, so the
@@ -620,36 +697,23 @@ owner = "M7.dynasty"
 lag = "lagged"
 use = "identity"
 [[reads]]
-column = "vow.vower"
-owner = "S7.vows"
-lag = "lagged"
-use = "identity"
-[[reads]]
 column = "vow.conflict"
 owner = "S7.vows"
 lag = "lagged"
 use = "rate"
-[[reads]]
-column = "artifact.bearer"
-owner = "S6.artifacts"
-lag = "lagged"
-use = "identity"
-[[reads]]
-column = "artifact.location"
-owner = "S6.artifacts"
-lag = "lagged"
-use = "identity"
+neutral = 0.0
 [[reads]]
 column = "artifact.rumour_reach"
 owner = "S6.artifacts"
 lag = "lagged"
 use = "rate"
+neutral = 0
 
 [scales]
 spatial = "named actor; candidate targets come from the actor's situation sets (relations, court, own claims, agenda goals), never from a scan of the world (GOV-003 §6 row 5)"
 temporal = "Day pulse for deaths (grief), decisions, breaks and commands at the instants they occur; Month pulse for stress accrual, decay and expiry. Decision polls every poll_months of the type (1 to 12), interrupts at t + 1 day or later"
 extent = "named actors only: 1 to 5,000 (05.3 §1); a kingdom world 200 to 2,000; the G1a performance world at most 500. The count is an outcome of M7's dormancy criteria, never a target (docs/01 principle 8)"
-restart = "Owned columns plus minds' pending agenda timers (polls, interrupts, break and refractory timers; the agenda's keyframe dump) restore the system exactly. Traits are restored from the keyframe, never recomputed: their draw was keyed by the instant of the first promotion (round 3, MAJ-9)"
+restart = "Owned columns plus minds' pending agenda timers (polls, interrupts, break and refractory timers, DEATH_DUE and MARRY_DUE with their payload and cause; the agenda's keyframe dump) restore the system exactly. Traits are restored from the keyframe, never recomputed: their draw was keyed by the instant of the first promotion (round 3, MAJ-9)"
 
 [[fidelity_ladder]]
 level = "F1"
@@ -664,8 +728,8 @@ status = "n/a"
 [[schedule]]
 pulse = "Day"
 phase = "Vital"
-steps = ["grief: for each death this instant, add grief stress to every named actor kin to the dead (derived kinship) or holding a liege or vassal row to them, saturating per instant; end the dead's rows and feuds; drop a dead actor's mind timers", "threshold: schedule a break for every actor whose stress crossed stress_threshold in this binding"]
-when = "every day start (rh-core runs every binding whose pulse fires); work only where M2's death timers fired in this instant's Vital timer pass, which precedes every binding (round 3, BLK-1)"
+steps = ["outcome_due: the fire of due DEATH_DUE and MARRY_DUE timers in this Vital's timer pass (T1's fire, after M2's level, before every binding; not the binding's step): submit ScheduleDeath or Marry to M2, which drains them in this same Vital before this binding (05.1 §2 rule 2; EVO-001 R9); a DEATH_DUE whose victim is already dead, or a MARRY_DUE whose a or b is dead (a natural death drawn for the same day start fires in M2's pass, before T1's; the grief step drops a dead actor's mind timers, but a victim or partner who is not a named actor holds none), is dropped with drop_timer(dead), never submitted (REV-EVO-001 NIT-15)", "grief: for each death this instant, add grief stress to every named actor kin to the dead (derived kinship) or holding a liege or vassal row to them, saturating per instant; end the dead's rows and feuds; drop a dead actor's mind timers", "threshold: schedule a break for every actor whose stress crossed stress_threshold in this binding"]
+when = "every day start (rh-core runs every binding whose pulse fires); work only where M2's apply_death ran in this instant's Vital, in its timer pass (which precedes every binding, round 3, BLK-1) or in its Day/Vital drain (which precedes T1's Vital binding by the M2 -> T1 edge; EVO-001)"
 [[schedule]]
 pulse = "Day"
 phase = "Agenda"
@@ -714,6 +778,11 @@ use = "entity = the actor, k = the target's PersonId, t = the break instant: whe
 purpose = "attack_outcome"
 key = ["actor", "target", "tick"]
 use = "entity = the actor, k = the target's PersonId, t = the decision instant: whether a feud attack's MURDER_ATTEMPT succeeds, hits iff draw < attempt_success (Prob32)"
+[[rng]]
+purpose = "outcome_delay"
+key = ["person", "tick"]
+use = "No draw (EVO-001 R9, R10). The purpose of the DEATH_DUE (entity = the victim, payload = the actor, cause = the MURDER_ATTEMPT) and MARRY_DUE (entity = a, payload = b, cause = None) timers at (the next day start, Vital): the one-day delay of a decided outcome is not a draw, and its event is already in the log. resample_timer (a material input in the person's scope) returns the timer's own tick and keeps its payload and cause; it never errors"
+resample_on_fork = false
 
 # ----------------------------------------------------------------------------- design concepts (ODD 4)
 [design]
@@ -823,7 +892,7 @@ summary = "First Promote{person}: person.named := true; traits and ambition from
 earns_its_place_by = ["V-INV-12", "V-SAGA-16"]
 [[submodels]]
 name = "break_act"
-summary = "When a break timer fires for actor a: the available acts are the [mental_breaks] entries whose needs a meets (stressor: the target of a's highest-conflict vow (P1b), else the culprit of a's most recent known kin harm (P1b), else a's active feud enemy with the lowest opinion; seat: a holds a title; kin: a living named relation; holdings: M4 registered). FLIGHT needs nothing, so the set is never empty. Weight of act k = clamp(1 + sum over traits of w_k,t x trait_t/100, 0.1, 2.0); the break_act draw picks one. Emit MENTAL_BREAK (motive edge to the crossing's cause) and the act's verb; apply its effects: MURDER_ATTEMPT on the stressor, break_outcome against attempt_success, success sends ScheduleDeath {victim = stressor, tick = the next day start, cause = murder, culprit = a, cause_event = the MURDER_ATTEMPT}; FLED sends Resign for each office of a (P1b: fugitive status via S3); HOLDINGS_BURNED destroys a's household stocks (M4, P1b); DESPAIR_PACT adds DESPAIR_PACT_WITH modifiers both ways with the stressed relation (an OpinionModifier self-send, applied at the next tick boundary) and sends RenounceClaim for a's claims. Then stress := max(0, stress - relief); stress_relieved += the applied amount; break_state := refractory; refractory_until := now + break_refractory_days; a refractory-end timer is scheduled"
+summary = "When a break timer fires for actor a: the available acts are the [mental_breaks] entries whose needs a meets (stressor: the target of a's highest-conflict vow (P1b), else the culprit of a's most recent known kin harm (P1b), else a's active feud enemy with the lowest opinion; seat: a holds a title; kin: a living named relation; holdings: M4 registered). FLIGHT needs nothing, so the set is never empty. Weight of act k = clamp(1 + sum over traits of w_k,t x trait_t/100, 0.1, 2.0); the break_act draw picks one. Emit MENTAL_BREAK (motive edge to the crossing's cause) and the act's verb; apply its effects: MURDER_ATTEMPT on the stressor, break_outcome against attempt_success, success schedules a DEATH_DUE timer at (the next day start, Vital) (entity = stressor, payload = a, cause = the MURDER_ATTEMPT; EVO-001 R9) whose fire submits ScheduleDeath {victim = stressor, cause = murder, culprit = a, cause_event = the MURDER_ATTEMPT}; FLED sends Resign for each office of a (P1b: fugitive status via S3); HOLDINGS_BURNED destroys a's household stocks (M4, P1b); DESPAIR_PACT adds DESPAIR_PACT_WITH modifiers both ways with the stressed relation (an OpinionModifier self-send, applied at the next tick boundary) and sends RenounceClaim for a's claims. Then stress := max(0, stress - relief); stress_relieved += the applied amount; break_state := refractory; refractory_until := now + break_refractory_days; a refractory-end timer is scheduled"
 earns_its_place_by = ["V-SAGA-16"]
 [[submodels]]
 name = "refractory_end"
@@ -937,7 +1006,7 @@ lag = "applied by M2's death path (BCK-002 A-30 sets the instant)"
 [[couplings]]
 system = "M7.dynasty"
 direction = "out"
-via = "PetitionSeat, PressClaim, RenounceClaim, Resign; M7 reads person.named and mind columns only as identity"
+via = "PetitionSeat, PressClaim, RenounceClaim, Resign; M7 reads person.named as a mode read with neutral = false (nobody holds a mind when T1 is absent, so M7's dormancy sends nothing; R12) and reads no mind column"
 lag = "applied at the next tick boundary"
 [[couplings]]
 system = "S7.vows"

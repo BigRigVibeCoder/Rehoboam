@@ -1,0 +1,29 @@
+# The whole engine-purity deny-list of bin/lint_arch.py, one package per line (VER-SPR-011-TEST GAP-2;
+# BCK-002 A-49). python/tests/test_lint_arch.py compares ENGINE_DENY_LIST with it, so adding or removing
+# an entry changes this file in the same reviewed edit. Names are written without quote marks (G-3).
+actix-web
+async-openai
+axum
+candle-core
+cpal
+gif
+hound
+hyper
+image
+jpeg-decoder
+kira
+lewton
+llama-cpp-2
+minimp3
+ollama-rs
+png
+reqwest
+rocket
+rodio
+symphonia
+tiktoken-rs
+tokenizers
+tower-http
+tts
+ureq
+warp

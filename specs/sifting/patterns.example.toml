@@ -33,14 +33,14 @@ id = "authority_purges_successor"
 version = 1
 tellability = 0.9
 description = "An authority coerces or harms their designated successor, motivated by fear."
-roles = { A = "authority", S = "successor" }
+roles = { A = "authority", S = "successor of A" }
 selection = "latest"
 on_complete = "clear_binding"
 firing_budget = { per_century_per_100k = 0.5 }
   [[pattern.clause]]
   bind = "e1"
   act = ["coerce", "harm", "purge"]
-  initiator = "A"
+  actor = "A"
   target = "S"
   where = ["succession_rank(S, A)@e1 == 1", "fear(A)@e1 >= 0.6"]
   require_edge = { into = "e1", kind = "motivated_by", from_state = "fear(A)" }
@@ -58,19 +58,19 @@ firing_budget = { per_century_per_100k = 20 }
   [[pattern.clause]]
   bind = "e1"
   act = ["aid", "promise"]
-  initiator = "A"
+  actor = "A"
   target = "B"
   where = ["trust(B, A)@e1 >= 0.6"]
   [[pattern.clause]]
   bind = "e2"
   act = ["harm", "betray", "conceal"]
-  initiator = "A"
+  actor = "A"
   target = "B"
   after = "e1"
   within_days = 3650
   [[pattern.unless]]
   act = ["aid"]
-  initiator = "B"
+  actor = "B"
   target = "A"
   between = ["e1", "e2"]
   [pattern.emit]
@@ -90,12 +90,12 @@ firing_budget = { per_century_per_100k = 10 }
   [[pattern.clause]]
   bind = "e1"
   act = ["harm"]
-  initiator = "X"
+  actor = "X"
   target = "V"
   [[pattern.clause]]
   bind = "e2"
   act = ["harm", "depose", "accuse"]
-  initiator = "R"
+  actor = "R"
   target = "X"
   after = "e1"
   within_days = 18000
@@ -106,8 +106,8 @@ firing_budget = { per_century_per_100k = 10 }
 id = "false_positive_purge_of_notable_child"
 version = 1
 tellability = 0.95
-description = "Covert-infiltration era: a test says positive, the subject is purged, and the subject was NOT infected. Irony is maximised when the subject is a notable's child."
-roles = { I = "investigator", S = "suspect", P = "kin" }
+description = "Covert-infiltration era: a test says positive, the subject is purged, and the subject was NOT infected. Irony is maximised when the subject is a notable (a notable's child needs a parent bound by a cast key: a domain reads at its anchor, REV-SPR-020 R16)."
+roles = { I = "investigator", S = "suspect" }
 selection = "latest"
 on_complete = "clear_binding"
 firing_budget = { per_century_per_100k = 2 }
@@ -116,7 +116,7 @@ threatened_role = "S"
   [[pattern.clause]]
   bind = "e1"
   act = ["test"]
-  initiator = "I"
+  actor = "I"
   target = "S"
   where = ["test_result(S)@e1 == 'positive'", "hive_member(S)@e1 == false"]
   [[pattern.clause]]
@@ -125,7 +125,7 @@ threatened_role = "S"
   target = "S"
   after = "e1"
   within_days = 90
-  where = ["is_parent(P, S)@e2", "notable(P)@e2 == true"]
+  where = ["notable(S)@e2 == true"]
   [pattern.emit]
   match_event = "innocent_purged"
 
@@ -141,12 +141,12 @@ firing_budget = { per_century_per_100k = 5 }
   [[pattern.clause]]
   bind = "e1"
   act = ["reveal", "aid", "harm"]
-  initiator = "M"
+  actor = "M"
   where = ["used_hive_only_knowledge(M)@e1 == true"]
   [[pattern.clause]]
   bind = "e2"
   act = ["discover", "accuse"]
-  initiator = "O"
+  actor = "O"
   target = "M"
   after = "e1"
   within_days = 30
@@ -157,7 +157,7 @@ id = "famine_to_succession_crisis"
 version = 1
 tellability = 0.9
 description = "Higher-order: a famine declared in a realm, followed within five years by that realm's authority purging their successor."
-roles = { A = "authority", S = "successor" }
+roles = { A = "any", S = "any" }          # A and S arrive bound by the match_event, whose emitter checked their domains at its own anchor (REV-SPR-020 R16): a match_event has no cast to anchor a domain here
 selection = "latest"
 on_complete = "clear_binding"
 firing_budget = { per_century_per_100k = 0.2 }
@@ -178,7 +178,7 @@ id = "guest_right_violated"
 version = 1
 tellability = 0.85
 description = "Three-stage kernel after Winnow's breakHospitality (B3 pp2-3): a refugee arrives, is aided by a host of high integrity at the time of the aid, then is harmed by that host before fleeing again."
-roles = { H = "host", G = "guest" }
+roles = { H = "any", G = "any" }          # the aid (e2) is what makes H the host and G the guest, so a host or guest domain read at their anchors (e2 pre-act, e1) could never hold (REV-SPR-020 R16); the pattern's clauses define the roles
 selection = "all"                     # >2 clauses: fork-and-accept (B3 p3) until per-stage semantics are defined
 on_complete = "keep"
 dedupe = { key = ["H", "G"], bucket_days = 365 }   # B3 p7: role bindings, not event IDs, carry perceived identity
@@ -187,11 +187,11 @@ surface_from = "e2"
   [[pattern.clause]]
   bind = "e1"
   act = ["flee"]
-  initiator = "G"
+  actor = "G"
   [[pattern.clause]]
   bind = "e2"
   act = ["aid"]
-  initiator = "H"
+  actor = "H"
   target = "G"
   after = "e1"
   within_days = 365
@@ -199,12 +199,12 @@ surface_from = "e2"
   [[pattern.clause]]
   bind = "e3"
   act = ["harm", "betray"]
-  initiator = "H"
+  actor = "H"
   target = "G"
   after = "e2"
   within_days = 365
   [[pattern.unless]]
   bind = "u1"
   act = ["flee"]
-  initiator = "G"
+  actor = "G"
   between = ["e1", "e3"]

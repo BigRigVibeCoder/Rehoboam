@@ -159,6 +159,11 @@ fn render() -> String {
 }
 
 #[test]
+// LINT-ALLOW(forbidden-api): a test reads an environment override for its golden file; tests never link into the engine (SPR-011 A-4)
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test reads an environment override for its golden file"
+)]
 fn samplers_reproduce_the_golden_vectors() {
     let path = std::env::var_os("RH_SAMPLE_GOLDEN").map_or_else(
         || std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(GOLDEN),

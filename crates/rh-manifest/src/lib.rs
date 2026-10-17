@@ -5,6 +5,9 @@
 //! Authored numbers reach plane A only as fixed point, compiled from the literal's exact decimal
 //! value (`docs/05_architecture/05.5` §3.2); plane A never sees an `f64`.
 //!
+//! - [`compile`]: a validated manifest compiled into the plane-A `rh_registry::WorldSpec`
+//!   (SPR-011 T-04): exact decimals to fixed point, Registry defaults, founders in genesis order.
+//! - [`exact`]: authored numbers as exact decimals, compiled into fixed point (`05.5` §3.2).
 //! - [`registry`]: the Registry v0 as typed sections with bounds (SPR-004 T-01).
 //! - [`manifest`]: typed manifest loading with the same verdicts, error counts and lines as the
 //!   reference (T-02, V-WC-04), and the JSON Schema emitted from the Rust types (T-04).
@@ -19,9 +22,12 @@
     reason = "tool plane: load-time validation must reproduce the reference's float checks (manifest_v0.py); lint_arch pins this crate to the tool plane"
 )]
 
+pub mod compile;
+pub mod exact;
 pub mod manifest;
 pub mod pyfmt;
 pub mod registry;
 pub mod yaml;
 
+pub use compile::{CompileError, CompileErrors, compile, compile_file};
 pub use registry::{Bounds, Number, Registry, RegistryError};

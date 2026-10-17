@@ -15,6 +15,9 @@
 //! SPR-006 adds `agenda` (timers keyed by `(time, phase, entity, seq)`), `command` (the lifecycle
 //! command queues) and `crash` (crash artifacts), and gives the engine the per-level merge, the
 //! event bus (`rh-events`), material-input re-sampling and the invariants in `Bookkeeping`.
+//! SPR-009 adds `observe`: boundary notices for a host's observer, with no clock (ruling 4).
+//! SPR-011 adds `ledger`: the person ledger's compaction and the life-course log's rules
+//! (ruling 5), and `fixed::Prob32` (ruling 4).
 #![forbid(unsafe_code)]
 
 pub mod access;
@@ -23,6 +26,8 @@ pub mod command;
 pub mod crash;
 pub mod engine;
 pub mod fixed;
+pub mod ledger;
+pub mod observe;
 pub mod ownership;
 pub mod phase;
 pub mod register;

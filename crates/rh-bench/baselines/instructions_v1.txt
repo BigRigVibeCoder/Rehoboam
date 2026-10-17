@@ -1,0 +1,26 @@
+# rehoboam/rh-bench/instructions/v1: callgrind instruction counts (Ir) of the PR-tier benches (SPR-009).
+# Written by `python -I bin/perf_gate.py record`, never by hand (SPR-009 ruling 3).
+format rehoboam/rh-bench/instructions/v1
+toolchain rustc 1.97.0 2d8144b7880597b6e6d3dfd63a9a9efae3f533d3
+toolchain llvm 22.1.6
+toolchain host x86_64-unknown-linux-gnu
+toolchain valgrind valgrind-3.22.0
+toolchain libc glibc 2.39
+toolchain iai-callgrind 0.16.1
+toolchain bmi2 yes
+slot raster_8x512 bench 4: no baseline until P1a, the first sprint with a spatial field (M1 or M3)
+bench draws/raw_draws/raw_1000 552039
+bench draws/step_draws/empty 16611
+bench draws/step_draws/rng_epoch0_1000 1257191
+bench draws/step_draws/rng_epoch1_1000 1519576
+bench draws/step_draws/stream_epoch0_1000 2250192
+bench keyframe_write_read/load/rows_10k 33030554
+bench keyframe_write_read/read/rows_10k 30393109
+bench keyframe_write_read/write/rows_10k 66396019
+bench plane_hashes/narrative_dirty_chunk/rows_10k 158779
+bench plane_hashes/narrative_full/rows_10k 4998899
+bench plane_hashes/observation_dirty_chunk/rows_10k 158786
+bench plane_hashes/observation_full/rows_10k 4998906
+bench plane_hashes/state_dirty_chunk/rows_10k 108731
+bench plane_hashes/state_dirty_column/rows_10k 581613
+bench plane_hashes/state_full/rows_10k 2311755

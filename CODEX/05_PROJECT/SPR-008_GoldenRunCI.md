@@ -2,14 +2,14 @@
 id: SPR-008
 title: "Golden-run CI, the smoke world and the bisect tool"
 type: how-to
-status: PLANNING
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001, RUN-002, GOV-008]
+related: [BCK-001, PRJ-001, RUN-002, GOV-008, VER-SPR-008, VER-SPR-008-TEST]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.2.1
 ---
 
 > **BLUF:** Prove determinism continuously: a smoke world with dummy systems runs a thousand years in CI with hash ladders, and a bisect tool names any divergence. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.
@@ -115,9 +115,9 @@ version: 1.2.0
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-008` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-008` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class.

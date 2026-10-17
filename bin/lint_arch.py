@@ -61,6 +61,33 @@ workspace crates, of every dependency kind (normal, build and dev):
                      a config from the crawl. CLIPPY_CONF_DIR, which points clippy at another
                      configuration, must not be set.
 
+    unsafe-allow     GOV-003 §2's reviewed unsafe allow-list is UNSAFE_ALLOW_LIST (SPR-009 T-05). A
+                     crate not on it keeps #![forbid(unsafe_code)]; a listed crate relaxes it to
+                     deny only, with its other lint tables equal to the workspace's, and holds
+                     `unsafe` or `allow(unsafe_code` only in its listed files.
+    global-allocator The only #[global_allocator] is in ALLOCATOR_CRATE's bench targets (V-PERF-11;
+                     SPR-009 ruling 5): the counting allocator never reaches a shipped binary.
+    count-alloc      ALLOCATOR_FEATURES (count-alloc, arena-alloc) are enabled by no dependency
+                     edge, are not default features, and are required by no target of
+                     ALLOCATOR_CRATE but a bench.
+
+    protocol-leaf    rh-protocol, the wire-format crate (SPR-026; specs/stream/wire_v1.md §7), is a
+                     tool-plane leaf pinned by name: it depends on no workspace crate, of any
+                     dependency kind, so a viewer holding the wire types has no path to the
+                     engine; its third-party dependencies are exactly PROTOCOL_EXTERNAL_DEPS
+                     (serde and serde_json; proptest as a dev-dependency), so no transport or
+                     runtime can enter through it (REV-SPR-026 R7); and the plane-A closure keeps
+                     every plane-A crate from depending on it, so the engine cannot name a frame.
+
+    engine-purity    The engine only engines (ADR-0035 §6; docs/13 §3; V-INSP-05; BCK-002 A-14). No
+                     engine crate (ENGINE_CRATES, every rh-sys-* and rh-contract-* crate, and
+                     every plane-A crate) reaches a crate on ENGINE_DENY_LIST, the one deny-list
+                     of media, HTTP-UI and LLM-client crates, through its normal or build
+                     dependencies, directly or transitively; dev-dependencies are exempt. Members
+                     are followed through their cargo-metadata edges, everything else through the
+                     resolved graph in the workspace's Cargo.lock, read offline. A missing lock,
+                     or a dependency the lock does not hold, is a violation (never fail open).
+
 Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
 Usage:  python -I bin/lint_arch.py [--manifest-path Cargo.toml]
@@ -104,7 +131,22 @@ PINNED_LABELS = MappingProxyType(
         # SPR-004 ruling A: the load-time front end reproduces the reference's float checks.
         "rh-manifest": ("tool", "tool"),
         "rh-sample": ("A", "machinery"),
+        # SPR-026 (specs/stream/wire_v1.md §7): the wire-format crate is a tool-plane leaf, so no
+        # plane-A crate can depend on it (plane-A-closure) and it depends on no member
+        # (protocol-leaf): the engine cannot name a frame, and a viewer cannot reach the engine.
+        "rh-protocol": ("tool", "tool"),
+        # SPR-012: the first real system crate (M2.demography) and the worldgen stub (ruling 10).
+        "rh-sys-demography": ("A", "system"),
+        "rh-worldgen": ("A", "machinery"),
     }
+)
+PROTOCOL_CRATE = "rh-protocol"
+PROTOCOL_LEAF_RULE = "protocol-leaf"
+# REV-SPR-026 R7: the exact third-party allow-list of the wire-format leaf, by dependency kind. A
+# socket or an async runtime (tokio, mio, socket2) in the crate that spells the wire would put the
+# transport where a viewer's types are; the host owns the socket (specs/stream/wire_v1.md §7).
+PROTOCOL_EXTERNAL_DEPS = MappingProxyType(
+    {"normal": frozenset({"serde", "serde_json"}), "dev": frozenset({"proptest"})}
 )
 SYSTEM_LABELS = ("A", "system")
 CONTRACT_CRATE = "rh-contracts"
@@ -165,6 +207,17 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
         "arrow-schema": (
             frozenset({"rh-snapshot"}),
             ARROW_NOTE,
+            NO_DEFAULT_FEATURES,
+            NO_FEATURES,
+        ),
+        "arc-swap": (
+            frozenset({"rh-stream"}),
+            "no floats: an ArcSwap of the World Stream live edge's immutable snapshot (w0, s, "
+            "last_year, chunk list, seal log), published by the writer and loaded by the serving "
+            "threads without a lock, so the writer never waits (specs/stream/wire_v1.md §6.2; "
+            "REV-SPR-026 R22: pre-approved for rh-stream alone). MIT OR Apache-2.0, no "
+            "dependencies, default features off; the exact pin is SPR-026's, at a version at "
+            "least two weeks old. It holds no simulation state",
             NO_DEFAULT_FEATURES,
             NO_FEATURES,
         ),
@@ -254,6 +307,97 @@ SKIPPED_ROOT_DIRS = frozenset({"target", ".git"})
 
 # The [lints] declaration of a crate that takes the workspace's lints and nothing else (rule lints).
 INHERITED_LINTS = ("workspace",)
+
+# REF: GOV-003 §2 ("#![forbid(unsafe_code)], except crates on a reviewed allow-list"); SPR-009
+# T-05, Architect ruling 2026-10-16. THE reviewed unsafe allow-list: crate -> the files, relative
+# to the crate, that may hold `unsafe` and `allow(unsafe_code`. A listed crate declares its own
+# [lints] equal to the workspace's but for `unsafe_code = "deny"`. Adding an entry is a review.
+UNSAFE_ALLOW_LIST = MappingProxyType({"rh-bench": ("src/alloc_count.rs",)})
+UNSAFE_RELAXED = "deny"
+# V-PERF-11's counting allocator (SPR-009 ruling 5): compiled only behind this feature of this
+# crate, which only that crate's bench targets enable, and the only #[global_allocator] in the
+# workspace, declared in a bench target. So it can never reach a shipped binary.
+ALLOCATOR_CRATE = "rh-bench"
+ALLOCATOR_FEATURES = ("arena-alloc", "count-alloc")
+ALLOCATOR_TARGET_DIR = "benches"
+# Anywhere inside an attribute: `#[global_allocator]` and `#[cfg_attr(cond, global_allocator)]`
+# alike (VER-SPR-009-TEST GAP-6).
+GLOBAL_ALLOCATOR = re.compile(r"#\s*!?\s*\[[^\]]*\bglobal_allocator\b")
+ALLOW_UNSAFE = re.compile(r"\ballow\s*\(\s*unsafe_code\b")
+UNSAFE_TOKEN = re.compile(r"\bunsafe\b")
+
+# REF: docs/13 §3 ("The engine only engines"); ADR-0035 §6; 05.0 §6; docs/09 V-INSP-05; EVO-4;
+# BCK-002 A-14 (SPR-011 T-00). The engine crates: the union of the lists in docs/13 §3, 05.0 §6 and
+# ADR-0035 §6, planned ones included, SPR-011's new rh-stream and SPR-026's rh-protocol (it runs in
+# the engine host's process; specs/stream/wire_v1.md §7). Every crate named rh-sys-* or
+# rh-contract-*, and every crate whose effective plane is A, is an engine crate too, so a new
+# plane-A crate cannot be left out of the rule by forgetting to list it. rh-bench and rh-golden are
+# not engine crates, by design: they are tool crates that measure and replay the engine from outside
+# (SPR-009, SPR-008) and no engine crate depends on them; leaving them off is not a gap.
+ENGINE_CRATES = frozenset(
+    {
+        "rh-cli",
+        "rh-contracts",
+        "rh-core",
+        "rh-events",
+        "rh-ids",
+        "rh-manifest",
+        "rh-minds",
+        "rh-protocol",
+        "rh-registry",
+        "rh-sample",
+        "rh-server",
+        "rh-sifter",
+        "rh-snapshot",
+        "rh-stream",
+        "rh-sys-demography",
+        "rh-sys-smoke",
+        "rh-worldgen",
+    }
+)
+ENGINE_CRATE_PREFIXES = (SYSTEM_CRATE_PREFIX, CONTRACT_CRATE_PREFIX)
+# The workspace crates that are not engine crates, by design (see ENGINE_CRATES): tool crates that
+# measure and replay the engine from outside. Every workspace member is on exactly one of the two
+# lists (python/tests/test_lint_arch.py; VER-SPR-011-TEST GAP-1, BCK-002 A-49), so a new crate must
+# be placed by a reviewed edit rather than fall through.
+NON_ENGINE_CRATES = frozenset({"rh-bench", "rh-golden"})
+# THE engine-purity deny-list, defined here and nowhere else (python/tests checks that): package
+# name -> what it is. docs/13 §3 names the categories (media, HTTP-UI, LLM client) and nine
+# examples; the rest are the common crates of the same categories. Matched by package name over the
+# transitive normal and build dependencies of every engine crate. Keep it alphabetical; adding an
+# entry is a review, removing one is a C2 change (ADR-0035 §6).
+ENGINE_DENY_LIST = MappingProxyType(
+    {
+        "actix-web": "HTTP UI (web server framework)",
+        "async-openai": "LLM client",
+        "axum": "HTTP UI (web server framework)",
+        "candle-core": "LLM inference",
+        "cpal": "media (audio I/O)",
+        "gif": "media (image codec)",
+        "hound": "media (audio codec)",
+        "hyper": "HTTP (the base of web servers and clients not listed here)",
+        "image": "media (images)",
+        "jpeg-decoder": "media (image codec)",
+        "kira": "media (audio engine)",
+        "lewton": "media (audio codec)",
+        "llama-cpp-2": "LLM inference",
+        "minimp3": "media (audio codec)",
+        "ollama-rs": "LLM client",
+        "png": "media (image codec)",
+        "reqwest": "HTTP client (LLM and web APIs)",
+        "rocket": "HTTP UI (web server framework)",
+        "rodio": "media (audio playback)",
+        "symphonia": "media (audio codecs)",
+        "tiktoken-rs": "LLM tokenizer",
+        "tokenizers": "LLM tokenizer",
+        "tower-http": "HTTP UI (web middleware)",
+        "tts": "TTS (text to speech; docs/13 §3)",
+        "ureq": "HTTP client (LLM and web APIs)",
+        "warp": "HTTP UI (web server framework)",
+    }
+)
+ENGINE_PURITY_RULE = "engine-purity"
+LOCK_FILE = "Cargo.lock"
 
 EXIT_OK = 0
 EXIT_VIOLATIONS = 1
@@ -618,6 +762,42 @@ def check_external_deps(crate: Crate) -> list[Violation]:
     return found
 
 
+def check_protocol_leaf(crate: Crate, members: frozenset[str]) -> list[Violation]:
+    """SPR-026: rh-protocol depends on no workspace crate, of any dependency kind (wire_v1.md §7).
+
+    The crate that spells the wire must give a viewer no path to rh-core, rh-stream or
+    rh-snapshot, and must stay testable from its golden file alone; a dev-dependency is refused
+    too, so the conformance test cannot quietly grow an engine.
+    """
+    if crate.name != PROTOCOL_CRATE:
+        return []
+    found = [
+        Violation(
+            PROTOCOL_LEAF_RULE,
+            crate.name,
+            f"depends on workspace crate {edge.target}{_via(edge)}; rh-protocol is a leaf: it "
+            "depends on no member of the workspace, so that a viewer holding the wire types has "
+            "no path to the engine (specs/stream/wire_v1.md §7)",
+        )
+        for edge in crate.edges
+        if edge.target in members
+    ]
+    allowed = ", ".join(
+        f"{t} ({k})" for k, ts in sorted(PROTOCOL_EXTERNAL_DEPS.items()) for t in sorted(ts)
+    )
+    found += [
+        Violation(
+            PROTOCOL_LEAF_RULE,
+            crate.name,
+            f"depends on third-party crate {edge.target}{_via(edge)}; rh-protocol's allow-list "
+            f"is exactly {allowed} (specs/stream/wire_v1.md §7; REV-SPR-026 R7)",
+        )
+        for edge in crate.external
+        if edge.target not in PROTOCOL_EXTERNAL_DEPS.get(edge.kind, frozenset())
+    ]
+    return found
+
+
 def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:
     """Check one workspace edge against V-INSP-03, V-PLN-01 and the plane-A closure."""
     found: list[Violation] = []
@@ -665,6 +845,173 @@ def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:
     return found
 
 
+def _manifest(crate: Crate) -> dict[str, object]:
+    """The crate's Cargo.toml as TOML."""
+    if crate.directory is None:
+        return {}
+    path = crate.directory / "Cargo.toml"
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
+        raise WorkspaceError(f"cannot read {path}: {err}") from err
+
+
+def workspace_lints(root: Path) -> dict[str, object]:
+    """The root manifest's [workspace.lints] tables."""
+    try:
+        document = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
+        raise WorkspaceError(f"cannot read {root / 'Cargo.toml'}: {err}") from err
+    workspace = document.get("workspace", {})
+    lints = workspace.get("lints", {}) if isinstance(workspace, dict) else {}
+    return dict(lints) if isinstance(lints, dict) else {}
+
+
+def check_unsafe_lints(crate: Crate, inherited: dict[str, object]) -> list[Violation]:
+    """GOV-003 §2: only an allow-listed crate relaxes unsafe_code, and only to deny.
+
+    A listed crate's own lint tables must equal the workspace's but for that one key, so its
+    other denies cannot drift away (SPR-009 T-05).
+    """
+    if crate.lints == INHERITED_LINTS:
+        return []
+    own = _manifest(crate).get("lints", {})
+    own = own if isinstance(own, dict) else {}
+    rust = own.get("rust", {})
+    level = rust.get("unsafe_code") if isinstance(rust, dict) else None
+    if level == "forbid":
+        return []
+    if crate.name not in UNSAFE_ALLOW_LIST:
+        return [
+            Violation(
+                "unsafe-allow",
+                crate.name,
+                f"declares unsafe_code = {level!r}, but only crates on UNSAFE_ALLOW_LIST may relax "
+                "#![forbid(unsafe_code)] (GOV-003 §2)",
+            )
+        ]
+    expected = {k: dict(v) if isinstance(v, dict) else v for k, v in inherited.items()}
+    rust_expected = expected.setdefault("rust", {})
+    if isinstance(rust_expected, dict):
+        rust_expected["unsafe_code"] = UNSAFE_RELAXED
+    if own != expected:
+        return [
+            Violation(
+                "unsafe-allow",
+                crate.name,
+                "its own [lints] must equal [workspace.lints] with only unsafe_code = "
+                f'"{UNSAFE_RELAXED}" (GOV-003 §2; SPR-009 T-05)',
+            )
+        ]
+    return []
+
+
+def _sources(crate: Crate) -> list[Path]:
+    """Every .rs file of the crate, outside the crate's own top-level `target/` directory.
+
+    Only the first component below the crate's directory is tested, as lint_forbidden does: a
+    checkout under a directory named `target` is scanned (SPR-009 review 4), and so is a source
+    directory named `target` inside the crate, such as `src/target/` (VER-SPR-009-TEST GAP-21).
+    """
+    directory = crate.directory
+    if directory is None:
+        return []
+    return sorted(
+        p for p in directory.rglob("*.rs") if p.relative_to(directory).parts[0] != "target"
+    )
+
+
+def check_allocator_sources(crate: Crate) -> list[Violation]:
+    """No #[global_allocator] but in the allocator crate's benches; unsafe only in listed files.
+
+    The unsafe part applies to listed crates; others keep #![forbid(unsafe_code)] (SPR-009 T-05).
+    """
+    if crate.directory is None:
+        return []
+    allowed = {crate.directory / f for f in UNSAFE_ALLOW_LIST.get(crate.name, ())}
+    found = []
+    for path in _sources(crate):
+        # Comment lines (doc comments included) name things; they declare nothing.
+        text = "\n".join(
+            line
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if not line.lstrip().startswith("//")
+        )
+        rel = path.relative_to(crate.directory).as_posix()
+        in_bench = crate.name == ALLOCATOR_CRATE and rel.startswith(f"{ALLOCATOR_TARGET_DIR}/")
+        if GLOBAL_ALLOCATOR.search(text) and not in_bench:
+            found.append(
+                Violation(
+                    "global-allocator",
+                    crate.name,
+                    f"{rel} declares a #[global_allocator]; only {ALLOCATOR_CRATE}'s bench "
+                    "targets may (V-PERF-11; SPR-009 ruling 5)",
+                )
+            )
+        listed = crate.name in UNSAFE_ALLOW_LIST
+        if (
+            listed
+            and path not in allowed
+            and (ALLOW_UNSAFE.search(text) or UNSAFE_TOKEN.search(text))
+        ):
+            found.append(
+                Violation(
+                    "unsafe-allow",
+                    crate.name,
+                    f"{rel} holds unsafe code; the allow-list admits only "
+                    f"{', '.join(UNSAFE_ALLOW_LIST[crate.name])} (GOV-003 §2)",
+                )
+            )
+    return found
+
+
+def check_allocator_feature(crate: Crate) -> list[Violation]:
+    """The counting allocator's feature is enabled by the allocator crate's bench targets only."""
+    found = [
+        Violation(
+            "count-alloc",
+            crate.name,
+            f"enables {ALLOCATOR_CRATE}/{feature} on its {e.kind} dependency; only "
+            f"{ALLOCATOR_CRATE}'s bench targets may (V-PERF-11; SPR-009 ruling 5)",
+        )
+        for e in crate.edges
+        for feature in ALLOCATOR_FEATURES
+        if e.target == ALLOCATOR_CRATE and feature in e.features
+    ]
+    if crate.name != ALLOCATOR_CRATE:
+        return found
+    manifest = _manifest(crate)
+    features = manifest.get("features", {})
+    defaults = features.get("default", []) if isinstance(features, dict) else []
+    for feature in ALLOCATOR_FEATURES:
+        if isinstance(defaults, list) and feature in defaults:
+            found.append(Violation("count-alloc", crate.name, f"{feature} is a default feature"))
+    for table in ("bin", "lib", "test", "example"):
+        targets = manifest.get(table, [])
+        for target in targets if isinstance(targets, list) else [targets]:
+            required = target.get("required-features", []) if isinstance(target, dict) else []
+            for feature in set(ALLOCATOR_FEATURES) & set(required):
+                found.append(
+                    Violation(
+                        "count-alloc",
+                        crate.name,
+                        f"a [{table}] target requires {feature}; only bench targets may",
+                    )
+                )
+    return found
+
+
+def check_allocator(crates: Sequence[Crate], root: Path) -> list[Violation]:
+    """The unsafe allow-list and the counting allocator's containment (SPR-009 T-05)."""
+    inherited = workspace_lints(root)
+    found = []
+    for crate in crates:
+        found += check_unsafe_lints(crate, inherited)
+        found += check_allocator_sources(crate)
+        found += check_allocator_feature(crate)
+    return found
+
+
 def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     """Check every crate's metadata and every workspace edge.
 
@@ -678,6 +1025,8 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     violations += [v for crate in crates if crate.declared_ok for v in check_rng_crates(crate)]
     violations += [v for crate in crates if crate.declared_ok for v in check_external_deps(crate)]
     violations += [v for crate in crates if crate.declared_ok for v in check_lints(crate)]
+    members = frozenset(by_name)
+    violations += [v for crate in crates for v in check_protocol_leaf(crate, members)]
     for crate in crates:
         for edge in crate.edges:
             target = by_name.get(edge.target)
@@ -685,6 +1034,178 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
                 continue
             violations.extend(check_edge(crate, edge, target))
     return violations
+
+
+@dataclass(frozen=True)
+class LockPackage:
+    """One `[[package]]` of a Cargo.lock: its name, version and resolved dependency entries."""
+
+    name: str
+    version: str
+    # Raw entries: "name", "name version" or "name version (source)".
+    dependencies: tuple[str, ...]
+
+
+def read_lock(path: Path) -> tuple[LockPackage, ...] | None:
+    """Return the packages of a Cargo.lock, or None when the file does not exist.
+
+    The lock is read rather than a full `cargo metadata`, which would need every crate's source
+    fetched: it holds the whole resolved graph, offline, and lists dev-dependencies only for
+    workspace members, whose edges come from cargo metadata with their kinds instead.
+
+    Raises:
+        WorkspaceError: The file exists but cannot be read or does not have the expected shape.
+    """
+    if not path.is_file():
+        return None
+    try:
+        document = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
+        raise WorkspaceError(f"cannot read {path}: {err}") from err
+    packages = []
+    for raw in _as_list(document.get("package", []), f"{path} [[package]]"):
+        package = _as_dict(raw, f"a [[package]] of {path}")
+        name, version = package.get("name"), package.get("version")
+        if not isinstance(name, str) or not isinstance(version, str):
+            raise WorkspaceError(f"a [[package]] of {path} has no name or version: {package!r}")
+        deps = _as_list(package.get("dependencies", []), f"the dependencies of {name} in {path}")
+        if not all(isinstance(d, str) for d in deps):
+            raise WorkspaceError(f"the dependencies of {name} in {path} are not strings")
+        packages.append(LockPackage(name, version, tuple(str(d) for d in deps)))
+    return tuple(packages)
+
+
+def is_engine_crate(crate: Crate) -> bool:
+    """Whether the engine-purity rule applies to a crate (ENGINE_CRATES; on its pinned labels)."""
+    return (
+        crate.name in ENGINE_CRATES
+        or crate.name.startswith(ENGINE_CRATE_PREFIXES)
+        or crate.plane == "A"
+    )
+
+
+# A node of the dependency walk: (package name, version). The version is None for a workspace
+# member and "" for a dependency the lock does not hold.
+_Node = tuple[str, str | None]
+UNRESOLVED = ""
+
+
+@dataclass(frozen=True)
+class DependencyGraph:
+    """The non-dev dependency graph: members from cargo metadata, the rest from Cargo.lock."""
+
+    members: MappingProxyType[str, Crate]
+    locked: MappingProxyType[str, tuple[LockPackage, ...]]
+
+    @classmethod
+    def of(cls, crates: Sequence[Crate], lock: Sequence[LockPackage]) -> "DependencyGraph":
+        """Index the members by name and the locked packages by name."""
+        by_name: dict[str, list[LockPackage]] = {}
+        for package in lock:
+            by_name.setdefault(package.name, []).append(package)
+        return cls(
+            MappingProxyType({crate.name: crate for crate in crates}),
+            MappingProxyType({name: tuple(found) for name, found in by_name.items()}),
+        )
+
+    def _resolve(self, name: str, version: str | None = None) -> list[_Node]:
+        """The nodes a dependency on ``name`` (at ``version``, when the lock names one) reaches."""
+        if name in self.members:
+            return [(name, None)]
+        nodes: list[_Node] = [
+            (name, p.version) for p in self.locked.get(name, ()) if version in (None, p.version)
+        ]
+        return nodes or [(name, UNRESOLVED)]
+
+    def successors(self, node: _Node) -> list[_Node]:
+        """A node's normal and build dependencies (a member's dev-dependencies are left out)."""
+        name, version = node
+        if version is None:
+            member = self.members[name]
+            edges = (*member.edges, *member.external)
+            return [n for e in edges if e.kind != "dev" for n in self._resolve(e.target)]
+        if version == UNRESOLVED:
+            return []
+        package = next(p for p in self.locked[name] if p.version == version)
+        entries = (entry.split() for entry in package.dependencies)
+        return [n for parts in entries for n in self._resolve(parts[0], *parts[1:2])]
+
+    def walk(self, start: str) -> list[list[str]]:
+        """Return the shortest path from ``start`` to every node it reaches, breadth first.
+
+        A path ends at the node it reaches; an unresolved node's path ends in "".
+        """
+        first: _Node = (start, None)
+        parent: dict[_Node, _Node | None] = {first: None}
+        queue, order = [first], []
+        while queue:
+            node = queue.pop(0)
+            order.append(node)
+            for succ in self.successors(node):
+                if succ not in parent:
+                    parent[succ] = node
+                    queue.append(succ)
+        paths: list[list[str]] = []
+        for node in order[1:]:
+            path: list[str] = []
+            at: _Node | None = node
+            while at is not None:
+                path.append(at[0])
+                at = parent[at]
+            paths.append([*reversed(path), *([UNRESOLVED] if node[1] == UNRESOLVED else [])])
+        return paths
+
+
+def check_engine_purity(
+    crates: Sequence[Crate], lock: Sequence[LockPackage] | None
+) -> list[Violation]:
+    """Check that no engine crate reaches a deny-listed crate (V-INSP-05; BCK-002 A-14).
+
+    The walk starts at an engine crate's normal and build edges (never its dev-dependencies: test
+    code does not ship in the engine), follows workspace members through their own non-dev edges
+    from cargo metadata, and every other crate through its resolved dependencies in Cargo.lock.
+    A missing lock, or a dependency the lock does not hold, is a violation: the transitive graph
+    would go unchecked (never fail open).
+    """
+    crates = [effective(crate) for crate in crates]
+    engines = [crate for crate in crates if crate.declared_ok and is_engine_crate(crate)]
+    if lock is None:
+        return [
+            Violation(
+                ENGINE_PURITY_RULE,
+                "workspace",
+                f"no {LOCK_FILE} beside the workspace manifest: the transitive dependencies of "
+                "the engine crates are not checked (V-INSP-05); generate and commit it",
+            )
+            for _ in engines[:1]
+        ]
+    graph = DependencyGraph.of(crates, lock)
+    found: list[Violation] = []
+    for crate in engines:
+        reported: set[str] = set()
+        for path in graph.walk(crate.name):
+            if path[-1] == UNRESOLVED:
+                found.append(
+                    Violation(
+                        ENGINE_PURITY_RULE,
+                        crate.name,
+                        f"its dependency {path[-2]} is not in {LOCK_FILE}, so what it depends on "
+                        "is not checked (V-INSP-05); update the lock",
+                    )
+                )
+            elif path[-1] in ENGINE_DENY_LIST and path[-1] not in reported:
+                reported.add(path[-1])
+                found.append(
+                    Violation(
+                        ENGINE_PURITY_RULE,
+                        crate.name,
+                        f"engine crate depends on {path[-1]} ({ENGINE_DENY_LIST[path[-1]]}) "
+                        f"through {' -> '.join(path)}; the engine only engines: no media, "
+                        "HTTP-UI or LLM-client crate among its normal or build dependencies, "
+                        "direct or transitive (ADR-0035 §6; V-INSP-05)",
+                    )
+                )
+    return found
 
 
 def clippy_configs(root: Path) -> list[str]:
@@ -823,16 +1344,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
         return EXIT_UNREADABLE
     root = args.manifest_path.absolute().parent
-    violations = check_workspace(crates) + check_clippy_configs(root, crates)
+    try:
+        allocator = check_allocator(crates, root)
+    except WorkspaceError as err:
+        print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
+        return EXIT_UNREADABLE
+    try:
+        lock = read_lock(root / LOCK_FILE)
+    except WorkspaceError as err:
+        print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
+        return EXIT_UNREADABLE
+    violations = (
+        check_workspace(crates)
+        + check_engine_purity(crates, lock)
+        + check_clippy_configs(root, crates)
+        + allocator
+    )
     print(f"lint_arch: {args.manifest_path}")
     for crate in crates:
         print(describe(crate))
     for violation in violations:
         print(violation.render())
     edge_count = sum(len(crate.edges) for crate in crates)
+    engines = sum(1 for crate in crates if is_engine_crate(effective(crate)))
     print(
-        f"lint_arch: {len(crates)} crates, {edge_count} workspace edges, "
-        f"{len(violations)} violations"
+        f"lint_arch: {len(crates)} crates, {edge_count} workspace edges, {engines} engine crates "
+        f"checked against {len(ENGINE_DENY_LIST)} deny-listed crates over "
+        f"{len(lock or ())} locked packages, {len(violations)} violations"
     )
     return EXIT_VIOLATIONS if violations else EXIT_OK
 

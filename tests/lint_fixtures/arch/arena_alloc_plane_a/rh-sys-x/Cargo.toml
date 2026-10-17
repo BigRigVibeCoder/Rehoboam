@@ -1,0 +1,15 @@
+[package]
+name = "rh-sys-x"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "system"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-bench = { version = "0.0.0", path = "../rh-bench", features = ["arena-alloc"] }
