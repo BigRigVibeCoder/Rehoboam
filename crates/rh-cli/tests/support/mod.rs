@@ -115,7 +115,11 @@ impl Host {
                 if let Some(mut e) = self.child.stderr.take() {
                     let _ = e.read_to_string(&mut err);
                 }
-                return (status.code().unwrap_or(-1), self.seen, err);
+                return (
+                    status.code().unwrap_or(-1),
+                    std::mem::take(&mut self.seen),
+                    err,
+                );
             }
             assert!(Instant::now() < deadline, "the host did not exit");
             while let Ok(l) = self.lines.try_recv() {
@@ -126,7 +130,15 @@ impl Host {
     }
 
     /// SIGKILL.
-    pub fn kill(mut self) {
+    pub fn kill(self) {
+        drop(self);
+    }
+}
+
+/// A host never outlives its test: whatever ends it (`finish`, `kill`, or a panic unwinding past
+/// it), the child is killed and reaped, so no `rh-cli` is left orphaned on the runner.
+impl Drop for Host {
+    fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
