@@ -22,7 +22,7 @@
 # the legal heir is "by the title's law (the effect language's succession laws, SPR-017)", the candidate set is not
 # restated here; the sortition law's draws are the `sortition` purpose.
 # Round 4g (effect-language re-check, B3): title.founder is replaced by an append-only tenure log (tenure.*) that the
-# title's law may read (holders_of(title, 8)); `sortition` is keyed by the title too.
+# title's law may read (holders_of(title, 16)); `sortition` is keyed by the title too.
 # Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
 # 0.3.2 (2026-10-17, EVO-001, the Architect's R9 and R12, merged with PR #49): the rate read of M6 and the mode read of T1's
 # person.named carry the machine-readable `neutral` SPR-014's absent-owner rule serves when the owner is absent (05.1 §2
@@ -38,12 +38,14 @@
 # declares the Registry [event_roles] it fills, checked by lint_odd.py. Note for the next version: SUCCEED's edge to the death or
 # deposition is a `triggered` edge under the envelope contract (a motive needs a mind); the frozen `when` and INV text say
 # "motive edge" and are amended at M7's next version (SPR-021), not here.
+# 0.3.4 (2026-10-17, amended, REV-SPR-017 N5, director D37): the title-blood window is 16 (holders_of(title, 16) at its three
+# mentions); still frozen, nothing else changed.
 odd_r = 2
 
 [system]
 id = "M7.dynasty"
 name = "Succession and dynasts"
-spec_version = "0.3.3"
+spec_version = "0.3.4"
 fidelity = "F1"
 status = "frozen"
 crate = "rh-sys-dynasty"
@@ -134,7 +136,7 @@ column = "tenure.title"
 entity = "tenure"
 type = "u64"
 plane = "A"
-meaning = "TitleId of the tenure. The tenure log is append-only, one row per change of holder, never compacted (ADR-0007): SUCCEED, a regrant, an interregnum's resolution and a reversion in demesne each append a row and close the previous one; rh-worldgen writes each title's initial holder's row at world creation (initial values, SPR-011 ruling 10). It is the reign list the chronicle and the V-SAGA tests read, and the title's law may read it (round 4g: the title-blood rule descends from the holder or from one of holders_of(title, 8))"
+meaning = "TitleId of the tenure. The tenure log is append-only, one row per change of holder, never compacted (ADR-0007): SUCCEED, a regrant, an interregnum's resolution and a reversion in demesne each append a row and close the previous one; rh-worldgen writes each title's initial holder's row at world creation (initial values, SPR-011 ruling 10). It is the reign list the chronicle and the V-SAGA tests read, and the title's law may read it (round 4g: the title-blood rule descends from the holder or from one of holders_of(title, 16))"
 fixed_point = false
 [[owns]]
 column = "tenure.holder"
@@ -719,7 +721,7 @@ summary = "In the death instant's Day/Polity binding (every death takes effect t
 earns_its_place_by = ["V-SAGA-19", "V-INV-03"]
 [[submodels]]
 name = "arbitrate"
-summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (the effect language's succession laws, SPR-017, which may read the tenure log, e.g. holders_of(title, 8) for the title-blood rule; every holder change below appends a tenure row and closes the previous one; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims (each claim.rank is recomputed here), and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees through kin(holder, dormancy_degrees) over the life-course columns); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest living adult kin in the law's order through kin(p, n), else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
+summary = "Run in-step by on_death and exit, and by a due interregnum-resolution timer. Candidates (each list in ascending PersonId): the legal heir by the title's law (the effect language's succession laws, SPR-017, which may read the tenure log, e.g. holders_of(title, 16) for the title-blood rule; every holder change below appends a tenure row and closes the previous one; the deposed ruler and persons in holy orders excluded), the claimants with pressed active claims (each claim.rank is recomputed here), and for a title without either, the liege's re-grant candidates (petitioners, then kin of the liege's holder within dormancy_degrees through kin(holder, dormancy_degrees) over the life-course columns); a vassal title with no candidate at all reverts to its liege's holder in demesne (SUCCEED). Score (Q16_16) = arb_legal_weight x [legal heir] + arb_claim_weight x [pressed claim] + arb_military_weight x [holds the title's marshal office] + arb_treasury_weight x [holds its steward office]; an exact tie is broken by arbitration_tie. Best leads the runner-up by contest_margin or more (or is alone), or the title is not sovereign: SUCCEED, holder := best, held_since := now, state := held; if best is not the legal heir, the heir gains a claim (CLAIM_CREATED) and a PASSED_OVER modifier about best; a realised claim's status := realised. Otherwise (sovereign only): INTERREGNUM_CRISIS, state := interregnum, a resolution timer interregnum_delay days later (at that day's start, Polity); at resolution, re-arbitrate with the same rule, and if still contested pick by arbitration_tie weighted by score; a sovereign with no candidate at resolution goes to the realm's highest-tier vassal holder (election by the magnates; ties in ascending TitleId). A successor under majority_age gets a regent by rule (the living adult mother, else the nearest living adult kin in the law's order through kin(p, n), else the steward): REGENCY_BEGUN and a regency-end timer at the first day start at or after the holder's majority"
 earns_its_place_by = ["V-SAGA-19", "V-SF-06b"]
 [[submodels]]
 name = "exit"

@@ -57,8 +57,7 @@ All are recorded in `docs/decisions-log.md`:
 | Item | Recommendation | Confidence |
 |---|---|---|
 | **The laptop:** RUN-001 (BCK-002 A-16) and one `adjutant` session of about 2 hours, for SPR-008 T-02 and SPR-009 T-04 | I will ping you when SPR-008 is ready | — |
-| **D37, the Registry effect language v0** (PR #41, v0.5.0, 558 golden cases), with D14 (title blood over the last 16 holders, which needs worldgen to back-fill pre-epoch history in SPR-019), D4 (sex rules) and D12 (bounds) | Approve. Four review rounds on a different model from the drafter's ended with 0 blockers and 0 majors (`REV-SPR-017`) | 75% |
-| **Eight more decisions** in `docs/decisions_pending.md`: D38 (tellability ceiling), D40 and D41 (births), D42 and D43 (the World Stream's window and live-edge format), D44 (eight or nine edge kinds), D46 (population synthesis marginals deferred), D47 (tip and scheduled inputs to P2) | Each row carries my recommendation and its confidence | — |
+| **Nothing is waiting on you** in `docs/decisions_pending.md`. You ruled D37, D38, D40–D44 and D46–D50, confirmed D29 and approved the CI minute savings on 2026-10-17 | — | — |
 
 Resolved since the first version of this summary:
 - you approved the P1a plan, D30 to D36 (PRJ-002 and SPR-011 approved; PR #32 and PR #37 merged in that order);
@@ -105,14 +104,14 @@ Resolved since the first version of this summary:
   | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | **Merged** (PR #50): the next M2 0.3.0 in `specs/systems/next/`; `REV-SPR-015` closed after three rounds. Q5 and Q6 went to the director as D40 and D41
   | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | **Merged** (PR #51, `513e281`; the fold, PR #59, `e890ae9`): mortality is `[algorithm.mortality_f1]` in the next M2; `REV-SPR-016-FOLD` closed. The next M2 0.3.0 is promoted in SPR-016's PR
   | SPR-018 drafter | `session_01EZrn9bjDkDgj6kEQsYpCuD` | **Merged** (PR #52, `e9e0fe3`); `REV-SPR-018` closed |
-  | SPR-019 drafter (Fable) | `session_01Kw2QAtEyRCehcyDsgxsZrm` | Population synthesis and the dynastic back-fill, `arch/SPR-019-popsynth` (PR #62): `REV-SPR-019` closed after three rounds, round 3 verified by the Architect; D46 went to the director. Merges on green CI. Next: SPR-030's dynastic fixture world |
-  | SPR-029 drafter (Fable) | `session_01CEqXirMqaKtGCk74DKcsCr` | Family annals v0 templates, `arch/SPR-029-annals` |
+  | SPR-019 drafter (Fable) | `session_01Kw2QAtEyRCehcyDsgxsZrm` | **Merged** (PR #62, `ae63eb9`): population synthesis and the dynastic back-fill, `next/M7` 0.4.0; `REV-SPR-019` closed after three rounds; D46 went to the director. Next: SPR-030's dynastic fixture world |
+  | SPR-029 drafter (Fable) | `session_01CEqXirMqaKtGCk74DKcsCr` | Family annals v0 templates, `arch/SPR-029-annals` (PR #69): round 2 after `REV-SPR-029` R1–R16; D49 and D50 decided |
   | SPR-020 drafter (Fable) | `session_01BuhAx8LwsfCjcUR5BDhFJQ` | **Merged** (PR #61, `4e941ef`): the event envelope (`specs/chronicle/envelope_v0.md`) and the Registry's role vocabulary; `REV-SPR-020` closed after four rounds; D44 went to the director. The implementation sprint is C3 (all four baselines move) |
   | SPR-026 drafter (Fable) | `session_01Kzu8vtatp9Zszm6brUQ8BM` | **Merged** (PR #60, `a53cac2`): the World Stream v1 wire and `rh-protocol`; `REV-SPR-026` closed after three rounds; D42, D43 and D47 went to the director |
 
 - **Review records:** `REV-SPR-015`, `REV-SPR-016`, `REV-SPR-016-FOLD`, `REV-SPR-018`, `REV-SPR-019`, `REV-SPR-020`, `REV-SPR-026` and `REV-EVO-001` are closed.
 - **`05.1` versions:** v1.10 is `exp`/`ln` (PR #51), v1.11 is SPR-011's rule 6, v1.12 is EVO-001's rule 2, v1.13 is SPR-020's rule 4 (an origin propagates through every hop).
-- **M7.dynasty spec version:** EVO-001 took 0.3.2. PR #61 (the SPR-020 envelope) took 0.3.3 for M7 and T1, and 0.2.2 for M2. PR #41 (the effect language, awaiting D37) takes 0.3.4, merges `main` and moves its gates to `--part core`. SPR-019's M7 changes go to a `next/M7.dynasty.odd.toml` draft 0.4.0 (REV-SPR-019 R4), which carries 0.3.3's `roles`.
+- **M7.dynasty spec version:** EVO-001 took 0.3.2. PR #61 (the SPR-020 envelope) took 0.3.3 for M7 and T1, and 0.2.2 for M2. PR #41 (the effect language, D37 approved 2026-10-17) takes 0.3.4, merges `main` and moves its gates to `--part core`. SPR-019's M7 changes go to a `next/M7.dynasty.odd.toml` draft 0.4.0 (REV-SPR-019 R4), which carries 0.3.3's `roles`.
 - **Outcome-carrying commands** (`ScheduleDeath`, `Marry`) are submitted only by their sender's timer at the outcome's instant (REV-EVO-001 R9). D39 was withdrawn.
 - **Messages to a working session:** send with the default priority or `now`. A `next` message waits for the target's turn to end.
 

@@ -22,8 +22,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The director's ruling of 2026-10-17: a scheduled nightly is skipped when main has not moved
+  # since the last successful nightly (the same commit gives the same results). A manual run
+  # (workflow_dispatch) always runs. A failed nightly is not "successful", so the next one
+  # re-runs on the same commit. python/tests/test_ci_workflow.py pins the gate.
+  freshness:
+    name: New commits on main since the last successful nightly?
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"; echo "a $EVENT run: runs"; exit 0
+          fi
+          last=$(gh run list --repo "$REPO" --workflow nightly.yml --branch main --status success \
+            --limit 1 --json headSha --jq '.[0].headSha // ""') || last=""
+          if [ -n "$last" ] && [ "$last" = "$HEAD_SHA" ]; then
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "main is at $HEAD_SHA, the commit of the last successful nightly: skipped"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "main is at $HEAD_SHA; the last successful nightly ran on ${last:-none}: runs"
+          fi
+
   ignored-tests:
     name: Nightly tier (ignored tests)
+    needs: freshness
+    if: needs.freshness.outputs.run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -49,6 +85,8 @@ jobs:
 
   golden:
     name: Nightly golden tier (smoke, 1,000 years, monthly; SPR-008)
+    needs: freshness
+    if: needs.freshness.outputs.run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:

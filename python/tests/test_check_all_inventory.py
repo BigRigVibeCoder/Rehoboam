@@ -109,6 +109,8 @@ REQUIRED_GATES = (
     "(check_baseline; SPR-008 T-04)",
     "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
     "SPR-012 T-08)",
+    "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml "
+    "(effect_ref --check; SPR-017)",
     "Golden draws power: a one-day error in q' either way changes re-sample outcomes of the "
     "larger fixture world (gen_m2_draws_reference --power; BCK-002 A-53, VER-SPR-012-TEST "
     "GAP-8)",
@@ -365,6 +367,7 @@ REQUIRED_GATES = (
     "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL "
     "(SPR-013 T-09; R2)",
     "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)",
+    "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass "
     "(SPR-007 GAP-2)",
