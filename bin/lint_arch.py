@@ -123,6 +123,9 @@ PINNED_LABELS = MappingProxyType(
         # SPR-004 ruling A: the load-time front end reproduces the reference's float checks.
         "rh-manifest": ("tool", "tool"),
         "rh-sample": ("A", "machinery"),
+        # SPR-012: the first real system crate (M2.demography) and the worldgen stub (ruling 10).
+        "rh-sys-demography": ("A", "system"),
+        "rh-worldgen": ("A", "machinery"),
     }
 )
 SYSTEM_LABELS = ("A", "system")
@@ -314,10 +317,17 @@ ENGINE_CRATES = frozenset(
         "rh-sifter",
         "rh-snapshot",
         "rh-stream",
+        "rh-sys-demography",
+        "rh-sys-smoke",
         "rh-worldgen",
     }
 )
 ENGINE_CRATE_PREFIXES = (SYSTEM_CRATE_PREFIX, CONTRACT_CRATE_PREFIX)
+# The workspace crates that are not engine crates, by design (see ENGINE_CRATES): tool crates that
+# measure and replay the engine from outside. Every workspace member is on exactly one of the two
+# lists (python/tests/test_lint_arch.py; VER-SPR-011-TEST GAP-1, BCK-002 A-49), so a new crate must
+# be placed by a reviewed edit rather than fall through.
+NON_ENGINE_CRATES = frozenset({"rh-bench", "rh-golden"})
 # THE engine-purity deny-list, defined here and nowhere else (python/tests checks that): package
 # name -> what it is. docs/13 §3 names the categories (media, HTTP-UI, LLM client) and nine
 # examples; the rest are the common crates of the same categories. Matched by package name over the

@@ -16,6 +16,7 @@ from lint_arch import (
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
     FLOAT_YIELDING_APIS,
+    NON_ENGINE_CRATES,
     PLANE_A_EXTERNAL_DEPS,
     UNKEYED_RNG_CRATES,
     Crate,
@@ -933,3 +934,26 @@ def test_the_deny_list_is_defined_once() -> None:
                     f"{relative} names deny-listed {name}: a second list?"
                 )
     assert checked > 300, f"only {checked} tracked text files read"
+
+
+def test_every_workspace_member_is_on_exactly_one_engine_list() -> None:
+    """GAP-1 (BCK-002 A-49): each crate under crates/ is an engine crate or a named non-engine one.
+
+    A new crate on neither list would skip the engine-purity rule silently; on both, the lists
+    contradict each other. SPR-012's two crates are engine crates.
+    """
+    members = sorted(p.parent.name for p in (REPO / "crates").glob("*/Cargo.toml"))
+    assert members, "no workspace members found"
+    for name in members:
+        on = (name in ENGINE_CRATES) + (name in NON_ENGINE_CRATES)
+        assert on == 1, f"{name} is on {on} of ENGINE_CRATES and NON_ENGINE_CRATES"
+    assert {"rh-worldgen", "rh-sys-demography"} <= ENGINE_CRATES
+    assert {"rh-bench", "rh-golden"} == NON_ENGINE_CRATES
+
+
+def test_the_whole_deny_list_equals_the_committed_golden_list() -> None:
+    """GAP-2 (BCK-002 A-49): removing or adding any entry (hyper, tts included) fails here."""
+    golden = REPO / "tests" / "lint_fixtures" / "arch" / "engine_deny_list.txt"
+    lines = golden.read_text(encoding="utf-8").splitlines()
+    names = [line for line in lines if line and not line.startswith("#")]
+    assert names == list(ENGINE_DENY_LIST)

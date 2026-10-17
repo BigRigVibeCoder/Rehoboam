@@ -1,0 +1,18 @@
+# solo's committed input script (SPR-011 ruling 15; the Architect's ruling on the Tester's interim
+# report of SPR-012). One scope-only material input on Ada, placed inside the month of her death, so
+# the golden run takes the whole path of ADR-0025 item 3: the epoch bump (BCK-002 A-29) and the
+# cancel-and-re-sample of a pending death (S11 of [algorithm.mortality_rung0]).
+#   Without the input, Ada's death is drawn at the Month pulse of tick 27,777,600 (year 53, day 210)
+#   for tick 27,796,320 (day 223), 13 days later.
+#   tick:    27,786,607 = year 53, day 216, 06:07 (53 x 518400 + 216 x 1440 + 6 x 60 + 7): strictly
+#            between that Month pulse and her death instant, and between pulse boundaries, so the
+#            input's instant is its own and her death is pending at it.
+#   Outcome: the re-sample misses (q' over the rest of the month is small at age 53), so the death
+#            is dropped; Ada lives on and dies at tick 29,975,040 (year 57, day 296), drawn at the
+#            Month pulse of tick 29,937,600 at epoch 1. bin/gen_m2_draws_reference.py's model
+#            predicts the same instants.
+#   founder: the founder's index in genesis order (0 = Ada); its PersonId is founder(seed, 0).
+# Each input is journaled before the first instant, in this order.
+[[input]]
+tick = 27786607
+founder = 0
