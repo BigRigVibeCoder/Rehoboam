@@ -1,0 +1,4 @@
+#rehoboam/annals/v0 world=solitary group=year templates=0.1.0 templates_digest=ce7b0296724cf918 calendar=365
+S 5 death.natural 1 [0] [4369] [name/4369]
+S 6 extinction 1 [0,1] [4369] [name/4369]
+digest 2d05849c9cdab547

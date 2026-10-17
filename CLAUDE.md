@@ -59,6 +59,8 @@ python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the indep
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
 python -I specs/chronicle/selftest.py
 python -I specs/chronicle/selftest_envelope.py   # the event envelope v0: anchored snapshots, typed edges, cause_told, the plane-B index, the byte budget (SPR-020; specs/chronicle/envelope_v0.md); --control snapshot-drift, motive-on-triggered, cause-later, budget-bloat and origin-lost must FAIL
+python -I specs/annals/selftest_annals_v0.py --check   # family annals v0 (SPR-029; specs/annals/annals_v0.md): templates over the envelope, calendar dates, designation, grouping by house, line and year, the provenance sidecar (V-NAR-05), no model (V-NAR-07), golden annals of the fixture chronicles; --write regenerates the goldens (never by hand); --control no-event-id, undeclared-slot and state-read must FAIL
+python -I specs/annals/lint_templates.py   # every annals slot resolves to a role, snapshot, payload slot, motive or edge the emitting [[emits]] declares; every in-scope kind has a template with an unconditional last variant; controls rendered by check_all from the real set (SPR-029)
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
 python -I bin/gen_decimal_vectors.py --check   # authored numbers: rh-manifest exact decimals -> fixed point match Python decimal (SPR-011 T-04)
 python -I specs/numerics/exp_ln_v0.py --check   # fixed-point exp and ln v0 (Q32_32): constants, convergence, faithful rounding, golden vectors (05.1 §6 item 4 v1.10; SPR-016); --exhaustive nightly

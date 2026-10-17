@@ -1,0 +1,6 @@
+# Fixture world for the family annals reference (SPR-029): one person on a 365-day calendar, in the
+# shape of specs/manifest/examples/solo.yaml (rung 0). No keyframe extract: no house, no prologue.
+[world]
+id = "solitary"
+days_per_year = 365
+epoch_label = "Test era"

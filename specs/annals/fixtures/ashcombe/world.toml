@@ -1,0 +1,8 @@
+# Fixture world for the family annals reference (SPR-029): a hand-made dynastic chronicle in the
+# shape of specs/manifest/examples/manor.yaml (two houses, one sovereign seat; the SPR-019 fixture).
+# Ids are illustrative decimal values, not H64 ids: nothing here was run by the engine. The rendered
+# annals are exact for these records; the records themselves are the fixture.
+[world]
+id = "ashcombe"
+days_per_year = 360          # the manifest calendar (05.1 §4.1): 12 months of 30 days
+epoch_label = "Year of Ash"  # world.calendar.epoch_label

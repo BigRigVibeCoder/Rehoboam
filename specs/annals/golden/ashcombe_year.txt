@@ -1,0 +1,74 @@
+# The annals of the years
+# From the chronicle of ashcombe; templates 0.1.0
+
+## The first year (Year of Ash)
+On day 14 of month 3, Maud bore a daughter, the second child of Maud.
+
+## The third year (Year of Ash)
+On day 1 of month 6, a son of Edric Ashcombe and a daughter of Hugh Thorne were married.
+
+## The fifth year (Year of Ash)
+On day 3 of month 9, a daughter of Hugh Thorne bore a son, person #1007 of House Ashcombe.
+
+## The eighth year (Year of Ash)
+On day 20 of month 2, Edric Ashcombe died of natural causes.
+On day 20 of month 2, after the death of Edric Ashcombe, a son of Edric Ashcombe succeeded Edric Ashcombe.
+
+## The ninth year (Year of Ash)
+On day 7 of month 5, Hugh Thorne, under strain (stress 63.0), declared a feud against a son of Edric Ashcombe out of jealousy of the succession of a son of Edric Ashcombe.
+
+## The tenth year (Year of Ash)
+On day 13 of month 1, a son of Edric Ashcombe was slain by Hugh Thorne, by murder.
+On day 13 of month 1, after the death of a son of Edric Ashcombe, person #1007 of House Ashcombe succeeded a son of Edric Ashcombe.
+On day 13 of month 1, a daughter of Hugh Thorne became regent for person #1007 of House Ashcombe, who was under age.
+On day 13 of month 1, with the death of a son of Edric Ashcombe, the feud between a son of Edric Ashcombe and Hugh Thorne ended.
+
+## The eleventh year (Year of Ash)
+On day 2 of month 4, a daughter of Hugh Thorne bore a son, person #1008 of House Ashcombe.
+
+## The 13th year (Year of Ash)
+On day 9 of month 7, the second child of Maud gained a claim against person #1007 of House Ashcombe.
+
+## The 14th year (Year of Ash)
+On day 2 of month 2, the second child of Maud pressed a claim against person #1007 of House Ashcombe.
+
+## The 15th year (Year of Ash)
+On day 2 of month 2, the second child of Maud renounced a claim.
+
+## The 17th year (Year of Ash)
+On day 30 of month 11, Hugh Thorne died of natural causes.
+
+## The 19th year (Year of Ash)
+On day 8 of month 8, Alys died by accident.
+
+## The 21st year (Year of Ash)
+On day 3 of month 9, the regency of a daughter of Hugh Thorne for person #1007 of House Ashcombe ended.
+
+## The 23rd year (Year of Ash)
+On day 4 of month 4, person #1007 of House Ashcombe declared a feud against the second child of Maud.
+
+## The 24th year (Year of Ash)
+On day 9 of month 1, person #1007 of House Ashcombe and the second child of Maud ended their feud.
+
+## The 31st year (Year of Ash)
+On day 1 of month 3, person #1007 of House Ashcombe was deposed by the second child of Maud, a claimant.
+On day 1 of month 3, after the deposition of person #1007 of House Ashcombe, the second child of Maud succeeded person #1007 of House Ashcombe.
+
+## The 32nd year (Year of Ash)
+On day 1 of month 1, the second child of Maud granted a seat to person #1008 of House Ashcombe.
+
+## The 34th year (Year of Ash)
+On day 6 of month 6, a daughter of Hugh Thorne died of natural causes.
+On day 6 of month 6, with the death of a daughter of Hugh Thorne, the house of a daughter of Hugh Thorne was extinguished.
+
+## The 36th year (Year of Ash)
+On day 2 of month 2, the second child of Maud died of natural causes.
+On day 2 of month 2, the succession to a sovereign title found no clear heir, and an interregnum began.
+On day 2 of month 2, person #1007 of House Ashcombe gained a claim to a vacant title.
+
+## The 37th year (Year of Ash)
+On day 1 of month 1, person #1008 of House Ashcombe succeeded the second child of Maud.
+
+## The 39th year (Year of Ash)
+On day 5 of month 5, person #1008 of House Ashcombe was deposed.
+On day 5 of month 5, after the deposition of person #1008 of House Ashcombe, person #1007 of House Ashcombe succeeded person #1008 of House Ashcombe.

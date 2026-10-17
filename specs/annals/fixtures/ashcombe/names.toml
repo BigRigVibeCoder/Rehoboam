@@ -1,0 +1,18 @@
+# The plane-C names file (annals_v0.md §4): what the chronicle does not carry. Persons: the manifest
+# cast (cast member k is founder k, rh-worldgen's order), here the living genesis dynasts as a cast
+# would name them; the genesis child 1005 and the in-run births are left unnamed so that the kinship
+# fallback shows. Houses: the manifest's dynasties (house k is the k-th dynasty, SPR-019 B1). Titles:
+# the polity's title labels. Keys are the ids' decimal text.
+[persons]
+"1003" = "Edric Ashcombe"
+"1004" = "Maud"
+"2003" = "Hugh Thorne"
+"2005" = "Alys"
+
+[houses]
+"9001" = "House Ashcombe"
+"9002" = "House Thorne"
+
+[titles]
+"1" = "the lordship of the Manor of Ash"
+"2" = "the seat of Thorne"

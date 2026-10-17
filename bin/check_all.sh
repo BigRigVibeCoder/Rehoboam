@@ -273,6 +273,36 @@ canonical_golden_control() {
   "$PY" -I specs/stream/canonical_v0.py --check --golden "$planted"
 }
 
+# Family annals v0 controls (SPR-029): rendered from the real template set and golden files, never copied, so
+# they cannot drift. annals_lint_control <case>: one planted defect per case (tests/lint_fixtures/README.md), each
+# refused by lint_templates.py with its own diagnostic; a sed that changes nothing is a harness error.
+annals_lint_control() {
+  local case="$1" src=specs/annals/templates_v0.toml planted="target/rendered-fixtures/annals_$1.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  case "$case" in
+    undeclared_role)     sed 's/^text = "On {date}, {target} died of natural causes."/text = "On {date}, {target} died of natural causes, by {instrument}."/' "$src" > "$planted" ;;
+    undeclared_snapshot) sed 's/^text = "On {date}, {actor} bore {payload.sex}, {target}."/text = "On {date}, {actor} (stress {snapshot.stress.actor}) bore {payload.sex}, {target}."/' "$src" > "$planted" ;;
+    state_read)          sed 's/^text = "On {date}, {target} died of natural causes."/text = "On {date}, {target} died of natural causes; {state.title.holder} took the title."/' "$src" > "$planted" ;;
+    unknown_payload)     sed 's/^text = "On {date}, {target} died of natural causes."/text = "On {date}, {target} died of natural causes, {payload.weather}."/' "$src" > "$planted" ;;
+    missing_kind)        sed 's/^    "FEUD_DECLARED", "FEUD_ENDED",$/    "FEUD_DECLARED", "FEUD_ENDED", "FLED",/' "$src" > "$planted" ;;
+    payload_uncited)     sed 's/^cited  = "Payload: \[death_cause code\]"/cited  = "Payload: [death cause]"/' "$src" > "$planted" ;;
+    no_catch_all)        sed '/^id = "death.other"$/a when = { payload = { cause = "accident" } }' "$src" > "$planted" ;;
+    undeclared_motive)   sed 's/^text = "On {date}, {actor} and {target} were married."/text = "On {date}, {actor} and {target} were married {motive}."/' "$src" > "$planted" ;;
+    label_recursion)     sed 's/^label = "the marriage of {actor} and {target}"/label = "the marriage of {actor} and {target} after {cause.triggered}"/' "$src" > "$planted" ;;
+    *) echo "annals_lint_control: unknown case $case"; return 1 ;;
+  esac || return 1
+  if cmp -s "$src" "$planted"; then echo "HARNESS ERROR: the $case sed planted nothing"; return 1; fi
+  "$PY" -I specs/annals/lint_templates.py --templates "$planted"
+}
+
+# annals_golden_control: the committed golden annals with one sidecar digest zeroed must be STALE.
+annals_golden_control() {
+  local planted=target/rendered-fixtures/annals_golden
+  rm -rf "$planted" && mkdir -p "$planted" && cp specs/annals/golden/* "$planted"/ || return 1
+  sed -i 's/^digest .*/digest 0000000000000000/' "$planted/solitary_year.sidecar.txt" || return 1
+  "$PY" -I specs/annals/selftest_annals_v0.py --check --golden-dir "$planted"
+}
+
 # lint_odd --next controls (SPR-015; REV-SPR-015 NIT-4): rendered from the next M2 spec itself, never copied, so they
 # cannot drift. odd_next_control <case>: algorithm (a frozen S0 step reworded), rng (a purpose planted before
 # death_time), bound (the Registry delta with tfr's upper bound moved). Each must FAIL with its own diagnostic.
@@ -1113,6 +1143,21 @@ run "selftest_envelope positive control: a motive on a triggered edge must FAIL 
 run "selftest_envelope positive control: a state value whose cause is a later event must FAIL (V-SAGA-21; SPR-020)" "fail:4. provenance of change: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control cause-later &&
 run "selftest_envelope positive control: fifty witnesses on every event must FAIL the byte budget (V-SAGA-15; REV-SPR-020 R11)" "fail:6. the byte budget: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control budget-bloat &&
 run "selftest_envelope positive control: an input's consequence that loses the origin after one hop must FAIL (05.2 §4.0 criterion 4; REV-SPR-020 R14)" "fail:7. origin through hops: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control origin-lost &&
+run "Family annals v0: provenance sidecar, template slots, no model, calendar, fixtures vs Registry, determinism, coverage, golden annals (selftest_annals_v0 --check; SPR-029)" "pass:ANNALS v0: PASS" "$PY" -I specs/annals/selftest_annals_v0.py --check &&
+run "selftest_annals positive control: a sentence with no event id must FAIL provenance (V-NAR-05; SPR-029)" "fail:1. provenance (V-NAR-05): FAIL" "$PY" -I specs/annals/selftest_annals_v0.py --check --control no-event-id &&
+run "selftest_annals positive control: a slot outside DEATH's declared roles must FAIL (SPR-029)" "fail:slot 'instrument' is not a role DEATH declares" "$PY" -I specs/annals/selftest_annals_v0.py --check --control undeclared-slot &&
+run "selftest_annals positive control: a template that reads world state must FAIL (ADR-0024; SPR-029)" "fail:is outside the envelope" "$PY" -I specs/annals/selftest_annals_v0.py --check --control state-read &&
+run "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)" "fail:STALE:" annals_golden_control &&
+run "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive or edge; every in-scope kind has a template (lint_templates; SPR-029)" "pass:PASS: 23 templates linted" "$PY" -I specs/annals/lint_templates.py &&
+run "lint_templates positive control: a slot naming a role the kind does not declare must FAIL (SPR-029)" "fail:slot 'instrument' is not a role DEATH declares in [[emits]]" annals_lint_control undeclared_role &&
+run "lint_templates positive control: a snapshot slot the kind does not declare must FAIL (SPR-029)" "fail:slot 'snapshot.stress.actor' is not a snapshot BIRTH declares" annals_lint_control undeclared_snapshot &&
+run "lint_templates positive control: a slot that reads world state must FAIL (ADR-0024; SPR-029)" "fail:slot 'state.title.holder' is outside the envelope" annals_lint_control state_read &&
+run "lint_templates positive control: a payload slot the layout does not declare must FAIL (SPR-029)" "fail:slot 'payload.weather': DEATH declares no such payload slot" annals_lint_control unknown_payload &&
+run "lint_templates positive control: an in-scope kind without a template must FAIL (SPR-029)" "fail:kind FLED is in scope but has no template" annals_lint_control missing_kind &&
+run "lint_templates positive control: a payload layout whose citation is not in the emitting [[emits]] must FAIL (SPR-029)" "fail:does not occur verbatim" annals_lint_control payload_uncited &&
+run "lint_templates positive control: a kind whose last variant is conditional must FAIL (SPR-029)" "fail:the last variant must be unconditional" annals_lint_control no_catch_all &&
+run "lint_templates positive control: a motive slot on a kind that declares no motives must FAIL (SPR-029)" "fail:slot 'motive': MARRIAGE declares no motives" annals_lint_control undeclared_motive &&
+run "lint_templates positive control: a cause slot in a label must FAIL (SPR-029)" "fail:is not allowed in a label" annals_lint_control label_recursion &&
 part golden &&
 run "Required tools present (golden part)" pass require_tools golden &&
 # Tier 10 — performance: instruction counts (SPR-009 T-02a; GOV-002 tier 10)

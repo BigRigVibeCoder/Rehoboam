@@ -1,0 +1,274 @@
+# Family annals v0: the template set (SPR-029, WP P2.8a; specs/annals/annals_v0.md).
+#
+# A template binds only to the fields of the event it renders (specs/chronicle/envelope_v0.md): its
+# roles, its anchored snapshots, its payload (through a layout cited verbatim from the emitting
+# system's [[emits]] entry), its causal edges and its tick. It never reads world state and never
+# invents a fact the event does not carry. The slot grammar is annals_v0.md §3; the lint is
+# specs/annals/lint_templates.py; the exact renderer is specs/annals/selftest_annals_v0.py.
+#
+# Register: the historian's (docs/decisions_pending.md D16): consequences, no gratuitous detail,
+# no pronoun (the chronicle carries sex only in the life-course records, so a person is always
+# designated, never "he" or "she"; annals_v0.md §4).
+
+[templates]
+format = "rehoboam/annals/templates/v0"
+version = "0.1.0"                        # bumped with any change to a text, a slot or a layout
+# Every kind an annal tells. An admitted event of another kind is counted in the sidecar's trailer
+# and not rendered (§5). Grouped as the WP names them: births, marriages, deaths, successions,
+# claims and feuds.
+scope = [
+    "BIRTH", "MARRIAGE",
+    "DEATH", "EXTINCTION",
+    "SUCCEED", "INTERREGNUM_CRISIS", "DEPOSED", "REGENCY_BEGUN", "REGENCY_ENDED", "SEAT_GRANTED", "HOUSE_EXTINCT",
+    "CLAIM_CREATED", "CLAIM_PRESSED", "CLAIM_RENOUNCED",
+    "FEUD_DECLARED", "FEUD_ENDED",
+]
+
+# ---------------------------------------------------------------------------------------------- enums
+# Words for the integer codes a payload slot or an edge carries. `ids` are the codes in order (the
+# Registry's or the emitting system's column codes); `words` are what a slot renders. A `when`
+# condition names an id, never a word.
+
+[enums.death_cause]                      # M2.demography person.death_cause (channel A: 0 none ... 5 accident)
+ids   = ["none", "natural", "murder", "battle", "execution", "accident"]
+words = ["", "of natural causes", "by murder", "in battle", "by execution", "by accident"]
+
+[enums.sex]                              # M2.demography person.sex: 0 male, 1 female
+ids   = ["male", "female"]
+words = ["a son", "a daughter"]
+
+[enums.motive]                           # the Registry [motive_edges], in list order; every id has words
+ids   = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]
+words = ["in retaliation for", "out of jealousy of", "under a vow sworn at", "out of ambition for",
+         "out of fear of", "out of loyalty after", "in grief for", "out of greed for", "corrupted by"]
+
+# -------------------------------------------------------------------------------------------- payloads
+# A payload layout names the slots of an event's integer payload, in order. It is a citation: `cited`
+# is text that must occur verbatim in the emitting system's [[emits]] `when` for the kind (the lint
+# checks the quotation against specs/systems, the next version first), so a layout can never drift
+# from the contract it reads. A kind without a layout has no payload slot. `enum` renders the code
+# through an enum's words; `ordinal` renders an integer as an ordinal ("third").
+
+[payloads.DEATH]
+system = "M2.demography"
+cited  = "Payload: [death_cause code]"
+slots  = [{ name = "cause", enum = "death_cause" }]
+
+[payloads.BIRTH]
+system = "M2.demography"
+cited  = "Payload: [sex code, birth order (parity after the birth)]"
+slots  = [{ name = "sex", enum = "sex" }, { name = "parity", ordinal = true }]
+
+# ------------------------------------------------------------------------------------------- templates
+# One entry per variant. For a kind, the variants are tried in file order and the first whose `when`
+# holds renders; the last variant of a kind has no `when` (the lint checks it), so every event of an
+# in-scope kind renders exactly one sentence. `label` is the noun phrase another sentence uses when
+# it names this event as a cause ("after the death of X"); it may use roles and payload slots, never
+# a cause slot (no recursion).
+#
+# `when` keys: has = [roles present], lacks = [roles absent], payload = { slot = enum id },
+#              edge = "triggered" | "contingent" | "motivated_by" (an edge of that kind is present).
+
+# --- births and marriages -------------------------------------------------------------------------
+
+[[template]]
+id = "birth"
+version = 1
+kind = "BIRTH"
+text = "On {date}, {actor} bore {payload.sex}, {target}."
+label = "the birth of {target}"
+
+[[template]]
+id = "marriage"
+version = 1
+kind = "MARRIAGE"
+text = "On {date}, {actor} and {target} were married."
+label = "the marriage of {actor} and {target}"
+
+# --- deaths ---------------------------------------------------------------------------------------
+
+[[template]]
+id = "death.slain"
+version = 1
+kind = "DEATH"
+when = { has = ["actor"] }
+text = "On {date}, {target} was slain by {actor}, {payload.cause}."
+label = "the death of {target}"
+
+[[template]]
+id = "death.natural"
+version = 1
+kind = "DEATH"
+when = { payload = { cause = "natural" } }
+text = "On {date}, {target} died of natural causes."
+label = "the death of {target}"
+
+[[template]]
+id = "death.other"
+version = 1
+kind = "DEATH"
+text = "On {date}, {target} died {payload.cause}."
+label = "the death of {target}"
+
+[[template]]
+id = "extinction"
+version = 1
+kind = "EXTINCTION"
+text = "With {cause.triggered}, no one was left alive in the world."
+label = "the end of the world's people"
+
+# --- successions ----------------------------------------------------------------------------------
+
+[[template]]
+id = "succeed.after"
+version = 1
+kind = "SUCCEED"
+when = { edge = "triggered" }
+text = "On {date}, after {cause.triggered}, {actor} succeeded {target}."
+label = "the succession of {actor}"
+
+[[template]]
+id = "succeed"
+version = 1
+kind = "SUCCEED"
+text = "On {date}, {actor} succeeded {target}."
+label = "the succession of {actor}"
+
+[[template]]
+id = "interregnum"
+version = 1
+kind = "INTERREGNUM_CRISIS"
+text = "On {date}, the succession to a sovereign title found no clear heir, and an interregnum began."
+label = "the interregnum"
+
+[[template]]
+id = "deposed.by"
+version = 1
+kind = "DEPOSED"
+when = { has = ["actor"] }
+text = "On {date}, {target} was deposed by {actor}, a claimant."
+label = "the deposition of {target}"
+
+[[template]]
+id = "deposed"
+version = 1
+kind = "DEPOSED"
+text = "On {date}, {target} was deposed."
+label = "the deposition of {target}"
+
+[[template]]
+id = "regency.begun"
+version = 1
+kind = "REGENCY_BEGUN"
+text = "On {date}, {actor} became regent for {target}, who was under age."
+label = "the regency of {actor}"
+
+[[template]]
+id = "regency.ended"
+version = 1
+kind = "REGENCY_ENDED"
+text = "On {date}, the regency of {actor} for {target} ended."
+label = "the end of the regency of {actor}"
+
+[[template]]
+id = "seat.granted"
+version = 1
+kind = "SEAT_GRANTED"
+text = "On {date}, {actor} granted a seat to {target}."
+label = "the grant of a seat to {target}"
+
+[[template]]
+id = "house.extinct"
+version = 1
+kind = "HOUSE_EXTINCT"
+text = "On {date}, with the death of {target}, the house of {target} was extinguished."
+label = "the extinction of the house of {target}"
+
+# --- claims ---------------------------------------------------------------------------------------
+
+[[template]]
+id = "claim.created.against"
+version = 1
+kind = "CLAIM_CREATED"
+when = { has = ["target"] }
+text = "On {date}, {actor} gained a claim against {target}."
+label = "the claim of {actor}"
+
+[[template]]
+id = "claim.created"
+version = 1
+kind = "CLAIM_CREATED"
+text = "On {date}, {actor} gained a claim to a vacant title."
+label = "the claim of {actor}"
+
+[[template]]
+id = "claim.pressed"
+version = 1
+kind = "CLAIM_PRESSED"
+text = "On {date}, {actor} pressed a claim against {target}."
+label = "the pressing of the claim of {actor}"
+
+[[template]]
+id = "claim.renounced"
+version = 1
+kind = "CLAIM_RENOUNCED"
+text = "On {date}, {actor} renounced a claim."
+label = "the renunciation by {actor}"
+
+# --- feuds ----------------------------------------------------------------------------------------
+
+[[template]]
+id = "feud.declared.motive"
+version = 1
+kind = "FEUD_DECLARED"
+when = { edge = "motivated_by" }
+text = "On {date}, {actor}, under strain (stress {snapshot.stress.actor}), declared a feud against {target} {motive} {cause.motivated_by}."
+label = "the feud declared by {actor}"
+
+[[template]]
+id = "feud.declared"
+version = 1
+kind = "FEUD_DECLARED"
+text = "On {date}, {actor} declared a feud against {target}."
+label = "the feud declared by {actor}"
+
+[[template]]
+id = "feud.ended.after"
+version = 1
+kind = "FEUD_ENDED"
+when = { edge = "triggered" }
+text = "On {date}, with {cause.triggered}, the feud between {actor} and {target} ended."
+label = "the end of the feud"
+
+[[template]]
+id = "feud.ended"
+version = 1
+kind = "FEUD_ENDED"
+text = "On {date}, {actor} and {target} ended their feud."
+label = "the end of the feud"
+
+# ------------------------------------------------------------------------------------------- prologue
+# Sentences rendered from the keyframe extract (annals_v0.md §6) for a house whose past is not in
+# channel A (REV-SPR-019 R1). Their slots are keyframe rows, named here so the lint sees the whole
+# vocabulary; a prologue template is never used for a chronicle sentence and a chronicle template
+# never uses a prologue slot.
+
+[[prologue]]
+id = "prologue.house"
+version = 1
+text = "{house} entered the chronicle with {living} living members."
+
+[[prologue]]
+id = "prologue.ancestor"
+version = 1
+text = "{person}, born on {birth_date}, died on {death_date}, before the chronicle began."
+
+[[prologue]]
+id = "prologue.tenure"
+version = 1
+text = "{holder} held {title} from {start_date} until {end_date}."
+
+[[prologue]]
+id = "prologue.tenure.open"
+version = 1
+text = "{holder} has held {title} since {start_date}."

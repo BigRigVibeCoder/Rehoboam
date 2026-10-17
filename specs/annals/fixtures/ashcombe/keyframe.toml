@@ -1,0 +1,121 @@
+# The keyframe extract (annals_v0.md §6): the rows of the genesis keyframe a house prologue reads,
+# because the back-filled dead have no channel-A record (REV-SPR-019 R1). Life-course rows: every
+# person the keyframe holds at genesis (the back-filled dead have exit_tick < 0; the living have no
+# exit_tick). house_member: M7's rows (no row for a wife married in). tenure: M7's log per title.
+# Ticks are minutes from the epoch; the fixture's are day starts.
+
+[[house]]
+id = 9001
+[[house]]
+id = 9002
+
+[[title]]
+id = 1
+[[title]]
+id = 2
+
+# --- House Ashcombe: the root couple (dead), their son Edric (holder), his wife and their son
+[[life_course]]
+person_id = 1001
+sex = 0
+mother_id = 0
+father_id = 0
+birth_tick = -31104000     # year -60, month 1, day 1
+exit_tick = -6220800       # year -12, month 1, day 1
+[[life_course]]
+person_id = 1002
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -30067200     # year -58
+exit_tick = -7776000       # year -15
+[[life_course]]
+person_id = 1003
+sex = 0
+mother_id = 1002
+father_id = 1001
+birth_tick = -19592640
+[[life_course]]
+person_id = 1004
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -18555840
+[[life_course]]
+person_id = 1005
+sex = 0
+mother_id = 1004
+father_id = 1003
+birth_tick = -8706240
+
+# --- House Thorne: the root couple (dead), their son Hugh (holder), his wife and their daughter
+[[life_course]]
+person_id = 2001
+sex = 0
+mother_id = 0
+father_id = 0
+birth_tick = -33696000     # year -65
+exit_tick = -4147200       # year -8
+[[life_course]]
+person_id = 2002
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -32140800     # year -62
+exit_tick = -1555200       # year -3
+[[life_course]]
+person_id = 2003
+sex = 0
+mother_id = 2002
+father_id = 2001
+birth_tick = -20629440
+[[life_course]]
+person_id = 2004
+sex = 1
+mother_id = 2005
+father_id = 2003
+birth_tick = -8187840
+[[life_course]]
+person_id = 2005
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -19074240
+
+[[house_member]]
+person = 1001
+house = 9001
+[[house_member]]
+person = 1003
+house = 9001
+[[house_member]]
+person = 1005
+house = 9001
+[[house_member]]
+person = 2001
+house = 9002
+[[house_member]]
+person = 2003
+house = 9002
+[[house_member]]
+person = 2004
+house = 9002
+
+[[tenure]]
+title = 1
+holder = 1001
+start = -20736000          # year -40
+end = -6220800             # his death, year -12
+[[tenure]]
+title = 1
+holder = 1003
+start = -6220800
+[[tenure]]
+title = 2
+holder = 2001
+start = -19699200          # year -38
+end = -4147200
+[[tenure]]
+title = 2
+holder = 2003
+start = -4147200
