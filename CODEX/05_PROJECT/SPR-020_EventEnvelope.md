@@ -2,7 +2,7 @@
 id: SPR-020
 title: "The event envelope in the engine: roles, anchored snapshots, typed edges, origin and provenance of change (P1.9)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -26,7 +26,7 @@ version: 0.1.0
 > - **Developer:** AGT-002-CORE, with AGT-002-TOOLS for `gen_skeletons.py` and `gen_hash_golden.py` (one Developer session may hold both roles).
 > - **Testers:** AGT-003-IF and AGT-003-DET (one Tester session may hold both, on a different model from the Developer's).
 > - **Size and class:** about 3.5 agent-days. **C3**: the event-log hash is in `state_hash` (R13: "C3 either way"). It contains C2 work: the event schema, three Registry sections and the keyframe format.
-> - **Status: awaiting the director's plan approval (GOV-005 §2).** D44 is pending: the sprint builds nine edge kinds, as the spec says, and §"Director items" states what changes under eight. The four baseline moves are announced to the director before the merge (GOV-005 §6; PRJ-002 §9).
+> - **Status: plan approved by the director on 2026-10-17 (D48; GOV-005 §2).** D44 is pending: the sprint builds nine edge kinds, as the spec says, and §"Director items" states what changes under eight. The four baseline moves are announced to the director before the merge (GOV-005 §6; PRJ-002 §9).
 
 # SPR-020 — The event envelope in the engine (WP P1.9)
 
@@ -48,7 +48,7 @@ version: 0.1.0
   - the S6 draft (`cause_column`, `default`, `event_ref` columns) is used by stub fixtures;
   - the smoke specs' roles (envelope §3, last paragraph).
 - **Rulings (binding):** REV-SPR-020 R1–R27; REV-EVO-001 R15 (the `cause` tail SPR-020's origin tail follows).
-- **Director items, pending:** D44 (eight or nine edge kinds) and D38 (DATA-5). D38 changes nothing in P1a: every draft is admitted, so `cause_told` is true whichever way it goes (envelope §5).
+- **Director items, decided 2026-10-17:** D44 (nine edge kinds, as built) and D38 (DATA-5 amended). D38 changes nothing in P1a: every draft is admitted, so `cause_told` is true whichever way it goes (envelope §5).
 - **Requirements covered:**
   - DATA-2 (typed edges);
   - DATA-3 (anchored snapshots);
@@ -363,8 +363,8 @@ T-01 to T-03 and T-06 depend only on SPR-013 and may start at once. T-04 and T-0
 |---|---|---|
 | 1 | SPR-013 not merged | Open |
 | 2 | SPR-014 not merged (blocks T-04 and T-05 only) | Open |
-| 3 | D44 | Open, director; non-blocking (built as nine; eight changes nothing built) |
-| 4 | The director's plan approval (GOV-005 §2) | Open: D48 |
+| 3 | D44 | **Closed:** nine kinds approved 2026-10-17 |
+| 4 | The director's plan approval (GOV-005 §2) | **Closed:** approved 2026-10-17 (D48) |
 
 ## Completion
 

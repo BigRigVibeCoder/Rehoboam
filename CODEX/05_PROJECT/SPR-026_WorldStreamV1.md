@@ -2,7 +2,7 @@
 id: SPR-026
 title: "World Stream v1: the live edge over a local socket, viewer cursors and rh-protocol (P1.17, part a)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
@@ -24,7 +24,7 @@ version: 0.1.0
 > - **Testers:** AGT-003-IF and AGT-003-DET. One Tester session may hold both roles, on a different model from the Developer's.
 > - **Size:** about 3 agent-days.
 > - **Class: C2** (the IF-0 wire, a new tool crate; channel A unchanged).
-> - **Awaiting the director's plan approval (GOV-005 §2).** D42 (the window) and D43 (canonical lines on the live edge) are pending. The sprint builds the spec's recommended options; "Director items" says what changes under each alternative.
+> - **Plan approved by the director on 2026-10-17 (D48; GOV-005 §2).** D42 (the window, option (b)) and D43 (canonical lines on the live edge) were approved on 2026-10-17, as the spec recommended.
 
 # SPR-026 — World Stream v1: the live edge (WP P1.17, part a)
 
@@ -40,15 +40,15 @@ version: 0.1.0
   - `specs/stream/wire_v1.md` §0–§10, with `specs/stream/selftest_wire_v1.py` and `specs/stream/golden/wire_v1.txt`;
   - `specs/stream/canonical_v0.md` §1 (frozen prefix) and §4 (digest);
   - `specs/stream/channel_a_v0.sql` R3 and R5; `specs/stream/channel_c_v0.sql` R7;
-  - `05.10` §5 and §7, and `05.9` IF-0 (v1.4, pending D43);
-  - ADR-0024, ADR-0030, ADR-0031 (§1 item 4 pending D43), ADR-0035 §6;
+  - `05.10` §5 and §7, and `05.9` IF-0 (v1.4; D43 approved);
+  - ADR-0024, ADR-0030, ADR-0031 (§1 item 4 amended by D43), ADR-0035 §6;
   - `docs/09` V-STR-01, V-STR-03, V-STR-05, V-PERF-09 (ingredients only), V-IF-02 (style), V-DET-19, V-INSP-03, V-INSP-05, V-PLN-01, V-PLN-04.
 - **System spec:** n/a.
 - **Rulings (binding):**
   - REV-SPR-026 R1–R24;
   - SPR-013 T-09's resume line (R18);
   - BCK-002 A-42, its stream-host part (R12).
-- **Director items, pending:** D42, D43, D47.
+- **Director items:** D42, D43 and D47, all approved on 2026-10-17.
 - **Requirements covered:**
   - STR-1 (stream determinism under viewers);
   - STR-3 (cursors, catch-up with no gap and no duplicate);
@@ -138,7 +138,7 @@ version: 0.1.0
     - `bytes()`;
     - the seal log.
   - **The writer's publication order** (I4): a chunk is appended; a seal lands and `s` is published; a year is dropped and `w0` moves.
-  - **Window policies.** Option (b), the year-end drop with a late seal dropping its year when it lands, is the default, pending D42. Option (a) is a host setting.
+  - **Window policies.** Option (b), the year-end drop with a late seal dropping its year when it lands, is the default (D42, approved). Option (a) is a host setting.
   - **Sealing:**
     - Under (b), sealing runs off the host thread. If SPR-013's writer seals on the host thread, this task moves it.
     - The latency of every seal is logged against its sim-year's wall time.
@@ -317,10 +317,10 @@ version: 0.1.0
 | # | Blocker | Status |
 |---|---|---|
 | 1 | SPR-013 not merged | Open |
-| 2 | D43 (the RECORDS payload) | Open, director. It blocks T-01's `records` module and T-05's digest checks only if ruled against |
-| 3 | D42 (the window bound) | Open, director. Non-blocking: (a) and (b) are both built |
+| 2 | D43 (the RECORDS payload) | **Closed:** approved 2026-10-17 |
+| 3 | D42 (the window bound) | **Closed:** option (b) approved 2026-10-17 |
 | 4 | The `tail --live` name, the client's file, and `LiveEdge` only under `--socket` (specs table) | **Closed:** ruled by the Architect (specs table) |
-| 5 | The director's plan approval (GOV-005 §2) | Open: D48 |
+| 5 | The director's plan approval (GOV-005 §2) | **Closed:** approved 2026-10-17 (D48) |
 
 ## Completion
 

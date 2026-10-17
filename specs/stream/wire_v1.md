@@ -1,6 +1,6 @@
 # World Stream wire format v1 (IF-0 live edge) and `rh-protocol`
 
-*Status: v1 draft, round 3 (REV-SPR-026 R1–R24 applied), a C2 contract for P1.17 (SPR-026, SPR-027). Two parts wait on the director: the live-edge container (§2.2, **pending D43**: ADR-0031 §1 item 4 says "Arrow IPC with LZ4") and the window bound (§6.1, **pending D42**: PERF-5 and V-PERF-09 say "the in-memory live-edge segment"). Reference: `specs/stream/selftest_wire_v1.py` (frame codec, control messages, the host's dispatcher, the `Catchup` state machine, the live-edge rule simulated with fast, slow, crawling, stalled, reconnecting, jumping and late viewers over sealed and live segments, a seal-race check, golden frames); golden file: `specs/stream/golden/wire_v1.txt`. Records: `specs/stream/channel_a_v0.sql`, `channel_c_v0.sql`; their one-line form: `specs/stream/canonical_v0.md`. Contracts it implements: `docs/05_architecture/05.10_world_stream.md` §5 and §7; `05.9` IF-0 and the harness rules; ADR-0024, ADR-0025, ADR-0030, ADR-0031, ADR-0035 §6. Tests: `docs/09` V-STR-01, V-STR-03, V-STR-05, V-PERF-09 (§9 below). A change to a byte of the frame header, a control message's field or an error code is a new version (`rehoboam/stream/wire/v2`), announced like a Registry change (`05.9` IF-9).*
+*Status: v1 draft, round 3 (REV-SPR-026 R1–R24 applied), a C2 contract for P1.17 (SPR-026, SPR-027). The director approved its two open parts on 2026-10-17: canonical lines on the live edge (§2.2, D43, amending ADR-0031 §1 item 4) and the window bound of option (b) (§6.1, D42, amending PERF-5 and V-PERF-09). Reference: `specs/stream/selftest_wire_v1.py` (frame codec, control messages, the host's dispatcher, the `Catchup` state machine, the live-edge rule simulated with fast, slow, crawling, stalled, reconnecting, jumping and late viewers over sealed and live segments, a seal-race check, golden frames); golden file: `specs/stream/golden/wire_v1.txt`. Records: `specs/stream/channel_a_v0.sql`, `channel_c_v0.sql`; their one-line form: `specs/stream/canonical_v0.md`. Contracts it implements: `docs/05_architecture/05.10_world_stream.md` §5 and §7; `05.9` IF-0 and the harness rules; ADR-0024, ADR-0025, ADR-0030, ADR-0031, ADR-0035 §6. Tests: `docs/09` V-STR-01, V-STR-03, V-STR-05, V-PERF-09 (§9 below). A change to a byte of the frame header, a control message's field or an error code is a new version (`rehoboam/stream/wire/v2`), announced like a Registry change (`05.9` IF-9).*
 
 *Architect text rulings, 2026-10-17, at SPR-026's plan: the viewer's live mode is `rh-cli tail --live`, because SPR-013 and `05.10` use `--follow <person>` as a person filter; `sift --follow` keeps its name. Two sentences about SPR-020 are updated now that PR #61 is merged (§2.2, §5). No frame, message or golden line changes.*
 
@@ -53,7 +53,7 @@ A receiver that finds a wrong magic, an unknown version, an unknown type, a nonz
 
 The payload is exactly one **JSON-RPC 2.0 object** (a request, a response, or a notification; never a batch array), encoded as **canonical JSON** (§3.1), UTF-8 without a byte-order mark, without a trailing newline. The methods, parameters, results, notifications and errors are §4.
 
-### 2.2 RECORDS (type 2) — pending D43
+### 2.2 RECORDS (type 2)
 
 The payload is a 20-byte sub-header, then `count` records in the **canonical text form** (`canonical_v0.md`), each line terminated by one LF, in ascending `seq` with no gap:
 
@@ -202,7 +202,7 @@ A response's `error` is `{"code": int, "message": string, "data": {"reason": tok
 
 ## 6. The live-edge rule
 
-### 6.1 State and the window bound — pending D42
+### 6.1 State and the window bound
 
 Per channel and timeline, the host keeps:
 
