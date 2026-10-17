@@ -143,9 +143,9 @@ fn a_system_taking_the_reserved_worldgen_id_is_refused() {
     let e = refused(vec![w.clone()], &[w]);
     assert_eq!(rules(&e), ["system-id"], "{e}");
     assert!(
-        e.violations
-            .iter()
-            .any(|v| v.message.contains("hashes to the RNG system_id of rh-worldgen")),
+        e.violations.iter().any(|v| v
+            .message
+            .contains("hashes to the RNG system_id of rh-worldgen")),
         "{e}"
     );
 }

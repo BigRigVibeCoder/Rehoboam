@@ -307,7 +307,7 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   float_type:float:f32 float_literal:float:0.5 float_suffix:float:2e-3f64 float_conversion:float:to_f64
   float_escape_reason:float:f64 float_undeclared_field:float:f32
   allow_disallowed:lint-allow:allow(clippy::disallowed_methods
-  file_modified:file-clock:.modified( process_command:process:std::process file_io:file-io:std::fs
+  file_modified:file-clock:.modified( process_command:process:std::process process_glob_std:process:process::C file_io:file-io:std::fs
   process_rename:process:std::process fs_group_rename:file-io:std::fs metadata_ext:file-clock:MetadataExt
   metadata_ufcs:file-clock:Metadata::modified mtime:file-clock:.mtime(
   env_rename:env:std::env env_var:env:std::env env_current_dir:env:std::env env_current_exe:env:std::env
@@ -644,13 +644,27 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-worldgen::genesis
-  rh-golden::golden"
+  rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
   echo "left to the by-name gates: $filter"
   cargo nextest run --workspace --locked --no-fail-fast --status-level fail -E "not ($filter)"
 }
+# V-INV-08 (SPR-012 T-07): M2's deaths are one keyed Bernoulli per person-month, never a Poisson or
+# binomial count. A grep gate over a system crate's src/ and Cargo.toml: no sampler crate, no
+# Poisson or binomial draw. Its control is a planted Poisson death that must FAIL.
+bernoulli_only() {
+  local dir="$1" hits
+  hits="$(grep -rniE 'poisson|binomial|rh_sample|rh-sample' "$dir/src" "$dir/Cargo.toml")" || true
+  if [ -n "$hits" ]; then
+    echo "VIOLATION [V-INV-08] $dir draws deaths other than by one Bernoulli per person-month:"
+    echo "$hits"
+    return 1
+  fi
+  echo "V-INV-08: $dir draws deaths by Bernoulli only (no sampler crate, no Poisson or binomial draw)"
+}
+
 # Its control: a typo in an entry must fail, never silently exclude nothing.
 workspace_tests_typo_control() {
   BY_NAME_TESTS="rh-snapshot::no_such_test" workspace_tests
@@ -767,6 +781,7 @@ run "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph" pass 
 run "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL" 'fail:unlinked crate `fixture_narrative`' cargo check --offline --locked --quiet --manifest-path tests/lint_fixtures/compile_fail/plane_a_names_plane_c/Cargo.toml --target-dir target/lint-fixtures &&
 fixed_point_compile_controls &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
+run "lint_forbidden positive control: rh-registry's spec loaders in a system crate's src/ must FAIL in every form, its tests/ and rh-registry pass (BCK-002 A-47)" "fail:3 files scanned; 5 violations" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/spec_loader_workspace/Cargo.toml &&
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
 run "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its tests/ and a builder's args pass (SPR-011 A-4)" "fail:VIOLATION [V-DET-19/env] \`std::env\` at tests/lint_fixtures/forbidden/env_workspace/rh-core/src/lib.rs:5:35;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/env_workspace/Cargo.toml &&
@@ -851,6 +866,11 @@ run "rh-sys-smoke gates by name: registration against the smoke specs, coverage,
 run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-06 rh-worldgen: V-DATA-05 founder ids and a forced collision, bit-equal genesis twice and across threads, Ada at 25, refused writes (SPR-012)" "pass:V-DATA-05: a forced collision resolves to the same rehash on every run" cargo nextest run -p rh-worldgen --locked --test genesis --no-capture &&
+run "T-06 V-INV-11: founders' negative birth ticks round-trip through a keyframe, and the loaded engine advances as the continuous one (SPR-012)" "pass:V-INV-11: negative birth ticks round-trip through a keyframe in 4 worlds" cargo nextest run -p rh-worldgen --locked --test keyframe --no-capture &&
+run "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)" "pass:V-DET-12, V-INV-01: 24 random worlds" cargo nextest run -p rh-worldgen --locked --test m2_system --no-capture &&
+run "T-07 M2.demography in release: q(15) of 10,000 founders aged 0 inside the binomial 99.9% band for 32 seeds; V-DATA-04 over 1,000 years (SPR-012)" "pass:V-DATA-04: 10000 persons emitted over 1,000 years" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(q15) | test(v_data_04)" &&
+run "V-INV-08: M2 draws deaths by Bernoulli only (no Poisson or binomial draw; SPR-012 T-07)" "pass:V-INV-08: crates/rh-sys-demography draws deaths by Bernoulli only" bernoulli_only crates/rh-sys-demography &&
+run "V-INV-08 positive control: a planted Poisson death draw must FAIL (SPR-012 T-07)" "fail:VIOLATION [V-INV-08] tests/lint_fixtures/bernoulli/poisson_death" bernoulli_only tests/lint_fixtures/bernoulli/poisson_death &&
 run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)" "fail:V-DET-12 violated" env RH_CORE_LIFE_GOLDEN="$PWD/tests/lint_fixtures/golden/backdated_life_events.txt" cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_12_golden_event_log &&
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&

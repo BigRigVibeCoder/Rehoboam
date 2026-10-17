@@ -248,6 +248,26 @@ fn an_invalid_manifest_is_never_compiled() {
     }
 }
 
+/// VER-SPR-011-TEST GAP-9: a literal whose exponent is past the stated bound is refused once at
+/// its path, not by the bounds check and again by the conversion.
+#[test]
+fn an_exponent_past_the_bound_is_reported_once() {
+    let reg = registry_with(
+        "fidelity_levels = [\"F0\", \"F1\", \"F2\"]\nparams = { e0 = [0.0, 1.0e9], brass_beta = [0.6, 1.65] }\ndefaults = { brass_beta = 1.0 }",
+    );
+    let manifest = solo_text().replace(
+        "systems: {}",
+        "systems:\n  M2.demography: {e0: 1.0e-1048577}",
+    );
+    let errors = refused(&manifest, &reg);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].starts_with("systems.M2.demography.e0: ")
+            && errors[0].contains("has an exponent beyond"),
+        "{errors:?}"
+    );
+}
+
 #[test]
 fn g_2_bounds_are_checked_on_the_exact_decimal_not_the_float() {
     // 85.0000000000000001 is one unit past e0's upper bound (85) in its last digit; as an f64 it

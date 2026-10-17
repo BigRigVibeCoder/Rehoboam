@@ -932,6 +932,9 @@ name = "rh-sys-demography"
 version = "0.0.0"
 dependencies = [
  "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-registry",
 ]
 
 [[package]]
@@ -950,8 +953,11 @@ name = "rh-worldgen"
 version = "0.0.0"
 dependencies = [
  "rh-core",
+ "rh-events",
  "rh-ids",
  "rh-registry",
+ "rh-snapshot",
+ "rh-sys-demography",
 ]
 
 [[package]]

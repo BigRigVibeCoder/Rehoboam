@@ -189,8 +189,14 @@ REQUIRED_GATES = (
     " Table 19, e0 within 0.06 years, the q(15) band (SPR-012)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "T-05 positive control: one altered schedule vector must FAIL (SPR-012)",
+    "T-06 V-INV-11: founders' negative birth ticks round-trip through a keyframe, and the loaded "
+    "engine advances as the continuous one (SPR-012)",
     "T-06 rh-worldgen: V-DATA-05 founder ids and a forced collision, bit-equal genesis twice and "
     "across threads, Ada at 25, refused writes (SPR-012)",
+    "T-07 M2.demography in release: q(15) of 10,000 founders aged 0 inside the binomial 99.9% band "
+    "for 32 seeds; V-DATA-04 over 1,000 years (SPR-012)",
+    "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and"
+    " V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
@@ -198,6 +204,8 @@ REQUIRED_GATES = (
     "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)",
     "V-DET-10 unsynced guard: read-only APIs fuzzed on the stub world (SPR-007 T-04)",
     "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)",
+    "V-INV-08 positive control: a planted Poisson death draw must FAIL (SPR-012 T-07)",
+    "V-INV-08: M2 draws deaths by Bernoulli only (no Poisson or binomial draw; SPR-012 T-07)",
     "V-PERF-04 control: a speed-up passes and never re-baselines (docs/08 §9)",
     "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 "
     "T-02a)",
@@ -384,6 +392,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
     "(VER-SPR-008)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
+    "lint_forbidden positive control: rh-registry's spec loaders in a system crate's src/ must FAIL"
+    " in every form, its tests/ and rh-registry pass (BCK-002 A-47)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "lint_odd applies control: a sender's payload matching [[applies]] field for field passes "
     "(REV-P1a section 7)",

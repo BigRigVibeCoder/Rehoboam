@@ -299,6 +299,7 @@ PLANTED = {
     "allow_disallowed": ("lint-allow", "allow(clippy::disallowed_methods"),
     "file_modified": ("file-clock", ".modified("),
     "process_command": ("process", "std::process"),
+    "process_glob_std": ("process", "process::C"),
     "process_rename": ("process", "std::process"),
     "fs_group_rename": ("file-io", "std::fs"),
     "metadata_ext": ("file-clock", "MetadataExt"),
@@ -1247,3 +1248,43 @@ def test_maj_1_min_2_renamed_std_raw_identifiers_and_nested_fs_are_refused(
 def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
     """Only std itself may not be renamed; a raw identifier or raw string is not a path (MIN-2)."""
     assert rules_hit(source) == []
+
+
+def test_spec_loaders_are_refused_in_system_crates_only() -> None:
+    """A-47: load_specs and registry_system_ids in a system crate's src/, in every form."""
+    forms = (
+        "use rh_registry::ownership::load_specs;\n",
+        "use rh_registry::ownership::{registry_system_ids as ids};\n",
+        "let _ = rh_registry::ownership::load_specs(p);\n",
+        "let f = registry_system_ids;\n",
+        "let _ = ownership :: load_specs (p);\n",
+    )
+    for code in forms:
+        report = Report(violations=[], escaped=[])
+        scan_source(code, "x.rs", report, floats=FloatScan(system=True))
+        assert len(report.violations) == 1, code
+        assert "[V-DET-19/spec-loader]" in report.violations[0], code
+        for scan in (FloatScan(), FloatScan("none", system=True)):
+            report = Report(violations=[], escaped=[])
+            scan_source(code, "x.rs", report, floats=scan)
+            assert report.violations == [], (code, scan)
+    # Names that merely contain the loaders' names are not them.
+    report = Report(violations=[], escaped=[])
+    scan_source(
+        "let load_specs_count = 1;\nfn my_registry_system_ids() {}\n",
+        "x.rs",
+        report,
+        floats=FloatScan(system=True),
+    )
+    assert report.violations == []
+
+
+def test_the_spec_loader_workspace_reports_the_system_crates_src_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """rh-sys-x's src/ is reported five times; its tests/ and rh-registry are not (A-47)."""
+    manifest = FIXTURES / "spec_loader_workspace" / "Cargo.toml"
+    assert main(["--manifest-path", str(manifest)]) == 1
+    out = capsys.readouterr().out
+    assert out.count("[V-DET-19/spec-loader]") == 5
+    assert "rh-sys-x/tests" not in out and "rh-registry/src" not in out

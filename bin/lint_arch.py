@@ -323,6 +323,11 @@ ENGINE_CRATES = frozenset(
     }
 )
 ENGINE_CRATE_PREFIXES = (SYSTEM_CRATE_PREFIX, CONTRACT_CRATE_PREFIX)
+# The workspace crates that are not engine crates, by design (see ENGINE_CRATES): tool crates that
+# measure and replay the engine from outside. Every workspace member is on exactly one of the two
+# lists (python/tests/test_lint_arch.py; VER-SPR-011-TEST GAP-1, BCK-002 A-49), so a new crate must
+# be placed by a reviewed edit rather than fall through.
+NON_ENGINE_CRATES = frozenset({"rh-bench", "rh-golden"})
 # THE engine-purity deny-list, defined here and nowhere else (python/tests checks that): package
 # name -> what it is. docs/13 §3 names the categories (media, HTTP-UI, LLM client) and nine
 # examples; the rest are the common crates of the same categories. Matched by package name over the

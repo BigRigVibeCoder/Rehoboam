@@ -1,0 +1,7 @@
+# Positive control for the spec-loader rule of bin/lint_forbidden.py (BCK-002 A-47; SPR-012 T-07;
+# tests/lint_fixtures/README.md); not in the Rehoboam workspace. rh-sys-x names rh-registry's spec
+# loaders in src/ in four forms (must FAIL, one violation each) and in tests/ (never reported);
+# rh-registry, which defines and calls them on its load path, is never reported.
+[workspace]
+members = ["rh-registry", "rh-sys-x"]
+resolver = "3"
