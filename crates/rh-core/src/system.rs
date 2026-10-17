@@ -30,16 +30,23 @@
 //!   Nothing a step buffers is visible until the engine merges the buffers of a whole scheduler
 //!   level in canonical order (SPR-006 ruling 1).
 //!
+//! SPR-011 adds [`StepCtx::chance`] (one keyed draw against a `Prob32`, T-01), keys every
+//! `rng` and `stream` draw by the drawn entity's epoch (T-02, BCK-002 A-29), and keeps the stream
+//! guard per (system, instant), across bindings and the timer pass (BCK-002 A-37).
+//!
 //! REF: `docs/05_architecture/05.1_simulation_core.md` §2, §4.1, §4.3; ADR-0025; ADR-0033 §3;
 //! `CODEX/05_PROJECT/SPR-005_CoreTimeAndScheduler.md` T-03, T-06, rulings 1 and 2;
 //! `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-02–T-05, rulings 1–5.
 
 use core::cell::RefCell;
 use core::fmt;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use rh_events::{DraftRef, EventDraft};
-use rh_ids::{EntityKey, EntityRef, PurposeId, RngStream, SystemId, SystemKey};
+use rh_ids::{
+    BranchSalt, EntityKey, EntityRef, PurposeId, RngStream, StreamKey, SystemId, SystemKey,
+};
 
 use crate::access::AccessSpec;
 use crate::agenda::{Agenda, TimerEntry, TimerId};
@@ -142,9 +149,10 @@ pub enum SimError {
         /// The purpose name.
         purpose: &'static str,
     },
-    /// A second keyed stream for one `(purpose, entity)` in one step, or a stream and an
-    /// [`StepCtx::rng`] draw for the same pair (`05.1` §6 item 3: each sampler call takes its own
-    /// stream; SPR-008). A system that needs two samples per entity declares two purposes.
+    /// A second keyed stream for one `(purpose, entity)` by one system at one instant, or a stream
+    /// and an [`StepCtx::rng`] draw for the same pair (`05.1` §6 item 3: each sampler call takes
+    /// its own stream; SPR-008), across the system's bindings and timer pass (BCK-002 A-37). A
+    /// system that needs two samples per entity declares two purposes.
     StreamReuse {
         /// The system.
         system: &'static str,
@@ -152,7 +160,7 @@ pub enum SimError {
         purpose: &'static str,
         /// The entity key (`EntityKey::entity_key`).
         entity: u64,
-        /// What the step had already taken for the pair: `"stream"` or `"rng"`.
+        /// What the system had already taken for the pair at this instant: `"stream"` or `"rng"`.
         taken: &'static str,
     },
     /// A timer the agenda refuses: in the past, in a phase the system is not bound in, or a
@@ -274,7 +282,7 @@ impl fmt::Display for SimError {
                 taken,
             } => write!(
                 f,
-                "{system} asked for a stream of purpose {purpose} for entity {entity}, which this step already used as a {taken} (05.1 §6 item 3: one stream per sampler call; declare another purpose)"
+                "{system} asked for a stream of purpose {purpose} for entity {entity}, which it already used as a {taken} at this instant (05.1 §6 item 3: one stream per sampler call, across bindings and the timer pass; declare another purpose)"
             ),
             Self::Timer { system, message } => write!(f, "{system}: timer refused: {message}"),
             Self::UndeclaredCommand { system, command } => write!(
@@ -363,7 +371,13 @@ pub(crate) struct Outbox {
 pub(crate) struct JobInfo<'a> {
     pub(crate) system: &'static str,
     pub(crate) system_id: SystemId,
+    /// `K1` at epoch 0, the common case (`05.1` §6 item 2).
     pub(crate) key: SystemKey,
+    /// The history tuple's seed and salt, to derive `K1` at another epoch.
+    pub(crate) world_seed: u64,
+    pub(crate) branch_salt: BranchSalt,
+    /// The entities' epochs as the instant's `Inputs` left them (ADR-0025; BCK-002 A-29).
+    pub(crate) epochs: &'a BTreeMap<EntityRef, u32>,
     pub(crate) purposes: &'a [&'static str],
     pub(crate) access: &'a AccessSpec,
     pub(crate) bindings: &'a [PulseBinding],
@@ -378,20 +392,29 @@ pub struct StepCtx<'a> {
     phase: Phase,
     inbox: Vec<QueuedCommand>,
     pub(crate) out: Outbox,
-    /// The `(purpose, entity)` pairs this step has drawn from, and how (05.1 §6 item 3). The
-    /// `RefCell` makes `StepCtx` `!Sync`: a step, or one system's timer pass, runs on one thread
-    /// and the context is never shared, so the set cannot be reached from two threads.
-    taken: RefCell<BTreeSet<(u64, u64, Taken)>>,
+    /// The `(purpose, entity)` pairs the system has drawn from at this instant, and how (05.1 §6
+    /// item 3). The engine keeps one set per (system, instant) and lends it to each of the
+    /// system's jobs in turn, so the guard spans every binding and the timer pass (BCK-002 A-37).
+    /// The `RefCell` makes `StepCtx` `!Sync`: a job runs on one thread and the context is never
+    /// shared, so the set cannot be reached from two threads.
+    taken: RefCell<Taken>,
+    /// `K1` at each epoch other than 0 this job has drawn at (derived once per epoch).
+    epoch_keys: RefCell<BTreeMap<u32, SystemKey>>,
 }
 
-/// How a step used a `(purpose, entity)` pair: through [`StepCtx::rng`] or [`StepCtx::stream`].
+/// The pairs a system has drawn from at one instant, `(purpose id, entity key)`, each with how it
+/// was first taken (a stream is recorded over an earlier `rng`); see [`StepCtx`]. The engine owns
+/// one per system and clears them at each instant.
+pub(crate) type Taken = BTreeMap<(u64, u64), TakenAs>;
+
+/// How a system used a `(purpose, entity)` pair: through [`StepCtx::rng`] or [`StepCtx::stream`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Taken {
+pub(crate) enum TakenAs {
     Rng,
     Stream,
 }
 
-impl Taken {
+impl TakenAs {
     const fn name(self) -> &'static str {
         match self {
             Self::Rng => "rng",
@@ -401,12 +424,14 @@ impl Taken {
 }
 
 impl<'a> StepCtx<'a> {
-    /// A context for one job: one system at instant `t` in `phase`, with its queued commands.
+    /// A context for one job: one system at instant `t` in `phase`, with its queued commands and
+    /// the pairs it has already drawn from at this instant.
     pub(crate) fn new(
         info: JobInfo<'a>,
         t: SimTime,
         phase: Phase,
         inbox: Vec<QueuedCommand>,
+        taken: Taken,
     ) -> Self {
         Self {
             info,
@@ -414,13 +439,43 @@ impl<'a> StepCtx<'a> {
             phase,
             inbox,
             out: Outbox::default(),
-            taken: RefCell::new(BTreeSet::new()),
+            taken: RefCell::new(taken),
+            epoch_keys: RefCell::new(BTreeMap::new()),
         }
     }
 
-    /// The commands the system did not take, and the buffers.
-    pub(crate) fn finish(self) -> (Vec<QueuedCommand>, Outbox) {
-        (self.inbox, self.out)
+    /// The commands the system did not take, the buffers, and the pairs drawn from so far.
+    pub(crate) fn finish(self) -> (Vec<QueuedCommand>, Outbox, Taken) {
+        (self.inbox, self.out, self.taken.into_inner())
+    }
+
+    /// The epoch keying a draw for `entity`: its count of material inputs (ADR-0025), 0 for an
+    /// entity no input has touched or an identifier no scope can name.
+    fn epoch_of(&self, entity: impl EntityKey) -> u32 {
+        entity
+            .entity()
+            .and_then(|e| self.info.epochs.get(&e).copied())
+            .unwrap_or(0)
+    }
+
+    /// `K2` of `(purpose, entity)` at the entity's current epoch. At epoch 0 it is the P0 key
+    /// exactly (BCK-002 A-29: an untouched entity draws as before).
+    fn stream_key(&self, purpose: PurposeId, entity: impl EntityKey) -> StreamKey {
+        let epoch = self.epoch_of(entity);
+        let raw = entity.entity_key();
+        if epoch == 0 {
+            return self.info.key.stream_key(purpose, raw);
+        }
+        let mut keys = self.epoch_keys.borrow_mut();
+        let key = keys.entry(epoch).or_insert_with(|| {
+            SystemKey::new(
+                self.info.world_seed,
+                self.info.branch_salt,
+                self.info.system_id,
+                epoch,
+            )
+        });
+        key.stream_key(purpose, raw)
     }
 
     /// The current instant.
@@ -438,8 +493,10 @@ impl<'a> StepCtx<'a> {
     /// Draw `k` of `purpose` for `entity` at the current instant:
     /// `H(world_seed, branch_salt, system_id, epoch, purpose, entity, t, k)`.
     ///
-    /// `epoch` is 0 here: a material input's re-sample draws its own epoch-keyed values
-    /// ([`ResampleCtx`]).
+    /// `epoch` is the drawn entity's: the number of material inputs whose scope has held it, as
+    /// of this instant's `Inputs` (ADR-0025; `05.1` §6 item 2; BCK-002 A-29). So after an input,
+    /// only the entities in its scope draw differently, from the input's instant on; an entity at
+    /// epoch 0 draws exactly as in P0.
     ///
     /// # Errors
     /// [`SimError::UndeclaredPurpose`] if `purpose` is not one the system registered.
@@ -456,20 +513,19 @@ impl<'a> StepCtx<'a> {
         k: u64,
     ) -> Result<u64, SimError> {
         let id = self.purpose_id(purpose)?;
-        let entity = entity.entity_key();
-        self.take(purpose.name(), id, entity, Taken::Rng)?;
-        let stream = self.info.key.stream_key(id, entity);
-        Ok(stream.draw(self.t.minutes(), k))
+        self.take(purpose.name(), id, entity.entity_key(), TakenAs::Rng)?;
+        Ok(self.stream_key(id, entity).draw(self.t.minutes(), k))
     }
 
     /// The keyed stream of `purpose` for `entity` at the current instant, positioned at draw 0:
     /// what an `rh-sample` sampler call takes (`05.1` §6 item 3). Its key is [`StepCtx::rng`]'s,
     /// so `stream(p, e)?.draw(k) == rng(p, e, k)?`.
     ///
-    /// One sampler call, one stream: within one step a pair is handed out as a stream at most
-    /// once, and never alongside [`StepCtx::rng`] draws for the same pair, because how many draws
-    /// a sampler consumes depends on its parameters. A system that needs two samples per entity
-    /// declares two purposes.
+    /// One sampler call, one stream: within one instant a system hands a pair out as a stream at
+    /// most once, and never alongside [`StepCtx::rng`] draws for the same pair, across all its
+    /// bindings and its timer pass (BCK-002 A-37), because how many draws a sampler consumes
+    /// depends on its parameters. A system that needs two samples per entity declares two
+    /// purposes. Like `rng`, the stream is keyed by the entity's epoch.
     ///
     /// # Errors
     /// [`SimError::UndeclaredPurpose`] if `purpose` is not one the system registered;
@@ -480,9 +536,8 @@ impl<'a> StepCtx<'a> {
         entity: impl EntityKey,
     ) -> Result<RngStream, SimError> {
         let id = self.purpose_id(purpose)?;
-        let entity = entity.entity_key();
-        self.take(purpose.name(), id, entity, Taken::Stream)?;
-        let key = self.info.key.stream_key(id, entity);
+        self.take(purpose.name(), id, entity.entity_key(), TakenAs::Stream)?;
+        let key = self.stream_key(id, entity);
         Ok(RngStream::from_stream_key(&key, self.t.minutes()))
     }
 
@@ -510,26 +565,25 @@ impl<'a> StepCtx<'a> {
         purpose: &'static str,
         id: PurposeId,
         entity: u64,
-        how: Taken,
+        how: TakenAs,
     ) -> Result<(), SimError> {
+        // One B-tree lookup per draw (SPR-011 T-02 measured the guard as most of a draw's cost
+        // in the step context; crates/rh-bench/benches/draws.rs).
         let mut taken = self.taken.borrow_mut();
-        let pair = (id.to_raw(), entity);
-        let earlier = [Taken::Stream, Taken::Rng]
-            .into_iter()
-            .find(|&t| taken.contains(&(pair.0, pair.1, t)));
-        match (earlier, how) {
-            (Some(Taken::Stream), _) | (Some(Taken::Rng), Taken::Stream) => {
-                Err(SimError::StreamReuse {
+        match taken.entry((id.to_raw(), entity)) {
+            Entry::Vacant(slot) => {
+                slot.insert(how);
+                Ok(())
+            }
+            Entry::Occupied(slot) => match (*slot.get(), how) {
+                (TakenAs::Rng, TakenAs::Rng) => Ok(()),
+                (earlier, _) => Err(SimError::StreamReuse {
                     system: self.info.system,
                     purpose,
                     entity,
-                    taken: earlier.map_or("", Taken::name),
-                })
-            }
-            _ => {
-                taken.insert((pair.0, pair.1, how));
-                Ok(())
-            }
+                    taken: earlier.name(),
+                }),
+            },
         }
     }
 

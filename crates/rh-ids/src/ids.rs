@@ -108,6 +108,8 @@
 
 use core::fmt;
 
+use crate::entity::EntityRef;
+
 /// Declares an identifier newtype with explicit raw conversions only.
 macro_rules! typed_id {
     ($(#[$doc:meta])* $name:ident($raw:ty)) => {
@@ -184,15 +186,27 @@ typed_id! {
 /// conversion, so a call site always says which entity it keys on. Two identifier types may share
 /// a raw value; the RNG purpose, which declares its entity kind (`[[rng]] key` in the system spec),
 /// keeps their draws apart.
-pub trait EntityKey {
+///
+/// It also names the entity as an [`EntityRef`], whose epoch keys the draw (ADR-0025; `05.1` §6
+/// item 2; BCK-002 A-29): the typed key a draw needs to find the entity a material input may have
+/// re-sampled. An identifier no input scope can name has no entity, and draws at epoch 0.
+pub trait EntityKey: Copy {
     /// The value used as `entity_id` in `H(world_seed, branch_salt(t), system_id, epoch, purpose,
     /// entity_id, t, k)`.
     fn entity_key(self) -> u64;
+
+    /// The entity whose epoch keys the draw, or `None` for an identifier no material input's scope
+    /// can name (its draws are at epoch 0).
+    fn entity(self) -> Option<EntityRef>;
 }
 
 impl EntityKey for PersonId {
     fn entity_key(self) -> u64 {
         self.0
+    }
+
+    fn entity(self) -> Option<EntityRef> {
+        Some(EntityRef::person(self))
     }
 }
 
@@ -200,11 +214,21 @@ impl EntityKey for RegionId {
     fn entity_key(self) -> u64 {
         u64::from(self.0)
     }
+
+    fn entity(self) -> Option<EntityRef> {
+        Some(EntityRef::region(self))
+    }
 }
 
+/// An event is never in a material input's scope (`EntityKind` has no event kind), so a draw keyed
+/// by one is at epoch 0.
 impl EntityKey for EventId {
     fn entity_key(self) -> u64 {
         self.0
+    }
+
+    fn entity(self) -> Option<EntityRef> {
+        None
     }
 }
 

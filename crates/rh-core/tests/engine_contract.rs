@@ -683,12 +683,81 @@ fn a_step_takes_one_stream_per_pair_and_never_mixes_it_with_rng() {
     }
 }
 
-/// A new step starts with no pair taken: the same pair's stream in the next step is allowed.
+/// BCK-002 A-37: the pair set spans one system's bindings at one instant. Bound in Vital and in
+/// Agenda on the same day, the second binding's stream of the same pair is refused (the two would
+/// draw identical numbers); a new instant starts with no pair taken, so a system bound once draws
+/// the same pair's stream every day.
 #[test]
-fn the_taken_pairs_reset_with_each_step() {
+fn the_taken_pairs_span_every_binding_of_an_instant_and_reset_with_each_instant() {
     fn step(
         _: &Stub,
         _: PulseBinding,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        c.stream(&Draw::Noise, RegionId::from_raw(3)).map(|_| ())
+    }
+    let t = SimTime::from_minutes(1_440);
+    let twice = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .at(Pulse::Day, Phase::Vital)
+        .at(Pulse::Day, Phase::Agenda)
+        .stepping(step);
+    let mut e = engine(vec![twice], t, 1);
+    assert_eq!(
+        e.advance_until(SimTime::from_minutes(3 * 1_440), |_, _| {}),
+        Err(SimError::StreamReuse {
+            system: "X1.d",
+            purpose: "noise",
+            entity: 3,
+            taken: "stream",
+        })
+    );
+    assert_eq!(e.crash_artifact().map(|a| a.tick), Some(1_440));
+    let once = Stub::new("X1.d")
+        .purposes_of::<Draw>()
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(step);
+    let mut e = engine(vec![once], t, 1);
+    assert_eq!(
+        e.advance_until(SimTime::from_minutes(3 * 1_440), |_, _| {}),
+        Ok(())
+    );
+}
+
+/// BCK-002 A-37: a timer pass and a step of one system at one instant share the pair set. The
+/// timer fires in Vital and takes the stream; the Day step in Agenda asks for the same pair.
+#[test]
+fn a_timer_pass_and_a_step_at_one_instant_share_the_pair_set() {
+    use rh_core::agenda::TimerEntry;
+    use rh_core::system::TimerSpec;
+    use rh_ids::EntityRef;
+    fn step(
+        _: &Stub,
+        b: PulseBinding,
+        _: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        if b.phase == Phase::Vital && c.now() == SimTime::EPOCH {
+            let time = c.now().checked_add_minutes(1_440).unwrap();
+            let entity = EntityRef::region(RegionId::from_raw(3));
+            let spec = TimerSpec {
+                time,
+                phase: Phase::Vital,
+                entity,
+                kind: 0,
+                payload: 0,
+            };
+            c.schedule(&Draw::Noise, spec)?;
+        }
+        if b.phase == Phase::Agenda && c.now() > SimTime::EPOCH {
+            c.stream(&Draw::Noise, RegionId::from_raw(3))?;
+        }
+        Ok(())
+    }
+    fn fire(
+        _: &Stub,
+        _: &TimerEntry,
         _: &mut SystemView<'_>,
         c: &mut StepCtx<'_>,
     ) -> Result<(), SimError> {
@@ -698,13 +767,19 @@ fn the_taken_pairs_reset_with_each_step() {
         .purposes_of::<Draw>()
         .at(Pulse::Day, Phase::Vital)
         .at(Pulse::Day, Phase::Agenda)
-        .stepping(step);
-    let t = SimTime::from_minutes(1_440);
-    let mut e = engine(vec![s], t, 1);
+        .stepping(step)
+        .firing(fire);
+    let mut e = engine(vec![s], SimTime::EPOCH, 1);
     assert_eq!(
-        e.advance_until(SimTime::from_minutes(3 * 1_440), |_, _| {}),
-        Ok(())
+        e.advance_until(SimTime::from_minutes(2 * 1_440), |_, _| {}),
+        Err(SimError::StreamReuse {
+            system: "X1.d",
+            purpose: "noise",
+            entity: 3,
+            taken: "stream",
+        })
     );
+    assert_eq!(e.crash_artifact().map(|a| a.tick), Some(1_440));
 }
 
 /// SPR-008 (Architect ruling on D3): the pair set spans every fire of one system in one timer

@@ -84,7 +84,7 @@ use crate::register::{Entry, Registered};
 use crate::schedule::Node;
 use crate::state::{EngineState, RestoreError, check_epochs, check_inputs, check_timers};
 use crate::system::{
-    InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx,
+    InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx, Taken,
 };
 use crate::time::{Calendar, Pulse, SimTime};
 use crate::world::{Column, SystemView, WorldTables};
@@ -223,6 +223,10 @@ pub struct Engine {
     /// The person ledger and life-course log, when the world has them (SPR-011 ruling 5): which
     /// columns the core compacts at `Bookkeeping` and checks after each step that owns one.
     ledger: Option<Ledger>,
+    /// The `(purpose, entity)` pairs each system (by entry index) has drawn from at the current
+    /// instant, lent to each of its jobs in turn and cleared at every instant (BCK-002 A-37).
+    /// Bookkeeping of the step guard, never state: an instant always starts it empty.
+    taken: BTreeMap<usize, Taken>,
 }
 
 /// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
@@ -264,12 +268,17 @@ struct Job {
 /// The columns one system owns, moved out of the tables for its step.
 type Owned = BTreeMap<&'static str, Column>;
 
+/// What one job takes to its thread: its owned columns, its command inbox, and the pairs its
+/// system has drawn from at this instant (BCK-002 A-37).
+type JobInput = (Owned, Vec<QueuedCommand>, Taken);
+
 /// The result of one job.
 struct JobOutcome {
     owned: Owned,
     result: Result<(), SimError>,
     untaken: Vec<QueuedCommand>,
     out: Outbox,
+    taken: Taken,
 }
 
 /// Counts for the per-instant diagnostic record.
@@ -360,6 +369,7 @@ impl Engine {
             dispatch: DispatchStats::default(),
             observer: None,
             ledger,
+            taken: BTreeMap::new(),
         }
     }
 
@@ -823,6 +833,7 @@ impl Engine {
         // The instant is the current one before its first notice, so a failure there (an observer
         // panic at InstantStart) names this instant, not the last (VER-SPR-009-TEST OBS-1).
         self.at = (t, Phase::Inputs);
+        self.taken.clear();
         self.notify(t, None, Boundary::InstantStart)?;
         let fired: Vec<Pulse> = self
             .calendar
@@ -1059,7 +1070,7 @@ impl Engine {
         self.dispatch.record(jobs.len());
         self.check_owned_columns(jobs)?;
         let guards = self.ledger_guards(jobs);
-        let inputs: Vec<(Owned, Vec<QueuedCommand>)> = jobs
+        let inputs: Vec<JobInput> = jobs
             .iter()
             .map(|job| {
                 let e = &self.registered.entries[job.index];
@@ -1069,7 +1080,8 @@ impl Engine {
                     .iter()
                     .filter_map(|w| self.tables.take(w.column).map(|rows| (w.column, rows)))
                     .collect();
-                (owned, self.commands.take(e.id))
+                let taken = self.taken.remove(&job.index).unwrap_or_default();
+                (owned, self.commands.take(e.id), taken)
             })
             .collect();
         let workers = self.threads.min(jobs.len()).max(1);
@@ -1078,8 +1090,10 @@ impl Engine {
             let tables = &self.tables;
             let agenda = &self.agenda;
             let entries = &self.registered.entries;
-            let key = |e: &Entry| SystemKey::new(self.world_seed, self.branch_salt, e.system_id, 0);
-            let run = |k: usize, job: &Job, (cols, inbox): (Owned, Vec<QueuedCommand>)| {
+            let epochs = &self.epochs;
+            let (world_seed, branch_salt) = (self.world_seed, self.branch_salt);
+            let key = |e: &Entry| SystemKey::new(world_seed, branch_salt, e.system_id, 0);
+            let run = |k: usize, job: &Job, (cols, inbox, taken): JobInput| {
                 let e = &entries[job.index];
                 let notice = |boundary| Notice {
                     at: t,
@@ -1097,12 +1111,15 @@ impl Engine {
                     system: e.id,
                     system_id: e.system_id,
                     key: key(e),
+                    world_seed,
+                    branch_salt,
+                    epochs,
                     purposes: &e.purposes,
                     access: &e.access,
                     bindings: &e.bindings,
                     agenda,
                 };
-                let mut ctx = StepCtx::new(info, t, phase, inbox);
+                let mut ctx = StepCtx::new(info, t, phase, inbox, taken);
                 // A failed JobStart skips the step; the instant is lost either way.
                 let result = started.and_then(|()| match &job.work {
                     Work::Timers(timers) => timers.iter().try_for_each(|timer| {
@@ -1112,7 +1129,7 @@ impl Engine {
                         guard(e.id, || e.model.step(*binding, &mut view, &mut ctx))
                     }
                 });
-                let (untaken, out) = ctx.finish();
+                let (untaken, out, taken) = ctx.finish();
                 let ended =
                     observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobEnd(job_ref))));
                 let result = result.and(ended);
@@ -1121,6 +1138,7 @@ impl Engine {
                     result,
                     untaken,
                     out,
+                    taken,
                 }
             };
             dispatch(self.threads, jobs, inputs, run)
@@ -1133,6 +1151,7 @@ impl Engine {
             }
             self.commands
                 .restore(self.registered.entries[job.index].id, o.untaken);
+            self.taken.insert(job.index, o.taken);
             if first_error.is_none() {
                 first_error = o.result.err();
             }
