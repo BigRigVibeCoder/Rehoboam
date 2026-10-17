@@ -282,7 +282,7 @@ impl fmt::Display for SimError {
                 taken,
             } => write!(
                 f,
-                "{system} asked for a stream of purpose {purpose} for entity {entity}, which it already used as a {taken} at this instant (05.1 §6 item 3: one stream per sampler call, across bindings and the timer pass; declare another purpose)"
+                "{system} drew again under purpose {purpose} for entity {entity}, which it already took as a {taken} at this instant (05.1 §6 item 3: one stream per sampler call, across bindings and the timer pass; declare another purpose)"
             ),
             Self::Timer { system, message } => write!(f, "{system}: timer refused: {message}"),
             Self::UndeclaredCommand { system, command } => write!(
@@ -403,8 +403,9 @@ pub struct StepCtx<'a> {
 }
 
 /// The pairs a system has drawn from at one instant, `(purpose id, entity key)`, each with how it
-/// was first taken (a stream is recorded over an earlier `rng`); see [`StepCtx`]. The engine owns
-/// one per system and clears them at each instant.
+/// was taken: repeated `rng` draws share one entry, and any other second take (a stream after an
+/// `rng`, or anything after a stream) is refused; see [`StepCtx`]. The engine owns one per system
+/// and clears them at each instant.
 pub(crate) type Taken = BTreeMap<(u64, u64), TakenAs>;
 
 /// How a system used a `(purpose, entity)` pair: through [`StepCtx::rng`] or [`StepCtx::stream`].

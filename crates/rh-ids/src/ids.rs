@@ -105,6 +105,27 @@
 //! use rh_ids::{MatchId, PersonId};
 //! let same = PersonId::from_raw(1) == PersonId::from_raw(1);
 //! ```
+//!
+//! `EntityKey` is sealed: a key type from outside could return `None` from `entity` and draw at
+//! epoch 0 forever, past every material input (Tester review of A-29):
+//!
+//! ```compile_fail,E0277
+//! use rh_ids::{EntityKey, EntityRef};
+//! #[derive(Clone, Copy)]
+//! struct Outside(u64);
+//! impl EntityKey for Outside {
+//!     fn entity_key(self) -> u64 { self.0 }
+//!     fn entity(self) -> Option<EntityRef> { None }
+//! }
+//! ```
+//!
+//! ```
+//! use rh_ids::{EntityKey, EntityRef, PersonId};
+//! #[derive(Clone, Copy)]
+//! struct Outside(u64);
+//! fn key<K: EntityKey>(k: K) -> (u64, Option<EntityRef>) { (k.entity_key(), k.entity()) }
+//! let _ = (Outside(1).0, key(PersonId::from_raw(1)));
+//! ```
 
 use core::fmt;
 
@@ -189,8 +210,9 @@ typed_id! {
 ///
 /// It also names the entity as an [`EntityRef`], whose epoch keys the draw (ADR-0025; `05.1` §6
 /// item 2; BCK-002 A-29): the typed key a draw needs to find the entity a material input may have
-/// re-sampled. An identifier no input scope can name has no entity, and draws at epoch 0.
-pub trait EntityKey: Copy {
+/// re-sampled. An identifier no input scope can name has no entity, and draws at epoch 0. Sealed:
+/// no type outside this crate implements it.
+pub trait EntityKey: Copy + sealed::Sealed {
     /// The value used as `entity_id` in `H(world_seed, branch_salt(t), system_id, epoch, purpose,
     /// entity_id, t, k)`.
     fn entity_key(self) -> u64;
@@ -198,6 +220,14 @@ pub trait EntityKey: Copy {
     /// The entity whose epoch keys the draw, or `None` for an identifier no material input's scope
     /// can name (its draws are at epoch 0).
     fn entity(self) -> Option<EntityRef>;
+}
+
+/// Seals [`EntityKey`]: only the identifier types here can key a draw.
+mod sealed {
+    pub trait Sealed {}
+    impl Sealed for super::PersonId {}
+    impl Sealed for super::RegionId {}
+    impl Sealed for super::EventId {}
 }
 
 impl EntityKey for PersonId {

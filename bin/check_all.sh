@@ -275,7 +275,7 @@ channel_c_float_control() {
 
 # Positive controls for the forbidden-API gate (V-DET-19): one planted file per API, holding exactly
 # that API, which must be reported under its own rule with its own token (tests/lint_fixtures/README.md).
-# Each entry is file:rule:token; a token may itself contain "::".
+# Each entry is file:rule:token; a token may itself contain "::", and "~" in it stands for a space.
 FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collections:HashSet
   thread_rng:thread-rng:thread_rng thread_rng_type:thread-rng:ThreadRng rand_rng:thread-rng:rand::rng
   std_rng:std-rng:StdRng small_rng:std-rng:SmallRng os_rng:std-rng:OsRng from_entropy:std-rng:from_entropy
@@ -290,13 +290,19 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   file_modified:file-clock:.modified( process_command:process:std::process file_io:file-io:std::fs
   process_rename:process:std::process fs_group_rename:file-io:std::fs metadata_ext:file-clock:MetadataExt
   metadata_ufcs:file-clock:Metadata::modified mtime:file-clock:.mtime(
-  env_rename:env:std::env env_var:env:env::var_os
+  env_rename:env:std::env env_var:env:std::env env_current_dir:env:std::env env_current_exe:env:std::env
+  env_temp_dir:env:std::env env_home_dir:env:std::env env_set_current_dir:env:std::env
+  env_split_paths:env:std::env env_join_paths:env:std::env
+  fs_renamed_std:file-io:fs::r fs_os_symlink:file-io:fs::s raw_ident_fs:file-io:std::fs
+  std_rename:std-rename:std~as std_rename_root:std-rename:std~as std_rename_self:std-rename:std~as
+  extern_crate_std:std-rename:extern~crate~std~as
   path_attr:source-include:#[path include_macro:source-include:include!("
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
   set -f  # tokens such as #[path must not be glob-expanded; `local -` restores the option
   for spec in $FORBIDDEN_API_CONTROLS; do
     file="${spec%%:*}"; rest="${spec#*:}"; rule="${rest%%:*}"; token="${rest#*:}"
+    token="${token//\~/ }"
     run "Forbidden-API positive control: $file must FAIL" "fail:VIOLATION [V-DET-19/$rule] ${tick}${token}${tick}" \
       "$PY" -I bin/lint_forbidden.py --scan "tests/lint_fixtures/forbidden/planted/$file.rs" || return 1
   done
@@ -412,7 +418,7 @@ def1_resume() {
 # just vanish (VER-SPR-002-TEST DEF-2). Each entry is file:compile_fail:compiling, the number of
 # `compile_fail` doctests and of compiling doctests (the twins that show each case fails for its
 # stated reason). Update an entry in the same commit that adds or removes a case.
-DOCTEST_EXPECT="crates/rh-ids/src/ids.rs:7:7 crates/rh-ids/src/rng.rs:1:1"
+DOCTEST_EXPECT="crates/rh-ids/src/ids.rs:8:8 crates/rh-ids/src/rng.rs:1:1"
 DOCTEST_LOG=target/doctests.txt
 doctests_run() {
   mkdir -p target && rm -f "$DOCTEST_LOG" || return 1
@@ -742,7 +748,9 @@ fixed_point_compile_controls &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
-run "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its tests/ and a builder's args pass (SPR-011 A-4)" "fail:VIOLATION [V-DET-19/env] \`env::var\` at tests/lint_fixtures/forbidden/env_workspace/rh-core/src/lib.rs:5:40;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/env_workspace/Cargo.toml &&
+run "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its tests/ and a builder's args pass (SPR-011 A-4)" "fail:VIOLATION [V-DET-19/env] \`std::env\` at tests/lint_fixtures/forbidden/env_workspace/rh-core/src/lib.rs:5:35;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/env_workspace/Cargo.toml &&
+run "lint_forbidden positive control: env::current_dir after a grouped import is reported on its own line (DEF-5)" "fail:VIOLATION [V-DET-19/env] \`env::c\` at tests/lint_fixtures/forbidden/env_path_after_group.rs:5:50" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/env_path_after_group.rs &&
+run "lint_forbidden control: std::env::consts, env! and option_env! pass (DEF-5)" "pass:1 files scanned; 0 violations" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/env_consts_ok.rs &&
 run "lint_forbidden positive control: fs::read after a grouped import is reported on its own line (DEF-1)" "fail:VIOLATION [V-DET-19/file-io] \`fs::r\` at tests/lint_fixtures/forbidden/fs_path_after_group.rs:5:18" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/fs_path_after_group.rs &&
 run "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)" "fail:VIOLATION [V-DET-19/file-io] \`std::fs\` at tests/lint_fixtures/forbidden/file_io_workspace/rh-core/src/lib.rs:4:5;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/file_io_workspace/Cargo.toml &&
 run "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)" "fail:VIOLATION [V-DET-19/float] \`f32\` at tests/lint_fixtures/forbidden/float_workspace/fixture-sys/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_workspace/Cargo.toml &&

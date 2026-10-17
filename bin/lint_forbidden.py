@@ -24,10 +24,17 @@ reports its metadata). Rules:
                       accessed`), any platform `MetadataExt`, and its accessors, which a glob
                       import brings in unnamed: `.atime(`/`.mtime(`/`.ctime(` (and `_nsec`),
                       `.st_*time(`, `.creation_time(`, `.last_access_time(`, `.last_write_time(`.
-    env               std::env::var, var_os, vars, vars_os, args, args_os, and any `use` tree that
-                      imports std::env (a rename, a group, a glob), in src/ and build.rs: the
-                      environment is an input outside the history tuple (SPR-011 A-4). tests/ may
-                      read the overrides of their golden files.
+    env               any path into std::env, in any form (DEF-5): `std::env::var`, the fully
+                      qualified `std::env::current_dir()`, `current_exe`, `temp_dir`, `home_dir`,
+                      `set_current_dir`, `split_paths`, `join_paths` and the rest, `env::<item>`
+                      after an import, and any `use` tree that imports std::env (a rename, a
+                      group, a glob), in src/ and build.rs: the environment and the host's
+                      directories are inputs outside the history tuple (SPR-011 A-4). The one
+                      exception is std::env::consts (the target's ARCH, OS and FAMILY, fixed at
+                      compile time by the build). Out of scope: the env! and option_env! macros,
+                      which read the build's environment at compile time into the engine build,
+                      a term of the history tuple, not a run-time input. tests/ may read the
+                      overrides of their golden files.
     process           the module std::process, in src/ and build.rs: Command, and exit, abort and
                       id too (A-44; DEF-1). tests/ may name temporary files by process id.
     file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
@@ -39,6 +46,11 @@ reports its metadata). Rules:
                       DEF-1: for process and file-io, every `use` item is parsed as a tree, so a
                       rename, `self`, `{self as x}` or a nested `std::{..}` group that imports the
                       module is reported at its `use`, whatever the form.
+    std-rename        (MIN-2) a renamed std in src/ and build.rs: `use std as x;`, `use ::std as
+                      x;`, `use std::{self as x}` and `extern crate std as x;`. A rename would
+                      carry std::process, std::fs and std::env past every path pattern. Raw
+                      identifiers are normalised first (`r#std::r#fs` is `std::fs`); on a line
+                      that holds one, the reported column counts without the `r#` prefixes.
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
@@ -184,6 +196,10 @@ FLOAT_API_RULE = "float-api"
 FILE_IO_RULE = "file-io"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
+STD_RENAME_RULE = "std-rename"
+# MIN-2: `r#ident` is `ident`; stripped before any rule matches (a raw string, r#"..."#, is a
+# literal the lexer has already blanked).
+RAW_IDENT = re.compile(r"\br#(?=[A-Za-z_])")
 # DEF-1 (Architect ruling): a `use` tree that names one of these modules, in any form (a path, a
 # rename, `self`, `{self as x}`, a nested group of `std::{..}`), is a violation of the rule.
 BANNED_MODULES = (
@@ -191,6 +207,8 @@ BANNED_MODULES = (
     (("std", "fs"), FILE_IO_RULE),
     (("std", "env"), ENV_RULE),
 )
+# DEF-5: the one path into a banned module that is allowed: the target's constants.
+ALLOWED_PATHS = frozenset({("std", "env", "consts")})
 USE_TOKEN = re.compile(r"::|[{},*;]|\w+")
 FILE_IO_CRATES = MappingProxyType(
     {
@@ -323,13 +341,24 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         ENV_RULE,
-        _rx(r"\benv::(?:vars?|vars_os|var_os|args|args_os)\b"),
-        "an environment read (std::env::var, var_os, vars, args) is an input outside the history "
-        "tuple (DET-1; BCK-002 A-44; SPR-011 A-4)",
+        # DEF-5: std::env in any form but std::env::consts; env::<item> after an import.
+        _rx(r"\bstd\s*::\s*env\b(?!\s*::\s*consts\b)|(?<!:)\benv\s*::\s*(?!consts\b)\w"),
+        "std::env (var, args, current_dir, current_exe, temp_dir, home_dir, set_current_dir, "
+        "split_paths, join_paths) reads the host's environment or directories, an input outside "
+        "the history tuple; only std::env::consts is allowed (DET-1; BCK-002 A-44; SPR-011 A-4; "
+        "DEF-5)",
+    ),
+    Rule(
+        STD_RENAME_RULE,
+        _rx(r"\bextern\s+crate\s+std\s+as\b"),
+        "a renamed std carries std::process, std::fs and std::env past every path pattern; name "
+        "std as std (MIN-2)",
     ),
     Rule(
         FILE_IO_RULE,
-        _rx(r"\bstd::fs\b|(?<!:)\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
+        # MAJ-1: no lookbehind; `s::fs::read` (a renamed std) and `std::os::unix::fs::symlink`
+        # are file I/O too.
+        _rx(r"\bstd::fs\b|\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
         "file I/O in plane A outside the crates allowed it (FILE_IO_CRATES): plane A reads its "
         "inputs through the journal and the compiled world, never from files (BCK-002 A-44)",
     ),
@@ -564,14 +593,20 @@ def find_forbidden(code: str, path: str) -> list[Finding]:
 
 
 def expand_use(tree: str) -> list[tuple[str, ...]]:
-    """Return every path a `use` tree imports, its groups expanded and `self` resolved (DEF-1).
+    """Return every path a `use` tree imports (see :func:`parse_use`)."""
+    return parse_use(tree)[0]
 
-    `tree` is the text after `use` (comments already blanked). Renames are dropped: `use
-    std::process as p;` imports `std::process`. A leading `::` is ignored; a glob imports its prefix
-    path followed by `*`.
+
+def parse_use(tree: str) -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
+    """Return the paths a `use` tree imports, and the paths it renames (DEF-1, MIN-2).
+
+    Groups are expanded and `self` resolved. `tree` is the text after `use` (comments already
+    blanked). A rename imports its path: `use std::process as p;` imports `std::process`, and
+    renames it. A leading `::` is ignored; a glob imports its prefix path followed by `*`.
     """
     tokens = USE_TOKEN.findall(tree)
     position = 0
+    renamed: list[tuple[str, ...]] = []
 
     def peek() -> str:
         return tokens[position] if position < len(tokens) else ";"
@@ -598,10 +633,11 @@ def expand_use(tree: str) -> list[tuple[str, ...]]:
             position += 1
             if token == "as":
                 position += 1  # the new name: the module imported is still `path`
+                renamed.append(path)
                 return [path]
             path = path if token == "self" else (*path, token)
 
-    return parse(())
+    return parse(()), renamed
 
 
 def find_use_modules(code: str, path: str) -> list[Finding]:
@@ -609,17 +645,21 @@ def find_use_modules(code: str, path: str) -> list[Finding]:
     line_starts = [0] + [m.end() for m in re.finditer("\n", code)]
     found = []
     for match in USE_ITEM.finditer(code):
-        imported = expand_use(match.group(0)[len("use") : -1])
+        imported, renamed = parse_use(match.group(0)[len("use") : -1])
+        line = bisect.bisect_right(line_starts, match.start()) - 1
+        column = match.start() - line_starts[line] + 1
+        if ("std",) in renamed:
+            why = next(r.why for r in RULES if r.name == STD_RENAME_RULE)
+            found.append(Finding(STD_RENAME_RULE, path, line + 1, column, "std as", why))
         for module, rule in BANNED_MODULES:
-            hit = next((p for p in imported if p[: len(module)] == module), None)
+            hit = next(
+                (p for p in imported if p[: len(module)] == module and p[:3] not in ALLOWED_PATHS),
+                None,
+            )
             if hit is None:
                 continue
-            line = bisect.bisect_right(line_starts, match.start()) - 1
             why = next(r.why for r in RULES if r.name == rule)
-            text = "::".join(module)
-            found.append(
-                Finding(rule, path, line + 1, match.start() - line_starts[line] + 1, text, why)
-            )
+            found.append(Finding(rule, path, line + 1, column, "::".join(module), why))
     return found
 
 
@@ -627,8 +667,10 @@ def _with_use_trees(code: str, path: str) -> list[Finding]:
     """The pattern findings, plus each use-tree finding no pattern made on its line (DEF-1).
 
     `use std::process as p;` is a pattern finding (the path) and a use-tree finding; it is reported
-    once. `use std::{fs, io};` is a use-tree finding only.
+    once. `use std::{fs, io};` is a use-tree finding only. Raw identifiers are stripped first
+    (MIN-2).
     """
+    code = RAW_IDENT.sub("", code)
     found = find_forbidden(code, path)
     reported = {(f.rule, f.line) for f in found}
     extra = [f for f in find_use_modules(code, path) if (f.rule, f.line) not in reported]
@@ -642,7 +684,8 @@ def _applies(finding: Finding, scan: "FloatScan") -> bool:
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
-    if finding.rule in (FILE_IO_RULE, PROCESS_RULE, ENV_RULE) and scan.scope == "none":
+    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE)
+    if finding.rule in rules and scan.scope == "none":
         return False
     return not (finding.rule == FILE_IO_RULE and scan.file_io)
 

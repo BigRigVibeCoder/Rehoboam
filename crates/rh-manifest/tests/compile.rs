@@ -226,7 +226,8 @@ fn a_registry_default_is_compiled_from_its_literal() {
 
 #[test]
 fn an_invalid_manifest_is_never_compiled() {
-    let dir = std::env::temp_dir().join(format!("rh-manifest-compile-{}", std::process::id()));
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("rh-manifest-compile-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("bad.yaml");
     std::fs::write(&path, solo_text().replace("seed: 1", "seed: -1")).unwrap();

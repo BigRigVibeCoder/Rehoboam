@@ -2,7 +2,8 @@
 //!
 //! One system, bound to the Day pulse in `Vital`, makes [`DRAWS`] keyed draws per step, one per
 //! person, through `StepCtx::rng` or `StepCtx::stream`, or none. Every draw pays the stream guard
-//! (a `RefCell` borrow and a `BTreeSet` lookup and insert, kept per (system, instant) since A-37)
+//! (a `RefCell` borrow and one `BTreeMap` entry lookup, in the system's fixed slot for the instant
+//! since A-37 and DEF-4)
 //! and the epoch lookup (a `BTreeMap` lookup, since A-29); a person a material input touched draws
 //! under its own `K1` as well. The bench compares one instant of each mode with the empty one and
 //! with [`raw_draws`], the same draws straight from `rh-ids`, so the per-draw cost of the step

@@ -3,8 +3,7 @@
 > **Since ADR-0032 (2026-10-16):** the process (roles, the work loop, sprints, defects, verification, planning) lives in `CODEX/10_GOVERNANCE/` (GOV-005, GOV-007, GOV-002). This document remains the **Rehoboam engineering supplement**: ownership rules, change classes, CI gates, the merge queue and golden-hash divergence (§4), the work-package fields now merged into `CODEX/_templates/template_sprint.md`, and context hygiene for agents.
 
 *Status: Draft v1.1 (2026-10-15). How you and the AI coding agents build Rehoboam together. It implements ADR-0022.*
-*v1.4 (2026-10-16): §4.3: the golden-run tiers follow SPR-011 ruling 16, the same text as GOV-002 tier 9.*
-*v1.4 (2026-10-17): §3: the engine-purity rule is enforced (`bin/lint_arch.py` rule `engine-purity`, SPR-011 T-00); `rh-stream` (planned, SPR-013) joins the engine-crate list.*
+*v1.4 (2026-10-16, 2026-10-17): §4.3: the golden-run tiers follow SPR-011 ruling 16, the same text as GOV-002 tier 9. §3: the engine-purity rule is enforced (`bin/lint_arch.py` rule `engine-purity`, SPR-011 T-00); `rh-stream` (planned, SPR-013) joins the engine-crate list.*
 *v1.3 (2026-10-16): §3: one engine-crate list, matching `bin/lint_arch.py` and the crates' `[package.metadata.rehoboam]`; crates not yet built are marked (planned).*
 *v1.2 (2026-10-16), ADR-0035: §3 gains the engine-purity rule (V-INSP-05, then planned in `bin/lint_arch.py` as BCK-002 A-14; enforced since v1.4); `rh-godot` is cut.*
 *v1.1 changes: new governance rules in §4 (single-writer column ownership, contract crates, lifecycle command queues, change classes C0–C3, merge queue, divergence bisect), aligned with `05.1` §2 and §6; `rh-contracts` and `rh-worldgen` added to the dependency rules; the decisions log already exists.*

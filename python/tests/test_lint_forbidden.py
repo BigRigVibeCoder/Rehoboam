@@ -305,7 +305,21 @@ PLANTED = {
     "metadata_ufcs": ("file-clock", "Metadata::modified"),
     "mtime": ("file-clock", ".mtime("),
     "env_rename": ("env", "std::env"),
-    "env_var": ("env", "env::var_os"),
+    "env_var": ("env", "std::env"),
+    "env_current_dir": ("env", "std::env"),
+    "env_current_exe": ("env", "std::env"),
+    "env_temp_dir": ("env", "std::env"),
+    "env_home_dir": ("env", "std::env"),
+    "env_set_current_dir": ("env", "std::env"),
+    "env_split_paths": ("env", "std::env"),
+    "env_join_paths": ("env", "std::env"),
+    "fs_renamed_std": ("file-io", "fs::r"),
+    "fs_os_symlink": ("file-io", "fs::s"),
+    "raw_ident_fs": ("file-io", "std::fs"),
+    "std_rename": ("std-rename", "std as"),
+    "std_rename_root": ("std-rename", "std as"),
+    "std_rename_self": ("std-rename", "std as"),
+    "extern_crate_std": ("std-rename", "extern crate std as"),
     "file_io": ("file-io", "std::fs"),
 }
 
@@ -329,7 +343,7 @@ def test_check_all_runs_a_control_for_every_planted_file() -> None:
     parsed = {}
     for spec in listed:
         name, rule, token = spec.split(":", 2)
-        parsed[name] = (rule, token)
+        parsed[name] = (rule, token.replace("~", " "))
     assert parsed == PLANTED
 
 
@@ -1159,4 +1173,77 @@ def test_a_4_the_env_workspace_reports_src_only(capsys: pytest.CaptureFixture[st
     assert main(["--manifest-path", str(FIXTURES / "env_workspace" / "Cargo.toml")]) == 1
     lines = [v for v in capsys.readouterr().out.splitlines() if v.startswith("VIOLATION")]
     assert len(lines) == 1
-    assert "env_workspace/rh-core/src/lib.rs:5:40" in lines[0]
+    assert "env_workspace/rh-core/src/lib.rs:5:35" in lines[0]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "fn f() { let _ = std::env::current_dir(); }",
+        "fn f() { let _ = ::std::env::current_exe(); }",
+        "fn f() { let _ = std :: env :: temp_dir(); }",
+        "fn f() { let _ = std::env::home_dir(); }",
+        'fn f() { let _ = std::env::set_current_dir("/"); }',
+        'fn f() { let _ = std::env::split_paths("a"); }',
+        'fn f() { let _ = std::env::join_paths(["a"]); }',
+        "fn f() { let _ = std::env::set_var; }",
+        "fn f() { let _ = env::current_dir(); }",
+        "use std::env::{self, consts};",
+        "use std::env::*;",
+        "use std::{env::consts, env::temp_dir};",
+    ],
+)
+def test_def_5_any_path_into_std_env_is_refused(source: str) -> None:
+    """Every form of std::env but its constants is the env rule (DEF-5)."""
+    assert "env" in rules_hit(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "fn f() -> &'static str { std::env::consts::OS }",
+        "use std::env::consts;",
+        "use std::env::consts::{ARCH, FAMILY};",
+        'fn f() -> &\'static str { env!("CARGO_PKG_NAME") }',
+        'fn f() -> Option<&\'static str> { option_env!("X") }',
+        "fn f(env: u8) -> u8 { env }",
+        "fn f() { let _ = my_env::current_dir(); }",
+    ],
+)
+def test_def_5_the_constants_and_the_compile_time_macros_pass(source: str) -> None:
+    """std::env::consts is fixed by the build; env! and option_env! are compile-time (DEF-5)."""
+    assert rules_hit(source) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "rule"),
+    [
+        ("use std as s;\nuse s::process as p;\nfn f() -> u32 { p::id() }", "std-rename"),
+        ("extern crate std as s;\nfn f() { s::process::exit(0) }", "std-rename"),
+        ("use ::std as s;", "std-rename"),
+        ("use std::{self as s, io};", "std-rename"),
+        ("fn f() { let _ = r#std::r#process::id(); }", "process"),
+        ("fn f() { let _ = r#std::r#env::current_dir(); }", "env"),
+        ("use r#std::r#fs;", "file-io"),
+        ('fn f() { let _ = s::fs::read("a"); }', "file-io"),
+        ('fn f() { let _ = std::os::unix::fs::symlink("a", "b"); }', "file-io"),
+    ],
+)
+def test_maj_1_min_2_renamed_std_raw_identifiers_and_nested_fs_are_refused(
+    source: str, rule: str
+) -> None:
+    """A renamed std, a raw identifier or an `X::fs::` path reaches no module (MAJ-1, MIN-2)."""
+    assert rule in rules_hit(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "use std::collections::BTreeMap as Map;",
+        "fn f(r#type: u8) -> u8 { r#type }",
+        'fn f() -> &\'static str { r#"std::fs"# }',
+    ],
+)
+def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
+    """Only std itself may not be renamed; a raw identifier or raw string is not a path (MIN-2)."""
+    assert rules_hit(source) == []

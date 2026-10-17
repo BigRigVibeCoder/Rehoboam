@@ -321,6 +321,7 @@ REQUIRED_GATES = (
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
     "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed and "
     "passes (SPR-008 T-00)",
+    "lint_forbidden control: std::env::consts, env! and option_env! pass (DEF-5)",
     "lint_forbidden float-api positive control: a private float alias in rh-sample must FAIL "
     "(SPR-003 GAP-11)",
     "lint_forbidden float-api positive control: an imported float alias in rh-sample must FAIL "
@@ -352,6 +353,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: an include! reached through a symlink resolves from the "
     "link, as rustc does (VER-SPR-008 MIN-3)",
+    "lint_forbidden positive control: env::current_dir after a grouped import is reported on its "
+    "own line (DEF-5)",
     "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must "
     "FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
