@@ -829,6 +829,8 @@ run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:"
 run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
+run "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's (gen_decimal_vectors --check; SPR-011 T-04)" pass "$PY" -I bin/gen_decimal_vectors.py --check &&
+run "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)" "fail:STALE:" "$PY" -I bin/gen_decimal_vectors.py --check --output tests/lint_fixtures/golden/stale_decimal_vectors.txt &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&

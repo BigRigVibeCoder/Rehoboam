@@ -59,6 +59,7 @@ python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the indep
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
 python -I specs/chronicle/selftest.py
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
+python -I bin/gen_decimal_vectors.py --check   # authored numbers: rh-manifest exact decimals -> fixed point match Python decimal (SPR-011 T-04)
 python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference distributions are current (SPR-003)
 cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sampler golden vectors at opt-level 3 (SPR-003 T-05)
 cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)

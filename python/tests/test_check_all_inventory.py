@@ -31,6 +31,8 @@ NEXTEST_TARGET = re.compile(r"--test (\S+)")
 REQUIRED_GATES = (
     "Architecture: crate boundaries, planes and engine purity (lint_arch; V-INSP-03, V-PLN-01, "
     "V-INSP-05)",
+    "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's "
+    "(gen_decimal_vectors --check; SPR-011 T-04)",
     "Baseline integrity control: a count 40 instructions off passes inside the band and is "
     "printed (SPR-009 R-8)",
     "Baseline integrity control: a local run says the tag and reason are not checked, never the "
@@ -250,6 +252,7 @@ REQUIRED_GATES = (
     "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL",
     "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must FAIL "
     "(SPR-007 GAP-2)",
+    "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)",
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",

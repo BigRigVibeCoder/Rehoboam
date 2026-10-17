@@ -251,7 +251,9 @@ def prob32_vectors(rng: SplitMix64) -> list[str]:
         pairs_.append((rng.next_u64() % (d + 1), d))  # mostly at most 1
     for n, d in pairs_:
         raw = None if d == 0 else round(Fraction(n * P32_ONE, d))
-        lines.append(f"p32.ratio {n} {d} {fmt(raw if raw is not None and raw <= P32_ONE else None)}")
+        lines.append(
+            f"p32.ratio {n} {d} {fmt(raw if raw is not None and raw <= P32_ONE else None)}"
+        )
     return lines
 
 

@@ -12,6 +12,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+
+use crate::exact::{Decimal, DecimalError};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -129,6 +131,11 @@ pub struct SystemDef {
     /// one of `params` and each value lies inside its bounds ([`Registry::problems`]).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub defaults: BTreeMap<String, Number>,
+    /// The exact decimal value of each default's literal as written, which is what reaches plane A
+    /// (`crate::exact`; `05.5` §3.2). Filled by [`Registry::from_toml`] from the TOML text; a
+    /// Registry built otherwise has none, and compiling a default without one is a load error.
+    #[serde(skip)]
+    pub default_literals: BTreeMap<String, Result<Decimal, DecimalError>>,
 }
 
 /// An archetype of being: `[archetypes.apex_predator]`.
@@ -380,14 +387,50 @@ impl Registry {
     /// [`RegistryError::Parse`] for bad TOML or an unknown section or field;
     /// [`RegistryError::Inconsistent`] when [`Registry::problems`] finds anything.
     pub fn from_toml(text: &str) -> Result<Self, RegistryError> {
-        let reg: Registry =
+        let mut reg: Registry =
             toml::from_str(text).map_err(|e| RegistryError::Parse(e.to_string()))?;
+        reg.read_default_literals(text)?;
         let problems = reg.problems();
         if problems.is_empty() {
             Ok(reg)
         } else {
             Err(RegistryError::Inconsistent(problems))
         }
+    }
+
+    /// Fills each system's [`SystemDef::default_literals`] from the TOML text: the literal of
+    /// every `defaults` entry, as `toml` keeps it (SPR-011 ruling 9).
+    fn read_default_literals(&mut self, text: &str) -> Result<(), RegistryError> {
+        use toml::de::{DeTable, DeValue};
+        let table = DeTable::parse(text).map_err(|e| RegistryError::Parse(e.to_string()))?;
+        let Some(DeValue::Table(systems)) =
+            table.get_ref().get("systems").map(toml::Spanned::get_ref)
+        else {
+            return Ok(());
+        };
+        for (id, def) in &mut self.systems {
+            let Some(DeValue::Table(entry)) = systems.get(id.as_str()).map(toml::Spanned::get_ref)
+            else {
+                continue;
+            };
+            let Some(DeValue::Table(defaults)) = entry.get("defaults").map(toml::Spanned::get_ref)
+            else {
+                continue;
+            };
+            for (name, value) in defaults {
+                let exact = match value.get_ref() {
+                    DeValue::Float(f) => Decimal::parse_toml_float(f.as_str()),
+                    DeValue::Integer(_) => match def.defaults.get(name.get_ref().as_ref()) {
+                        Some(Number::Int(i)) => Ok(Decimal::from_int(i128::from(*i))),
+                        _ => Err(DecimalError::Syntax(format!("{}", name.get_ref()))),
+                    },
+                    other => Err(DecimalError::Syntax(format!("{other:?}"))),
+                };
+                def.default_literals
+                    .insert(name.get_ref().to_string(), exact);
+            }
+        }
+        Ok(())
     }
 
     /// Reads, parses and checks a Registry file.
