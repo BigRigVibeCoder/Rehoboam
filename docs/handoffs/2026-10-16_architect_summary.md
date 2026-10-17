@@ -100,7 +100,14 @@ Resolved since the first version of this summary:
   | EVO-001 drafter | `session_01KHKcdcgSqTBuEw1RS6XvH8` | SPR-014's contract and `neutral` on `[[reads]]` (`6bc202e`); merges before the births spec |
   | M2 F1 drafter | `session_01X232tohbeVxBfHxZkFYQVq` | SPR-015's births, partnering, households, as `specs/systems/next/` (`421f2e1`) |
   | SPR-016 drafter | `session_01Na65ZokwKyd82SPMcAGLLn` | Fixed-point `exp`/`ln` (`05.1` §6) and M2 F1 mortality, as `specs/demography/mortality_f1.toml`, folded into `next/` after the births spec |
+  | SPR-018 drafter | `session_01EZrn9bjDkDgj6kEQsYpCuD` | Worldgen-lite, `M1.regions` F0, `S3.migration` F0 (PR #52) |
 
+- **Review records** (each round's independent review with the Architect's rulings in §0), on review branches until the round closes, then merged like PR #43:
+  - `REV-EVO-001` (`review/EVO-001-r1`, PR #49);
+  - `REV-SPR-015` (`review/SPR-015-r1`, PR #50);
+  - `REV-SPR-016` (`review/SPR-016-r1`, PR #51);
+  - `REV-SPR-018` (`review/SPR-018-r1`, PR #52).
+- **`05.1` version lines:** SPR-011's audit, PR #51 (`exp`/`ln`) and PR #49 (EVO-001) each change `05.1`. The first to merge takes v1.10; each later one takes the next number and merges `main` first.
 - **M7.dynasty spec version:** EVO-001 and PR #41 both bump M7 to 0.3.2. The one that merges second takes 0.3.3; PR #41 also merges `main` and moves its gates to `--part core`.
 - **Messages to a working session:** send with the default priority or `now`. Four `next` messages to the SPR-011 Developer were not delivered.
 
