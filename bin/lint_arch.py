@@ -74,8 +74,10 @@ workspace crates, of every dependency kind (normal, build and dev):
     protocol-leaf    rh-protocol, the wire-format crate (SPR-026; specs/stream/wire_v1.md §7), is a
                      tool-plane leaf pinned by name: it depends on no workspace crate, of any
                      dependency kind, so a viewer holding the wire types has no path to the
-                     engine; and the plane-A closure keeps every plane-A crate from depending on
-                     it, so the engine cannot name a frame.
+                     engine; its third-party dependencies are exactly PROTOCOL_EXTERNAL_DEPS
+                     (serde and serde_json; proptest as a dev-dependency), so no transport or
+                     runtime can enter through it (REV-SPR-026 R7); and the plane-A closure keeps
+                     every plane-A crate from depending on it, so the engine cannot name a frame.
 
     engine-purity    The engine only engines (ADR-0035 §6; docs/13 §3; V-INSP-05; BCK-002 A-14). No
                      engine crate (ENGINE_CRATES, every rh-sys-* and rh-contract-* crate, and
@@ -137,6 +139,12 @@ PINNED_LABELS = MappingProxyType(
 )
 PROTOCOL_CRATE = "rh-protocol"
 PROTOCOL_LEAF_RULE = "protocol-leaf"
+# REV-SPR-026 R7: the exact third-party allow-list of the wire-format leaf, by dependency kind. A
+# socket or an async runtime (tokio, mio, socket2) in the crate that spells the wire would put the
+# transport where a viewer's types are; the host owns the socket (specs/stream/wire_v1.md §7).
+PROTOCOL_EXTERNAL_DEPS = MappingProxyType(
+    {"normal": frozenset({"serde", "serde_json"}), "dev": frozenset({"proptest"})}
+)
 SYSTEM_LABELS = ("A", "system")
 CONTRACT_CRATE = "rh-contracts"
 CONTRACT_CRATE_PREFIX = "rh-contract-"
@@ -742,7 +750,7 @@ def check_protocol_leaf(crate: Crate, members: frozenset[str]) -> list[Violation
     """
     if crate.name != PROTOCOL_CRATE:
         return []
-    return [
+    found = [
         Violation(
             PROTOCOL_LEAF_RULE,
             crate.name,
@@ -753,6 +761,20 @@ def check_protocol_leaf(crate: Crate, members: frozenset[str]) -> list[Violation
         for edge in crate.edges
         if edge.target in members
     ]
+    allowed = ", ".join(
+        f"{t} ({k})" for k, ts in sorted(PROTOCOL_EXTERNAL_DEPS.items()) for t in sorted(ts)
+    )
+    found += [
+        Violation(
+            PROTOCOL_LEAF_RULE,
+            crate.name,
+            f"depends on third-party crate {edge.target}{_via(edge)}; rh-protocol's allow-list "
+            f"is exactly {allowed} (specs/stream/wire_v1.md §7; REV-SPR-026 R7)",
+        )
+        for edge in crate.external
+        if edge.target not in PROTOCOL_EXTERNAL_DEPS.get(edge.kind, frozenset())
+    ]
+    return found
 
 
 def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:

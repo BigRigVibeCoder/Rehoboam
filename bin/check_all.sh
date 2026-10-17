@@ -368,7 +368,8 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   fs_renamed_std:file-io:fs::r fs_os_symlink:file-io:fs::s raw_ident_fs:file-io:std::fs
   std_rename:std-rename:std~as std_rename_root:std-rename:std~as std_rename_self:std-rename:std~as
   extern_crate_std:std-rename:extern~crate~std~as
-  net_socket:network:std::os::unix::net
+  net_socket:network:std::os::unix::net net_parent_alias:network:net::UnixListener
+  net_parent_glob:network:net::TcpListener net_parent_self:network:net::UnixDatagram
   path_attr:source-include:#[path include_macro:source-include:include!("
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
@@ -784,6 +785,7 @@ run "lint_arch positive control: unsafe_code relaxed by a crate not on the allow
 run "lint_arch positive control: an allow-listed crate whose lints drift from the workspace's must FAIL (SPR-009 T-05)" "fail:VIOLATION [unsafe-allow] rh-bench: its own [lints] must equal [workspace.lints]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/unsafe_drift/Cargo.toml &&
 run "lint_arch positive control: unsafe outside the allow-listed file must FAIL (SPR-009 T-05)" "fail:VIOLATION [unsafe-allow] rh-bench: src/lib.rs holds unsafe code" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/unsafe_outside_file/Cargo.toml &&
 run "lint_arch positive control: rh-protocol depending on a workspace crate must FAIL (protocol-leaf; SPR-026)" "fail:VIOLATION [protocol-leaf] rh-protocol: depends on workspace crate rh-core" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/protocol_depends_on_plane_a/Cargo.toml &&
+run "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf allow-list; SPR-026 R7)" "fail:VIOLATION [protocol-leaf] rh-protocol: depends on third-party crate tokio" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/protocol_third_party/Cargo.toml &&
 run "lint_arch positive control: plane A -> rh-protocol must FAIL (plane-A closure; SPR-026)" "fail:VIOLATION [plane-A-closure] rh-stream: plane-A crate depends on plane-\"tool\" crate rh-protocol" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_protocol/Cargo.toml &&
 run "lint_arch positive control: system -> system must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_system/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_disallowed/Cargo.toml &&
@@ -827,6 +829,7 @@ run "lint_forbidden positive control: an environment read in a plane-A crate's s
 run "lint_forbidden positive control: env::current_dir after a grouped import is reported on its own line (DEF-5)" "fail:VIOLATION [V-DET-19/env] \`env::c\` at tests/lint_fixtures/forbidden/env_path_after_group.rs:5:50" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/env_path_after_group.rs &&
 run "lint_forbidden control: std::env::consts, env! and option_env! pass (DEF-5)" "pass:1 files scanned; 0 violations" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/env_consts_ok.rs &&
 run "lint_forbidden positive control: fs::read after a grouped import is reported on its own line (DEF-1)" "fail:VIOLATION [V-DET-19/file-io] \`fs::r\` at tests/lint_fixtures/forbidden/fs_path_after_group.rs:5:18" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/fs_path_after_group.rs &&
+run "lint_forbidden positive control: a socket in rh-cli outside src/serve.rs must FAIL; src/serve.rs and tests/ pass, and the tool crate's float is not scanned (SPR-026 R7)" "fail:VIOLATION [V-DET-19/network] \`std::os::unix::net\` at tests/lint_fixtures/forbidden/network_workspace/rh-cli/src/main.rs:3:14;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/network_workspace/Cargo.toml &&
 run "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)" "fail:VIOLATION [V-DET-19/file-io] \`std::fs\` at tests/lint_fixtures/forbidden/file_io_workspace/rh-core/src/lib.rs:4:5;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/file_io_workspace/Cargo.toml &&
 run "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)" "fail:VIOLATION [V-DET-19/float] \`f32\` at tests/lint_fixtures/forbidden/float_workspace/fixture-sys/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_workspace/Cargo.toml &&
 run "lint_forbidden positive control: a float outside rh-sample must FAIL (SPR-003 T-00)" "fail:VIOLATION [V-DET-19/float] \`f64\` at tests/lint_fixtures/forbidden/float_zone/rh-sampler/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_zone/Cargo.toml &&
@@ -977,7 +980,7 @@ run "World Stream v0 channel-C segment schema: no floats, header, order, sealed 
 run "channel-C self-test positive control: a float column in the DDL must FAIL" "fail:1. no float columns: FAIL" channel_c_float_control &&
 run "World Stream wire format v1: framing, control messages, refusals, the live-edge rule with slow, stalled and reconnecting viewers, golden frames (selftest_wire_v1 --check; SPR-026)" "pass:OK:" "$PY" -I specs/stream/selftest_wire_v1.py --check &&
 run "wire_v1 positive control: a stale golden frame must FAIL (SPR-026)" "fail:STALE:" wire_golden_control &&
-run "wire_v1 positive control: a host that drops a sealed year from memory before its seal is on disk must FAIL the live-edge rule (SPR-026)" "fail:6. live-edge rule (control: a year dropped before its seal, I1 broken): FAIL" "$PY" -I specs/stream/selftest_wire_v1.py --control window-gap &&
+run "wire_v1 positive control: a host whose window moves before the dropped year is on disk must FAIL the live-edge rule (SPR-026)" "fail:6. live-edge rule (control: the window moves before the dropped year is on disk): FAIL" "$PY" -I specs/stream/selftest_wire_v1.py --control window-gap &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py &&
 part golden &&
 run "Required tools present (golden part)" pass require_tools golden &&

@@ -328,6 +328,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: rh-manifest relabelled as plane A must FAIL (SPR-004)",
     "lint_arch positive control: rh-protocol depending on a workspace crate must FAIL "
     "(protocol-leaf; SPR-026)",
+    "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf "
+    "allow-list; SPR-026 R7)",
     "lint_arch positive control: rh-sample relabelled out of plane A must FAIL (SPR-003 T-00)",
     "lint_arch positive control: rh-sample without [lints] workspace = true must FAIL (SPR-003 "
     "GAP-9)",
@@ -368,6 +370,8 @@ REQUIRED_GATES = (
     "T-00)",
     "lint_forbidden positive control: a forbidden API in an included skeleton must FAIL (SPR-008 "
     "T-00)",
+    "lint_forbidden positive control: a socket in rh-cli outside src/serve.rs must FAIL; "
+    "src/serve.rs and tests/ pass, and the tool crate's float is not scanned (SPR-026 R7)",
     "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)",
     "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its "
     "tests/ and a builder's args pass (SPR-011 A-4)",
@@ -445,8 +449,8 @@ REQUIRED_GATES = (
     "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
     "small-scale V-DET-01/02 (SPR-008 T-01)",
     "uv lock --check positive control: drifted lock must FAIL",
-    "wire_v1 positive control: a host that drops a sealed year from memory before its seal is on "
-    "disk must FAIL the live-edge rule (SPR-026)",
+    "wire_v1 positive control: a host whose window moves before the dropped year is on disk must "
+    "FAIL the live-edge rule (SPR-026)",
     "wire_v1 positive control: a stale golden frame must FAIL (SPR-026)",
     "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)",
     "worldgen-lite positive control: an altered template number must FAIL against the golden "

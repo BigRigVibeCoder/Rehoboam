@@ -37,11 +37,14 @@ reports its metadata). Rules:
                       overrides of their golden files.
     process           the module std::process, in src/ and build.rs: Command, and exit, abort and
                       id too (A-44; DEF-1). tests/ may name temporary files by process id.
-    network           a socket, in src/ and build.rs: std::net, std::os::unix::net and their
-                      listener, stream and datagram types (SPR-026; specs/stream/wire_v1.md §7).
-                      The World Stream's live edge is served by the tool-plane host, so the
-                      engine's append has no path to a reader (05.10 §7 item 3; V-PERF-09).
-                      tests/ may open a socket to test a host.
+    network           a socket, in src/ and build.rs: std::net, std::os::unix::net, `net::<Type>`
+                      through a renamed or glob-imported parent, and the listener, stream and
+                      datagram types (SPR-026; specs/stream/wire_v1.md §7). The World Stream's
+                      live edge is served by the tool-plane host, so the engine's append has no
+                      path to a reader (05.10 §7 item 3; V-PERF-09). tests/ may open a socket to
+                      test a host. The tool crates on NETWORK_FILES (rh-cli, the engine host) are
+                      scanned for this rule alone, with their serving module allowed
+                      (src/serve.rs; REV-SPR-026 R7).
     file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
                       build.rs (where the float rule's scope says engine code) of a plane-A crate
                       not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot
@@ -200,6 +203,10 @@ FLOAT_API_RULE = "float-api"
 # is a reviewed change. --scan has no crate context and allows no one.
 FILE_IO_RULE = "file-io"
 NETWORK_RULE = "network"
+# REF: specs/stream/wire_v1.md §7 (REV-SPR-026 R7, MAJ-2 c). Tool-plane crates scanned for the
+# network rule only, with the files allowed a socket: the engine host's tick loop lives in rh-cli,
+# so a socket anywhere in it but the serving module would put a reader on the tick path.
+NETWORK_FILES = MappingProxyType({"rh-cli": frozenset({"src/serve.rs"})})
 PROCESS_RULE = "process"
 ENV_RULE = "env"
 STD_RENAME_RULE = "std-rename"
@@ -236,6 +243,10 @@ class FloatScan:
     deps: tuple[tuple[str, re.Pattern[str]], ...] = ()
     # The file's crate is on FILE_IO_CRATES (BCK-002 A-44); the file-io rule then does not apply.
     file_io: bool = False
+    # The file's crate is on NETWORK_FILES (SPR-026): only the network rule applies, and not to
+    # the crate's allowed files.
+    network_only: bool = False
+    network_allowed: bool = False
 
 
 FLOAT_API_WHY = (
@@ -373,9 +384,11 @@ RULES: tuple[Rule, ...] = (
     Rule(
         NETWORK_RULE,
         # SPR-026 (specs/stream/wire_v1.md §7): a socket in plane A would put a reader on the tick
-        # path. A type name right after `::` is part of a path the first alternatives match.
+        # path. `net::<Type>` catches the parent-module bypasses (`use std::os::unix as u;
+        # u::net::UnixListener`, a glob, `{self as x}`; REV-SPR-026 MIN-1). A type name right
+        # after `::` is part of a path the first alternatives match.
         _rx(
-            r"\bstd::net\b|\bstd::os::unix::net\b|\bunix::net\b"
+            r"\bstd::net\b|\bstd::os::unix::net\b|\bunix::net\b|\bnet::(?:Unix|Tcp|Udp)\w*"
             r"|(?<![:\w])(?:Unix|Tcp)(?:Listener|Stream)\b|(?<![:\w])(?:UnixDatagram|UdpSocket)\b"
         ),
         "a socket in plane A (std::net, std::os::unix::net): the World Stream's live edge is "
@@ -699,8 +712,12 @@ def _with_use_trees(code: str, path: str) -> list[Finding]:
 
 def _applies(finding: Finding, scan: "FloatScan") -> bool:
     """Whether a finding's rule applies under the file's scan (module DECISION; A-44; DEF-1)."""
+    if scan.network_only:
+        return finding.rule == NETWORK_RULE and scan.scope != "none" and not scan.network_allowed
     if finding.rule == FLOAT_RULE:
         return scan.scope == "rule"
+    if finding.rule == NETWORK_RULE and scan.network_allowed:
+        return False
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
@@ -944,7 +961,7 @@ def scan_source(
         report.scanned.add((file, scan))
     lexed = lex(source)
     findings = [f for f in _with_use_trees(lexed.code, name) if _applies(f, scan)]
-    if floats == "rule":
+    if floats == "rule" and not scan.network_only:
         findings += find_float_dep(lexed.code, name, dep_floats)
     # Includes resolve from the file as it was reached, not from its symlink target (MIN-3).
     reached = path if isinstance(path, Path) else None
@@ -1103,6 +1120,12 @@ def float_rule_applies(file: Path, root: Path) -> bool:
     return file.relative_to(root).parts[0] not in FLOAT_FREE_DIRS
 
 
+def _network_allowed(file: Path, root: Path) -> bool:
+    """Whether ``file`` is one of its crate's NETWORK_FILES (by its path relative to the root)."""
+    allowed = NETWORK_FILES.get(root.name, frozenset())
+    return root.is_dir() and file.relative_to(root).as_posix() in allowed
+
+
 def scan_paths(
     paths: Iterable[Path],
     float_fields: frozenset[str] = frozenset(),
@@ -1135,7 +1158,10 @@ def scan_paths(
                 scopes.setdefault(file, "none")
             else:
                 scopes.setdefault(file, "zone" if root in float_exempt else "rule")
-            crate_of.setdefault(file, (crate_scans or {}).get(root, FloatScan()))
+            scan = (crate_scans or {}).get(root, FloatScan())
+            if scan.network_only and _network_allowed(file, root):
+                scan = replace(scan, network_allowed=True)
+            crate_of.setdefault(file, scan)
     for file in sorted(scopes):
         source = file.read_text(encoding="utf-8")
         scan_source(
@@ -1190,6 +1216,28 @@ def plane_a_crate_dirs(manifest_path: Path) -> list[tuple[str, Path]]:
     Raises:
         WorkspaceError: cargo is missing or fails, or its output has an unexpected shape.
     """
+    return [
+        (name, directory)
+        for name, directory, plane in workspace_crate_dirs(manifest_path)
+        if plane in (None, "A")
+    ]
+
+
+def network_scoped_crate_dirs(manifest_path: Path) -> list[tuple[str, Path]]:
+    """Return (name, directory) for each tool crate on NETWORK_FILES (scanned for sockets only)."""
+    return [
+        (name, directory)
+        for name, directory, plane in workspace_crate_dirs(manifest_path)
+        if plane == "tool" and name in NETWORK_FILES
+    ]
+
+
+def workspace_crate_dirs(manifest_path: Path) -> list[tuple[str, Path, str | None]]:
+    """Return (name, directory, declared plane) for every workspace crate.
+
+    Raises:
+        WorkspaceError: cargo is missing or fails, or its output has an unexpected shape.
+    """
     command = ["cargo", "metadata", "--format-version", "1", "--no-deps", "--offline"]
     try:
         result = subprocess.run(
@@ -1207,9 +1255,8 @@ def plane_a_crate_dirs(manifest_path: Path) -> list[tuple[str, Path]]:
         members = set(document["workspace_members"])
         packages = [p for p in document["packages"] if p["id"] in members]
         crates = [
-            (str(p["name"]), Path(p["manifest_path"]).parent)
+            (str(p["name"]), Path(p["manifest_path"]).parent, _plane(p.get("metadata")))
             for p in packages
-            if _plane(p.get("metadata")) in (None, "A")
         ]
     except (json.JSONDecodeError, KeyError, TypeError) as err:
         raise WorkspaceError(f"unexpected cargo metadata output: {err!r}") from err
@@ -1273,8 +1320,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             if zone:
                 exempt = ", ".join(sorted(n for n, d in crates if d in zone))
                 scope += f"; float rule exempts {exempt} only (SPR-003 float zone)"
+            scoped = network_scoped_crate_dirs(args.manifest_path)
+            for name, directory in scoped:
+                crate_scans[directory] = FloatScan(network_only=True)
+                files = ", ".join(sorted(NETWORK_FILES[name]))
+                scope += f"; sockets in {name} only in {files} (SPR-026)"
             report = scan_paths(
-                [directory for _, directory in crates], float_fields, zone, crate_scans
+                [directory for _, directory in [*crates, *scoped]],
+                float_fields,
+                zone,
+                crate_scans,
             )
     except (WorkspaceError, SpecError, OSError, UnicodeDecodeError) as err:
         print(f"lint_forbidden: cannot read the code to scan: {err}", file=sys.stderr)

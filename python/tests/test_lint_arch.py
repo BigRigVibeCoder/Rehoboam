@@ -197,6 +197,28 @@ def test_rh_protocol_is_a_leaf_of_every_dependency_kind(dep_kind: str) -> None:
     assert found(engine(crate("rh-protocol", plane="tool", kind="tool"))) == []
 
 
+@pytest.mark.parametrize(
+    ("target", "dep_kind", "ok"),
+    [
+        ("serde", "normal", True),
+        ("serde_json", "normal", True),
+        ("proptest", "dev", True),
+        ("proptest", "normal", False),
+        ("serde", "build", False),
+        ("tokio", "normal", False),
+        ("mio", "dev", False),
+    ],
+)
+def test_rh_protocol_takes_exactly_its_third_party_allow_list(
+    target: str, dep_kind: str, ok: bool
+) -> None:
+    """REV-SPR-026 R7: serde and serde_json, proptest as a dev-dependency, nothing else."""
+    leaf = replace(
+        crate("rh-protocol", plane="tool", kind="tool"), external=(Edge(target, dep_kind),)
+    )
+    assert (("protocol-leaf", "rh-protocol") in found(engine(leaf))) is not ok
+
+
 def test_rh_protocol_is_pinned_to_the_tool_plane_and_closed_to_plane_a() -> None:
     """Relabelling rh-protocol is refused; a plane-A crate depending on it breaks the closure."""
     assert PINNED["rh-protocol"] == ("tool", "tool")
@@ -439,6 +461,7 @@ def test_main_passes_on_the_repository_workspace() -> None:
         ("engine_purity_transitive", "engine-purity"),
         ("protocol_depends_on_plane_a", "protocol-leaf"),
         ("plane_a_to_protocol", "plane-A-closure"),
+        ("protocol_third_party", "protocol-leaf"),
     ],
 )
 def test_main_catches_each_fixture(

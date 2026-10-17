@@ -165,6 +165,10 @@ def test_raw_identifiers_are_code() -> None:
         ("let s = UnixStream::connect(path)?;", "network"),
         ("let l = TcpListener::bind(addr)?;", "network"),
         ("use std::os::unix::net::*;", "network"),
+        ("use std::os::unix as u; let l = u::net::UnixListener::bind(p);", "network"),
+        ("use std::os::unix::*; let l = net::UnixListener::bind(p);", "network"),
+        ("use std::os::unix::{self as x}; let d = x::net::UnixDatagram::bind(p);", "network"),
+        ("use std::os as o; let l = o::unix::net::TcpListener::bind(p);", "network"),
     ],
 )
 def test_each_forbidden_api_is_caught_by_its_rule(snippet: str, rule: str) -> None:
@@ -272,6 +276,9 @@ def test_rust_files_skip_only_the_top_level_target_directory(tmp_path: Path) -> 
 # file stem -> (rule, the token the report names); mirrors FORBIDDEN_API_CONTROLS in check_all.sh.
 PLANTED = {
     "net_socket": ("network", "std::os::unix::net"),
+    "net_parent_alias": ("network", "net::UnixListener"),
+    "net_parent_glob": ("network", "net::TcpListener"),
+    "net_parent_self": ("network", "net::UnixDatagram"),
     "hash_map": ("hash-collections", "HashMap"),
     "hash_set": ("hash-collections", "HashSet"),
     "thread_rng": ("thread-rng", "thread_rng"),
@@ -356,6 +363,20 @@ def test_check_all_runs_a_control_for_every_planted_file() -> None:
 def test_every_planted_file_is_covered_by_a_test() -> None:
     """A planted file without a test would be a positive control nobody checks."""
     assert sorted(p.stem for p in (FIXTURES / "planted").glob("*.rs")) == sorted(PLANTED)
+
+
+def test_a_network_scoped_tool_crate_is_scanned_for_sockets_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """SPR-026 R7: rh-cli's socket outside src/serve.rs is the one finding; its float is not."""
+    manifest = FIXTURES / "network_workspace" / "Cargo.toml"
+    assert main(["--manifest-path", str(manifest)]) == EXIT_VIOLATIONS
+    out = capsys.readouterr().out
+    violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
+    assert len(violations) == 1
+    assert "[V-DET-19/network] `std::os::unix::net` at" in violations[0]
+    assert "rh-cli/src/main.rs:3:14" in violations[0]
+    assert "sockets in rh-cli only in src/serve.rs (SPR-026)" in out
 
 
 def test_main_scans_plane_a_and_undeclared_crates_only(capsys: pytest.CaptureFixture[str]) -> None:
