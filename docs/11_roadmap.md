@@ -1,6 +1,7 @@
 # 11 — Roadmap: Phases, Gates and Work Packages
 
-*Status: Draft v1.6 (2026-10-16). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*Status: Draft v1.7 (2026-10-17). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*v1.7 (2026-10-17): D51 (ADR-0036): a viewer lane (V.1–V.3) for `rh-view`, the voxel observation harness, after P1.17 and off every gate's critical path; the cut "street-level 3D view" becomes V.3.*
 *v1.6 (2026-10-16): rung 0 drops forks, which come with branching (P2.9); V-SAGA-15's P1a variant measures on the 10k dynastic world (D34).*
 *v1.5 (2026-10-16): G0 rulings by the director. Rung 0 is ageing and death on day boundaries: a household's food comes with M3 and M4 in P1b, and daily life at `minutes` is Later (D31). P1.18 (`S5.daily_life` F1) and P1.8 (M1 F1) move to P1b, where the columns they read have owners (D33). P1.7 inherits titles and claims only; property inheritance moves to P1.5a (D35). G1a has one test list, the same as `09` §5, with P1a variants for tests that need systems or worlds P1a does not build; V-SAGA-16's stress-accounting identity gates G1a and its break band gates G1b (D34).*
 *v1.4 (2026-10-16): G0 rulings by the director. P0.7 loses the Rerun logging hooks (a Rerun view, if wanted, is a downstream consumer of the World Stream) and the Textual TUI stub, which moves to P1.17. The G0 CI criterion records baselines for benches 7 and 8; bench 4's baseline moves to the first P1a sprint that builds a spatial field (M1 or M3).*
@@ -186,7 +187,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 | P1.13 | Scheduled outcomes and lifecycle queues | Intra-pulse outcome times as agenda timers; lifecycle commands applied in `(phase, PersonId)` order; no back-dating (ADR-0025); `rh-contracts` v0 for the M1/M2/M7 and minds columns |
 | P1.14 | Determinism and performance at scale | Golden runs on the M1/M2/M7 world (1,000 years); CRN pairing test (ADR-0026); meso benches (≤ 50k persons, ≤ 2,000 named actors) and `bench/serial_fraction`. The synthetic 1M benches move to Later with P3.10 |
 | P1.15 | Registry effect language v0 (moved from P1b) | The typed, total evaluator in `rh-registry` (`05.5` §2.1); succession-law eligibility and ordering; verb effects as queued commands; a golden test |
-| P1.17 | World Stream v1 (moved from P1b; ADR-0030, `05.10`) | Channels A and C, `seq` and segments (the Parquet chronicle as the stream at rest), the live edge over a socket, viewer cursors, `stream.subscribe` / `stream.status`, the materializer (keyframe + replay), tip and scheduled inputs, the pace command, `rh-cli tail` filters (significance, place, person, pattern, regional digest); the Textual TUI stub, a read-only status view over the stream (moved from P0.7). Gate: V-STR-01–03, V-STR-05, V-PERF-09 |
+| P1.17 | World Stream v1 (moved from P1b; ADR-0030, `05.10`) | Channels A and C, `seq` and segments (the Parquet chronicle as the stream at rest), the live edge over a socket, viewer cursors, `stream.subscribe` / `stream.status`, the materializer (keyframe + replay), the pace command, `rh-cli tail` filters (significance, place, person, pattern, regional digest); the Textual TUI stub, a read-only status view over the stream (moved from P0.7). Gate: V-STR-01–03, V-STR-05, V-PERF-09 |
 
 **Gate G1a: a dynasty lives, dies and inherits deterministically, and the templated chronicle reads as a family history.** This is the one G1a test list; `09` §5 lists the same tests. Where a test needs a system or world that P1a does not build, its P1a variant, stated in its `09` row, applies (D34).
 - **Determinism** (V-DET-01, V-DET-02, V-DET-12): identical plane-A hashes at 1/2/4/N threads, every sim-month for 1,000 years, on `smoke`, rungs 0–2 and a dynastic fixture world (a few great houses and titles, M6 held at neutral); no back-dating.
@@ -257,7 +258,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 | P2.4 | Pattern packs v1: **saga packs** | Vow arcs (sworn → pursued → fulfilled or broken or lapsed), relic chains, revenge, betrayal, succession war, the corrupted bearer; plus famine, reversal and irony. About 25–30 patterns, each with a firing-rate budget. Bad-run metric (MOE-6) wired into the liveness gate. Gate: V-SAGA-05 |
 | P2.5 | Significance v1 | Components, per-era recompute, bounded hindsight retention, per-timeline visibility sidecar (plane C), rarity base rates |
 | P2.6 | `rh-server` v1 | Timelines (run, pause, read-only seek, fork); keyframe service (10-year permanent keyframes, yearly LRU with a RAM tier, capture at auto-pause); the IF-0 control and stream endpoint; Arrow data endpoints. No presentation serving (ADR-0035 §6) |
-| P2.7 | Time-Machine harness v1 (text; ADR-0030) | `rh-tui` over the World Stream: status line (tip, pace, cursor, lag), Watch and Play styles, Time-Machine (speed bands, run-until, overview and detail lanes as text), ASCII map, causal inspector as an ancestor tree, person/place views, Annals, rating form. Cultivator mode only |
+| P2.7 | Time-Machine harness v1 (text; ADR-0030) | Tip and scheduled inputs over `control.sock` (STR-4; moved from P1.17 by D47, 2026-10-17). `rh-tui` over the World Stream: status line (tip, pace, cursor, lag), Watch and Play styles, Time-Machine (speed bands, run-until, overview and detail lanes as text), ASCII map, causal inspector as an ancestor tree, person/place views, Annals, rating form. Cultivator mode only |
 | P2.8 | Annals and Chronicle (templated) | Extends P2.8a: grouped saga arcs (by vow, relic and house) with causal "because" clauses; episode and season texts for the audio chronicle; provenance links |
 | P2.9 | Branching | What-if forks with override inputs; material-input dependency scopes with timer cancel and re-sample; acting in the past forks (ADR-0025); timeline diff view |
 | P2.10 | Facts ledger v1 | Pins and `facts_ledger` (plane B, `05.2` §3.3), written on `entity.*` display; MOE-3 re-open probe (DATA-7) |
@@ -407,6 +408,16 @@ These keep their WP IDs. Each needs your decision to enter a phase.
 | P7.2 | Oracle verbs in glyph scenes, the prophecy loop, accessibility polish (rest of old P7) | Follows P6 if taken up; G7 (V-HUM-08) applies then |
 | E2–E5 | Era packs | Below |
 
+## Viewer lane (ADR-0036, D51; off the critical path)
+
+**Goal.** Let the red team and the director *see* the world they audit: a native Bevy voxel viewer, `rh-view`, that reads the World Stream and the materializer and stages what the simulation decided. It is an observation harness (ADR-0030), not a gate surface: text stays the G2 thesis surface. Plans: `CODEX/05_PROJECT/PRJ-003_BevyVoxelViewer.md` (the red team's), run by AGT-002-TOOLS.
+
+| WP | Work package | Output |
+|---|---|---|
+| V.1 | Read-only spike (after P1.17's materializer, SPR-027; SPR-033 onward, each sprint ≤ 3 agent-days) | `viewer/` workspace; terrain, regions, settlements and the route graph from worldgen-lite; households and houses from the materializer; births, deaths, marriages and successions as visual moments; a timeline scrubber (seek through keyframes plus replay); the camera director over channel C (R3D-7); fidelity by zoom. Gate: V-R3D-13, V-R3D-14 |
+| V.2 | P1b's world (with P1.4, P1.5a, P1.8, P1.18) | People moving through the day (`S5.daily_life`), fields and harvests, stores and famine, settlement growth and routes in use |
+| V.3 | The street-level inhabitant (with P2.7) | Spectator roaming is V.1's free camera. Acting in the world: `PlayerAction` and `SpeechAct` journaled over `control.sock`, landing at the tip; an act in the past only as a fork (ADR-0025); reactions decided by `T1.minds`; words translated to speech acts under ADR-0034 |
+
 ## Cut (ADR-0035)
 
 Kept here so the IDs are not reused.
@@ -417,7 +428,8 @@ Kept here so the IDs are not reused.
 | SPK-1 | Crowds spike (3D) | **Cut (ADR-0035)** |
 | SPK-3 | Application-wallpaper power spike (3D) | **Cut (ADR-0035)** |
 | Per-era 3D art packs | Architecture kits, clothing, vehicles | **Cut (ADR-0035)** |
-| Any VR or street-level 3D view | Never planned as a WP; excluded permanently | **Cut (ADR-0035)** |
+| Any VR view | Never planned as a WP; excluded permanently | **Cut (ADR-0035)** |
+| Street-level 3D view | Never planned as a WP | **Moved to the viewer lane, V.3 (ADR-0036, D51)** |
 
 ---
 

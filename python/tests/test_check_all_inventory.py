@@ -106,6 +106,8 @@ REQUIRED_GATES = (
     "(check_baseline; SPR-008 T-04)",
     "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
     "SPR-012 T-08)",
+    "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml "
+    "(effect_ref --check; SPR-017)",
     "Golden draws: M2's death instants on fixture worlds are the independent model's, every S11 "
     "re-sample case covered (gen_m2_draws_reference --check; SPR-012, Tester's interim report)",
     "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for "
@@ -147,6 +149,8 @@ REQUIRED_GATES = (
     "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference "
     "--check; SPR-012 T-05)",
     "Golden vectors: M4 basket and price rule",
+    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the "
+    "effect_ref differential (SPR-019; REV-SPR-019 R3)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
@@ -176,6 +180,7 @@ REQUIRED_GATES = (
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
     "Manifest: household (rung 1; SPR-011 ruling 18)",
     "Manifest: invalid_draft_style must FAIL",
+    "Manifest: manor (the SPR-019 fixture: a dynastic manor)",
     "Manifest: solo",
     "Manifest: uz_job",
     "Manifest: val_khor",
@@ -315,6 +320,7 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
+    "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass "
     "(SPR-007 GAP-2)",
@@ -563,6 +569,17 @@ REQUIRED_GATES = (
     "(REV-SPR-029 F14)",
     "lint_templates positive control: enum ids that differ from the emitter's column codes must "
     "FAIL (REV-SPR-029 F13)",
+    "population synthesis positive control: a spec check value off by one must FAIL the "
+    "reference's spec check (SPR-019; REV-SPR-019 R5)",
+    "population synthesis positive control: an altered golden output must FAIL (SPR-019)",
+    "population synthesis positive control: conceptions inside the closed period must FAIL the "
+    "spacing invariant (SPR-019 B6)",
+    "population synthesis positive control: effect_ref.py with its succession order reversed must "
+    "FAIL the effect differential (REV-SPR-019 R3)",
+    "population synthesis positive control: floors in place of the age-sex allocation must FAIL "
+    "INV-PS-01 (SPR-019 P3)",
+    "population synthesis positive control: floors in place of the couple-table rounding must "
+    "FAIL INV-PS-03 (SPR-019 P7)",
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
