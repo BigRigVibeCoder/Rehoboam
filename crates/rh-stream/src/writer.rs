@@ -21,6 +21,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::StreamError;
+use crate::convert::Admissions;
 use crate::record::{Body, Channel, Header, Record, sim_year};
 use crate::seal::{SealHook, channel_dir, read_segment, remove_partials, seal, sealed_segments};
 use crate::segment::{self, Dictionaries, Provenance};
@@ -67,6 +68,9 @@ pub struct StreamWriter {
     /// Segments already sealed for years after the resume point (verified, never rewritten).
     existing: BTreeMap<i64, PathBuf>,
     summary: Summary,
+    /// The Chronicle Writer's admission bitset (`envelope_v0.md` §5): host memory, rebuilt from
+    /// the sealed `event` tables at resume.
+    admissions: Admissions,
 }
 
 impl StreamWriter {
@@ -80,6 +84,17 @@ impl StreamWriter {
     #[must_use]
     pub const fn open_year(&self) -> i64 {
         self.year
+    }
+
+    /// The admission bitset: which event ids have an `EVENT` record (`cause_told`).
+    #[must_use]
+    pub const fn admissions(&self) -> &Admissions {
+        &self.admissions
+    }
+
+    /// The admission bitset, to record each drained event's admission before its body is built.
+    pub const fn admissions_mut(&mut self) -> &mut Admissions {
+        &mut self.admissions
     }
 
     /// A writer for a new run: the timeline's channel A must hold no sealed segment.
@@ -109,6 +124,7 @@ impl StreamWriter {
             deaths: 0,
             existing: BTreeMap::new(),
             summary: Summary::default(),
+            admissions: Admissions::new(),
         })
     }
 
@@ -144,6 +160,7 @@ impl StreamWriter {
                 deaths: 0,
                 existing: sealed,
                 summary: Summary::default(),
+                admissions: Admissions::new(),
             });
         }
         let path = sealed.remove(&year).ok_or_else(|| {
@@ -152,7 +169,14 @@ impl StreamWriter {
                 dir.display()
             ))
         })?;
+        // The admission bitset of every sealed year up to the resume point: every EVENT record is
+        // an admitted event (envelope §5).
+        let mut told = Vec::new();
+        for earlier in sealed.range(..year).map(|(_, p)| p) {
+            told.extend(event_ids(&segment::decode(&read_segment(earlier)?, mpy)?));
+        }
         let seg = segment::decode(&read_segment(&path)?, mpy)?;
+        told.extend(event_ids(&seg));
         if seg.row.last_tick > tick {
             return Err(StreamError::Segment(format!(
                 "sim-year {year}'s segment ends at tick {}, after the resume point {tick}",
@@ -170,6 +194,7 @@ impl StreamWriter {
             deaths: 0,
             existing: sealed.into_iter().filter(|(y, _)| *y > year).collect(),
             summary: Summary::default(),
+            admissions: Admissions::from_told(told),
         };
         for r in &seg.records {
             w.count(&r.body);
@@ -356,4 +381,15 @@ pub fn read_channel_a(
         out.push(seg);
     }
     Ok(out)
+}
+
+/// The ids of a decoded segment's `EVENT` records.
+fn event_ids(seg: &segment::SegmentA) -> Vec<u64> {
+    seg.records
+        .iter()
+        .filter_map(|r| match &r.body {
+            Body::Event(e) => Some(e.event_id),
+            _ => None,
+        })
+        .collect()
 }

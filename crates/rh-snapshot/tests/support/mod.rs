@@ -264,5 +264,6 @@ pub fn agreeing_specs(stubs: &[Stub]) -> SpecTable {
     SpecTable {
         owners,
         specs: specs.into_iter().map(|(d, e)| (d.system, e)).collect(),
+        registry: rh_core::ownership::RegistryTable::default(),
     }
 }

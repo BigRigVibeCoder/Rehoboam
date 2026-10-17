@@ -525,7 +525,11 @@ impl StreamHost {
         }
         let t = at.minutes();
         for e in engine.drain_events() {
-            let body = event_body(&e, &self.dictionaries).map_err(|e| stream_error(&e))?;
+            if !self.writer.admissions_mut().admits(&e) {
+                continue;
+            }
+            let body = event_body(&e, &self.dictionaries, self.writer.admissions())
+                .map_err(|e| stream_error(&e))?;
             self.pending.push((e.tick, body));
         }
         while let Some(row) = self

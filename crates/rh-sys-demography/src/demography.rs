@@ -23,7 +23,7 @@ use rh_core::system::{
 };
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_core::world::{SystemView, WorldTables};
-use rh_events::EventDraft;
+use rh_events::{EventDraft, RoleId};
 use rh_ids::{EntityKind, EntityRef, PersonId};
 
 use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day};
@@ -252,7 +252,7 @@ fn ledger_row(view: &SystemView<'_>, person: u64) -> Result<Option<usize>, SimEr
 }
 
 /// The single death path (S12; SPR-011 ruling 6): the dead row (alive 0, death tick, cause), the
-/// person's open life-course exit (written once), `DEATH` with the deceased as subject and the
+/// person's open life-course exit (written once), `DEATH` with the deceased as `target` and the
 /// cause code as payload, then `EXTINCTION` caused by that `DEATH` if no ledger row is alive.
 /// The P1.13 command path (`ScheduleDeath`) will call it too.
 ///
@@ -291,7 +291,7 @@ pub fn apply_death(
     view.write(LC_DEATH_CAUSE)?[open] = cause;
     let death = ctx.emit(
         EventDraft::new(DEATH)
-            .subject(EntityRef::person(person))
+            .role(RoleId::TARGET, EntityRef::person(person))
             .with_payload(vec![cause]),
     )?;
     if view.read(PERSON_ALIVE)?.iter().all(|&a| a == 0) {

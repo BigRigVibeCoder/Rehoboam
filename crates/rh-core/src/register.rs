@@ -79,6 +79,9 @@ pub(crate) struct Entry {
 /// A registered, conflict-free set of systems with its derived schedule.
 pub struct Registered {
     pub(crate) entries: Vec<Entry>,
+    /// The Registry's `[motive_edges]` ids in list order: a motive's index breaks coalescing ties
+    /// (envelope §5), from [`SpecTable::motives`].
+    pub(crate) motives: Vec<String>,
     schedule: Schedule,
     reports: Vec<String>,
 }
@@ -284,11 +287,11 @@ pub fn register(
         })
         .collect();
     let derived = schedule::derive(&inputs);
-    drop(inputs);
     let violations = once_each(violations);
     match derived {
         Ok(schedule) if violations.is_empty() => Ok(Registered {
             entries,
+            motives: specs.registry.motives.clone(),
             schedule,
             reports,
         }),

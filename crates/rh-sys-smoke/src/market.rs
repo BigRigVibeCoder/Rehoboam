@@ -20,7 +20,7 @@ use rh_core::fixed::Q16_16;
 use rh_core::system::{InvariantResult, PulseBinding, SimError, StepCtx, SystemModel};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EventDraft, RoleId};
 use rh_ids::EntityRef;
 
 use crate::common::{
@@ -70,7 +70,7 @@ impl Market {
         for (r, k) in large {
             ctx.emit(
                 EventDraft::new("TRADE")
-                    .subject(EntityRef::region(region(r)))
+                    .role(RoleId::TARGET, EntityRef::region(region(r)))
                     .with_payload(vec![r64(r), i64::from(k)]),
             )?;
         }

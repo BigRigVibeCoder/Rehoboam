@@ -31,7 +31,7 @@
 //! | `rh-core/engine.epochs` | entity a material input touched, in entity order | `entity, u32 epoch` |
 //! | `rh-core/engine.inputs` | queued material input: instants in order, inputs in submission order | `i64 time, u32 index, list(entity scope)` |
 //! | `rh-core/engine.meta` | (one row) | `opt(i64 cursor), u32 timeline, u64 accepted_inputs, u64 command next_seq` |
-//! | `rh-core/events.held` (carried, not hashed) | undrained event, in id order | `u64 id, i64 tick, u8 phase, str emitter, str kind, list(entity subjects), list(u64 causes), list(i64 payload)` |
+//! | `rh-core/events.held` (carried, not hashed) | undrained event, in id order (v2, `envelope_v0.md` §6) | `u64 id, i64 tick, u8 phase, str emitter, str kind, opt(u32) place, i32 magnitude, u8 secrecy, u8 origin, u8 admitted, list(u8 role ‖ entity) roles, list(str attr ‖ entity ‖ opt(entity) partner ‖ i32 value) snapshots, list(u64 cause ‖ u8 kind ‖ opt(str) motive ‖ i16 weight ‖ i16 evidence) causes, list(i64) payload` |
 //! | `rh-core/events.meta` | (one row) | `u64 next_seq, opt(i64 tick || u8 phase) last, u64 running` |
 //!
 //! `bin/gen_hash_golden.py` encodes a synthetic engine state the same way, independently, and
@@ -53,8 +53,10 @@ use rh_core::register::Registered;
 use rh_core::state::EngineState;
 use rh_core::time::SimTime;
 use rh_core::world::WorldTables;
-use rh_events::{DraftRef, Event, EventLogState};
-use rh_ids::{EntityKind, EntityRef, EventId, PersonId, PurposeId, SystemId, TimelineId};
+use rh_events::{
+    DraftRef, Edge, EdgeKind, Event, EventLogState, Origin, RoleId, RoleRow, Secrecy, Snapshot,
+};
+use rh_ids::{EntityKind, EntityRef, EventId, PersonId, PlaceId, PurposeId, SystemId, TimelineId};
 
 use crate::hash::{Plane, PlaneDigest, TableDigest};
 
@@ -226,14 +228,36 @@ fn held_rows(events: &[Event]) -> Vec<Vec<u8>> {
                 .i64(event.tick)
                 .u8(event.phase)
                 .str(event.emitter)
-                .str(event.kind)
-                .u32(len32(event.subjects.len()));
-            for subject in &event.subjects {
-                w.entity(*subject);
+                .str(event.kind);
+            match event.place {
+                None => w.u8(0),
+                Some(p) => w.u8(1).u32(p.to_raw()),
+            };
+            w.i32(event.magnitude)
+                .u8(event.secrecy.code())
+                .u8(event.origin.code())
+                .u8(u8::from(event.admitted))
+                .u32(len32(event.roles.len()));
+            for row in &event.roles {
+                w.u8(row.role.0).entity(row.entity);
+            }
+            w.u32(len32(event.snapshots.len()));
+            for snap in &event.snapshots {
+                w.str(snap.attr).entity(snap.entity);
+                match snap.partner {
+                    None => w.u8(0),
+                    Some(p) => w.u8(1).entity(p),
+                };
+                w.i32(snap.value);
             }
             w.u32(len32(event.causes.len()));
-            for cause in &event.causes {
-                w.u64(cause.to_raw());
+            for edge in &event.causes {
+                w.u64(edge.cause.to_raw()).u8(edge.kind.code());
+                match edge.motive {
+                    None => w.u8(0),
+                    Some(m) => w.u8(1).str(m),
+                };
+                w.i16(edge.weight).i16(edge.evidence);
             }
             w.list_i64(&event.payload);
             w.0
@@ -278,6 +302,14 @@ impl W {
         self
     }
     fn i64(&mut self, x: i64) -> &mut Self {
+        self.0.extend_from_slice(&x.to_le_bytes());
+        self
+    }
+    fn i32(&mut self, x: i32) -> &mut Self {
+        self.0.extend_from_slice(&x.to_le_bytes());
+        self
+    }
+    fn i16(&mut self, x: i16) -> &mut Self {
         self.0.extend_from_slice(&x.to_le_bytes());
         self
     }
@@ -357,6 +389,18 @@ impl<'a> R<'a> {
     }
     fn i64(&mut self) -> Result<i64, DecodeError> {
         Ok(self.u64()?.cast_signed())
+    }
+    fn i32(&mut self) -> Result<i32, DecodeError> {
+        Ok(self.u32()?.cast_signed())
+    }
+    fn i16(&mut self) -> Result<i16, DecodeError> {
+        let mut a = [0; 2];
+        a.copy_from_slice(self.take(2)?);
+        Ok(i16::from_le_bytes(a))
+    }
+    fn code<T>(&mut self, what: &str, f: impl Fn(u8) -> Option<T>) -> Result<T, DecodeError> {
+        let c = self.u8()?;
+        f(c).ok_or_else(|| DecodeError(format!("{}: {what} code {c}", self.table)))
     }
     fn str(&mut self) -> Result<String, DecodeError> {
         let n = self.u32()? as usize;
@@ -614,12 +658,55 @@ impl Decoder<'_> {
             let phase = r.u8()?;
             let emitter = self.intern(EVENTS_HELD, &r.str()?)?;
             let kind = self.intern(EVENTS_HELD, &r.str()?)?;
+            let place = if r.flag()? {
+                Some(PlaceId::from_raw(r.u32()?))
+            } else {
+                None
+            };
+            let magnitude = r.i32()?;
+            let secrecy = r.code("secrecy", Secrecy::from_code)?;
+            let origin = r.code("origin", Origin::from_code)?;
+            let admitted = r.flag()?;
             let count = r.count()?;
-            let subjects = (0..count).map(|_| r.entity()).collect::<Result<_, _>>()?;
+            let roles = (0..count)
+                .map(|_| {
+                    Ok(RoleRow {
+                        role: RoleId(r.u8()?),
+                        entity: r.entity()?,
+                    })
+                })
+                .collect::<Result<_, DecodeError>>()?;
             let count = r.count()?;
-            let causes = (0..count)
-                .map(|_| r.u64().map(EventId::from_raw))
-                .collect::<Result<_, _>>()?;
+            let mut snapshots = Vec::with_capacity(count);
+            for _ in 0..count {
+                let attr = self.intern(EVENTS_HELD, &r.str()?)?;
+                let entity = r.entity()?;
+                let partner = if r.flag()? { Some(r.entity()?) } else { None };
+                snapshots.push(Snapshot {
+                    attr,
+                    entity,
+                    partner,
+                    value: r.i32()?,
+                });
+            }
+            let count = r.count()?;
+            let mut causes = Vec::with_capacity(count);
+            for _ in 0..count {
+                let cause = EventId::from_raw(r.u64()?);
+                let edge = r.code("edge kind", EdgeKind::from_code)?;
+                let motive = if r.flag()? {
+                    Some(self.intern(EVENTS_HELD, &r.str()?)?)
+                } else {
+                    None
+                };
+                causes.push(Edge {
+                    cause,
+                    kind: edge,
+                    motive,
+                    weight: r.i16()?,
+                    evidence: r.i16()?,
+                });
+            }
             let payload = r.list_i64()?;
             r.end()?;
             events.push(Event {
@@ -628,7 +715,13 @@ impl Decoder<'_> {
                 phase,
                 emitter,
                 kind,
-                subjects,
+                place,
+                magnitude,
+                secrecy,
+                origin,
+                admitted,
+                roles,
+                snapshots,
                 causes,
                 payload,
             });

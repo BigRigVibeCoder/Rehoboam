@@ -70,7 +70,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
-use rh_events::{Event, EventLog};
+use rh_events::{CausalEdge, Event, EventLog, EventRef, Origin};
 use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
 
 use crate::access::Lag;
@@ -1247,18 +1247,47 @@ impl Engine {
         }
         let mut ids = Vec::with_capacity(out.events.len());
         for mut draft in out.events {
-            let local = std::mem::take(&mut draft.local_causes);
-            // INVARIANT: `StepCtx::emit` admits only references to earlier drafts.
-            draft
-                .causes
-                .extend(local.iter().filter_map(|r| ids.get(r.0).copied()));
+            let event_error = |err: rh_events::EventError| SimError::Event {
+                system: e.id,
+                message: err.to_string(),
+            };
+            // Resolve every draft-local cause to the id this merge gave it, then coalesce to one
+            // edge per cause (envelope §5). INVARIANT: `StepCtx::emit` admits only references to
+            // earlier drafts, so every `Draft` resolves; a `Draft` left unresolved (or a `None`)
+            // stays and `append` refuses it.
+            let mut resolved = Vec::with_capacity(draft.causes.len());
+            let mut unresolved = Vec::new();
+            for edge in draft.causes {
+                let id = match edge.cause {
+                    EventRef::Known(id) => Some(id),
+                    EventRef::Draft(r) => ids.get(r.0).copied(),
+                    EventRef::None => None,
+                };
+                match id {
+                    Some(id) => resolved.push(edge.resolved(id)),
+                    None => unresolved.push(edge),
+                }
+            }
+            let motives = &self.registered.motives;
+            let coalesced = rh_events::coalesce(draft.kind, resolved, |m| {
+                motives.iter().position(|x| x == m)
+            })
+            .map_err(event_error)?;
+            draft.causes = coalesced
+                .into_iter()
+                .map(|edge| CausalEdge {
+                    cause: EventRef::Known(edge.cause),
+                    kind: edge.kind,
+                    motive: edge.motive,
+                    weight: edge.weight,
+                    evidence: edge.evidence,
+                })
+                .chain(unresolved)
+                .collect();
             let id = self
                 .events
-                .append(t.minutes(), phase.index(), e.id, draft)
-                .map_err(|err| SimError::Event {
-                    system: e.id,
-                    message: err.to_string(),
-                })?;
+                .append(t.minutes(), phase.index(), e.id, Origin::Sim, draft)
+                .map_err(event_error)?;
             ids.push(id);
             tally.events += 1;
         }

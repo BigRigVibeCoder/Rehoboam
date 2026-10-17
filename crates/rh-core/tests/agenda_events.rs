@@ -51,7 +51,7 @@ use rh_core::system::{PulseBinding, ResampleCtx, SimError, SpecPurpose, StepCtx,
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::{Event, EventDraft};
+use rh_events::{EdgeKind, Event, EventDraft, EventRef, RoleId};
 use rh_ids::rng::{h64_words, tag};
 use rh_ids::{BranchSalt, EntityRef, PersonId};
 use support::{Stub, agreeing_specs};
@@ -141,7 +141,7 @@ fn vital_step(
                 c.cancel(t.id())?;
             }
             pending[row] = 0;
-            c.emit(EventDraft::new("CURED").subject(entity(row)))?;
+            c.emit(EventDraft::new("CURED").role(RoleId::TARGET, entity(row)))?;
         }
     }
     v.write("vital.pending")?.copy_from_slice(&pending);
@@ -172,7 +172,7 @@ fn vital_fire(
     v.write("vital.pending")?[row] = 0;
     let death = c.emit(
         EventDraft::new("DEATH")
-            .subject(entity(row))
+            .role(RoleId::TARGET, entity(row))
             .with_payload(vec![r64(row), timer.key.time.minutes()]),
     )?;
     c.submit(Command {
@@ -236,9 +236,10 @@ fn estate_step(
         *order = order
             .wrapping_mul(31)
             .wrapping_add(q.command.person.to_raw().cast_signed());
-        let mut e = EventDraft::new("INHERITANCE").subject(EntityRef::person(q.command.person));
+        let mut e = EventDraft::new("INHERITANCE")
+            .role(RoleId::TARGET, EntityRef::person(q.command.person));
         if let Some(cause) = q.cause {
-            e = e.caused_by(cause);
+            e = e.caused_by(EventRef::Known(cause), EdgeKind::Triggered);
         }
         c.emit(e)?;
     }
@@ -260,7 +261,7 @@ fn rumor_step(
     let alive = v.read("vital.alive")?.to_vec();
     for (row, &a) in alive.iter().enumerate() {
         if a == 1 && row % 7 == usize::try_from(c.now().minutes().rem_euclid(7)).unwrap() {
-            c.emit(EventDraft::new("RUMOR").subject(entity(row)))?;
+            c.emit(EventDraft::new("RUMOR").role(RoleId::TARGET, entity(row)))?;
         }
     }
     Ok(())
@@ -408,7 +409,14 @@ fn ruling_1_thread_count_never_reaches_an_id() {
         "every death passes its id through the command"
     );
     for e in base.events.iter().filter(|e| e.kind == "CENSUS_NOTE") {
-        assert_eq!(e.causes, [rh_ids::EventId::from_raw(e.id.to_raw() - 1)]);
+        let edges: Vec<_> = e.causes.iter().map(|c| (c.cause, c.kind)).collect();
+        assert_eq!(
+            edges,
+            [(
+                rh_ids::EventId::from_raw(e.id.to_raw() - 1),
+                EdgeKind::Triggered
+            )]
+        );
     }
     for threads in [2, 4, 8] {
         let other = run(life_engine(7, 48, 4, false, threads), 3);
@@ -480,7 +488,7 @@ fn v_det_12_no_back_dating_property() {
                     "case {case}: EventIds strictly increase"
                 );
                 assert!(
-                    e.causes.iter().all(|c| *c < e.id),
+                    e.causes.iter().all(|c| c.cause < e.id),
                     "case {case}: causes point back"
                 );
                 last = Some(key);
@@ -539,7 +547,7 @@ fn t02_material_input_resamples_only_its_scope_keyed_by_epoch() {
         .events()
         .iter()
         .filter(|e| e.tick == due_at.minutes() && e.kind == "DEATH")
-        .map(|e| e.subjects[0])
+        .map(|e| e.roles[0].entity)
         .collect();
     assert!(
         !fired_now.contains(&before[0].0.entity),
@@ -881,7 +889,8 @@ fn t04_one_emitter_per_event_kind_declared_in_its_spec() {
 /// The committed event log of the life world (seed 7, 48 persons, two years, one thread).
 const LIFE_GOLDEN: &str = "tests/golden/life_world_events.txt";
 
-/// One event as a golden line: `id tick phase emitter kind s=[subjects] c=[causes] p=[payload]`.
+/// One event as a golden line: `id tick phase emitter kind s=[cast entities] c=[cause ids]
+/// p=[payload]` (the stub world's events have one `target` each and `triggered` edges only).
 fn event_line(e: &Event) -> String {
     let list = |v: Vec<String>| v.join(",");
     format!(
@@ -891,8 +900,13 @@ fn event_line(e: &Event) -> String {
         e.phase,
         e.emitter,
         e.kind,
-        list(e.subjects.iter().map(ToString::to_string).collect()),
-        list(e.causes.iter().map(|c| c.to_raw().to_string()).collect()),
+        list(e.roles.iter().map(|r| r.entity.to_string()).collect()),
+        list(
+            e.causes
+                .iter()
+                .map(|c| c.cause.to_raw().to_string())
+                .collect()
+        ),
         list(e.payload.iter().map(ToString::to_string).collect()),
     )
 }

@@ -16,6 +16,13 @@
 //!   emitted earlier in the same step by a [`DraftRef`]; the merge resolves it to that event's id,
 //!   which is then smaller by construction.
 //!
+//! - **The envelope** (`specs/chronicle/envelope_v0.md`, SPR-020 T-02). A draft carries its
+//!   place, magnitude and secrecy, its cast ([`RoleRow`]), its anchored snapshots ([`Snapshot`])
+//!   and typed causal edges ([`CausalEdge`]); the engine stamps the [`Origin`]. The merge
+//!   resolves every [`EventRef::Draft`] and coalesces edges to one per cause ([`coalesce`]);
+//!   [`EventLog::append`] refuses what §5 forbids, and [`Event::digest`] (version 2) hashes every
+//!   stored field but the admission flag.
+//!
 //! The phase is stored as its 0-based index (`rh_core::Phase::index`): this crate sits below
 //! `rh-core` and does not name its types.
 //!
@@ -24,15 +31,28 @@
 //! so event order is part of the hash contract and the drain cadence is not.
 //!
 //! REF: `docs/05_architecture/05.0_overview.md` §6; ADR-0007; ADR-0025 item 2;
-//! `docs/09` V-DET-12; `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-04, rulings 1 and 4.
+//! `docs/09` V-DET-12; `CODEX/05_PROJECT/SPR-006_AgendaEventsInvariants.md` T-04, rulings 1 and 4;
+//! `CODEX/05_PROJECT/SPR-020_EventEnvelope.md` T-02; REV-SPR-020 R3, R4, R8, R9, R21; REV-SPR-029 R20.
 #![forbid(unsafe_code)]
+
+mod coalesce;
+mod envelope;
 
 use core::fmt;
 
-use rh_ids::{EntityRef, EventId};
+use rh_ids::{EntityRef, EventId, PlaceId};
 
-/// Domain tag of [`EventLog::hash`].
-const TAG_EVENT_HASH: u64 = rh_ids::rng::tag("rehoboam/rh-events/log-hash/v1");
+pub use coalesce::coalesce;
+pub use envelope::{
+    CausalEdge, EVIDENCE_ONE, Edge, EdgeKind, EventRef, Origin, RoleId, RoleRow, Secrecy, Snapshot,
+};
+
+/// Domain tag of [`EventLog::hash`], of [`Event::digest`] and of the names they hash: version 2,
+/// the event envelope (`envelope_v0.md` §6).
+const TAG_EVENT_HASH: u64 = rh_ids::rng::tag("rehoboam/rh-events/log-hash/v2");
+
+/// The most role rows an event may hold: the ordinal is a `u8` (envelope §1; R12 NIT-5).
+pub const MAX_CAST: usize = 256;
 
 /// An earlier draft of the same step: the `n`-th event the step emitted, counting from 0. A step
 /// cannot know the `EventId` of an event it emits (ids are assigned at the merge), so it names it
@@ -40,54 +60,178 @@ const TAG_EVENT_HASH: u64 = rh_ids::rng::tag("rehoboam/rh-events/log-hash/v1");
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DraftRef(pub usize);
 
-/// An event as a system drafts it: no id, tick or phase yet (the merge assigns them).
+/// An event as a system drafts it (`envelope_v0.md` §2): no id, tick, phase, origin or admission
+/// flag yet (the engine stamps the origin; the merge assigns the rest).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EventDraft {
     /// The event kind, as the emitter's spec declares it (`[[emits]] kind`).
     pub kind: &'static str,
-    /// The entities the event is about, in the emitter's role order.
-    pub subjects: Vec<EntityRef>,
-    /// Causal edges: earlier events this one follows from.
-    pub causes: Vec<EventId>,
-    /// Causal edges to earlier drafts of the same step; resolved into `causes` before
-    /// [`EventLog::append`], which refuses a draft that still has any.
-    pub local_causes: Vec<DraftRef>,
+    /// `event.place_id`: none until places exist (SPR-018).
+    pub place: Option<PlaceId>,
+    /// `event.magnitude`: 0 unless the verb's spec gives it a meaning.
+    pub magnitude: i32,
+    /// `event.secrecy`: public unless the spec says.
+    pub secrecy: Secrecy,
+    /// The cast: role rows (sorted and checked by `rh-core`'s `emit`).
+    pub roles: Vec<RoleRow>,
+    /// The anchored snapshots (sorted and checked by `emit`).
+    pub snapshots: Vec<Snapshot>,
+    /// The causal edges, to earlier drafts of the step or to known events; the merge resolves and
+    /// coalesces them.
+    pub causes: Vec<CausalEdge>,
     /// Kind-specific integer payload.
     pub payload: Vec<i64>,
 }
 
 impl EventDraft {
-    /// A draft of `kind` with no subjects, causes or payload.
+    /// A public draft of `kind` with no place, magnitude, cast, snapshot, cause or payload.
     #[must_use]
     pub fn new(kind: &'static str) -> Self {
         Self {
             kind,
-            subjects: Vec::new(),
+            place: None,
+            magnitude: 0,
+            secrecy: Secrecy::Public,
+            roles: Vec::new(),
+            snapshots: Vec::new(),
             causes: Vec::new(),
-            local_causes: Vec::new(),
             payload: Vec::new(),
         }
     }
 
-    /// Adds a subject.
+    /// Sets the place.
     #[must_use]
-    pub fn subject(mut self, entity: EntityRef) -> Self {
-        self.subjects.push(entity);
+    pub fn at(mut self, place: PlaceId) -> Self {
+        self.place = Some(place);
         self
     }
 
-    /// Adds a causal edge.
+    /// Sets the magnitude.
     #[must_use]
-    pub fn caused_by(mut self, cause: EventId) -> Self {
-        self.causes.push(cause);
+    pub fn magnitude(mut self, magnitude: i32) -> Self {
+        self.magnitude = magnitude;
         self
     }
 
-    /// Adds a causal edge to an earlier draft of the same step.
+    /// Sets the secrecy.
     #[must_use]
-    pub fn after(mut self, draft: DraftRef) -> Self {
-        self.local_causes.push(draft);
+    pub fn secrecy(mut self, secrecy: Secrecy) -> Self {
+        self.secrecy = secrecy;
         self
+    }
+
+    /// Adds a role row.
+    #[must_use]
+    pub fn role(mut self, role: RoleId, entity: EntityRef) -> Self {
+        self.roles.push(RoleRow { role, entity });
+        self
+    }
+
+    /// Adds a witness (the one role that may repeat).
+    #[must_use]
+    pub fn witness(self, entity: EntityRef) -> Self {
+        self.role(RoleId::WITNESS, entity)
+    }
+
+    /// Adds a one-argument snapshot of `attr` of `entity`.
+    #[must_use]
+    pub fn snapshot(mut self, attr: &'static str, entity: EntityRef, value: i32) -> Self {
+        self.snapshots.push(Snapshot {
+            attr,
+            entity,
+            partner: None,
+            value,
+        });
+        self
+    }
+
+    /// Adds a two-argument snapshot of `attr` of `(entity, partner)`.
+    #[must_use]
+    pub fn relational_snapshot(
+        mut self,
+        attr: &'static str,
+        entity: EntityRef,
+        partner: EntityRef,
+        value: i32,
+    ) -> Self {
+        self.snapshots.push(Snapshot {
+            attr,
+            entity,
+            partner: Some(partner),
+            value,
+        });
+        self
+    }
+
+    /// Adds a snapshot of `attr` of the event itself (stored as the world: §4 rule 3).
+    #[must_use]
+    pub fn event_snapshot(self, attr: &'static str, value: i32) -> Self {
+        self.snapshot(attr, EntityRef::WORLD, value)
+    }
+
+    /// Adds a causal edge of a non-motivated kind: weight 0, and evidence 1 on a deterministic
+    /// kind (the only kinds with a fixed evidence; the others take [`EventDraft::caused_by_with`]).
+    #[must_use]
+    pub fn caused_by(self, cause: EventRef, kind: EdgeKind) -> Self {
+        let evidence = if kind.is_deterministic() {
+            EVIDENCE_ONE
+        } else {
+            0
+        };
+        self.caused_by_with(cause, kind, evidence)
+    }
+
+    /// Adds a causal edge of a non-motivated kind with an explicit evidence (`Q8_8` raw bits).
+    #[must_use]
+    pub fn caused_by_with(mut self, cause: EventRef, kind: EdgeKind, evidence: i16) -> Self {
+        self.causes.push(CausalEdge {
+            cause,
+            kind,
+            motive: None,
+            weight: 0,
+            evidence,
+        });
+        self
+    }
+
+    /// Adds a `motivated_by` edge naming `motive` (a `[motive_edges]` name), with its weight and
+    /// evidence as `Q8_8` raw bits.
+    #[must_use]
+    pub fn motivated_by(
+        mut self,
+        cause: EventRef,
+        motive: &'static str,
+        weight: i16,
+        evidence: i16,
+    ) -> Self {
+        self.causes.push(CausalEdge {
+            cause,
+            kind: EdgeKind::MotivatedBy,
+            motive: Some(motive),
+            weight,
+            evidence,
+        });
+        self
+    }
+
+    /// Adds a `motivated_by` edge whose contributor is not a named motive (an opinion term, a
+    /// trait term).
+    #[must_use]
+    pub fn motivated_by_unnamed(mut self, cause: EventRef, weight: i16, evidence: i16) -> Self {
+        self.causes.push(CausalEdge {
+            cause,
+            kind: EdgeKind::MotivatedBy,
+            motive: None,
+            weight,
+            evidence,
+        });
+        self
+    }
+
+    /// A `triggered` edge to an earlier draft of the same step.
+    #[must_use]
+    pub fn after(self, draft: DraftRef) -> Self {
+        self.caused_by(EventRef::Draft(draft), EdgeKind::Triggered)
     }
 
     /// Sets the payload.
@@ -111,10 +255,23 @@ pub struct Event {
     pub emitter: &'static str,
     /// The kind.
     pub kind: &'static str,
-    /// The subjects.
-    pub subjects: Vec<EntityRef>,
-    /// The causal edges, all to smaller ids.
-    pub causes: Vec<EventId>,
+    /// `event.place_id`.
+    pub place: Option<PlaceId>,
+    /// `event.magnitude`.
+    pub magnitude: i32,
+    /// `event.secrecy`.
+    pub secrecy: Secrecy,
+    /// `event.origin`: the origin of the job that emitted it.
+    pub origin: Origin,
+    /// Whether the chronicle admits it (`05.2` §4.0; D38). Carried, never hashed: plane A never
+    /// branches on it. Every P1a draft is admitted.
+    pub admitted: bool,
+    /// The cast, in canonical order (role, then entity).
+    pub roles: Vec<RoleRow>,
+    /// The snapshots, in canonical order.
+    pub snapshots: Vec<Snapshot>,
+    /// The causal edges, one per cause, by cause id ascending; all to smaller ids.
+    pub causes: Vec<Edge>,
     /// The payload.
     pub payload: Vec<i64>,
 }
@@ -134,12 +291,12 @@ pub enum EventError {
     BackDated {
         /// The kind.
         kind: &'static str,
-        /// The `(tick, phase)` of the append.
+        /// The `(tick, phase)` of the refused append.
         at: (i64, u8),
         /// The `(tick, phase)` of the last event.
         last: (i64, u8),
     },
-    /// The draft still has draft-local causes: the caller resolves them first.
+    /// A cause is still a [`EventRef::Draft`] (or [`EventRef::None`]): the merge resolves it first.
     Unresolved {
         /// The kind.
         kind: &'static str,
@@ -153,6 +310,55 @@ pub enum EventError {
         /// The id the new event would get.
         id: EventId,
     },
+    /// A motive on an edge whose kind is not `motivated_by` (§5).
+    MotiveOffMotivatedBy {
+        /// The kind.
+        kind: &'static str,
+        /// The edge's cause.
+        cause: EventId,
+        /// The edge's kind.
+        edge: EdgeKind,
+        /// The motive.
+        motive: &'static str,
+    },
+    /// A non-zero weight on an edge whose kind is not `motivated_by` (§5).
+    WeightOffMotivatedBy {
+        /// The kind.
+        kind: &'static str,
+        /// The edge's cause.
+        cause: EventId,
+        /// The edge's kind.
+        edge: EdgeKind,
+        /// The weight's raw bits.
+        weight: i16,
+    },
+    /// An evidence other than 1 (256) on a deterministic kind, or outside [0, 1] (§5; R8).
+    Evidence {
+        /// The kind.
+        kind: &'static str,
+        /// The edge's cause.
+        cause: EventId,
+        /// The edge's kind.
+        edge: EdgeKind,
+        /// The evidence's raw bits.
+        evidence: i16,
+    },
+    /// Two edges to one cause: the merge coalesces them first (§5; R9).
+    DuplicateCause {
+        /// The kind.
+        kind: &'static str,
+        /// The repeated cause.
+        cause: EventId,
+    },
+    /// An edge of kind 6–8 (`player`, `oracle`, `director`), which has no writer in P1a (§5).
+    NoWriter {
+        /// The kind.
+        kind: &'static str,
+        /// The edge's cause.
+        cause: EventId,
+        /// The edge's kind.
+        edge: EdgeKind,
+    },
 }
 
 impl fmt::Display for EventError {
@@ -164,17 +370,97 @@ impl fmt::Display for EventError {
                 at.0, at.1, last.0, last.1
             ),
             Self::Unresolved { kind } => {
-                write!(f, "event {kind} still has unresolved draft-local causes")
+                write!(f, "event {kind} still has an unresolved draft-local cause")
             }
             Self::ForwardCause { kind, cause, id } => write!(
                 f,
                 "event {kind} (id {id}) names cause {cause}, which is not an earlier event"
+            ),
+            Self::MotiveOffMotivatedBy {
+                kind,
+                cause,
+                edge,
+                motive,
+            } => write!(
+                f,
+                "event {kind}: the {edge} edge to {cause} carries the motive {motive}; a motive is on motivated_by only"
+            ),
+            Self::WeightOffMotivatedBy {
+                kind,
+                cause,
+                edge,
+                weight,
+            } => write!(
+                f,
+                "event {kind}: the {edge} edge to {cause} has weight {weight}; the weight is 0 off motivated_by"
+            ),
+            Self::Evidence {
+                kind,
+                cause,
+                edge,
+                evidence,
+            } => write!(
+                f,
+                "event {kind}: the {edge} edge to {cause} has evidence {evidence}; it is 256 on a deterministic kind and in [0, 256] otherwise"
+            ),
+            Self::DuplicateCause { kind, cause } => write!(
+                f,
+                "event {kind} has two edges to cause {cause}; one edge per cause (coalesce first)"
+            ),
+            Self::NoWriter { kind, cause, edge } => write!(
+                f,
+                "event {kind}: the {edge} edge to {cause} is of an input kind, which has no writer in P1a"
             ),
         }
     }
 }
 
 impl std::error::Error for EventError {}
+
+/// The edge rules of §5 that do not depend on the new id or on the other edges: a writer for the
+/// kind, a motive and a weight only on `motivated_by`, evidence 1 on a deterministic kind and in
+/// [0, 1] otherwise.
+fn check_edge(kind: &'static str, e: &Edge) -> Result<(), EventError> {
+    if !e.kind.has_writer() {
+        return Err(EventError::NoWriter {
+            kind,
+            cause: e.cause,
+            edge: e.kind,
+        });
+    }
+    if e.kind != EdgeKind::MotivatedBy {
+        if let Some(motive) = e.motive {
+            return Err(EventError::MotiveOffMotivatedBy {
+                kind,
+                cause: e.cause,
+                edge: e.kind,
+                motive,
+            });
+        }
+        if e.weight != 0 {
+            return Err(EventError::WeightOffMotivatedBy {
+                kind,
+                cause: e.cause,
+                edge: e.kind,
+                weight: e.weight,
+            });
+        }
+    }
+    let evidence_ok = if e.kind.is_deterministic() {
+        e.evidence == EVIDENCE_ONE
+    } else {
+        (0..=EVIDENCE_ONE).contains(&e.evidence)
+    };
+    if !evidence_ok {
+        return Err(EventError::Evidence {
+            kind,
+            cause: e.cause,
+            edge: e.kind,
+            evidence: e.evidence,
+        });
+    }
+    Ok(())
+}
 
 /// The event log of one timeline: the events in id order and the counter.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -231,8 +517,11 @@ impl EventLog {
             if e.id.to_raw() != expected {
                 return Err(format!("event {} where id {expected} is expected", e.id));
             }
-            if let Some(&cause) = e.causes.iter().find(|c| **c >= e.id) {
-                return Err(format!("event {} names the later cause {cause}", e.id));
+            if let Some(c) = e.causes.iter().find(|c| c.cause >= e.id) {
+                return Err(format!("event {} names the later cause {}", e.id, c.cause));
+            }
+            if e.causes.windows(2).any(|w| w[0].cause >= w[1].cause) {
+                return Err(format!("event {}'s causes are not ascending", e.id));
             }
         }
         if let Some(w) = state
@@ -297,38 +586,74 @@ impl EventLog {
         std::mem::take(&mut self.events)
     }
 
-    /// Appends a draft emitted by `emitter` at instant `tick` in phase `phase`, and returns its id.
+    /// Appends a draft emitted by `emitter` at instant `tick` in phase `phase` by a job of
+    /// `origin`, admitted by the chronicle, and returns its id.
     ///
     /// # Errors
-    /// [`EventError::BackDated`] if `(tick, phase)` is before the last event's;
-    /// [`EventError::Unresolved`] if the draft still has draft-local causes;
-    /// [`EventError::ForwardCause`] if a cause is not smaller than the new id. Nothing is appended
-    /// and the counter does not move.
+    /// As [`EventLog::append_admitted`].
     pub fn append(
         &mut self,
         tick: i64,
         phase: u8,
         emitter: &'static str,
+        origin: Origin,
         draft: EventDraft,
     ) -> Result<EventId, EventError> {
+        self.append_admitted(tick, phase, emitter, origin, true, draft)
+    }
+
+    /// Appends a draft, as [`EventLog::append`], with the admission flag the merge computed
+    /// (`05.2` §4.0; carried, never hashed).
+    ///
+    /// # Errors
+    /// [`EventError::BackDated`] if `(tick, phase)` is before the last event's;
+    /// [`EventError::Unresolved`] if a cause is not a known id; [`EventError::ForwardCause`] if a
+    /// cause is not smaller than the new id; [`EventError::NoWriter`],
+    /// [`EventError::MotiveOffMotivatedBy`], [`EventError::WeightOffMotivatedBy`] and
+    /// [`EventError::Evidence`] for an edge that breaks §5; [`EventError::DuplicateCause`] for two
+    /// edges to one cause. Nothing is appended and the counter does not move.
+    pub fn append_admitted(
+        &mut self,
+        tick: i64,
+        phase: u8,
+        emitter: &'static str,
+        origin: Origin,
+        admitted: bool,
+        draft: EventDraft,
+    ) -> Result<EventId, EventError> {
+        let kind = draft.kind;
         if let Some(last) = self.last
             && (tick, phase) < last
         {
             return Err(EventError::BackDated {
-                kind: draft.kind,
+                kind,
                 at: (tick, phase),
                 last,
             });
         }
-        if !draft.local_causes.is_empty() {
-            return Err(EventError::Unresolved { kind: draft.kind });
-        }
         let id = self.next_id();
-        if let Some(&cause) = draft.causes.iter().find(|c| **c >= id) {
-            return Err(EventError::ForwardCause {
-                kind: draft.kind,
-                cause,
-                id,
+        let mut causes = Vec::with_capacity(draft.causes.len());
+        for c in &draft.causes {
+            let EventRef::Known(cause) = c.cause else {
+                return Err(EventError::Unresolved { kind });
+            };
+            causes.push(c.resolved(cause));
+        }
+        causes.sort_by_key(|e| e.cause);
+        for e in &causes {
+            if e.cause >= id {
+                return Err(EventError::ForwardCause {
+                    kind,
+                    cause: e.cause,
+                    id,
+                });
+            }
+            check_edge(kind, e)?;
+        }
+        if let Some(w) = causes.windows(2).find(|w| w[0].cause == w[1].cause) {
+            return Err(EventError::DuplicateCause {
+                kind,
+                cause: w[0].cause,
             });
         }
         let event = Event {
@@ -336,9 +661,15 @@ impl EventLog {
             tick,
             phase,
             emitter,
-            kind: draft.kind,
-            subjects: draft.subjects,
-            causes: draft.causes,
+            kind,
+            place: draft.place,
+            magnitude: draft.magnitude,
+            secrecy: draft.secrecy,
+            origin,
+            admitted,
+            roles: draft.roles,
+            snapshots: draft.snapshots,
+            causes,
             payload: draft.payload,
         };
         self.running = rh_ids::rng::h64_words(TAG_EVENT_HASH, &[self.running, event.digest()]);
@@ -358,42 +689,102 @@ impl EventLog {
     }
 }
 
+/// `h(name)`: a Registry name, an emitter or a kind, hashed under the log's tag.
+fn h_name(name: &str) -> u64 {
+    rh_ids::rng::h64_bytes(TAG_EVENT_HASH, name.as_bytes())
+}
+
+/// A signed value sign-extended to a word.
+fn sx(v: i64) -> u64 {
+    v.cast_unsigned()
+}
+
 impl Event {
-    /// A digest of every field of the event: what the running log hash folds in.
+    /// A digest of every hashed field of the event, version 2 (`envelope_v0.md` §6): what the
+    /// running log hash folds in. Words, in order:
+    ///
+    /// ```text
+    /// id, tick, phase, h(emitter), h(kind),
+    /// has_place (0|1), place (0 when absent), magnitude (i32 sign-extended), secrecy, origin,
+    /// n_roles,     then per role row:  role, entity_kind_tag, entity_raw
+    /// n_snapshots, then per snapshot:  h(attr name), entity_kind_tag, entity_raw, has_partner (0|1),
+    ///                                  partner_kind_tag, partner_raw (0, 0 when absent), value (i32 sign-extended)
+    /// n_causes,    then per edge:      cause_id, kind, has_motive (0|1), h(motive name) (0 when absent),
+    ///                                  weight (i16 sign-extended), evidence
+    /// n_payload,   then the payload words
+    /// ```
+    ///
+    /// The admission flag is not hashed (`05.2` §4.0).
     #[must_use]
     pub fn digest(&self) -> u64 {
-        use rh_ids::rng::{h64_bytes, h64_words};
         let mut words = vec![
             self.id.to_raw(),
-            self.tick.cast_unsigned(),
+            sx(self.tick),
             u64::from(self.phase),
-            h64_bytes(TAG_EVENT_HASH, self.emitter.as_bytes()),
-            h64_bytes(TAG_EVENT_HASH, self.kind.as_bytes()),
-            self.subjects.len() as u64,
+            h_name(self.emitter),
+            h_name(self.kind),
+            u64::from(self.place.is_some()),
+            self.place.map_or(0, |p| u64::from(p.to_raw())),
+            sx(i64::from(self.magnitude)),
+            u64::from(self.secrecy.code()),
+            u64::from(self.origin.code()),
+            self.roles.len() as u64,
         ];
-        for s in &self.subjects {
-            words.push(u64::from(s.kind().tag()));
-            words.push(s.raw());
+        for r in &self.roles {
+            words.extend([
+                u64::from(r.role.0),
+                u64::from(r.entity.kind().tag()),
+                r.entity.raw(),
+            ]);
+        }
+        words.push(self.snapshots.len() as u64);
+        for s in &self.snapshots {
+            words.extend([
+                h_name(s.attr),
+                u64::from(s.entity.kind().tag()),
+                s.entity.raw(),
+                u64::from(s.partner.is_some()),
+                s.partner.map_or(0, |p| u64::from(p.kind().tag())),
+                s.partner.map_or(0, EntityRef::raw),
+                sx(i64::from(s.value)),
+            ]);
         }
         words.push(self.causes.len() as u64);
-        words.extend(self.causes.iter().map(|c| c.to_raw()));
+        for e in &self.causes {
+            words.extend([
+                e.cause.to_raw(),
+                u64::from(e.kind.code()),
+                u64::from(e.motive.is_some()),
+                e.motive.map_or(0, h_name),
+                sx(i64::from(e.weight)),
+                sx(i64::from(e.evidence)),
+            ]);
+        }
         words.push(self.payload.len() as u64);
         words.extend(self.payload.iter().map(|v| v.cast_unsigned()));
-        h64_words(TAG_EVENT_HASH, &words)
+        rh_ids::rng::h64_words(TAG_EVENT_HASH, &words)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{EventDraft, EventError, EventLog};
+    use super::{
+        DraftRef, Edge, EdgeKind, EventDraft, EventError, EventLog, EventRef, Origin, coalesce,
+    };
     use rh_ids::{EntityRef, EventId, PersonId};
+
+    const SIM: Origin = Origin::Sim;
+
+    fn known(raw: u64) -> EventRef {
+        EventRef::Known(EventId::from_raw(raw))
+    }
 
     #[test]
     fn ids_follow_append_order_and_back_dating_is_refused() {
         let mut log = EventLog::new();
-        let a = log.append(10, 4, "M2.demography", EventDraft::new("DEATH"));
-        let b = log.append(10, 4, "M2.demography", EventDraft::new("DEATH"));
-        let c = log.append(10, 9, "S7.vows", EventDraft::new("VOW_VOIDED"));
+        let a = log.append(10, 4, "M2.demography", SIM, EventDraft::new("DEATH"));
+        let b = log.append(10, 4, "M2.demography", SIM, EventDraft::new("DEATH"));
+        let c = log.append(10, 9, "S7.vows", SIM, EventDraft::new("VOW_VOIDED"));
         assert_eq!(
             (a, b, c),
             (
@@ -402,9 +793,9 @@ mod tests {
                 Ok(EventId::from_raw(2))
             )
         );
-        let early = log.append(10, 4, "M2.demography", EventDraft::new("DEATH"));
+        let early = log.append(10, 4, "M2.demography", SIM, EventDraft::new("DEATH"));
         assert!(matches!(early, Err(EventError::BackDated { .. })));
-        let past = log.append(9, 11, "M2.demography", EventDraft::new("DEATH"));
+        let past = log.append(9, 11, "M2.demography", SIM, EventDraft::new("DEATH"));
         assert!(matches!(past, Err(EventError::BackDated { .. })));
         assert_eq!(
             log.next_id(),
@@ -419,38 +810,118 @@ mod tests {
     fn causes_point_back() {
         let mut log = EventLog::new();
         let d = log
-            .append(0, 4, "M2.demography", EventDraft::new("DEATH"))
+            .append(0, 4, "M2.demography", SIM, EventDraft::new("DEATH"))
             .unwrap_or_else(|e| panic!("{e}"));
         let ok = log.append(
             0,
             9,
             "S7.vows",
+            SIM,
             EventDraft::new("VOW_VOIDED")
-                .caused_by(d)
-                .subject(EntityRef::person(PersonId::from_raw(7))),
+                .caused_by(EventRef::Known(d), EdgeKind::Triggered)
+                .role(
+                    super::RoleId::ACTOR,
+                    EntityRef::person(PersonId::from_raw(7)),
+                ),
         );
         assert_eq!(ok, Ok(EventId::from_raw(1)));
         let self_cause = log.append(
             0,
             9,
             "S7.vows",
-            EventDraft::new("VOW_VOIDED").caused_by(EventId::from_raw(2)),
+            SIM,
+            EventDraft::new("VOW_VOIDED").caused_by(known(2), EdgeKind::Triggered),
         );
         assert!(matches!(self_cause, Err(EventError::ForwardCause { .. })));
         let local = log.append(
             0,
             9,
             "S7.vows",
-            EventDraft::new("VOW_VOIDED").after(super::DraftRef(0)),
+            SIM,
+            EventDraft::new("VOW_VOIDED").after(DraftRef(0)),
         );
         assert!(matches!(local, Err(EventError::Unresolved { .. })));
+        let none = log.append(
+            0,
+            9,
+            "S7.vows",
+            SIM,
+            EventDraft::new("VOW_VOIDED").caused_by(EventRef::None, EdgeKind::Triggered),
+        );
+        assert!(matches!(none, Err(EventError::Unresolved { .. })));
+    }
+
+    /// SPR-020 T-02: each `append` refusal of §5, planted, is refused by its named error, and a
+    /// refusal touches nothing (the counter, the last instant, the hash and the held events).
+    #[test]
+    fn every_edge_refusal_is_named_and_touches_nothing() {
+        let mut log = EventLog::new();
+        for _ in 0..3 {
+            log.append(0, 1, "X", SIM, EventDraft::new("A"))
+                .unwrap_or_else(|e| panic!("{e}"));
+        }
+        let before = log.clone();
+        let d = || EventDraft::new("B");
+        let mut motive_on_triggered = d().caused_by(known(0), EdgeKind::Triggered);
+        motive_on_triggered.causes[0].motive = Some("GRIEF_FOR");
+        let mut weight_on_triggered = d().caused_by(known(0), EdgeKind::Triggered);
+        weight_on_triggered.causes[0].weight = 5;
+        let cases: Vec<(EventDraft, &str)> = vec![
+            (d().after(DraftRef(0)), "Unresolved"),
+            (d().caused_by(known(3), EdgeKind::Triggered), "ForwardCause"),
+            (motive_on_triggered, "MotiveOffMotivatedBy"),
+            (weight_on_triggered, "WeightOffMotivatedBy"),
+            (
+                d().caused_by_with(known(0), EdgeKind::Triggered, 255),
+                "Evidence",
+            ),
+            (
+                d().caused_by_with(known(0), EdgeKind::Contingent, 0),
+                "Evidence",
+            ),
+            (
+                d().caused_by_with(known(0), EdgeKind::Enabled, 257),
+                "Evidence",
+            ),
+            (d().motivated_by(known(0), "GRIEF_FOR", 10, -1), "Evidence"),
+            (
+                d().caused_by(known(0), EdgeKind::Triggered)
+                    .caused_by(known(0), EdgeKind::Contingent),
+                "DuplicateCause",
+            ),
+            (d().caused_by(known(0), EdgeKind::Player), "NoWriter"),
+            (d().caused_by(known(0), EdgeKind::Oracle), "NoWriter"),
+            (d().caused_by(known(0), EdgeKind::Director), "NoWriter"),
+        ];
+        for (draft, name) in cases {
+            let got = log.append(1, 1, "X", SIM, draft);
+            let err = got.err().unwrap_or_else(|| panic!("{name}: accepted"));
+            assert!(format!("{err:?}").starts_with(name), "{name}: got {err:?}");
+            assert_eq!(log, before, "{name}: a refused append touched the log");
+        }
+        let ok = log.append(
+            1,
+            1,
+            "X",
+            SIM,
+            d().caused_by(known(2), EdgeKind::Triggered)
+                .motivated_by(known(0), "GRIEF_FOR", -7, 0)
+                .caused_by_with(known(1), EdgeKind::Probabilistic, 0),
+        );
+        assert_eq!(ok, Ok(EventId::from_raw(3)));
+        let cause_ids: Vec<u64> = log.events()[3]
+            .causes
+            .iter()
+            .map(|e| e.cause.to_raw())
+            .collect();
+        assert_eq!(cause_ids, [0, 1, 2], "edges are sorted by cause id");
     }
 
     #[test]
     fn drain_keeps_the_counter_and_the_order_floor() {
         let mut log = EventLog::new();
         let h0 = log.hash();
-        log.append(5, 1, "X", EventDraft::new("A").with_payload(vec![1]))
+        log.append(5, 1, "X", SIM, EventDraft::new("A").with_payload(vec![1]))
             .unwrap_or_else(|e| panic!("{e}"));
         assert_ne!(log.hash(), h0);
         let h1 = log.hash();
@@ -458,18 +929,20 @@ mod tests {
         assert!(log.events().is_empty());
         assert_eq!(log.hash(), h1, "draining does not change the hash");
         assert_eq!(log.next_id(), EventId::from_raw(1));
-        assert!(log.append(4, 1, "X", EventDraft::new("A")).is_err());
+        assert!(log.append(4, 1, "X", SIM, EventDraft::new("A")).is_err());
     }
 
     #[test]
-    fn the_hash_ignores_the_drain_cadence() {
-        let fill = |drain_every: Option<u64>| -> u64 {
+    fn the_hash_ignores_the_drain_cadence_and_the_admission_flag() {
+        let fill = |drain_every: Option<u64>, admit_odd: bool| -> u64 {
             let mut log = EventLog::new();
             for i in 0..240_i64 {
-                log.append(
+                log.append_admitted(
                     i / 4,
                     u8::try_from(i % 4).unwrap_or(0),
                     "X",
+                    SIM,
+                    !admit_odd || i % 2 == 0,
                     EventDraft::new("A").with_payload(vec![i]),
                 )
                 .unwrap_or_else(|e| panic!("{e}"));
@@ -479,10 +952,157 @@ mod tests {
             }
             log.hash()
         };
-        let never = fill(None);
-        assert_eq!(fill(Some(20)), never, "monthly");
-        assert_eq!(fill(Some(240)), never, "yearly");
-        assert_eq!(fill(Some(1)), never, "every event");
+        let never = fill(None, false);
+        assert_eq!(fill(Some(20), false), never, "monthly");
+        assert_eq!(fill(Some(240), false), never, "yearly");
+        assert_eq!(fill(Some(1), false), never, "every event");
+        assert_eq!(fill(None, true), never, "the admission flag is not hashed");
+    }
+
+    /// The R20 known answer (envelope §5 as amended): `GRIEF_FOR` +100, `FEAR_OF` +100 and
+    /// `RETALIATION_FOR` −150 to one cause give weight +50 and motive `FEAR_OF` (index 4 beats
+    /// `GRIEF_FOR`'s 6). The old rule (largest |weight|) would have named `RETALIATION_FOR`.
+    #[test]
+    fn coalescing_known_answers() {
+        const MOTIVES: [&str; 9] = [
+            "RETALIATION_FOR",
+            "JEALOUSY_OF",
+            "VOW_OF",
+            "AMBITION_FOR",
+            "FEAR_OF",
+            "LOYALTY_TO",
+            "GRIEF_FOR",
+            "GREED_FOR",
+            "CORRUPTION_BY",
+        ];
+        let idx = |m: &str| MOTIVES.iter().position(|x| *x == m);
+        let c = EventId::from_raw(4);
+        let m = |motive: Option<&'static str>, weight: i16, evidence: i16| Edge {
+            cause: c,
+            kind: EdgeKind::MotivatedBy,
+            motive,
+            weight,
+            evidence,
+        };
+        let one = |edges: Vec<Edge>| {
+            let out = coalesce("X", edges, idx).unwrap_or_else(|e| panic!("{e}"));
+            assert_eq!(out.len(), 1);
+            out[0]
+        };
+        let r20 = one(vec![
+            m(Some("GRIEF_FOR"), 100, 10),
+            m(Some("FEAR_OF"), 100, 20),
+            m(Some("RETALIATION_FOR"), -150, 30),
+        ]);
+        assert_eq!(
+            (r20.kind, r20.motive, r20.weight, r20.evidence),
+            (EdgeKind::MotivatedBy, Some("FEAR_OF"), 50, 30)
+        );
+        // R21: a contingent reference and a RETALIATION_FOR motive to one harm keep motivated_by
+        // with its motive, weight and margin.
+        let r21 = one(vec![
+            Edge {
+                cause: c,
+                kind: EdgeKind::Contingent,
+                motive: None,
+                weight: 0,
+                evidence: 256,
+            },
+            m(Some("RETALIATION_FOR"), 90, 40),
+        ]);
+        assert_eq!(
+            (r21.kind, r21.motive, r21.weight, r21.evidence),
+            (EdgeKind::MotivatedBy, Some("RETALIATION_FOR"), 90, 40)
+        );
+        // Saturated once, in any order: 32767 + 32767 - 32768 is 32766 exactly (a step-by-step
+        // saturation gives -1 in this order), and 32767 + 32767 + 5 saturates to i16::MAX.
+        for order in [[0, 1, 2], [2, 0, 1], [1, 2, 0]] {
+            for (w, want) in [
+                ([32767_i16, 32767, -32768], 32766),
+                ([32767, 32767, 5], i16::MAX),
+            ] {
+                let e = one(order
+                    .iter()
+                    .map(|&k| m(Some("GREED_FOR"), w[k], 0))
+                    .collect());
+                assert_eq!(e.weight, want, "{w:?} in order {order:?}");
+            }
+        }
+        assert_eq!(
+            one(vec![
+                m(Some("GREED_FOR"), -32768, 0),
+                m(Some("FEAR_OF"), -1, 0)
+            ])
+            .weight,
+            i16::MIN
+        );
+        // A zero sum names nothing; a negative one the most negative; an unnamed winner none.
+        assert_eq!(
+            one(vec![m(Some("GRIEF_FOR"), 5, 0), m(Some("FEAR_OF"), -5, 0)]).motive,
+            None
+        );
+        assert_eq!(
+            one(vec![m(Some("GRIEF_FOR"), -9, 0), m(Some("FEAR_OF"), 2, 0)]).motive,
+            Some("GRIEF_FOR")
+        );
+        assert_eq!(
+            one(vec![m(None, 9, 0), m(Some("FEAR_OF"), 2, 0)]).motive,
+            None
+        );
+        assert_eq!(
+            one(vec![m(None, 9, 0), m(Some("CORRUPTION_BY"), 9, 0)]).motive,
+            Some("CORRUPTION_BY"),
+            "an unnamed contributor counts as the highest index"
+        );
+    }
+
+    /// Mixed deterministic kinds keep the precedence's first; a bad contributor is refused.
+    #[test]
+    fn coalescing_mixed_kinds_and_bad_contributors() {
+        let idx = |m: &str| ["FEAR_OF"].iter().position(|x| *x == m);
+        let c = EventId::from_raw(4);
+        let m = |motive: Option<&'static str>, weight: i16, evidence: i16| Edge {
+            cause: c,
+            kind: EdgeKind::MotivatedBy,
+            motive,
+            weight,
+            evidence,
+        };
+        let one = |edges: Vec<Edge>| {
+            let out = coalesce("X", edges, idx).unwrap_or_else(|e| panic!("{e}"));
+            assert_eq!(out.len(), 1);
+            out[0]
+        };
+        // Triggered and enabled to one cause: triggered, evidence 1.
+        let te = one(vec![
+            Edge {
+                cause: c,
+                kind: EdgeKind::Enabled,
+                motive: None,
+                weight: 0,
+                evidence: 17,
+            },
+            Edge {
+                cause: c,
+                kind: EdgeKind::Triggered,
+                motive: None,
+                weight: 0,
+                evidence: 256,
+            },
+        ]);
+        assert_eq!((te.kind, te.evidence), (EdgeKind::Triggered, 256));
+        // A contributor that breaks an edge rule is refused, not absorbed.
+        let bad = Edge {
+            cause: c,
+            kind: EdgeKind::Triggered,
+            motive: None,
+            weight: 3,
+            evidence: 256,
+        };
+        assert!(matches!(
+            coalesce("X", vec![bad, m(Some("FEAR_OF"), 1, 0)], idx),
+            Err(EventError::WeightOffMotivatedBy { .. })
+        ));
     }
 
     /// SPR-007 T-02: the state round-trips (before and after a drain), and only the form
@@ -495,11 +1115,11 @@ mod tests {
         for i in 0..6_i64 {
             let d = EventDraft::new("A").with_payload(vec![i]);
             let d = if i > 0 {
-                d.caused_by(EventId::from_raw(0))
+                d.caused_by(known(0), EdgeKind::Triggered)
             } else {
                 d
             };
-            log.append(i / 2, u8::try_from(i % 2).unwrap_or(0), "X", d)
+            log.append(i / 2, u8::try_from(i % 2).unwrap_or(0), "X", SIM, d)
                 .unwrap_or_else(|e| panic!("{e}"));
         }
         let state = log.state();
@@ -529,8 +1149,15 @@ mod tests {
         );
         assert!(refused(|s| s.events[4].tick = -1), "back-dated");
         assert!(
-            refused(|s| s.events[1].causes = vec![EventId::from_raw(3)]),
+            refused(|s| s.events[1].causes[0].cause = EventId::from_raw(3)),
             "a later cause"
+        );
+        assert!(
+            refused(|s| {
+                let e = s.events[3].causes[0];
+                s.events[3].causes.push(e);
+            }),
+            "a repeated cause"
         );
         assert!(refused(|s| s.last = None), "events but no last");
         let empty = EventLogState {

@@ -135,6 +135,7 @@ fn specs() -> SpecTable {
     SpecTable {
         owners,
         specs: [(SYSTEM.to_owned(), entry)].into_iter().collect(),
+        registry: rh_core::ownership::RegistryTable::default(),
     }
 }
 

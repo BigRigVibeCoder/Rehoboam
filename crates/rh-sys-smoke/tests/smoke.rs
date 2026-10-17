@@ -152,7 +152,14 @@ fn a_run_exercises_timers_commands_events_and_invariants() {
     );
     assert!(caused <= deaths);
     for e in r.events.iter().filter(|e| e.kind == "CENSUS_NOTE") {
-        assert_eq!(e.causes, [rh_ids::EventId::from_raw(e.id.to_raw() - 1)]);
+        let edges: Vec<_> = e.causes.iter().map(|c| (c.cause, c.kind)).collect();
+        assert_eq!(
+            edges,
+            [(
+                rh_ids::EventId::from_raw(e.id.to_raw() - 1),
+                rh_events::EdgeKind::Triggered
+            )]
+        );
     }
     // Death ticks fall between pulse boundaries: timers fire at their own minute.
     let off_day = r

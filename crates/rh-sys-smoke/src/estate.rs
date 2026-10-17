@@ -12,7 +12,7 @@ use rh_core::command::Command;
 use rh_core::system::{InvariantResult, PulseBinding, SimError, StepCtx, SystemModel};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EdgeKind, EventDraft, EventRef, RoleId};
 use rh_ids::EntityRef;
 
 use crate::common::{PERSONS, WORLD, check, fail, from_skeleton, purposes, row};
@@ -50,9 +50,10 @@ impl Estate {
             *order = order
                 .wrapping_mul(31)
                 .wrapping_add(q.command.person.to_raw().cast_signed());
-            let mut e = EventDraft::new("INHERITANCE").subject(EntityRef::person(q.command.person));
+            let mut e = EventDraft::new("INHERITANCE")
+                .role(RoleId::TARGET, EntityRef::person(q.command.person));
             if let Some(cause) = q.cause {
-                e = e.caused_by(cause);
+                e = e.caused_by(EventRef::Known(cause), EdgeKind::Triggered);
             }
             let inheritance = ctx.emit(e)?;
             if (fee >> 8) % 4 == 0 {

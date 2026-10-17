@@ -147,8 +147,12 @@ fn synthetic_state() -> rh_core::state::EngineState {
     use rh_core::engine::MaterialInput;
     use rh_core::phase::Phase;
     use rh_core::time::SimTime;
-    use rh_events::{DraftRef, Event, EventLogState};
-    use rh_ids::{EntityKind, EntityRef, EventId, PersonId, PurposeId, SystemId, TimelineId};
+    use rh_events::{
+        DraftRef, Edge, EdgeKind, Event, EventLogState, Origin, RoleId, RoleRow, Secrecy, Snapshot,
+    };
+    use rh_ids::{
+        EntityKind, EntityRef, EventId, PersonId, PlaceId, PurposeId, SystemId, TimelineId,
+    };
     const DAY: i64 = 1_440;
     let e = EntityRef::new;
     let t = SimTime::from_minutes;
@@ -244,8 +248,23 @@ fn synthetic_state() -> rh_core::state::EngineState {
                     phase: 4,
                     emitter: "X1.vital",
                     kind: "DEATH",
-                    subjects: vec![e(EntityKind::Person, 7)],
-                    causes: vec![EventId::from_raw(3)],
+                    place: None,
+                    magnitude: 0,
+                    secrecy: Secrecy::Public,
+                    origin: Origin::Sim,
+                    admitted: true,
+                    roles: vec![RoleRow {
+                        role: RoleId::TARGET,
+                        entity: e(EntityKind::Person, 7),
+                    }],
+                    snapshots: vec![],
+                    causes: vec![Edge {
+                        cause: EventId::from_raw(3),
+                        kind: EdgeKind::Triggered,
+                        motive: None,
+                        weight: 0,
+                        evidence: 256,
+                    }],
                     payload: vec![1],
                 },
                 Event {
@@ -254,8 +273,51 @@ fn synthetic_state() -> rh_core::state::EngineState {
                     phase: 9,
                     emitter: "X4.census",
                     kind: "CENSUS",
-                    subjects: vec![],
-                    causes: vec![],
+                    place: Some(PlaceId::from_raw(12)),
+                    magnitude: -7,
+                    secrecy: Secrecy::Faction,
+                    origin: Origin::Oracle,
+                    admitted: false,
+                    roles: vec![
+                        RoleRow {
+                            role: RoleId::ACTOR,
+                            entity: e(EntityKind::Person, 9),
+                        },
+                        RoleRow {
+                            role: RoleId::WITNESS,
+                            entity: e(EntityKind::Household, 3),
+                        },
+                    ],
+                    snapshots: vec![
+                        Snapshot {
+                            attr: "stress",
+                            entity: e(EntityKind::Person, 9),
+                            partner: None,
+                            value: 18_000,
+                        },
+                        Snapshot {
+                            attr: "trust",
+                            entity: e(EntityKind::Person, 9),
+                            partner: Some(e(EntityKind::Person, 7)),
+                            value: -300,
+                        },
+                    ],
+                    causes: vec![
+                        Edge {
+                            cause: EventId::from_raw(3),
+                            kind: EdgeKind::MotivatedBy,
+                            motive: Some("GRIEF_FOR"),
+                            weight: -120,
+                            evidence: 40,
+                        },
+                        Edge {
+                            cause: EventId::from_raw(18),
+                            kind: EdgeKind::Triggered,
+                            motive: None,
+                            weight: 0,
+                            evidence: 256,
+                        },
+                    ],
                     payload: vec![-1, 40],
                 },
             ],

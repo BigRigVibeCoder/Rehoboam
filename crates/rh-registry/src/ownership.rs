@@ -410,6 +410,7 @@ impl Ownership {
                 .iter()
                 .map(|(id, s)| (id.clone(), s.entry()))
                 .collect(),
+            registry: rh_core::ownership::RegistryTable::default(),
         }
     }
 

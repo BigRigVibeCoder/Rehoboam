@@ -43,7 +43,7 @@ use core::fmt;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
-use rh_events::{DraftRef, EventDraft};
+use rh_events::{DraftRef, EventDraft, EventRef};
 use rh_ids::{
     BranchSalt, EntityKey, EntityRef, PurposeId, RngStream, StreamKey, SystemId, SystemKey,
 };
@@ -721,11 +721,22 @@ impl<'a> StepCtx<'a> {
             });
         }
         let index = self.out.events.len();
-        if let Some(r) = draft.local_causes.iter().find(|r| r.0 >= index) {
-            return Err(self.event_error(format!(
-                "event {} names draft {} as its cause, which is not an earlier draft of this step",
-                draft.kind, r.0
-            )));
+        for edge in &draft.causes {
+            match edge.cause {
+                EventRef::Draft(r) if r.0 >= index => {
+                    return Err(self.event_error(format!(
+                        "event {} names draft {} as its cause, which is not an earlier draft of this step",
+                        draft.kind, r.0
+                    )));
+                }
+                EventRef::None => {
+                    return Err(self.event_error(format!(
+                        "event {} has a {} edge to no event; EventRef::None is not an edge",
+                        draft.kind, edge.kind
+                    )));
+                }
+                EventRef::Draft(_) | EventRef::Known(_) => {}
+            }
         }
         self.out.events.push(draft);
         Ok(DraftRef(index))
