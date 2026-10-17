@@ -363,18 +363,21 @@ worldgen_lite_template_control() {
   "$PY" -I specs/worldgen/selftest_worldgen_lite.py --templates "$planted"
 }
 
-# Population synthesis spec control (SPR-019, REV-SPR-019 R5): the spec file with one check value off by one; the exact
-# reference, which asserts the spec's constants and check values, must FAIL on it (selftest_population_synthesis.py --spec).
-population_synthesis_spec_control() {
-  local planted=target/rendered-fixtures/population_synthesis_stale_spec.toml
-  mkdir -p "$(dirname "$planted")" || return 1
-  sed 's/hamlet_42_married = 1,/hamlet_42_married = 2,/' specs/worldgen/population_synthesis.toml > "$planted" || return 1
-  grep -q "hamlet_42_married = 2," "$planted" || { echo "control not planted: hamlet_42_married not found"; return 1; }
-  "$PY" -I specs/worldgen/selftest_population_synthesis.py --spec "$planted"
+# Population synthesis gate (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10): the exact reference with the effect_ref
+# differential, and the two controls that need no second build on the same run: a copy of the golden outputs with
+# hamlet's leftover count changed must be reported STALE, and a copy of the spec with one check value off by one must
+# be reported SPEC MISMATCH (selftest_population_synthesis.py --altered-golden, --stale-spec).
+population_synthesis_gate() {
+  local golden=target/rendered-fixtures/population_synthesis_altered_golden.txt
+  local spec=target/rendered-fixtures/population_synthesis_stale_spec.toml
+  mkdir -p "$(dirname "$golden")" || return 1
+  sed '0,/^leftover 0 orphans 0$/s//leftover 1 orphans 0/' specs/worldgen/golden/population_synthesis_v0.txt > "$golden" || return 1
+  grep -q '^leftover 1 orphans 0$' "$golden" || { echo "control not planted: no 'leftover 0 orphans 0' line in the population-synthesis golden file"; return 1; }
+  sed 's/hamlet_42_married = 1,/hamlet_42_married = 2,/' specs/worldgen/population_synthesis.toml > "$spec" || return 1
+  grep -q "hamlet_42_married = 2," "$spec" || { echo "control not planted: hamlet_42_married not found"; return 1; }
+  "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref specs/registry --altered-golden "$golden" --stale-spec "$spec"
 }
 
-# Population synthesis effect-differential control (REV-SPR-019 R3): a copy of specs/registry whose effect_ref.py sorts
-# a succession line in reverse; the differential between the back-fill's own successions and effect_ref.py must FAIL.
 population_synthesis_effect_control() {
   local planted=target/rendered-fixtures/effect_ref_reversed
   rm -rf "$planted" && mkdir -p "$planted" || return 1
@@ -384,24 +387,16 @@ population_synthesis_effect_control() {
   "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref "$planted"
 }
 
-# Population synthesis golden control (SPR-019): the committed golden outputs with hamlet's leftover count changed; the
-# exact reference must FAIL on them (selftest_population_synthesis.py --golden).
-population_synthesis_golden_control() {
-  local planted=target/rendered-fixtures/population_synthesis_altered_golden.txt
-  mkdir -p "$(dirname "$planted")" || return 1
-  sed '0,/^leftover 0 orphans 0$/s//leftover 1 orphans 0/' specs/worldgen/golden/population_synthesis_v0.txt > "$planted" || return 1
-  grep -q '^leftover 1 orphans 0$' "$planted" || { echo "control not planted: no 'leftover 0 orphans 0' line in the population-synthesis golden file"; return 1; }
-  "$PY" -I specs/worldgen/selftest_population_synthesis.py --golden "$planted"
-}
-
-# Fixture worlds golden control (SPR-030): the committed golden outputs with twin_vales seed 1's named-actor count changed;
-# the exact reference must FAIL on them (selftest_fixture_worlds.py --golden).
-fixture_worlds_golden_control() {
+# Fixture worlds gate (SPR-030; REV-SPR-030 R6, R10): the PR tier's cases (twin_vales at seeds 1 to 3, kingdom_10k at
+# seed 1) rendered once and compared with the committed golden outputs and with an altered copy (twin_vales seed 1's
+# narrow named-at-start count changed), which must be reported STALE in the same run (selftest_fixture_worlds.py
+# --tier pr --altered-golden). The nightly tier renders every case (bin/golden_nightly.sh).
+fixture_worlds_gate() {
   local planted=target/rendered-fixtures/fixture_worlds_altered_golden.txt
   mkdir -p "$(dirname "$planted")" || return 1
-  sed '0,/^named_at_start 31 /s//named_at_start 32 /' specs/worldgen/golden/fixture_worlds_v0.txt > "$planted" || return 1
-  grep -q '^named_at_start 32 ' "$planted" || { echo "control not planted: no 'named_at_start 31' line in the fixture-worlds golden file"; return 1; }
-  "$PY" -I specs/worldgen/selftest_fixture_worlds.py --golden "$planted"
+  sed '0,/^named_at_start narrow 31 /s//named_at_start narrow 32 /' specs/worldgen/golden/fixture_worlds_v0.txt > "$planted" || return 1
+  grep -q '^named_at_start narrow 32 ' "$planted" || { echo "control not planted: no 'named_at_start narrow 31' line in the fixture-worlds golden file"; return 1; }
+  "$PY" -I specs/worldgen/selftest_fixture_worlds.py --tier pr --altered-golden "$planted"
 }
 
 # Wire-format golden control (SPR-026): the committed wire golden file with its first frame's hex changed; the
@@ -1146,17 +1141,15 @@ run "M2 F1 reference positive control: a stale check value in the next M2 spec m
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
-run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential (SPR-019; REV-SPR-019 R3)" "pass:EFFECT DIFFERENTIAL: 1389 successions of 5 laws over 2 configurations compared" "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref specs/registry &&
+run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential and the altered-golden and stale-spec controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10)" "pass:EFFECT DIFFERENTIAL: 1389 successions of 5 laws over 2 configurations compared" population_synthesis_gate &&
 run "population synthesis positive control: effect_ref.py with its succession order reversed must FAIL the effect differential (REV-SPR-019 R3)" "fail:differs from effect_ref.py's" population_synthesis_effect_control &&
-run "population synthesis positive control: an altered golden output must FAIL (SPR-019)" "fail:STALE:" population_synthesis_golden_control &&
 run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
 run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
 run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
-run "population synthesis positive control: a spec check value off by one must FAIL the reference's spec check (SPR-019; REV-SPR-019 R5)" "fail:SPEC MISMATCH" population_synthesis_spec_control &&
-run "Golden vectors: fixture worlds twin_vales and kingdom_10k at genesis, exact reference (SPR-030)" "pass:FIXTURE WORLDS: PASS" "$PY" -I specs/worldgen/selftest_fixture_worlds.py &&
-run "fixture worlds positive control: an altered golden output must FAIL (SPR-030)" "fail:STALE:" fixture_worlds_golden_control &&
-run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales (SPR-030)" "pass:CRN PAIRING: PASS" "$PY" -I specs/determinism/selftest_crn_pairing.py &&
-run "CRN pairing positive control: a world-wide epoch bump must FAIL V-DET-17's correlation threshold (SPR-030)" "fail:CRN PAIRING: FAIL" "$PY" -I specs/determinism/selftest_crn_pairing.py --control global-epoch &&
+run "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, R10)" "pass:FIXTURE WORLDS: PASS" fixture_worlds_gate &&
+run "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start lines (SPR-030; REV-SPR-030 R11)" "fail:STALE:" "$PY" -I specs/worldgen/selftest_fixture_worlds.py --control dormancy-one &&
+run "Population projection: the fixture worlds' member share and population under the house-member mechanics, uncapped and capped (SPR-030; REV-SPR-030 R1)" "pass:POPULATION PROJECTION: PASS" "$PY" -I specs/worldgen/project_population.py --check &&
+run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)" "pass:CRN PAIRING: PASS" "$PY" -I specs/determinism/selftest_crn_pairing.py --seeds 1 --controls &&
 run "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality --check; SPR-016)" "pass:M2 F1 MORTALITY: PASS" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check &&
 run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)" "fail:1. rung 0 = beta 1: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control beta-one-power &&
 run "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 (SPR-016 MR7)" "fail:5. infant sub-schedule: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control infant-discontinuous &&

@@ -1,13 +1,14 @@
-"""The fixture-worlds reference's hardcoded manifests mirror the example YAML files (SPR-030).
+"""The fixture-worlds references' hardcoded manifests mirror the example YAML files (SPR-030).
 
-``specs/worldgen/selftest_fixture_worlds.py`` runs under ``python -I`` with the standard library
-only, so it cannot parse YAML; its ``TWIN_VALES`` and ``KINGDOM_10K`` restate the fields of
-``specs/manifest/examples/twin_vales.yaml`` and ``kingdom_10k.yaml`` that genesis reads, and its
-``DORMANCY_DEGREES`` and ``MAJORITY_AGE`` restate the two M7 parameters the naming criterion reads.
-This test reads the YAML (the test suite has PyYAML) and compares, so an edit to either file that
-the other does not follow turns the suite red. The CRN pairing reference
-(``specs/determinism/selftest_crn_pairing.py``) builds the same ``TWIN_VALES``, so it is covered
-too.
+``specs/worldgen/selftest_fixture_worlds.py`` and ``specs/determinism/selftest_crn_pairing.py``
+run under ``python -I`` with the standard library only, so they cannot parse YAML; the first's
+``TWIN_VALES`` and ``KINGDOM_10K`` restate the fields of ``specs/manifest/examples/twin_vales.yaml``
+and ``kingdom_10k.yaml`` that genesis reads, its ``DORMANCY_DEGREES`` and ``MAJORITY_AGE`` the two
+M7 parameters the naming criterion reads, and the second's calendar constants (``MONTH_DAYS``,
+``MONTHS``) the fixture's calendar (REV-SPR-030 R11). This test reads the YAML (the test suite has
+PyYAML) and compares, so an edit to either side that the other does not follow turns the suite
+red. It also pins the tiers of REV-SPR-030 R10 and that both manifests set every M7 and T1
+parameter of the Registry (neither system has defaults yet).
 """
 
 from __future__ import annotations
@@ -23,17 +24,22 @@ import yaml  # type: ignore[import-untyped]  # PyYAML ships no stubs (as test_ci
 
 REPO = Path(__file__).resolve().parents[2]
 REFERENCE = REPO / "specs" / "worldgen" / "selftest_fixture_worlds.py"
+CRN = REPO / "specs" / "determinism" / "selftest_crn_pairing.py"
 EXAMPLES = REPO / "specs" / "manifest" / "examples"
 WORLDS = ("twin_vales", "kingdom_10k")
 
 
-def _reference() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("selftest_fixture_worlds", REFERENCE)
+def _load(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    sys.modules["selftest_fixture_worlds"] = module
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _reference() -> ModuleType:
+    return _load("selftest_fixture_worlds", REFERENCE)
 
 
 def _docs() -> dict[str, dict[str, Any]]:
@@ -82,11 +88,23 @@ def test_fixture_worlds_mirror_their_yaml() -> None:
     assert {case.id for case in ref.WORLDS} == set(WORLDS)
 
 
-def test_fixture_seeds_cover_the_brief() -> None:
-    """The fixture is pinned at seeds 1 to 3 and the 10k world at seeds 1 and 2 (the brief)."""
+def test_tiers_follow_the_rulings() -> None:
+    """The fixture at seeds 1 to 3 and the 10k world at 1 and 2; the PR tier runs one 10k seed."""
     ref = _reference()
-    assert ref.SEEDS["twin_vales"] == (1, 2, 3)
-    assert ref.SEEDS["kingdom_10k"] == (1, 2)
+    assert ref.SEEDS == {"twin_vales": (1, 2, 3), "kingdom_10k": (1, 2)}
+    assert ref.PR_TIER == {"twin_vales": (1, 2, 3), "kingdom_10k": (1,)}
+    crn = _load("selftest_crn_pairing", CRN)
+    assert crn.SEEDS == (1, 2) and crn.PR_SEEDS == (1,)
+
+
+def test_crn_calendar_mirrors_twin_vales() -> None:
+    """The CRN reference's calendar constants are twin_vales.yaml's (REV-SPR-030 R11)."""
+    crn = _load("selftest_crn_pairing", CRN)
+    calendar = _docs()["twin_vales"]["world"]["calendar"]
+    assert calendar["months"] == crn.MONTHS
+    assert calendar["days_per_year"] == crn.MONTH_DAYS * crn.MONTHS
+    assert crn.WORLD.id == "twin_vales"
+    assert crn.HORIZON_YEARS == 10  # docs/09 V-DET-17: paired rollouts over 10 years
 
 
 def test_both_worlds_set_every_m7_and_t1_parameter() -> None:

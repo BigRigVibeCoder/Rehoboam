@@ -56,8 +56,6 @@ REQUIRED_GATES = (
     "(SPR-007 ruling 4)",
     "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
     "CI workflows parse (YAML)",
-    "CRN pairing positive control: a world-wide epoch bump must FAIL V-DET-17's correlation "
-    "threshold (SPR-030)",
     "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 "
     "--check; SPR-013 T-09)",
     "Chronicle SQL-twin equivalence",
@@ -135,7 +133,8 @@ REQUIRED_GATES = (
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
-    "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales (SPR-030)",
+    "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, "
+    "with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)",
     "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)",
     "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality "
     "--check; SPR-016)",
@@ -143,10 +142,12 @@ REQUIRED_GATES = (
     "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference "
     "--check; SPR-012 T-05)",
     "Golden vectors: M4 basket and price rule",
-    "Golden vectors: fixture worlds twin_vales and kingdom_10k at genesis, exact reference "
-    "(SPR-030)",
+    "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, "
+    "exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, "
+    "R10)",
     "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the "
-    "effect_ref differential (SPR-019; REV-SPR-019 R3)",
+    "effect_ref differential and the altered-golden and stale-spec controls in the same run "
+    "(SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
@@ -189,6 +190,8 @@ REQUIRED_GATES = (
     "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)",
     "Ownership lint positive control: unowned write must FAIL",
     "Ownership lint: single writer from specs/systems (SPR-004 T-03)",
+    "Population projection: the fixture worlds' member share and population under the "
+    "house-member mechanics, uncapped and capped (SPR-030; REV-SPR-030 R1)",
     "Python: format (ruff format --check)",
     "Python: lint (ruff check)",
     "Python: types (mypy --strict)",
@@ -320,7 +323,8 @@ REQUIRED_GATES = (
     "GAP-3)",
     "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
-    "fixture worlds positive control: an altered golden output must FAIL (SPR-030)",
+    "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start "
+    "lines (SPR-030; REV-SPR-030 R11)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass "
     "(SPR-007 GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
@@ -538,9 +542,6 @@ REQUIRED_GATES = (
     "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the "
     "Registry by name (REV-SPR-020 R22, R26)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
-    "population synthesis positive control: a spec check value off by one must FAIL the "
-    "reference's spec check (SPR-019; REV-SPR-019 R5)",
-    "population synthesis positive control: an altered golden output must FAIL (SPR-019)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
     "population synthesis positive control: effect_ref.py with its succession order reversed must "

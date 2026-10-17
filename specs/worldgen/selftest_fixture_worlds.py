@@ -10,15 +10,22 @@ G1a gates and the annals need from genesis is pinned in
 
   * the counts: persons, living, back-filled dynasts, synthesised, married, households, orphans;
     the living by sex and by age band (0-14, 15-49, 50 and over);
-  * every house: its founder indices (``founder = k``, the annals' labels and the names file's
-    keys: SPR-019 B4, B6, B8), generations, rows, members, the living, the title it holds and
-    the holder's k, its tenure log's length and the stand-in fallbacks;
-  * the named actors at world start under M7's criterion (SIM-9; T1 [initialization]): the
-    holder of each house's title and every living house member within ``dormancy_degrees``
-    kinship steps of a holder of the house's title (parent-or-child steps over the life-course
-    log, the dead included: the effect language's kin(p, n)); beside them the adults beyond that
-    distance (dormant-eligible at the first dormancy pass) and the minors beyond it (named or not
-    is SPR-021's question: companion §2);
+  * every house: its members' founder indices (``founder = k``, the annals' labels and the names
+    file's keys: SPR-019 B4, B6, B8), generations, rows, members, the living, the title it holds
+    with the SPR-019 reference's title and tenure lines (tier, liege, polity, holder, held_since,
+    predecessor_exit, every tenure row: REV-SPR-030 R6), the title's line at genesis under its
+    law (the effect language's succession laws, as the SPR-019 reference states them) with the
+    heir and the second in line as ``(k, kinship distance from the holder)`` and the line's
+    length (an empty line is the computable route to an interregnum: REV-SPR-030 R2, R8);
+  * the named actors at world start under M7's rule as written (SIM-9; `dormancy`, `on_birth`;
+    T1 [initialization]), in two readings: the NARROW one, the holder of each house's title and
+    every living house member within ``dormancy_degrees`` kinship steps of a holder of the
+    house's title (parent-or-child steps over the life-course log, the dead included: the effect
+    language's kin(p, n)); and the FULL one, the gate's, which adds the first and the second in
+    each title's line (on_birth's clause) and the ruling house's heir (dormancy's Promote clause;
+    claim holders would join, and none exist at genesis: REV-SPR-030 R2). Beside them the adults
+    beyond that distance (dormant-eligible at the first pass, which runs at world start) and the
+    minors beyond it (named or not is SPR-021's question: companion §2);
   * the digests of the person, marriage, household and house_member rows the SPR-019 reference
     renders, so the genesis of these worlds is bit-pinned.
 
@@ -26,9 +33,19 @@ The companion ``specs/worldgen/fixture_worlds.md`` says which mechanism each gat
 each world and gives the arithmetic. ``python/tests/test_fixture_worlds_cases.py`` keeps the
 hardcoded manifests below equal to the YAML files.
 
-Run: python -I specs/worldgen/selftest_fixture_worlds.py            (check; exit 1 on failure)
-     python -I specs/worldgen/selftest_fixture_worlds.py --write    (regenerate the golden)
+Tiers (REV-SPR-030 R10): the PR tier renders the fixture at seeds 1 to 3 and the 10k world at
+seed 1 and compares those blocks of the golden file; the nightly tier renders every case. The
+altered-golden control runs in the same process as the check, on the one rendering.
+
+Run: python -I specs/worldgen/selftest_fixture_worlds.py                 (every case)
+     python -I specs/worldgen/selftest_fixture_worlds.py --tier pr       (the PR tier's cases)
+     python -I specs/worldgen/selftest_fixture_worlds.py --write         (regenerate the golden)
      python -I specs/worldgen/selftest_fixture_worlds.py --golden PATH   (check another file)
+     python -I specs/worldgen/selftest_fixture_worlds.py --tier pr --altered-golden PATH
+         (also require that an altered copy of the golden file is reported STALE)
+     python -I specs/worldgen/selftest_fixture_worlds.py --control dormancy-one
+         (must FAIL: dormancy_degrees read as 1 moves the named-at-start lines of twin_vales
+         seed 1 against the committed golden)
 Exit: 0 pass, 1 fail, 2 the reference failed its own checks. Standard library only (GOV-003 §3).
 """
 
@@ -37,6 +54,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -72,10 +90,14 @@ MAJORITY_AGE = "16"
 DORMANCY_DEGREES = 2
 CHILD_MAX = 15
 FERTILE_END = 50
+LINE_HEAD = 2  # on_birth: the first and the second in a title's line meet the naming criteria
+DISTANCE_LIMIT = 32  # a kinship distance beyond this is reported as none (no such pair exists)
 SEEDS = {
     "twin_vales": (1, 2, 3),
     "kingdom_10k": (1, 2),
-}  # the fixture at seeds 1-3 (the brief), 10k at 1-2
+}  # the fixture at 1-3 (the brief), 10k at 1-2
+PR_TIER = {"twin_vales": (1, 2, 3), "kingdom_10k": (1,)}  # REV-SPR-030 R10; the rest nightly
+CONTROL_CASE = ("twin_vales", 1)  # --control dormancy-one renders this case alone
 
 # The manifests, as specs/manifest/examples/twin_vales.yaml and kingdom_10k.yaml give them
 # (python/tests/test_fixture_worlds_cases.py checks these mirrors against the YAML).
@@ -148,6 +170,7 @@ KINGDOM_10K = ps.Manifest(
 WORLDS: tuple[Manifest, ...] = (TWIN_VALES, KINGDOM_10K)
 
 
+# ----------------------------------------------------------------------------- kinship
 def kin_within(gen: Genealogy, p: int, n: int) -> set[int]:
     """Return kin(p, n): every other person within n parent-or-child steps, the dead included."""
     seen = {p}
@@ -163,33 +186,58 @@ def kin_within(gen: Genealogy, p: int, n: int) -> set[int]:
     return seen - {p}
 
 
+def kin_distance(gen: Genealogy, a: int, b: int) -> int | None:
+    """Return the least number of parent-or-child steps from a to b, or None beyond the limit."""
+    if a == b:
+        return 0
+    seen = {a}
+    queue = deque([(a, 0)])
+    while queue:
+        x, d = queue.popleft()
+        if d >= DISTANCE_LIMIT:
+            continue
+        for y in gen.parents(x, False) + gen.children(x):
+            if y == b:
+                return d + 1
+            if y not in seen:
+                seen.add(y)
+                queue.append((y, d + 1))
+    return None
+
+
+# ----------------------------------------------------------------------------- one house
 @dataclass
 class HouseReport:
-    """One house at world start: its members, the named and the dormant-eligible (SIM-9)."""
+    """One house at world start: its members, the named under both readings, the line (SIM-9)."""
 
     house: House
     title: Title
     living: list[int]
-    named: list[
+    narrow: list[
         int
     ]  # living members within dormancy_degrees of the title's holder, holder included
+    full: list[int]  # narrow + the first and second in the title's line (the gate's reading)
     dormant_adults: list[int]  # living adult members beyond that distance: Demote at the first pass
     minors_far: list[int]  # living minor members beyond it (SPR-021 decides whether they are named)
-    k_lo: int
-    k_hi: int
+    line: list[int]  # the title's line at genesis under its law, in succession order
+    line_outside: int  # persons in the line who are not members of the house
 
 
-def house_report(g: Genesis, gen: Genealogy, h: House) -> HouseReport:
-    """Classify one house's living members at tick 0 by the naming criterion."""
+def house_report(g: Genesis, gen: Genealogy, h: House, degrees: int) -> HouseReport:
+    """Classify one house's living members at tick 0 by the naming criterion, both readings."""
     t = next(t for t in g.titles if t.id == h.title)
+    members = set(h.members)
     living = [pid for pid in h.members if g.persons[pid].alive]
-    near = kin_within(gen, t.holder, DORMANCY_DEGREES) | {t.holder}
-    named = [pid for pid in living if pid in near]
+    near = kin_within(gen, t.holder, degrees) | {t.holder}
+    narrow = [pid for pid in living if pid in near]
+    line = ps.Law(gen, t.holder, t.tenures, g.majority).line_for(t.law)
+    head = set(line[:LINE_HEAD])
+    full = [pid for pid in living if pid in near or pid in head]
     far = [pid for pid in living if pid not in near]
     adults = [pid for pid in far if -g.persons[pid].birth >= g.majority]
     minors = [pid for pid in far if -g.persons[pid].birth < g.majority]
-    ks = sorted(g.persons[pid].k for pid in h.members)
-    return HouseReport(h, t, living, named, adults, minors, ks[0], ks[-1])
+    outside = sum(1 for pid in line if pid not in members)
+    return HouseReport(h, t, living, narrow, full, adults, minors, line, outside)
 
 
 def living_bands(g: Genesis) -> tuple[int, int, int, int, int]:
@@ -211,12 +259,23 @@ def living_bands(g: Genesis) -> tuple[int, int, int, int, int]:
     return males, females, young, fertile, old
 
 
-def render_world(m: Manifest) -> tuple[list[str], list[str]]:
+def line_text(g: Genesis, gen: Genealogy, x: HouseReport) -> str:
+    """The heir and the second in line as k/distance, and the line's length."""
+    parts = []
+    for label, pid in zip(("heir", "second"), x.line[:LINE_HEAD], strict=False):
+        d = kin_distance(gen, x.title.holder, pid)
+        parts.append(f"{label} {g.persons[pid].k}/{'none' if d is None else d}")
+    for label in ("heir", "second")[len(x.line) :]:
+        parts.append(f"{label} none")
+    return f"line {len(x.line)} outside_house {x.line_outside} " + " ".join(parts)
+
+
+def render_world(m: Manifest, degrees: int) -> tuple[list[str], list[str]]:
     """Build one world; return its golden lines and the failures of the SPR-019 invariants."""
     g = ps.build(m)
     failures = ps.Checker(g).run() + ps.check_widths(g)
     gen = ps.Genealogy(g.persons, 0)
-    reports = [house_report(g, gen, h) for h in g.houses]
+    reports = [house_report(g, gen, h, degrees) for h in g.houses]
     r = g.report
     males, females, young, fertile, old = living_bands(g)
     lines = [
@@ -226,20 +285,24 @@ def render_world(m: Manifest) -> tuple[list[str], list[str]]:
         f"married {r.married} households {len(g.households)} orphans {r.orphans}",
         f"living_by_sex males {males} females {females} by_age 0-14 {young} 15-49 {fertile} "
         f"50+ {old}",
-        f"named_at_start {sum(len(x.named) for x in reports)} "
+        f"named_at_start narrow {sum(len(x.narrow) for x in reports)} "
+        f"full {sum(len(x.full) for x in reports)} "
         f"dormant_adults {sum(len(x.dormant_adults) for x in reports)} "
         f"minors_beyond {sum(len(x.minors_far) for x in reports)} "
-        f"dormancy_degrees {DORMANCY_DEGREES} majority_age {MAJORITY_AGE}",
+        f"empty_lines {sum(1 for x in reports if not x.line)} "
+        f"dormancy_degrees {degrees} majority_age {MAJORITY_AGE}",
     ]
     for x in reports:
         h, t = x.house, x.title
-        lines.append(
-            f"house {h.k} generations {h.generations} founders {x.k_lo}..{x.k_hi} rows {h.rows} "
-            f"members {len(h.members)} living {len(x.living)} named {len(x.named)} "
+        lines += [
+            f"house {h.k} generations {h.generations} rows {h.rows} members {len(h.members)} "
+            f"living {len(x.living)} named_narrow {len(x.narrow)} named_full {len(x.full)} "
             f"dormant_adults {len(x.dormant_adults)} minors_beyond {len(x.minors_far)} "
             f"title {t.k} law {t.law} holder_k {g.persons[t.holder].k} tenures {len(t.tenures)} "
-            f"fallbacks {t.fallbacks} minors_seated {t.minor_fallbacks}"
-        )
+            f"fallbacks {t.fallbacks} minors_seated {t.minor_fallbacks} {line_text(g, gen, x)}",
+            f"members_k {h.k} " + " ".join(str(g.persons[pid].k) for pid in h.members),
+            *ps.render_house(g, h),
+        ]
     case_lines = ps.render_case(g)
     lines += [line for line in case_lines if line.endswith("_sha256") or "_sha256 " in line]
     return lines, failures
@@ -249,25 +312,51 @@ HEADER = [
     "# fixture worlds golden outputs (SPR-030): GENERATED by",
     "# python -I specs/worldgen/selftest_fixture_worlds.py --write; do not edit.",
     "# Per world and seed: the counts at tick 0; the living by sex and age band; the named",
-    "# actors at world start (M7 SIM-9: holders and living house members within dormancy_degrees",
-    "# of the house's holder), the dormant-eligible adults and the minors beyond that distance;",
-    "# each house with its founder indices, generations, rows, members, living, named, title,",
-    "# holder and tenure log; the SPR-019 digests of the person, marriage, household and",
+    "# actors at world start under M7's rule (narrow: holders and living house members within",
+    "# dormancy_degrees of the house's holder; full: plus the first and second in each title's",
+    "# line, the gate's reading), the dormant-eligible adults and the minors beyond that distance,",
+    "# the titles whose line is empty; each house with its generations, rows, members, living,",
+    "# named under both readings, title, holder, tenure count, the line's length and its heir and",
+    "# second as k/kinship distance, its members' founder indices, and the SPR-019 reference's",
+    "# title and tenure lines; the SPR-019 digests of the person, marriage, household and",
     "# house_member rows.",
     "constants fixture-worlds-v0",
 ]
 
 
-def render() -> tuple[str, list[str]]:
-    """Render every world at every seed."""
-    lines = HEADER[:]
+def cases(tier: str) -> list[tuple[Manifest, int]]:
+    """The (manifest, seed) cases of a tier."""
+    seeds = PR_TIER if tier == "pr" else SEEDS
+    return [(m, seed) for m in WORLDS for seed in seeds[m.id]]
+
+
+def render(selected: list[tuple[Manifest, int]], degrees: int) -> tuple[dict[str, str], list[str]]:
+    """Render the selected cases; return the blocks by 'world id seed' and the failures."""
+    blocks: dict[str, str] = {}
     failures: list[str] = []
-    for m in WORLDS:
-        for seed in SEEDS[m.id]:
-            world_lines, world_failures = render_world(ps.Manifest(**{**m.__dict__, "seed": seed}))
-            lines += world_lines
-            failures += world_failures
-    return "\n".join(lines) + "\n", failures
+    for m, seed in selected:
+        world_lines, world_failures = render_world(
+            ps.Manifest(**{**m.__dict__, "seed": seed}), degrees
+        )
+        blocks[world_lines[0]] = "\n".join(world_lines) + "\n"
+        failures += world_failures
+    return blocks, failures
+
+
+def split_blocks(text: str) -> tuple[str, dict[str, str]]:
+    """Split a golden text into its header and its 'world id seed' blocks."""
+    header: list[str] = []
+    blocks: dict[str, str] = {}
+    key = ""
+    for line in text.splitlines():
+        if line.startswith("world "):
+            key = line
+            blocks[key] = ""
+        if key:
+            blocks[key] += line + "\n"
+        else:
+            header.append(line)
+    return "\n".join(header) + ("\n" if header else ""), blocks
 
 
 def first_difference(current: str, text: str) -> int:
@@ -277,34 +366,73 @@ def first_difference(current: str, text: str) -> int:
     return next((i for i, (x, z) in pairs if x != z), min(len(a), len(b))) + 1
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Check or regenerate the golden file."""
+def compare(golden_text: str, blocks: dict[str, str]) -> str | None:
+    """Return a STALE line for the first rendered block that differs from the golden, or None."""
+    header, golden_blocks = split_blocks(golden_text)
+    expected_header = "\n".join(HEADER) + "\n"
+    if header != expected_header:
+        return f"STALE: header differs at line {first_difference(header, expected_header)}"
+    for key, text in blocks.items():
+        current = golden_blocks.get(key, "")
+        if current != text:
+            offset = golden_text.find(key)
+            base = golden_text[:offset].count("\n") if offset >= 0 else 0
+            return f"STALE: {key!r} differs at line {base + first_difference(current, text)}"
+    return None
+
+
+def parse(argv: list[str] | None) -> argparse.Namespace:
+    """The command line."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--write", action="store_true", help="regenerate the golden file")
     parser.add_argument("--golden", type=Path, default=GOLDEN, help="the golden file to check")
-    args = parser.parse_args(argv)
+    parser.add_argument("--tier", choices=("pr", "nightly"), default="nightly")
+    parser.add_argument("--altered-golden", type=Path, help="an altered copy that must be STALE")
+    parser.add_argument("--control", choices=("dormancy-one",), help="a control that must fail")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Check or regenerate the golden file; run the controls."""
+    args = parse(argv)
+    degrees = 1 if args.control == "dormancy-one" else DORMANCY_DEGREES
+    if args.control:
+        selected = [(m, s) for m, s in cases("nightly") if (m.id, s) == CONTROL_CASE]
+    else:
+        selected = cases("nightly" if args.write else args.tier)
     try:
-        text, failures = render()
+        blocks, failures = render(selected, degrees)
     except AssertionError as e:
-        text, failures = "", [f"construction error: {e}"]
+        blocks, failures = {}, [f"construction error: {e}"]
     if failures:
         for x in failures[:20]:
             print(f"REFERENCE FAILED: {x}")
         print(f"FIXTURE WORLDS: FAIL (the reference's own checks: {len(failures)} failures)")
         return EXIT_REFERENCE
+    text = "\n".join(HEADER) + "\n" + "".join(blocks.values())
     if args.write:
         args.golden.parent.mkdir(parents=True, exist_ok=True)
         args.golden.write_text(text, encoding="utf-8")
         print(f"wrote {args.golden}")
         return EXIT_OK
     current = args.golden.read_text(encoding="utf-8") if args.golden.exists() else ""
-    if current != text:
-        line = first_difference(current, text)
-        print(f"STALE: {args.golden} differs from the reference at line {line}")
+    stale = compare(current, blocks)
+    if stale:
+        print(stale)
         print("FIXTURE WORLDS: FAIL")
         return EXIT_FAIL
-    n, cases = text.count("\n"), sum(len(v) for v in SEEDS.values())
-    print(f"FIXTURE WORLDS: PASS ({len(WORLDS)} worlds, {cases} cases, {n} lines)")
+    if args.control:
+        print(f"CONTROL INERT: {args.control} left the golden lines unchanged")
+        return EXIT_OK
+    if args.altered_golden is not None:
+        altered = compare(args.altered_golden.read_text(encoding="utf-8"), blocks)
+        if altered is None:
+            print(f"ALTERED GOLDEN CONTROL FAILED: {args.altered_golden} equals the reference")
+            print("FIXTURE WORLDS: FAIL")
+            return EXIT_FAIL
+        print(f"altered golden control: {altered} (as required)")
+    n = text.count("\n")
+    print(f"FIXTURE WORLDS: PASS ({args.tier} tier: {len(selected)} cases, {n} lines rendered)")
     return EXIT_OK
 
 

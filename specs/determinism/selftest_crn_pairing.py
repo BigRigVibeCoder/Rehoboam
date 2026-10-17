@@ -3,36 +3,42 @@
 The protocol pairs two rollouts of the same world (manifest hash, seed, Registry, build and thread
 count equal) whose input journals differ by one journaled material input: a scope-only input on one
 person (the ``[[input]] tick, founder`` form of ``worlds/*/inputs.toml``), which bumps that
-person's RNG epoch and re-samples a pending death (ADR-0025 item 3; M2 S11). Over the 10-year
-horizon it then correlates the death instants of the unaffected persons across the pair; under the
-keyed RNG H(world_seed, salt, system, epoch, purpose, entity, t, k) with a per-entity epoch,
-every draw of every other entity is the same bytes in both runs, so their deaths coincide and the
-correlation is 1. Docs/09 V-DET-17 asks for at least 0.9 on unaffected lineages.
+person's RNG epoch and cancels and re-samples its pending death (ADR-0025 item 3; M2 S11). The
+input is placed inside the month of the target's death in the run without it, before the death
+day, as ``worlds/solo/inputs.toml`` places Ada's: so the re-sample path runs, and the pair is
+VALID only if the target is alive at the input in both runs, dies at different instants, and at
+least one of those instants is inside the horizon (REV-SPR-030 R3). Over the 10-year horizon the
+protocol then compares the death instants of everyone the input cannot reach: under the keyed RNG
+H(world_seed, salt, system, epoch, purpose, entity, t, k) with a per-entity epoch, every draw of
+every other entity is the same bytes in both runs, so their deaths coincide exactly. That exact
+identity is the gate (R4); docs/09's correlation of at least 0.9 is reported beside it.
 
 This file is the protocol's exact worked computation on the dynastic fixture world
-``twin_vales`` at seeds 1 and 2 (``specs/manifest/examples/twin_vales.yaml``), on an M2-only model
-of the engine, every piece of which is a frozen or next-version reference already on `main`:
+``twin_vales`` (``specs/manifest/examples/twin_vales.yaml``), on an M2-only model of the engine,
+every piece of which is a frozen or next-version reference already on `main`:
 
-  * genesis by the SPR-019 reference (``specs/worldgen/selftest_population_synthesis.py``);
+  * genesis by the SPR-019 reference, through ``specs/worldgen/selftest_fixture_worlds.py``;
   * M2 F1 mortality MR9-MR13 and S8-S11 by ``specs/demography/selftest_m2_f1_mortality.py``
-    (the schedule of e0 30 and beta 1; the density modifier is 1 below 10,000,000 living);
+    (the schedule of e0 30 and beta 1; the density modifier is 1 below the default capacity);
   * the keyed draws by ``bin/gen_rng_golden.py`` with the entity and epoch conventions of
     ``bin/gen_m2_draws_reference.py`` (StepCtx: entity = PersonId; ResampleCtx: entity =
     H64(resample-entity/v1, [Person, id]), keyed by the epoch after the input).
 
-No births (a child born before the input exists identically in both runs and would only add
-pairs; one born after it is not alive at the input in both runs, so the protocol excludes it), no
-M7 and no T1 (their deaths are agenda or ruler-exit timers on named actors, who are in the affected
-set by construction). The statistic, the affected set, the censoring and the threshold are the
-protocol's; the companion §3 derives them. Golden: ``specs/determinism/golden/crn_pairing_v0.txt``.
+No births (a child born before the input exists identically in both runs; one born after it is
+not alive at the input in both runs, so the protocol pairs it by PersonId among the partnering
+events, which this model does not run), no M7 and no T1 (their deaths fall on sovereigns and
+named actors, who are in the affected set by construction: companion §3.3). The controls that
+must fail (R3, R4) run in the same process on the one run A, from its state at the input.
 
-Run: python -I specs/determinism/selftest_crn_pairing.py            (check; exit 1 on failure)
-     python -I specs/determinism/selftest_crn_pairing.py --write    (regenerate the golden)
+Run: python -I specs/determinism/selftest_crn_pairing.py              (seeds 1 and 2)
+     python -I specs/determinism/selftest_crn_pairing.py --seeds 1    (the PR tier)
+     python -I specs/determinism/selftest_crn_pairing.py --write      (regenerate the golden)
      python -I specs/determinism/selftest_crn_pairing.py --golden PATH
-     python -I specs/determinism/selftest_crn_pairing.py --control global-epoch   (must FAIL: the
-         input bumps every living person's epoch, the mistake a world-wide epoch counter would be)
-Exit: 0 pass, 1 fail (the statistic, or a stale golden), 2 the model failed its own checks.
-Standard library only (GOV-003 §3).
+     python -I specs/determinism/selftest_crn_pairing.py --seeds 1 --controls   (also run the five
+         mutants, each of which must make the protocol FAIL: no-op-input, swap-remove-after-input,
+         shift-one-day, rekey-2pct, global-epoch)
+Exit: 0 pass, 1 fail (the protocol, a stale golden, or a control that did not fail), 2 the model
+failed its own checks. Standard library only (GOV-003 §3).
 """
 
 from __future__ import annotations
@@ -42,6 +48,7 @@ import hashlib
 import importlib.util
 import sys
 from bisect import bisect_right
+from copy import deepcopy
 from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
@@ -76,18 +83,16 @@ Genesis = Any  # the SPR-019 reference's types, loaded by path
 # ------------------------------------------------------------------------- the protocol's constants
 WORLD = fw.TWIN_VALES  # the dynastic fixture world; the target is its primogeniture sovereign
 SEEDS = (1, 2)
+PR_SEEDS = (1,)  # REV-SPR-030 R10: seed 1 in the PR tier, the rest nightly
 DAY = 1440
-MONTH_DAYS = 30  # twin_vales runs the 360-day calendar: twelve months of 30 days
+MONTH_DAYS = 30  # twin_vales.yaml: days_per_year 360, months 12 (the mirror test checks)
+MONTHS = 12
 MONTH = MONTH_DAYS * DAY
-YEAR = 12 * MONTH
+YEAR = MONTHS * MONTH
 HORIZON_YEARS = 10  # V-DET-17: paired rollouts over 10 years
 T_END = HORIZON_YEARS * YEAR  # 5,184,000: deaths at or after it are censored
-# The input's tick: inside year 1, on the 15th day of its first month, 6 h 7 min into the day: not
-# a Month pulse and not a day start, so it lands between an M2 pulse and a pending timer; early
-# enough that the genesis sovereign is alive at it at both seeds (the golden says so).
-T_IN = YEAR + 14 * DAY + 6 * 60 + 7  # 538,927
-KIN_DEGREES = 6  # k: the effect language's kin(p, n) reaches 6 and M7's dormancy_degrees <= 6
-THRESHOLD = Fraction(9, 10)  # docs/09 V-DET-17: correlation >= 0.9 on the unaffected
+INPUT_OFFSET = 6 * 60 + 7  # solo's convention: the input at 06:07 of its day, never a day start
+THRESHOLD = Fraction(9, 10)  # docs/09 V-DET-17's floor on the correlation, reported
 MIN_UNAFFECTED = 100  # the protocol needs at least this many unaffected persons alive at the input
 E0, BETA = WORLD.e0, WORLD.brass_beta  # the manifest's M2 literals ("30", the default "1")
 SYSTEM = rng.system_id("M2.demography")
@@ -96,6 +101,8 @@ PERSON_KIND = 1  # rh_ids::EntityKind::Person
 TAG_RESAMPLE_ENTITY = rng.tag("rehoboam/rh-core/resample-entity/v1")
 RHO_DIGITS = 9
 MIN_PAIRS = 2  # a correlation needs two pairs; the protocol's MIN_UNAFFECTED is the real bound
+REKEY_EVERY = 50  # the rekey-2pct mutant re-keys every 50th unaffected person
+CONTROLS = ("no-op-input", "swap-remove-after-input", "shift-one-day", "rekey-2pct", "global-epoch")
 
 
 # ----------------------------------------------------------------------------- the keyed draws
@@ -115,9 +122,9 @@ class Keys:
             self.k2[(epoch, entity)] = rng.prf(self.k1[epoch], PURPOSE, entity)
         return self.k2[(epoch, entity)]
 
-    def step(self, epoch: int, person: int, t: int, k: int) -> int:
+    def step(self, epoch: int, entity: int, t: int, k: int) -> int:
         """A StepCtx draw: entity = the PersonId, keyed by the person's epoch."""
-        return int(rng.stream_u64(self._k2(epoch, person), t, k))
+        return int(rng.stream_u64(self._k2(epoch, entity), t, k))
 
     def resample(self, epoch: int, person: int, t: int, k: int) -> int:
         """A ResampleCtx draw: entity = resample_entity_id(person), the epoch after the input."""
@@ -177,78 +184,127 @@ class Rollout:
     """One run of the M2-only model: who dies when, and what the input did."""
 
     births: dict[int, int]  # PersonId -> birth tick of everyone alive at tick 0
-    inputs: dict[int, list[int]]  # tick -> persons whose epoch the input bumps, in order
-    resampled: set[int] = field(default_factory=set)  # the persons S11 re-samples (the target)
+    keying: str = "entity"  # "entity": H keyed by PersonId; "position": the swap-remove mutant
     deaths: dict[int, int] = field(default_factory=dict)
     epoch: dict[int, int] = field(default_factory=dict)
     pending: dict[int, int] = field(default_factory=dict)
     alive: set[int] = field(default_factory=set)
-    input_log: list[str] = field(default_factory=list)
+    order: list[int] = field(default_factory=list)  # the living vector of the position mutant
+    t: int = 0  # the next instant to run
+    input_log: str = ""
+
+    def start(self) -> None:
+        """Tick 0: everyone alive at epoch 0, the vector in ascending id."""
+        self.epoch = dict.fromkeys(self.births, 0)
+        self.alive = set(self.births)
+        self.order = sorted(self.births)
 
     def input_on(self, keys: Keys, m: Mortality, t: int, p: int) -> None:
         """A scope-only input on p at t: the epoch, then S11 on a pending death (ADR-0025 3)."""
         self.epoch[p] += 1
         tau = self.pending.get(p)
-        if p not in self.resampled:
-            return  # the control's epoch bumps: no re-sample of these persons' timers
         if p not in self.alive or tau is None:
-            self.input_log.append(f"epoch {self.epoch[p] - 1}->{self.epoch[p]} pending none")
+            self.input_log = f"epoch {self.epoch[p] - 1}->{self.epoch[p]} pending none"
             return
         del self.pending[p]
         t_m = t // MONTH * MONTH
         q = m.resample_q(t - self.births[p], t_m + MONTH - self.births[p])
         if not mort.hits(keys.resample(self.epoch[p], p, t, 0), q):
-            self.input_log.append(f"epoch 0->1 pending {tau} resample miss")
+            self.input_log = f"epoch 0->1 pending {tau} resample miss"
             return
         new = mort.resample_day(t, t_m + MONTH, keys.resample(self.epoch[p], p, t, 1))
-        self.input_log.append(f"epoch 0->1 pending {tau} resample {'none' if new is None else new}")
+        self.input_log = f"epoch 0->1 pending {tau} resample {'none' if new is None else new}"
         if new is not None:
             self.pending[p] = new
 
     def pulse(self, keys: Keys, m: Mortality, t: int) -> None:
         """S8-S10 at the Month pulse t: one Bernoulli per living person, ascending id."""
-        for p in sorted(self.alive):
+        for i, p in enumerate(self.order if self.keying == "position" else sorted(self.alive)):
             assert p not in self.pending, "a pending death survived its month"
+            entity = i + 1 if self.keying == "position" else p
             q = m.month_q(t - self.births[p])
-            if mort.hits(keys.step(self.epoch[p], p, t, 0), q):
-                self.pending[p] = mort.death_day(t, MONTH, keys.step(self.epoch[p], p, t, 1))
+            if mort.hits(keys.step(self.epoch[p], entity, t, 0), q):
+                tau = mort.death_day(t, MONTH, keys.step(self.epoch[p], entity, t, 1))
+                self.pending[p] = tau
 
-    def run(self, seed: int, m: Mortality) -> None:
-        """Pulses, timers and inputs in tick order up to the horizon's end."""
-        keys = Keys(seed)
-        self.epoch = dict.fromkeys(self.births, 0)
-        self.alive = set(self.births)
-        pulses = {k * MONTH for k in range(HORIZON_YEARS * 12)}
-        instants = sorted(pulses | set(self.inputs))
+    def die(self, p: int, t: int) -> None:
+        """A death timer fires: the ledger row leaves; the position mutant swap-removes it."""
+        del self.pending[p]
+        self.alive.discard(p)
+        self.deaths[p] = t
+        if self.keying == "position":
+            i = self.order.index(p)
+            self.order[i] = self.order[-1]
+            self.order.pop()
+
+    def run(self, keys: Keys, m: Mortality, until: int, inputs: dict[int, list[int]]) -> None:
+        """Pulses, timers and inputs in tick order from self.t up to (excluding) ``until``."""
+        pulses = {k * MONTH for k in range(HORIZON_YEARS * MONTHS)}
+        instants = sorted({x for x in pulses | set(inputs) if self.t <= x < until})
+        instants = sorted(set(instants) | {tau for tau in self.pending.values() if tau < until})
         while instants:
             t = instants.pop(0)
-            for p in self.inputs.get(t, []):
+            for p in inputs.get(t, []):
                 self.input_on(keys, m, t, p)
             for p in sorted(q for q, tau in self.pending.items() if tau == t):
-                del self.pending[p]
-                self.alive.discard(p)
-                self.deaths[p] = t
+                self.die(p, t)
             if t in pulses:
                 self.pulse(keys, m, t)
-            nxt = [tau for tau in self.pending.values() if tau > t and tau not in instants]
+            nxt = [tau for tau in self.pending.values() if t < tau < until and tau not in instants]
             instants = sorted(set(instants) | set(nxt))
-        assert not self.pending or min(self.pending.values()) >= T_END
+        self.t = until
 
     def alive_at(self, t: int) -> set[int]:
         """Everyone alive at t: born by then and not dead before or at t."""
         return {p for p in self.births if self.deaths.get(p, T_END + 1) > t}
 
 
+def continue_run(
+    state: Rollout, keys: Keys, m: Mortality, inputs: dict[int, list[int]], *, bump: list[int]
+) -> Rollout:
+    """Copy a rollout at its instant, bump the epochs of ``bump`` there, and run to the horizon."""
+    r = deepcopy(state)
+    for p in bump:
+        r.epoch[p] += 1
+    r.run(keys, m, T_END, inputs)
+    return r
+
+
+def rerun_subset(
+    done: Rollout, state: Rollout, keys: Keys, m: Mortality, bump: list[int]
+) -> Rollout:
+    """``done`` with the persons of ``bump`` re-run from ``state`` at one epoch more.
+
+    Exact under entity keying: a person's draws depend on nothing but its own state, so only the
+    re-keyed persons' instants can change (the model's own independence, which the global-epoch
+    mutant re-runs in full).
+    """
+    part = deepcopy(state)
+    part.births = {p: state.births[p] for p in bump}
+    part.alive &= set(bump)
+    part.pending = {p: tau for p, tau in part.pending.items() if p in bump}
+    part.deaths = {p: t for p, t in part.deaths.items() if p in bump}
+    for p in bump:
+        part.epoch[p] += 1
+    part.run(keys, m, T_END, {})
+    r = deepcopy(done)
+    for p in bump:
+        r.deaths.pop(p, None)
+        if p in part.deaths:
+            r.deaths[p] = part.deaths[p]
+    return r
+
+
 # ----------------------------------------------------------------------------- the affected set
-def affected(g: Genesis, target: int) -> dict[str, set[int]]:
+def affected(g: Genesis, target: int, title: Any) -> dict[str, set[int]]:  # noqa: ANN401
     """The protocol's affected set S around the target, by component (companion §3.3)."""
     gen = ps.Genealogy(g.persons, 0)
-    kin = fw.kin_within(gen, target, KIN_DEGREES) | {target}
+    line = set(ps.Law(gen, target, title.tenures, g.majority).line_for(title.law))
     house_id = g.persons[target].house
     house = {pid for h in g.houses if h.id == house_id for pid in h.members}
     realm = [h for h in g.houses if h.k < len(WORLD.polities[0].dynasties)]  # the first polity's
-    named = {pid for h in realm for pid in fw.house_report(g, gen, h).named}
-    core = kin | house | named
+    named = {pid for h in realm for pid in fw.house_report(g, gen, h, fw.DORMANCY_DEGREES).full}
+    core = {target} | line | house | named
     close: set[int] = set()
     for pid in core:
         p = g.persons[pid]
@@ -256,21 +312,28 @@ def affected(g: Genesis, target: int) -> dict[str, set[int]]:
             close.add(p.spouse)
         if p.household in g.households:
             close |= {q.id for q in g.persons.values() if q.household == p.household and q.alive}
-    return {"kin": kin, "house": house, "named_realm": named, "households": close - core}
+    return {"line": line, "house": house, "named_realm": named, "households": close - core}
 
 
 # ----------------------------------------------------------------------------- the statistic
 @dataclass
-class Statistic:
-    """Pearson's correlation of paired, right-censored death instants, exact in rationals."""
+class Verdict:
+    """The protocol's outcome on one pair: validity, the exact-CRN check, the correlation."""
 
+    valid: bool
+    reason: str  # why the pair is INVALID, or ""
+    unaffected: int
     pairs: int
     identical: int
     rho2: Fraction | None  # None when a run's instants have no variance
     positive: bool
 
-    def passes(self) -> bool:
-        """Pass iff rho >= 0.9: a positive covariance and rho^2 >= 0.81."""
+    def exact(self) -> bool:
+        """Every unaffected pair has identical death instants (the gate, REV-SPR-030 R4)."""
+        return self.identical == self.pairs
+
+    def rho_ok(self) -> bool:
+        """Pass iff rho >= 0.9: a positive covariance and rho^2 >= 0.81 (docs/09's floor)."""
         return self.rho2 is not None and self.positive and self.rho2 >= THRESHOLD * THRESHOLD
 
     def rho2_text(self) -> str:
@@ -280,9 +343,46 @@ class Statistic:
         scaled = (self.rho2 * 10**RHO_DIGITS).numerator // (self.rho2 * 10**RHO_DIGITS).denominator
         return f"{scaled // 10**RHO_DIGITS}.{scaled % 10**RHO_DIGITS:0{RHO_DIGITS}d}"
 
+    def failures(self, label: str) -> list[str]:
+        """The protocol's failures on this pair, prefixed by ``label``."""
+        f = []
+        if not self.valid:
+            f.append(f"{label}: INVALID pair: {self.reason}")
+        if self.unaffected < MIN_UNAFFECTED:
+            f.append(f"{label}: {self.unaffected} unaffected persons, under {MIN_UNAFFECTED}")
+        if not self.exact():
+            f.append(f"{label}: {self.pairs - self.identical} of {self.pairs} pairs differ")
+        if not self.rho_ok():
+            f.append(f"{label}: rho^2 {self.rho2_text()} is under 0.81 or not positive")
+        return f
 
-def correlate(a: Rollout, b: Rollout, unaffected: set[int]) -> Statistic:
-    """Pair each unaffected person's death instants, censor at T_END, drop both-censored pairs."""
+
+def correlate(xs: list[int], ys: list[int]) -> tuple[Fraction | None, bool]:
+    """Pearson's rho^2 of paired instants, exact in rationals, and the covariance's sign."""
+    n = len(xs)
+    if n < MIN_PAIRS:
+        return None, False
+    sx, sy = sum(xs), sum(ys)
+    cov = n * sum(x * y for x, y in zip(xs, ys, strict=True)) - sx * sy
+    vx = n * sum(x * x for x in xs) - sx * sx
+    vy = n * sum(y * y for y in ys) - sy * sy
+    if vx == 0 or vy == 0:
+        return None, False
+    return Fraction(cov * cov, vx * vy), cov > 0
+
+
+def evaluate(a: Rollout, b: Rollout, s_all: set[int], target: int, t_in: int) -> Verdict:
+    """Validity (R3), then the pairs over U: censor at T_END, drop both-censored, compare."""
+    ta, tb = a.deaths.get(target), b.deaths.get(target)
+    if target not in a.alive_at(t_in) or target not in b.alive_at(t_in):
+        valid, reason = False, "the target is not alive at the input in both runs"
+    elif ta == tb:
+        valid, reason = False, f"the target's death instants are equal ({ta})"
+    elif (ta is None or ta >= T_END) and (tb is None or tb >= T_END):
+        valid, reason = False, "neither death instant of the target is inside the horizon"
+    else:
+        valid, reason = True, ""
+    unaffected = (a.alive_at(t_in) & b.alive_at(t_in)) - s_all
     xs, ys = [], []
     for p in sorted(unaffected):
         x, y = min(a.deaths.get(p, T_END), T_END), min(b.deaths.get(p, T_END), T_END)
@@ -290,98 +390,167 @@ def correlate(a: Rollout, b: Rollout, unaffected: set[int]) -> Statistic:
             continue
         xs.append(x)
         ys.append(y)
-    n = len(xs)
     identical = sum(1 for x, y in zip(xs, ys, strict=True) if x == y)
-    if n < MIN_PAIRS:
-        return Statistic(n, identical, None, False)
-    sx, sy = sum(xs), sum(ys)
-    cov = n * sum(x * y for x, y in zip(xs, ys, strict=True)) - sx * sy
-    vx = n * sum(x * x for x in xs) - sx * sx
-    vy = n * sum(y * y for y in ys) - sy * sy
-    if vx == 0 or vy == 0:
-        return Statistic(n, identical, None, False)
-    return Statistic(n, identical, Fraction(cov * cov, vx * vy), cov > 0)
+    rho2, positive = correlate(xs, ys)
+    return Verdict(valid, reason, len(unaffected), len(xs), identical, rho2, positive)
 
 
 # ----------------------------------------------------------------------------- one seed
+@dataclass
+class Pair:
+    """Run A, its state at the input, run B, and the protocol's sets for one seed."""
+
+    g: Genesis
+    target: int
+    title: Any
+    t_in: int
+    a: Rollout
+    at_input: Rollout  # run A's state at t_in, the controls' common starting point
+    b: Rollout
+    parts: dict[str, set[int]]
+    verdict: Verdict
+
+    @property
+    def s_all(self) -> set[int]:
+        """The affected set S."""
+        return set().union(*self.parts.values())
+
+
 def digest(deaths: dict[int, int]) -> str:
     """SHA-256 over 'id tick' lines in ascending id."""
     text = "\n".join(f"{p} {t}" for p, t in sorted(deaths.items())) + "\n"
     return hashlib.sha256(text.encode("ascii")).hexdigest()
 
 
-def render_seed(seed: int, m: Mortality, control: str | None) -> tuple[list[str], list[str]]:
-    """Build the world, run the pair, correlate; return the golden lines and the failures."""
+def run_pair(seed: int, m: Mortality) -> Pair:
+    """Genesis, run A to the horizon, the input tick from the target's run-A death, run B."""
     g = ps.build(ps.Manifest(**{**WORLD.__dict__, "seed": seed}))
     births = {p.id: p.birth for p in g.persons.values() if p.alive}
     title = next(t for t in g.titles if t.k == 0)
     target = title.holder
     assert title.tier == 0 and g.persons[target].house == g.houses[0].id, "the sovereign of house 0"
-    bumped = sorted(births) if control == "global-epoch" else [target]
-    a = Rollout(births, {})
-    b = Rollout(births, {T_IN: bumped}, resampled={target})
-    a.run(seed, m)
-    b.run(seed, m)
-    parts = affected(g, target)
+    keys = Keys(seed)
+    a = Rollout(births)
+    a.start()
+    a.run(keys, m, T_END, {})
+    tau = a.deaths.get(target)
+    # The input: the day before the target's run-A death, 06:07 (inside that death's month, after
+    # its Month pulse since death days start at the pulse's day + 1); with no death in run A the
+    # pair cannot be VALID and the protocol reports it (R3).
+    t_in = (tau - DAY if tau is not None else T_END - DAY) + INPUT_OFFSET
+    at_input = Rollout(births)  # run A again up to the input: the controls' common starting point
+    at_input.start()
+    at_input.run(keys, m, t_in, {})
+    before = {p: t for p, t in a.deaths.items() if t < t_in}
+    assert at_input.deaths == before, "run A to the input equals run A's deaths before it"
+    b = continue_run(at_input, keys, m, {t_in: [target]}, bump=[])
+    parts = affected(g, target, title)
     s_all = set().union(*parts.values())
-    both = a.alive_at(T_IN) & b.alive_at(T_IN)
-    unaffected = both - s_all
-    stat = correlate(a, b, unaffected)
-    failures = []
-    if len(unaffected) < MIN_UNAFFECTED:
-        failures.append(
-            f"seed {seed}: {len(unaffected)} unaffected persons, under {MIN_UNAFFECTED}"
-        )
-    if not stat.passes():
-        failures.append(f"seed {seed}: rho^2 {stat.rho2_text()} is under 0.81 or not positive")
-    tgt = g.persons[target]
+    return Pair(g, target, title, t_in, a, at_input, b, parts, evaluate(a, b, s_all, target, t_in))
+
+
+def render_seed(seed: int, pair: Pair) -> list[str]:
+    """The golden lines of one seed."""
+    g, a, b, v = pair.g, pair.a, pair.b, pair.verdict
+    tgt = g.persons[pair.target]
+    parts = pair.parts
+    s_all = pair.s_all
+    alive_in_s = len(s_all & a.alive_at(pair.t_in))
 
     def tick(r: Rollout) -> str:
-        return str(r.deaths[target]) if target in r.deaths else "censored"
+        return str(r.deaths[pair.target]) if pair.target in r.deaths else "censored"
 
-    lines = [
+    return [
         f"world {WORLD.id} {seed} horizon_years {HORIZON_YEARS} t_end {T_END}",
-        f"target founder {tgt.k} id {tgt.id} age_years {-tgt.birth // YEAR} title {title.k} "
-        f"law {title.law}",
-        f"input tick {T_IN} kind scope_only founder {tgt.k} {b.input_log[0]}",
-        f"affected kin{KIN_DEGREES} {len(parts['kin'])} house {len(parts['house'])} "
+        f"target founder {tgt.k} id {tgt.id} age_years {-tgt.birth // YEAR} title {pair.title.k} "
+        f"law {pair.title.law}",
+        f"input tick {pair.t_in} kind scope_only founder {tgt.k} {b.input_log}",
+        f"affected line {len(parts['line'])} house {len(parts['house'])} "
         f"named_realm {len(parts['named_realm'])} households {len(parts['households'])} "
-        f"total {len(s_all)}",
-        f"living_at_input A {len(a.alive_at(T_IN))} B {len(b.alive_at(T_IN))} "
-        f"unaffected {len(unaffected)}",
-        f"deaths A {len(a.deaths)} B {len(b.deaths)} pairs {stat.pairs} identical {stat.identical} "
-        f"rho2 {stat.rho2_text()} rho_at_least_0.9 {'yes' if stat.passes() else 'no'}",
+        f"total {len(s_all)} alive_at_input {alive_in_s}",
+        f"living_at_input A {len(a.alive_at(pair.t_in))} B {len(b.alive_at(pair.t_in))} "
+        f"unaffected {v.unaffected}",
+        f"pair {'VALID' if v.valid else 'INVALID'} deaths A {len(a.deaths)} B {len(b.deaths)} "
+        f"pairs {v.pairs} identical {v.identical} rho2 {v.rho2_text()} "
+        f"rho_at_least_0.9 {'yes' if v.rho_ok() else 'no'}",
         f"target_death A {tick(a)} B {tick(b)}",
         f"deaths_sha256 A {digest(a.deaths)} B {digest(b.deaths)}",
     ]
-    return lines, failures
 
 
+# ----------------------------------------------------------------------------- the controls
+def mutant(name: str, pair: Pair, keys: Keys, m: Mortality) -> tuple[Rollout, Rollout]:
+    """The pair (A', B') of one mutant engine, from run A's state at the input."""
+    t_in, target, s_all = pair.t_in, pair.target, pair.s_all
+    unaffected = sorted((pair.a.alive_at(t_in) & pair.b.alive_at(t_in)) - s_all)
+    inputs = {t_in: [target]}
+    if name == "no-op-input":  # the input changes nothing: B is A
+        return pair.a, pair.a
+    if name == "swap-remove-after-input":  # draws keyed by the living vector's position
+        base = deepcopy(pair.at_input)
+        base.keying = "position"
+        return continue_run(base, keys, m, {}, bump=[]), continue_run(
+            base, keys, m, inputs, bump=[]
+        )
+    if name == "shift-one-day":  # every unaffected death in B one day later
+        b = deepcopy(pair.b)
+        for p in unaffected:
+            if p in b.deaths:
+                b.deaths[p] += DAY
+        return pair.a, b
+    if name == "rekey-2pct":  # the input re-keys every 50th unaffected person too
+        return pair.a, rerun_subset(pair.b, pair.at_input, keys, m, unaffected[::REKEY_EVERY])
+    if name == "global-epoch":  # a world-wide epoch counter: everyone re-keyed at the input
+        bump = sorted(p for p in pair.at_input.alive if p != target)
+        return pair.a, continue_run(pair.at_input, keys, m, inputs, bump=bump)
+    raise AssertionError(name)
+
+
+def run_controls(seed: int, pair: Pair, m: Mortality) -> tuple[list[str], int]:
+    """Every mutant must make the protocol fail; return the report lines and the count that did."""
+    keys = Keys(seed)
+    lines, failed = [], 0
+    for name in CONTROLS:
+        a, b = mutant(name, pair, keys, m)
+        v = evaluate(a, b, pair.s_all, pair.target, pair.t_in)
+        f = v.failures(f"PROTOCOL FAILED: seed {seed} [{name}]")
+        if f:
+            failed += 1
+            lines += f
+        else:
+            lines.append(f"CONTROL PASSED: seed {seed} [{name}]: the protocol did not fail")
+    return lines, failed
+
+
+# ----------------------------------------------------------------------------- the golden
 HEADER = [
     "# CRN pairing golden outputs (SPR-030; V-DET-17): GENERATED by",
     "# python -I specs/determinism/selftest_crn_pairing.py --write; do not edit.",
     "# Per seed of twin_vales: the target (the primogeniture sovereign at genesis), the one",
-    "# scope-only input and what S11 did with the target's pending death; the affected set by",
-    "# component; the living at the input and the unaffected; the paired deaths, the identical",
-    "# pairs and rho^2 (exact rationals, rounded down); the target's death in each run; the",
-    "# digests of both runs' death instants.",
-    f"constants crn-pairing-v0 horizon_years {HORIZON_YEARS} t_in {T_IN} kin_degrees {KIN_DEGREES}"
+    "# scope-only input inside the month of the target's run-A death and what S11 did with the",
+    "# pending death; the affected set by component, with how many of it are alive at the input;",
+    "# the living at the input and the unaffected; the pair's validity, the deaths, the pairs,",
+    "# the identical pairs and rho^2 (exact rationals, rounded down); the target's death in each",
+    "# run; the digests of both runs' death instants.",
+    f"constants crn-pairing-v0 horizon_years {HORIZON_YEARS} input_offset {INPUT_OFFSET}"
     f" threshold {THRESHOLD} min_unaffected {MIN_UNAFFECTED} e0 {E0} beta {BETA}",
 ]
 
 
-def render(control: str | None) -> tuple[str, list[str]]:
-    """Render every seed; the model's own checks first."""
-    m = Mortality()
-    failures = m.check(
-        [0, DAY, MONTH - DAY, YEAR, 16 * YEAR + 3 * DAY, 61 * YEAR + 7 * DAY, 119 * YEAR]
-    )
-    lines = HEADER[:]
-    for seed in SEEDS if control is None else SEEDS[:1]:  # a control needs one seed to fail
-        seed_lines, seed_failures = render_seed(seed, m, control)
-        lines += seed_lines
-        failures += seed_failures
-    return "\n".join(lines) + "\n", failures
+def split_blocks(text: str) -> tuple[str, dict[str, str]]:
+    """Split a golden text into its header and its 'world id seed ...' blocks."""
+    header: list[str] = []
+    blocks: dict[str, str] = {}
+    key = ""
+    for line in text.splitlines():
+        if line.startswith("world "):
+            key = line
+            blocks[key] = ""
+        if key:
+            blocks[key] += line + "\n"
+        else:
+            header.append(line)
+    return "\n".join(header) + ("\n" if header else ""), blocks
 
 
 def first_difference(current: str, text: str) -> int:
@@ -391,28 +560,65 @@ def first_difference(current: str, text: str) -> int:
     return next((i for i, (x, z) in pairs if x != z), min(len(a), len(b))) + 1
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Check or regenerate the golden file; run a control that must fail."""
+def compare(golden_text: str, blocks: dict[str, str]) -> str | None:
+    """Return a STALE line for the first rendered block that differs from the golden, or None."""
+    header, golden_blocks = split_blocks(golden_text)
+    expected_header = "\n".join(HEADER) + "\n"
+    if header != expected_header:
+        return f"STALE: header differs at line {first_difference(header, expected_header)}"
+    for key, text in blocks.items():
+        current = golden_blocks.get(key, "")
+        if current != text:
+            offset = golden_text.find(key)
+            base = golden_text[:offset].count("\n") if offset >= 0 else 0
+            return f"STALE: {key!r} differs at line {base + first_difference(current, text)}"
+    return None
+
+
+def parse(argv: list[str] | None) -> argparse.Namespace:
+    """The command line."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--write", action="store_true", help="regenerate the golden file")
     parser.add_argument("--golden", type=Path, default=GOLDEN, help="the golden file to check")
-    parser.add_argument("--control", choices=["global-epoch"], help="a control that must fail")
-    args = parser.parse_args(argv)
-    text, failures = render(args.control)
-    print(text, end="")
-    model = [f for f in failures if "differs from the reference" in f]
+    parser.add_argument("--seeds", default=",".join(map(str, SEEDS)), help="the seeds to run")
+    parser.add_argument("--controls", action="store_true", help="also run the five mutants")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:  # noqa: C901
+    """Check or regenerate the golden file; run the controls that must fail."""
+    args = parse(argv)
+    seeds = SEEDS if args.write else tuple(int(s) for s in args.seeds.split(","))
+    m = Mortality()
+    model = m.check(
+        [0, DAY, MONTH - DAY, YEAR, 16 * YEAR + 3 * DAY, 61 * YEAR + 7 * DAY, 119 * YEAR]
+    )
     if model:
         for f in model:
             print(f"MODEL FAILED: {f}")
         print("CRN PAIRING: FAIL (the model's own checks)")
         return EXIT_MODEL
+    blocks: dict[str, str] = {}
+    failures: list[str] = []
+    control_lines: list[str] = []
+    controls_failed = 0
+    for seed in seeds:
+        pair = run_pair(seed, m)
+        lines = render_seed(seed, pair)
+        blocks[lines[0]] = "\n".join(lines) + "\n"
+        failures += pair.verdict.failures(f"PROTOCOL FAILED: seed {seed}")
+        if args.controls:
+            seed_lines, failed = run_controls(seed, pair, m)
+            control_lines += seed_lines
+            controls_failed += failed
+    text = "\n".join(HEADER) + "\n" + "".join(blocks.values())
+    print(text, end="")
+    for line in control_lines:
+        print(line)
     if failures:
         for f in failures:
-            print(f"PROTOCOL FAILED: {f}")
+            print(f)
         print("CRN PAIRING: FAIL")
-        return EXIT_FAIL
-    if args.control:
-        print("CRN PAIRING: PASS under a control that must fail")
         return EXIT_FAIL
     if args.write:
         args.golden.parent.mkdir(parents=True, exist_ok=True)
@@ -420,12 +626,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wrote {args.golden}")
         return EXIT_OK
     current = args.golden.read_text(encoding="utf-8") if args.golden.exists() else ""
-    if current != text:
-        line = first_difference(current, text)
-        print(f"STALE: {args.golden} differs from the reference at line {line}")
+    stale = compare(current, blocks)
+    if stale:
+        print(stale)
         print("CRN PAIRING: FAIL")
         return EXIT_FAIL
-    print(f"CRN PAIRING: PASS ({len(SEEDS)} seeds, rho >= {THRESHOLD} on the unaffected)")
+    wanted = len(CONTROLS) * len(seeds)
+    if args.controls and controls_failed != wanted:
+        print(f"CRN PAIRING: FAIL (controls: {controls_failed} of {wanted} made the protocol fail)")
+        return EXIT_FAIL
+    note = f", controls {controls_failed} of {wanted} FAIL as required" if args.controls else ""
+    print(
+        f"CRN PAIRING: PASS (seeds {','.join(map(str, seeds))}: every pair VALID and exact{note})"
+    )
     return EXIT_OK
 
 
