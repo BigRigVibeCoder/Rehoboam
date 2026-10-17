@@ -362,7 +362,7 @@ fn schedule_death(
         .args
         .get(3)
         .and_then(|a| a.event())
-        .unwrap_or_default();
+        .unwrap_or(EventRef::None);
     let victim = PersonId::from_raw(victim.cast_unsigned());
     if apply_death(view, ctx, victim, cause, cause_event)? == Death::AlreadyDead {
         ctx.drop_command(q, DropReason::Dead);

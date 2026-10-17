@@ -79,7 +79,7 @@ impl AgendaKey {
 
 /// What fires: the owning system, the RNG purpose its time was drawn under, and a closure id
 /// with an integer argument ("a heap entry plus a closure ID", ADR-0025).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Timer {
     /// The owning system's RNG `system_id` (name-derived, stable): only it can cancel the timer,
     /// and it handles the firing.
@@ -98,7 +98,7 @@ pub struct Timer {
 }
 
 /// A timer with its key: what a system's `fire` and `resample_timer` receive.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimerEntry {
     /// The key.
     pub key: AgendaKey,

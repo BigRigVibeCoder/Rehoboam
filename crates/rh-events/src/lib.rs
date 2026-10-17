@@ -40,24 +40,10 @@ const TAG_EVENT_HASH: u64 = rh_ids::rng::tag("rehoboam/rh-events/log-hash/v1");
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DraftRef(pub usize);
 
-/// An event-typed slot of a lifecycle command or a timer (`05.1` §2 rule 2, "Event-typed slots";
-/// EVO-001, REV-SPR-017 N3): one of the step's own drafts, an event id read from state, or none.
-///
-/// The merge replaces every `Draft` by the id it assigns in the same merge (`rh-core`), so an
-/// owner only ever sees `Known` or `None`. The type is opaque on purpose: it has no conversion
-/// from or to an integer and is not an `rh_ids::EntityKey`, so it can neither stand in for an
-/// integer payload field nor key a draw. A step that wants the id reads it with
-/// [`EventRef::known`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum EventRef {
-    /// No event.
-    #[default]
-    None,
-    /// An earlier draft of the submitting step, resolved at the merge.
-    Draft(DraftRef),
-    /// An event already in the log.
-    Known(EventId),
-}
+// `EventRef`'s text is shared with SPR-020 and kept identical (Architect, SPR-014): its methods
+// live here, and the slot's opacity is documented on the type.
+mod event_ref;
+pub use event_ref::EventRef;
 
 impl EventRef {
     /// The event's id, once it is known (always, after the merge, unless the slot is empty).

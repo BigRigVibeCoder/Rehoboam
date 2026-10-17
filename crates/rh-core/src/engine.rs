@@ -986,7 +986,8 @@ impl Engine {
                 .flat_map(|&entity| self.agenda.pending_for(entity))
                 .map(|(key, timer)| TimerEntry { key, timer })
                 .collect();
-            touched.sort_unstable();
+            // Keys are unique (the seq), so the key order is the whole order.
+            touched.sort_unstable_by_key(|e| e.key);
             for entry in touched {
                 self.resample(t, entry)?;
             }

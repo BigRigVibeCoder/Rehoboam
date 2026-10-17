@@ -32,7 +32,7 @@ use crate::time::SimTime;
 /// (`05.1` §2 rule 2, "Event-typed slots"). The owner's spec types each field
 /// ([`ArgType`]); `StepCtx::submit` refuses an `Int` in an `EventRef` field, an `Event` anywhere
 /// else, and an integer outside its field's type.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Arg {
     /// An integer field: an id's bits, a time, a code, a fixed-point value's raw bits.
     Int(i64),
