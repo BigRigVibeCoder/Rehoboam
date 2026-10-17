@@ -1,0 +1,22 @@
+[package]
+name = "rh-sifter"
+description = "Sifter v0: single-clause story patterns over sealed channel A, written as channel-C segments"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# SPR-011 ruling 14: the sifter runs downstream of the engine, on sealed channel-A segments, and
+# writes channel C. Plane C (ADR-0024): no plane-A crate may depend on it (V-PLN-01).
+[package.metadata.rehoboam]
+plane = "C"
+kind = "machinery"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }
+rh-stream = { version = "0.0.0", path = "../rh-stream" }
+serde = { version = "=1.0.229", features = ["derive"] }
+toml = "=1.1.8"

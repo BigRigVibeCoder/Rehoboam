@@ -214,6 +214,12 @@ def lint(patterns: dict, reg: dict, warns: list[str] | None = None) -> list[str]
         clauses = p.get("clause", [])
         if not clauses:
             errs.append(f"{pid}: no clauses")
+        # VER-SPR-013-TEST GAP-4 (rh-sifter's MIN-1): a declared role that no clause binds through its
+        # cast is refused; a match_event clause imports the match's bindings, so it may bind any.
+        if not any("match_event" in c for c in clauses):
+            cast_bound = {str(c[k]) for c in clauses for k in cast_keys & set(c)}
+            for var in sorted(set(p.get("roles", {})) - cast_bound):
+                errs.append(f"{pid}: role {var} is declared but no clause binds it")
         for c in clauses:
             ev = c.get("bind")
             where = f"{pid}.{ev}"
@@ -333,6 +339,10 @@ def main(argv: list[str]) -> int:
     dom_errs = lint(domain, reg, dom_warns)
     u_errs, r_errs = lint(unbound, reg), lint(domain, bad_reg)
     c_errs = lint(cast_on_match, reg)
+    spare = {"pattern": [{"id": "spare", "roles": {"A": "any", "B": "any"}, "selection": "latest",
+                          "on_complete": "clear_binding", "firing_budget": {"per_century_per_100k": 1},
+                          "clause": [{"bind": "e1", "verb": "DEATH", "target": "A"}]}]}
+    assert any("role B is declared but no clause binds it" in e for e in lint(spare, reg))
     assert any("a match_event clause has no cast" in e for e in c_errs), c_errs
     assert any("A='authority' has a domain, but no clause binds A" in e for e in c_errs), c_errs
     assert any("W='kin' has a domain, but no clause binds W through actor, target or instrument" in e for e in u_errs), u_errs

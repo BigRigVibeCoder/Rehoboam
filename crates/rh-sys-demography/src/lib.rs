@@ -30,3 +30,14 @@ impl Demography {
             .transpose()
     }
 }
+
+/// The `mutant-*` Cargo features compiled into this build (BCK-002 A-52): empty in every build a
+/// world or a baseline may come from. `rh-cli run` and `bin/regen_baseline.sh` refuse a build where
+/// it is not; `python/tests/test_mutant_features.py` checks that every `mutant-*` feature of the
+/// crate is listed here.
+pub const MUTANTS: &[&str] = &[
+    #[cfg(feature = "mutant-resample-hit-k1")]
+    "mutant-resample-hit-k1",
+    #[cfg(feature = "mutant-resample-day-k0")]
+    "mutant-resample-day-k0",
+];

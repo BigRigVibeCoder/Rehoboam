@@ -1,0 +1,7 @@
+# Test fixture world (SPR-013 T-11): not a golden world, no baseline. The manifest is pinned as a golden
+# world's is (one copy, no drift).
+world = "fixture-founders_10k"
+manifest = "tests/worlds/founders_10k/manifest.yaml"
+manifest_sha256 = "7d55663bb3d8d704da440fac1b3076fcf90a16c7a177992181df6e64b628cccd"
+registry = "specs/manifest/registry_v0.toml"
+inputs = "tests/worlds/founders_10k/inputs.toml"

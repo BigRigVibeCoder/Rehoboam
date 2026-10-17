@@ -16,6 +16,10 @@
 //!    and the threads it spawns, the merge, or the engine between levels, phases and instants. The
 //!    observer's own allocations are excluded. Driving these counts to 0 is BCK-002 A-32.
 //!
+//! 4. **The rungs** (SPR-013 T-13): `solo`, `household` and `hamlet`, each at 1 thread over the same
+//!    window on its own calendar, as `rh-cli run` builds them, with no inputs: one budget line per
+//!    rung (`rung <world> …`).
+//!
 //! The P0 engine allocates per tick (per-level buffers, scoped threads), so the budget is the
 //! measured count, and any increase fails (ruling 5). `bin/perf_gate.py alloc-gate` runs this
 //! target and compares its output with `baselines/allocations_v1.txt`.
@@ -34,7 +38,7 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 
 use rh_bench::alloc_count::{Counting, Snapshot, snapshot};
-use rh_bench::smoke;
+use rh_bench::{rungs, smoke};
 use rh_core::engine::Engine;
 use rh_core::observe::{Boundary, Notice, Observer};
 use rh_core::time::SimTime;
@@ -184,16 +188,20 @@ fn advance(engine: &mut Engine, t: SimTime) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-/// Runs the warm-up, then the window one instant at a time.
-fn measure(engine: &mut Engine, sites: Option<&Sites>) -> Result<Window, String> {
+/// Runs the warm-up, then the window one instant at a time, on a calendar of `minutes_per_year`.
+fn measure(
+    engine: &mut Engine,
+    sites: Option<&Sites>,
+    minutes_per_year: i64,
+) -> Result<Window, String> {
     advance(
         engine,
-        SimTime::from_minutes(WARM_UP_YEARS * MINUTES_PER_YEAR - 1),
+        SimTime::from_minutes(WARM_UP_YEARS * minutes_per_year - 1),
     )?;
     if let Some(s) = sites {
         s.reset();
     }
-    let end = SimTime::from_minutes((WARM_UP_YEARS + MEASURED_YEARS) * MINUTES_PER_YEAR - 1);
+    let end = SimTime::from_minutes((WARM_UP_YEARS + MEASURED_YEARS) * minutes_per_year - 1);
     let (mut ticks, mut max_per_tick) = (0, 0);
     let start = snapshot();
     while let Some(t) = engine.next_instant().filter(|t| *t <= end) {
@@ -236,7 +244,7 @@ fn report(repo: &Path, control: bool) -> Result<String, String> {
         if let Some(s) = &sites {
             engine.set_observer(Some(s.clone()));
         }
-        let w = measure(&mut engine, sites.as_deref())?;
+        let w = measure(&mut engine, sites.as_deref(), MINUTES_PER_YEAR)?;
         lines.push(format!(
             "budget threads {threads} ticks {} allocations {} growths {} shrinks {} max_per_tick {}",
             w.ticks, w.total.allocations, w.total.growths, w.total.shrinks, w.max_per_tick
@@ -244,6 +252,20 @@ fn report(repo: &Path, control: bool) -> Result<String, String> {
         if let Some(s) = sites {
             site_lines = s.report();
         }
+    }
+    // SPR-013 T-13: each rung of the ladder, at 1 thread (one system: every level holds one job),
+    // over the same window on its own calendar; its budget is its measured count.
+    lines.push(format!(
+        "window-rungs {} warm-up {WARM_UP_YEARS} years, measured {MEASURED_YEARS} year(s), no inputs, manifest seeds",
+        rungs::RUNGS.join(",")
+    ));
+    for world in rungs::RUNGS {
+        let (mut engine, calendar, seed) = rungs::engine(repo, world, 1)?;
+        let w = measure(&mut engine, None, calendar.minutes_per_year())?;
+        lines.push(format!(
+            "rung {world} seed {seed} threads 1 ticks {} allocations {} growths {} shrinks {} max_per_tick {}",
+            w.ticks, w.total.allocations, w.total.growths, w.total.shrinks, w.max_per_tick
+        ));
     }
     lines.extend(site_lines);
     Ok(lines.join("\n") + "\n")

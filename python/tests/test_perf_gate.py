@@ -286,6 +286,32 @@ def test_a_changed_window_or_tick_count_asks_for_a_re_baseline() -> None:
     assert lines == ["window changed: the ticks at 1 thread(s) differ"]
 
 
+RUNGS = ALLOC + (
+    "window-rungs solo,hamlet warm-up 2 years\n"
+    "rung solo seed 1 threads 1 ticks 12 allocations 1068 growths 85 shrinks 0 max_per_tick 89\n"
+    "rung hamlet seed 42 threads 1 ticks 14 allocations 1502 growths 157 shrinks 0 "
+    "max_per_tick 113\n"
+)
+
+
+def test_each_rung_is_gated_like_the_smoke_world() -> None:
+    """SPR-013 T-13: a rung line is a budget of its own; an increase in one rung fails by name."""
+    assert alloc_compare(RUNGS, RUNGS)[0] == OK
+    verdict, lines = alloc_compare(RUNGS, RUNGS.replace("allocations 1502", "allocations 1503"))
+    assert verdict == FAIL
+    assert "OVER BUDGET rung hamlet allocations: 1502 -> 1503 (+1)" in lines
+    assert "ok rung solo allocations: 1068 -> 1068" in lines
+    verdict, lines = alloc_compare(RUNGS, RUNGS.replace("ticks 12", "ticks 13"))
+    assert (verdict, lines) == (REBASELINE, ["window changed: the ticks of rung solo differ"])
+    assert alloc_compare(RUNGS, RUNGS.replace("seed 42", "seed 43"))[0] == REBASELINE
+    rung_threads = RUNGS.replace("rung solo seed 1 threads 1", "rung solo seed 1 threads 2")
+    assert alloc_compare(RUNGS, rung_threads) == (
+        REBASELINE,
+        ["window changed: the ticks of rung solo differ"],
+    )
+    assert alloc_compare(ALLOC, RUNGS)[0] == REBASELINE, "a rung added is a new window"
+
+
 def test_a_push_with_no_base_says_it_did_not_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

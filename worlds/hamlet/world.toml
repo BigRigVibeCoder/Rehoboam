@@ -1,0 +1,8 @@
+# The golden world hamlet (SPR-011 rulings 16, 18; SPR-013 T-13). One copy of the manifest, no drift: the
+# runner refuses to run if the manifest's bytes do not hash to manifest_sha256. Re-pin only with the
+# baseline, in a [C3] PR. The SHA-256 is the run's manifest_hash (the history tuple, DET-1).
+world = "hamlet"
+manifest = "specs/manifest/examples/hamlet.yaml"
+manifest_sha256 = "d795a5e10950bc017df52c2b12d7be61bd4da6f223c4950c80ba0c98c103cbaf"
+registry = "specs/manifest/registry_v0.toml"
+inputs = "worlds/hamlet/inputs.toml"

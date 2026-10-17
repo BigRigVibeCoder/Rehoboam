@@ -230,44 +230,45 @@ impl SystemSpec {
     }
 }
 
-/// Loads every system spec in a directory (`*.odd.toml`, skipping `_`-prefixed templates), in
-/// file-name order.
+/// Whether a spec file name is a system spec: `*.odd.toml`, not a `_`-prefixed template.
+#[must_use]
+pub fn is_spec_file(name: &str) -> bool {
+    name.ends_with(".odd.toml") && !name.starts_with('_')
+}
+
+/// Parses the system specs among `files` (`(path, text)` pairs, as a host read them): the files
+/// [`is_spec_file`] accepts, in path order. A pure parser (BCK-002 A-51): reading the files is the
+/// host's (`rh_manifest::specs::load_specs`) or a test helper's, never plane A's.
 ///
 /// # Errors
-/// The directory or a spec cannot be read or parsed.
-pub fn load_specs(dir: &Path) -> Result<Vec<SystemSpec>, String> {
-    let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let mut paths: Vec<PathBuf> = entries
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| {
+/// A spec cannot be parsed.
+pub fn parse_specs(files: Vec<(PathBuf, String)>) -> Result<Vec<SystemSpec>, String> {
+    let mut files: Vec<(PathBuf, String)> = files
+        .into_iter()
+        .filter(|(p, _)| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .is_some_and(|n| n.ends_with(".odd.toml") && !n.starts_with('_'))
+                .is_some_and(is_spec_file)
         })
         .collect();
-    paths.sort();
-    paths
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    files
         .iter()
-        .map(|p| {
-            let text = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
-            SystemSpec::from_toml(p, &text)
-        })
+        .map(|(p, text)| SystemSpec::from_toml(p, text))
         .collect()
 }
 
-/// The system ids of a Registry file: the keys of its `[systems]` table. Reads nothing else, so
-/// this plane-A crate never parses a Registry number.
+/// The system ids of a Registry's text: the keys of its `[systems]` table. Reads nothing else, so
+/// this plane-A crate never parses a Registry number. `name` is for messages only. A pure parser
+/// (BCK-002 A-51).
 ///
 /// # Errors
-/// The file cannot be read, is not TOML, or has no `[systems]` table.
-pub fn registry_system_ids(path: &Path) -> Result<BTreeSet<String>, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let table: toml::Table =
-        toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+/// The text is not TOML, or has no `[systems]` table.
+pub fn parse_registry_system_ids(name: &str, text: &str) -> Result<BTreeSet<String>, String> {
+    let table: toml::Table = toml::from_str(text).map_err(|e| format!("{name}: {e}"))?;
     match table.get("systems") {
         Some(toml::Value::Table(systems)) => Ok(systems.keys().cloned().collect()),
-        _ => Err(format!("{}: no [systems] table", path.display())),
+        _ => Err(format!("{name}: no [systems] table")),
     }
 }
 
@@ -327,7 +328,7 @@ pub struct Ownership {
 
 impl Ownership {
     /// Builds the table from the specs, checking them against each other and the Registry's
-    /// system ids (from `rh-manifest`'s Registry, or [`registry_system_ids`]).
+    /// system ids (from `rh-manifest`'s Registry, or [`parse_registry_system_ids`]).
     #[must_use]
     pub fn build(specs: &[SystemSpec], system_ids: &BTreeSet<String>) -> Self {
         let mut problems = Vec::new();
@@ -427,181 +428,5 @@ impl Ownership {
             }
         }
         out
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn repo() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-    }
-
-    fn table() -> Ownership {
-        let reg = registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
-        let specs = load_specs(&repo().join("specs/systems")).unwrap();
-        Ownership::build(&specs, &reg)
-    }
-
-    fn access(system: &str, reads: &[&str], writes: &[&str]) -> AccessSpec {
-        AccessSpec {
-            system: system.to_owned(),
-            reads: reads.iter().map(ToString::to_string).collect(),
-            writes: writes.iter().map(ToString::to_string).collect(),
-        }
-    }
-
-    #[test]
-    fn the_specs_agree_with_themselves() {
-        let t = table();
-        assert_eq!(t.problems, vec![]);
-        assert_eq!(t.owners["person.alive"].system, "M2.demography");
-        assert_eq!(t.owners["encounter_log.day_index"].system, "S5.daily_life");
-        for spec in t.specs.values() {
-            assert_eq!(t.check(&AccessSpec::from_spec(spec)), vec![], "{}", spec.id);
-        }
-    }
-
-    /// T-03 acceptance: a system writing a column it does not own is rejected.
-    #[test]
-    fn writing_an_unowned_column_is_rejected() {
-        let t = table();
-        let found = t.check(&access(
-            "S5.daily_life",
-            &[],
-            &["encounter_log.day_index", "person.alive"],
-        ));
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].rule, "single-writer");
-        assert!(
-            found[0]
-                .message
-                .starts_with("writes person.alive, which M2.demography owns")
-        );
-        let nobody = t.check(&access("M2.demography", &[], &["person.mood"]));
-        assert_eq!(
-            nobody[0].message,
-            "writes person.mood, which no system spec owns"
-        );
-    }
-
-    #[test]
-    fn undeclared_reads_and_unknown_systems_are_rejected() {
-        let t = table();
-        let found = t.check(&access("M2.demography", &["person.residence"], &[]));
-        assert_eq!(found[0].rule, "undeclared-read");
-        assert_eq!(t.check(&access("M9.ghost", &[], &[]))[0].rule, "registry");
-    }
-
-    #[test]
-    fn two_owners_and_plane_leaks_are_found() {
-        let reg = registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
-        let spec = |id: &str, col: &str, plane: &str, reads: &[&str]| SystemSpec {
-            path: PathBuf::from(format!("{id}.odd.toml")),
-            id: id.to_owned(),
-            owns: vec![OwnedColumn {
-                column: col.to_owned(),
-                plane: plane.to_owned(),
-                ty: "bool".to_owned(),
-            }],
-            reads: reads
-                .iter()
-                .map(|c| DeclaredRead {
-                    column: (*c).to_owned(),
-                    owner: "M1.regions".to_owned(),
-                    lag: "lagged".to_owned(),
-                })
-                .collect(),
-            rng: vec![],
-            schedule: vec![],
-            commands: vec![],
-            emits: vec![],
-            from_manifest: vec![],
-        };
-        let t = Ownership::build(
-            &[
-                spec("M1.regions", "region.pins", "B", &[]),
-                spec("M2.demography", "person.alive", "A", &["region.pins"]),
-                spec("M3.agriculture", "person.alive", "A", &[]),
-            ],
-            &reg,
-        );
-        assert_eq!(t.problems.len(), 1);
-        assert!(
-            t.problems[0]
-                .message
-                .contains("which M2.demography already owns")
-        );
-        let leak = t.check(&access("M2.demography", &["region.pins"], &[]));
-        assert_eq!(leak[0].rule, "plane");
-    }
-
-    /// DEF-8: the lint checks the spec fields it relies on, without `lint_odd.py`.
-    #[test]
-    fn spec_fields_the_lint_relies_on_are_validated() {
-        let reg = registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).unwrap();
-        let dir = repo().join("specs/systems");
-        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
-        let m2 = read("M2.demography.odd.toml");
-        let s7 = read("S7.vows.odd.toml");
-        let cases = [
-            (
-                "M2.demography.odd.toml",
-                m2.replacen("plane = \"A\"", "plane = \"D\"", 1),
-                "plane",
-                "in plane 'D'",
-            ),
-            (
-                "M2.demography.odd.toml",
-                m2.replacen("plane = \"A\"", "plane = \"b\"", 1),
-                "plane",
-                "in plane 'b'",
-            ),
-            (
-                "M2.demography.odd.toml",
-                m2.replacen("type = \"i64\"", "type = \"wibble\"", 1),
-                "spec",
-                "unknown type 'wibble'",
-            ),
-            (
-                "S7.vows.odd.toml",
-                s7.replacen("column = \"person.alive\"", "column = \"person.mood\"", 1),
-                "single-writer",
-                "reads person.mood, which M2.demography's spec does not declare",
-            ),
-            (
-                "S7.vows.odd.toml",
-                s7.replacen("owner = \"M2.demography\"", "owner = \"S6.artifacts\"", 1),
-                "single-writer",
-                "from S6.artifacts, but M2.demography owns it",
-            ),
-        ];
-        for (file, text, rule, needle) in cases {
-            let mut specs = load_specs(&dir).unwrap();
-            let i = specs
-                .iter()
-                .position(|s| s.path.file_name().is_some_and(|n| n == file))
-                .unwrap();
-            specs[i] = SystemSpec::from_toml(&dir.join(file), &text).unwrap();
-            let t = Ownership::build(&specs, &reg);
-            assert!(
-                t.problems
-                    .iter()
-                    .any(|v| v.rule == rule && v.message.contains(needle)),
-                "{needle}: {:?}",
-                t.problems
-            );
-        }
-    }
-
-    #[test]
-    fn access_files_parse() {
-        let a = AccessSpec::from_toml(
-            "[[access]]\nsystem = \"S5.daily_life\"\nwrites = [\"person.alive\"]\n",
-        )
-        .unwrap();
-        assert_eq!(a[0].writes, vec!["person.alive".to_owned()]);
-        assert!(AccessSpec::from_toml("[[access]]\nsystem = \"x\"\nowns = []\n").is_err());
     }
 }
