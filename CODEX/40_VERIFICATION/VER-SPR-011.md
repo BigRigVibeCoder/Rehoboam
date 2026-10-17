@@ -93,6 +93,7 @@ The first synthetic input is at tick 3,822,127 (year 7, day 99, 06:07; a scope o
 1. A PR that conflicts with `main` gets no `pull_request` CI. Merge `main` whenever it moves; three commits went untested for about 45 minutes.
 2. `send_message` with priority `next` is delivered when the target's turn ends. Four Architect messages reached the Developer about 50 minutes late. Use `now` for anything time-sensitive.
 3. A fix can open the hole next to the one it closes (DEF-1's lookbehind). Every lint fix gets planted controls for its neighbours, not only for the reported form.
+4. A gate that scans every tracked file also scans the records. The Tester's report quoted deny-listed crate names inside quote marks and failed G-3's defined-once test on the audit commit's CI run. The audit removed the quote marks on its two lines; nothing else in the report changed. Records name crates without quotes.
 
 ## 7. Backlog (BCK-002 1.13.0)
 - **A-46:** the `StepCtx` draw overhead (about 690 instructions per draw over raw) before SPR-030's scale benches.
