@@ -264,6 +264,48 @@ canonical_golden_control() {
   "$PY" -I specs/stream/canonical_v0.py --check --golden "$planted"
 }
 
+# lint_odd --next controls (SPR-015; REV-SPR-015 NIT-4): rendered from the next M2 spec itself, never copied, so they
+# cannot drift. odd_next_control <case>: algorithm (a frozen S0 step reworded), rng (a purpose planted before
+# death_time), bound (the Registry delta with tfr's upper bound moved). Each must FAIL with its own diagnostic.
+odd_next_control() {
+  local dir=target/rendered-fixtures/odd_next/$1 src=specs/systems/next/M2.demography.odd.toml
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  local lock=specs/systems/next/amendments.lock.toml
+  case "$1" in
+    algorithm)
+      cp "$lock" "$dir/" || return 1
+      sed 's/^  "S0 Rounding\. rhe(n \/ d) for integers n (signed)/  "S0 Rounding (PLANTED CHANGE). rhe(n \/ d) for integers n (signed)/' "$src" > "$dir/M2.demography.odd.toml" || return 1
+      grep -q "PLANTED CHANGE" "$dir/M2.demography.odd.toml" || { echo "control not planted: S0 not found"; return 1; }
+      "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
+    rng)
+      cp "$lock" "$dir/" || return 1
+      sed '0,/^\[\[rng\]\]$/s//[[rng]]\npurpose = "planted_first"\nkey = ["person"]\nuse = "PLANTED"\nresample_on_fork = false\ndraws = []\n[[rng]]/' "$src" > "$dir/M2.demography.odd.toml" || return 1
+      grep -q "planted_first" "$dir/M2.demography.odd.toml" || { echo "control not planted: no [[rng]] found"; return 1; }
+      "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
+    bound)
+      sed 's/tfr = \[1.2, 7.5\]/tfr = [1.2, 9.5]/' specs/systems/next/registry_delta.toml > "$dir/registry_delta.toml" || return 1
+      grep -q "9.5" "$dir/registry_delta.toml" || { echo "control not planted: tfr bounds not found"; return 1; }
+      "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay "$dir/registry_delta.toml" ;;
+    lock)
+      # REV-SPR-015 round 3 MIN-1: the committed lock pins every amendment's path and text digest; one digest changed
+      cp "$src" "$dir/" || return 1
+      sed '0,/= "sha256:[0-9a-f]/s//= "sha256:x/' "$lock" > "$dir/amendments.lock.toml" || return 1
+      grep -q 'sha256:x' "$dir/amendments.lock.toml" || { echo "control not planted: no digest found"; return 1; }
+      "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
+    *) echo "odd_next_control: unknown case $1"; return 1 ;;
+  esac
+}
+
+# M2 F1 reference control (SPR-015): the next-version M2 spec with one check value off by one; the exact reference
+# must FAIL on it (selftest_m2_f1.py --spec).
+m2_f1_stale_control() {
+  local planted=target/rendered-fixtures/m2_f1_stale_check_value.odd.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/tfr1_bits = 615614/tfr1_bits = 615615/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
+  grep -q 'tfr1_bits = 615615' "$planted" || { echo "control not planted: tfr1_bits = 615614 not found in the next M2 spec"; return 1; }
+  "$PY" -I specs/demography/selftest_m2_f1.py --spec "$planted"
+}
+
 # Worldgen-lite golden control (SPR-018): the committed golden outputs with one land count off by one; the exact reference
 # must FAIL on them (selftest_worldgen_lite.py --golden).
 worldgen_lite_golden_control() {
@@ -829,6 +871,11 @@ run "lint_odd neutral positive control: an enum neutral outside the column's cod
 run "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)" "pass:WARN  M3.agriculture.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
 run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
 run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 29 planted changes rejected (3 of them by the amendments lock), 18 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
+run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
+run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
+run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
 run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
@@ -910,6 +957,8 @@ run "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refus
 run "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)" "fail:STALE:" "$PY" -I specs/numerics/exp_ln_v0.py --check --golden tests/lint_fixtures/golden/stale_exp_ln_v0.txt &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
+run "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)" "pass:M2 F1 FERTILITY AND PARTNERING: PASS" "$PY" -I specs/demography/selftest_m2_f1.py &&
+run "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)" "fail:M2 F1 FERTILITY AND PARTNERING: FAIL" m2_f1_stale_control &&
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
