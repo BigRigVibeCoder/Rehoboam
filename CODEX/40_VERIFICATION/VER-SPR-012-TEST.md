@@ -9,10 +9,12 @@ tags: [verification, testing, determinism, validation]
 related: [SPR-012, SPR-011, VER-SPR-011-TEST, VER-SPR-008-TEST, AGT-003-DET, AGT-003-STAT, ADR-0025, ADR-0026]
 created: 2026-10-17
 updated: 2026-10-17
-version: 1.0.0
+version: 1.1.0
 ---
 
-> **BLUF (head `9e5a6c25510748bfba6bc5d6a50305494cddd7ec`, PR #56): T-05, T-06, T-07 and T-08 meet their acceptance criteria, and so do the A-47 and A-49 items. I found no defect.** `bin/check_all.sh` is **358 of 358** on a clean clone of the head, and pytest passes (624) under the three CI event shapes. My own implementation of M2's rung-0 algorithm (S8 to S12), written from the spec on the repository's independent RNG reference, predicts the death instant of **every one of 33,711 persons** in the runs I compared, including 783 scoped re-samples, on both calendars and at 1, 2, 4 and 8 threads. The fixed-point schedule agrees with my own `fractions` reference on all 3,091 committed golden vectors, on 105,472 further random and edge cases, and on all 4,259,841 `Q16_16` inputs for the q(15) band identity. The 32-seed q(15) check passes against the Architect's conditional null in every cohort I ran (5 cohorts of 8 to 32 seeds, 88 seeds in all). **Seven contract gaps, none a defect.** The one that matters: `resample_timer`'s draw wiring is pinned by no test at all, solo's ladder included. Two mutants of it survive every gate, and my differential catches both (GAP-1). A second gap is structural: thread-count invariance on `solo` cannot fail, because no scheduler level ever holds two jobs (GAP-2).
+> **BLUF (phase 3, head `bd2e718d35ffd04f342085f8067fb7b1af7f214f`; section 7): the delta passes. Both of my surviving mutants now die, my independent model reproduces the new differential golden (188 deaths, 28 re-sample outcomes, 0 differences) and Ada's re-sample (27,796,320 pending, a miss at epoch 1, death at 29,975,040), the new `solo` baseline reproduces at 1 to 64 threads, and `bin/check_all.sh` is 374 of 374 on a clean clone with pytest at 625 under the three CI shapes. No defect. GAP-1, GAP-3 and GAP-6 are closed; GAP-5 is deferred to BCK-002 A-51; GAP-2, GAP-4 and GAP-7 stand as ruled. Two new minor gaps: the golden's 19 re-samples cannot resolve a one-day error in q′ (two further mutants of mine survive it and die under my 401-re-sample differential, GAP-8), and two small holes in the new gates (GAP-9).**
+>
+> **BLUF (phase 2, head `9e5a6c25510748bfba6bc5d6a50305494cddd7ec`, PR #56): T-05, T-06, T-07 and T-08 meet their acceptance criteria, and so do the A-47 and A-49 items. I found no defect.** `bin/check_all.sh` is **358 of 358** on a clean clone of the head, and pytest passes (624) under the three CI event shapes. My own implementation of M2's rung-0 algorithm (S8 to S12), written from the spec on the repository's independent RNG reference, predicts the death instant of **every one of 33,711 persons** in the runs I compared, including 783 scoped re-samples, on both calendars and at 1, 2, 4 and 8 threads. The fixed-point schedule agrees with my own `fractions` reference on all 3,091 committed golden vectors, on 105,472 further random and edge cases, and on all 4,259,841 `Q16_16` inputs for the q(15) band identity. The 32-seed q(15) check passes against the Architect's conditional null in every cohort I ran (5 cohorts of 8 to 32 seeds, 88 seeds in all). **Seven contract gaps, none a defect.** The one that matters: `resample_timer`'s draw wiring is pinned by no test at all, solo's ladder included. Two mutants of it survive every gate, and my differential catches both (GAP-1). A second gap is structural: thread-count invariance on `solo` cannot fail, because no scheduler level ever holds two jobs (GAP-2).
 
 Tested head: `9e5a6c25510748bfba6bc5d6a50305494cddd7ec` on `sprint/SPR-012-solo` (includes a merge of `main` at `67a78c0`). Probes ran on a clean clone and on `git archive` copies of that SHA, each with its own absolute `CARGO_TARGET_DIR`; the Developer's tree was never touched. The probe plan was written from the contracts (SPR-012 T-05 to T-08, SPR-011 rulings 3 to 17, the frozen M2 spec 0.2.0 `[algorithm.mortality_rung0]`, `specs/demography/`, R12 §9, `05.1` §2, §4.2, §6, §9, `05.2` §1, §4, §6, ADR-0025, ADR-0026, `docs/09` V-DET-01/02/05/12/19, V-INV-01/08/11, V-DATA-04/05, V-SCALE-03, V-GOLD-01, V-SF-02) before the branch was opened. The Architect's rulings of 2026-10-17 were applied when they arrived: the Table 19 e₀ is the recomputed one, the q(15) null is the conditional one, and K = 1 means within the spec's 2^10 units. Tools: rustc 1.97.0 (pinned), cargo-nextest 0.9.148, cargo-deny 0.20.2, valgrind 3.22.0, iai-callgrind-runner 0.16.1, a 4-core x86-64 host. My probes live in the scratchpad (`PROBE_PLAN_SPR-012.md` and `probes/`); none is committed. This file is the only thing I committed.
 
@@ -189,3 +191,69 @@ Totals: 59 code mutants (19 schedule, 16 system, 10 worldgen, 1 manifest, 13 SHA
 - `household` and `hamlet` runs through `rh-cli` (no `worlds/` directories until SPR-013); their manifests compile and generate (§2.2).
 - The full `check_all` for each `check_all` mutant.
 - Valgrind and the instruction-count gates run only inside the whole `check_all` pass.
+
+## 7. Phase 3: the delta, head `bd2e718d35ffd04f342085f8067fb7b1af7f214f`
+
+A fast-forward from my `b758979`. Clean clone with a real `origin/main` (`f53c192`), absolute fresh `CARGO_TARGET_DIR`. The delta: `a7d4968` (the Architect's review fixes MAJ-1, MAJ-2, MIN-1 to MIN-3, NIT-1 to NIT-6 and a merge of `main`), `7e5799c` (the differential golden of M2's draws, GAP-1), `6c4a38a` (empty `pass:`/`fail:` refused, GAP-6), `5e73eed` (solo's input moved into Ada's death month) and `bd2e718` `[C3]` (the regenerated solo baseline).
+
+### 7.1 Verdicts
+
+| Item | Verdict | Basis |
+|---|---|---|
+| GAP-1: both mutants die | **PASS** | D11 and D12 fail the differential golden by source edit and by the Cargo features; 9 of 11 further hand-made mutants die too (§7.2) |
+| The differential golden against my model | **PASS** | 188 of 188 death instants and 28 of 28 re-sample outcomes equal my S8 to S12 (§7.3) |
+| Ada: 27,796,320 pending, miss, 29,975,040 | **PASS** | reproduced by my model (§7.3) |
+| The new `solo` baseline | **PASS** | byte-equal at 1, 2, 3, 4, 8 and 64 threads; the yearly cut of the monthly run equals it; resume from the keyframes of years 0, 10, 20, 30 and 50 equals the continuous run; the 19 rung-1 table roots still reproduce from my genesis; `smoke` byte-equal and `worlds/smoke` identical to `main` |
+| Changed gates fail for the right reason | **PASS with GAP-9** | pooled z, the spec-loader rule, `bernoulli_only`, the empty expectation (§7.4) |
+| No default build path enables a `mutant-*` feature | **PASS** | §7.5 |
+| `bin/check_all.sh` whole | **PASS** | 374 of 374, exit 0 |
+| pytest under CI's variables | **PASS** | 625 passed under `pull_request`, `push` and `workflow_dispatch` shapes |
+
+### 7.2 GAP-1: the mutants
+
+`tests/draws_golden.rs` against 11 mutants on a clean archive of the head (`probes/mut3.py`):
+
+| Mutant | Outcome |
+|---|---|
+| R1 the re-sample Bernoulli from k = 1 (my D11, by source edit); R2 the re-sample day from k = 0 (my D12) | killed (`differs: engine …, model …`) |
+| R3 the day from k = 2; R4 the hit test inverted; R5 the month end one day late; R8 the re-sample always picks the first day; R9 the monthly day draw at k = 2; R10 the monthly Bernoulli at k = 1; R11 `c = 0` picks the last day | killed |
+| R6 the birth tick in the payload off by one day; R7 the q′ window one day short | **survive** the golden (GAP-8); both die under my differential (4 and 16 of 250 worlds mismatch) |
+
+The check_all controls (`--features mutant-resample-hit-k1`, `mutant-resample-day-k0`, an altered golden line) ran green in the whole pass. The generator is current (`gen_m2_draws_reference.py --check`: 188 deaths; mid-month 13, own instant 6, last day 1, duplicate 2, no pending 8, hit 6, miss 13).
+
+### 7.3 My model against the golden
+
+`probes/gold_cmp.py` replays the six fixture worlds of `m2_draws_v1.txt` (360- and 365-day, e₀ from 20 to 45, 3 to 52 years) from their persons and inputs: the monthly Bernoulli and day (S8 to S10), then each input's cancel and re-sample (S11), on the repository's independent RNG reference, with the 365-day month starts taken from an engine trace. It predicts all 188 `death` lines and all 28 `resample` lines (pending and the new instant, `miss`, `none` for c = 0, and `no_pending`) with 0 differences. So the generator is checked by a second independent model, not only by the engine.
+
+Ada (`probes/t07_oracle.py` on the new input, tick 27,786,607): the pending death is at 27,796,320, the re-sample at epoch 1 misses and the timer is dropped, the Month pulse at 29,937,600 draws again at epoch 1, and she dies at 29,975,040 (year 57), with `EXTINCTION` at the same instant. The engine's baseline agrees (the rung-1 table roots are unchanged; the ladder differs from the old one from rung 1 on, in all 200 rungs, because the queued input is part of the hashed state).
+
+### 7.4 The changed gates
+
+- **Pooled z (MAJ-1).** The test's null comes from a schedule built separately at e₀ = 30, so the honest mutant shifts only the engine's world e₀. Engine at 30.25: `q15_of_10000…` FAILS (panics at the pooled assertion). At 30.05 and 30.02 it passes (pooled z −2.71 and −2.29); at 29.75 it passes (z +1.72). The fixed seeds 1000 to 1031 sit at a pooled z of −1.96 under the null (my seeds 7000 to 7031 give +0.87), so the test detects an e₀ error of about +0.09 or −0.35 years, not symmetric (GAP-9). A mutation inside `Demography::new` shifts the null and the engine together and is invisible to the test: that is by construction, and the schedule goldens guard it.
+- **`spec-loader` (MAJ-2).** Planted calls FAIL in `rh-sys-demography`, `rh-worldgen`, `rh-core`, `rh-snapshot` and a non-home file of `rh-registry` (`lib.rs`); also a re-export under another name, a macro body, a function pointer and a `build.rs`. `ownership.rs` of `rh-registry` is exempt as designed, a wrapper written there is not seen (documented). One evasion: the exemption matches the last two path parts, so a file `rh-registry/src/sub/src/ownership.rs` is exempt too (GAP-9).
+- **`bernoulli_only` (MIN-2).** A missing directory, a directory without `Cargo.toml`, and one without `src/` each FAIL (exit 1, "nothing to check, refused"); a clean crate passes; "Poisson" in a comment of `src/` and "binomial" in `Cargo.toml` each FAIL; the real crate passes. The `rc > 1` branch (grep error) I could not exercise: the host runs as root, so an unreadable file stays readable.
+- **Empty expectation (GAP-6).** `verdict --empty-fail` fails with "HARNESS ERROR: empty fail: expectation". Deleting the guard in `run` turns that control's verdict into PASS, so the gate goes red when run; the pytest inventory alone does not notice the deletion (it passes with the guard deleted or reduced to `fail:`), the runtime control does. A text of one space (`"fail: "`) is not refused (GAP-9).
+
+### 7.5 No default path enables a `mutant-*` feature
+
+`grep` over `.github/workflows/*.yml`, `bin/check_all.sh`, `bin/regen_baseline.sh` and `bin/golden_nightly.sh`: the two features appear only in the two must-FAIL controls of `check_all.sh` (lines 968 and 969); no `--all-features` anywhere; `rh-golden`, `rh-cli` and `rh-worldgen` name no feature of `rh-sys-demography`. The regeneration script builds `rh-cli` with default features, and the regenerated baseline equals my reproduction. A doc comment in `tests/draws_golden.rs` still names a feature `mutant-resample-k-swap` that no longer exists (a nit).
+
+### 7.6 Contract gaps after the delta
+
+| # | State | Note |
+|---|---|---|
+| GAP-1 | **closed** | differential golden plus solo's input in a pending death; D11 and D12 die |
+| GAP-2 | open as ruled | thread invariance on `solo` stays vacuous; `household` and `hamlet` baselines carry `--require-parallel` in SPR-013 |
+| GAP-3 | **closed** | pooled z added; an engine at e₀ = 30.25 fails it (asymmetry noted in GAP-9) |
+| GAP-4 | open as ruled | the V-SCALE-03 assertion comes with SPR-030 |
+| GAP-5 | deferred (BCK-002 A-51) | the rule now covers all of plane A except `ownership.rs`'s definitions |
+| GAP-6 | **closed** with a residue | see GAP-9 |
+| GAP-7 | open as ruled | SPR-013 |
+| **GAP-8** | new | **The golden's 19 re-samples cannot resolve a q′ error of one day.** R6 and R7 change q′ by about 3% relative, which flips none of 19 fixed draws; both die under 401 re-samples. Recommendation: a second, larger fixture world in the generator (about 150 re-samples, a few KB of golden) so that a one-day error in the window or the birth is seen. Confidence 60% |
+| **GAP-9** | new, minor | (a) the pooled q(15) check is asymmetric because its fixed seeds sit at z −1.96: it sees +0.09 or −0.35 years of e₀; a symmetric set or a printed null-centred z would make the claim "±0.25 years" true on both sides; (b) the `spec-loader` home exemption matches a path suffix, so `rh-registry/src/<any>/src/ownership.rs` is exempt; match the exact path; (c) an expectation of whitespace only (`"fail: "`) passes the harness's empty-text check. Confidence 50% |
+
+No DEF-n.
+
+### 7.7 Not run in phase 3
+
+CI run 306 (not inspected); `--part core` and `--part golden` as separate runs; the nightly script end to end (solo's 9 monthly 1,000-year ladders at 1, 4 and 8 threads were compared by hand); a mutation run of the whole nextest suite on the delta (only the draws golden, the pooled test and the changed gates were mutated).
