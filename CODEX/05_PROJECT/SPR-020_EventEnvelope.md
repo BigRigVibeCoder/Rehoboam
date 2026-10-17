@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-002, PRJ-002, REV-SPR-020, EVO-001, REV-EVO-001, SPR-013, SPR-014, SPR-026, SPR-029, SPR-030, ADR-0024, ADR-0025, ADR-0035]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.1.0
+version: 0.1.1
 ---
 
 > **BLUF:** Builds the event envelope v0 (`specs/chronicle/envelope_v0.md`, merged in PR #61) in the engine:
@@ -143,8 +143,8 @@ T-01 to T-03 and T-06 depend only on SPR-013 and may start at once. T-04 and T-0
     - resolves every `Draft`;
     - coalesces edges to one per cause by §5's total rule:
       - the kept kind is the first in the order `motivated_by`, `contingent`, `triggered`, `enabled`, `probabilistic`, `relayed_knowledge`;
-      - the weight is the saturating `Q8_8` sum of the contributors' weights;
-      - the motive is the one with the largest |weight|, a tie going to the lower index and an unnamed contributor counting last;
+      - the weight is the saturating `Q8_8` sum of the contributors' weights: the exact `i64` sum, saturated once to `i16`, independent of their order;
+      - the motive takes the sign of the summed weight: the largest positive contributor when the sum is positive, the most negative when it is negative, NULL when it is 0; a tie goes to the lower index, and an unnamed contributor counts last (envelope §5 as amended by REV-SPR-029 R20). A known answer for the tests: `GRIEF_FOR` +100, `FEAR_OF` +100 and `RETALIATION_FOR` −150 to one cause coalesce to weight +50 and motive `FEAR_OF`, the tie going to the lower index 4. The old rule would have named `RETALIATION_FOR`;
       - the evidence is the largest among the contributors of the kept kind;
     - sorts the edges by cause id.
   - **`EventLog::append` refuses:**

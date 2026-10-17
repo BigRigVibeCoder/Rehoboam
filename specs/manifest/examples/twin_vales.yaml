@@ -1,0 +1,109 @@
+# The dynastic fixture world for SPR-030 (PRJ-002 §6; BCK-002 A-06, the dynastic part; docs/09 §5 G1a):
+# two valleys, two polities, five great houses, 1,500 persons, 300 years. Small enough for PR-tier goldens
+# (about four manors), rich enough that every P1a-variant gate has something to bite on within 300 years:
+#   V-INV-12 (great houses, dormancy and re-promotion): five houses of 3 to 6 back-filled generations under
+#     dormancy_degrees = 2, so part of every house is beyond two degrees of its holder at genesis (dormant-eligible)
+#     and comes back within reach when the seat moves (specs/worldgen/fixture_worlds.md §2);
+#   V-INV-03 (the single death path): M2's hazard on everyone; M7's ruler exits on two sovereigns (deposition
+#     0.03 and murder 0.01 per ruler-year at the reference state, times the law multiplier); T1's agenda
+#     (MURDER_ATTEMPT -> ScheduleDeath) on the named actors;
+#   a contested succession or a deposition: the tanistry sovereign (law multiplier 1) expects about nine
+#     depositions and three murders in 300 years, each deposed ruler a claimant, so arbitration with pressed
+#     claims and INTERREGNUM_CRISIS are reachable (§2 gives the arithmetic);
+#   V-DET-17 (CRN pairing): the paired-rollout protocol of specs/determinism/crn_pairing_v0.md names its
+#     intervention on this world's primogeniture sovereign at seed 1;
+#   V-DATA-04 (P1a variant), V-DET-01/02/12 on a dynastic world.
+# The exact reference specs/worldgen/selftest_fixture_worlds.py pins genesis at seeds 1 to 3 (houses, members,
+# founder indices, generations, the named actors at genesis) in specs/worldgen/golden/fixture_worlds_v0.txt;
+# python/tests/test_fixture_worlds_cases.py keeps its mirror of this file honest. No cast: every person is
+# synthesised or back-filled (names come from the annals' kinship fallback, D49). Systems of the template that
+# P1a does not build (M3, M4, M6, M8) are listed as not built in the run header (SPR-011 ruling 3); M6 absent
+# means exec_constraint reads its neutral 0, so m_ec = 1 in M7's exit hazards. Every M7 and T1 parameter is set
+# here because neither system has Registry defaults yet (REV-SPR-019 R15; SPR-021 gives them or the compile
+# refuses a manifest without them).
+manifest_version: 0
+registry_version: "0.2.0"
+world:
+  id: twin_vales
+  display_name: "The Twin Vales"
+  template: feudal_realm
+  seed: 1
+  calendar: {days_per_year: 360, months: 12, seasons: 4, epoch_label: "Year of the Vales"}
+  horizon: {years: 300, label: historical}
+  fidelity_profile: {M2.demography: F1, M7.dynasty: F1, T1.minds: F1}
+geography:
+  raster_resolution: 128
+  region_count: 6
+  heightmap_template: mountain_valleys
+  climate: {zone: temperate_continental, harvest_sigma: 0.2, autocorr: 0.1, spatial_share: 0.6, volcanic_rate: 0.0}
+  ecology: {livestock_kg_per_capita: 0, wild_prey_tonnes: 0}
+peoples:
+  - archetype: human
+    population: 1500
+    class_shares: {commoner: 0.88, burgher: 0.07, elite: 0.05}
+    cultures:
+      - {id: valefolk, name: "Vale-folk", naming_seed: "soft river names, orchard and ash places", value_bias: {tradition: 0.4}}
+      - {id: fellmen, name: "Fell-men", naming_seed: "hard upland names, stone and weather", value_bias: {power: 0.2, tradition: 0.3}}
+    faiths:
+      - {id: hearth, name: "Hearth custom", doctrine_tags: []}
+polities:
+  - id: vale_of_ash
+    name: "The Vale of Ash"
+    government: feudal_monarchy
+    succession_law: primogeniture
+    titles: {authority: Lord_of_Ash, successor: Heir_of_Ash, subordinate: Reeve}
+    dynasties:
+      - {id: ashcombe, name: "House Ashcombe", generations: 5}
+      - {id: thorne, name: "House Thorne", generations: 4}
+      - {id: redmane, name: "House Redmane", generations: 3}
+  - id: high_fells
+    name: "The High Fells"
+    government: tribal_confederation
+    succession_law: tanistry
+    titles: {authority: Chieftain, successor: Tanist}
+    dynasties:
+      - {id: fell, name: "House Fell", generations: 6}
+      - {id: carrow, name: "House Carrow", generations: 3}
+systems:
+  M2.demography: {e0: 30, tfr: 4.9, elite_fertility_mult: 1.2}
+  M7.dynasty:
+    murder_hazard_base: 0.01       # Eisner's pooled rate; the reference institutional state
+    deposition_hazard_ref: 0.03    # K&S's non-lethal deposition at election
+    primogeniture_hr: 0.3
+    seniority_hr: 2.0
+    predecessor_killed_or: 2.8
+    predecessor_deposed_hr: 1.7
+    exec_constraint_hr: 0.5        # inert in P1a: M6 is not built, so exec_constraint reads its neutral 0
+    majority_age: 16
+    arb_legal_weight: 1.0
+    arb_claim_weight: 0.6
+    arb_military_weight: 0.3       # offices are not back-filled: inert until M7 grants one
+    arb_treasury_weight: 0.3
+    contest_margin: 0.5            # a pressed claim (0.6) against the legal heir (1.0) is contested: 0.4 < 0.5
+    interregnum_max_days: 180
+    dormancy_degrees: 2            # SIM-9's N: the fixture's dormancy lever (fixture_worlds.md §2)
+    vocation_holy_orders: 0.2
+    vocation_mercenary: 0.15
+  T1.minds:
+    stress_threshold: 70
+    stress_decay: 3
+    vow_conflict_gain: 5
+    break_delay_max_days: 30
+    grief_gain: 20
+    grief_instant_cap: 40
+    loyalty_conflict_gain: 5
+    dissonance_gain: 10
+    break_refractory_days: 365
+    attempt_success: 0.3
+    trait_sd: 25
+    iaus_top_k: 3
+    interrupt_daily_cap: 2
+    thought_cap: 20
+    thought_decay: 2
+    marriage_min_age: 16
+narrative:
+  pattern_packs: [succession, solitary_life]
+  default_style_card: historian
+presentation:
+  era_art: early_medieval
+  palette: mono
