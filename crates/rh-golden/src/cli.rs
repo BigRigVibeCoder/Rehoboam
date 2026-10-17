@@ -158,6 +158,7 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--resume" => args.resume = Some(PathBuf::from(value)),
             "--run-dir" => args.run_dir = Some(PathBuf::from(value)),
             "--inputs" => args.inputs = Some(PathBuf::from(value)),
+            "--test-pace-ms" => args.pace_ms = Some(number("--test-pace-ms")?),
             "--test-poison" => {
                 args.poison = Some(
                     i64::try_from(number("--test-poison")?)
@@ -167,7 +168,7 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--test-stall" => {
                 args.stall = Some(
                     crate::stream::Stall::parse(value)
-                        .ok_or_else(|| bad("--test-stall is seal:YEAR:FILE or sealed:YEAR"))?,
+                        .ok_or_else(|| bad("--test-stall is seal:YEAR:FILE, sealed:YEAR, mid:TICK or seal:YEAR:FILE+mid:TICK"))?,
                 );
             }
             "--dump" => {

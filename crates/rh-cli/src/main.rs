@@ -105,6 +105,10 @@ fn main() -> ExitCode {
             rh_golden::cli::ladder_cut_yearly(monthly.as_ref(), out.as_ref()),
         ),
         ["bisect", rest @ ..] => golden(rh_golden::cli::bisect_cmd, rest),
+        // SPR-026 T-05: the live edge, through the socket.
+        ["tail", rest @ ..] if rest.contains(&"--live") => {
+            ExitCode::from(serve::tail_live(rest, std::path::Path::new(DEFAULT_REPO)))
+        }
         // SPR-013 T-10: the sealed World Stream of a run directory.
         ["tail", rest @ ..] => golden(rh_golden::cli::tail_cmd, rest),
         // SPR-026 T-04: channel C sifted as channel A seals, served on C.sock with --socket.

@@ -176,6 +176,10 @@ pub struct RunArgs {
     /// (`--test-poison`; SPR-026 T-03, A-42): an observer that panics, which the engine turns into
     /// a fatal `SimError::Observer`. Never on a baseline.
     pub poison: Option<i64>,
+    /// A test hook that sleeps this many milliseconds after each stop of the run loop
+    /// (`--test-pace-ms`; SPR-026 T-05): a slow host, so a viewer can be ahead of a resumed one.
+    /// It changes no byte of the run. Never on a baseline.
+    pub pace_ms: Option<u64>,
 }
 
 impl RunArgs {
@@ -208,6 +212,7 @@ impl RunArgs {
             inputs: None,
             replay: false,
             poison: None,
+            pace_ms: None,
         }
     }
 }
@@ -769,6 +774,9 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
             )),
             _ => None,
         };
+        if let Some(ms) = args.pace_ms {
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+        }
         if let Some(h) = host.as_mut() {
             let rel = kf.as_ref().map(|(year, _)| keyframe_rel(*year));
             let marker = rel

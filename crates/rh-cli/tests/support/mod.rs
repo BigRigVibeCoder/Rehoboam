@@ -25,6 +25,8 @@ use rh_protocol::records::{self, RecordsFrame};
 use rh_protocol::wire::{self, Frame, FrameType, MAX_PAYLOAD};
 use serde_json::{Value, json};
 
+pub mod viewer;
+
 pub const BIN: &str = env!("CARGO_BIN_EXE_rh-cli");
 pub const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
@@ -162,6 +164,17 @@ impl Client {
         }
     }
 
+    /// A connection now, or `None` (no socket, or no server behind it).
+    pub fn try_connect(path: &Path) -> Option<Self> {
+        let s = UnixStream::connect(path).ok()?;
+        s.set_read_timeout(Some(Duration::from_mins(1))).ok()?;
+        Some(Self {
+            s,
+            buf: Vec::new(),
+            next_id: 0,
+        })
+    }
+
     pub fn send_raw(&mut self, bytes: &[u8]) {
         self.s.write_all(bytes).unwrap();
     }
@@ -246,4 +259,13 @@ pub fn baseline(world: &str) -> PathBuf {
     Path::new(REPO).join(format!(
         "worlds/{world}/baselines/{world}_yearly_200y.ladder"
     ))
+}
+
+/// Lowercase hex.
+pub fn hex(b: &[u8]) -> String {
+    use std::fmt::Write as _;
+    b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    })
 }

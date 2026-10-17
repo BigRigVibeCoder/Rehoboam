@@ -853,6 +853,7 @@ dependencies = [
  "rh-golden",
  "rh-ids",
  "rh-snapshot",
+ "rh-stream",
  "rh-sys-smoke",
 ]
 

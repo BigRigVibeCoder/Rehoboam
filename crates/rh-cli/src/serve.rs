@@ -772,3 +772,469 @@ fn sift_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
     }
     Ok(code)
 }
+
+/// A viewer's connection: the socket and what it has read.
+struct ViewerConn {
+    s: UnixStream,
+    buf: Vec<u8>,
+}
+
+/// What the viewer's socket gave it next.
+enum Got {
+    Frame(Frame),
+    Closed,
+}
+
+impl ViewerConn {
+    fn connect(sock: &Path) -> Option<Self> {
+        let s = UnixStream::connect(sock).ok()?;
+        s.set_read_timeout(Some(Duration::from_secs(30))).ok()?;
+        Some(Self { s, buf: Vec::new() })
+    }
+
+    fn send(&mut self, v: &serde_json::Value) -> bool {
+        control::control_frame(v)
+            .ok()
+            .is_some_and(|f| self.s.write_all(&f).is_ok())
+    }
+
+    fn next(&mut self) -> Result<Got, String> {
+        loop {
+            match wire::decode(&self.buf, MAX_PAYLOAD) {
+                Ok((f, used)) => {
+                    self.buf.drain(..used);
+                    return Ok(Got::Frame(f));
+                }
+                Err(e) if e.is_incomplete() => {}
+                Err(e) => return Err(format!("a protocol error from the host: {e}")),
+            }
+            let mut tmp = vec![0u8; 1 << 16];
+            match self.s.read(&mut tmp) {
+                Ok(0) => return Ok(Got::Closed),
+                Ok(n) => self.buf.extend_from_slice(&tmp[..n]),
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                    return Err("the host sent nothing for 30 s".to_owned());
+                }
+                Err(_) => return Ok(Got::Closed),
+            }
+        }
+    }
+}
+
+/// `rh-cli tail D --live` (module docs; `wire_v1.md` §6.3).
+struct LiveTail<'a> {
+    run_dir: PathBuf,
+    sock: PathBuf,
+    channel_c: bool,
+    canonical: bool,
+    mpy: i64,
+    display: Option<rh_golden::tail::Display>,
+    out: &'a mut dyn Write,
+    conn: Option<ViewerConn>,
+    next_id: i64,
+    /// `(id, method)` of the request in flight.
+    pending: Option<(i64, &'static str)>,
+    history: Option<serde_json::Value>,
+    nonce: Option<u64>,
+    /// Lines received live, by seq, of the sim-years a resumed host may re-emit (R21).
+    recent: std::collections::BTreeMap<u64, String>,
+    resumed: bool,
+    verified: u64,
+    printed: u64,
+}
+
+impl LiveTail<'_> {
+    fn print(&mut self, first_seq: u64, lines: &[String]) -> Result<(), String> {
+        for (i, l) in lines.iter().enumerate() {
+            let seq = first_seq + u64::try_from(i).unwrap_or(u64::MAX);
+            let shown = match &self.display {
+                Some(d) => rh_golden::tail::display_line(
+                    &rh_stream::canonical::parse(l).map_err(|e| e.to_string())?,
+                    d,
+                ),
+                None => l.clone(),
+            };
+            writeln!(self.out, "{shown}").map_err(|e| format!("tail: {e}"))?;
+            self.recent.insert(seq, l.clone());
+            self.printed += 1;
+        }
+        // Keep about two sim-years' worth: what a resumed host can re-emit.
+        while self.recent.len() > 1 << 16 {
+            self.recent.pop_first();
+        }
+        self.out.flush().map_err(|e| format!("tail: {e}"))
+    }
+
+    fn request(&mut self, method: &'static str, params: Option<serde_json::Value>) -> bool {
+        self.next_id += 1;
+        self.pending = Some((self.next_id, method));
+        let v = control::request(&serde_json::json!(self.next_id), method, params);
+        self.conn.as_mut().is_some_and(|c| c.send(&v))
+    }
+
+    /// Reconnects and asks `stream.status` (the `Status` action): the event it gives, or `None`
+    /// when no host serves the socket any more and the writer is gone.
+    fn reconnect(&mut self) -> Result<Option<Event>, String> {
+        self.conn = None;
+        let mut tries = 0u32;
+        loop {
+            if let Some(c) = ViewerConn::connect(&self.sock) {
+                self.conn = Some(c);
+                break;
+            }
+            if rh_golden::stream::writer_gone(&self.run_dir) && !self.sock.exists() {
+                return Ok(None);
+            }
+            tries += 1;
+            if tries > 3000 {
+                return Err(format!("no host at {} for 5 minutes", self.sock.display()));
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        if !self.request("stream.status", None) {
+            return Ok(Some(Event::Closed));
+        }
+        loop {
+            let Some(conn) = self.conn.as_mut() else {
+                return Ok(Some(Event::Closed));
+            };
+            let f = match conn.next()? {
+                Got::Closed => return Ok(Some(Event::Closed)),
+                Got::Frame(f) => f,
+            };
+            let (_, v) = control::decode_control(&f.payload).map_err(|e| e.message)?;
+            if let Some(reason) = control::reply_reason(&v) {
+                // The cap: too_many_viewers, then the host closes.
+                return Ok(Some(Event::Refused {
+                    reason: reason.to_owned(),
+                    finished: false,
+                }));
+            }
+            let Some(result) = v.get("result") else {
+                continue;
+            };
+            let st = control::check_status(result).map_err(|e| e.message)?;
+            let same = self.history.as_ref().is_none_or(|h| h == st.history());
+            if same && self.nonce.is_some_and(|n| n != st.run_nonce) {
+                self.resumed = true;
+            }
+            self.history = Some(st.history().clone());
+            self.nonce = Some(st.run_nonce);
+            self.pending = None;
+            return Ok(Some(Event::Status { same_run: same }));
+        }
+    }
+
+    /// The next event from the socket, printing the records the loop delivers.
+    fn event(&mut self, lp: &mut Catchup) -> Result<Action, String> {
+        let Some(conn) = self.conn.as_mut() else {
+            return Ok(lp.next(Event::Closed));
+        };
+        let f = match conn.next()? {
+            Got::Closed => return Ok(lp.next(Event::Closed)),
+            Got::Frame(f) => f,
+        };
+        if f.ftype == FrameType::Records {
+            let r = match records::decode(&f.payload) {
+                Ok(r) => r,
+                Err(e) => return Ok(lp.next_failed(&e.message)),
+            };
+            let count = u64::try_from(r.lines.len()).unwrap_or(u64::MAX);
+            let action = lp.next(Event::Records {
+                first_seq: r.first_seq,
+                count,
+            });
+            if matches!(action, Action::Deliver { count, .. } if count > 0) {
+                self.print(r.first_seq, &r.lines)?;
+            }
+            return Ok(action);
+        }
+        let (kind, v) = control::decode_control(&f.payload).map_err(|e| e.message)?;
+        if kind == control::Kind::Notification {
+            return Ok(match control::read_notice(&v).map_err(|e| e.message)? {
+                control::Notice::Sealed(s) => {
+                    self.verify_resumed(&s)?;
+                    lp.next(Event::Sealed)
+                }
+                control::Notice::Behind {
+                    next_seq,
+                    sealed_last_seq,
+                    live_first_seq,
+                    ..
+                } => lp.next(Event::Behind {
+                    next_seq,
+                    s: sealed_last_seq,
+                    w0: live_first_seq,
+                }),
+                control::Notice::End { reason, .. } => lp.next(Event::End(reason)),
+                control::Notice::Unknown(_) => Action::Ignore(String::new()),
+            });
+        }
+        let method = self.pending.take().map(|(_, m)| m).unwrap_or_default();
+        let reason = control::reply_reason(&v).map(str::to_owned);
+        let result = |key: &str| v["result"][key].as_u64().unwrap_or_default();
+        Ok(match (method, reason.as_deref()) {
+            ("stream.subscribe", None) => lp.next(Event::Subscribed(result("first_seq"))),
+            ("stream.unsubscribe", None) => lp.next(Event::Unsubscribed(result("next_seq"))),
+            ("stream.subscribe", Some("behind_live_edge")) => {
+                let d = &v["error"]["data"];
+                lp.next(Event::Behind {
+                    next_seq: lp.cursor,
+                    s: d["sealed_last_seq"].as_u64(),
+                    w0: d["live_first_seq"].as_u64().unwrap_or_default(),
+                })
+            }
+            (_, Some(r)) => lp.next(Event::Refused {
+                reason: r.to_owned(),
+                finished: v["error"]["data"]["finished"].as_bool().unwrap_or(false),
+            }),
+            _ => Action::Ignore(String::new()),
+        })
+    }
+
+    /// R21: after a resumed host, what this viewer received of a re-emitted year must be what the
+    /// host sealed.
+    fn verify_resumed(&mut self, s: &control::Sealed) -> Result<(), String> {
+        let Some(last) = s.last_seq.filter(|_| self.resumed) else {
+            return Ok(());
+        };
+        let lines: Option<Vec<&String>> =
+            (s.first_seq..=last).map(|q| self.recent.get(&q)).collect();
+        if let Some(lines) = lines {
+            let digest = hex16(&rh_stream::canonical::digest(&lines));
+            if digest != s.canonical_digest {
+                return Err(format!(
+                    "the resumed host's sim-year {} differs from what this viewer received",
+                    s.sim_year
+                ));
+            }
+            self.verified += 1;
+        }
+        Ok(())
+    }
+}
+
+trait FailNext {
+    fn next_failed(&mut self, detail: &str) -> Action;
+}
+
+impl FailNext for Catchup {
+    /// A frame that does not decode is a protocol error: the loop closes, as for any.
+    fn next_failed(&mut self, detail: &str) -> Action {
+        self.state = rh_protocol::cursor::State::Failed;
+        Action::Close(detail.to_owned())
+    }
+}
+
+use rh_protocol::cursor::{Action, Catchup, Event};
+
+/// `rh-cli tail D --live [--channel A|C] [--from-seq N] [--canonical]` (module docs). Returns the
+/// exit code: 0 at `stream.end` (or when the host is gone and the sealed tail is printed), 1 when
+/// the stream ended aborted, 2 on an error.
+#[must_use]
+pub fn tail_live(words: &[&str], repo: &Path) -> u8 {
+    match tail_live_inner(words, repo) {
+        Ok(code) => code,
+        Err(e) if e.contains("Broken pipe") => rh_golden::cli::OK,
+        Err(e) => {
+            eprintln!("{e}");
+            rh_golden::cli::TOOL
+        }
+    }
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "the viewer's loop in one place: every action of Catchup and what it does"
+)]
+fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
+    let (mut run_dir, mut channel_c, mut canonical, mut from) = (None, false, false, 0u64);
+    let mut repo = repo.to_path_buf();
+    let mut it = words.iter();
+    while let Some(&w) = it.next() {
+        let mut value = || {
+            it.next()
+                .copied()
+                .ok_or_else(|| format!("{w} needs a value"))
+        };
+        match w {
+            "--live" => {}
+            "--canonical" => canonical = true,
+            "--channel" => {
+                channel_c = match value()? {
+                    "A" => false,
+                    "C" => true,
+                    v => return Err(format!("--channel {v}: A or C")),
+                };
+            }
+            "--from-seq" => {
+                let v = value()?;
+                from = v
+                    .parse()
+                    .map_err(|_| format!("--from-seq {v} is not a number"))?;
+            }
+            "--repo" => repo = PathBuf::from(value()?),
+            flag if flag.starts_with("--") => {
+                return Err(format!(
+                    "tail --live: {flag} is not a live flag (--channel, --from-seq, --canonical)"
+                ));
+            }
+            dir => run_dir = Some(PathBuf::from(dir)),
+        }
+    }
+    let run_dir = run_dir.ok_or("tail --live needs a run directory")?;
+    while !run_dir.join(rh_golden::stream::RUN_TOML).is_file() {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let run = RunToml::read(&run_dir).map_err(|e| e.0)?;
+    let display = if canonical {
+        None
+    } else {
+        Some(rh_golden::tail::display_of(&repo, &run).map_err(|e| e.0)?)
+    };
+    let channel = if channel_c { Channel::C } else { Channel::A };
+    let (sock, _) = socket_paths(&run_dir, channel);
+    let stdout = std::io::stdout();
+    let mut lock = stdout.lock();
+    if canonical {
+        let format = if channel_c {
+            rh_sifter::sift::FORMAT_C
+        } else {
+            rh_stream::segment::FORMAT_A
+        };
+        let h = rh_stream::canonical::FileHeader {
+            timeline_id: TIMELINE,
+            channel: if channel_c {
+                rh_stream::record::Channel::C
+            } else {
+                rh_stream::record::Channel::A
+            },
+            registry_version: run.registry_version.clone(),
+            format: format.to_owned(),
+        };
+        writeln!(lock, "{}", h.line()).map_err(|e| format!("tail: {e}"))?;
+    }
+    let mut t = LiveTail {
+        run_dir: run_dir.clone(),
+        sock,
+        channel_c,
+        canonical,
+        mpy: run.minutes_per_year,
+        display,
+        out: &mut lock,
+        conn: None,
+        next_id: 0,
+        pending: None,
+        history: None,
+        nonce: None,
+        recent: std::collections::BTreeMap::new(),
+        resumed: false,
+        verified: 0,
+        printed: 0,
+    };
+    let mut lp = Catchup::new(from);
+    let mut protocol_errors = 0;
+    let _ = lp.start();
+    // Connect first: the loop's first subscribe needs a connection.
+    let mut action = match t.reconnect()? {
+        Some(Event::Status { .. }) => Action::Subscribe(from),
+        Some(e) => lp.next(e),
+        None => Action::Done(from, EndReason::Finished),
+    };
+    let prefix = if t.canonical { "# " } else { "" };
+    loop {
+        action = match action {
+            Action::Subscribe(seq) => {
+                if t.request(
+                    "stream.subscribe",
+                    Some(control::SubscribeFrom::Seq(seq).params()),
+                ) {
+                    t.event(&mut lp)?
+                } else {
+                    lp.next(Event::Closed)
+                }
+            }
+            Action::SubscribeLive => {
+                if t.request(
+                    "stream.subscribe",
+                    Some(control::SubscribeFrom::Live.params()),
+                ) {
+                    t.event(&mut lp)?
+                } else {
+                    lp.next(Event::Closed)
+                }
+            }
+            Action::Unsubscribe => {
+                if t.request("stream.unsubscribe", None) {
+                    t.event(&mut lp)?
+                } else {
+                    lp.next(Event::Closed)
+                }
+            }
+            Action::ReadSealed { from, to } => {
+                let lines = rh_golden::tail::sealed_lines(&t.run_dir, t.channel_c, t.mpy, from, to)
+                    .map_err(|e| e.0)?;
+                t.print(from, &lines)?;
+                lp.next(Event::SealedRead {
+                    first_seq: from,
+                    count: u64::try_from(lines.len()).unwrap_or(u64::MAX),
+                })
+            }
+            Action::Wait(polls, _) => {
+                std::thread::sleep(Duration::from_millis(100) * u32::try_from(polls).unwrap_or(64));
+                lp.next(Event::RetryElapsed)
+            }
+            Action::Status => {
+                let Some(e) = t.reconnect()? else {
+                    // No host any more, and the writer is gone: the rest is on disk.
+                    let lines = rh_golden::tail::sealed_lines(
+                        &t.run_dir,
+                        t.channel_c,
+                        t.mpy,
+                        lp.cursor,
+                        u64::MAX,
+                    )
+                    .map_err(|e| e.0)?;
+                    t.print(lp.cursor, &lines)?;
+                    writeln!(
+                        t.out,
+                        "{prefix}STATUS live: no host serves {}; the sealed segments are printed \
+                         through seq {}",
+                        t.sock.display(),
+                        lp.cursor + u64::try_from(lines.len()).unwrap_or(0)
+                    )
+                    .map_err(|e| format!("tail: {e}"))?;
+                    return Ok(rh_golden::cli::OK);
+                };
+                lp.next(e)
+            }
+            Action::Done(cursor, reason) => {
+                writeln!(
+                    t.out,
+                    "{prefix}STATUS live end: {} | cursor {cursor} | {} lines | {} resumed year(s) \
+                     verified",
+                    reason.name(),
+                    t.printed,
+                    t.verified
+                )
+                .map_err(|e| format!("tail: {e}"))?;
+                return Ok(match reason {
+                    EndReason::Finished => rh_golden::cli::OK,
+                    EndReason::Aborted => rh_golden::cli::DIFFERENT,
+                });
+            }
+            Action::Close(detail) => {
+                protocol_errors += 1;
+                eprintln!("tail --live: protocol error: {detail}");
+                if protocol_errors > 3 {
+                    return Err("tail --live: more than three protocol errors".to_owned());
+                }
+                t.conn = None;
+                lp.next(Event::Closed)
+            }
+            Action::Stop(detail) => return Err(format!("tail --live: {detail}")),
+            Action::Deliver { .. } | Action::Ignore(_) => t.event(&mut lp)?,
+        };
+    }
+}

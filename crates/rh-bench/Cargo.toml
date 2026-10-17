@@ -50,6 +50,8 @@ rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }
 # SPR-009 T-05: the smoke world (its systems, and its spec table through rh-golden's host code).
 rh-golden = { version = "0.0.0", path = "../rh-golden" }
 rh-sys-smoke = { version = "0.0.0", path = "../rh-sys-smoke" }
+# SPR-026 T-05: the live edge the live_edge bench target serves to its in-process viewers.
+rh-stream = { version = "0.0.0", path = "../rh-stream" }
 
 # SPR-009 ruling 2: exactly pinned, a dev-dependency of the bench targets only. Its runner binary,
 # iai-callgrind-runner, must be the same version (RUN-001 §3; .github/workflows/ci.yml).
@@ -101,6 +103,13 @@ harness = false
 
 # V-PERF-11: heap allocations per steady-state tick, under the counting allocator (SPR-009 T-05).
 # The only target that enables count-alloc, and the only #[global_allocator] (bin/lint_arch.py).
+# SPR-026 T-05: V-PERF-09's ingredients (the gate is SPR-030's): the host's live bytes under the
+# counting allocator against LiveEdge::bytes() and the per-viewer frame cap, with viewers attached.
+[[bench]]
+name = "live_edge"
+harness = false
+required-features = ["count-alloc"]
+
 [[bench]]
 name = "alloc_budget"
 harness = false

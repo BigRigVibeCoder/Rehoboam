@@ -81,12 +81,31 @@ pub enum Stall {
         /// The tick.
         tick: i64,
     },
+    /// Both at once (`seal:<year>:<n>+mid:<tick>`; SPR-026 T-05): the seal thread blocks inside
+    /// a seal while the host thread blocks mid-year, so a kill there is mid-year with a seal in
+    /// flight (a live edge's run only, where the seal is off the host thread).
+    SealAndMid {
+        /// The sim-year of the stalled seal.
+        year: i64,
+        /// Its file index.
+        index: usize,
+        /// The host thread's tick.
+        tick: i64,
+    },
 }
 
 impl Stall {
-    /// Parses `seal:<year>:<n>`, `sealed:<year>` or `mid:<tick>`.
+    /// Parses `seal:<year>:<n>`, `sealed:<year>`, `mid:<tick>` or `seal:<year>:<n>+mid:<tick>`.
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
+        if let Some((seal, mid)) = s.split_once('+') {
+            return match (Self::parse(seal)?, Self::parse(mid)?) {
+                (Self::Seal { year, index }, Self::Mid { tick }) => {
+                    Some(Self::SealAndMid { year, index, tick })
+                }
+                _ => None,
+            };
+        }
         let parts: Vec<&str> = s.split(':').collect();
         match parts.as_slice() {
             ["seal", y, n] => Some(Self::Seal {
@@ -124,7 +143,11 @@ impl Hook {
 
 impl SealHook for Hook {
     fn file_written(&mut self, channel: Channel, year: i64, index: usize, name: &str) {
-        if channel == Channel::A && self.0 == Some(Stall::Seal { year, index }) {
+        let at = match self.0 {
+            Some(Stall::SealAndMid { year, index, .. }) => Some(Stall::Seal { year, index }),
+            other => other,
+        };
+        if channel == Channel::A && at == Some(Stall::Seal { year, index }) {
             Self::stall(&format!("seal y{year:06} file {index} {name}"));
         }
     }
@@ -604,7 +627,7 @@ impl StreamHost {
         self.writer
             .push(t, batch, &mut self.hook)
             .map_err(|e| stream_error(&e))?;
-        if let Some(Stall::Mid { tick }) = self.hook.0
+        if let Some(Stall::Mid { tick } | Stall::SealAndMid { tick, .. }) = self.hook.0
             && t >= tick
         {
             Hook::stall(&format!(
