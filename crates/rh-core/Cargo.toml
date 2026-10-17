@@ -24,3 +24,9 @@ rh-ids = { version = "0.0.0", path = "../rh-ids" }
 # SPR-006: the integration tests build event drafts and read the log.
 [dev-dependencies]
 rh-events = { version = "0.0.0", path = "../rh-events" }
+
+[features]
+# The planted engine of SPR-014 T-01 (EVO-001 option D1): every binding of an owner gets its whole
+# inbox, not only the binding its spec names. `tests/agenda_events.rs` V-DET-21 must FAIL with
+# "delivered to a non-draining job". No build of a world enables it.
+mutant-deliver-every-job = []

@@ -243,6 +243,57 @@ pub struct SpecEntry {
     /// The manifest sections its `[initialization] from_manifest` names: genesis writes the
     /// system's columns from those sections only (SPR-011 ruling 10; SPR-012 T-06).
     pub from_manifest: Vec<String>,
+    /// Every `[[applies]]` entry: the command, its draining binding, its key rule, key field,
+    /// typed payload and whether it carries a sampled outcome (EVO-001; SPR-014 T-01).
+    pub applies: Vec<SpecApply>,
+    /// Every `[[reads]]` entry's `use` and typed `neutral` (EVO-001 R4, R12; SPR-014 T-04).
+    pub read_uses: Vec<SpecReadUse>,
+    /// `(command, timer, purpose)` for every outcome `[[commands]]` entry (EVO-001 R9).
+    pub outcome_timers: Vec<(String, String, String)>,
+    /// `(purpose, first key name)` for every `[[rng]]` entry (BCK-002 A-50; SPR-014 T-07).
+    pub rng_keys: Vec<(String, String)>,
+    /// `(column, value)` for every `[[owns]] default`, typed as the column (`05.1` §2 rule 2,
+    /// the ledger row insert; SPR-014 T-05).
+    pub defaults: Vec<(String, i64)>,
+}
+
+/// One `[[applies]]` entry, as data (`05.1` §2 rule 2; EVO-001).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SpecApply {
+    /// The command.
+    pub command: String,
+    /// `drained_by` as `(pulse, phase)` names.
+    pub drained_by: (String, String),
+    /// `key`: `living` or `any` (`any` when absent: the lint refuses that on a frozen spec).
+    pub key: String,
+    /// `key_field`: a `PersonId` payload field, or `person` (`Command::person` itself).
+    pub key_field: String,
+    /// The typed payload, `(field, type)` in order; `None` for an untyped one (a draft spec).
+    pub payload: Option<Vec<(String, String)>>,
+    /// `outcome`: the command carries a sampled outcome (EVO-001 R9).
+    pub outcome: bool,
+}
+
+/// How one `[[reads]]` entry uses its column (EVO-001 R4, R12): an identity read requires its
+/// owner; a rate or mode read carries a neutral, served when its owner is absent.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SpecReadUse {
+    /// The column.
+    pub column: String,
+    /// `identity`, `rate` or `mode`; anything else (or nothing) is treated as `identity`, which
+    /// is the strict reading: a world without the owner is refused.
+    pub usage: String,
+    /// The neutral, typed as the column (an enum's code, a fixed-point value's raw bits), when
+    /// the spec gives one the loader could type.
+    pub neutral: Option<i64>,
+}
+
+impl SpecReadUse {
+    /// Whether the read is a rate or mode read: dropped, not refused, when its owner is absent.
+    #[must_use]
+    pub fn droppable(&self) -> bool {
+        self.usage == "rate" || self.usage == "mode"
+    }
 }
 
 impl SpecEntry {
@@ -261,6 +312,9 @@ pub struct SpecTable {
     pub owners: BTreeMap<String, Owner>,
     /// Spec entries by system id.
     pub specs: BTreeMap<String, SpecEntry>,
+    /// The number of codes of every enum column whose `[[owns]]` lists its `values` (EVO-001),
+    /// for `enum(<column>)` payload fields.
+    pub enum_codes: BTreeMap<String, usize>,
 }
 
 /// Checks one access declaration (`system` reads `reads`, writes `writes`) against the spec

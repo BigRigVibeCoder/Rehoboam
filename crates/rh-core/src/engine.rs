@@ -75,6 +75,7 @@ use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
 
 use crate::access::Lag;
 use crate::agenda::{Agenda, Timer, TimerEntry};
+use crate::command::KeyRule;
 use crate::command::{CommandQueues, QueuedCommand};
 use crate::crash::{CrashArtifact, DIAGNOSTIC_RECORDS, Provenance};
 use crate::ledger::{Ledger, LifeCourseGuard};
@@ -84,7 +85,8 @@ use crate::register::{Entry, Registered};
 use crate::schedule::Node;
 use crate::state::{EngineState, RestoreError, check_epochs, check_inputs, check_timers};
 use crate::system::{
-    InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError, StepCtx, Taken,
+    DropKind, DropReason, InvariantResult, JobInfo, Outbox, PulseBinding, ResampleCtx, SimError,
+    StepCtx, Taken,
 };
 use crate::time::{Calendar, Pulse, SimTime};
 use crate::world::{Column, SystemView, WorldTables};
@@ -195,7 +197,6 @@ pub struct Engine {
     agenda: Agenda,
     events: EventLog,
     commands: CommandQueues,
-    command_owner: BTreeMap<&'static str, &'static str>,
     by_system_id: BTreeMap<SystemId, usize>,
     epochs: BTreeMap<EntityRef, u32>,
     inputs: BTreeMap<SimTime, Vec<MaterialInput>>,
@@ -228,6 +229,10 @@ pub struct Engine {
     /// Bookkeeping of the step guard, never state: an instant always starts it empty. One slot
     /// per system, built once, so an instant with no draws allocates nothing (V-PERF-11).
     taken: Vec<Taken>,
+    /// Every drop so far, `dropped{system, kind, reason}` (`05.1` §2 rule 2; REV-EVO-001 R11): a
+    /// diagnostic, printed with the run's vitals, outside every plane hash and every keyframe
+    /// (GOV-006 §3: observability never changes history). A restored engine counts from zero.
+    dropped: BTreeMap<(&'static str, DropKind, DropReason), u64>,
 }
 
 /// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
@@ -314,8 +319,6 @@ impl Engine {
     ) -> Self {
         let mut tables = tables;
         let mut bound: BTreeSet<Pulse> = BTreeSet::new();
-        let mut lagged = BTreeSet::new();
-        let mut command_owner = BTreeMap::new();
         let mut by_system_id = BTreeMap::new();
         for (i, e) in registered.entries.iter().enumerate() {
             for w in &e.access.writes {
@@ -324,18 +327,9 @@ impl Engine {
                 }
             }
             bound.extend(e.bindings.iter().map(|b| b.pulse));
-            lagged.extend(
-                e.access
-                    .reads
-                    .iter()
-                    .filter(|r| r.lag.is_lagged())
-                    .map(|r| r.column),
-            );
-            for &c in &e.access.applies {
-                command_owner.entry(c).or_insert(e.id);
-            }
             by_system_id.insert(e.system_id, i);
         }
+        let lagged = registered.lagged_reads();
         let (ledger, ledger_error) = match Ledger::of(&tables) {
             Ok(ledger) => (ledger, None),
             Err(e) => (None, Some(e)),
@@ -354,7 +348,6 @@ impl Engine {
             agenda: Agenda::new(),
             events: EventLog::new(),
             commands: CommandQueues::new(),
-            command_owner,
             by_system_id,
             epochs: BTreeMap::new(),
             inputs: BTreeMap::new(),
@@ -371,6 +364,7 @@ impl Engine {
             observer: None,
             ledger,
             taken: Vec::new(),
+            dropped: BTreeMap::new(),
         }
     }
 
@@ -452,7 +446,13 @@ impl Engine {
         }
         for (owner, queue) in &state.commands.queues {
             for c in queue {
-                if engine.command_owner.get(c.command.kind) != Some(owner) {
+                if engine
+                    .registered
+                    .commands
+                    .get(c.command.kind)
+                    .map(|d| d.owner)
+                    != Some(owner)
+                {
                     return Err(RestoreError::Commands(format!(
                         "{} is not the owner of command {}",
                         owner, c.command.kind
@@ -611,6 +611,15 @@ impl Engine {
     #[must_use]
     pub fn commands(&self) -> &CommandQueues {
         &self.commands
+    }
+
+    /// The drops counted so far, `dropped{system, kind, reason}` (`05.1` §2 rule 2): the core's
+    /// dead-person drop at take (under the owner, `dead_key`), the owners' own drops (`dead`,
+    /// `ended`) and the discarded sends to absent owners (under the sender, `absent_owner`). A
+    /// diagnostic: no hash or keyframe reads it.
+    #[must_use]
+    pub fn dropped(&self) -> &BTreeMap<(&'static str, DropKind, DropReason), u64> {
+        &self.dropped
     }
 
     /// The epoch of `entity`: the number of material inputs that have touched it.
@@ -804,6 +813,9 @@ impl Engine {
             | SimError::Timer { system, .. }
             | SimError::UndeclaredCommand { system, .. }
             | SimError::UndeclaredEvent { system, .. }
+            | SimError::EventSlot { system, .. }
+            | SimError::Payload { system, .. }
+            | SimError::EntityKind { system, .. }
             | SimError::Event { system, .. }
             | SimError::Panic { system, .. }
             | SimError::Unsupported { system, .. }
@@ -992,6 +1004,20 @@ impl Engine {
             });
         };
         let e = &self.registered.entries[i];
+        // BCK-002 A-50: the timer's entity is of the kind its purpose's key declares.
+        if let Some((&purpose, &declared)) = e
+            .purpose_kinds
+            .iter()
+            .find(|(p, _)| rh_ids::PurposeId::of(p) == entry.timer.purpose)
+            && entry.key.entity.kind() != declared
+        {
+            return Err(SimError::EntityKind {
+                system: e.id,
+                purpose,
+                declared: declared.name(),
+                drawn: entry.key.entity.kind().name(),
+            });
+        }
         let epoch = self.epoch(entry.key.entity);
         let ctx = ResampleCtx {
             key: SystemKey::new(self.world_seed, self.branch_salt, e.system_id, epoch),
@@ -1047,6 +1073,7 @@ impl Engine {
         if let Some(ledger) = &self.ledger {
             ledger.check(&self.tables)?;
         }
+        self.check_queue_age(t)?;
         for e in &self.registered.entries {
             let results = guard(e.id, || Ok(e.model.invariants(&self.tables)))?;
             if let Some(r) = results.into_iter().find(|r| !r.holds) {
@@ -1058,6 +1085,116 @@ impl Engine {
             }
         }
         Ok(())
+    }
+
+    /// `queue-no-stale-command` (`05.1` §2 rule 2, queue age; §9; BCK-002 A-31): no queued
+    /// command is as old as the period of its draining binding's pulse, `t - tick <
+    /// period(pulse(drained_by))`, the period being the calendar's length of that pulse's period
+    /// containing `tick` (`Day`: 1,440 minutes).
+    fn check_queue_age(&self, t: SimTime) -> Result<(), SimError> {
+        for (owner, c) in self.commands.iter() {
+            let Some(decl) = self.registered.commands.get(c.command.kind) else {
+                continue;
+            };
+            let pulse = decl.drained_by.pulse;
+            let period = self
+                .calendar
+                .floor(pulse, c.tick)
+                .and_then(|start| Some((start, self.calendar.next_boundary(pulse, start)?)))
+                .map_or(i64::MAX, |(start, end)| end.minutes() - start.minutes());
+            let age = t.minutes() - c.tick.minutes();
+            if age >= period {
+                return Err(SimError::Invariant {
+                    system: CORE,
+                    name: "queue-no-stale-command",
+                    detail: format!(
+                        "{owner}'s {} command seq {} from {} has waited {age} minutes at {t}, not less than the {period}-minute period of its draining binding {}/{}",
+                        c.command.kind,
+                        c.seq,
+                        c.sender,
+                        pulse.name(),
+                        decl.drained_by.phase.name()
+                    ),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Each job's inbox, taken before any column moves: a binding gets the queued commands of
+    /// every kind its system's spec says it drains, a timer pass none (`05.1` §2 rule 2). In a
+    /// world with a ledger, a `key = "living"` command whose key person has no ledger row or has
+    /// `person.alive = 0` in the tables as they stand at the level's start is dropped here, never
+    /// delivered, and counted under `dropped{owner, kind, dead_key}` (BCK-002 A-30).
+    fn inboxes(&mut self, jobs: &[Job]) -> Vec<Vec<QueuedCommand>> {
+        let mut out = Vec::with_capacity(jobs.len());
+        for job in jobs {
+            let Work::Step(binding) = &job.work else {
+                out.push(Vec::new());
+                continue;
+            };
+            let owner = self.registered.entries[job.index].id;
+            let decls = &self.registered.commands;
+            let inbox = self.commands.take_kinds(owner, |kind| {
+                decls.get(kind).is_some_and(|d| {
+                    d.owner == owner
+                        && (d.drained_by == *binding || cfg!(feature = "mutant-deliver-every-job"))
+                })
+            });
+            if inbox.is_empty() || self.ledger.is_none() {
+                out.push(inbox);
+                continue;
+            }
+            let ids = self.tables.get(crate::ledger::PERSON_ID);
+            let alive = self.tables.get(crate::ledger::PERSON_ALIVE);
+            let living = |person: u64| -> bool {
+                ids.and_then(|ids| {
+                    ids.binary_search_by_key(&person, |v| v.cast_unsigned())
+                        .ok()
+                })
+                .and_then(|row| alive.and_then(|a| a.get(row)))
+                .is_some_and(|&a| a != 0)
+            };
+            let mut kept = Vec::with_capacity(inbox.len());
+            for c in inbox {
+                let rule = decls.get(c.command.kind).map(|d| d.key);
+                if rule == Some(KeyRule::Living) && !living(c.command.person.to_raw()) {
+                    *self
+                        .dropped
+                        .entry((
+                            owner,
+                            DropKind::Command(c.command.kind),
+                            DropReason::DeadKey,
+                        ))
+                        .or_default() += 1;
+                } else {
+                    kept.push(c);
+                }
+            }
+            out.push(kept);
+        }
+        out
+    }
+
+    /// What each job of a level takes to its thread: its owned columns (moved out of the tables),
+    /// its inbox and its system's drawn pairs. Every inbox is taken, and every dead-person drop
+    /// decided, before any column moves.
+    fn job_inputs(&mut self, jobs: &[Job]) -> Vec<JobInput> {
+        let inboxes = self.inboxes(jobs);
+        jobs.iter()
+            .zip(inboxes)
+            .map(|(job, inbox)| {
+                let e = &self.registered.entries[job.index];
+                let owned = e
+                    .access
+                    .writes
+                    .iter()
+                    .filter_map(|w| self.tables.take(w.column).map(|rows| (w.column, rows)))
+                    .collect();
+                let taken = std::mem::take(&mut self.taken[job.index]);
+                (owned, inbox, taken)
+            })
+            .collect()
     }
 
     /// Runs one level of jobs (in order on one thread, spread over several otherwise), returns
@@ -1073,26 +1210,14 @@ impl Engine {
         self.dispatch.record(jobs.len());
         self.check_owned_columns(jobs)?;
         let guards = self.ledger_guards(jobs, phase);
-        let inputs: Vec<JobInput> = jobs
-            .iter()
-            .map(|job| {
-                let e = &self.registered.entries[job.index];
-                let owned = e
-                    .access
-                    .writes
-                    .iter()
-                    .filter_map(|w| self.tables.take(w.column).map(|rows| (w.column, rows)))
-                    .collect();
-                let taken = std::mem::take(&mut self.taken[job.index]);
-                (owned, self.commands.take(e.id), taken)
-            })
-            .collect();
+        let inputs = self.job_inputs(jobs);
         let workers = self.threads.min(jobs.len()).max(1);
         let outcomes: Vec<JobOutcome> = {
             let observer = self.observer.as_deref();
             let tables = &self.tables;
             let agenda = &self.agenda;
             let entries = &self.registered.entries;
+            let commands = &self.registered.commands;
             let epochs = &self.epochs;
             let (world_seed, branch_salt) = (self.world_seed, self.branch_salt);
             let key = |e: &Entry| SystemKey::new(world_seed, branch_salt, e.system_id, 0);
@@ -1109,7 +1234,8 @@ impl Engine {
                 // back to the tables with the others.
                 let started =
                     observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobStart(job_ref))));
-                let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
+                let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot)
+                    .with_dropped(&e.dropped_reads);
                 let info = JobInfo {
                     system: e.id,
                     system_id: e.system_id,
@@ -1121,6 +1247,8 @@ impl Engine {
                     access: &e.access,
                     bindings: &e.bindings,
                     agenda,
+                    commands,
+                    purpose_kinds: &e.purpose_kinds,
                 };
                 let mut ctx = StepCtx::new(info, t, phase, inbox, taken);
                 // A failed JobStart skips the step; the instant is lost either way.
@@ -1216,7 +1344,12 @@ impl Engine {
         Ok(())
     }
 
-    /// Commits one system's buffers: cancellations, timers, events, commands (ruling 1).
+    /// Commits one system's buffers, in the order of `05.1` §2 rule 4 (EVO-001): cancellations,
+    /// events (which get their `EventId` here), timers (which get their `seq`, and their `cause`
+    /// resolved to the id of the draft it names), lifecycle commands (queued for their owners,
+    /// every event-typed slot resolved), then the ledger rows the step inserts (rule 2) and the
+    /// drops it counted. The agenda's `seq` and the `EventId` are separate counters, so taking
+    /// events before timers changes no id (SPR-006 ruling 1 merged timers first).
     fn merge(
         &mut self,
         t: SimTime,
@@ -1231,19 +1364,6 @@ impl Engine {
                 system: e.id,
                 message: err.to_string(),
             })?;
-        }
-        for (spec, purpose) in out.timers {
-            self.agenda.insert(
-                spec.time,
-                spec.phase,
-                spec.entity,
-                Timer {
-                    owner: e.system_id,
-                    purpose,
-                    kind: spec.kind,
-                    payload: spec.payload,
-                },
-            );
         }
         let mut ids = Vec::with_capacity(out.events.len());
         for mut draft in out.events {
@@ -1262,17 +1382,116 @@ impl Engine {
             ids.push(id);
             tally.events += 1;
         }
-        for command in out.commands {
-            let Some(&owner) = self.command_owner.get(command.kind) else {
+        // INVARIANT: `StepCtx` admits only references to drafts this step already emitted.
+        let resolve = |r: rh_events::EventRef| r.resolved(|d| ids.get(d.0).copied());
+        for (spec, purpose) in out.timers {
+            self.agenda.insert(
+                spec.time,
+                spec.phase,
+                spec.entity,
+                Timer {
+                    owner: e.system_id,
+                    purpose,
+                    kind: spec.kind,
+                    payload: spec.payload,
+                    cause: resolve(spec.cause),
+                },
+            );
+        }
+        for mut command in out.commands {
+            let Some(owner) = self.registered.commands.get(command.kind).map(|d| d.owner) else {
                 return Err(SimError::UndeclaredCommand {
                     system: e.id,
                     command: command.kind,
                 });
             };
-            // INVARIANT: `StepCtx::submit` admits only references to drafts already emitted.
-            let cause = command.cause.and_then(|r| ids.get(r.0).copied());
-            self.commands.push(owner, t, phase, e.id, cause, command);
+            let draft = command.cause.draft();
+            command.cause = resolve(command.cause);
+            for arg in &mut command.args {
+                if let crate::command::Arg::Event(r) = arg {
+                    *r = resolve(*r);
+                }
+            }
+            self.commands.push(owner, t, phase, e.id, draft, command);
             tally.commands += 1;
+        }
+        let system = e.id;
+        if !out.inserts.is_empty() {
+            self.insert_rows(system, out.inserts)?;
+        }
+        for (kind, reason) in out.drops {
+            *self.dropped.entry((system, kind, reason)).or_default() += 1;
+        }
+        Ok(())
+    }
+
+    /// Inserts ledger rows handed over by `system`'s step (`05.1` §2 rule 2, "Ledger rows enter by
+    /// insert"; SPR-014 T-05): each at its sorted position in every `person.*` column, the
+    /// inserter's columns with its values, every other owner's with its declared default, else 0.
+    fn insert_rows(
+        &mut self,
+        system: &'static str,
+        rows: Vec<Vec<(&'static str, i64)>>,
+    ) -> Result<(), SimError> {
+        let refuse = |message: String| SimError::Ledger { system, message };
+        let Some(ledger) = &self.ledger else {
+            return Err(refuse(
+                "inserted a ledger row in a world without a ledger (no person.id)".to_owned(),
+            ));
+        };
+        let e = self
+            .registered
+            .entries
+            .iter()
+            .find(|e| e.id == system)
+            .ok_or_else(|| refuse("is not registered".to_owned()))?;
+        let own: BTreeSet<&str> = e
+            .access
+            .writes
+            .iter()
+            .map(|w| w.column)
+            .filter(|c| ledger.is_person(c))
+            .collect();
+        for row in rows {
+            let given: BTreeSet<&str> = row.iter().map(|(c, _)| *c).collect();
+            if given.len() != row.len() || given != own {
+                return Err(refuse(format!(
+                    "inserted a row of {:?}, not each of its own person.* columns {:?} once",
+                    row.iter().map(|(c, _)| *c).collect::<Vec<_>>(),
+                    own
+                )));
+            }
+            let id = row
+                .iter()
+                .find(|(c, _)| *c == crate::ledger::PERSON_ID)
+                .map(|(_, v)| *v)
+                .ok_or_else(|| refuse("inserted a row without person.id".to_owned()))?;
+            let at = match self
+                .tables
+                .get(crate::ledger::PERSON_ID)
+                .map(|ids| ids.binary_search_by_key(&id.cast_unsigned(), |v| v.cast_unsigned()))
+            {
+                Some(Ok(_)) => {
+                    return Err(refuse(format!(
+                        "inserted person {}, whose id the ledger already holds",
+                        id.cast_unsigned()
+                    )));
+                }
+                Some(Err(at)) => at,
+                None => 0,
+            };
+            for column in ledger.person_columns() {
+                let value = row
+                    .iter()
+                    .find(|(c, _)| *c == column.as_str())
+                    .map(|(_, v)| *v)
+                    .or_else(|| self.registered.defaults.get(column.as_str()).copied())
+                    .unwrap_or(0);
+                if let Some(mut rows) = self.tables.take(column) {
+                    rows.insert(at.min(rows.len()), value);
+                    self.tables.insert(column, rows);
+                }
+            }
         }
         Ok(())
     }

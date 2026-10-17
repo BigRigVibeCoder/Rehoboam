@@ -3,6 +3,11 @@ pub const SYSTEM_ID: &str = "M2.demography";
 pub const SPEC_VERSION: &str = "0.0.9";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Month, Phase::Vital),
+    (Pulse::Day, Phase::Vital),
+];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+    ("ScheduleDeath", Pulse::Day, Phase::Vital),
+    ("Marry", Pulse::Day, Phase::Vital),
 ];
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]

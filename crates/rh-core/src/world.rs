@@ -153,7 +153,14 @@ pub struct SystemView<'a> {
     owned: BTreeMap<&'static str, Column>,
     current: &'a WorldTables,
     start_of_instant: &'a WorldTables,
+    /// The rate and mode reads registration dropped (their owner is absent), with their neutrals
+    /// (`05.1` §2 rule 2): each enumerates as an empty column, and [`SystemView::value`] returns
+    /// its neutral for any row.
+    dropped: &'a BTreeMap<&'static str, i64>,
 }
+
+/// No dropped reads: the default for views built outside an engine level.
+static NO_DROPPED: BTreeMap<&'static str, i64> = BTreeMap::new();
 
 impl<'a> SystemView<'a> {
     /// A view for `system`, which owns `owned` (moved out of the tables by the caller).
@@ -170,7 +177,14 @@ impl<'a> SystemView<'a> {
             owned,
             current,
             start_of_instant,
+            dropped: &NO_DROPPED,
         }
+    }
+
+    /// The view with the system's dropped reads (absent owners, `05.1` §2 rule 2).
+    pub(crate) fn with_dropped(mut self, dropped: &'a BTreeMap<&'static str, i64>) -> Self {
+        self.dropped = dropped;
+        self
     }
 
     /// Returns the owned columns to the caller.
@@ -193,6 +207,9 @@ impl<'a> SystemView<'a> {
                 column: column.to_owned(),
             });
         };
+        if self.dropped.contains_key(column) {
+            return Ok(&[]);
+        }
         let tables = if read.lag.is_lagged() {
             self.start_of_instant
         } else {
@@ -205,6 +222,35 @@ impl<'a> SystemView<'a> {
                 system: self.system,
                 column: column.to_owned(),
             })
+    }
+
+    /// A keyed lookup: row `row` of `column`, through the same checks as [`SystemView::read`].
+    /// `None` for a row the column does not have. For a rate or mode read that registration
+    /// dropped because its owner is absent, every row gives the read's declared neutral, never
+    /// the type's zero (`05.1` §2 rule 2; `rh-contracts` accessors call this).
+    ///
+    /// # Errors
+    /// As [`SystemView::read`].
+    pub fn value(&self, column: &str, row: usize) -> Result<Option<i64>, SimError> {
+        if !self.owned.contains_key(column)
+            && self.access.read_of(column).is_some()
+            && let Some(&neutral) = self.dropped.get(column)
+        {
+            return Ok(Some(neutral));
+        }
+        Ok(self.read(column)?.get(row).copied())
+    }
+
+    /// The ledger row of `person`: its position in `person.id`, which is sorted ascending as a
+    /// `u64` (SPR-011 ruling 5). The system must own or read `person.id`.
+    ///
+    /// # Errors
+    /// As [`SystemView::read`] of `person.id`.
+    pub fn person_row(&self, person: rh_ids::PersonId) -> Result<Option<usize>, SimError> {
+        Ok(self
+            .read(crate::ledger::PERSON_ID)?
+            .binary_search_by_key(&person.to_raw(), |v| v.cast_unsigned())
+            .ok())
     }
 
     /// Mutable access to a column the system owns.

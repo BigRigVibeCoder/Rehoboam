@@ -40,6 +40,73 @@ const TAG_EVENT_HASH: u64 = rh_ids::rng::tag("rehoboam/rh-events/log-hash/v1");
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DraftRef(pub usize);
 
+/// An event-typed slot of a lifecycle command or a timer (`05.1` §2 rule 2, "Event-typed slots";
+/// EVO-001, REV-SPR-017 N3): one of the step's own drafts, an event id read from state, or none.
+///
+/// The merge replaces every `Draft` by the id it assigns in the same merge (`rh-core`), so an
+/// owner only ever sees `Known` or `None`. The type is opaque on purpose: it has no conversion
+/// from or to an integer and is not an `rh_ids::EntityKey`, so it can neither stand in for an
+/// integer payload field nor key a draw. A step that wants the id reads it with
+/// [`EventRef::known`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum EventRef {
+    /// No event.
+    #[default]
+    None,
+    /// An earlier draft of the submitting step, resolved at the merge.
+    Draft(DraftRef),
+    /// An event already in the log.
+    Known(EventId),
+}
+
+impl EventRef {
+    /// The event's id, once it is known (always, after the merge, unless the slot is empty).
+    #[must_use]
+    pub const fn known(self) -> Option<EventId> {
+        match self {
+            Self::Known(id) => Some(id),
+            Self::None | Self::Draft(_) => None,
+        }
+    }
+
+    /// The draft this slot names, before the merge resolves it.
+    #[must_use]
+    pub const fn draft(self) -> Option<DraftRef> {
+        match self {
+            Self::Draft(d) => Some(d),
+            Self::None | Self::Known(_) => None,
+        }
+    }
+
+    /// Whether the slot is empty.
+    #[must_use]
+    pub const fn is_none(self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    /// The slot with a `Draft` replaced by the id `resolve` gives it (the merge, `rh-core`);
+    /// `None` and `Known` are kept. A draft `resolve` does not know becomes `None`.
+    #[must_use]
+    pub fn resolved(self, resolve: impl FnOnce(DraftRef) -> Option<EventId>) -> Self {
+        match self {
+            Self::Draft(d) => resolve(d).map_or(Self::None, Self::Known),
+            other => other,
+        }
+    }
+}
+
+impl From<DraftRef> for EventRef {
+    fn from(d: DraftRef) -> Self {
+        Self::Draft(d)
+    }
+}
+
+impl From<EventId> for EventRef {
+    fn from(id: EventId) -> Self {
+        Self::Known(id)
+    }
+}
+
 /// An event as a system drafts it: no id, tick or phase yet (the merge assigns them).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EventDraft {

@@ -1214,6 +1214,12 @@ def rust(sid, specs):
              f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
              "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
     lines += [f"    (Pulse::{x['pulse']}, Phase::{x['phase']})," for x in s["schedule"]]
+    # DECISION (SPR-014 T-01; REV-EVO-001 NIT-10): one (command, Pulse, Phase) per [[applies]] entry, its drained_by, so
+    # registration can compare the code's draining bindings with the spec as it compares SCHEDULE.
+    lines += ["];", "pub const DRAINS: &[(&str, Pulse, Phase)] = &["]
+    for a in s.get("applies", []):
+        pulse, _, phase = str(a.get("drained_by", "")).partition("/")
+        lines.append(f'    ("{a["command"]}", Pulse::{pulse}, Phase::{phase}),')
     # DECISION: the enum carries the spec's purpose names, so code never maps variants to names by
     # hand (registration checks the names against [[rng]], SPR-005 T-06). An empty enum takes no
     # #[repr]: Rust refuses a representation for a zero-variant enum. REF: SPR-005 ruling 2.

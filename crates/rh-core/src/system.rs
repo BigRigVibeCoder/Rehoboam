@@ -43,14 +43,15 @@ use core::fmt;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
-use rh_events::{DraftRef, EventDraft};
+use rh_events::{DraftRef, EventDraft, EventRef};
 use rh_ids::{
-    BranchSalt, EntityKey, EntityRef, PurposeId, RngStream, StreamKey, SystemId, SystemKey,
+    BranchSalt, EntityKey, EntityKind, EntityRef, PurposeId, RngStream, StreamKey, SystemId,
+    SystemKey,
 };
 
 use crate::access::AccessSpec;
 use crate::agenda::{Agenda, TimerEntry, TimerId};
-use crate::command::{Command, QueuedCommand};
+use crate::command::{Arg, Command, CommandDecl, QueuedCommand};
 use crate::fixed::{Probability, draw_hits};
 use crate::phase::Phase;
 use crate::time::{Pulse, SimTime};
@@ -179,6 +180,39 @@ pub enum SimError {
         /// The command.
         command: &'static str,
     },
+    /// An event-typed payload slot given an integer, or an integer field given an event slot
+    /// (`05.1` §2 rule 2, "Event-typed slots"; SPR-014 T-02).
+    EventSlot {
+        /// The submitting system.
+        system: &'static str,
+        /// The command.
+        command: &'static str,
+        /// The field (its name in the owner's `[[applies]] payload`).
+        field: String,
+    },
+    /// A command whose payload does not fit the owner's `[[applies]] payload`: a wrong field
+    /// count, an integer outside its field's type, or a key person that differs from the field
+    /// `key_field` names (SPR-014 T-02).
+    Payload {
+        /// The submitting system.
+        system: &'static str,
+        /// The command.
+        command: &'static str,
+        /// What does not fit.
+        message: String,
+    },
+    /// A draw whose entity is not of the kind its purpose's `[[rng]] key` declares (BCK-002
+    /// A-50; SPR-014 T-07).
+    EntityKind {
+        /// The system.
+        system: &'static str,
+        /// The purpose.
+        purpose: &'static str,
+        /// The kind the purpose's key declares.
+        declared: &'static str,
+        /// The kind drawn with.
+        drawn: &'static str,
+    },
     /// An event kind the system does not declare in `AccessSpec::emits` (SPR-006 T-04).
     UndeclaredEvent {
         /// The system.
@@ -289,6 +323,28 @@ impl fmt::Display for SimError {
                 f,
                 "{system} submitted command {command}, which its AccessSpec does not declare or no registered system applies"
             ),
+            Self::EventSlot {
+                system,
+                command,
+                field,
+            } => write!(
+                f,
+                "{system} submitted command {command} with an integer in its event-typed field {field}, or an event slot in an integer field (05.1 §2 rule 2: an EventRef slot takes a DraftRef or an EventId, never an integer)"
+            ),
+            Self::Payload {
+                system,
+                command,
+                message,
+            } => write!(f, "{system} submitted command {command}: {message}"),
+            Self::EntityKind {
+                system,
+                purpose,
+                declared,
+                drawn,
+            } => write!(
+                f,
+                "{system} drew under purpose {purpose}, whose [[rng]] key is a {declared}, with a {drawn} (BCK-002 A-50)"
+            ),
             Self::UndeclaredEvent { system, kind } => write!(
                 f,
                 "{system} emitted event {kind}, which its AccessSpec does not declare"
@@ -355,6 +411,69 @@ pub struct TimerSpec {
     pub kind: u32,
     /// The system's argument.
     pub payload: i64,
+    /// The event that caused it: a draft of this step (resolved at the merge), an id read from
+    /// state, or none (`05.1` §2 rule 2; EVO-001 R9). It is an `EventRef`, so an integer cannot
+    /// stand in for it:
+    ///
+    /// ```compile_fail
+    /// # use rh_core::system::TimerSpec;
+    /// # use rh_core::{Phase, time::SimTime};
+    /// # use rh_ids::{EntityRef, PersonId};
+    /// let _ = TimerSpec {
+    ///     time: SimTime::from_minutes(1),
+    ///     phase: Phase::Vital,
+    ///     entity: EntityRef::person(PersonId::from_raw(1)),
+    ///     kind: 0,
+    ///     payload: 0,
+    ///     cause: 5, // an integer in an event-typed slot does not compile
+    /// };
+    /// ```
+    pub cause: EventRef,
+}
+
+/// Why a command or a timer was dropped (`05.1` §2 rule 2: one diagnostic,
+/// `dropped{system, kind, reason}`; REV-EVO-001 R11).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DropReason {
+    /// `rh-core` at take: a `key = "living"` command whose key person is dead or absent.
+    DeadKey,
+    /// The owner's drain or a fire: a person it names is dead.
+    Dead,
+    /// The owner: an ended claim or vow.
+    Ended,
+    /// A send whose owner the world does not register (`StepCtx::submit` discards it).
+    AbsentOwner,
+}
+
+impl DropReason {
+    /// The reason's name in the diagnostic.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::DeadKey => "dead_key",
+            Self::Dead => "dead",
+            Self::Ended => "ended",
+            Self::AbsentOwner => "absent_owner",
+        }
+    }
+}
+
+/// What was dropped: a command kind, or a timer's closure id.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DropKind {
+    /// A command, by its Registry name.
+    Command(&'static str),
+    /// A timer, by its owner's closure id.
+    Timer(u32),
+}
+
+impl fmt::Display for DropKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Command(kind) => f.write_str(kind),
+            Self::Timer(kind) => write!(f, "timer.{kind}"),
+        }
+    }
 }
 
 /// What one step buffered, merged by the engine at the end of the level (ruling 1).
@@ -364,6 +483,10 @@ pub(crate) struct Outbox {
     pub(crate) timers: Vec<(TimerSpec, PurposeId)>,
     pub(crate) commands: Vec<Command>,
     pub(crate) events: Vec<EventDraft>,
+    /// The drops the step counted: its own (`drop_command`, `drop_timer`) and its discarded sends.
+    pub(crate) drops: Vec<(DropKind, DropReason)>,
+    /// Ledger rows the step hands `rh-core` to insert at the merge (`05.1` §2 rule 2).
+    pub(crate) inserts: Vec<Vec<(&'static str, i64)>>,
 }
 
 /// What the engine lends one job: the system's identity and declarations and the agenda as it
@@ -382,6 +505,11 @@ pub(crate) struct JobInfo<'a> {
     pub(crate) access: &'a AccessSpec,
     pub(crate) bindings: &'a [PulseBinding],
     pub(crate) agenda: &'a Agenda,
+    /// Every registered command, with its owner and typing (`05.1` §2 rule 2).
+    pub(crate) commands: &'a BTreeMap<&'static str, CommandDecl>,
+    /// The entity kind each of the system's purposes keys its draws by, where its `[[rng]] key`
+    /// names one (BCK-002 A-50).
+    pub(crate) purpose_kinds: &'a BTreeMap<&'static str, EntityKind>,
 }
 
 /// The step context of one system at one instant and phase (`05.1` §2 rule 6): the keyed RNG,
@@ -514,6 +642,7 @@ impl<'a> StepCtx<'a> {
         k: u64,
     ) -> Result<u64, SimError> {
         let id = self.purpose_id(purpose)?;
+        self.check_kind(purpose.name(), entity)?;
         self.take(purpose.name(), id, entity.entity_key(), TakenAs::Rng)?;
         Ok(self.stream_key(id, entity).draw(self.t.minutes(), k))
     }
@@ -537,6 +666,7 @@ impl<'a> StepCtx<'a> {
         entity: impl EntityKey,
     ) -> Result<RngStream, SimError> {
         let id = self.purpose_id(purpose)?;
+        self.check_kind(purpose.name(), entity)?;
         self.take(purpose.name(), id, entity.entity_key(), TakenAs::Stream)?;
         let key = self.stream_key(id, entity);
         Ok(RngStream::from_stream_key(&key, self.t.minutes()))
@@ -588,6 +718,24 @@ impl<'a> StepCtx<'a> {
         }
     }
 
+    /// BCK-002 A-50: the drawn entity is of the kind the purpose's `[[rng]] key` declares, when
+    /// the key names a kind (registration reports the purposes whose key has none yet).
+    fn check_kind(&self, purpose: &'static str, entity: impl EntityKey) -> Result<(), SimError> {
+        let Some(&declared) = self.info.purpose_kinds.get(purpose) else {
+            return Ok(());
+        };
+        let drawn = entity.kind();
+        if drawn == Some(declared) {
+            return Ok(());
+        }
+        Err(SimError::EntityKind {
+            system: self.info.system,
+            purpose,
+            declared: declared.name(),
+            drawn: drawn.map_or("event", EntityKind::name),
+        })
+    }
+
     fn purpose_id<P: SpecPurpose>(&self, purpose: &P) -> Result<PurposeId, SimError> {
         let name = purpose.name();
         if self.info.purposes.contains(&name) {
@@ -632,6 +780,15 @@ impl<'a> StepCtx<'a> {
                 spec.phase
             )));
         }
+        if spec
+            .cause
+            .draft()
+            .is_some_and(|d| d.0 >= self.out.events.len())
+        {
+            return Err(self.event_error(
+                "a timer names a draft as its cause which this step has not emitted".to_owned(),
+            ));
+        }
         self.out.timers.push((spec, id));
         Ok(())
     }
@@ -670,17 +827,55 @@ impl<'a> StepCtx<'a> {
             .collect()
     }
 
-    /// Takes the lifecycle commands queued for this system, in `(tick, phase, PersonId, seq)`
-    /// order (`05.1` §2 rule 2). The system applies them; commands it does not take stay queued.
+    /// Takes the lifecycle commands queued for this binding, in `(tick, phase, PersonId, seq)`
+    /// order (`05.1` §2 rule 2): the commands of every kind the system's spec says this binding
+    /// drains (`drained_by`), and nothing in any other job (another binding, the timer pass). The
+    /// binding settles each one in this step: applies it, or drops it with
+    /// [`StepCtx::drop_command`]. A `key = "living"` command whose key person was dead when the
+    /// level started never reaches it: `rh-core` dropped it at the take (BCK-002 A-30). Commands a
+    /// binding does not take stay queued, in order.
     pub fn take_commands(&mut self) -> Vec<QueuedCommand> {
         std::mem::take(&mut self.inbox)
     }
 
+    /// Drops a command this binding took, counted under `dropped{system, kind, reason}`: a key
+    /// person it killed earlier in the same drain, a dead party in the payload, an ended claim
+    /// (`05.1` §2 rule 2). A drop is never an error, and it changes no state.
+    pub fn drop_command(&mut self, command: &QueuedCommand, reason: DropReason) {
+        self.out
+            .drops
+            .push((DropKind::Command(command.command.kind), reason));
+    }
+
+    /// Drops a due timer instead of acting on it (a death timer for a person already dead),
+    /// counted under `dropped{system, kind, reason}` (`05.1` §2 rule 2; REV-EVO-001 NIT-15).
+    pub fn drop_timer(&mut self, timer: &TimerEntry, reason: DropReason) {
+        self.out
+            .drops
+            .push((DropKind::Timer(timer.timer.kind), reason));
+    }
+
+    /// Hands `rh-core` one complete row of this system's own `person.*` columns, inserted at the
+    /// merge of this step's level at its sorted position in every `person.*` column (`05.1` §2
+    /// rule 2, "Ledger rows enter by insert"; SPR-014 T-05). The row names each of the system's
+    /// `person.*` columns once, `person.id` among them; another owner's column gets its declared
+    /// default, else 0. A duplicate id fails the merge with [`SimError::Ledger`].
+    pub fn insert_person(&mut self, row: Vec<(&'static str, i64)>) {
+        self.out.inserts.push(row);
+    }
+
     /// Submits a lifecycle command to its owner's queue.
+    ///
+    /// A command whose owner the world does not register is accepted and discarded, never
+    /// queued, and counted under `dropped{sender, command, absent_owner}`: the sender never asks
+    /// whether the owner exists (`05.1` §2 rule 2, absent owners).
     ///
     /// # Errors
     /// [`SimError::UndeclaredCommand`] if the system does not declare it in `AccessSpec::sends`;
-    /// [`SimError::Event`] if its cause is not an event this step already emitted.
+    /// [`SimError::Event`] if its cause or an event-typed field names a draft this step has not
+    /// emitted; [`SimError::EventSlot`] for an integer in an `EventRef` field (or an event slot in
+    /// an integer field); [`SimError::Payload`] for a wrong field count, a value outside its
+    /// field's type, or a key person that differs from the owner's `key_field`.
     pub fn submit(&mut self, command: Command) -> Result<(), SimError> {
         if self.info.access.send_of(command.kind).is_none() {
             return Err(SimError::UndeclaredCommand {
@@ -688,13 +883,68 @@ impl<'a> StepCtx<'a> {
                 command: command.kind,
             });
         }
-        if let Some(r) = command.cause
-            && r.0 >= self.out.events.len()
-        {
+        let emitted = self.out.events.len();
+        let unknown_draft = |r: EventRef| r.draft().is_some_and(|d| d.0 >= emitted);
+        if unknown_draft(command.cause) {
             return Err(self.event_error(format!(
-                "command {} names draft {} as its cause, which this step has not emitted",
-                command.kind, r.0
+                "command {} names a draft as its cause which this step has not emitted",
+                command.kind
             )));
+        }
+        let Some(decl) = self.info.commands.get(command.kind) else {
+            self.out
+                .drops
+                .push((DropKind::Command(command.kind), DropReason::AbsentOwner));
+            return Ok(());
+        };
+        let payload_error = |message: String| SimError::Payload {
+            system: self.info.system,
+            command: command.kind,
+            message,
+        };
+        if let Some(fields) = &decl.payload {
+            if fields.len() != command.args.len() {
+                return Err(payload_error(format!(
+                    "{} fields, but {}'s [[applies]] payload has {}",
+                    command.args.len(),
+                    decl.owner,
+                    fields.len()
+                )));
+            }
+            for ((name, ty), arg) in fields.iter().zip(&command.args) {
+                match (*ty == crate::command::ArgType::Event, arg) {
+                    (true, Arg::Event(r)) if unknown_draft(*r) => {
+                        return Err(self.event_error(format!(
+                            "command {} names a draft in field {name} which this step has not emitted",
+                            command.kind
+                        )));
+                    }
+                    (true, Arg::Event(_)) => {}
+                    (false, Arg::Int(v)) if ty.admits(*v) => {}
+                    (false, Arg::Int(v)) => {
+                        return Err(payload_error(format!(
+                            "field {name} = {v} is outside its type {ty:?}"
+                        )));
+                    }
+                    (true, Arg::Int(_)) | (false, Arg::Event(_)) => {
+                        return Err(SimError::EventSlot {
+                            system: self.info.system,
+                            command: command.kind,
+                            field: name.clone(),
+                        });
+                    }
+                }
+            }
+            if let Some(i) = decl.key_field {
+                let key = command.person.to_raw().cast_signed();
+                if command.int(i) != Some(key) {
+                    return Err(payload_error(format!(
+                        "its key person {} differs from its key field {} (05.1 §2 rule 2)",
+                        command.person.to_raw(),
+                        fields[i].0
+                    )));
+                }
+            }
         }
         self.out.commands.push(command);
         Ok(())

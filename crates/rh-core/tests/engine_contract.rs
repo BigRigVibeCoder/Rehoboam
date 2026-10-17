@@ -747,6 +747,7 @@ fn a_timer_pass_and_a_step_at_one_instant_share_the_pair_set() {
                 entity,
                 kind: 0,
                 payload: 0,
+                cause: rh_events::EventRef::None,
             };
             c.schedule(&Draw::Noise, spec)?;
         }
@@ -806,6 +807,7 @@ fn the_fires_of_one_timer_pass_share_the_pair_set() {
                     entity: EntityRef::region(RegionId::from_raw(row)),
                     kind: 0,
                     payload,
+                    cause: rh_events::EventRef::None,
                 },
             )?;
         }

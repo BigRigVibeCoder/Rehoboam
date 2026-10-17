@@ -10,9 +10,11 @@
     reason = "each test file uses a different subset of the helpers"
 )]
 
-use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandApply, CommandSend, Lag, Plane};
 use rh_core::agenda::TimerEntry;
-use rh_core::ownership::{Declaration, Source, SpecEntry, SpecTable, single_writer};
+use rh_core::ownership::{
+    Declaration, Source, SpecApply, SpecEntry, SpecReadUse, SpecTable, single_writer,
+};
 use rh_core::system::{
     AggregateSpec, InvariantResult, ParamSchema, PulseBinding, ResampleCtx, SimError, SpecPurpose,
     StepCtx, SystemDescriptor, SystemModel,
@@ -49,6 +51,18 @@ pub struct Stub {
     pub resample: Option<ResampleFn>,
     /// `None`: no invariants.
     pub check: Option<InvariantFn>,
+    /// Its spec's `[[applies]]` entries (SPR-014): one per `applies`, untyped and `key = "any"`
+    /// unless [`Stub::typed`] or [`Stub::living`] says otherwise.
+    pub apply_specs: Vec<SpecApply>,
+    /// Its spec's `[[reads]] use` and typed `neutral` (SPR-014 T-04); a read not listed is an
+    /// identity read.
+    pub read_uses: Vec<SpecReadUse>,
+    /// Its spec's `[[rng]] key` first names (A-50); a purpose not listed is not kind-checked.
+    pub rng_keys: Vec<(String, String)>,
+    /// Its spec's `[[owns]] default` values (the row insert).
+    pub defaults: Vec<(String, i64)>,
+    /// The code counts of its enum columns, for `enum(<column>)` payload fields.
+    pub enum_codes: Vec<(String, usize)>,
 }
 
 #[allow(
@@ -76,6 +90,11 @@ impl Stub {
             fire: None,
             resample: None,
             check: None,
+            apply_specs: Vec::new(),
+            read_uses: Vec::new(),
+            rng_keys: Vec::new(),
+            defaults: Vec::new(),
+            enum_codes: Vec::new(),
         }
     }
 
@@ -142,9 +161,77 @@ impl Stub {
         self
     }
 
-    /// Declares a command it owns and applies.
-    pub fn applies(mut self, command: &'static str) -> Self {
-        self.access.applies.push(command);
+    /// Declares a command it owns and applies, drained by its first binding (SPR-014 T-01): bind
+    /// the stub first. Its spec agrees (`key = "any"`, untyped).
+    pub fn applies(self, command: &'static str) -> Self {
+        let b = *self
+            .bindings
+            .first()
+            .unwrap_or_else(|| panic!("{}: bind the stub before declaring {command}", self.id));
+        self.applies_at(command, b.pulse, b.phase)
+    }
+
+    /// Declares a command it owns, drained by `(pulse, phase)`; its spec agrees.
+    pub fn applies_at(mut self, command: &'static str, pulse: Pulse, phase: Phase) -> Self {
+        self.access
+            .applies
+            .push(CommandApply::new(command, pulse, phase));
+        self.apply_specs.push(SpecApply {
+            command: command.to_owned(),
+            drained_by: (pulse.name().to_owned(), phase.name().to_owned()),
+            key: "any".to_owned(),
+            key_field: "person".to_owned(),
+            payload: None,
+            outcome: false,
+        });
+        self
+    }
+
+    /// Types an applied command in its spec: `payload` as `(field, type)`, the key field (a
+    /// `PersonId` field, or `person`), and the key rule (`living` or `any`).
+    pub fn typed(
+        mut self,
+        command: &str,
+        payload: &[(&str, &str)],
+        key_field: &str,
+        key: &str,
+    ) -> Self {
+        let a = self
+            .apply_specs
+            .iter_mut()
+            .find(|a| a.command == command)
+            .unwrap_or_else(|| panic!("{} does not apply {command}", self.id));
+        a.payload = Some(
+            payload
+                .iter()
+                .map(|(n, t)| ((*n).to_owned(), (*t).to_owned()))
+                .collect(),
+        );
+        key_field.clone_into(&mut a.key_field);
+        key.clone_into(&mut a.key);
+        self
+    }
+
+    /// Declares, in its spec, how it uses a read: `rate` or `mode` with a typed neutral, or
+    /// `identity` (`neutral` `None`).
+    pub fn uses(mut self, column: &str, usage: &str, neutral: Option<i64>) -> Self {
+        self.read_uses.push(SpecReadUse {
+            column: column.to_owned(),
+            usage: usage.to_owned(),
+            neutral,
+        });
+        self
+    }
+
+    /// Declares, in its spec, the first key name of a purpose's `[[rng]] key` (A-50).
+    pub fn rng_key(mut self, purpose: &str, key: &str) -> Self {
+        self.rng_keys.push((purpose.to_owned(), key.to_owned()));
+        self
+    }
+
+    /// Declares, in its spec, a column's `[[owns]] default`.
+    pub fn default_of(mut self, column: &str, value: i64) -> Self {
+        self.defaults.push((column.to_owned(), value));
         self
     }
 
@@ -186,6 +273,11 @@ impl Stub {
                 .collect(),
             emits: self.access.emits.iter().map(|k| (*k).to_owned()).collect(),
             from_manifest: Vec::new(),
+            applies: self.apply_specs.clone(),
+            read_uses: self.read_uses.clone(),
+            outcome_timers: Vec::new(),
+            rng_keys: self.rng_keys.clone(),
+            defaults: self.defaults.clone(),
         };
         (declaration, entry)
     }
@@ -264,5 +356,9 @@ pub fn agreeing_specs(stubs: &[Stub]) -> SpecTable {
     SpecTable {
         owners,
         specs: specs.into_iter().map(|(d, e)| (d.system, e)).collect(),
+        enum_codes: stubs
+            .iter()
+            .flat_map(|s| s.enum_codes.iter().cloned())
+            .collect(),
     }
 }

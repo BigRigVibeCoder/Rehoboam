@@ -515,7 +515,10 @@ fn the_reported_error_is_the_same_at_every_thread_count() {
 }
 
 /// G-c: columns are materialised only when the engine is built, from the owners' declared writes;
-/// a run-time read of a column the world does not have is fatal, never a creation.
+/// nothing creates one at run time. Since SPR-014 (T-04, `05.1` §2 rule 2), a read of a column
+/// whose owner is absent never reaches the engine as a missing column: an identity read is refused
+/// at registration (`absent-owner`), and a rate or mode read is dropped, enumerating as an empty
+/// table and answering keyed lookups with its neutral, while the column is still never created.
 #[test]
 fn columns_come_only_from_declared_writes() {
     fn reads_ghost(
@@ -524,7 +527,16 @@ fn columns_come_only_from_declared_writes() {
         v: &mut SystemView<'_>,
         _: &mut StepCtx<'_>,
     ) -> Result<(), SimError> {
-        v.read("ghost.x").map(|_| ())
+        assert!(
+            v.read("ghost.x")?.is_empty(),
+            "a dropped read enumerates as empty"
+        );
+        assert_eq!(
+            v.value("ghost.x", 3)?,
+            Some(-7),
+            "and a keyed lookup gives its neutral"
+        );
+        Ok(())
     }
     let w = Stub::new("X1.w").writes("w.x").at(Pulse::Day, Phase::Vital);
     let r = Stub::new("X2.r")
@@ -532,8 +544,25 @@ fn columns_come_only_from_declared_writes() {
         .reads("ghost.x", "X9.ghost", Lag::Lagged)
         .at(Pulse::Day, Phase::Polity)
         .stepping(reads_ghost);
+    // As an identity read (no `use` in its spec): refused by name.
+    let t = agreeing_specs(&[w.clone(), r.clone()]);
+    let Err(e) = register(vec![w.clone().boxed(), r.clone().boxed()], &t) else {
+        panic!("an identity read of an absent owner must be refused");
+    };
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [absent-owner] X2.r: reads ghost.x as an identity read from X9.ghost, which is not registered: a world that registers X2.r registers X9.ghost (05.1 §2 rule 2)"
+        ]
+    );
+    // As a rate read with its neutral: dropped, and the column is never created.
+    let r = r.uses("ghost.x", "rate", Some(-7));
     let t = agreeing_specs(&[w.clone(), r.clone()]);
     let reg = register(vec![w.boxed(), r.boxed()], &t).unwrap();
+    assert_eq!(reg.dropped_reads("X2.r"), [("ghost.x", -7)]);
     let mut engine = Engine::new(
         CALENDAR,
         1,
@@ -549,11 +578,7 @@ fn columns_come_only_from_declared_writes() {
         "the declared writes, empty; nothing else"
     );
     assert!(engine.tables().get("w.x").unwrap().is_empty());
-    let err = engine.advance_until(SimTime::EPOCH, |_, _| {}).unwrap_err();
-    assert_eq!(
-        err.to_string(),
-        "X2.r accesses ghost.x, which the world does not have (columns are created only from declared writes)"
-    );
+    engine.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
     assert!(
         engine.tables().get("ghost.x").is_none(),
         "nothing was created"

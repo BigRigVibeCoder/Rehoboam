@@ -23,11 +23,18 @@
 //! `u8 1 || x`; an entity is `u8 kind tag || u64 raw` (`rh_ids::EntityKind::tag`); a phase is
 //! `u8 index` (`Phase::index`); a time is its `i64` minutes; `list(x)` is `u32 count || x...`.
 //!
+//! **Tails** (`05.1` §2 rule 2; EVO-001 R15; `specs/chronicle/envelope_v0.md` §2). A timer's
+//! `cause` is written after its last field only when present, as `u8 1 || u64 id`, and decoded by
+//! the row's remaining length; a timer without one hashes exactly as before, so the hash golden
+//! stays v1. A queued command's event-typed payload fields (`[[applies]] payload` type `EventRef`)
+//! keep their position in `args`: the resolved id, or -1 for none (`05.1` v1.14); the decoder
+//! types them through the owner's spec ([`Registered::command`]).
+//!
 //! | Table | One row per | Row |
 //! |---|---|---|
 //! | `rh-core/agenda.meta` | (one row) | `u64 next_seq` |
-//! | `rh-core/agenda.timers` | heap entry, in key order | `i64 time, u8 phase, entity, u64 seq, u32 owner, u64 purpose, u32 kind, i64 payload, u8 tombstoned` |
-//! | `rh-core/engine.commands` | queued command: owners in name order, each queue in key order | `str owner, i64 tick, u8 phase, u64 person, u64 seq, str sender, opt(u64 cause), str kind, list(i64 args), opt(u64 draft)` |
+//! | `rh-core/agenda.timers` | heap entry, in key order | `i64 time, u8 phase, entity, u64 seq, u32 owner, u64 purpose, u32 kind, i64 payload, u8 tombstoned [, u8 1 ‖ u64 cause]` |
+//! | `rh-core/engine.commands` | queued command: owners in name order, each queue in key order | `str owner, i64 tick, u8 phase, u64 person, u64 seq, str sender, opt(u64 cause), str kind, list(i64 args), opt(u64 draft)`; an event-typed field of `args` is its resolved id, or -1 for none |
 //! | `rh-core/engine.epochs` | entity a material input touched, in entity order | `entity, u32 epoch` |
 //! | `rh-core/engine.inputs` | queued material input: instants in order, inputs in submission order | `i64 time, u32 index, list(entity scope)` |
 //! | `rh-core/engine.meta` | (one row) | `opt(i64 cursor), u32 timeline, u64 accepted_inputs, u64 command next_seq` |
@@ -46,14 +53,14 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use rh_core::agenda::{AgendaKey, AgendaState, Timer, TimerId};
-use rh_core::command::{Command, CommandQueuesState, QueuedCommand};
+use rh_core::command::{Arg, Command, CommandQueuesState, QueuedCommand};
 use rh_core::engine::MaterialInput;
 use rh_core::phase::Phase;
 use rh_core::register::Registered;
 use rh_core::state::EngineState;
 use rh_core::time::SimTime;
 use rh_core::world::WorldTables;
-use rh_events::{DraftRef, Event, EventLogState};
+use rh_events::{DraftRef, Event, EventLogState, EventRef};
 use rh_ids::{EntityKind, EntityRef, EventId, PersonId, PurposeId, SystemId, TimelineId};
 
 use crate::hash::{Plane, PlaneDigest, TableDigest};
@@ -158,6 +165,12 @@ fn timer_rows(agenda: &AgendaState) -> Vec<Vec<u8>> {
                 .u32(timer.kind)
                 .i64(timer.payload)
                 .u8(u8::from(tombstoned(key.seq)));
+            // The cause tail, only when present (R15: hash-neutral when empty).
+            if let Some(cause) = timer.cause.known() {
+                w.u8(1).u64(cause.to_raw());
+            } else if cfg!(feature = "mutant-cause-u8-zero") {
+                w.u8(0);
+            }
             w.0
         })
         .collect()
@@ -178,8 +191,15 @@ fn command_rows(commands: &CommandQueuesState) -> Vec<Vec<u8>> {
                 .str(queued.sender)
                 .opt_u64(queued.cause.map(EventId::to_raw))
                 .str(queued.command.kind)
-                .list_i64(&queued.command.args)
-                .opt_u64(queued.command.cause.map(|d| d.0 as u64));
+                .list_i64(
+                    &queued
+                        .command
+                        .args
+                        .iter()
+                        .map(|a| a.encoded())
+                        .collect::<Vec<_>>(),
+                )
+                .opt_u64(queued.cause_draft.map(|d| d.0 as u64));
             w.0
         })
         .collect()
@@ -397,6 +417,10 @@ impl<'a> R<'a> {
         let count = self.count()?;
         (0..count).map(|_| self.i64()).collect()
     }
+    fn at_end(&self) -> bool {
+        self.i == self.b.len()
+    }
+
     fn end(&self) -> Result<(), DecodeError> {
         if self.i == self.b.len() {
             Ok(())
@@ -506,14 +530,24 @@ impl Decoder<'_> {
                 entity: r.entity()?,
                 seq: r.u64()?,
             };
-            let timer = Timer {
+            let mut timer = Timer {
                 owner: SystemId::from_raw(r.u32()?),
                 purpose: PurposeId::from_raw(r.u64()?),
                 kind: r.u32()?,
                 payload: r.i64()?,
+                cause: EventRef::None,
             };
             if r.flag()? {
                 tombstones.push(TimerId::from_raw(key.seq));
+            }
+            // The cause tail (R15), present only when the timer has a cause.
+            if !r.at_end() {
+                if !r.flag()? {
+                    return Err(DecodeError(format!(
+                        "{AGENDA_TIMERS}: a cause tail must start with 1"
+                    )));
+                }
+                timer.cause = EventRef::Known(EventId::from_raw(r.u64()?));
             }
             r.end()?;
             entries.push((key, timer));
@@ -540,7 +574,19 @@ impl Decoder<'_> {
                 None
             };
             let kind = self.intern(ENGINE_COMMANDS, &r.str()?)?;
-            let args = r.list_i64()?;
+            let decl = self.registered.command(kind);
+            let args = r
+                .list_i64()?
+                .into_iter()
+                .enumerate()
+                .map(|(i, v)| match decl {
+                    Some(d) if d.is_event_field(i) => Arg::Event(match v {
+                        -1 => EventRef::None,
+                        id => EventRef::Known(EventId::from_raw(id.cast_unsigned())),
+                    }),
+                    _ => Arg::Int(v),
+                })
+                .collect();
             let draft = if r.flag()? {
                 Some(DraftRef(usize::try_from(r.u64()?).unwrap_or(usize::MAX)))
             } else {
@@ -553,11 +599,12 @@ impl Decoder<'_> {
                 seq,
                 sender,
                 cause,
+                cause_draft: draft,
                 command: Command {
                     kind,
                     person,
                     args,
-                    cause: draft,
+                    cause: cause.map_or(EventRef::None, EventRef::Known),
                 },
             };
             match queues.last_mut() {

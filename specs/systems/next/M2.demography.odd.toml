@@ -409,7 +409,6 @@ drained_by = "Day/Vital"
 key = "living"
 key_field = "victim"
 outcome = true
-sprint = "SPR-014"
 [[applies]]
 command = "Marry"
 payload = "{ a: PersonId, b: PersonId }"
@@ -418,7 +417,6 @@ drained_by = "Day/Vital"
 key = "living"
 key_field = "a"
 outcome = true
-sprint = "SPR-014"
 
 [[emits]]
 kind = "DEATH"
@@ -978,6 +976,11 @@ prototype = "specs/demography/selftest_m2_f1.py"   # births, partnering, househo
 # ----------------------------------------------------------------------------- amendments of the frozen slice (REV-SPR-015 R1)
 # Each record quotes the frozen text byte for byte, gives the new text (what this file now says there) and a reason;
 # lint_odd.py --next checks both texts against the two files and prints every amendment.
+[[amends]]
+of = "schedule.Day/Vital.steps.lifecycle"
+frozen = "lifecycle: the drain of M2's command queue (05.1 §2 rule 2; EVO-001, REV-EVO-001 R9 shape (b); drained_by Day/Vital; SPR-014): the inbox of ScheduleDeath and Marry is taken in (tick, phase, PersonId, seq) order, after the timers of the slot (the sender's own timer submitted each command in this instant's timer pass); rh-core has dropped each one whose key person was dead at the level's start (key = living, dropped{M2, kind, dead_key}; BCK-002 A-30); a ScheduleDeath is applied through apply_death (S12) with the command's cause, and dropped (dead) if its victim died earlier in this drain; a Marry writes person.spouse both ways, and is dropped (dead) if either party is dead (households and the marriage rows are SPR-015's, P1.3); the queue-age allowance is one day (A-31: the drain binds Day)"
+to = "lifecycle: the drain of M2's command queue ([algorithm.lifecycle_f1]; EVO-001, REV-EVO-001 R9 shape (b); drained_by Day/Vital): every ScheduleDeath and Marry in the inbox is applied now, through apply_death or apply_marry, after the timers of the slot (the sender's own timer submitted it in this instant's timer pass); a command for a dead key person is dropped and counted (BCK-002 A-30); the queue-age allowance is one day (A-31: the drain binds Day)"
+reason = "F1 applies Marry through apply_marry ([algorithm.partnering_f1] N7, households and the marriage rows) and ScheduleDeath through S12 as amended ([algorithm.lifecycle_f1]); frozen 0.2.3 (SPR-014) built the drain with the minimal Marry (person.spouse only)"
 [[amends]]
 of = "invariants.INV-M2-03.statement"
 frozen = "Death timers stay inside their month, on day starts: every pending M2 timer drawn at the Month pulse t_m (or re-drawn in its month) lies on a day start in [t_m + 1440, t_(m+1) - 1440], so none is pending at a Month pulse instant and none fires at one"
