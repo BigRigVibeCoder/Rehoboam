@@ -4,6 +4,7 @@ Refs: SPR-001 T-04; docs/09 V-INSP-03 (EVO-1), V-PLN-01 (DET-12); docs/13 §3; A
 """
 
 import re
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -903,27 +904,32 @@ def test_the_engine_set_covers_the_documented_lists() -> None:
 
 
 def test_the_deny_list_is_defined_once() -> None:
-    """One deny-list in one place (docs/13 §3).
+    """One deny-list in one place (docs/13 §3; G-3).
 
-    No other file of code or configuration names its entries, and lint_arch.py names each of them
-    exactly once.
+    No tracked file names any entry as a quoted string, except the one definition, its fixtures and
+    this file's tests of the rule, and lint_arch.py defines each entry exactly once. Every text file
+    the repository tracks is read (`git ls-files`), whatever its suffix.
     """
-    entries = [name for name in ENGINE_DENY_LIST if name not in {"image", "png", "gif", "warp"}]
     own = REPO / "bin" / "lint_arch.py"
     text = own.read_text(encoding="utf-8")
     for name in ENGINE_DENY_LIST:
         assert text.count(f'"{name}":') == 1, name
-    suffixes = {".py", ".sh", ".toml", ".yml", ".yaml", ".rs"}
-    for path in sorted(REPO.rglob("*")):
-        relative = path.relative_to(REPO).as_posix()
-        if (
-            not path.is_file()
-            or path.suffix not in suffixes
-            or path == own
-            or relative.startswith(("target/", ".git/", "python/.venv/", "tests/lint_fixtures/"))
-            or path == Path(__file__).resolve()
-        ):
+    tracked = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "-z"], capture_output=True, check=True
+    ).stdout.decode("utf-8")
+    exempt = {"bin/lint_arch.py", "python/tests/test_lint_arch.py"}
+    checked = 0
+    for relative in filter(None, tracked.split("\0")):
+        if relative in exempt or relative.startswith("tests/lint_fixtures/"):
             continue
-        body = path.read_text(encoding="utf-8", errors="replace")
-        for name in entries:
-            assert f'"{name}"' not in body, f"{relative} names deny-listed {name}: a second list?"
+        try:
+            body = (REPO / relative).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
+            continue  # binary files, or one deleted in the working tree
+        checked += 1
+        for name in ENGINE_DENY_LIST:
+            for quote in ('"', "'"):
+                assert f"{quote}{name}{quote}" not in body, (
+                    f"{relative} names deny-listed {name}: a second list?"
+                )
+    assert checked > 300, f"only {checked} tracked text files read"

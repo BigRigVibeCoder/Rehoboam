@@ -37,9 +37,9 @@ use super::q::Q16_16;
 
 /// A source of uniform `u64` draws: every value equally likely, draws independent.
 ///
-/// SPR-002's keyed RNG (`rh-ids`) will implement it (BCK-002 A-21), keyed by
-/// `(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)` with `k` advancing per
-/// draw.
+/// SPR-002's keyed stream, `rh_ids::RngStream`, implements it (BCK-002 A-21; SPR-011 T-01), keyed
+/// by `(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)` with `k` advancing
+/// per draw.
 /// Plane A must never implement it with an unkeyed RNG (V-DET-19).
 pub trait UniformDraw {
     /// Returns the next uniform draw.

@@ -8,8 +8,8 @@ agents: [coder, tester]
 tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-001, PRJ-002, SPR-007, SPR-008, SPR-012, SPR-013, ADR-0025, ADR-0026, ADR-0030, ADR-0031, ADR-0035]
 created: 2026-10-16
-updated: 2026-10-16
-version: 1.1.0
+updated: 2026-10-17
+version: 1.1.1
 ---
 
 > **BLUF:** Increment A of the walking skeleton (WP P1.0): the engine prerequisites the first real system needs. An engine-purity lint (A-14), a 32-bit probability type with keyed uniform draws (A-21), draws keyed by the entity's epoch (A-29, which regenerates the `smoke` baseline), ledger rows with the life-course log, and authored numbers compiled exactly into plane A. Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). The director approved P1.0 as one plan run as three sprints (ruling 1): this sprint, SPR-012 (`solo` lives and dies) and SPR-013 (the stream, the sifter, replay and rungs 1–2). Rulings 1–19 below bind all three and stay here, numbered as the specs and code already cite them ("SPR-011 ruling N"). Task numbers T-00 to T-13 are kept across the three sprints, so "SPR-011 T-05" in older text means T-05 of the plan, now in SPR-012.
@@ -112,27 +112,27 @@ For all three increments; "Here" names the task and, outside increment A, its sp
 #### T-00: Engine-purity lint (BCK-002 A-14)
 - **Deliverable:** Rule `engine-purity` in `bin/lint_arch.py`. One deny-list constant (media, HTTP-UI and LLM-client crates, as `docs/13` §3 lists), checked over the transitive normal and build dependencies of every engine crate. The engine set is the union of the lists in `docs/13` §3, `05.0` §6 and ADR-0035 §6, plus `rh-sys-*` and the new crates. Planted fixtures in `tests/lint_fixtures/`; Python tests; the gate inventory test updated.
 - **Acceptance:** V-INSP-05: zero violations on the workspace. A planted direct dependency on a deny-listed crate FAILS; a planted transitive one FAILS; a dev-dependency passes. A test proves the deny-list is defined once.
-- **Status:** [ ] not started
+- **Status:** [x] done: `bbbd973`; DEF-1, DEF-2 `f820447`; A-1, A-4 `ce35874`; A-5, G-3 in the review-fix push
 
 #### T-01: A finer probability type and keyed uniform draws (BCK-002 A-21; ruling 4)
 - **Deliverable:** `Prob32` in `rh_core::fixed`, with `draw_hits` and `chance` on it; `UniformDraw` for `rh_ids::RngStream`; a `StepCtx` helper that draws one keyed `u64` against a probability. `bin/gen_fixed_vectors.py` extended (exact rational reference) and its golden file regenerated.
 - **Acceptance:** Golden vectors bit-equal (`gen_fixed_vectors.py --check`). P(hit) = bits / 2³² exactly, by the reference. One draw is consumed per call whatever p is (CRN). Compile-fail controls: no implicit mix with `Q16_16`; no float conversion. V-DET-19 clean. Every existing ladder unchanged.
-- **Status:** [ ] not started
+- **Status:** [x] done: `279af09`
 
 #### T-02: Draws keyed by the entity's epoch (BCK-002 A-29)
 - **Deliverable:** `StepCtx::rng` and `StepCtx::stream` key every draw by the drawn entity's current epoch (ADR-0025; `05.1` §6 item 2). `ResampleCtx` is unchanged. The smoke baseline is regenerated with SPR-008's tools; the bisect report goes in the PR.
 - **Acceptance:** V-DET-14: after a scoped input, only entities in the scope draw differently, from the input's instant on; entities outside keep bit-equal draws (property test over random scopes). An entity at epoch 0 draws exactly as in P0. The bisect report puts smoke's first divergence at or after its first synthetic input, never earlier.
-- **Status:** [ ] not started
+- **Status:** [x] done: `ec4fbc5`, A-37 bench `0589a38` `[perf-baseline]`, smoke baseline `97f1aa5` `[C3]`; DEF-4 `c5d28bb`
 
 #### T-03: Ledger rows and the life-course log (ruling 5)
 - **Deliverable:** In `rh-core`: the ledger exists when `person.id` is registered. All `person.*` columns stay aligned and sorted by `person.id`. A compaction pass at the start of `Bookkeeping` removes every row with `person.alive = 0` from all `person.*` columns. `life_course.*` columns are append-only, and a row's exit fields are written once (a core check refuses anything else). Core invariants: alignment, order, and one open life-course entry per ledger row. Compaction removes rows from `person.*` columns that other systems own (`person.named` for T1, `person.house` and `person.vocation` for M7): this is a core-only exemption from single-writer ownership, and no `SystemModel` can obtain it. The life-course log keeps `mother` and `father` for everyone who ever entered, so kinship stays readable through the dead (REV-P1a NEW-1).
 - **Acceptance:** V-INV-01 subset as property tests on random small worlds: alignment; order; the living count equals the open entries; a closed entry is absent from the ledger. A death applied in `Vital` is gone before `Bookkeeping` hashes the same instant. V-DET-05: keyframe round-trip with a compaction inside the window. V-DET-01/02 on a stub world with deaths. The smoke ladder is unchanged. V-INV-04 positive control (REV-P1a MIN-9): a test system that removes a ledger row, or writes a `person.*` column it does not own, is refused at registration or at the step with a named error, while the core compaction of the same rows passes.
-- **Status:** [ ] not started
+- **Status:** [x] done: `3c88775`, fix `1d72e48`; DEF-3 `5edbc5e`; A-2, G-1, A-3 `a859273`
 
 #### T-04: Authored numbers into plane A (`05.5` §3.2; rulings 8, 9)
 - **Deliverable:** `rh_registry::WorldSpec` (plane-A types only) and `rh_manifest::compile(manifest, registry) -> WorldSpec`. Registry `defaults` are read (ruling 8). Exact decimal to fixed point, rounded half to even, never through `f64`; a value that does not fit is a load error. `rh-manifest` gains its edge to `rh-registry`; no plane-A crate depends on `rh-manifest`.
 - **Acceptance:** A property test against a Python `decimal` reference over random literals, halfway cases included, gives the same bits. Out-of-range and non-fitting literals are refused by name. The plane-A-closure lint is clean. `solo` and `uz_job` compile. V-WC-04 parity is unchanged.
-- **Status:** [ ] not started
+- **Status:** [x] done: `96ef61d`; G-2 `cae8547`
 
 ## Out of scope (explicit)
 - Increments B and C: SPR-012 (T-05 to T-08) and SPR-013 (T-09 to T-13).

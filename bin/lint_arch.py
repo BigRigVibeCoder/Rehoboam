@@ -296,7 +296,9 @@ UNSAFE_TOKEN = re.compile(r"\bunsafe\b")
 # BCK-002 A-14 (SPR-011 T-00). The engine crates: the union of the lists in docs/13 §3, 05.0 §6 and
 # ADR-0035 §6, planned ones included, and SPR-011's new rh-stream. Every crate named rh-sys-* or
 # rh-contract-*, and every crate whose effective plane is A, is an engine crate too, so a new
-# plane-A crate cannot be left out of the rule by forgetting to list it.
+# plane-A crate cannot be left out of the rule by forgetting to list it. rh-bench and rh-golden are
+# not engine crates, by design: they are tool crates that measure and replay the engine from outside
+# (SPR-009, SPR-008) and no engine crate depends on them; leaving them off is not a gap.
 ENGINE_CRATES = frozenset(
     {
         "rh-cli",
@@ -330,6 +332,7 @@ ENGINE_DENY_LIST = MappingProxyType(
         "cpal": "media (audio I/O)",
         "gif": "media (image codec)",
         "hound": "media (audio codec)",
+        "hyper": "HTTP (the base of web servers and clients not listed here)",
         "image": "media (images)",
         "jpeg-decoder": "media (image codec)",
         "kira": "media (audio engine)",
@@ -345,6 +348,7 @@ ENGINE_DENY_LIST = MappingProxyType(
         "tiktoken-rs": "LLM tokenizer",
         "tokenizers": "LLM tokenizer",
         "tower-http": "HTTP UI (web middleware)",
+        "tts": "TTS (text to speech; docs/13 §3)",
         "ureq": "HTTP client (LLM and web APIs)",
         "warp": "HTTP UI (web server framework)",
     }
