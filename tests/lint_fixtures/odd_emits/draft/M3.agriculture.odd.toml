@@ -22,9 +22,11 @@ not_yet = []
 [[emits]]
 kind = "NOT_A_VERB"
 when = "planted: not in the Registry [verbs]"
+roles = ["actor"]   # the envelope requires roles on a frozen spec (SPR-020; REV-SPR-020 R7); this case isolates the verb check (SPR-011 ruling 11)
 [[emits]]
 kind = "SUCCEED"
 when = "planted: the Registry gives SUCCEED to M7.dynasty"
+roles = ["actor"]   # the envelope requires roles on a frozen spec (SPR-020; REV-SPR-020 R7); this case isolates the verb check (SPR-011 ruling 11)
 
 [scales]
 spatial = "region"
