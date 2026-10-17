@@ -301,8 +301,25 @@ odd_next_control() {
       sed '0,/= "sha256:[0-9a-f]/s//= "sha256:x/' "$lock" > "$dir/amendments.lock.toml" || return 1
       grep -q 'sha256:x' "$dir/amendments.lock.toml" || { echo "control not planted: no digest found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
+    clean)
+      # REV-SPR-020 R26 (NIT-7): a next version that amends nothing (the frozen T1 as a draft, version bumped) lints
+      # and plants nothing in the lock; SPR-019's next M7 needs this path
+      sed -e 's/^status = "frozen"/status = "draft"/' -e 's/^spec_version = "0.3.3"/spec_version = "0.4.0"/' specs/systems/T1.minds.odd.toml > "$dir/T1.minds.odd.toml" || return 1
+      grep -q '^spec_version = "0.4.0"' "$dir/T1.minds.odd.toml" || { echo "control not rendered: T1 is not 0.3.3"; return 1; }
+      cp "$lock" "$dir/" || return 1
+      "$PY" -I specs/systems/lint_odd.py --next "$dir" ;;
     *) echo "odd_next_control: unknown case $1"; return 1 ;;
   esac
+}
+
+# lint_patterns bad-Registry control (REV-SPR-020 R22 NIT-3, R26 NIT-1): the Registry's `authority` domain rendered with a
+# relational attribute, an unknown owner and a bad column; the lint refuses the Registry by name, not by a traceback.
+bad_domains_control() {
+  local dir=target/rendered-fixtures/sifting
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  sed 's/^authority    = { attribute = "holds_title",    relational = false, owner = "M7.dynasty",  column = "title.holder" }/authority = { attribute = "is_successor", relational = false, owner = "M9.bogus", column = "x" }/' specs/manifest/registry_v0.toml > "$dir/registry_bad_domains.toml" || return 1
+  grep -q 'M9.bogus' "$dir/registry_bad_domains.toml" || { echo "control not planted: the authority domain line was not found"; return 1; }
+  "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml "$dir/registry_bad_domains.toml"
 }
 
 # M2 F1 reference control (SPR-015): the next-version M2 spec with one check value off by one; the exact reference
@@ -968,6 +985,7 @@ run "lint_odd next positive control: a next version that changes a frozen algori
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
 run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
+run "lint_odd next control: a next version with no amendment lints and plants nothing in the lock (REV-SPR-020 R26)" "pass:self-check (next of T1.minds): 24 planted changes rejected (0 of them by the amendments lock), 0 amendments recorded and locked" odd_next_control clean &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
 run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
@@ -977,6 +995,7 @@ run "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons 
 run "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)" "fail:STALE: tests/lint_fixtures/skeletons/smoke_stale/X3_smoke_vital.rs" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out tests/lint_fixtures/skeletons/smoke_stale --check &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)" "pass:PASS: 1 patterns linted." "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml &&
+run "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the Registry by name (REV-SPR-020 R22, R26)" "fail:FAIL: the Registry is refused; no pattern was linted." bad_domains_control &&
 run "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)" "fail:ERROR life_ends.e1: UNANCHORED state read" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
 run "Manifest: val_khor" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml &&

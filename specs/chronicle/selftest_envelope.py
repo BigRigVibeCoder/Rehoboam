@@ -66,7 +66,7 @@ MOTIVES = 9  # [motive_edges] ids 0..8
 T1_VERBS = {BREAK, FEUD, REVENGE}  # the acts that carry a stress snapshot and a motive edge
 SIM, ORACLE = 0, 3  # event.origin codes; an OracleMove input maps to oracle (envelope_v0.md §2)
 INPUT_EVERY_YEARS = 7  # the smoke world's cadence: one material input every seven years
-HOPS = 3  # the input's consequence chain: a timer fire, its timer's fire, its command's drain
+HOPS = 4  # an input's chain: a timer fire, its timer, its command's drain, the drain's own command
 VERB_WEIGHTS = {DEATH: 25, BIRTH: 30, MARRIAGE: 10, SUCCEED: 10, BREAK: 10, FEUD: 10, REVENGE: 5}
 REFUSAL = (
     0.08  # share of BIRTH drafts the admission rule refuses (a P1.11 world; P1a tells every draft)
@@ -98,6 +98,9 @@ class Chronicle:
     )  # tl, place, value, from, cause
     admitted: set[int] = field(default_factory=set)
     hops: list[tuple[int, int]] = field(default_factory=list)  # (cause, effect) of one job
+    expected: dict[int, int] = field(
+        default_factory=dict
+    )  # chain event -> the origin it must carry
     inputs: int = 0
     at_emission: dict[tuple[int, int], int] = field(
         default_factory=dict
@@ -178,14 +181,17 @@ def _emit(rnd: random.Random, chron: Chronicle, tick: int, control: Control) -> 
 
 
 def _hop(chron: Chronicle, tick: int, origin: int, cause: int | None) -> int:
-    """One mechanical consequence of a job, under the job's origin (envelope_v0.md §2, R14).
+    """One mechanical consequence of a job, under the job's origin (envelope_v0.md §2, R14, R24).
 
     A DEATH triggered by the previous hop: every timer, command and draft a job creates carries
-    the job's origin, so the chain keeps the input's.
+    the job's origin, a drain's own commands and timers carry the drained command's, so the
+    chain keeps the input's. The expected origin is recorded apart from the stamped one, so a
+    stamp that loses it fails check 7 (R26).
     """
     eid = chron.next_id
     chron.next_id += 1
     chron.admitted.add(eid)
+    chron.expected[eid] = ORACLE
     row = (0, eid, tick, DEATH, 1 << DEATH, eid % PLACES, 0, 128, 0, origin, None, None)
     chron.events.append(row)
     actor, target = eid % PERSONS, (eid + 1) % PERSONS
@@ -360,7 +366,18 @@ def check_provenance(con: duckdb.DuckDBPyConnection) -> bool:
 
 
 def check_origin(con: duckdb.DuckDBPyConnection, chron: Chronicle) -> bool:
-    """Check 7: an input's origin survives every hop (envelope_v0.md §2; 05.2 §4.0 item 4; R14)."""
+    """Check 7: an input's origin survives every hop (envelope_v0.md §2; 05.2 §4.0 item 4; R14).
+
+    The hops are a timer fire, the timer it inserts, the command that timer submits and the
+    command the drain itself submits (R24); each event's origin is compared with the origin the
+    generator expects of it, not with its neighbour's alone (R26). The engine test that owns the
+    property is the sprint's `origin_through_hops` in rh-core (envelope_v0.md §12).
+    """
+    wrong = sum(
+        1
+        for row in con.execute("SELECT event_id, origin FROM event").fetchall()
+        if int(row[0]) in chron.expected and int(row[1]) != chron.expected[int(row[0])]
+    )
     lost = count(
         con,
         "SELECT count(*) FROM hop h JOIN event c ON c.event_id = h.cause_id "
@@ -373,9 +390,10 @@ def check_origin(con: duckdb.DuckDBPyConnection, chron: Chronicle) -> bool:
     )
     print(
         f"   {chron.inputs} inputs, {len(chron.hops)} hops ({HOPS - 1} per input); "
-        f"{lost} hops lost the origin, {sim} chain events stamped sim"
+        f"{wrong} chain events differ from the expected origin, {lost} hops lost it, "
+        f"{sim} stamped sim"
     )
-    return chron.inputs > 0 and lost == 0 and sim == 0
+    return chron.inputs > 0 and wrong == 0 and lost == 0 and sim == 0
 
 
 @dataclass

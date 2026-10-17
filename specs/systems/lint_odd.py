@@ -15,7 +15,8 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     each of its `snapshots` names a Registry attribute, the role (`of`) it is read of (or "event"), a `partner` role for
     a two-argument attribute, and the owned or read column (`from`) it is filled from, whose type matches the
     attribute's; a `cause_column` on an [[owns]] state column names an owned `event_ref` column of the same entity
-    (SAGA-15; an Option<EventId>, none by default, so no id is reserved: REV-SPR-020 R17).
+    (SAGA-15; an Option<EventId>, none by default, so no id is reserved: REV-SPR-020 R17); an event_ref column
+    declares no `default` (R26).
     A missing `roles` is an error on a frozen spec and a warning on a draft; a wrong value is always an error
     (REV-SPR-020 R7). `of = "witness"` is refused (a witness is many); a repeated motive or snapshot key is an error;
     an `algorithm.<name>` source declares its `type`, checked like a column's; a foreign enum source's codes are
@@ -1083,6 +1084,8 @@ def lint_envelope(p, s, reg, enum_names, errs, warns, frozen=False):
     algorithms = set(s.get("algorithm", {}))
     all_types = dict(ALL_OWNED_TYPES)
     for o in s.get("owns", []):
+        if o.get("type") == "event_ref" and "default" in o:
+            errs.append(f"{p}: {o.get('column')} is an event_ref, whose default is none by definition: drop `default` (REV-SPR-020 R26)")
         cc = o.get("cause_column")
         if cc is None:
             continue
@@ -1491,8 +1494,9 @@ def main() -> int:
             assert any("is not in" in e and f"steps.{step_label(target)}" in e for e in pe), pe
             assert any("no longer makes" in e and meaning_of in e for e in pe), pe
             lock_probes += 1
-        for probe_lock, needle in (({**want, next(iter(want)): "sha256:planted"}, "changed its text since"),
-                                   ({k: v for k, v in list(want.items())[1:]}, "is not in")):
+        # REV-SPR-020 R26 (NIT-7): a next version with no amendment has nothing to plant in the lock
+        for probe_lock, needle in ((({**want, next(iter(want)): "sha256:planted"}, "changed its text since"),
+                                    ({k: v for k, v in list(want.items())[1:]}, "is not in")) if want else ()):
             pe = []
             compare_lock(sid, want, probe_lock, nf.name, pe)
             assert any(needle in e for e in pe), (needle, pe)

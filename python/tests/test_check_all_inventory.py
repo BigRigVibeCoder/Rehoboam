@@ -509,6 +509,8 @@ REQUIRED_GATES = (
     "(EVO-001)",
     "lint_odd neutral positive control: an identity read carrying a neutral must FAIL "
     "(REV-EVO-001 R12)",
+    "lint_odd next control: a next version with no amendment lints and plants nothing in the lock "
+    "(REV-SPR-020 R26)",
     "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound "
     "must FAIL (SPR-015)",
     "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)",
@@ -519,6 +521,8 @@ REQUIRED_GATES = (
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
+    "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the Registry "
+    "by name (REV-SPR-020 R22, R26)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",

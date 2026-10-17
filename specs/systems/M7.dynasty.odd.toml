@@ -291,9 +291,9 @@ fixed_point = false
 [[owns]]
 column = "claim.cause_event"
 entity = "claim"
-type = "u64"
+type = "event_ref"
 plane = "A"
-meaning = "EventId of the SUCCEED or DEPOSED event that created it (provenance)"
+meaning = "The SUCCEED or DEPOSED event that created it (provenance), an Option<EventId> set in the same step as the event through ctx.set_cause with its DraftRef (envelope_v0.md §7, REV-SPR-020 R25)"
 fixed_point = false
 [[owns]]
 column = "claim.rank"

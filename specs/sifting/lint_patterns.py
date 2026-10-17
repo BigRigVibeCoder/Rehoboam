@@ -137,6 +137,8 @@ def lint(patterns: dict, reg: dict, warns: list[str] | None = None) -> list[str]
         _unknown(set(p.get("emit", {})), EMIT_KEYS, f"{pid}.emit", errs)
         anchors: dict[str, str] = {}                     # role variable -> the clause that anchors its domain read (R16)
         for c in p.get("clause", []):
+            if "match_event" in c:
+                continue
             for k in sorted(anchor_keys & set(c)):
                 anchors.setdefault(str(c[k]), str(c.get("bind")))
         for var, spec_role in p.get("roles", {}).items():
@@ -225,6 +227,8 @@ def lint(patterns: dict, reg: dict, warns: list[str] | None = None) -> list[str]
             selectors = [k for k in ("act", "verb", "match_event") if k in c]
             if len(selectors) != 1:
                 errs.append(f"{where}: exactly one of act/verb/match_event required (got {selectors})")
+            if "match_event" in c and cast_keys & set(c):   # a match has bindings, not a cast (REV-SPR-020 R26)
+                errs.append(f"{where}: a match_event clause has no cast; it imports the match's bindings, so drop {sorted(cast_keys & set(c))}")
             for a in c.get("act", []):
                 if a not in acts:
                     errs.append(f"{where}: act class '{a}' not in Registry")
@@ -282,6 +286,11 @@ def main(argv: list[str]) -> int:
     reg = tomllib.loads(Path(argv[2]).read_text(encoding="utf-8"))
     warns: list[str] = []
     errs = lint(pats, reg, warns)
+    if errs and all(e.startswith("Registry") for e in errs):   # the Registry itself is refused; no self-check runs on it (R26)
+        for e in errs:
+            print("ERROR", e)
+        print("FAIL: the Registry is refused; no pattern was linted.")
+        return 1
     # Self-checks: the draft's rule and a misspelled key must both be rejected.
     draft = {"pattern": [{"id": "draft_tyrant_cleansing_order", "roles": {"S": "authority", "H": "successor"},
                           "selection": "latest", "on_complete": "clear_binding",
@@ -311,6 +320,10 @@ def main(argv: list[str]) -> int:
     unbound = {"pattern": [{"id": "unbound", "roles": {"A": "authority", "W": "kin of A", "M": "any"},
                             "selection": "latest", "on_complete": "clear_binding", "firing_budget": {"per_century_per_100k": 1},
                             "clause": [{"bind": "e1", "act": ["harm"], "actor": "A", "witness": "W", "target": "M"}]}]}
+    # REV-SPR-020 R26: a cast key on a match_event clause is refused, so a match never anchors a domain
+    cast_on_match = {"pattern": [{"id": "cast_on_match", "roles": {"A": "authority"}, "selection": "latest", "on_complete": "clear_binding",
+                                  "firing_budget": {"per_century_per_100k": 1},
+                                  "clause": [{"bind": "e1", "match_event": "successor_purged", "actor": "A"}]}]}
     # REV-SPR-020 R22 NIT-3: a [role_domains] entry of the wrong shape is refused with the Registry
     bad_reg = {**reg, "role_domains": {**reg["role_domains"],
                                        "authority": {"attribute": "is_successor", "relational": False, "owner": "M9.bogus", "column": "x"}}}
@@ -319,6 +332,9 @@ def main(argv: list[str]) -> int:
     dom_warns: list[str] = []
     dom_errs = lint(domain, reg, dom_warns)
     u_errs, r_errs = lint(unbound, reg), lint(domain, bad_reg)
+    c_errs = lint(cast_on_match, reg)
+    assert any("a match_event clause has no cast" in e for e in c_errs), c_errs
+    assert any("A='authority' has a domain, but no clause binds A" in e for e in c_errs), c_errs
     assert any("W='kin' has a domain, but no clause binds W through actor, target or instrument" in e for e in u_errs), u_errs
     assert not any("A='authority' has a domain" in e for e in u_errs), u_errs
     assert any("takes 2 argument(s); relational = false needs 1" in e for e in r_errs), r_errs

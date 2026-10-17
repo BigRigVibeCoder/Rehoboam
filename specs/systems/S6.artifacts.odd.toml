@@ -40,16 +40,16 @@ fixed_point = false
 [[owns]]
 column = "artifact.origin_event"
 entity = "artifact"
-type = "u64"
+type = "event_ref"
 plane = "A"
-meaning = "EventId of the artifact's origin: its placement at world creation (manifest, journaled), the catalyst input that introduced it, or ARTIFACT_FORGED. No event may reference the artifact before it"
+meaning = "The artifact's origin event, an Option<EventId>: ARTIFACT_FORGED, set in the forging step through ctx.set_cause with the draft's DraftRef (envelope_v0.md §7, REV-SPR-020 R25); none for a placement at world creation (manifest, journaled) or a catalyst input, which are inputs, not events. No event may reference the artifact before it"
 fixed_point = false
 [[owns]]
 column = "artifact.chain_head"
 entity = "artifact"
-type = "u64"
+type = "event_ref"
 plane = "A"
-meaning = "EventId of the latest event in its bearer chain (forged, passed, found, used, destroyed); each new chain event links to the previous one by a contingent causal edge, so the chain is unbroken and readable backwards"
+meaning = "The latest event in its bearer chain (forged, passed, found, used, destroyed), an Option<EventId> set in the same step as the event through ctx.set_cause with its DraftRef (envelope_v0.md §7, REV-SPR-020 R25); each new chain event links to the previous one by a contingent causal edge, so the chain is unbroken and readable backwards"
 fixed_point = false
 [[owns]]
 column = "artifact.kind"
