@@ -14,7 +14,7 @@ version: 1.0.0
 
 > **BLUF:** The gate does what SPR-009 and the Architect's rulings say, and after the Developer's two fix commits every defect but one is closed. `bin/check_all.sh` is green on clean archives of all three heads I saw: `874a302` (194 of 194, 542 s), `8d6c51c` (194, 437 s) and `46f0f59` (194, 386 s). The instruction-count gate passes 10.00% and fails 10.01%; a real measured +4.55% and +7.46% slowdown pass and +10.92% and +12.92% fail; a 30% speed-up passes and never rewrites the baseline; runs in one checkout, under `taskset`, with ASLR off, and from checkout paths of 2, 81, 83 and 106 characters agree within 42 instructions (the band is 64). The R-8 band, the `[perf-baseline]` title and reason rules, R-7 (arena containment, exclusion, exhaustion) and R-9 behave as ruled. A hostile observer (clock reads, id-dependent sleeps, allocation, thread spawns, attach and detach mid-run) changes no monthly `state_hash` at 1, 2, 4 and 8 threads, and no clock API is reachable from plane A by name or through `unsafe`. **Four defects:** DEF-1 (medium) a panicking observer corrupted the engine silently, fixed in `8d6c51c` and re-verified; DEF-2 (medium-low) nothing pinned the content of an observer notice, fixed in `46f0f59` and re-verified; DEF-4 (low) the allocator self-test could not see `alloc_zeroed`, fixed in `46f0f59` and re-verified; **DEF-3 (low) `wall_trend.py check` passes a `nan` median, still open on `46f0f59`.** **Mutation:** of 35 mutants of the gate, the observer and the CI workflow, 18 turned the checks red at `874a302` and 17 survived; at `46f0f59` 27 are red and 8 survive (the six CI-workflow edits, one meta-level expectation in a control, one immaterial boundary in the allocator). **Twelve contract gaps**, none blocking; GAP-1 (the workflow does not re-run when a PR title is edited) is the one I would fix before merge. T-03 (vitals) and T-05's per-tick baseline are out of scope at these heads by the Architect's instruction; T-04's machines were not available.
 
-> **Phase 2 BLUF (§7, head `c29787c`):** the merge of main, T-03 vitals and T-05 hold, and the phase-1 fixes are in, but **`c29787c` is red on GitHub** (DEF-5: one pytest test reads `RH_EVENT`, which the workflow sets; it passes on a developer's machine and fails on all three CI event shapes) and its PR tier needs about 17 min 40 s, **over the 15-minute criterion** (V-PERF-04). The Developer's `ded5f7f` (two parallel jobs, 11 min) turns CI green; I re-ran only its pytest. One more defect (DEF-6, low), six contract gaps, and 13 of 28 new mutants survive, most of them in the vitals timing logic and the allocation gate's branches.
+> **Phase 2 BLUF (§7, head `c29787c`):** the merge of main, T-03 vitals and T-05 hold, and the phase-1 fixes are in, but **`c29787c` is red on GitHub** (DEF-5: one pytest test reads `RH_EVENT`, which the workflow sets; it passes on a developer's machine and fails on all three CI event shapes) and its PR tier needs about 17 min 40 s, **over the 15-minute criterion** (V-PERF-04). The Developer's `ded5f7f` (two parallel jobs, 11 min) turns CI green; §8 re-verifies `ded5f7f` and `a4b78cb` in full: both are green, the split holds, DEF-5 and DEF-6 are closed. One more defect (DEF-6, low), six contract gaps, and 13 of 28 new mutants survive, most of them in the vitals timing logic and the allocation gate's branches.
 
 Tested commit: `874a30271da9c22a12e14775a011379e9f02263f` on `sprint/SPR-009-benchmarks` (PR #34), five SPR-009 commits (`d549bf8`, `671dbe6`, `b35ac48`, `82bdddf`, `874a302`) on top of `4ac588d`. During the run the Developer pushed two commits: `8d6c51c` (the DEF-1 fix, four files in `rh-core` and `rh-snapshot`) and `46f0f59` (DEF-2 and DEF-4 tests and the survivors of my first mutation round, in `observer.rs`, `test_perf_gate.py` and `alloc_budget.rs`; no gate code changed). Each defect was re-verified on the commit that fixes it, `check_all.sh` was run whole on all three heads, and the mutants that had survived were re-run on `46f0f59` (§4). This file is committed on top of `46f0f59`; every other result is from `874a302`, which the two later commits change only in the observer and in tests. The probe plan was written from the contracts before the branch was opened (SPR-009 v1.5.0 with its six rulings, `docs/08` §9, `docs/09` V-PERF-04, V-PERF-11, V-DET-07, GOV-003 §2 and §5, GOV-006, `docs/13` §4.2–4.5); the Architect's later rulings R-7, R-8, R-9, 7 and 8 and deviation 3 were applied when the head arrived. All probing ran on `git archive` copies of the SHA, each with its own `CARGO_TARGET_DIR`; the repository tree was only read. Tools: valgrind 3.22.0, cargo-nextest 0.9.148, cargo-deny 0.20.2, iai-callgrind-runner 0.16.1, rustc 1.97.0 (pinned), glibc 2.39, a 4-core Xeon 2.1 GHz with BMI2, AVX2 and AVX-512. Probes are in the scratchpad (`probe_plan.md`, `mutate.py`, `mkperf.py`, `tester_obs.rs`, `tester_alloc.rs`); nothing but this file is committed. The Tester runs on a model different from the Developer's (GOV-005 §4.2); which one is not recorded here by instruction.
 
@@ -335,3 +335,63 @@ Method as in §4, on `c29787c`, with the release build of `rh-cli` added to the 
 - A cold-cache hosted run: the only hosted timings are those above.
 - The nightly golden tier, the cross-machine procedure, peak RSS, a second CPU or glibc, and T-04.
 - The full `check_all` under each mutant (a 41-check chain judged them).
+
+## 8. The delta: `ded5f7f` (review of `c29787c`) and `a4b78cb` (answer to §7)
+
+Method as in §7: a `git archive` with history of each commit, a cold target directory, this 4-core sandbox, the pull-request environment variables of the workflow (`RH_EVENT=pull_request`, `RH_PR_TITLE` ending `[C1] [perf-baseline]`, `RH_BASELINE_BASE=origin/main`, `GITHUB_ACTIONS=true`). The two parts of the chain ran side by side, as CI's two jobs do.
+
+### 8.1 Verdicts
+
+| Item | `ded5f7f` | `a4b78cb` |
+|---|---|---|
+| `check_all.sh --part core` | **PASS**, 218 checks, 511 s | **PASS**, 218 checks, 476 s |
+| `check_all.sh --part golden` | **PASS**, 53 checks, 568 s | **PASS**, 53 checks, 536 s |
+| GitHub CI | run 38977023421 green: golden job 10 min 54 s, core job 9 min 55 s, 11 min 02 s to completion | run 38982157531 green in 6 min 40 s (caches warm) |
+| Every gate runs on every PR, once | **Yes**, §8.2 (with GAP-19) | same |
+| DEF-5 (CI red) | **closed**: 487 pytest pass with no CI variables, as pull request, push, `workflow_dispatch` and with every variable set | closed |
+| DEF-6 (pace truncated) | open | **closed**: `--years 1`, 2 and 3 print 15.7, 15.7 and 15.9 sim-years/s (63, 126 and 188 ms); V8 (the truncation back) fails a test |
+| V-PERF-04, per-PR ≤ 15 min | met on the hosted run (11 min 02 s); no cold-cache figure | met (6 min 40 s warm; 8 min 56 s for the slower part here) |
+
+### 8.2 The CI split
+
+- **Inventory.** The two reports hold 218 + 53 = 271 checks against 265 at `c29787c`; no check appears in both parts; every old gate is present. What changed: `Required tools present` is one per part; the nextest run is renamed and leaves out the by-name binaries (43 s instead of 135 s); the 1,000-year N-thread golden run now carries `--vitals` and the standalone T-03 gate is gone (its ladder is compared with the baseline and with the 1-thread ladder); six checks are new (the hostile-variables pytest, a per-part verdict pair, the typo control of the by-name list, the allocation toolchain control, the PR tag-group control). The five `||` self-test controls are in the core report.
+- **Verdict per part.** Each report states its part (`Verdict: PASS (218 checks, part core)`) and carries a SKIP row for the other; the self-test pair proves `--part core` passes while a golden-part gate fails, and `--part golden` fails at its own failing gate. `--part x` for any other value exits 2.
+- **Each test binary runs once.** A by-name entry that no gate runs, a gate that runs a binary not listed, a run line before `part core`, and a bogus part name all fail the inventory tests. **GAP-20:** the test counts the V-DET-12 positive control, which runs one filtered test of `agenda_events` and must fail, as running the whole binary, so deleting `--test agenda_events` from the passing by-name gate escapes pytest. In a real run the gate's output marker (`V-DET-12: golden event log of 196 events checked`) still fails it.
+- **GAP-19 (medium): nothing ties `ci.yml` to the parts.** I changed the workflow one edit at a time and ran the 487 tests: `part: [core, golden]` → `[core]`, and both jobs running `--part core`, each pass every test. Either edit makes the golden part (the golden runs, the performance gates, the vitals, the allocation budget) vanish from CI with no red signal. Recommendation: a test that reads the matrix and the `--part` argument of `ci.yml` and asserts the set equals the parts of `check_all.sh`; or a closing job (`needs` both) that downloads both reports and requires one `PASS (… part core)` and one `PASS (… part golden)`. Confidence: high. The other workflow edits I tried (fail-fast, artifact name, concurrency group, `RH_EVENT` back to the old expression) are silent too, but harmless or loud in a real run.
+
+### 8.3 The other fixes of `ded5f7f`
+
+| Fix | Result |
+|---|---|
+| PR title: `[perf-baseline]` in the trailing tag group | `x [perf-baseline]`, `x [perf-baseline] [C1]`, `x [C1] [perf-baseline]` pass; `[perf-baseline] x`, `x [perf-baseline] (#3)`, `[PERF-BASELINE]` and no tag fail. |
+| Unknown event inside Actions | With `GITHUB_ACTIONS=true`, `RH_EVENT` = `schedule`, `local` or empty is an error naming the three it knows; `pull_request`, `push`, `workflow_dispatch` pass. |
+| Allocation baseline toolchain lines | A changed `libc`, `llvm` or `rustc` line, or the lines missing, gives exit 3 "toolchain changed: re-baseline required"; an extra allocation gives exit 1 OVER BUDGET; with both, the toolchain wins (as R-9 does for instructions). |
+| Observer error text without the worker | A panic at the second job of a level (index 1) on the smoke world: the same text, artifact (`observer`, tick 0) and state hash at 1, 2, 4 and 8 threads. |
+| `lint_arch` and a checkout under a directory named `target` | Flagged as it should be; a violation only inside the crate's own `target/` is ignored. **GAP-21:** the skip matches any path component named `target` below the crate, so a Rust module `src/target/alloc.rs` holding `#[global_allocator]` is not seen (0 violations). `lint_forbidden` skips only the first component. |
+| Push concurrency group per SHA, real event name | Read, not run (a hosted behaviour). |
+
+### 8.4 The answer to §7 (`a4b78cb`)
+
+- **GAP-13 (vitals timing untested): closed.** `Timing::with_clock` injects the clock; scripted notice sequences at one and two workers assert the tip, instants, parallel time, serial share, per-system times and the line. Of my seven vitals mutants, V1 to V9 now fail a test.
+- **GAP-15 (allocation comparison branches): closed.** A2, A3, A4, A5 and the new A10 (toolchain change not noticed) fail pytest. G3 (the no-base push) and D4 (0 samples) fail pytest too.
+- **GAP-18 (cheap checks last): closed.** pytest is check 20 of 218 in the core part, 12 s in, before any Rust build; an inventory test pins the order.
+- **GAP-17:** `worlds/smoke/README.md` says never to squash-merge a C3 PR (read).
+- **Still open:** DEF-1 to DEF-6 are closed; GAP-14 (what "serial fraction" measures) and GAP-16 (signals the vitals do not carry) are open; the older residuals of §7.5 are unchanged.
+
+### 8.5 Mutation matrix of `a4b78cb`
+
+25 mutants plus the unmutated control (green), by the reduced chain, which now fails fast: a pytest failure shows in 8 to 10 s.
+
+| Result | Mutants |
+|---|---|
+| red by a test (19) | V1, V2, V3, V4, V5, V6, V7, V8, V9 (`rh-golden` unit tests); A2, A3, A4, A5, A10, G3, D4 (pytest); T1 unknown Actions event accepted, T2 PR tag anywhere in the title, T3 `lint_arch` skipping any `target` component below a checkout (pytest) |
+| red by a lint only (1) | V10 `wall: last` (the unused `first` fails clippy; it does not fail a test) |
+| **green (5)** | V10b `wall = last - first/2`; V11 a level start overwritten only when none is open; T4 the observer text names the worker again; C2; R4 |
+
+- **GAP-22:** the scripted clock starts at 0, so a mistake of origin between absolute and relative readings is invisible (V10b). Start the script at a non-zero time. V11 is probably equivalent (levels never nest). T4 is the thread-independence of the error text: the suite does not pin it. C2 and R4 are the meta-level and immaterial survivors of §4.
+
+### 8.6 What was not run in this phase
+
+- A cold-cache hosted run of either commit. The hosted figures are with restored caches (the rust-cache step took 1 s).
+- The per-SHA push concurrency group and the real-event-name change, which only a hosted push shows.
+- The 82-run allocation repeatability of §7.4 on these commits: the budget file gained only its toolchain lines and its counts are unchanged, and the allocation gate passed in the golden-part run of each.
