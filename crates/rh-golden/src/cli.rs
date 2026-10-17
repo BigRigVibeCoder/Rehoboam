@@ -151,6 +151,7 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--ladder" => {
                 args.rung = RungKind::from_name(value)
                     .ok_or_else(|| bad("--ladder is yearly or monthly"))?;
+                args.rung_set = true;
             }
             "--out" => out = Some(PathBuf::from(value)),
             "--journal" => journal = Some(PathBuf::from(value)),
@@ -298,7 +299,7 @@ pub fn run_world_live(
                     println!(
                         "{world}: {} {} rungs to year {} at {} thread(s){last}; ladder {}",
                         ladder.rungs.len(),
-                        args.rung.name(),
+                        ladder.header.rung.name(),
                         args.years,
                         args.threads,
                         args.out.display()

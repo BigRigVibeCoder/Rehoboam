@@ -81,6 +81,12 @@ pub enum Stall {
         /// The tick.
         tick: i64,
     },
+    /// During a new run directory's creation, after step `step` (`create:<n>`; BCK-002 A-58):
+    /// 1 the directory, 2 the writer's lock, 3 the journal, 4 the ladder, 5 `run.toml`.
+    Create {
+        /// The step.
+        step: u8,
+    },
     /// Both at once (`seal:<year>:<n>+mid:<tick>`; SPR-026 T-05): the seal thread blocks inside
     /// a seal while the host thread blocks mid-year, so a kill there is mid-year with a seal in
     /// flight (a live edge's run only, where the seal is off the host thread).
@@ -115,6 +121,9 @@ impl Stall {
             ["sealed", y] => Some(Self::Sealed {
                 year: y.parse().ok()?,
             }),
+            ["create", n] => Some(Self::Create {
+                step: n.parse().ok()?,
+            }),
             ["mid", t] => Some(Self::Mid {
                 tick: t.parse().ok()?,
             }),
@@ -132,7 +141,7 @@ impl Hook {
         clippy::infinite_loop,
         reason = "a test hook: it blocks until the test kills the process"
     )]
-    fn stall(what: &str) -> ! {
+    pub(crate) fn stall(what: &str) -> ! {
         println!("STALL {what}");
         let _ = std::io::stdout().flush();
         loop {

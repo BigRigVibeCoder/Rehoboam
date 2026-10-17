@@ -137,6 +137,9 @@ pub struct RunArgs {
     pub threads: usize,
     /// Rung kind.
     pub rung: RungKind,
+    /// Whether `--ladder` was given (a resumed run directory's rung is otherwise its `run.toml`'s;
+    /// BCK-002 A-58, VER-SPR-013-TEST GAP-8).
+    pub rung_set: bool,
     /// Where the ladder is written.
     pub out: PathBuf,
     /// The input journal: created by a full run (replacing any file there), read by a resumed one.
@@ -195,6 +198,7 @@ impl RunArgs {
             years,
             threads,
             rung,
+            rung_set: false,
             out: out.to_path_buf(),
             journal: out.with_extension("journal.sqlite"),
             until: None,
@@ -362,6 +366,18 @@ pub fn history(seed: u64) -> History {
 /// [`Error`] naming the first check that fails.
 pub(crate) fn open_journal(path: &Path, world: &Setup) -> Result<Replay, Error> {
     if wal_has_rows(path) {
+        // BCK-002 A-58: a write-ahead log is also what a running writer leaves; say which.
+        let dir = path.parent().unwrap_or_else(|| Path::new("."));
+        let running =
+            dir.join(crate::stream::WRITER_LOCK).is_file() && !crate::stream::writer_gone(dir);
+        if running {
+            return Err(Error(format!(
+                "journal: {} is being written: the run's writer is still running (it holds {}). \
+                 Replay it once the run has ended",
+                path.display(),
+                dir.join(crate::stream::WRITER_LOCK).display()
+            )));
+        }
         return Err(Error(format!(
             "journal: {} still has a write-ahead log: the run was killed and not resumed. Resume \
              it first (rh-cli run --resume), which folds the log in (REV-SPR-013 MAJ-3)",
@@ -527,6 +543,34 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
 )]
 pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error> {
     refuse_mutants()?;
+    // BCK-002 A-58 (GAP-8): a resumed run directory's rung is the one its run.toml records; a
+    // different --ladder is refused, and none is needed.
+    let resolved;
+    let recorded = match (&args.resume, &args.run_dir) {
+        (Some(_), Some(d)) => RunToml::read(d)
+            .ok()
+            .and_then(|t| t.rung)
+            .and_then(|r| crate::ladder::RungKind::from_name(&r)),
+        _ => None,
+    };
+    let args = match recorded {
+        Some(r) if args.rung_set && r != args.rung => {
+            return Err(Error(format!(
+                "--ladder {} conflicts with the run directory's rung, {} (run.toml): a resume \
+                 keeps its run's ladder; nothing was written",
+                args.rung.name(),
+                r.name()
+            )));
+        }
+        Some(r) => {
+            resolved = RunArgs {
+                rung: r,
+                ..args.clone()
+            };
+            &resolved
+        }
+        None => args,
+    };
     let smoke = args.world == SMOKE;
     if args.leak_thread && !smoke {
         return Err(Error(format!(
@@ -635,11 +679,26 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
         std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
     }
     // The writer's lock, held until the run returns (a tail --wait sees it released).
+    let creating = run_dir.is_some() && args.resume.is_none();
+    let step = |n: u8| {
+        if creating && args.stall == Some(Stall::Create { step: n }) {
+            Hook::stall(&format!("create step {n}"));
+        }
+    };
+    step(1);
     let _writer_lock = run_dir
         .as_ref()
         .map(|d| crate::stream::lock_writer(&d.0))
         .transpose()?;
+    step(2);
+    // BCK-002 A-58 (VER-SPR-013-TEST DEF-3): run.toml is the last file a new run creates, so a
+    // directory with a journal or a ladder but no run.toml is a creation killed before it ended:
+    // under the writer's lock, its leftovers are removed and the run is created afresh.
+    if let (Some(dir), true, false) = (&run_dir, creating, args.replay) {
+        remove_creation_leftovers(dir)?;
+    }
     let (mut engine, journal, identity, rows) = start(args, &world, &registered)?;
+    step(3);
     // SPR-009 T-03: the host's clock-free observer; the engine carries no clock (ruling 4).
     let timing = args.vitals.then(|| Arc::new(Timing::default()));
     let poison = args.poison.map(|t| Arc::new(Poison(t)));
@@ -683,12 +742,15 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
         Some(dir) if args.resume.is_some() => {
             let mpy = world.calendar.minutes_per_year();
             let through = ((start.minutes() - 1).div_euclid(mpy) + 1) * mpy - 1;
-            let (log, prefix) = LadderLog::resume(&dir.ladder(), &ladder.header, through)?;
+            let at_keyframe = state_digest(&engine.snapshot());
+            let (log, prefix) =
+                LadderLog::resume(&dir.ladder(), &ladder.header, through, &at_keyframe)?;
             ladder.rungs = prefix;
             Some(log)
         }
         Some(dir) => Some(LadderLog::create(&dir.ladder(), &ladder.header)?),
     };
+    step(4);
     let store = KeyframeStore::default();
     // Keyframes: the --keyframes directory of a full run (SPR-008), or the run directory's of
     // any streaming run, resumed ones included (their markers are part of channel A).
@@ -702,6 +764,7 @@ pub fn run_live(args: &RunArgs, live: Option<LiveHost>) -> Result<Outcome, Error
         )?),
         _ => None,
     };
+    step(5);
     // SPR-026: the live edge, before the first record is pushed (the socket exists first).
     if let (Some(l), Some(h), Some(dir)) = (live, host.as_mut(), &run_dir) {
         let edge = h.attach_live(l.policy, l.clock, args.stall)?;
@@ -854,7 +917,12 @@ impl LadderLog {
     /// and to reach the keyframe; everything after them, a partial line left by a kill included,
     /// is dropped; the file is rewritten atomically with `header` (an extended run's horizon) and
     /// those rungs, and the resumed rungs are appended.
-    fn resume(path: &Path, header: &Header, through: i64) -> Result<(Self, Vec<Rung>), Error> {
+    fn resume(
+        path: &Path,
+        header: &Header,
+        through: i64,
+        at_keyframe: &PlaneDigest,
+    ) -> Result<(Self, Vec<Rung>), Error> {
         let fail = |what: String| Error(format!("{}: {what}", path.display()));
         let text = std::fs::read_to_string(path).map_err(|e| fail(e.to_string()))?;
         let mut cut = 0;
@@ -892,6 +960,24 @@ impl LadderLog {
             return Err(fail(format!(
                 "the ladder does not reach the keyframe at tick {through}"
             )));
+        }
+        // BCK-002 A-58 (VER-SPR-013-TEST GAP-12): the keyframe's own rung must be whole: its lines
+        // are exactly its rendering, and its state hash and table roots are the restored state's.
+        if let Some(last) = prefix.rungs.last().filter(|_| through >= 0) {
+            let roots: Vec<(String, u64)> = at_keyframe
+                .tables
+                .iter()
+                .map(|(name, d)| (name.clone(), d.root))
+                .collect();
+            if !text[..cut].ends_with(&crate::ladder::render_rung(last))
+                || last.hash != at_keyframe.hash
+                || last.roots != roots
+            {
+                return Err(fail(format!(
+                    "the rung at the keyframe's tick {through} is torn or is not the keyframe's \
+                     state: resume from an earlier keyframe"
+                )));
+            }
         }
         let kept = Ladder {
             header: header.clone(),
@@ -938,6 +1024,39 @@ impl LadderLog {
     }
 }
 
+/// Removes what a new run killed during its creation left (BCK-002 A-58, DEF-3): the journal (and
+/// its write-ahead files) and the ladder, when `run.toml`, which the creation writes last, is
+/// absent. Called under the writer's lock, after `refuse_used_run_dir`.
+fn remove_creation_leftovers(dir: &RunDir) -> Result<(), Error> {
+    if dir.run_toml().exists() {
+        return Ok(());
+    }
+    let journal = dir.journal();
+    let mut leftovers = vec![journal.clone(), dir.ladder()];
+    for suffix in ["-wal", "-shm"] {
+        let mut p = journal.as_os_str().to_owned();
+        p.push(suffix);
+        leftovers.push(PathBuf::from(p));
+    }
+    let mut removed = Vec::new();
+    for p in leftovers.iter().filter(|p| p.is_file()) {
+        std::fs::remove_file(p).map_err(|e| Error(format!("{}: {e}", p.display())))?;
+        removed.push(
+            p.file_name()
+                .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+        );
+    }
+    if !removed.is_empty() {
+        eprintln!(
+            "note: {} held the leftovers of a run killed while it was being created (no run.toml): \
+             removed {}",
+            dir.0.display(),
+            removed.join(", ")
+        );
+    }
+    Ok(())
+}
+
 /// A new run needs a run directory that holds no run (REV-SPR-013 MAJ-2): no stream, no keyframe,
 /// and (unless it is a replay's fresh directory, which holds the copied `run.toml` and journal)
 /// no `run.toml` or journal. Checked before any file is touched, so a refused run leaves the
@@ -951,7 +1070,8 @@ fn refuse_used_run_dir(dir: &RunDir, replay: bool) -> Result<(), Error> {
     if nonempty(&dir.keyframes()) {
         found.push("keyframes/".to_owned());
     }
-    if !replay {
+    // A journal without run.toml is a creation killed before it ended (DEF-3), not a run.
+    if !replay && dir.run_toml().exists() {
         for p in [dir.run_toml(), dir.journal()] {
             if p.exists() {
                 found.push(
