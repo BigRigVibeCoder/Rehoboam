@@ -921,6 +921,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rh-protocol"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rh-registry"
 version = "0.0.0"
 dependencies = [
