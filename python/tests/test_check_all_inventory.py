@@ -65,6 +65,8 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
+    "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden "
+    "vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)",
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
     "T-03)",
@@ -110,6 +112,8 @@ REQUIRED_GATES = (
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
+    "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality "
+    "--check; SPR-016)",
     "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)",
     "Golden vectors: M4 basket and price rule",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
@@ -119,6 +123,12 @@ REQUIRED_GATES = (
     "--check; SPR-007 T-01)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
+    "M2 F1 positive control: a newborn drawn on rung 0's S8 must FAIL the first-draw rule (SPR-016 "
+    "MR10)",
+    "M2 F1 positive control: a stale golden file must FAIL (SPR-016)",
+    "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 "
+    "(SPR-016 MR7)",
+    "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
     "Manifest: aethelgard",
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
@@ -239,6 +249,7 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
+    "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
     "GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
