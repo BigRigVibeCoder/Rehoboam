@@ -377,15 +377,38 @@ REQUIRED_GATES = (
     "(VER-SPR-008)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
-    "lint_odd applies control: a sender's payload matching [[applies]] field for field passes "
-    "(REV-P1a section 7)",
+    "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, "
+    "with its drain binding, passes (REV-P1a section 7; EVO-001)",
     "lint_odd applies positive control: a sender's payload fields differ from [[applies]], "
     "frozen, must FAIL (REV-P1a section 7)",
+    "lint_odd applies positive control: an [[applies]] drained_by naming no binding of "
+    "[[schedule]], frozen, must FAIL (EVO-001)",
+    "lint_odd applies positive control: an [[applies]] payload type outside the closed "
+    "vocabulary, frozen, must FAIL (EVO-001)",
+    "lint_odd applies positive control: an outcome-carrying command whose sender names no timer, "
+    "frozen, must FAIL (REV-EVO-001 R9)",
+    "lint_odd applies positive control: two [[applies]] entries for one command must FAIL "
+    "(REV-EVO-001 MIN-11)",
     "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 "
     "ruling 11)",
     "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)",
     "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling "
     "11)",
+    "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns "
+    "and passes (EVO-001)",
+    "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity "
+    "warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)",
+    "lint_odd neutral control: an identity read without a neutral and a rate read with a typed "
+    "neutral stated by its coupling pass (EVO-001)",
+    "lint_odd neutral positive control: a frozen spec's rate read of an absent owner with no "
+    "neutral must FAIL (EVO-001)",
+    "lint_odd neutral positive control: a neutral of the wrong type must FAIL (EVO-001)",
+    "lint_odd neutral positive control: a neutral that cannot be typed, frozen, must FAIL "
+    "(EVO-001)",
+    "lint_odd neutral positive control: an enum neutral outside the column's codes must FAIL "
+    "(EVO-001)",
+    "lint_odd neutral positive control: an identity read carrying a neutral must FAIL "
+    "(REV-EVO-001 R12)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",

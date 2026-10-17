@@ -55,6 +55,7 @@ fixed_point = false
 column = "artifact.kind"
 entity = "artifact"
 type = "enum"
+registry = "artifact_kinds"
 plane = "A"
 meaning = "Registry [artifact_kinds] id (relic, crown, weapon, ring, tome, heirloom); sets kind_strength, the overlay pushed and whether it is regalia"
 fixed_point = false
@@ -62,6 +63,7 @@ fixed_point = false
 column = "artifact.state"
 entity = "artifact"
 type = "enum"
+values = ["borne", "placed", "lost", "destroyed"]
 plane = "A"
 meaning = "borne | placed | lost | destroyed. borne: bearer set, location 0. placed or lost: location set, bearer 0 (lost = nobody's knowledge row names the place). destroyed: both 0; terminal"
 fixed_point = false
