@@ -24,7 +24,7 @@ use rh_core::time::SimTime;
 use rh_golden::ladder::RungKind;
 use rh_golden::replay::{REPLAY_MARKER, ReplayArgs, ReplayReport, replay};
 use rh_golden::run::{RunArgs, run};
-use rh_golden::stream::RunToml;
+use rh_golden::stream::{RunToml, WRITER_LOCK};
 use rh_ids::EntityRef;
 use rh_ids::person::PersonIdTable;
 use rh_snapshot::journal::{
@@ -69,6 +69,8 @@ fn replay_of(dir: &Path, into: &Path, from_keyframe: Option<i64>, threads: usize
     .unwrap()
 }
 
+/// Every file under `dir`, by relative name, with its bytes; `.writer.lock` by name only, since
+/// its content is the pid and start time of whichever process last took the lock (GAP-11).
 fn files(dir: &Path) -> BTreeMap<String, Vec<u8>> {
     fn walk(root: &Path, at: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
         for e in std::fs::read_dir(at).unwrap() {
@@ -77,7 +79,12 @@ fn files(dir: &Path) -> BTreeMap<String, Vec<u8>> {
                 walk(root, &p, out);
             } else {
                 let rel = p.strip_prefix(root).unwrap().display().to_string();
-                out.insert(rel, std::fs::read(&p).unwrap());
+                let bytes = if p.file_name().is_some_and(|n| n == WRITER_LOCK) {
+                    Vec::new()
+                } else {
+                    std::fs::read(&p).unwrap()
+                };
+                out.insert(rel, bytes);
             }
         }
     }

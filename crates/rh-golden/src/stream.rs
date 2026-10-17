@@ -24,7 +24,7 @@
 //! the world, the seed, the horizon, the calendar and the history tuple), `D/journal.sqlite`,
 //! `D/keyframes/year-NNNN.rhkf`, `D/run.ladder` (written append-only as the run goes and synced
 //! before each keyframe, so a killed run's ladder reaches its newest keyframe; REV-SPR-013 MAJ-3),
-//! `D/.writer.lock` (held by the running writer) and
+//! `D/.writer.lock` (held by the running writer, which writes its pid and start time into it) and
 //! `D/stream/t0000000000/A/y######/`. The engine never reads it: it is the host's.
 //!
 //! **Test hooks** (`--test-stall`, never on a baseline): the run prints a `STALL` line and blocks
@@ -139,26 +139,75 @@ impl SealHook for Hook {
 /// and the OS releases it when the run ends or is killed (REV-SPR-013 MIN-9).
 pub const WRITER_LOCK: &str = ".writer.lock";
 
-/// Takes the run directory's writer lock, refusing a second writer.
+/// How many times [`lock_writer`] tries a held lock, and the step of its linear backoff: 10
+/// tries over about 220 ms. A reader's probe ([`writer_gone`]) holds the lock for microseconds; a
+/// live writer holds it for the whole run (VER-SPR-013-TEST GAP-11).
+const LOCK_TRIES: u32 = 10;
+const LOCK_STEP: std::time::Duration = std::time::Duration::from_millis(4);
+
+/// Takes the run directory's writer lock, refusing a second writer. The `flock` decides, not the
+/// file's content: once the lock is taken, the file is rewritten with this process's pid and start
+/// time, which a refusal reports (VER-SPR-013-TEST GAP-11).
 ///
 /// # Errors
-/// [`Error`] if the lock cannot be taken (another run writes this directory) or the file cannot
-/// be opened.
+/// [`Error`] if the lock is still held after [`LOCK_TRIES`] tries (another run writes this
+/// directory; the message names the recorded pid and whether it is running), or the file cannot
+/// be opened, locked or written (the I/O error).
 pub fn lock_writer(dir: &Path) -> Result<std::fs::File, Error> {
     let path = dir.join(WRITER_LOCK);
-    let f = std::fs::OpenOptions::new()
+    let fail = |e: std::io::Error| Error(format!("{}: {e}", path.display()));
+    let mut f = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(&path)
-        .map_err(|e| Error(format!("{}: {e}", path.display())))?;
-    f.try_lock().map_err(|_| {
-        Error(format!(
-            "{}: another run is writing this run directory",
-            dir.display()
-        ))
-    })?;
+        .map_err(fail)?;
+    let mut tries = 0;
+    loop {
+        match f.try_lock() {
+            Ok(()) => break,
+            Err(std::fs::TryLockError::WouldBlock) if tries < LOCK_TRIES => {
+                tries += 1;
+                std::thread::sleep(LOCK_STEP * tries);
+            }
+            Err(std::fs::TryLockError::WouldBlock) => {
+                return Err(Error(format!(
+                    "{}: another run is writing this run directory ({})",
+                    dir.display(),
+                    holder(&path)
+                )));
+            }
+            Err(std::fs::TryLockError::Error(e)) => return Err(fail(e)),
+        }
+    }
+    #[allow(
+        clippy::disallowed_types,
+        clippy::disallowed_methods,
+        reason = "the lock file's diagnostic start time, outside the history tuple (GAP-11)"
+    )]
+    let started = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    f.set_len(0).map_err(fail)?;
+    write!(f, "pid {}\nstarted {started}\n", std::process::id()).map_err(fail)?;
     Ok(f)
+}
+
+/// Who holds the lock at `path`, from the pid the holder wrote: "held by pid N (running)" or
+/// "(not running)", by whether `/proc/N` exists.
+fn holder(path: &Path) -> String {
+    let pid = std::fs::read_to_string(path).ok().and_then(|text| {
+        text.lines()
+            .find_map(|l| l.strip_prefix("pid "))
+            .and_then(|p| p.trim().parse::<u32>().ok())
+    });
+    match pid {
+        Some(pid) if Path::new(&format!("/proc/{pid}")).exists() => {
+            format!("held by pid {pid} (running)")
+        }
+        Some(pid) => format!("held by pid {pid} (not running)"),
+        None => "held by a process that recorded no pid".to_owned(),
+    }
 }
 
 /// Whether a run directory's writer is gone: its lock file exists and is not held. Before a run
