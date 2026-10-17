@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, PRJ-001, RUN-001, GOV-008, VER-SPR-009, VER-SPR-009-TEST]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.10.0
+version: 1.11.0
 ---
 
 > **BLUF:** Measure speed from the start: criterion benches, a 10% regression gate on instruction counts (stable on shared runners and laptops), wall-clock trends on the on-demand VM, serial-fraction instrumentation and the vitals line. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 3 agent-days.

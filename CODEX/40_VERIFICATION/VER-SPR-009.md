@@ -2,24 +2,24 @@
 id: VER-SPR-009
 title: "Audit of SPR-009"
 type: record
-status: DRAFT
+status: CLOSED
 owner: architect
 agents: [architect, tester]
 tags: [verification]
 related: [SPR-009, VER-SPR-009-TEST, VER-G0, BCK-002, SPR-008]
 created: 2026-10-16
 updated: 2026-10-16
-version: 0.1.0
+version: 1.0.0
 ---
 
-> **BLUF:** DRAFT; the verdict waits for the Tester's phase 2. SPR-009 gives the engine its speed evidence:
+> **BLUF: PASS.** SPR-009 gives the engine its speed evidence:
 > - benches 7 and 8 (plane hashes, keyframes) at 10k rows, with bench 4 a named, empty slot;
 > - a regression gate on instruction counts, run on a deterministic arena so a count does not depend on the checkout's path, with every committed count checked against CI's recomputation within a band;
 > - wall-clock trends with criterion and `bin/wall_trend.py`, gating only on `adjutant` after T-04;
 > - a clock-free observer interface in `rh-core`, guarded so an observer panic poisons the engine instead of unwinding (DEF-1), and the vitals line computed by the host;
-> - a per-tick allocation budget on the smoke world, exact and repeatable at 1 and 4 threads.
+> - a per-tick allocation budget on the smoke world, exact and repeatable at 1 and 4 threads (82 of 82 runs byte-identical).
 >
-> The Tester's phase 1 found an observer panic that corrupted the engine silently (DEF-1), notice content that nothing pinned (DEF-2), a NaN median that passed (DEF-3) and a blind spot in the allocator self-test (DEF-4). My review of `c29787c` found CI red on a test that read CI's own variables, a PR tier of about 17 minutes on a slow runner against V-PERF-04's 15, and a concurrency rule inherited from SPR-008 that could drop a push's range (an escape against SPR-008). All are fixed. The PR tier now runs as two parallel jobs. T-04 is blocked on the director's machines and re-opens as a follow-up (ruling 6). Change class C2, not the C1 the plan said: the sprint adds `rh-core`'s observer interface and `SimError::Observer` (§3). The Architect merges (GOV-005 §6).
+> Three Tester phases and one Architect review found DEF-1 to DEF-6, a CI-red test that read CI's own variables, a PR tier of about 17 min 40 s on a slow runner against V-PERF-04's 15, a concurrency rule inherited from SPR-008 that could drop a push's range (an escape against SPR-008), and a CI matrix that could lose the golden part silently (GAP-19). All are fixed. The PR tier now runs as two parallel jobs: 11 minutes on cold caches, 6–7 minutes warm. T-04 is blocked on the director's machines and re-opens as a follow-up (ruling 6). Change class C2, not the C1 the plan said (§3). Six items go to the backlog (A-32 with the allocation sites, A-41 to A-45). The Architect merges (GOV-005 §6).
 
 # VER-SPR-009 — Audit of SPR-009
 
@@ -28,7 +28,7 @@ PR #34 merges with a merge commit: the branch carries a merge of `main` (`5d77e2
 ## 1. Automated checks
 | Check | Result | Evidence |
 |---|---|---|
-| `bin/check_all.sh` | Phase 1: PASS (194 checks) on clean archives of `874a302`, `8d6c51c` and `46f0f59` (Tester). `c29787c`: PASS (265) locally, FAIL on CI (pytest read `RH_EVENT`). `ded5f7f`: PASS (271, both parts) locally, 8 min 57 s | Tester phase 2: *pending* |
+| `bin/check_all.sh` | Phase 1: PASS (194 checks) on clean archives of `874a302`, `8d6c51c` and `46f0f59` (Tester). `c29787c`: PASS (265) locally, FAIL on CI (pytest read `RH_EVENT`). `ded5f7f`: PASS (271, both parts) locally, 8 min 57 s. `69ce702` (final): PASS (272, both parts) locally | Tester phases 2 and 3: PASS on clean archives of `c29787c`, `ded5f7f` (core 218, golden 53) and `a4b78cb`; the final delta Architect-verified (499 tests; the GAP-19 and GAP-21 controls) |
 | CI on GitHub-hosted runners | `c29787c`: FAIL (run 38972047368), 17 min 22 s, stopped at check 243 of 265; a full run would take about 17 min 40 s. `ded5f7f`: **PASS** (run 38977023421): two parallel jobs on cold per-part caches, `core` 9 min 55 s and `golden` 10 min 54 s; the run's wall time is about 11 minutes, inside the 12-minute acceptance and V-PERF-04's 15. `1aec52d` (warm caches, run 38980955766): `core` 5 min 4 s, `golden` 6 min 28 s | PR #34 |
 | Engine speed | No regression. 300 smoke years, `main` (`c5b197a`) vs `c29787c`, same machine, two rounds: 14.0/13.9 s vs 14.0/13.6 s at 1 thread; 42.5/40.2 s vs 41.7/41.0 s at 4 threads; ladders equal. CI's slower times on `c29787c` were the runner (GitHub-hosted runners vary about 2×) and test load | Architect |
 | Change class | C2 (§3) | — |
@@ -68,12 +68,12 @@ PR #34 merges with a merge commit: the branch carries a merge of `main` (`5d77e2
 | Review 4–8 (minor) lint_arch skipped every file under a checkout path containing `target`; the PR tag accepted mid-title; an unknown Actions event treated as local; no toolchain lines on the allocation budget; the observer error text named the worker | Fixed (`ded5f7f`), each with a control or test |
 | Review 9–11 (nits) vitals semantics, C-library allocations, the PR body | README notes; PR body updated |
 | Mutants surviving at `46f0f59` | C2 already red on the named regression; R4 immaterial (an equal-size `realloc`); Y1–Y6 (CI workflow edits) are BCK-002 A-41 |
-| DEF-6 (low; Tester phase 2) the vitals pace truncated to whole years | *Fixed in the next head (pending)* |
-| GAP-13, GAP-15, G3, D4 (Tester phase 2) 13 green mutants: the vitals timing arithmetic, four branches of the allocation comparison, the no-base push, 0 samples | *Tests in the next head (pending)*: a fake-clock test of `Timing`; one test per allocation field |
+| DEF-6 (low; Tester phase 2) the vitals pace truncated to whole years | Fixed (`a4b78cb`): one exact ratio; `--years 1/2/3` print 15.7/15.7/15.9 (Tester) |
+| GAP-13, GAP-15, G3, D4 (Tester phase 2) 13 green mutants: the vitals timing arithmetic, four branches of the allocation comparison, the no-base push, 0 samples | Fixed (`a4b78cb`): fake-clock tests of `Timing` at 1 and 2 workers; one test per allocation field; the no-base push and 0-samples tests. All 13 mutants now fail (Tester phase 3) |
 | GAP-17, GAP-18 | A docs line beside `[C3]` (never squash these PRs); the core part runs ruff, mypy and pytest before the Rust builds |
-| **GAP-19** (medium; Tester phase 3) nothing ties `ci.yml` to the parts: a matrix of `[core]` alone passes every test, and the golden part would leave CI silently | *Fix pending*: a pytest that parses the CI matrix and the `--part` argument against `check_all.sh`'s parts, with controls both ways (the first piece of A-41) |
-| GAP-21, GAP-22, T4 (Tester phase 3) lint_arch skipped any `target` component below the crate; the fake clock started at 0, so an origin error survived (V10b); the DEF-1 test panicked only at job index 0, so a worker number in the error text survived | *Fix pending* |
-| GAP-20 (Tester phase 3) the inventory counts a filtered must-fail control as coverage of a whole test binary | *Fix pending, or A-41* |
+| **GAP-19** (medium; Tester phase 3) nothing ties `ci.yml` to the parts: a matrix of `[core]` alone passes every test, and the golden part would leave CI silently | Fixed (`69ce702`): `python/tests/test_ci_workflow.py` parses the CI matrix and the `--part` argument against `check_all.sh`'s parts. Controls: `[core]`, `[core, core]`, a hard-coded `--part core`, `CHECK_PART: core` and a bare `check_all.sh` all fail; Architect-verified (a `[core]` matrix and `CHECK_PART: core` each turn the test red). The first piece of A-41 |
+| GAP-21, GAP-22, T4 (Tester phase 3) lint_arch skipped any `target` component below the crate; the fake clock started at 0, so an origin error survived (V10b); the DEF-1 test panicked only at job index 0, so a worker number in the error text survived | Fixed (`69ce702`): lint_arch skips only the crate's top-level `target/` (fixture `global_allocator_src_target`, a FAIL gate; Architect-verified); the scripted clock starts at 3,600,000 ms, and V10b now fails; a DEF-1 test panics at job index 1 and compares the tick and text at 1 and 4 threads, so a worker number in the text fails |
+| GAP-20 (Tester phase 3) the inventory counts a filtered must-fail control as coverage of a whole test binary | Fixed (`69ce702`): a filtered or must-fail by-name gate covers nothing in the inventory; a test pins the three cases |
 | GAP-14, GAP-16, Y7, Y8 | Backlog: the serial fraction's semantics with A-32 (it depends on thread count and includes spawn cost); GOV-006 §2 signals (A-45); Y7 and Y8 with A-41 |
 | GAP-6, GAP-9 residuals | Accepted: a `]` inside a string in the same attribute; a huge `IDLE_MINUTES` integer |
 
@@ -86,11 +86,11 @@ PR #34 merges with a merge commit: the branch carries a merge of `main` (`5d77e2
 | T-02 | V-PERF-04 positive control on gate (a); two runs on one commit give identical counts | Yes |
 | T-03 | Vitals printed by `rh-cli run smoke` | Yes; the N-thread golden run carries the observer and equals the baseline |
 | T-04 | Machine ratios and wall-clock baselines | **Blocked: the director's machines** (ruling 6). Procedure and scripts done |
-| T-05 | A fixture that allocates in its tick fails; two runs report identical counts | Yes; exact at 1 and 4 threads over 6 runs (Developer) and *phase 2 (Tester)* |
+| T-05 | A fixture that allocates in its tick fails; two runs report identical counts | Yes: 82 of 82 runs byte-identical (pinned to 1–3 cores, under load, other cwd and env); eight allocating fixtures fail OVER BUDGET (Tester phase 2) |
 
 ## 6. Verdict
 | Field | Value |
 |---|---|
-| Verdict | *pending the Tester's phase 2 and CI on the final head* |
+| Verdict | **PASS** (2026-10-17) |
 | Merge route | The Architect merges (GOV-005 §6), with a merge commit |
-| Carried forward | T-04 (the director's session); BCK-002 A-32 (the allocation sites are its work list), A-41 (a ci.yml structural lint), A-42 (snapshot and `state_hash` on a poisoned engine), A-43 (wall-clock gate preconditions: machine, spread, trend-file integrity), A-44 (plane-A file-metadata and process lint) |
+| Carried forward | T-04 (the director's session); BCK-002 A-32 (the allocation sites are its work list), A-41 (a ci.yml structural lint), A-42 (snapshot and `state_hash` on a poisoned engine), A-43 (wall-clock gate preconditions: machine, spread, trend-file integrity), A-44 (plane-A file-metadata and process lint, in SPR-011 T-00), A-45 (the vitals' GOV-006 §2 signals and serial-fraction semantics). SPR-011 also takes A-37 and the 20-minute timeout |
