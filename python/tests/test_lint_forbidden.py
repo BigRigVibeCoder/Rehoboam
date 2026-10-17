@@ -304,6 +304,8 @@ PLANTED = {
     "metadata_ext": ("file-clock", "MetadataExt"),
     "metadata_ufcs": ("file-clock", "Metadata::modified"),
     "mtime": ("file-clock", ".mtime("),
+    "env_rename": ("env", "std::env"),
+    "env_var": ("env", "env::var_os"),
     "file_io": ("file-io", "std::fs"),
 }
 
@@ -1058,6 +1060,12 @@ def test_an_include_resolves_from_the_symlink_not_its_target(tmp_path: Path) -> 
         ("let t = m.mtime() + m.ctime_nsec();", "file-clock"),
         ("let t = m.st_atime();", "file-clock"),
         ("let t = m.last_write_time();", "file-clock"),
+        # A-4: the environment, in any import form.
+        ('let s = std::env::var("EPOCHREALTIME");', "env"),
+        ("let a: Vec<String> = std::env::args().collect();", "env"),
+        ("use std::env as e;", "env"),
+        ("use std::{io, env::{self as e}};", "env"),
+        ("use std::env::vars_os;", "env"),
         ("use std::fs;", "file-io"),
         ("let f = fs::File::open(p);", "file-io"),
         ("let f = File::create(p);", "file-io"),
@@ -1077,6 +1085,8 @@ def test_a_44_rules_catch_their_forms(code: str, rule: str) -> None:
         "use std::{io, path::Path};",
         "use std::os::unix::ffi::OsStrExt;",
         "let t = clock.datetime();",
+        "let c = builder.args(&[1, 2]);",
+        "let e = self.environment();",
         "let m = state.modified_rows;",
         "let r = ledger.created_at(t);",
         "let p = std::path::Path::new(x);",
@@ -1142,3 +1152,11 @@ def test_def_1_a_path_after_a_grouped_import_is_reported_on_its_own_line(
 def test_use_trees_expand_to_the_paths_they_import(tree: str, paths: list[tuple[str, ...]]) -> None:
     """Renames are dropped, `self` is its prefix, groups nest (DEF-1)."""
     assert expand_use(f" {tree};") == paths
+
+
+def test_a_4_the_env_workspace_reports_src_only(capsys: pytest.CaptureFixture[str]) -> None:
+    """rh-core's src/ read is reported; its tests/ override and a builder's `args` are not."""
+    assert main(["--manifest-path", str(FIXTURES / "env_workspace" / "Cargo.toml")]) == 1
+    lines = [v for v in capsys.readouterr().out.splitlines() if v.startswith("VIOLATION")]
+    assert len(lines) == 1
+    assert "env_workspace/rh-core/src/lib.rs:5:40" in lines[0]

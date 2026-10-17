@@ -290,6 +290,7 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   file_modified:file-clock:.modified( process_command:process:std::process file_io:file-io:std::fs
   process_rename:process:std::process fs_group_rename:file-io:std::fs metadata_ext:file-clock:MetadataExt
   metadata_ufcs:file-clock:Metadata::modified mtime:file-clock:.mtime(
+  env_rename:env:std::env env_var:env:env::var_os
   path_attr:source-include:#[path include_macro:source-include:include!("
 forbidden_api_controls() {
   local - spec file rest rule token tick='`'
@@ -741,6 +742,7 @@ fixed_point_compile_controls &&
 run "Forbidden APIs in plane A (lint_forbidden; V-DET-19)" pass "$PY" -I bin/lint_forbidden.py &&
 forbidden_api_controls &&
 run "lint_forbidden positive control: workspace plane-A crate must FAIL" "fail:VIOLATION [V-DET-19/hash-collections] \`HashMap\` at tests/lint_fixtures/forbidden/workspace/fixture-core/" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/workspace/Cargo.toml &&
+run "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its tests/ and a builder's args pass (SPR-011 A-4)" "fail:VIOLATION [V-DET-19/env] \`env::var\` at tests/lint_fixtures/forbidden/env_workspace/rh-core/src/lib.rs:5:40;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/env_workspace/Cargo.toml &&
 run "lint_forbidden positive control: fs::read after a grouped import is reported on its own line (DEF-1)" "fail:VIOLATION [V-DET-19/file-io] \`fs::r\` at tests/lint_fixtures/forbidden/fs_path_after_group.rs:5:18" "$PY" -I bin/lint_forbidden.py --scan tests/lint_fixtures/forbidden/fs_path_after_group.rs &&
 run "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)" "fail:VIOLATION [V-DET-19/file-io] \`std::fs\` at tests/lint_fixtures/forbidden/file_io_workspace/rh-core/src/lib.rs:4:5;" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/file_io_workspace/Cargo.toml &&
 run "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)" "fail:VIOLATION [V-DET-19/float] \`f32\` at tests/lint_fixtures/forbidden/float_workspace/fixture-sys/src/lib.rs" "$PY" -I bin/lint_forbidden.py --manifest-path tests/lint_fixtures/forbidden/float_workspace/Cargo.toml &&

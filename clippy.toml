@@ -20,6 +20,9 @@ disallowed-types = [
     { path = "rand::rngs::ThreadRng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
     { path = "rand::rngs::SmallRng", reason = "unkeyed RNG whose algorithm may change between releases; use the keyed RNG (ADR-0006)", allow-invalid = true },
     { path = "rand::rngs::OsRng", reason = "entropy-seeded RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    # SPR-011 A-1 (DEF-1's second line): clippy resolves aliases, globs and use trees, which the text gate
+    # parses only approximately.
+    { path = "std::process::Command", reason = "runs another program, outside the history tuple (DET-1; BCK-002 A-44; SPR-011 DEF-1, A-1)" },
 ]
 
 disallowed-methods = [
@@ -77,6 +80,29 @@ disallowed-methods = [
     # holds the textual twin); the input journal stores no REAL. allow-invalid: only rh-snapshot links rusqlite.
     { path = "rusqlite::types::ValueRef::as_f64", reason = "a REAL from SQLite is a float in plane A; the journal stores INTEGER, TEXT and BLOB only (SPR-007 ruling 3, GAP-1)", allow-invalid = true },
     { path = "rusqlite::types::ValueRef::as_f64_or_null", reason = "a REAL from SQLite is a float in plane A; the journal stores INTEGER, TEXT and BLOB only (SPR-007 ruling 3, GAP-1)", allow-invalid = true },
+    # SPR-011 A-1 (DEF-2's second line): a file's timestamps are a wall clock without a clock name.
+    { path = "std::fs::Metadata::modified", reason = "a file's timestamp is a wall clock (BCK-002 A-44; SPR-011 DEF-2, A-1)" },
+    { path = "std::fs::Metadata::accessed", reason = "a file's timestamp is a wall clock (BCK-002 A-44; SPR-011 DEF-2, A-1)" },
+    { path = "std::fs::Metadata::created", reason = "a file's timestamp is a wall clock (BCK-002 A-44; SPR-011 DEF-2, A-1)" },
+    { path = "std::os::unix::fs::MetadataExt::atime", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::unix::fs::MetadataExt::atime_nsec", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::unix::fs::MetadataExt::mtime", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::unix::fs::MetadataExt::mtime_nsec", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::unix::fs::MetadataExt::ctime", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::unix::fs::MetadataExt::ctime_nsec", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::linux::fs::MetadataExt::st_atime", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::linux::fs::MetadataExt::st_atime_nsec", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::linux::fs::MetadataExt::st_mtime", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::linux::fs::MetadataExt::st_mtime_nsec", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::linux::fs::MetadataExt::st_ctime", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    { path = "std::os::linux::fs::MetadataExt::st_ctime_nsec", reason = "a file's timestamp is a wall clock (SPR-011 DEF-2, A-1)", allow-invalid = true },
+    # SPR-011 A-4: the environment is an input outside the history tuple (DET-1).
+    { path = "std::env::var", reason = "an environment read is an input outside the history tuple (DET-1; SPR-011 A-4)" },
+    { path = "std::env::var_os", reason = "an environment read is an input outside the history tuple (DET-1; SPR-011 A-4)" },
+    { path = "std::env::vars", reason = "an environment read is an input outside the history tuple (DET-1; SPR-011 A-4)" },
+    { path = "std::env::vars_os", reason = "an environment read is an input outside the history tuple (DET-1; SPR-011 A-4)" },
+    { path = "std::env::args", reason = "an environment read is an input outside the history tuple (DET-1; SPR-011 A-4)" },
+    { path = "std::env::args_os", reason = "an environment read is an input outside the history tuple (DET-1; SPR-011 A-4)" },
     { path = "rand::thread_rng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
     { path = "rand::rng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
     { path = "rand::random", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },

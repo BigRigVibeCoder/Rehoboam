@@ -24,6 +24,10 @@ reports its metadata). Rules:
                       accessed`), any platform `MetadataExt`, and its accessors, which a glob
                       import brings in unnamed: `.atime(`/`.mtime(`/`.ctime(` (and `_nsec`),
                       `.st_*time(`, `.creation_time(`, `.last_access_time(`, `.last_write_time(`.
+    env               std::env::var, var_os, vars, vars_os, args, args_os, and any `use` tree that
+                      imports std::env (a rename, a group, a glob), in src/ and build.rs: the
+                      environment is an input outside the history tuple (SPR-011 A-4). tests/ may
+                      read the overrides of their golden files.
     process           the module std::process, in src/ and build.rs: Command, and exit, abort and
                       id too (A-44; DEF-1). tests/ may name temporary files by process id.
     file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
@@ -179,9 +183,14 @@ FLOAT_API_RULE = "float-api"
 # is a reviewed change. --scan has no crate context and allows no one.
 FILE_IO_RULE = "file-io"
 PROCESS_RULE = "process"
+ENV_RULE = "env"
 # DEF-1 (Architect ruling): a `use` tree that names one of these modules, in any form (a path, a
 # rename, `self`, `{self as x}`, a nested group of `std::{..}`), is a violation of the rule.
-BANNED_MODULES = ((("std", "process"), PROCESS_RULE), (("std", "fs"), FILE_IO_RULE))
+BANNED_MODULES = (
+    (("std", "process"), PROCESS_RULE),
+    (("std", "fs"), FILE_IO_RULE),
+    (("std", "env"), ENV_RULE),
+)
 USE_TOKEN = re.compile(r"::|[{},*;]|\w+")
 FILE_IO_CRATES = MappingProxyType(
     {
@@ -311,6 +320,12 @@ RULES: tuple[Rule, ...] = (
         _rx(r"\bstd::process\b|\bprocess::\w"),
         "std::process (Command, exit, abort, id) reaches outside the history tuple: another "
         "program's output and timing, or the host process (DET-1; BCK-002 A-44; DEF-1)",
+    ),
+    Rule(
+        ENV_RULE,
+        _rx(r"\benv::(?:vars?|vars_os|var_os|args|args_os)\b"),
+        "an environment read (std::env::var, var_os, vars, args) is an input outside the history "
+        "tuple (DET-1; BCK-002 A-44; SPR-011 A-4)",
     ),
     Rule(
         FILE_IO_RULE,
@@ -627,7 +642,7 @@ def _applies(finding: Finding, scan: "FloatScan") -> bool:
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
-    if finding.rule in (FILE_IO_RULE, PROCESS_RULE) and scan.scope == "none":
+    if finding.rule in (FILE_IO_RULE, PROCESS_RULE, ENV_RULE) and scan.scope == "none":
         return False
     return not (finding.rule == FILE_IO_RULE and scan.file_io)
 

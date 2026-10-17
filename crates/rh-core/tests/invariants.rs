@@ -362,6 +362,11 @@ fn t05_invariants_run_every_instant_after_the_bookkeeping_systems() {
 const CRASH_GOLDEN: &str = "tests/golden/crash_stock_seed3.json";
 
 #[test]
+// LINT-ALLOW(forbidden-api): a test reads an environment override for its golden file; tests never link into the engine (SPR-011 A-4)
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test reads an environment override for its golden file"
+)]
 fn t05_the_committed_crash_artifact_replays() {
     let mut engine = stock_engine(3, 40, 1);
     assert!(engine.advance_until(ten_years(), |_, _| {}).is_err());

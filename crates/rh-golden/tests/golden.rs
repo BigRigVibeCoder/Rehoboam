@@ -121,6 +121,10 @@ const CASES: u64 = 4;
 const TAG_CASES: u64 = tag("rehoboam/rh-golden/tests/v-det-11/v1");
 
 #[test]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "tool plane: command-line arguments and environment overrides (SPR-011 A-4)"
+)]
 fn v_det_11_the_bisect_names_an_injected_month_table_and_row() {
     let tables = world_tables();
     let months = u64::try_from(YEARS).unwrap() * 12;

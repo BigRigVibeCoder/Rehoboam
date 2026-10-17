@@ -347,6 +347,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: a forbidden API in an included skeleton must FAIL (SPR-008 "
     "T-00)",
     "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)",
+    "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its "
+    "tests/ and a builder's args pass (SPR-011 A-4)",
     "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: an include! reached through a symlink resolves from the "
     "link, as rustc does (VER-SPR-008 MIN-3)",
