@@ -1,0 +1,6 @@
+# Fixture for bin/lint_forbidden.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# SPR-026 (REV-SPR-026 R7): the tool crate rh-cli is scanned for the network rule only; a socket in
+# src/main.rs is reported, in src/serve.rs (NETWORK_FILES) and tests/ it is allowed, and its float is not a finding.
+[workspace]
+members = ["rh-cli"]
+resolver = "3"

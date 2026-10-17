@@ -276,6 +276,8 @@ REQUIRED_GATES = (
     "(SPR-011 ruling 13)",
     "World Stream v0 channel-C segment schema: no floats, header, order, sealed round trip, "
     "digests, life_ends twin (SPR-013 T-11)",
+    "World Stream wire format v1: framing, control messages, refusals, the live-edge rule with "
+    "slow, stalled and reconnecting viewers, golden frames (selftest_wire_v1 --check; SPR-026)",
     "canonical_v0 positive control: a stale golden digest must FAIL",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
@@ -368,10 +370,15 @@ REQUIRED_GATES = (
     "lint_arch positive control: plane A -> plane C must FAIL",
     "lint_arch positive control: plane A -> rand must FAIL",
     "lint_arch positive control: plane A -> rh-manifest (tool) must FAIL (SPR-004)",
+    "lint_arch positive control: plane A -> rh-protocol must FAIL (plane-A closure; SPR-026)",
     "lint_arch positive control: plane A -> unreviewed third-party crate must FAIL",
     "lint_arch positive control: rand_chacha outside rh-ids must FAIL",
     "lint_arch positive control: relabelled rh-snapshot must FAIL",
     "lint_arch positive control: rh-manifest relabelled as plane A must FAIL (SPR-004)",
+    "lint_arch positive control: rh-protocol depending on a workspace crate must FAIL "
+    "(protocol-leaf; SPR-026)",
+    "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf "
+    "allow-list; SPR-026 R7)",
     "lint_arch positive control: rh-sample relabelled out of plane A must FAIL (SPR-003 T-00)",
     "lint_arch positive control: rh-sample without [lints] workspace = true must FAIL (SPR-003 "
     "GAP-9)",
@@ -412,6 +419,8 @@ REQUIRED_GATES = (
     "T-00)",
     "lint_forbidden positive control: a forbidden API in an included skeleton must FAIL (SPR-008 "
     "T-00)",
+    "lint_forbidden positive control: a socket in rh-cli outside src/serve.rs must FAIL; "
+    "src/serve.rs and tests/ pass, and the tool crate's float is not scanned (SPR-026 R7)",
     "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)",
     "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its "
     "tests/ and a builder's args pass (SPR-011 A-4)",
@@ -432,6 +441,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: rh-registry's spec loaders named in plane-A src/ outside "
     "their home must FAIL in all seven forms, alias and macro included; tests/ and ownership.rs "
     "pass (BCK-002 A-47; review MAJ-2)",
+    "lint_forbidden positive control: the six ways round sockets-only-in-serve.rs (re-exports, "
+    "#[path], include!) must FAIL (SPR-026 R19)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
     "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, "
     "with its drain binding, passes (REV-P1a section 7; EVO-001)",
@@ -504,6 +515,9 @@ REQUIRED_GATES = (
     "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
     "small-scale V-DET-01/02 (SPR-008 T-01)",
     "uv lock --check positive control: drifted lock must FAIL",
+    "wire_v1 positive control: a host whose window moves before the dropped year is on disk must "
+    "FAIL the live-edge rule (SPR-026)",
+    "wire_v1 positive control: a stale golden frame must FAIL (SPR-026)",
     "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)",
     "worldgen-lite positive control: an altered template number must FAIL against the golden "
     "outputs (SPR-018)",

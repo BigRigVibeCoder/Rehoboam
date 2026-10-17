@@ -82,6 +82,7 @@ python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortali
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
+python -I specs/stream/selftest_wire_v1.py --check   # World Stream wire format v1 (IF-0 live edge): framing, control messages, refusals, the live-edge rule simulated with slow, stalled and reconnecting viewers, golden frames (SPR-026); --control window-gap must FAIL
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
 python -I specs/systems/lint_odd.py   # system specs; a foreign [[reads]] entry says whether its owner is `required`, with a typed `neutral` on rate and mode reads of absent owners; [[applies]] payloads are typed and name their drain binding (EVO-001); planted both ways in tests/lint_fixtures/odd_neutral/ and odd_applies/
