@@ -110,6 +110,6 @@ never changes a committed skeleton or the index until step 4.
 
 | File | What |
 |---|---|
-| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) on the frozen 0.2.0 rung-0 slice |
+| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) on the frozen rung-0 slice (0.2.1: 0.2.0 plus EVO-001's typed payloads and codes) |
 | `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`); verbs `BIRTH`, `MARRIAGE` |
 | `amendments.lock.toml` | the eighteen amendments of the M2 draft (five texts, seven column meanings, six parameter meanings), path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |

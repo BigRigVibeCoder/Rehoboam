@@ -40,8 +40,8 @@ cargo nextest run --workspace --locked
 cargo test --doc --workspace --locked             # doctests: rh-ids compile-fail cases, counted per file by check_all (SPR-002)
 cargo nextest run -p rh-ids --run-ignored only --test stream_independence   # V-DET-20 full sweep, 10^6 draws (nightly)
 # Architecture lints: stdlib Python
-python -I bin/lint_arch.py        # crate boundaries (V-INSP-03) and plane isolation (V-PLN-01)
-python -I bin/lint_forbidden.py   # forbidden APIs in plane-A crates (V-DET-19), floats outside declared f32_field columns included
+python -I bin/lint_arch.py        # crate boundaries (V-INSP-03), plane isolation (V-PLN-01), engine purity (V-INSP-05, SPR-011)
+python -I bin/lint_forbidden.py   # forbidden APIs in plane-A crates (V-DET-19), floats outside declared f32_field columns, file clocks, std::process::Command and file I/O outside FILE_IO_CRATES included (A-44)
 # Python: configuration in python/pyproject.toml, run from the repository root
 python -m ruff check --config python/pyproject.toml .
 python -m mypy --config-file python/pyproject.toml
@@ -59,6 +59,8 @@ python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the indep
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
 python -I specs/chronicle/selftest.py
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
+python -I bin/gen_decimal_vectors.py --check   # authored numbers: rh-manifest exact decimals -> fixed point match Python decimal (SPR-011 T-04)
+python -I specs/numerics/exp_ln_v0.py --check   # fixed-point exp and ln v0 (Q32_32): constants, convergence, faithful rounding, golden vectors (05.1 §6 item 4 v1.10; SPR-016); --exhaustive nightly
 python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference distributions are current (SPR-003)
 cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sampler golden vectors at opt-level 3 (SPR-003 T-05)
 cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)
@@ -66,12 +68,14 @@ python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
 python -I specs/demography/selftest_m2_f1.py      # M2 F1 fertility and partnering: the exact reference of [algorithm.fertility_f1] and [algorithm.partnering_f1] in the next-version spec (SPR-015)
 python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml   # the next version of a frozen spec (M2 F1 draft 0.3.0) supersedes it for the run and must preserve the frozen slice (SPR-015; specs/systems/next/README.md)
+python -I specs/worldgen/selftest_worldgen_lite.py   # worldgen-lite v0 and S3 F0 residence: the exact reference of M1's [algorithm.worldgen_lite] and S3's [algorithm.residence_f0], golden outputs in specs/worldgen/golden/ (SPR-018)
+python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of specs/demography/mortality_f1.toml [algorithm.mortality_f1] (SPR-016); --control beta-one-power, --control infant-discontinuous and --control newborn-uncovered must FAIL (each isolates one check)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
-python -I specs/systems/lint_odd.py
+python -I specs/systems/lint_odd.py   # system specs; a foreign [[reads]] entry says whether its owner is `required`, with a typed `neutral` on rate and mode reads of absent owners; [[applies]] payloads are typed and name their drain binding (EVO-001); planted both ways in tests/lint_fixtures/odd_neutral/ and odd_applies/
 python -I bin/gen_skeletons.py --check     # committed rh-core skeletons = lint_odd.py --rust (SPR-005)
 python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml   # the smoke world's dummy specs, outside the real Registry (SPR-008)
 python -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check
@@ -91,7 +95,7 @@ target/debug/rh-cli ownership    # single-writer column ownership from specs/sys
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
 # Performance (SPR-009): instruction counts under valgrind (needs valgrind and iai-callgrind-runner 0.16.1)
-python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8 within 10% of the baseline
+python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8, and the draw-cost bench (SPR-011 A-37), within 10% of the baseline
 python -I bin/perf_gate.py integrity --measured artifacts/perf/instructions.txt   # ruling 3: a changed baseline = the tool's output, [perf-baseline] PR
 python -I bin/perf_gate.py record   # regenerate the baseline (never by hand); only in a [perf-baseline] PR with a perf-baseline-reason: line
 cargo nextest run -p rh-snapshot --locked --test observer   # observer invariance: a host observer changes no hash (SPR-009 ruling 4)

@@ -1,15 +1,15 @@
 # Planted fixture for lint_odd.py's event-vocabulary check (SPR-011 ruling 11). Never a contract: a minimal spec for a
-# Registry system that has no spec yet (M1.regions), complete enough that only its [[emits]] can fail.
+# Registry system that has no spec yet (M3.agriculture; M1.regions, the fixture host until SPR-018, has one), complete enough that only its [[emits]] can fail.
 # Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/<case> [--overlay ...]
 odd_r = 2
 
 [system]
-id = "M1.regions"
-name = "Regions (lint fixture)"
+id = "M3.agriculture"
+name = "Agriculture (lint fixture)"
 spec_version = "0.0.1"
 fidelity = "F0"
-status = "frozen"
-crate = "rh-sys-regions"
+status = "draft"
+crate = "rh-sys-agriculture"
 adrs = []
 requirements = []
 
@@ -66,15 +66,47 @@ from_manifest = []
 drivers = []
 
 [[params]]
-name = "route_cost_sea"
+name = "anomaly_regime_corr"
 meaning = "fixture"
 source = "design value"
 [[params]]
-name = "route_cost_river"
+name = "anomaly_regime_rate"
 meaning = "fixture"
 source = "design value"
 [[params]]
-name = "route_cost_land"
+name = "anomaly_regime_years"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "autocorr"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "crop_corr_spring_spring"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "crop_corr_winter_spring"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "harvest_sigma"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "seed_yield_ratio"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "spatial_share"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "volcanic_rate"
+meaning = "fixture"
+source = "design value"
+[[params]]
+name = "yield_cv_tech_floor"
 meaning = "fixture"
 source = "design value"
 
@@ -84,7 +116,7 @@ summary = "nothing"
 earns_its_place_by = ["V-INV-01"]
 
 [[invariants]]
-id = "INV-M1-01"
+id = "INV-M3-01"
 statement = "fixture"
 test = "V-INV-01"
 

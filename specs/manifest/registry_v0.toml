@@ -11,6 +11,13 @@ registry_version = "0.2.0"
 fidelity_levels = ["F0", "F1"]
 params = { route_cost_sea = [1.0, 1.0], route_cost_river = [3.0, 8.0], route_cost_land = [10.0, 60.0] }
 
+# S3.migration (SPR-018; specs/systems/S3.migration.odd.toml): residence at F0 (no parameter), moves and fugitives at F1 (P1b),
+# individual migration choice at F2 (P4). Added with the draft spec so lint_odd.py and rh-cli ownership resolve the system; the
+# registry_version bumps when the spec freezes in SPR-018's PR, as the M2 F1 delta does (specs/systems/next/README.md step 4).
+[systems."S3.migration"]
+fidelity_levels = ["F0", "F1", "F2"]
+params = {}
+
 [systems."M2.demography"]
 fidelity_levels = ["F0", "F1", "F2"]
 # Mortality is a Brass relational logit (specs/demography/). e0 is a convenience input converted to alpha at beta = 1;

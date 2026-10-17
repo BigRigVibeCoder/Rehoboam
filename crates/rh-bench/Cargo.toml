@@ -84,6 +84,14 @@ name = "keyframe_write_read"
 harness = false
 required-features = ["arena-alloc"]
 
+# The per-draw cost of StepCtx's keyed draws (SPR-011 T-02, BCK-002 A-37): the stream guard per
+# (system, instant) and the epoch lookup, against the same draws straight from rh-ids. Gated with
+# benches 7 and 8 (bin/perf_gate.py, BENCH_TARGETS).
+[[bench]]
+name = "draws"
+harness = false
+required-features = ["arena-alloc"]
+
 # Wall-clock trends of benches 7 and 8 at docs/08 §9's sizes (100k and 1M rows; RH_WALL_ROWS
 # overrides), with criterion (SPR-009 T-02b). bin/wall_trend.py summarises its samples; they gate
 # only on adjutant, once T-04 has measured its spread.

@@ -3,7 +3,7 @@
 # (fathers), households and the kinship the effect language walks, added on top of the frozen rung-0 slice.
 #
 # HOW THIS FILE RELATES TO THE FROZEN ONE (lint_odd.py --next; specs/systems/next/README.md). specs/systems/M2.demography.odd.toml
-# is 0.2.0, frozen 2026-10-16 (D30/D36); SPR-012 and SPR-013 built against it and its skeleton is committed. This file
+# is 0.2.1 (0.2.0 frozen 2026-10-16, D30/D36; 0.2.1 by EVO-001, PR #49: typed payloads, codes, no date on a command); SPR-012 and SPR-013 built against it and its skeleton is committed. This file
 # is its next version. It is linted with `python -I specs/systems/lint_odd.py --next specs/systems/next --overlay
 # specs/systems/next/registry_delta.toml`, which supersedes 0.2.0 by this file for that run (so M7 and T1's reads and
 # commands are checked against it) and then checks that the frozen slice is preserved: every 0.2.0 [[owns]] column with
@@ -85,6 +85,7 @@ fixed_point = false
 column = "person.sex"
 entity = "person"
 type = "enum"
+values = ["male", "female"]
 plane = "A"
 meaning = "male | female (codes 0, 1). Drawn at birth (F9, purpose birth_sex). Never changes"
 fixed_point = false
@@ -127,6 +128,7 @@ fixed_point = false
 column = "person.death_cause"
 entity = "person"
 type = "enum"
+values = ["none", "natural", "murder", "battle", "execution", "accident"]
 plane = "A"
 meaning = "none | natural | murder | battle | execution | accident (codes 0-5); none while alive. Written by apply_death with alive = 0 and the death tick: natural for an M2 hazard death, otherwise the cause the ScheduleDeath command carried (M7, T1.minds; M8 later; P1.13). Readable, like every column of the dead row, until rh-core's compaction at the start of Bookkeeping of the death instant (SPR-011 ruling 5); the life-course log keeps it after that"
 fixed_point = false
@@ -241,6 +243,7 @@ column = "marriage.source"
 entity = "marriage"
 plane = "A"
 type = "enum"
+values = ["genesis", "partnering", "command"]
 meaning = "genesis | partnering | command (codes 0-2): who made the marriage. genesis: the manifest couple (H2); partnering: M2's own timer (N3-N6, apply_marry with source = M2); command: a sender's Marry applied by the drain (N7). INV-M2-13 binds partnering rows only (REV-SPR-015 round 3 MIN-3)"
 fixed_point = false
 
@@ -271,6 +274,7 @@ fixed_point = false
 column = "life_course.origin"
 entity = "life_course"
 type = "enum"
+values = ["born", "founder", "immigrant"]
 plane = "A"
 meaning = "born | founder | immigrant (codes 0, 1, 2; schema.sql life_course.origin). born for every F1 birth"
 fixed_point = false
@@ -292,6 +296,7 @@ fixed_point = false
 column = "life_course.sex"
 entity = "life_course"
 type = "enum"
+values = ["male", "female"]
 plane = "A"
 meaning = "As person.sex at entry: male | female (codes 0, 1); written once at entry, like mother and father. Founders take their person.sex at genesis. Succession through a dead ancestor needs it (REV-P1a section 8, NEW-7)"
 fixed_point = false
@@ -313,6 +318,7 @@ fixed_point = false
 column = "life_course.exit_kind"
 entity = "life_course"
 type = "enum"
+values = ["open", "death", "emigration"]
 plane = "A"
 meaning = "open | death | emigration (codes 0, 1, 2). open while the person is in the ledger; written once when the person leaves (schema.sql exit_kind: NULL = open, 0 death, 1 emigration in the chronicle view)"
 fixed_point = false
@@ -327,6 +333,7 @@ fixed_point = false
 column = "life_course.death_cause"
 entity = "life_course"
 type = "enum"
+values = ["none", "natural", "murder", "battle", "execution", "accident"]
 plane = "A"
 meaning = "As person.death_cause (none | natural | murder | battle | execution | accident); none unless exit_kind = death; written once with exit_kind"
 fixed_point = false
@@ -367,32 +374,33 @@ use = "mode"
 neutral = 0
 why = "REV-SPR-018 R8: P1a has no residence moves (PRJ-002 ruling M-6), so a marriage must not make a household that spans two settlements: the husband draw (N4) takes candidates from the bride's settlement only. Neutral 0 = no restriction: while S3 is not registered (every P1a world before SPR-018) the pool is the whole ledger and M2 still registers on its own (REV-EVO-001 R4). S3 F0 gives the newborn the mother's residence (SPR-018)"
 
-# Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4): one payload per command, which every sender uses.
-# F1 ([algorithm.lifecycle_f1]; EVO-001 and REV-EVO-001 R9, shape (b); drained_by = the one binding that takes M2's
-# inbox, REV-EVO-001 R2): a commanded outcome is submitted by its SENDER'S timer in the timer pass of the outcome's
-# instant, and M2 applies it in its Day/Vital drain of that same instant, after the timer pass and before the bindings
-# that read M2 at same_instant (T1.minds, M7.dynasty). M2 holds nothing: no pending table, no commanded timer. The
-# payload's `tick` is the frozen 0.2.0 field; M2 0.2.1 (EVO-001) removes it and this draft takes the 0.2.1 payloads
-# verbatim when it merges main. Every death and marriage takes effect at a day start (round 3, BLK-1).
-# The accepted set is exactly these two. Considered and not accepted in F1: Divorce and EndMarriage (no verb sends
-# one in P1a; F2), Adopt and Legitimise (M7 legitimacy, P1b at the earliest), ScheduleBirth (no system other than M2
-# makes a birth; a catalyst that does is a journaled material input, P1b), SetHousehold (S3.migration F0 moves nobody).
+# Lifecycle commands M2 applies: the frozen 0.2.1 entries byte for byte (EVO-001: typed payloads, drained_by, the
+# living-key rule, key_field, outcome = true; a command carries no date, 05.1 §2 rule 2). F1 applies them in
+# [algorithm.lifecycle_f1] (ScheduleDeath through S12 as amended, Marry through [algorithm.partnering_f1] N7 under the
+# command preconditions: the sender's age rule, not M2's, REV-SPR-015 MIN-5; a command that fails one is dropped and
+# reported, INV-M2-05's rule). The Day/Vital binding below is the drain drained_by names (SPR-014 builds it).
 [[applies]]
 command = "ScheduleDeath"
-payload = "{ victim: PersonId, tick: SimTime (a day start), cause: natural | murder | battle | execution | accident, culprit: PersonId or 0, cause_event: EventId or 0 }"
+payload = "{ victim: PersonId, cause: enum(person.death_cause), culprit: PersonId, cause_event: EventRef }"
 from = ["M7.dynasty", "T1.minds"]
 drained_by = "Day/Vital"
-sprint = "P1.13 (SPR-014); applied by [algorithm.lifecycle_f1] (SPR-015)"
+key = "living"
+key_field = "victim"
+outcome = true
+sprint = "SPR-014"
 [[applies]]
 command = "Marry"
-payload = "{ a: PersonId, b: PersonId, tick: SimTime (a day start) }"
+payload = "{ a: PersonId, b: PersonId }"
 from = ["T1.minds"]
 drained_by = "Day/Vital"
-sprint = "P1.13 (SPR-014); applied by [algorithm.partnering_f1] N7 (SPR-015) under the command preconditions (the sender's age rule, not M2's: REV-SPR-015 MIN-5); a command that fails one is dropped and reported (INV-M2-05's rule), never applied in part"
+key = "living"
+key_field = "a"
+outcome = true
+sprint = "SPR-014"
 
 [[emits]]
 kind = "DEATH"
-when = "apply_death, when a death timer fires (alive = 0, death tick, death cause, life-course exit). Roles: the deceased is target; there is no actor for a natural death (a ScheduleDeath's culprit is actor, P1.13). Payload: [death_cause code]. Causes: none for a natural death. Admitted under DATA-5 as the tellable act class death at rungs 0-2 (SPR-011 ruling 11)"
+when = "apply_death, when a death timer fires or the Day/Vital drain applies a ScheduleDeath (SPR-014; EVO-001): alive = 0, death tick, death cause, life-course exit. Roles: the deceased is target; there is no actor for a natural death (a ScheduleDeath's culprit is actor, P1.13). Payload: [death_cause code]. Causes: none for a natural death. Admitted under DATA-5 as the tellable act class death at rungs 0-2 (SPR-011 ruling 11)"
 [[emits]]
 kind = "EXTINCTION"
 when = "apply_death leaves no ledger row with alive = 1, no row inserted earlier in the same step and no BIRTH_TIMER due in this slot whose mother's row is present (S12 as amended: the newborns of this slot, born or about to be, count as living; REV-SPR-015 MIN-3, R17.1): emitted once, right after that DEATH, in the same fire, with the DEATH as its one cause (a draft-local cause, written as a triggered edge; SPR-011 rulings 11, 17). No roles; payload: [] . With births it still happens at most once per run (an empty world bears no children, and a birth whose mother was compacted before the instant is dropped); the run continues to its requested end (V-SCALE-04)"
@@ -631,7 +639,7 @@ steps = [
 # command. DET-13 and ADR-0025 stand as written. M2 holds nothing and draws nothing for a commanded outcome.
 version = "m2-f1-lifecycle-v2"
 steps = [
-  "L1 Drain. M2's Day/Vital binding (drained_by) takes its whole inbox in key order (tick, phase, PersonId, seq) at the start of its step, after the slot's timer pass. rh-core has already dropped every command whose key person has no ledger row or alive = 0 (key = living; BCK-002 A-30; EVO-001); M2 drops and counts, per (sender, command, reason): a ScheduleDeath with cause = none (INV-M2-05), a Marry failing N7's preconditions, and a command whose payload tick (the frozen 0.2.0 field, until M2 0.2.1 removes it) is not this instant (a sender error under shape (b): applied now and counted late or early, EVO-001 L1; never held).",
+  "L1 Drain. M2's Day/Vital binding (drained_by) takes its whole inbox in key order (tick, phase, PersonId, seq) at the start of its step, after the slot's timer pass. rh-core has already dropped every command whose key person has no ledger row or alive = 0 (key = living; BCK-002 A-30; EVO-001); M2 drops and counts, per (sender, command, reason): a ScheduleDeath with cause = none (INV-M2-05), a Marry failing N7's preconditions (a command carries no date: its sender's timer submitted it in this instant, 05.1 §2 rule 2; nothing is ever held).",
   "L2 Apply. Every remaining command is applied in this step: ScheduleDeath through apply_death(victim, cause, culprit, cause_event) (S12 as amended, then H4), Marry through apply_marry (N7, source = the sender). The step's own order is the inbox's key order, after every timer of the slot, so a natural death timer of the same instant has already taken effect (S12 then drops the command's death as a second death of the same person, counted) and a commanded death cancels the victim's later DEATH_TIMER (S12).",
   "L3 Age. A command waits at most until M2's next Day/Vital binding: at most one day in P1a, where every sender submits at a day start; the queue-age invariant (A-31) holds by construction, and a violation means a skipped drain.",
   "L4 Shape (a), not chosen (REV-SPR-015 R12): M2 would hold a later-dated command in an M2-owned pending table with a timer that keeps its tick on a re-sample; that needs an amendment of ADR-0025 item 3 and DET-13 for queued commands (REV-SPR-015 §4) and was withdrawn with EVO-001's D39. Recorded so that the choice is visible; nothing of it is in this spec.",

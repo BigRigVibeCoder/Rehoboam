@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS life_course (          -- plane A
 CREATE TABLE IF NOT EXISTS life_interval (        -- plane A: residence, occupation, faction, marriage spells
     timeline_id UINTEGER  NOT NULL,
     person_id   UBIGINT   NOT NULL,
-    kind        UTINYINT  NOT NULL,            -- 0 residence (region), 1 occupation, 2 faction, 3 marriage (partner id)
+    kind        UTINYINT  NOT NULL,            -- 0 residence (settlement id; the region through M1, REV-SPR-018 R11), 1 occupation, 2 faction, 3 marriage (partner id)
     value       BIGINT    NOT NULL,
     valid_from  BIGINT    NOT NULL,
     valid_to    BIGINT

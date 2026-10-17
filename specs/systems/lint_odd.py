@@ -16,6 +16,34 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     senders (`from`); every sender's [[commands]] entry for it carries a `payload` with the same field names in the same
     order, `from` lists exactly the specs that send it, and a command sent to a spec that declares [[applies]] must be
     one of them. A warning on a draft spec, an error on a frozen one,
+  - absent owners (EVO-001; REV-P1a NEW-4; REV-SPR-017 round 3; 05.1 §2 rule 2): an identity read of another system's
+    column always requires its owner (registration refuses a world without it, by name) and declares no `neutral`. A
+    `rate` or `mode` read of another system's column carries a machine-readable `neutral`, the value a keyed lookup
+    returns when the owner is absent and the read is dropped (the type's zero is never a fallback). A neutral is typed
+    by the column's type, from the owner's [[owns]] `type` or the Registry [era_state] entry for an owner with no spec:
+    a TOML integer in the type's range, true/false, a member of the enum's codes, or a number representable in
+    q8_8/q16_16 (an exact decimal that is a multiple of the step) and inside its range. A rate read's neutral is also
+    named in its in-coupling's `neutral` prose as `<column> = <value>`. A missing or untypeable neutral is a warning on
+    a draft spec and an error on a frozen one; a mistyped neutral is always an error (a deliberate departure from
+    warning-on-draft: a wrong value is never right). The lint prints, per spec, the owners its identity reads require
+    (NOTE lines), and warns, as advice only, when a substrate (`[purpose] role = "substrate"`) reads as identity a
+    column of a system that is not a substrate, since that makes it require a system a smaller world may lack
+    (registration enforces the rule itself: a world lacking a required owner is refused by name; R12, R16),
+  - enum codes (EVO-001): an enum column of [[owns]] carries its codes, `values = [...]` (code = position) or
+    `registry = "<table>"` (the Registry table's `ids` list, else its keys in byte-wise ascending order, as verb_id),
+  - lifecycle commands, typed (EVO-001): each [[applies]] entry (one per command kind) has a payload `{ name: Type, ... }`
+    in a closed vocabulary (PersonId, EventRef, SimTime, the id types, u8..u64, i64, bool, q8_8, q16_16,
+    enum(<entity.column>) naming an enum column with codes; a field named *_event is an EventRef; no name repeats);
+    `drained_by = "<Pulse>/<Phase>"` names the one binding of [[schedule]] that takes the command (an escape: with
+    `sprint = "SPR-NNN"` naming a sprint that exists (a document under CODEX/05_PROJECT, or a row of a PRJ plan
+    until the document exists; any other id is an error, R18) an undeclared binding is a counted warning until that
+    sprint's document is CLOSED, then an error on a frozen spec); `key` is "living" (the dead-person drop applies,
+    05.1 §2 rule 2) or "any", stated; `key_field` names the PersonId payload field the command is keyed by, or
+    "person" for Command::person itself when the payload does not repeat it (R15); `outcome = true` marks a command
+    that carries a sampled, dated outcome, and every sender's [[commands]] entry for it then names the sender's own
+    `timer` kind and the [[rng]] `purpose` it is re-sampled under (05.1 §2 rule 2: the sender's timer submits it),
+    and the sender binds the draining binding's pulse and phase, where its timer fires (a sender naming a timer
+    for a command that carries no outcome is warned),
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
@@ -63,6 +91,7 @@ import hashlib
 import re
 import sys
 import tomllib
+from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -79,6 +108,21 @@ TYPES = {"i64", "u64", "i32", "u32", "u16", "u8", "bool", "enum", "q8_8", "q16_1
 SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
 READ_USES = ("identity", "mode", "rate")
 IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_range", "source")
+INTEGER_TYPES = {"i64", "u64", "i32", "u32", "u16", "u8"}
+NUMBER_TYPES = {"q8_8", "q16_16", "f32_field"}
+INT_RANGE = {"u8": (0, 2**8 - 1), "u16": (0, 2**16 - 1), "u32": (0, 2**32 - 1), "u64": (0, 2**64 - 1),
+             "i32": (-2**31, 2**31 - 1), "i64": (-2**63, 2**63 - 1)}
+FIXED_RANGE = {"q8_8": (Decimal(-128), Decimal(128)), "q16_16": (Decimal(-32768), Decimal(32768))}   # [lo, hi)
+REGISTRY_ID = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+PAYLOAD_TYPES = {"PersonId", "EventRef", "SimTime", "TitleId", "OfficeId", "ClaimId", "HouseId", "VowId", "ArtifactId",
+                 "HouseholdId", "PlaceId", "u8", "u16", "u32", "u64", "i64", "bool", "q8_8", "q16_16"}
+PAYLOAD_ENUM = re.compile(r"^enum\(([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*)\)$")
+PAYLOAD_FIELD = re.compile(r"^([a-z][a-z0-9_]*)\s*:\s*(\S+)$")
+BINDING = re.compile(r"^(" + "|".join(PULSES) + r")/(" + "|".join(PHASES) + r")$")
+KEY_RULES = ("living", "any")
+SPRINT_ID = re.compile(r"^SPR-\d{3}$")
+TIMER_KIND = re.compile(r"^[A-Z][A-Z0-9_]*$")
+FIXED_STEP = {"q8_8": 256, "q16_16": 65536}
 SERIES = ("constant", "step", "sine", "ramp", "historical")
 
 
@@ -89,7 +133,7 @@ def replacement_problems(overlay_path, specs):
     """With --specs (a spec set outside the Registry, SPR-008 ruling 2): every overlay system id is
     X-prefixed, and every spec is one of the overlay's systems. ``load`` has already refused an overlay
     entry that repeats a Registry name."""
-    overlay = tomllib.loads(Path(overlay_path).read_text(encoding="utf-8"))
+    overlay = tomllib.loads(Path(overlay_path).read_text(encoding="utf-8"), parse_float=Decimal)
     ids = set(overlay.get("systems", {}))
     problems = [f"{overlay_path}: overlay system '{sid}' must be X-prefixed (X<digits>.<snake_name>)"
                 for sid in sorted(ids) if not OVERLAY_ID.match(sid)]
@@ -106,13 +150,13 @@ def spec_files(d):
 def load(extra_dirs=(), overlay=None, specs_dir=SPECS, next_dir=None):
     """Return (registry, specs, requirement ids, test ids, ADR ids, frozen), where ``frozen`` maps each id that a
     ``--next`` spec superseded to the repository spec it replaced (empty without ``--next``)."""
-    reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
+    reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"), parse_float=Decimal)
     specs = {}
     files = spec_files(specs_dir)
     for d in extra_dirs:
         files += spec_files(d)
     for f in files:
-        s = tomllib.loads(f.read_text(encoding="utf-8"))
+        s = tomllib.loads(f.read_text(encoding="utf-8"), parse_float=Decimal)   # exact decimals (SPR-011 ruling 9)
         sid = s.get("system", {}).get("id", f.stem)
         if sid in specs:
             raise SystemExit(f"{f}: system {sid} already has a spec ({specs[sid][0]})")
@@ -120,7 +164,7 @@ def load(extra_dirs=(), overlay=None, specs_dir=SPECS, next_dir=None):
     frozen = {}
     if next_dir is not None:                      # next versions supersede for this run (SPR-015)
         for f in spec_files(next_dir):
-            s = tomllib.loads(f.read_text(encoding="utf-8"))
+            s = tomllib.loads(f.read_text(encoding="utf-8"), parse_float=Decimal)   # exact decimals (SPR-011 ruling 9)
             sid = s.get("system", {}).get("id", f.stem)
             if sid not in specs:
                 raise SystemExit(f"{f}: a next-version spec must supersede a spec in {specs_dir}; {sid} has none")
@@ -129,7 +173,7 @@ def load(extra_dirs=(), overlay=None, specs_dir=SPECS, next_dir=None):
             frozen[sid] = specs[sid]
             specs[sid] = (f, s)
     if overlay is not None:                       # a world's own systems and verbs (SPR-011 ruling 11)
-        over = tomllib.loads(Path(overlay).read_text(encoding="utf-8"))
+        over = tomllib.loads(Path(overlay).read_text(encoding="utf-8"), parse_float=Decimal)
         unknown = sorted(set(over) - {"systems", "verbs"})
         if unknown:
             raise SystemExit(f"overlay {overlay}: only [systems] and [verbs] may be overlaid, found {unknown}")
@@ -456,21 +500,176 @@ def lint_next(frozen, specs, errs):
 
 
 def payload_fields(text):
-    """Field names of a payload written `{ name: Type, name: Type }` (types may hold `|` and `or`, never commas)."""
+    """Field names of a payload written `{ name: Type, ... }` (an owner's [[applies]]) or `{ name, ... }` (a sender's
+    [[commands]])."""
     inner = str(text).strip()
     if not (inner.startswith("{") and inner.endswith("}")):
         return None
     return [f.split(":")[0].strip() for f in inner[1:-1].split(",") if f.strip()]
 
 
-def lint_applies(specs, errs, warns, next_ids=()):
-    """[[applies]] against the senders' [[commands]] (PR #32; REV-P1a §7). A next-version spec (``next_ids``) is held
-    to frozen-level strictness (REV-SPR-015 R6)."""
+def payload_types(text):
+    """The `(name, type)` pairs of a typed payload `{ name: Type, ... }` (EVO-001), or None if any field lacks the
+    form; the types are not checked here."""
+    inner = str(text).strip()
+    if not (inner.startswith("{") and inner.endswith("}")):
+        return None
+    out = []
+    for f in inner[1:-1].split(","):
+        if not f.strip():
+            continue
+        m = PAYLOAD_FIELD.match(f.strip())
+        if m is None:
+            return None
+        out.append((m.group(1), m.group(2)))
+    return out
+
+
+def payload_type_problem(t, enum_names):
+    """Why ``t`` is not in the closed payload vocabulary (EVO-001), or None."""
+    if t in PAYLOAD_TYPES:
+        return None
+    m = PAYLOAD_ENUM.match(t)
+    if m is None:
+        return f"type '{t}' is not in the payload vocabulary {sorted(PAYLOAD_TYPES)} or enum(<entity.column>)"
+    if m.group(1) not in enum_names:
+        return f"type '{t}' names no enum column with codes in any spec"
+    return None
+
+
+def enum_codes(col_entry, reg):
+    """The code names of an enum column of [[owns]] (EVO-001): `values` by position, or the Registry table named by
+    `registry` (its `ids` list, else its keys in byte-wise ascending order). None, with a reason, if neither is usable."""
+    values, table = col_entry.get("values"), col_entry.get("registry")
+    if (values is None) == (table is None):
+        return None, "needs exactly one of values = [...] or registry = \"<table>\" (its codes; EVO-001)"
+    if values is not None:
+        if not (isinstance(values, list) and values and all(isinstance(v, str) and SNAKE.match(v) for v in values)
+                and len(set(values)) == len(values)):
+            return None, "values must be a non-empty list of distinct snake_case names"
+        return list(values), None
+    t = reg.get(table)
+    if not isinstance(t, dict):
+        return None, f"registry = \"{table}\" names no Registry table"
+    ids = t.get("ids")
+    if isinstance(ids, list):
+        names = [i for i in ids if isinstance(i, str)]
+    else:
+        names = sorted(k for k in t if isinstance(k, str))
+    if not names or not all(REGISTRY_ID.match(n) for n in names):
+        return None, f"registry = \"{table}\": the table has no usable ids"
+    return names, None
+
+
+def names_value(prose, column, value):
+    """Whether the coupling's free-text `neutral` states ``<column> = <value>`` (the bare name or entity.column; EVO-001,
+    REV-EVO-001 NIT-8), so that a number elsewhere in the prose cannot stand in for it."""
+    forms = {str(value)}
+    if isinstance(value, bool):
+        forms |= {"true", "false"} & {str(value).lower()}
+    elif isinstance(value, (int, Decimal, float)):
+        d = Decimal(str(value)).normalize()
+        forms |= {format(d, "f"), str(value)}
+    bare = column.split(".", 1)[-1]
+    name = r"(?:" + re.escape(column) + "|" + re.escape(bare) + ")"
+    return any(re.search(r"(?<![\w.])" + name + r"\s*=\s*" + re.escape(f) + r"(?![\w.])", str(prose)) for f in forms)
+
+
+def closed_sprints():
+    """The sprint ids whose document in CODEX/05_PROJECT is CLOSED (the `sprint` escape of [[applies]] ends there)."""
+    out = set()
+    for f in (ROOT / "CODEX" / "05_PROJECT").glob("SPR-*.md"):
+        head = f.read_text(encoding="utf-8")[:2000]
+        if re.search(r"^status:\s*CLOSED\b", head, re.M):
+            out.add(f.name[:7])
+    return out
+
+
+def known_sprints():
+    """The sprint ids a `sprint` escape may name (REV-EVO-001 R18): a sprint document under CODEX/05_PROJECT, or, until
+    the document exists, a sprint row of a PRJ plan there (`| SPR-NNN |`). Any other id is refused."""
+    out = set()
+    for f in (ROOT / "CODEX" / "05_PROJECT").glob("SPR-*.md"):
+        out.add(f.name[:7])
+    for f in (ROOT / "CODEX" / "05_PROJECT").glob("PRJ-*.md"):
+        out.update(re.findall(r"^\|\s*(SPR-\d{3})\s*\|", f.read_text(encoding="utf-8"), re.M))
+    return out
+
+
+def lint_applies(specs, errs, warns, enum_names=None, next_ids=()):
+    """[[applies]] against the senders' [[commands]] (PR #32; REV-P1a §7), and each entry's typed payload, drained_by
+    and key (EVO-001). A next-version spec (``next_ids``) is held to frozen-level strictness (REV-SPR-015 R6)."""
+    enum_names = enum_names or {}
+
     def frozen_or_next(sid):
         return specs[sid][1].get("system", {}).get("status") == "frozen" or sid in next_ids
     for tid, (tf, ts) in specs.items():
         strict = errs if frozen_or_next(tid) else warns
-        applies = {a.get("command"): a for a in ts.get("applies", [])}
+        applies = {}
+        for a in ts.get("applies", []):
+            if a.get("command") in applies:
+                errs.append(f"{tf.name}: [[applies]] {a.get('command')} is declared twice; one draining binding per command kind (EVO-001)")
+            applies.setdefault(a.get("command"), a)
+        bindings = {f"{sc.get('pulse')}/{sc.get('phase')}" for sc in ts.get("schedule", [])}
+        for cmd, a in sorted(applies.items()):
+            typed = payload_types(a.get("payload"))
+            names = []
+            if typed is None:
+                strict.append(f"{tf.name}: [[applies]] {cmd} payload must be typed, \"{{ name: Type, ... }}\" (EVO-001)")
+            else:
+                for name, t in typed:
+                    if (why := payload_type_problem(t, enum_names)) is not None:
+                        strict.append(f"{tf.name}: [[applies]] {cmd} field {name}: {why}")
+                    if name.endswith("_event") and t != "EventRef":
+                        errs.append(f"{tf.name}: [[applies]] {cmd} field {name} must be an EventRef (the merge rewrites event slots; EVO-001)")
+                    if name in names:
+                        errs.append(f"{tf.name}: [[applies]] {cmd} field {name} is repeated")
+                    names.append(name)
+            drained = a.get("drained_by")
+            if not isinstance(drained, str) or not BINDING.match(drained):
+                strict.append(f"{tf.name}: [[applies]] {cmd} needs drained_by = \"<Pulse>/<Phase>\", the one binding that takes it (EVO-001)")
+            elif drained not in bindings:
+                sprint = a.get("sprint")
+                if sprint is not None and not (isinstance(sprint, str) and SPRINT_ID.match(sprint)):
+                    errs.append(f"{tf.name}: [[applies]] {cmd} sprint must be \"SPR-NNN\" (EVO-001)")
+                    sprint = None
+                elif sprint is not None and sprint not in KNOWN_SPRINTS:
+                    errs.append(f"{tf.name}: [[applies]] {cmd} sprint {sprint} names no sprint: no document under CODEX/05_PROJECT and no PRJ row (EVO-001 R18)")
+                    sprint = None
+                if sprint is None or sprint in CLOSED_SPRINTS:
+                    strict.append(f"{tf.name}: [[applies]] {cmd} is drained_by {drained}, which [[schedule]] does not declare"
+                                  + (f" ({sprint} is CLOSED: declare the binding)" if sprint else ""))
+                else:
+                    warns.append(f"{tf.name}: ESCAPE [[applies]] {cmd} is drained_by {drained}, which [[schedule]] does not declare until {sprint}")
+            if a.get("key") is None:
+                strict.append(f"{tf.name}: [[applies]] {cmd} needs key = \"living\" | \"any\" (EVO-001)")
+            elif a.get("key") not in KEY_RULES:
+                errs.append(f"{tf.name}: [[applies]] {cmd} key must be \"living\" | \"any\" (EVO-001)")
+            kf = a.get("key_field")
+            if not isinstance(kf, str):
+                strict.append(f"{tf.name}: [[applies]] {cmd} needs key_field = \"<a PersonId payload field>\" | \"person\", the person it is keyed by (EVO-001)")
+            elif typed is not None and (kf, "PersonId") not in typed and not (kf == "person" and "person" not in names):
+                errs.append(f"{tf.name}: [[applies]] {cmd} key_field {kf} is not a PersonId field of the payload (nor \"person\", Command::person itself)")
+            if not isinstance(a.get("outcome", False), bool):
+                errs.append(f"{tf.name}: [[applies]] {cmd} outcome must be true or false")
+            else:
+                for sid, (sf, ss) in specs.items():
+                    for c in ss.get("commands", []):
+                        if c.get("target") != tid or c.get("command") != cmd:
+                            continue
+                        sp = errs if ss.get("system", {}).get("status") == "frozen" else warns
+                        timer, purpose = c.get("timer"), c.get("purpose")
+                        if not a.get("outcome"):
+                            if timer is not None or purpose is not None:
+                                warns.append(f"{sf.name}: [[commands]] {cmd} to {tid} names a timer, but the owner's [[applies]] says it carries no outcome (outcome = false): an undated request waits for the draining binding (EVO-001)")
+                            continue
+                        if not (isinstance(timer, str) and TIMER_KIND.match(timer)):
+                            sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome, so it needs timer = \"<KIND>\", the sender's own timer that submits it (EVO-001)")
+                        purposes = {g.get("purpose") for g in ss.get("rng", [])}
+                        if purpose not in purposes:
+                            sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome, so it needs purpose = one of its [[rng]] purposes, under which its timer is re-sampled (EVO-001)")
+                        if isinstance(drained, str) and BINDING.match(drained) and drained not in {f"{sc.get('pulse')}/{sc.get('phase')}" for sc in ss.get("schedule", [])}:
+                            sp.append(f"{sf.name}: [[commands]] {cmd} to {tid} carries an outcome submitted by {sid}'s timer in the timer pass of {drained}, which {sid} does not bind in [[schedule]] (a timer fires at the level of its owner's first binding in the phase; the engine would raise SimError::Timer at the first fire; EVO-001 R9)")
         senders = {}                              # command -> [(sender id, its [[commands]] entry)]
         for sid, (sf, ss) in specs.items():
             for c in ss.get("commands", []):
@@ -500,11 +699,70 @@ def lint_applies(specs, errs, warns, next_ids=()):
                         f"{specs[s][0].name}: [[commands]] {cmd} to {tid} has payload fields {got}, but [[applies]] declares {want}")
 
 
-def lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=()):
-    """``next_ids``: systems a --next spec supersedes for this run. A draft spec that still reads a column from the
-    owner it had before the next version claimed it warns (it moves when the next version supersedes the file); a
-    frozen reader errs as always."""
+def neutral_problem(value, col_type, names=None):
+    """Why ``value`` is not a well-typed `neutral` for a column of ``col_type`` (EVO-001), or None. ``names`` are the
+    enum's codes when known (an enum column without codes is reported at its owner)."""
+    shown = str(value)
+    if col_type in INTEGER_TYPES:
+        if not isinstance(value, int) or isinstance(value, bool):
+            return f"neutral {shown} must be a TOML integer for a {col_type} column"
+        lo, hi = INT_RANGE[col_type]
+        if not lo <= value <= hi:
+            return f"neutral {shown} is outside {col_type}'s range [{lo}, {hi}]"
+    elif col_type == "bool":
+        if not isinstance(value, bool):
+            return f"neutral {shown} must be true or false for a bool column"
+    elif col_type == "enum":
+        if not isinstance(value, str) or not REGISTRY_ID.match(value):
+            return f"neutral {shown} must be a value name for a enum column"
+        if names is not None and value not in names:
+            return f"neutral {shown} is not one of the enum's codes {names}"
+    elif col_type in NUMBER_TYPES:
+        if isinstance(value, bool) or not isinstance(value, (int, Decimal, float)):
+            return f"neutral {shown} must be a TOML number for a {col_type} column"
+        if col_type in FIXED_RANGE:
+            lo, hi = FIXED_RANGE[col_type]
+            d = Decimal(str(value))
+            if d * FIXED_STEP[col_type] != int(d * FIXED_STEP[col_type]):
+                return f"neutral {shown} is not representable in {col_type} (a multiple of 1/{FIXED_STEP[col_type]})"
+            if not lo <= d < hi:
+                return f"neutral {shown} is outside {col_type}'s range [{lo}, {hi})"
+    else:
+        return f"column type '{col_type}' has no neutral form"
+    return None
+
+
+def column_type(col, owner, owners_type, reg):
+    """The declared type of ``col`` (``entity.name``): the owner spec's [[owns]], else the Registry [era_state]
+    entry of the same name and owner (M6's exec_constraint before M6 has a spec). None if neither."""
+    if col in owners_type:
+        return owners_type[col]
+    name = col.split(".", 1)[-1]
+    era = reg.get("era_state", {}).get(name)
+    if era is not None and era.get("owner") == owner:
+        return era.get("type")
+    return None
+
+
+CLOSED_SPRINTS = set()
+KNOWN_SPRINTS = set()
+
+
+def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
+    """``next_ids``: systems a --next spec supersedes for this run (SPR-015). A draft spec that still reads a column
+    from the owner it had before the next version claimed it warns (it moves when the next version supersedes the
+    file); a frozen reader errs as always."""
     errs, warns = [], []
+    notes = notes if notes is not None else []
+    roles = {sid: s.get("purpose", {}).get("role") for sid, (_, s) in specs.items()}
+    owners_type = {o.get("column"): o.get("type") for _, (_, s) in specs.items() for o in s.get("owns", [])}
+    enum_names = {}                               # enum column -> its code names (EVO-001)
+    for _, (_, s) in specs.items():
+        for o in s.get("owns", []):
+            if o.get("type") == "enum":
+                names, _why = enum_codes(o, reg)
+                if names is not None:
+                    enum_names[o.get("column")] = names
     owners = {}                                   # column -> (system, plane)
     for sid, (f, s) in specs.items():
         for o in s.get("owns", []):
@@ -549,6 +807,10 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=()):
             planes.add(o.get("plane"))
             if o.get("type") in ("q8_8", "q16_16") and not o.get("fixed_point", False):
                 errs.append(f"{p}: {o.get('column')} is fixed-point by type; set fixed_point = true")
+            if o.get("type") == "enum":
+                _names, why = enum_codes(o, reg)
+                if why is not None:
+                    (errs if hdr.get("status") == "frozen" else warns).append(f"{p}: enum column {o.get('column')} {why}")
         # reads resolve to owners; plane rule
         for r in s.get("reads", []):
             col, owner = r.get("column"), r.get("owner")
@@ -591,6 +853,39 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=()):
             ob = c.get("output_bounds")
             if ob is not None and (not isinstance(ob, list) or len(ob) != 2):
                 errs.append(f"{p}: in-coupling on {col}: output_bounds must be [min, max]")
+        # absent owners (EVO-001; 05.1 §2 rule 2; REV-EVO-001 R12): an identity read requires its owner and has no
+        # neutral; a rate or mode read carries the neutral a keyed lookup returns once the read is dropped
+        required_owners = sorted({r.get("owner") for r in s.get("reads", []) if r.get("owner") != sid and r.get("use") == "identity"})
+        if required_owners:
+            notes.append(f"{p}: requires {', '.join(required_owners)} (identity reads; a world that registers {sid} registers them)")
+        for r in s.get("reads", []):
+            col, owner, use = r.get("column"), r.get("owner"), r.get("use")
+            if owner == sid:
+                continue
+            if use == "identity" and s.get("purpose", {}).get("role") == "substrate" and roles.get(owner) != "substrate":
+                warns.append(f"{p}: a substrate reads {col} from {owner} as identity, which requires {owner}"
+                             + (" (not a substrate)" if owner in roles else " (no spec, so its role is unknown)")
+                             + "; advisory: a substrate that must run alone reads it as rate or mode with a neutral, and registration refuses a world that lacks the owner (EVO-001 R12, R16)")
+            if "required" in r:
+                errs.append(f"{p}: read {col} from {owner}: `required` is not a field; an identity read always requires its owner (EVO-001 R12)")
+            if use == "identity":
+                if "neutral" in r:
+                    errs.append(f"{p}: read {col} from {owner} is an identity read, which requires its owner and declares no neutral (EVO-001)")
+                continue
+            if "neutral" not in r:
+                strict.append(f"{p}: read {col} from {owner} needs a neutral value, typed by the column "
+                              f"(a {use} read, dropped when its owner is absent; EVO-001; 05.1 §2 rule 2)")
+                continue
+            value = r.get("neutral")
+            ct = column_type(col, owner, owners_type, reg)
+            if ct is None:
+                strict.append(f"{p}: neutral of {col} cannot be typed: {owner} has no spec declaring it and the Registry "
+                              "[era_state] has no entry for it (EVO-001)")
+            elif (why := neutral_problem(value, ct, enum_names.get(col))) is not None:
+                errs.append(f"{p}: read {col} from {owner}: {why} (EVO-001)")
+            c = in_by_col.get(col)
+            if use == "rate" and c is not None and c.get("neutral") and not names_value(c.get("neutral"), col, value):
+                strict.append(f"{p}: in-coupling on {col}: its neutral prose does not state {col.split('.', 1)[-1]} = {value} (EVO-001)")
         iso = s.get("isolation")
         if iso is None:
             strict.append(f"{p}: missing [isolation] (synthetic forcing for this system alone; docs/09 V-SF-22)")
@@ -688,7 +983,7 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=()):
         for c in s.get("couplings", []):
             if c.get("system") not in reg.get("systems", {}) and c.get("system") not in ("S1.culture", "S2.technology", "S3.migration"):
                 errs.append(f"{p}: coupling to unknown system {c.get('system')}")
-    lint_applies(specs, errs, warns, next_ids)
+    lint_applies(specs, errs, warns, enum_names, next_ids)
     return errs, warns
 
 
@@ -770,6 +1065,8 @@ def main() -> int:
         print(e)
         return 2
     reg, specs, req_ids, test_ids, adr_ids, frozen = load(extra, overlay, specs_dir, next_dir)
+    CLOSED_SPRINTS.update(closed_sprints())
+    KNOWN_SPRINTS.update(known_sprints())
     overlay_errs = []
     if overlay is not None and specs_dir != SPECS:
         overlay_errs = replacement_problems(overlay, specs)
@@ -783,7 +1080,10 @@ def main() -> int:
             return 1
         print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
         return 0
-    errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=set(frozen))
+    lint_notes = []
+    errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids, lint_notes, next_ids=set(frozen))
+    for n in lint_notes:
+        print("NOTE ", n)
     notes = lint_next(frozen, specs, errs)
     errs = overlay_errs + errs
     # REV-SPR-015 round 3 MIN-1: the amendments are locked by path and text digest, not counted
@@ -993,17 +1293,86 @@ def main() -> int:
         assert any(needle in e for e in caught), (needle, caught)
     if "M2.demography" in specs:
         assert any("also owned" in e for e in caught), caught
-    # self-check (SPR-011 ruling 11): a frozen spec emitting an unknown verb or another system's verb is an error;
-    # a draft one only warns
-    m2 = specs.get("M2.demography")
-    if m2 is not None:
-        for status, want_err in (("frozen", True), ("draft", False)):
-            probe_spec = dict(m2[1], system=dict(m2[1]["system"], status=status),
-                              emits=m2[1].get("emits", []) + [{"kind": "NOT_A_VERB"}, {"kind": "SUCCEED"}])
-            pe, pw = lint(reg, {"M2.demography": (m2[0], probe_spec)}, req_ids, test_ids, adr_ids)
-            for needle in ("emits NOT_A_VERB, which is not a Registry verb", "emits SUCCEED, which the Registry gives to M7.dynasty"):
+    # self-check (EVO-001): the absent-owner rules on [[reads]], enum codes on [[owns]], typed [[applies]] entries and
+    # the outcome timer on [[commands]]. frozen -> error, draft -> warning for the declarations; a wrong value is always
+    # an error.
+    if "M2.demography" in specs:
+        base = {"odd_r": 2, "system": {"id": "S5.daily_life", "fidelity": "F1"}, "purpose": {"role": "substrate"}, "owns": [], "params": [], "rng": [{"purpose": "fix", "key": ["person"]}],
+                "schedule": [{"pulse": "Day", "phase": "Activity", "steps": ["x: y"]}]}
+        rd = lambda col, owner, use, **kw: dict({"column": col, "owner": owner, "lag": "lagged", "use": use}, **kw)
+        ap = lambda **kw: dict({"command": "X", "payload": "{ a: PersonId }", "from": [], "drained_by": "Day/Activity", "key": "living", "key_field": "a"}, **kw)
+        M2 = "M2.demography"
+        probes = [   # (status, reads, applies, commands, needle, want_err)
+            ("draft", [rd("person.alive", M2, "identity", neutral=False)], [], [], "is an identity read, which requires its owner and declares no neutral", True),
+            ("draft", [rd("person.alive", M2, "identity", required=True)], [], [], "`required` is not a field", True),
+            ("frozen", [rd("polity.exec_constraint", "M6.polity", "rate")], [], [], "needs a neutral value", True),
+            ("draft", [rd("person.death_cause", M2, "mode")], [], [], "needs a neutral value", False),
+            ("draft", [rd("person.death_cause", M2, "mode", neutral=0)], [], [], "must be a value name for a enum column", True),
+            ("draft", [rd("person.death_tick", M2, "mode", neutral="0")], [], [], "must be a TOML integer for a i64 column", True),
+            ("draft", [rd("person.mother", M2, "mode", neutral=-5)], [], [], "is outside u64's range", True),
+            ("draft", [rd("person.sex", M2, "mode", neutral="not_a_sex")], [], [], "is not one of the enum's codes", True),
+            ("draft", [rd("person.death_cause", M2, "mode", neutral="none")], [], [], "", False),
+            ("draft", [rd("polity.exec_constraint", "M6.polity", "mode", neutral=Decimal("1e9"))], [], [], "is outside q8_8's range", True),
+            ("draft", [rd("polity.exec_constraint", "M6.polity", "mode", neutral=Decimal("0.001"))], [], [], "is not representable in q8_8", True),
+            ("draft", [rd("polity.exec_constraint", "M6.polity", "mode", neutral=Decimal("127.999"))], [], [], "is not representable in q8_8", True),
+            ("draft", [rd("polity.exec_constraint", "M6.polity", "mode", neutral="zero")], [], [], "must be a TOML number for a q8_8 column", True),
+            ("frozen", [rd("region.conditions", "M6.polity", "mode", neutral=0)], [], [], "cannot be typed", True),
+            ("draft", [rd("region.conditions", "M6.polity", "mode", neutral=0)], [], [], "cannot be typed", False),
+            ("frozen", [], [ap(payload="{ a, b }")], [], "payload must be typed", True),
+            ("frozen", [], [ap(payload="{ a: PersonId, b: Potato }")], [], "field b: type 'Potato' is not in the payload vocabulary", True),
+            ("frozen", [], [ap(payload="{ a: PersonId, c: enum(person.death_cause), e: EventRef }")], [], "", False),
+            ("frozen", [], [ap(payload="{ a: PersonId, e: enum(person.nope) }")], [], "names no enum column with codes", True),
+            ("draft", [], [ap(payload="{ a: PersonId, cause_event: u64 }")], [], "field cause_event must be an EventRef", True),
+            ("draft", [], [ap(payload="{ a: PersonId, a: u64 }")], [], "field a is repeated", True),
+            ("frozen", [], [dict(ap(), drained_by=None)], [], "needs drained_by", True),
+            ("frozen", [], [ap(drained_by="Day/Agenda")], [], "is drained_by Day/Agenda, which [[schedule]] does not declare", True),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-014")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-014", False),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-999")], [], "sprint SPR-999 names no sprint: no document under CODEX/05_PROJECT and no PRJ row", True),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-006")], [], "(SPR-006 is CLOSED: declare the binding)", True),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="P1.13 (SPR-014)")], [], "sprint must be \"SPR-NNN\"", True),
+            ("frozen", [], [dict(ap(), key=None)], [], "needs key = ", True),
+            ("draft", [], [ap(key="maybe")], [], "key must be", True),
+            ("frozen", [], [dict(ap(), key_field=None)], [], "needs key_field", True),
+            ("draft", [], [ap(payload="{ a: PersonId, n: u64 }", key_field="n")], [], "key_field n is not a PersonId field", True),
+            ("frozen", [], [ap(payload="{ row: i64 }", key_field="person")], [], "", False),
+            ("draft", [], [ap(payload="{ person: u64 }", key_field="person")], [], "key_field person is not a PersonId field", True),
+            ("frozen", [], [ap(), ap(drained_by="Day/Activity")], [], "is declared twice", True),
+            ("draft", [], [ap(outcome="yes")], [], "outcome must be true or false", True),
+            ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }"}], "carries an outcome, so it needs timer", True),
+            ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "nope"}], "needs purpose = one of its [[rng]] purposes", True),
+            ("frozen", [], [ap(outcome=True, **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "", False),
+            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-014", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
+            ("frozen", [], [ap(**{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "names a timer, but the owner's [[applies]] says it carries no outcome", False),
+            ("frozen", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
+            ("draft", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
+            ("frozen", [rd("person.alive", M2, "identity")], [], [], "", False),
+        ]
+        for status, reads, applies, commands, needle, want_err in probes:
+            probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies, commands=commands)
+            CLOSED_SPRINTS.add("SPR-006")
+            KNOWN_SPRINTS.update({"SPR-006", "SPR-014"})
+            pe, pw = lint(reg, {M2: specs[M2], "M7.dynasty": specs["M7.dynasty"], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids) if "M7.dynasty" in specs else lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
+            pe = [e for e in pe if e.startswith("probe.odd.toml")]
+            pw = [e for e in pw if e.startswith("probe.odd.toml")]
+            mine = lambda xs: [e for e in xs if "neutral" in e or "required" in e or "[[applies]]" in e or "[[commands]]" in e or "substrate" in e]
+            if needle:
                 assert any(needle in e for e in (pe if want_err else pw)), (status, needle, pe, pw)
                 assert not any(needle in e for e in (pw if want_err else pe)), (status, needle, pe, pw)
+            else:
+                assert not mine(pe) and not mine(pw), (status, reads, applies, commands, mine(pe), mine(pw))
+        # an enum column without codes is reported at its owner; a rate read's neutral must be stated by its coupling as
+        # `<column> = <value>` (a number elsewhere in the prose does not count: NIT-8)
+        cpl = lambda prose: [{"system": "M6.polity", "direction": "in", "column": "polity.exec_constraint", "form": "f", "neutral": prose,
+                              "output_bounds": ["0", "1"], "data_range": "d", "beyond_range": "b", "source": "s"}]
+        probe_spec = dict(base, system=dict(base["system"], status="frozen"),
+                          owns=[{"column": "mood.state", "entity": "mood", "type": "enum", "plane": "A"}],
+                          reads=[rd("polity.exec_constraint", "M6.polity", "rate", neutral=1)], couplings=cpl("m_ec = 1 + 0 x 1, so 1"))
+        pe, _ = lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
+        for needle in ("enum column mood.state needs exactly one of values", "its neutral prose does not state exec_constraint = 1"):
+            assert any(needle in e for e in pe), (needle, pe)
+        probe_spec = dict(probe_spec, owns=[], couplings=cpl("exec_constraint = 1, an assembly"))
+        pe, _ = lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
+        assert not any("neutral prose" in e for e in pe), pe
     print(f"  self-check (broken spec rejected): {len(caught)} errors, e.g. {caught[0]}")
     print(f"{'PASS' if not errs else 'FAIL'}: {len(specs)} system specs linted ({len(warns)} warnings)")
     return 1 if errs else 0

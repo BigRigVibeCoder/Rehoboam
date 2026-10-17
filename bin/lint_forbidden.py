@@ -18,6 +18,39 @@ reports its metadata). Rules:
                       groups and globs), SystemTime, Utc::now, Local::now. A bare `Instant` is not
                       flagged, so that the simulation may name its own time type; every path to
                       the std type is.
+    file-clock        .modified(), .accessed() and .created() (std::fs::Metadata): a file's
+                      timestamps are a wall clock reached without a clock name (BCK-002 A-44).
+    file-clock        also (DEF-2) the UFCS and path forms (`Metadata::modified`, `<Metadata>::
+                      accessed`), any platform `MetadataExt`, and its accessors, which a glob
+                      import brings in unnamed: `.atime(`/`.mtime(`/`.ctime(` (and `_nsec`),
+                      `.st_*time(`, `.creation_time(`, `.last_access_time(`, `.last_write_time(`.
+    env               any path into std::env, in any form (DEF-5): `std::env::var`, the fully
+                      qualified `std::env::current_dir()`, `current_exe`, `temp_dir`, `home_dir`,
+                      `set_current_dir`, `split_paths`, `join_paths` and the rest, `env::<item>`
+                      after an import, and any `use` tree that imports std::env (a rename, a
+                      group, a glob), in src/ and build.rs: the environment and the host's
+                      directories are inputs outside the history tuple (SPR-011 A-4). The one
+                      exception is std::env::consts (the target's ARCH, OS and FAMILY, fixed at
+                      compile time by the build). Out of scope: the env! and option_env! macros,
+                      which read the build's environment at compile time into the engine build,
+                      a term of the history tuple, not a run-time input. tests/ may read the
+                      overrides of their golden files.
+    process           the module std::process, in src/ and build.rs: Command, and exit, abort and
+                      id too (A-44; DEF-1). tests/ may name temporary files by process id.
+    file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
+                      build.rs (where the float rule's scope says engine code) of a plane-A crate
+                      not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot
+                      (the journal and keyframes) and rh-registry (the system specs it reads for
+                      the ownership lint). tests/, benches/ and examples/ may read their golden
+                      files. A dependency's own file API is not seen (A-44).
+                      DEF-1: for process and file-io, every `use` item is parsed as a tree, so a
+                      rename, `self`, `{self as x}` or a nested `std::{..}` group that imports the
+                      module is reported at its `use`, whatever the form.
+    std-rename        (MIN-2) a renamed std in src/ and build.rs: `use std as x;`, `use ::std as
+                      x;`, `use std::{self as x}` and `extern crate std as x;`. A rename would
+                      carry std::process, std::fs and std::env past every path pattern. Raw
+                      identifiers are normalised first (`r#std::r#fs` is `std::fs`); on a line
+                      that holds one, the reported column counts without the `r#` prefixes.
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
@@ -132,6 +165,7 @@ import tomllib
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal
 
 RULE_ID = "V-DET-19"
@@ -155,6 +189,33 @@ FLOAT_FREE_DIRS = frozenset({"tests", "benches", "examples"})
 # change (VER-SPR-003-TEST GAP-3).
 FLOAT_EXEMPT_CRATES = frozenset({"rh-sample"})
 FLOAT_API_RULE = "float-api"
+# REF: BCK-002 A-44 (VER-SPR-009-TEST GAP-5; SPR-011 T-00). The plane-A crates allowed file I/O
+# in src/ and build.rs, with why. tests/, benches/ and examples/ never link into the engine and may
+# read their golden files anywhere. python/tests/test_lint_forbidden.py asserts the set: widening it
+# is a reviewed change. --scan has no crate context and allows no one.
+FILE_IO_RULE = "file-io"
+PROCESS_RULE = "process"
+ENV_RULE = "env"
+STD_RENAME_RULE = "std-rename"
+# MIN-2: `r#ident` is `ident`; stripped before any rule matches (a raw string, r#"..."#, is a
+# literal the lexer has already blanked).
+RAW_IDENT = re.compile(r"\br#(?=[A-Za-z_])")
+# DEF-1 (Architect ruling): a `use` tree that names one of these modules, in any form (a path, a
+# rename, `self`, `{self as x}`, a nested group of `std::{..}`), is a violation of the rule.
+BANNED_MODULES = (
+    (("std", "process"), PROCESS_RULE),
+    (("std", "fs"), FILE_IO_RULE),
+    (("std", "env"), ENV_RULE),
+)
+# DEF-5: the one path into a banned module that is allowed: the target's constants.
+ALLOWED_PATHS = frozenset({("std", "env", "consts")})
+USE_TOKEN = re.compile(r"::|[{},*;]|\w+")
+FILE_IO_CRATES = MappingProxyType(
+    {
+        "rh-registry": "reads specs/systems/*.odd.toml for the ownership lint at load (SPR-004)",
+        "rh-snapshot": "the input journal and keyframe files (SPR-007), through rusqlite and bytes",
+    }
+)
 # Which float rule a file gets (scan_source): the float rule, the float-api rule, or neither.
 FloatScope = Literal["rule", "zone", "none"]
 
@@ -165,6 +226,8 @@ class FloatScan:
 
     scope: FloatScope = "rule"
     deps: tuple[tuple[str, re.Pattern[str]], ...] = ()
+    # The file's crate is on FILE_IO_CRATES (BCK-002 A-44); the file-io rule then does not apply.
+    file_io: bool = False
 
 
 FLOAT_API_WHY = (
@@ -257,6 +320,47 @@ RULES: tuple[Rule, ...] = (
             r"|\btime::(?:Instant|\*)|\btime::\{[^}]*\bInstant\b"
         ),
         "wall-clock read; simulation time comes from rh-core (GOV-003 §2)",
+    ),
+    Rule(
+        "file-clock",
+        _rx(
+            r"\.\s*(?:modified|accessed|created)\s*\("  # the method calls
+            r"|\bMetadata\s*>?\s*::(?:modified|accessed|created)\b"  # UFCS, <Metadata>::, fn items
+            r"|\bMetadataExt\b"  # any platform's timestamp trait (std::os::*::fs)
+            r"|\.\s*(?:st_)?[amc]time(?:_nsec)?\s*\("  # unix and linux accessors (glob-imported)
+            r"|\.\s*(?:creation_time|last_access_time|last_write_time)\s*\("  # windows
+        ),
+        "a file's timestamp (fs::Metadata, a platform MetadataExt) is a wall-clock read without "
+        "a clock name; simulation time comes from rh-core (BCK-002 A-44; DEF-2)",
+    ),
+    Rule(
+        PROCESS_RULE,
+        _rx(r"\bstd::process\b|\bprocess::\w"),
+        "std::process (Command, exit, abort, id) reaches outside the history tuple: another "
+        "program's output and timing, or the host process (DET-1; BCK-002 A-44; DEF-1)",
+    ),
+    Rule(
+        ENV_RULE,
+        # DEF-5: std::env in any form but std::env::consts; env::<item> after an import.
+        _rx(r"\bstd\s*::\s*env\b(?!\s*::\s*consts\b)|(?<!:)\benv\s*::\s*(?!consts\b)\w"),
+        "std::env (var, args, current_dir, current_exe, temp_dir, home_dir, set_current_dir, "
+        "split_paths, join_paths) reads the host's environment or directories, an input outside "
+        "the history tuple; only std::env::consts is allowed (DET-1; BCK-002 A-44; SPR-011 A-4; "
+        "DEF-5)",
+    ),
+    Rule(
+        STD_RENAME_RULE,
+        _rx(r"\bextern\s+crate\s+std\s+as\b"),
+        "a renamed std carries std::process, std::fs and std::env past every path pattern; name "
+        "std as std (MIN-2)",
+    ),
+    Rule(
+        FILE_IO_RULE,
+        # MAJ-1: no lookbehind; `s::fs::read` (a renamed std) and `std::os::unix::fs::symlink`
+        # are file I/O too.
+        _rx(r"\bstd::fs\b|\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
+        "file I/O in plane A outside the crates allowed it (FILE_IO_CRATES): plane A reads its "
+        "inputs through the journal and the compiled world, never from files (BCK-002 A-44)",
     ),
     Rule(
         "unsafe",
@@ -486,6 +590,104 @@ def find_forbidden(code: str, path: str) -> list[Finding]:
                 (match.start(), Finding(rule.name, path, line_index + 1, column, text, rule.why))
             )
     return [finding for _, finding in sorted(found, key=lambda pair: (pair[0], pair[1].rule))]
+
+
+def expand_use(tree: str) -> list[tuple[str, ...]]:
+    """Return every path a `use` tree imports (see :func:`parse_use`)."""
+    return parse_use(tree)[0]
+
+
+def parse_use(tree: str) -> tuple[list[tuple[str, ...]], list[tuple[str, ...]]]:
+    """Return the paths a `use` tree imports, and the paths it renames (DEF-1, MIN-2).
+
+    Groups are expanded and `self` resolved. `tree` is the text after `use` (comments already
+    blanked). A rename imports its path: `use std::process as p;` imports `std::process`, and
+    renames it. A leading `::` is ignored; a glob imports its prefix path followed by `*`.
+    """
+    tokens = USE_TOKEN.findall(tree)
+    position = 0
+    renamed: list[tuple[str, ...]] = []
+
+    def peek() -> str:
+        return tokens[position] if position < len(tokens) else ";"
+
+    def parse(prefix: tuple[str, ...]) -> list[tuple[str, ...]]:
+        nonlocal position
+        path = prefix
+        while True:
+            token = peek()
+            if token == "::":
+                position += 1
+                continue
+            if token == "{":
+                position += 1
+                out: list[tuple[str, ...]] = []
+                while peek() not in ("}", ";"):
+                    out += parse(path)
+                    if peek() == ",":
+                        position += 1
+                position += 1  # the closing brace
+                return out
+            if token in ("}", ",", ";"):
+                return [path]
+            position += 1
+            if token == "as":
+                position += 1  # the new name: the module imported is still `path`
+                renamed.append(path)
+                return [path]
+            path = path if token == "self" else (*path, token)
+
+    return parse(()), renamed
+
+
+def find_use_modules(code: str, path: str) -> list[Finding]:
+    """Return a finding for every `use` item that imports a banned module (DEF-1), at its `use`."""
+    line_starts = [0] + [m.end() for m in re.finditer("\n", code)]
+    found = []
+    for match in USE_ITEM.finditer(code):
+        imported, renamed = parse_use(match.group(0)[len("use") : -1])
+        line = bisect.bisect_right(line_starts, match.start()) - 1
+        column = match.start() - line_starts[line] + 1
+        if ("std",) in renamed:
+            why = next(r.why for r in RULES if r.name == STD_RENAME_RULE)
+            found.append(Finding(STD_RENAME_RULE, path, line + 1, column, "std as", why))
+        for module, rule in BANNED_MODULES:
+            hit = next(
+                (p for p in imported if p[: len(module)] == module and p[:3] not in ALLOWED_PATHS),
+                None,
+            )
+            if hit is None:
+                continue
+            why = next(r.why for r in RULES if r.name == rule)
+            found.append(Finding(rule, path, line + 1, column, "::".join(module), why))
+    return found
+
+
+def _with_use_trees(code: str, path: str) -> list[Finding]:
+    """The pattern findings, plus each use-tree finding no pattern made on its line (DEF-1).
+
+    `use std::process as p;` is a pattern finding (the path) and a use-tree finding; it is reported
+    once. `use std::{fs, io};` is a use-tree finding only. Raw identifiers are stripped first
+    (MIN-2).
+    """
+    code = RAW_IDENT.sub("", code)
+    found = find_forbidden(code, path)
+    reported = {(f.rule, f.line) for f in found}
+    extra = [f for f in find_use_modules(code, path) if (f.rule, f.line) not in reported]
+    return sorted(found + extra, key=lambda f: (f.line, f.column, f.rule))
+
+
+def _applies(finding: Finding, scan: "FloatScan") -> bool:
+    """Whether a finding's rule applies under the file's scan (module DECISION; A-44; DEF-1)."""
+    if finding.rule == FLOAT_RULE:
+        return scan.scope == "rule"
+    # File I/O and std::process are refused where the float rule's scope says engine code (src/,
+    # build.rs; and the float zone's src/): tests may read their golden files and name temporary
+    # directories by process id. File I/O is allowed in FILE_IO_CRATES.
+    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE)
+    if finding.rule in rules and scan.scope == "none":
+        return False
+    return not (finding.rule == FILE_IO_RULE and scan.file_io)
 
 
 def find_escapes(lexed: Lexed, path: str) -> list[Escape]:
@@ -721,9 +923,7 @@ def scan_source(
             return  # reached twice (directly and through an include!, or by two includes)
         report.scanned.add((file, scan))
     lexed = lex(source)
-    findings = [
-        f for f in find_forbidden(lexed.code, name) if floats == "rule" or f.rule != FLOAT_RULE
-    ]
+    findings = [f for f in _with_use_trees(lexed.code, name) if _applies(f, scan)]
     if floats == "rule":
         findings += find_float_dep(lexed.code, name, dep_floats)
     # Includes resolve from the file as it was reached, not from its symlink target (MIN-3).
@@ -887,7 +1087,7 @@ def scan_paths(
     paths: Iterable[Path],
     float_fields: frozenset[str] = frozenset(),
     float_exempt: frozenset[Path] = frozenset(),
-    dep_floats: dict[Path, list[tuple[str, re.Pattern[str]]]] | None = None,
+    crate_scans: dict[Path, FloatScan] | None = None,
     repo: Path = REPO_ROOT,
 ) -> Report:
     """Scan every ``.rs`` file under ``paths`` as plane-A code.
@@ -897,7 +1097,9 @@ def scan_paths(
         float_fields: The columns the system specs declare ``f32_field``.
         float_exempt: Roots among ``paths`` whose files the float rule skips entirely (the float
             zone crate's directory); every other rule still applies to them.
-        dep_floats: Per root, the float-yielding dependency APIs its crate may reach.
+        crate_scans: Per root, what its crate brings to every file's :class:`FloatScan`: the
+            float-yielding dependency APIs it may reach, and whether it is allowed file I/O
+            (FILE_IO_CRATES). The scope is set per file.
         repo: The directory a followed include! must resolve inside (the repository).
 
     Raises:
@@ -906,14 +1108,14 @@ def scan_paths(
     """
     report = Report(violations=[], escaped=[], repo=repo)
     scopes: dict[Path, FloatScope] = {}
-    deps_of: dict[Path, list[tuple[str, re.Pattern[str]]]] = {}
+    crate_of: dict[Path, FloatScan] = {}
     for root in paths:
         for file in rust_files([root]):
             if not float_rule_applies(file, root):
                 scopes.setdefault(file, "none")
             else:
                 scopes.setdefault(file, "zone" if root in float_exempt else "rule")
-            deps_of.setdefault(file, (dep_floats or {}).get(root, []))
+            crate_of.setdefault(file, (crate_scans or {}).get(root, FloatScan()))
     for file in sorted(scopes):
         source = file.read_text(encoding="utf-8")
         scan_source(
@@ -921,7 +1123,7 @@ def scan_paths(
             file,
             report,
             float_fields,
-            floats=FloatScan(scopes[file], tuple(deps_of[file])),
+            floats=replace(crate_of[file], scope=scopes[file]),
         )
     return report
 
@@ -1029,12 +1231,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             names = ", ".join(name for name, _ in crates)
             scope = f"{len(crates)} crates scanned as plane A ({names})"
             apis = float_yielding_apis()
-            dep_floats = {
-                directory: [
-                    (dep, pattern)
-                    for dep, (users, pattern) in apis.items()
-                    if users is None or name in users
-                ]
+            crate_scans = {
+                directory: FloatScan(
+                    deps=tuple(
+                        (dep, pattern)
+                        for dep, (users, pattern) in apis.items()
+                        if users is None or name in users
+                    ),
+                    file_io=name in FILE_IO_CRATES,
+                )
                 for name, directory in crates
             }
             listed = sorted(
@@ -1042,13 +1247,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 for dep, (users, _) in apis.items()
             )
             scope += f"; float-yielding APIs refused: {'; '.join(listed) or 'none'}"
+            scope += f"; file I/O allowed in {', '.join(sorted(FILE_IO_CRATES))} only (A-44)"
             # The float-zone note stays last: controls match it together with the file count.
             zone = frozenset(d for name, d in crates if name in FLOAT_EXEMPT_CRATES)
             if zone:
                 exempt = ", ".join(sorted(n for n, d in crates if d in zone))
                 scope += f"; float rule exempts {exempt} only (SPR-003 float zone)"
             report = scan_paths(
-                [directory for _, directory in crates], float_fields, zone, dep_floats
+                [directory for _, directory in crates], float_fields, zone, crate_scans
             )
     except (WorkspaceError, SpecError, OSError, UnicodeDecodeError) as err:
         print(f"lint_forbidden: cannot read the code to scan: {err}", file=sys.stderr)

@@ -6,6 +6,7 @@ A tool-plane crate: it measures plane-A code from outside and is never a depende
 |---|---|---|---|
 | `benches/plane_hashes.rs` (bench 7) | `state_hash`, observation and narrative hashes, full and dirty-chunk, at 10k rows | `bin/perf_gate.py`, under callgrind (iai-callgrind) | V-PERF-04: more than 10% more instructions than `baselines/instructions_v1.txt` fails the PR |
 | `benches/keyframe_write_read.rs` (bench 8) | keyframe write (with its read-back), read and load, at 10k rows | as above | as above |
+| `benches/draws.rs` | one instant whose one system makes 1,000 keyed draws through `StepCtx::rng` or `stream`, at epoch 0 and 1, an empty step, and the same draws straight from `rh-ids` (SPR-011 T-02, BCK-002 A-37: the stream guard per (system, instant) and the epoch lookup) | as above | as above |
 | `benches/wall.rs` | benches 7 and 8 at 100k and 1M rows, wall clock (criterion) | `bin/bench_session.sh`, `.github/workflows/adjutant.yml` | trends; an alert above 10%, gating only on `adjutant` once T-04 has measured its spread |
 | `benches/alloc_budget.rs` | heap allocations per steady-state tick (V-PERF-11), under the counting allocator | `cargo bench -p rh-bench --features count-alloc --bench alloc_budget` | V-PERF-11 (T-05) |
 
