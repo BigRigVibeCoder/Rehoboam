@@ -26,35 +26,42 @@ Naming: `<reading-list ID>_<first author>_<year>_<short title>.<ext>`. IDs match
 | `A16a_grimm_et_al_2010_odd_first_update.pdf` | Grimm, V. et al. (2010). "The ODD protocol: a review and first update." *Ecological Modelling* 221 | System-spec documentation template | R12 §13–15 |
 | `A16b_grimm_et_al_2020_odd_second_update.pdf` | Grimm, V. et al. (2020). "The ODD protocol … second update." *JASSS* 23(2) | System-spec documentation template | R12 §13–15 |
 | `A12c_lucas_turkes_2004_fitting_lanchester_equations.pdf` | Lucas, T. W. & Turkes, T. (2004). *Naval Research Logistics* 51(1) | M8 attrition | R12 §11 |
+| `A13b_alfani_2021_economic_inequality_in_preindustrial_times.pdf` | Alfani, G. (2021). "Economic inequality in preindustrial times: Europe and beyond." *Journal of Economic Literature* 59(1), 3–44 | Wealth Gini V-SF-17, post-plague compression V-SF-11b, M4 accounts | R12 §13 |
+| `A14_alfani_ograda_eds_2017_famine_in_european_history.pdf` | Alfani, G. & Ó Gráda, C. (eds.) (2017). *Famine in European History*, Cambridge UP (full volume incl. Introduction) | V-SF-03e Europe-wide famine frequency and chronology | R12 §17 |
 | `A14a_campbell_ograda_2011_harvest_shortfalls_famines.pdf` | Campbell, B. M. S. & Ó Gráda, C. (2011). "Harvest shortfalls, grain prices, and famines in preindustrial England." *J. Economic History* 71(4), 859–886 | V-SF-03 mortality crises; M3 harvests → M4 prices | R12 §17 |
 | `A14b_alfani_mocarelli_strangio_2017_famine_italy.pdf` | Alfani, G., Mocarelli, L. & Strangio, D. (2017). "Italy." Ch. 2 in Alfani, G. & Ó Gráda, C. (eds.), *Famine in European History*, CUP | V-SF-03 famine chronology 1250–1810; provisioning institutions | R12 §17 |
 | `A17_arbesman_2011_lifespans_of_empires.pdf` | Arbesman, S. (2011). "The life-spans of empires." *Historical Methods* 44(3), 127–129 | V-SF-07 polity lifespans | R12 §16 |
 | `A18_allen_2001_great_divergence_wages_prices.pdf` | Allen, R. C. (2001). "The great divergence in European wages and prices from the Middle Ages to the First World War." *Explorations in Economic History* 38, 411–447 | M4 wages and subsistence; V-SF-10, V-SF-11 | R12 §18 |
+| `A19_coale_demeny_1983_regional_model_life_tables.pdf` | Coale, A. J., Demeny, P. & Vaughan, B. (1983). *Regional Model Life Tables and Stable Populations*, 2nd ed., Academic Press | M2 infant & child mortality sub-schedules ($q_0$, $_4q_1$, $l_5$), sex ratios | R12 §9 |
+| `A20_taagepera_1979_size_and_duration_of_empires.pdf` | Taagepera, R. (1979). "Size and duration of empires: growth-decline curves, 600 B.C. to 600 A.D." *Social Science History* 3(3/4), 115–138 | V-SF-07 polity lifespans and duration distributions | R12 §16 |
+| `B1_park_et_al_2023_generative_agents.pdf` | Park, J. S. et al. (2023). "Generative agents: interactive simulacra of human behavior." *UIST 2023* | T1.minds symbolic reflection trees and memory retrieval | R12 §21 |
 | `B2_kreminski_dickinson_wardripfruin_2019_felt.pdf` | Kreminski, M., Dickinson, M. & Wardrip-Fruin, N. (2019). "Felt: a simple story sifter." *ICIDS 2019* | Sifter query semantics (ADR-0008, `05.4`) | R12 §19 |
 | `B3_kreminski_dickinson_mateas_2021_winnow.pdf` | Kreminski, M., Dickinson, M. & Mateas, M. (2021). "Winnow: a domain-specific language for incremental story sifting." *AIIDE 2021* | Incremental sifting and partial matches (ADR-0008, `specs/sifting/`) | R12 §19 |
+| `B4_kreminski_et_al_2022_select_the_unexpected.pdf` | Kreminski, M. et al. (2022). "Select the unexpected: a statistical heuristic for story sifting." *ICIDS 2022* | Bayesian unexpectedness metric $\mathcal{U} = -\log_2 P$, rarity scoring (`05.4`) | R12 §19 |
 | `B5_behrooz_swanson_jhala_2015_remember_that_time.pdf` | Behrooz, M., Swanson, R. & Jhala, A. (2015). "Remember that time? Telling interesting stories from past interactions." *ICIDS 2015* | Retrospective story selection | R12 §20 |
 | `B6a_oneill_riedl_2014_dramatis.pdf` | O'Neill, B. & Riedl, M. (2014). "Dramatis: a computational model of suspense." *AAAI 2014* | Suspense and auto-pause (`05.4`) | R12 §20 |
+| `B6b_cheong_young_2015_suspenser.pdf` | Cheong, Y.-G. & Young, R. M. (2015). "Suspenser: a story generation system for suspense." *IEEE TCIAIG* 7(1), 39–52 | Suspense structure and drama pacing | R12 §20 |
+| `B6c_cheong_young_2008_narrative_generation_for_suspense.pdf` | Cheong, Y.-G. & Young, R. M. (2008). "Narrative generation for suspense: modeling and evaluation." *ICIDS 2008*, LNCS 5334 | Evaluated suspense metrics | R12 §20 |
 | `B17_lessard_et_al_2026_narrative_gold_digging.pdf` | Lessard, J., Friedrich, S., Paré-Chouinard, S. & Kosseim, L. (2026). "Narrative gold digging: sifting and narrating stories from a procedural simulation" | Sifting heuristics vs narration; the G2 protocol | R12 §20 |
 
 **Still wanted** (in priority order; exact citations so they can be found; "verify" marks a citation recalled from memory):
 
-*Pre-modern bands (each one currently soft or resting on a single source):*
-0. **Alfani, G. (2021). "Economic inequality in preindustrial times: Europe and beyond." *Journal of Economic Literature* 59(1), 3–44.** The file uploaded under this name was a different item (see A13x). It feeds V-SF-17 and V-SF-11b.
-1. **Alfani, G. & Ó Gráda, C. (2017). "Introduction." In *Famine in European History*, CUP.** The Italy chapter arrived (A14b); the Introduction carries the Europe-wide famine frequency that V-SF-03e needs.
-2. Coale, A. J. & Demeny, P. (1983). *Regional Model Life Tables and Stable Populations*, 2nd ed., Academic Press. Only the **West** tables and the introduction. They give M2 an infant sub-schedule and sex differences, which Brass lacks.
-3. A plague source for a separate plague-crisis band (V-SF-03 now counts plague crises but has no band for them). Candidate: Alfani, G. (2013). "Plague in seventeenth-century Europe and the decline of Italy: an epidemiological hypothesis." *European Review of Economic History* 17(4) (verify).
-4. Taagepera, R. (1978). "Size and duration of empires: growth-decline curves, 3000 to 600 B.C." *Social Science Research* 7, 180–196; and (1979) "… 600 B.C. to 600 A.D." *Social Science History* 3, 115–138. They define the "duration" behind V-SF-07.
-5. A source on small-polity survival, so that V-SF-07's mean can be gated below empire scale. Candidate: Abramson, S. F. (2017). "The economic origins of the territorial state." *International Organization* 71(1) (verify).
+*Pre-modern bands:*
+- [x] ~~**Alfani, G. (2021). JEL.**~~ **RECEIVED** (`A13b`).
+- [x] ~~**Alfani & Ó Gráda (2017). Introduction.**~~ **RECEIVED** (`A14`).
+- [x] ~~**Coale & Demeny (1983). Model West tables.**~~ **RECEIVED** (`A19`).
+- [ ] 3. A plague source for a separate plague-crisis band (V-SF-03 now counts plague crises but has no band for them). Candidate: Alfani, G. (2013). "Plague in seventeenth-century Europe and the decline of Italy: an epidemiological hypothesis." *European Review of Economic History* 17(4) (verify).
+- [x] ~~**Taagepera, R. (1979).**~~ **RECEIVED** (`A20`).
+- [ ] 5. A source on small-polity survival, so that V-SF-07's mean can be gated below empire scale. Candidate: Abramson, S. F. (2017). "The economic origins of the territorial state." *International Organization* 71(1) (verify).
 
 *For M8 (P3a), pre-modern battles; WWII anchors are in hand:*
-
-6. The CAA historical battle database CDB90 and its CHASE report (Helmbold & Khan 1986, as cited by Lucas & Turkes 2004). These cover battle outcomes against casualties and are needed for breakpoints.
-7. Helmbold, R. L. (1965), *Operations Research* 13, 857–859; Helmbold (1969), RAND P-4199; Helmbold (1987), CAA-TP-87-16; Hartley, D. S. & Helmbold, R. L. (1995), *Naval Research Logistics* 42, 609–633.
+- [ ] 6. The CAA historical battle database CDB90 and its CHASE report (Helmbold & Khan 1986, as cited by Lucas & Turkes 2004). These cover battle outcomes against casualties and are needed for breakpoints.
+- [ ] 7. Helmbold, R. L. (1965), *Operations Research* 13, 857–859; Helmbold (1969), RAND P-4199; Helmbold (1987), CAA-TP-87-16; Hartley, D. S. & Helmbold, R. L. (1995), *Naval Research Logistics* 42, 609–633.
 
 *Story detection (the thesis gate G2):*
-
-8. Kreminski, M. et al. (2022). "Select the unexpected: a statistical heuristic for story sifting." *ICIDS 2022*.
-9. Cheong, Y.-G. & Young, R. M. (2015). "Suspenser: a story generation system for suspense." *IEEE TCIAIG* 7(1). (Dramatis arrived; this is its companion.)
+- [x] ~~**Kreminski et al. (2022). Select the unexpected.**~~ **RECEIVED** (`B4`).
+- [x] ~~**Cheong & Young (2015). Suspenser.**~~ **RECEIVED** (`B6b`, `B6c`).
+- [x] ~~**Park et al. (2023). Generative Agents.**~~ **RECEIVED** (`B1`).
 
 *Optional:* Cirillo, P. & Taleb, N. N. (2016), *Physica A* 452 (Clauset 2018 already covers the war tail); McCloskey, D. N. & Nash, J. (1984), "Corn at interest: the extent and cost of grain storage in medieval England", *American Economic Review* 74(1) (sets `grain_carryover_cost`; verify).
 

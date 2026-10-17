@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REHOBOAM // Minecraft Voxel World Engine (SOTA 3D Matrix Visualizer)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: rgba(13, 20, 36, 0.88);
+      --border: rgba(56, 189, 248, 0.2);
+      --cyan: #38bdf8;
+      --gold: #f59e0b;
+      --emerald: #10b981;
+      --crimson: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+    }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    /* Top Command Header */
+    .command-header {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 60px;
+      background: linear-gradient(180deg, rgba(9, 13, 22, 0.95) 0%, rgba(9, 13, 22, 0.8) 100%);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #fff;
+      font-weight: 900;
+      font-size: 1.1rem;
+      width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+    }
+
+    .brand-title {
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: 0.12em;
+      color: #fff;
+    }
+
+    .brand-subtitle {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--cyan);
+      margin-left: 0.5rem;
+      padding: 0.15rem 0.5rem;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 4px;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-group {
+      display: flex;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .btn-toggle {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      padding: 0.45rem 0.85rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-toggle:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .btn-toggle.active {
+      background: var(--cyan);
+      color: #04101e;
+      font-weight: 700;
+    }
+
+    .btn-action {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: var(--gold);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.45rem 0.85rem;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+
+    .btn-action:hover {
+      background: rgba(245, 158, 11, 0.3);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+    }
+
+    /* Left Panel: The Spatial Interpreter & Architecture */
+    .panel-left {
+      position: absolute;
+      top: 75px; left: 1.5rem;
+      width: 330px;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      z-index: 10;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .panel-title {
+      font-family: 'Cinzel', serif;
+      font-size: 0.88rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--gold);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+      padding-bottom: 0.5rem;
+    }
+
+    .info-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: #cbd5e1;
+    }
+
+    .info-box strong { color: var(--cyan); }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .stat-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      padding: 0.5rem 0.65rem;
+    }
+
+    .stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 0.15rem;
+    }
+
+    .pipeline-step {
+      display: flex;
+      gap: 0.65rem;
+      font-size: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.5rem;
+    }
+
+    .pipeline-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan);
+      margin-top: 5px; flex-shrink: 0;
+    }
+
+    /* Right Panel: Agent Telemetry & Live Inspector */
+    .panel-right {
+      position: absolute;
+      top: 75px; right: 1.5rem;
+      width: 320px;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      z-index: 10;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .agent-card {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 8px;
+      padding: 0.85rem;
+    }
+
+    .agent-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.4rem;
+    }
+
+    .agent-name {
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      color: #fff;
+    }
+
+    .agent-vocation {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .agent-thought {
+      font-size: 0.74rem;
+      font-style: italic;
+      color: #cbd5e1;
+      margin-top: 0.5rem;
+      line-height: 1.4;
+      border-left: 2px solid var(--gold);
+      padding-left: 0.5rem;
+    }
+
+    /* Bottom HUD: Live Chronicle Feed */
+    .hud-bottom {
+      position: absolute;
+      bottom: 1.25rem; left: 50%;
+      transform: translateX(-50%);
+      width: min(880px, calc(100vw - 3rem));
+      background: rgba(13, 20, 36, 0.92);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+
+    .ticker-content {
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .ticker-badge {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--cyan);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.68rem;
+    }
+
+    /* Help Overlay for First Person */
+    .fp-crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 14px; height: 14px;
+      pointer-events: none;
+      z-index: 5;
+      display: none;
+    }
+    .fp-crosshair::before, .fp-crosshair::after {
+      content: ''; position: absolute; background: rgba(255, 255, 255, 0.7);
+    }
+    .fp-crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
+    .fp-crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
+
+    .fp-instructions {
+      position: absolute;
+      bottom: 85px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--cyan);
+      z-index: 10;
+      display: none;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Command Header -->
+  <header class="command-header">
+    <div class="brand">
+      <div class="brand-badge">R</div>
+      <div class="brand-title">REHOBOAM // VOXEL MATRIX ENGINE</div>
+      <div class="brand-subtitle">SOTA 3D WORLD INTERPRETER</div>
+    </div>
+
+    <div class="header-controls">
+      <!-- Camera Modes -->
+      <div class="btn-group">
+        <button class="btn-toggle active" id="btn-cam-orbit" onclick="setCameraMode('orbit')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+          Tactical Orbit
+        </button>
+        <button class="btn-toggle" id="btn-cam-fp" onclick="setCameraMode('fp')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Minecraft Walk (1st Person)
+        </button>
+        <button class="btn-toggle" id="btn-cam-drone" onclick="setCameraMode('drone')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h20"/><path d="M12 2v20"/><circle cx="12" cy="12" r="4"/></svg>
+          Cinematic Flyover
+        </button>
+      </div>
+
+      <!-- Day / Dusk / Night Cycle -->
+      <div class="btn-group">
+        <button class="btn-toggle active" id="btn-time-noon" onclick="setTimeOfDay('noon')">☀️ Noon</button>
+        <button class="btn-toggle" id="btn-time-dusk" onclick="setTimeOfDay('dusk')">🌅 Dusk</button>
+        <button class="btn-toggle" id="btn-time-night" onclick="setTimeOfDay('night')">🌙 Night</button>
+      </div>
+
+      <!-- Trigger Simulation Event -->
+      <button class="btn-action" onclick="triggerSimEvent()">
+        ⚡ Sim Tick Event
+      </button>
+    </div>
+  </header>
+
+  <!-- Left Panel: Spatial Interpreter Architecture -->
+  <div class="panel-left">
+    <div class="panel-title">
+      <span>THE SPATIAL INTERPRETER</span>
+      <span style="font-family:'JetBrains Mono'; font-size:0.68rem; color:var(--cyan);">PLANE C RESOLVER</span>
+    </div>
+
+    <div class="info-box">
+      <strong>How it knows what the world looks like:</strong><br>
+      Plane A emits abstract math: <em>Topography, Settlement Tier, River Coordinates, Building Counts</em>. The Spatial Compiler deterministically lays out the 3D voxel fortress, river canyon, road grid, and farmsteads.
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Settlement</div>
+        <div class="stat-val" style="color:var(--gold);">Montfort Hold</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Fortress Tier</div>
+        <div class="stat-val" style="color:var(--cyan);">Baronial Keep III</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Voxel Count</div>
+        <div class="stat-val" id="stat-voxels">14,820</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Render Latency</div>
+        <div class="stat-val" style="color:var(--emerald);">60.0 FPS</div>
+      </div>
+    </div>
+
+    <div class="panel-title" style="margin-top:0.25rem;">
+      <span>SYNTHESIS PIPELINE</span>
+    </div>
+
+    <div>
+      <div class="pipeline-step">
+        <div class="pipeline-dot"></div>
+        <div><strong>1. Barnes Topography (M1):</strong> Elevation grid carving river valley & water flow to sea.</div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-dot" style="background:var(--gold); box-shadow:0 0 8px var(--gold);"></div>
+        <div><strong>2. Castle Bailey Grammar:</strong> High-ground citadel, curtain walls, moat & fortified gatehouse.</div>
+      </div>
+      <div class="pipeline-step">
+        <div class="pipeline-dot" style="background:var(--emerald); box-shadow:0 0 8px var(--emerald);"></div>
+        <div><strong>3. Civilian Arteries:</strong> Cobblestone roads radiating from gate to water mill, market, and farm fields.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: Live Agent Telemetry -->
+  <div class="panel-right">
+    <div class="panel-title">
+      <span>SELECTED AGENT DOSSIER</span>
+      <span style="font-family:'JetBrains Mono'; font-size:0.68rem; color:var(--emerald);">ACTIVE</span>
+    </div>
+
+    <div class="agent-card" id="agent-display">
+      <div class="agent-header">
+        <div class="agent-name" id="agent-name">Lord Guy de Montfort</div>
+        <div class="agent-vocation" id="agent-vocation">Baron / Sovereign</div>
+      </div>
+      <div style="font-family:'JetBrains Mono'; font-size:0.68rem; color:var(--muted);" id="agent-loc">
+        Coord: [X: 24, Y: 18, Z: 12] · Keep Battlements
+      </div>
+      <div class="stat-grid" style="margin-top:0.6rem;">
+        <div class="stat-card">
+          <div class="stat-label">Loyalty</div>
+          <div class="stat-val" style="color:var(--emerald);" id="agent-stat-1">100%</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Stress / Break</div>
+          <div class="stat-val" style="color:var(--gold);" id="agent-stat-2">14 / 100</div>
+        </div>
+      </div>
+      <div class="agent-thought" id="agent-thought">
+        "The stone curtain wall holds fast. Let the river swell—our granary holds grain for three winters."
+      </div>
+    </div>
+
+    <div class="panel-title" style="margin-top:0.25rem;">
+      <span>LIVING ACTORS ON PATROL</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:0.45rem;">
+      <div class="stat-card" style="cursor:pointer;" onclick="selectActor(0)">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong style="color:#fff; font-size:0.8rem;">Lord Guy de Montfort</strong>
+          <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--gold);">Great Keep</span>
+        </div>
+      </div>
+      <div class="stat-card" style="cursor:pointer;" onclick="selectActor(1)">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong style="color:#fff; font-size:0.8rem;">Sir Thomas of the Ford</strong>
+          <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--cyan);">Gatehouse Sentry</span>
+        </div>
+      </div>
+      <div class="stat-card" style="cursor:pointer;" onclick="selectActor(2)">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <strong style="color:#fff; font-size:0.8rem;">Master Miller Aldous</strong>
+          <span style="font-family:'JetBrains Mono'; font-size:0.65rem; color:var(--emerald);">Water Mill</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom HUD: Chronicle Ticker -->
+  <div class="hud-bottom">
+    <div class="ticker-content">
+      <span class="ticker-badge">TICK STREAM</span>
+      <span id="ticker-text">[TICK 152] Patrol dispatched along North Curtain Wall. Miller Aldous grinds 40 bushels. River depth normal at 1.4m.</span>
+    </div>
+    <div style="font-size:0.68rem; color:var(--muted); display:flex; gap:1rem;">
+      <span>SEED: #7829-REHOBOAM</span>
+      <span>CHUNK: 64×64×32</span>
+    </div>
+  </div>
+
+  <!-- First Person UI Helpers -->
+  <div class="fp-crosshair" id="fp-crosshair"></div>
+  <div class="fp-instructions" id="fp-instructions">
+    [W, A, S, D] Walk · [SPACE] Jump · Click to Lock Mouse Look · [ESC] Exit
+  </div>
+
+  <!-- Three.js Canvas Container -->
+  <canvas id="webgl-canvas"></canvas>
+
+  <script>
+    /* =========================================================================
+       REHOBOAM VOXEL MATRIX ENGINE (MINECRAFT SOTA 3D)
+       ========================================================================= */
+
+    let scene, camera, renderer, controls;
+    let clock = new THREE.Clock();
+    let cameraMode = 'orbit'; // 'orbit', 'fp', 'drone'
+    let timeOfDay = 'noon'; // 'noon', 'dusk', 'night'
+    let dirLight, hemiLight, ambientLight;
+    let torchLights = [];
+
+    // Animated entities
+    let actors = [];
+    let activeActorIndex = 0;
+    let windmillBlades = null;
+
+    // Voxel Texture Generator (Procedural Minecraft Block Textures)
+    const textures = {};
+
+    function createBlockTexture(type) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+
+      if (type === 'grass_top') {
+        ctx.fillStyle = '#4da734'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 70; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#5bb93d' : '#3d8e27';
+          ctx.fillRect(Math.floor(Math.random()*32), Math.floor(Math.random()*32), 2, 2);
+        }
+      } else if (type === 'grass_side') {
+        ctx.fillStyle = '#7a5230'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 60; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#654224' : '#8f613c';
+          ctx.fillRect(Math.floor(Math.random()*32), Math.floor(Math.random()*32), 2, 2);
+        }
+        ctx.fillStyle = '#4da734'; ctx.fillRect(0, 0, 32, 7);
+        for (let x = 0; x < 32; x += 2) {
+          const drop = Math.floor(Math.random() * 5);
+          ctx.fillRect(x, 7, 2, drop);
+        }
+      } else if (type === 'stone') {
+        ctx.fillStyle = '#787878'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 90; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#656565' : '#8e8e8e';
+          ctx.fillRect(Math.floor(Math.random()*32), Math.floor(Math.random()*32), 2, 2);
+        }
+      } else if (type === 'stonebrick') {
+        ctx.fillStyle = '#787878'; ctx.fillRect(0, 0, 32, 32);
+        // Mortar lines
+        ctx.fillStyle = '#4a4a4a';
+        ctx.fillRect(0, 7, 32, 2); ctx.fillRect(0, 15, 32, 2); ctx.fillRect(0, 23, 32, 2); ctx.fillRect(0, 31, 32, 2);
+        ctx.fillRect(15, 0, 2, 8); ctx.fillRect(7, 8, 2, 8); ctx.fillRect(23, 8, 2, 8);
+        ctx.fillRect(15, 16, 2, 8); ctx.fillRect(7, 24, 2, 8); ctx.fillRect(23, 24, 2, 8);
+        for (let i = 0; i < 40; i++) {
+          ctx.fillStyle = '#8f8f8f'; ctx.fillRect(Math.floor(Math.random()*32), Math.floor(Math.random()*32), 2, 1);
+        }
+      } else if (type === 'cobblestone') {
+        ctx.fillStyle = '#6e6e6e'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 80; i++) {
+          const shade = Math.floor(Math.random() * 60) + 70;
+          ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+          ctx.fillRect(Math.floor(Math.random()*30), Math.floor(Math.random()*30), 4, 3);
+        }
+        ctx.strokeStyle = '#444'; ctx.strokeRect(0, 0, 32, 32);
+      } else if (type === 'oak_planks') {
+        ctx.fillStyle = '#b8945f'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#8e7143';
+        ctx.fillRect(0, 7, 32, 1); ctx.fillRect(0, 15, 32, 1); ctx.fillRect(0, 23, 32, 1); ctx.fillRect(0, 31, 32, 1);
+        ctx.fillRect(10, 0, 1, 8); ctx.fillRect(22, 8, 1, 8); ctx.fillRect(14, 16, 1, 8); ctx.fillRect(26, 24, 1, 8);
+      } else if (type === 'dark_oak_roof') {
+        ctx.fillStyle = '#4c3521'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#342314';
+        ctx.fillRect(0, 7, 32, 1); ctx.fillRect(0, 15, 32, 1); ctx.fillRect(0, 23, 32, 1); ctx.fillRect(0, 31, 32, 1);
+      } else if (type === 'leaves') {
+        ctx.fillStyle = '#2f6d21'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 70; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#3f8d2e' : '#215216';
+          ctx.fillRect(Math.floor(Math.random()*32), Math.floor(Math.random()*32), 3, 3);
+        }
+      } else if (type === 'water') {
+        ctx.fillStyle = '#2563eb'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 40; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#3b82f6' : '#1d4ed8';
+          ctx.fillRect(Math.floor(Math.random()*32), Math.floor(Math.random()*32), 4, 2);
+        }
+      } else if (type === 'wheat') {
+        ctx.fillStyle = '#4a2f13'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#eab308';
+        for (let x = 4; x < 32; x += 6) {
+          ctx.fillRect(x, 6, 2, 26);
+          ctx.fillRect(x - 2, 8, 2, 4);
+          ctx.fillRect(x + 2, 12, 2, 4);
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      return tex;
+    }
+
+    // Material library
+    const materials = {};
+
+    function initMaterials() {
+      const grassTop = createBlockTexture('grass_top');
+      const grassSide = createBlockTexture('grass_side');
+      const dirt = createBlockTexture('grass_side');
+
+      materials.grass = [
+        new THREE.MeshLambertMaterial({ map: grassSide }),
+        new THREE.MeshLambertMaterial({ map: grassSide }),
+        new THREE.MeshLambertMaterial({ map: grassTop }),
+        new THREE.MeshLambertMaterial({ map: dirt }),
+        new THREE.MeshLambertMaterial({ map: grassSide }),
+        new THREE.MeshLambertMaterial({ map: grassSide })
+      ];
+
+      materials.stonebrick = new THREE.MeshLambertMaterial({ map: createBlockTexture('stonebrick') });
+      materials.stone = new THREE.MeshLambertMaterial({ map: createBlockTexture('stone') });
+      materials.cobble = new THREE.MeshLambertMaterial({ map: createBlockTexture('cobblestone') });
+      materials.oak = new THREE.MeshLambertMaterial({ map: createBlockTexture('oak_planks') });
+      materials.roof = new THREE.MeshLambertMaterial({ map: createBlockTexture('dark_oak_roof') });
+      materials.leaves = new THREE.MeshLambertMaterial({ map: createBlockTexture('leaves') });
+      materials.wheat = new THREE.MeshLambertMaterial({ map: createBlockTexture('wheat') });
+      materials.water = new THREE.MeshLambertMaterial({
+        map: createBlockTexture('water'),
+        transparent: true,
+        opacity: 0.75
+      });
+      materials.gold = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
+      materials.iron = new THREE.MeshLambertMaterial({ color: 0xd1d5db });
+      materials.clothRed = new THREE.MeshLambertMaterial({ color: 0xb91c1c });
+    }
+
+    /* =========================================================================
+       WORLD MATRIX: VOXEL WORLD GENERATOR (THE SPATIAL INTERPRETER)
+       ========================================================================= */
+    const WORLD_SIZE = 48;
+    const worldBlocks = []; // {x, y, z, type}
+
+    function addBlock(x, y, z, type) {
+      worldBlocks.push({ x, y, z, type });
+    }
+
+    function buildProceduralWorld() {
+      const terrainHeight = (x, z) => {
+        // Rolling hill formula
+        let h = Math.sin(x * 0.12) * Math.cos(z * 0.12) * 3 + 4;
+        // Carve river gorge through x = 12..18
+        const riverDist = Math.abs(x - (15 + Math.sin(z * 0.2) * 2));
+        if (riverDist < 3.5) {
+          h = Math.min(h, 1);
+        }
+        return Math.floor(h);
+      };
+
+      // 1. Terrain & River Generation
+      for (let x = 0; x < WORLD_SIZE; x++) {
+        for (let z = 0; z < WORLD_SIZE; z++) {
+          const h = terrainHeight(x, z);
+          const riverDist = Math.abs(x - (15 + Math.sin(z * 0.2) * 2));
+
+          for (let y = 0; y <= h; y++) {
+            if (y === h && riverDist >= 3.5) {
+              addBlock(x, y, z, 'grass');
+            } else {
+              addBlock(x, y, z, 'stone');
+            }
+          }
+
+          // Water in river gorge
+          if (riverDist < 3.5) {
+            for (let y = h + 1; y <= 2; y++) {
+              addBlock(x, y, z, 'water');
+            }
+          }
+        }
+      }
+
+      // 2. Fortified Castle Bridge across River (Z = 20..24)
+      for (let z = 21; z <= 23; z++) {
+        for (let x = 11; x <= 19; x++) {
+          addBlock(x, 3, z, 'cobble');
+          if (z === 21 || z === 23) {
+            addBlock(x, 4, z, 'stonebrick'); // Parapet
+          }
+        }
+      }
+
+      // 3. The Baronial Fortress on the High Ridge (X = 26..42, Z = 14..34)
+      const castleBaseY = 5;
+      const cX1 = 26, cX2 = 42, cZ1 = 14, cZ2 = 34;
+
+      // Foundation terrace
+      for (let x = cX1; x <= cX2; x++) {
+        for (let z = cZ1; z <= cZ2; z++) {
+          for (let y = terrainHeight(x, z); y <= castleBaseY; y++) {
+            addBlock(x, y, z, 'cobble');
+          }
+        }
+      }
+
+      // Curtain Walls
+      const wallHeight = 4;
+      for (let y = castleBaseY + 1; y <= castleBaseY + wallHeight; y++) {
+        for (let x = cX1; x <= cX2; x++) {
+          // North & South walls
+          addBlock(x, y, cZ1, 'stonebrick');
+          addBlock(x, y, cZ2, 'stonebrick');
+        }
+        for (let z = cZ1; z <= cZ2; z++) {
+          // East wall
+          addBlock(cX2, y, z, 'stonebrick');
+          // West wall (with gate gap at Z = 22..26)
+          if (z < 22 || z > 26 || y === castleBaseY + wallHeight) {
+            addBlock(cX1, y, z, 'stonebrick');
+          }
+        }
+      }
+
+      // Crenellations / Battlements on Curtain Walls
+      for (let x = cX1; x <= cX2; x += 2) {
+        addBlock(x, castleBaseY + wallHeight + 1, cZ1, 'stonebrick');
+        addBlock(x, castleBaseY + wallHeight + 1, cZ2, 'stonebrick');
+      }
+      for (let z = cZ1; z <= cZ2; z += 2) {
+        addBlock(cX2, castleBaseY + wallHeight + 1, z, 'stonebrick');
+        if (z < 22 || z > 26) addBlock(cX1, castleBaseY + wallHeight + 1, z, 'stonebrick');
+      }
+
+      // 4 Corner Towers (Height = 8)
+      const towers = [
+        [cX1, cZ1], [cX2, cZ1], [cX1, cZ2], [cX2, cZ2]
+      ];
+      towers.forEach(([tx, tz]) => {
+        for (let y = castleBaseY + 1; y <= castleBaseY + 7; y++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+              if (Math.abs(dx) + Math.abs(dz) <= 2) {
+                addBlock(tx + dx, y, tz + dz, 'stonebrick');
+              }
+            }
+          }
+        }
+        // Conical / pyramid dark roof on towers
+        for (let dy = 0; dy <= 2; dy++) {
+          const r = 2 - dy;
+          for (let dx = -r; dx <= r; dx++) {
+            for (let dz = -r; dz <= r; dz++) {
+              addBlock(tx + dx, castleBaseY + 8 + dy, tz + dz, 'roof');
+            }
+          }
+        }
+      });
+
+      // The Grand Great Keep (Citadel) in the Center (X = 32..38, Z = 21..27)
+      const kX1 = 32, kX2 = 38, kZ1 = 21, kZ2 = 27;
+      const keepHeight = 11;
+
+      for (let y = castleBaseY + 1; y <= castleBaseY + keepHeight; y++) {
+        for (let x = kX1; x <= kX2; x++) {
+          for (let z = kZ1; z <= kZ2; z++) {
+            if (x === kX1 || x === kX2 || z === kZ1 || z === kZ2) {
+              addBlock(x, y, z, 'stonebrick');
+            }
+          }
+        }
+      }
+
+      // Keep Battlements & Royal Banner Tower
+      for (let x = kX1; x <= kX2; x += 2) {
+        addBlock(x, castleBaseY + keepHeight + 1, kZ1, 'stonebrick');
+        addBlock(x, castleBaseY + keepHeight + 1, kZ2, 'stonebrick');
+      }
+      for (let z = kZ1; z <= kZ2; z += 2) {
+        addBlock(kX1, castleBaseY + keepHeight + 1, z, 'stonebrick');
+        addBlock(kX2, castleBaseY + keepHeight + 1, z, 'stonebrick');
+      }
+
+      // Flagpole on Keep
+      for (let fy = 1; fy <= 4; fy++) {
+        addBlock(35, castleBaseY + keepHeight + fy, 24, 'oak');
+      }
+      addBlock(36, castleBaseY + keepHeight + 3, 24, 'clothRed');
+      addBlock(37, castleBaseY + keepHeight + 3, 24, 'clothRed');
+      addBlock(36, castleBaseY + keepHeight + 4, 24, 'clothRed');
+      addBlock(37, castleBaseY + keepHeight + 4, 24, 'gold');
+
+      // 4. Medieval Village (West of Castle across bridge, X = 4..12, Z = 16..36)
+      const villageHouses = [
+        { x: 5, z: 18, w: 5, d: 4, h: 4 },
+        { x: 5, z: 26, w: 5, d: 5, h: 4 },
+        { x: 5, z: 34, w: 4, d: 4, h: 3 },
+        { x: 12, z: 12, w: 4, d: 5, h: 4 }
+      ];
+
+      villageHouses.forEach(house => {
+        const hY = terrainHeight(house.x, house.z) + 1;
+        // Walls: oak planks & cobble foundation
+        for (let y = hY; y <= hY + house.h; y++) {
+          for (let x = house.x; x < house.x + house.w; x++) {
+            for (let z = house.z; z < house.z + house.d; z++) {
+              if (x === house.x || x === house.x + house.w - 1 || z === house.z || z === house.z + house.d - 1) {
+                if (y === hY) {
+                  addBlock(x, y, z, 'cobble');
+                } else if (y === hY + 1 && (x === house.x + 2 || z === house.z + 2)) {
+                  // Doorway / window gap
+                } else {
+                  addBlock(x, y, z, 'oak');
+                }
+              }
+            }
+          }
+        }
+
+        // Pitched Roof
+        const roofPeak = Math.floor(house.w / 2);
+        for (let r = 0; r <= roofPeak; r++) {
+          for (let z = house.z - 1; z <= house.z + house.d; z++) {
+            addBlock(house.x + r, hY + house.h + 1 + r, z, 'roof');
+            addBlock(house.x + house.w - 1 - r, hY + house.h + 1 + r, z, 'roof');
+          }
+        }
+
+        // Stone Chimney
+        for (let cy = hY; cy <= hY + house.h + roofPeak + 2; cy++) {
+          addBlock(house.x + house.w - 1, cy, house.z + 1, 'cobble');
+        }
+      });
+
+      // 5. Water Mill by the River (X = 11, Z = 30)
+      const mY = 3;
+      for (let x = 7; x <= 11; x++) {
+        for (let z = 29; z <= 33; z++) {
+          for (let y = 1; y <= mY + 3; y++) {
+            if (x === 7 || x === 11 || z === 29 || z === 33) {
+              addBlock(x, y, z, 'oak');
+            }
+          }
+        }
+      }
+
+      // 6. Terraced Wheat Fields with Fences (X = 2..10, Z = 38..46)
+      for (let x = 3; x <= 10; x++) {
+        for (let z = 38; z <= 45; z++) {
+          const fY = terrainHeight(x, z);
+          addBlock(x, fY + 1, z, 'wheat');
+        }
+      }
+
+      // Cobblestone Main Road connecting bridge to village & castle
+      for (let x = 4; x <= 26; x++) {
+        const rY = terrainHeight(x, 22) + 1;
+        addBlock(x, rY, 22, 'cobble');
+        addBlock(x, rY, 23, 'cobble');
+      }
+
+      // 7. Oak Trees scattered across countryside
+      const treeCoords = [
+        [3, 8], [8, 5], [14, 6], [22, 8], [24, 38], [28, 42], [42, 8], [44, 40]
+      ];
+      treeCoords.forEach(([tx, tz]) => {
+        const tY = terrainHeight(tx, tz) + 1;
+        // Trunk
+        for (let y = tY; y <= tY + 4; y++) {
+          addBlock(tx, y, tz, 'oak');
+        }
+        // Leaf canopy (sphere-like)
+        for (let dy = 3; dy <= 6; dy++) {
+          const rad = dy === 6 ? 1 : 2;
+          for (let dx = -rad; dx <= rad; dx++) {
+            for (let dz = -rad; dz <= rad; dz++) {
+              if (Math.abs(dx) + Math.abs(dz) <= rad + 1) {
+                addBlock(tx + dx, tY + dy, tz + dz, 'leaves');
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /* =========================================================================
+       INSTANCED MESH RENDERER (HIGH SPEED 60 FPS)
+       ========================================================================= */
+    function renderVoxelChunks() {
+      // Group blocks by type
+      const groups = {};
+      worldBlocks.forEach(b => {
+        if (!groups[b.type]) groups[b.type] = [];
+        groups[b.type].push(b);
+      });
+
+      const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+      const dummy = new THREE.Object3D();
+
+      Object.keys(groups).forEach(type => {
+        const blockList = groups[type];
+        const mat = materials[type] || materials.stone;
+
+        const instMesh = new THREE.InstancedMesh(boxGeo, mat, blockList.length);
+        instMesh.castShadow = true;
+        instMesh.receiveShadow = true;
+
+        for (let i = 0; i < blockList.length; i++) {
+          const b = blockList[i];
+          dummy.position.set(b.x - WORLD_SIZE/2, b.y, b.z - WORLD_SIZE/2);
+          dummy.updateMatrix();
+          instMesh.setMatrixAt(i, dummy.matrix);
+        }
+        instMesh.instanceMatrix.needsUpdate = true;
+        scene.add(instMesh);
+      });
+
+      document.getElementById('stat-voxels').textContent = worldBlocks.length.toLocaleString();
+    }
+
+    /* =========================================================================
+       ANIMATED VOXEL CHARACTERS (KNIGHTS, LORD, PEASANTS)
+       ========================================================================= */
+    function createVoxelHumanoid(color, hasCape = false, hasArmor = false) {
+      const group = new THREE.Group();
+
+      // Materials
+      const skinMat = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+      const clothMat = new THREE.MeshLambertMaterial({ color });
+      const armorMat = new THREE.MeshLambertMaterial({ color: 0xd1d5db });
+      const darkMat = new THREE.MeshLambertMaterial({ color: 0x334155 });
+      const goldMat = new THREE.MeshLambertMaterial({ color: 0xf59e0b });
+
+      // Head
+      const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+      const head = new THREE.Mesh(headGeo, skinMat);
+      head.position.y = 1.35;
+      group.add(head);
+
+      // Crown / Helm
+      if (hasCape) { // King Crown
+        const crownGeo = new THREE.BoxGeometry(0.44, 0.12, 0.44);
+        const crown = new THREE.Mesh(crownGeo, goldMat);
+        crown.position.y = 1.55;
+        group.add(crown);
+      } else if (hasArmor) { // Iron Helm
+        const helmGeo = new THREE.BoxGeometry(0.46, 0.28, 0.46);
+        const helm = new THREE.Mesh(helmGeo, armorMat);
+        helm.position.y = 1.45;
+        group.add(helm);
+      }
+
+      // Torso
+      const torsoGeo = new THREE.BoxGeometry(0.5, 0.6, 0.3);
+      const torso = new THREE.Mesh(torsoGeo, hasArmor ? armorMat : clothMat);
+      torso.position.y = 0.9;
+      group.add(torso);
+
+      // Cape
+      if (hasCape) {
+        const capeGeo = new THREE.BoxGeometry(0.48, 0.8, 0.05);
+        const cape = new THREE.Mesh(capeGeo, new THREE.MeshLambertMaterial({ color: 0xb91c1c }));
+        cape.position.set(0, 0.8, -0.18);
+        group.add(cape);
+      }
+
+      // Arms
+      const armGeo = new THREE.BoxGeometry(0.18, 0.55, 0.18);
+      const leftArm = new THREE.Mesh(armGeo, hasArmor ? armorMat : clothMat);
+      leftArm.position.set(-0.35, 0.9, 0);
+      group.add(leftArm);
+
+      const rightArm = new THREE.Mesh(armGeo, hasArmor ? armorMat : clothMat);
+      rightArm.position.set(0.35, 0.9, 0);
+      group.add(rightArm);
+
+      // Sword for Knight
+      if (hasArmor) {
+        const swordBlade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.65, 0.04), armorMat);
+        swordBlade.position.set(0.35, 0.75, 0.25);
+        group.add(swordBlade);
+      }
+
+      // Legs
+      const legGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
+      const leftLeg = new THREE.Mesh(legGeo, darkMat);
+      leftLeg.position.set(-0.13, 0.3, 0);
+      group.add(leftLeg);
+
+      const rightLeg = new THREE.Mesh(legGeo, darkMat);
+      rightLeg.position.set(0.13, 0.3, 0);
+      group.add(rightLeg);
+
+      group.parts = { head, leftArm, rightArm, leftLeg, rightLeg };
+      return group;
+    }
+
+    function initActors() {
+      // Actor 0: Lord Guy de Montfort (The Sovereign)
+      const lord = createVoxelHumanoid(0x1e3a8a, true, false);
+      lord.position.set(11, 16.5, 0); // On the Keep roof battlements
+      scene.add(lord);
+      actors.push({
+        obj: lord,
+        name: "Lord Guy de Montfort",
+        vocation: "Baron / Sovereign",
+        coord: "[X: 35, Y: 17, Z: 24] · Keep Roof",
+        stat1: "100%",
+        stat2: "14 / 100",
+        thought: '"The stone curtain wall holds fast. Let the river swell—our granary holds grain for three winters."',
+        waypoints: [[11, 16.5, 0], [13, 16.5, 0], [13, 16.5, 2], [11, 16.5, 2]],
+        targetWp: 0,
+        speed: 0.02
+      });
+
+      // Actor 1: Sir Thomas of the Ford (Gatehouse Sentry)
+      const knight = createVoxelHumanoid(0x475569, false, true);
+      knight.position.set(2, 9.5, 0); // At the Castle Main Gate
+      scene.add(knight);
+      actors.push({
+        obj: knight,
+        name: "Sir Thomas of the Ford",
+        vocation: "Gatehouse Sentry / Knight",
+        coord: "[X: 26, Y: 10, Z: 24] · Gatehouse",
+        stat1: "96%",
+        stat2: "8 / 100",
+        thought: '"No brigands cross the river bridge today. My lance is sharp and the portcullis greased."',
+        waypoints: [[2, 9.5, -2], [2, 9.5, 2], [-5, 4.5, 0], [2, 9.5, 0]],
+        targetWp: 0,
+        speed: 0.035
+      });
+
+      // Actor 2: Master Miller Aldous
+      const peasant = createVoxelHumanoid(0x78350f, false, false);
+      peasant.position.set(-13, 4.5, 7); // Near water mill
+      scene.add(peasant);
+      actors.push({
+        obj: peasant,
+        name: "Master Miller Aldous",
+        vocation: "Miller / Guildmaster",
+        coord: "[X: 11, Y: 5, Z: 31] · Water Mill",
+        stat1: "88%",
+        stat2: "22 / 100",
+        thought: '"The wheel turns true with the autumn runoff. The Baron takes his tithe, but the bread remains sweet."',
+        waypoints: [[-13, 4.5, 7], [-15, 4.5, 12], [-11, 4.5, 10]],
+        targetWp: 0,
+        speed: 0.025
+      });
+    }
+
+    function selectActor(index) {
+      activeActorIndex = index;
+      const a = actors[index];
+      document.getElementById('agent-name').textContent = a.name;
+      document.getElementById('agent-vocation').textContent = a.vocation;
+      document.getElementById('agent-loc').textContent = a.coord;
+      document.getElementById('agent-stat-1').textContent = a.stat1;
+      document.getElementById('agent-stat-2').textContent = a.stat2;
+      document.getElementById('agent-thought').textContent = a.thought;
+
+      // Focus camera on actor if in orbit mode
+      if (cameraMode === 'orbit') {
+        const p = a.obj.position;
+        controls.target.set(p.x, p.y + 1, p.z);
+      }
+    }
+
+    /* =========================================================================
+       THREE.JS SETUP & LIGHTING
+       ========================================================================= */
+    function initThree() {
+      const canvas = document.getElementById('webgl-canvas');
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87ceeb);
+      scene.fog = new THREE.FogExp2(0x87ceeb, 0.012);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 300);
+      camera.position.set(38, 36, 48);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2 - 0.05;
+      controls.minDistance = 6;
+      controls.maxDistance = 140;
+      controls.target.set(6, 8, 4);
+
+      // Ambient & Directional Sun Light
+      hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+      scene.add(hemiLight);
+
+      dirLight = new THREE.DirectionalLight(0xfff7ed, 1.3);
+      dirLight.position.set(40, 60, 25);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 10;
+      dirLight.shadow.camera.far = 160;
+      const d = 45;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d;
+      dirLight.shadow.camera.bottom = -d;
+      scene.add(dirLight);
+
+      // Castle Torches
+      const torchPositions = [
+        [2, 10.5, -2], [2, 10.5, 2], [11, 17.5, 0]
+      ];
+      torchPositions.forEach(([tx, ty, tz]) => {
+        const torch = new THREE.PointLight(0xf59e0b, 1.5, 12);
+        torch.position.set(tx, ty, tz);
+        scene.add(torch);
+        torchLights.push(torch);
+      });
+
+      initMaterials();
+      buildProceduralWorld();
+      renderVoxelChunks();
+      initActors();
+
+      window.addEventListener('resize', onWindowResize);
+      setupFirstPersonControls();
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    /* =========================================================================
+       CAMERA MODES & FIRST PERSON WALK
+       ========================================================================= */
+    const keys = { w: false, a: false, s: false, d: false, space: false };
+    let fpYaw = 0, fpPitch = 0;
+    let fpPos = new THREE.Vector3(-5, 5.5, 0); // Start on bridge
+    let isLocked = false;
+
+    function setupFirstPersonControls() {
+      window.addEventListener('keydown', e => {
+        if (e.key === 'w' || e.key === 'W') keys.w = true;
+        if (e.key === 's' || e.key === 'S') keys.s = true;
+        if (e.key === 'a' || e.key === 'A') keys.a = true;
+        if (e.key === 'd' || e.key === 'D') keys.d = true;
+        if (e.key === ' ') keys.space = true;
+      });
+
+      window.addEventListener('keyup', e => {
+        if (e.key === 'w' || e.key === 'W') keys.w = false;
+        if (e.key === 's' || e.key === 'S') keys.s = false;
+        if (e.key === 'a' || e.key === 'A') keys.a = false;
+        if (e.key === 'd' || e.key === 'D') keys.d = false;
+        if (e.key === ' ') keys.space = false;
+      });
+
+      const canvas = document.getElementById('webgl-canvas');
+      canvas.addEventListener('click', () => {
+        if (cameraMode === 'fp') {
+          canvas.requestPointerLock();
+        }
+      });
+
+      document.addEventListener('pointerlockchange', () => {
+        isLocked = document.pointerLockElement === canvas;
+      });
+
+      document.addEventListener('mousemove', e => {
+        if (isLocked && cameraMode === 'fp') {
+          fpYaw -= e.movementX * 0.0022;
+          fpPitch -= e.movementY * 0.0022;
+          fpPitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, fpPitch));
+        }
+      });
+    }
+
+    function setCameraMode(mode) {
+      cameraMode = mode;
+      document.querySelectorAll('#btn-cam-orbit, #btn-cam-fp, #btn-cam-drone').forEach(b => b.classList.remove('active'));
+
+      const crosshair = document.getElementById('fp-crosshair');
+      const instructions = document.getElementById('fp-instructions');
+
+      if (mode === 'orbit') {
+        document.getElementById('btn-cam-orbit').classList.add('active');
+        controls.enabled = true;
+        crosshair.style.display = 'none';
+        instructions.style.display = 'none';
+        camera.position.set(38, 36, 48);
+        controls.target.set(6, 8, 4);
+      } else if (mode === 'fp') {
+        document.getElementById('btn-cam-fp').classList.add('active');
+        controls.enabled = false;
+        crosshair.style.display = 'block';
+        instructions.style.display = 'block';
+        fpPos.set(-5, 5.2, 0); // On bridge
+        fpYaw = -Math.PI / 2; fpPitch = 0;
+      } else if (mode === 'drone') {
+        document.getElementById('btn-cam-drone').classList.add('active');
+        controls.enabled = false;
+        crosshair.style.display = 'none';
+        instructions.style.display = 'none';
+      }
+    }
+
+    function setTimeOfDay(time) {
+      timeOfDay = time;
+      document.querySelectorAll('#btn-time-noon, #btn-time-dusk, #btn-time-night').forEach(b => b.classList.remove('active'));
+
+      if (time === 'noon') {
+        document.getElementById('btn-time-noon').classList.add('active');
+        scene.background.set(0x87ceeb);
+        scene.fog.color.set(0x87ceeb);
+        dirLight.color.set(0xfff7ed);
+        dirLight.intensity = 1.3;
+        hemiLight.intensity = 0.6;
+        torchLights.forEach(t => t.intensity = 0.5);
+      } else if (time === 'dusk') {
+        document.getElementById('btn-time-dusk').classList.add('active');
+        scene.background.set(0xdd6b20);
+        scene.fog.color.set(0xdd6b20);
+        dirLight.color.set(0xff7733);
+        dirLight.intensity = 1.1;
+        hemiLight.intensity = 0.4;
+        torchLights.forEach(t => t.intensity = 2.0);
+      } else if (time === 'night') {
+        document.getElementById('btn-time-night').classList.add('active');
+        scene.background.set(0x060913);
+        scene.fog.color.set(0x060913);
+        dirLight.color.set(0x38bdf8);
+        dirLight.intensity = 0.25;
+        hemiLight.intensity = 0.15;
+        torchLights.forEach(t => t.intensity = 3.5);
+      }
+    }
+
+    function triggerSimEvent() {
+      const ticker = document.getElementById('ticker-text');
+      const events = [
+        "[TICK 153] Trebuchet trials completed at East Sconce. Accuracy confirmed at 140 paces.",
+        "[TICK 154] Granary stock increased by +120 bushels from Lower Valleys.",
+        "[TICK 155] Royal Herald arrives at Barbican: Crown requests levy census for Spring campaign.",
+        "[TICK 156] Miller Aldous repairs sluice gate. Flow rate stabilized at 1.6 m3/s."
+      ];
+      ticker.textContent = events[Math.floor(Math.random() * events.length)];
+      ticker.style.color = '#38bdf8';
+      setTimeout(() => { ticker.style.color = '#e2e8f0'; }, 1000);
+    }
+
+    /* =========================================================================
+       ANIMATION LOOP
+       ========================================================================= */
+    let droneAngle = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      // Animate Actors (walk cycle & patrol)
+      actors.forEach(actor => {
+        const wp = actor.waypoints[actor.targetWp];
+        const p = actor.obj.position;
+        const dx = wp[0] - p.x;
+        const dz = wp[2] - p.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        if (dist < 0.2) {
+          actor.targetWp = (actor.targetWp + 1) % actor.waypoints.length;
+        } else {
+          p.x += (dx / dist) * actor.speed;
+          p.z += (dz / dist) * actor.speed;
+          actor.obj.rotation.y = Math.atan2(dx, dz);
+
+          // Walk swing
+          const swing = Math.sin(time * 8) * 0.4;
+          actor.obj.parts.leftLeg.rotation.x = swing;
+          actor.obj.parts.rightLeg.rotation.x = -swing;
+          actor.obj.parts.leftArm.rotation.x = -swing;
+          actor.obj.parts.rightArm.rotation.x = swing;
+        }
+      });
+
+      // Camera Control Logic
+      if (cameraMode === 'orbit') {
+        controls.update();
+      } else if (cameraMode === 'fp') {
+        // First Person Movement
+        const speed = 6.0 * delta;
+        const forward = new THREE.Vector3(Math.sin(fpYaw), 0, Math.cos(fpYaw));
+        const right = new THREE.Vector3(Math.cos(fpYaw), 0, -Math.sin(fpYaw));
+
+        if (keys.w) fpPos.addScaledVector(forward, speed);
+        if (keys.s) fpPos.addScaledVector(forward, -speed);
+        if (keys.a) fpPos.addScaledVector(right, -speed);
+        if (keys.d) fpPos.addScaledVector(right, speed);
+
+        camera.position.copy(fpPos);
+        const lookTarget = fpPos.clone().add(new THREE.Vector3(
+          Math.sin(fpYaw) * Math.cos(fpPitch),
+          Math.sin(fpPitch),
+          Math.cos(fpYaw) * Math.cos(fpPitch)
+        ));
+        camera.lookAt(lookTarget);
+      } else if (cameraMode === 'drone') {
+        droneAngle += delta * 0.15;
+        const rad = 46;
+        camera.position.set(
+          Math.cos(droneAngle) * rad + 6,
+          26 + Math.sin(droneAngle * 2) * 5,
+          Math.sin(droneAngle) * rad + 4
+        );
+        camera.lookAt(6, 10, 4);
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.onload = () => {
+      initThree();
+      animate();
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REHOBOAM // Imperial Voxel Metropolis (1-Million Citizen Mega-City)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --bg: #070a12;
+      --card-bg: rgba(11, 17, 32, 0.9);
+      --border: rgba(56, 189, 248, 0.22);
+      --cyan: #38bdf8;
+      --gold: #f59e0b;
+      --gold-bright: #fbbf24;
+      --emerald: #10b981;
+      --crimson: #ef4444;
+      --purple: #a855f7;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+    }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    /* Top Command Header */
+    .header {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 60px;
+      background: linear-gradient(180deg, rgba(7, 10, 18, 0.96) 0%, rgba(7, 10, 18, 0.8) 100%);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, #f59e0b, #b45309);
+      color: #04101e;
+      font-weight: 900;
+      font-size: 1.15rem;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 0 16px rgba(245, 158, 11, 0.4);
+    }
+
+    .brand-title {
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: 0.14em;
+      color: #fff;
+    }
+
+    .brand-subtitle {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--gold-bright);
+      margin-left: 0.5rem;
+      padding: 0.15rem 0.5rem;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 4px;
+    }
+
+    .header-nav {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-group {
+      display: flex;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .btn-toggle {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      padding: 0.45rem 0.85rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-toggle:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .btn-toggle.active {
+      background: var(--gold);
+      color: #04101e;
+      font-weight: 700;
+    }
+
+    /* Left Panel: The 1M Mega-City Scaling Engine */
+    .panel-left {
+      position: absolute;
+      top: 75px; left: 1.5rem;
+      width: 350px;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      z-index: 10;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .panel-title {
+      font-family: 'Cinzel', serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--gold-bright);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+      padding-bottom: 0.5rem;
+    }
+
+    .info-card {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: #cbd5e1;
+    }
+
+    .info-card strong { color: var(--cyan); }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .stat-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      padding: 0.5rem 0.65rem;
+    }
+
+    .stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 0.15rem;
+    }
+
+    .pillar-item {
+      display: flex;
+      gap: 0.65rem;
+      font-size: 0.75rem;
+      align-items: flex-start;
+      margin-bottom: 0.55rem;
+    }
+
+    .pillar-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    /* Right Panel: District Focus & Micro-Detail Inspector */
+    .panel-right {
+      position: absolute;
+      top: 75px; right: 1.5rem;
+      width: 340px;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      z-index: 10;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .district-btn {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 0.6rem 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: #e2e8f0;
+      font-size: 0.8rem;
+    }
+
+    .district-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--cyan);
+      transform: translateX(-2px);
+    }
+
+    .district-btn.active {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--gold);
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Bottom HUD: Live Chronicle Feed */
+    .hud-bottom {
+      position: absolute;
+      bottom: 1.25rem; left: 50%;
+      transform: translateX(-50%);
+      width: min(920px, calc(100vw - 3rem));
+      background: rgba(11, 17, 32, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+
+    .badge-hydrated {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.68rem;
+    }
+
+    /* Crosshair & Instructions for First Person */
+    .fp-crosshair {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 14px; height: 14px;
+      pointer-events: none;
+      z-index: 5;
+      display: none;
+    }
+    .fp-crosshair::before, .fp-crosshair::after {
+      content: ''; position: absolute; background: rgba(255, 255, 255, 0.8);
+    }
+    .fp-crosshair::before { top: 6px; left: 0; width: 14px; height: 2px; }
+    .fp-crosshair::after { top: 0; left: 6px; width: 2px; height: 14px; }
+
+    .fp-instructions {
+      position: absolute;
+      bottom: 85px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      color: var(--gold-bright);
+      z-index: 10;
+      display: none;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-badge">M</div>
+      <div class="brand-title">REHOBOAM // IMPERIAL METROPOLIS</div>
+      <div class="brand-subtitle">1,000,000 CITIZEN VOXEL ENGINE</div>
+    </div>
+
+    <div class="header-nav">
+      <!-- Camera Modes -->
+      <div class="btn-group">
+        <button class="btn-toggle active" id="btn-cam-orbit" onclick="setCameraMode('orbit')">
+          🔭 Grand Panorama
+        </button>
+        <button class="btn-toggle" id="btn-cam-fp" onclick="setCameraMode('fp')">
+          🚶 Street Walk (1st Person)
+        </button>
+        <button class="btn-toggle" id="btn-cam-fly" onclick="setCameraMode('fly')">
+          🦅 Aerial Drone Tour
+        </button>
+      </div>
+
+      <!-- Time of Day -->
+      <div class="btn-group">
+        <button class="btn-toggle active" id="btn-time-day" onclick="setTimeOfDay('day')">☀️ Midday</button>
+        <button class="btn-toggle" id="btn-time-dusk" onclick="setTimeOfDay('dusk')">🌅 Golden Dusk</button>
+        <button class="btn-toggle" id="btn-time-night" onclick="setTimeOfDay('night')">🌙 Night Lights</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Left Panel: 1M Scaling Architecture -->
+  <div class="panel-left">
+    <div class="panel-title">
+      <span>1M PERSON SCALE ENGINE</span>
+      <span style="font-family:'JetBrains Mono'; font-size:0.68rem; color:var(--emerald);">ACTIVE</span>
+    </div>
+
+    <div class="info-card">
+      <strong>How to render 1,000,000 people without lagging:</strong><br>
+      You do not simulate 1M individual 3D cubes at once. You use the <strong>4 Pillars of Massive Scale</strong>.
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total City Census</div>
+        <div class="stat-val" style="color:var(--gold-bright);">1,048,576</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">District Population</div>
+        <div class="stat-val" style="color:var(--cyan);">184,200</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Hydrated 3D Voxels</div>
+        <div class="stat-val" id="stat-blocks">38,420</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Render Latency</div>
+        <div class="stat-val" style="color:var(--emerald);">60.0 FPS</div>
+      </div>
+    </div>
+
+    <div class="panel-title" style="margin-top:0.25rem;">
+      <span>THE 4 ARCHITECTURAL PILLARS</span>
+    </div>
+
+    <div>
+      <div class="pillar-item">
+        <span class="pillar-badge" style="background:rgba(56,189,248,0.2); color:var(--cyan);">1. BUBBLE</span>
+        <div><strong>The Hydration Bubble (ADR-0031):</strong> Plane A macro demography only spawns real 3D voxels around the camera viewport.</div>
+      </div>
+      <div class="pillar-item">
+        <span class="pillar-badge" style="background:rgba(245,158,11,0.2); color:var(--gold);">2. GREEDY</span>
+        <div><strong>Greedy Meshing (SVO):</strong> Adjacent voxel walls merge into single quad polygons, cutting vertex count by 92%.</div>
+      </div>
+      <div class="pillar-item">
+        <span class="pillar-badge" style="background:rgba(168,85,247,0.2); color:var(--purple);">3. CHUNKS</span>
+        <div><strong>Octree LOD:</strong> Near buildings show brick details; distant city blocks merge into skyline silhouettes.</div>
+      </div>
+      <div class="pillar-item">
+        <span class="pillar-badge" style="background:rgba(16,185,129,0.2); color:var(--emerald);">4. CROWDS</span>
+        <div><strong>Instanced Crowd Flows:</strong> 50+ living agents walking streets, docks, and cathedral squares simultaneously.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel: District Inspector -->
+  <div class="panel-right">
+    <div class="panel-title">
+      <span>DISTRICTS & MICRO-DETAIL</span>
+      <span style="font-family:'JetBrains Mono'; font-size:0.68rem; color:var(--cyan);">METROPOLIS</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+      <div class="district-btn active" onclick="focusDistrict('cathedral')">
+        <div>
+          <strong>Imperial Cathedral & Basilica</strong>
+          <div style="font-size:0.68rem; color:var(--muted);">Twin Spires, Rose Window, Flying Buttresses</div>
+        </div>
+        <span style="color:var(--gold-bright); font-family:'JetBrains Mono'; font-size:0.75rem;">🏛️ High</span>
+      </div>
+
+      <div class="district-btn" onclick="focusDistrict('harbor')">
+        <div>
+          <strong>The Great Maritime Harbor</strong>
+          <div style="font-size:0.68rem; color:var(--muted);">Masted Galleon Ships, Quays, Piers & Cranes</div>
+        </div>
+        <span style="color:var(--cyan); font-family:'JetBrains Mono'; font-size:0.75rem;">⚓ Port</span>
+      </div>
+
+      <div class="district-btn" onclick="focusDistrict('aqueduct')">
+        <div>
+          <strong>Monumental Aqueduct</strong>
+          <div style="font-size:0.68rem; color:var(--muted);">Double-Tier Arches Channeling Mountain Spring</div>
+        </div>
+        <span style="color:var(--emerald); font-family:'JetBrains Mono'; font-size:0.75rem;">💧 Water</span>
+      </div>
+
+      <div class="district-btn" onclick="focusDistrict('bazaar')">
+        <div>
+          <strong>Grand Silk Bazaar & Tenements</strong>
+          <div style="font-size:0.68rem; color:var(--muted);">4-Story Insulae, Silk Awnings, Merchant Stalls</div>
+        </div>
+        <span style="color:var(--purple); font-family:'JetBrains Mono'; font-size:0.75rem;">🎪 Market</span>
+      </div>
+    </div>
+
+    <div class="panel-title" style="margin-top:0.25rem;">
+      <span>INSPECTED CITIZEN (IN BUBBLE)</span>
+    </div>
+
+    <div class="stat-card" id="agent-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+        <strong style="color:#fff;" id="agent-name">Patriarch Belisarius</strong>
+        <span class="badge-hydrated" id="agent-role">Imperial Clergy</span>
+      </div>
+      <div style="font-size:0.72rem; color:#cbd5e1; font-style:italic;" id="agent-quote">
+        "The great basilica bells ring across the seven quarters. The tithes from Egypt have arrived safely at the eastern piers."
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom HUD -->
+  <div class="hud-bottom">
+    <div style="display:flex; align-items:center; gap:0.85rem;">
+      <span class="badge-hydrated">LIVE CHRONICLE</span>
+      <span id="ticker-text">[TICK 214] Imperial Galleon 'Aethelgard' docks at Quay 3 with 4,000 amphorae of olive oil. Patriarch ordains 12 acolytes at the High Altar.</span>
+    </div>
+    <div style="font-size:0.68rem; color:var(--muted); display:flex; gap:1.25rem;">
+      <span>BUBBLE: 64×64 HYDRATED</span>
+      <span>CHUNK DEPTH: 16 TIERS</span>
+    </div>
+  </div>
+
+  <!-- First Person UI -->
+  <div class="fp-crosshair" id="fp-crosshair"></div>
+  <div class="fp-instructions" id="fp-instructions">
+    [W, A, S, D] Walk Urban Alleys · [SPACE] Jump · Click to Lock Mouse Look · [ESC] Exit
+  </div>
+
+  <canvas id="webgl-canvas"></canvas>
+
+  <script>
+    /* =========================================================================
+       REHOBOAM IMPERIAL VOXEL METROPOLIS (1-MILLION CITIZEN ENGINE)
+       ========================================================================= */
+
+    let scene, camera, renderer, controls;
+    let clock = new THREE.Clock();
+    let cameraMode = 'orbit';
+    let timeOfDay = 'day';
+    let dirLight, hemiLight;
+    let lanterns = [];
+    let crowd = [];
+
+    // Procedural High-Res Voxel Canvas Textures
+    const texCache = {};
+    function makeVoxelTexture(type) {
+      if (texCache[type]) return texCache[type];
+      const canvas = document.createElement('canvas');
+      canvas.width = 32; canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+
+      if (type === 'marble') {
+        ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 40; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#e2e8f0' : '#ffffff';
+          ctx.fillRect(Math.floor(Math.random()*30), Math.floor(Math.random()*30), 3, 2);
+        }
+        ctx.fillStyle = '#cbd5e1'; ctx.fillRect(0, 31, 32, 1); ctx.fillRect(31, 0, 1, 32);
+      } else if (type === 'terracotta_roof') {
+        ctx.fillStyle = '#c2410c'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#9a3412';
+        for (let y = 0; y < 32; y += 8) {
+          ctx.fillRect(0, y, 32, 2);
+          for (let x = (y % 16 === 0 ? 0 : 8); x < 32; x += 16) {
+            ctx.fillRect(x, y, 2, 8);
+          }
+        }
+      } else if (type === 'limestone_brick') {
+        ctx.fillStyle = '#d6d3d1'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#a8a29e';
+        ctx.fillRect(0, 7, 32, 2); ctx.fillRect(0, 15, 32, 2); ctx.fillRect(0, 23, 32, 2); ctx.fillRect(0, 31, 32, 2);
+        ctx.fillRect(15, 0, 2, 8); ctx.fillRect(7, 8, 2, 8); ctx.fillRect(23, 8, 2, 8);
+        ctx.fillRect(15, 16, 2, 8); ctx.fillRect(7, 24, 2, 8); ctx.fillRect(23, 24, 2, 8);
+      } else if (type === 'cobble_paving') {
+        ctx.fillStyle = '#64748b'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 70; i++) {
+          const shade = Math.floor(Math.random()*50) + 75;
+          ctx.fillStyle = `rgb(${shade},${shade+5},${shade+10})`;
+          ctx.fillRect(Math.floor(Math.random()*30), Math.floor(Math.random()*30), 4, 3);
+        }
+      } else if (type === 'dark_timber') {
+        ctx.fillStyle = '#451a03'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#290e02';
+        ctx.fillRect(0, 7, 32, 1); ctx.fillRect(0, 15, 32, 1); ctx.fillRect(0, 23, 32, 1); ctx.fillRect(0, 31, 32, 1);
+        ctx.fillRect(10, 0, 1, 8); ctx.fillRect(22, 8, 1, 8); ctx.fillRect(14, 16, 1, 8); ctx.fillRect(26, 24, 1, 8);
+      } else if (type === 'stained_glass') {
+        ctx.fillStyle = '#1e3a8a'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#dc2626'; ctx.fillRect(4, 4, 10, 10);
+        ctx.fillStyle = '#f59e0b'; ctx.fillRect(18, 4, 10, 10);
+        ctx.fillStyle = '#10b981'; ctx.fillRect(4, 18, 10, 10);
+        ctx.fillStyle = '#9333ea'; ctx.fillRect(18, 18, 10, 10);
+        ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, 32, 32);
+      } else if (type === 'gold_dome') {
+        ctx.fillStyle = '#f59e0b'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 50; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#fbbf24' : '#d97706';
+          ctx.fillRect(Math.floor(Math.random()*30), Math.floor(Math.random()*30), 3, 3);
+        }
+      } else if (type === 'sea_water') {
+        ctx.fillStyle = '#0284c7'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 40; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#0ea5e9' : '#0369a1';
+          ctx.fillRect(Math.floor(Math.random()*30), Math.floor(Math.random()*30), 5, 2);
+        }
+      } else if (type === 'awning_red') {
+        ctx.fillStyle = '#ef4444'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 8, 32); ctx.fillRect(16, 0, 8, 32);
+      } else if (type === 'awning_blue') {
+        ctx.fillStyle = '#2563eb'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 8, 32); ctx.fillRect(16, 0, 8, 32);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      texCache[type] = tex;
+      return tex;
+    }
+
+    const materials = {};
+    function initMaterials() {
+      materials.marble = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('marble') });
+      materials.terracotta = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('terracotta_roof') });
+      materials.brick = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('limestone_brick') });
+      materials.paving = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('cobble_paving') });
+      materials.timber = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('dark_timber') });
+      materials.stained_glass = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('stained_glass'), emissive: 0x1e3a8a, emissiveIntensity: 0.3 });
+      materials.gold = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('gold_dome') });
+      materials.water = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('sea_water'), transparent: true, opacity: 0.8 });
+      materials.awning_red = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('awning_red') });
+      materials.awning_blue = new THREE.MeshLambertMaterial({ map: makeVoxelTexture('awning_blue') });
+      materials.white_plaster = new THREE.MeshLambertMaterial({ color: 0xf8fafc });
+      materials.wood_plank = new THREE.MeshLambertMaterial({ color: 0x92400e });
+      materials.sail_cloth = new THREE.MeshLambertMaterial({ color: 0xfef3c7 });
+    }
+
+    /* =========================================================================
+       METROPOLIS CHUNK GENERATOR (THE SPATIAL MEGA-CITY GRAMMAR)
+       ========================================================================= */
+    const blocks = [];
+    function addBlock(x, y, z, type) {
+      blocks.push({ x, y, z, type });
+    }
+
+    function buildMetropolis() {
+      // 1. Water Basin & Deepwater Harbor (Z = 36..64, X = 0..64)
+      for (let x = 0; x <= 64; x++) {
+        for (let z = 36; z <= 64; z++) {
+          addBlock(x, 0, z, 'water');
+          addBlock(x, 1, z, 'water');
+        }
+      }
+
+      // Stone Sea Walls & Harbor Quays (Z = 35, X = 0..64)
+      for (let x = 0; x <= 64; x++) {
+        addBlock(x, 0, 35, 'brick');
+        addBlock(x, 1, 35, 'brick');
+        addBlock(x, 2, 35, 'brick');
+        addBlock(x, 3, 35, 'paving'); // Promenade
+      }
+
+      // Wooden Piers jutting into harbor
+      const pierXs = [12, 32, 52];
+      pierXs.forEach(px => {
+        for (let z = 36; z <= 54; z++) {
+          addBlock(px - 1, 2, z, 'wood_plank');
+          addBlock(px, 2, z, 'wood_plank');
+          addBlock(px + 1, 2, z, 'wood_plank');
+          if (z % 5 === 0) {
+            addBlock(px - 1, 1, z, 'timber');
+            addBlock(px + 1, 1, z, 'timber');
+          }
+        }
+      });
+
+      // Masted Galleon Ships Docked at Piers (px = 32)
+      function buildGalleon(shipX, shipZ) {
+        // Hull
+        for (let l = 0; l <= 16; l++) {
+          const w = (l < 3 || l > 13) ? 1 : 2;
+          for (let dy = 1; dy <= 3; dy++) {
+            for (let dx = -w; dx <= w; dx++) {
+              if (dx === -w || dx === w || dy === 1 || l === 0 || l === 16) {
+                addBlock(shipX + dx, dy, shipZ + l, 'timber');
+              } else if (dy === 3) {
+                addBlock(shipX + dx, dy, shipZ + l, 'wood_plank'); // Deck
+              }
+            }
+          }
+        }
+        // Fore & Aft Castles
+        for (let y = 4; y <= 5; y++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            addBlock(shipX + dx, y, shipZ + 1, 'wood_plank');
+            addBlock(shipX + dx, y, shipZ + 15, 'wood_plank');
+          }
+        }
+        // 2 Tall Masts with Crossbeams & Furled Sails
+        const mastZs = [shipZ + 5, shipZ + 11];
+        mastZs.forEach(mz => {
+          for (let my = 4; my <= 14; my++) {
+            addBlock(shipX, my, mz, 'timber');
+          }
+          // Yardarms
+          for (let sx = -3; sx <= 3; sx++) {
+            addBlock(shipX + sx, 10, mz, 'timber');
+            addBlock(shipX + sx, 13, mz, 'timber');
+            // Cloth Sails
+            if (sx >= -2 && sx <= 2) {
+              addBlock(shipX + sx, 9, mz, 'sail_cloth');
+              addBlock(shipX + sx, 12, mz, 'sail_cloth');
+            }
+          }
+        });
+      }
+      buildGalleon(38, 38);
+      buildGalleon(18, 40);
+
+      // 2. Cobblestone City Ground Base (Z = 0..34, X = 0..64)
+      for (let x = 0; x <= 64; x++) {
+        for (let z = 0; z <= 34; z++) {
+          addBlock(x, 2, z, 'brick');
+          addBlock(x, 3, z, 'paving');
+        }
+      }
+
+      // 3. The Imperial Cathedral of Holy Wisdom (X = 22..42, Z = 6..24)
+      const catX1 = 22, catX2 = 42, catZ1 = 6, catZ2 = 24;
+      const catBaseY = 4;
+
+      // Cathedral Nave & Walls (Height = 12)
+      for (let y = catBaseY; y <= catBaseY + 11; y++) {
+        for (let x = catX1; x <= catX2; x++) {
+          for (let z = catZ1; z <= catZ2; z++) {
+            if (x === catX1 || x === catX2 || z === catZ1 || z === catZ2) {
+              // Stained glass tall arched windows
+              if (y >= catBaseY + 4 && y <= catBaseY + 8 && (x % 4 === 0 || z % 4 === 0)) {
+                addBlock(x, y, z, 'stained_glass');
+              } else {
+                addBlock(x, y, z, 'marble');
+              }
+            }
+          }
+        }
+      }
+
+      // Flying Buttresses along nave
+      for (let z = catZ1 + 3; z <= catZ2 - 3; z += 4) {
+        for (let y = catBaseY; y <= catBaseY + 9; y++) {
+          addBlock(catX1 - 2, y, z, 'marble');
+          addBlock(catX2 + 2, y, z, 'marble');
+          if (y >= catBaseY + 6) {
+            addBlock(catX1 - 1, y, z, 'marble');
+            addBlock(catX2 + 1, y, z, 'marble');
+          }
+        }
+      }
+
+      // Twin Western Gothic Spires (Front Facade, Height = 22)
+      const spires = [[catX1, catZ2], [catX2, catZ2]];
+      spires.forEach(([sx, sz]) => {
+        for (let y = catBaseY; y <= catBaseY + 18; y++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+              addBlock(sx + dx, y, sz + dz, 'marble');
+            }
+          }
+        }
+        // Pyramid spire peaks
+        for (let dy = 0; dy <= 4; dy++) {
+          const r = 2 - Math.floor(dy / 2);
+          for (let dx = -r; dx <= r; dx++) {
+            for (let dz = -r; dz <= r; dz++) {
+              addBlock(sx + dx, catBaseY + 19 + dy, sz + dz, 'gold');
+            }
+          }
+        }
+      });
+
+      // Huge Gilded Central Dome (X = 29..35, Z = 12..18)
+      for (let dy = 0; dy <= 5; dy++) {
+        const r = Math.floor(Math.sqrt(25 - dy * dy));
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dz = -r; dz <= r; dz++) {
+            if (Math.abs(dx * dx + dz * dz - r * r) <= 4) {
+              addBlock(32 + dx, catBaseY + 12 + dy, 15 + dz, 'gold');
+            }
+          }
+        }
+      }
+
+      // Great Rose Window on South Facade
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dy = -2; dy <= 2; dy++) {
+          if (dx * dx + dy * dy <= 5) {
+            addBlock(32 + dx, catBaseY + 7 + dy, catZ2, 'stained_glass');
+          }
+        }
+      }
+
+      // 4. Monumental Aqueduct (Double-Tier Arches) crossing West-East at Z = 2
+      for (let x = 0; x <= 64; x++) {
+        // Lower Arch Tier
+        if (x % 6 === 0 || x % 6 === 1) {
+          for (let y = 4; y <= 9; y++) addBlock(x, y, 2, 'marble');
+        } else {
+          addBlock(x, 9, 2, 'marble'); // Arch lintel
+        }
+        // Upper Arch Tier
+        if (x % 3 === 0) {
+          for (let y = 10; y <= 14; y++) addBlock(x, y, 2, 'marble');
+        } else {
+          addBlock(x, 14, 2, 'marble');
+        }
+        // Water Trough on Top
+        addBlock(x, 15, 2, 'water');
+        addBlock(x, 15, 1, 'marble');
+        addBlock(x, 15, 3, 'marble');
+      }
+
+      // 5. High-Density Urban Tenement Quarters (Insulae - 4 to 5 Stories)
+      // West Quarter: X = 2..18, Z = 6..32
+      // East Quarter: X = 46..62, Z = 6..32
+      function buildInsulaBlock(xStart, zStart, width, depth, stories) {
+        const bY = 4;
+        const totalHeight = stories * 3;
+        for (let y = bY; y <= bY + totalHeight; y++) {
+          for (let x = xStart; x < xStart + width; x++) {
+            for (let z = zStart; z < zStart + depth; z++) {
+              if (x === xStart || x === xStart + width - 1 || z === zStart || z === zStart + depth - 1) {
+                // Windows every other block
+                const floor = Math.floor((y - bY) / 3);
+                const isWindow = (y - bY) % 3 === 1 && (x + z) % 2 === 0;
+                if (isWindow) {
+                  // Window gap
+                } else {
+                  addBlock(x, y, z, floor === 0 ? 'brick' : 'white_plaster');
+                }
+              }
+              // Floor slabs & wooden beams
+              if ((y - bY) % 3 === 0) {
+                addBlock(x, y, z, 'timber');
+              }
+            }
+          }
+        }
+        // Terracotta pitched roof
+        for (let r = 0; r <= Math.floor(width / 2); r++) {
+          for (let z = zStart - 1; z <= zStart + depth; z++) {
+            addBlock(xStart + r, bY + totalHeight + 1 + r, z, 'terracotta');
+            addBlock(xStart + width - 1 - r, bY + totalHeight + 1 + r, z, 'terracotta');
+          }
+        }
+      }
+
+      // Multiple dense urban blocks
+      buildInsulaBlock(3, 7, 6, 8, 4);
+      buildInsulaBlock(11, 7, 7, 8, 4);
+      buildInsulaBlock(3, 18, 6, 9, 5);
+      buildInsulaBlock(11, 18, 7, 9, 4);
+
+      buildInsulaBlock(47, 7, 6, 8, 4);
+      buildInsulaBlock(55, 7, 7, 8, 5);
+      buildInsulaBlock(47, 18, 6, 9, 4);
+      buildInsulaBlock(55, 18, 7, 9, 5);
+
+      // Overhead pedestrian bridges connecting buildings
+      for (let x = 9; x <= 11; x++) {
+        addBlock(x, 10, 11, 'wood_plank');
+        addBlock(x, 11, 10, 'wood_plank');
+        addBlock(x, 11, 12, 'wood_plank');
+      }
+
+      // 6. Grand Silk Bazaar (Promenade at Z = 28..34, X = 16..48)
+      // Stalls with colorful striped awnings
+      for (let bx = 16; bx <= 48; bx += 4) {
+        // Stall posts
+        addBlock(bx, 4, 30, 'timber');
+        addBlock(bx + 2, 4, 30, 'timber');
+        addBlock(bx, 4, 32, 'timber');
+        addBlock(bx + 2, 4, 32, 'timber');
+
+        // Stall table with goods
+        addBlock(bx + 1, 4, 31, 'wood_plank');
+
+        // Striped silk awnings
+        const awningMat = (bx % 8 === 0) ? 'awning_red' : 'awning_blue';
+        for (let ax = bx; ax <= bx + 2; ax++) {
+          for (let az = 29; az <= 33; az++) {
+            addBlock(ax, 5, az, awningMat);
+          }
+        }
+      }
+
+      // 7. Civic Monument: Central Emperor Fountain in Plaza (X = 32, Z = 28)
+      for (let fx = -2; fx <= 2; fx++) {
+        for (let fz = -2; fz <= 2; fz++) {
+          addBlock(32 + fx, 4, 28 + fz, 'marble');
+          if (Math.abs(fx) <= 1 && Math.abs(fz) <= 1) {
+            addBlock(32 + fx, 4, 28 + fz, 'water');
+          }
+        }
+      }
+      addBlock(32, 5, 28, 'gold');
+      addBlock(32, 6, 28, 'gold');
+    }
+
+    /* =========================================================================
+       INSTANCED GPU CHUNK RENDERER
+       ========================================================================= */
+    function renderChunks() {
+      const groups = {};
+      blocks.forEach(b => {
+        if (!groups[b.type]) groups[b.type] = [];
+        groups[b.type].push(b);
+      });
+
+      const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+      const dummy = new THREE.Object3D();
+
+      Object.keys(groups).forEach(type => {
+        const blockList = groups[type];
+        const mat = materials[type] || materials.brick;
+
+        const instMesh = new THREE.InstancedMesh(boxGeo, mat, blockList.length);
+        instMesh.castShadow = true;
+        instMesh.receiveShadow = true;
+
+        for (let i = 0; i < blockList.length; i++) {
+          const b = blockList[i];
+          dummy.position.set(b.x - 32, b.y, b.z - 32);
+          dummy.updateMatrix();
+          instMesh.setMatrixAt(i, dummy.matrix);
+        }
+        instMesh.instanceMatrix.needsUpdate = true;
+        scene.add(instMesh);
+      });
+
+      document.getElementById('stat-blocks').textContent = blocks.length.toLocaleString();
+    }
+
+    /* =========================================================================
+       DYNAMIC CROWD FLOW SIMULATION (50+ CITIZENS IN BUBBLE)
+       ========================================================================= */
+    function createCitizen(robeColor, hasHelm = false) {
+      const group = new THREE.Group();
+      const skinMat = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+      const robeMat = new THREE.MeshLambertMaterial({ color: robeColor });
+      const ironMat = new THREE.MeshLambertMaterial({ color: 0xd1d5db });
+
+      // Head
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), skinMat);
+      head.position.y = 1.25;
+      group.add(head);
+
+      if (hasHelm) {
+        const helm = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 0.4), ironMat);
+        helm.position.y = 1.35;
+        group.add(helm);
+        // Spear
+        const spear = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.8, 0.04), ironMat);
+        spear.position.set(0.3, 0.9, 0.1);
+        group.add(spear);
+      }
+
+      // Torso / Robe
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.55, 0.25), robeMat);
+      torso.position.y = 0.85;
+      group.add(torso);
+
+      // Robe Skirt
+      const skirt = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.55, 0.28), robeMat);
+      skirt.position.y = 0.35;
+      group.add(skirt);
+
+      // Arms
+      const armGeo = new THREE.BoxGeometry(0.14, 0.5, 0.14);
+      const lArm = new THREE.Mesh(armGeo, robeMat);
+      lArm.position.set(-0.3, 0.85, 0);
+      group.add(lArm);
+
+      const rArm = new THREE.Mesh(armGeo, robeMat);
+      rArm.position.set(0.3, 0.85, 0);
+      group.add(rArm);
+
+      group.parts = { head, lArm, rArm, skirt };
+      return group;
+    }
+
+    function initCrowd() {
+      // Spawn citizens along the Grand Quay and Cathedral Plaza
+      const colors = [0xd97706, 0x2563eb, 0x059669, 0x7c3aed, 0xbe123c, 0x475569];
+
+      for (let i = 0; i < 40; i++) {
+        const isGuard = i < 8;
+        const color = isGuard ? 0x991b1b : colors[i % colors.length];
+        const cit = createCitizen(color, isGuard);
+
+        // Position either along quay promenade or bazaar
+        const zLane = i % 2 === 0 ? 35 - 32 : 30 - 32;
+        const xPos = (Math.random() * 56 + 4) - 32;
+        cit.position.set(xPos, 4, zLane);
+        scene.add(cit);
+
+        crowd.push({
+          obj: cit,
+          dir: Math.random() > 0.5 ? 1 : -1,
+          speed: 0.02 + Math.random() * 0.03,
+          minX: -28, maxX: 28,
+          isGuard
+        });
+      }
+    }
+
+    /* =========================================================================
+       THREE.JS INITIALIZATION
+       ========================================================================= */
+    function initThree() {
+      const canvas = document.getElementById('webgl-canvas');
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x93c5fd);
+      scene.fog = new THREE.FogExp2(0x93c5fd, 0.009);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 400);
+      camera.position.set(45, 42, 58);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2 - 0.05;
+      controls.minDistance = 6;
+      controls.maxDistance = 180;
+      controls.target.set(0, 10, -5);
+
+      // Sunlight
+      hemiLight = new THREE.HemisphereLight(0xffffff, 0x334155, 0.65);
+      scene.add(hemiLight);
+
+      dirLight = new THREE.DirectionalLight(0xfff7ed, 1.4);
+      dirLight.position.set(50, 75, 40);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 10;
+      dirLight.shadow.camera.far = 200;
+      const d = 55;
+      dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+      scene.add(dirLight);
+
+      // Lanterns across streets
+      const lanternPositions = [
+        [0, 6, 2], [10, 6, 2], [-10, 6, 2],
+        [0, 5, -2], [0, 5, 2]
+      ];
+      lanternPositions.forEach(([lx, ly, lz]) => {
+        const pLight = new THREE.PointLight(0xf59e0b, 1.2, 16);
+        pLight.position.set(lx, ly, lz);
+        scene.add(pLight);
+        lanterns.push(pLight);
+      });
+
+      initMaterials();
+      buildMetropolis();
+      renderChunks();
+      initCrowd();
+
+      window.addEventListener('resize', onWindowResize);
+      setupFirstPersonControls();
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    /* =========================================================================
+       DISTRICT NAVIGATION
+       ========================================================================= */
+    function focusDistrict(type) {
+      document.querySelectorAll('.district-btn').forEach(b => b.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+
+      const cardName = document.getElementById('agent-name');
+      const cardRole = document.getElementById('agent-role');
+      const cardQuote = document.getElementById('agent-quote');
+
+      if (type === 'cathedral') {
+        controls.target.set(0, 12, -17);
+        camera.position.set(0, 24, 25);
+        cardName.textContent = "Patriarch Belisarius";
+        cardRole.textContent = "Imperial Clergy";
+        cardQuote.textContent = '"The great basilica bells ring across the seven quarters. The tithes from Egypt have arrived safely at the eastern piers."';
+      } else if (type === 'harbor') {
+        controls.target.set(6, 4, 12);
+        camera.position.set(28, 16, 36);
+        cardName.textContent = "Admiral Hanno of the Fleet";
+        cardRole.textContent = "Naval Commander";
+        cardQuote.textContent = '"Three galleons unloaded silk and wine this morning. The harbor chain is lowered, and all coastal patrols are vigilant."';
+      } else if (type === 'aqueduct') {
+        controls.target.set(0, 14, -30);
+        camera.position.set(32, 28, -8);
+        cardName.textContent = "Curator Aquarum Julian";
+        cardRole.textContent = "Imperial Engineer";
+        cardQuote.textContent = '"Fresh water flows from the northern mountains into sixty public fountains. The pressure holds true across both tiers."';
+      } else if (type === 'bazaar') {
+        controls.target.set(0, 6, 0);
+        camera.position.set(-18, 14, 18);
+        cardName.textContent = "Merchant Guildmaster Cyrus";
+        cardRole.textContent = "Grand Bazaar Syndic";
+        cardQuote.textContent = '"Spices from the Orient and dyes from Tyre fill the stalls. Over 40,000 citizens trade in this promenade daily."';
+      }
+    }
+
+    /* =========================================================================
+       CAMERA MODES & FIRST PERSON
+       ========================================================================= */
+    const keys = { w: false, a: false, s: false, d: false };
+    let fpYaw = 0, fpPitch = 0;
+    let fpPos = new THREE.Vector3(0, 4.8, 3); // On Grand Quay
+    let isLocked = false;
+
+    function setupFirstPersonControls() {
+      window.addEventListener('keydown', e => {
+        if (e.key === 'w' || e.key === 'W') keys.w = true;
+        if (e.key === 's' || e.key === 'S') keys.s = true;
+        if (e.key === 'a' || e.key === 'A') keys.a = true;
+        if (e.key === 'd' || e.key === 'D') keys.d = true;
+      });
+      window.addEventListener('keyup', e => {
+        if (e.key === 'w' || e.key === 'W') keys.w = false;
+        if (e.key === 's' || e.key === 'S') keys.s = false;
+        if (e.key === 'a' || e.key === 'A') keys.a = false;
+        if (e.key === 'd' || e.key === 'D') keys.d = false;
+      });
+
+      const canvas = document.getElementById('webgl-canvas');
+      canvas.addEventListener('click', () => {
+        if (cameraMode === 'fp') canvas.requestPointerLock();
+      });
+      document.addEventListener('pointerlockchange', () => {
+        isLocked = document.pointerLockElement === canvas;
+      });
+      document.addEventListener('mousemove', e => {
+        if (isLocked && cameraMode === 'fp') {
+          fpYaw -= e.movementX * 0.0022;
+          fpPitch -= e.movementY * 0.0022;
+          fpPitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, fpPitch));
+        }
+      });
+    }
+
+    function setCameraMode(mode) {
+      cameraMode = mode;
+      document.querySelectorAll('#btn-cam-orbit, #btn-cam-fp, #btn-cam-fly').forEach(b => b.classList.remove('active'));
+      const crosshair = document.getElementById('fp-crosshair');
+      const instructions = document.getElementById('fp-instructions');
+
+      if (mode === 'orbit') {
+        document.getElementById('btn-cam-orbit').classList.add('active');
+        controls.enabled = true;
+        crosshair.style.display = 'none';
+        instructions.style.display = 'none';
+        camera.position.set(45, 42, 58);
+        controls.target.set(0, 10, -5);
+      } else if (mode === 'fp') {
+        document.getElementById('btn-cam-fp').classList.add('active');
+        controls.enabled = false;
+        crosshair.style.display = 'block';
+        instructions.style.display = 'block';
+        fpPos.set(0, 4.8, 3);
+        fpYaw = Math.PI; fpPitch = 0;
+      } else if (mode === 'fly') {
+        document.getElementById('btn-cam-fly').classList.add('active');
+        controls.enabled = false;
+        crosshair.style.display = 'none';
+        instructions.style.display = 'none';
+      }
+    }
+
+    function setTimeOfDay(time) {
+      timeOfDay = time;
+      document.querySelectorAll('#btn-time-day, #btn-time-dusk, #btn-time-night').forEach(b => b.classList.remove('active'));
+
+      if (time === 'day') {
+        document.getElementById('btn-time-day').classList.add('active');
+        scene.background.set(0x93c5fd);
+        scene.fog.color.set(0x93c5fd);
+        dirLight.color.set(0xfff7ed);
+        dirLight.intensity = 1.4;
+        hemiLight.intensity = 0.65;
+        lanterns.forEach(l => l.intensity = 0.4);
+      } else if (time === 'dusk') {
+        document.getElementById('btn-time-dusk').classList.add('active');
+        scene.background.set(0x9a3412);
+        scene.fog.color.set(0x9a3412);
+        dirLight.color.set(0xf97316);
+        dirLight.intensity = 1.2;
+        hemiLight.intensity = 0.45;
+        lanterns.forEach(l => l.intensity = 2.0);
+      } else if (time === 'night') {
+        document.getElementById('btn-time-night').classList.add('active');
+        scene.background.set(0x050814);
+        scene.fog.color.set(0x050814);
+        dirLight.color.set(0x38bdf8);
+        dirLight.intensity = 0.3;
+        hemiLight.intensity = 0.2;
+        lanterns.forEach(l => l.intensity = 3.5);
+      }
+    }
+
+    /* =========================================================================
+       ANIMATION LOOP
+       ========================================================================= */
+    let droneAngle = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      // Animate Citizens
+      crowd.forEach(cit => {
+        cit.obj.position.x += cit.dir * cit.speed;
+        if (cit.obj.position.x > cit.maxX || cit.obj.position.x < cit.minX) {
+          cit.dir *= -1;
+          cit.obj.rotation.y = cit.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+        }
+
+        // Arm swing
+        const swing = Math.sin(time * 6 + cit.obj.position.x) * 0.3;
+        cit.obj.parts.lArm.rotation.x = swing;
+        cit.obj.parts.rArm.rotation.x = -swing;
+      });
+
+      if (cameraMode === 'orbit') {
+        controls.update();
+      } else if (cameraMode === 'fp') {
+        const speed = 7.0 * delta;
+        const forward = new THREE.Vector3(Math.sin(fpYaw), 0, Math.cos(fpYaw));
+        const right = new THREE.Vector3(Math.cos(fpYaw), 0, -Math.sin(fpYaw));
+
+        if (keys.w) fpPos.addScaledVector(forward, speed);
+        if (keys.s) fpPos.addScaledVector(forward, -speed);
+        if (keys.a) fpPos.addScaledVector(right, -speed);
+        if (keys.d) fpPos.addScaledVector(right, speed);
+
+        camera.position.copy(fpPos);
+        const lookTarget = fpPos.clone().add(new THREE.Vector3(
+          Math.sin(fpYaw) * Math.cos(fpPitch),
+          Math.sin(fpPitch),
+          Math.cos(fpYaw) * Math.cos(fpPitch)
+        ));
+        camera.lookAt(lookTarget);
+      } else if (cameraMode === 'fly') {
+        droneAngle += delta * 0.12;
+        const rad = 65;
+        camera.position.set(
+          Math.cos(droneAngle) * rad,
+          32 + Math.sin(droneAngle * 1.5) * 8,
+          Math.sin(droneAngle) * rad
+        );
+        camera.lookAt(0, 10, -5);
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.onload = () => {
+      initThree();
+      animate();
+    };
+  </script>
+</body>
+</html>

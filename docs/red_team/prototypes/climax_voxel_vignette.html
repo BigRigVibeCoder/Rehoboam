@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REHOBOAM // Tier 3 Cinematic 3D Climax ("The Mt. Doom Camera")</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+  <style>
+    :root {
+      --bg: #03050a;
+      --gold: #f59e0b;
+      --gold-bright: #fbbf24;
+      --cyan: #38bdf8;
+      --crimson: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+    }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    /* Cinematic Film Borders */
+    .letterbox {
+      position: absolute;
+      left: 0; width: 100%;
+      background: rgba(3, 5, 10, 0.92);
+      backdrop-filter: blur(12px);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+    }
+    .letterbox.top { top: 0; height: 52px; }
+    .letterbox.bottom { 
+      bottom: 0; height: 44px;
+      border-top: 1px solid rgba(245, 158, 11, 0.25);
+      border-bottom: none;
+    }
+
+    .title-banner {
+      font-family: 'Cinzel', serif;
+      font-size: 1.15rem;
+      letter-spacing: 3px;
+      color: var(--gold-bright);
+      text-shadow: 0 0 16px rgba(245, 158, 11, 0.6);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+      padding: 2px 10px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn-return {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      padding: 5px 14px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-return:hover {
+      background: var(--cyan);
+      color: #03050a;
+      box-shadow: 0 0 14px var(--cyan);
+    }
+
+    /* Dramatic Narrative Overlay */
+    .narrative-card {
+      position: absolute;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(11, 15, 26, 0.88);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      border-radius: 12px;
+      padding: 1.25rem 2rem;
+      max-width: 820px;
+      width: 92%;
+      backdrop-filter: blur(16px);
+      z-index: 20;
+      text-align: center;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.85), 0 0 30px rgba(245, 158, 11, 0.15);
+      animation: slideUp 0.8s ease;
+    }
+
+    .dramatic-quote {
+      font-family: 'Cinzel', serif;
+      font-size: 1.1rem;
+      line-height: 1.6;
+      color: #fef3c7;
+      margin-bottom: 0.75rem;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+    }
+
+    .sifter-metric {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+    }
+    .sifter-metric span { color: var(--gold-bright); font-weight: 700; }
+
+    /* Camera Director HUD */
+    .camera-hud {
+      position: absolute;
+      top: 68px;
+      right: 24px;
+      z-index: 20;
+      background: rgba(11, 15, 26, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+    }
+
+    .hud-title {
+      color: var(--gold-bright);
+      font-weight: 800;
+      font-size: 0.8rem;
+      letter-spacing: 1px;
+      margin-bottom: 2px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .cam-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .hud-btn {
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--text);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .hud-btn:hover {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: var(--cyan);
+      color: #fff;
+    }
+    .hud-btn.active {
+      background: rgba(245, 158, 11, 0.2);
+      border-color: var(--gold-bright);
+      color: var(--gold-bright);
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translate(-50%, 30px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Letterbox -->
+  <div class="letterbox top">
+    <div class="title-banner">
+      <span>REHOBOAM</span>
+      <span style="font-weight: 400; opacity: 0.6;">//</span>
+      <span>TIER 3 CLIMAX VIGNETTE</span>
+      <span class="badge-pill">U = 62.4 BITS &bull; NARRATIVE SURPRISE</span>
+    </div>
+
+    <div class="nav-actions">
+      <button class="btn-return" id="btnAudioToggle" onclick="toggleAudio()">🔊 Soundscape: OFF</button>
+      <a href="live_world_stream.html" class="btn-return">⮌ Return to 2.5D Matrix Stream</a>
+    </div>
+  </div>
+
+  <!-- WebGL Render Canvas -->
+  <canvas id="webgl-canvas"></canvas>
+
+  <!-- Narrative Climax Card -->
+  <div class="narrative-card">
+    <div class="dramatic-quote" id="narrativeText">
+      "Lord Regent Valerius stands over the fallen monarch upon the high precipice of the Cracks of Doom. The Cursed Greatsword radiates ancient malice—a sacred vow shattered for a crown of ash."
+    </div>
+    <div class="sifter-metric">
+      <div>Epoch: <span id="valTick">Month 05 (Day 148)</span></div>
+      <div>Bayesian Unexpectedness: <span id="valSurprise">62.4 bits (Top 0.0001% Climax)</span></div>
+      <div>Causal Arc: <span id="valCausal">Broken Vow #12 &rarr; Famine Despair &rarr; Citadel Breach &rarr; Regicide</span></div>
+    </div>
+  </div>
+
+  <!-- Camera Director HUD -->
+  <div class="camera-hud">
+    <div class="hud-title">
+      <span>CINEMATIC DIRECTOR</span>
+      <span style="color: var(--cyan);">60 FPS PBR</span>
+    </div>
+
+    <div class="cam-buttons">
+      <button class="hud-btn active" id="camBtnOrbit" onclick="setCameraMode('orbit')">360° Orbit</button>
+      <button class="hud-btn" id="camBtnFaceoff" onclick="setCameraMode('faceoff')">Face-Off</button>
+      <button class="hud-btn" id="camBtnCrown" onclick="setCameraMode('crown')">Fallen Crown</button>
+      <button class="hud-btn" id="camBtnAbyss" onclick="setCameraMode('abyss')">Lava Chasm</button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+      <button class="hud-btn active" id="btnBloomToggle" onclick="toggleBloom()">✨ Bloom: ON</button>
+      <button class="hud-btn" id="btnLightning" onclick="triggerLightning()">⚡ Strike Bolt</button>
+    </div>
+
+    <button class="hud-btn" style="margin-top: 4px;" id="btnNextSaga" onclick="nextSaga()">⚔ Next Narrative Saga</button>
+  </div>
+
+  <!-- Bottom Letterbox -->
+  <div class="letterbox bottom">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--muted);">
+      Drag mouse to orbit camera &bull; Scroll to zoom &bull; Real-time PBR shaders &amp; ash particle dynamics
+    </div>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--gold-bright);">
+      Pure Downstream Presentation &bull; Zero Rust Core Overhead &bull; Plane C
+    </div>
+  </div>
+
+  <script>
+    // --- THREE.JS SCENE INITIALIZATION ---
+    const canvas = document.getElementById('webgl-canvas');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x04060c);
+    scene.fog = new THREE.FogExp2(0x060814, 0.022);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 150);
+    camera.position.set(0, 7, 18);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.03;
+    controls.minDistance = 5;
+    controls.maxDistance = 45;
+    controls.target.set(0, 2.5, 0);
+
+    // --- CINEMATIC LIGHTING ---
+    const ambientLight = new THREE.AmbientLight(0x131d2e, 1.2);
+    scene.add(ambientLight);
+
+    // 1. Chasm Core Molten Lava Light
+    const lavaLight = new THREE.PointLight(0xff3700, 4.5, 35);
+    lavaLight.position.set(0, -1.5, 0);
+    lavaLight.castShadow = true;
+    lavaLight.shadow.mapSize.width = 1024;
+    lavaLight.shadow.mapSize.height = 1024;
+    scene.add(lavaLight);
+
+    // 2. Moonlight Specular Rim Light
+    const moonRimLight = new THREE.DirectionalLight(0x38bdf8, 2.4);
+    moonRimLight.position.set(-16, 22, -12);
+    moonRimLight.castShadow = true;
+    moonRimLight.shadow.mapSize.width = 1024;
+    moonRimLight.shadow.mapSize.height = 1024;
+    moonRimLight.shadow.bias = -0.0005;
+    scene.add(moonRimLight);
+
+    // 3. Golden Relic Aura Light
+    const relicLight = new THREE.PointLight(0xffd700, 3.0, 16);
+    relicLight.position.set(0, 4.2, 0);
+    scene.add(relicLight);
+
+    // 4. Runeblade Fire Light
+    const bladeLight = new THREE.PointLight(0xef4444, 2.0, 8);
+    bladeLight.position.set(-1.8, 4.5, 0);
+    scene.add(bladeLight);
+
+    // --- PROCEDURAL TEXTURES & MATERIALS ---
+    // Procedural Molten Lava Canvas Texture
+    function createLavaTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 512;
+      const ctx = c.getContext('2d');
+
+      const grad = ctx.createRadialGradient(256, 256, 20, 256, 256, 256);
+      grad.addColorStop(0, '#fff3b0');
+      grad.addColorStop(0.2, '#ff6a00');
+      grad.addColorStop(0.5, '#d91e18');
+      grad.addColorStop(0.8, '#4a0808');
+      grad.addColorStop(1, '#1a0303');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Crusting veins
+      ctx.strokeStyle = '#0e0202';
+      ctx.lineWidth = 4;
+      for (let i = 0; i < 60; i++) {
+        ctx.beginPath();
+        let x = Math.random() * 512;
+        let y = Math.random() * 512;
+        ctx.moveTo(x, y);
+        for (let j = 0; j < 6; j++) {
+          x += (Math.random() - 0.5) * 60;
+          y += (Math.random() - 0.5) * 60;
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      return new THREE.CanvasTexture(c);
+    }
+
+    const lavaTexture = createLavaTexture();
+    lavaTexture.wrapS = THREE.RepeatWrapping;
+    lavaTexture.wrapT = THREE.RepeatWrapping;
+    lavaTexture.repeat.set(3, 3);
+
+    // High-Fidelity PBR Materials
+    const matBasalt = new THREE.MeshStandardMaterial({
+      color: 0x181a24,
+      roughness: 0.88,
+      metalness: 0.15,
+      flatShading: true
+    });
+
+    const matDarkRock = new THREE.MeshStandardMaterial({
+      color: 0x0e1017,
+      roughness: 0.95,
+      metalness: 0.05,
+      flatShading: true
+    });
+
+    const matLavaSurface = new THREE.MeshStandardMaterial({
+      map: lavaTexture,
+      emissive: 0xff3b00,
+      emissiveMap: lavaTexture,
+      emissiveIntensity: 0.95,
+      roughness: 0.3
+    });
+
+    const matRoyalArmor = new THREE.MeshStandardMaterial({
+      color: 0xd4d8e2,
+      metalness: 0.92,
+      roughness: 0.22
+    });
+
+    const matGoldTrim = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      metalness: 0.95,
+      roughness: 0.18,
+      emissive: 0x78350f,
+      emissiveIntensity: 0.2
+    });
+
+    const matDarkPlate = new THREE.MeshStandardMaterial({
+      color: 0x111319,
+      metalness: 0.88,
+      roughness: 0.28
+    });
+
+    const matRoyalVelvet = new THREE.MeshStandardMaterial({
+      color: 0x881337,
+      roughness: 0.92,
+      metalness: 0.05
+    });
+
+    const matBladeEnergy = new THREE.MeshStandardMaterial({
+      color: 0xef4444,
+      emissive: 0xff1100,
+      emissiveIntensity: 1.8,
+      roughness: 0.1
+    });
+
+    // --- SCENE GEOMETRY GENERATION ---
+    const sceneGroup = new THREE.Group();
+    scene.add(sceneGroup);
+
+    // 1. The Volcanic Basalt Precipice (Sculpted Cliff Edge)
+    function buildCliffPlatform() {
+      const cliffGeo = new THREE.CylinderGeometry(8.5, 11, 4, 18, 4);
+      const pos = cliffGeo.attributes.position;
+      // Perturb vertices for organic basalt rock look
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const z = pos.getZ(i);
+        const noise = Math.sin(x * 1.4) * Math.cos(z * 1.4) * 0.45;
+        pos.setXYZ(i, x + (Math.random() - 0.5) * 0.3, y + noise, z + (Math.random() - 0.5) * 0.3);
+      }
+      cliffGeo.computeVertexNormals();
+
+      const cliffMesh = new THREE.Mesh(cliffGeo, matBasalt);
+      cliffMesh.position.set(0, 0, 0);
+      cliffMesh.castShadow = true;
+      cliffMesh.receiveShadow = true;
+      sceneGroup.add(cliffMesh);
+
+      // Cracked upper stone slabs
+      for (let i = 0; i < 14; i++) {
+        const rad = 2.5 + Math.random() * 4.5;
+        const ang = Math.random() * Math.PI * 2;
+        const sx = Math.cos(ang) * rad;
+        const sz = Math.sin(ang) * rad;
+        const slabGeo = new THREE.BoxGeometry(1.4 + Math.random() * 1.6, 0.4, 1.4 + Math.random() * 1.6);
+        const slab = new THREE.Mesh(slabGeo, matDarkRock);
+        slab.position.set(sx, 2.05, sz);
+        slab.rotation.y = Math.random() * Math.PI;
+        slab.castShadow = true;
+        slab.receiveShadow = true;
+        sceneGroup.add(slab);
+      }
+
+      // 2. Chasm / Molten Lava Gorge Below
+      const lavaGeo = new THREE.PlaneGeometry(80, 80, 24, 24);
+      const lavaMesh = new THREE.Mesh(lavaGeo, matLavaSurface);
+      lavaMesh.rotation.x = -Math.PI / 2;
+      lavaMesh.position.y = -2.8;
+      sceneGroup.add(lavaMesh);
+
+      // 3. Ancient Fractured Gothic Ruin Pillars
+      const pillarAngles = [0.8, 2.2, 3.8, 5.2];
+      pillarAngles.forEach(ang => {
+        const px = Math.cos(ang) * 7.2;
+        const pz = Math.sin(ang) * 7.2;
+        const h = 6 + Math.random() * 5;
+        const pGeo = new THREE.CylinderGeometry(0.7, 0.9, h, 8);
+        const pMesh = new THREE.Mesh(pGeo, matDarkRock);
+        pMesh.position.set(px, h / 2 - 0.5, pz);
+        pMesh.rotation.z = (Math.random() - 0.5) * 0.12;
+        pMesh.castShadow = true;
+        pMesh.receiveShadow = true;
+        sceneGroup.add(pMesh);
+
+        // Ornate capital
+        const capGeo = new THREE.BoxGeometry(2.0, 0.6, 2.0);
+        const cap = new THREE.Mesh(capGeo, matGoldTrim);
+        cap.position.set(px, h - 0.2, pz);
+        cap.castShadow = true;
+        sceneGroup.add(cap);
+      });
+    }
+
+    buildCliffPlatform();
+
+    // --- ARTICULATED 3D CHARACTER FIGURES (NO PLAIN BOXES!) ---
+
+    // 1. The Fallen Monarch / King (Kneeling in Ruin)
+    function buildFallenKing() {
+      const kingGroup = new THREE.Group();
+      kingGroup.position.set(1.8, 2.2, 0.8);
+
+      // Torso & Royal Breastplate
+      const torsoGeo = new THREE.CylinderGeometry(0.5, 0.38, 1.1, 8);
+      const torso = new THREE.Mesh(torsoGeo, matRoyalArmor);
+      torso.position.set(0, 0.8, 0);
+      torso.rotation.x = 0.35; // Slumped forward
+      torso.castShadow = true;
+      kingGroup.add(torso);
+
+      // Gold Royal Inlay
+      const crestGeo = new THREE.BoxGeometry(0.35, 0.5, 0.15);
+      const crest = new THREE.Mesh(crestGeo, matGoldTrim);
+      crest.position.set(0, 0.85, 0.25);
+      crest.rotation.x = 0.35;
+      kingGroup.add(crest);
+
+      // Head & Winged Helmet
+      const headGeo = new THREE.DodecahedronGeometry(0.32);
+      const head = new THREE.Mesh(headGeo, matRoyalArmor);
+      head.position.set(0, 1.5, 0.2);
+      head.rotation.x = 0.5; // Bowed in defeat
+      head.castShadow = true;
+      kingGroup.add(head);
+
+      // Helmet Wings
+      const wingGeo = new THREE.ConeGeometry(0.12, 0.6, 4);
+      const wingL = new THREE.Mesh(wingGeo, matGoldTrim);
+      wingL.position.set(-0.35, 1.7, 0.15);
+      wingL.rotation.z = -0.5;
+      kingGroup.add(wingL);
+
+      const wingR = new THREE.Mesh(wingGeo, matGoldTrim);
+      wingR.position.set(0.35, 1.7, 0.15);
+      wingR.rotation.z = 0.5;
+      kingGroup.add(wingR);
+
+      // Shoulders / Pauldrons
+      const pauldronGeo = new THREE.SphereGeometry(0.28, 6, 6);
+      const pL = new THREE.Mesh(pauldronGeo, matGoldTrim);
+      pL.position.set(-0.65, 1.25, 0.1);
+      kingGroup.add(pL);
+
+      const pR = new THREE.Mesh(pauldronGeo, matGoldTrim);
+      pR.position.set(0.65, 1.25, 0.1);
+      kingGroup.add(pR);
+
+      // Arms (Right arm propped on ground)
+      const armGeo = new THREE.CylinderGeometry(0.14, 0.12, 0.8, 6);
+      const armR = new THREE.Mesh(armGeo, matRoyalArmor);
+      armR.position.set(0.7, 0.6, 0.3);
+      armR.rotation.z = -0.4;
+      armR.rotation.x = 0.6;
+      kingGroup.add(armR);
+
+      // Kneeling Legs
+      const thighGeo = new THREE.CylinderGeometry(0.18, 0.15, 0.9, 6);
+      const thighL = new THREE.Mesh(thighGeo, matRoyalArmor);
+      thighL.position.set(-0.35, 0.35, -0.2);
+      thighL.rotation.x = -1.2;
+      kingGroup.add(thighL);
+
+      const thighR = new THREE.Mesh(thighGeo, matRoyalArmor);
+      thighR.position.set(0.35, 0.35, 0.1);
+      thighR.rotation.x = -0.8;
+      kingGroup.add(thighR);
+
+      // Royal Velvet Cape Draped on Rock
+      const capeGeo = new THREE.ConeGeometry(0.85, 1.6, 6, 1, true);
+      const cape = new THREE.Mesh(capeGeo, matRoyalVelvet);
+      cape.position.set(0, 0.6, -0.4);
+      cape.rotation.x = -0.6;
+      cape.castShadow = true;
+      kingGroup.add(cape);
+
+      // The Shattered Royal Crown (Lying on Basalt Stone)
+      const crownGeo = new THREE.TorusGeometry(0.22, 0.06, 6, 12);
+      const crown = new THREE.Mesh(crownGeo, matGoldTrim);
+      crown.position.set(0.9, 0.08, 0.8);
+      crown.rotation.x = Math.PI / 2;
+      crown.rotation.y = 0.3;
+      crown.castShadow = true;
+      kingGroup.add(crown);
+
+      // Broken Royal Sword Blade Shards
+      const hiltGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.4);
+      const hilt = new THREE.Mesh(hiltGeo, matGoldTrim);
+      hilt.position.set(-0.8, 0.06, 0.6);
+      hilt.rotation.z = Math.PI / 2;
+      kingGroup.add(hilt);
+
+      const shardGeo = new THREE.BoxGeometry(0.1, 0.03, 0.6);
+      const shard = new THREE.Mesh(shardGeo, matRoyalArmor);
+      shard.position.set(-0.4, 0.03, 0.7);
+      shard.rotation.y = 0.4;
+      kingGroup.add(shard);
+
+      sceneGroup.add(kingGroup);
+      return kingGroup;
+    }
+
+    // 2. The Usurper / Greatlord (Standing Menacingly)
+    function buildUsurper() {
+      const usurperGroup = new THREE.Group();
+      usurperGroup.position.set(-1.8, 2.2, -0.4);
+
+      // Heavy Dark Plate Torso
+      const torsoGeo = new THREE.CylinderGeometry(0.62, 0.48, 1.4, 8);
+      const torso = new THREE.Mesh(torsoGeo, matDarkPlate);
+      torso.position.set(0, 1.6, 0);
+      torso.castShadow = true;
+      usurperGroup.add(torso);
+
+      // Spiked Horned Greathelm
+      const helmGeo = new THREE.CylinderGeometry(0.38, 0.42, 0.7, 8);
+      const helm = new THREE.Mesh(helmGeo, matDarkPlate);
+      helm.position.set(0, 2.6, 0);
+      helm.castShadow = true;
+      usurperGroup.add(helm);
+
+      // Glowing Crimson Visor Eye Slit (Radiates menace through bloom)
+      const visorGeo = new THREE.BoxGeometry(0.44, 0.08, 0.15);
+      const visorMat = new THREE.MeshBasicMaterial({ color: 0xff0044 });
+      const visor = new THREE.Mesh(visorGeo, visorMat);
+      visor.position.set(0, 2.65, 0.38);
+      usurperGroup.add(visor);
+
+      // Horns
+      const hornGeo = new THREE.ConeGeometry(0.1, 0.7, 5);
+      const hornL = new THREE.Mesh(hornGeo, matDarkRock);
+      hornL.position.set(-0.4, 3.0, 0);
+      hornL.rotation.z = 0.6;
+      usurperGroup.add(hornL);
+
+      const hornR = new THREE.Mesh(hornGeo, matDarkRock);
+      hornR.position.set(0.4, 3.0, 0);
+      hornR.rotation.z = -0.6;
+      usurperGroup.add(hornR);
+
+      // Heavy Spiked Pauldrons
+      const pGeo = new THREE.DodecahedronGeometry(0.4);
+      const pL = new THREE.Mesh(pGeo, matDarkPlate);
+      pL.position.set(-0.85, 2.15, 0);
+      usurperGroup.add(pL);
+
+      const pR = new THREE.Mesh(pGeo, matDarkPlate);
+      pR.position.set(0.85, 2.15, 0);
+      usurperGroup.add(pR);
+
+      // Raised Arms Holding Glowing Runeblade
+      const armGeo = new THREE.CylinderGeometry(0.18, 0.15, 1.1, 6);
+      const armL = new THREE.Mesh(armGeo, matDarkPlate);
+      armL.position.set(-0.45, 2.3, 0.4);
+      armL.rotation.x = -1.2;
+      armL.rotation.y = 0.4;
+      usurperGroup.add(armL);
+
+      const armR = new THREE.Mesh(armGeo, matDarkPlate);
+      armR.position.set(0.45, 2.3, 0.4);
+      armR.rotation.x = -1.2;
+      armR.rotation.y = -0.4;
+      usurperGroup.add(armR);
+
+      // Stance Legs
+      const legGeo = new THREE.CylinderGeometry(0.24, 0.2, 1.2, 6);
+      const legL = new THREE.Mesh(legGeo, matDarkPlate);
+      legL.position.set(-0.42, 0.6, 0);
+      legL.rotation.z = 0.15;
+      usurperGroup.add(legL);
+
+      const legR = new THREE.Mesh(legGeo, matDarkPlate);
+      legR.position.set(0.42, 0.6, 0.2);
+      legR.rotation.x = 0.2;
+      usurperGroup.add(legR);
+
+      // Blackened Warrior Cape
+      const capeGeo = new THREE.BoxGeometry(1.2, 2.2, 0.1);
+      const cape = new THREE.Mesh(capeGeo, matDarkRock);
+      cape.position.set(0, 1.3, -0.45);
+      cape.rotation.x = 0.15;
+      cape.castShadow = true;
+      usurperGroup.add(cape);
+
+      // The Cursed Glowing Runeblade (Raised High)
+      const bladeHilt = new THREE.CylinderGeometry(0.06, 0.06, 0.8);
+      const hiltMesh = new THREE.Mesh(bladeHilt, matGoldTrim);
+      hiltMesh.position.set(0, 2.8, 0.85);
+      hiltMesh.rotation.x = 0.3;
+      usurperGroup.add(hiltMesh);
+
+      const bladeGeo = new THREE.BoxGeometry(0.18, 2.4, 0.06);
+      const bladeMesh = new THREE.Mesh(bladeGeo, matBladeEnergy);
+      bladeMesh.position.set(0, 4.0, 1.2);
+      bladeMesh.rotation.x = 0.3;
+      bladeMesh.castShadow = true;
+      usurperGroup.add(bladeMesh);
+
+      sceneGroup.add(usurperGroup);
+      return usurperGroup;
+    }
+
+    // 3. The Hovering Cursed Relic (The Primal Core / Ring)
+    function buildCursedRelic() {
+      const relicGroup = new THREE.Group();
+      relicGroup.position.set(0, 4.2, 0);
+
+      // Outer Celestial Gyroscope Ring
+      const ring1Geo = new THREE.TorusGeometry(1.2, 0.06, 8, 32);
+      const ring1 = new THREE.Mesh(ring1Geo, matGoldTrim);
+      relicGroup.add(ring1);
+
+      // Middle Intersecting Ring
+      const ring2Geo = new THREE.TorusGeometry(0.85, 0.05, 8, 32);
+      const ring2 = new THREE.Mesh(ring2Geo, matBladeEnergy);
+      relicGroup.add(ring2);
+
+      // Glowing Inner Shard
+      const shardGeo = new THREE.OctahedronGeometry(0.45);
+      const shard = new THREE.Mesh(shardGeo, matBladeEnergy);
+      relicGroup.add(shard);
+
+      sceneGroup.add(relicGroup);
+      return { group: relicGroup, ring1, ring2, shard };
+    }
+
+    const king = buildFallenKing();
+    const usurper = buildUsurper();
+    const relic = buildCursedRelic();
+
+    // --- VOLUMETRIC ASH EMBER PARTICLE SYSTEM ---
+    const PARTICLE_COUNT = 1200;
+    const emberGeo = new THREE.BufferGeometry();
+    const emberPositions = new Float32Array(PARTICLE_COUNT * 3);
+    const emberVelocities = new Float32Array(PARTICLE_COUNT * 3);
+
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      emberPositions[i * 3 + 0] = (Math.random() - 0.5) * 25;
+      emberPositions[i * 3 + 1] = -2.5 + Math.random() * 18;
+      emberPositions[i * 3 + 2] = (Math.random() - 0.5) * 25;
+
+      emberVelocities[i * 3 + 0] = (Math.random() - 0.5) * 0.02;
+      emberVelocities[i * 3 + 1] = 0.03 + Math.random() * 0.05;
+      emberVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+    }
+
+    emberGeo.setAttribute('position', new THREE.BufferAttribute(emberPositions, 3));
+
+    // Glowing Ember Particle Material
+    function createEmberTexture() {
+      const c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(0.3, '#ffaa00');
+      g.addColorStop(0.7, '#ff3300');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+
+    const emberMat = new THREE.PointsMaterial({
+      size: 0.35,
+      map: createEmberTexture(),
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const emberParticles = new THREE.Points(emberGeo, emberMat);
+    sceneGroup.add(emberParticles);
+
+    // --- CAMERA DIRECTOR MODES ---
+    let cameraMode = 'orbit';
+
+    const CAMERA_PRESETS = {
+      orbit: { pos: new THREE.Vector3(0, 6.5, 17), target: new THREE.Vector3(0, 2.5, 0), autoRotate: true },
+      faceoff: { pos: new THREE.Vector3(-0.6, 2.8, 3.8), target: new THREE.Vector3(-1.4, 3.4, 0), autoRotate: false },
+      crown: { pos: new THREE.Vector3(2.6, 2.8, 2.6), target: new THREE.Vector3(1.8, 2.2, 0.8), autoRotate: false },
+      abyss: { pos: new THREE.Vector3(0, 11, -12), target: new THREE.Vector3(0, 0, 0), autoRotate: true }
+    };
+
+    function setCameraMode(mode) {
+      cameraMode = mode;
+      document.querySelectorAll('.camera-hud .hud-btn').forEach(b => b.classList.remove('active'));
+      if (mode === 'orbit') document.getElementById('camBtnOrbit').classList.add('active');
+      if (mode === 'faceoff') document.getElementById('camBtnFaceoff').classList.add('active');
+      if (mode === 'crown') document.getElementById('camBtnCrown').classList.add('active');
+      if (mode === 'abyss') document.getElementById('camBtnAbyss').classList.add('active');
+
+      const preset = CAMERA_PRESETS[mode];
+      controls.autoRotate = preset.autoRotate;
+      controls.target.copy(preset.target);
+
+      // Smooth camera transition
+      gsapLikeCamera(preset.pos);
+    }
+
+    function gsapLikeCamera(targetPos) {
+      const startPos = camera.position.clone();
+      let t = 0;
+      const interval = setInterval(() => {
+        t += 0.05;
+        camera.position.lerpVectors(startPos, targetPos, t);
+        if (t >= 1) clearInterval(interval);
+      }, 16);
+    }
+
+    // --- NARRATIVE SIFTED SAGAS ---
+    const SAGAS = [
+      {
+        quote: "\"Lord Regent Valerius stands over the fallen monarch upon the high precipice of the Cracks of Doom. The Cursed Greatsword radiates ancient malice—a sacred vow shattered for a crown of ash.\"",
+        tick: "Month 05 (Day 148)",
+        surprise: "62.4 bits (Top 0.0001% Climax)",
+        causal: "Broken Vow #12 \u2192 Famine Despair \u2192 Citadel Breach \u2192 Regicide"
+      },
+      {
+        quote: "\"Frodo reaches the final basalt spire above the fiery chasm. The One Ring whispers with the full crushing weight of three thousand years. In the final second, human will bends to the ancient tensor.\"",
+        tick: "Month 09 (Day 294)",
+        surprise: "71.2 bits (Legendary Epic)",
+        causal: "Ringbearer Burden \u2192 Volcanic Sapping \u2192 Relic Claimed \u2192 Ring Shattered"
+      },
+      {
+        quote: "\"The Last Centurion of Legio IX stands alone before the breached Iron Gate of Augusta Praetoria as barbarian hordes surge through the marble forum. He strikes his shield one final time.\"",
+        tick: "Month 11 (Day 342)",
+        surprise: "54.8 bits (Heroic Tragedy)",
+        causal: "Siege of Praetoria \u2192 Grain Stock Burned \u2192 Wall Collapse \u2192 Last Stand"
+      }
+    ];
+
+    let sagaIndex = 0;
+    function nextSaga() {
+      sagaIndex = (sagaIndex + 1) % SAGAS.length;
+      const s = SAGAS[sagaIndex];
+      document.getElementById('narrativeText').textContent = s.quote;
+      document.getElementById('valTick').textContent = s.tick;
+      document.getElementById('valSurprise').textContent = s.surprise;
+      document.getElementById('valCausal').textContent = s.causal;
+      setCameraMode('faceoff');
+    }
+
+    // --- WEB AUDIO API PROCEDURAL GOTHIC AMBIENCE ---
+    let audioCtx = null;
+    let isAudioPlaying = false;
+    let masterGain = null;
+
+    function toggleAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = audioCtx.createGain();
+        masterGain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+        masterGain.connect(audioCtx.destination);
+
+        // Low gothic drone oscillator
+        const osc1 = audioCtx.createOscillator();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(55, audioCtx.currentTime); // A1
+        const filter1 = audioCtx.createBiquadFilter();
+        filter1.type = 'lowpass';
+        filter1.frequency.setValueAtTime(220, audioCtx.currentTime);
+
+        osc1.connect(filter1);
+        filter1.connect(masterGain);
+        osc1.start();
+
+        // Sub bass oscillator
+        const osc2 = audioCtx.createOscillator();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(36.7, audioCtx.currentTime); // D1
+        osc2.connect(masterGain);
+        osc2.start();
+      }
+
+      isAudioPlaying = !isAudioPlaying;
+      if (isAudioPlaying) {
+        audioCtx.resume();
+        masterGain.gain.setTargetAtTime(0.2, audioCtx.currentTime, 0.5);
+        document.getElementById('btnAudioToggle').textContent = "🔊 Soundscape: ON";
+      } else {
+        masterGain.gain.setTargetAtTime(0.001, audioCtx.currentTime, 0.5);
+        document.getElementById('btnAudioToggle').textContent = "🔇 Soundscape: OFF";
+      }
+    }
+
+    // --- POST-PROCESSING & UNREAL BLOOM PIPELINE ---
+    let bloomEnabled = true;
+    const composer = new THREE.EffectComposer(renderer);
+    const renderPass = new THREE.RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const bloomPass = new THREE.UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.35,  // Bloom Strength
+      0.45,  // Radius
+      0.65   // Threshold
+    );
+    composer.addPass(bloomPass);
+
+    function toggleBloom() {
+      bloomEnabled = !bloomEnabled;
+      const btn = document.getElementById('btnBloomToggle');
+      if (bloomEnabled) {
+        btn.classList.add('active');
+        btn.textContent = "✨ Bloom: ON";
+      } else {
+        btn.classList.remove('active');
+        btn.textContent = "✨ Bloom: OFF";
+      }
+    }
+
+    // --- DYNAMIC LIGHTNING STORM SYSTEM ---
+    const lightningLight = new THREE.DirectionalLight(0xdbeafe, 0);
+    lightningLight.position.set(10, 35, 15);
+    scene.add(lightningLight);
+
+    let nextLightningTime = 3.5;
+    let lightningFlashPhase = 0;
+    let lightningEndTime = 0;
+
+    function triggerLightning() {
+      lightningFlashPhase = 1;
+      lightningEndTime = clock.getElapsedTime() + 0.45;
+      playThunderRumble();
+    }
+
+    function playThunderRumble() {
+      if (!audioCtx || !isAudioPlaying) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(52, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(18, audioCtx.currentTime + 1.4);
+        g.gain.setValueAtTime(0.35, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 1.4);
+        osc.connect(g);
+        g.connect(masterGain);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.4);
+      } catch(e) {}
+    }
+
+    // Resize Handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- ANIMATION & SHADER LOOP ---
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const time = clock.getElapsedTime();
+
+      // 1. Molten Lava Pulse & Texture Flow
+      lavaTexture.offset.x = time * 0.015;
+      lavaTexture.offset.y = Math.sin(time * 0.2) * 0.02;
+      lavaLight.intensity = 4.2 + Math.sin(time * 8.0) * 0.6 + Math.cos(time * 14.0) * 0.4;
+
+      // 2. Cursed Relic Gyroscopic Rotation & Hover
+      if (relic) {
+        relic.ring1.rotation.x = time * 1.8;
+        relic.ring1.rotation.y = time * 0.9;
+        relic.ring2.rotation.y = time * 2.2;
+        relic.ring2.rotation.z = time * 1.4;
+        relic.shard.rotation.x = time * 3.0;
+        relic.shard.rotation.y = time * 2.0;
+
+        relic.group.position.y = 4.2 + Math.sin(time * 2.5) * 0.25;
+        relicLight.intensity = 2.8 + Math.sin(time * 6.0) * 0.5;
+      }
+
+      // 3. Runeblade Crackling Energy
+      bladeLight.intensity = 2.0 + Math.sin(time * 18.0) * 0.6;
+
+      // 4. Update Ash Ember Particles
+      const positions = emberGeo.attributes.position.array;
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        // Apply velocity & turbulent wind drift
+        positions[i * 3 + 1] += emberVelocities[i * 3 + 1];
+        positions[i * 3 + 0] += Math.sin(time + positions[i * 3 + 1]) * 0.012;
+        positions[i * 3 + 2] += Math.cos(time + positions[i * 3 + 1]) * 0.012;
+
+        // Reset if rising out of bounds
+        if (positions[i * 3 + 1] > 18) {
+          positions[i * 3 + 1] = -2.5;
+          positions[i * 3 + 0] = (Math.random() - 0.5) * 22;
+          positions[i * 3 + 2] = (Math.random() - 0.5) * 22;
+        }
+      }
+      emberGeo.attributes.position.needsUpdate = true;
+
+      // 5. Procedural Lightning Flashes
+      if (time > nextLightningTime) {
+        triggerLightning();
+        nextLightningTime = time + 5.0 + Math.random() * 6.0;
+      }
+
+      if (lightningFlashPhase > 0) {
+        const remaining = lightningEndTime - time;
+        if (remaining > 0.3) {
+          lightningLight.intensity = 4.5;
+        } else if (remaining > 0.2) {
+          lightningLight.intensity = 0.5;
+        } else if (remaining > 0.05) {
+          lightningLight.intensity = 6.0; // Second stark burst
+        } else {
+          lightningLight.intensity = 0;
+          lightningFlashPhase = 0;
+        }
+      }
+
+      controls.update();
+
+      if (bloomEnabled) {
+        composer.render();
+      } else {
+        renderer.render(scene, camera);
+      }
+    }
+
+    animate();
+  </script>
+</body>
+</html>

@@ -14,3 +14,9 @@ python/.venv/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+
+# Downstream binary assets & raw game rips (Plane C)
+assets/
+scratch/
+upload/
+docs/red_team/games/

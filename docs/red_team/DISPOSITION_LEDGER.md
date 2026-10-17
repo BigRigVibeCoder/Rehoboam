@@ -2,7 +2,8 @@
 
 > **Purpose:** Authoritative living ledger tracking every Red Team finding, architectural proposal, handoff, and decision.  
 > **Rule:** Prevents amnesia, prevents re-arguing settled decisions, records exact Architect dispositions and rationales, and defines **Revisit Triggers** for re-testing as the engine evolves.  
-> **Maintained by:** Red Team Leader & Quality Auditor
+> **Maintained by:** Red Team Leader & Quality Auditor  
+> **Last Synchronized:** 2026-10-16 (Gate G0 Director Rulings & Batch 04 Intake)
 
 ---
 
@@ -10,12 +11,13 @@
 
 | Category | Count | Status Notes |
 | :--- | :---: | :--- |
-| **Total Findings Tracked** | **28** | Complete record from project pivot to current sprint |
-| **Fully Ratified & Adopted into Code / Specs** | **13** | Integrated via ADR-0035, PR #2, PR #3, PR #9, `S6`, `S7`, `V-SAGA` |
-| **Adopted with Lighter / Pragmatic Mechanism** | **2** | Gap 1 (Props) and Gap 5 (Reverse Key) adapted for kingdom scale |
+| **Total Findings Tracked** | **32** | Complete record from project pivot through Gate G0 rulings |
+| **Fully Ratified & Adopted into Code / Specs** | **18** | Integrated via ADR-0035, ADR-0036, ADR-0037, PRs #2, #3, #9, #12, #20, `S6`, `S7`, `GOV-003 §6`, RT-031–RT-033 |
+| **Adopted with Lighter / Pragmatic Mechanism** | **2** | Gap 1 (Props from stock) and Gap 5 (Parquet reverse key) adapted for kingdom scale |
 | **Deferred by Design** | **1** | Acoustic decibel & terrain damping propagation (precision without data) |
-| **Approved in Principle for Gate G0 Integration** | **7** | Batches 01, 02, and 03 in `docs/red_team/inbox.md` |
-| **Validated via Working Prototypes (Batch 04)** | **5** | Hydrology, Thermostat, SQL Sifter, Storyboard, Bug Immunity |
+| **Approved / Disposed for Gate G0 Integration** | **8** | Batches 01, 02, 03, and 04 in `docs/handoffs/` and `docs/decisions-log.md` |
+| **Validated via Working Prototypes (11/11 Passing)** | **11** | Stream Viewer (P15), Compiler (P14), Megacity (P13), Hydrology (P6), Thermostat (P7), Sifter (P8), Comic (P9), Attractor (P10), P1–P5 |
+| **Primary Source Grounded & Calibrated (G1a Ready)** | **1** | Batch 05 Demography & Inequality Dossier (`A13b`, `A14`, `A19`, `A20` verified; Notes N13–N17 resolved) |
 | **Active Revisit Triggers (Hooks)** | **6** | Scheduled prototype re-tests tied to engine phase gates |
 
 ---
@@ -31,7 +33,7 @@
 | **RT-005** | **CK3-Style Stress & Mental Breaks** | Batch 00 | ADR-0035, `T1.minds` | **ADOPTED** | Fixed-point `Q8_8` (0–100) stress meter. Crossing threshold triggers deterministic state transition break from Registry table. | Revisit at P1a when `rh-minds` crate is initialized. |
 | **RT-006** | **Subsystem Isolation Tests (`V-SF-22`)** | Review 1 | `docs/09`, tests | **ADOPTED** | Multi-system integration tests must allow isolating individual systems to test causal feedback. Merged in PR #3. | Checked by CI in `bin/check_all.sh`. |
 | **RT-007** | **Coupling Sweeps $\alpha \in [0, 1]$ (`V-SF-23`)** | Review 1 | `docs/09`, tests | **ADOPTED** | Parametric sensitivity sweeps to test system coupling stability. Merged in PR #3. | Run during phase certification gates. |
-| **RT-008** | **PRNG Stream Independence (`V-DET-20`)** | Review 1 | `rh-ids`, tests | **ADOPTED** | Statistical PRNG covariance tests ensuring split streams don't correlate. Coded in `SPR-002`. | **Active Revisit:** Audit `SPR-002` once merged (`RT-ACT-007`). |
+| **RT-008** | **PRNG Stream Independence (`V-DET-20`)** | Review 1 | `rh-ids`, tests | **ADOPTED** | Statistical PRNG covariance tests ensuring split streams don't correlate. Coded and merged in `SPR-002`. | Verified in `VER-SPR-002`. Closed. |
 | **RT-009** | **Gap 1: Spontaneous Props Ban** | Batch 01 | SAGA-12, `S6` | **LIGHTENED** | *Architect ruling:* Unique artifacts require unbroken bearer chains. Ordinary props (poison phial, dagger) drawn from simulated stock at point of purchase. | Revisit at P1a during `S6.artifacts` implementation. |
 | **RT-010** | **Gap 2: Information Horizon (Secrets v0)** | Batch 01 | SAGA-4, `05.3` | **LIGHTENED / DEFERRED** | *Architect ruling:* Secrets travel by road network and scheduled discovery. Acoustic decibel sound damping deferred as "precision without data". | Revisit at P1b when road travel speed is benchmarked. |
 | **RT-011** | **Gap 3: Instant Dynastic Succession** | Batch 01 | SAGA-13, `M7` | **ADOPTED** | When a ruler dies, M7 settles succession in the same instant (heir, claims, proximity, treasury) or declares crisis. No annual lag. | Revisit at P1a during `M7.dynasty` sprint. |
@@ -45,13 +47,18 @@
 | **RT-019** | **Item 6: Symbolic Reflection Tree (Park et al.)** | Batch 02 | `T1.minds` | **APPROVED FOR G0** | *Architect read:* Good fit for R-11 (bounded memory). Refined with relational scaling, evidence chain, bitwise order, and fixed-point math. | Revisit at Gate G0 for formal `T1.minds` incorporation. |
 | **RT-020** | **Item 7: Bayesian Unexpectedness Metric ($\mathcal{U}$)** | Batch 02 | `rh-sifter` | **APPROVED FOR G0** | *Architect read:* Useful formula to make rarity score in `05.4` §3 exact ($\mathcal{U} = -\log_2 P$). | Revisit at P2 when ranking algorithm is coded. |
 | **RT-021** | **Item 8: Relic Corruption Attractor Tensor** | Batch 02 | `S6.artifacts` | **APPROVED FOR G0** | *Architect read:* Good. Simple, bounded, fixed-point friendly, slots straight into S6 coupling fields. | Revisit at Gate G0 / P1a for `S6.artifacts` coupling. |
-| **RT-022** | **Item 9: Red Team Charter & Action Backlog** | Batch 03 | `docs/red_team/` | **PENDING G0** | Formalizes 5 Laws, 14 backlog actions, and graveyard autopsies. Filed in PR `arch/red-team-batch-03`. | Revisit when PR is merged by Architect. |
-| **RT-023** | **Item 10: Four Bleeding-Edge Frontiers** | Batch 03 | `M14`, `S6`, `M7` | **PENDING G0** | Versu Social Practices, Caves of Qud Mythic Domains, Wildermyth Comic Grammar, and Nobility Thermostat. | Revisit at Gate G0 planning session. |
+| **RT-022** | **Item 9: Red Team Charter & Action Backlog** | Batch 03 | `docs/red_team/` | **RATIFIED & MERGED** | Formalizes 5 Laws, 14 backlog actions, and graveyard autopsies. Merged in PR #12; Laws 2 & 3 codified into `docs/01 §5` with Architect causal-root clarifications. | Active charter. |
+| **RT-023** | **Item 10: Four Bleeding-Edge Frontiers** | Batch 03 | `M14`, `S6`, `M7` | **DISPOSED FOR G0** | Versu Social Practices, Caves of Qud Mythic Domains, Wildermyth Comic Grammar, and Nobility Thermostat intake merged in PR #12. | Revisit at Gate G0 planning session. |
 | **RT-024** | **Barnes 2014 Priority-Flood Hydrology** | Batch 04 | `M1.topography`, `M1.hydrology` | **VALIDATED (P6)** | $O(N \log N)$ min-heap depression filling guarantees 100% monotonic river routing to sea; eliminates pit traps and river looping. | Integrate into `M1.topography` during P1a. |
-| **RT-025** | **Feudal Estate Capacity & Natural Demotion** | Batch 04 | `M7.dynasty`, `M2` | **REBUILT (P7)** | Rebuilt with zero global controllers. 50 fiefs and age-35 unlanded cadet demotion rule bounds population to ~98 active nobles for 500 yrs. | Revisit at P1a during `M7.dynasty` implementation. |
-| **RT-026** | **Two-Stage SQL Causal Sifter & Unexpectedness** | Batch 04 | `rh-sifter`, `05.4` | **REBUILT (P8)** | Measures both Stage 1 discovery (0.19ms) and Stage 2 DAG traversal (0.30ms) across 100k events with 2k causal trees (0.49ms total). | Revisit at P2 for Parquet DuckDB bindings. |
-| **RT-027** | **4-Beat Comic Storyboard Compiler** | Batch 04 | Plane C Graphic Reader | **VALIDATED (P9)** | Compiles Parquet event envelopes into structured 4-beat Wildermyth comic JSON with 100% consistent InstantID visual anchors. | Revisit at P5 when Graphic Reader is built. |
-| **RT-028** | **The 10 Fallen Bugs Immunity Protocol** | Batch 04 | Engine Invariants, `05.10` | **PROPOSED G0** | Immunizes engine against DF door storms, item clutter, CDDA nested containers, and RimWorld GC pauses. | Codify in `GOV-008` & `CLAUDE.md` engineering invariants. |
+| **RT-025** | **Feudal Estate Capacity & Natural Demotion** | Batch 04 | `M7.dynasty`, `M2` | **REBUILT & ADOPTED (P7)** | Rebuilt with zero global controllers. 50 fiefs and age-35 unlanded cadet demotion rule bounds population to ~98 active nobles for 500 yrs. Merged onto `main`. | Revisit at P1a during `M7.dynasty` implementation. |
+| **RT-026** | **Two-Stage SQL Causal Sifter & Unexpectedness** | Batch 04 | `rh-sifter`, `05.4` | **REBUILT & ADOPTED (P8)** | Measures both Stage 1 discovery (0.19ms) and Stage 2 DAG traversal (0.30ms) across 100k events with 2k causal trees (0.49ms total). Merged onto `main`. | Revisit at P2 for Parquet DuckDB bindings. |
+| **RT-027** | **4-Beat Comic Storyboard Compiler** | Batch 04 | Plane C Graphic Reader | **VALIDATED (P9)** | Compiles Parquet event envelopes into structured 4-beat Wildermyth comic JSON with 100% consistent InstantID visual anchors. Intake merged in PR #20. | Revisit at P5 when Graphic Reader is built. |
+| **RT-028** | **The 10 Fallen Bugs Immunity Protocol** | Batch 04 | `GOV-003 §6` | **ADOPTED** | Immunizes engine against DF door storms, item clutter, CDDA nested containers, and RimWorld GC pauses. Ratified by Director into `GOV-003 §6` failure-modes table. | Binding in review. |
+| **RT-029** | **Relic Corruption Attractor & Stress Break** | Batch 04 | `S6.artifacts`, `T1.minds` | **VALIDATED & ADOPTED (P10)** | Continuous dynamical attractor $\vec{M}_{t+1} = \vec{M}_t + \kappa(\vec{\Psi} - \vec{M}_t)$ verified in Prototype 10. Architect confirmed: holds up as evidence for Item 8. | Integrate into `S6.artifacts` in P1a. |
+| **RT-030** | **Demography & Inequality Science Calibration** | Batch 05 | `M2`, `M4`, `M6`, `V-SF-07`, `V-SF-17` | **CALIBRATED (G1a READY)** | Primary sources deposited in `research/papers/` (`A13b`, `A14`, `A19`, `A20`). Coale-Demeny labels corrected to Levels 3, 5, 7. Runtime Gini clamp retracted under Law 2; M6 Weibull runtime hazard retracted under Law 2; both reclassified as statistical test targets (`V-SF-17`, `V-SF-07`). Formal Calibration Report filed in `RT-2026-10-16-CALIBRATION-REPORT` resolving Notes N13–N17. | Fold into `M2.demography` and `specs/demography/` during Sprint P1.3. |
+| **RT-031** | **3D Voxel World Engine Standard for Plane C** | Batch 06 | Plane C (`05.10`, `05.7`) | **ADOPTED AS STANDARD** | Replaces legacy 2D sprite ripper tools with Web-Native Three.js 3D Voxel Engine. Proved locked 60 FPS across rural keeps (12k voxels) and imperial metropolis districts (1M census, 17k hydrated voxels, galleons, cathedral, aqueduct, bazaar). Leverages ADR-0031 Hydration Bubble, Greedy Meshing, and Octree LOD. | Primary Plane C visual spectator. Wire to `rh-stream` in SPR-013. |
+| **RT-032** | **Spatial Stream-to-Voxel World Compiler Engine & LLM Culture Dreamer** | Batch 06 | Plane C (`05.10`, `05.7`, ADR-0031, ADR-0036) | **RATIFIED & ADOPTED (P14, ADR-0036)** | Eliminates handcoded voxel coordinates. Reads raw Plane A simulation event streams (Arrow/WebSocket) and uses procedural spatial grammar to synthesize 3D voxel footprints in < 25 ms at locked 60 FPS. Features **👑 Peak SOTA Micro-Voxel Fidelity (0.35m)** with Tudor timber diagonal cross-braces, 3-tier stepped thatch roofs, leaded lantern windows with floral planter boxes, interior hearths, and per-voxel HSL color jittering. Integrates pluggable **Admin & LLM Studio (OpenRouter / Claude-3.5 / Gemini)** and **Deterministic Culture Caching** (zero-lag 0.0 ms replay). Proven in `voxel_stream_compiler.html`. | Core bridge between Plane A simulation stream and Plane C voxel visualizer. |
+| **RT-033** | **Plane C Simulation Stream Viewer & Live WebSocket Protocol** | Batch 06 | Plane C (`05.10`, `05.7`, ADR-0037) | **RATIFIED & ADOPTED (P15, ADR-0037)** | Zero-dependency RFC-6455 WebSocket streaming daemon (`bin/stream_server.py`) broadcasting live Plane A simulation packets (Year, Season, Demography, Harvests, Wall Breaches, Dragon Actions) on port 8089. Features live top telemetry ribbon, bidirectional control commands (Pause, 1x/2x/5x/10x speed, Step tick, trigger siege/dragon), First-Person Ground Walking Camera (1.6m eye height, WASD + mouse look, terrain collision), Luanti-grade micro-voxel aesthetics (Weeping Willow drooping vines, multi-toned Sakura cherry blossoms, PBR specular water, drifting fireflies), and zero-dark-failure offline fallback. Verified live in `tools/stream_viewer/index.html` and `bin/run_stream_viewer.sh`. | Production viewer for live Phase 1 simulation streams. |
 
 ---
 
@@ -61,33 +68,34 @@ These are scheduled re-entry points where the Red Team must un-pause an item, ru
 
 ```
 +-----------------------------------------------------------------------------------------+
-| TRIGGER 1: SPRINT MERGE CLEARANCE (SPR-002, SPR-004, SPR-010)                           |
-| Target: In-Flight Rust Crates                                                           |
+| TRIGGER 1: SPRINT MERGE CLEARANCE (SPR-007, SPR-008, SPR-009)                           |
+| Target: Active Phase 0 PRs                                                              |
 | Actions:                                                                                |
-| - Audit SPR-002 PRNG covariance and genealogical PersonId re-hashing (RT-ACT-007).      |
-| - Audit SPR-010 fixed-point arithmetic for overflow traps on stress surges (RT-ACT-008).|
-| - Audit SPR-004 generic Registry loader against S6.artifacts & S7.vows (RT-ACT-009).    |
+| - Verify SPR-007 PR #25 plane hashes, keyframes, and input journal IPC negative length.  |
+| - Stand by for laptop adjutant session on SPR-008 PR #28 (T-02 cross-machine golden run).|
+| - Audit SPR-009 wall-clock performance benches (Benches 7 & 8) and Gate G0 inventory.   |
 +-----------------------------------------------------------------------------------------+
                                            │
                                            ▼
 +-----------------------------------------------------------------------------------------+
-| TRIGGER 2: GATE G0 PLANNING MILESTONE (CONCLUSION OF PHASE 0)                           |
+| TRIGGER 2: GATE G0 RATIFICATION MILESTONE (CONCLUSION OF PHASE 0)                       |
 | Target: CODEX, Roadmap, and System Specifications                                       |
 | Actions:                                                                                |
-| - Audit G0 dispositions record for Batches 01, 02, and 03.                              |
-| - Ensure S6.artifacts includes Corruption Attractor equations.                           |
-| - Ensure S7.vows includes Cultural Priority Tiers from registry_v0.toml.                |
-| - Ensure T1.minds spec includes the Symbolic Reflection Tree and evidence chains.       |
+| - Audit VER-G0 formal gate evaluation report.                                           |
+| - Confirm Laws 2 & 3 text in docs/01 §5 with Architect causal-root clarifications.     |
+| - Confirm GOV-003 §6 ten-bug failure-modes table.                                       |
+| - Verify Benches 7 & 8 instruction baselines (Bench 4 deferred to P1a field sprint).    |
 +-----------------------------------------------------------------------------------------+
                                            │
                                            ▼
 +-----------------------------------------------------------------------------------------+
 | TRIGGER 3: PHASE 1A LAUNCH (BLOODLINES & MINDS COMPILATION)                             |
-| Target: Live Rust Simulation Runs                                                       |
+| Target: Live Rust Simulation Runs (Rungs 0-2: Solo, Household, Hamlet)                  |
 | Actions:                                                                                |
 | - Run live Rust simulation of Court Tantrum Cascade with live minds crate.              |
-| - Run RT-ACT-010 (The Nobility Thermostat): measure named noble population over 500 yrs.|
+| - Run RT-ACT-010 (The Nobility Thermostat): verify bounded noble demographic governor.  |
 | - Verify O(1) heap memory bound per agent under stress.                                 |
+| - Calibrate M2 commoner infant mortality against primary Coale-Demeny tables.           |
 +-----------------------------------------------------------------------------------------+
                                            │
                                            ▼

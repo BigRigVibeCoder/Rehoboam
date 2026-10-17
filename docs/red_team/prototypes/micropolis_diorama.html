@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REHOBOAM // Micropolis 2D Settlement Diorama (Clean-Room Prototype)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #07090e;
+      --panel-bg: rgba(15, 23, 42, 0.85);
+      --border-color: rgba(56, 189, 248, 0.2);
+      --border-bright: rgba(56, 189, 248, 0.5);
+      --accent-cyan: #38bdf8;
+      --accent-gold: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-emerald: #10b981;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 60%),
+        linear-gradient(to bottom, #07090e 0%, #030712 100%);
+      color: var(--text-main);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+    }
+
+    /* CRT Scanline Overlay */
+    .scanlines {
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+      background-size: 100% 4px;
+      pointer-events: none;
+      z-index: 999;
+      opacity: 0.6;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 1.5rem;
+    }
+
+    .header-titles h1 {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 1.1rem;
+      color: var(--accent-cyan);
+      text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.5px;
+    }
+
+    .header-titles p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .badge-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      font-weight: 600;
+    }
+
+    .main-layout {
+      display: grid;
+      grid-template-columns: 560px 1fr;
+      gap: 1.5rem;
+      flex: 1;
+    }
+
+    /* Screen Panel */
+    .screen-panel {
+      background: #000;
+      border: 2px solid var(--border-bright);
+      border-radius: 12px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px rgba(56, 189, 248, 0.15);
+    }
+
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+      background: #111827;
+    }
+
+    /* Controls */
+    .controls-bar {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      width: 100%;
+    }
+
+    .btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.6rem 1rem;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      background: rgba(30, 41, 59, 0.7);
+      color: var(--text-main);
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+      color: #fff;
+    }
+
+    .btn.primary {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .btn.primary:hover {
+      background: var(--accent-cyan);
+      color: #07090e;
+    }
+
+    .btn.danger {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #f87171;
+    }
+
+    .btn.danger:hover {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    /* Telemetry HUD */
+    .telemetry-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      width: 100%;
+      margin-top: 1rem;
+    }
+
+    .telemetry-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      text-align: center;
+    }
+
+    .telemetry-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .telemetry-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent-gold);
+      margin-top: 2px;
+    }
+
+    /* Right Chronicle Panel */
+    .info-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .card {
+      background: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 1.25rem;
+      backdrop-filter: blur(12px);
+    }
+
+    .card-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chronicle-stream {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.82rem;
+      line-height: 1.6;
+      height: 240px;
+      overflow-y: auto;
+      background: #050811;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .chronicle-entry {
+      border-left: 2px solid var(--accent-cyan);
+      padding-left: 0.5rem;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .chronicle-entry.crisis {
+      border-color: var(--accent-red);
+      color: #fca5a5;
+    }
+
+    .chronicle-entry.riot {
+      border-color: #f97316;
+      color: #fed7aa;
+    }
+
+    .chronicle-entry.breach {
+      border-color: #a855f7;
+      color: #e9d5ff;
+      font-weight: 700;
+    }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+
+    .legend-color {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+    }
+
+    /* Contract Alert */
+    .contract-banner {
+      background: rgba(56, 189, 248, 0.08);
+      border-left: 4px solid var(--accent-cyan);
+      border-radius: 0 8px 8px 0;
+      padding: 0.75rem 1rem;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #bae6fd;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="scanlines"></div>
+
+  <header>
+    <div class="header-titles">
+      <h1>REHOBOAM // MICROPOLIS 2D DIORAMA</h1>
+      <p>Plane C Downstream Retro Visualizer &bull; Clean-Room Implementation (Zero GPL / Zero EA Code)</p>
+    </div>
+    <span class="badge-pill">Unidirectional Impulse Bridge (RT-ACT-004)</span>
+  </header>
+
+  <div class="main-layout">
+    <!-- Left Screen Panel -->
+    <div class="screen-panel">
+      <canvas id="cityCanvas" width="512" height="512"></canvas>
+
+      <div class="telemetry-row">
+        <div class="telemetry-box">
+          <div class="telemetry-label">Siege Month</div>
+          <div class="telemetry-val" id="valTick">01 / 06</div>
+        </div>
+        <div class="telemetry-box">
+          <div class="telemetry-label">Granary Food</div>
+          <div class="telemetry-val" id="valFood">1,000</div>
+        </div>
+        <div class="telemetry-box">
+          <div class="telemetry-label">Garrison Loyalty</div>
+          <div class="telemetry-val" id="valLoyalty" style="color: var(--accent-emerald);">95%</div>
+        </div>
+      </div>
+
+      <div class="controls-bar">
+        <button class="btn primary" id="btnPlay">▶ Play Simulation</button>
+        <button class="btn" id="btnStep">⏭ Step Tick</button>
+        <button class="btn danger" id="btnReset">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- Right Chronicle & Specs Panel -->
+    <div class="info-panel">
+      <!-- Legal & Architecture Invariant -->
+      <div class="contract-banner">
+        <strong>The Architectural Contract (Law 2 / Zero Feedback):</strong><br>
+        The Rust core engine (Plane A) simulates famine and siege physics, emitting immutable Parquet events. This 2D canvas is a <strong>pure receiver</strong>. It renders cellular fire spread and gate breaches for human spectacle, but never feeds a single bit back into world state.
+      </div>
+
+      <!-- Tile Legend -->
+      <div class="card">
+        <div class="card-title">Municipal Tilemap Legend</div>
+        <div class="legend-grid">
+          <div class="legend-item"><div class="legend-color" style="background: #1e3a1e;"></div> Grass / Soil</div>
+          <div class="legend-item"><div class="legend-color" style="background: #1e40af;"></div> River (Water)</div>
+          <div class="legend-item"><div class="legend-color" style="background: #64748b;"></div> Cobblestone Road</div>
+          <div class="legend-item"><div class="legend-color" style="background: #e2e8f0;"></div> Castle Keep</div>
+          <div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div> Market Quarter</div>
+          <div class="legend-item"><div class="legend-color" style="background: #854d0e;"></div> Thatched Hovels</div>
+          <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div> Riot / Fire (!)</div>
+          <div class="legend-item"><div class="legend-color" style="background: #475569;"></div> Ash / Rubble (x)</div>
+        </div>
+      </div>
+
+      <!-- Live Event Chronicle Stream -->
+      <div class="card" style="flex: 1; display: flex; flex-direction: column;">
+        <div class="card-title">
+          <span>Downstream Parquet Event Stream</span>
+          <span style="font-size: 0.7rem; color: var(--accent-emerald);">● STREAMING</span>
+        </div>
+        <div class="chronicle-stream" id="chronicleStream">
+          <div class="chronicle-entry">
+            <strong>[TICK 01] SIEGE_ENVELOPMENT:</strong> Enemy vanguard severs the North Road. City of Alden's Hold is fully encircled. Inflow of grain ceased.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('cityCanvas');
+    const ctx = canvas.getContext('2d');
+    const GRID_SIZE = 16;
+    const TILE_PX = canvas.width / GRID_SIZE; // 32px per tile
+
+    // Tile Types: '.' grass, '~' river, '=' road, 'K' keep, 'm' market, 'h' hovel, '!' fire, 'x' ruin
+    let grid = [];
+    let tick = 1;
+    let maxTick = 6;
+    let isPlaying = false;
+    let playInterval = null;
+    let particles = [];
+    let granary = 1000;
+    let loyalty = 95;
+
+    // Sound / Effect simulation
+    function initGrid() {
+      grid = [];
+      for (let y = 0; y < GRID_SIZE; y++) {
+        let row = [];
+        for (let x = 0; x < GRID_SIZE; x++) {
+          row.push({ kind: '.', burning: false, fireFrame: 0 });
+        }
+        grid.push(row);
+      }
+
+      // River at x=2
+      for (let y = 0; y < GRID_SIZE; y++) grid[y][2].kind = '~';
+
+      // Main Road & Bridge
+      for (let x = 0; x < GRID_SIZE; x++) grid[8][x].kind = '=';
+
+      // Outer West Wall & Gate at (0, 8)
+      for (let y = 3; y <= 13; y++) {
+        grid[y][0].kind = 'W'; // Wall
+      }
+      grid[8][0].kind = 'G'; // West Gate
+
+      // Castle Keep at (12, 3)
+      grid[3][12].kind = 'K';
+      grid[3][11].kind = 'K';
+      grid[2][12].kind = 'K';
+
+      // Market at (9, 9)
+      grid[9][9].kind = 'm';
+      grid[9][10].kind = 'm';
+
+      // Hovels & Tenements
+      const hovels = [
+        [6,5], [6,6], [7,5], [7,6], [6,11], [6,12], [7,11], [7,12],
+        [10,5], [10,6], [11,5], [11,6], [10,11], [10,12], [11,11], [11,12]
+      ];
+      hovels.forEach(([y, x]) => grid[y][x].kind = 'h');
+
+      granary = 1000;
+      loyalty = 95;
+      tick = 1;
+      particles = [];
+      updateHUD();
+      document.getElementById('chronicleStream').innerHTML = `
+        <div class="chronicle-entry">
+          <strong>[TICK 01] SIEGE_ENVELOPMENT:</strong> Enemy vanguard severs the North Road. Alden's Hold encircled. Trade severed.
+        </div>
+      `;
+    }
+
+    function updateHUD() {
+      document.getElementById('valTick').innerText = `${String(tick).padStart(2, '0')} / 06`;
+      document.getElementById('valFood').innerText = granary.toLocaleString();
+      const elLoyalty = document.getElementById('valLoyalty');
+      elLoyalty.innerText = `${loyalty}%`;
+      if (loyalty > 70) elLoyalty.style.color = 'var(--accent-emerald)';
+      else if (loyalty > 40) elLoyalty.style.color = 'var(--accent-gold)';
+      else elLoyalty.style.color = 'var(--accent-red)';
+    }
+
+    function logChronicle(msg, type = '') {
+      const stream = document.getElementById('chronicleStream');
+      const div = document.createElement('div');
+      div.className = `chronicle-entry ${type}`;
+      div.innerHTML = msg;
+      stream.appendChild(div);
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function stepSimulation() {
+      if (tick >= maxTick) {
+        pauseSimulation();
+        return;
+      }
+      tick++;
+
+      // Macro Famine mechanics
+      granary = Math.max(0, granary - 250);
+
+      if (tick === 2) {
+        logChronicle(`<strong>[TICK 02] RATIONING_ORDER:</strong> Granary drops to ${granary}. Lord Commander cuts civilian grain quotas by 50%.`);
+      } else if (tick === 3) {
+        loyalty = 80;
+        logChronicle(`<strong>[TICK 03] GRAIN_HOARDING:</strong> Reserves at ${granary}. Rumors spread of nobles hoarding grain in Keep.`);
+      } else if (tick === 4) {
+        loyalty = 50;
+        // Famine riot & fire!
+        grid[7][11].kind = '!';
+        grid[7][11].burning = true;
+        logChronicle(`<strong>[TICK 04] FAMINE_RIOT:</strong> Granary hits ZERO! Starving mob storms the bakery quarter at (11, 7) and torches it!`, 'riot');
+      } else if (tick === 5) {
+        loyalty = 25;
+        // Cellular fire spread
+        grid[7][11].kind = 'x'; // burned to ruin
+        grid[7][11].burning = false;
+        
+        // Spread to neighbors
+        [[6,11], [7,12], [6,12]].forEach(([y, x]) => {
+          if (grid[y][x].kind === 'h' || grid[y][x].kind === 'm') {
+            grid[y][x].kind = '!';
+            grid[y][x].burning = true;
+          }
+        });
+
+        // Gate breached from mutiny
+        grid[8][0].kind = 'x'; // Breached West Gate
+        logChronicle(`<strong>[TICK 05] CONTAGION & BETRAYAL:</strong> Fire sweeps the eastern tenement blocks! Mutinous, starving guards throw open the West Gate!`, 'breach');
+      } else if (tick === 6) {
+        loyalty = 10;
+        // Further fire burn out
+        for (let y = 0; y < GRID_SIZE; y++) {
+          for (let x = 0; x < GRID_SIZE; x++) {
+            if (grid[y][x].burning) {
+              grid[y][x].kind = 'x';
+              grid[y][x].burning = false;
+            }
+          }
+        }
+        // Fire spread to market
+        grid[9][9].kind = '!';
+        grid[9][9].burning = true;
+        logChronicle(`<strong>[TICK 06] DISTRICT_COLLAPSE:</strong> Enemy vanguard pours through breached gate. Lower city ablaze. Keep isolated.`, 'crisis');
+      }
+
+      updateHUD();
+    }
+
+    // Particle system for fire & smoke
+    function spawnParticles() {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (grid[y][x].kind === '!') {
+            // Spawn flame & smoke
+            particles.push({
+              x: x * TILE_PX + TILE_PX / 2 + (Math.random() - 0.5) * 16,
+              y: y * TILE_PX + TILE_PX / 2,
+              vx: (Math.random() - 0.5) * 1,
+              vy: -1.2 - Math.random() * 1.5,
+              life: 1.0,
+              decay: 0.03 + Math.random() * 0.03,
+              color: Math.random() > 0.4 ? '#ef4444' : '#f59e0b',
+              size: 3 + Math.random() * 4
+            });
+          }
+        }
+      }
+    }
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= p.decay;
+        p.size *= 0.98;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+    }
+
+    // Render Tilemap
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Grid Tiles
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const tile = grid[y][x];
+          const px = x * TILE_PX;
+          const py = y * TILE_PX;
+
+          switch (tile.kind) {
+            case '.': // Grass
+              ctx.fillStyle = (x + y) % 2 === 0 ? '#1b321a' : '#172b16';
+              ctx.fillRect(px, py, TILE_PX, TILE_PX);
+              break;
+
+            case '~': // River
+              ctx.fillStyle = '#1e40af';
+              ctx.fillRect(px, py, TILE_PX, TILE_PX);
+              // Water ripples
+              ctx.fillStyle = '#3b82f6';
+              ctx.fillRect(px + 4, py + (Date.now() / 80 + y * 8) % TILE_PX, 6, 2);
+              break;
+
+            case '=': // Road
+              ctx.fillStyle = '#475569';
+              ctx.fillRect(px, py, TILE_PX, TILE_PX);
+              // Cobble speckles
+              ctx.fillStyle = '#64748b';
+              ctx.fillRect(px + 6, py + 8, 4, 4);
+              ctx.fillRect(px + 18, py + 16, 4, 4);
+              break;
+
+            case 'W': // Stone Wall
+              ctx.fillStyle = '#94a3b8';
+              ctx.fillRect(px, py, TILE_PX, TILE_PX);
+              ctx.strokeStyle = '#334155';
+              ctx.strokeRect(px + 2, py + 2, TILE_PX - 4, TILE_PX - 4);
+              break;
+
+            case 'G': // Gate
+              ctx.fillStyle = '#854d0e';
+              ctx.fillRect(px + 4, py + 2, TILE_PX - 8, TILE_PX - 4);
+              ctx.fillStyle = '#f59e0b';
+              ctx.fillRect(px + 12, py + 12, 8, 8); // Iron Portcullis
+              break;
+
+            case 'K': // Castle Keep
+              ctx.fillStyle = '#cbd5e1';
+              ctx.fillRect(px + 2, py + 2, TILE_PX - 4, TILE_PX - 4);
+              ctx.fillStyle = '#38bdf8'; // Blue Keep Banner
+              ctx.fillRect(px + 8, py + 6, 16, 8);
+              break;
+
+            case 'm': // Market
+              ctx.fillStyle = '#b45309';
+              ctx.fillRect(px + 4, py + 4, TILE_PX - 8, TILE_PX - 8);
+              ctx.fillStyle = '#fbbf24'; // Canopy
+              ctx.fillRect(px + 8, py + 8, TILE_PX - 16, 6);
+              break;
+
+            case 'h': // Hovel
+              ctx.fillStyle = '#78350f';
+              ctx.fillRect(px + 6, py + 6, TILE_PX - 12, TILE_PX - 12);
+              ctx.fillStyle = '#a16207'; // Thatch
+              ctx.fillRect(px + 8, py + 8, TILE_PX - 16, 6);
+              break;
+
+            case '!': // Fire / Riot
+              ctx.fillStyle = '#b91c1c';
+              ctx.fillRect(px + 2, py + 2, TILE_PX - 4, TILE_PX - 4);
+              ctx.fillStyle = '#f59e0b';
+              ctx.fillRect(px + 6, py + 6, TILE_PX - 12, TILE_PX - 12);
+              break;
+
+            case 'x': // Ash / Rubble
+              ctx.fillStyle = '#1e293b';
+              ctx.fillRect(px + 2, py + 2, TILE_PX - 4, TILE_PX - 4);
+              ctx.fillStyle = '#475569';
+              ctx.fillRect(px + 6, py + 10, 8, 4);
+              ctx.fillRect(px + 16, py + 18, 6, 4);
+              break;
+          }
+
+          // Grid lines
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+          ctx.strokeRect(px, py, TILE_PX, TILE_PX);
+        }
+      }
+
+      // Draw Particles
+      spawnParticles();
+      updateParticles();
+      for (const p of particles) {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1.0;
+
+      requestAnimationFrame(draw);
+    }
+
+    function playSimulation() {
+      if (isPlaying) return;
+      isPlaying = true;
+      document.getElementById('btnPlay').innerText = '⏸ Pause';
+      playInterval = setInterval(() => {
+        if (tick < maxTick) {
+          stepSimulation();
+        } else {
+          pauseSimulation();
+        }
+      }, 1600);
+    }
+
+    function pauseSimulation() {
+      isPlaying = false;
+      document.getElementById('btnPlay').innerText = '▶ Play Simulation';
+      if (playInterval) clearInterval(playInterval);
+    }
+
+    document.getElementById('btnPlay').addEventListener('click', () => {
+      if (isPlaying) pauseSimulation();
+      else playSimulation();
+    });
+
+    document.getElementById('btnStep').addEventListener('click', () => {
+      pauseSimulation();
+      stepSimulation();
+    });
+
+    document.getElementById('btnReset').addEventListener('click', () => {
+      pauseSimulation();
+      initGrid();
+    });
+
+    // Start
+    initGrid();
+    requestAnimationFrame(draw);
+  </script>
+</body>
+</html>

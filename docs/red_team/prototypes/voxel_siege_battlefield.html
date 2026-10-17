@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REHOBOAM // Dynamic Voxel Battlefield (Siege Engines & Crimson Dragon)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --bg: #090a10;
+      --card-bg: rgba(13, 16, 28, 0.92);
+      --border: rgba(239, 68, 68, 0.3);
+      --crimson: #ef4444;
+      --fire: #f97316;
+      --gold: #f59e0b;
+      --cyan: #38bdf8;
+      --emerald: #10b981;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      user-select: none;
+    }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    /* Header */
+    .header {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 60px;
+      background: linear-gradient(180deg, rgba(9, 10, 16, 0.96) 0%, rgba(9, 10, 16, 0.8) 100%);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 1.5rem;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, #ef4444, #991b1b);
+      color: #fff;
+      font-weight: 900;
+      font-size: 1.15rem;
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+    }
+
+    .brand-title {
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: 0.12em;
+      color: #fff;
+    }
+
+    .brand-subtitle {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--crimson);
+      margin-left: 0.5rem;
+      padding: 0.15rem 0.5rem;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 4px;
+    }
+
+    .controls-nav {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .btn-group {
+      display: flex;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .btn-toggle {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.74rem;
+      padding: 0.45rem 0.85rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+
+    .btn-toggle.active {
+      background: var(--crimson);
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .btn-action-fire {
+      background: linear-gradient(135deg, #f97316, #dc2626);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.45rem 0.95rem;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      box-shadow: 0 0 16px rgba(249, 115, 22, 0.5);
+      transition: all 0.2s ease;
+    }
+
+    .btn-action-fire:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 24px rgba(249, 115, 22, 0.8);
+    }
+
+    .btn-action-dragon {
+      background: linear-gradient(135deg, #7c3aed, #4c1d95);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.45rem 0.95rem;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      box-shadow: 0 0 16px rgba(124, 58, 237, 0.5);
+      transition: all 0.2s ease;
+    }
+
+    .btn-action-dragon:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 0 24px rgba(124, 58, 237, 0.8);
+    }
+
+    /* Left Panel */
+    .panel-left {
+      position: absolute;
+      top: 75px; left: 1.5rem;
+      width: 340px;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      z-index: 10;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .panel-title {
+      font-family: 'Cinzel', serif;
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--crimson);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+      padding-bottom: 0.5rem;
+    }
+
+    .info-card {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 6px;
+      padding: 0.75rem;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: #cbd5e1;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+
+    .stat-card {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      padding: 0.5rem 0.65rem;
+    }
+
+    .stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 0.15rem;
+    }
+
+    /* Right Panel */
+    .panel-right {
+      position: absolute;
+      top: 75px; right: 1.5rem;
+      width: 320px;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      z-index: 10;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .entity-btn {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      padding: 0.6rem 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      color: #e2e8f0;
+      font-size: 0.8rem;
+    }
+
+    .entity-btn:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: var(--crimson);
+      transform: translateX(-2px);
+    }
+
+    .entity-btn.active {
+      background: rgba(239, 68, 68, 0.3);
+      border-color: var(--crimson);
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Bottom HUD */
+    .hud-bottom {
+      position: absolute;
+      bottom: 1.25rem; left: 50%;
+      transform: translateX(-50%);
+      width: min(920px, calc(100vw - 3rem));
+      background: rgba(13, 16, 28, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.65rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+
+    .badge-event {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--crimson);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-badge">⚔️</div>
+      <div class="brand-title">REHOBOAM // VOXEL BATTLEFIELD</div>
+      <div class="brand-subtitle">SIEGE ENGINES & FLYING DRAGON</div>
+    </div>
+
+    <div class="controls-nav">
+      <!-- Camera Modes -->
+      <div class="btn-group">
+        <button class="btn-toggle active" id="btn-cam-orbit" onclick="setCameraMode('orbit')">
+          🔭 Battlefield Orbit
+        </button>
+        <button class="btn-toggle" id="btn-cam-dragon" onclick="setCameraMode('dragon')">
+          🐉 Dragon Rider Cam
+        </button>
+        <button class="btn-toggle" id="btn-cam-catapult" onclick="setCameraMode('catapult')">
+          🎯 Siege Line Cam
+        </button>
+      </div>
+
+      <!-- Live Action Buttons -->
+      <button class="btn-action-fire" onclick="fireCatapults()">
+        💥 Fire Catapults! (Breach Walls)
+      </button>
+      <button class="btn-action-dragon" onclick="triggerDragonBreath()">
+        🔥 Dragon Fire Strike! (Lethal)
+      </button>
+      <button class="btn-toggle" onclick="resetBattlefield()" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.2);">
+        🔄 Rebuild & Revive
+      </button>
+    </div>
+  </header>
+
+  <!-- Left Panel: Simulation Context -->
+  <div class="panel-left">
+    <div class="panel-title">
+      <span>THE SIEGE OF MONTFORT</span>
+      <span style="font-family:'JetBrains Mono'; font-size:0.68rem; color:var(--crimson);">U = 74.2 BITS</span>
+    </div>
+
+    <div class="info-card">
+      <strong>Voxel Art + Procedural Physics:</strong><br>
+      The world is not just static math. Articulated voxel models (the <strong>Winged Crimson Dragon</strong>, <strong>Heavy Counterweight Trebuchets</strong>, and <strong>24 Animated Legionaries</strong>) simulate dynamic siege warfare with projectile physics.
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Wall Integrity</div>
+        <div class="stat-val" id="stat-wall-hp" style="color:var(--emerald);">100% [INTACT]</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Casualties / Dead</div>
+        <div class="stat-val" id="stat-casualties" style="color:#ef4444;">0 Fallen</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Attacking Host</div>
+        <div class="stat-val" id="stat-attackers" style="color:var(--crimson);">16 Spearmen</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Fortress Garrison</div>
+        <div class="stat-val" id="stat-defenders" style="color:var(--cyan);">8 Crossbows</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Physics Barrier</div>
+        <div class="stat-val" id="stat-barrier" style="color:var(--cyan);">AABB Hard Block</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Keep Clearance</div>
+        <div class="stat-val" id="stat-clearance" style="color:var(--emerald);">+8.5m [SAFE]</div>
+      </div>
+    </div>
+
+    <div class="panel-title" style="margin-top:0.25rem;">
+      <span>ART & ANIMATION SYSTEM</span>
+    </div>
+
+    <div class="info-card" style="font-size:0.75rem;">
+      • <strong>Dragon Rig:</strong> Multi-segment articulated spine, flapping voxel wings with 2-axis joint rotation, and particle fire cone.<br>
+      • <strong>Siege Physics:</strong> Trebuchet throwing arms accelerate boulders along parabolic ballistic trajectories with explosive block bursts.<br>
+      • <strong>Phalanx Formation:</strong> Shield-wall spearmen advance while battlements return volley fire.
+    </div>
+  </div>
+
+  <!-- Right Panel: Unit Focus -->
+  <div class="panel-right">
+    <div class="panel-title">
+      <span>TACTICAL UNIT INSPECTOR</span>
+      <span style="font-family:'JetBrains Mono'; font-size:0.68rem; color:var(--fire);">COMBAT</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:0.5rem;">
+      <div class="entity-btn active" onclick="focusUnit('dragon')">
+        <div>
+          <strong>Vermithrax the Red (Dragon)</strong>
+          <div style="font-size:0.68rem; color:var(--muted);">Ancient Mythic Drake · 18m Wingspan</div>
+        </div>
+        <span>🐉</span>
+      </div>
+
+      <div class="entity-btn" onclick="focusUnit('trebuchet')">
+        <div>
+          <strong>Heavy Siege Battery No. 1</strong>
+          <div style="font-size:0.68rem; color:var(--muted);">Timber Trebuchet · 120-Pace Throw</div>
+        </div>
+        <span>🎯</span>
+      </div>
+
+      <div class="entity-btn" onclick="focusUnit('phalanx')">
+        <div>
+          <strong>Crimson Vanguard Phalanx</strong>
+          <div style="font-size:0.68rem; color:var(--muted);">12 Armored Spearmen & Shields</div>
+        </div>
+        <span>🛡️</span>
+      </div>
+
+      <div class="entity-btn" onclick="focusUnit('gatehouse')">
+        <div>
+          <strong>Montfort Citadel Gatehouse</strong>
+          <div style="font-size:0.68rem; color:var(--muted);">Stone Curtain Wall & Portcullis</div>
+        </div>
+        <span>🏰</span>
+      </div>
+    </div>
+
+    <div class="panel-title" style="margin-top:0.25rem;">
+      <span>TACTICAL EVENT LOG</span>
+    </div>
+
+    <div class="info-card" id="tactical-log" style="font-size:0.72rem; line-height:1.4;">
+      [TICK 302] Trebuchets zeroed on North Bastion.<br>
+      [TICK 303] Shadow over the sun: Vermithrax ascends to 60 meters.<br>
+      [TICK 304] Garrison commander orders boiling pitch prepared.
+    </div>
+  </div>
+
+  <!-- Bottom HUD -->
+  <div class="hud-bottom">
+    <div style="display:flex; align-items:center; gap:0.85rem;">
+      <span class="badge-event">SIEGE TICK 305</span>
+      <span id="ticker-text">Vermithrax circles the high battlements. Siege batteries prepare coordinate barrage on the gatehouse!</span>
+    </div>
+    <div style="font-size:0.68rem; color:var(--muted); display:flex; gap:1.25rem;">
+      <span>FPS: 60.0 LOCKED</span>
+      <span>VOXEL PARTICLES: ACTIVE</span>
+    </div>
+  </div>
+
+  <canvas id="webgl-canvas"></canvas>
+
+  <script>
+    /* =========================================================================
+       REHOBOAM DYNAMIC VOXEL BATTLEFIELD & DRAGON ENGINE
+       ========================================================================= */
+
+    let scene, camera, renderer, controls;
+    let clock = new THREE.Clock();
+    let cameraMode = 'orbit';
+
+    // Combat Entities & Simulation State
+    let dragonGroup, dragonWings = [];
+    let catapults = [];
+    let boulders = [];
+    let particles = [];
+    let fireParticles = [];
+    let soldiers = [];
+    let rubbleList = [];
+    let stonebrickMesh = null;
+    let stonebrickBlockList = [];
+    let wallIntegrity = 100;
+    let totalCasualties = 0;
+    let attackerCount = 16;
+    let defenderCount = 8;
+
+    // Castle Physical Colliders (AABB Obstacle Volumes for Aerial Collision Barriers)
+    const castleColliders = [
+      { minX: -9.5, maxX: 9.5, minZ: -16.0, maxZ: -4.5, maxY: 24.5, name: "Great Keep Citadel" },
+      { minX: -7.5, maxX: -2.5, minZ: -2.5, maxZ: 2.5, maxY: 17.0, name: "West Gatehouse Tower" },
+      { minX: 2.5, maxX: 7.5, minZ: -2.5, maxZ: 2.5, maxY: 17.0, name: "East Gatehouse Tower" },
+      { minX: -21.5, maxX: 21.5, minZ: -2.0, maxZ: 2.0, maxY: 13.5, name: "Front Curtain Wall" },
+      { minX: -21.5, maxX: -18.5, minZ: -16.0, maxZ: 0.5, maxY: 13.5, name: "West Flank Wall" },
+      { minX: 18.5, maxX: 21.5, minZ: -16.0, maxZ: 0.5, maxY: 13.5, name: "East Flank Wall" }
+    ];
+
+    function getCastleObstacleHeight(x, z) {
+      let h = 3.5; // Base terrain level
+      for (let i = 0; i < castleColliders.length; i++) {
+        const c = castleColliders[i];
+        if (x >= c.minX && x <= c.maxX && z >= c.minZ && z <= c.maxZ) {
+          if (c.maxY > h) h = c.maxY;
+        }
+      }
+      return h;
+    }
+
+    // Procedural Pixel Textures
+    function createTexture(type) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32; canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+
+      if (type === 'stonebrick') {
+        ctx.fillStyle = '#787878'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#383838';
+        ctx.fillRect(0, 7, 32, 2); ctx.fillRect(0, 15, 32, 2); ctx.fillRect(0, 23, 32, 2); ctx.fillRect(0, 31, 32, 2);
+        ctx.fillRect(15, 0, 2, 8); ctx.fillRect(7, 8, 2, 8); ctx.fillRect(23, 8, 2, 8);
+        ctx.fillRect(15, 16, 2, 8); ctx.fillRect(7, 24, 2, 8); ctx.fillRect(23, 24, 2, 8);
+        for (let i = 0; i < 40; i++) {
+          ctx.fillStyle = '#949494'; ctx.fillRect(Math.floor(Math.random()*30), Math.floor(Math.random()*30), 2, 1);
+        }
+      } else if (type === 'grass') {
+        ctx.fillStyle = '#4d7c0f'; ctx.fillRect(0, 0, 32, 32);
+        for (let i = 0; i < 60; i++) {
+          ctx.fillStyle = Math.random() > 0.5 ? '#65a30d' : '#365314';
+          ctx.fillRect(Math.floor(Math.random()*30), Math.floor(Math.random()*30), 3, 2);
+        }
+      } else if (type === 'dragon_scale') {
+        ctx.fillStyle = '#991b1b'; ctx.fillRect(0, 0, 32, 32);
+        ctx.fillStyle = '#7f1d1d';
+        for (let y = 0; y < 32; y += 4) {
+          for (let x = (y % 8 === 0 ? 0 : 4); x < 32; x += 8) {
+            ctx.fillRect(x, y, 4, 3);
+          }
+        }
+        for (let i = 0; i < 30; i++) {
+          ctx.fillStyle = '#b91c1c'; ctx.fillRect(Math.floor(Math.random()*30), Math.floor(Math.random()*30), 2, 2);
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.magFilter = THREE.NearestFilter;
+      tex.minFilter = THREE.NearestFilter;
+      return tex;
+    }
+
+    // Materials
+    const materials = {};
+    function initMaterials() {
+      materials.stonebrick = new THREE.MeshLambertMaterial({ map: createTexture('stonebrick') });
+      materials.cobble = new THREE.MeshLambertMaterial({ color: 0x475569 });
+      materials.wood = new THREE.MeshLambertMaterial({ color: 0x78350f });
+      materials.woodDark = new THREE.MeshLambertMaterial({ color: 0x451a03 });
+      materials.iron = new THREE.MeshLambertMaterial({ color: 0x94a3b8 });
+      materials.dragonRed = new THREE.MeshLambertMaterial({ map: createTexture('dragon_scale') });
+      materials.dragonDark = new THREE.MeshLambertMaterial({ color: 0x581c1c });
+      materials.dragonWing = new THREE.MeshLambertMaterial({ color: 0x881337, side: THREE.DoubleSide });
+      materials.dragonHorn = new THREE.MeshLambertMaterial({ color: 0xfef08a });
+      materials.dragonEye = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+      materials.fire = new THREE.MeshBasicMaterial({ color: 0xf97316 });
+      materials.fireYellow = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+      materials.clothRed = new THREE.MeshLambertMaterial({ color: 0xdc2626 });
+      materials.clothBlue = new THREE.MeshLambertMaterial({ color: 0x2563eb });
+      materials.grass = new THREE.MeshLambertMaterial({ map: createTexture('grass') });
+      materials.dirt = new THREE.MeshLambertMaterial({ color: 0x543a22 });
+      materials.water = new THREE.MeshLambertMaterial({ color: 0x1d4ed8, transparent: true, opacity: 0.75 });
+    }
+
+    /* =========================================================================
+       1. THE VOXEL CRIMSON DRAGON (ARTICULATED RIG)
+       ========================================================================= */
+    function buildVoxelDragon() {
+      dragonGroup = new THREE.Group();
+
+      // Main Torso (Long muscular chest & belly)
+      const bodyGeo = new THREE.BoxGeometry(2.4, 1.8, 5.0);
+      const body = new THREE.Mesh(bodyGeo, materials.dragonRed);
+      body.castShadow = true;
+      dragonGroup.add(body);
+
+      // Spinal Ridge Scutes
+      for (let z = -2.2; z <= 2.2; z += 0.8) {
+        const spike = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 0.4), materials.dragonHorn);
+        spike.position.set(0, 1.1, z);
+        dragonGroup.add(spike);
+      }
+
+      // Neck & Head Group
+      const neckGroup = new THREE.Group();
+      neckGroup.position.set(0, 0.4, 2.6);
+
+      // Neck segments curving forward
+      const neck1 = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.4, 2.0), materials.dragonDark);
+      neck1.position.set(0, 0.6, 0.8);
+      neckGroup.add(neck1);
+
+      // Head Skull
+      const head = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.2, 2.2), materials.dragonRed);
+      head.position.set(0, 1.2, 2.4);
+      neckGroup.add(head);
+
+      // Snout / Jaws
+      const snout = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 1.6), materials.dragonDark);
+      snout.position.set(0, 0.9, 3.8);
+      neckGroup.add(snout);
+
+      // Horns on Crown
+      const hornL = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 1.6), materials.dragonHorn);
+      hornL.position.set(-0.7, 1.8, 2.0);
+      hornL.rotation.x = -0.4; hornL.rotation.y = -0.3;
+      neckGroup.add(hornL);
+
+      const hornR = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 1.6), materials.dragonHorn);
+      hornR.position.set(0.7, 1.8, 2.0);
+      hornR.rotation.x = -0.4; hornR.rotation.y = 0.3;
+      neckGroup.add(hornR);
+
+      // Glowing Eyes
+      const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.3), materials.dragonEye);
+      eyeL.position.set(-0.85, 1.3, 2.8);
+      neckGroup.add(eyeL);
+
+      const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.3), materials.dragonEye);
+      eyeR.position.set(0.85, 1.3, 2.8);
+      neckGroup.add(eyeR);
+
+      dragonGroup.add(neckGroup);
+      dragonGroup.neck = neckGroup;
+
+      // Articulated Wings (Left & Right)
+      function createWing(isRight) {
+        const wingPivot = new THREE.Group();
+        wingPivot.position.set(isRight ? 1.2 : -1.2, 0.8, 0.5);
+
+        // Shoulder bone
+        const bone1 = new THREE.Mesh(new THREE.BoxGeometry(isRight ? 3.5 : -3.5, 0.4, 0.5), materials.dragonDark);
+        bone1.position.set(isRight ? 1.75 : -1.75, 0, 0);
+        wingPivot.add(bone1);
+
+        // Wing membrane (flat segmented voxel panels)
+        const membrane1 = new THREE.Mesh(new THREE.BoxGeometry(isRight ? 4.0 : -4.0, 0.1, 4.0), materials.dragonWing);
+        membrane1.position.set(isRight ? 2.0 : -2.0, -0.1, -1.8);
+        wingPivot.add(membrane1);
+
+        // Outer wing joint & tip
+        const outerPivot = new THREE.Group();
+        outerPivot.position.set(isRight ? 3.5 : -3.5, 0, 0);
+
+        const bone2 = new THREE.Mesh(new THREE.BoxGeometry(isRight ? 3.5 : -3.5, 0.35, 0.4), materials.dragonDark);
+        bone2.position.set(isRight ? 1.75 : -1.75, 0, 0);
+        outerPivot.add(bone2);
+
+        const membrane2 = new THREE.Mesh(new THREE.BoxGeometry(isRight ? 4.5 : -4.5, 0.08, 3.5), materials.dragonWing);
+        membrane2.position.set(isRight ? 2.25 : -2.25, -0.1, -1.5);
+        outerPivot.add(membrane2);
+
+        wingPivot.add(outerPivot);
+        wingPivot.outer = outerPivot;
+
+        return wingPivot;
+      }
+
+      const wingLeft = createWing(false);
+      const wingRight = createWing(true);
+      dragonGroup.add(wingLeft);
+      dragonGroup.add(wingRight);
+      dragonWings = [wingLeft, wingRight];
+
+      // Tail with 3 swaying segments
+      const tailGroup = new THREE.Group();
+      tailGroup.position.set(0, 0, -2.5);
+
+      const t1 = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 2.5), materials.dragonDark);
+      t1.position.set(0, 0, -1.25);
+      tailGroup.add(t1);
+
+      const t2Group = new THREE.Group();
+      t2Group.position.set(0, 0, -2.5);
+      const t2 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 2.5), materials.dragonRed);
+      t2.position.set(0, 0, -1.25);
+      t2Group.add(t2);
+
+      // Tail blade / spade tip
+      const spade = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 1.4), materials.dragonHorn);
+      spade.position.set(0, 0, -2.6);
+      t2Group.add(spade);
+
+      tailGroup.add(t2Group);
+      tailGroup.t2 = t2Group;
+      dragonGroup.add(tailGroup);
+      dragonGroup.tail = tailGroup;
+
+      // Glowing Dragon Chest Light (Casts dramatic light on ground)
+      const dragonChestLight = new THREE.PointLight(0xf97316, 3.0, 50);
+      dragonChestLight.position.set(0, -1, 1);
+      dragonGroup.add(dragonChestLight);
+      dragonGroup.light = dragonChestLight;
+
+      dragonGroup.position.set(0, 32, 0);
+      scene.add(dragonGroup);
+    }
+
+    /* =========================================================================
+       2. WORKING TREBUCHETS (SIEGE ENGINES)
+       ========================================================================= */
+    function buildTrebuchet(x, z, rotY) {
+      const group = new THREE.Group();
+      group.position.set(x, 4, z);
+      group.rotation.y = rotY;
+
+      // Heavy Timber Base Frame
+      const baseL = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.8, 7.0), materials.woodDark);
+      baseL.position.set(-2.0, 0.4, 0);
+      group.add(baseL);
+
+      const baseR = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.8, 7.0), materials.woodDark);
+      baseR.position.set(2.0, 0.4, 0);
+      group.add(baseR);
+
+      // 4 Wheels
+      for (let wx = -2.2; wx <= 2.2; wx += 4.4) {
+        for (let wz = -2.8; wz <= 2.8; wz += 5.6) {
+          const wheel = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.4, 1.4), materials.wood);
+          wheel.position.set(wx, 0.7, wz);
+          group.add(wheel);
+        }
+      }
+
+      // Triangular A-Frame Uprights
+      for (let sx = -1.8; sx <= 1.8; sx += 3.6) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.8, 6.0, 0.8), materials.wood);
+        post.position.set(sx, 3.4, 0);
+        group.add(post);
+
+        const braceF = new THREE.Mesh(new THREE.BoxGeometry(0.6, 5.0, 0.6), materials.woodDark);
+        braceF.position.set(sx, 2.8, 1.8);
+        braceF.rotation.x = -0.55;
+        group.add(braceF);
+
+        const braceB = new THREE.Mesh(new THREE.BoxGeometry(0.6, 5.0, 0.6), materials.woodDark);
+        braceB.position.set(sx, 2.8, -1.8);
+        braceB.rotation.x = 0.55;
+        group.add(braceB);
+      }
+
+      // Steel Axle
+      const axle = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.4, 0.4), materials.iron);
+      axle.position.set(0, 6.0, 0);
+      group.add(axle);
+
+      // Rotating Throwing Arm Group
+      const armGroup = new THREE.Group();
+      armGroup.position.set(0, 6.0, 0);
+
+      // The Long Beam (12 meters long)
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 11.0), materials.wood);
+      beam.position.set(0, 0, 2.5); // Pivot at 2.5m offset
+      armGroup.add(beam);
+
+      // Heavy Counterweight Box at short end
+      const cWeight = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.2, 1.8), materials.iron);
+      cWeight.position.set(0, -1.2, -3.0);
+      armGroup.add(cWeight);
+
+      // Sling cup at long end
+      const cup = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.3, 1.2), materials.woodDark);
+      cup.position.set(0, 0.4, 7.8);
+      armGroup.add(cup);
+
+      // Loaded Flaming Boulder in cup
+      const boulder = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.9), materials.fire);
+      boulder.position.set(0, 1.0, 7.8);
+      armGroup.add(boulder);
+      armGroup.boulder = boulder;
+
+      armGroup.rotation.x = -0.9; // Cocked position
+      group.add(armGroup);
+      group.arm = armGroup;
+
+      scene.add(group);
+      catapults.push(group);
+    }
+
+    /* =========================================================================
+       3. 24 ANIMATED SOLDIERS (ATTACKING PHALANX & DEFENDING GARRISON)
+       ========================================================================= */
+    function createSoldier(isAttacker, hasShield = false) {
+      const group = new THREE.Group();
+      const skinMat = new THREE.MeshLambertMaterial({ color: 0xffdbac });
+      const armorMat = materials.iron;
+      const tunicMat = isAttacker ? materials.clothRed : materials.clothBlue;
+
+      // Helm
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.35, 0.4), skinMat);
+      head.position.y = 1.3;
+      const helm = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.22, 0.44), armorMat);
+      helm.position.y = 1.45;
+      group.add(head);
+      group.add(helm);
+
+      // Torso & Tunic
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.3), tunicMat);
+      torso.position.y = 0.85;
+      group.add(torso);
+
+      // Arms
+      const lArm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, 0.16), tunicMat);
+      lArm.position.set(-0.35, 0.85, 0);
+      group.add(lArm);
+
+      const rArm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.55, 0.16), tunicMat);
+      rArm.position.set(0.35, 0.85, 0);
+      group.add(rArm);
+
+      // Weapon: Long Spear or Crossbow
+      if (isAttacker) {
+        const spear = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.6, 0.06), materials.woodDark);
+        spear.position.set(0.35, 1.4, 0.5);
+        spear.rotation.x = -0.4;
+        group.add(spear);
+
+        if (hasShield) {
+          const shield = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.9, 0.6), materials.clothRed);
+          shield.position.set(-0.45, 0.85, 0.2);
+          group.add(shield);
+        }
+      } else {
+        // Crossbow
+        const crossbow = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.1, 0.8), materials.woodDark);
+        crossbow.position.set(0, 0.9, 0.4);
+        group.add(crossbow);
+      }
+
+      // Legs
+      const lLeg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), materials.woodDark);
+      lLeg.position.set(-0.13, 0.3, 0);
+      group.add(lLeg);
+
+      const rLeg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), materials.woodDark);
+      rLeg.position.set(0.13, 0.3, 0);
+      group.add(rLeg);
+
+      group.parts = { lArm, rArm, lLeg, rLeg };
+      return group;
+    }
+
+    function initSoldiers() {
+      // 16 Attackers in formation (Z = 20..32, X = -18..-2)
+      for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 5; col++) {
+          const s = createSoldier(true, row === 0);
+          const x = -14 + col * 3.0;
+          const z = 22 + row * 2.8;
+          s.position.set(x, 4, z);
+          s.rotation.y = Math.PI; // Facing castle to the North
+          scene.add(s);
+          soldiers.push({
+            obj: s,
+            isAttacker: true,
+            originX: x,
+            originY: 4,
+            originZ: z,
+            name: `Vanguard Spearman #${row * 5 + col + 1}`,
+            isDead: false,
+            deathProgress: 0
+          });
+        }
+      }
+
+      // 8 Defenders on Castle Battlements (Z = 2..8, X = -10..10, Y = 12)
+      for (let i = 0; i < 8; i++) {
+        const s = createSoldier(false, false);
+        const x = -10.5 + i * 3.0;
+        s.position.set(x, 12, 1);
+        s.rotation.y = 0; // Aiming south down at attackers
+        scene.add(s);
+        soldiers.push({
+          obj: s,
+          isAttacker: false,
+          originX: x,
+          originY: 12,
+          originZ: 1,
+          name: `Citadel Crossbowman #${i + 1}`,
+          isDead: false,
+          deathProgress: 0
+        });
+      }
+    }
+
+    /* =========================================================================
+       4. CASTLE FORTRESS & SIEGE WALLS
+       ========================================================================= */
+    function buildCastleAndTerrain() {
+      const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+      const dummy = new THREE.Object3D();
+      const worldBlocks = [];
+
+      function b(x, y, z, type) {
+        worldBlocks.push({ x, y, z, type });
+      }
+
+      // Ground (Z = -20..40, X = -30..30)
+      for (let x = -28; x <= 28; x++) {
+        for (let z = -18; z <= 38; z++) {
+          b(x, 3, z, 'grass');
+          // Moat along Z = 6..10
+          if (z >= 6 && z <= 10 && (x < -4 || x > 4)) {
+            b(x, 2, z, 'water');
+          } else {
+            b(x, 2, z, 'dirt');
+          }
+        }
+      }
+
+      // Castle Drawbridge crossing moat at X = -3..3, Z = 6..10
+      for (let x = -3; x <= 3; x++) {
+        for (let z = 6; z <= 10; z++) {
+          b(x, 3.8, z, 'wood');
+        }
+      }
+
+      // Castle Curtain Wall (Height = 8, Y = 4..11, along Z = 0)
+      for (let x = -20; x <= 20; x++) {
+        for (let y = 4; y <= 11; y++) {
+          // Gatehouse gap at X = -4..4
+          if (x >= -4 && x <= 4 && y < 9) {
+            // Portcullis gap
+          } else {
+            b(x, y, 0, 'stonebrick');
+          }
+        }
+        // Crenellations
+        if (x % 2 === 0) b(x, 12, 0, 'stonebrick');
+      }
+
+      // Side Walls
+      for (let z = -14; z <= 0; z++) {
+        for (let y = 4; y <= 11; y++) {
+          b(-20, y, z, 'stonebrick');
+          b(20, y, z, 'stonebrick');
+        }
+        if (z % 2 === 0) {
+          b(-20, 12, z, 'stonebrick');
+          b(20, 12, z, 'stonebrick');
+        }
+      }
+
+      // Massive Gatehouse Towers at X = -5 and X = 5
+      [-5, 5].forEach(gx => {
+        for (let y = 4; y <= 15; y++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dz = -1; dz <= 1; dz++) {
+              b(gx + dx, y, dz, 'stonebrick');
+            }
+          }
+        }
+        b(gx, 16, 0, 'stonebrick');
+      });
+
+      // Central Great Keep in the Bailey (X = -8..8, Z = -14..-6, Height = 18)
+      for (let x = -8; x <= 8; x++) {
+        for (let z = -14; z <= -6; z++) {
+          if (x === -8 || x === 8 || z === -14 || z === -6) {
+            for (let y = 4; y <= 18; y++) b(x, y, z, 'stonebrick');
+          }
+        }
+      }
+      for (let x = -8; x <= 8; x += 2) {
+        b(x, 19, -14, 'stonebrick');
+        b(x, 19, -6, 'stonebrick');
+      }
+
+      // Royal Banner on Keep
+      for (let y = 19; y <= 23; y++) b(0, y, -10, 'wood');
+      b(1, 22, -10, 'clothBlue'); b(2, 22, -10, 'clothBlue');
+      b(1, 23, -10, 'clothBlue'); b(2, 23, -10, 'clothBlue');
+
+      // Group & render blocks
+      const groups = {};
+      worldBlocks.forEach(blk => {
+        if (!groups[blk.type]) groups[blk.type] = [];
+        groups[blk.type].push(blk);
+      });
+
+      Object.keys(groups).forEach(type => {
+        const blist = groups[type];
+        const inst = new THREE.InstancedMesh(boxGeo, materials[type] || materials.stonebrick, blist.length);
+        inst.castShadow = true; inst.receiveShadow = true;
+        if (type === 'stonebrick') {
+          stonebrickMesh = inst;
+          stonebrickBlockList = [];
+          for (let i = 0; i < blist.length; i++) {
+            dummy.position.set(blist[i].x, blist[i].y, blist[i].z);
+            dummy.updateMatrix();
+            inst.setMatrixAt(i, dummy.matrix);
+            stonebrickBlockList.push({
+              index: i,
+              x: blist[i].x,
+              y: blist[i].y,
+              z: blist[i].z,
+              matrix: dummy.matrix.clone(),
+              isDestroyed: false
+            });
+          }
+        } else {
+          for (let i = 0; i < blist.length; i++) {
+            dummy.position.set(blist[i].x, blist[i].y, blist[i].z);
+            dummy.updateMatrix();
+            inst.setMatrixAt(i, dummy.matrix);
+          }
+        }
+        inst.instanceMatrix.needsUpdate = true;
+        scene.add(inst);
+      });
+    }
+
+    /* =========================================================================
+       5. ACTION HANDLERS: FIRE CATAPULTS & DRAGON FIRE BREATH
+       ========================================================================= */
+    function fireCatapults() {
+      catapults.forEach((cat, idx) => {
+        setTimeout(() => {
+          // Arm swing animation trigger
+          cat.arm.isFiring = true;
+          cat.arm.fireProgress = 0;
+
+          // Spawn flying boulder
+          const p = new THREE.Vector3();
+          cat.arm.boulder.getWorldPosition(p);
+
+          const bMesh = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 1.2), materials.fire);
+          bMesh.position.copy(p);
+          scene.add(bMesh);
+
+          // Alternating ballistic targets: West curtain wall vs East curtain wall
+          const target = (idx % 2 === 0) 
+            ? { x: -8.0, y: 7.5, z: 0 }  // West wall section
+            : { x: 8.0, y: 7.5, z: 0 };  // East wall section
+
+          boulders.push({
+            mesh: bMesh,
+            startX: p.x, startY: p.y, startZ: p.z,
+            targetX: target.x, targetY: target.y, targetZ: target.z,
+            t: 0,
+            speed: 0.018
+          });
+
+          // Hide loaded boulder until reset
+          cat.arm.boulder.visible = false;
+          setTimeout(() => { cat.arm.boulder.visible = true; }, 3000);
+        }, idx * 450);
+      });
+
+      document.getElementById('ticker-text').textContent = "[BARRAGE!] Heavy trebuchets launch 200lb flaming boulders at the stone curtain wall!";
+      logTacticalEvent("[SIEGE BATTERY] Counterweight arms released! High-angle ballistic trajectory.", 'var(--fire)');
+    }
+
+    let isBreathingFire = false;
+    function triggerDragonBreath() {
+      if (isBreathingFire) return;
+      isBreathingFire = true;
+      document.getElementById('dragon-status').textContent = "BREATHING FIRE!";
+      document.getElementById('dragon-status').style.color = "#f97316";
+
+      // Spawn intense cone of fire voxels from dragon head
+      for (let i = 0; i < 60; i++) {
+        setTimeout(() => {
+          if (!isBreathingFire) return;
+          const fBox = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5 + Math.random()*0.5, 0.5 + Math.random()*0.5, 0.5 + Math.random()*0.5),
+            Math.random() > 0.5 ? materials.fire : materials.fireYellow
+          );
+
+          // Get dragon head position
+          const hPos = new THREE.Vector3();
+          dragonGroup.neck.getWorldPosition(hPos);
+          fBox.position.copy(hPos);
+
+          const dir = new THREE.Vector3(0, -0.6, 1.0).applyEuler(dragonGroup.rotation).normalize();
+          fBox.velocity = dir.multiplyScalar(0.7 + Math.random() * 0.4);
+          fBox.velocity.x += (Math.random() - 0.5) * 0.3;
+          fBox.velocity.y += (Math.random() - 0.5) * 0.3;
+
+          scene.add(fBox);
+          fireParticles.push({ mesh: fBox, life: 1.0 });
+        }, i * 35);
+      }
+
+      // Check casualties along dragon strafing line
+      setTimeout(() => {
+        checkCasualtiesInFireCone();
+      }, 700);
+
+      setTimeout(() => {
+        isBreathingFire = false;
+        document.getElementById('dragon-status').textContent = "Airborne Patrol";
+        document.getElementById('dragon-status').style.color = "#f59e0b";
+      }, 2500);
+
+      document.getElementById('ticker-text').textContent = "[DRAGON STRIKE!] Vermithrax unleashes a torrent of dragonfire over the lower bailey!";
+    }
+
+    function createExplosion(x, y, z) {
+      for (let i = 0; i < 24; i++) {
+        const p = new THREE.Mesh(
+          new THREE.BoxGeometry(0.4, 0.4, 0.4),
+          Math.random() > 0.5 ? materials.fire : materials.cobble
+        );
+        p.position.set(x, y, z);
+        p.velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 0.6,
+          Math.random() * 0.7 + 0.2,
+          (Math.random() - 0.5) * 0.6
+        );
+        scene.add(p);
+        particles.push({ mesh: p, life: 1.0 });
+      }
+    }
+
+    function damageWallAt(targetX, targetY, targetZ, blastRadius = 3.3) {
+      if (!stonebrickMesh || !stonebrickBlockList.length) return 0;
+      let destroyedCount = 0;
+      const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+
+      stonebrickBlockList.forEach(b => {
+        if (!b.isDestroyed) {
+          const dx = b.x - targetX;
+          const dy = b.y - targetY;
+          const dz = b.z - targetZ;
+          const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+          if (dist <= blastRadius) {
+            b.isDestroyed = true;
+            destroyedCount++;
+            stonebrickMesh.setMatrixAt(b.index, zeroMatrix);
+            spawnPhysicalRubble(b.x, b.y, b.z, dx, dy, dz);
+          }
+        }
+      });
+
+      if (destroyedCount > 0) {
+        stonebrickMesh.instanceMatrix.needsUpdate = true;
+        wallIntegrity = Math.max(0, Math.round(wallIntegrity - destroyedCount * 1.5));
+        updateHUD();
+        logTacticalEvent(`[WALL BREACH] Stone curtain wall demolished at sector (${Math.round(targetX)}, ${Math.round(targetY)})! ${destroyedCount} stone blocks collapsed into rubble!`, 'var(--crimson)');
+      }
+      return destroyedCount;
+    }
+
+    function spawnPhysicalRubble(x, y, z, dirX, dirY, dirZ) {
+      const rMat = Math.random() > 0.4 ? materials.stonebrick : materials.cobble;
+      const rMesh = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.85), rMat);
+      rMesh.position.set(x, y, z);
+      rMesh.castShadow = true;
+      rMesh.receiveShadow = true;
+
+      const norm = Math.sqrt(dirX*dirX + dirY*dirY + dirZ*dirZ) || 1;
+      const speed = 3.5 + Math.random() * 4.0;
+      rMesh.velocity = new THREE.Vector3(
+        (dirX / norm) * speed + (Math.random() - 0.5) * 2.5,
+        Math.random() * 3.5 + 1.5,
+        (dirZ / norm) * speed + (Math.random() - 0.5) * 2.5
+      );
+      rMesh.rotVel = new THREE.Vector3(
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 8
+      );
+      rMesh.isResting = false;
+      scene.add(rMesh);
+      rubbleList.push(rMesh);
+    }
+
+    function checkCasualtiesNear(targetX, targetY, targetZ, radius, cause) {
+      let casualtiesThisHit = 0;
+      soldiers.forEach(s => {
+        if (!s.isDead) {
+          const dx = s.obj.position.x - targetX;
+          const dy = s.obj.position.y - targetY;
+          const dz = s.obj.position.z - targetZ;
+          const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+          if (dist <= radius) {
+            s.isDead = true;
+            s.deathProgress = 0;
+            casualtiesThisHit++;
+            totalCasualties++;
+            if (s.isAttacker) attackerCount = Math.max(0, attackerCount - 1);
+            else defenderCount = Math.max(0, defenderCount - 1);
+
+            logTacticalEvent(`[FATALITY] ${s.name} killed by ${cause}!`, '#ef4444');
+          }
+        }
+      });
+
+      if (casualtiesThisHit > 0) {
+        updateHUD();
+        document.getElementById('ticker-text').textContent = `[CASUALTY REPORT] ${casualtiesThisHit} soldier(s) fallen in action! Total dead: ${totalCasualties}.`;
+        
+        // Helmbold Rout Rule (Empirical Historical Threshold: 20% loss = rout)
+        const totalForces = 24;
+        if (totalCasualties / totalForces >= 0.20) {
+          logTacticalEvent(`[HELMBOLD ROUT TRIGGERED] Army casualties reached ${( (totalCasualties/totalForces)*100 ).toFixed(0)}% (threshold >= 20%)! Cohort morale shattered!`, '#eab308');
+          document.getElementById('ticker-text').textContent = `[ROUT!] Helmbold threshold breached (>20% losses). Vanguard phalanx broken!`;
+        }
+      }
+    }
+
+    function checkCasualtiesInFireCone() {
+      let killed = 0;
+      soldiers.forEach(s => {
+        if (!s.isDead && killed < 3) {
+          if (Math.random() > 0.45) {
+            s.isDead = true;
+            s.deathProgress = 0;
+            killed++;
+            totalCasualties++;
+            if (s.isAttacker) attackerCount = Math.max(0, attackerCount - 1);
+            else defenderCount = Math.max(0, defenderCount - 1);
+
+            // Spawn fire burst on soldier
+            for (let i = 0; i < 8; i++) {
+              const fb = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), materials.fire);
+              fb.position.copy(s.obj.position);
+              fb.velocity = new THREE.Vector3((Math.random()-0.5)*0.5, Math.random()*0.5, (Math.random()-0.5)*0.5);
+              scene.add(fb);
+              fireParticles.push({ mesh: fb, life: 1.2 });
+            }
+
+            logTacticalEvent(`[INCINERATED] ${s.name} consumed by dragonfire!`, 'var(--fire)');
+          }
+        }
+      });
+      if (killed > 0) {
+        updateHUD();
+        document.getElementById('ticker-text').textContent = `[DRAGONFIRE CARNAGE] ${killed} soldiers incinerated by Vermithrax! Total dead: ${totalCasualties}.`;
+        
+        const totalForces = 24;
+        if (totalCasualties / totalForces >= 0.20) {
+          logTacticalEvent(`[HELMBOLD ROUT TRIGGERED] Army casualties reached ${( (totalCasualties/totalForces)*100 ).toFixed(0)}% (threshold >= 20%)! Morale collapsed!`, '#eab308');
+        }
+      }
+    }
+
+    function updateHUD() {
+      const wallEl = document.getElementById('stat-wall-hp');
+      if (wallEl) {
+        wallEl.textContent = `${wallIntegrity}% ` + (wallIntegrity > 75 ? '[INTACT]' : wallIntegrity > 40 ? '[BREACHED]' : '[RUINS]');
+        wallEl.style.color = wallIntegrity > 75 ? 'var(--emerald)' : wallIntegrity > 40 ? '#f59e0b' : '#ef4444';
+      }
+      const casEl = document.getElementById('stat-casualties');
+      if (casEl) casEl.textContent = `${totalCasualties} Fallen`;
+      const attEl = document.getElementById('stat-attackers');
+      if (attEl) attEl.textContent = `${attackerCount} Spearmen`;
+      const defEl = document.getElementById('stat-defenders');
+      if (defEl) defEl.textContent = `${defenderCount} Crossbows`;
+    }
+
+    function logTacticalEvent(text, color = '#cbd5e1') {
+      const log = document.getElementById('tactical-log');
+      if (!log) return;
+      const entry = document.createElement('div');
+      entry.style.color = color;
+      entry.style.marginTop = '0.35rem';
+      entry.innerHTML = text;
+      log.prepend(entry);
+    }
+
+    function resetBattlefield() {
+      // 1. Repair Walls
+      if (stonebrickMesh && stonebrickBlockList.length) {
+        stonebrickBlockList.forEach(b => {
+          b.isDestroyed = false;
+          stonebrickMesh.setMatrixAt(b.index, b.matrix);
+        });
+        stonebrickMesh.instanceMatrix.needsUpdate = true;
+      }
+      // 2. Clear Rubble
+      rubbleList.forEach(r => scene.remove(r));
+      rubbleList = [];
+      // 3. Revive Soldiers
+      soldiers.forEach(s => {
+        s.isDead = false;
+        s.deathProgress = 0;
+        s.obj.rotation.x = 0;
+        s.obj.position.x = s.originX;
+        s.obj.position.y = s.originY;
+        s.obj.position.z = s.originZ;
+      });
+      // 4. Reset Counters
+      wallIntegrity = 100;
+      totalCasualties = 0;
+      attackerCount = 16;
+      defenderCount = 8;
+      updateHUD();
+      document.getElementById('ticker-text').textContent = "[BATTLEFIELD RESTORED] Fortress rebuilt, stone battlements restored, garrisons replenished.";
+      logTacticalEvent("[SYSTEM] Battlefield reset & walls reconstructed.", 'var(--cyan)');
+    }
+
+    /* =========================================================================
+       6. THREE.JS SCENE SETUP
+       ========================================================================= */
+    function initThree() {
+      const canvas = document.getElementById('webgl-canvas');
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x2d1b33);
+      scene.fog = new THREE.FogExp2(0x2d1b33, 0.007);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 300);
+      camera.position.set(38, 34, 45);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2 - 0.05;
+      controls.target.set(0, 10, 8);
+
+      // Dramatic Sunset / War Lighting
+      const hemi = new THREE.HemisphereLight(0xffedd5, 0x33203b, 0.85);
+      scene.add(hemi);
+
+      const sun = new THREE.DirectionalLight(0xf97316, 1.8);
+      sun.position.set(-40, 50, 40);
+      sun.castShadow = true;
+      sun.shadow.mapSize.width = 2048;
+      sun.shadow.mapSize.height = 2048;
+      scene.add(sun);
+
+      const fillLight = new THREE.DirectionalLight(0x60a5fa, 0.7);
+      fillLight.position.set(40, 30, -30);
+      scene.add(fillLight);
+
+      // Torches & Fire Light
+      const fireLight = new THREE.PointLight(0xf97316, 2.5, 45);
+      fireLight.position.set(0, 8, 2);
+      scene.add(fireLight);
+
+      initMaterials();
+      buildCastleAndTerrain();
+      buildVoxelDragon();
+      buildTrebuchet(-12, 28, Math.PI);
+      buildTrebuchet(12, 28, Math.PI);
+      initSoldiers();
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+    }
+
+    function setCameraMode(mode) {
+      cameraMode = mode;
+      document.querySelectorAll('#btn-cam-orbit, #btn-cam-dragon, #btn-cam-catapult').forEach(b => b.classList.remove('active'));
+
+      if (mode === 'orbit') {
+        document.getElementById('btn-cam-orbit').classList.add('active');
+        controls.enabled = true;
+        camera.position.set(38, 34, 45);
+        controls.target.set(0, 10, 8);
+      } else if (mode === 'dragon') {
+        document.getElementById('btn-cam-dragon').classList.add('active');
+        controls.enabled = false;
+      } else if (mode === 'catapult') {
+        document.getElementById('btn-cam-catapult').classList.add('active');
+        controls.enabled = true;
+        camera.position.set(-14, 8, 36);
+        controls.target.set(-5, 9, 0);
+      }
+    }
+
+    function focusUnit(type) {
+      document.querySelectorAll('.entity-btn').forEach(b => b.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+
+      if (type === 'dragon') {
+        controls.target.set(dragonGroup.position.x, dragonGroup.position.y, dragonGroup.position.z);
+      } else if (type === 'trebuchet') {
+        controls.target.set(-12, 8, 28);
+      } else if (type === 'phalanx') {
+        controls.target.set(0, 5, 24);
+      } else if (type === 'gatehouse') {
+        controls.target.set(0, 10, 0);
+      }
+    }
+
+    /* =========================================================================
+       7. MAIN ANIMATION LOOP
+       ========================================================================= */
+    let dragonAngle = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const delta = clock.getDelta();
+      const time = clock.getElapsedTime();
+
+      // 1. Dragon Flight Dynamics with AABB Physics Obstacle Barriers
+      dragonAngle += delta * 0.40;
+      
+      // Patrol loop: Wide ellipse covering the battlefield and castle bailey
+      // rx: 26.0 (sweeping past the east/west walls at x = -20 and 20)
+      // rz: 23.0, centerZ: 7.0 (from z = -16 over keep to z = +30 over siege engines)
+      const rx = isBreathingFire ? 21.0 : 26.0;
+      const rz = isBreathingFire ? 19.0 : 23.0;
+      const centerZ = 7.0;
+
+      const targetX = Math.cos(dragonAngle) * rx;
+      const targetZ = Math.sin(dragonAngle) * rz + centerZ;
+
+      // Obstacle detection along flight path: check current and lookahead coordinates
+      const lookaheadAngle = dragonAngle + 0.35;
+      const lookX = Math.cos(lookaheadAngle) * rx;
+      const lookZ = Math.sin(lookaheadAngle) * rz + centerZ;
+      const currentObstacleH = getCastleObstacleHeight(targetX, targetZ);
+      const futureObstacleH = getCastleObstacleHeight(lookX, lookZ);
+      const highestNearbyObstacle = Math.max(currentObstacleH, futureObstacleH);
+
+      // Safe clearance margin: at least 4.5 meters above any stone crenellation or tower spire
+      const minSafeY = highestNearbyObstacle + 4.5;
+
+      // Dynamic Flight Altitude Profile:
+      // Over open siege field (Z > 12): swooping low-altitude combat run (Y = 17..21m)
+      // Over citadel & keep (Z <= 12): soaring high altitude (Y = 29..36m), clearing tallest spire (Y = 24.5m)
+      let desiredY = (targetZ > 12)
+        ? (isBreathingFire ? 15.0 : 18.5) + Math.sin(dragonAngle * 2) * 2.5
+        : 30.5 + Math.sin(dragonAngle * 2) * 3.5;
+
+      // Enforce the physics barrier: desired altitude must strictly clear all stone obstacles
+      desiredY = Math.max(desiredY, minSafeY);
+
+      // Smoothly update dragon coordinates
+      dragonGroup.position.x = targetX;
+      dragonGroup.position.z = targetZ;
+      dragonGroup.position.y = THREE.MathUtils.lerp(dragonGroup.position.y || desiredY, desiredY, delta * 3.2);
+
+      // HARD PHYSICAL BARRIER (ZERO-PENETRATION ENFORCEMENT):
+      if (dragonGroup.position.y < minSafeY) {
+        dragonGroup.position.y = minSafeY;
+      }
+
+      // Dynamic Flight Pitch & Banking Angle
+      const isClimbing = desiredY > dragonGroup.position.y + 0.3;
+      const pitchTarget = isClimbing ? -0.28 : Math.cos(dragonAngle * 2) * 0.12;
+      dragonGroup.rotation.y = -dragonAngle + Math.PI / 2;
+      dragonGroup.rotation.z = Math.sin(time * 3) * 0.18 - 0.22; // Bank into turn
+      dragonGroup.rotation.x = THREE.MathUtils.lerp(dragonGroup.rotation.x, pitchTarget, delta * 3.5);
+
+      // Aerodynamic Wing Flap (Flaps faster and harder when climbing or breathing fire)
+      const flapSpeed = isClimbing ? 6.5 : 4.5;
+      const flapAmp = isClimbing ? 0.55 : 0.45;
+      const flap = Math.sin(time * flapSpeed) * flapAmp;
+      dragonWings[0].rotation.z = -flap - 0.2;
+      dragonWings[1].rotation.z = flap + 0.2;
+      dragonWings[0].outer.rotation.z = -flap * 0.7;
+      dragonWings[1].outer.rotation.z = flap * 0.7;
+
+      // Tail & Neck sway
+      dragonGroup.tail.rotation.y = Math.sin(time * 3) * 0.25;
+      dragonGroup.tail.t2.rotation.y = Math.sin(time * 3 - 0.5) * 0.35;
+      dragonGroup.neck.rotation.y = Math.sin(time * 2) * 0.15;
+
+      // Update Keep Clearance HUD
+      const keepDist = (dragonGroup.position.y - currentObstacleH).toFixed(1);
+      const clearEl = document.getElementById('stat-clearance');
+      if (clearEl) {
+        clearEl.textContent = `+${keepDist}m [SAFE]`;
+        clearEl.style.color = keepDist > 5 ? 'var(--emerald)' : 'var(--gold)';
+      }
+
+      // 2. Dragon Rider Camera Lock
+      if (cameraMode === 'dragon') {
+        const behindOffset = new THREE.Vector3(0, 6, -16).applyEuler(dragonGroup.rotation);
+        camera.position.copy(dragonGroup.position).add(behindOffset);
+        const lookTarget = dragonGroup.position.clone().add(new THREE.Vector3(0, 0, 15).applyEuler(dragonGroup.rotation));
+        camera.lookAt(lookTarget);
+      } else if (controls.enabled) {
+        controls.update();
+      }
+
+      // 3. Catapult Firing Animations
+      catapults.forEach(cat => {
+        if (cat.arm.isFiring) {
+          cat.arm.fireProgress += delta * 4.0;
+          if (cat.arm.fireProgress < 1.0) {
+            // Rapid swing forward
+            cat.arm.rotation.x = THREE.MathUtils.lerp(-0.9, 0.6, cat.arm.fireProgress);
+          } else if (cat.arm.fireProgress < 2.0) {
+            // Recoil settle
+            cat.arm.rotation.x = 0.6 - Math.sin((cat.arm.fireProgress - 1.0) * Math.PI) * 0.15;
+          } else {
+            // Slow reset back to cocked
+            cat.arm.rotation.x = THREE.MathUtils.lerp(cat.arm.rotation.x, -0.9, 0.03);
+            if (Math.abs(cat.arm.rotation.x - (-0.9)) < 0.05) {
+              cat.arm.isFiring = false;
+            }
+          }
+        }
+      });
+
+      // 4. Boulders in Ballistic Flight
+      for (let i = boulders.length - 1; i >= 0; i--) {
+        const b = boulders[i];
+        b.t += b.speed;
+        if (b.t >= 1.0) {
+          // Impact explosion & real-time volumetric wall breach!
+          createExplosion(b.targetX, b.targetY, b.targetZ);
+          damageWallAt(b.targetX, b.targetY, b.targetZ, 3.4);
+          checkCasualtiesNear(b.targetX, b.targetY, b.targetZ, 4.6, 'Trebuchet Boulder');
+          scene.remove(b.mesh);
+          boulders.splice(i, 1);
+        } else {
+          // Parabolic trajectory: Lerp X & Z, Parabola for Y
+          b.mesh.position.x = THREE.MathUtils.lerp(b.startX, b.targetX, b.t);
+          b.mesh.position.z = THREE.MathUtils.lerp(b.startZ, b.targetZ, b.t);
+          const arcHeight = 18;
+          b.mesh.position.y = THREE.MathUtils.lerp(b.startY, b.targetY, b.t) + Math.sin(b.t * Math.PI) * arcHeight;
+          b.mesh.rotation.x += 0.2;
+          b.mesh.rotation.z += 0.15;
+        }
+      }
+
+      // 5. Update Falling Physical Rubble
+      for (let i = rubbleList.length - 1; i >= 0; i--) {
+        const r = rubbleList[i];
+        if (!r.isResting) {
+          r.position.addScaledVector(r.velocity, delta);
+          r.velocity.y -= 16.0 * delta; // Gravity
+          r.rotation.x += r.rotVel.x * delta;
+          r.rotation.y += r.rotVel.y * delta;
+          r.rotation.z += r.rotVel.z * delta;
+
+          // Ground collision at y = 3.5
+          if (r.position.y <= 3.5) {
+            r.position.y = 3.5 + Math.random() * 0.2;
+            r.velocity.set(0, 0, 0);
+            r.rotVel.set(0, 0, 0);
+            r.isResting = true;
+          }
+        }
+      }
+
+      // 6. Update Impact Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life -= delta * 1.5;
+        if (p.life <= 0) {
+          scene.remove(p.mesh);
+          particles.splice(i, 1);
+        } else {
+          p.mesh.position.add(p.mesh.velocity);
+          p.mesh.velocity.y -= delta * 1.2; // Gravity
+          p.mesh.scale.multiplyScalar(0.97);
+        }
+      }
+
+      // 7. Update Dragon Fire Breath Particles
+      for (let i = fireParticles.length - 1; i >= 0; i--) {
+        const fp = fireParticles[i];
+        fp.life -= delta * 1.2;
+        if (fp.life <= 0) {
+          scene.remove(fp.mesh);
+          fireParticles.splice(i, 1);
+        } else {
+          fp.mesh.position.add(fp.mesh.velocity);
+          fp.mesh.scale.multiplyScalar(0.96);
+        }
+      }
+
+      // 8. Soldier Animations (Marching / Aiming / Death Collapse)
+      soldiers.forEach((s, idx) => {
+        if (s.isDead) {
+          if (s.deathProgress < 1.0) {
+            s.deathProgress += delta * 2.5;
+            const p = Math.min(1.0, s.deathProgress);
+            s.obj.rotation.x = - (Math.PI / 2) * p;
+            if (!s.isAttacker && s.obj.position.y > 4.0) {
+              // Battlement defender blown off the wall, tumbling to ground
+              s.obj.position.y -= delta * 14.0;
+              if (s.obj.position.y <= 3.6) s.obj.position.y = 3.6;
+            }
+          }
+          return;
+        }
+        if (s.isAttacker) {
+          // Attacker shield wall slow advance
+          const marchSwing = Math.sin(time * 5 + idx) * 0.25;
+          s.obj.parts.lLeg.rotation.x = marchSwing;
+          s.obj.parts.rLeg.rotation.x = -marchSwing;
+        } else {
+          // Defender crossbow aiming
+          s.obj.rotation.x = Math.sin(time * 2 + idx) * 0.08 - 0.1;
+        }
+      });
+
+      renderer.render(scene, camera);
+    }
+
+    window.onload = () => {
+      initThree();
+      animate();
+    };
+  </script>
+</body>
+</html>
