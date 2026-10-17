@@ -838,8 +838,14 @@ run "canonical_v0 positive control: a stale golden digest must FAIL" "fail:STALE
 run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
+run "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)" "pass:OK:" "$PY" -I specs/numerics/exp_ln_v0.py --check &&
+run "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)" "fail:STALE:" "$PY" -I specs/numerics/exp_ln_v0.py --check --golden tests/lint_fixtures/golden/stale_exp_ln_v0.txt &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
+run "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality --check; SPR-016)" "pass:M2 F1 MORTALITY: PASS" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check &&
+run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 F3)" "fail:1. rung 0 = beta 1: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control beta-one-power &&
+run "M2 F1 positive control: an unnormalised infant table must FAIL continuity at age 1 (SPR-016 F7)" "fail:5. infant sub-schedule: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control shares-unnormalised &&
+run "M2 F1 positive control: a stale golden file must FAIL (SPR-016)" "fail:STALE:" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check --golden tests/lint_fixtures/golden/stale_m2_f1_mortality.txt &&
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
 # Tier 6/8 — determinism-style and contract prototypes
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&

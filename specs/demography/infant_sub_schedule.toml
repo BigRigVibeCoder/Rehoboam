@@ -1,0 +1,26 @@
+# The infant sub-schedule of M2 F1 mortality (specs/demography/mortality_f1.toml, F7): how the deaths of
+# the first year of life are spread over its twelve months. Brass (1971) gives l(0) = 1 and l(1) only and
+# says the first year needs its own sub-schedule (R12 §9: Ys(0) is -infinity; age 1 is weak, p. 86,
+# endogenous neonatal deaths). Rung 0 interpolates l linearly through year 0, a flat hazard; historical
+# infant mortality is front-loaded (R09 §2: a quarter to a third die in the first year, and most of those
+# early in it).
+#
+# Shape: the biometric law of Bourgeois-Pichat (1951): cumulative exogenous deaths from birth to day n grow
+# as [ln(1 + n)]^3, with an endogenous component concentrated at birth. The cumulative share of the year's
+# deaths by the start of month j (j = 1..12, month boundaries at 365 j / 12 days) is
+#     c(j) = eps + (1 - eps) [ln(1 + 365 j / 12)]^3 / [ln 366]^3,      c(0) = 0, c(12) = 1,
+# with eps the endogenous share. DESIGN VALUE eps = 0.15, which puts 32% of the year's deaths in the first
+# month, the order of the neonatal share of pre-transition populations. [U] Neither the law's fit to
+# pre-transition data nor the neonatal share is in the research yet: R12 batch 3 item (verify
+# Bourgeois-Pichat 1951, Population 6(2), and a pre-transition neonatal share); until then these are design
+# values, and the table below is the contract. The M9 harness (SPR-028) reports the first-month share.
+#
+# The table is the contract, not the formula: cumulative_share_q16[j] = round(c(j) 2^16), half to even,
+# computed once with Python's decimal at 60 digits (selftest_m2_f1_mortality.py check 5 recomputes it).
+# Plane A holds these 13 integers as constants; it never evaluates the formula.
+# Invariants: 13 entries; [0] = 0; [12] = 65536; non-decreasing.
+
+[infant_sub_schedule]
+version = "bourgeois-pichat-eps0.15-v1"
+endogenous_share = "0.15"
+cumulative_share_q16 = [0, 20928, 28835, 34919, 39964, 44323, 48186, 51672, 54860, 57805, 60546, 63115, 65536]
