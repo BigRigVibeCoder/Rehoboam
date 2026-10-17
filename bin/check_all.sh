@@ -330,15 +330,17 @@ annals_orphan_control() {
 odd_next_control() {
   local dir=target/rendered-fixtures/odd_next/$1 src=specs/systems/next/M2.demography.odd.toml
   rm -rf "$dir" && mkdir -p "$dir" || return 1
-  local lock=specs/systems/next/amendments.lock.toml
+  local lock=specs/systems/next/amendments.lock.toml m7=specs/systems/next/M7.dynasty.odd.toml
+  # the M7 draft rides along unchanged where the overlay is the real delta: its verb HOUSE_JOINED (M7 0.5.0,
+  # BCK-002 A-56) would otherwise fail the frozen M7 for a reason that is not the control's own
   case "$1" in
     algorithm)
-      cp "$lock" "$dir/" || return 1
+      cp "$lock" "$m7" "$dir/" || return 1
       sed 's/^  "S0 Rounding\. rhe(n \/ d) for integers n (signed)/  "S0 Rounding (PLANTED CHANGE). rhe(n \/ d) for integers n (signed)/' "$src" > "$dir/M2.demography.odd.toml" || return 1
       grep -q "PLANTED CHANGE" "$dir/M2.demography.odd.toml" || { echo "control not planted: S0 not found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     rng)
-      cp "$lock" "$dir/" || return 1
+      cp "$lock" "$m7" "$dir/" || return 1
       sed '0,/^\[\[rng\]\]$/s//[[rng]]\npurpose = "planted_first"\nkey = ["person"]\nuse = "PLANTED"\nresample_on_fork = false\ndraws = []\n[[rng]]/' "$src" > "$dir/M2.demography.odd.toml" || return 1
       grep -q "planted_first" "$dir/M2.demography.odd.toml" || { echo "control not planted: no [[rng]] found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
@@ -348,7 +350,7 @@ odd_next_control() {
       "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay "$dir/registry_delta.toml" ;;
     lock)
       # REV-SPR-015 round 3 MIN-1: the committed lock pins every amendment's path and text digest; one digest changed
-      cp "$src" "$dir/" || return 1
+      cp "$src" "$m7" "$dir/" || return 1
       sed '0,/= "sha256:[0-9a-f]/s//= "sha256:x/' "$lock" > "$dir/amendments.lock.toml" || return 1
       grep -q 'sha256:x' "$dir/amendments.lock.toml" || { echo "control not planted: no digest found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
@@ -1326,7 +1328,7 @@ run "selftest_annals positive control: a template that reads world state must FA
 run "selftest_annals positive control: a network module imported during the render must FAIL (V-NAR-07; REV-SPR-029 F16)" "fail:was imported during the render" "$PY" -I specs/annals/selftest_annals_v0.py --check --control network-import &&
 run "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)" "fail:STALE:" annals_golden_control &&
 run "selftest_annals positive control: a golden file no rendered group owns must FAIL as an orphan (REV-SPR-029 R39)" "fail:STALE: orphan target/rendered-fixtures/annals_orphan/ashcombe_line-1.txt: no rendered group owns it" annals_orphan_control &&
-run "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive or edge; every in-scope kind has a template and every out-of-scope kind a label (lint_templates; SPR-029)" "pass:PASS: 29 templates linted" "$PY" -I specs/annals/lint_templates.py &&
+run "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive or edge; every in-scope kind has a template and every out-of-scope kind a label (lint_templates; SPR-029)" "pass:PASS: 31 templates linted" "$PY" -I specs/annals/lint_templates.py &&
 run "lint_templates positive control: a slot naming a role the kind does not declare must FAIL (SPR-029)" "fail:slot 'instrument' is not a role DEATH declares in [[emits]]" annals_lint_control undeclared_role &&
 run "lint_templates positive control: a snapshot slot the kind does not declare must FAIL (SPR-029)" "fail:slot 'snapshot.stress.actor' is not a snapshot BIRTH declares" annals_lint_control undeclared_snapshot &&
 run "lint_templates positive control: a slot that reads world state must FAIL (ADR-0024; SPR-029)" "fail:slot 'state.title.holder' is outside the envelope" annals_lint_control state_read &&

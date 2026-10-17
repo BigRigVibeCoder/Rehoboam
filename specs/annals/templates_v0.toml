@@ -14,7 +14,7 @@
 
 [templates]
 format = "rehoboam/annals/templates/v0"
-version = "0.2.0"                        # bumped with any change to a text, a slot, a layout or a label
+version = "0.3.0"                        # bumped with any change to a text, a slot, a layout or a label
 # Every kind an annal tells. An admitted event of another kind is counted in the sidecar's trailer
 # and not rendered (§5), but it may be named as a cause through a [[label]] below (§3). Grouped as
 # the WP names them: births, marriages, deaths, successions, claims and feuds.
@@ -22,6 +22,7 @@ scope = [
     "BIRTH", "MARRIAGE",
     "DEATH", "EXTINCTION",
     "SUCCEED", "INTERREGNUM_CRISIS", "DEPOSED", "REGENCY_BEGUN", "REGENCY_ENDED", "SEAT_GRANTED", "HOUSE_EXTINCT",
+    "HOUSE_JOINED",
     "CLAIM_CREATED", "CLAIM_PRESSED", "CLAIM_RENOUNCED",
     "FEUD_DECLARED", "FEUD_ENDED",
 ]
@@ -308,6 +309,23 @@ version = 2
 kind = "HOUSE_EXTINCT"
 text = "On {date}, the house of {target}, its last member, was extinguished."
 label = "the extinction of the house of {target}"
+
+# HOUSE_JOINED (M7 0.5.0, BCK-002 A-56): a newborn received into its mother's house under the bounded
+# membership rule, the one channel-A record of a membership the father walk does not give (annals_v0.md §4).
+[[template]]
+id = "house.joined.after"
+version = 1
+kind = "HOUSE_JOINED"
+when = { edge = "triggered" }
+text = "On {date}, following {cause.triggered}, the child was received into the house of {actor}, the mother."
+label = "the reception of {target} into the house of {actor}"
+
+[[template]]
+id = "house.joined"
+version = 1
+kind = "HOUSE_JOINED"
+text = "On {date}, {target} was received into the house of {actor}, the mother."
+label = "the reception of {target} into the house of {actor}"
 
 # --- claims ---------------------------------------------------------------------------------------
 

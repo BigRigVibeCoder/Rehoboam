@@ -21,8 +21,9 @@ keyframe extract: annals_v0.md §1, §6):
 
 Ids are XXH3-64 of a label (``person:edric``), so they are 64-bit like real H64 ids and the id
 fallback reads as it will at G1a (REV-SPR-029 F21); they are not H64 ids and nothing here was run
-by the engine. Verb ids, act classes and tellability come from the Registry plus the next-M2
-delta (``BIRTH``, ``MARRIAGE``), the dictionary the chronicle headers name as ``0.2.0+next``.
+by the engine. Verb ids, act classes and tellability come from the Registry plus the next-version
+delta (``BIRTH``, ``MARRIAGE``; M7 0.5.0's ``HOUSE_JOINED``), the dictionary the chronicle headers
+name as ``0.2.0+next``.
 
 Run: python -I specs/annals/fixtures/gen_fixtures.py [--check]
 """
@@ -236,7 +237,8 @@ GENESIS: dict[str, tuple[int, str | int, str | int, Date, Date | None, str | Non
 # Wynn, Orm, Xan and Tilda are the house-walk probe (REV-SPR-029 R18, annals_v0.md §4 rule 4):
 # Xan, a genesis grandson of Edric through a daughter, has no house_member row, so no house (no
 # walk into a genesis person's ancestry); his in-run son by Tilda walks to his father (no house)
-# and then to his mother, House Thorne. Orm is a cast member who shares Edric's name (the R33
+# and then, through the HOUSE_JOINED M7 0.5.0 records for a membership through the mother, to
+# House Thorne. Orm is a cast member who shares Edric's name (the R33
 # golden case): both bearers and every child designated through either father carry a label.
 TENURES = (  # (title, holder, start (y, m, d), end (y, m, d) or None)
     (LORDSHIP, "ash_root", (-40, 1, 1), (-12, 1, 1)),
@@ -390,13 +392,24 @@ def ashcombe(seg: Segment) -> None:  # noqa: PLR0915  (one scripted history, in 
     e_alys = seg.event(tk, VITAL, "DEATH", (ACCIDENT,), ((TARGET, P["alys"]),))
     seg.exit(tk, P["alys"], ACCIDENT, e_alys)
     # y20-21: the house-walk probe (R18): Xan, houseless, marries Tilda of Thorne; their son is
-    # born the next year and walks to House Thorne through his mother. He dies in infancy (y24)
+    # born the next year and joins House Thorne through his mother. He dies in infancy (y24)
     # and Tilda in y31, so House Thorne is still extinguished with Giles in y33.
     tk = t(20, 4, 4)
     seg.event(tk, VITAL, "MARRIAGE", roles=((ACTOR, P["xan"]), (TARGET, P["tilda"])))
     tk = t(21, 2, 2)
-    seg.event(tk, VITAL, "BIRTH", (MALE, 1), ((ACTOR, P["tilda"]), (TARGET, P["bram"])))
+    e_bram = seg.event(tk, VITAL, "BIRTH", (MALE, 1), ((ACTOR, P["tilda"]), (TARGET, P["bram"])))
     seg.entry(tk, P["bram"], BORN, MALE, P["tilda"], P["xan"], tk)
+    # M7 0.5.0's bounded membership rule (BCK-002 A-56): Xan has no house, and Tilda is
+    # named-eligible for House Thorne (its holder Giles is her brother, two kinship steps at
+    # dormancy_degrees 2), so on_birth gives Bram her house with a HOUSE_JOINED at Polity,
+    # triggered by the birth: the record the house walk reads (annals_v0.md §4).
+    seg.event(
+        tk,
+        POLITY,
+        "HOUSE_JOINED",
+        roles=((ACTOR, P["tilda"]), (TARGET, P["bram"])),
+        causes=(told(e_bram),),
+    )
     # y22: a deposition timer fires with no pressed claimant: Cedric is deposed and gains a claim;
     # his brother Wulf (13) succeeds under a regency. The timer fires on day 2 or later (M7:
     # successions and depositions are never on a year's first day; R26).

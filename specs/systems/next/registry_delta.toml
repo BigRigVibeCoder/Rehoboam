@@ -1,4 +1,5 @@
-# Registry delta for the next-version M2 spec (specs/systems/next/M2.demography.odd.toml, 0.3.0 draft; SPR-015).
+# Registry delta for the next-version M2 spec (specs/systems/next/M2.demography.odd.toml, 0.3.0 draft; SPR-015) and the
+# next-version M7 spec (M7.dynasty.odd.toml 0.5.0 draft: the verb HOUSE_JOINED, BCK-002 A-56).
 # Linted with: python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml
 # In --next mode (specs/systems/next/README.md) an overlay may REPLACE the Registry's [systems] entry of a system that
 # has a next-version spec, keeping its fidelity_levels and every existing parameter's bounds and default (the lint
@@ -22,3 +23,6 @@ defaults = { e0 = 30.0, brass_beta = 1.0, tfr = 4.9, elite_fertility_mult = 1.0,
 # 05.2 §4.0: "P1.3 adds births and marriages (birth, marry)". Tellability priors are design values (DEATH is 128).
 BIRTH    = { act_classes = ["birth"], emitted_by = "M2.demography", tellability = 96 }     # actor: the mother; target: the child; payload [sex, birth order]
 MARRIAGE = { act_classes = ["marry"], emitted_by = "M2.demography", tellability = 112 }    # actor: the husband; target: the wife; payload []
+# M7 0.5.0 (BCK-002 A-56): a newborn received into its mother's house under the bounded membership rule; the record plane C's
+# house walk reads. Tellability a design value below BIRTH's partner event MARRIAGE and above BIRTH.
+HOUSE_JOINED = { act_classes = ["bond"], emitted_by = "M7.dynasty", tellability = 104 }   # actor: the mother; target: the newborn; payload []

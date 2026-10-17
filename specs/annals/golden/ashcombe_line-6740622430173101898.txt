@@ -1,5 +1,5 @@
 # The annals of the line of Edric Ashcombe (Founder #1)
-# From the chronicle of ashcombe; templates 0.2.0
+# From the chronicle of ashcombe; templates 0.3.0
 
 ## The second year (Year of Ash)
 On day 5 of month 2, the first son of Edric Ashcombe (Founder #8) and the first daughter of Hugh Thorne were married.
@@ -39,6 +39,7 @@ On day 4 of month 4, the first son of Edric Ashcombe (Founder #11) and the secon
 
 ## The twenty-second year (Year of Ash)
 On day 2 of month 2, the second daughter of Hugh Thorne bore the first son of Edric Ashcombe (Founder #11) a son, p-3374, the first child of that mother.
+On day 2 of month 2, following the birth of p-3374, the child was received into the house of the second daughter of Hugh Thorne, the mother.
 
 ## The twenty-third year (Year of Ash)
 On day 2 of month 3, p-aae0 was deposed.

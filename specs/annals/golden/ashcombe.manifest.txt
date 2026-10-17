@@ -1,6 +1,6 @@
-#rehoboam/annals/manifest/v0 world=ashcombe chronicle_digest=64415301e76d22dfa0cedd621a4072ba templates=0.2.0 templates_digest=1594723802faf26c
-group house:3172275184034551431 1250da92f91d4d1d
-group house:7252932463130708544 e242038e830c6fc7
-group line:2008906306131934606 a0e7efdabf40eae5
-group year 0a868b65a1205f68
-digest 5b17d47fafe93c76
+#rehoboam/annals/manifest/v0 world=ashcombe chronicle_digest=358e4f3fa5c0096692f32b8697813ff1 templates=0.3.0 templates_digest=21b7a5cbbf14a024
+group house:3172275184034551431 60c8004c98ef9332
+group house:7252932463130708544 634c5ec21eb6c312
+group line:2008906306131934606 d377cc7fa4d118b2
+group year e7444786cbce90c4
+digest c3bf1c5530e5e09e

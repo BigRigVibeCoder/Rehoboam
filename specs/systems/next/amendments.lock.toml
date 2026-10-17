@@ -26,5 +26,6 @@
 
 [amendments."M7.dynasty"]
 "initialization.state" = "sha256:f12fbc4628bcf775091df8809b590abadcb060706609a8a98c5061aaabf1dbaa"
-"owns.house_member.house.meaning" = "sha256:b0b841c000d758ba2bb7eb0d25f5146180c5cf799bbd09721fdf6d85aa82830c"
+"invariants.INV-M7-06.statement" = "sha256:79f8b3ccdf8e0ebaf293813b4d75734e6fce2124b30f63b71918beed1ca1e57a"
+"owns.house_member.house.meaning" = "sha256:342a0f311ee49231818c6e9e0a1c70495751b63d7b86fc018c725c3d7a475361"
 "owns.tenure.title.meaning" = "sha256:27850981311ebb09814b475f1f71658403d263b944dafb43f78e9a7af61836be"

@@ -1,5 +1,5 @@
 # The annals of House Ashcombe
-# From the chronicle of ashcombe; templates 0.2.0
+# From the chronicle of ashcombe; templates 0.3.0
 
 ## Before the chronicle began
 House Ashcombe entered the chronicle with four living members.
