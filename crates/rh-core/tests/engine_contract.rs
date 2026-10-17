@@ -838,3 +838,91 @@ fn the_fires_of_one_timer_pass_share_the_pair_set() {
     );
     assert_eq!(e.crash_artifact().map(|a| a.tick), Some(1_440));
 }
+
+// --- BCK-002 A-50 (SPR-014 T-07): the entity kind of a draw --------------------------------
+
+/// The purposes of the kind-check stub: one keyed by a person, one by the world, one by a title
+/// (a key name with no `EntityKind` yet).
+enum Kp {
+    Person,
+    World,
+    Title,
+}
+
+impl SpecPurpose for Kp {
+    const ALL: &'static [Self] = &[Self::Person, Self::World, Self::Title];
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Person => "by_person",
+            Self::World => "by_world",
+            Self::Title => "by_title",
+        }
+    }
+}
+
+fn draws(
+    _: &support::Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let person = rh_ids::PersonId::from_raw(7);
+    let _ = c.rng(&Kp::Person, person, 0)?;
+    let _ = c.rng(&Kp::World, rh_ids::WorldKey::WORLD, 0)?;
+    // A title has no EntityKind yet: not kind-checked, so any key draws.
+    let _ = c.rng(&Kp::Title, RegionId::from_raw(3), 0)?;
+    if v.read("kind.case")?[0] == 1 {
+        let _ = c.rng(&Kp::Person, RegionId::from_raw(3), 1)?;
+    }
+    if v.read("kind.case")?[0] == 2 {
+        let _ = c.stream(&Kp::World, person)?;
+    }
+    Ok(())
+}
+
+fn kind_run(case: i64) -> (Result<(), SimError>, Vec<String>) {
+    let stub = support::Stub::new("X1.kinds")
+        .writes("kind.case")
+        .purposes_of::<Kp>()
+        .rng_key("by_person", "person")
+        .rng_key("by_world", "world")
+        .rng_key("by_title", "title")
+        .at(Pulse::Day, Phase::Vital)
+        .stepping(draws);
+    let specs = support::agreeing_specs(std::slice::from_ref(&stub));
+    let registered = register(vec![stub.boxed()], &specs).unwrap_or_else(|e| panic!("{e}"));
+    let reports = registered.reports().to_vec();
+    let mut tables = WorldTables::new();
+    tables.insert("kind.case", vec![case]);
+    let mut e = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    );
+    (e.advance_until(SimTime::EPOCH, |_, _| {}), reports)
+}
+
+/// A draw whose entity is not the kind its purpose's `[[rng]] key` declares is a `SimError`
+/// naming the system, the purpose and both kinds; a key name with no kind yet is reported.
+#[test]
+fn a_draw_of_the_wrong_entity_kind_is_refused_by_name() {
+    let (ok, reports) = kind_run(0);
+    ok.unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        reports,
+        [
+            "X1.kinds: RNG purpose by_title keys by title, which has no EntityKind yet: its draws are not kind-checked (BCK-002 A-50)"
+        ]
+    );
+    assert_eq!(
+        kind_run(1).0.unwrap_err().to_string(),
+        "X1.kinds drew under purpose by_person, whose [[rng]] key is a person, with a region (BCK-002 A-50)"
+    );
+    assert_eq!(
+        kind_run(2).0.unwrap_err().to_string(),
+        "X1.kinds drew under purpose by_world, whose [[rng]] key is a world, with a person (BCK-002 A-50)"
+    );
+}

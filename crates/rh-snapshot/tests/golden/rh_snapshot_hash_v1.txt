@@ -10,7 +10,7 @@
 #   engine_table <name> <rows> <root> <chunks..>  the synthetic engine state's tables
 #   engine <plane hash>   its state_hash: the synthetic world columns and engine tables,
 #   rh-core/events.held excepted (a carried table: in a keyframe, outside the hash)
-#   engine_cause_table, engine_cause: the same state with two timers carrying a cause (SPR-014 T-02)
+#   engine_cause_table, engine_cause: two timers with a cause (SPR-014 T-02)
 xxh3_64 0 2d06800538d394c2
 xxh3_64 1 e12ef9d2eb86ceeb
 xxh3_64 2 71470e6b39ce0012
