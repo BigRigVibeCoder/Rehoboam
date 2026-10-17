@@ -4,15 +4,16 @@
 //! through these accessors and request changes through lifecycle commands (single writer).
 //! Changing it is a C2 change (docs/13 §4.2).
 //!
-//! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.1_simulation_core.md` §2.
+//! - [`m2`]: `M2.demography`'s columns, `person.*` and `life_course.*` (SPR-014 T-06).
 //!
-//! Stub created by SPR-001 (repository bootstrap). The first system that owns columns fills it.
+//! Each accessor reads through the caller's [`rh_core::world::SystemView`] (its keyed lookup,
+//! [`rh_core::world::SystemView::value`]), so the caller's `AccessSpec` applies, a lagged read sees
+//! its lag, and a read registration dropped because its owner is absent gives the declared neutral
+//! (`05.1` §2 rule 2). `tests/drift.rs` compares every accessor's column, type and enum codes
+//! with the owner's spec.
+//!
+//! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.1_simulation_core.md`
+//! §2; `docs/13` §4.1, §4.3; `CODEX/05_PROJECT/SPR-014_LifecycleQueues.md` T-06.
 #![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    /// Placeholder so the PR tier has a test to run in every crate; replaced by real tests
-    /// when the crate gains code.
-    #[test]
-    fn stub_crate_builds() {}
-}
+pub mod m2;
