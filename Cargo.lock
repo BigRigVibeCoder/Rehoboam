@@ -946,6 +946,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rh-worldgen"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-ids",
+ "rh-registry",
+]
+
+[[package]]
 name = "rusqlite"
 version = "0.40.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

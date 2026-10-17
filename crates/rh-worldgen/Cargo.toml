@@ -1,0 +1,21 @@
+[package]
+name = "rh-worldgen"
+description = "World generation: the founders stub of SPR-011 ruling 10 (no raster, regions or settlements yet)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# SPR-012 T-06: plane A, machinery, pinned in bin/lint_arch.py. It writes initial values only:
+# the founders, into the columns whose owner initialises from the manifest (ruling 10).
+[package.metadata.rehoboam]
+plane = "A"
+kind = "machinery"
+
+[lints]
+workspace = true
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
+rh-registry = { version = "0.0.0", path = "../rh-registry" }

@@ -189,6 +189,8 @@ REQUIRED_GATES = (
     " Table 19, e0 within 0.06 years, the q(15) band (SPR-012)",
     "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)",
     "T-05 positive control: one altered schedule vector must FAIL (SPR-012)",
+    "T-06 rh-worldgen: V-DATA-05 founder ids and a forced collision, bit-equal genesis twice and "
+    "across threads, Ada at 25, refused writes (SPR-012)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",

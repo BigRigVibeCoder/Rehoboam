@@ -643,7 +643,8 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
-  rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-golden::golden"
+  rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-worldgen::genesis
+  rh-golden::golden"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -849,6 +850,7 @@ run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-1
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
+run "T-06 rh-worldgen: V-DATA-05 founder ids and a forced collision, bit-equal genesis twice and across threads, Ada at 25, refused writes (SPR-012)" "pass:V-DATA-05: a forced collision resolves to the same rehash on every run" cargo nextest run -p rh-worldgen --locked --test genesis --no-capture &&
 run "V-DET-12 positive control: a back-dated event in the golden log must FAIL (SPR-006)" "fail:V-DET-12 violated" env RH_CORE_LIFE_GOLDEN="$PWD/tests/lint_fixtures/golden/backdated_life_events.txt" cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_12_golden_event_log &&
 run "T-05 crash replay positive control: an artifact with an altered instant must FAIL (SPR-006)" "fail:does not replay" env RH_CORE_CRASH_ARTIFACT="$PWD/tests/lint_fixtures/golden/crash_altered_tick.json" cargo nextest run -p rh-core --locked --test invariants --no-capture t05_the_committed_crash_artifact_replays &&
 run "Rust: doctests (cargo test --doc)" pass doctests_run &&
