@@ -29,3 +29,5 @@ serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.8"
 # SPR-013 T-09: the World Stream of a manifest world's run.
 rh-stream = { version = "0.0.0", path = "../rh-stream" }
+# SPR-013 T-11: `rh-cli sift` (a tool may depend on plane C; plane A never does).
+rh-sifter = { version = "0.0.0", path = "../rh-sifter" }

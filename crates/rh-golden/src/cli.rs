@@ -441,7 +441,9 @@ pub fn tail_cmd(words: &[String], repo: &Path) -> u8 {
     let result = parsed.and_then(|args| {
         let stdout = std::io::stdout();
         let mut lock = stdout.lock();
-        crate::tail::tail(&args, &crate::tail::no_annotations, &mut lock)
+        let repo = args.repo.clone();
+        let notes = move |dir: &Path| crate::sift::annotations(&repo, dir);
+        crate::tail::tail(&args, &notes, &mut lock)
     });
     match result {
         Ok(()) => OK,
@@ -485,4 +487,34 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
     }
     args.run_dir = run_dir.ok_or_else(|| bad("a run directory is required"))?;
     Ok(args)
+}
+
+/// `sift <run-dir>` (SPR-013 T-11; [`crate::sift`]). Exit 0, or 2 on a tool error.
+#[must_use]
+pub fn sift_cmd(words: &[String], repo: &Path) -> u8 {
+    let (dir, repo) = match words {
+        [dir] => (PathBuf::from(dir), repo.to_path_buf()),
+        [dir, flag, r] if flag == "--repo" => (PathBuf::from(dir), PathBuf::from(r)),
+        _ => {
+            eprintln!("usage: rh-cli sift <run-dir> [--repo R]");
+            return TOOL;
+        }
+    };
+    match crate::sift::sift(&repo, &dir) {
+        Ok((packs, s)) => {
+            println!(
+                "sift: {} matches of {} in {} channel-C segments from {} channel-A records; {}",
+                s.matches,
+                packs.join(","),
+                s.segments,
+                s.a_records,
+                dir.join("stream").display()
+            );
+            OK
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            TOOL
+        }
+    }
 }

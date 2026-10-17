@@ -88,6 +88,11 @@ cargo nextest run -p rh-golden --release --test stream   # V-STR-01 on solo and 
 target/release/rh-cli tail target/golden/solo_run [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K] [--canonical] [--wait]   # the sealed stream as display or canonical lines (SPR-013 T-10)
 cargo nextest run -p rh-golden --release --test tail   # tail: every record once from any cursor, canonical digests, read-only, display snapshots (RH_UPDATE_SNAPSHOTS=1 rewrites them; a stale copy must FAIL)
 cargo nextest run -p rh-cli --locked --test tail_live   # a tail started mid-run prints the after-run tail's lines (SPR-013 T-10)
+target/release/rh-cli sift target/golden/solo_run   # channel C (life_ends matches) from sealed channel A, downstream of the engine (SPR-013 T-11)
+python -I specs/sifting/twin_check.py target/golden/solo_run   # V-SIFT-01: the SQL twin (specs/sifting/twins/) = rh-sifter's channel C; --control drop-last must FAIL
+cargo nextest run -p rh-sifter --locked --test sift   # rh-sifter v0: the golden matches and MatchIds; refusals (SPR-013 T-11)
+cargo nextest run -p rh-golden --release --test sift   # V-PLN-04 subset: sifting twice is byte-identical; channel A and the ladder unchanged (SPR-013 T-11)
+python -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml   # V-SIFT-05: must FAIL (an unanchored read)
 python -I specs/stream/selftest_wire_v1.py --check   # World Stream wire format v1 (IF-0 live edge): framing, control messages, refusals, the live-edge rule simulated with slow, stalled and reconnecting viewers, golden frames (SPR-026); --control window-gap must FAIL
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py

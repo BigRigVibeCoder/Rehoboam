@@ -78,6 +78,8 @@ pub struct Setup {
     /// rule of `05.5` §3): the cast's names, and each household's children and servants named
     /// after their head. Commoners have none.
     pub names: BTreeMap<u64, String>,
+    /// The manifest's `narrative.pattern_packs`, in order (what `rh-cli sift` sifts with; T-11).
+    pub packs: Vec<String>,
 }
 
 /// A manifest world's stream dictionaries and the history tuple its segments carry.
@@ -117,10 +119,17 @@ fn read(path: &Path) -> Result<String, Error> {
     std::fs::read_to_string(path).map_err(|e| Error(format!("{}: {e}", path.display())))
 }
 
+/// The prefix of a test fixture world: `fixture-<name>` lives in `tests/worlds/<name>`, not under
+/// `worlds/` (it has no baseline; SPR-013 T-11's 10,000-founder fixture).
+pub const FIXTURE_PREFIX: &str = "fixture-";
+
 /// The directory of world `name` under `repo`.
 #[must_use]
 pub fn world_dir(repo: &Path, name: &str) -> PathBuf {
-    repo.join("worlds").join(name)
+    match name.strip_prefix(FIXTURE_PREFIX) {
+        Some(fixture) => repo.join("tests/worlds").join(fixture),
+        None => repo.join("worlds").join(name),
+    }
 }
 
 /// The SHA-256 check of `world.toml`'s pin: `Ok(hex)` when the manifest's bytes hash to it.
@@ -224,7 +233,7 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
     // Constructed once here, so a refusal (alpha, beta) fails the setup, not a registration.
     let m2 = Demography::from_world(&spec).map_err(|e| Error(e.to_string()))?;
     let script = scripted_inputs(repo, &toml.inputs, &spec)?;
-    let names = display_names(&repo.join(&toml.manifest), &registry, &spec)?;
+    let (names, packs) = display_names(&repo.join(&toml.manifest), &registry, &spec)?;
     let calendar = spec.calendar;
     let provenance = Provenance {
         build: format!(
@@ -272,16 +281,18 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
         not_built,
         stream: Some(stream),
         names,
+        packs,
     })
 }
 
 /// The founders' display names (see [`Setup::names`]), in genesis order (ruling 10: the cast,
-/// then each household's sons, daughters and servants, then the rest).
+/// then each household's sons, daughters and servants, then the rest), and the manifest's pattern
+/// packs.
 fn display_names(
     manifest: &Path,
     registry: &Registry,
     spec: &WorldSpec,
-) -> Result<BTreeMap<u64, String>, Error> {
+) -> Result<(BTreeMap<u64, String>, Vec<String>), Error> {
     let rh_manifest::manifest::Outcome::Checked { manifest: m, .. } =
         rh_manifest::manifest::validate_file(manifest, registry)
     else {
@@ -301,11 +312,12 @@ fn display_names(
         labels.extend((1..=n(h.children.daughters)).map(|i| format!("{head}'s daughter {i}")));
         labels.extend((1..=n(h.servants)).map(|i| format!("{head}'s servant {i}")));
     }
-    Ok(ids
+    let names = ids
         .iter()
         .zip(labels)
         .map(|(id, name)| (id.to_raw(), name))
-        .collect())
+        .collect();
+    Ok((names, m.narrative.pattern_packs.clone()))
 }
 
 /// The bytes of a lowercase hex digest.
@@ -391,5 +403,6 @@ fn smoke(repo: &Path, seed: u64) -> Result<Setup, Error> {
         not_built: Vec::new(),
         stream: None,
         names: BTreeMap::new(),
+        packs: Vec::new(),
     })
 }

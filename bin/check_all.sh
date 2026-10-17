@@ -450,6 +450,14 @@ tail_stopped_wall() {
   kill -KILL "$pid"; wait "$pid" 2>/dev/null
   echo "T-10 wall: solo 200 years: ${headless} ms headless, ${streaming} ms streaming, ${stopped} ms streaming with a stopped tail attached"
 }
+# SPR-013 T-11: a world's run streamed into a fresh run directory, sifted, and checked against the SQL twin.
+world_sift_twin() {
+  local dir="$GOLDEN/$1_run"
+  rm -rf "$dir"
+  "$RH_CLI_RELEASE" run "$1" --years "$2" --threads 1 --ladder yearly --run-dir "$dir" >/dev/null || return 1
+  "$RH_CLI_RELEASE" sift "$dir" || return 1
+  "$PY" -I specs/sifting/twin_check.py "$dir"
+}
 # SPR-013 T-09: solo's PR-tier golden run streams into a fresh run directory (the ladder is the
 # baseline's; watching changes nothing).
 solo_stream_run() {
@@ -775,7 +783,7 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
   rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
-  rh-cli::kill rh-golden::tail rh-cli::tail_live"
+  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -995,6 +1003,7 @@ run "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons 
 run "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)" "fail:STALE: tests/lint_fixtures/skeletons/smoke_stale/X3_smoke_vital.rs" "$PY" -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out tests/lint_fixtures/skeletons/smoke_stale --check &&
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)" "pass:PASS: 1 patterns linted." "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml &&
+run "V-SIFT-05 positive control: life_ends with an unanchored state read must FAIL (SPR-013 T-11)" "fail:ERROR life_ends.e1: UNANCHORED state read: 'notable(A)'" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml &&
 run "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)" "fail:ERROR life_ends.e1: UNANCHORED state read" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
 run "Manifest: val_khor" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/val_khor.yaml &&
@@ -1014,6 +1023,7 @@ run "rh-stream by name: byte-identical sealing over seeds and world sizes, conti
 run "rh-stream by name: the pinned Parquet writer properties in every file, no float column, the golden segment's bytes pinned (SPR-013 T-09; the Architect's parquet review)" "pass:T-09 golden segment bytes: xxh3-128 ee00e7bc4a9b2f5610438c3c743e49a2" cargo nextest run -p rh-stream --locked --test parquet_props --no-capture &&
 run "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 T-09; GOV-002 tier 15; wire_v1.md §11)" "pass:T-09 mid-year kill -9: hamlet verified years 10-14" cargo nextest run -p rh-cli --locked --test kill --no-capture &&
 run "tail by name: a tail started before a run's first seal and following it prints the after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 sealed)" "pass:T-10: a tail started mid-run prints the after-run tail's lines" cargo nextest run -p rh-cli --locked --test tail_live --no-capture &&
+run "rh-sifter by name: the golden channel-A segment sifts to the golden life_ends matches and MatchIds; several targets give several matches; what v0 cannot honour is refused (SPR-013 T-11)" "pass:T-11: the golden segment sifts to the golden life_ends matches" cargo nextest run -p rh-sifter --locked --test sift --no-capture &&
 run "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)" "pass:left to the by-name gates" workspace_tests &&
 run "Workspace tests positive control: a by-name entry that names no test binary must FAIL (SPR-009 review 2a)" "fail:no binary IDs matched" workspace_tests_typo_control &&
 run "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard (SPR-007 T-01..T-04)" "pass:every_golden_line_reproduces" cargo nextest run -p rh-snapshot --locked --test hash --test golden --test journal --test keyframe --test guard --test stub_world --status-level pass &&
@@ -1033,7 +1043,7 @@ run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-1
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
-run "M2 draws differential golden: the engine's death instants equal the independent model's, re-samples included (SPR-012, Tester's interim report)" "pass:M2 draws: 188 death instants in 6 worlds equal the independent model's" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
+run "M2 draws differential golden: the engine's death instants equal the independent model's, re-samples included (SPR-012, Tester's interim report)" "pass:M2 draws: 388 death instants in 7 worlds equal the independent model's" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
 run "M2 draws positive control: one altered death line in the golden must FAIL (SPR-012)" "fail:death 0 differs: engine" env RH_M2_DRAWS_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_draws_v1.txt" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
 run "M2 draws positive control: the re-sample's Bernoulli taken from k = 1 must FAIL (SPR-012, the Tester's first mutant)" "fail:differs: engine" cargo nextest run -p rh-sys-demography --locked --features mutant-resample-hit-k1 --test draws_golden --no-capture &&
 run "M2 draws positive control: the re-sample's day taken from k = 0 must FAIL (SPR-012, the Tester's second mutant)" "fail:differs: engine" cargo nextest run -p rh-sys-demography --locked --features mutant-resample-day-k0 --test draws_golden --no-capture &&
@@ -1174,6 +1184,13 @@ run "check_segments positive control: a DOUBLE column planted in a sealed table 
 run "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)" "fail:DIGEST: y000000" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" --plant digest &&
 run "rh-golden by name: V-STR-01 on solo and the 60-person hamlet (byte-identical segments twice and at 1, 2 and 4 threads), the streaming ladder = the headless one, resume verification (SPR-013 T-09)" "pass:T-09 V-STR-01: hamlet, 60 years" cargo nextest run -p rh-golden --release --locked --test stream --no-capture &&
 run "rh-golden by name: tail prints every record once in seq order from any cursor, its canonical output digests to each segment's canonical_digest, it never writes to the run directory, and the display form matches its snapshots (SPR-013 T-10)" "pass:T-10: the display form matches its 4 snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture &&
+run "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment (SPR-013 T-11; ruling 14)" "pass:sift: 1 matches of solitary_life in 200 channel-C segments" "$RH_CLI_RELEASE" sift "$GOLDEN/solo_run" &&
+run "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 1 matches of solitary_life" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" &&
+run "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)" "fail:TWIN DIFFERS: 0 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control drop-last &&
+run "V-SIFT-01 on household: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 6 matches of solitary_life" world_sift_twin household 200 &&
+run "V-SIFT-01 on hamlet: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 60 matches of solitary_life" world_sift_twin hamlet 200 &&
+run "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 10000 matches of solitary_life" world_sift_twin fixture-founders_10k 120 &&
+run "rh-golden by name: V-PLN-04 subset: sifting twice is byte-identical and leaves channel A, keyframes, journal and ladder unchanged; one life_ends match per death, shown by tail (SPR-013 T-11)" "pass:T-11 V-PLN-04: hamlet: two sifts byte-identical" cargo nextest run -p rh-golden --release --locked --test sift --no-capture &&
 run "tail snapshot positive control: a stale snapshot must FAIL with the first differing line (SPR-013 T-10)" "fail:SNAPSHOT hamlet_follow_job differs at line 2" env RH_TAIL_SNAPSHOTS="$PWD/tests/lint_fixtures/golden/stale_tail_snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture the_display_form_matches_its_snapshots &&
 run "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, streaming, and streaming with a stopped tail attached, reported" "pass:T-10 wall: solo 200 years" tail_stopped_wall &&
 run "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)" "pass:solo: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/solo_yearly_tN.ladder" &&

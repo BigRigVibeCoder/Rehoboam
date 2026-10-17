@@ -1,0 +1,38 @@
+# Test fixture (not a golden world): 10,000 founders under M2.demography's rung-0 slice (SPR-013 T-11). V-SIFT-01 runs the
+# sifter and its SQL twin on it (05.2 §4.0: P1.0 admits every draft, so all 10,000 deaths are EVENT records); it is the
+# largest world P1.0 streams. No cast, no households: every founder is a commoner, aged uniformly in [0, 60) at genesis
+# (SPR-011 ruling 10). Run with `rh-cli run fixture-founders_10k --years N --run-dir D`.
+manifest_version: 0
+registry_version: "0.2.0"
+world:
+  id: founders_10k
+  display_name: "Ten thousand founders"
+  template: pastoral_household
+  seed: 10007
+  calendar: {days_per_year: 360, months: 12, seasons: 4, epoch_label: "Fixture era"}
+  horizon: {years: 150, label: historical}
+  fidelity_profile: {M2.demography: F1}
+geography:
+  raster_resolution: 64
+  region_count: 1
+  heightmap_template: flat
+  climate: {zone: temperate_maritime, harvest_sigma: 0.15, autocorr: 0.1, spatial_share: 0.9, volcanic_rate: 0.0}
+  ecology: {livestock_kg_per_capita: 0, wild_prey_tonnes: 0}
+peoples:
+  - archetype: human
+    population: 10000
+    class_shares: {commoner: 1.0, burgher: 0.0, elite: 0.0}
+    cultures:
+      - {id: fixturefolk, name: "Fixture folk", naming_seed: "plain names", value_bias: {self_direction: 0.3}}
+    faiths:
+      - {id: hearth, name: "Hearth custom", doctrine_tags: []}
+cast: []
+households: []
+systems:
+  M2.demography: {e0: 30}
+narrative:
+  pattern_packs: [solitary_life]
+  default_style_card: historian
+presentation:
+  era_art: lofi_plain
+  palette: mono

@@ -201,6 +201,8 @@ REQUIRED_GATES = (
     "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)",
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
+    "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment "
+    "(SPR-013 T-11; ruling 14)",
     "Sifting patterns (lint_patterns)",
     "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)",
     "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-008 "
@@ -274,6 +276,14 @@ REQUIRED_GATES = (
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
     "V-PLN-01 compile-fail fixture has a clean dependency graph",
     "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)",
+    "V-SIFT-01 on hamlet: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)",
+    "V-SIFT-01 on household: stream 200 years, sift, the twin = rh-sifter (SPR-013 T-11)",
+    "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, "
+    "event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)",
+    "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter "
+    "(SPR-013 T-11)",
+    "V-SIFT-05 positive control: life_ends with an unanchored state read must FAIL (SPR-013 "
+    "T-11)",
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
@@ -512,6 +522,9 @@ REQUIRED_GATES = (
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
     "crash replay (SPR-006)",
+    "rh-golden by name: V-PLN-04 subset: sifting twice is byte-identical and leaves channel A, "
+    "keyframes, journal and ladder unchanged; one life_ends match per death, shown by tail "
+    "(SPR-013 T-11)",
     "rh-golden by name: V-STR-01 on solo and the 60-person hamlet (byte-identical segments "
     "twice and at 1, 2 and 4 threads), the streaming ladder = the headless one, resume "
     "verification (SPR-013 T-09)",
@@ -526,6 +539,9 @@ REQUIRED_GATES = (
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
+    "rh-sifter by name: the golden channel-A segment sifts to the golden life_ends matches and "
+    "MatchIds; several targets give several matches; what v0 cannot honour is refused (SPR-013 "
+    "T-11)",
     "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced guard "
     "(SPR-007 T-01..T-04)",
     "rh-stream by name: byte-identical sealing over seeds and world sizes, contiguous seq, R4 "
@@ -542,6 +558,7 @@ REQUIRED_GATES = (
     "sealed)",
     "tail snapshot positive control: a stale snapshot must FAIL with the first differing line "
     "(SPR-013 T-10)",
+    "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)",
     "uv lock --check positive control: drifted lock must FAIL",
     "wire_v1 positive control: a host whose window moves before the dropped year is on disk must "
     "FAIL the live-edge rule (SPR-026)",
