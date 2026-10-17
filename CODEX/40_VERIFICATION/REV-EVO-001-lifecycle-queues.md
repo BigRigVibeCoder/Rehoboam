@@ -9,7 +9,7 @@ tags: [verification]
 related: [EVO-001, PRJ-002, SPR-014, BCK-002, REV-P1a, REV-SPR-017]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF:** Round 2, on PR #49 at `b1c6890`: **approve after one small revision. 0 blockers, 1 major, 6 minors, 7 nits.** The smoke ladder is byte-identical to its baseline, and M7 and T1 now apply commands when their frozen texts say. R6 is ruled for shape (b), strengthened (§2.0 R9): an outcome-carrying command is submitted only by its sender's timer at the outcome's instant. DET-13 and ADR-0025 then stand as written, so D39 is withdrawn and nothing goes to the director. Round 1 found 1 blocker, 5 majors, 6 minors and 4 nits (§0, §1). Both rounds ran in sessions on a different model from the drafter's.
@@ -578,3 +578,250 @@ All in `$R/src`, the copy.
 - V-DET-21, V-INV-15 and the dead-person drop: SPR-014 has no code yet, so the rule was checked by tracing the engine and specs, not by running it.
 - The `solo`, `household` and `hamlet` ladders under M2's future `Day`/`Vital` binding (§5 defers this to SPR-014).
 - The births draft's own gates (`lint_odd.py --next`, `selftest_m2_f1.py`).
+
+
+## 3. Round 3 (2026-10-17, `1d08b06`; main merged in `757141b`)
+
+### 3.0 Architect rulings, round 3
+**Approve after one text revision:** 0 blockers, 1 major, 3 minors, 4 nits. R9 is accepted at 8/10. The reviewer traced both murders end to end: no day is lost, no death is applied early, each outcome is a timer from the step that drew it, and an input on the victim reaches it. T1's "own tick" re-sample is a re-draw over a single possible value and does not defeat ADR-0025.
+
+| # | Finding | Ruling |
+|---|---|---|
+| R15 | MAJ-7 | Both changes the text gives SPR-014 must leave smoke's ladder unchanged, as the PR requires. (1) For smoke's commands, `key_field` names the `Command`'s existing `person` field; no new `args` entry. (2) The timer's `EventRef` cause slot is hash-neutral when empty: an absent cause adds no bytes to the timer's hashed encoding. If either cannot be made neutral, the text must say that SPR-014 regenerates smoke in a `[C3]` commit, with a bisect whose first divergence is the first command or timer it touches, announced to the director |
+| R16 | MIN-13 | The lint's substrate rule is advisory. Registration enforces it: a world lacking a required owner is refused by name (R12). Say so in the rule's text; the lint keeps printing each spec's required owners |
+| R17 | MIN-14 | M7's murder re-sample draws among the day starts at or after the input's instant within the month (the input's own day included when its day start is after the input), never cancelling when one remains; a murder whose month has no remaining day start moves to the next month's first day start |
+| R18 | MIN-15 | The `sprint` escape requires that the named sprint's document exists under `CODEX/05_PROJECT/`; `SPR-999` is refused |
+| R19 | Nits | As listed. The conflicts with `main` were resolved in `757141b` |
+
+### 3.1 The review (round 3, independent reviewer)
+
+Reviewer: independent, on a different model from the drafter's. Copy reviewed: `$R/src`, a `git archive` of `1d08b06`. Round 3 adds `b71f85e` (the round-3 text), `85c7e51` (a merge of `main` at `513e281`: PR #51), `afa6886` and `1d08b06`. Nothing in `/home/user/Rehoboam` was modified. Line numbers refer to the copy. `$R` = `/tmp/claude-0/-home-user-Rehoboam/78f410bc-aa41-55ce-883d-f1b2ebd2cbcd/scratchpad/evo001_review_r3`.
+
+### BLUF
+
+**Approvable after one more text revision: 0 blockers, 1 major, 3 minors, 4 nits.**
+
+- **R9 works as built.** I traced a T1 murder and an M7 murder against `05.1` §4.2 and the derived order (`real_specs.rs:779-792`, `Vital` = M2, M7, T1):
+  - No day is lost.
+  - No death is applied before its sampled instant.
+  - Each outcome is a plane-A timer from the merge of the step that drew it, with no `Inputs` phase in between.
+  - An input that scopes the victim reaches the timer through the sender's `resample_timer`.
+  - T1's "own tick" re-sample re-draws an outcome that has only one possible value (a fixed delay). It does not defeat ADR-0025.
+- **R10, R11, R12 and R14 are applied. R13 is partly applied** (MIN-15).
+- **The major (MAJ-7).** Round 3 tells SPR-014 to do two things that move the smoke ladder, while the same PR makes "the smoke ladder is unchanged; a difference is a defect" an acceptance criterion (R1). I measured both:
+  - adding the key person to the smoke commands' `args`: `BASELINE MISMATCH`, `engine.commands` at 307 rungs;
+  - encoding a timer's `cause` slot as an empty option: `BASELINE MISMATCH`, `agenda.timers` at 849 rungs, and the final state hash changes.
+  - The fix is text only.
+- **Checks.**
+  - The smoke ladder built from the copy is byte-identical to the baseline.
+  - The lint, the smoke lint, both skeleton checks and all 25 fixture gates pass.
+  - The inventory pytest: 12 passed. ruff and mypy: clean. `nextest` on rh-core, rh-registry and rh-sys-smoke: 144 passed.
+- **Main has moved** (`e9e0fe3`, PR #52). A trial merge has 5 conflicts, and 12 of this PR's lint fixtures use an `M1.regions` id, which now collides with the real `M1.regions` spec (NIT-13).
+
+### 1. R9–R14 status
+
+| # | Ruling | Status | Evidence, and what is missing |
+|---|---|---|---|
+| R9 | Shape (b), strengthened: an outcome command is submitted only by its sender's timer, in the outcome instant's timer pass | **APPLIED** (MAJ-7) | <ul><li>`05.1:68` states it, with the timer `cause` slot.</li><li>M2 0.2.1 marks `ScheduleDeath` and `Marry` `outcome = true`.</li><li>T1 0.3.2 `[[commands]]` (`:438-450`): `DEATH_DUE` and `MARRY_DUE` under `outcome_delay` (`[[rng]] :756-760`); `outcome_due` in `Day/Vital` (`:706`); `restart`.</li><li>M7 0.3.2 (`:366-368`, `:542`, `:563`): `MURDER_DUE` under `exit_murder`.</li><li>The lint requires `timer` and `purpose` (fixture `outcome_untimed`; probes P4, P11, P12, P13).</li><li>D39 is withdrawn from `decisions_pending.md`.</li><li>The trace is in §3.</li></ul> |
+| R10 | M7's murder re-sample, never errors, carries the culprit; the same for T1 | **APPLIED** (MIN-14) | <ul><li>M7 `:563`: the day is re-drawn among the month's remaining day starts; the payload is the culprit; `cause = None`; `resample_on_fork = true`; `restart` `:512`; the deposition gap is passed to SPR-021.</li><li>T1 `:759`: own tick, keeps payload and cause, `resample_on_fork = false`.</li><li>The engine's API allows `None` (`system.rs:751-763`) and re-inserts `entry.timer` unchanged (`engine.rs:969-985`), so payload and cause survive.</li><li>M7's rule mishandles the input's own day (MIN-14).</li></ul> |
+| R11 | One diagnostic per (system, kind, reason), timers included | **APPLIED** (NIT-12) | <ul><li>`05.1:69`: `dropped{system, kind, reason}`, `StepCtx::drop_timer`, reasons `dead_key`, `dead`, `ended`, `absent_owner`.</li><li>V-INV-15 (`docs/09:138`) uses it.</li><li>Residue: M7 adds a fifth reason, `resampled_out` (`:563`), that `05.1` does not list and that the engine's `None` path does not count (MIN-14).</li><li>EVO §6's MIN-5 row (`:105`) still names `commands.dropped_dead`, `dropped_by_owner` and `dropped_send`.</li><li>"`system` the dropper" vs `dropped{owner, command, dead_key}` for `rh-core`'s drop.</li></ul> |
+| R12 | Identity reads always require their owner; no flag; explicit `neutral` on rate and mode reads | **APPLIED** (MIN-13, NIT-12) | <ul><li>No `required` field remains in any spec; the lint refuses one (`lint_odd.py:482`).</li><li>NOTE lines print each spec's required owners: M7 requires M2; T1 requires M2 and M7; M2 prints none.</li><li>**M2 0.2.1 has 0 foreign reads.**</li><li>The S6/S7 identity reads leave M7 and T1 (`vow.vower`, `vow.status`, `artifact.bearer`, `artifact.location`).</li><li>M7's `person.named` becomes a mode read, `neutral = false`, with an `[isolation]` forcing (`:825`). `false` is a real state ("nobody holds a mind"), not a MAJ-3 impossible one. Accept it explicitly.</li><li>`real_specs.rs` registers M2, M7 and T1 with the S6, S7 and M6 reads reported.</li><li>**So M7 and T1 are registrable in P1a without S6 or S7.**</li><li>PRJ-002 makes SPR-023 follow SPR-021.</li><li>The substrate rule is keyed on the wrong property (MIN-13).</li></ul> |
+| R13 | `key_field`; one `[[applies]]` per command; the `sprint` escape bounded; the nits | **PARTLY APPLIED** (MIN-15, NIT-12) | <ul><li>`key_field` is on all 15 `[[applies]]` entries, checked as a `PersonId` payload field (P5, P6).</li><li>A duplicate entry is an error (fixture `dup_command`).</li><li>NIT-5 to NIT-8 and NIT-10 are done: representability, `*_event` as `EventRef`, duplicate fields and a stated `key` all fail as they should (N1-N4).</li><li>The `sprint` escape ends only when the sprint's document is CLOSED. A sprint with no document never ends: `SPR-999` passes, and SPR-014 itself has no document (MIN-15).</li><li>NIT-9's "13 typed entries" is still at EVO `:75` (there are 15).</li></ul> |
+| R14 | `05.1` version at merge | **APPLIED** | <ul><li>`05.1:13`: v1.11, "PR #51 took v1.10", applied with PR #49.</li><li>On current `main` (`e9e0fe3`) the header still ends at v1.10, so v1.11 is still free.</li></ul> |
+
+### 2. New findings
+
+#### MAJ-7. Round 3 tells SPR-014 to make two encoding changes that move the smoke ladder, against R1
+
+- **Where:**
+  - `worlds/smoke/systems/X4.smoke_estate.odd.toml:54-55` ("SPR-014 … adds the person to args (no draw reads args: the ladder is unchanged)"). With it: X3, X5 and X7's payloads become `{ row, person }`, and `05.1:69` says "`submit` refuses a command whose key differs from that field".
+  - `05.1:68` and EVO `:83` and `:23` (the engine work list): "a timer carries, beside its integer payload, one `EventRef` (`cause`)". EVO `:83` says "hash-neutral", but only about the merge order.
+  - Against: EVO §5 `:89` ("no existing baseline moves … a difference is a defect, not a `[C3]` regeneration"), V-INV-15 ("the smoke ladder is unchanged") and PRJ-002 `:153`.
+- **Evidence:** A queue and the agenda are plane-A state and appear in the ladder.
+  - `rh-snapshot/src/state.rs:150-161` encodes each timer row as fixed fields.
+  - `:165-182` encodes each command row, `list_i64(args)` included.
+  - The smoke ladder has an `rh-core/agenda.timers` digest at all 1,000 rungs (850 distinct). It has a non-empty `rh-core/engine.commands` digest at 307 rungs: X5's `Polity` sends wait across the year end.
+  - I ran two experiments in a second copy (`$R/exp`), each with a release build and the 1,000-year yearly ladder:
+    1. The four smoke `submit`s with the person appended to `args`: `BASELINE MISMATCH` at rung 1. 307 `engine.commands` lines and 992 rung lines differ.
+    2. `timer_rows` with one `u8(0)` after the payload (what `opt_u64(None)` writes for an absent `cause`): `BASELINE MISMATCH`. 849 `agenda.timers` lines differ, and the final state hash goes from `bef936ec026341a0` to `10512eebeaa73e01`.
+  - The SPR-007 hash golden (`crates/rh-snapshot/tests/golden/rh_snapshot_hash_v1.txt`, `bin/gen_hash_golden.py:534`) pins the same timer layout.
+  - An empty side table would not avoid this either: `plane_hash_of` (`hash.rs:365`) hashes every table name present.
+- **Why it matters:** SPR-014 would get two requirements that contradict each other. Whichever it obeys, it fails R1's acceptance criterion or this text.
+- **Fix (text, in this PR):**
+  - The key field is carried by `Command::person` and is not duplicated in `args`. The smoke payloads stay `{ row: i64 }` plus the key, or `key_field` may name `Command::person` directly. Strike the X4 comment's "adds the person to args".
+  - A timer's `cause` is encoded only when present, so a timer without a cause is byte-identical to v1: for example a trailing field that is written only when `Some`, decoded by row length, and the hash golden stays v1.
+  - Or the Architect accepts a `[C3]` regeneration in SPR-014 for these two format changes, and R1's "a difference is a defect" is amended to exclude them.
+  - Name the timer `cause` slot in SPR-014's row in PRJ-002 (`:35`), which lists only the command payload rewrite.
+- **Confidence:** 9/10 for the `args` comment (measured); 8/10 for the timer slot (a hash-neutral encoding exists, but the text does not ask for one).
+
+#### MIN-13. The substrate rule depends on the role label, not on which systems a world registers
+
+- **Where:**
+  - `lint_odd.py:29-30`, `:477-480`: "a substrate (`role = "substrate"`, a system that must run alone: M2 on `solo`) may read as identity only another substrate's column".
+  - EVO `:53`, `:117`.
+- **Evidence:**
+  - `role` is the ODD "higher-level purpose" ("substrate for other systems | drama coupling | stylized-fact producer", `docs/templates/system_spec_odd_r.md:14`). It does not mean "runs alone".
+  - The S5 draft is a substrate. The rule tells it to read `person.residence` (S3) and `person.occupation` (M4) "as rate or mode with a neutral". That is MAJ-3's impossible state (one neutral residence for everyone). It becomes an error when S5 is frozen.
+  - It also fails its stated purpose. On a trial merge with `main` (`e9e0fe3`), `M1.regions` and `S3.migration` are both `role = "substrate"`. S3 requires M1 and M2, so a substrate already cannot run alone. Planting an identity read of `region.land_cells` (M1) in frozen M2 gives `PASS` (NOTE: "M2.demography requires M1.regions"). Yet `solo` and `hamlet` register M2 without M1.
+  - The rule happens to hold today only because M2 reads nothing foreign.
+- **Fix:** Check what the rule is for. For each `specs/manifest/examples/*.yaml`, every identity-read owner of every registered system must be registered. Drop the role condition, or keep it as a warning.
+- **Confidence:** 8/10.
+
+#### MIN-14. M7's murder re-sample leaves out the input's own day
+
+- **Where:** M7 `:563`: "the day is re-drawn among the month's remaining day starts after the input's instant … (no remaining day start: the timer is dropped and counted, `dropped{M7, MURDER_DUE, resampled_out}`)".
+- **Evidence:**
+  - A timer due at `(k, Vital)` is still pending at `(k, Inputs)`, and the engine accepts a re-draw at `(k, Vital)`: it refuses only `<= (t, Inputs)` (`engine.rs:970`).
+  - "After the input's instant" leaves day k out. An input on the ruler on the murder day therefore always postpones the murder. On the month's last day it always cancels it.
+  - The hit itself is kept (unlike M2's S11, which re-draws the hit with q′). Given a hit placed uniformly over days 2 to the last, the exact conditional re-draw is uniform over the day starts at or after `t_in`, which is never empty while the timer is pending.
+  - `resampled_out` is outside `05.1:69`'s reasons, and `Engine::resample` counts nothing on `None`.
+  - "Keyed as exit_day" contradicts "under `exit_murder`" (`ResampleCtx.purpose` is the timer's purpose).
+- **Fix:** Re-draw among the month's day starts **at or after** `t_in`, under `exit_murder`, with k as `exit_day` uses it. Then the drop and `resampled_out` disappear. Say that keeping the hit (unlike M2's S11) is deliberate.
+- **Confidence:** 8/10.
+
+#### MIN-15. The `sprint` escape never ends for a sprint without a document
+
+- **Where:** `lint_odd.py:222-229` (`closed_sprints` reads `CODEX/05_PROJECT/SPR-*.md`) and `:262-270`.
+- **Evidence:**
+  - Probe P1: frozen M7 `PressClaim` with `drained_by = "Hour/Inputs"` and `sprint = "SPR-999"`: `PASS`, one ESCAPE warning.
+  - P2 (`SPR-010`, which is CLOSED) fails correctly.
+  - The real escape names SPR-014, which has no document in `CODEX/05_PROJECT/` yet.
+- **Fix:** A `sprint` must name an existing sprint document, or a PRJ-002 row until the document exists. Otherwise it is an error on a frozen spec.
+- **Confidence:** 8/10.
+
+#### Nits
+
+- **NIT-12. Stale text** (it contradicts R9, R11 and R12):
+  - EVO-001:
+    - `:23` "`required` and `neutral` on `[[reads]]`", "non-required reads";
+    - `:73` B1 "`required` per read … `required` on 43 reads";
+    - `:75` "13 typed entries" (there are 15);
+    - `:83` fact (1) "T1 sends at `Agenda` d", and "D39 records the choice for the director", although D39 is withdrawn (`:25`, `:139`);
+    - `:100` MAJ-5 row "**Open:** the Architect's ruling on (b)";
+    - `:105` the old counter names;
+    - `:126` V-INV-04 "a required read … a non-required read";
+    - `:131` "a foreign read that lacks `required`".
+  - PRJ-002 `:161-162` ("`required`"; T1 "undated `Marry` and `ScheduleDeath`").
+  - T1 `:984` "M7 reads person.named … only as identity".
+  - M7 `:803` (S7 "in": "drops the read and the neutral applies"; the read is gone, and as an identity read it would be refused).
+  - `real_specs.rs:778` "R6 (b)".
+  - **Forward note:** under R12, M7's P1b dormancy reads of `vow.*` as identity would make every M7 world require S7, and S7 requires S6 and T1. M7's own `[isolation]` run (T1 stubbed) would then be impossible. Decide in P1b whether to read them as mode reads.
+- **NIT-13. Main has moved** (`e9e0fe3`, PR #52, SPR-018).
+  - `git merge-tree` reports conflicts in `PRJ-002`, `check_all.sh`, `tests/lint_fixtures/README.md` and the two `odd_applies` M3 fixtures.
+  - Main moved the fixtures off `M1.regions`, but 12 of this PR's fixtures (`odd_applies/{bad_type,dup_command,outcome_untimed,unbound_drain}`, all 8 `odd_neutral/*`) are `M1.regions.odd.toml`. On the merged tree each is refused with "system M1.regions already has a spec", so their gates fail for the wrong reason.
+  - After the merge, `lint_odd.py` passes on the real specs (8 specs, M1 and S3 are drafts).
+- **NIT-14. Lint gaps outside R9's wording:**
+  - A sender of an outcome command with no binding in the drain's phase passes (P3: M7 without `Day/Vital`; P8: T1 without it). The engine would raise `SimError::Timer` at the first fire. SPR-014 could check at registration.
+  - `05.1:71` says a mode read's neutral is "named by the read's in-coupling prose", but the lint checks this only for rate reads, and M7's `person.named` has no in-coupling with that column.
+  - `outcome = false` with senders still naming `timer` passes silently (P15).
+- **NIT-15. M7 does not keep its `MURDER_DUE` id.**
+  - `exit_timer` stores only the deposition timer (`:694`), so `on_death` cannot cancel a pending murder when the ruler dies or loses the title earlier in the month.
+  - The fire then submits for a dead ruler, which `rh-core` drops (`dead_key`, counted under M2), or it kills an ex-ruler, which V-SF-06 would count as a ruler murder.
+  - `05.1:69` says a timer firing for someone dead is dropped with `drop_timer`, but neither M7 nor T1 says it checks before submitting.
+  - The frozen 0.3.1 text could not cancel either, so nothing is lost. Under (b), though, M7 owns the timer and can.
+
+### 3. The R9 trace
+
+**Order.**
+- `05.1` §4.2: Inputs, …, Vital, Activity, Contagion, Polity, Military, Agenda, Culture, Bookkeeping.
+- `Vital` = [M2, M7, T1] (`real_specs.rs:780`). M7 and T1 are at level 1 after M2 (`same_instant` reads), with M7 before T1 by id.
+- The timer pass runs before the binding pass: each owner once, at the level of its first binding in the phase (`engine.rs:844-860`).
+- Commands submitted in the timer pass merge at the end of their level, so the binding pass's level 0 (M2's `Day/Vital` drain) sees them.
+
+**T1, foreground murder (`DEATH_DUE`).**
+
+| When | What |
+|---|---|
+| (d, `Agenda`), T1 `Day/Agenda` | `attack_outcome` or `break_outcome` hits; T1 emits `MURDER_ATTEMPT` (a `DraftRef`) and schedules `DEATH_DUE` at (d+1 start, `Vital`): entity = victim, payload = actor, cause = the draft. It is strictly after (d, `Agenda`), so it is accepted. The level merge assigns the event's id, then the timer's `seq`, and rewrites the cause (events before timers, `05.1:87`) |
+| (d+1, `Inputs`) | An input scoping the victim: `pending_for(victim)` finds the timer; `T1::resample_timer` returns its own tick; the engine checks `(d+1, Vital) > (d+1, Inputs)` and re-inserts it, payload and cause kept |
+| (d+1, `Vital`) timer pass | Level 0: M2's own timers (a natural death of the victim would land here). Level 1: M7's fires, then T1's: submit `ScheduleDeath {victim, murder, actor, cause_event}`, keyed `(d+1, Vital, victim, seq)` |
+| (d+1, `Vital`) binding pass | Level 0: M2 `Day/Vital` takes the inbox. `rh-core` drops the command if the victim is already dead (`dead_key`); otherwise `apply_death`, and `DEATH` at (d+1, `Vital`). Level 1: M7 (empty), T1 grief |
+| (d+1, `Polity`) | M7 `on_death` arbitrates |
+
+**M7, background murder (`MURDER_DUE`).**
+
+| When | What |
+|---|---|
+| (day 1, `Polity`), M7 `Month/Polity` | `exit_murder` hits; `exit_day` gives k ∈ [2, last]; `murder_culprit` draws the culprit. M7 schedules `MURDER_DUE` at (k, `Vital`): entity = ruler, payload = culprit. It merges at the level's end |
+| (k, `Inputs`) | An input scoping the ruler: `M7::resample_timer` re-draws the day (MIN-14) |
+| (k, `Vital`) timer pass | Level 1: M7's fire submits `ScheduleDeath {ruler, murder, culprit, None}` |
+| (k, `Vital`) binding pass | Level 0: M2 drains and applies; `DEATH` at (k, `Vital`). This is the drawn day, as in the frozen text |
+| (k, `Polity`) | `on_death` arbitrates, the same instant (V-SAGA-19) |
+
+**Answers.**
+- **Day lost?** No. Both deaths apply in the same `Vital` slot as in the frozen 0.3.1 timing. M7's `Day/Vital` binding exists only so that its timer pass has a level. Its step is empty, and the spec now says the fire must not be done in it (`:542`), which settles NIT-5.
+- **Applied before the sampled instant?** Never. T1 applies at d+1 > (d, `Agenda`); M7 at k ≥ 2 > (1, `Polity`). A re-draw is refused if it falls at or before (t, `Inputs`).
+- **A timer from the instant it was sampled (DET-13)?** Yes for both. The timer is inserted by the step that drew the outcome and enters the agenda at that level's merge. No `Inputs` phase falls between the draw and the agenda. V-DET-21's "never queued across an `Inputs` phase" holds, because the command exists only between a `Vital` timer pass and the same `Vital`'s drain.
+- **Does a victim-scoped input reach it (ADR-0025 item 3)?** Yes. Both timers' entity is the victim (T1) or the ruler (M7). `MARRY_DUE`'s entity is `a`, so an input that scopes only `b` does not reach it. That is harmless: the re-sample is the timer's own tick, and M2's drain drops a `Marry` with a dead `b`.
+- **T1's own-tick re-sample.**
+  - It is a re-draw from a distribution with a single value, not a way round ADR-0025. The date is a fixed one-day delay, so nothing about it was drawn.
+  - The draw (success) was made at d and is already in the log as `MURDER_ATTEMPT`. Under ADR-0025 item 4 (the earlier tick wins), the d decision takes precedence over a d+1 input.
+  - This is not the case round 2 objected to. Shape (a) froze a *hazard-drawn* date (M7's murder) so that no input could re-draw it. Under (b), M7's drawn date is re-drawn by M7 (R10).
+  - The rule should be written down, so that "own tick" cannot be used later for a drawn date. Add one sentence to `05.1:68`: *a timer whose time is not drawn (a fixed delay after a logged decision) re-samples to its own tick; a drawn time is re-drawn.*
+- **Within-instant order (EVO `:85`).** It is correct as written:
+  - A natural death in M2's timer pass comes before any commanded death.
+  - For an M7 and a T1 murder of one victim on one day, the keys are equal up to `seq`, so M7's (merged first) is applied and T1's is dropped by M2 as "killed earlier in the same drain".
+
+**Recommendation: accept R9 as built, confidence 8/10**, with:
+- MAJ-7's encoding sentences, so that SPR-014 can keep the smoke ladder unchanged;
+- MIN-14's "at or after `t_in`";
+- the one-sentence own-tick rule above.
+
+The 2/10 against is cost: a binding M7 needs only so that its timer pass has a level, two T1 timer kinds, and a timer `cause` slot in plane-A state, where shape (a) put the same information in an M2 pending table. None of these changes timing or a requirement.
+
+### 4. Lint probes
+
+Probes were planted in copies of `specs/systems` and run with `--specs` (scripts `$R/probes/run_probes*.py`). The M2 → M1 probe ran on the trial-merged tree.
+
+| Probe | Planted | Result | Expected |
+|---|---|---|---|
+| P1 | `sprint = "SPR-999"`, undeclared `drained_by` (frozen M7) | PASS, ESCAPE warning | FAIL (MIN-15) |
+| P2 | `sprint = "SPR-010"` (CLOSED) | FAIL | FAIL |
+| P3, P8 | M7 or T1 without a `Day/Vital` binding | PASS | gap (NIT-14) |
+| P4 | T1 `DEATH_DUE` under an undeclared purpose | FAIL | FAIL |
+| P5 | `key_field = "cause"` (not a `PersonId`) | FAIL | FAIL |
+| P6 | `key_field` missing (frozen) | FAIL | FAIL |
+| P7b | `outcome = "yes"` | FAIL | FAIL |
+| P9 | identity read with a `neutral` | FAIL | FAIL |
+| P10 | frozen M2 identity-reads T1 | FAIL (substrate rule) | FAIL |
+| M2 → M1 (merged tree) | frozen M2 identity-reads M1 (a "substrate") | PASS | FAIL (MIN-13) |
+| P11, P13 | lower-case or missing `timer` | FAIL | FAIL |
+| P12 | `outcome = true` on `PressClaim` | FAIL (T1 lacks timer and purpose) | FAIL |
+| P14 | enum neutral outside the codes | FAIL | FAIL |
+| P15 | `outcome = false` on `ScheduleDeath` | PASS | not checkable (NIT-14) |
+| N1 | `neutral = 0.00001` in q8_8 | FAIL (not representable) | FAIL |
+| N2 | `cause_event: u64` | FAIL | FAIL |
+| N3 | repeated payload field | FAIL | FAIL |
+| N4 | `key` missing (frozen) | FAIL | FAIL |
+
+### 5. Checks run (in `$R/src`)
+
+**Smoke ladder**
+- `cargo build --release --locked -p rh-cli` with `CARGO_TARGET_DIR=$R/target`, toolchain 1.97.0: built in 1 m 40 s.
+- `rh-cli run smoke --years 1000 --ladder yearly`: last rung state hash `bef936ec026341a0`.
+- `bin/check_baseline.py`: `BASELINE OK`. `cmp`: byte-identical to `worlds/smoke/baselines/smoke_yearly_1000y.ladder`.
+
+**Lints and skeletons**
+- `python3 -I specs/systems/lint_odd.py`: `PASS: 6 system specs linted (16 warnings)`, 5 NOTE lines; M2 has none.
+- The smoke overlay lint: `PASS: 7 (0 warnings)`.
+- `bin/gen_skeletons.py --check`: rh-core 6 up to date; smoke 7 up to date.
+- The stale control fails on `M2_demography.rs` only.
+- The 25 `check_all.sh` gates from "System specs (lint_odd)" to the smoke stale control (`check_all.sh:761-785`), run with check_all's own `run`: all PASS.
+
+**Python** (with `python/.venv`)
+- `pytest python/tests/test_check_all_inventory.py`: 12 passed.
+- `ruff`: all checks passed. `mypy`: no issues in 40 files.
+
+**Rust**
+- `cargo nextest run -p rh-core -p rh-registry -p rh-sys-smoke --locked`: 144 passed.
+
+**Experiments** (MAJ-7; `$R/exp`, `CARGO_TARGET_DIR=$R/target_exp`): both `BASELINE MISMATCH`, as described in MAJ-7.
+
+**Trial merge** with `origin/main` `e9e0fe3` (`git merge-tree`, objects only; tree `926c4eb`, extracted to `$R/merged`): 5 conflicts. The lint passes on the real specs; the M1-based fixtures collide (NIT-13).
+
+### 6. Not run
+
+- `bin/check_all.sh` (either part), clippy, cargo-deny, the full workspace `nextest`, doctests, the nightly tiers, the perf and allocation gates.
+- The smoke run at `--threads 4` / `--require-parallel 5`, and `rh-golden`.
+- SPR-014's behaviour (drain, drop, re-sample counters). Nothing is built yet, so R9 was checked by tracing the engine and the specs.
+- PR #50 (births) against R9.
