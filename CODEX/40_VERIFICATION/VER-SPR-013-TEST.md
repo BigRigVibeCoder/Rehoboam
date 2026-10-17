@@ -16,7 +16,7 @@ version: 1.0.0
 
 Tested heads (both on `sprint/SPR-013-stream`, PR #64):
 - `0c33aa851831d4781cad54246b1b0f6e42d2380d` (T-09 to T-12, A-51 to A-53), the head the Architect sent first.
-- `a64bc59a64190c41c8395e14100b5ab2217e5f6b` (adds T-13 rungs 1 and 2, the `household` and `hamlet` baselines, per-rung allocations, `--expect-serial`; includes a merge of `main` at `92cefab`), the branch tip when I started T-13. The Architect had not yet named a T-13 head: if the intended head differs, T-13 results here need a re-run on it.
+- `a64bc59a64190c41c8395e14100b5ab2217e5f6b` (adds T-13 rungs 1 and 2, the `household` and `hamlet` baselines, per-rung allocations, `--expect-serial`; includes a merge of `main` at `92cefab`), the branch tip when I started T-13. The Architect has since named `a64bc59` as the final head (it adds only merged `main` content to `eccdb77`), so every T-13 result here is on the final head.
 
 Method: every probe ran on a `git archive` copy or a clean clone of the SHA (with `origin/main` set to the merge base for the baseline-integrity gate), each with its own absolute `CARGO_TARGET_DIR`. The Developer's tree was never touched. The probe plan was written from `SPR-013`, `SPR-011` rulings 11 to 19, `05.1` §6 and §9, `05.10` §4 to §8, `05.9` IF-0 to IF-2, `channel_a_v0.sql`, `channel_c_v0.sql`, `canonical_v0.md` and the `docs/09` tests before I read any implementation. My oracles use DuckDB, the standard library, and the repository's independent references (`canonical_v0.py`, `gen_hash_golden.py`, `gen_rng_golden.py`, `gen_m2_draws_reference.py`), never the Rust code under test as its own oracle. GitHub Actions had no runner, so nothing here is a CI result.
 
@@ -120,6 +120,17 @@ Runs: `solo` (1 person), `household` (5), `hamlet` (60) and the 10,000-founder f
 | A-52 | `rh-cli` built with `mutant-resample-day-k0`: `build-info`, `run solo`, `run smoke`, `run hamlet`, `replay`, `sift`, `tail` | `build-info` prints `mutants: mutant-resample-day-k0` (rc 1); `run` and `replay` stop with `MUTANT BUILD` (rc 2) and write nothing; `sift` and `tail` still work (they run no engine). `regen_baseline.sh` builds its own binary and then checks `build-info` |
 | A-53 | `draws_golden` now has 530 re-samples in 7 worlds; I planted a one-day error in q′ (`interval_q(.., end - 1440)`); whitespace-only `pass:`/`fail:` text; the stale feature name; the `spec-loader` exemption | the one-day mutant **fails** (`w7: death 3 differs`); the harness controls for blank text exist and pass; the feature names are current; the exemption rule retired with A-51 |
 
+### 2.7 The Architect's six T-13 points, and CI (`a64bc59`)
+
+1. **Baselines:** `check_baseline` passes in `check_all`; the `household` and `hamlet` ladders equal my own 200-year recomputation at 1 and 4 threads and from debug and `native` builds; `smoke` and `solo` are unchanged. `0c33aa8` is still an ancestor of `a64bc59` and unchanged.
+2. **`--expect-serial`:** passes on `household` and `hamlet` (1,000 years, 1 to 8 threads); the `smoke` run is refused with its message.
+3. **V-PERF-11:** `perf_gate.py alloc-record` on a clean clone of `a64bc59` wrote `allocations_v1.txt` **byte-identical** to the committed file (smoke 819,401 allocations and 281 at most per tick at 1 thread, and the three `rung` lines); `alloc-gate` passes in `check_all`.
+4. **Input scripts:** an independent model fed only the births and the journal shows the input on Oswin (`household`, tick 2,377,807) and on Job (`hamlet`, tick 17,772,847) each landing on a pending death (`pending`, re-sample misses), and the engine's death instants equal the model's (§2.4).
+5. **V-SCALE-04 / `rungs`:** consistent past extinction at 1,000 years (§2.5), and the `rungs` mutants are killed (§4).
+6. **Nightly entries by hand:** V-DET-01/02 (12 runs per world, 1,000 years), V-SCALE-01/04 (replay at 4 threads, one EXTINCTION, sift, twin, `check_segments`), V-INV-02 (debug 1,000-year soak): all pass. The script itself I did not run.
+
+CI (run 39025299299 on `a64bc59`, PR #64): success. `--part core` 12 min 04 s inside `bin/check_all.sh` (job 12 min 41 s); `--part golden` 9 min 18 s (job 10 min 22 s); wall 13.2 min for the run. The earlier run on `eccdb77` (39025105444) was cancelled after 2.5 minutes by the newer push.
+
 ## 3. Defects and gaps
 
 ### DEF-1 (low): `replay --from-keyframe` at the run's last keyframe reports a false failure
@@ -209,4 +220,3 @@ Of the 40 Rust-code mutants (c, w, s, t, x, r), 24 are killed by the Rust tests,
 - **Genesis roots of the `household` and `hamlet` baselines from an independent reference (GAP-6).**
 - **The 10,000-founder fixture at 1,000 years, or any world above 60 persons for a long run.**
 - **A killed `sift`:** I killed `run`, not `sift` (its sealing code is shared and the sifter is re-runnable).
-- **Re-running T-13 on the head the Architect names,** if it differs from `a64bc59`.
