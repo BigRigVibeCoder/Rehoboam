@@ -59,12 +59,14 @@ python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the indep
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
 python -I specs/chronicle/selftest.py
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
+python -I specs/numerics/exp_ln_v0.py --check   # fixed-point exp and ln v0 (Q32_32): constants, convergence, faithful rounding, golden vectors (05.1 §6 item 4 v1.10; SPR-016); --exhaustive nightly
 python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference distributions are current (SPR-003)
 cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sampler golden vectors at opt-level 3 (SPR-003 T-05)
 cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)
 python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
 python -I specs/worldgen/selftest_worldgen_lite.py   # worldgen-lite v0 and S3 F0 residence: the exact reference of M1's [algorithm.worldgen_lite] and S3's [algorithm.residence_f0], golden outputs in specs/worldgen/golden/ (SPR-018)
+python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of specs/demography/mortality_f1.toml [algorithm.mortality_f1] (SPR-016); --control beta-one-power, --control infant-discontinuous and --control newborn-uncovered must FAIL (each isolates one check)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
