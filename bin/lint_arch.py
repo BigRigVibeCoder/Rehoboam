@@ -61,6 +61,16 @@ workspace crates, of every dependency kind (normal, build and dev):
                      a config from the crawl. CLIPPY_CONF_DIR, which points clippy at another
                      configuration, must not be set.
 
+    unsafe-allow     GOV-003 §2's reviewed unsafe allow-list is UNSAFE_ALLOW_LIST (SPR-009 T-05). A
+                     crate not on it keeps #![forbid(unsafe_code)]; a listed crate relaxes it to
+                     deny only, with its other lint tables equal to the workspace's, and holds
+                     `unsafe` or `allow(unsafe_code` only in its listed files.
+    global-allocator The only #[global_allocator] is in ALLOCATOR_CRATE's bench targets (V-PERF-11;
+                     SPR-009 ruling 5): the counting allocator never reaches a shipped binary.
+    count-alloc      ALLOCATOR_FEATURES (count-alloc, arena-alloc) are enabled by no dependency
+                     edge, are not default features, and are required by no target of
+                     ALLOCATOR_CRATE but a bench.
+
 Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
 Usage:  python -I bin/lint_arch.py [--manifest-path Cargo.toml]
@@ -254,6 +264,24 @@ SKIPPED_ROOT_DIRS = frozenset({"target", ".git"})
 
 # The [lints] declaration of a crate that takes the workspace's lints and nothing else (rule lints).
 INHERITED_LINTS = ("workspace",)
+
+# REF: GOV-003 §2 ("#![forbid(unsafe_code)], except crates on a reviewed allow-list"); SPR-009
+# T-05, Architect ruling 2026-10-16. THE reviewed unsafe allow-list: crate -> the files, relative
+# to the crate, that may hold `unsafe` and `allow(unsafe_code`. A listed crate declares its own
+# [lints] equal to the workspace's but for `unsafe_code = "deny"`. Adding an entry is a review.
+UNSAFE_ALLOW_LIST = MappingProxyType({"rh-bench": ("src/alloc_count.rs",)})
+UNSAFE_RELAXED = "deny"
+# V-PERF-11's counting allocator (SPR-009 ruling 5): compiled only behind this feature of this
+# crate, which only that crate's bench targets enable, and the only #[global_allocator] in the
+# workspace, declared in a bench target. So it can never reach a shipped binary.
+ALLOCATOR_CRATE = "rh-bench"
+ALLOCATOR_FEATURES = ("arena-alloc", "count-alloc")
+ALLOCATOR_TARGET_DIR = "benches"
+# Anywhere inside an attribute: `#[global_allocator]` and `#[cfg_attr(cond, global_allocator)]`
+# alike (VER-SPR-009-TEST GAP-6).
+GLOBAL_ALLOCATOR = re.compile(r"#\s*!?\s*\[[^\]]*\bglobal_allocator\b")
+ALLOW_UNSAFE = re.compile(r"\ballow\s*\(\s*unsafe_code\b")
+UNSAFE_TOKEN = re.compile(r"\bunsafe\b")
 
 EXIT_OK = 0
 EXIT_VIOLATIONS = 1
@@ -665,6 +693,173 @@ def check_edge(source: Crate, edge: Edge, target: Crate) -> list[Violation]:
     return found
 
 
+def _manifest(crate: Crate) -> dict[str, object]:
+    """The crate's Cargo.toml as TOML."""
+    if crate.directory is None:
+        return {}
+    path = crate.directory / "Cargo.toml"
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
+        raise WorkspaceError(f"cannot read {path}: {err}") from err
+
+
+def workspace_lints(root: Path) -> dict[str, object]:
+    """The root manifest's [workspace.lints] tables."""
+    try:
+        document = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
+        raise WorkspaceError(f"cannot read {root / 'Cargo.toml'}: {err}") from err
+    workspace = document.get("workspace", {})
+    lints = workspace.get("lints", {}) if isinstance(workspace, dict) else {}
+    return dict(lints) if isinstance(lints, dict) else {}
+
+
+def check_unsafe_lints(crate: Crate, inherited: dict[str, object]) -> list[Violation]:
+    """GOV-003 §2: only an allow-listed crate relaxes unsafe_code, and only to deny.
+
+    A listed crate's own lint tables must equal the workspace's but for that one key, so its
+    other denies cannot drift away (SPR-009 T-05).
+    """
+    if crate.lints == INHERITED_LINTS:
+        return []
+    own = _manifest(crate).get("lints", {})
+    own = own if isinstance(own, dict) else {}
+    rust = own.get("rust", {})
+    level = rust.get("unsafe_code") if isinstance(rust, dict) else None
+    if level == "forbid":
+        return []
+    if crate.name not in UNSAFE_ALLOW_LIST:
+        return [
+            Violation(
+                "unsafe-allow",
+                crate.name,
+                f"declares unsafe_code = {level!r}, but only crates on UNSAFE_ALLOW_LIST may relax "
+                "#![forbid(unsafe_code)] (GOV-003 §2)",
+            )
+        ]
+    expected = {k: dict(v) if isinstance(v, dict) else v for k, v in inherited.items()}
+    rust_expected = expected.setdefault("rust", {})
+    if isinstance(rust_expected, dict):
+        rust_expected["unsafe_code"] = UNSAFE_RELAXED
+    if own != expected:
+        return [
+            Violation(
+                "unsafe-allow",
+                crate.name,
+                "its own [lints] must equal [workspace.lints] with only unsafe_code = "
+                f'"{UNSAFE_RELAXED}" (GOV-003 §2; SPR-009 T-05)',
+            )
+        ]
+    return []
+
+
+def _sources(crate: Crate) -> list[Path]:
+    """Every .rs file of the crate, outside the crate's own top-level `target/` directory.
+
+    Only the first component below the crate's directory is tested, as lint_forbidden does: a
+    checkout under a directory named `target` is scanned (SPR-009 review 4), and so is a source
+    directory named `target` inside the crate, such as `src/target/` (VER-SPR-009-TEST GAP-21).
+    """
+    directory = crate.directory
+    if directory is None:
+        return []
+    return sorted(
+        p for p in directory.rglob("*.rs") if p.relative_to(directory).parts[0] != "target"
+    )
+
+
+def check_allocator_sources(crate: Crate) -> list[Violation]:
+    """No #[global_allocator] but in the allocator crate's benches; unsafe only in listed files.
+
+    The unsafe part applies to listed crates; others keep #![forbid(unsafe_code)] (SPR-009 T-05).
+    """
+    if crate.directory is None:
+        return []
+    allowed = {crate.directory / f for f in UNSAFE_ALLOW_LIST.get(crate.name, ())}
+    found = []
+    for path in _sources(crate):
+        # Comment lines (doc comments included) name things; they declare nothing.
+        text = "\n".join(
+            line
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if not line.lstrip().startswith("//")
+        )
+        rel = path.relative_to(crate.directory).as_posix()
+        in_bench = crate.name == ALLOCATOR_CRATE and rel.startswith(f"{ALLOCATOR_TARGET_DIR}/")
+        if GLOBAL_ALLOCATOR.search(text) and not in_bench:
+            found.append(
+                Violation(
+                    "global-allocator",
+                    crate.name,
+                    f"{rel} declares a #[global_allocator]; only {ALLOCATOR_CRATE}'s bench "
+                    "targets may (V-PERF-11; SPR-009 ruling 5)",
+                )
+            )
+        listed = crate.name in UNSAFE_ALLOW_LIST
+        if (
+            listed
+            and path not in allowed
+            and (ALLOW_UNSAFE.search(text) or UNSAFE_TOKEN.search(text))
+        ):
+            found.append(
+                Violation(
+                    "unsafe-allow",
+                    crate.name,
+                    f"{rel} holds unsafe code; the allow-list admits only "
+                    f"{', '.join(UNSAFE_ALLOW_LIST[crate.name])} (GOV-003 §2)",
+                )
+            )
+    return found
+
+
+def check_allocator_feature(crate: Crate) -> list[Violation]:
+    """The counting allocator's feature is enabled by the allocator crate's bench targets only."""
+    found = [
+        Violation(
+            "count-alloc",
+            crate.name,
+            f"enables {ALLOCATOR_CRATE}/{feature} on its {e.kind} dependency; only "
+            f"{ALLOCATOR_CRATE}'s bench targets may (V-PERF-11; SPR-009 ruling 5)",
+        )
+        for e in crate.edges
+        for feature in ALLOCATOR_FEATURES
+        if e.target == ALLOCATOR_CRATE and feature in e.features
+    ]
+    if crate.name != ALLOCATOR_CRATE:
+        return found
+    manifest = _manifest(crate)
+    features = manifest.get("features", {})
+    defaults = features.get("default", []) if isinstance(features, dict) else []
+    for feature in ALLOCATOR_FEATURES:
+        if isinstance(defaults, list) and feature in defaults:
+            found.append(Violation("count-alloc", crate.name, f"{feature} is a default feature"))
+    for table in ("bin", "lib", "test", "example"):
+        targets = manifest.get(table, [])
+        for target in targets if isinstance(targets, list) else [targets]:
+            required = target.get("required-features", []) if isinstance(target, dict) else []
+            for feature in set(ALLOCATOR_FEATURES) & set(required):
+                found.append(
+                    Violation(
+                        "count-alloc",
+                        crate.name,
+                        f"a [{table}] target requires {feature}; only bench targets may",
+                    )
+                )
+    return found
+
+
+def check_allocator(crates: Sequence[Crate], root: Path) -> list[Violation]:
+    """The unsafe allow-list and the counting allocator's containment (SPR-009 T-05)."""
+    inherited = workspace_lints(root)
+    found = []
+    for crate in crates:
+        found += check_unsafe_lints(crate, inherited)
+        found += check_allocator_sources(crate)
+        found += check_allocator_feature(crate)
+    return found
+
+
 def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     """Check every crate's metadata and every workspace edge.
 
@@ -823,7 +1018,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
         return EXIT_UNREADABLE
     root = args.manifest_path.absolute().parent
-    violations = check_workspace(crates) + check_clippy_configs(root, crates)
+    try:
+        allocator = check_allocator(crates, root)
+    except WorkspaceError as err:
+        print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
+        return EXIT_UNREADABLE
+    violations = check_workspace(crates) + check_clippy_configs(root, crates) + allocator
     print(f"lint_arch: {args.manifest_path}")
     for crate in crates:
         print(describe(crate))

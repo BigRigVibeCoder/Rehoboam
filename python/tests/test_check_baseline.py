@@ -8,7 +8,6 @@ means; `test_the_environment_supplies_the_defaults` covers the variables on purp
 Refs: SPR-008 T-04, ruling 6; VER-SPR-008 MAJ-1; docs/13 §4.4.
 """
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -25,13 +24,6 @@ from check_baseline import (
 
 LADDER = "rehoboam-ladder v1\nworld smoke\nrung 1 9 0000-12 00000000000000aa 00000000000000bb\n"
 UNCHANGED = C3Rule(changed=False, marked=False, where="base")
-
-
-@pytest.fixture(autouse=True)
-def _isolated_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear every RH_* variable and GITHUB_ACTIONS: CI's gate settings must not leak in."""
-    for name in [n for n in os.environ if n.startswith("RH_")] + ["GITHUB_ACTIONS"]:
-        monkeypatch.delenv(name, raising=False)
 
 
 def write(path: Path, text: str) -> Path:

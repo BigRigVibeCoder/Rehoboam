@@ -214,6 +214,15 @@ pub enum SimError {
         /// The panic message.
         message: String,
     },
+    /// The host's observer panicked while receiving a notice (SPR-009 DEF-1). Caught like a step's
+    /// panic: fatal, it poisons the engine and leaves a crash artifact naming the observer and the
+    /// notice; it never unwinds to the host with columns out of the tables.
+    Observer {
+        /// The notice being delivered.
+        notice: String,
+        /// The panic message.
+        message: String,
+    },
     /// A system-specific failure.
     System {
         /// The system.
@@ -271,6 +280,9 @@ impl fmt::Display for SimError {
                 detail,
             } => write!(f, "invariant {name} of {system} violated: {detail}"),
             Self::Panic { system, message } => write!(f, "{system} panicked: {message}"),
+            Self::Observer { notice, message } => {
+                write!(f, "the host's observer panicked at {notice}: {message}")
+            }
             Self::Unsupported {
                 system,
                 column,

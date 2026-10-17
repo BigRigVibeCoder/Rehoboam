@@ -1,0 +1,13 @@
+# Positive-control fixture for bin/lint_arch.py (SPR-009 T-05; tests/lint_fixtures/README.md); not
+# in the Rehoboam workspace. A tool crate not on UNSAFE_ALLOW_LIST relaxes unsafe_code to
+# allow (rule unsafe-allow).
+[workspace]
+members = ["rh-tool"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"

@@ -1,0 +1,13 @@
+# Fixture for bin/lint_arch.py (SPR-009 R-7; tests/lint_fixtures/README.md); not in the Rehoboam
+# workspace. NEGATIVE control: a bench target requiring arena-alloc, with its
+# #[global_allocator] in benches/, passes.
+[workspace]
+members = ["rh-bench"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"

@@ -9,7 +9,7 @@ tags: [verification]
 related: [SPR-008, VER-SPR-008-TEST, VER-G0, BCK-002]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.0.0
+version: 1.0.1
 ---
 
 > **BLUF: PASS.** SPR-008 gives the engine its golden-run evidence:
@@ -73,7 +73,7 @@ Commit SHAs are as reported during the sprint. PR #28 merges with a merge commit
 
 | Residuals (Tester round 3) | Accepted, no action: `trap - EXIT; exit 0` (a deliberate edit no lint can stop; review catches it); `include_str!` under a renamed path and a `use include::X;` false positive (OBS-6, OBS-7); `check_baseline.py` accepting a baseline with an `inject` or `leak thread` header only when the recomputation is that same file, which CI never does (OBS-8). GAP-2's third part is A-39; GAP-5 is A-40 |
 
-**Escapes found later:** none so far.
+**Escapes found later:** 1. GAP-8's fix was incomplete: GitHub keeps one *pending* run per concurrency group, so a third quick push to `main` replaced the pending second one, and the `[C3]` push rule never checked the second push's range. Found by the Architect's review of SPR-009 (`VER-SPR-009` §4, review 3) and fixed there: a push gets its own group, its SHA.
 
 ## 5. Acceptance criteria
 | Task | Criterion | Met |

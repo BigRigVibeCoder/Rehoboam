@@ -11,6 +11,9 @@ checks both:
   verdict is PASS (exit 0). With `--or-true` the first gate fails and its line ends in `|| true`;
   with `--or-exit` it fails and its line ends in `|| exit 0`; with `--early-exit` a passing gate
   is followed by `exit 0` before the chain's end. Each must be FAIL (exit 1).
+  `--part-core` and `--part-golden` (SPR-009 review 2) plant a two-part chain whose golden gate
+  fails, and run it with `--part core` (PASS, 1 check: the golden part is skipped and says so) and
+  `--part golden` (FAIL at the golden gate): the verdict works per part.
 - `lint FILE [--plant-or-true | --plant-or-exit]`: refuses a `run` line of the chain that ends in
   `|| true`, `|| :` or `|| exit ...` (exit 1, naming the line). The plant flags append `|| true`
   or `|| exit 0` to the chain's first `run` line in memory, as the planted controls.
@@ -21,7 +24,8 @@ checks both:
   other outcome (a missing file, say) exits 1. `--plant-pwd-join` restores the old
   `$PWD/$GOLDEN` join in memory, which must then fail for the wrong reason.
 
-Usage: python -I bin/check_all_selftest.py verdict [--or-true | --or-exit | --early-exit]
+Usage: python -I bin/check_all_selftest.py verdict [--or-true | --or-exit | --early-exit |
+                                                    --part-core | --part-golden]
        python -I bin/check_all_selftest.py lint bin/check_all.sh [--plant-or-true | --plant-or-exit]
        python -I bin/check_all_selftest.py abs-target [--plant-pwd-join]
 """
@@ -42,18 +46,24 @@ C3_PRESENT = "regenerated in a [C3] PR"
 BASELINE = "worlds/smoke/baselines/smoke_yearly_1000y.ladder"
 OR_TRUE = re.compile(r"\|\|\s*(true|:|exit(\s+\$?\w+)?)\s*(&&)?\s*$")
 LATER = '\nrun "planted later gate" pass true'
+PARTS = (
+    'part core &&\nrun "planted core gate" pass true &&\n'
+    'part golden &&\nrun "planted failing golden gate" pass false'
+)
 PLANTED_CHAINS = {
     "": 'run "planted gate" pass true &&' + LATER,
     "--or-true": 'run "planted failing gate" pass false || true &&' + LATER,
     "--or-exit": 'run "planted failing gate" pass false || exit 0 &&' + LATER,
     "--early-exit": 'run "planted gate" pass true && exit 0' + LATER,
+    "--part-core": PARTS,
+    "--part-golden": PARTS,
 }
 PLANTS = {"--plant-or-true": " || true &&", "--plant-or-exit": " || exit 0 &&"}
 
 
 def chain(lines: list[str]) -> list[tuple[int, str]]:
-    """Return the chain's lines (1-based), from the first top-level `run` to `status=$?`."""
-    start = next(i for i, line in enumerate(lines) if line.startswith("run "))
+    """Return the chain's lines (1-based), from the first top-level `run` or `part` to the end."""
+    start = next(i for i, line in enumerate(lines) if line.startswith(("run ", "part ")))
     end = lines.index("status=$?")
     return [(i + 1, lines[i]) for i in range(start, end)]
 
@@ -83,7 +93,7 @@ def _cut(text: str) -> tuple[str, str]:
     """Return check_all.sh's `run()`, `finish()`, the trap's lines, and the chain's end."""
     lines = text.splitlines()
     trap = [line for line in lines if line in ('chain_done=""', "trap finish EXIT")]
-    head = _function(lines, "run") + _function(lines, "finish") + trap
+    head = _function(lines, "run") + _function(lines, "part") + _function(lines, "finish") + trap
     return "\n".join(head), "\n".join(lines[lines.index("status=$?") :])
 
 
@@ -101,6 +111,7 @@ def verdict(mode: str = "") -> int:
             [
                 "set -u",
                 f"REPORT='{report}'",
+                f"PART='{mode.removeprefix('--part-') if mode.startswith('--part-') else ''}'",
                 ': > "$REPORT"',
                 'n=0; failed=""',
                 run_fn,

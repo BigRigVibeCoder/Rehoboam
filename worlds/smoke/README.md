@@ -44,6 +44,7 @@ target/release/rh-cli ladder compare a.ladder worlds/smoke/baselines/smoke_yearl
 - `bin/check_baseline.py` compares the committed baseline with CI's recomputation. In every case the baseline must equal the recomputation byte for byte, so it can only be regenerated, never typed. On top of that, the **C3 rule** fails closed (VER-SPR-008 MAJ-1):
   - **pull request:** the base branch is required (no base: exit 2). If the baseline changed against it, the PR title must end with a tag group holding `[C3]`. `SPR-008: golden CI [C3]` passes; `docs: explain the [C3] rule` does not. A title edit re-runs the gate.
   - **push:** if the baseline changed in `before..after`, a commit subject in that range must end with `[C3]`. A push with no previous commit (a new branch) reports the rule "not checked: no base".
+  - **Never squash-merge a C3 PR** (VER-SPR-009-TEST GAP-17). The push rule needs `[C3]` at the end of a commit subject, and a squash merge replaces the PR's commits with one carrying GitHub's default subject, so the push run fails closed. Merge by merge commit or rebase; the same holds for `[perf-baseline]` PRs (`crates/rh-bench/README.md`).
   - **local run with no base:** reports "C3 rule not checked (no base ref)", never "unchanged".
 
   Controls in `bin/check_all.sh`: a hand-edited baseline fails; a regenerated one fails without the mark and passes with it (title and push forms); `[C3]` outside the trailing tag group fails; a pull request with no base fails closed.

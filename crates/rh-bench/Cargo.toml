@@ -1,0 +1,99 @@
+[package]
+name = "rh-bench"
+description = "Benchmark fixtures, the instruction-count benches and the allocation counter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+# A tool crate (SPR-009): it measures plane-A code and is never a dependency of it. Its bench
+# targets are the only place iai-callgrind enters the graph (SPR-009 ruling 2).
+[package.metadata.rehoboam]
+plane = "tool"
+kind = "tool"
+
+[lints.rust]
+# GOV-003 §2's reviewed allow-list (bin/lint_arch.py, UNSAFE_ALLOW_LIST; SPR-009 T-05, Architect
+# ruling 2026-10-16): deny instead of forbid, so src/alloc_count.rs alone may allow it. Every other
+# table here is the workspace's, copied exactly; lint_arch fails if one drifts.
+unsafe_code = "deny"
+missing_docs = "deny"
+
+[lints.clippy]
+# Pedantic is advisory locally; CI and bin/check_all.sh run clippy with -D warnings.
+pedantic = { level = "warn", priority = -1 }
+# GOV-003 §2: no unwrap/expect in library code; panic! only for violated invariants. Each exception
+# is an #[allow(..., reason = "INVARIANT: ...")], and every allow must carry a reason.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+allow_attributes_without_reason = "deny"
+# Second line of defence behind bin/lint_forbidden.py (V-DET-19); the lists live in clippy.toml.
+disallowed_types = "deny"
+disallowed_methods = "deny"
+# Backstop for floats that reach plane A without a float token, which bin/lint_forbidden.py cannot see
+# (SPR-010 GAP-3, Architect ruling 2026-10-16): arithmetic on a value a dependency returns as f64.
+# float_cmp covers ==/!= where clippy can judge it. No clippy lint covers float < and >. A crate that
+# genuinely needs floats (a tool crate, or a declared f32_field kernel) opts out at the use site with
+# #[allow(clippy::float_arithmetic, reason = "...")]. The one crate-wide opt-out is rh-sample, plane A's
+# float zone (SPR-003 Architect ruling, 2026-10-16), with a single crate-level allow in its lib.rs.
+float_arithmetic = "deny"
+float_cmp = "deny"
+
+[dependencies]
+rh-core = { version = "0.0.0", path = "../rh-core" }
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
+rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }
+# SPR-009 T-05: the smoke world (its systems, and its spec table through rh-golden's host code).
+rh-golden = { version = "0.0.0", path = "../rh-golden" }
+rh-sys-smoke = { version = "0.0.0", path = "../rh-sys-smoke" }
+
+# SPR-009 ruling 2: exactly pinned, a dev-dependency of the bench targets only. Its runner binary,
+# iai-callgrind-runner, must be the same version (RUN-001 §3; .github/workflows/ci.yml).
+[dev-dependencies]
+iai-callgrind = "=0.16.1"
+# SPR-009 T-02b, Architect ruling 2026-10-16: criterion for the wall-clock trends, exactly pinned,
+# default features off (no rayon, no plotters, no HTML reports), for the `wall` bench target only.
+criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
+
+[features]
+# V-PERF-11's counting allocator (SPR-009 T-05, ruling 5): src/alloc_count.rs. Only the bench target
+# that measures allocations requires it; bin/lint_arch.py (count-alloc, global-allocator) keeps it
+# there.
+count-alloc = []
+# V-PERF-04's deterministic arena (src/alloc_count.rs, Arena): the instruction-count targets run on it,
+# so their counts do not depend on where the repository is checked out. They require it.
+arena-alloc = []
+# V-PERF-04's positive control (SPR-009 T-02): bench 7's full state hash does about 15% more work.
+# Only bin/perf_gate.py's control turns it on; it never changes what a plane-A crate computes.
+slowdown-control = []
+
+# Bench 7 and bench 8 of docs/08 §9 at the PR tier's sizes (SPR-009 ruling 2). Bench 4
+# (raster_8x512) is a named, empty slot until P1a (ruling 1): a `slot` line in the baseline
+# (bin/perf_gate.py, SLOTS).
+[[bench]]
+name = "plane_hashes"
+harness = false
+required-features = ["arena-alloc"]
+
+[[bench]]
+name = "keyframe_write_read"
+harness = false
+required-features = ["arena-alloc"]
+
+# Wall-clock trends of benches 7 and 8 at docs/08 §9's sizes (100k and 1M rows; RH_WALL_ROWS
+# overrides), with criterion (SPR-009 T-02b). bin/wall_trend.py summarises its samples; they gate
+# only on adjutant, once T-04 has measured its spread.
+[[bench]]
+name = "wall"
+harness = false
+
+# V-PERF-11: heap allocations per steady-state tick, under the counting allocator (SPR-009 T-05).
+# The only target that enables count-alloc, and the only #[global_allocator] (bin/lint_arch.py).
+[[bench]]
+name = "alloc_budget"
+harness = false
+required-features = ["count-alloc"]

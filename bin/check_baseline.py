@@ -23,8 +23,8 @@ The C3 rule fails closed (VER-SPR-008 MAJ-1). By event (`--event`, default `$RH_
   "not checked: no base", said so. If the baseline changed in the range, at least one commit
   subject in it must carry `[C3]` in its trailing tag group: the commit `bin/regen_baseline.sh`
   asks for.
-- `local`: with `--base-ref`, as for a pull request; without one, the rule is reported "not
-  checked (no base ref)", never "unchanged".
+- `local` (and `workflow_dispatch`, a manual CI run): with `--base-ref`, as for a pull request;
+  without one, the rule is reported "not checked (no base ref)", never "unchanged".
 
 `--changed yes|no` overrides the change detection (with the title rule), for the planted controls.
 
@@ -195,7 +195,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--recomputed", type=Path, nargs="+", required=True)
     parser.add_argument(
         "--event",
-        choices=("pull_request", "push", "local"),
+        # workflow_dispatch: ci.yml passes the real event name; a manual run is a local one.
+        choices=("pull_request", "push", "local", "workflow_dispatch"),
         default=os.environ.get("RH_EVENT") or "local",
     )
     parser.add_argument("--base-ref", default=os.environ.get("RH_BASELINE_BASE", ""))

@@ -17,6 +17,7 @@ from lint_arch import (
     Crate,
     Edge,
     WorkspaceError,
+    check_allocator_sources,
     check_clippy_configs,
     check_workspace,
     crates_from_metadata,
@@ -728,3 +729,24 @@ def test_float_yielding_apis_name_reviewed_dependencies() -> None:
         for token in FLOAT_YIELDING_APIS[name]
     }
     assert {"Float64", "Float64Array", "Float32Type", "Float64Builder", "f16", "half"} <= arrow
+
+
+def test_a_checkout_under_a_target_directory_is_still_scanned(tmp_path: Path) -> None:
+    """Review 4: only a target/ below the crate is skipped, never one above the checkout."""
+    directory = tmp_path / "target" / "checkout" / "crates" / "rh-tool"
+    (directory / "src").mkdir(parents=True)
+    (directory / "src" / "lib.rs").write_text(
+        "#[global_allocator]\nstatic A: std::alloc::System = std::alloc::System;\n",
+        encoding="utf-8",
+    )
+    (directory / "target" / "debug").mkdir(parents=True)
+    (directory / "target" / "debug" / "built.rs").write_text("#[global_allocator]\n")
+    # GAP-21: a source directory named `target` inside src/ is code, and is scanned.
+    (directory / "src" / "target").mkdir()
+    (directory / "src" / "target" / "alloc.rs").write_text("#[global_allocator]\n")
+    tool = replace(crate("rh-tool", plane="tool", kind="tool"), directory=directory)
+    found = [(v.rule, v.crate, v.message.split(" ", 1)[0]) for v in check_allocator_sources(tool)]
+    assert found == [
+        ("global-allocator", "rh-tool", "src/lib.rs"),
+        ("global-allocator", "rh-tool", "src/target/alloc.rs"),
+    ]
