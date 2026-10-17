@@ -29,7 +29,10 @@ NEXTEST_TARGET = re.compile(r"--test (\S+)")
 
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
-    "Architecture: crate boundaries and planes (lint_arch; V-INSP-03, V-PLN-01)",
+    "Architecture: crate boundaries, planes and engine purity (lint_arch; V-INSP-03, V-PLN-01, "
+    "V-INSP-05)",
+    "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's "
+    "(gen_decimal_vectors --check; SPR-011 T-04)",
     "Baseline integrity control: a count 40 instructions off passes inside the band and is "
     "printed (SPR-009 R-8)",
     "Baseline integrity control: a local run says the tag and reason are not checked, never the "
@@ -267,6 +270,7 @@ REQUIRED_GATES = (
     "fp-contract guard positive control: a .cargo/config.toml with fp-contract must FAIL",
     "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must FAIL "
     "(SPR-007 GAP-2)",
+    "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)",
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",
@@ -275,6 +279,8 @@ REQUIRED_GATES = (
     "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)",
     "lint_arch control: a bench target requiring arena-alloc, with its allocator in benches/, "
     "passes (SPR-009 R-7)",
+    "lint_arch control: a deny-listed dev-dependency of an engine crate, and a viewer's normal "
+    "one, pass (V-INSP-05; SPR-011 T-00)",
     "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)",
     "lint_arch positive control: a #[global_allocator] behind cfg_attr must FAIL (SPR-009 GAP-6)",
     "lint_arch positive control: a #[global_allocator] outside rh-bench's benches must FAIL "
@@ -294,6 +300,10 @@ REQUIRED_GATES = (
     "lint_arch positive control: a third-party crate in rh-sample must FAIL (SPR-003 GAP-4)",
     "lint_arch positive control: an allow-listed crate whose lints drift from the workspace's "
     "must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: an engine crate depending directly on a deny-listed crate must "
+    "FAIL (V-INSP-05; SPR-011 T-00)",
+    "lint_arch positive control: an engine crate reaching a deny-listed crate transitively must "
+    "FAIL (V-INSP-05; SPR-011 T-00)",
     "lint_arch positive control: kind contract outside rh-contract-* must FAIL",
     "lint_arch positive control: libm not pinned exactly must FAIL (SPR-003 GAP-4)",
     "lint_arch positive control: libm outside rh-sample must FAIL",
@@ -323,6 +333,7 @@ REQUIRED_GATES = (
     "lint_forbidden control: a float in rh-sample passes (SPR-003 T-00)",
     "lint_forbidden control: a literal in-repository include! of a clean skeleton is followed and "
     "passes (SPR-008 T-00)",
+    "lint_forbidden control: std::env::consts, env! and option_env! pass (DEF-5)",
     "lint_forbidden float-api positive control: a private float alias in rh-sample must FAIL "
     "(SPR-003 GAP-11)",
     "lint_forbidden float-api positive control: an imported float alias in rh-sample must FAIL "
@@ -349,10 +360,18 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: a forbidden API in an included skeleton must FAIL (SPR-008 "
     "T-00)",
     "lint_forbidden positive control: a use that renames the include macro must FAIL (VER-SPR-008)",
+    "lint_forbidden positive control: an environment read in a plane-A crate's src/ must FAIL, its "
+    "tests/ and a builder's args pass (SPR-011 A-4)",
     "lint_forbidden positive control: an include! outside the repository must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: an include! reached through a symlink resolves from the "
     "link, as rustc does (VER-SPR-008 MIN-3)",
+    "lint_forbidden positive control: env::current_dir after a grouped import is reported on its "
+    "own line (DEF-5)",
+    "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must "
+    "FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
+    "lint_forbidden positive control: fs::read after a grouped import is reported on its own line "
+    "(DEF-1)",
     "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
     "(VER-SPR-008)",

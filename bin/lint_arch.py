@@ -71,6 +71,15 @@ workspace crates, of every dependency kind (normal, build and dev):
                      edge, are not default features, and are required by no target of
                      ALLOCATOR_CRATE but a bench.
 
+    engine-purity    The engine only engines (ADR-0035 §6; docs/13 §3; V-INSP-05; BCK-002 A-14). No
+                     engine crate (ENGINE_CRATES, every rh-sys-* and rh-contract-* crate, and
+                     every plane-A crate) reaches a crate on ENGINE_DENY_LIST, the one deny-list
+                     of media, HTTP-UI and LLM-client crates, through its normal or build
+                     dependencies, directly or transitively; dev-dependencies are exempt. Members
+                     are followed through their cargo-metadata edges, everything else through the
+                     resolved graph in the workspace's Cargo.lock, read offline. A missing lock,
+                     or a dependency the lock does not hold, is a violation (never fail open).
+
 Sources, wildcards and licences of third-party crates are governed by cargo-deny (deny.toml).
 
 Usage:  python -I bin/lint_arch.py [--manifest-path Cargo.toml]
@@ -282,6 +291,70 @@ ALLOCATOR_TARGET_DIR = "benches"
 GLOBAL_ALLOCATOR = re.compile(r"#\s*!?\s*\[[^\]]*\bglobal_allocator\b")
 ALLOW_UNSAFE = re.compile(r"\ballow\s*\(\s*unsafe_code\b")
 UNSAFE_TOKEN = re.compile(r"\bunsafe\b")
+
+# REF: docs/13 §3 ("The engine only engines"); ADR-0035 §6; 05.0 §6; docs/09 V-INSP-05; EVO-4;
+# BCK-002 A-14 (SPR-011 T-00). The engine crates: the union of the lists in docs/13 §3, 05.0 §6 and
+# ADR-0035 §6, planned ones included, and SPR-011's new rh-stream. Every crate named rh-sys-* or
+# rh-contract-*, and every crate whose effective plane is A, is an engine crate too, so a new
+# plane-A crate cannot be left out of the rule by forgetting to list it. rh-bench and rh-golden are
+# not engine crates, by design: they are tool crates that measure and replay the engine from outside
+# (SPR-009, SPR-008) and no engine crate depends on them; leaving them off is not a gap.
+ENGINE_CRATES = frozenset(
+    {
+        "rh-cli",
+        "rh-contracts",
+        "rh-core",
+        "rh-events",
+        "rh-ids",
+        "rh-manifest",
+        "rh-minds",
+        "rh-registry",
+        "rh-sample",
+        "rh-server",
+        "rh-sifter",
+        "rh-snapshot",
+        "rh-stream",
+        "rh-worldgen",
+    }
+)
+ENGINE_CRATE_PREFIXES = (SYSTEM_CRATE_PREFIX, CONTRACT_CRATE_PREFIX)
+# THE engine-purity deny-list, defined here and nowhere else (python/tests checks that): package
+# name -> what it is. docs/13 §3 names the categories (media, HTTP-UI, LLM client) and nine
+# examples; the rest are the common crates of the same categories. Matched by package name over the
+# transitive normal and build dependencies of every engine crate. Keep it alphabetical; adding an
+# entry is a review, removing one is a C2 change (ADR-0035 §6).
+ENGINE_DENY_LIST = MappingProxyType(
+    {
+        "actix-web": "HTTP UI (web server framework)",
+        "async-openai": "LLM client",
+        "axum": "HTTP UI (web server framework)",
+        "candle-core": "LLM inference",
+        "cpal": "media (audio I/O)",
+        "gif": "media (image codec)",
+        "hound": "media (audio codec)",
+        "hyper": "HTTP (the base of web servers and clients not listed here)",
+        "image": "media (images)",
+        "jpeg-decoder": "media (image codec)",
+        "kira": "media (audio engine)",
+        "lewton": "media (audio codec)",
+        "llama-cpp-2": "LLM inference",
+        "minimp3": "media (audio codec)",
+        "ollama-rs": "LLM client",
+        "png": "media (image codec)",
+        "reqwest": "HTTP client (LLM and web APIs)",
+        "rocket": "HTTP UI (web server framework)",
+        "rodio": "media (audio playback)",
+        "symphonia": "media (audio codecs)",
+        "tiktoken-rs": "LLM tokenizer",
+        "tokenizers": "LLM tokenizer",
+        "tower-http": "HTTP UI (web middleware)",
+        "tts": "TTS (text to speech; docs/13 §3)",
+        "ureq": "HTTP client (LLM and web APIs)",
+        "warp": "HTTP UI (web server framework)",
+    }
+)
+ENGINE_PURITY_RULE = "engine-purity"
+LOCK_FILE = "Cargo.lock"
 
 EXIT_OK = 0
 EXIT_VIOLATIONS = 1
@@ -882,6 +955,178 @@ def check_workspace(crates: Sequence[Crate]) -> list[Violation]:
     return violations
 
 
+@dataclass(frozen=True)
+class LockPackage:
+    """One `[[package]]` of a Cargo.lock: its name, version and resolved dependency entries."""
+
+    name: str
+    version: str
+    # Raw entries: "name", "name version" or "name version (source)".
+    dependencies: tuple[str, ...]
+
+
+def read_lock(path: Path) -> tuple[LockPackage, ...] | None:
+    """Return the packages of a Cargo.lock, or None when the file does not exist.
+
+    The lock is read rather than a full `cargo metadata`, which would need every crate's source
+    fetched: it holds the whole resolved graph, offline, and lists dev-dependencies only for
+    workspace members, whose edges come from cargo metadata with their kinds instead.
+
+    Raises:
+        WorkspaceError: The file exists but cannot be read or does not have the expected shape.
+    """
+    if not path.is_file():
+        return None
+    try:
+        document = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as err:
+        raise WorkspaceError(f"cannot read {path}: {err}") from err
+    packages = []
+    for raw in _as_list(document.get("package", []), f"{path} [[package]]"):
+        package = _as_dict(raw, f"a [[package]] of {path}")
+        name, version = package.get("name"), package.get("version")
+        if not isinstance(name, str) or not isinstance(version, str):
+            raise WorkspaceError(f"a [[package]] of {path} has no name or version: {package!r}")
+        deps = _as_list(package.get("dependencies", []), f"the dependencies of {name} in {path}")
+        if not all(isinstance(d, str) for d in deps):
+            raise WorkspaceError(f"the dependencies of {name} in {path} are not strings")
+        packages.append(LockPackage(name, version, tuple(str(d) for d in deps)))
+    return tuple(packages)
+
+
+def is_engine_crate(crate: Crate) -> bool:
+    """Whether the engine-purity rule applies to a crate (ENGINE_CRATES; on its pinned labels)."""
+    return (
+        crate.name in ENGINE_CRATES
+        or crate.name.startswith(ENGINE_CRATE_PREFIXES)
+        or crate.plane == "A"
+    )
+
+
+# A node of the dependency walk: (package name, version). The version is None for a workspace
+# member and "" for a dependency the lock does not hold.
+_Node = tuple[str, str | None]
+UNRESOLVED = ""
+
+
+@dataclass(frozen=True)
+class DependencyGraph:
+    """The non-dev dependency graph: members from cargo metadata, the rest from Cargo.lock."""
+
+    members: MappingProxyType[str, Crate]
+    locked: MappingProxyType[str, tuple[LockPackage, ...]]
+
+    @classmethod
+    def of(cls, crates: Sequence[Crate], lock: Sequence[LockPackage]) -> "DependencyGraph":
+        """Index the members by name and the locked packages by name."""
+        by_name: dict[str, list[LockPackage]] = {}
+        for package in lock:
+            by_name.setdefault(package.name, []).append(package)
+        return cls(
+            MappingProxyType({crate.name: crate for crate in crates}),
+            MappingProxyType({name: tuple(found) for name, found in by_name.items()}),
+        )
+
+    def _resolve(self, name: str, version: str | None = None) -> list[_Node]:
+        """The nodes a dependency on ``name`` (at ``version``, when the lock names one) reaches."""
+        if name in self.members:
+            return [(name, None)]
+        nodes: list[_Node] = [
+            (name, p.version) for p in self.locked.get(name, ()) if version in (None, p.version)
+        ]
+        return nodes or [(name, UNRESOLVED)]
+
+    def successors(self, node: _Node) -> list[_Node]:
+        """A node's normal and build dependencies (a member's dev-dependencies are left out)."""
+        name, version = node
+        if version is None:
+            member = self.members[name]
+            edges = (*member.edges, *member.external)
+            return [n for e in edges if e.kind != "dev" for n in self._resolve(e.target)]
+        if version == UNRESOLVED:
+            return []
+        package = next(p for p in self.locked[name] if p.version == version)
+        entries = (entry.split() for entry in package.dependencies)
+        return [n for parts in entries for n in self._resolve(parts[0], *parts[1:2])]
+
+    def walk(self, start: str) -> list[list[str]]:
+        """Return the shortest path from ``start`` to every node it reaches, breadth first.
+
+        A path ends at the node it reaches; an unresolved node's path ends in "".
+        """
+        first: _Node = (start, None)
+        parent: dict[_Node, _Node | None] = {first: None}
+        queue, order = [first], []
+        while queue:
+            node = queue.pop(0)
+            order.append(node)
+            for succ in self.successors(node):
+                if succ not in parent:
+                    parent[succ] = node
+                    queue.append(succ)
+        paths: list[list[str]] = []
+        for node in order[1:]:
+            path: list[str] = []
+            at: _Node | None = node
+            while at is not None:
+                path.append(at[0])
+                at = parent[at]
+            paths.append([*reversed(path), *([UNRESOLVED] if node[1] == UNRESOLVED else [])])
+        return paths
+
+
+def check_engine_purity(
+    crates: Sequence[Crate], lock: Sequence[LockPackage] | None
+) -> list[Violation]:
+    """Check that no engine crate reaches a deny-listed crate (V-INSP-05; BCK-002 A-14).
+
+    The walk starts at an engine crate's normal and build edges (never its dev-dependencies: test
+    code does not ship in the engine), follows workspace members through their own non-dev edges
+    from cargo metadata, and every other crate through its resolved dependencies in Cargo.lock.
+    A missing lock, or a dependency the lock does not hold, is a violation: the transitive graph
+    would go unchecked (never fail open).
+    """
+    crates = [effective(crate) for crate in crates]
+    engines = [crate for crate in crates if crate.declared_ok and is_engine_crate(crate)]
+    if lock is None:
+        return [
+            Violation(
+                ENGINE_PURITY_RULE,
+                "workspace",
+                f"no {LOCK_FILE} beside the workspace manifest: the transitive dependencies of "
+                "the engine crates are not checked (V-INSP-05); generate and commit it",
+            )
+            for _ in engines[:1]
+        ]
+    graph = DependencyGraph.of(crates, lock)
+    found: list[Violation] = []
+    for crate in engines:
+        reported: set[str] = set()
+        for path in graph.walk(crate.name):
+            if path[-1] == UNRESOLVED:
+                found.append(
+                    Violation(
+                        ENGINE_PURITY_RULE,
+                        crate.name,
+                        f"its dependency {path[-2]} is not in {LOCK_FILE}, so what it depends on "
+                        "is not checked (V-INSP-05); update the lock",
+                    )
+                )
+            elif path[-1] in ENGINE_DENY_LIST and path[-1] not in reported:
+                reported.add(path[-1])
+                found.append(
+                    Violation(
+                        ENGINE_PURITY_RULE,
+                        crate.name,
+                        f"engine crate depends on {path[-1]} ({ENGINE_DENY_LIST[path[-1]]}) "
+                        f"through {' -> '.join(path)}; the engine only engines: no media, "
+                        "HTTP-UI or LLM-client crate among its normal or build dependencies, "
+                        "direct or transitive (ADR-0035 §6; V-INSP-05)",
+                    )
+                )
+    return found
+
+
 def clippy_configs(root: Path) -> list[str]:
     """Return every clippy.toml or .clippy.toml under ``root``, relative and sorted.
 
@@ -1023,16 +1268,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     except WorkspaceError as err:
         print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
         return EXIT_UNREADABLE
-    violations = check_workspace(crates) + check_clippy_configs(root, crates) + allocator
+    try:
+        lock = read_lock(root / LOCK_FILE)
+    except WorkspaceError as err:
+        print(f"lint_arch: cannot read the workspace: {err}", file=sys.stderr)
+        return EXIT_UNREADABLE
+    violations = (
+        check_workspace(crates)
+        + check_engine_purity(crates, lock)
+        + check_clippy_configs(root, crates)
+        + allocator
+    )
     print(f"lint_arch: {args.manifest_path}")
     for crate in crates:
         print(describe(crate))
     for violation in violations:
         print(violation.render())
     edge_count = sum(len(crate.edges) for crate in crates)
+    engines = sum(1 for crate in crates if is_engine_crate(effective(crate)))
     print(
-        f"lint_arch: {len(crates)} crates, {edge_count} workspace edges, "
-        f"{len(violations)} violations"
+        f"lint_arch: {len(crates)} crates, {edge_count} workspace edges, {engines} engine crates "
+        f"checked against {len(ENGINE_DENY_LIST)} deny-listed crates over "
+        f"{len(lock or ())} locked packages, {len(violations)} violations"
     )
     return EXIT_VIOLATIONS if violations else EXIT_OK
 

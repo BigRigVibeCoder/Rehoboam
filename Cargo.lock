@@ -883,6 +883,9 @@ dependencies = [
 name = "rh-manifest"
 version = "0.0.0"
 dependencies = [
+ "rh-core",
+ "rh-ids",
+ "rh-registry",
  "saphyr-parser",
  "schemars",
  "serde",
@@ -895,6 +898,7 @@ name = "rh-registry"
 version = "0.0.0"
 dependencies = [
  "rh-core",
+ "rh-ids",
  "serde",
  "toml",
 ]
