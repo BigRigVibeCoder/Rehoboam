@@ -25,8 +25,9 @@
 //! `D/stream/t0000000000/A/y######/`. The engine never reads it: it is the host's.
 //!
 //! **Test hooks** (`--test-stall`, never on a baseline): the run prints a `STALL` line and blocks
-//! after writing file `n` of a segment (`seal:<year>:<n>`) or after sealing it
-//! (`sealed:<year>`), so a test can `kill -9` it there (GOV-002 tier 15; PR #60).
+//! after writing file `n` of a segment (`seal:<year>:<n>`), after sealing it (`sealed:<year>`),
+//! or after the first push at or past a tick (`mid:<tick>`, naming the open year and its buffered
+//! records), so a test can `kill -9` it there (GOV-002 tier 15; PR #60).
 //!
 //! REF: `CODEX/05_PROJECT/SPR-013_WalkingSkeletonC.md` T-09; SPR-011 ruling 13; `05.10` §5, §7.
 
@@ -70,10 +71,17 @@ pub enum Stall {
         /// The sim-year.
         year: i64,
     },
+    /// After the first push at or past `tick`: a kill there is mid-year, with the open year's
+    /// records in memory and unsealed (REV-SPR-013 MIN-10: the line names the tick and the
+    /// buffered records, so a test can prove it).
+    Mid {
+        /// The tick.
+        tick: i64,
+    },
 }
 
 impl Stall {
-    /// Parses `seal:<year>:<n>` or `sealed:<year>`.
+    /// Parses `seal:<year>:<n>`, `sealed:<year>` or `mid:<tick>`.
     #[must_use]
     pub fn parse(s: &str) -> Option<Self> {
         let parts: Vec<&str> = s.split(':').collect();
@@ -84,6 +92,9 @@ impl Stall {
             }),
             ["sealed", y] => Some(Self::Sealed {
                 year: y.parse().ok()?,
+            }),
+            ["mid", t] => Some(Self::Mid {
+                tick: t.parse().ok()?,
             }),
             _ => None,
         }
@@ -459,7 +470,17 @@ impl StreamHost {
         }
         self.writer
             .push(t, batch, &mut self.hook)
-            .map_err(|e| stream_error(&e))
+            .map_err(|e| stream_error(&e))?;
+        if let Some(Stall::Mid { tick }) = self.hook.0
+            && t >= tick
+        {
+            Hook::stall(&format!(
+                "mid tick {t} sim-year {} buffered {}",
+                self.writer.open_year(),
+                self.writer.buffered()
+            ));
+        }
+        Ok(())
     }
 
     /// Seals the open year and reports.

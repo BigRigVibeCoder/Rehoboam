@@ -626,3 +626,61 @@ fn parse_replay(words: &[String], repo: &Path) -> Result<crate::replay::ReplayAr
         threads,
     })
 }
+
+/// `canonical parse` and `canonical files F...`: `rh-stream`'s canonical parser, for the
+/// differential gate against the reference (`specs/stream/differential_v0.py`; REV-SPR-013 MAJ-1).
+///
+/// - `parse` reads lines from stdin (split at LF; a line may hold any other byte) and prints one
+///   line per input: `ok <the record rendered again>` or `err`.
+/// - `files` checks each canonical file (`digest_file`) and prints `ok <digest>` or `err` per file.
+///
+/// Exit 0, or 2 on a usage or I/O error.
+#[must_use]
+pub fn canonical_cmd(words: &[String], _repo: &Path) -> u8 {
+    use rh_stream::canonical;
+    use std::io::{Read, Write};
+    let stdout = std::io::stdout();
+    let mut out = std::io::BufWriter::new(stdout.lock());
+    let mut emit = |line: String| writeln!(out, "{line}").is_ok();
+    match words {
+        [cmd] if cmd == "parse" => {
+            let mut data = Vec::new();
+            if std::io::stdin().read_to_end(&mut data).is_err() {
+                return TOOL;
+            }
+            if data.last() == Some(&b'\n') {
+                data.pop();
+            }
+            for raw in data.split(|&b| b == b'\n') {
+                let verdict = std::str::from_utf8(raw)
+                    .ok()
+                    .and_then(|l| canonical::parse(l).ok())
+                    .and_then(|r| canonical::render(&r).ok())
+                    .map_or_else(|| "err".to_owned(), |l| format!("ok {l}"));
+                if !emit(verdict) {
+                    return TOOL;
+                }
+            }
+            OK
+        }
+        [cmd, files @ ..] if cmd == "files" => {
+            for f in files {
+                let Ok(bytes) = std::fs::read(f) else {
+                    return TOOL;
+                };
+                let verdict = canonical::digest_file(&bytes).map_or_else(
+                    |_| "err".to_owned(),
+                    |c| format!("ok {}", canonical::hex16(&c.digest)),
+                );
+                if !emit(verdict) {
+                    return TOOL;
+                }
+            }
+            OK
+        }
+        _ => {
+            eprintln!("usage: rh-cli canonical parse < LINES | rh-cli canonical files F...");
+            TOOL
+        }
+    }
+}

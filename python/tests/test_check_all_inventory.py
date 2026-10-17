@@ -59,6 +59,11 @@ REQUIRED_GATES = (
     "(SPR-007 ruling 4)",
     "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
     "CI workflows parse (YAML)",
+    "Canonical differential positive control: a reference with its header domain check relaxed "
+    "must FAIL (REV-SPR-013 MAJ-1)",
+    "Canonical differential: rh-stream's parser and canonical_v0.py give every generated, "
+    "golden, planted and mutated line, and every planted and header-mutated file, the same "
+    "verdict (canonical_v0.md §3; REV-SPR-013 MAJ-1)",
     "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 "
     "--check; SPR-013 T-09)",
     "Chronicle SQL-twin equivalence",

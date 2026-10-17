@@ -355,6 +355,8 @@ pub enum JournalError {
     Sqlite(rusqlite::Error),
     /// The file is not a journal of this schema.
     Schema(String),
+    /// The write-ahead log could not be checkpointed: another connection holds the journal.
+    Busy(String),
     /// The journal belongs to another history key.
     HistoryMismatch {
         /// The key in the file.
@@ -398,6 +400,7 @@ impl fmt::Display for JournalError {
         match self {
             Self::Sqlite(e) => write!(f, "journal: SQLite: {e}"),
             Self::Schema(m) => write!(f, "journal: not a {SCHEMA} journal: {m}"),
+            Self::Busy(m) => write!(f, "journal: busy: {m}"),
             Self::HistoryMismatch { journal, expected } => write!(
                 f,
                 "replay: the journal belongs to {journal:?}, not to {expected:?}"
@@ -505,6 +508,28 @@ impl Journal {
     #[must_use]
     pub fn key(&self) -> &HistoryKey {
         &self.key
+    }
+
+    /// Moves every committed row from the write-ahead log into the database file and truncates
+    /// the log (`PRAGMA wal_checkpoint(TRUNCATE)`), so a reader that opens the file alone, read-only
+    /// and immutable, sees every input. A writer killed mid-run leaves its rows in the log; the
+    /// host checkpoints on resume (REV-SPR-013 MAJ-3).
+    ///
+    /// # Errors
+    /// [`JournalError::Sqlite`] if `SQLite` cannot checkpoint, or reports the log busy.
+    pub fn checkpoint(&self) -> Result<(), JournalError> {
+        let (busy, _, _): (i64, i64, i64) =
+            self.conn
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })?;
+        if busy != 0 {
+            return Err(JournalError::Busy(
+                "the write-ahead log cannot be checkpointed: another connection holds it"
+                    .to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     /// The writer connection's `journal_mode` and `synchronous` (`"wal"` and 2, FULL, on every

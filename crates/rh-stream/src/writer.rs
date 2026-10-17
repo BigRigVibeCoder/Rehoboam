@@ -70,6 +70,18 @@ pub struct StreamWriter {
 }
 
 impl StreamWriter {
+    /// The records of the open (unsealed) sim-year held in memory.
+    #[must_use]
+    pub const fn buffered(&self) -> usize {
+        self.buffer.len()
+    }
+
+    /// The open sim-year.
+    #[must_use]
+    pub const fn open_year(&self) -> i64 {
+        self.year
+    }
+
     /// A writer for a new run: the timeline's channel A must hold no sealed segment.
     ///
     /// # Errors

@@ -194,14 +194,18 @@ fn replays_from_keyframes_equal_the_run() {
     for world in ["solo", "hamlet"] {
         let dir = base.join(world);
         run_into(world, 60, &dir, None);
-        for (year, threads) in [(10, 1), (30, 4), (50, 1)] {
+        // Year 60 is the run's last keyframe: nothing to replay, still EQUAL (VER-SPR-013-TEST DEF-1).
+        for (year, threads) in [(10, 1), (30, 4), (50, 1), (60, 1)] {
             let into = base.join(format!("{world}_from{year}_t{threads}"));
             let r = replay_of(&dir, &into, Some(year * MPY - 1), threads);
             assert!(r.equal(), "{world} from {year}: {:?}", r.differences);
-            assert_eq!(r.rungs, usize::try_from(60 - year).unwrap());
+            assert_eq!(
+                r.rungs, 60,
+                "the whole run's ladder, its prefix from the sidecar"
+            );
         }
         println!(
-            "T-12 V-DET-05: {world}: replays from the keyframes of years 10, 30 and 50 (1 and 4 threads) equal the run"
+            "T-12 V-DET-05: {world}: replays from the keyframes of years 10, 30, 50 and 60 (the last: nothing to replay; 1 and 4 threads) equal the run"
         );
     }
     let err = replay(&ReplayArgs {
@@ -397,4 +401,54 @@ fn a_missing_extra_or_edited_journal_row_hard_fails_the_replay() {
     println!(
         "T-12: an edited, a missing, a re-chained (self-consistent) and an extra journal row each hard-fail the replay"
     );
+}
+
+/// REV-SPR-013 MAJ-2: a new run into a directory that already holds a run is refused before any
+/// file is touched: every file of the 200-year run stays byte-identical.
+#[test]
+fn a_new_run_into_a_used_run_directory_is_refused_and_touches_nothing() {
+    let dir = scratch("used_dir");
+    run_into("solo", 200, &dir, None);
+    let before = files(&dir);
+    let mut a = RunArgs::new(&repo(), 50, 1, RungKind::Yearly, &dir.join("run.ladder"));
+    "solo".clone_into(&mut a.world);
+    a.journal = dir.join("journal.sqlite");
+    a.run_dir = Some(dir.clone());
+    let err = run(&a).unwrap_err();
+    assert!(err.0.contains("already holds a run"), "{err}");
+    assert!(
+        files(&dir) == before,
+        "a refused run changed the run directory"
+    );
+    println!(
+        "T-12 MAJ-2: a run into a used run directory is refused; its {} files are unchanged",
+        before.len()
+    );
+}
+
+/// REV-SPR-013 MAJ-3 (c): a run directory resumed with `--extend` past its horizon records the
+/// new horizon in `run.toml`, its `run.ladder` is the whole extended run's, and it replays from
+/// its journal alone, `REPLAY EQUAL`.
+#[test]
+fn an_extended_run_directory_records_its_horizon_and_replays() {
+    let dir = scratch("extended");
+    run_into("solo", 60, &dir, None);
+    let mut a = RunArgs::new(&repo(), 80, 1, RungKind::Yearly, &dir.join("run.ladder"));
+    "solo".clone_into(&mut a.world);
+    a.journal = dir.join("journal.sqlite");
+    a.run_dir = Some(dir.clone());
+    a.resume = Some(dir.join("keyframes/year-0050.rhkf"));
+    a.extend = true;
+    let ladder = run(&a).unwrap();
+    assert_eq!(ladder.rungs.len(), 80, "the whole extended run's ladder");
+    assert_eq!(RunToml::read(&dir).unwrap().years, 80);
+    let r = replay_of(&dir, &base_of(&dir).join("extended_replayed"), None, 1);
+    assert!(r.compared && r.equal(), "{:?}", r.differences);
+    println!(
+        "T-12 MAJ-3: solo extended from 60 to 80 years at its year-50 keyframe: run.toml says 80, REPLAY EQUAL"
+    );
+}
+
+fn base_of(dir: &Path) -> PathBuf {
+    dir.parent().unwrap().to_path_buf()
 }

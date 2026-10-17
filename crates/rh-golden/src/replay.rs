@@ -13,9 +13,9 @@
 //!    nothing journaled. With `--from-keyframe TICK` (the last minute of a sim-year whose keyframe
 //!    the run wrote), it copies that keyframe and the sealed channel-A segments before it as well,
 //!    and resumes from the keyframe through the journal (V-DET-05);
-//! 3. compares the replay with the run: the ladder (a resumed replay's rungs are the run's from the
-//!    keyframe on), every channel-A segment's `canonical_digest` and file bytes, and every keyframe
-//!    file. It prints `REPLAY EQUAL` or `REPLAY DIFFERS` with the first difference.
+//! 3. compares the replay with the run: the whole ladder (a resumed run directory's ladder starts
+//!    from its keyframe's ladder sidecar), every channel-A segment's `canonical_digest` and file
+//!    bytes, and every keyframe file. It prints `REPLAY EQUAL` or `REPLAY DIFFERS` with the first difference.
 //!
 //! The replay's inputs are the journal's, never the input script's (V-DET-18). A run directory
 //! holding only `run.toml` and the journal is replayed without the comparison (`compared` is
@@ -31,7 +31,7 @@ use rh_stream::writer::read_channel_a;
 
 use crate::dump;
 use crate::ladder::{Ladder, RungKind, compare};
-use crate::run::{Error, RunArgs, keyframe_path, open_journal, run};
+use crate::run::{Error, RunArgs, keyframe_path, ladder_sidecar, open_journal, run};
 use crate::stream::{RunDir, RunToml};
 
 /// `rh-cli replay`'s arguments.
@@ -202,6 +202,10 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
             let from = keyframe_path(&src.keyframes(), y);
             if from.is_file() {
                 copy(&from, &keyframe_path(&dst.keyframes(), y))?;
+                copy(
+                    &ladder_sidecar(&from),
+                    &ladder_sidecar(&keyframe_path(&dst.keyframes(), y)),
+                )?;
             }
         }
         // The sealed channel-A segments before the keyframe's year end: sim-years 0..year.
@@ -235,29 +239,15 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
             .map_err(|e| Error(format!("{}: {e}", src.ladder().display())))?,
     )
     .map_err(|e| Error(format!("{}: {e}", src.ladder().display())))?;
-    let rungs = if resume_year.is_some() {
-        let from = got
-            .rungs
-            .first()
-            .and_then(|first| want.rungs.iter().position(|r| r.index == first.index));
-        match from {
-            Some(from) if got.rungs[..] == want.rungs[from..] => {}
-            _ => differences.push(format!(
-                "LADDER: the resumed replay's {} rungs are not the run's last {}",
-                got.rungs.len(),
-                got.rungs.len()
-            )),
-        }
-        got.rungs.len()
-    } else {
-        if let Some(d) = compare(&want, &got) {
-            differences.push(format!("LADDER: {d}"));
-        }
-        if got.render() != want.render() {
-            differences.push("LADDER: the ladder files differ".to_owned());
-        }
-        got.rungs.len()
-    };
+    // A resumed run directory's ladder is the whole run's (its keyframe's sidecar and the resumed
+    // rungs; REV-SPR-013 MAJ-3), so both replays compare the whole ladder.
+    if let Some(d) = compare(&want, &got) {
+        differences.push(format!("LADDER: {d}"));
+    }
+    if got.render() != want.render() {
+        differences.push("LADDER: the ladder files differ".to_owned());
+    }
+    let rungs = got.rungs.len();
     let read = |dir: &RunDir| {
         read_channel_a(&dir.stream(), 0, mpy).map_err(|e| Error(format!("stream: {e}")))
     };
@@ -288,7 +278,26 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
     {
         differences.push(format!("STREAM: stream/{rel} is not byte-identical"));
     }
-    let (ka, kb) = (files(&src.keyframes())?, files(&dst.keyframes())?);
+    // Keyframes byte for byte. A keyframe's ladder sidecar carries the horizon of the run that
+    // wrote it (an extended run's earlier ones the shorter horizon), so it is checked as what it
+    // is for: its rungs are the run's ladder up to the keyframe.
+    let (mut ka, mut kb) = (files(&src.keyframes())?, files(&dst.keyframes())?);
+    for (rel, bytes) in std::mem::take(&mut ka) {
+        if rel.ends_with(".ladder") {
+            let prefix = std::str::from_utf8(&bytes)
+                .ok()
+                .and_then(|t| Ladder::parse(t).ok())
+                .map(|l| l.rungs);
+            if prefix.is_none_or(|p| want.rungs.get(..p.len()) != Some(&p[..])) {
+                differences.push(format!(
+                    "KEYFRAME: keyframes/{rel} is not the run's ladder up to its keyframe"
+                ));
+            }
+        } else {
+            ka.insert(rel, bytes);
+        }
+    }
+    kb.retain(|rel, _| !rel.ends_with(".ladder"));
     if let Some(rel) = ka
         .keys()
         .chain(kb.keys())

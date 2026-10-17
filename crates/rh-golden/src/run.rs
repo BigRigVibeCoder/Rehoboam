@@ -483,6 +483,11 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         )));
     }
     if let Some(dir) = &run_dir {
+        // REV-SPR-013 MAJ-2: a refused run touches no file, so the check comes before the
+        // journal is created and run.toml written.
+        if args.resume.is_none() {
+            refuse_used_run_dir(dir, args.replay)?;
+        }
         std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
     }
     let (mut engine, journal, identity, rows) = start(args, &world, &registered)?;
@@ -517,6 +522,13 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     };
     ladder.header.journal = identity.map(|p| (p.inputs, dump::hex(&p.head)));
     ladder.header.until = args.until.filter(|&u| u < args.years);
+    // REV-SPR-013 MAJ-3 (b): a resumed run directory's ladder is the whole run's: the rungs up to
+    // the keyframe (its ladder sidecar) and the resumed ones.
+    if let (Some(_), Some(kf)) = (&run_dir, &args.resume)
+        && kf.as_path() != Path::new(GENESIS)
+    {
+        ladder.rungs = ladder_prefix(kf, &ladder.header)?;
+    }
     let store = KeyframeStore::default();
     // Keyframes: the --keyframes directory of a full run (SPR-008), or the run directory's of
     // any streaming run, resumed ones included (their markers are part of channel A).
@@ -603,6 +615,20 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
             h.push(t, marker)?;
         }
         if let (Some((year, (bytes, _))), Some(dir)) = (&kf, &keyframes) {
+            // A run directory's keyframe carries the ladder so far, written first, so a keyframe on
+            // disk always has its prefix (REV-SPR-013 MAJ-3 (b)).
+            if run_dir.is_some() {
+                let prefix = Ladder {
+                    header: ladder.header.clone(),
+                    rungs: ladder.rungs.clone(),
+                    failed: None,
+                };
+                rh_stream::seal::write_atomic(
+                    &ladder_sidecar(&keyframe_path(dir, *year)),
+                    prefix.render().as_bytes(),
+                )
+                .map_err(|e| error("ladder sidecar")(&e))?;
+            }
             write_file(&keyframe_path(dir, *year), bytes)?;
         }
     }
@@ -614,6 +640,79 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         vitals: timing.and_then(|t| t.vitals()),
         stream,
     })
+}
+
+/// `--resume genesis`: resume a run directory from genesis through its journal (a run killed
+/// before its first keyframe; REV-SPR-013 MIN-4). Its sealed years are verified, not rewritten.
+pub const GENESIS: &str = "genesis";
+
+/// The ladder sidecar of a run directory's keyframe: the ladder up to the keyframe's year.
+#[must_use]
+pub fn ladder_sidecar(keyframe: &Path) -> PathBuf {
+    keyframe.with_extension("ladder")
+}
+
+/// The rungs before a resumed run directory's keyframe, from its sidecar, checked to be this
+/// run's ladder (world, seed, rung kind and hash layout).
+fn ladder_prefix(keyframe: &Path, header: &Header) -> Result<Vec<Rung>, Error> {
+    let path = ladder_sidecar(keyframe);
+    let text = std::fs::read_to_string(&path).map_err(|e| {
+        Error(format!(
+            "{}: {e} (a run directory's keyframe has its ladder)",
+            path.display()
+        ))
+    })?;
+    let prefix = Ladder::parse(&text).map_err(|e| Error(format!("{}: {e}", path.display())))?;
+    let h = &prefix.header;
+    if h.world != header.world
+        || h.seed != header.seed
+        || h.rung != header.rung
+        || h.hash != header.hash
+    {
+        return Err(Error(format!(
+            "{}: the ladder sidecar is another run's ({} seed {}, {})",
+            path.display(),
+            h.world,
+            h.seed,
+            h.rung.name()
+        )));
+    }
+    Ok(prefix.rungs)
+}
+
+/// A new run needs a run directory that holds no run (REV-SPR-013 MAJ-2): no stream, no keyframe,
+/// and (unless it is a replay's fresh directory, which holds the copied `run.toml` and journal)
+/// no `run.toml` or journal. Checked before any file is touched, so a refused run leaves the
+/// directory byte-identical.
+fn refuse_used_run_dir(dir: &RunDir, replay: bool) -> Result<(), Error> {
+    let nonempty = |p: &Path| std::fs::read_dir(p).is_ok_and(|mut d| d.next().is_some());
+    let mut found: Vec<String> = Vec::new();
+    if nonempty(&dir.stream()) {
+        found.push("stream/".to_owned());
+    }
+    if nonempty(&dir.keyframes()) {
+        found.push("keyframes/".to_owned());
+    }
+    if !replay {
+        for p in [dir.run_toml(), dir.journal()] {
+            if p.exists() {
+                found.push(
+                    p.file_name()
+                        .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+                );
+            }
+        }
+    }
+    if found.is_empty() {
+        return Ok(());
+    }
+    Err(Error(format!(
+        "{} already holds a run ({}): a new run needs an empty run directory. Resume it with \
+         --resume <keyframe>, replay it with rh-cli replay, or choose another --run-dir; nothing \
+         was written",
+        dir.0.display(),
+        found.join(", ")
+    )))
 }
 
 /// Writes a run's file: atomically for the run directory's keyframes, so that a keyframe on disk
@@ -650,6 +749,12 @@ fn stream_host(
         // resume point is the last minute of the sim-year that instant is in (-1 at genesis).
         let mpy = world.calendar.minutes_per_year();
         let tick = ((start.minutes() - 1).div_euclid(mpy) + 1) * mpy - 1;
+        // REV-SPR-013 MAJ-3 (c): an extended run's horizon is the run directory's from now on.
+        let mut toml = RunToml::read(&dir.0)?;
+        if toml.years != args.years {
+            toml.years = args.years;
+            toml.write(&dir.0)?;
+        }
         StreamHost::resume(cfg, tick, engine.tables(), rows, hook)
     } else {
         RunToml {
@@ -730,6 +835,14 @@ fn start(
         )));
     }
     if let Some(keyframe) = &args.resume {
+        // REV-SPR-013 MAJ-3 (a): a run killed mid-run left its rows in the write-ahead log; fold
+        // them into the file, so a read-only reader (replay) sees every input.
+        Journal::open(&args.journal, &journal_key(&world.provenance, world.seed))
+            .and_then(|j| j.checkpoint())
+            .map_err(|e| error("journal")(&e))?;
+        if keyframe.as_path() == Path::new(GENESIS) {
+            return replay_start(args, world, registered);
+        }
         let bytes = std::fs::read(keyframe).map_err(|e| error("keyframe")(&e))?;
         let replay = Replay::open(
             &args.journal,
@@ -797,6 +910,11 @@ fn replay_start(
         TIMELINE,
     )
     .map_err(|e| error("journal")(&e))?;
+    // `--resume genesis` (a run killed before its first keyframe) holds the run's own horizon; a
+    // replay's is its run.toml's, checked against the journal by the replay.
+    if !args.replay {
+        check_horizon(&replay, args, world)?;
+    }
     let mut engine = Engine::new(
         world.calendar,
         world.seed,
