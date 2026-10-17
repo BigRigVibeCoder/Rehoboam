@@ -12,8 +12,9 @@
 //!   the journal and verifies years 0 to 4.
 //!
 //! Every resume takes the defaults (its ladder is `run.ladder`). The run directory ends with the
-//! unbroken run's stream, `STEP_DIGEST`s included, and its whole `run.ladder`, and `rh-cli replay`
-//! of it reports `REPLAY EQUAL` (REV-SPR-013 MAJ-3).
+//! unbroken run's stream, `STEP_DIGEST`s included, its whole `run.ladder` and its file names (no
+//! `-wal` or `-shm`, VER-SPR-013-TEST DEF-4), and `rh-cli replay` of it reports `REPLAY EQUAL`
+//! (REV-SPR-013 MAJ-3).
 #![allow(
     clippy::disallowed_types,
     clippy::unwrap_used,
@@ -102,6 +103,17 @@ fn stream_of(dir: &Path) -> BTreeMap<String, Vec<u8>> {
     files(&dir.join("stream"))
 }
 
+/// VER-SPR-013-TEST DEF-4: a resumed run directory holds the unbroken run's file names (no `-wal`
+/// or `-shm` beside the journal, no partial segment).
+fn assert_same_names(world: &str, dir: &Path, clean: &Path) {
+    let names = |d: &Path| files(d).into_keys().collect::<Vec<_>>();
+    assert_eq!(
+        names(dir),
+        names(clean),
+        "{world}: the resumed directory's file names differ"
+    );
+}
+
 #[test]
 fn a_kill_during_sealing_leaves_no_partial_segment_and_the_resume_reseals_the_same_bytes() {
     for world in ["solo", "hamlet"] {
@@ -124,6 +136,7 @@ fn a_kill_during_sealing_leaves_no_partial_segment_and_the_resume_reseals_the_sa
             "{world}: {summary}"
         );
         assert!(!channel.join(".y000015.partial").exists());
+        assert_same_names(world, &dir, &clean);
         assert_eq!(
             stream_of(&dir),
             stream_of(&clean),
@@ -141,6 +154,7 @@ const MONTH: i64 = 43_200;
 /// `rh-cli replay <dir> --into <dir>.replayed`: its first line.
 fn replay(dir: &Path) -> String {
     let into = dir.with_extension("replayed");
+    let _ = std::fs::remove_dir_all(&into); // a stale earlier output would be refused (DEF-2)
     let out = Command::new(BIN)
         .arg("replay")
         .arg(dir)
@@ -238,6 +252,7 @@ fn a_mid_year_kill_and_resume_re_emit_no_seq_below_the_first_unsealed_year() {
                 == std::fs::read(clean.join("run.ladder")).unwrap(),
             "{world}: run.ladder is not the whole run's"
         );
+        assert_same_names(world, &dir, &clean);
         let replayed = replay(&dir);
         assert!(replayed.starts_with("REPLAY EQUAL"), "{world}: {replayed}");
         println!(
@@ -274,6 +289,7 @@ fn a_kill_before_the_first_keyframe_resumes_from_genesis() {
                 == std::fs::read(clean.join("run.ladder")).unwrap(),
             "{world}: run.ladder differs"
         );
+        assert_same_names(world, &dir, &clean);
         let replayed = replay(&dir);
         assert!(replayed.starts_with("REPLAY EQUAL"), "{world}: {replayed}");
         println!(

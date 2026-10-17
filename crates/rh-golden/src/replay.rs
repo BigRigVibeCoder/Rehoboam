@@ -4,13 +4,16 @@
 //! world, the seed, the horizon and the rung kind, and records the journal's input count and chain
 //! head when the run started. The replay
 //!
-//! 0. refuses `--into` the run directory or a directory inside it, and a journal that still has a
-//!    write-ahead log (a killed run not yet resumed);
+//! 0. refuses `--into` the run directory, a directory inside it or a directory that contains it,
+//!    an existing non-empty `--into` that is not a previous replay's output (it holds no
+//!    [`REPLAY_MARKER`]), and a journal that still has a write-ahead log (a killed run not yet
+//!    resumed) (VER-SPR-013-TEST DEF-2);
 //! 1. opens the run's journal read-only (`Replay::open`: the history key, the count, the `seq`
 //!    sequence, every payload hash and row digest, the chain) and requires its position to be
 //!    `run.toml`'s exactly, so a missing, extra or edited row hard-fails, even in a journal that
 //!    was re-chained to be self-consistent;
-//! 2. copies `run.toml` and the journal into a fresh directory `--into` and runs the world there
+//! 2. writes [`REPLAY_MARKER`] into `--into` first, then copies `run.toml` and the journal there
+//!    and runs the world there
 //!    with [`RunArgs::replay`]: the engine at genesis, the journal's rows submitted in `seq` order,
 //!    nothing journaled. With `--from-keyframe TICK` (the last minute of a sim-year whose keyframe
 //!    the run wrote), it copies that keyframe and the sealed channel-A segments before it as well,
@@ -47,6 +50,11 @@ use crate::ladder::{Ladder, RungKind, compare};
 use crate::run::{Error, RunArgs, keyframe_path, open_journal, run};
 use crate::stream::{RunDir, RunToml};
 
+/// The file a replay writes into its `--into` directory before anything else. An existing,
+/// non-empty `--into` is replaced only when it holds this file, so a replay never deletes a
+/// directory it did not write (VER-SPR-013-TEST DEF-2).
+pub const REPLAY_MARKER: &str = ".rh-replay";
+
 /// `rh-cli replay`'s arguments.
 #[derive(Clone, Debug)]
 pub struct ReplayArgs {
@@ -54,7 +62,8 @@ pub struct ReplayArgs {
     pub repo: PathBuf,
     /// The run directory replayed.
     pub run_dir: PathBuf,
-    /// The fresh directory the replay is written into (replaced if it exists).
+    /// The directory the replay is written into: absent, empty, or a previous replay's output
+    /// (it holds [`REPLAY_MARKER`]), which is replaced.
     pub into: PathBuf,
     /// Resume from the keyframe at this tick (the last minute of a sim-year) instead of genesis.
     pub from_keyframe: Option<i64>,
@@ -142,6 +151,43 @@ fn resolved(path: &Path) -> PathBuf {
             _ => return path.to_path_buf(),
         }
     }
+}
+
+/// REV-SPR-013 MIN-7 and VER-SPR-013-TEST DEF-2: the replay writes a fresh directory and never
+/// deletes one it did not write. `into` must be neither the run directory, nor inside it, nor
+/// contain it (resolved paths, a path that does not exist yet by its nearest existing ancestor);
+/// and an existing `into` must be empty or a previous replay's output (it holds [`REPLAY_MARKER`]).
+fn check_into(run: &Path, into: &Path) -> Result<(), Error> {
+    let (run_at, into_at) = (resolved(run), resolved(into));
+    if into_at.starts_with(&run_at) {
+        return Err(Error(format!(
+            "--into {} is the run directory (or inside it): a replay writes a fresh directory",
+            into.display()
+        )));
+    }
+    if run_at.starts_with(&into_at) {
+        return Err(Error(format!(
+            "--into {} contains the run directory {}: a replay writes a fresh directory and would \
+             delete the run",
+            into.display(),
+            run.display()
+        )));
+    }
+    if into.exists() {
+        let empty = std::fs::read_dir(into)
+            .map_err(|e| Error(format!("--into {}: {e}", into.display())))?
+            .next()
+            .is_none();
+        if !empty && !into.join(REPLAY_MARKER).is_file() {
+            return Err(Error(format!(
+                "--into {} exists, is not empty and is not a previous replay's output (no {}): \
+                 a replay deletes only a directory it wrote; give an absent or empty directory",
+                into.display(),
+                REPLAY_MARKER
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// VER-SPR-013-TEST GAP-3: `run.toml`'s horizon, seed and manifest hash are the run's. The
@@ -318,17 +364,12 @@ pub fn replay(args: &ReplayArgs) -> Result<ReplayReport, Error> {
         }
     };
     let dst = RunDir(args.into.clone());
-    // REV-SPR-013 MIN-7: the replay writes a fresh directory, never the run's own.
-    if resolved(&dst.0).starts_with(resolved(&src.0)) {
-        return Err(Error(format!(
-            "--into {} is the run directory (or inside it): a replay writes a fresh directory",
-            dst.0.display()
-        )));
-    }
+    check_into(&src.0, &dst.0)?;
     if dst.0.exists() {
         std::fs::remove_dir_all(&dst.0).map_err(io("replay"))?;
     }
     std::fs::create_dir_all(&dst.0).map_err(io("replay"))?;
+    std::fs::write(dst.0.join(REPLAY_MARKER), b"rh-cli replay output\n").map_err(io("replay"))?;
     copy(&src.run_toml(), &dst.run_toml())?;
     copy(&src.journal(), &dst.journal())?;
     let mut run_args = RunArgs::new(

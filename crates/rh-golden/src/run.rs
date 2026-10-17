@@ -316,10 +316,7 @@ pub fn history(seed: u64) -> History {
 /// # Errors
 /// [`Error`] naming the first check that fails.
 pub(crate) fn open_journal(path: &Path, world: &Setup) -> Result<Replay, Error> {
-    let mut wal = path.as_os_str().to_owned();
-    wal.push("-wal");
-    // A checkpointed log is empty (TRUNCATE); one with bytes holds rows the file does not.
-    if std::fs::metadata(Path::new(&wal)).is_ok_and(|m| m.len() > 0) {
+    if wal_has_rows(path) {
         return Err(Error(format!(
             "journal: {} still has a write-ahead log: the run was killed and not resumed. Resume \
              it first (rh-cli run --resume), which folds the log in (REV-SPR-013 MAJ-3)",
@@ -329,6 +326,14 @@ pub(crate) fn open_journal(path: &Path, world: &Setup) -> Result<Replay, Error> 
     // Immutable: the replay writes nothing beside the run's journal (REV-SPR-013 MIN-8).
     Replay::open_immutable(path, &journal_key(&world.provenance, world.seed), TIMELINE)
         .map_err(|e| error("journal")(&e))
+}
+
+/// Whether the journal at `path` has a write-ahead log with bytes in it: rows the file does not
+/// hold yet (a checkpointed log is empty, TRUNCATE).
+fn wal_has_rows(path: &Path) -> bool {
+    let mut wal = path.as_os_str().to_owned();
+    wal.push("-wal");
+    std::fs::metadata(Path::new(&wal)).is_ok_and(|m| m.len() > 0)
 }
 
 fn journal_key(p: &Provenance, seed: u64) -> HistoryKey {
@@ -487,6 +492,25 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         register((world.systems)(args.leak_thread), &world.specs)
             .map_err(|e| error("registration")(&e))
     };
+    // VER-SPR-013-TEST DEF-4: every argument and input is checked before anything is created.
+    if args.until.is_some_and(|u| u < 0 || u > args.years) {
+        return Err(Error(format!(
+            "--until {} is outside the horizon of {} years",
+            args.until.unwrap_or_default(),
+            args.years
+        )));
+    }
+    if args.resume.is_none()
+        && !args.replay
+        && let Some((tick, _)) = (world.inputs)(args.years)
+            .into_iter()
+            .find(|(t, _)| *t < SimTime::EPOCH)
+    {
+        return Err(Error(format!(
+            "the input script has an input at tick {}, before genesis: nothing was written",
+            tick.minutes()
+        )));
+    }
     // VER-SPR-013-TEST GAP-3: an input of the script at or past the horizon is never dropped in
     // silence. A new run refuses it before anything is written; a resumed --extend run, whose
     // history is its journal's, says which inputs it leaves out.
@@ -977,24 +1001,18 @@ fn start(
     world: &Setup,
     registered: &dyn Fn() -> Result<rh_core::register::Registered, Error>,
 ) -> Result<Started, Error> {
-    if args.until.is_some_and(|u| u < 0 || u > args.years) {
-        return Err(Error(format!(
-            "--until {} is outside the horizon of {} years",
-            args.until.unwrap_or_default(),
-            args.years
-        )));
-    }
     if let Some(keyframe) = &args.resume {
         // REV-SPR-013 MAJ-3 (a): a run killed mid-run left its rows in the write-ahead log; fold
-        // them into the file, so a read-only reader (replay) sees every input.
-        Journal::open(&args.journal, &journal_key(&world.provenance, world.seed))
-            .and_then(|j| j.checkpoint())
-            .map_err(|e| error("journal")(&e))?;
-        if keyframe.as_path() == Path::new(GENESIS) {
-            return replay_start(args, world, registered);
+        // them into the file, so a read-only reader (replay) sees every input. The write-mode
+        // connection is the journal's last, so closing it removes the emptied -wal and -shm.
+        if wal_has_rows(&args.journal) {
+            Journal::open(&args.journal, &journal_key(&world.provenance, world.seed))
+                .and_then(|j| j.checkpoint())
+                .map_err(|e| error("journal")(&e))?;
         }
-        let bytes = std::fs::read(keyframe).map_err(|e| error("keyframe")(&e))?;
-        let replay = Replay::open(
+        // VER-SPR-013-TEST DEF-4: every other read is immutable, so a refused resume leaves the
+        // directory as it was and a finished one leaves no -wal or -shm.
+        let replay = Replay::open_immutable(
             &args.journal,
             &journal_key(&world.provenance, world.seed),
             TIMELINE,
@@ -1004,6 +1022,10 @@ fn start(
         if !args.replay {
             check_horizon(&replay, args, world)?;
         }
+        if keyframe.as_path() == Path::new(GENESIS) {
+            return replay_start(&replay, args, world, registered);
+        }
+        let bytes = std::fs::read(keyframe).map_err(|e| error("keyframe")(&e))?;
         let history = History {
             provenance: world.provenance.clone(),
             world_seed: world.seed,
@@ -1016,7 +1038,13 @@ fn start(
         return Ok((engine, None, Some(replay.position()), rows));
     }
     if args.replay {
-        return replay_start(args, world, registered);
+        let replay = Replay::open_immutable(
+            &args.journal,
+            &journal_key(&world.provenance, world.seed),
+            TIMELINE,
+        )
+        .map_err(|e| error("journal")(&e))?;
+        return replay_start(&replay, args, world, registered);
     }
     for suffix in ["", "-wal", "-shm"] {
         let mut path = args.journal.clone().into_os_string();
@@ -1045,26 +1073,16 @@ fn start(
     Ok((engine, Some(journal), Some(identity), rows))
 }
 
-/// A replay's start (SPR-013 T-12): the engine at genesis, and every row of the journal at
-/// `args.journal`, checked against the history tuple (`Replay::open`: count, seq, payload and row
-/// digests, the chain), submitted in `seq` order as the run submitted them. Nothing is journaled:
+/// A replay's start (SPR-013 T-12): the engine at genesis, and every row of `replay` (the journal
+/// at `args.journal` opened immutable and checked against the history tuple: count, seq, payload
+/// and row digests, the chain), submitted in `seq` order as the run submitted them. Nothing is journaled:
 /// the replay reads the journal and never writes it.
 fn replay_start(
+    replay: &Replay,
     args: &RunArgs,
     world: &Setup,
     registered: &dyn Fn() -> Result<rh_core::register::Registered, Error>,
 ) -> Result<Started, Error> {
-    let replay = Replay::open(
-        &args.journal,
-        &journal_key(&world.provenance, world.seed),
-        TIMELINE,
-    )
-    .map_err(|e| error("journal")(&e))?;
-    // `--resume genesis` (a run killed before its first keyframe) holds the run's own horizon; a
-    // replay's is its run.toml's, checked against the journal by the replay.
-    if !args.replay {
-        check_horizon(&replay, args, world)?;
-    }
     let mut engine = Engine::new(
         world.calendar,
         world.seed,

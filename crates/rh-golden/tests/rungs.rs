@@ -129,10 +129,12 @@ fn every_rung_runs_past_its_extinction_and_its_chronicle_stays_consistent() {
             deaths,
             "{world}: sift"
         );
+        let into = dir.with_extension("replayed");
+        let _ = std::fs::remove_dir_all(&into); // a stale earlier output would be refused (DEF-2)
         let r = replay(&ReplayArgs {
             repo: repo(),
             run_dir: dir.clone(),
-            into: dir.with_extension("replayed"),
+            into,
             from_keyframe: None,
             threads: 1,
         })

@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use rh_core::time::SimTime;
 use rh_golden::ladder::RungKind;
-use rh_golden::replay::{ReplayArgs, ReplayReport, replay};
+use rh_golden::replay::{REPLAY_MARKER, ReplayArgs, ReplayReport, replay};
 use rh_golden::run::{RunArgs, run};
 use rh_golden::stream::RunToml;
 use rh_ids::EntityRef;
@@ -164,10 +164,11 @@ fn a_journal_and_run_toml_alone_replay_to_the_run_byte_for_byte() {
         let rebuilt = base.join(format!("{world}_rebuilt"));
         let r = replay_of(&only, &rebuilt, None, 1);
         assert!(!r.compared);
-        // The journal is the replay's input, copied; the run's outputs must be the run's.
+        // The journal is the replay's input, copied, and the marker its own; the run's outputs
+        // must be the run's.
         let outputs = |d: &Path| {
             let mut f = files(d);
-            f.retain(|k, _| !k.starts_with("journal.sqlite"));
+            f.retain(|k, _| !k.starts_with("journal.sqlite") && k != REPLAY_MARKER);
             f
         };
         let (got, want) = (outputs(&rebuilt), outputs(&dir));
@@ -443,15 +444,11 @@ fn an_extended_run_directory_records_its_horizon_and_replays() {
     let ladder = run(&a).unwrap();
     assert_eq!(ladder.rungs.len(), 80, "the whole extended run's ladder");
     assert_eq!(RunToml::read(&dir).unwrap().years, 80);
-    let r = replay_of(&dir, &base_of(&dir).join("extended_replayed"), None, 1);
+    let r = replay_of(&dir, &scratch("extended_replayed"), None, 1);
     assert!(r.compared && r.equal(), "{:?}", r.differences);
     println!(
         "T-12 MAJ-3: solo extended from 60 to 80 years at its year-50 keyframe: run.toml says 80, REPLAY EQUAL"
     );
-}
-
-fn base_of(dir: &Path) -> PathBuf {
-    dir.parent().unwrap().to_path_buf()
 }
 
 /// REV-SPR-013 MIN-5: a run directory whose journal is swapped for another self-consistent one of
@@ -599,5 +596,175 @@ fn an_edited_run_toml_and_an_input_past_the_horizon_are_refused() {
     assert!(!short.exists(), "a refused run wrote its run directory");
     println!(
         "T-12 GAP-3: an edited years or manifest_hash is refused by name; an input past the horizon refuses the run before any write"
+    );
+}
+
+/// `rh-cli replay <dir> --into <into>`'s library form, its error.
+fn replay_err(dir: &Path, into: &Path) -> String {
+    replay(&ReplayArgs {
+        repo: repo(),
+        run_dir: dir.to_path_buf(),
+        into: into.to_path_buf(),
+        from_keyframe: None,
+        threads: 1,
+    })
+    .unwrap_err()
+    .0
+}
+
+/// VER-SPR-013-TEST DEF-2: a replay never deletes a directory it did not write. `--into` an
+/// ancestor of the run, or an unrelated non-empty directory, is refused by name with every file
+/// under it unchanged (names and bytes); `--into` an empty directory replays, and so does `--into`
+/// that previous replay's output, which holds the marker.
+#[test]
+fn a_replay_never_deletes_a_directory_it_did_not_write() {
+    let base = scratch("into_guard");
+    let parent = base.join("p");
+    let dir = parent.join("run");
+    run_into("solo", 60, &dir, None);
+    std::fs::write(parent.join("other.txt"), "keep\n").unwrap();
+    std::fs::create_dir_all(parent.join("sibling")).unwrap();
+    std::fs::write(parent.join("sibling/x.txt"), "keep too\n").unwrap();
+    let before = files(&base);
+    for into in [parent.clone(), base.clone(), parent.join("sibling/..")] {
+        let err = replay_err(&dir, &into);
+        assert!(err.contains("contains the run directory"), "{err}");
+        assert!(
+            files(&base) == before,
+            "--into {}: a file changed",
+            into.display()
+        );
+    }
+    let unrelated = base.join("u");
+    std::fs::create_dir_all(&unrelated).unwrap();
+    std::fs::write(unrelated.join("precious.txt"), "precious\n").unwrap();
+    let theirs = files(&unrelated);
+    let err = replay_err(&dir, &unrelated);
+    assert!(err.contains("is not a previous replay's output"), "{err}");
+    assert!(
+        files(&unrelated) == theirs,
+        "an unrelated directory changed"
+    );
+    let empty = base.join("empty");
+    std::fs::create_dir_all(&empty).unwrap();
+    for pass in ["an empty directory", "the previous replay's output"] {
+        let r = replay_of(&dir, &empty, None, 1);
+        assert!(r.compared && r.equal(), "{pass}: {:?}", r.differences);
+        assert!(empty.join(REPLAY_MARKER).is_file(), "{pass}: no marker");
+    }
+    println!(
+        "T-12 DEF-2: --into an ancestor of the run or an unrelated non-empty directory is refused, every file unchanged; an empty directory and a previous replay's output replay EQUAL"
+    );
+}
+
+/// `run solo --years <years> --run-dir <dir> --resume <keyframe>`.
+fn resume_args(dir: &Path, years: i64, keyframe: &Path) -> RunArgs {
+    let mut a = RunArgs::new(&repo(), years, 1, RungKind::Yearly, &dir.join("run.ladder"));
+    "solo".clone_into(&mut a.world);
+    a.journal = dir.join("journal.sqlite");
+    a.run_dir = Some(dir.to_path_buf());
+    a.resume = Some(keyframe.to_path_buf());
+    a
+}
+
+/// VER-SPR-013-TEST DEF-4 (REV-SPR-013 MAJ-2): a refused run touches nothing. An input before
+/// genesis in a new run leaves no directory; a resume whose `--years` disagrees with the journal
+/// leaves the run directory's names and bytes as they were (no `-wal` or `-shm`); and a resume
+/// that succeeds leaves the unbroken run's files, the same names and bytes.
+#[test]
+fn a_refused_run_touches_nothing_and_a_resume_leaves_the_unbroken_runs_files() {
+    let base = scratch("def4");
+    let neg = base.join("negative");
+    let mut a = RunArgs::new(&repo(), 60, 1, RungKind::Yearly, &neg.join("run.ladder"));
+    "solo".clone_into(&mut a.world);
+    a.journal = neg.join("journal.sqlite");
+    a.run_dir = Some(neg.clone());
+    a.inputs = Some(script(&base.join("script"), &[(-5, 0)]));
+    let err = run(&a).unwrap_err();
+    assert!(
+        err.0.contains("before genesis: nothing was written"),
+        "{err}"
+    );
+    assert!(!neg.exists(), "a refused run created its run directory");
+    let dir = base.join("run");
+    run_into("solo", 60, &dir, None);
+    let unbroken = files(&dir);
+    let kf = dir.join("keyframes/year-0010.rhkf");
+    let err = run(&resume_args(&dir, 40, &kf)).unwrap_err();
+    assert!(
+        err.0.contains("disagrees with the journal's horizon"),
+        "{err}"
+    );
+    assert!(
+        files(&dir) == unbroken,
+        "a refused resume changed the run directory"
+    );
+    let ladder = run(&resume_args(&dir, 60, &kf)).unwrap();
+    assert!(ladder.failed.is_none());
+    let after = files(&dir);
+    assert_eq!(
+        after.keys().collect::<Vec<_>>(),
+        unbroken.keys().collect::<Vec<_>>(),
+        "a resumed directory's file names are not the unbroken run's"
+    );
+    assert!(
+        after == unbroken,
+        "a resumed directory's bytes are not the unbroken run's"
+    );
+    println!(
+        "T-12 DEF-4: an input before genesis leaves no directory; a refused resume changes none of {} files; a resume leaves the unbroken run's names and bytes",
+        unbroken.len()
+    );
+}
+
+/// VER-SPR-013-TEST GAP-9 (mutants n03 and n04): a resume refuses by name a `run.ladder` that does
+/// not reach its keyframe (a lost fsync: without the check the resumed ladder has a gap) and
+/// another run's `run.ladder`, and leaves the directory as it was.
+#[test]
+fn a_short_or_foreign_ladder_is_refused_by_name_on_resume() {
+    let base = scratch("gap9");
+    let dir = base.join("run");
+    run_into("solo", 60, &dir, None);
+    let ladder = std::fs::read_to_string(dir.join("run.ladder")).unwrap();
+    let short: String = ladder
+        .split_inclusive('\n')
+        .filter(|l| {
+            l.strip_prefix("rung ")
+                .and_then(|r| r.split(' ').nth(1))
+                .and_then(|t| t.parse::<i64>().ok())
+                .is_none_or(|t| t < 5 * MPY)
+        })
+        .collect();
+    assert!(short.len() < ladder.len(), "the short ladder lost no rung");
+    std::fs::write(dir.join("run.ladder"), &short).unwrap();
+    let kf = dir.join("keyframes/year-0010.rhkf");
+    let before = files(&dir);
+    let err = run(&resume_args(&dir, 60, &kf)).unwrap_err();
+    assert!(
+        err.0.contains("does not reach the keyframe at tick"),
+        "{err}"
+    );
+    assert!(
+        files(&dir) == before,
+        "a refused resume changed the run directory"
+    );
+    let other = base.join("other");
+    let mut a = RunArgs::new(&repo(), 60, 1, RungKind::Yearly, &other.join("run.ladder"));
+    "solo".clone_into(&mut a.world);
+    a.journal = other.join("journal.sqlite");
+    a.run_dir = Some(other.clone());
+    a.seed = 2;
+    a.seed_set = true;
+    run(&a).unwrap();
+    std::fs::copy(other.join("run.ladder"), dir.join("run.ladder")).unwrap();
+    let before = files(&dir);
+    let err = run(&resume_args(&dir, 60, &kf)).unwrap_err();
+    assert!(err.0.contains("another run's ladder (solo seed 2"), "{err}");
+    assert!(
+        files(&dir) == before,
+        "a refused resume changed the run directory"
+    );
+    println!(
+        "T-12 GAP-9: a run.ladder short of its keyframe and another run's run.ladder are refused by name on resume, the directory unchanged"
     );
 }
