@@ -364,6 +364,8 @@ REQUIRED_GATES = (
     "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)",
     "lint_odd next positive control: a next version that changes a frozen algorithm step must "
     "FAIL (SPR-015)",
+    "lint_odd next positive control: an amendment whose text changed since the committed lock must "
+    "FAIL (SPR-015)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",

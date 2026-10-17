@@ -28,9 +28,10 @@ thousandths, the gestation and postpartum months, the sex ratio) are READ FROM T
      on a day start of its own month; a re-sampled birth lies after the input and never drops;
   7. V-SF-24's report values: births per married woman-year by the mother's age at birth, from
      the chain WITH mortality and widowhood at e0 = 30 (the population the isolation run measures;
-     REV-SPR-015 MAJ-3, R17.2), are NOT M n(a); the per-band ratios are printed and pinned against
-     the spec's ``report_ratios``, and conceptions per susceptible woman-month equal c_i exactly
-     (the identity V-SF-24 tests);
+     REV-SPR-015 MAJ-3, R17.2), banded by the mother's exact age at the birth instant (round 3
+     MIN-2), are NOT M n(a); the per-band ratios are printed and pinned against the spec's
+     ``report_ratios``, and conceptions per susceptible woman-month equal c_i exactly (the identity
+     V-SF-24 tests);
   8. the prose of the step texts F1, F2, N1 and N2 states the same numbers as ``constants`` (a
      reviewer reads the steps, the engine compiles the constants: they must not drift apart).
 
@@ -92,7 +93,7 @@ GROWTH_BAND = (Fraction(-1, 1000), Fraction(3, 1000))  # V-SF-01: r in [-0.1%, +
 HUSBAND_OLDER_YEARS = 3  # check 5's widowhood chain: the husband's age gap (the spec's fact)
 NUM_BITS_MAX = 60  # F4 numerator width the spec states
 DEN_BITS_MAX = 30  # F4 denominator width the spec states
-REPORT_TOL = Fraction(1, 100)  # check 7: the spec's two-digit ratios, within a unit (floats)
+REPORT_TOL = Fraction(1, 1000)  # check 7: the spec's three-digit ratios, within a unit (floats)
 SECANT_STEPS = 3  # check 5: NRR is almost linear in tfr, so few steps find NRR = 1
 
 
@@ -494,13 +495,33 @@ def check_timers(st: Standards) -> bool:
 
 
 def band_ratios(st: Standards, m: int, chain: Chain) -> list[float]:
-    """Return births per married woman-year over M n(a), per band at birth, from ``chain``."""
+    """Return births per married woman-year over M n(a), per band of the mother's age at the birth.
+
+    The banding is the observer's (V-SF-24): a birth counts in the band of the mother's exact age at
+    the birth instant, and a married woman-day counts in the band of her age that day. The chain's
+    months sit on the Month-pulse grid while mothers are born at any instant of a month, so a birth
+    in the last month of a band index falls in the next band for half of the mothers (her offset
+    and the birth day are both uniform within the month), and so does half of that month's married
+    time; the chain splits that month half and half (REV-SPR-015 round 3 MIN-2). Births after 49
+    and the time after 49 are dropped.
+    """
     births, married, _ = chain.run()
+    by_band_births = [0.0] * (BANDS + 1)
+    by_band_months = [0.0] * (BANDS + 1)
+    for a, (b, w) in enumerate(zip(births, married, strict=True)):
+        i = a // BAND_MONTHS
+        if a % BAND_MONTHS == BAND_MONTHS - 1:
+            by_band_births[i] += b / 2
+            by_band_births[i + 1] += b / 2
+            by_band_months[i] += w / 2
+            by_band_months[i + 1] += w / 2
+        else:
+            by_band_births[i] += b
+            by_band_months[i] += w
     ratios = []
     for i in range(BANDS):
-        lo, hi = i * BAND_MONTHS, (i + 1) * BAND_MONTHS
-        married_years = sum(married[lo:hi]) / MONTHS_PER_YEAR
-        ratios.append(sum(births[lo:hi]) / married_years / (m * st.natural[i] / (Q16 * THOUSAND)))
+        rate = by_band_births[i] / (by_band_months[i] / MONTHS_PER_YEAR)
+        ratios.append(rate / (m * st.natural[i] / (Q16 * THOUSAND)))
     return ratios
 
 
@@ -514,10 +535,11 @@ def check_report(st: Standards, spec: dict[str, Any]) -> bool:
     print(
         "   V-SF-24 report: births per married woman-year / M n(a) by band at birth, e0 = 30 with "
         f"widowhood (husband {HUSBAND_OLDER_YEARS} y older) = "
-        + ", ".join(f"{r:.2f}" for r in ratios)
-        + f" (spec: {', '.join(f'{x:.2f}' for x in stated)}); without mortality "
-        + ", ".join(f"{r:.2f}" for r in plain)
-        + "; the chain draws every conception at c_i, the identity V-SF-24 tests"
+        + ", ".join(f"{r:.3f}" for r in ratios)
+        + f" (spec: {', '.join(f'{x:.3f}' for x in stated)}); without mortality "
+        + ", ".join(f"{r:.3f}" for r in plain)
+        + "; banded by the mother's age at the birth instant (the last month of a band index "
+        "splits half and half); the chain draws every conception at c_i, the identity V-SF-24 tests"
     )
     return ok
 

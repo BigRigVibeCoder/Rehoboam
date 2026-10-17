@@ -53,9 +53,23 @@ reason = "<why>"
 
 The lint checks `frozen` against the frozen file and `to` against the next file, refuses a record whose texts are
 equal or whose path has no text, and prints every amendment as an `AMEND` line and a count
-(`amendments (next of <id>): N recorded`, pinned by `bin/check_all.sh`), so a reviewer sees each change to the
-frozen meaning in the run's output. A change without a record is an error; an amended algorithm step under an
-unchanged table `version` is an error too (REV-SPR-015 R17.4).
+(`amendments (next of <id>): N recorded`), so a reviewer sees each change to the frozen meaning in the run's
+output. A change without a record is an error; an amended algorithm step under an unchanged table `version` is an
+error too (REV-SPR-015 R17.4).
+
+**The amendments lock** (REV-SPR-015 round 3 MIN-1). A count can be kept while its content changes (a valid record
+that amends a frozen arithmetic step while a meaning amendment is withdrawn), so the set is pinned, not counted:
+`next/amendments.lock.toml` lists, per system, every amended path with the sha256 of its new text. The lint reads it
+on every `--next` run and fails, naming the path, on any amendment added, withdrawn or changed since the lock (and
+on a missing lock). It is written only by the tool, `lint_odd.py --next … --write-amendments-lock`, after the
+reviewer has read the new `AMEND` lines; it is never typed. `bin/check_all.sh` renders a control with one digest
+changed, which must fail.
+
+**A new table never overrides a frozen step.** A frozen step changes only through an `[[amends]]` record on its
+own table. The lint refuses a new `[algorithm.*]` table whose step reuses a frozen step id (`S9` in a table of the
+next version's own) or whose text names a frozen step as replaced, overridden, superseded, void or no longer
+applying. Prose can be written around any regex, so this is also a **review rule**: a reviewer reads every new
+table for a sentence that changes what a frozen step computes and demands the amendment.
 
 A draft spec that still reads a column from the owner it had before the next version claimed it (S6's
 `household.head` from M4 today) warns in `--next` mode and names the follow-up; a frozen reader errs as always.
@@ -92,3 +106,4 @@ never changes a committed skeleton or the index until step 4.
 |---|---|
 | `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) on the frozen 0.2.0 rung-0 slice |
 | `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`); verbs `BIRTH`, `MARRIAGE` |
+| `amendments.lock.toml` | the twelve amendments of the M2 draft, path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |

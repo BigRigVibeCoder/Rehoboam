@@ -102,7 +102,7 @@ target/release/rh-cli run smoke --years 1000 --threads 4 --vitals --out target/g
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml   # life_ends (SPR-011)
 ```
 
-Not a check: `bin/regen_baseline.sh` regenerates the smoke golden baseline, only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`).
+Not a check: `bin/regen_baseline.sh` regenerates the smoke golden baseline, only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`). Nor is `lint_odd.py --next … --write-amendments-lock`, which rewrites `specs/systems/next/amendments.lock.toml` (every amendment of a next-version spec, by path and text digest) after the Architect has read the new `AMEND` lines; the lock is never typed (SPR-015, REV-SPR-015 round 3 MIN-1).
 
 ## Conventions
 - Docs are Markdown, and diagrams are Mermaid.

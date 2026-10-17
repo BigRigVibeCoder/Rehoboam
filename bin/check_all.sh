@@ -270,12 +270,15 @@ canonical_golden_control() {
 odd_next_control() {
   local dir=target/rendered-fixtures/odd_next/$1 src=specs/systems/next/M2.demography.odd.toml
   rm -rf "$dir" && mkdir -p "$dir" || return 1
+  local lock=specs/systems/next/amendments.lock.toml
   case "$1" in
     algorithm)
+      cp "$lock" "$dir/" || return 1
       sed 's/^  "S0 Rounding\. rhe(n \/ d) for integers n (signed)/  "S0 Rounding (PLANTED CHANGE). rhe(n \/ d) for integers n (signed)/' "$src" > "$dir/M2.demography.odd.toml" || return 1
       grep -q "PLANTED CHANGE" "$dir/M2.demography.odd.toml" || { echo "control not planted: S0 not found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     rng)
+      cp "$lock" "$dir/" || return 1
       sed '0,/^\[\[rng\]\]$/s//[[rng]]\npurpose = "planted_first"\nkey = ["person"]\nuse = "PLANTED"\nresample_on_fork = false\ndraws = []\n[[rng]]/' "$src" > "$dir/M2.demography.odd.toml" || return 1
       grep -q "planted_first" "$dir/M2.demography.odd.toml" || { echo "control not planted: no [[rng]] found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
@@ -283,6 +286,12 @@ odd_next_control() {
       sed 's/tfr = \[1.2, 7.5\]/tfr = [1.2, 9.5]/' specs/systems/next/registry_delta.toml > "$dir/registry_delta.toml" || return 1
       grep -q "9.5" "$dir/registry_delta.toml" || { echo "control not planted: tfr bounds not found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay "$dir/registry_delta.toml" ;;
+    lock)
+      # REV-SPR-015 round 3 MIN-1: the committed lock pins every amendment's path and text digest; one digest changed
+      cp "$src" "$dir/" || return 1
+      sed '0,/= "sha256:[0-9a-f]/s//= "sha256:x/' "$lock" > "$dir/amendments.lock.toml" || return 1
+      grep -q 'sha256:x' "$dir/amendments.lock.toml" || { echo "control not planted: no digest found"; return 1; }
+      "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     *) echo "odd_next_control: unknown case $1"; return 1 ;;
   esac
 }
@@ -797,10 +806,11 @@ run "lint_odd emits control: a draft spec emitting a non-verb warns and passes (
 run "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 ruling 11)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/overlay --overlay tests/lint_fixtures/odd_emits/overlay.toml &&
 run "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, must FAIL (REV-P1a section 7)" "fail:has payload fields ['a', 'c', 'b'], but [[applies]] declares ['a', 'b', 'c']" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/mismatch &&
 run "lint_odd applies control: a sender's payload matching [[applies]] field for field passes (REV-P1a section 7)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/match &&
-run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 19 planted changes rejected, 12 amendments recorded, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 24 planted changes rejected (3 of them by the amendments lock), 12 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
+run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
 run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
