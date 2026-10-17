@@ -631,6 +631,8 @@ effect_golden_control() {
   mkdir -p "$(dirname "$planted")" || return 1
   sed '0,/^expect = "bool:true"$/s//expect = "bool:false"/' specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
   "$PY" -I specs/registry/effect_ref.py --check --golden "$planted"
+}
+
 # SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
 # and 8 under callgrind (bin/perf_gate.py) and compares them with the committed baseline; a second
 # run must give identical counts; a changed baseline must equal the tool's output (ruling 3).

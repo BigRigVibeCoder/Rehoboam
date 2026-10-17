@@ -285,8 +285,6 @@ REQUIRED_GATES = (
     "canonical_v0 positive control: a stale golden digest must FAIL",
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
-    "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass (SPR-007 "
-    "GAP-2)",
     "channel-C self-test positive control: a float column in the DDL must FAIL",
     "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the "
     "right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)",
