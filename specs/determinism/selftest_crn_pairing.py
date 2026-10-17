@@ -30,7 +30,7 @@ events, which this model does not run), no M7 and no T1 (their deaths fall on so
 named actors, who are in the affected set by construction: companion §3.3). The controls that
 must fail (R3, R4) run in the same process on the one run A, from its state at the input.
 
-Run: python -I specs/determinism/selftest_crn_pairing.py              (seeds 1 and 2)
+Run: python -I specs/determinism/selftest_crn_pairing.py              (seeds 1 to 3)
      python -I specs/determinism/selftest_crn_pairing.py --seeds 1    (the PR tier)
      python -I specs/determinism/selftest_crn_pairing.py --write      (regenerate the golden)
      python -I specs/determinism/selftest_crn_pairing.py --golden PATH
@@ -82,8 +82,11 @@ Genesis = Any  # the SPR-019 reference's types, loaded by path
 
 # ------------------------------------------------------------------------- the protocol's constants
 WORLD = fw.TWIN_VALES  # the dynastic fixture world; the target is its primogeniture sovereign
-SEEDS = (1, 2)
-PR_SEEDS = (1,)  # REV-SPR-030 R10: seed 1 in the PR tier, the rest nightly
+SEEDS = (
+    1,
+    2,
+    3,
+)  # the PR tier runs seed 1 (check_all); the nightly tier every seed (REV-SPR-030 R10)
 DAY = 1440
 MONTH_DAYS = 30  # twin_vales.yaml: days_per_year 360, months 12 (the mirror test checks)
 MONTHS = 12
@@ -94,6 +97,9 @@ T_END = HORIZON_YEARS * YEAR  # 5,184,000: deaths at or after it are censored
 INPUT_OFFSET = 6 * 60 + 7  # solo's convention: the input at 06:07 of its day, never a day start
 THRESHOLD = Fraction(9, 10)  # docs/09 V-DET-17's floor on the correlation, reported
 MIN_UNAFFECTED = 100  # the protocol needs at least this many unaffected persons alive at the input
+MIN_WINDOW_YEARS = 5  # R14: a VALID pair has at least this many sim-years after the input ...
+MIN_INFORMATIVE = 100  # ... and at least this many informative (not both-censored) pairs in U
+MIN_WINDOW = MIN_WINDOW_YEARS * 12 * MONTH_DAYS * DAY
 E0, BETA = WORLD.e0, WORLD.brass_beta  # the manifest's M2 literals ("30", the default "1")
 SYSTEM = rng.system_id("M2.demography")
 PURPOSE = rng.purpose_id("death_time")
@@ -102,7 +108,15 @@ TAG_RESAMPLE_ENTITY = rng.tag("rehoboam/rh-core/resample-entity/v1")
 RHO_DIGITS = 9
 MIN_PAIRS = 2  # a correlation needs two pairs; the protocol's MIN_UNAFFECTED is the real bound
 REKEY_EVERY = 50  # the rekey-2pct mutant re-keys every 50th unaffected person
-CONTROLS = ("no-op-input", "swap-remove-after-input", "shift-one-day", "rekey-2pct", "global-epoch")
+# Each mutant and the reason the protocol must give for it (R14: a control that fails for another
+# reason is a control that did not test what it claims).
+CONTROLS = {
+    "no-op-input": "death instants are equal",
+    "swap-remove-after-input": "pairs differ",
+    "shift-one-day": "pairs differ",
+    "rekey-2pct": "pairs differ",
+    "global-epoch": "pairs differ",
+}
 
 
 # ----------------------------------------------------------------------------- the keyed draws
@@ -302,9 +316,10 @@ def affected(g: Genesis, target: int, title: Any) -> dict[str, set[int]]:  # noq
     line = set(ps.Law(gen, target, title.tenures, g.majority).line_for(title.law))
     house_id = g.persons[target].house
     house = {pid for h in g.houses if h.id == house_id for pid in h.members}
-    realm = [h for h in g.houses if h.k < len(WORLD.polities[0].dynasties)]  # the first polity's
+    realm = realm_houses(g, title)
     named = {pid for h in realm for pid in fw.house_report(g, gen, h, fw.DORMANCY_DEGREES).full}
-    core = {target} | line | house | named
+    realm_members = {pid for h in realm for pid in h.members}  # R16: every member of every house
+    core = {target} | line | house | named | realm_members
     close: set[int] = set()
     for pid in core:
         p = g.persons[pid]
@@ -312,7 +327,25 @@ def affected(g: Genesis, target: int, title: Any) -> dict[str, set[int]]:  # noq
             close.add(p.spouse)
         if p.household in g.households:
             close |= {q.id for q in g.persons.values() if q.household == p.household and q.alive}
-    return {"line": line, "house": house, "named_realm": named, "households": close - core}
+    return {
+        "line": line,
+        "house": house,
+        "named_realm": named,
+        "realm_members": realm_members,
+        "households": close - core,
+    }
+
+
+def realm_houses(g: Genesis, title: Any) -> list[Any]:  # noqa: ANN401
+    """The houses of the title's polity: the manifest lists dynasties polity by polity, in order."""
+    first = 0
+    for polity in WORLD.polities:
+        n = len(polity.dynasties)
+        houses = [h for h in g.houses if first <= h.k < first + n]
+        if any(h.title == title.id for h in houses):
+            return houses
+        first += n
+    raise AssertionError("a title outside every polity")
 
 
 # ----------------------------------------------------------------------------- the statistic
@@ -380,6 +413,8 @@ def evaluate(a: Rollout, b: Rollout, s_all: set[int], target: int, t_in: int) ->
         valid, reason = False, f"the target's death instants are equal ({ta})"
     elif (ta is None or ta >= T_END) and (tb is None or tb >= T_END):
         valid, reason = False, "neither death instant of the target is inside the horizon"
+    elif T_END - t_in < MIN_WINDOW:
+        valid, reason = False, f"the window after the input is under {MIN_WINDOW_YEARS} years"
     else:
         valid, reason = True, ""
     unaffected = (a.alive_at(t_in) & b.alive_at(t_in)) - s_all
@@ -391,6 +426,8 @@ def evaluate(a: Rollout, b: Rollout, s_all: set[int], target: int, t_in: int) ->
         xs.append(x)
         ys.append(y)
     identical = sum(1 for x, y in zip(xs, ys, strict=True) if x == y)
+    if valid and len(xs) < MIN_INFORMATIVE:
+        valid, reason = False, f"{len(xs)} informative pairs, under {MIN_INFORMATIVE}"
     rho2, positive = correlate(xs, ys)
     return Verdict(valid, reason, len(unaffected), len(xs), identical, rho2, positive)
 
@@ -422,22 +459,48 @@ def digest(deaths: dict[int, int]) -> str:
     return hashlib.sha256(text.encode("ascii")).hexdigest()
 
 
-def run_pair(seed: int, m: Mortality) -> Pair:
-    """Genesis, run A to the horizon, the input tick from the target's run-A death, run B."""
+def choose_target(g: Genesis, a: Rollout) -> tuple[Any, list[str]]:
+    """R14: the first sovereign (primogeniture, then tanistry) whose run-A death leaves the window.
+
+    Returns the title, or None when no sovereign qualifies (the seed is then SKIPPED and the
+    protocol moves to the next seed), and the log of every candidate considered. A run-A death
+    that is not M2's (a T1 DEATH_DUE in the engine) disqualifies a candidate the same way: the
+    input re-samples M2's own timer only (crn_pairing_v0.md §3.2); in this M2-only model every
+    death is M2's.
+    """
+    log = []
+    chosen = None
+    for title in sorted((t for t in g.titles if t.tier == 0), key=lambda t: t.k):
+        tau = a.deaths.get(title.holder)
+        window = None if tau is None else T_END - (tau - DAY + INPUT_OFFSET)
+        ok = window is not None and window >= MIN_WINDOW
+        years = "none" if tau is None else f"{tau / YEAR:.2f}"
+        log.append(
+            f"candidate title {title.k} {title.law} founder {g.persons[title.holder].k} "
+            f"runA_death_year {years} {'chosen' if ok and chosen is None else 'rejected'}"
+        )
+        if ok and chosen is None:
+            chosen = title
+    return chosen, log
+
+
+def run_pair(seed: int, m: Mortality) -> Pair | None:
+    """Genesis, run A to the horizon, the target and input from run A, run B; None if skipped."""
     g = ps.build(ps.Manifest(**{**WORLD.__dict__, "seed": seed}))
     births = {p.id: p.birth for p in g.persons.values() if p.alive}
-    title = next(t for t in g.titles if t.k == 0)
-    target = title.holder
-    assert title.tier == 0 and g.persons[target].house == g.houses[0].id, "the sovereign of house 0"
     keys = Keys(seed)
     a = Rollout(births)
     a.start()
     a.run(keys, m, T_END, {})
-    tau = a.deaths.get(target)
+    title, log = choose_target(g, a)
+    SKIPPED[seed] = log
+    if title is None:
+        return None
+    target = title.holder
+    tau = a.deaths[target]
     # The input: the day before the target's run-A death, 06:07 (inside that death's month, after
-    # its Month pulse since death days start at the pulse's day + 1); with no death in run A the
-    # pair cannot be VALID and the protocol reports it (R3).
-    t_in = (tau - DAY if tau is not None else T_END - DAY) + INPUT_OFFSET
+    # its Month pulse since death days start at the pulse's day + 1).
+    t_in = tau - DAY + INPUT_OFFSET
     at_input = Rollout(births)  # run A again up to the input: the controls' common starting point
     at_input.start()
     at_input.run(keys, m, t_in, {})
@@ -447,6 +510,9 @@ def run_pair(seed: int, m: Mortality) -> Pair:
     parts = affected(g, target, title)
     s_all = set().union(*parts.values())
     return Pair(g, target, title, t_in, a, at_input, b, parts, evaluate(a, b, s_all, target, t_in))
+
+
+SKIPPED: dict[int, list[str]] = {}  # per seed, the candidate log of choose_target (rendered)
 
 
 def render_seed(seed: int, pair: Pair) -> list[str]:
@@ -462,12 +528,14 @@ def render_seed(seed: int, pair: Pair) -> list[str]:
 
     return [
         f"world {WORLD.id} {seed} horizon_years {HORIZON_YEARS} t_end {T_END}",
+        *SKIPPED[seed],
         f"target founder {tgt.k} id {tgt.id} age_years {-tgt.birth // YEAR} title {pair.title.k} "
         f"law {pair.title.law}",
-        f"input tick {pair.t_in} kind scope_only founder {tgt.k} {b.input_log}",
+        f"input tick {pair.t_in} kind scope_only founder {tgt.k} {b.input_log} "
+        f"window_years {(T_END - pair.t_in) / YEAR:.2f}",
         f"affected line {len(parts['line'])} house {len(parts['house'])} "
-        f"named_realm {len(parts['named_realm'])} households {len(parts['households'])} "
-        f"total {len(s_all)} alive_at_input {alive_in_s}",
+        f"named_realm {len(parts['named_realm'])} realm_members {len(parts['realm_members'])} "
+        f"households {len(parts['households'])} total {len(s_all)} alive_at_input {alive_in_s}",
         f"living_at_input A {len(a.alive_at(pair.t_in))} B {len(b.alive_at(pair.t_in))} "
         f"unaffected {v.unaffected}",
         f"pair {'VALID' if v.valid else 'INVALID'} deaths A {len(a.deaths)} B {len(b.deaths)} "
@@ -489,6 +557,7 @@ def mutant(name: str, pair: Pair, keys: Keys, m: Mortality) -> tuple[Rollout, Ro
     if name == "swap-remove-after-input":  # draws keyed by the living vector's position
         base = deepcopy(pair.at_input)
         base.keying = "position"
+        base.order = sorted(base.alive)  # R14: the living vector at the input, nobody dead in it
         return continue_run(base, keys, m, {}, bump=[]), continue_run(
             base, keys, m, inputs, bump=[]
         )
@@ -510,15 +579,20 @@ def run_controls(seed: int, pair: Pair, m: Mortality) -> tuple[list[str], int]:
     """Every mutant must make the protocol fail; return the report lines and the count that did."""
     keys = Keys(seed)
     lines, failed = [], 0
-    for name in CONTROLS:
+    for name, reason in CONTROLS.items():
         a, b = mutant(name, pair, keys, m)
         v = evaluate(a, b, pair.s_all, pair.target, pair.t_in)
         f = v.failures(f"PROTOCOL FAILED: seed {seed} [{name}]")
-        if f:
+        if not f:
+            lines.append(f"CONTROL PASSED: seed {seed} [{name}]: the protocol did not fail")
+        elif not any(reason in x for x in f):
+            lines += f
+            lines.append(
+                f"CONTROL FAILED FOR ANOTHER REASON: seed {seed} [{name}]: wanted {reason!r}"
+            )
+        else:
             failed += 1
             lines += f
-        else:
-            lines.append(f"CONTROL PASSED: seed {seed} [{name}]: the protocol did not fail")
     return lines, failed
 
 
@@ -526,7 +600,8 @@ def run_controls(seed: int, pair: Pair, m: Mortality) -> tuple[list[str], int]:
 HEADER = [
     "# CRN pairing golden outputs (SPR-030; V-DET-17): GENERATED by",
     "# python -I specs/determinism/selftest_crn_pairing.py --write; do not edit.",
-    "# Per seed of twin_vales: the target (the primogeniture sovereign at genesis), the one",
+    "# Per seed of twin_vales: the sovereign candidates and the chosen target (R14: the",
+    "# primogeniture sovereign, else the tanistry one, else the seed is SKIPPED), the one",
     "# scope-only input inside the month of the target's run-A death and what S11 did with the",
     "# pending death; the affected set by component, with how many of it are alive at the input;",
     "# the living at the input and the unaffected; the pair's validity, the deaths, the pairs,",
@@ -602,8 +677,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     failures: list[str] = []
     control_lines: list[str] = []
     controls_failed = 0
+    valid_seeds = 0
     for seed in seeds:
         pair = run_pair(seed, m)
+        if pair is None:  # R14: no sovereign of this seed meets the power floor: pinned, skipped
+            key = f"world {WORLD.id} {seed} horizon_years {HORIZON_YEARS} t_end {T_END}"
+            blocks[key] = (
+                "\n".join([key, *SKIPPED[seed], "pair SKIPPED no_sovereign_qualifies"]) + "\n"
+            )
+            continue
+        valid_seeds += 1
         lines = render_seed(seed, pair)
         blocks[lines[0]] = "\n".join(lines) + "\n"
         failures += pair.verdict.failures(f"PROTOCOL FAILED: seed {seed}")
@@ -611,6 +694,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             seed_lines, failed = run_controls(seed, pair, m)
             control_lines += seed_lines
             controls_failed += failed
+    if not valid_seeds:
+        failures.append("PROTOCOL FAILED: no seed produced a pair")
     text = "\n".join(HEADER) + "\n" + "".join(blocks.values())
     print(text, end="")
     for line in control_lines:
@@ -631,13 +716,15 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
         print(stale)
         print("CRN PAIRING: FAIL")
         return EXIT_FAIL
-    wanted = len(CONTROLS) * len(seeds)
+    wanted = len(CONTROLS) * valid_seeds
     if args.controls and controls_failed != wanted:
         print(f"CRN PAIRING: FAIL (controls: {controls_failed} of {wanted} made the protocol fail)")
         return EXIT_FAIL
     note = f", controls {controls_failed} of {wanted} FAIL as required" if args.controls else ""
+    skipped = len(seeds) - valid_seeds
     print(
-        f"CRN PAIRING: PASS (seeds {','.join(map(str, seeds))}: every pair VALID and exact{note})"
+        f"CRN PAIRING: PASS (seeds {','.join(map(str, seeds))}: {valid_seeds} VALID and exact "
+        f"pair(s), {skipped} seed(s) skipped for power{note})"
     )
     return EXIT_OK
 

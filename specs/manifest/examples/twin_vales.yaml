@@ -13,7 +13,7 @@
 #   V-DET-17 (CRN pairing): the paired-rollout protocol of specs/determinism/crn_pairing_v0.md names its
 #     intervention on this world's primogeniture sovereign at seed 1;
 #   V-DATA-04 (P1a variant), V-DET-01/02/12 on a dynastic world.
-# The exact reference specs/worldgen/selftest_fixture_worlds.py pins genesis at seeds 1 and 2 (houses, members,
+# The exact reference specs/worldgen/selftest_fixture_worlds.py pins genesis at seeds 1 to 3 (houses, members,
 # founder indices, generations, the named actors at genesis) in specs/worldgen/golden/fixture_worlds_v0.txt;
 # python/tests/test_fixture_worlds_cases.py keeps its mirror of this file honest. No cast: every person is
 # synthesised or back-filled (names come from the annals' kinship fallback, D49). Systems of the template that

@@ -217,7 +217,7 @@ class HouseReport:
         int
     ]  # living members within dormancy_degrees of the title's holder, holder included
     full: list[int]  # narrow + the first and second in the title's line (the gate's reading)
-    dormant_adults: list[int]  # living adult members beyond that distance: Demote at the first pass
+    dormant_adults: list[int]  # living adult members beyond that distance and not named (R18)
     minors_far: list[int]  # living minor members beyond it (SPR-021 decides whether they are named)
     line: list[int]  # the title's line at genesis under its law, in succession order
     line_outside: int  # persons in the line who are not members of the house
@@ -233,7 +233,7 @@ def house_report(g: Genesis, gen: Genealogy, h: House, degrees: int) -> HouseRep
     line = ps.Law(gen, t.holder, t.tenures, g.majority).line_for(t.law)
     head = set(line[:LINE_HEAD])
     full = [pid for pid in living if pid in near or pid in head]
-    far = [pid for pid in living if pid not in near]
+    far = [pid for pid in living if pid not in near and pid not in head]  # R18: not the named
     adults = [pid for pid in far if -g.persons[pid].birth >= g.majority]
     minors = [pid for pid in far if -g.persons[pid].birth < g.majority]
     outside = sum(1 for pid in line if pid not in members)
@@ -290,7 +290,8 @@ def render_world(m: Manifest, degrees: int) -> tuple[list[str], list[str]]:
         f"dormant_adults {sum(len(x.dormant_adults) for x in reports)} "
         f"minors_beyond {sum(len(x.minors_far) for x in reports)} "
         f"empty_lines {sum(1 for x in reports if not x.line)} "
-        f"dormancy_degrees {degrees} majority_age {MAJORITY_AGE}",
+        f"dormancy_degrees {DORMANCY_DEGREES} majority_age {MAJORITY_AGE}",  # the label, not the
+        # degree used: --control dormancy-one must move the counts, not this label (R19)
     ]
     for x in reports:
         h, t = x.house, x.title
@@ -300,7 +301,7 @@ def render_world(m: Manifest, degrees: int) -> tuple[list[str], list[str]]:
             f"dormant_adults {len(x.dormant_adults)} minors_beyond {len(x.minors_far)} "
             f"title {t.k} law {t.law} holder_k {g.persons[t.holder].k} tenures {len(t.tenures)} "
             f"fallbacks {t.fallbacks} minors_seated {t.minor_fallbacks} {line_text(g, gen, x)}",
-            f"members_k {h.k} " + " ".join(str(g.persons[pid].k) for pid in h.members),
+            f"members_k {h.k}: " + " ".join(str(g.persons[pid].k) for pid in h.members),
             *ps.render_house(g, h),
         ]
     case_lines = ps.render_case(g)

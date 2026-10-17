@@ -174,7 +174,8 @@ def render_world(w: World, r: Rates) -> list[str]:
         if year <= w.horizon:
             p = at(points, year)
             lines.append(f"year {year} population {p.n:.0f} member_share {p.share:.3f}")
-    peak = max(points, key=lambda p: p.n)
+    inside = [*(p for p in points if p.year <= w.horizon), at(points, w.horizon)]
+    peak = max(inside, key=lambda p: p.n)
     years = range(w.horizon + 1)
     mean = sum(at(points, y).n for y in years) / len(years)
     lines.append(f"peak population {peak.n:.0f} at year {peak.year:.0f} mean {mean:.0f}")
@@ -202,7 +203,8 @@ def render() -> str:
         r = rates(mult)
         w = World("kingdom_10k", 10000, 117, 1000, mult, holy, None)
         p = project(w, r)
-        final, peak = p[-1], max(p, key=lambda q: q.n)
+        final = at(p, w.horizon)
+        peak = max([*(q for q in p if q.year <= w.horizon), final], key=lambda q: q.n)
         lines.append(
             f"sensitivity mult {mult} holy {holy} nrr_e {r.nrr_e:.4f} "
             f"final population {final.n:.0f} member_share {final.share:.3f} "

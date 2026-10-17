@@ -89,12 +89,12 @@ def test_fixture_worlds_mirror_their_yaml() -> None:
 
 
 def test_tiers_follow_the_rulings() -> None:
-    """The fixture at seeds 1 to 3 and the 10k world at 1 and 2; the PR tier runs one 10k seed."""
+    """The fixture at seeds 1 to 3, the 10k world at 1 and 2, the CRN seeds; one 10k seed in PR."""
     ref = _reference()
     assert ref.SEEDS == {"twin_vales": (1, 2, 3), "kingdom_10k": (1, 2)}
     assert ref.PR_TIER == {"twin_vales": (1, 2, 3), "kingdom_10k": (1,)}
     crn = _load("selftest_crn_pairing", CRN)
-    assert crn.SEEDS == (1, 2) and crn.PR_SEEDS == (1,)
+    assert crn.SEEDS == (1, 2, 3)  # seed 1 in check_all, every seed in golden_nightly.sh
 
 
 def test_crn_calendar_mirrors_twin_vales() -> None:

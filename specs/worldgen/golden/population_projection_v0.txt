@@ -43,6 +43,6 @@ peak population 10415 at year 88 mean 9761
 member_share_reaches 0.5 year 235
 member_share_reaches 0.9 year 294
 member_share_reaches 0.98 year 294
-sensitivity mult 1.0 holy 0.2 nrr_e 1.0341 final population 90 member_share 1.000 peak 11513 at year 176
-sensitivity mult 1.2 holy 0.0 nrr_e 1.2449 final population 7901494 member_share 1.000 peak 7901494 at year 1028
-sensitivity mult 1.0 holy 0.0 nrr_e 1.0341 final population 32387 member_share 1.000 peak 32387 at year 1028
+sensitivity mult 1.0 holy 0.2 nrr_e 1.0341 final population 108 member_share 1.000 peak 11513 at year 176
+sensitivity mult 1.2 holy 0.0 nrr_e 1.2449 final population 6398160 member_share 1.000 peak 6398160 at year 1000
+sensitivity mult 1.0 holy 0.0 nrr_e 1.0341 final population 31356 member_share 1.000 peak 31356 at year 1000

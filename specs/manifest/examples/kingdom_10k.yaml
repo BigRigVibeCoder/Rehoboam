@@ -3,10 +3,12 @@
 # and V-PERF-09's P1a variant (headless, then with rh-cli tail, the TUI stub and a stalled consumer). One manifest
 # serves all three (specs/worldgen/fixture_worlds.md §3 says why): three polities under three laws, twelve great
 # houses of 3 to 6 back-filled generations, twelve seats. The named-actor bound is checkable: a person is named at
-# world start iff a cast member or a great-house member within dormancy_degrees of a holder of a title, claim or
-# office of its house (M7 SIM-9, T1 [initialization]); with dormancy_degrees = 2 the exact reference counts the
-# named at genesis per house at seeds 1 and 2 (specs/worldgen/golden/fixture_worlds_v0.txt) and §3 gives the
-# expected range over 1,000 years. No cast. Systems of the template that P1a does not build (M3, M4, M6, M8)
+# world start iff a cast member or a great-house member who meets M7's rule (SIM-9; dormancy and on_birth; T1
+# [initialization]): holding a seat, office or claim, or within dormancy_degrees of a holder of a title, claim or
+# office of its house, or the ruling house's heir, or first or second in a title's line; with dormancy_degrees = 2
+# the exact reference counts the named at genesis per house at seeds 1 and 2 under that full rule (and under the
+# dormancy clause alone), in specs/worldgen/golden/fixture_worlds_v0.txt, and §3 gives the expected range over
+# 1,000 years. No cast. Systems of the template that P1a does not build (M3, M4, M6, M8)
 # are listed as not built (SPR-011 ruling 3). Every M7 and T1 parameter is set (no Registry defaults yet).
 manifest_version: 0
 registry_version: "0.2.0"
