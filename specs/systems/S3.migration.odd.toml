@@ -36,7 +36,7 @@ not_yet = [
   "Fugitives (P1.23, SAGA-14, V-SAGA-20): person.fugitive set by a lifecycle command from T1.minds after a crime or a mental break; flight as scheduled moves along M1's route graph (route.a, route.b, length_cells, then F1 costs) toward a border, a sanctuary or an ally, with an interception hazard per segment; tile paths only in focus regions and micro worlds. F1, P1b",
   "Emigration off the map (life_course.exit_kind = emigration) and immigration (H64(seed, immigrant, origin, t, k) ids, LIFE_ENTRY origin immigrant): P4 with the off-map compartments and the materialisation adapter (05.1 §3)",
   "urban_share, the era-state variable the Registry gives S3 ([era_state]; ADR-0027): a region's share of people living in settlements above a size threshold; owned and written by S3 from F1 (settlements grow) on, read by M2 fertility and M5 then. Nothing reads it in P1a",
-  "A residence record in channel A of the World Stream: v0 has LIFE_ENTRY and LIFE_EXIT only (specs/stream/channel_a_v0.sql). Residence intervals become a non-event channel-A record: the Architect reserves its record-kind number in SPR-013's channel-A v0, and SPR-018's sprint defines its fields (REV-SPR-018 R11 Q1)",
+  "A residence record in channel A of the World Stream: v0 writes LIFE_ENTRY and LIFE_EXIT only; kind 7 RESIDENCE_INTERVAL is reserved (specs/stream/channel_a_v0.sql, REV-SPR-018 R11) as a non-event record of this table's rows, and SPR-018's sprint defines its fields: one record per residence_interval row at genesis and at each birth",
   "Residence at the raster cell or plot (PlotId; 05.2 §2): F2 with settlement plans",
 ]
 
@@ -218,7 +218,7 @@ source = "design value (SPR-018): people live where there is land; replaced by p
 [[couplings]]
 system = "M2.demography"
 direction = "in"
-via = "the rows M2's birth timers insert in this instant's Vital slot (person.birth_tick = now, person.mother); same_instant reads, so S3's binding is scheduled after M2's"
+via = "the rows M2's birth timers insert in this instant's Vital slot (found by person.residence = 0; their person.mother read same_instant), so S3's binding is scheduled after M2's"
 lag = "same instant (05.1 §2 rule 4 edge)"
 [[couplings]]
 system = "S5.daily_life"

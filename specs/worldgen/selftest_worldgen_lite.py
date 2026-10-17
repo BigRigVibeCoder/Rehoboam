@@ -14,7 +14,9 @@ bit for bit. It checks:
   2. the invariants of the M1 spec hold on every case: every land cell reached from a seed has one
      region and every sea cell none; regions are 4-connected and non-empty; one seat per region,
      inside it; the region graph is exactly the 4-adjacency of regions; one route per edge; every
-     land component has a seed while the region count allows (W6);
+     land component has a seed while the region count allows (W6); each case pins the number of
+     connected components of its region graph, and M1's [isolation] claim on desert_fringe at
+     R = 128 (connected for seeds 1 to 8 except seed 3's island) is asserted;
   3. the widths the spec states hold (the accumulator, the step cost, the draw-to-index product),
      the template ids are the Registry's [heightmap_templates], every template generates at R = 64
      for seeds 1 to 8 (W5), and no founder id of any case needs the rehash;
@@ -85,6 +87,10 @@ MAX_OP_COUNT = 64
 MAX_SMOOTH_PASSES = 4
 REGION_NONE = 0
 REGISTRY = ROOT / "specs" / "manifest" / "registry_v0.toml"
+# The isolation claim of M1's spec: desert_fringe at R = 128, K = 4 has a connected region graph for
+# every seed 1 to 8 but seed 3, whose island becomes a region with no edge (2 components).
+CLAIM_TEMPLATE, CLAIM_RESOLUTION, CLAIM_REGIONS = "desert_fringe", 128, 4
+CLAIM_COMPONENTS = {1: 1, 2: 1, 3: 2, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1}
 SWEEP_RESOLUTION = 64
 SWEEP_SEEDS = range(1, 9)
 SWEEP_REGIONS = (1, 4)
@@ -399,6 +405,28 @@ def edges(region: list[int], r: int) -> list[tuple[int, int]]:
     return sorted(found)
 
 
+def graph_components(k: int, edge_list: list[tuple[int, int]]) -> int:
+    """The number of connected components of the region graph on regions 1..k."""
+    adj: dict[int, set[int]] = {i: set() for i in range(1, k + 1)}
+    for a, b in edge_list:
+        adj[a].add(b)
+        adj[b].add(a)
+    seen: set[int] = set()
+    count = 0
+    for start in range(1, k + 1):
+        if start in seen:
+            continue
+        count += 1
+        stack = [start]
+        seen.add(start)
+        while stack:
+            for nb in adj[stack.pop()]:
+                if nb not in seen:
+                    seen.add(nb)
+                    stack.append(nb)
+    return count
+
+
 def routes(edge_list: list[tuple[int, int]], seat: list[int], r: int) -> list[int]:
     """W9: one route per edge, length = isqrt of the squared distance between the two seats."""
     out = []
@@ -585,6 +613,19 @@ def check_registry_ids(templates: dict[str, Template]) -> list[str]:
     return []
 
 
+def check_claim(templates: dict[str, Template]) -> list[str]:
+    """M1's [isolation] claim: desert_fringe at R = 128, region-graph components per seed."""
+    failures = []
+    for seed, want in CLAIM_COMPONENTS.items():
+        w = generate(templates, CLAIM_TEMPLATE, seed, CLAIM_RESOLUTION, CLAIM_REGIONS)
+        got = graph_components(w.k, w.edges)
+        if got != want:
+            failures.append(
+                f"{CLAIM_TEMPLATE} seed {seed} R {CLAIM_RESOLUTION}: {got} components, not {want}"
+            )
+    return failures
+
+
 def check_sweep(templates: dict[str, Template]) -> list[str]:
     """W5's claim: every template generates at R = 64 for seeds 1 to 8 and K = 1 and 4."""
     failures = []
@@ -703,6 +744,8 @@ def render_case(w: World, pop: Population) -> list[str]:
         "seats " + " ".join(map(str, w.seat)),
         f"edges {len(w.edges)} " + " ".join(f"{a}-{b}" for a, b in w.edges),
         "routes " + " ".join(map(str, w.route_length)),
+        f"graph components {graph_components(w.k, w.edges)} "
+        f"connected {'yes' if graph_components(w.k, w.edges) == 1 else 'no'}",
         f"residence cast={len(pop.cast)} households={hh} rest={pop.rest} "
         + " ".join(map(str, place)),
     ]
@@ -759,7 +802,7 @@ def main(argv: list[str] | None = None) -> int:
     templates = load_templates(args.templates)
     text, failures = render(templates, templates_version(args.templates))
     failures += check_widths(templates) + check_registry_ids(templates) + birth_sequence()
-    failures += check_sweep(templates)
+    failures += check_sweep(templates) + check_claim(templates)
     if failures:
         for f in failures:
             print(f"REFERENCE FAILED: {f}")

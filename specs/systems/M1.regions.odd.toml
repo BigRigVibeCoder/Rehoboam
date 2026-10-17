@@ -248,7 +248,7 @@ steps = [
 #   * desert_fringe at seed 42, R = 256, K = 4 (hamlet: hamlet.yaml sets raster_resolution 256): 53,859 land cells,
 #     regions of 27,691, 6,711, 5,996 and 13,461 cells, seats 18078, 55338, 54904 and 26409, 5 edges (1-3, 1-4, 2-3,
 #     2-4, 3-4: the complete graph on 4 regions less 1-2), route lengths 78 to 148 cells; Job's house of 42 in
-#     settlement 1, the four friends in 4, 2, 1 and 3, the 14 others 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 2 (an
+#     settlement 1, the four friends in 4, 2, 1 and 3, the 14 others 1, 2, 1, 2, 4, 3, 2, 1, 1, 4, 1, 1, 4, 1 (an
 #     independent re-implementation reproduced these numbers from the spec text alone, REV-SPR-018 §1 MAJ-1).
 #     The same template and seed at R = 128 (a smaller raster, not hamlet) give 13,453 land cells and routes 43 to 81.
 #   * The bench 4 fixture (continental_plains, seed 1, R = 512): the elevation digest and the digest of one W4 pass over
@@ -326,8 +326,8 @@ lag = "lagged, through S3"
 
 [isolation]                                # docs/09 V-SF-22: M1 F0 reads nothing, so there is nothing to force
 forcing = []
-horizon = "n/a: genesis only; the isolation run is the generation itself on every template at R = 64, 128, 256 and 512 and K = 1, 4 and 64, seeds 1 to 8 (the reference runs the R = 64 part on every check)"
-expect = "Every case generates or is refused by W5 with its counts; INV-M1-01 to INV-M1-05 hold; the outputs equal the exact reference's; two machines agree (V-INV-10); flat gives one region and no edge; desert_fringe at R = 256 (hamlet) and at R = 128 gives 4 regions and a connected graph for seeds 1 to 8 (hamlet's neighbours can reach each other; REV-SPR-018 §1 confirmed both)"
+horizon = "n/a: genesis only; the isolation run is the generation itself. The reference sweeps, on every check: every template at R = 64, seeds 1 to 8, K = 1 and K = 4 (invariants on each); desert_fringe at R = 128, K = 4, seeds 1 to 8 (region-graph components); and the ten golden cases, each with its region-graph component count pinned. The sprint extends the sweep to R = 256 and 512 and K = 64 on the Rust port"
+expect = "Every case generates or is refused by W5 with its counts; INV-M1-01 to INV-M1-05 hold; the outputs equal the exact reference's; two machines agree (V-INV-10); flat gives one region and no edge; desert_fringe at R = 128 and R = 256, K = 4, gives a connected region graph for seeds 1, 2 and 4 to 8 (hamlet, seed 42, included: its neighbours can reach each other), and for seed 3 an island region with no edge (2 graph components; W6 seeds the island, F1's sea routes join it): the reference asserts the R = 128 row on every check and pins each golden case's component count"
 
 [verification]
 tests = ["V-INV-10", "V-DET-01", "V-DET-02", "V-INV-01", "V-PERF-02", "V-PERF-04"]

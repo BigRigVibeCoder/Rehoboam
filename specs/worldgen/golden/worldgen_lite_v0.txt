@@ -13,6 +13,7 @@ land_cells 4096
 seats 2015
 edges 0 
 routes 
+graph components 1 connected yes
 residence cast=1 households=ada_house:0:0 rest=0 1
 case flat 7 64 1
 elevation_sha256 4e236405feac4f34fba85390a56dc39eee36ab43ca44b793728d179d39faa3b2
@@ -23,6 +24,7 @@ land_cells 4096
 seats 2015
 edges 0 
 routes 
+graph components 1 connected yes
 residence cast=2 households=oswin_house:0:3 rest=0 1 1 1 1 1
 case desert_fringe 42 256 4
 elevation_sha256 2e42840f91b068fb4717246553136f44a2929ca636dbd75503e0888d41896f73
@@ -33,6 +35,7 @@ land_cells 27691 6711 5996 13461
 seats 18078 55338 54904 26409
 edges 5 1-3 1-4 2-3 2-4 3-4
 routes 148 121 78 113 136
+graph components 1 connected yes
 residence cast=6 households=job_house:0:40 rest=14 1 1 4 2 1 3 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2 1 2 4 3 2 1 1 4 1 1 4 1
 case desert_fringe 42 128 4
 elevation_sha256 5a7a7e6d8850efa07051fe75bde473af129630328c2832c01ebeeb19a69229f5
@@ -43,6 +46,7 @@ land_cells 6236 1694 2701 2822
 seats 4652 12864 3946 12309
 edges 5 1-2 1-3 1-4 2-3 2-4
 routes 67 62 64 81 43
+graph components 1 connected yes
 residence cast=6 households=job_house:0:40 rest=14 1 1 4 3 1 3 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 2 2 1 3 4 3 3 1 1 4 1 2 4 2
 case desert_fringe 7 128 4
 elevation_sha256 97ecde33afec0a8813dcb33a4f321f4f626491bc485860921662b403614924a0
@@ -53,6 +57,7 @@ land_cells 6090 1409 1266 1986
 seats 11559 2829 14697 3120
 edges 4 1-2 1-3 1-4 2-4
 routes 72 70 66 35
+graph components 1 connected yes
 residence cast=3 households=a:0:3,b:2:1 rest=10 4 3 2 4 4 4 2 2 1 3 1 1 1 1 1 1 4
 case archipelago 7 96 6
 elevation_sha256 ddb584f6bb73b9e65de17f1477c958beabee10e838a9d78117d7f7fbbc0a07df
@@ -63,6 +68,7 @@ land_cells 953 1029 177 121 177 138
 seats 2676 1855 5512 6247 7316 8584
 edges 0 
 routes 
+graph components 6 connected no
 residence cast=3 households=a:0:3,b:2:1 rest=10 5 3 2 5 5 5 2 2 2 3 1 2 1 1 1 1 6
 case mountain_valleys 7 128 5
 elevation_sha256 dc7f05ba4887f8efb3770484c0c21911f38fe624b5c1ccaf684201c1456cc651
@@ -73,6 +79,7 @@ land_cells 6679 2976 2354 2042 1798
 seats 9534 2396 3603 13037 13328
 edges 7 1-2 1-3 1-4 1-5 2-3 2-4 3-5
 routes 63 62 54 54 73 84 76
+graph components 1 connected yes
 residence cast=3 households=a:0:3,b:2:1 rest=10 5 4 2 5 5 5 2 2 2 4 1 2 1 1 1 1 5
 case caldera_with_passes 1 128 3
 elevation_sha256 550cec11dbb473f6fbeeb842e2c76209d47566efa48b4a3789e0b2937a40e354
@@ -83,6 +90,7 @@ land_cells 7955 4404 3859
 seats 8660 2609 13220
 edges 3 1-2 1-3 2-3
 routes 58 60 84
+graph components 1 connected yes
 residence cast=3 households=a:0:3,b:2:1 rest=10 1 1 3 1 1 1 3 1 1 1 2 3 2 3 1 3 1
 case continental_plains 3 64 8
 elevation_sha256 2ea11fd832d17ec210c5ac63aa51c4023d3c470a2aaff872f9de2a965dda4edc
@@ -93,6 +101,7 @@ land_cells 591 294 364 335 995 439 472 606
 seats 1267 3140 773 3628 1688 293 2806 3221
 edges 14 1-5 1-6 1-7 2-3 2-5 2-8 3-5 3-6 4-7 4-8 5-6 5-7 5-8 7-8
 routes 27 20 24 37 30 17 23 32 16 23 25 34 24 33
+graph components 1 connected yes
 residence cast=3 households=a:0:3,b:2:1 rest=10 4 7 6 4 4 4 6 7 5 1 1 2 5 1 5 1 8
 case river_delta_city 11 128 4
 elevation_sha256 a451dea46b2ff6f67cf7bde4befcd89b0e86570d75d4f926b85b879bf1ce45ba
@@ -103,6 +112,7 @@ land_cells 5489 2735 4037 3536
 seats 9756 4073 13145 2993
 edges 5 1-3 1-4 2-3 2-4 3-4
 routes 66 57 72 56 88
+graph components 1 connected yes
 residence cast=3 households=a:0:3,b:2:1 rest=10 2 3 2 2 2 2 2 1 4 3 2 4 2 2 1 2 1
 bench4 continental_plains 1 512 layers 8
 bench4_elevation_sha256 cba935b4c65e19747bb4e58c036b5e23c9dfef10a6edfeb1a1c3a5ed8c15cb90
