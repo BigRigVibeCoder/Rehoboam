@@ -82,6 +82,8 @@ fertility's hook (`eps_f`) will share, with its M4 in-coupling and its isolation
 spec (P1.5a): a rate read needs a neutral typed by the owner's column, M4 has none, and the frozen-mode lint refuses
 the spec at promotion otherwise. MR11 states the form with the factor exactly 1 until then.
 
+**A frozen bump and its next version (REV-SPR-019 R13).** A frozen spec may be bumped (a declaration-only bump such as M7 0.3.2 → 0.3.3 in PR #61) while a next version of it is a draft here. The `[[amends]]` records quote the frozen text byte for byte and every other frozen element must be preserved, so the draft breaks the moment the bump lands. The rule: of the bump and the next version, **whichever lands second re-derives the next version from the new frozen file** (copy the new frozen text, re-apply the draft's amendments and additions, regenerate the lock with the tool) in its own PR, before it is merged. The lock's digests do not change when the amended texts do not.
+
 **One draft per system id.** `next/` holds at most one next version per id, and only a frozen spec takes one, so a
 second slice of the same system is drafted standalone and folded into the draft once the first slice has merged (SPR-016's
 mortality was drafted as `specs/demography/mortality_f1.toml` under PR #51 and folded into the M2 draft after PR #50).

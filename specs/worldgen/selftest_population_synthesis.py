@@ -95,7 +95,7 @@ DAY = 1440
 MONTHS = 12
 DAYS_360 = 360
 MONTHS_365 = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)  # rh-core time.rs
-SHORTEST_MONTH = 28
+SIBLING_GAP_DAYS = 609  # P10: at least M2's least birth-to-birth gap on either calendar (R10)
 Q16 = 1 << 16
 MAX_POPULATION = 10_000_000  # the manifest's bound on a people's population (< 2^24)
 # rh-ids layouts (person/founder/v1 exists; household/v1 is SPR-015's H1; house and title are new).
@@ -153,7 +153,7 @@ GAP_SEED_OTHER = 1
 IPF_SWEEPS = 32
 IPF_SCALE = 1 << 32  # cells carry 32 fraction bits
 CHILD_BANDS = 3  # 0-4, 5-9, 10-14
-SIBLING_GAP = CLOSED * SHORTEST_MONTH * DAY  # P10: two genesis siblings' births, in minutes
+SIBLING_GAP = SIBLING_GAP_DAYS * DAY  # P10: two genesis siblings' births, in minutes (876,960)
 BAND_REPRESENTATIVE = 2  # P9: a band's representative age is its lower bound plus two years
 OFFSET_BITS = 32  # P3: the offset phi is the draw's high 32 bits over 2^32
 WEIGHT_PRODUCT_BITS = 96  # P3: an allocation needs sum(weights) x total < 2^96 (then u128 suffices)
@@ -477,6 +477,8 @@ class Succession:
     rows: int  # tenure rows written before it (the closed one included)
     line: list[int]  # the law's line; empty when the stand-in rule decided
     chosen: int
+    adult_branch: bool  # the stand-in's adult branch fired (an empty line, a living adult male)
+    minor: bool  # the seated holder is under the majority at the succession
 
 
 @dataclass
@@ -499,6 +501,16 @@ class Title:
     def fallbacks(self) -> int:
         """Successions the stand-in rule decided because the law's line was empty."""
         return sum(1 for s in self.successions if not s.line)
+
+    @property
+    def minor_fallbacks(self) -> int:
+        """Stand-in successions that seated a minor (no living adult male in the house)."""
+        return sum(1 for s in self.successions if not s.line and s.minor)
+
+    @property
+    def adult_fallbacks(self) -> int:
+        """Stand-in successions decided by the adult branch."""
+        return sum(1 for s in self.successions if not s.line and s.adult_branch)
 
 
 @dataclass
@@ -1066,8 +1078,11 @@ class Genesis:
         self.bear(p, w, tick, house, heir=None)
 
     # -- B9: tenures ---------------------------------------------------------------------------
-    def stand_in(self, house: House, t: int) -> int:
-        """B9's stand-in: the oldest living adult male of the house at t, else its oldest male."""
+    def stand_in(self, house: House, t: int) -> tuple[int, bool]:
+        """B9's stand-in: the oldest living adult male of the house at t, else its oldest male.
+
+        Returns the person and whether the adult branch fired; the other branch seats a minor.
+        """
         living = [
             self.persons[pid]
             for pid in house.members
@@ -1075,13 +1090,13 @@ class Genesis:
         ]
         assert living, "a spine member is always alive at a pre-epoch holder death (B4)"
         adults = [p for p in living if t - p.birth >= self.majority]
-        return min(adults or living, key=lambda p: (p.birth, p.id)).id
+        return min(adults or living, key=lambda p: (p.birth, p.id)).id, bool(adults)
 
     def tenures(self, house: House, title: Title) -> None:
         """B9, B10: the tenure log from the root's majority to genesis, and the title at tick 0."""
         rows: list[Tenure] = []
         if title.law in COURT_LAWS:
-            rows.append(Tenure(title.id, self.stand_in(house, 0), 0, I64_MAX))
+            rows.append(Tenure(title.id, self.stand_in(house, 0)[0], 0, I64_MAX))
         else:
             holder = self.persons[house.root]
             heir_birth = self.persons[house.members[1]].birth
@@ -1100,8 +1115,9 @@ class Genesis:
         """B9: the law's line at the holder's death at t; its first, else the stand-in."""
         law = Law(Genealogy(self.persons, t), holder, rows, self.majority)
         line = law.line_for(title.law)
-        chosen = line[0] if line else self.stand_in(house, t)
-        title.successions.append(Succession(t, holder, len(rows), line, chosen))
+        chosen, adult = (line[0], False) if line else self.stand_in(house, t)
+        minor = t - self.persons[chosen].birth < self.majority
+        title.successions.append(Succession(t, holder, len(rows), line, chosen, adult, minor))
         return chosen
 
     # -- P: population synthesis -----------------------------------------------------------
@@ -1355,21 +1371,23 @@ class Genesis:
         The exact targets are T_k = w_k total / sum(w); with C_k their running sums and
         phi = (u >> 32) / 2^32 the offset (purpose synth_offset, entity = 16 i + slot, k = 0), cell
         k receives the points phi, phi + 1, ... that fall in [C_(k-1), C_k):
-        ceil(C_k - phi) - ceil(C_(k-1) - phi) units, its floor or its ceiling. Every product fits
-        u128 when sum(w) total < 2^96. A target at an integer value gets exactly it.
+        ceil(C_k - phi) - ceil(C_(k-1) - phi) units, its floor or its ceiling. Every quantity is
+        unsigned and below 2^128 when sum(w) (total + 1) < 2^96. A target at an integer value
+        gets exactly it.
         """
         assert all(w >= 0 for w in weights)
         if total == 0:
             return Allocation(weights, 0, [0] * len(weights))
         s = sum(weights)
         assert s > 0, "nothing to allocate over"
-        assert s * total < 1 << WEIGHT_PRODUCT_BITS, "an allocation product does not fit u128"
+        assert s * (total + 1) < 1 << WEIGHT_PRODUCT_BITS, "an allocation product does not fit u128"
         if self.control == "rounding-cells" and slot == SLOT_AGESEX:
             return Allocation(weights, total, [w * total // s for w in weights])
         phi = self.draw(PURPOSE_OFFSET, SLOT_STRIDE * PEOPLE_INDEX + slot, 0) >> (64 - OFFSET_BITS)
         scale = 1 << OFFSET_BITS
+        # ceil(C_k - phi) = ceil(C_k + 1 - phi) - 1: every term unsigned, below 2^128 (R15).
         bounds = [
-            ceil_div(c * total * scale - phi * s, s * scale)
+            ceil_div(c * total * scale + (scale - phi) * s, s * scale) - 1
             for c in itertools.accumulate(weights, initial=0)
         ]
         cells = [b - a for a, b in itertools.pairwise(bounds)]
@@ -1527,6 +1545,24 @@ CASES: tuple[Manifest, ...] = (
     MANOR,
     Manifest(**{**MANOR.__dict__, "seed": 2}),
 )
+# The law sweep's second configuration (REV-SPR-019 R12): the manor's two houses at the manifest's
+# deepest generations (6) on the 365-day calendar, so the tenure logs reach past half the blood
+# window and the stand-in's adult branch fires; a sweep fixture, not a golden case (no YAML).
+MANOR_G6 = Manifest(
+    **{
+        **MANOR.__dict__,
+        "id": "manor_g6",
+        "days_per_year": 365,
+        "polities": (
+            Polity(
+                "manor_of_ash",
+                "primogeniture",
+                (Dynasty("ashcombe", 6), Dynasty("thorne", 6)),
+            ),
+        ),
+    }
+)
+SWEEP_CONFIGS: tuple[Manifest, ...] = (MANOR, MANOR_G6)
 
 
 def build(m: Manifest, control: str | None = None, *, synthesise: bool = True) -> Genesis:
@@ -1675,7 +1711,9 @@ class Checker:
         if any(b - a <= CLOSED for a, b in itertools.pairwise(pulses)):
             self.fail(f"two conceptions of {mo.id} inside the closed period")
         births = sorted(ps[c].birth for c in mo.children)
-        if any(b - a < SIBLING_GAP for a, b in itertools.pairwise(births)):
+        # P10's gap for a synthesised mother; M2's least gap on the calendar for a back-filled one
+        gap = least_birth_gap(self.g.cal) if mo.generation >= 0 else SIBLING_GAP
+        if any(b - a < gap for a, b in itertools.pairwise(births)):
             self.fail(f"two children of {mo.id} born less than the sibling gap apart")
         if mo.children and (mo.parity != len(mo.children) or mo.last_birth != births[-1]):
             self.fail(f"parity or last_birth_tick of {mo.id}")
@@ -1729,9 +1767,25 @@ class Checker:
                     self.fail("a house member's father is not of the house")
 
 
+def least_birth_gap(cal: Calendar) -> int:
+    """Return M2's least birth-to-birth gap on ``cal`` in minutes (P10; REV-SPR-019 R10).
+
+    Two conceptions more than the closed period apart (pulses m and m + 21 at the closest) give a
+    first birth no later than the last day start of month m + 9 and a second no earlier than the
+    first day start of month m + 30: t_(m+30) + 1 day - (t_(m+10) - 1 day), minimised over m.
+    """
+    return min(
+        cal.month_start(m + CLOSED + GESTATION + 1) - cal.month_start(m + GESTATION + 1) + 2 * DAY
+        for m in range(MONTHS)
+    )
+
+
 def check_widths(g: Genesis) -> list[str]:
     """Check 4: the widths the spec states, and E(a) against the births reference's exact chain."""
     f = []
+    for days in (DAYS_360, 365):
+        if least_birth_gap(Calendar(days)) > SIBLING_GAP:
+            f.append(f"the sibling gap is below M2's least birth-to-birth gap on {days} days")
     if (MAX_POPULATION * IPF_SCALE) * MAX_POPULATION * IPF_SCALE >= 1 << 128:
         f.append("an IPF product does not fit u128")
     oldest = -(6 * (FATHER_AGE[1] + 1) + YOUNGEST_YEARS + 1) * max(MONTHS_365) * MONTHS * DAY
@@ -1801,7 +1855,7 @@ def render_house(g: Genesis, h: House) -> list[str]:
         f"title {t.k} {t.id} tier {t.tier} law {LAWS.index(t.law)} liege {t.liege} "
         f"polity {t.polity} holder {t.holder} held_since {t.held_since} "
         f"predecessor_exit {t.predecessor_exit} successions {len(t.successions)} "
-        f"fallbacks {t.fallbacks}",
+        f"fallbacks {t.fallbacks} minors {t.minor_fallbacks}",
         *[f"tenure {t.k} {r.holder} {r.start} {r.end}" for r in t.tenures],
     ]
 
@@ -1857,8 +1911,10 @@ HEADER = [
     "# mother band); each house and title with its tenure log (holder, start, end; i64::MAX while",
     "# held); digests of the person (id, sex, birth, death, mother, father, spouse, household,",
     "# residence, generation, parity, last_birth_tick), marriage, household and house_member rows",
-    "# (sorted). Then the law sweep: the manor at seed 1 under each law (its houses' tenure logs)",
-    "# and, over the sweep seeds, each law's successions and stand-in fallbacks.",
+    "# (sorted). Then the law sweep, per configuration (the manor; the manor at six generations on",
+    "# the 365-day calendar) and law: the seed-1 houses and tenure logs, then the counts over the",
+    "# sweep seeds (successions, stand-in fallbacks, minors seated, adult-branch fallbacks, women",
+    "# holders, the longest log) and a digest of every seed's tenure logs and succession heads.",
     "constants population-synthesis-v0 backfill-v0",
 ]
 
@@ -1886,6 +1942,8 @@ def case_values(g: Genesis, values: dict[str, Any]) -> None:
         ever_married_q32_at_19=g.fert.ever_married(19),
         ever_married_q32_at_49=g.fert.ever_married(49),
         schedule_end_years_at_default=Schedule(E0_DEFAULT, BETA_DEFAULT, g.cal).end_years,
+        least_birth_gap_minutes_360=least_birth_gap(Calendar(DAYS_360)),
+        least_birth_gap_minutes_365=least_birth_gap(Calendar(365)),
     )
     key = f"{g.m.id}_{g.seed}"
     values[f"{key}_synthesised"] = r.synthesised
@@ -1904,29 +1962,84 @@ def case_values(g: Genesis, values: dict[str, Any]) -> None:
         }
 
 
+def log_lines(seed: int, g: Genesis) -> list[str]:
+    """One configuration's tenure logs and successions at a seed, for the sweep's per-law digest."""
+    out: list[str] = []
+    for t in g.titles:
+        out += [f"{seed} {t.k} tenure {r.holder} {r.start} {r.end}" for r in t.tenures]
+        out += [
+            f"{seed} {t.k} succession {s.tick} head {s.line[0] if s.line else 0} chosen {s.chosen}"
+            for s in t.successions
+        ]
+    return out
+
+
+@dataclass
+class SweepCounts:
+    """One law's counts over a configuration's sweep seeds (REV-SPR-019 R9, R12)."""
+
+    successions: int = 0
+    fallbacks: int = 0
+    minors: int = 0  # stand-in successions that seated a minor
+    adult_fallbacks: int = 0  # stand-in successions decided by the adult branch
+    women: int = 0  # tenure rows held by women
+    longest: int = 0  # the longest tenure log
+    log: list[str] = field(default_factory=list)
+
+    def add(self, seed: int, g: Genesis) -> None:
+        """Count one built configuration."""
+        for t in g.titles:
+            self.successions += len(t.successions)
+            self.fallbacks += t.fallbacks
+            self.minors += t.minor_fallbacks
+            self.adult_fallbacks += t.adult_fallbacks
+            self.women += sum(1 for r in t.tenures if g.persons[r.holder].sex == SEX_FEMALE)
+            self.longest = max(self.longest, len(t.tenures))
+        self.log += log_lines(seed, g)
+
+    def values(self) -> dict[str, int]:
+        """The counts the spec pins."""
+        return {
+            "successions": self.successions,
+            "fallbacks": self.fallbacks,
+            "minors": self.minors,
+            "adult_fallbacks": self.adult_fallbacks,
+        }
+
+
 def law_sweep(control: str | None, seeds: int) -> tuple[list[str], list[str], dict[str, Any]]:
-    """Check 3: the manor's back-fill under each law over the sweep seeds, and its golden lines."""
+    """Check 3: the back-fill under each law over the sweep seeds and configurations; golden lines.
+
+    For each configuration and law: the manor's seed-1 houses and tenure logs, then one line with
+    the counts and a digest of every seed's tenure logs and successions (each line's head and the
+    seated holder), so a changed window, a changed stand-in or a changed law moves a golden line.
+    """
     lines: list[str] = []
     failures: list[str] = []
     values: dict[str, Any] = {}
-    for law in LAWS:
-        successions = fallbacks = women = 0
-        for seed in range(1, seeds + 1):
-            g = build(with_law(MANOR, law, seed), control, synthesise=False)
-            failures += [f"law {law}: {x}" for x in Checker(g, backfill_only=True).run()]
-            if seed == MANOR.seed:
-                lines.append(f"sweep {law} {MANOR.id} {seed}")
-                for h in g.houses:
-                    lines += render_house(g, h)
-            for t in g.titles:
-                successions += len(t.successions)
-                fallbacks += t.fallbacks
-                women += sum(1 for r in t.tenures if g.persons[r.holder].sex == SEX_FEMALE)
-        lines.append(
-            f"sweep {law} seeds {seeds} successions {successions} fallbacks {fallbacks} "
-            f"women_holders {women}"
-        )
-        values[f"sweep_{law}"] = {"successions": successions, "fallbacks": fallbacks}
+    adult_total = 0
+    for m in SWEEP_CONFIGS:
+        for law in LAWS:
+            counts = SweepCounts()
+            for seed in range(1, seeds + 1):
+                g = build(with_law(m, law, seed), control, synthesise=False)
+                failures += [f"{m.id} law {law}: {x}" for x in Checker(g, backfill_only=True).run()]
+                if seed == 1:
+                    lines.append(f"sweep {m.id} {law} seed {seed}")
+                    for h in g.houses:
+                        lines += render_house(g, h)
+                counts.add(seed, g)
+            lines.append(
+                f"sweep {m.id} {law} seeds {seeds} successions {counts.successions} "
+                f"fallbacks {counts.fallbacks} minors {counts.minors} "
+                f"adult_fallbacks {counts.adult_fallbacks} women_holders {counts.women} "
+                f"longest_log {counts.longest} logs_sha256 {sha(counts.log)}"
+            )
+            values[f"sweep_{m.id}_{law}"] = counts.values()
+            adult_total += counts.adult_fallbacks
+    values["sweep_adult_fallbacks"] = adult_total
+    if adult_total == 0:
+        failures.append("the stand-in's adult branch never fires in the sweep (R9 pins one case)")
     return lines, failures, values
 
 
