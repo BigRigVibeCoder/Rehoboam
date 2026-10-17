@@ -8,8 +8,8 @@ agents: [all]
 tags: [roadmap, project-management]
 related: [PRJ-001, BCK-001, BCK-002, SPR-011, VER-G0]
 created: 2026-10-16
-updated: 2026-10-16
-version: 0.5.1
+updated: 2026-10-17
+version: 0.5.2
 ---
 
 # PRJ-002 — P1a "Bloodlines": sprint plan
@@ -151,8 +151,8 @@ The G1a list is one list, the same in `docs/11` and `docs/09` §5, with P1a vari
 | Channel-A segment DDL (`specs/stream/channel_a_v0.sql`); `life_ends`; `household.yaml`, `hamlet.yaml` (A-06) | SPR-013 | Missing |
 | Channel C segment DDL (`specs/stream/channel_c_v0.sql`) (PR #37 Q10) | SPR-013 | Missing |
 | EVO: same-instant command delivery, the absent-owner registration rule, and the merge's rewrite of event-typed payload fields (`05.1` §2 rule 2; REV-P1a NEW-4; D36) | SPR-014 | Missing |
-| M2 F1: fertility, partnering, households, kinship | SPR-015 | Missing |
-| M2 F1 mortality (infant sub-schedule, old-age tail, density modifier); fixed-point `exp`/`ln` ruling and reference | SPR-016 | Missing |
+| M2 F1: fertility, partnering, households, kinship | SPR-015 | Drafted (2026-10-17): `specs/systems/next/M2.demography.odd.toml` 0.3.0 draft on the frozen 0.2.0 slice, with `specs/demography/selftest_m2_f1.py` and `docs/05_architecture/systems/M2.demography_F1.md`; awaits the Architect's rulings Q1–Q4 and the director's Q5, Q6, then supersedes the frozen file in SPR-015's PR |
+| M2 F1 mortality (infant sub-schedule, old-age tail, density modifier); fixed-point `exp`/`ln` ruling and reference | SPR-016 | Missing; its dependencies are listed in `docs/05_architecture/systems/M2.demography_F1.md` §4 |
 | Effect-language grammar and golden cases, with the kinship relations (REV-P1a NEW-3) | SPR-017 | Drafting (`05.5` §2.1 is prose) |
 | `neutral` on `[[reads]]` in `lint_odd.py`'s schema and in M7's and T1's foreign reads: the effect language's loader needs it, and SPR-014's absent-owner rule supplies it (D36) | SPR-017 | Missing |
 | `M1.regions` (F0 graph; F1 routes); worldgen-lite; `S3.migration` F0 | SPR-018; SPR-032 (P1b, D33) | Missing |

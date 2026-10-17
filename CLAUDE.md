@@ -64,6 +64,8 @@ cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sam
 cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)
 python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
+python -I specs/demography/selftest_m2_f1.py      # M2 F1 fertility and partnering: the exact reference of [algorithm.fertility_f1] and [algorithm.partnering_f1] in the next-version spec (SPR-015)
+python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml   # the next version of a frozen spec (M2 F1 draft 0.3.0) supersedes it for the run and must preserve the frozen slice (SPR-015; specs/systems/next/README.md)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)

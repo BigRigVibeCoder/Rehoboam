@@ -109,6 +109,10 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `odd_emits/overlay/`, `odd_emits/overlay.toml` | `specs/systems/lint_odd.py --extra-specs --overlay` (SPR-011 ruling 11) | a frozen spec emitting a kind only a world's Registry overlay declares | must succeed (`PASS: 7 system specs linted`) |
 | `odd_applies/mismatch/` | `specs/systems/lint_odd.py --extra-specs` (PR #32 `[[applies]]`; REV-P1a §7) | a frozen spec whose `[[commands]]` payload lists the `[[applies]]` fields in another order | `has payload fields ['a', 'c', 'b'], but [[applies]] declares ['a', 'b', 'c']` |
 | `odd_applies/match/` | as above | the same spec with matching payload fields | must succeed (`PASS: 7 system specs linted`) |
+| `odd_next/algorithm_changed/` | `specs/systems/lint_odd.py --next` (SPR-015; `specs/systems/next/README.md`) | the next-version M2 spec with a frozen `[algorithm.mortality_rung0]` step reworded | `frozen [algorithm.mortality_rung0] changed` |
+| `odd_next/rng_prefix/` | as above | the next-version M2 spec with a new `[[rng]]` purpose inserted before the frozen `death_time` (the skeleton's discriminants are positional) | `frozen RNG purpose death_time must stay at position 0` |
+| `odd_next/overlay_moves_bound.toml` | `lint_odd.py --next --overlay` (SPR-015) | the next Registry delta with `tfr`'s upper bound moved from 7.5 to 9.5 | `replacement changes or drops parameter tfr bounds` |
+| (rendered) `target/rendered-fixtures/m2_f1_stale_check_value.odd.toml` | `specs/demography/selftest_m2_f1.py --spec` (SPR-015) | the next-version M2 spec with `tfr1_bits` off by one | `M2 F1 FERTILITY AND PARTNERING: FAIL` |
 | `sifting/life_ends_unanchored.toml` | `specs/sifting/lint_patterns.py` (V-SIFT-05; SPR-011 ruling 14) | `life_ends` with a `where` read that is not anchored to a bound event | `ERROR life_ends.e1: UNANCHORED state read` |
 
 Since SPR-003 GAP-9, every plane-A crate in the `arch/` and `compile_fail/plane_a_names_plane_*` fixtures declares `[lints] workspace = true` (each fixture root has a `[workspace.lints]` table), so each control fails only for the rule it plants.

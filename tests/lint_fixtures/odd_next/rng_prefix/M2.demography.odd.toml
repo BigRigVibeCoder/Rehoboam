@@ -1,0 +1,749 @@
+# ODD-R v2 system spec (ADR-0033). M2 F1, spec 0.3.0 DRAFT (SPR-015; PRJ-002 §6 "M2 F1: fertility, partnering,
+# households, kinship"): births by age-specific fertility, partnering (fathers), households and the kinship the effect
+# language walks, added on top of the frozen rung-0 slice.
+#
+# HOW THIS FILE RELATES TO THE FROZEN ONE (lint_odd.py --next; specs/systems/next/README.md). specs/systems/M2.demography.odd.toml
+# is 0.2.0, frozen 2026-10-16 (D30/D36); SPR-012 and SPR-013 built against it and its skeleton is committed. This file
+# is its next version. It is linted with `python -I specs/systems/lint_odd.py --next specs/systems/next --overlay
+# specs/systems/next/registry_delta.toml`, which supersedes 0.2.0 by this file for that run (so M7 and T1's reads and
+# commands are checked against it) and then checks that the frozen slice is preserved: every 0.2.0 [[owns]] column with
+# the same entity, type, plane and fixed_point; every 0.2.0 [algorithm.*] table byte for byte (mortality_rung0 below is
+# the frozen text, unchanged); the 0.2.0 [[rng]] purposes as a prefix, in order, with the same key, resample_on_fork
+# and draws (so RngPurpose discriminants of the generated skeleton do not move); every 0.2.0 [[invariants]] id with the
+# same statement and test; every 0.2.0 [[applies]] command with the same payload; every 0.2.0 schedule binding and
+# [[emits]] kind; every 0.2.0 parameter with its default. The rung-0 semantics are therefore unchanged: F1 adds steps,
+# columns, purposes, commands' handling and invariants beside them. When the director approves SPR-015's plan, the
+# Architect moves this file over the frozen one (a C2 change inside SPR-015's C3 PR), merges registry_delta.toml into
+# registry_v0.toml, regenerates the skeleton (bin/gen_skeletons.py) and freezes 0.3.0; `next/` is then empty again.
+#
+# EVERY NUMBER IN THIS FILE IS EITHER CITED OR A DESIGN VALUE, AND SAYS WHICH. The exact reference
+# specs/demography/selftest_m2_f1.py reproduces every F1 integer below and asserts the check values.
+odd_r = 2
+
+[system]
+id = "M2.demography"
+name = "Demography"
+spec_version = "0.3.0"
+fidelity = "F1"
+status = "draft"                           # next version of the frozen 0.2.0 (specs/systems/next/README.md)
+crate = "rh-sys-demography"
+adrs = ["ADR-0003", "ADR-0006", "ADR-0007", "ADR-0024", "ADR-0025", "ADR-0026"]
+requirements = ["DATA-8", "SIM-5", "SIM-6", "SIM-8", "SIM-9", "DET-13"]
+
+[purpose]
+statement = "Age every person, schedule deaths, births and marriages as timers, keep households, and keep the life-course log and the marriage log of everyone who ever lived: the genealogy every kinship relation walks."
+role = "substrate"
+patterns = [
+  { test = "V-SF-02", pattern = "Child mortality to age 15 in the agrarian band", kind = "identity", role = "sole" },
+  { test = "V-SF-02b", pattern = "Adult mortality shape on the Brass General Standard", kind = "identity", role = "sole" },
+  { test = "V-SF-24", pattern = "Age-specific marital fertility follows the Coale-Trussell natural-fertility shape at the manifest's level", kind = "identity", role = "sole" },
+  { test = "V-SF-25", pattern = "Early, near-universal female marriage (the F1 nuptiality standard) and fathers for every birth", kind = "identity", role = "sole" },
+  { test = "V-SF-01", pattern = "Long-run growth of a closed population inside the pre-modern band, from births and deaths alone", kind = "emergent", role = "sole" },
+  { test = "V-SF-18", pattern = "Household size and the share of complex households (soft; Laslett and Hajnal unread)", kind = "emergent", role = "contributing" },
+]
+not_yet = [
+  "Brass at any (alpha, beta): needs fixed-point exp and ln (SPR-016); F1 births run at beta = 1 only, as rung 0",
+  "An infant sub-schedule below age 1 and an old-age tail above 90 (SPR-016): rung 0 interpolates linearly from l(0) = 1 to l(1), and l(100) = 0 makes death certain in the month a person reaches 100",
+  "Density and entitlement modifiers of fertility and mortality (eps_f, eps_m: M4 F0 and M1 F0 give y and K; SPR-016 stubs the hook, P1.5a fills it). V-SF-20b",
+  "Maternal mortality, stillbirth and twins: not modelled (a birth is always one live child; the mother's death is the ordinary schedule). A later fidelity level",
+  "Parity-specific fertility control (Coale-Trussell m > 0), the Hajnal marriage market (age-at-marriage as a manifest culture setting), divorce, polygyny, adoption and legitimacy: F2 (05.1 §3)",
+  "Remarriage at its own rate: F1 draws a widow at the first-marriage rate of her age (design simplification, decision F1-D7)",
+  "Per-settlement marriage pools: F1's pool is the whole ledger; S3.migration F0 (SPR-018) bounds it by settlement",
+  "Immigration and off-map materialisation (H64(seed, immigrant, origin, t, k)): P4 with S3 F1",
+]
+
+# ----------------------------------------------------------------------------- the live ledger (person.*)
+# SPR-011 ruling 5: the ledger exists when person.id is registered. rh-core keeps every person.* column aligned and sorted
+# by person.id, whoever owns it. A dead row leaves at once: rh-core's compaction pass at the start of Bookkeeping of the
+# death instant removes every row with person.alive = 0 from every person.* column, before invariants and hashes. Until
+# then the dead row is readable by every system (M7 and T1.minds read it at Polity and Agenda of the same instant).
+# F1 (SPR-015): a row ENTERS through SPR-014's row insert (05.1 §2 rule 2; [algorithm.fertility_f1] F9): apply_birth hands
+# rh-core one complete row of M2's columns; rh-core inserts it into every person.* column, M2's with the given values and
+# every other owner's with the zero of its type (0, false, enum code 0), keeping the sort, at the merge of M2's level in
+# Vital, so every later phase of the birth instant reads the newborn (M7 on_birth at Polity, T1 at Agenda).
+[[owns]]
+column = "person.id"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId (ADR-0026): the ledger key. Founders get founder(seed, k) with the deterministic rehash (ruling 10); births H64(mother, parity) with the same rehash ([algorithm.fertility_f1] F9; rh-ids person/child/v1). Rows are sorted ascending by it; it is never reused"
+fixed_point = false
+[[owns]]
+column = "person.birth_tick"
+entity = "person"
+type = "i64"
+plane = "A"
+meaning = "Signed sim-time of birth in minutes (ADR-0026); negative for founders born before the epoch; the birth instant (a day start) for a birth. Never changes"
+fixed_point = false
+[[owns]]
+column = "person.sex"
+entity = "person"
+type = "enum"
+plane = "A"
+meaning = "male | female (codes 0, 1). Drawn at birth (F9, purpose birth_sex). Never changes"
+fixed_point = false
+[[owns]]
+column = "person.alive"
+entity = "person"
+type = "bool"
+plane = "A"
+meaning = "1 on every ledger row except the dead of the current instant: apply_death writes 0, and rh-core's compaction at the start of Bookkeeping of that instant removes the row (SPR-011 ruling 5). A row with alive = 0 never survives an instant"
+fixed_point = false
+[[owns]]
+column = "person.death_tick"
+entity = "person"
+type = "i64"
+plane = "A"
+meaning = "i64::MAX while alive; the death instant (minutes), written once by apply_death together with alive = 0. The pending death time is a timer in the agenda, never this column"
+fixed_point = false
+[[owns]]
+column = "person.mother"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the mother, or 0 for a founder or immigrant without one (ADR-0026); set at birth (F9) or at genesis for a manifest household's children ([initialization]), never changed"
+fixed_point = false
+[[owns]]
+column = "person.father"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the father: the mother's husband at conception (F7 records him in the timer, so a posthumous child keeps its father); 0 when unknown or for a founder or immigrant without one; set at birth or at genesis, never changed"
+fixed_point = false
+[[owns]]
+column = "person.spouse"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the living spouse, or 0. Written by apply_marry ([algorithm.partnering_f1] N7), whether the marriage came from M2's own partnering timer or from T1.minds' Marry command; cleared by apply_death on the spouse's death ([algorithm.households_f1] H4). Symmetric: a.spouse = b iff b.spouse = a (INV-M2-08). Genesis marries a manifest household's head to its one adult cast member of the other sex ([initialization])"
+fixed_point = false
+[[owns]]
+column = "person.death_cause"
+entity = "person"
+type = "enum"
+plane = "A"
+meaning = "none | natural | murder | battle | execution | accident (codes 0-5); none while alive. Written by apply_death with alive = 0 and the death tick: natural for an M2 hazard death, otherwise the cause the ScheduleDeath command carried (M7, T1.minds; M8 later; P1.13). Readable, like every column of the dead row, until rh-core's compaction at the start of Bookkeeping of the death instant (SPR-011 ruling 5); the life-course log keeps it after that"
+fixed_point = false
+# F1 columns (SPR-015).
+[[owns]]
+column = "person.household"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "HouseholdId of the household the person belongs to (never 0 for a living person: INV-M2-09). The mother's at birth (F9), the manifest's or a one-person household at genesis, moved by apply_marry (N7) and by the dissolution rule (H4). 05.1 §5's ledger column `household u64`"
+fixed_point = false
+[[owns]]
+column = "person.parity"
+entity = "person"
+type = "u16"
+plane = "A"
+meaning = "Live births this person has given: the next child's parity for H64(mother, parity) (rh-ids: 0 for her first). Incremented by apply_birth (F9); at genesis the count of a manifest household's children whose mother she is, else 0. Always 0 for a male"
+fixed_point = false
+[[owns]]
+column = "person.last_birth_tick"
+entity = "person"
+type = "i64"
+plane = "A"
+meaning = "Instant of this person's last live birth as a mother; i64::MIN when none (founders too: a founder mother is susceptible from the epoch). Written by apply_birth (F9); read by the fertility step for the postpartum closed period (F5)"
+fixed_point = false
+[[owns]]
+column = "person.due_tick"
+entity = "person"
+type = "i64"
+plane = "A"
+meaning = "The instant of this woman's pending birth timer (a day start of the due month), i64::MAX when she is not pregnant. Written with the timer (F7), re-written by a re-sample (F8), cleared by apply_birth (F9). The timer fires the birth; this column is state the fertility step reads (no second conception while pregnant) and INV-M2-10 ties the two together"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- households (household.*; F1)
+# Minimal households (ADR-0026 item 4; 05.1 §3 "households (minimal)"): a row per household ever formed, kept sorted
+# ascending by household.id like the ledger, never removed (a dissolved household keeps its row with dissolved_tick set,
+# so a reader of a dead parent's household still finds it; the table grows by about one row per marriage).
+# Membership is person.household. [algorithm.households_f1] states formation, headship and dissolution.
+[[owns]]
+column = "household.id"
+entity = "household"
+type = "u64"
+plane = "A"
+meaning = "HouseholdId = H64 over the rh-ids domain tag rehoboam/rh-ids/household/v1 of [founding head PersonId, formation tick as u64] (05.2 §1: H(founding member id, formation tick)); genesis households use formation tick 0. rh-ids adds the layout with golden vectors in SPR-015 (bin/gen_rng_golden.py). Never reused; a collision is a load error (the pair is unique by construction)"
+fixed_point = false
+[[owns]]
+column = "household.head"
+entity = "household"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the head: the husband at formation (N7), the manifest's head at genesis; on the head's death the surviving spouse if a member, else the oldest living member (H4). 0 once dissolved"
+fixed_point = false
+[[owns]]
+column = "household.formed_tick"
+entity = "household"
+type = "i64"
+plane = "A"
+meaning = "The marriage instant that formed it, 0 for a genesis household. Never changes"
+fixed_point = false
+[[owns]]
+column = "household.dissolved_tick"
+entity = "household"
+type = "i64"
+plane = "A"
+meaning = "i64::MAX while a living person belongs to it; written once, with the instant, when the last member dies (H4) or when its head marries into another household and takes the members along (N7)"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- the marriage log (marriage.*; F1)
+# ADR-0026 item 3: the life-course log has interval tables for residence, occupation, faction and marriage. The marriage
+# log is the marriage interval table in plane A: one row per marriage, append-only in apply order (N7), end_tick written
+# once (H4). The chronicle's life_interval rows of kind 3 (schema.sql) are derived from it, two per row. In P1a every
+# marriage is also a MARRIAGE event row (05.2 §4.0: every P1a world is under the tellability ceiling); a channel-A
+# LIFE_INTERVAL record kind for marriages at scale is SPR-015's format decision (question Q4 of the PR).
+[[owns]]
+column = "marriage.husband"
+entity = "marriage"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the husband (the male party; apply_marry normalises the order)"
+fixed_point = false
+[[owns]]
+column = "marriage.wife"
+entity = "marriage"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the wife"
+fixed_point = false
+[[owns]]
+column = "marriage.start_tick"
+entity = "marriage"
+type = "i64"
+plane = "A"
+meaning = "The instant apply_marry applied it (a day start); 0 for a genesis marriage"
+fixed_point = false
+[[owns]]
+column = "marriage.end_tick"
+entity = "marriage"
+type = "i64"
+plane = "A"
+meaning = "i64::MAX while both live; the death instant of the first spouse to die, written once by apply_death (H4). F1 has no other ending (no divorce)"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- the life-course log (life_course.*)
+# Everyone ever born, founded or immigrated (05.1 §7; ADR-0026; DATA-8). SPR-011 ruling 5: append-only. A row is appended
+# once, when the person enters the world (genesis for founders, birth, immigration), and its exit fields (exit_kind,
+# exit_tick, death_cause) are written once, when the person leaves; rh-core refuses any other write. Row order is entry
+# order: at genesis the founders in ascending PersonId; later, the order of the entering events. The log is never
+# compacted (ADR-0007): it is the plane-A record of who lived. Channel A carries it as LIFE_ENTRY and LIFE_EXIT records
+# (specs/stream/channel_a_v0.sql); the chronicle's life_course table is their join.
+# The genealogy of everyone (ADR-0026 item 3; round 4 of PR #32, NEW-1): the live ledger holds only the living and is
+# compacted at Bookkeeping of a death instant (SPR-011 ruling 5), so kinship through the dead (T1.minds, M7.dynasty) walks
+# life_course.person_id, mother, father and sex, never person.*. mother, father and sex are set once, at entry (sex as person.sex): 0 for
+# founders (pre-epoch rows appended at genesis), the parents for births (F9).
+# F1 confirms what the effect language's genealogy prelude (specs/registry/effect_language_v0.md §5.3; SPR-017) needs
+# from this log, and nothing more: person_id, mother, father (the walks), birth_tick (sibling order; ties by person_id,
+# which F1 never produces for one mother: one birth per mother per instant) and sex (cognatic eligibility), plus the
+# ledger's person.alive for lineage pruning. Every birth writes all five at entry (REV-P1a NEW-7). The genealogy is
+# acyclic by construction: a parent's birth_tick is at least 15 years below a child's (INV-M2-06).
+[[owns]]
+column = "life_course.person_id"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the person the row records; unique in the log"
+fixed_point = false
+[[owns]]
+column = "life_course.origin"
+entity = "life_course"
+type = "enum"
+plane = "A"
+meaning = "born | founder | immigrant (codes 0, 1, 2; schema.sql life_course.origin). born for every F1 birth"
+fixed_point = false
+[[owns]]
+column = "life_course.mother"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "As person.mother at entry; 0 for founders and immigrants without one"
+fixed_point = false
+[[owns]]
+column = "life_course.father"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "As person.father at entry; 0 when unknown, for founders and immigrants without one"
+fixed_point = false
+[[owns]]
+column = "life_course.sex"
+entity = "life_course"
+type = "enum"
+plane = "A"
+meaning = "As person.sex at entry: male | female (codes 0, 1); written once at entry, like mother and father. Founders take their person.sex at genesis. Succession through a dead ancestor needs it (REV-P1a section 8, NEW-7)"
+fixed_point = false
+[[owns]]
+column = "life_course.birth_tick"
+entity = "life_course"
+type = "i64"
+plane = "A"
+meaning = "As person.birth_tick; negative for founders born before the epoch"
+fixed_point = false
+[[owns]]
+column = "life_course.entry_tick"
+entity = "life_course"
+type = "i64"
+plane = "A"
+meaning = "The instant the row was appended: 0 for founders (genesis), the birth tick for a birth, the arrival tick for an immigrant"
+fixed_point = false
+[[owns]]
+column = "life_course.exit_kind"
+entity = "life_course"
+type = "enum"
+plane = "A"
+meaning = "open | death | emigration (codes 0, 1, 2). open while the person is in the ledger; written once when the person leaves (schema.sql exit_kind: NULL = open, 0 death, 1 emigration in the chronicle view)"
+fixed_point = false
+[[owns]]
+column = "life_course.exit_tick"
+entity = "life_course"
+type = "i64"
+plane = "A"
+meaning = "i64::MAX while open; the instant of the exit, written once with exit_kind"
+fixed_point = false
+[[owns]]
+column = "life_course.death_cause"
+entity = "life_course"
+type = "enum"
+plane = "A"
+meaning = "As person.death_cause (none | natural | murder | battle | execution | accident); none unless exit_kind = death; written once with exit_kind"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- reads (F1)
+# Round 4 (NEW-4): declared unconditionally; SPR-014's registration rule drops a read whose owner the world does not
+# register (solo, household and hamlet register neither T1.minds nor M7.dynasty) and gives the step view the coupling's
+# neutral value, stated on each in-coupling below. All three are flags read at the start of the instant (lagged): none
+# enters a rate.
+[[reads]]
+column = "person.named"
+owner = "T1.minds"
+lag = "lagged"
+use = "mode"
+why = "Named actors marry by decision (T1's Marry command), everyone else by M2's partnering step: a named woman is skipped by N3 and a named man is no candidate in N4, so T1 and M2 never both marry the same person. Neutral: 0 (nobody named)"
+[[reads]]
+column = "person.vocation"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "mode"
+why = "holy_orders leaves the marriage pool (M7's vocation submodel: 'M2's fertility reads it'); the other vocations change nothing. Neutral: none"
+[[reads]]
+column = "house_member.person"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "mode"
+why = "A woman with a house_member row (born into or founding a great house) conceives at M x elite_fertility_mult (F4); the default multiplier 1.0 makes the read inert. Neutral: no row (nobody is a house member)"
+
+# Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4): one payload per command, which every sender uses.
+# F1 (SPR-014's Day/Vital drain, [[schedule]] below): a command whose tick is the drain's own instant is applied in the
+# drain, in Vital, after the timer pass and before the bindings that read M2 at same_instant (T1.minds, M7.dynasty); a
+# later tick becomes a timer at that tick. Every death and marriage takes effect at a day start (round 3, BLK-1).
+# The accepted set is exactly these two. Considered and not accepted in F1: Divorce and EndMarriage (no verb sends
+# one in P1a; F2), Adopt and Legitimise (M7 legitimacy, P1b at the earliest), ScheduleBirth (no system other than M2
+# makes a birth; a catalyst that does is a journaled material input, P1b), SetHousehold (S3.migration F0 moves nobody).
+[[applies]]
+command = "ScheduleDeath"
+payload = "{ victim: PersonId, tick: SimTime (a day start), cause: natural | murder | battle | execution | accident, culprit: PersonId or 0, cause_event: EventId or 0 }"
+from = ["M7.dynasty", "T1.minds"]
+sprint = "P1.13 (SPR-014)"
+[[applies]]
+command = "Marry"
+payload = "{ a: PersonId, b: PersonId, tick: SimTime (a day start) }"
+from = ["T1.minds"]
+sprint = "P1.13 (SPR-014); applied by [algorithm.partnering_f1] N7 (SPR-015): the same preconditions and effects as M2's own partnering timer; a command that fails one is dropped and reported (INV-M2-05's rule), never applied in part"
+
+[[emits]]
+kind = "DEATH"
+when = "apply_death, when a death timer fires (alive = 0, death tick, death cause, life-course exit). Roles: the deceased is target; there is no actor for a natural death (a ScheduleDeath's culprit is actor, P1.13). Payload: [death_cause code]. Causes: none for a natural death. Admitted under DATA-5 as the tellable act class death at rungs 0-2 (SPR-011 ruling 11)"
+[[emits]]
+kind = "EXTINCTION"
+when = "apply_death leaves no ledger row with alive = 1: emitted once, right after that DEATH, in the same fire, with the DEATH as its one cause (a draft-local cause, written as a triggered edge; SPR-011 rulings 11, 17). No roles; payload: [] . With births it still happens at most once per run (an empty world bears no children); the run continues to its requested end (V-SCALE-04)"
+[[emits]]
+kind = "BIRTH"
+when = "apply_birth (F9), when a birth timer fires at a day start: after the row insert and the life-course append. Roles: the mother is actor, the child is target (the father is in the child's life-course row; P1.9's typed [event_roles] may add a parent role, BCK-002 A-24). Payload: [sex code, birth order (parity after the birth)]. Causes: none (the marriage is state, not a cause). Registry verb BIRTH, act class birth, tellability 96 (design value: below DEATH's 128), admitted at every P1a world under the ceiling (05.2 §4.0)"
+[[emits]]
+kind = "MARRIAGE"
+when = "apply_marry (N7), whether from M2's partnering timer or from T1's Marry command. Roles: the husband is actor, the wife is target. Payload: []. Causes: none from a timer; a Marry command carries no cause_event (its frozen payload), so none from it either. Registry verb MARRIAGE, act class marry, tellability 112 (design value)"
+
+[scales]
+spatial = "person; households as collectives (membership only, no place: residence is S3.migration's from SPR-018)"
+temporal = "Month pulse for every draw (mortality, fertility, partnering); each death, birth and marriage a timer at a day start (a Day-pulse instant): deaths and marriages inside their month, births in the ninth month after conception, never a Month-pulse instant (amended ruling 7; INV-M2-03, INV-M2-10, INV-M2-11); a Day/Vital binding drains the command queue (SPR-014)"
+extent = "every living person in the ledger; the marriage pool is the whole ledger at F1 (per-settlement pools from SPR-018)"
+restart = "Owned columns (ledger, households, marriage log, life-course log) plus the pending death, birth and marriage timers in the agenda restore the system exactly. K, the fertility tables (F3, F4) and the nuptiality bits (N1) are pure functions of the compiled e0, tfr and elite_fertility_mult and are recomputed at construction, never stored. M2 keeps no index: the children-by-parent and spouse lookups it needs are rebuilt from the log at construction (a cache with a rebuild rule)"
+
+[[fidelity_ladder]]
+level = "F1"
+representation = "Per-person Brass relational-logit hazards on the General Standard (specs/demography); rung 0: beta = 1 in odds form, monthly Bernoulli draws ([algorithm.mortality_rung0]). F1 births: Coale-Trussell natural fertility at level M from tfr, a 9 + 11 month closed period, conceptions drawn monthly for married women and born as timers ([algorithm.fertility_f1]); partnering by a monthly nuptiality hazard and a keyed choice of husband ([algorithm.partnering_f1]); minimal households ([algorithm.households_f1])"
+status = "target"
+
+[[schedule]]
+pulse = "Month"
+phase = "Vital"
+steps = [
+  "ageing: nothing stored; age is derived from birth_tick",
+  "apply_death: due death timers fire in the phase's timer pass, before the pulse steps (05.1 §2 rule 4); none is due at a Month pulse instant (INV-M2-03)",
+  "mortality: one Bernoulli per living person on this month's probability; a hit becomes a death timer at the start of a keyed day inside the month, never the Month-pulse instant",
+  "fertility: one Bernoulli per susceptible married woman on her band's conception probability ([algorithm.fertility_f1] F5, F6); a hit becomes a birth timer at the start of a keyed day of the ninth month after this one, with the husband as father (F7)",
+  "partnering: one Bernoulli per eligible unmarried woman on her band's nuptiality probability ([algorithm.partnering_f1] N3, N4); a hit picks a husband by a keyed draw among the eligible men and becomes a marriage timer at the start of a keyed day inside the month (N5)",
+]
+when = "always"
+[[schedule]]
+pulse = "Day"
+phase = "Vital"
+steps = [
+  "apply_death: due death timers (M2's own and those made from ScheduleDeath commands) fire in the timer pass of this day start; the single death path, S12 then [algorithm.households_f1] H4",
+  "apply_birth: due birth timers fire in the same timer pass, in agenda key order with the deaths ([algorithm.fertility_f1] F9); a mother's birth timer precedes her death timer of the same instant (its seq is lower: drawn earlier), so a death in childbirth bears the child first",
+  "apply_marry: due marriage timers fire in the same timer pass ([algorithm.partnering_f1] N7)",
+  "households: the H4 bookkeeping of each death of this instant runs inside apply_death; nothing else runs here ([algorithm.households_f1])",
+  "lifecycle: SPR-014's drain of M2's command queue: a ScheduleDeath or Marry whose tick is this instant is applied now, through apply_death or apply_marry, after the timers of the slot; a later tick becomes a timer (ScheduleDeath: kind 1 at (tick, Vital) with the command's cause; Marry: kind 3 at (tick, Vital) with the command's parties); a command for a dead person is dropped and reported (BCK-002 A-30); the queue-age invariant is one day (A-31: M2 binds Day)",
+]
+when = "always (the binding runs at every day start; a when clause is documentation, round 3 BLK-1)"
+
+[[rng]]
+purpose = "planted_first"
+key = ["person"]
+use = "PLANTED: a new purpose before the frozen one"
+resample_on_fork = false
+draws = ["k = 0"]
+[[rng]]
+purpose = "death_time"
+key = ["person", "month"]
+use = "Whether a person dies this month, and on which day: the death fires at the start of that day, the Day-pulse instant, so systems reacting to a death in the same instant (M7 succession, T1 grief) run their Day bindings at it (amended SPR-011 ruling 7; minute-level death times wait for BCK-002 A-35). [algorithm.mortality_rung0] S9"
+# SPR-011 ruling 7 and the RNG-purpose rule of 05.1 §6 item 9: a vital timer is re-drawn after a fork or a scoped input.
+resample_on_fork = true
+draws = [
+  "k = 0: the monthly Bernoulli on the month's Prob32 probability; exactly one draw per living person per month, whatever the probability (CRN)",
+  "k = 1: only on a hit, the day of death: one of the month's day starts after the Month-pulse instant (S9); in a re-sample, one of the day starts after the input's instant (S11)",
+]
+# Stream key: (world_seed, branch_salt(t), system_id(M2.demography), epoch of the person (BCK-002 A-29), purpose death_time,
+# entity person.id, t = the Month pulse instant, k). A re-sample draws through rh-core's ResampleCtx instead: the same purpose,
+# entity resample_entity_id(Person), t = the input's instant, the epoch after the input, the same k = 0 and k = 1.
+[[rng]]
+purpose = "conception"
+key = ["person", "month"]
+use = "Whether a susceptible married woman conceives this month, and on which day of the ninth month after it the child is born ([algorithm.fertility_f1] F6, F7). Keyed as death_time: (world_seed, branch_salt(t), system_id, the woman's epoch, purpose conception, entity = the woman's person.id, t = the Month pulse instant, k). The father is state (her spouse at t), not a draw"
+resample_on_fork = true
+draws = [
+  "k = 0: the monthly Bernoulli on her band's conception probability c_i (F4); exactly one draw per susceptible married woman per month (CRN)",
+  "k = 1: only on a hit, the birth day: one of the due month's day starts other than its pulse instant (F6); in a re-sample (F8, through ResampleCtx at t = the input's instant, k = 0 of the re-sample), one of the due month's day starts after the input, else the first day start after the due month",
+]
+[[rng]]
+purpose = "marriage_time"
+key = ["person", "month"]
+use = "Whether an eligible unmarried woman marries this month, whom, and on which day ([algorithm.partnering_f1] N4, N5). Keyed as death_time, entity = the woman's person.id, t = the Month pulse instant"
+resample_on_fork = true
+draws = [
+  "k = 0: the monthly Bernoulli on her band's nuptiality probability (N1); exactly one draw per eligible unmarried woman per month (CRN)",
+  "k = 1: only on a hit with at least one candidate, the husband: a uniform index into the candidate list, ascending person.id (N4)",
+  "k = 2: only then, the day: one of this month's day starts other than the pulse instant (N4); in a re-sample (N6, k = 0 of the re-sample), one of the remaining day starts after the input, else the timer is dropped",
+]
+[[rng]]
+purpose = "birth_sex"
+key = ["person", "tick"]
+use = "The newborn's sex, drawn at the birth ([algorithm.fertility_f1] F9): entity = the child's own PersonId (known before the draw: H64(mother, parity) with the rehash), t = the birth instant, k = 0. Not a timer, so not re-sampled: the same child born at the same instant has the same sex in every branch (CRN, ADR-0026)"
+resample_on_fork = false
+draws = [
+  "k = 0: male iff the draw hits SEX_M = rhe(2^32 x 105 / 205) (F2); exactly one draw per birth",
+]
+
+[design]
+basic_principles = "Mortality: Brass relational logit on the General Standard (Brass 1971; R12 §9), at beta = 1 l(x) = 1 / (1 + K O(x)), K solved from e0 without exp or ln. Fertility: Coale and Trussell (1974) natural fertility, f(a) = M n(a) with the control parameter m = 0 (no parity-specific stopping; R12 §9 notes the volume has no Brass fertility model, Barrett's Monte Carlo gives the micro mechanics the closed period copies), realised as a monthly conception hazard whose long-run birth rate is M n(a) exactly (F4). Partnering: a monthly first-marriage hazard by age band (the early, near-universal pattern Hajnal 1965 contrasts with the European one; R09 §2 B), husband chosen among the eligible by a keyed draw: minimal partnering so that fathers exist (ADR-0026 item 4). Households: membership only, formed by marriage, inherited by the survivor"
+emergence = "Age structure, life expectancy, the growth rate (V-SF-01), the realised TFR (below tfr by widowhood and death before 50), birth intervals, orphanhood, household size and the time to extinction of a small population emerge from the per-person draws. Imposed: the schedules themselves (the identity tests V-SF-02, V-SF-24, V-SF-25)"
+adaptation = "n/a: demography has no agents that choose. T1.minds' marry decision for named actors is T1's adaptation, applied here"
+objectives = "n/a: no agents that choose"
+learning = "n/a: no agents that choose"
+prediction = "n/a: no agents that choose"
+sensing = "Three flags at the start of the instant (lagged): person.named (T1), person.vocation and house_member.person (M7), each with a neutral value when its owner is absent. Era-state medical level shifts alpha from SPR-016 (05.1 §3.1); entitlement from P1.5a"
+interaction = "Lifecycle commands only (05.1 §2 rule 2): ScheduleDeath and Marry applied through apply_death and apply_marry; births enter the ledger through SPR-014's row insert; M7 on_birth and T1 read the newborn and the spouse column at the same instant. Within M2, a marriage this month, a conception this month and a death this month are drawn independently from the state at the Month pulse and reconciled when their timers fire (a dead party drops a marriage or a birth; a dead mother's unborn child is lost)"
+stochasticity = "Keyed counter-based RNG only (ADR-0006): per person-month one Bernoulli for death (k = 0) and, for a married susceptible woman, one for conception, for an eligible unmarried woman one for marriage; on a hit one day draw (and for a marriage one husband draw); one sex draw per birth keyed by the child. No Poisson or batched draws (V-INV-08). Exactly one k = 0 draw per eligible person per purpose per month whatever the probability (CRN, V-DET-17)"
+collectives = "Households: imposed (formed by a marriage or at genesis, dissolved when empty), owned here (household.*, person.household). Great houses are M7's; M2 reads membership for the fertility multiplier only"
+observation = "The life-course log (LIFE_ENTRY, LIFE_EXIT), the marriage log, and DEATH, EXTINCTION, BIRTH and MARRIAGE events in channel A; monthly living count, births and deaths in STEP_DIGEST (its births field, 0 in P1.0, is live from SPR-015). Declared aggregates (SPR-028): crude birth and death rates, age-specific marital fertility by band, age at first marriage, mean household size; INSUFFICIENT below 400 births (fertility bands) and 100 households"
+era_state = []    # F1 reads no era state; medical_level (S2.technology) moves alpha from SPR-016, when S2 has an owner
+scale_behaviour = "Identical at every N: every per-person draw depends only on that person's state and the Month pulse, not on N or on visiting order; the husband draw depends on the candidate list, which is the same list in the same order whatever the thread count (N4). Cost: the partnering step scans the eligible men once per hit; at 10k persons (SPR-030) that is about 100 hits x 2,000 men a month, trivial; at the kingdom scale and above a per-settlement pool (SPR-018) bounds it. Statistical bands report INSUFFICIENT below their sample minimums"
+
+[algorithm.mortality_rung0]
+# SPR-011 ruling 7: no transcendental in plane A. Every quantity is an exact integer; every width is the smallest standard
+# width that holds every intermediate; every division is rounded exactly once, as stated. The exact reference
+# (specs/demography/selftest_m2_rung0.py, Python fractions) reproduces it bit for bit; T-05's bin/gen_m2_reference.py
+# ports that reference and generates the golden vectors.
+version = "m2-rung0-v1"
+steps = [
+  "S0 Rounding. rhe(n / d) for integers n (signed) and d > 0 is the integer nearest n / d, ties to the even integer: q = floor(n / d), r = n - q d; add 1 iff 2r > d, or 2r = d and q is odd. Every division below is rhe of exact integers unless it says floor. No float, no truncating cast, no other rounding.",
+  "S1 Standard (compiled-in constants). The 71 grid ages a_0..a_70 and four-digit survivors ls_0..ls_70 of specs/demography/brass_general_standard.toml [standard] (Brass 1971 Table 4). Held as h_i = 2 a_i (u8, half-years: 0, 2, 4, ..., 100, 105, ..., 200) and s_i = 10^4 ls_i (u16: s_0 = 10000, s_70 = 0, non-increasing). Both conversions are exact.",
+  "S2 Parameters. e0 is the Q16_16 compiled from the manifest literal (ruling 9: exact decimal, round half to even): E = e0 bits, i32, E in [1310720, 5570560] by the Registry bounds [20, 85]. rh_manifest::compile fills each parameter M2 reads from the manifest, else from the Registry default (e0 = 30, beta = 1); a parameter M2 reads with neither is a load error naming it, so the compiled WorldSpec holds no optional parameter (Architect ruling on PR #37). Rung 0 reads exactly e0 and brass_beta. brass_beta must compile to exactly 65536 (1.0); a manifest that sets brass_alpha is refused at load by name, since rung 0 reads no alpha and K comes from e0 (until P1.3); tfr, eps_f, eps_m and elite_fertility_mult are not read at rung 0, so they are not compiled and need no default.",
+  "S3 Survivors at a grid age for a level k (K = k / 2^32; k is a u64 in [0, 2^40]). L_i(k) = 0 if s_i = 0; otherwise L_i(k) = rhe(s_i 2^64 / (s_i 2^32 + k (10^4 - s_i))). Numerator u128 (< 2^78), denominator u64 (< 2^54). L_i(k) is in [0, 2^32] (32 fraction bits); L_0(k) = 2^32 for every k, and L_i(2^32) = rhe(s_i 2^32 / 10^4) is the standard itself. This is l = 1 / (1 + K (1 - ls) / ls) multiplied through by s_i 2^32.",
+  "S4 Trapezoid sum. T(k) = sum over i = 0..69 of (h_(i+1) - h_i) (L_i(k) + L_(i+1)(k)), a u64 (< 2^42). e0(k) = T(k) / 2^34 years exactly (h counts half-years and the trapezoid halves; L has 32 fraction bits). No rounding.",
+  "S5 Bisection for K. lo = 0, hi = 2^40. Repeat exactly 40 times: mid = (lo + hi) >> 1; if T(mid) >= E 2^18 then lo = mid, else hi = mid. Then K = lo (k bits). The comparison is exact (E 2^18 is e0 in units of 2^-34 years). mid is never 0, and T(2^40) / 2^34 < 1 year < 20 while T(k) / 2^34 tends to 98.75 years as k falls to 1, so every Registry e0 is bracketed. T is non-increasing in k (each L_i is, and rhe is monotone), so K is the largest k with e0(k) >= e0. Computed once, at construction.",
+  "S6 Schedule. L_i = L_i(K) for i = 0..70: 71 u64 values, the whole rung-0 schedule.",
+  "S7 Survivors at an age in minutes. Y = minutes per year of the world calendar: 518400 (360 days) or 525600 (365 days). Grid ages in minutes A_i = h_i Y / 2 (exact, Y is even; A_70 = 100 Y). For an age x (i64 minutes, x >= 0; a negative age is an error): if x >= A_70 then l(x) = 0; otherwise, for the unique i with A_i <= x < A_(i+1), l(x) = L_i + rhe((L_(i+1) - L_i) (x - A_i) / (A_(i+1) - A_i)), all i64 (|L_(i+1) - L_i| <= 2^32 and x - A_i < 2^21, so the product is < 2^53). l(x) is in [0, 2^32] and non-increasing in x.",
+  "S8 Monthly probability. At the Month pulse instant t_m, with D = t_(m+1) - t_m the month's length in minutes from the calendar (43200 for 360 days; 40320 to 44640 for 365), a living person with birth tick b has x = t_m - b. q = 2^32 if l(x) = 0, else q = rhe(2^32 (l(x) - l(x + D)) / l(x)) (numerator u128). q is a Prob32 (05.1 §6 item 4) with bits in [0, 2^32]. q = 2^32 (certain death) iff l(x + D) = 0, that is iff x + D >= 100 Y: the old-age tail is P1.3.",
+  "S9 Draws (amended SPR-011 ruling 7: deaths fire at day starts). Stream key as [[rng]] death_time with t = t_m. k = 0: draw d0 (u64); the person dies this month iff d0 hits q (Prob32 mapping: q = 2^32, or d0 < q 2^32). Exactly one k = 0 draw per living person per month, whatever q. k = 1, only on a hit: n = D / 1440, the month's length in days (30; 28 to 31 for 365 days), so the candidate instants are the n - 1 day starts t_m + 1440 j for j = 1..n-1 (the Month-pulse instant t_m itself is excluded: a timer must be strictly after the current instant and phase); draw d1; j = 1 + floor(d1 (n - 1) / 2^64) (u128 product, floor); the death instant is tau = t_m + 1440 j: uniform over the month's day starts other than the pulse instant. The probability q still covers the whole month [t_m, t_m + D): a death that would fall on the first day moves to a later day start (design simplification: the hazard is flat within a month, below the schedule's resolution; BCK-002 A-35 brings minute-level times).",
+  "S10 Timer. On a hit M2 inserts one agenda timer at (tau, Vital), a Day-pulse instant: owner M2, purpose death_time, kind 1 (DEATH_TIMER), payload b (the birth tick, which S11 needs), about the person. Persons are visited in ascending person.id, so the agenda's insertion order is PersonId order.",
+  "S11 Re-sample (resample_on_fork; ADR-0025 item 3). A material input at instant t_in that scopes the person, while the timer is pending (t_in <= tau: a timer due at t_in itself is still pending in the Inputs phase, ADR-0025 item 4), cancels it, and resample_timer re-draws through ResampleCtx (purpose death_time, the epoch after the input, t = t_in): t_end = the first month start after t_in (the pending month's end); x0 = t_in - b, x1 = t_end - b; q' = 2^32 if l(x0) = 0, else rhe(2^32 (l(x0) - l(x1)) / l(x0)). k = 0: d0 hits q'? The candidate instants are the day starts strictly after t_in and before t_end: s_1 < ... < s_c. On a miss, or when c = 0 (the input fell on the month's last day, so every candidate day has passed), the timer is dropped (None): the person lives to the next Month pulse, where the monthly draw applies again. On a hit with c >= 1, k = 1: j = floor(d1 c / 2^64) (u128 product, floor) and tau' = s_(j+1). Intended behaviour, a one-month horizon (ADR-0025 item 3; Architect ruling on PR #37): an input re-samples only the pending timers in its scope, so a person with no pending death this month is not re-drawn until the next Month pulse, which draws afresh at the new epoch. At rung 0 no input changes a hazard, so nothing is lost; reconsider when inputs change conditions (P1.3).",
+  "S12 apply_death(person, cause), in fire at the timer's instant (Vital): person.alive := 0; person.death_tick := now; person.death_cause := cause (natural for an M2 timer); on the person's open life_course row: exit_kind := death, exit_tick := now, death_cause := cause (each written once; rh-core refuses a second write, ruling 5); emit DEATH (target = person; no actor; payload [cause code]); then, if no ledger row has alive = 1, emit EXTINCTION with the DEATH as its cause. The dead row stays readable until rh-core's compaction at the start of Bookkeeping of this instant.",
+]
+# Check values of this algorithm (from the exact reference; selftest_m2_rung0.py asserts them). K is in units of 2^-32.
+check_values = [
+  { e0 = "20",    K = 18743037470 },
+  { e0 = "23.4",  K = 14691140731 },
+  { e0 = "30",    K = 9582773732 },
+  { e0 = "36.6",  K = 6442600637 },
+  { e0 = "43.44", K = 4299869756 },
+  { e0 = "60",    K = 1466952214 },
+  { e0 = "85",    K = 73327863 },
+]
+# Facts of the fixed-point schedule that the plan's acceptance criteria must use (selftest_m2_rung0.py proves them):
+#   * The four-digit standard's own trapezoid e0 is 43.45915 years exactly (T(2^32) / 2^34 is within 2^-30 years of it,
+#     S3 rounding each L_i), not 43.44 (Brass's rounded value): K = 1 is reached at e0 = 43.45915 (|K - 2^32| = 569
+#     units, from the Q16_16 rounding of e0), not at 43.44 (K = 1.00114 there).
+#   * V-SF-02's q(15) in [0.35, 0.55] holds exactly for e0 in [23.441086, 36.569855] (Q16_16 bits 1536235 to 2396642;
+#     about [23.4, 36.6]). SPR-011 T-05 and ruling 8 use these exact values (Architect, PR #37).
+
+[algorithm.fertility_f1]
+# F1 births (SPR-015). No transcendental in plane A; every quantity an exact integer; every division rhe (S0) unless it
+# says floor. The exact reference specs/demography/selftest_m2_f1.py reproduces every integer and asserts check_values.
+# The frozen S2 sentence "tfr ... not read at rung 0, so not compiled" is superseded for F1 by F2 below: F1 reads tfr and
+# elite_fertility_mult, so rh_manifest::compile fills them from the manifest, else from the Registry defaults.
+version = "m2-f1-fertility-v1"
+steps = [
+  "F0 Rounding, calendar. rhe as S0. Y, D and the month starts t_m as S7 and S8; n_m = D_m / 1440 is month m's length in days. Ages in minutes: x = t - birth_tick. A woman's band at t is i = floor(x / Y) - 15 for 15 Y <= x < 50 Y (i in 0..6: ages 15-19, 20-24, ..., 45-49), else none.",
+  "F1 Natural-fertility standard (compiled-in constants). Coale and Trussell (1974, Population Index 40(2), Table 1) n(a), births per married woman-year by five-year band 15-19 .. 45-49: 0.411, 0.460, 0.431, 0.395, 0.322, 0.167, 0.024; held as thousandths N_i = 411, 460, 431, 395, 322, 167, 24 (u16). Cited values; the transcription is checked against secondary sources only (a research batch confirms it against the paper: the PR's question Q1). Zero outside the bands.",
+  "F2 Parameters and constants. tfr: the Q16_16 compiled from the manifest literal or the Registry default 4.7 (design value, F3 and check_values: it puts the stationary estimate at e0 = 30 inside V-SF-01's band with room for the widowhood loss), T = its bits, in [78643, 491520] by the Registry bounds [1.2, 7.5]. elite_fertility_mult: Q16_16, default 1.0, bits E in [65536, 104858] by the bounds [1.0, 1.6]. Constants (design values unless marked): gestation G = 9 months; postpartum non-susceptible period P = 11 months (Barrett's mean, R12 §9, taken as fixed); the closed period after a conception is therefore G + P = 20 months; SEX_M = rhe(2^32 x 105 / 205) = 2199861298, the Prob32 that a birth is male (the biological sex ratio at birth of about 105 boys per 100 girls, a standard demographic constant held fixed: cited in kind, no paper in research/ yet, question Q1). brass_alpha, eps_f and eps_m are still not read.",
+  "F3 Level. The reference TFR of the F1 nuptiality schedule at M = 1, TFR1 = sum over bands i of 5 N_i / 1000 x pi_i, where pi_i is the mean share of woman-months in band i spent married by a woman who marries at the N1 monthly probabilities and never dies or is widowed (the exact chain of specs/demography/selftest_m2_f1.py); TFR1 = 9.393524 years-equivalent births, held as the Q16_16 constant TFR1_BITS = 615614 (round half to even). The level is M = tfr / TFR1 in Q16_16: m = rhe(T x 65536 / TFR1_BITS); at the default, m = 32791 (0.50035). So tfr is the TFR a cohort would reach under the F1 marriage pattern with no mortality; the realised TFR is lower by widowhood and death before 50, and the growth band V-SF-01 is the acceptance test of the default. For a woman with a house_member row (M7; neutral: none), m_e = rhe(m x E / 65536) replaces m.",
+  "F4 Conception probability per band (computed once at construction, 7 values for m and 7 for m_e). b_i = m x N_i (births per woman-year in units of 2^-16 / 1000); den_i = 12 x 65536 x 1000 - 20 x b_i; c_i = 2^32 if den_i <= 0, else min(2^32, rhe(2^32 x b_i / den_i)). Numerator < 2^60 (m_e <= 1.6 x 0.80 x 65536, N_i <= 460), denominator < 2^30, both u64. c_i is a Prob32 in [0, 2^32] and non-decreasing in tfr and in E. Why this form: a woman drawn monthly at c with a closed period of 20 months after each conception bears 12 c / (1 + 20 c) children a year in the long run; solving for c gives b / (12 - 20 b), so the long-run birth rate equals M n_i exactly (check 3 of the reference). The denominator reaches 0 only above the Registry range for m alone (m x 460 x 20 >= 12 x 1000 x 65536 needs M >= 1.30, tfr >= 12.3); with the multiplier at tfr 7.5 x 1.6 the 20-24 band saturates at c = 2^32 (certain conception every susceptible month: the stated clamp, inside the bounds).",
+  "F5 Susceptible women at the Month pulse t_m, visited in ascending person.id: alive, female, spouse != 0 (married; the husband's row is alive by INV-M2-08), band i not none, due_tick = i64::MAX (not pregnant), and the postpartum period over: no live birth in the last P months, that is last_birth_tick < t_(m-P) (the start of the P-th month before this one; a founder's i64::MIN always passes). The spouse's age and vocation do not matter. A named woman is not skipped: T1 decides marriages, not births.",
+  "F6 Draws. Stream key as [[rng]] conception with t = t_m, entity = the woman. k = 0: draw d0; she conceives iff d0 hits c_i (m_e's table if she has a house_member row, else m's). Exactly one k = 0 draw per susceptible woman per month, whatever c_i. k = 1, only on a hit: the due month is m + G; n = n_(m+G) its length in days; j = 1 + floor(d1 (n - 1) / 2^64) (u128 product, floor); tau = t_(m+G) + 1440 j, a day start of the due month other than its pulse instant (uniform over them; the pulse instant is excluded as S9 excludes it, so no M2 timer ever fires at a Month pulse: INV-M2-03, INV-M2-10).",
+  "F7 Timer. On a hit M2 inserts one agenda timer at (tau, Vital): owner M2, purpose conception, kind 2 (BIRTH_TIMER), about the woman, payload = her spouse's PersonId at t_m as i64 (the same 64 bits; the father, recorded at conception so a child born after its father's death keeps him), and writes person.due_tick := tau. Women are visited in ascending person.id, so the insertion order is PersonId order.",
+  "F8 Re-sample (resample_on_fork; ADR-0025 item 3). A material input at t_in that scopes the woman while the timer is pending cancels it, and resample_timer re-draws through ResampleCtx (purpose conception, the epoch after the input, t = t_in), k = 0 of the re-sample: the pregnancy stands (no new Bernoulli); the candidates are the due month's day starts strictly after max(t_in, t_(m+G)) and before t_(m+G+1): s_1 < ... < s_c; if c >= 1, tau' = s_(1 + floor(d c / 2^64)); if c = 0 (the input fell on or after the due month's last day start), tau' = t_(m+G+1) + 1440, the first day start after the due month that is not a pulse instant. A birth is never dropped by a re-sample; due_tick := tau'. An input that scopes the father re-samples nothing here (the timer is about the mother). The father in the payload is kept.",
+  "F9 apply_birth(mother, father), in fire at the timer's instant (Vital, a day start), in agenda key order with the other timers of the slot. If the mother's ledger row is absent or has alive = 0 (she died before this instant, or earlier in this slot in key order), the timer is dropped and reported (the unborn child dies with her: no row, no event, parity unchanged). Otherwise: p = mother.parity (u16); id = the rh-ids child id of (mother, p): H64 over rehoboam/rh-ids/person/child/v1 of [mother, p], rehashed with c = 1, 2, ... (person/rehash/v1) while the id is in the table of every id ever issued (V-DATA-05; the table is a pure function of the history); sex: stream key as [[rng]] birth_sex with entity = id and t = now, k = 0: male iff the draw hits SEX_M. Row insert through SPR-014's plumbing with M2's columns {id, birth_tick = now, sex, alive = 1, death_tick = i64::MAX, mother, father, spouse = 0, death_cause = none, household = mother.household, parity = 0, last_birth_tick = i64::MIN, due_tick = i64::MAX}; every other owner's person.* column takes the zero of its type. Append the life_course row {person_id = id, origin = born, mother, father, sex, birth_tick = now, entry_tick = now, exit_kind = open, exit_tick = i64::MAX, death_cause = none}. Then mother.parity := p + 1; mother.last_birth_tick := now; mother.due_tick := i64::MAX. Emit BIRTH (actor = mother, target = child; payload [sex code, p + 1]). The father is not read: he may be dead (his row compacted); the life-course log keeps him.",
+  "F10 Order within a slot. Timers due at one (t, Vital) fire in agenda key order (t, phase, entity, seq) (05.1 §4.3). A mother's birth timer (drawn at least G months earlier) has a lower seq than any death timer about her drawn later, so it fires first: a death in childbirth bears the child, then the mother dies in the same instant and H4 moves the household on. Two births never share a mother at one instant (one pending birth per woman, INV-M2-10), so the children of one mother are totally ordered by birth_tick, as the effect language's sibling order requires (§5.3).",
+]
+# Check values (specs/demography/selftest_m2_f1.py asserts them; every integer exact).
+check_values = { tfr_default = "4.7", natural = [411, 460, 431, 395, 322, 167, 24], tfr1_bits = 615614, m_bits_at_default = 32791, conception_bits_at_default = [111984581, 133644237, 120491498, 105483713, 78832946, 34745617, 4385759], sex_male_bits = 2199861298 }
+# Facts the plan's acceptance criteria use (the reference proves them):
+#   * Under the no-widowhood approximation with the rung-0 schedule at e0 = 30, NRR = 1 at tfr = 4.479 and the default
+#     4.7 gives NRR = 1.049, r = +0.165% a year (V-SF-01's band is [-0.1%, +0.3%]). Widowhood and remarriage gaps lower
+#     the realised rate; SPR-015 confirms the default on the hamlet and the 10,000-founder fixture, and a change of
+#     default is C3 (it moves every rung's golden).
+#   * The default's conception probabilities per susceptible month are 0.026, 0.031, 0.028, 0.025, 0.018, 0.008, 0.001
+#     for the seven bands: a 20-24-year-old married woman conceives after 32 months on average and bears about one child
+#     every 52 months at M = 0.50 (the long-run rate 0.23 a year).
+
+[algorithm.partnering_f1]
+# F1 partnering (SPR-015; ADR-0026 item 4 "minimal partnering in M2 F1, so that fathers exist"). Same rules as above.
+version = "m2-f1-partnering-v1"
+steps = [
+  "N1 Nuptiality standard (compiled-in constants; design values). Monthly probability that an unmarried woman marries, by the F0 bands 15-19 .. 45-49, in thousandths: 18, 35, 24, 11, 5, 2, 2; held as Prob32 bits mu_i = rhe(2^32 x thousandths / 1000) (check_values). Zero outside the bands (no marriage under 15 or at 50 and over). The pattern is the early, near-universal one (Hajnal 1965's non-European pattern as summarised in R09 §2 B; the numbers are unsourced): mean age at first marriage 18.8 years, 66% married by 20, 96% by 25, 99.7% ever married by 50 (the reference's check 4; V-SF-25's band is [18, 22] and >= 90%). A culture-declared pattern (Hajnal's late one) is F2's marriage market.",
+  "N2 Men's minimum age MIN_AGE_M = 18 years, women's MIN_AGE_F = 15 years (design values; T1's own marriage_min_age applies to its named actors' decisions, M2 enforces these at apply_marry for every path). Preferred age gap: husband older by between -5 and +15 years (design values).",
+  "N3 Eligible women at the Month pulse t_m, visited in ascending person.id: alive, female, spouse = 0, band not none (15 <= age < 50), person.named = 0 (T1 marries named actors by its Marry command; neutral 0 when T1 is absent), person.vocation != holy_orders (M7; neutral none). A widow is eligible at once (no waiting period; her pending remarriage interval emerges from the hazard) at the first-marriage probability of her band (decision F1-D7, not_yet).",
+  "N4 Draws. Stream key as [[rng]] marriage_time with t = t_m, entity = the woman. k = 0: draw d0; she seeks a husband this month iff d0 hits mu_i. Exactly one k = 0 draw per eligible woman per month. On a hit, the candidates: every man alive with spouse = 0, age >= MIN_AGE_M, person.named = 0, vocation != holy_orders, not matched earlier in this step (a per-step set), not kin of the woman within two degrees over the life-course log (her father, son, brother or half-brother, grandfather, grandson: the set kin(w, 2) of the effect language, which M2 computes over its own mother and father columns, the dead included), and with birth_tick in [w.birth_tick - 15 Y, w.birth_tick + 5 Y] (the preferred gap); if that list is empty, the same list without the gap condition; if still empty, no marriage this month (the k = 0 hit is spent; she draws again next month). The list is in ascending person.id. k = 1: h = the candidate at index floor(d1 C / 2^64) (C candidates, u128 product, floor). k = 2: n = n_m; j = 1 + floor(d2 (n - 1) / 2^64); tau = t_m + 1440 j, a day start of this month other than the pulse instant (as S9).",
+  "N5 Timer. M2 inserts one agenda timer at (tau, Vital): owner M2, purpose marriage_time, kind 3 (MARRIAGE_TIMER), about the woman, payload = h as i64. h joins the step's matched set. Nothing is written to the ledger at the pulse: both stay unmarried until the timer fires, and a death of either before tau drops it (N7). No cross-month state is needed: the timer lies inside the month, so at the next Month pulse it has fired or been dropped.",
+  "N6 Re-sample (resample_on_fork; ADR-0025 item 3). A material input at t_in that scopes the woman while the timer is pending cancels it, and resample_timer re-draws through ResampleCtx (purpose marriage_time, the epoch after the input, t = t_in), k = 0 of the re-sample: the candidates are the month's day starts strictly after t_in and before t_(m+1); with c >= 1, tau' = s_(1 + floor(d c / 2^64)), the husband kept; with c = 0 the timer is dropped (both draw again next month: a marriage, unlike a birth, is not owed). An input that scopes the man re-samples nothing here.",
+  "N7 apply_marry(a, b, now, source), in fire at a marriage timer's instant (source = M2: a = the payload's husband, b = the woman the timer is about) or in the Day/Vital drain for a Marry command whose tick is now (source = the sender; a, b as given, normalised so that a is the male: a same-sex pair fails the first precondition). Preconditions, all checked against the ledger at this point of the slot: both rows present with alive = 1; a male and b female; a.spouse = 0 and b.spouse = 0; a's age >= MIN_AGE_M and b's >= MIN_AGE_F; b in band 15-49 is NOT required (a command may marry an older woman); neither has vocation holy_orders; b is not in kin(a, 2) over the life-course log. A failed precondition drops the marriage with a report naming the source, a, b and the instant (INV-M2-05's rule): a timer whose party died, a command for a married or dead person, a command racing M2's own timer for the same man (the timer fired first in this slot and wins). Effects: a.spouse := b; b.spouse := a; append the marriage row {husband = a, wife = b, start_tick = now, end_tick = i64::MAX}; households ([algorithm.households_f1] H3): if household(a).head = a then b and every member of the household b headed, if she headed one, move to a's household and hers is dissolved; else if household(b).head = b then a and the members of the household a headed, if any, move to b's and his is dissolved; else a new household {id = H64(household/v1, [a, now]), head = a, formed_tick = now, dissolved_tick = i64::MAX} and a.household := b.household := it (a household left empty by either move is dissolved: dissolved_tick := now, head := 0). Emit MARRIAGE (actor = a, target = b; payload []).",
+]
+check_values = { nuptiality_bits = [77309411, 150323855, 103079215, 47244640, 21474836, 8589935, 8589935] }
+
+[algorithm.households_f1]
+# Minimal households (SPR-015). Membership only; no place, no stocks (M4 F0 holdings in P1b read person.household).
+version = "m2-f1-households-v1"
+steps = [
+  "H1 Identity. HouseholdId = H64 over the rh-ids domain tag rehoboam/rh-ids/household/v1 of [founding head PersonId, formation tick as u64] (05.2 §1). Rows sorted ascending by household.id; never removed.",
+  "H2 Genesis (rh-worldgen, [initialization]). For each manifest household, in manifest order: a row {id = H64(household/v1, [head, 0]), head, formed_tick = 0, dissolved_tick = i64::MAX}; the head, every cast member whose `household` names it, and its children and servants get person.household = it. Every other founder gets a one-person household {id = H64(household/v1, [founder, 0]), head = the founder}. If the household's head and exactly one other adult (age >= MIN_AGE_M or MIN_AGE_F by sex) cast member of the other sex belong to it, they are married at genesis: spouse columns set, a marriage row {start_tick = 0} (the pre-epoch start is not known; spin-up history is discarded, 05.2 §1), and the household's `children` get mother := the wife and father := the husband in person.* and life_course.* (so that siblings never marry: N4's kin rule reads these), and the wife's parity := their count. Otherwise the children get mother = father = 0 as at rung 0. Servants get no parents. (household.yaml: Oswin and Maren married, their three children's parents; hamlet.yaml: Job and his wife, ten children; the 30 servants and the 14 others each their own household; solo.yaml: Ada alone.)",
+  "H3 Marriage. N7's household rule: the couple lives in the household the husband heads, else the one the wife heads, else a new one headed by the husband; a head who marries into another household takes every member of the household it headed along, and that household is dissolved.",
+  "H4 Death (after S12, in the same apply_death fire, for each dead d in turn). (a) Spouse: if d.spouse = s != 0 then s.spouse := 0 and the open marriage row of (d, s) gets end_tick := now (written once; if s dies in the same slot, its own apply_death finds d.spouse already 0 and the row closed). (b) Headship: h = d.household; if household(h).head = d: head := s if s is alive (alive = 1 at this point) and s.household = h; else the member of h with alive = 1 and the least (birth_tick, person_id) (the oldest; ties by id); else there is no living member: head := 0 and dissolved_tick := now. Children stay in their household whoever heads it (an orphan child may head a household of children: V-SF-18 counts it). (c) Timers: a pending BIRTH_TIMER about d is not cancelled; F9 drops it when it fires. A pending MARRIAGE_TIMER about d or naming d as husband is not cancelled; N7 drops it. (d) EXTINCTION as S12.",
+  "H5 Birth. F9: the child joins the mother's household.",
+  "H6 Restart. The household table, the marriage log, the ledger columns and the pending timers restore everything; M2's spouse and children-by-parent lookups are caches rebuilt from the log at construction.",
+]
+
+[initialization]
+state = "rh-worldgen (SPR-011 ruling 10; extended by SPR-015 for F1) writes the founders: person.id = founder(seed, k) with the deterministic rehash, birth_tick from age_years (pre-epoch, with a keyed offset inside the year), sex as given or a keyed fair draw, alive = 1, death_tick = i64::MAX, death_cause = none; mother, father and spouse 0 except as [algorithm.households_f1] H2 states for a manifest household's couple and children; household per H2; parity = the number of manifest children whose mother she is, else 0; last_birth_tick = i64::MIN; due_tick = i64::MAX; and one life_course row per founder (origin founder, sex, mother and father as person.*, birth_tick as person.birth_tick, entry_tick 0, exit open), in ascending PersonId; the household rows per H2; the genesis marriage rows per H2, in manifest household order. No timer exists at genesis: the first Month pulse at tick 0 draws the first month's deaths, conceptions and marriages. SPR-019's population synthesis replaces H2's genesis kin with pre-epoch life-course rows (parent links back to each dynasty's generations) and this [initialization] is amended then"
+from_manifest = ["peoples", "cast", "households"]
+
+[input_data]
+drivers = []
+
+[[params]]
+name = "e0"
+meaning = "Life expectancy at birth in years, a convenience converted to the Brass level K = exp(2 alpha) at beta = 1 by [algorithm.mortality_rung0] S5"
+source = "R12 §9; default 30: a design value inside V-SF-02's band (e0 in [23.441086, 36.569855], about [23.4, 36.6], at beta = 1), the value uz_job already uses (SPR-011 ruling 8)"
+default = 30.0
+[[params]]
+name = "brass_alpha"
+meaning = "Level of mortality on the logit scale. Refused at F1 births as at rung 0 (e0 sets the level; any alpha needs fixed-point exp, SPR-016)"
+source = "Brass 1971; observed -1.36 to 0.55"
+[[params]]
+name = "brass_beta"
+meaning = "Slope (shape) of mortality on the logit scale. F1 accepts exactly 1 until SPR-016"
+source = "Brass 1971; observed 0.64 to 1.64; default 1: the General Standard's own shape (SPR-011 ruling 8)"
+default = 1.0
+[[params]]
+name = "tfr"
+meaning = "Total fertility rate of a cohort under the F1 marriage pattern with no mortality ([algorithm.fertility_f1] F3): sets the Coale-Trussell level M = tfr / TFR1, TFR1 = 9.3935. The realised TFR is lower (widowhood, death before 50)"
+source = "Design value 4.7: NRR = 1 at e0 = 30 needs 4.479 without widowhood (the reference's check 5); 4.7 leaves room for the widowhood loss and sits at r = +0.165% a year in V-SF-01's band [-0.1, +0.3]. R09 §2 gives the manifest range [1.2, 7.5] and the hard guard on r; SPR-015 confirms the default on the hamlet and the 10,000-founder fixture (a default change is C3)"
+default = 4.7
+[[params]]
+name = "eps_f"
+meaning = "Fertility response to food entitlement (P1.5a; the hook is stubbed in SPR-016). Not read at F1 births; no default"
+source = "R09"
+[[params]]
+name = "eps_m"
+meaning = "Mortality response to food entitlement (P1.5a). Not read at F1 births; no default"
+source = "R09"
+[[params]]
+name = "elite_fertility_mult"
+meaning = "Multiplier on the fertility level M for a woman with an M7 house_member row ([algorithm.fertility_f1] F3, F4). 1.0 makes the read inert"
+source = "Turchin & Nefedov 2009 (elite numbers outgrow commoners'; R12 §12); default 1.0: a design value, neutral until a band exists (V-SF-04 is gated from G4); the dynastic fixture world (SPR-030) may set it inside [1.0, 1.6]"
+default = 1.0
+
+[[submodels]]
+name = "mortality"
+summary = "[algorithm.mortality_rung0] S1-S10: K from e0 by fixed-point bisection (40 steps) on the trapezoid e0 of the standard grid; l linear between grid ages in minutes of age; monthly q = 1 - l(x + D) / l(x) as Prob32; one keyed Bernoulli per living person per month (k = 0); on a hit a death timer at the start of a keyed day inside the month (k = 1), never at the Month-pulse instant. Unchanged from 0.2.0"
+earns_its_place_by = ["V-SF-02", "V-SF-02b", "V-INV-08"]
+[[submodels]]
+name = "apply_death"
+summary = "[algorithm.mortality_rung0] S12, then [algorithm.households_f1] H4: the single death path. Writes the dead row and the life-course exit once, emits DEATH and, when the last living person dies, EXTINCTION; then widows the spouse, closes the marriage row and moves the household's headship on. The function that drains ScheduleDeath commands (SPR-014)"
+earns_its_place_by = ["V-INV-01", "V-DATA-04", "V-SCALE-04", "V-INV-03"]
+[[submodels]]
+name = "fertility"
+summary = "[algorithm.fertility_f1] F3-F8: M from tfr and TFR1; seven Prob32 conception probabilities per level, c_i = b_i / (12 - 20 b_i), so the long-run birth rate is M n(a) exactly; one keyed Bernoulli per susceptible married woman per month (k = 0); on a hit a birth timer at the start of a keyed day of the ninth month after this one (k = 1), the husband recorded as father; due_tick written"
+earns_its_place_by = ["V-SF-24", "V-SF-01", "V-INV-08"]
+[[submodels]]
+name = "apply_birth"
+summary = "[algorithm.fertility_f1] F9, F10: the single birth path. Drops the birth of a dead mother; issues H64(mother, parity) with the deterministic rehash; draws the sex keyed by the child; inserts the row through SPR-014's row insert (M7 and T1 read it in the same instant); appends the life-course row with mother, father, sex and birth_tick; updates the mother's parity and last birth; emits BIRTH"
+earns_its_place_by = ["V-DATA-04", "V-DATA-05", "V-INV-01", "V-INV-12"]
+[[submodels]]
+name = "partnering"
+summary = "[algorithm.partnering_f1] N1-N6: one keyed Bernoulli per eligible unmarried woman per month on her band's nuptiality probability (k = 0); on a hit a uniform keyed choice among the eligible men (not named, not in holy orders, not kin within two degrees, preferably -5 to +15 years older) (k = 1) and a marriage timer at the start of a keyed day inside the month (k = 2). Named actors are left to T1's Marry command"
+earns_its_place_by = ["V-SF-25", "V-SF-18"]
+[[submodels]]
+name = "apply_marry"
+summary = "[algorithm.partnering_f1] N7: the single marriage path for M2's timers and T1's Marry commands alike. Checks both alive, unmarried, of age, of opposite sex, not in holy orders, not kin within two degrees; drops and reports otherwise; writes both spouse columns, appends the marriage row, settles the household (H3), emits MARRIAGE"
+earns_its_place_by = ["V-SF-25", "V-INV-01"]
+[[submodels]]
+name = "households"
+summary = "[algorithm.households_f1] H1-H6: H64(head, formation tick) ids; genesis households and marriages from the manifest; the couple's household at a marriage; headship to the surviving spouse, else the oldest member; dissolution when empty; the child in the mother's household"
+earns_its_place_by = ["V-SF-18", "V-INV-01"]
+[[submodels]]
+name = "lifecycle"
+summary = "SPR-014's Day/Vital drain of M2's command queue: ScheduleDeath and Marry at their tick through apply_death and apply_marry; a later tick becomes a timer; a command for a dead person is dropped and reported (BCK-002 A-30); queue age at most one day (A-31)"
+earns_its_place_by = ["V-INV-03", "V-SAGA-19"]
+
+[[invariants]]
+id = "INV-M2-01"
+statement = "People are conserved: for each month, living count at its end - living count at its start = entries - exits in the life-course log over the month (at rung 0: - deaths), and the living count equals the number of open life-course rows after every Bookkeeping"
+test = "V-INV-01"
+[[invariants]]
+id = "INV-M2-02"
+statement = "Life-course consistency: every ledger row has exactly one life_course row with the same person_id and birth_tick, and it is open; every closed row's person_id is absent from the ledger after Bookkeeping; exit fields change at most once (open -> closed) and entry fields never"
+test = "V-DATA-04"
+[[invariants]]
+id = "INV-M2-03"
+statement = "Death timers stay inside their month, on day starts: every pending M2 timer drawn at the Month pulse t_m (or re-drawn in its month) lies on a day start in [t_m + 1440, t_(m+1) - 1440], so none is pending at a Month pulse instant and none fires at one"
+test = "V-DET-12"
+[[invariants]]
+id = "INV-M2-04"
+statement = "Alive and death tick agree: death_tick = i64::MAX iff alive = 1; a row with alive = 0 has death_tick = now and exists only between Vital and the Bookkeeping compaction of that instant"
+test = "V-INV-01"
+[[invariants]]
+id = "INV-M2-05"
+statement = "No death without a cause: apply_death never writes death_cause = none. A ScheduleDeath command whose cause is none (an invalid payload; effect language round 3, Q13) is dropped and reported, never applied, as a command for an already-dead victim is (BCK-002 A-30); the report names the sender, the victim and the tick. Applies from P1.13, when M2 drains ScheduleDeath; rung 0 has only natural deaths"
+test = "V-INV-01"
+# F1 invariants (SPR-015).
+[[invariants]]
+id = "INV-M2-06"
+statement = "Genealogy is acyclic with a minimum parental age: every life_course row with origin born has mother != 0, the mother's row has sex female, and birth_tick(child) - birth_tick(mother) >= 15 Y + 9 months and < 50 Y + 9 months; father = 0 or a row with sex male and birth_tick(child) - birth_tick(father) >= 18 Y + 9 months; a founder's or immigrant's parents are 0 or rows born before it. The children of one mother have distinct birth_ticks"
+test = "V-INV-01"
+[[invariants]]
+id = "INV-M2-07"
+statement = "Genealogical ids: every born person_id is the rh-ids child id of (mother, k) or its deterministic rehash for the k that is its birth order among the mother's born children in birth_tick order (0-based), plus her genesis children; person.parity of a living woman equals the number of life_course rows with mother = her; no id is issued twice; founders match founder(seed, k)"
+test = "V-DATA-05"
+[[invariants]]
+id = "INV-M2-08"
+statement = "Marriage is exclusive and symmetric: a.spouse = b != 0 iff b.spouse = a, both alive, of opposite sex, and exactly one marriage row with end_tick = i64::MAX names them; a person with spouse = 0 is in no open marriage row; a marriage row's start_tick <= end_tick, and a closed row's end_tick is the death instant of one of its parties; no row pairs kin within two degrees"
+test = "V-INV-01"
+[[invariants]]
+id = "INV-M2-09"
+statement = "Households are consistent: every living person's household names a row with dissolved_tick = i64::MAX whose head is a living member of it; a row with dissolved_tick = i64::MAX has at least one living member; a row with dissolved_tick <= now has none and head = 0; dissolved_tick is written once"
+test = "V-INV-01"
+[[invariants]]
+id = "INV-M2-10"
+statement = "Pregnancy and birth timers agree: a woman has due_tick != i64::MAX iff exactly one BIRTH_TIMER about her is pending, at (due_tick, Vital); due_tick is a day start of the ninth calendar month after the conception month (or the first non-pulse day start after it, after a late re-sample) and never a Month pulse instant; a man always has due_tick = i64::MAX; a widow keeps her pending birth (the father is in the timer), so an unmarried woman may be pregnant"
+test = "V-DET-12"
+[[invariants]]
+id = "INV-M2-11"
+statement = "Marriage timers stay inside their month, on day starts, like deaths (INV-M2-03), name two living unmarried persons when drawn, and no two pending marriage timers name the same person"
+test = "V-DET-12"
+[[invariants]]
+id = "INV-M2-12"
+statement = "Births are conserved with the log and the events: each BIRTH event matches one life_course row with origin born and entry_tick = the event's tick, and each MARRIAGE event one marriage row with start_tick = its tick; STEP_DIGEST.births over a month equals the LIFE_ENTRY records with origin born in it"
+test = "V-DATA-04"
+
+[[couplings]]
+system = "S5.daily_life"
+direction = "out"
+via = "S5 reads birth_tick, sex and alive at the start of each day"
+lag = "start of day"
+[[couplings]]
+system = "T1.minds"
+direction = "out"
+via = "The death path: a death in the Vital slot starts grief; T1 reads the dead row (alive = 0, death_tick = now) until Bookkeeping of the instant (PR #32). Births: a newborn's row and life-course row are readable at Agenda of the birth instant; kinship through life_course.* (same_instant); the living spouse through person.spouse"
+lag = "same instant (later phase)"
+[[couplings]]
+system = "T1.minds"
+direction = "in"
+column = "person.named"
+via = "Marry commands for named actors (T1's marry decision), applied by apply_marry under the same preconditions as M2's own timers; and the person.named flag, which keeps named persons out of M2's partnering step. In a world without T1 (solo, household, hamlet) SPR-014's registration rule drops the read and the neutral applies"
+lag = "lagged (start of instant)"
+form = "flag: named persons are excluded from N3 and N4"
+neutral = "person.named = 0 for everyone (nobody is named: M2 marries everyone)"
+output_bounds = [0, 1]
+data_range = "0 or 1"
+beyond_range = "n/a: a flag"
+source = "T1.minds spec (frozen 0.3.1), decision marry"
+[[couplings]]
+system = "M7.dynasty"
+direction = "out"
+via = "Succession on a titleholder's death: M7 reads the dead row at Polity of the death instant (PR #32). Births: on_birth reads the newborn's person.mother and person.father at Polity of the birth instant (MAJ-5) and writes its house_member row"
+lag = "same instant (later phase)"
+[[couplings]]
+system = "M7.dynasty"
+direction = "in"
+column = "person.vocation"
+via = "holy_orders leaves the marriage pool (N3, N4). Neutral when M7 is absent: none"
+lag = "lagged (start of instant)"
+form = "flag"
+neutral = "person.vocation = none for everyone"
+output_bounds = [0, 3]
+data_range = "Registry [vocations] codes"
+beyond_range = "n/a: an enum"
+source = "M7.dynasty spec (frozen 0.3.1), vocation submodel"
+[[couplings]]
+system = "M7.dynasty"
+direction = "in"
+column = "house_member.person"
+via = "A house member conceives at M x elite_fertility_mult (F3). Neutral when M7 is absent, and inert at the default multiplier 1.0: no row"
+lag = "lagged (start of instant)"
+form = "flag: multiplies the level M for members"
+neutral = "no house_member row for anyone"
+output_bounds = [1.0, 1.6]
+data_range = "the multiplier's Registry bounds"
+beyond_range = "refused at load"
+source = "M7.dynasty spec (frozen 0.3.1), house_member; Turchin & Nefedov 2009"
+[[couplings]]
+system = "S3.migration"
+direction = "out"
+via = "Residence at birth (S3 F0, SPR-018): S3 reads the newborn's person.mother at the birth instant and gives the child the mother's residence; person.household for a household move later"
+lag = "same instant (later phase)"
+
+[isolation]                                # docs/09 V-SF-22
+forcing = [
+  { input = "person.named", series = "constant:0", note = "no T1: M2 marries everyone" },
+  { input = "person.vocation", series = "constant:none", note = "no M7: nobody in holy orders" },
+  { input = "house_member.person", series = "constant:absent", note = "no M7: no house members; and a step series that marks 10% of women members with elite_fertility_mult = 1.3, for the multiplier's arithmetic" },
+]
+horizon = "1,000 sim-years"
+expect = "F1 in isolation is the whole P1a demography. (1) A 1,000-founder population (ages uniform in [0, 60), e0 = 30, tfr = 4.7, 32 seeds) neither dies out nor exceeds 5 x its start over 1,000 years, with the seed-mean r inside V-SF-01's band; (2) age-specific marital fertility per band, measured from the marriage log and the births, sits inside the binomial 99.9% band of M n(a) (V-SF-24; INSUFFICIENT below 400 births); (3) women's mean age at first marriage in [18, 22], at least 90% ever married by 50, every born row has a father (V-SF-25); (4) q(15) of the birth cohorts stays in V-SF-02's band (the rung-0 schedule, unchanged); (5) the three rung worlds: solo dies out (one woman, no husband), household and hamlet now persist or die out by chance, not by construction (V-SCALE-04 still holds when they do)"
+
+[verification]
+tests = ["V-SF-01", "V-SF-02", "V-SF-02b", "V-SF-24", "V-SF-25", "V-INV-01", "V-INV-03", "V-INV-08", "V-INV-12", "V-DET-12", "V-DET-14", "V-DET-17", "V-DATA-04", "V-DATA-05", "V-SCALE-04"]
+prototype = "specs/demography/selftest_m2_f1.py"

@@ -35,7 +35,19 @@ Registry) is linted, and its skeletons generated, with
 [verbs] are added to the Registry's for this run only; with --specs, each overlay system id is X-prefixed
 (`X<digits>.<name>`) and every spec in DIR must be one of the overlay's systems, so a dummy spec can never
 stand in for a real one.
+
+The next version of a frozen spec (SPR-015; specs/systems/next/README.md) is linted with
+     python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml
+--next DIR: every spec in DIR supersedes the repository spec of the same id for this run (an id with no spec to
+supersede is an error), and `lint_next` checks that the superseding spec preserves the frozen slice: the same id
+and crate, a higher spec_version, status draft; every frozen [[owns]] column with the same entity, type, plane and
+fixed_point; every frozen [algorithm.*] table equal; the frozen [[rng]] purposes as a prefix in order with the same
+key, resample_on_fork and draws; every frozen [[invariants]] id with the same statement and test; every frozen
+[[applies]] command with the same payload; every frozen schedule binding, [[emits]] kind and parameter, frozen
+defaults unchanged. With --next, an overlay may replace the Registry [systems] entry of a superseded system
+(never another), keeping fidelity_levels and every existing parameter's bounds and default.
 """
+import copy
 import re
 import sys
 import tomllib
@@ -74,8 +86,36 @@ def replacement_problems(overlay_path, specs):
     return problems
 
 
-def load(extra_dirs=(), overlay=None, specs_dir=SPECS):
+def spec_files(d):
+    """The spec files of directory ``d`` (``_template`` and other ``_``-prefixed files are not specs)."""
+    return sorted(p for p in Path(d).glob("*.odd.toml") if not p.name.startswith("_"))
+
+
+def load(extra_dirs=(), overlay=None, specs_dir=SPECS, next_dir=None):
+    """Return (registry, specs, requirement ids, test ids, ADR ids, frozen), where ``frozen`` maps each id that a
+    ``--next`` spec superseded to the repository spec it replaced (empty without ``--next``)."""
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
+    specs = {}
+    files = spec_files(specs_dir)
+    for d in extra_dirs:
+        files += spec_files(d)
+    for f in files:
+        s = tomllib.loads(f.read_text(encoding="utf-8"))
+        sid = s.get("system", {}).get("id", f.stem)
+        if sid in specs:
+            raise SystemExit(f"{f}: system {sid} already has a spec ({specs[sid][0]})")
+        specs[sid] = (f, s)
+    frozen = {}
+    if next_dir is not None:                      # next versions supersede for this run (SPR-015)
+        for f in spec_files(next_dir):
+            s = tomllib.loads(f.read_text(encoding="utf-8"))
+            sid = s.get("system", {}).get("id", f.stem)
+            if sid not in specs:
+                raise SystemExit(f"{f}: a next-version spec must supersede a spec in {specs_dir}; {sid} has none")
+            if sid in frozen:
+                raise SystemExit(f"{f}: system {sid} already has a next-version spec ({frozen[sid][0]})")
+            frozen[sid] = specs[sid]
+            specs[sid] = (f, s)
     if overlay is not None:                       # a world's own systems and verbs (SPR-011 ruling 11)
         over = tomllib.loads(Path(overlay).read_text(encoding="utf-8"))
         unknown = sorted(set(over) - {"systems", "verbs"})
@@ -83,25 +123,111 @@ def load(extra_dirs=(), overlay=None, specs_dir=SPECS):
             raise SystemExit(f"overlay {overlay}: only [systems] and [verbs] may be overlaid, found {unknown}")
         for sec in ("systems", "verbs"):
             clash = sorted(set(over.get(sec, {})) & set(reg.get(sec, {})))
-            if clash:
-                raise SystemExit(f"overlay {overlay}: [{sec}] entries already in the Registry: {clash}")
+            # With --next, the [systems] entry of a superseded system may be replaced (its F1 defaults), never another's.
+            replaced = [c for c in clash if sec == "systems" and c in frozen]
+            if sorted(set(clash) - set(replaced)):
+                raise SystemExit(f"overlay {overlay}: [{sec}] entries already in the Registry: {sorted(set(clash) - set(replaced))}")
+            for sid in replaced:
+                for problem in replacement_keeps(sid, reg["systems"][sid], over["systems"][sid]):
+                    raise SystemExit(f"overlay {overlay}: [systems.\"{sid}\"] {problem}")
             reg.setdefault(sec, {}).update(over.get(sec, {}))
-    specs = {}
-    files = sorted(p for p in Path(specs_dir).glob("*.odd.toml") if not p.name.startswith("_"))   # _template is not a spec
-    for d in extra_dirs:
-        files += sorted(p for p in Path(d).glob("*.odd.toml") if not p.name.startswith("_"))
-    for f in files:
-        s = tomllib.loads(f.read_text(encoding="utf-8"))
-        sid = s.get("system", {}).get("id", f.stem)
-        if sid in specs:
-            raise SystemExit(f"{f}: system {sid} already has a spec ({specs[sid][0]})")
-        specs[sid] = (f, s)
     plan03 = (ROOT / "docs" / "03_requirements.md").read_text(encoding="utf-8")
     plan09 = (ROOT / "docs" / "09_verification_and_validation.md").read_text(encoding="utf-8")
     req_ids = set(re.findall(r"^\| ([A-Z][A-Z0-9]*-\d+) \|", plan03, re.M))
     test_ids = set(re.findall(r"^\| (V-[A-Z0-9]+-\d+[a-z]?) \|", plan09, re.M))
     adr_ids = {p.name[:8] for p in (ROOT / "docs" / "06_adr").glob("ADR-*.md")}
-    return reg, specs, req_ids, test_ids, adr_ids
+    return reg, specs, req_ids, test_ids, adr_ids, frozen
+
+
+def replacement_keeps(sid, old, new):
+    """Problems with a --next overlay's replacement of a Registry [systems] entry: fidelity_levels, every existing
+    parameter's bounds and every existing default must be kept (a replacement adds, it never moves a contract)."""
+    problems = []
+    if new.get("fidelity_levels") != old.get("fidelity_levels"):
+        problems.append(f"replacement changes fidelity_levels {old.get('fidelity_levels')} -> {new.get('fidelity_levels')}")
+    for name, bounds in old.get("params", {}).items():
+        if new.get("params", {}).get(name) != bounds:
+            problems.append(f"replacement changes or drops parameter {name} bounds {bounds} -> {new.get('params', {}).get(name)}")
+    for name, value in old.get("defaults", {}).items():
+        if new.get("defaults", {}).get(name) != value:
+            problems.append(f"replacement changes or drops default {name} = {value} -> {new.get('defaults', {}).get(name)}")
+    return problems
+
+
+def semver(text):
+    """The (major, minor, patch) of ``text``, or None."""
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", str(text))
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def lint_next(frozen, specs, errs):
+    """A next-version spec preserves the frozen slice it supersedes (SPR-015; specs/systems/next/README.md)."""
+    for sid, (ff, fs) in frozen.items():
+        nf, ns = specs[sid]
+        p = f"{nf.name} (next of {ff.name})"
+        fh, nh = fs.get("system", {}), ns.get("system", {})
+        if fh.get("status") != "frozen":
+            errs.append(f"{p}: only a frozen spec takes a next version; {ff.name} is {fh.get('status')}")
+        if nh.get("status") != "draft":
+            errs.append(f"{p}: a next version is a draft until it supersedes the file, not {nh.get('status')}")
+        if nh.get("crate") != fh.get("crate"):
+            errs.append(f"{p}: crate {nh.get('crate')} differs from the frozen {fh.get('crate')}")
+        fv, nv = semver(fh.get("spec_version")), semver(nh.get("spec_version"))
+        if fv is None or nv is None or nv <= fv:
+            errs.append(f"{p}: spec_version {nh.get('spec_version')} must be a semver above the frozen {fh.get('spec_version')}")
+        owns = {o.get("column"): o for o in ns.get("owns", [])}
+        for o in fs.get("owns", []):
+            col = o.get("column")
+            n = owns.get(col)
+            if n is None:
+                errs.append(f"{p}: frozen column {col} is missing from [[owns]]")
+                continue
+            for k in ("entity", "type", "plane", "fixed_point"):
+                if n.get(k) != o.get(k):
+                    errs.append(f"{p}: frozen column {col} changed {k}: {o.get(k)!r} -> {n.get(k)!r}")
+        for name, table in fs.get("algorithm", {}).items():
+            got = ns.get("algorithm", {}).get(name)
+            if got is None:
+                errs.append(f"{p}: frozen [algorithm.{name}] is missing")
+            elif got != table:
+                keys = sorted(k for k in set(table) | set(got) if table.get(k) != got.get(k))
+                errs.append(f"{p}: frozen [algorithm.{name}] changed (keys {keys}); a changed algorithm is a new table")
+        frozen_rng, next_rng = fs.get("rng", []), ns.get("rng", [])
+        for i, g in enumerate(frozen_rng):
+            n = next_rng[i] if i < len(next_rng) else {}
+            if n.get("purpose") != g.get("purpose"):
+                errs.append(f"{p}: frozen RNG purpose {g.get('purpose')} must stay at position {i} (found {n.get('purpose')}): the generated RngPurpose discriminants are positional")
+                continue
+            for k in ("key", "resample_on_fork", "draws"):
+                if n.get(k) != g.get(k):
+                    errs.append(f"{p}: frozen RNG purpose {g.get('purpose')} changed {k}")
+        invs = {i.get("id"): i for i in ns.get("invariants", [])}
+        for i in fs.get("invariants", []):
+            n = invs.get(i.get("id"))
+            if n is None:
+                errs.append(f"{p}: frozen invariant {i.get('id')} is missing")
+            elif (n.get("statement"), n.get("test")) != (i.get("statement"), i.get("test")):
+                errs.append(f"{p}: frozen invariant {i.get('id')} changed its statement or test")
+        applies = {a.get("command"): a for a in ns.get("applies", [])}
+        for a in fs.get("applies", []):
+            n = applies.get(a.get("command"))
+            if n is None or n.get("payload") != a.get("payload"):
+                errs.append(f"{p}: frozen [[applies]] {a.get('command')} is missing or changed its payload")
+        bindings = {(x.get("pulse"), x.get("phase")) for x in ns.get("schedule", [])}
+        for x in fs.get("schedule", []):
+            if (x.get("pulse"), x.get("phase")) not in bindings:
+                errs.append(f"{p}: frozen schedule binding ({x.get('pulse')}, {x.get('phase')}) is missing")
+        kinds = {e.get("kind") for e in ns.get("emits", [])}
+        for e in fs.get("emits", []):
+            if e.get("kind") not in kinds:
+                errs.append(f"{p}: frozen [[emits]] {e.get('kind')} is missing")
+        params = {x.get("name"): x for x in ns.get("params", [])}
+        for x in fs.get("params", []):
+            n = params.get(x.get("name"))
+            if n is None:
+                errs.append(f"{p}: frozen parameter {x.get('name')} is missing")
+            elif "default" in x and n.get("default") != x.get("default"):
+                errs.append(f"{p}: frozen default of {x.get('name')} changed: {x.get('default')} -> {n.get('default')}")
 
 
 def payload_fields(text):
@@ -146,7 +272,10 @@ def lint_applies(specs, errs, warns):
                         f"{specs[s][0].name}: [[commands]] {cmd} to {tid} has payload fields {got}, but [[applies]] declares {want}")
 
 
-def lint(reg, specs, req_ids, test_ids, adr_ids):
+def lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=()):
+    """``next_ids``: systems a --next spec supersedes for this run. A draft spec that still reads a column from the
+    owner it had before the next version claimed it warns (it moves when the next version supersedes the file); a
+    frozen reader errs as always."""
     errs, warns = [], []
     owners = {}                                   # column -> (system, plane)
     for sid, (f, s) in specs.items():
@@ -196,7 +325,10 @@ def lint(reg, specs, req_ids, test_ids, adr_ids):
             col, owner = r.get("column"), r.get("owner")
             if col in owners:
                 if owners[col][0] != owner:
-                    errs.append(f"{p}: reads {col} from {owner}, but {owners[col][0]} owns it")
+                    moved = owners[col][0] in next_ids and hdr.get("status") != "frozen"
+                    (warns if moved else errs).append(
+                        f"{p}: reads {col} from {owner}, but {owners[col][0]} owns it"
+                        + (" (in its next version: point the read at it when that version supersedes the file)" if moved else ""))
                 if "A" in planes and owners[col][1] in ("B", "C"):
                     errs.append(f"{p}: a plane-A system reads plane-{owners[col][1]} column {col} (ADR-0024)")
             elif owner in specs:
@@ -376,12 +508,12 @@ def rust(sid, specs):
 
 
 def parse_args(argv):
-    """Return (specs dir, extra spec dirs, overlay path or None, (mode, id) or None) from ``argv``, or raise
-    ValueError."""
-    specs_dir, extra, overlay, gen = SPECS, [], None, None
+    """Return (specs dir, extra spec dirs, overlay path or None, (mode, id) or None, next dir or None) from
+    ``argv``, or raise ValueError."""
+    specs_dir, extra, overlay, gen, next_dir = SPECS, [], None, None, None
     i = 0
     while i < len(argv):
-        if argv[i] in ("--specs", "--extra-specs", "--overlay", "--brief", "--rust") and i + 1 < len(argv):
+        if argv[i] in ("--specs", "--extra-specs", "--overlay", "--brief", "--rust", "--next") and i + 1 < len(argv):
             flag, value = argv[i], argv[i + 1]
             if flag == "--specs":
                 specs_dir = Path(value)
@@ -389,21 +521,23 @@ def parse_args(argv):
                 extra.append(value)
             elif flag == "--overlay":
                 overlay = value
+            elif flag == "--next":
+                next_dir = value
             else:
                 gen = (flag, value)
             i += 2
         else:
             raise ValueError(f"unknown argument {argv[i]!r}; see the module docstring")
-    return specs_dir, extra, overlay, gen
+    return specs_dir, extra, overlay, gen, next_dir
 
 
 def main() -> int:
     try:
-        specs_dir, extra, overlay, gen = parse_args(sys.argv[1:])
+        specs_dir, extra, overlay, gen, next_dir = parse_args(sys.argv[1:])
     except ValueError as e:
         print(e)
         return 2
-    reg, specs, req_ids, test_ids, adr_ids = load(extra, overlay, specs_dir)
+    reg, specs, req_ids, test_ids, adr_ids, frozen = load(extra, overlay, specs_dir, next_dir)
     overlay_errs = []
     if overlay is not None and specs_dir != SPECS:
         overlay_errs = replacement_problems(overlay, specs)
@@ -417,8 +551,39 @@ def main() -> int:
             return 1
         print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
         return 0
-    errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids)
+    errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=set(frozen))
+    lint_next(frozen, specs, errs)
     errs = overlay_errs + errs
+    # self-check (SPR-015): a next version that changes a frozen algorithm step, a frozen column's type, a frozen
+    # default, or puts a new RNG purpose before a frozen one must be rejected; the clean one must not be
+    for sid, (nf, ns) in ((sid, specs[sid]) for sid in frozen):
+        clean = []
+        lint_next({sid: frozen[sid]}, {sid: (nf, ns)}, clean)
+        probes = []
+        bad = copy.deepcopy(ns)
+        for name in bad.get("algorithm", {}):
+            if name in frozen[sid][1].get("algorithm", {}):
+                bad["algorithm"][name]["steps"] = ["S0 changed"]
+                probes.append((bad, f"frozen [algorithm.{name}] changed"))
+                break
+        bad = copy.deepcopy(ns)
+        bad["owns"][0]["type"] = "u8" if bad["owns"][0].get("type") != "u8" else "u16"
+        probes.append((bad, "changed type"))
+        bad = copy.deepcopy(ns)
+        bad["rng"].insert(0, {"purpose": "planted_first", "key": ["person"]})
+        probes.append((bad, "must stay at position 0"))
+        bad = copy.deepcopy(ns)
+        for x in bad.get("params", []):
+            if "default" in x:
+                x["default"] = x["default"] + 1
+                probes.append((bad, "frozen default of"))
+                break
+        for probe, needle in probes:
+            pe = []
+            lint_next({sid: frozen[sid]}, {sid: (nf, probe)}, pe)
+            assert any(needle in e for e in pe), (sid, needle, pe)
+        print(f"  self-check (next of {sid}): {len(probes)} planted changes rejected, the clean next version "
+              f"{'kept' if not clean else 'REJECTED'}")
     for w in warns:
         print("WARN ", w)
     for e in errs:

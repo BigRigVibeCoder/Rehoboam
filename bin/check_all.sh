@@ -264,6 +264,16 @@ canonical_golden_control() {
   "$PY" -I specs/stream/canonical_v0.py --check --golden "$planted"
 }
 
+# M2 F1 reference control (SPR-015): the next-version M2 spec with one check value off by one; the exact reference
+# must FAIL on it (selftest_m2_f1.py --spec).
+m2_f1_stale_control() {
+  local planted=target/rendered-fixtures/m2_f1_stale_check_value.odd.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/tfr1_bits = 615614/tfr1_bits = 615615/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
+  grep -q 'tfr1_bits = 615615' "$planted" || { echo "control not planted: tfr1_bits = 615614 not found in the next M2 spec"; return 1; }
+  "$PY" -I specs/demography/selftest_m2_f1.py --spec "$planted"
+}
+
 # Channel-C float control (SPR-013 T-11): the channel-C DDL with closed_by_seq made a DOUBLE; the self-test must FAIL.
 channel_c_float_control() {
   local planted=target/rendered-fixtures/channel_c_float_column.sql
@@ -764,6 +774,10 @@ run "lint_odd emits control: a draft spec emitting a non-verb warns and passes (
 run "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 ruling 11)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/overlay --overlay tests/lint_fixtures/odd_emits/overlay.toml &&
 run "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, must FAIL (REV-P1a section 7)" "fail:has payload fields ['a', 'c', 'b'], but [[applies]] declares ['a', 'b', 'c']" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/mismatch &&
 run "lint_odd applies control: a sender's payload matching [[applies]] field for field passes (REV-P1a section 7)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/match &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 4 planted changes rejected, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" "$PY" -I specs/systems/lint_odd.py --next tests/lint_fixtures/odd_next/algorithm_changed --overlay specs/systems/next/registry_delta.toml &&
+run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" "$PY" -I specs/systems/lint_odd.py --next tests/lint_fixtures/odd_next/rng_prefix --overlay specs/systems/next/registry_delta.toml &&
+run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay tests/lint_fixtures/odd_next/overlay_moves_bound.toml &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
 run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
@@ -840,6 +854,8 @@ run "gen_sampler_reference positive control: stale reference must FAIL" "fail:ST
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
+run "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)" "pass:M2 F1 FERTILITY AND PARTNERING: PASS" "$PY" -I specs/demography/selftest_m2_f1.py &&
+run "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)" "fail:M2 F1 FERTILITY AND PARTNERING: FAIL" m2_f1_stale_control &&
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
 # Tier 6/8 — determinism-style and contract prototypes
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&

@@ -1,0 +1,21 @@
+# Registry delta for the next-version M2 spec (specs/systems/next/M2.demography.odd.toml, 0.3.0 draft; SPR-015).
+# Linted with: python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml
+# In --next mode (specs/systems/next/README.md) an overlay may REPLACE the Registry's [systems] entry of a system that
+# has a next-version spec, keeping its fidelity_levels and every existing parameter's bounds and default (the lint
+# checks that), and may add [verbs]. When 0.3.0 is frozen the Architect merges this file into
+# specs/manifest/registry_v0.toml and deletes it. Nothing here is read by the engine, the manifest validator or the
+# frozen 0.2.0 lint until then.
+
+[systems."M2.demography"]
+fidelity_levels = ["F0", "F1", "F2"]
+# Unchanged bounds (specs/manifest/registry_v0.toml). F1 reads tfr and elite_fertility_mult (SPR-015); brass_alpha,
+# eps_f and eps_m stay unread (SPR-016, P1.5a).
+params = { e0 = [20.0, 85.0], brass_alpha = [-2.1, 0.75], brass_beta = [0.6, 1.65], tfr = [1.2, 7.5], eps_f = [0.1, 1.0], eps_m = [0.5, 3.0], elite_fertility_mult = [1.0, 1.6] }
+# F1 defaults (SPR-011 ruling 8: a default arrives with the sprint that first reads the parameter). tfr = 4.7 and
+# elite_fertility_mult = 1.0 are design values; the spec's [[params]] states why ([algorithm.fertility_f1] F2, F3).
+defaults = { e0 = 30.0, brass_beta = 1.0, tfr = 4.7, elite_fertility_mult = 1.0 }
+
+[verbs]
+# 05.2 §4.0: "P1.3 adds births and marriages (birth, marry)". Tellability priors are design values (DEATH is 128).
+BIRTH    = { act_classes = ["birth"], emitted_by = "M2.demography", tellability = 96 }     # actor: the mother; target: the child; payload [sex, birth order]
+MARRIAGE = { act_classes = ["marry"], emitted_by = "M2.demography", tellability = 112 }    # actor: the husband; target: the wife; payload []
