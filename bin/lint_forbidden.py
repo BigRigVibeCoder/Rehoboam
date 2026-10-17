@@ -20,16 +20,21 @@ reports its metadata). Rules:
                       the std type is.
     file-clock        .modified(), .accessed() and .created() (std::fs::Metadata): a file's
                       timestamps are a wall clock reached without a clock name (BCK-002 A-44).
-    process           std::process::Command (also in use groups and globs): another program's
-                      output and timing are outside the history tuple (A-44). std::process::id
-                      and exit stay allowed.
+    file-clock        also (DEF-2) the UFCS and path forms (`Metadata::modified`, `<Metadata>::
+                      accessed`), any platform `MetadataExt`, and its accessors, which a glob
+                      import brings in unnamed: `.atime(`/`.mtime(`/`.ctime(` (and `_nsec`),
+                      `.st_*time(`, `.creation_time(`, `.last_access_time(`, `.last_write_time(`.
+    process           the module std::process, in src/ and build.rs: Command, and exit, abort and
+                      id too (A-44; DEF-1). tests/ may name temporary files by process id.
     file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
                       build.rs (where the float rule's scope says engine code) of a plane-A crate
                       not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot
                       (the journal and keyframes) and rh-registry (the system specs it reads for
                       the ownership lint). tests/, benches/ and examples/ may read their golden
-                      files. Textual: a renamed import (`use std::fs as f;`) is caught at the
-                      `std::fs`; a dependency's own file API is not (A-44).
+                      files. A dependency's own file API is not seen (A-44).
+                      DEF-1: for process and file-io, every `use` item is parsed as a tree, so a
+                      rename, `self`, `{self as x}` or a nested `std::{..}` group that imports the
+                      module is reported at its `use`, whatever the form.
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
@@ -173,6 +178,11 @@ FLOAT_API_RULE = "float-api"
 # read their golden files anywhere. python/tests/test_lint_forbidden.py asserts the set: widening it
 # is a reviewed change. --scan has no crate context and allows no one.
 FILE_IO_RULE = "file-io"
+PROCESS_RULE = "process"
+# DEF-1 (Architect ruling): a `use` tree that names one of these modules, in any form (a path, a
+# rename, `self`, `{self as x}`, a nested group of `std::{..}`), is a violation of the rule.
+BANNED_MODULES = ((("std", "process"), PROCESS_RULE), (("std", "fs"), FILE_IO_RULE))
+USE_TOKEN = re.compile(r"::|[{},*;]|\w+")
 FILE_IO_CRATES = MappingProxyType(
     {
         "rh-registry": "reads specs/systems/*.odd.toml for the ownership lint at load (SPR-004)",
@@ -286,19 +296,25 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "file-clock",
-        _rx(r"\.\s*(?:modified|accessed|created)\s*\("),
-        "a file's modified/accessed/created time (fs::Metadata) is a wall-clock read without a "
-        "clock name; simulation time comes from rh-core (BCK-002 A-44)",
+        _rx(
+            r"\.\s*(?:modified|accessed|created)\s*\("  # the method calls
+            r"|\bMetadata\s*>?\s*::(?:modified|accessed|created)\b"  # UFCS, <Metadata>::, fn items
+            r"|\bMetadataExt\b"  # any platform's timestamp trait (std::os::*::fs)
+            r"|\.\s*(?:st_)?[amc]time(?:_nsec)?\s*\("  # unix and linux accessors (glob-imported)
+            r"|\.\s*(?:creation_time|last_access_time|last_write_time)\s*\("  # windows
+        ),
+        "a file's timestamp (fs::Metadata, a platform MetadataExt) is a wall-clock read without "
+        "a clock name; simulation time comes from rh-core (BCK-002 A-44; DEF-2)",
     ),
     Rule(
-        "process",
-        _rx(r"\bprocess::(?:Command\b|\*|\{[^}]*\bCommand\b)"),
-        "std::process::Command runs another program, whose output and timing are outside the "
-        "history tuple (DET-1; BCK-002 A-44)",
+        PROCESS_RULE,
+        _rx(r"\bstd::process\b|\bprocess::\w"),
+        "std::process (Command, exit, abort, id) reaches outside the history tuple: another "
+        "program's output and timing, or the host process (DET-1; BCK-002 A-44; DEF-1)",
     ),
     Rule(
         FILE_IO_RULE,
-        _rx(r"\bstd::fs\b|\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
+        _rx(r"\bstd::fs\b|(?<!:)\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
         "file I/O in plane A outside the crates allowed it (FILE_IO_CRATES): plane A reads its "
         "inputs through the journal and the compiled world, never from files (BCK-002 A-44)",
     ),
@@ -530,6 +546,90 @@ def find_forbidden(code: str, path: str) -> list[Finding]:
                 (match.start(), Finding(rule.name, path, line_index + 1, column, text, rule.why))
             )
     return [finding for _, finding in sorted(found, key=lambda pair: (pair[0], pair[1].rule))]
+
+
+def expand_use(tree: str) -> list[tuple[str, ...]]:
+    """Return every path a `use` tree imports, its groups expanded and `self` resolved (DEF-1).
+
+    `tree` is the text after `use` (comments already blanked). Renames are dropped: `use
+    std::process as p;` imports `std::process`. A leading `::` is ignored; a glob imports its prefix
+    path followed by `*`.
+    """
+    tokens = USE_TOKEN.findall(tree)
+    position = 0
+
+    def peek() -> str:
+        return tokens[position] if position < len(tokens) else ";"
+
+    def parse(prefix: tuple[str, ...]) -> list[tuple[str, ...]]:
+        nonlocal position
+        path = prefix
+        while True:
+            token = peek()
+            if token == "::":
+                position += 1
+                continue
+            if token == "{":
+                position += 1
+                out: list[tuple[str, ...]] = []
+                while peek() not in ("}", ";"):
+                    out += parse(path)
+                    if peek() == ",":
+                        position += 1
+                position += 1  # the closing brace
+                return out
+            if token in ("}", ",", ";"):
+                return [path]
+            position += 1
+            if token == "as":
+                position += 1  # the new name: the module imported is still `path`
+                return [path]
+            path = path if token == "self" else (*path, token)
+
+    return parse(())
+
+
+def find_use_modules(code: str, path: str) -> list[Finding]:
+    """Return a finding for every `use` item that imports a banned module (DEF-1), at its `use`."""
+    line_starts = [0] + [m.end() for m in re.finditer("\n", code)]
+    found = []
+    for match in USE_ITEM.finditer(code):
+        imported = expand_use(match.group(0)[len("use") : -1])
+        for module, rule in BANNED_MODULES:
+            hit = next((p for p in imported if p[: len(module)] == module), None)
+            if hit is None:
+                continue
+            line = bisect.bisect_right(line_starts, match.start()) - 1
+            why = next(r.why for r in RULES if r.name == rule)
+            text = "::".join(module)
+            found.append(
+                Finding(rule, path, line + 1, match.start() - line_starts[line] + 1, text, why)
+            )
+    return found
+
+
+def _with_use_trees(code: str, path: str) -> list[Finding]:
+    """The pattern findings, plus each use-tree finding no pattern made on its line (DEF-1).
+
+    `use std::process as p;` is a pattern finding (the path) and a use-tree finding; it is reported
+    once. `use std::{fs, io};` is a use-tree finding only.
+    """
+    found = find_forbidden(code, path)
+    reported = {(f.rule, f.line) for f in found}
+    extra = [f for f in find_use_modules(code, path) if (f.rule, f.line) not in reported]
+    return sorted(found + extra, key=lambda f: (f.line, f.column, f.rule))
+
+
+def _applies(finding: Finding, scan: "FloatScan") -> bool:
+    """Whether a finding's rule applies under the file's scan (module DECISION; A-44; DEF-1)."""
+    if finding.rule == FLOAT_RULE:
+        return scan.scope == "rule"
+    # File I/O and std::process are refused where the float rule's scope says engine code (src/,
+    # build.rs; and the float zone's src/): tests may read their golden files and name temporary
+    # directories by process id. File I/O is allowed in FILE_IO_CRATES.
+    if finding.rule in (FILE_IO_RULE, PROCESS_RULE) and scan.scope == "none":
+        return False
+    return not (finding.rule == FILE_IO_RULE and scan.file_io)
 
 
 def find_escapes(lexed: Lexed, path: str) -> list[Escape]:
@@ -765,14 +865,7 @@ def scan_source(
             return  # reached twice (directly and through an include!, or by two includes)
         report.scanned.add((file, scan))
     lexed = lex(source)
-    findings = [
-        f
-        for f in find_forbidden(lexed.code, name)
-        if (floats == "rule" or f.rule != FLOAT_RULE)
-        # File I/O is refused where the float rule's scope says engine code (src/, build.rs), and
-        # in the float zone's src/ too, unless the crate is allowed it (BCK-002 A-44).
-        and not (f.rule == FILE_IO_RULE and (floats == "none" or scan.file_io))
-    ]
+    findings = [f for f in _with_use_trees(lexed.code, name) if _applies(f, scan)]
     if floats == "rule":
         findings += find_float_dep(lexed.code, name, dep_floats)
     # Includes resolve from the file as it was reached, not from its symlink target (MIN-3).

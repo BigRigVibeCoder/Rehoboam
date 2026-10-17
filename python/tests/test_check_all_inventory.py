@@ -353,6 +353,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES must "
     "FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
+    "lint_forbidden positive control: fs::read after a grouped import is reported on its own line "
+    "(DEF-1)",
     "lint_forbidden positive control: include!(concat!(...)) must FAIL (SPR-008 T-00)",
     "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
     "(VER-SPR-008)",

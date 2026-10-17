@@ -16,6 +16,7 @@ from lint_forbidden import (
     FloatScope,
     Report,
     declared_float_fields,
+    expand_use,
     float_yielding_apis,
     lex,
     main,
@@ -297,7 +298,12 @@ PLANTED = {
     "float_undeclared_field": ("float", "f32"),
     "allow_disallowed": ("lint-allow", "allow(clippy::disallowed_methods"),
     "file_modified": ("file-clock", ".modified("),
-    "process_command": ("process", "process::Command"),
+    "process_command": ("process", "std::process"),
+    "process_rename": ("process", "std::process"),
+    "fs_group_rename": ("file-io", "std::fs"),
+    "metadata_ext": ("file-clock", "MetadataExt"),
+    "metadata_ufcs": ("file-clock", "Metadata::modified"),
+    "mtime": ("file-clock", ".mtime("),
     "file_io": ("file-io", "std::fs"),
 }
 
@@ -1035,6 +1041,23 @@ def test_an_include_resolves_from_the_symlink_not_its_target(tmp_path: Path) -> 
         ("use std::process::{Child, Command};", "process"),
         ("use std::process::*;", "process"),
         ("let c = std :: process :: Command :: new(x);", "process"),
+        # DEF-1: the module, in any form of use tree.
+        ("let id = std::process::id();", "process"),
+        ("std::process::exit(2);", "process"),
+        ('use std::process as p; fn a() { p::Command::new("date"); }', "process"),
+        ("use std::process::{self as p};", "process"),
+        ("use std::process::{self}; fn a() { self::Command::new(x); }", "process"),
+        ("use ::std::{io, process::{self as q}};", "process"),
+        ('use std::{fs as f, io}; fn a() { f::read("x"); }', "file-io"),
+        ("use std::{io, fs::{self as g}};", "file-io"),
+        ("pub use std::{fs};", "file-io"),
+        # DEF-2: every read of a file's timestamps.
+        ("let _ = Metadata::modified(&m);", "file-clock"),
+        ("let g = <Metadata>::accessed;", "file-clock"),
+        ("use std::os::linux::fs::MetadataExt;", "file-clock"),
+        ("let t = m.mtime() + m.ctime_nsec();", "file-clock"),
+        ("let t = m.st_atime();", "file-clock"),
+        ("let t = m.last_write_time();", "file-clock"),
         ("use std::fs;", "file-io"),
         ("let f = fs::File::open(p);", "file-io"),
         ("let f = File::create(p);", "file-io"),
@@ -1051,15 +1074,16 @@ def test_a_44_rules_catch_their_forms(code: str, rule: str) -> None:
 @pytest.mark.parametrize(
     "code",
     [
-        "let id = std::process::id();",
-        "std::process::exit(2);",
+        "use std::{io, path::Path};",
+        "use std::os::unix::ffi::OsStrExt;",
+        "let t = clock.datetime();",
         "let m = state.modified_rows;",
         "let r = ledger.created_at(t);",
         "let p = std::path::Path::new(x);",
     ],
 )
 def test_a_44_rules_leave_allowed_forms_alone(code: str) -> None:
-    """process::id and exit, field names and paths are not file clocks, processes or I/O."""
+    """Field names, paths and other std modules are not file clocks, processes or I/O."""
     report = Report(violations=[], escaped=[])
     scan_source(code + "\n", "snippet.rs", report)
     assert report.violations == []
@@ -1090,3 +1114,31 @@ def test_the_file_io_workspace_reports_src_only(capsys: pytest.CaptureFixture[st
     assert len(violations) == 1
     assert "file_io_workspace/rh-core/src/lib.rs:4:5" in violations[0]
     assert "file I/O allowed in rh-registry, rh-snapshot only (A-44)" in out
+
+
+def test_def_1_a_path_after_a_grouped_import_is_reported_on_its_own_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The `fs::<item>` pattern is not dead weight behind the use-tree check (DEF-1 test gap)."""
+    assert main(["--scan", str(FIXTURES / "fs_path_after_group.rs")]) == EXIT_VIOLATIONS
+    lines = [v for v in capsys.readouterr().out.splitlines() if v.startswith("VIOLATION")]
+    assert [line.split(" at ", 1)[1].split(";")[0][-4:] for line in lines] == [":4:1", "5:18"]
+    assert "`fs::r`" in lines[1]
+
+
+@pytest.mark.parametrize(
+    ("tree", "paths"),
+    [
+        ("std::process as p", [("std", "process")]),
+        ("std::process::{self as p}", [("std", "process")]),
+        (
+            "::std::{io, fs::{self as g, File}}",
+            [("std", "io"), ("std", "fs"), ("std", "fs", "File")],
+        ),
+        ("std::{fs, io}", [("std", "fs"), ("std", "io")]),
+        ("a::b::*", [("a", "b", "*")]),
+    ],
+)
+def test_use_trees_expand_to_the_paths_they_import(tree: str, paths: list[tuple[str, ...]]) -> None:
+    """Renames are dropped, `self` is its prefix, groups nest (DEF-1)."""
+    assert expand_use(f" {tree};") == paths
