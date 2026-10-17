@@ -17,7 +17,8 @@
 //! fields, and write a row's exit fields (`exit_kind`, `exit_tick`, `death_cause`) only in the
 //! step that closes it, from open (`exit_kind = 0`) to closed (not every field need change then);
 //! a row appended open carries the open values in its exit fields, and one appended closed (a
-//! back-filled ancestor) any; [`LifeCourseGuard`] refuses anything else (DEF-3). The log is never
+//! back-filled ancestor, absent from the ledger: DEF-6) any; [`LifeCourseGuard`] refuses
+//! anything else (DEF-3). The log is never
 //! compacted (ADR-0007): kinship through the dead walks it (REV-P1a NEW-1).
 //!
 //! **Core invariants** (`Bookkeeping`, after compaction): every `person.*` column is as long as
@@ -345,7 +346,8 @@ impl LifeCourseGuard {
     ///
     /// # Errors
     /// [`SimError::Ledger`] naming `system` and the column: a changed `person.*` row count, a
-    /// removed life-course row, a changed entry field, or an exit field written twice.
+    /// removed life-course row, a changed entry field, an exit field written twice, or an entry
+    /// appended closed for a person in the ledger.
     pub(crate) fn check(&self, system: &'static str, tables: &WorldTables) -> Result<(), SimError> {
         let refuse = |message: String| SimError::Ledger { system, message };
         self.check_ids_and_alive(system, tables)?;
@@ -421,6 +423,43 @@ impl LifeCourseGuard {
                         )));
                     }
                 }
+            }
+        }
+        self.check_closed_appends(system, tables, kinds_after)
+    }
+
+    /// DEF-6: an entry appended closed is a dead person's (a back-filled ancestor); one whose
+    /// `person_id` is a ledger row, alive or dying this instant, is refused.
+    fn check_closed_appends(
+        &self,
+        system: &'static str,
+        tables: &WorldTables,
+        kinds_after: &[i64],
+    ) -> Result<(), SimError> {
+        // A job that does not own life_course.person_id appends no entry (its length is fixed).
+        let Some(before) = self
+            .life_course
+            .iter()
+            .find(|(c, _)| c == LIFE_COURSE_PERSON)
+            .map(|(_, rows)| rows.len())
+        else {
+            return Ok(());
+        };
+        let ids = column(tables, PERSON_ID);
+        let persons = column(tables, LIFE_COURSE_PERSON);
+        for (row, &p) in persons.iter().enumerate().skip(before) {
+            let closed = kinds_after.get(row).is_some_and(|&k| k != OPEN);
+            // The ledger is sorted by id as a u64; a step may have unsorted it, so scan.
+            if closed && ids.contains(&p) {
+                return Err(SimError::Ledger {
+                    system,
+                    message: format!(
+                        "life_course row {row} was appended closed for person {}, who has a \
+                         ledger row: only a person absent from the ledger (a back-filled \
+                         ancestor) is appended closed (SPR-011 ruling 5; DEF-6)",
+                        p.cast_unsigned()
+                    ),
+                });
             }
         }
         Ok(())

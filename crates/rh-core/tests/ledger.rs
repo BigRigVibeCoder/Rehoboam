@@ -159,10 +159,17 @@ fn mortal(
             }
         }
         // DEF-3: an entry appended open with an exit field that is not the open value; or
-        // (allowed) a dead ancestor appended closed, as SPR-019's back-fill will.
-        "M2.misborn" | "M2.backfill" => {
+        // (allowed) a dead ancestor appended closed, as SPR-019's back-fill will. DEF-6: a closed
+        // entry appended for a person still in the ledger (the Tester's probe).
+        "M2.misborn" | "M2.backfill" | "M2.closedliving"
+            if s.id != "M2.closedliving" || !ids.is_empty() =>
+        {
             let open = s.id == "M2.misborn";
-            let id = (now / MONTH + 1) << 40;
+            let id = if s.id == "M2.closedliving" {
+                ids[0]
+            } else {
+                (now / MONTH + 1) << 40
+            };
             let row = [
                 id,
                 1,
@@ -621,6 +628,24 @@ fn def_3_a_terse_closing_and_a_row_appended_closed_pass() {
                 get(e.tables(), PERSON_ID).len() < n,
                 "{mortal}: people died"
             );
+        }
+    }
+}
+
+#[test]
+fn def_6_a_closed_entry_for_a_person_in_the_ledger_is_refused_by_name() {
+    for (n, seed) in [(30, 9), (5, 2), (120, 31)] {
+        let mut e = engine(systems("M2.closedliving"), world(n, 3, seed), seed, 1);
+        match e.advance_until(SimTime::from_minutes(MONTH * 12), |_, _| {}) {
+            Err(SimError::Ledger { system, message }) => {
+                assert_eq!(system, "M2.closedliving");
+                assert!(
+                    message.contains("was appended closed for person")
+                        && message.contains("who has a ledger row"),
+                    "n {n}: {message}"
+                );
+            }
+            other => panic!("n {n}: refused for the wrong reason: {other:?}"),
         }
     }
 }
