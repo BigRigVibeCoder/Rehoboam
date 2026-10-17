@@ -3,7 +3,7 @@
 # (fathers), households and the kinship the effect language walks, added on top of the frozen rung-0 slice.
 #
 # HOW THIS FILE RELATES TO THE FROZEN ONE (lint_odd.py --next; specs/systems/next/README.md). specs/systems/M2.demography.odd.toml
-# is 0.2.1 (0.2.0 frozen 2026-10-16, D30/D36; 0.2.1 by EVO-001, PR #49: typed payloads, codes, no date on a command); SPR-012 and SPR-013 built against it and its skeleton is committed. This file
+# is 0.2.2 (0.2.0 frozen 2026-10-16, D30/D36; 0.2.1 by EVO-001, PR #49: typed payloads, codes, no date on a command; 0.2.2 by SPR-020: `roles` on its [[emits]]); SPR-012 and SPR-013 built against it and its skeleton is committed. This file
 # is its next version. It is linted with `python -I specs/systems/lint_odd.py --next specs/systems/next --overlay
 # specs/systems/next/registry_delta.toml`, which supersedes 0.2.0 by this file for that run (so M7 and T1's reads and
 # commands are checked against it) and then checks that the frozen slice is preserved: every 0.2.0 [[owns]] column with
@@ -423,15 +423,19 @@ sprint = "SPR-014"
 [[emits]]
 kind = "DEATH"
 when = "apply_death, when a death timer fires or the Day/Vital drain applies a ScheduleDeath (SPR-014; EVO-001): alive = 0, death tick, death cause, life-course exit. Roles: the deceased is target; there is no actor for a natural death (a ScheduleDeath's culprit is actor, P1.13). Payload: [death_cause code]. Causes: none for a natural death. Admitted under DATA-5 as the tellable act class death at rungs 0-2 (SPR-011 ruling 11)"
+roles = ["actor", "target"]   # target: the deceased; actor: the culprit of a caused death (ScheduleDeath.culprit), none for a natural one (envelope_v0.md §3)
 [[emits]]
 kind = "EXTINCTION"
 when = "apply_death leaves no ledger row with alive = 1, no row inserted earlier in the same step and no BIRTH_TIMER due in this slot whose mother's row is present (S12 as amended: the newborns of this slot, born or about to be, count as living; REV-SPR-015 MIN-3, R17.1): emitted once, right after that DEATH, in the same fire, with the DEATH as its one cause (a draft-local cause, written as a triggered edge; SPR-011 rulings 11, 17). No roles; payload: [] . With births it still happens at most once per run (an empty world bears no children, and a birth whose mother was compacted before the instant is dropped); the run continues to its requested end (V-SCALE-04)"
+roles = []                   # no cast; its one cause is the DEATH (triggered)
 [[emits]]
 kind = "BIRTH"
 when = "apply_birth (F9), when a birth timer fires at a day start: after the row insert and the life-course append. Roles: the mother is actor, the child is target (the father is in the child's life-course row; P1.9's typed [event_roles] may add a parent role, BCK-002 A-24). Payload: [sex code, birth order (parity after the birth)]. Causes: none (the marriage is state, not a cause). Registry verb BIRTH, act class birth, tellability 96 (design value: below DEATH's 128), admitted at every P1a world under the ceiling (05.2 §4.0)"
+roles = ["actor", "target"]   # actor: the mother; target: the child (SPR-020, envelope_v0.md §3)
 [[emits]]
 kind = "MARRIAGE"
 when = "apply_marry (N7), whether from M2's partnering timer or from T1's Marry command. Roles: the husband is actor, the wife is target. Payload: []. Causes: none from a timer; a Marry command carries no cause_event (its frozen payload), so none from it either. Registry verb MARRIAGE, act class marry, tellability 112 (design value)"
+roles = ["actor", "target"]   # actor: the husband; target: the wife (SPR-020, envelope_v0.md §3)
 
 [scales]
 spatial = "person; households as collectives (membership only, no place: residence is S3.migration's from SPR-018)"

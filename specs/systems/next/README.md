@@ -123,7 +123,7 @@ never changes a committed skeleton or the index until step 4.
 
 | File | What |
 |---|---|
-| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) and F1 mortality (SPR-016, `[algorithm.mortality_f1]`, folded after PR #50) on the frozen rung-0 slice (0.2.1: 0.2.0 plus EVO-001's typed payloads and codes) |
+| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) and F1 mortality (SPR-016, `[algorithm.mortality_f1]`, folded after PR #50) on the frozen rung-0 slice (0.2.2: 0.2.0 plus EVO-001's typed payloads and codes, and SPR-020's `roles`) |
 | `M7.dynasty.odd.toml` | 0.4.0 draft (SPR-019, PR #62): the frozen 0.3.2 with three `[[amends]]` records for rh-worldgen's dynastic back-fill (`specs/worldgen/population_synthesis.toml` `[algorithm.dynastic_backfill]`): `[initialization]` (the houses, genealogy, `house_member` rows and each title's pre-epoch tenure log by its law), `tenure.title` (a pre-epoch log, not one initial row), `house_member.house` (every agnatic descendant the back-fill writes, the dead included). Nothing else of 0.3.2 changes |
 | `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`) and mortality's two parameters with their defaults (`density_capacity`, `density_mortality_slope`); verbs `BIRTH`, `MARRIAGE` |
 | `amendments.lock.toml` | the nineteen amendments of the M2 draft (five texts, seven column meanings, seven parameter meanings; the mortality fold re-stated five and added `e0`'s; SPR-019 re-stated `[initialization]`) and the three of the M7 draft, path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |

@@ -46,6 +46,7 @@ fixed_point = false
 [[emits]]
 kind = "TRADE"
 when = "an hourly price move is large, or a daily trade happens"
+roles = ["target"]            # the region
 [[commands]]
 target = "X4.smoke_estate"
 command = "Settle"

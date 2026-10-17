@@ -39,6 +39,7 @@ fixed_point = false
 [[emits]]
 kind = "FROST"
 when = "a region's temperature falls through 8 degrees"
+roles = ["target"]            # the region (SPR-020: the dummies fill target for their one subject)
 
 [scales]
 spatial = "The smoke world: 4 regions and 64 person rows"
