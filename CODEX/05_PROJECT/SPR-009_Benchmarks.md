@@ -2,11 +2,11 @@
 id: SPR-009
 title: "Benchmark harness and regression gate"
 type: how-to
-status: PLANNING
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001, RUN-001, GOV-008]
+related: [BCK-001, PRJ-001, RUN-001, GOV-008, VER-SPR-009, VER-SPR-009-TEST]
 created: 2026-10-16
 updated: 2026-10-16
 version: 1.10.0
@@ -104,8 +104,8 @@ version: 1.10.0
 
 | Rule | This sprint |
 |---|---|
-| Change class (`docs/13` §4.2) | C1 |
-| Planes touched (ADR-0024) | none (tooling) |
+| Change class (`docs/13` §4.2) | C2 (Architect at the audit; the plan said C1): `rh-core` gains a public observer interface (`Observer`, `Notice`, `set_observer`) and `SimError::Observer`. History is unchanged (`VER-SPR-009` §3) |
+| Planes touched (ADR-0024) | A: `rh-core` (the observer interface, the DEF-1 guard, OBS-1). Tool: `rh-bench`, `rh-golden` (vitals), `bin/`, CI |
 | Owned columns written | none |
 | RNG purposes | none |
 | Golden-hash effect | none |
@@ -154,9 +154,9 @@ version: 1.10.0
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-009` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class.
+- [x] All tasks meet their acceptance criteria, except T-04: blocked on the director's machines (ruling 6), re-opened as a follow-up for the director's session.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-009` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class.
