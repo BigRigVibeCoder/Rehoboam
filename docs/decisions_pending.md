@@ -8,7 +8,6 @@
 
 | ID | Question | Recommendation (default if unanswered) | Needed by |
 |---|---|---|---|
-| D46 | **Population synthesis v0: defer P1.2's "IPF from manifest marginals" to the `population` marginal alone?** SPR-019's spec (PR #62) synthesises the anonymous rest of a people from the compiled M2 schedule: age and sex from its stationary population, marriage and children from M2 F1's own constants. Class, culture and faith marginals have no owning system in P1a (M4 F0 and S1 are P1b), so no manifest field is added in v0. The founders with pre-epoch births, the genealogical kin and the three-generation houses are built as written. `hamlet`'s golden moves when SPR-019 is built (announced then) | **Approve the deferral.** Optional `peoples[].age_structure`, class and culture shares arrive with their owners in P1b, with the Rust loader's parity fixtures. Confidence: 75% | Before SPR-019 (P1.2) is planned |
 | D29 | **Which image provider, and what monthly budget?** The graphic chronicle renders storyboard panels in batch after a saga is compiled (`05.11` §6; `12` Q24). | **A serverless API, in batch, no GPU VM.** Choose among fal.ai, Replicate and Together AI (FLUX.1 [dev] or SDXL) by a two-week trial on the same 50 panels at the start of P3. About $0.005–0.015 per panel, ≈ $1 per season (estimate, verify at P3). Default ceiling: $10 a month. Confidence: medium | Start of P3 (nothing earlier depends on it) |
 
 ## Decided on 2026-10-17
@@ -22,10 +21,12 @@
 | D42 | **Approved: option (b).** The live-edge window is the current sim-year and the previous one, plus the lateness of any seal slower than a sim-year. PERF-5 and V-PERF-09 amended (`specs/stream/wire_v1.md` §6.1) |
 | D43 | **Approved: canonical text lines on the live edge**, for line-by-line digest verification and stdlib viewers; Arrow and Parquet stay the format at rest. ADR-0031 §1 item 4 amended |
 | D44 | **Approved: nine causal edge kinds**, keeping `oracle` (code 7). DATA-2 and V-DATA-09 amended |
+| D46 | **Approved: population synthesis v0 deferral (PR #62 / PR #67).** Defer IPF from manifest marginals to the `population` marginal alone for P1a; class, culture and faith shares arrive in P1b with their owning systems (M4, S1). Age/sex come from the demographic schedule; marriage/children from M2 F1 constants |
 | D47 | **Approved: "tip and scheduled inputs" moves from P1.17 to P2** in `docs/11` (now in P2.7, over `control.sock`, STR-4), matching PRJ-002 |
 | D48 | **Approved: the wave-4 sprint plans** SPR-014 (lifecycle queues), SPR-020 (the event envelope, with its C3 baseline moves announced before the merge) and SPR-026 (World Stream v1). Order: SPR-014, then SPR-020; SPR-026 in between or after. They start when SPR-013 merges |
-| D49 | **Approved: names for persons come from a deterministic plane-C generator at P2.8** (`H(seed, person_id, "name")`); plane A stores no name strings in the state hash. G1a reads with the annals' kinship fallback (SPR-029) |
+| D49 | **Approved: names for persons come from a deterministic plane-C generator at P2.8** (`H(seed, person_id, "name")`); plane A stores no name strings in the state hash. G1a reads with the annals' kinship fallback (SPR-029). Formatting contingency for unlinked founder IDs noted |
 | D50 | **Approved: V-NAR-05 amended.** A prologue sentence before a house's first chronicle sentence maps to the keyframe rows it was rendered from (`kf:life/…`, `kf:tenure/…`), not to event IDs (SPR-029) |
+| CI | **Approved: CI minute-saving skips.** Docs-only PRs skip the golden test matrix half of CI; nightly runs are skipped when zero new commits have landed on `main` |
 
 ## Decided on 2026-10-16
 
