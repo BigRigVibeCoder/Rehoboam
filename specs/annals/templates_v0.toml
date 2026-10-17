@@ -53,7 +53,7 @@ words = ["in retaliation for", "out of jealousy of", "under a vow sworn at", "ou
 # is the whole `Payload: [...]` clause of the emitting system's [[emits]] `when` for the kind, and
 # the lint checks that the clause occurs there verbatim and that there is one slot per comma-
 # separated item (REV-SPR-029 F12), so a layout can never drift from the contract it reads. A kind
-# whose `when` states no layout has no payload slot (M7 0.3.3: BCK-002 A-55 types the payloads).
+# whose `when` states no layout has no payload slot (M7 0.3.4, draft 0.4.0: A-55 types the payloads).
 # `enum` renders the code through an enum's words; `ordinal` renders an integer as an ordinal word.
 
 [payloads.DEATH]

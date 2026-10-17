@@ -11,7 +11,7 @@ keyframe extract: annals_v0.md §1, §6):
   ``specs/manifest/examples/manor.yaml``. The history follows the rules the specs state: a birth
   nine months after its conception and never from a pregnancy pending at genesis (M2 0.3.0 F9,
   SPR-019 D-08); a posthumous birth within nine months of the father's death; a succession or an
-  interregnum in the instant a holder dies or is deposed, at the `Polity` phase (M7 0.3.3, SAGA-13);
+  interregnum in the instant a holder dies or is deposed, at the `Polity` phase (M7 0.3.4, SAGA-13);
   a claim created only when a succession passes over the legal heir or a ruler is deposed; a
   deposition by the leading pressed claimant, who holds an unrenounced claim; a title named in
   every M7 payload; T1's acts with the edges and motives T1 declares (envelope_v0.md §3).

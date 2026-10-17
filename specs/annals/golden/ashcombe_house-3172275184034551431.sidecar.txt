@@ -1,4 +1,4 @@
-#rehoboam/annals/v0 world=ashcombe group=house:3172275184034551431 timeline=0 chronicle_digest=425657e96809da694935359649a77373 registry_version=0.2.0+next keyframe_extract=aa6bab905234af36 state_hash=0a5c3e1d9b7f2468 manifest_hash=sha256:afce94fcb48fdfff99f60be5bc6104222a04953e1da364f6cb06c84738d1a2e0 templates=0.2.0 templates_digest=d78ab0226a3e2fa2 renderer=annals_v0/0.3.0 calendar=360
+#rehoboam/annals/v0 world=ashcombe group=house:3172275184034551431 timeline=0 chronicle_digest=425657e96809da694935359649a77373 registry_version=0.2.0+next keyframe_extract=aa6bab905234af36 state_hash=0a5c3e1d9b7f2468 manifest_hash=sha256:afce94fcb48fdfff99f60be5bc6104222a04953e1da364f6cb06c84738d1a2e0 templates=0.2.0 templates_digest=1594723802faf26c renderer=annals_v0/0.3.0 calendar=360
 P 5 prologue.house 2 [] [2852707390447582764,6740622430173101898,9074827264899753041,18145486546762629703] [house/3172275184034551431,kf:life/18145486546762629703,kf:life/2852707390447582764,kf:life/6740622430173101898,kf:life/9074827264899753041]
 P 6 prologue.ancestor 1 [] [52998799569557452] [kf:life/52998799569557452]
 P 7 prologue.tenure 1 [] [52998799569557452] [kf:life/52998799569557452,kf:tenure/1/-20736000,title/1]
@@ -31,4 +31,4 @@ S 61 succeed.after 1 [34,36] [6759579853571863877,12313099716791886200,146397682
 S 64 seat.granted 1 [37] [12313099716791886200,16429412308034766705] []
 # omitted: 1 event(s) of kinds outside the template set: MURDER_ATTEMPT x1
 # castless: 1 event(s) with no cast and no told triggered edge into this group: INTERREGNUM_CRISIS x1
-digest 6be03be48c7cd26a
+digest ed5199e626993918
