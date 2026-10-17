@@ -1072,7 +1072,7 @@ impl Engine {
     ) -> Result<(), SimError> {
         self.dispatch.record(jobs.len());
         self.check_owned_columns(jobs)?;
-        let guards = self.ledger_guards(jobs);
+        let guards = self.ledger_guards(jobs, phase);
         let inputs: Vec<JobInput> = jobs
             .iter()
             .map(|job| {
@@ -1180,7 +1180,7 @@ impl Engine {
     /// What each job must preserve of the ledger columns it owns (SPR-011 ruling 5): `None` for a
     /// job that owns none, or in a world without a ledger.
     /// A world without a ledger pays nothing: no guard and no allocation (DEF-4, V-PERF-11).
-    fn ledger_guards(&self, jobs: &[Job]) -> Vec<Option<LifeCourseGuard>> {
+    fn ledger_guards(&self, jobs: &[Job], phase: Phase) -> Vec<Option<LifeCourseGuard>> {
         if self.ledger.is_none() {
             return Vec::new();
         }
@@ -1188,7 +1188,8 @@ impl Engine {
             .map(|job| {
                 let e = &self.registered.entries[job.index];
                 self.ledger.as_ref().and_then(|ledger| {
-                    let g = ledger.guard(&self.tables, e.access.writes.iter().map(|w| w.column));
+                    let writes = e.access.writes.iter().map(|w| w.column);
+                    let g = ledger.guard(&self.tables, writes, phase);
                     (!g.is_empty()).then_some(g)
                 })
             })

@@ -32,6 +32,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::phase::Phase;
 use crate::system::SimError;
 use crate::world::{Column, WorldTables};
 
@@ -247,12 +248,28 @@ impl Ledger {
         &self,
         tables: &WorldTables,
         owned: impl Iterator<Item = &'c str>,
+        phase: Phase,
     ) -> LifeCourseGuard {
-        let mut guard = LifeCourseGuard::default();
+        let mut guard = LifeCourseGuard {
+            phase,
+            person_rows: Vec::new(),
+            ids: None,
+            alive_after_compaction: false,
+            life_course: Vec::new(),
+        };
         for column in owned {
             if self.is_person(column) {
                 let len = tables.get(column).map_or(0, Vec::len);
                 guard.person_rows.push((column.to_owned(), len));
+                // A-2: only a job that writes person.id pays for keeping its ids.
+                if column == PERSON_ID {
+                    guard.ids = tables.get(column).cloned();
+                }
+                // G-1: compaction ran at the start of Bookkeeping; a death written after it would
+                // survive the instant.
+                if column == PERSON_ALIVE && phase == Phase::Bookkeeping {
+                    guard.alive_after_compaction = true;
+                }
             } else if self.is_life_course(column) {
                 let rows = tables.get(column).cloned().unwrap_or_default();
                 guard.life_course.push((column.to_owned(), rows));
@@ -263,9 +280,14 @@ impl Ledger {
 }
 
 /// The ledger columns one step owns, as they stood before it (see [`Ledger::guard`]).
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct LifeCourseGuard {
+    phase: Phase,
     person_rows: Vec<(String, usize)>,
+    /// `person.id` before the step, kept only for a job that writes it (A-2).
+    ids: Option<Column>,
+    /// Whether the job writes `person.alive` in `Bookkeeping`, after the compaction (G-1).
+    alive_after_compaction: bool,
     life_course: Vec<(String, Column)>,
 }
 
@@ -275,6 +297,50 @@ impl LifeCourseGuard {
         self.person_rows.is_empty() && self.life_course.is_empty()
     }
 
+    /// A-2: an existing row's `person.id` never changes in a step; G-1: no death after the
+    /// instant's compaction.
+    fn check_ids_and_alive(
+        &self,
+        system: &'static str,
+        tables: &WorldTables,
+    ) -> Result<(), SimError> {
+        let refuse = |message: String| SimError::Ledger { system, message };
+        if let Some(before) = &self.ids {
+            let after = tables.get(PERSON_ID).map(Vec::as_slice).unwrap_or_default();
+            if let Some((row, (old, new))) = before
+                .iter()
+                .zip(after)
+                .enumerate()
+                .find(|(_, (old, new))| old != new)
+            {
+                return Err(refuse(format!(
+                    "person.id row {row} changed from {} to {} in {}: an existing row's person.id \
+                     never changes; rows leave only by rh-core's compaction and enter only at \
+                     genesis (SPR-011 ruling 5; A-2)",
+                    old.cast_unsigned(),
+                    new.cast_unsigned(),
+                    self.phase
+                )));
+            }
+        }
+        if self.alive_after_compaction
+            && let Some(row) = tables
+                .get(PERSON_ALIVE)
+                .and_then(|alive| alive.iter().position(|&a| a == 0))
+        {
+            let id = tables
+                .get(PERSON_ID)
+                .and_then(|ids| ids.get(row))
+                .map_or(0, |id| id.cast_unsigned());
+            return Err(refuse(format!(
+                "wrote person.alive = 0 for person {id} in {}, after the instant's compaction: \
+                 a death is applied before Bookkeeping (SPR-011 ruling 5; G-1)",
+                self.phase
+            )));
+        }
+        Ok(())
+    }
+
     /// Checks the step's ledger columns after it ran.
     ///
     /// # Errors
@@ -282,6 +348,7 @@ impl LifeCourseGuard {
     /// removed life-course row, a changed entry field, or an exit field written twice.
     pub(crate) fn check(&self, system: &'static str, tables: &WorldTables) -> Result<(), SimError> {
         let refuse = |message: String| SimError::Ledger { system, message };
+        self.check_ids_and_alive(system, tables)?;
         for (column, before) in &self.person_rows {
             let after = tables.get(column).map_or(0, Vec::len);
             if after != *before {

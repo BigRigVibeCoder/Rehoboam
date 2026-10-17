@@ -121,6 +121,22 @@ fn mortal(
                 v.write(c)?.pop();
             }
         }
+        // A-2: remove a ledger row and append another, keeping the row count.
+        "M2.swapper" if !ids.is_empty() => {
+            let last = *ids.last().unwrap();
+            for c in [
+                "person.id",
+                "person.alive",
+                "person.birth_tick",
+                "person.death_tick",
+            ] {
+                let column = v.write(c)?;
+                let kept = column.pop().unwrap();
+                column.push(if c == "person.id" { last + 2 } else { kept });
+            }
+        }
+        // A-2: rewrite an id in place, keeping the order.
+        "M2.renamer" if !ids.is_empty() => v.write("person.id")?[0] -= 1,
         // A system that removes a life-course row.
         "M2.eraser" if !persons.is_empty() => {
             for c in LIFE {
@@ -185,6 +201,21 @@ fn namer(
     Ok(())
 }
 
+/// A second `person.*` owner in `Culture`, beside `T1.namer`.
+fn tagger(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let ids = col(v, PERSON_ID)?;
+    let t = c.now().minutes();
+    for (slot, id) in v.write("person.tag")?.iter_mut().zip(ids) {
+        *slot = (id ^ t).rem_euclid(97);
+    }
+    Ok(())
+}
+
 /// A `Bookkeeping` reader: the dead of this instant must already be gone.
 fn audit(
     _: &Stub,
@@ -214,17 +245,36 @@ fn mortal_stub(id: &'static str) -> Stub {
     {
         s = s.writes(c);
     }
-    s.at(Pulse::Month, Phase::Vital).stepping(mortal)
+    // G-1: a death applied in Bookkeeping, after the instant's compaction.
+    let phase = if id == "M2.late" {
+        Phase::Bookkeeping
+    } else {
+        Phase::Vital
+    };
+    s.at(Pulse::Month, phase).stepping(mortal)
 }
 
 fn systems(mortal: &'static str) -> Vec<Stub> {
+    let lag = if mortal == "M2.late" {
+        Lag::Lagged
+    } else {
+        Lag::SameInstant
+    };
     vec![
         mortal_stub(mortal),
         Stub::new("T1.namer")
             .writes("person.named")
-            .reads("person.id", mortal, Lag::SameInstant)
+            // M2.late writes in Bookkeeping, after Culture: a same-instant read would be backward.
+            .reads("person.id", mortal, lag)
             .at(Pulse::Month, Phase::Culture)
             .stepping(namer),
+        // A-3: a second Culture system with disjoint writes, so that level holds two jobs and the
+        // thread-invariance test runs the parallel path.
+        Stub::new("T2.tagger")
+            .writes("person.tag")
+            .reads("person.id", mortal, lag)
+            .at(Pulse::Month, Phase::Culture)
+            .stepping(tagger),
         Stub::new("X9.audit")
             .reads("person.alive", mortal, Lag::SameInstant)
             .at(Pulse::Month, Phase::Bookkeeping)
@@ -259,6 +309,7 @@ fn world(n: usize, closed: usize, seed: u64) -> WorldTables {
     t.insert("person.birth_tick", vec![-MONTH * 12 * 20; n_live]);
     t.insert("person.death_tick", vec![i64::MAX; n_live]);
     t.insert("person.named", vec![0; n_live]);
+    t.insert("person.tag", vec![0; n_live]);
     // Entry order: the founders in ascending id, as genesis appends them.
     let closed_row = |i: usize| dead_rows.contains(&i);
     let rows = all.len();
@@ -404,6 +455,12 @@ fn v_det_01_02_a_world_with_deaths_is_identical_across_threads_and_repeats() {
                     .unwrap();
                 states.push(e.tables().clone());
             }
+            // A-3: the Culture level holds T1.namer and T2.tagger, so N threads split it.
+            let dispatch = e.dispatch_stats();
+            assert!(
+                dispatch.max_jobs >= 2 && dispatch.parallel_levels >= 12 * 30,
+                "{dispatch:?}"
+            );
             states
         };
         let reference = run(1);
@@ -565,5 +622,37 @@ fn def_3_a_terse_closing_and_a_row_appended_closed_pass() {
                 "{mortal}: people died"
             );
         }
+    }
+}
+
+#[test]
+fn a_2_an_existing_rows_person_id_never_changes() {
+    for (mortal, expected) in [
+        ("M2.swapper", "person.id row 29 changed from"),
+        ("M2.renamer", "person.id row 0 changed from"),
+    ] {
+        match first_error(mortal) {
+            SimError::Ledger { system, message } => {
+                assert_eq!(system, mortal);
+                assert!(message.starts_with(expected), "{mortal}: {message}");
+                assert!(message.contains("in Vital: an existing row's person.id never changes"));
+            }
+            other => panic!("{mortal} refused for the wrong reason: {other}"),
+        }
+    }
+}
+
+#[test]
+fn g_1_a_death_after_the_compaction_names_its_system_and_phase() {
+    match first_error("M2.late") {
+        SimError::Ledger { system, message } => {
+            assert_eq!(system, "M2.late");
+            assert!(
+                message.starts_with("wrote person.alive = 0 for person ")
+                    && message.contains(" in Bookkeeping, after the instant's compaction"),
+                "{message}"
+            );
+        }
+        other => panic!("refused for the wrong reason: {other}"),
     }
 }
