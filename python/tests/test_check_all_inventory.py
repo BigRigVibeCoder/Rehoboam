@@ -296,6 +296,9 @@ REQUIRED_GATES = (
     "Virtual telemetry (S5 prototype)",
     "Workspace tests positive control: a by-name entry that names no test binary must FAIL "
     "(SPR-009 review 2a)",
+    "World Stream control channel v1: the method table, every request and response, refusals, "
+    "the governor's rule, pace invariance on a simulated engine, the run log, golden frames "
+    "(selftest_control_v1 --check; SPR-027 T-01)",
     "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip "
     "(SPR-011 ruling 13)",
     "World Stream v0 channel-C segment schema: no floats, header, order, sealed round trip, "
@@ -330,6 +333,20 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
+    "control_v1 positive control: a band mixed into the state hash must FAIL pace invariance "
+    "(SPR-027 T-01)",
+    "control_v1 positive control: a pace command journaled as an input must FAIL (STR-5; "
+    "REV-SPR-026 R12; SPR-027 T-01)",
+    "control_v1 positive control: a pause that writes a record must FAIL pace invariance (W35; "
+    "SPR-027 T-01)",
+    "control_v1 positive control: a resume that owes the paused wall time must FAIL (SPR-027 T-01)",
+    "control_v1 positive control: a stale golden frame must FAIL (SPR-027 T-01)",
+    "control_v1 positive control: a step that pauses one instant past its target must FAIL (W37; "
+    "SPR-027 T-01)",
+    "control_v1 positive control: an input accepted on control.sock must FAIL the method table "
+    "(D47; SPR-027 T-01)",
+    "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 "
+    "§4.5; SPR-027 T-01)",
     "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
     "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start "
