@@ -166,7 +166,8 @@ REQUIRED_GATES = (
     "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference "
     "--check; SPR-012 T-05)",
     "Golden vectors: M4 basket and price rule",
-    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference (SPR-019)",
+    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the "
+    "effect_ref differential (SPR-019; REV-SPR-019 R3)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
@@ -598,6 +599,8 @@ REQUIRED_GATES = (
     "population synthesis positive control: an altered golden output must FAIL (SPR-019)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
+    "population synthesis positive control: effect_ref.py with its succession order reversed must "
+    "FAIL the effect differential (REV-SPR-019 R3)",
     "population synthesis positive control: floors in place of the age-sex allocation must FAIL "
     "INV-PS-01 (SPR-019 P3)",
     "population synthesis positive control: floors in place of the couple-table rounding must "
