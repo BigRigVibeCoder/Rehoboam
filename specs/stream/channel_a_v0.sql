@@ -4,7 +4,10 @@
 -- synthetic run's segments).
 --
 -- Status: v0, for P1.0 (SPR-013, T-09). A C2 contract: a change to a column, a code or the order is a new format version
--- (`segment.format`), announced like a Registry change.
+-- (`segment.format`), announced like a Registry change. Amended in place for the event envelope (SPR-020, P1.9;
+-- specs/chronicle/envelope_v0.md) before any build wrote a segment: event_snapshot child rows, the typed causal_edge
+-- (motive, weight, evidence, cause_told) and the event_role_kind, motive_edge_kind and attribute dictionaries. No segment
+-- of the pre-amendment shape exists, so the format id stays v0 (envelope_v0.md §11).
 --
 -- ============================================================================================ rules
 -- R1  Plane A only. Channel A carries authoritative records; plane B never enters the stream; channel C (sift matches)
@@ -17,7 +20,7 @@
 --       tick         the instant (SimTime, i64 minutes) the record belongs to; never earlier than any record before it;
 --       kind         the record kind code (record_kind below), constant per table.
 --     The channel is the segment's (the directory and `segment.channel`), not repeated in rows. Child rows (event_role,
---     causal_edge) are not records: they hang off their EVENT by (timeline_id, event_id) and carry no seq.
+--     event_snapshot, causal_edge) are not records: they hang off their EVENT by (timeline_id, event_id) and carry no seq.
 -- R4  Order within an instant (SPR-011 ruling 13). The records of one tick are written in this order, and seq follows it:
 --       1. INPUT        in journal seq order (05.1 §6 item 6; the journal's acceptance order);
 --       2. EVENT        in EventId order (the timeline's event counter; EventId order is emission order, ADR-0025);
@@ -32,12 +35,14 @@
 --       stream/t<timeline_id, 10 digits>/A/y<sim_year, 6 digits>/<table>.parquet
 --     e.g. stream/t0000000000/A/y000012/event.parquet. sim_year = floor(tick / minutes_per_year) of the world calendar
 --     (518,400 or 525,600; 05.1 §4.1); channel A has no record before tick 0, so sim_year >= 0. A sealed segment holds one
---     file per table below, every one of them, empty or not, plus the dictionaries (verb, act_class, record_kind) and
---     its `segment` row. Sealing is atomic: each file is written to a temporary name, fsynced, renamed; the directory
+--     file per table below, every one of them, empty or not, plus the dictionaries (verb, act_class, record_kind,
+--     event_role_kind, motive_edge_kind, attribute) and its `segment` row. Sealing is atomic: each file is written to a temporary name, fsynced, renamed; the directory
 --     is complete when segment.parquet exists, which is written last (SPR-011 ruling 13; T-09).
--- R6  Self-describing. Every segment carries the Registry version it was written under and the verb, act-class and
---     record-kind dictionaries in force, so a segment stays readable after the Registry grows: verb_id is the verb's
---     index in the Registry's [verbs] sorted by name (ruling 11), act_classes bit i is the Registry's [act_classes].ids[i].
+-- R6  Self-describing. Every segment carries the Registry version it was written under and the verb, act-class,
+--     record-kind, event-role, motive-edge and attribute dictionaries in force, so a segment stays readable after the
+--     Registry grows: verb_id is the verb's index in the Registry's [verbs] sorted by name (ruling 11), act_classes bit i is
+--     the Registry's [act_classes].ids[i], role is the index in [event_roles].ids, motive the index in [motive_edges].ids,
+--     attr_id the index in [attributes] sorted by name (envelope_v0.md §2).
 -- R7  Byte identity (V-STR-01). For the same build, Registry, manifest, seed and journal, every file of every segment is
 --     byte-identical, at any pace and thread count; `segment.canonical_digest` (the digest of the records' canonical
 --     text form in seq order, T-09) survives a Parquet library upgrade.
@@ -70,6 +75,22 @@ CREATE TABLE IF NOT EXISTS verb (                 -- the Registry's [verbs] at s
 CREATE TABLE IF NOT EXISTS act_class (            -- the Registry's [act_classes].ids at sealing, in list order (R6)
     act_class_id UTINYINT NOT NULL PRIMARY KEY,    -- bit position in act_classes bitsets (< 64)
     name         VARCHAR  NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS event_role_kind (      -- the Registry's [event_roles].ids at sealing, in list order (R6; envelope_v0.md §1)
+    role  UTINYINT NOT NULL PRIMARY KEY,           -- 0 actor, 1 target, 2 witness, 3 instrument; a role is only ever appended
+    name  VARCHAR  NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS motive_edge_kind (     -- the Registry's [motive_edges].ids at sealing, in list order (R6; envelope_v0.md §5)
+    motive USMALLINT NOT NULL PRIMARY KEY,         -- 0 RETALIATION_FOR, 1 JEALOUSY_OF, ... ; only ever appended
+    name   VARCHAR   NOT NULL UNIQUE
+);
+
+CREATE TABLE IF NOT EXISTS attribute (            -- the Registry's [attributes] at sealing, sorted by name (R6; envelope_v0.md §4)
+    attr_id USMALLINT NOT NULL PRIMARY KEY,        -- index in [attributes] sorted by name
+    name    VARCHAR   NOT NULL UNIQUE,
+    type    VARCHAR   NOT NULL                     -- q8_8 | int | bool | enum: how event_snapshot.value is read
 );
 
 CREATE TABLE IF NOT EXISTS segment (              -- one row per sealed segment; written last (R5)
@@ -127,11 +148,11 @@ CREATE TABLE IF NOT EXISTS event (                -- kind 2 EVENT (schema.sql ev
     PRIMARY KEY (timeline_id, seq)
 );
 
-CREATE TABLE IF NOT EXISTS event_role (           -- child rows of EVENT: who plays which role
+CREATE TABLE IF NOT EXISTS event_role (           -- child rows of EVENT: who plays which role (= schema.sql's event_role)
     timeline_id  UINTEGER NOT NULL,
     event_id     UBIGINT  NOT NULL,
-    ordinal      UTINYINT NOT NULL,                -- position among the event's subjects (emission order), contiguous from 0
-    entity_kind  UTINYINT NOT NULL,                -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region
+    ordinal      UTINYINT NOT NULL,                -- position among the event's cast: by role code, then (entity_kind, entity_id); contiguous from 0
+    entity_kind  UTINYINT NOT NULL,                -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region (5 artifact, P1b)
     entity_id    UBIGINT  NOT NULL,
     role         UTINYINT NOT NULL,                -- Registry [event_roles] index: 0 actor, 1 target, 2 witness, 3 instrument
     PRIMARY KEY (timeline_id, event_id, ordinal)
@@ -139,14 +160,34 @@ CREATE TABLE IF NOT EXISTS event_role (           -- child rows of EVENT: who pl
 -- DEATH: one row, role 1 (target), the deceased; no actor for a natural death (ruling 11). EXTINCTION: no row.
 -- An event's ordinals are 0..n-1 with no gap: the canonical text form writes roles as a list whose position is the
 -- ordinal (specs/stream/canonical_v0.md §3), so a gap could not round-trip. The self-test checks it.
--- schema.sql's concrete_role codes (initiator, target, partner, bystander, instrument) and abstract_role are reconciled
--- with [event_roles] in P1.9 (SPR-011 Blocker 6); channel A v0 uses the Registry's codes.
+-- Every role appears at most once per event except witness (envelope_v0.md §1). schema.sql's event_role has exactly
+-- these columns since SPR-020 (the self-test checks it): the reconciliation of SPR-011 Blocker 6 is done.
 
-CREATE TABLE IF NOT EXISTS causal_edge (          -- child rows of EVENT: its causes, all with smaller event_id
-    timeline_id UINTEGER NOT NULL,
-    cause_id    UBIGINT  NOT NULL,
-    effect_id   UBIGINT  NOT NULL,
-    kind        UTINYINT NOT NULL,                 -- schema.sql codes; P1.0 writes SPR-006's untyped causes as 1 triggered (ruling 11)
+CREATE TABLE IF NOT EXISTS event_snapshot (       -- child rows of EVENT: anchored attribute values (= schema.sql's event_snapshot)
+    timeline_id  UINTEGER  NOT NULL,
+    event_id     UBIGINT   NOT NULL,
+    attr_id      USMALLINT NOT NULL,               -- attribute.attr_id
+    entity_kind  UTINYINT  NOT NULL,               -- the first argument's entity; 0 with entity_id 0 = the event itself
+    entity_id    UBIGINT   NOT NULL,
+    partner_kind UTINYINT,                         -- the second argument of a relational attribute; both NULL or both set
+    partner_id   UBIGINT,
+    value        INTEGER   NOT NULL                -- q8_8 raw bits, bool 0/1, enum index, or an int (envelope_v0.md §4 item 5)
+);
+-- One row per (timeline_id, event_id, attr_id, entity_kind, entity_id, partner_kind, partner_id); no PRIMARY KEY because the
+-- partner columns are nullable. The writer's rows are sorted and distinct by that key, and the canonical form refuses a
+-- repeated or unordered snapshot (canonical_v0.md §3).
+-- Exactly the snapshots the emitter's [[emits]] entry declares, filled by the emitter at emit (envelope_v0.md §4). In P1a only
+-- T1.minds declares one (stress of the actor); M2's and M7's events carry none.
+
+CREATE TABLE IF NOT EXISTS causal_edge (          -- child rows of EVENT: its causes, all with smaller event_id (= schema.sql's causal_edge)
+    timeline_id UINTEGER  NOT NULL,
+    cause_id    UBIGINT   NOT NULL,
+    effect_id   UBIGINT   NOT NULL,
+    kind        UTINYINT  NOT NULL,                -- schema.sql codes 0-8; a timer's or command's cause and a draft-local cause are 1 triggered
+    motive      USMALLINT,                         -- motive_edge_kind.motive; NULL unless kind = 3 motivated_by (envelope_v0.md §5)
+    weight      SMALLINT  NOT NULL,                -- q8_8 raw bits, signed; 0 unless kind = 3
+    evidence    SMALLINT  NOT NULL,                -- q8_8 raw bits in [0, 256]; 256 for a deterministic link
+    cause_told  BOOLEAN   NOT NULL,                -- the cause has an EVENT record (05.2 §4.0); true on every P1a edge
     PRIMARY KEY (timeline_id, effect_id, cause_id)
 );
 

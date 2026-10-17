@@ -343,13 +343,13 @@ def _list_codec(
     name: str,
     item: Codec,
     order: Order,
-    sort_index: int | None = None,
+    sort_index: tuple[int, ...] | None = None,
     finish: Callable[[tuple[object, ...]], tuple[object, ...]] | None = None,
 ) -> Codec:
     """``[item,item,...]``; ``order`` names what is wrong with a non-canonical item order.
 
-    Generated items are sorted and deduplicated by tuple component ``sort_index`` (when given),
-    then passed through ``finish``.
+    Generated items are sorted and deduplicated by the tuple components ``sort_index`` (when
+    given), then passed through ``finish``.
     """
 
     def check(items: tuple[object, ...]) -> tuple[object, ...]:
@@ -377,12 +377,17 @@ def _list_codec(
     return Codec(name, render, parse, gen)
 
 
-def _canonical_order(items: list[object], sort_index: int) -> tuple[object, ...]:
-    """Generated list items sorted and deduplicated by component ``sort_index``."""
-    seen: dict[object, object] = {}
+def _sort_key(item: object, indices: tuple[int, ...]) -> tuple[object, ...]:
+    """The components ``indices`` of a tuple item, a NULL (None) ordered before any value."""
+    assert isinstance(item, tuple)
+    return tuple((0, 0) if item[i] is None else (1, item[i]) for i in indices)
+
+
+def _canonical_order(items: Sequence[object], indices: tuple[int, ...]) -> tuple[object, ...]:
+    """Generated list items sorted and deduplicated by the components ``indices``."""
+    seen: dict[tuple[object, ...], object] = {}
     for it in items:
-        assert isinstance(it, tuple)
-        seen.setdefault(it[sort_index], it)
+        seen.setdefault(_sort_key(it, indices), it)
     return tuple(seen[k] for k in sorted(seen))  # type: ignore[type-var,unused-ignore]
 
 
@@ -390,11 +395,11 @@ def _any_order(_: tuple[object, ...]) -> str | None:
     return None
 
 
-def _ascending(index: int, what: str) -> Order:
-    """Items strictly ascending by component ``index``."""
+def _ascending(indices: tuple[int, ...], what: str) -> Order:
+    """Items strictly ascending by the components ``indices`` (a NULL before any value)."""
 
     def order(items: tuple[object, ...]) -> str | None:
-        keys = [it[index] for it in items if isinstance(it, tuple)]
+        keys = [_sort_key(it, indices) for it in items if isinstance(it, tuple)]
         for a, b in itertools.pairwise(keys):
             if not a < b:
                 return f"{what} not strictly ascending: {a!r} then {b!r}"
@@ -408,7 +413,7 @@ def _events_order(items: tuple[object, ...]) -> str | None:
     names = [it[0] for it in items if isinstance(it, tuple)]
     if len(set(names)) != len(names):
         return f"clause names repeat: {names}"
-    return _ascending(1, "event ids")(items)
+    return _ascending((1,), "event ids")(items)
 
 
 def _renamed_clauses(items: tuple[object, ...]) -> tuple[object, ...]:
@@ -418,12 +423,15 @@ def _renamed_clauses(items: tuple[object, ...]) -> tuple[object, ...]:
 
 I64 = _int_codec("i64", -(1 << 63), (1 << 63) - 1)
 I32 = _int_codec("i32", -(1 << 31), (1 << 31) - 1)
+I16 = _int_codec("i16", -(1 << 15), (1 << 15) - 1)
 U64 = _int_codec("u64", 0, MASK64)
 U32 = _int_codec("u32", 0, (1 << 32) - 1)
 U16 = _int_codec("u16", 0, (1 << 16) - 1)
 U8 = _int_codec("u8", 0, (1 << 8) - 1)
 OPT_U64 = _optional(U64)
 OPT_U32 = _optional(U32)
+OPT_U16 = _optional(U16)
+OPT_U8 = _optional(U8)
 HASH64 = _hex64_codec("hash64")
 BLOB16 = _hex128_codec("blob16")
 STR = _str_codec("string")
@@ -437,6 +445,10 @@ ORIGIN = _enum_codec("origin", [0, 1, 3, 4])
 ENTITY_KIND = _enum_codec("entity_kind", range(5))
 EVENT_ROLE = _enum_codec("role", range(4))
 EDGE_KIND = _enum_codec("edge kind", range(9))
+MOTIVATED_BY = 3  # the one edge kind that may carry a motive (envelope_v0.md §5)
+HALF = 0.5
+CAUSE_TOLD = _enum_codec("cause_told", range(2))
+EVIDENCE = _int_codec("evidence", 0, 256)  # q8_8 raw bits in [0, 1]
 LIFE_ORIGIN = _enum_codec("life origin", range(3))
 SEX = _enum_codec("sex", range(2))
 EXIT_KIND = _enum_codec("exit_kind", range(2))
@@ -446,15 +458,38 @@ ON_COMPLETE = _enum_codec("on_complete", range(3))
 STATUS = _enum_codec("status", [1])
 PAYLOAD = _list_codec("payload", I64, _any_order)
 EVENT_IDS = _list_codec("event ids", U64, _any_order)
-ROLES = _list_codec("roles", _tuple_codec("role", (ENTITY_KIND, U64, EVENT_ROLE)), _any_order)
+ROLE_KEY = (
+    2,
+    0,
+    1,
+)  # the ordinal order: role code, then (entity_kind, entity_id) (envelope_v0.md §1)
+ROLES = _list_codec(
+    "roles",
+    _tuple_codec("role", (ENTITY_KIND, U64, EVENT_ROLE)),
+    _ascending(ROLE_KEY, "roles (by role code, then entity)"),
+    ROLE_KEY,
+)
+SNAPSHOT_KEY = (0, 1, 2, 3, 4)  # (attr_id, entity_kind, entity_id, partner_kind, partner_id)
+SNAPSHOTS = _list_codec(
+    "snapshots",
+    _tuple_codec("snapshot", (U16, ENTITY_KIND, U64, OPT_U8, OPT_U64, I32)),
+    _ascending(SNAPSHOT_KEY, "snapshot keys"),
+    SNAPSHOT_KEY,
+)
 CAUSES = _list_codec(
-    "causes", _tuple_codec("cause", (U64, EDGE_KIND)), _ascending(0, "cause ids"), 0
+    "causes",
+    _tuple_codec("cause", (U64, EDGE_KIND, OPT_U16, I16, EVIDENCE, CAUSE_TOLD)),
+    _ascending((0,), "cause ids"),
+    (0,),
 )
 BINDINGS = _list_codec(
-    "bindings", _tuple_codec("binding", (ROLE_VAR, ENTITY_KIND, U64)), _ascending(0, "roles"), 0
+    "bindings",
+    _tuple_codec("binding", (ROLE_VAR, ENTITY_KIND, U64)),
+    _ascending((0,), "roles"),
+    (0,),
 )
 EVENTS = _list_codec(
-    "events", _tuple_codec("event", (CLAUSE_NAME, U64)), _events_order, 1, _renamed_clauses
+    "events", _tuple_codec("event", (CLAUSE_NAME, U64)), _events_order, (1,), _renamed_clauses
 )
 
 Fields = tuple[tuple[str, Codec], ...]
@@ -486,6 +521,7 @@ KINDS: dict[str, Fields] = {
         ("origin", ORIGIN),
         ("payload", PAYLOAD),
         ("roles", ROLES),
+        ("snapshots", SNAPSHOTS),
         ("causes", CAUSES),
     ),
     "LIFE_ENTRY": (
@@ -586,8 +622,24 @@ def _check_life_exit(rec: Record) -> str | None:
     return None
 
 
+def _check_event(rec: Record) -> str | None:
+    """The envelope's domains (envelope_v0.md §4, §5): a partner pair; a motive on kind 3 only."""
+    snapshots, causes = rec["snapshots"], rec["causes"]
+    assert isinstance(snapshots, tuple) and isinstance(causes, tuple)
+    for snap in snapshots:
+        assert isinstance(snap, tuple)
+        if (snap[3] is None) != (snap[4] is None):
+            return f"snapshot {snap!r}: partner_kind and partner_id are both NULL or both set"
+    for edge in causes:
+        assert isinstance(edge, tuple)
+        if edge[2] is not None and edge[1] != MOTIVATED_BY:
+            return f"cause {edge!r}: a motive refines motivated_by (kind {MOTIVATED_BY}) only"
+    return None
+
+
 # Record-level domain checks beyond the token grammar, applied by render and parse.
 KIND_CHECKS: dict[str, Callable[[Record], str | None]] = {
+    "EVENT": _check_event,
     "MATCH": _check_match,
     "LIFE_EXIT": _check_life_exit,
 }
@@ -613,7 +665,33 @@ def _fix_life_exit(rec: Record, rng: random.Random) -> Record:
     return rec.replace(death_cause=0, event_id=None)
 
 
+def _fix_event(rec: Record, rng: random.Random) -> Record:
+    """Make a generated EVENT obey the envelope's domains, re-sorted (a partner moves a row)."""
+    snapshots, causes = rec["snapshots"], rec["causes"]
+    assert isinstance(snapshots, tuple) and isinstance(causes, tuple)
+    fixed_snapshots = []
+    for snap in snapshots:
+        assert isinstance(snap, tuple)
+        fixed = snap
+        if (snap[3] is None) != (snap[4] is None):
+            kinds = range(5)  # entity kinds
+            partner = (
+                (None, None) if rng.random() < HALF else (rng.choice(kinds), rng.getrandbits(64))
+            )
+            fixed = (*snap[:3], *partner, snap[5])
+        fixed_snapshots.append(fixed)
+    fixed_causes = tuple(
+        (edge[0], edge[1], edge[2] if edge[1] == MOTIVATED_BY else None, *edge[3:])
+        for edge in causes
+        if isinstance(edge, tuple)
+    )
+    return rec.replace(
+        snapshots=_canonical_order(fixed_snapshots, SNAPSHOT_KEY), causes=fixed_causes
+    )
+
+
 KIND_FIXES: dict[str, Callable[[Record, random.Random], Record]] = {
+    "EVENT": _fix_event,
     "MATCH": _fix_match,
     "LIFE_EXIT": _fix_life_exit,
 }
@@ -799,18 +877,75 @@ REFUSED: tuple[tuple[str, str], ...] = (
         "INPUT 0 0 0 0 1 k s ~ p 00000000000000000000000000000000 00000000000000000000000000000000",
         "an input class other than push",
     ),
-    ("EVENT 0 0 0 1 12 0 DEATH 32768 ~ 0 128 0 0 [1] [] []", "a phase of 12"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 4 0 [1] [] []", "a secrecy of 4"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 2 [1] [] []", "the retired origin 2"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 1 [] []", "a payload that is not a list"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [1,] [] []", "a trailing comma"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7] []", "a role tuple with two parts"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [5/7/1] []", "an entity kind of 5"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/4] []", "a role code of 4"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [0/9]", "an edge kind of 9"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [3/1,2/1]", "causes out of order"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [2/1,2/1]", "a repeated cause"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [ ] [] []", "a space inside a list"),
+    ("EVENT 0 0 0 1 12 0 DEATH 32768 ~ 0 128 0 0 [1] [] [] []", "a phase of 12"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 4 0 [1] [] [] []", "a secrecy of 4"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 2 [1] [] [] []", "the retired origin 2"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 1 [] [] []", "a payload that is not a list"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [1,] [] [] []", "a trailing comma"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7] [] []", "a role tuple with two parts"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [5/7/1] [] []", "an entity kind of 5"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/4] [] []", "a role code of 4"),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/1,1/8/0] [] []",
+        "roles out of role-code order",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/8/2,1/7/2] [] []",
+        "witnesses out of entity order",
+    ),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/1,1/7/1] [] []", "a repeated cast row"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/9/~/0/256/1]", "an edge kind of 9"),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1]",
+        "a cause tuple with two parts (the P1.0 shape)",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/2/0/256/1]",
+        "a motive on a triggered edge",
+    ),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/3/~/0/257/1]", "an evidence of 257"),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/3/~/-32769/256/1]",
+        "a weight below i16",
+    ),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/~/0/256/2]", "a cause_told of 2"),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [3/1/~/0/256/1,2/1/~/0/256/1]",
+        "causes out of order",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [2/1/~/0/256/1,2/1/~/0/256/1]",
+        "a repeated cause",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/~/8/100] []",
+        "a partner id without a kind",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/1/~/100] []",
+        "a partner kind without an id",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/5/7/~/~/100] []",
+        "a snapshot entity kind of 5",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/8/~/~/100,25/1/7/~/~/100] []",
+        "snapshots out of order",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/1/8/100,25/1/7/~/~/100] []",
+        "a snapshot with a partner before the same key without one",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/~/~/100,25/1/7/~/~/100] []",
+        "a repeated snapshot",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/7/~/~/2147483648] []",
+        "a snapshot value past i32",
+    ),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [ ] [] [] []", "a space inside a list"),
     (
         "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [B/1/1,A/1/2] [e1/1]",
         "bindings out of order",
@@ -945,8 +1080,13 @@ def self_test() -> list[str]:
 D_TEST = b"\x00" * DIGEST_LEN
 DEATH, EXTINCTION = 0, 1
 DEATH_CLASS = 1 << 15
-TARGET = 1
+ACTOR, TARGET = 0, 1
 TRIGGERED = 1
+RETALIATION_FOR = 0  # [motive_edges] index
+STRESS_ATTR = 25  # an [attributes] index (illustrative; the segment's dictionary names it)
+ONE = 256  # q8_8 raw bits of 1
+# The P1.0 edge in its typed shape: a deterministic link, no motive, weight 0, evidence 1, told.
+LINK = (None, 0, ONE, 1)
 A_YEAR = (-10_368_000, -(1 << 40))
 # life_ends matches of the hand-written segment, in R4 order:
 # (seq, tick, closing event id, its channel-A seq, the deceased).
@@ -962,19 +1102,63 @@ def _event(
 ) -> Record:
     """An EVENT record: ``verb`` is (verb_id, name, tellability); ``rest`` follows the verb."""
     verb_id, name, tellability = verb
-    phase, place, magnitude, secrecy, origin, payload, roles, causes = rest
+    phase, place, magnitude, secrecy, origin, payload, roles, snapshots, causes = rest
     fields = (0, seq, tick, eid, phase, verb_id, name, DEATH_CLASS if verb_id <= 1 else 1 << 4)
     return Record(
-        "EVENT", (*fields, place, magnitude, tellability, secrecy, origin, payload, roles, causes)
+        "EVENT",
+        (
+            *fields,
+            place,
+            magnitude,
+            tellability,
+            secrecy,
+            origin,
+            payload,
+            roles,
+            snapshots,
+            causes,
+        ),
     )
 
 
 def _hand_written_a() -> list[Record]:
     """Channel-A records of one synthetic instant sequence in R4 order, with the grammar's edges."""
-    d1 = (4, None, 0, 0, 0, (1,), ((1, 0x1111, TARGET),), ())
-    decree = (4, 12, -5, 3, 1, (), ((1, 0x2222, 0), (3, 9, 1)), ((0, TRIGGERED),))
-    extinction = (9, None, 0, 0, 0, (-1, 0, (1 << 63) - 1, -(1 << 63)), (), ((0, 0), (1, 5)))
-    d2 = (4, None, 0, 0, 0, (2,), ((1, 0x2222, TARGET), (1, 0x3333, 0)), ())
+    d1 = (4, None, 0, 0, 0, (1,), ((1, 0x1111, TARGET),), (), ())
+    decree = (
+        4,
+        12,
+        -5,
+        3,
+        1,
+        (),
+        ((1, 0x2222, ACTOR), (3, 9, TARGET)),
+        (),
+        ((0, TRIGGERED, *LINK),),
+    )
+    extinction = (
+        9,
+        None,
+        0,
+        0,
+        0,
+        (-1, 0, (1 << 63) - 1, -(1 << 63)),
+        (),
+        (),
+        ((0, 0, *LINK), (1, 5, None, 0, 128, 0)),
+    )
+    # A murder: the culprit is the actor, a stress snapshot of the culprit, a RETALIATION_FOR motive
+    # edge to the decree (weight 0.5, margin 0.25) and a triggered edge to the first death.
+    d2 = (
+        4,
+        None,
+        0,
+        0,
+        0,
+        (2,),
+        ((1, 0x3333, ACTOR), (1, 0x2222, TARGET)),
+        ((STRESS_ATTR, 1, 0x3333, None, None, 0x3F00),),
+        ((0, TRIGGERED, *LINK), (1, MOTIVATED_BY, RETALIATION_FOR, 128, 64, 1)),
+    )
     return [
         Record(
             "INPUT", (0, 0, 0, 0, 0, "resample", "person", 0x1111, "script", D_TEST, b"\x01" * 16)
