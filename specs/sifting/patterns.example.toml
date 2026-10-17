@@ -33,7 +33,7 @@ id = "authority_purges_successor"
 version = 1
 tellability = 0.9
 description = "An authority coerces or harms their designated successor, motivated by fear."
-roles = { A = "authority", S = "successor" }
+roles = { A = "authority", S = "successor of A" }
 selection = "latest"
 on_complete = "clear_binding"
 firing_budget = { per_century_per_100k = 0.5 }
@@ -107,7 +107,7 @@ id = "false_positive_purge_of_notable_child"
 version = 1
 tellability = 0.95
 description = "Covert-infiltration era: a test says positive, the subject is purged, and the subject was NOT infected. Irony is maximised when the subject is a notable's child."
-roles = { I = "investigator", S = "suspect", P = "kin" }
+roles = { I = "investigator", S = "suspect", P = "kin of S" }
 selection = "latest"
 on_complete = "clear_binding"
 firing_budget = { per_century_per_100k = 2 }
@@ -157,7 +157,7 @@ id = "famine_to_succession_crisis"
 version = 1
 tellability = 0.9
 description = "Higher-order: a famine declared in a realm, followed within five years by that realm's authority purging their successor."
-roles = { A = "authority", S = "successor" }
+roles = { A = "authority", S = "successor of A" }
 selection = "latest"
 on_complete = "clear_binding"
 firing_budget = { per_century_per_100k = 0.2 }

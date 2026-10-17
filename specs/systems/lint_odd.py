@@ -15,7 +15,10 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     each of its `snapshots` names a Registry attribute, the role (`of`) it is read of (or "event"), a `partner` role for
     a two-argument attribute, and the owned or read column (`from`) it is filled from, whose type matches the
     attribute's; a `cause_column` on an [[owns]] state column names an owned u64 column of the same entity (SAGA-15).
-    A missing `roles` is a warning on every spec until SPR-020 closes; a wrong value is always an error.
+    A missing `roles` is an error on a frozen spec and a warning on a draft; a wrong value is always an error
+    (REV-SPR-020 R7). `of = "witness"` is refused (a witness is many); a repeated motive or snapshot key is an error;
+    an `algorithm.<name>` source declares its `type`, checked like a column's; a foreign enum source's codes are
+    compared with the attribute's values. A `cause_column` needs the state column's declared `default`.
     A warning on a draft spec, an error on a frozen one,
   - parameter defaults (SPR-011 ruling 8): a [[params]] `default` equals the Registry's `defaults` entry, both ways,
   - lifecycle commands (PR #32; REV-P1a §7): each [[applies]] of a spec names a command, its payload fields and its
@@ -116,7 +119,7 @@ READ_USES = ("identity", "mode", "rate")
 IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_range", "source")
 # A snapshot's source column type per Registry attribute type (envelope_v0.md §4 item 5).
 SNAPSHOT_SOURCE_TYPES = {"q8_8": {"q8_8"}, "bool": {"bool"}, "int": {"u8", "u16", "u32", "i32", "i64"}, "enum": {"enum"}}
-SNAPSHOT_KEYS = {"attr", "of", "partner", "from"}
+SNAPSHOT_KEYS = {"attr", "of", "partner", "from", "type"}
 INTEGER_TYPES = {"i64", "u64", "i32", "u32", "u16", "u8"}
 NUMBER_TYPES = {"q8_8", "q16_16", "f32_field"}
 INT_RANGE = {"u8": (0, 2**8 - 1), "u16": (0, 2**16 - 1), "u32": (0, 2**32 - 1), "u64": (0, 2**64 - 1),
@@ -755,6 +758,7 @@ def column_type(col, owner, owners_type, reg):
 
 CLOSED_SPRINTS = set()
 KNOWN_SPRINTS = set()
+ALL_OWNED_TYPES = {}   # column -> type over every spec of the run (for a snapshot read from a foreign column)
 
 
 def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
@@ -765,6 +769,8 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
     notes = notes if notes is not None else []
     roles = {sid: s.get("purpose", {}).get("role") for sid, (_, s) in specs.items()}
     owners_type = {o.get("column"): o.get("type") for _, (_, s) in specs.items() for o in s.get("owns", [])}
+    ALL_OWNED_TYPES.clear()
+    ALL_OWNED_TYPES.update(owners_type)
     enum_names = {}                               # enum column -> its code names (EVO-001)
     for _, (_, s) in specs.items():
         for o in s.get("owns", []):
@@ -971,7 +977,7 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
                 strict_emits.append(f"{p}: emits {k}, which the Registry gives to {verbs[k].get('emitted_by')}")
         for k in sorted(v for v, d in verbs.items() if d.get("emitted_by") == sid and v not in emitted):
             strict_emits.append(f"{p}: the Registry gives verb {k} to {sid}, but [[emits]] does not declare it")
-        lint_envelope(p, s, reg, enum_names, errs, warns)   # SPR-020: roles, motives, snapshots, cause_column
+        lint_envelope(p, s, reg, enum_names, errs, warns, hdr.get("status") == "frozen")   # SPR-020: roles, motives, snapshots, cause_column
         # submodels earn their place
         for sm in s.get("submodels", []):
             ep = sm.get("earns_its_place_by", [])
@@ -997,7 +1003,12 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
     return errs, warns
 
 
-def lint_envelope(p, s, reg, enum_names, errs, warns):
+def default_problem(value, ct, enum_codes_of_column):
+    """Why ``value`` is not a well-typed default for a column of type ``ct`` (envelope_v0.md §7), or None."""
+    return neutral_problem(value, ct, enum_codes_of_column)
+
+
+def lint_envelope(p, s, reg, enum_names, errs, warns, frozen=False):
     """The event envelope's declarations (SPR-020; envelope_v0.md §2, §4, §7): [[emits]] `roles`, `motives` and
     `snapshots` against the Registry [event_roles], [motive_edges] and [attributes] and the spec's own [[owns]] and
     [[reads]]; `cause_column` on an [[owns]] state column. A wrong value is an error on any spec; a missing `roles` is a
@@ -1008,6 +1019,7 @@ def lint_envelope(p, s, reg, enum_names, errs, warns):
     own = {o.get("column"): o for o in s.get("owns", [])}
     readable = set(own) | {r.get("column") for r in s.get("reads", [])}
     algorithms = set(s.get("algorithm", {}))
+    all_types = dict(ALL_OWNED_TYPES)
     for o in s.get("owns", []):
         cc = o.get("cause_column")
         if cc is None:
@@ -1018,11 +1030,17 @@ def lint_envelope(p, s, reg, enum_names, errs, warns):
             errs.append(f"{p}: {col} cause_column {cc} must name another column this spec owns (SAGA-15; envelope_v0.md §7)")
         elif target.get("type") != "u64" or target.get("entity") != entity:
             errs.append(f"{p}: {col} cause_column {cc} must be a u64 (EventId, 0 = none) of the same entity {entity}")
+        if "default" not in o:
+            errs.append(f"{p}: {col} has a cause_column, so it needs a declared default (the state rh-core compares against; envelope_v0.md §7, REV-SPR-020 R2)")
+        else:
+            why = default_problem(o.get("default"), o.get("type"), enum_names.get(col))
+            if why is not None:
+                errs.append(f"{p}: {col} default: {why}")
     for e in s.get("emits", []):
         where = f"{p}: [[emits]] {e.get('kind')}"
         roles = e.get("roles")
         if roles is None:
-            warns.append(f"{where} declares no roles: the [event_roles] it fills (SPR-020; an error on a frozen spec once SPR-020 closes)")
+            (errs if frozen else warns).append(f"{where} declares no roles: the [event_roles] it fills (SPR-020; an error on a frozen spec)")
             roles = []
         elif not (isinstance(roles, list) and all(isinstance(r, str) for r in roles)):
             errs.append(f"{where}: roles must be a list of [event_roles] ids")
@@ -1040,6 +1058,10 @@ def lint_envelope(p, s, reg, enum_names, errs, warns):
         for m in motives:
             if m not in motive_ids:
                 errs.append(f"{where}: motive '{m}' is not in the Registry [motive_edges] {motive_ids}")
+        dup_m = sorted({m for m in motives if motives.count(m) > 1})
+        if dup_m:
+            errs.append(f"{where}: motive(s) {dup_m} listed twice")
+        seen_snapshots = set()
         for sn in e.get("snapshots", []):
             if not isinstance(sn, dict):
                 errs.append(f"{where}: a snapshot is a table {{ attr, of, [partner], from }}")
@@ -1054,6 +1076,12 @@ def lint_envelope(p, s, reg, enum_names, errs, warns):
                 continue
             args = a.get("args", [])
             sw = f"{where}: snapshot {name}"
+            key = (name, of, partner)
+            if key in seen_snapshots:
+                errs.append(f"{sw} of {of} is declared twice")
+            seen_snapshots.add(key)
+            if of == "witness" or partner == "witness":
+                errs.append(f"{sw}: a snapshot of witness is undefined (a witness is many; envelope_v0.md §4 item 3)")
             if args[:1] == ["event"]:
                 if of != "event":
                     errs.append(f"{sw} is an attribute of the event; of must be \"event\"")
@@ -1071,17 +1099,21 @@ def lint_envelope(p, s, reg, enum_names, errs, warns):
             elif str(src).startswith("algorithm."):
                 if str(src)[len("algorithm."):] not in algorithms:
                     errs.append(f"{sw}: from = {src} names no [algorithm.*] table of this spec")
+                at = sn.get("type")
+                if at is None:
+                    errs.append(f"{sw}: from = {src} computes a value, so the snapshot declares its type (a column type; REV-SPR-020 R7)")
+                elif at not in SNAPSHOT_SOURCE_TYPES.get(a.get("type"), set()):
+                    errs.append(f"{sw} is a {a.get('type')} attribute; from = {src} yields a {at} (envelope_v0.md §4 item 5)")
             elif src not in readable:
                 errs.append(f"{sw}: from = {src} is neither owned by this spec nor one of its [[reads]]")
             else:
                 ct = own[src].get("type") if src in own else None
                 if ct is None:
-                    ct = next((rt for rt in [column_type(src, next((r.get("owner") for r in s.get("reads", []) if r.get("column") == src), None),
-                                                          {c: o.get("type") for c, o in own.items()}, reg)] if rt), None)
+                    ct = column_type(src, next((r.get("owner") for r in s.get("reads", []) if r.get("column") == src), None), all_types, reg)
                 if ct is not None and ct not in SNAPSHOT_SOURCE_TYPES.get(a.get("type"), set()):
                     errs.append(f"{sw} is a {a.get('type')} attribute; from = {src} is a {ct} column (envelope_v0.md §4 item 5)")
-                if a.get("type") == "enum" and src in own:
-                    names, _why = enum_codes(own[src], reg)
+                if a.get("type") == "enum":
+                    names = enum_codes(own[src], reg)[0] if src in own else enum_names.get(src)
                     if names is not None and names != list(a.get("values", [])):
                         errs.append(f"{sw}: the enum column {src} codes {names} differ from the attribute's values {a.get('values')}")
 

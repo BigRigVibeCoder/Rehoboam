@@ -26,8 +26,8 @@ version: 1.0.0
 
 | Spec | Exists? | Gap | Writer | Needed by |
 |---|---|---|---|---|
-| `specs/chronicle/schema.sql` | Exists | `concrete_role` codes differ from the Registry's `[event_roles]` (P1.9 reconciles them; ruling 11 uses `target` for the deceased) | — | T-09 |
-| `specs/stream/channel_a_v0.sql` | Exists (PR #37; `selftest_channel_a.py`) | — | — | T-09 |
+| `specs/chronicle/schema.sql` | Exists | Reconciled with `[event_roles]` by the envelope spec (PR #61, `specs/chronicle/envelope_v0.md` §1): `event_role` is channel A's child table column for column; ruling 11 uses `target` for the deceased | — | T-09 |
+| `specs/stream/channel_a_v0.sql` | Exists (PR #37; `selftest_channel_a.py`), **amended in place by the envelope spec (PR #61) before any build wrote a segment** (REV-SPR-020 R6, the Architect approves this amendment at that merge): three child tables (`event_role`, `event_snapshot`, `causal_edge` with `motive`, `weight`, `evidence`, `cause_told`), six dictionaries (`verb`, `act_class`, `record_kind`, `event_role_kind`, `motive_edge_kind`, `attribute`), 16 files per segment, most of them empty on `solo`, `household` and `hamlet` (no snapshot, no motive edge in P1.0); `entity_kind` 0–5. T-09 implements this shape, which is final for P1a: SPR-020 moves `rh-core/events.meta`, not a segment | — | T-09 |
 | `specs/sifting/patterns.solitary_life.toml` (`life_ends`) | Exists (PR #37) | — | — | T-11 |
 | `specs/stream/channel_c_v0.sql` (`sift_match`) | In review: PR #45 (draft; `selftest_channel_c.py`, with a `life_ends` SQL twin) | PR #37 Q10 | Architect | T-11 |
 | `household.yaml`, `hamlet.yaml` | Exist (PR #37) | — | — | T-13 |
@@ -51,7 +51,7 @@ version: 1.0.0
 Fixed in SPR-013's plan before it starts (PR #37's carried questions): what makes an act class "tellable" for DATA-5 (Q8; ruling 11 already admits every death at rungs 0–2 as tellable); the canonical text form and `segment.canonical_digest`, XXH3-128 over the canonical lines in `seq` order (Q11).
 
 #### T-09: `rh-stream`: channel A and the sealed chronicle (rulings 11, 12, 13)
-- **Deliverable:** Crate `rh-stream`, pinned (A, machinery), with `parquet` reviewed in. The record header and the P1.0 kinds; the in-instant order; per-sim-year sealed segments matching `schema.sql` and `specs/stream/channel_a_v0.sql`; atomic sealing; the per-segment canonical digest; the lossless one-line canonical text form and its parser. The host writes after each instant, from `Engine::drain_events`, the journal and the life-course delta.
+- **Deliverable:** Crate `rh-stream`, pinned (A, machinery), with `parquet` reviewed in. The record header and the P1.0 kinds; the in-instant order; per-sim-year sealed segments matching `schema.sql` and `specs/stream/channel_a_v0.sql` as amended by the envelope spec (every child table and dictionary written, empty or not: 16 files per segment; the `EVENT` canonical line with its `snapshots` and six-part `causes`; `cause_told` true on every P1.0 edge); atomic sealing; the per-segment canonical digest; the lossless one-line canonical text form and its parser. The host writes after each instant, from `Engine::drain_events`, the journal and the life-course delta.
 - **Acceptance:** V-STR-01 on `solo` and a 60-person fixture: segments byte-identical across two runs and across 1 and N threads, and canonical digests equal. V-DATA-10 subset: a Python test reads every sealed table with DuckDB, with `schema.sql`'s types. `seq` is contiguous from 0 across segments. The canonical form round-trips every record (property test; the parser joins the nightly fuzz tier). A `kill -9` during sealing leaves no partial segment, and the resumed run reseals the same bytes (GOV-002 tier 15). No channel-A table has a float column.
 - **Status:** [ ] not started
 

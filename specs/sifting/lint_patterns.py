@@ -3,6 +3,10 @@ Lint for Rehoboam sifting patterns (DSL v0). Enforces:
   * a closed key set: unknown keys are errors, so nothing is silently ignored;
   * act classes, roles and verbs exist in the Registry; a clause binds a cast member by its Registry [event_roles]
     name (`actor`, `target`, `witness`, `instrument`), to one of the pattern's role variables (SPR-020, envelope_v0.md §1);
+    a clause with `witness = "W"` binds W to each witness row in turn (one partial per witness);
+  * a role variable's domain (`A = "authority"`, `S = "successor of A"`) has a Registry [role_domains] entry whose bool
+    attribute it compiles to as an anchored read (holds_title(A)@eN == true); a relational domain names a partner variable
+    of the pattern; a domain whose source is "none" has no snapshot yet and warns (envelope_v0.md §1, R1);
   * every state read is a Registry-declared attribute, ANCHORED to a bound event (`attr(...)@eN`), with the right arity;
   * enum comparisons use declared symbolic values;
   * `after`, `between` and `require_edge` reference bound events; `require_edge.from_state` is anchored or names an attribute;
@@ -66,11 +70,16 @@ def _check_reads(expr: str, visible: set[str], attrs: dict, where: str, errs: li
             errs.append(f"{where}: '{m['val']}' is not a value of enum '{m['name']}' {a.get('values')}")
 
 
-def lint(patterns: dict, reg: dict) -> list[str]:
+def lint(patterns: dict, reg: dict, warns: list[str] | None = None) -> list[str]:
+    warns = warns if warns is not None else []
     acts = set(reg["act_classes"]["ids"])
     roles = set(reg["roles"]["ids"])
+    for section in ("event_roles", "role_domains"):      # SPR-020: both are required (envelope_v0.md §8)
+        if section not in reg:
+            return [f"Registry: missing [{section}] (SPR-020, envelope_v0.md §8)"]
     cast_keys = set(reg["event_roles"]["ids"])           # the clause keys that bind a cast member (envelope_v0.md §1)
     clause_keys, unless_keys = CLAUSE_KEYS | cast_keys, UNLESS_KEYS | cast_keys
+    domains = reg["role_domains"]
     verbs = set(reg.get("verbs", {}).keys())
     attrs = reg.get("attributes", {})
     errs: list[str] = []
@@ -80,11 +89,31 @@ def lint(patterns: dict, reg: dict) -> list[str]:
         pid = p.get("id", "<no id>")
         _unknown(set(p), PATTERN_KEYS, pid, errs)
         _unknown(set(p.get("emit", {})), EMIT_KEYS, f"{pid}.emit", errs)
-        for var, role in p.get("roles", {}).items():
+        for var, spec_role in p.get("roles", {}).items():
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", var):   # the canonical form's identifier (specs/stream/canonical_v0.md §2)
                 errs.append(f"{pid}: role variable '{var}' is not an identifier [A-Za-z_][A-Za-z0-9_]*")
+            role, _, partner = str(spec_role).partition(" of ")     # `S = "successor of A"`: a relational domain (envelope_v0.md §1)
             if role not in roles:
                 errs.append(f"{pid}: role {var}='{role}' not in Registry")
+                continue
+            if role == "any":
+                if partner:
+                    errs.append(f"{pid}: role {var}: 'any' takes no partner")
+                continue
+            d = domains.get(role)
+            if d is None:
+                errs.append(f"{pid}: role {var}='{role}' has no [role_domains] entry (its anchored attribute; SPR-020)")
+                continue
+            a = attrs.get(d.get("attribute"))
+            if a is None or a.get("type") != "bool":
+                errs.append(f"{pid}: role {var}='{role}': domain attribute {d.get('attribute')!r} is not a bool [attributes] entry")
+            if d.get("relational") and partner not in p.get("roles", {}):
+                errs.append(f"{pid}: role {var}='{role}' is relational: write \"{role} of <variable>\" naming a role variable of the pattern")
+            if not d.get("relational") and partner:
+                errs.append(f"{pid}: role {var}='{role}' is not relational; drop 'of {partner}'")
+            if d.get("source") == "none":
+                warns.append(f"{pid}: role {var}='{role}' compiles to {d.get('attribute')}({var}{', ' + partner if partner else ''})@eN, "
+                             "which no system captures yet (source = none): the clause cannot bind until its owner declares the snapshot")
         for key, allowed in (("selection", SELECTIONS), ("on_complete", ON_COMPLETE)):
             if key not in p:
                 errs.append(f"{pid}: missing {key} (match semantics are declared, never implicit; 05.4 §2.3)")
@@ -196,7 +225,8 @@ def lint(patterns: dict, reg: dict) -> list[str]:
 def main(argv: list[str]) -> int:
     pats = tomllib.loads(Path(argv[1]).read_text(encoding="utf-8"))
     reg = tomllib.loads(Path(argv[2]).read_text(encoding="utf-8"))
-    errs = lint(pats, reg)
+    warns: list[str] = []
+    errs = lint(pats, reg, warns)
     # Self-checks: the draft's rule and a misspelled key must both be rejected.
     draft = {"pattern": [{"id": "draft_tyrant_cleansing_order", "roles": {"S": "authority", "H": "successor"},
                           "selection": "latest", "on_complete": "clear_binding",
@@ -218,14 +248,26 @@ def main(argv: list[str]) -> int:
     old_key = {"pattern": [{"id": "old_key", "roles": {"A": "any"}, "selection": "latest", "on_complete": "clear_binding",
                             "firing_budget": {"per_century_per_100k": 1},
                             "clause": [{"bind": "e1", "act": ["harm"], "initiator": "A", "target": "B"}]}]}
+    domain = {"pattern": [{"id": "domain", "roles": {"A": "authority", "S": "successor", "H": "host", "K": "kin of A"},
+                           "selection": "latest", "on_complete": "clear_binding", "firing_budget": {"per_century_per_100k": 1},
+                           "clause": [{"bind": "e1", "act": ["harm"], "actor": "A", "target": "S"}]}]}
     d_errs, t_errs, s_errs, m_errs = lint(draft, reg), lint(typo, reg), lint(implicit, reg), lint(three, reg)
     o_errs = lint(old_key, reg)
+    dom_warns: list[str] = []
+    dom_errs = lint(domain, reg, dom_warns)
     assert any("unknown key 'initiator'" in e for e in o_errs), o_errs      # the cast keys are [event_roles] ids (SPR-020)
     assert any("target = 'B' is not one of the pattern's role variables" in e for e in o_errs), o_errs
+    assert any("S='successor' is relational" in e for e in dom_errs), dom_errs   # domains compile to anchored reads (R1)
+    assert any("H='host' compiles to is_host(H)@eN" in w for w in dom_warns), dom_warns
+    assert not any("K=" in e for e in dom_errs) and not any("A=" in e for e in dom_errs), dom_errs
+    no_domains = {k: v for k, v in reg.items() if k != "role_domains"}
+    assert lint(domain, no_domains) == ["Registry: missing [role_domains] (SPR-020, envelope_v0.md §8)"]
     assert any("not declared" in e or "UNANCHORED" in e for e in d_errs), d_errs
     assert any("unknown key 'edge'" in e for e in t_errs), t_errs
     assert any("selection" in e for e in s_errs) and any("firing_budget" in e for e in s_errs), s_errs
     assert any(">2 clauses" in e for e in m_errs) and any("anchor @e2 not bound" in e for e in m_errs), m_errs
+    for w in warns:
+        print("WARN ", w)
     for e in errs:
         print("ERROR", e)
     n = len(pats.get("pattern", []))

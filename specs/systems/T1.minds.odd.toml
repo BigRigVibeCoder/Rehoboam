@@ -37,7 +37,7 @@
 # (NIT-15): a due timer whose victim or partner is already dead is dropped (drop_timer), never submitted.
 # 0.3.3 (2026-10-17, SPR-020, the event envelope; specs/chronicle/envelope_v0.md; no mechanics changed): every [[emits]] entry
 # declares the Registry [event_roles] it fills, the [motive_edges] its motivated_by edges may carry and the one anchored snapshot
-# of P1a, stress(actor) read from mind.stress at emit (envelope_v0.md §4), checked by lint_odd.py.
+# of P1a, stress(actor) read from mind.stress at emit on its seven acts, the pre-act value (envelope_v0.md §4), checked by lint_odd.py.
 odd_r = 2
 
 [system]
@@ -454,6 +454,7 @@ snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
 kind = "FEUD_ENDED"
 when = "IAUS chooses the reconcile option, or a party dies (the death path)"
 roles = ["actor", "target"]   # the party who reconciled (or died: the death path) and the other party
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]   # the pre-act value (envelope_v0.md §4)
 
 # ----------------------------------------------------------------------------- lifecycle commands sent
 [[commands]]

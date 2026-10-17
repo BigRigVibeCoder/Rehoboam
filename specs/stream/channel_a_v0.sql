@@ -3,11 +3,12 @@
 -- Self-test: python -I specs/stream/selftest_channel_a.py (builds these tables, checks the rules below, writes and reads a
 -- synthetic run's segments).
 --
--- Status: v0, for P1.0 (SPR-013, T-09). A C2 contract: a change to a column, a code or the order is a new format version
--- (`segment.format`), announced like a Registry change. Amended in place for the event envelope (SPR-020, P1.9;
--- specs/chronicle/envelope_v0.md) before any build wrote a segment: event_snapshot child rows, the typed causal_edge
--- (motive, weight, evidence, cause_told) and the event_role_kind, motive_edge_kind and attribute dictionaries. No segment
--- of the pre-amendment shape exists, so the format id stays v0 (envelope_v0.md §11).
+-- Status: v0, for P1.0 (SPR-013, T-09). A C2 contract. Until the first build writes a segment, a change to a column, a
+-- code or the order is an in-place amendment of v0, recorded in this change log; from then on it is a new format version
+-- (`segment.format`), announced like a Registry change (REV-SPR-020 R6). Change log:
+--   * SPR-020 (P1.9; specs/chronicle/envelope_v0.md), before any build wrote a segment: event_snapshot child rows, the typed
+--     causal_edge (motive, weight, evidence, cause_told), the event_role_kind, motive_edge_kind and attribute dictionaries,
+--     entity_kind 5 reserved for artifacts. 16 files per segment. SPR-013 implements this shape; it is final for P1a.
 --
 -- ============================================================================================ rules
 -- R1  Plane A only. Channel A carries authoritative records; plane B never enters the stream; channel C (sift matches)
@@ -152,7 +153,8 @@ CREATE TABLE IF NOT EXISTS event_role (           -- child rows of EVENT: who pl
     timeline_id  UINTEGER NOT NULL,
     event_id     UBIGINT  NOT NULL,
     ordinal      UTINYINT NOT NULL,                -- position among the event's cast: by role code, then (entity_kind, entity_id); contiguous from 0
-    entity_kind  UTINYINT NOT NULL,                -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region (5 artifact, P1b)
+    entity_kind  UTINYINT NOT NULL,                -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region; 5 artifact is
+                                                   -- reserved (S6's sprint adds the rh-ids variant; envelope_v0.md §1, REV-SPR-020 R12)
     entity_id    UBIGINT  NOT NULL,
     role         UTINYINT NOT NULL,                -- Registry [event_roles] index: 0 actor, 1 target, 2 witness, 3 instrument
     PRIMARY KEY (timeline_id, event_id, ordinal)
@@ -238,7 +240,7 @@ CREATE TABLE IF NOT EXISTS keyframe_marker (      -- kind 6 KEYFRAME: a pointer 
     seq              UBIGINT   NOT NULL,
     tick             BIGINT    NOT NULL,
     kind             USMALLINT NOT NULL CHECK (kind = 6),
-    keyframe_format  VARCHAR   NOT NULL,           -- 'rehoboam/rh-snapshot/keyframe/v1'
+    keyframe_format  VARCHAR   NOT NULL,           -- 'rehoboam/rh-snapshot/keyframe/v1'; v2 from SPR-020 (envelope_v0.md §6)
     keyframe_path    VARCHAR   NOT NULL,           -- relative to the run directory
     state_hash       UBIGINT   NOT NULL,           -- the hash the keyframe's header carries
     journal_position UBIGINT   NOT NULL,           -- accepted inputs at the keyframe (05.1 §6 item 6)

@@ -442,10 +442,18 @@ PHASE = _enum_codec("phase", range(12))
 INPUT_CLASS = _enum_codec("class", [0])
 SECRECY = _enum_codec("secrecy", range(4))
 ORIGIN = _enum_codec("origin", [0, 1, 3, 4])
-ENTITY_KIND = _enum_codec("entity_kind", range(5))
+ENTITY_KIND = _enum_codec(
+    "entity_kind", range(6)
+)  # 5 = artifact, reserved for S6 (envelope_v0.md §1)
 EVENT_ROLE = _enum_codec("role", range(4))
 EDGE_KIND = _enum_codec("edge kind", range(9))
 MOTIVATED_BY = 3  # the one edge kind that may carry a motive (envelope_v0.md §5)
+DETERMINISTIC_KINDS = frozenset(
+    {0, 1, 6, 7, 8}
+)  # contingent, triggered, player, oracle, director: evidence is 1
+WITNESS = 2  # the one role that may repeat on an event (envelope_v0.md §1)
+EVIDENCE_ONE = 256  # q8_8 raw bits of 1
+MAX_CAST = 256  # the ordinal is a u8
 HALF = 0.5
 CAUSE_TOLD = _enum_codec("cause_told", range(2))
 EVIDENCE = _int_codec("evidence", 0, 256)  # q8_8 raw bits in [0, 1]
@@ -622,18 +630,48 @@ def _check_life_exit(rec: Record) -> str | None:
     return None
 
 
+def _check_cast(roles: tuple[object, ...]) -> str | None:
+    """A cast of at most 256 rows, every role but witness at most once (envelope_v0.md §1)."""
+    if len(roles) > MAX_CAST:
+        return f"a cast of {len(roles)} rows; the ordinal is a u8 (at most {MAX_CAST})"
+    seen: set[object] = set()
+    for row in roles:
+        assert isinstance(row, tuple)
+        role = row[2]
+        if role != WITNESS and role in seen:
+            return f"role {role} filled twice; only witness ({WITNESS}) may repeat"
+        seen.add(role)
+    return None
+
+
+def _check_edge(edge: tuple[object, ...]) -> str | None:
+    """A motive on motivated_by only; weight 0 off it; evidence 1 on a deterministic kind (§5)."""
+    kind, motive, weight, evidence = edge[1], edge[2], edge[3], edge[4]
+    if motive is not None and kind != MOTIVATED_BY:
+        return f"cause {edge!r}: a motive refines motivated_by (kind {MOTIVATED_BY}) only"
+    if kind != MOTIVATED_BY and weight != 0:
+        return f"cause {edge!r}: weight is 0 on every kind but motivated_by"
+    if kind in DETERMINISTIC_KINDS and evidence != EVIDENCE_ONE:
+        return f"cause {edge!r}: evidence is 1 ({EVIDENCE_ONE}) on a deterministic kind"
+    return None
+
+
 def _check_event(rec: Record) -> str | None:
-    """The envelope's domains (envelope_v0.md §4, §5): a partner pair; a motive on kind 3 only."""
-    snapshots, causes = rec["snapshots"], rec["causes"]
-    assert isinstance(snapshots, tuple) and isinstance(causes, tuple)
+    """The envelope's domains (envelope_v0.md §1, §4, §5), applied by render and parse."""
+    roles, snapshots, causes = rec["roles"], rec["snapshots"], rec["causes"]
+    assert isinstance(roles, tuple) and isinstance(snapshots, tuple) and isinstance(causes, tuple)
+    problem = _check_cast(roles)
+    if problem:
+        return problem
     for snap in snapshots:
         assert isinstance(snap, tuple)
         if (snap[3] is None) != (snap[4] is None):
             return f"snapshot {snap!r}: partner_kind and partner_id are both NULL or both set"
     for edge in causes:
         assert isinstance(edge, tuple)
-        if edge[2] is not None and edge[1] != MOTIVATED_BY:
-            return f"cause {edge!r}: a motive refines motivated_by (kind {MOTIVATED_BY}) only"
+        problem = _check_edge(edge)
+        if problem:
+            return problem
     return None
 
 
@@ -674,20 +712,36 @@ def _fix_event(rec: Record, rng: random.Random) -> Record:
         assert isinstance(snap, tuple)
         fixed = snap
         if (snap[3] is None) != (snap[4] is None):
-            kinds = range(5)  # entity kinds
+            kinds = range(6)  # entity kinds, artifact reserved
             partner = (
                 (None, None) if rng.random() < HALF else (rng.choice(kinds), rng.getrandbits(64))
             )
             fixed = (*snap[:3], *partner, snap[5])
         fixed_snapshots.append(fixed)
-    fixed_causes = tuple(
-        (edge[0], edge[1], edge[2] if edge[1] == MOTIVATED_BY else None, *edge[3:])
-        for edge in causes
-        if isinstance(edge, tuple)
-    )
+    fixed_causes = tuple(_fix_edge(edge) for edge in causes if isinstance(edge, tuple))
+    roles = rec["roles"]
+    assert isinstance(roles, tuple)
+    seen: set[object] = set()
+    fixed_roles = []
+    for row in roles:
+        assert isinstance(row, tuple)
+        if row[2] == WITNESS or row[2] not in seen:
+            seen.add(row[2])
+            fixed_roles.append(row)
     return rec.replace(
-        snapshots=_canonical_order(fixed_snapshots, SNAPSHOT_KEY), causes=fixed_causes
+        roles=tuple(fixed_roles),
+        snapshots=_canonical_order(fixed_snapshots, SNAPSHOT_KEY),
+        causes=fixed_causes,
     )
+
+
+def _fix_edge(edge: tuple[object, ...]) -> tuple[object, ...]:
+    """A generated edge within its kind's domains (:func:`_check_edge`)."""
+    kind = edge[1]
+    motive = edge[2] if kind == MOTIVATED_BY else None
+    weight = edge[3] if kind == MOTIVATED_BY else 0
+    evidence = EVIDENCE_ONE if kind in DETERMINISTIC_KINDS else edge[4]
+    return (edge[0], kind, motive, weight, evidence, edge[5])
 
 
 KIND_FIXES: dict[str, Callable[[Record, random.Random], Record]] = {
@@ -883,7 +937,27 @@ REFUSED: tuple[tuple[str, str], ...] = (
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 1 [] [] []", "a payload that is not a list"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [1,] [] [] []", "a trailing comma"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7] [] []", "a role tuple with two parts"),
-    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [5/7/1] [] []", "an entity kind of 5"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [6/7/1] [] []", "an entity kind of 6"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/0,1/8/0] [] []", "two actors"),
+    ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/1,1/8/1] [] []", "two targets"),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] ["
+        + ",".join(f"1/{i}/2" for i in range(MAX_CAST + 1))
+        + "] [] []",
+        "a cast of 257 rows",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/~/5/256/1]",
+        "a triggered edge with a weight",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/~/0/0/1]",
+        "a triggered edge with evidence 0",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/0/~/0/255/1]",
+        "a contingent edge with evidence below 1",
+    ),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/4] [] []", "a role code of 4"),
     (
         "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/1,1/8/0] [] []",
@@ -926,8 +1000,8 @@ REFUSED: tuple[tuple[str, str], ...] = (
         "a partner kind without an id",
     ),
     (
-        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/5/7/~/~/100] []",
-        "a snapshot entity kind of 5",
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/6/7/~/~/100] []",
+        "a snapshot entity kind of 6",
     ),
     (
         "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [25/1/8/~/~/100,25/1/7/~/~/100] []",
@@ -954,7 +1028,7 @@ REFUSED: tuple[tuple[str, str], ...] = (
         "MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [1/1/1] [e1/1]",
         "a role that is not an identifier",
     ),
-    ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [A/5/1] [e1/1]", "a binding to entity kind 5"),
+    ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [A/6/1] [e1/1]", "a binding to entity kind 6"),
     ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 2 1 [] [e1/2,e2/1]", "event ids not ascending"),
     ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 2 1 [] [e1/1,e1/2]", "a repeated clause"),
     ("MATCH 0 0 0 0000000000000000 p q 1 0 0 1 0 1 1 [] [x1/1]", "a clause not named eN"),

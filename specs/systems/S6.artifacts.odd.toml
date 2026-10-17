@@ -107,7 +107,7 @@ column = "artifact.condition_cause"
 entity = "artifact"
 type = "u64"
 plane = "A"
-meaning = "EventId of the event that last changed condition, contaminants, charge or a curse: the cause is stored with the state (the Legends reverse key, SAGA-15)"
+meaning = "EventId of the event that last changed condition, contaminants, charge or a curse: the cause is stored with the state (the Legends reverse key, SAGA-15). Set only through ctx.set_cause(column, row, EventRef) with the act's DraftRef (or a Known id), which the merge rewrites to the EventId (envelope_v0.md §7, REV-SPR-020 R2); never typed as an id in the step. 0 = none"
 fixed_point = false
 [[owns]]
 column = "artifact.bearer_since"
@@ -143,7 +143,7 @@ motives = ["GREED_FOR", "LOYALTY_TO", "VOW_OF"]
 snapshots = [{ attr = "contaminants", of = "event", from = "artifact.contaminants" }]
 [[emits]]
 kind = "ARTIFACT_USED"
-when = "The artifact is the instrument of an act (it is also the instrument role in that act's event); its charge, condition and contaminants change with the act, and condition_cause takes the act's EventId"
+when = "The artifact is the instrument of an act (it is also the instrument role in that act's event); its charge, condition and contaminants change with the act, and condition_cause is set to the act through ctx.set_cause (the ARTIFACT_USED draft's DraftRef, rewritten at the merge)"
 roles = ["actor", "instrument"]
 snapshots = [{ attr = "contaminants", of = "event", from = "artifact.contaminants" }]
 [[emits]]
@@ -298,7 +298,7 @@ summary = "At the bearer's death instant: with a keyed draw (loss_on_death) the 
 earns_its_place_by = ["V-SAGA-02", "V-SAGA-10"]
 [[submodels]]
 name = "apply_commands"
-summary = "Transfer (gift, trade; theft resolved with theft_outcome against theft_success), Use (the act's instrument: charge, condition and contaminants change, condition_cause := the act's EventId; ARTIFACT_USED), Search (search_find against find_chance at the artifact's place), Destroy, Forge (new id H64(seed, \"artifact\", forge_event, k); origin_event := the forging event). Every applied command emits its event, links it to chain_head by a contingent edge and advances chain_head; a change of bearer resets bearer_since and exposure. A command naming an artifact whose origin event is later than now is refused"
+summary = "Transfer (gift, trade; theft resolved with theft_outcome against theft_success), Use (the act's instrument: charge, condition and contaminants change, condition_cause set through ctx.set_cause to the ARTIFACT_USED draft, rewritten at the merge; ARTIFACT_USED), Search (search_find against find_chance at the artifact's place), Destroy, Forge (new id H64(seed, \"artifact\", forge_event, k); origin_event := the forging event). Every applied command emits its event, links it to chain_head by a contingent edge and advances chain_head; a change of bearer resets bearer_since and exposure. A command naming an artifact whose origin event is later than now is refused"
 earns_its_place_by = ["V-SAGA-02", "V-SAGA-13"]
 [[submodels]]
 name = "influence"
@@ -327,7 +327,7 @@ statement = "No event references an artifact before its origin_event; every bear
 test = "V-SAGA-17"
 [[invariants]]
 id = "INV-S6-06"
-statement = "Every non-default physical or transformation state (condition below 1, any contaminant, spent charge, a curse) has a condition_cause that resolves to an existing, earlier event"
+statement = "Every non-default physical or transformation state (condition below 1, any contaminant, spent charge, a curse) has a condition_cause that resolves to an existing, earlier event (rh-core checks it after every merge against the declared defaults: envelope_v0.md §7)"
 test = "V-SAGA-21"
 [[invariants]]
 id = "INV-S6-04"

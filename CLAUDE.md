@@ -58,7 +58,7 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
 python -I specs/chronicle/selftest.py
-python -I specs/chronicle/selftest_envelope.py   # the event envelope v0: anchored snapshots, typed edges, cause_told, the plane-B index, the byte budget (SPR-020; specs/chronicle/envelope_v0.md); --control snapshot-drift, motive-on-triggered and cause-later must FAIL
+python -I specs/chronicle/selftest_envelope.py   # the event envelope v0: anchored snapshots, typed edges, cause_told, the plane-B index, the byte budget (SPR-020; specs/chronicle/envelope_v0.md); --control snapshot-drift, motive-on-triggered, cause-later and budget-bloat must FAIL
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
 python -I bin/gen_decimal_vectors.py --check   # authored numbers: rh-manifest exact decimals -> fixed point match Python decimal (SPR-011 T-04)
 python -I specs/numerics/exp_ln_v0.py --check   # fixed-point exp and ln v0 (Q32_32): constants, convergence, faithful rounding, golden vectors (05.1 §6 item 4 v1.10; SPR-016); --exhaustive nightly

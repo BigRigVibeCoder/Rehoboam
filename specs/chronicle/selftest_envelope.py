@@ -16,12 +16,14 @@ typed and motive edges, ``cause_told``), and checks:
      resolves to an existing event at or before the state's start; the control plants a later one;
   5. the plane-B index: ``last_event_at_place``, ``events_at_place``, ``last_event_in_cell`` and
      ``last_event_for`` answer a brute-force oracle on random queries;
-  6. the byte budget (V-SAGA-15; envelope_v0.md §9): the stored (Parquet, zstd) bytes of the
-     envelope per event, at the P1a design densities, are at or under 40; the fullest P1a envelope
-     on every event is reported and must stay under 48.
+  6. the byte budget (V-SAGA-15; envelope_v0.md §9, the measure fixed for SPR-030): the stored
+     (Parquet, zstd) bytes of the envelope per event, motive edges counted in full, at the P1a
+     design densities, are at or under 40; the fullest P1a envelope on every event is reported and
+     must stay under 48; the control plants fifty witnesses on every event.
 
 Run: python -I specs/chronicle/selftest_envelope.py
-     [--control snapshot-drift | motive-on-triggered | cause-later]   (each must FAIL its check)
+     [--control snapshot-drift | motive-on-triggered | cause-later | budget-bloat]
+     (each must FAIL its check)
 """
 
 from __future__ import annotations
@@ -71,6 +73,10 @@ CELL_SHARE = 0.2
 STRESS_DRIFT = 3 * ONE
 BUDGET_MEAN = 40  # V-SAGA-15: mean stored overhead per event at the P1a design densities
 BUDGET_FULL = 48  # the cells-and-contaminants ceiling, for the fullest P1a envelope on every event
+BLOAT_WITNESSES = 50  # the budget control: this many witnesses on every event
+RELIEF = (
+    20 * ONE
+)  # a break's stress relief: the act's own effect, applied after the pre-act snapshot
 INDEX_QUERIES = 100
 HALF = 0.5
 Row = tuple[object, ...]
@@ -102,6 +108,7 @@ class Control:
     snapshot_drift: bool = False
     motive_on_triggered: bool = False
     cause_later: bool = False
+    budget_bloat: bool = False
 
 
 def _drift(rnd: random.Random, chron: Chronicle, actor: int) -> int:
@@ -143,13 +150,19 @@ def _emit(rnd: random.Random, chron: Chronicle, tick: int, control: Control) -> 
     cast = [(ACTOR, actor), (TARGET, target)]
     if rnd.random() < WITNESS_SHARE:
         cast.append((WITNESS, rnd.randrange(PERSONS)))
+    if control.budget_bloat:
+        cast.extend((WITNESS, w) for w in rnd.sample(range(PERSONS), BLOAT_WITNESSES))
     cast.sort()
     for ordinal, (role, who) in enumerate(cast):
         chron.roles.append((0, eid, ordinal, PERSON, who, role))
     if verb in T1_VERBS:
-        read = _drift(rnd, chron, actor)
+        read = _drift(
+            rnd, chron, actor
+        )  # the pre-act value the rule read (envelope_v0.md §4 item 2)
         chron.at_emission[(eid, actor)] = read
         chron.snapshots.append((0, eid, STRESS, PERSON, actor, None, None, read))
+        if verb == BREAK:  # the act's own effect lands after the snapshot
+            chron.stress[actor] = max(0, read - RELIEF)
     if rnd.random() < CELL_SHARE:
         chron.snapshots.append((0, eid, CELL_X, WORLD, 0, None, None, place % CELLS))
         chron.snapshots.append((0, eid, CELL_Y, WORLD, 0, None, None, place // CELLS))
@@ -256,6 +269,9 @@ EDGE_RULES = {
         f"SELECT count(*) FROM causal_edge WHERE evidence < 0 OR evidence > {ONE}"
     ),
     "a weight off motivated_by": "SELECT count(*) FROM causal_edge WHERE kind <> 3 AND weight <> 0",
+    "an evidence other than 1 on a deterministic kind": (
+        f"SELECT count(*) FROM causal_edge WHERE kind IN (0, 1, 6, 7, 8) AND evidence <> {ONE}"
+    ),
     "a forward cause": "SELECT count(*) FROM causal_edge WHERE cause_id >= effect_id",
     "a contingent edge without a reference": (
         "SELECT count(*) FROM causal_edge c JOIN event e ON e.event_id = c.effect_id "
@@ -368,15 +384,29 @@ def _parquet_bytes(con: duckdb.DuckDBPyConnection, query: str, tmp: Path, name: 
 
 
 def stored_overhead(con: duckdb.DuckDBPyConnection, tmp: Path, name: str) -> float:
-    """The envelope's stored bytes per admitted event (envelope_v0.md §9: the V-SAGA-15 measure)."""
+    """The envelope's stored bytes per admitted event (envelope_v0.md §9: the V-SAGA-15 measure).
+
+    (i) cast rows beyond the first two, (ii) every snapshot row, (iii) every motivated_by edge in
+    full (a motive edge is new), (iv) the typed columns of every other edge (P1.0 already stored
+    their cause and kind): the Parquet bytes, zstd, divided by the admitted events.
+    """
     events = count(con, "SELECT count(*) FROM event")
     roles = _parquet_bytes(con, "SELECT * FROM event_role WHERE ordinal >= 2", tmp, f"{name}_roles")
     snapshots = _parquet_bytes(con, "SELECT * FROM event_snapshot", tmp, f"{name}_snapshots")
-    edges_full = _parquet_bytes(con, "SELECT * FROM causal_edge", tmp, f"{name}_edges")
-    edges_p10 = _parquet_bytes(
-        con, "SELECT timeline_id, cause_id, effect_id, kind FROM causal_edge", tmp, f"{name}_p10"
+    motive_edges = _parquet_bytes(
+        con, f"SELECT * FROM causal_edge WHERE kind = {MOTIVATED_BY}", tmp, f"{name}_motive"
     )
-    return (roles + snapshots + edges_full - edges_p10) / events
+    other_full = _parquet_bytes(
+        con, f"SELECT * FROM causal_edge WHERE kind <> {MOTIVATED_BY}", tmp, f"{name}_other"
+    )
+    other_p10 = _parquet_bytes(
+        con,
+        "SELECT timeline_id, cause_id, effect_id, kind FROM causal_edge "
+        f"WHERE kind <> {MOTIVATED_BY}",
+        tmp,
+        f"{name}_other_p10",
+    )
+    return (roles + snapshots + motive_edges + other_full - other_p10) / events
 
 
 def fullest(chron: Chronicle) -> Chronicle:
@@ -422,7 +452,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument(
         "--control",
-        choices=["snapshot-drift", "motive-on-triggered", "cause-later"],
+        choices=["snapshot-drift", "motive-on-triggered", "cause-later", "budget-bloat"],
         help="plant one defect",
     )
     args = parser.parse_args(argv)
@@ -430,6 +460,7 @@ def main(argv: list[str] | None = None) -> int:
         snapshot_drift=args.control == "snapshot-drift",
         motive_on_triggered=args.control == "motive-on-triggered",
         cause_later=args.control == "cause-later",
+        budget_bloat=args.control == "budget-bloat",
     )
     chron = generate(control)
     con = load(chron)

@@ -264,7 +264,24 @@ ids = ["succession", "revenge", "famine", "reversal", "irony", "elite_feud", "dr
 ids = ["mythic_chronicle", "deep_time", "saga", "historian", "ensemble_space_opera", "noir_city", "wisdom_dialogue"]
 
 [event_roles]          # the cast and instrument of an event (the cinematic envelope, ADR-0035 §7a; 05.2 §4.1a); plane A
-ids = ["actor", "target", "witness", "instrument"]   # instrument: the S6 artifact used, if any
+ids = ["actor", "target", "witness", "instrument"]   # instrument: the S6 artifact used, if any. The index is the role code everywhere
+                                                     # (schema.sql, channel A, the canonical form); a role is only ever appended (envelope_v0.md §8)
+
+[role_domains]         # a pattern role's domain ([roles]) as an anchored bool attribute, captured as a snapshot at emission (SPR-020,
+                       # envelope_v0.md §1, R1): `A = "authority"` compiles to holds_title(A)@eN == true; a relational domain names its
+                       # partner variable (`S = "successor of A"` -> is_successor(S, A)@eN). source: the system that declares the snapshot
+                       # ("life_course": the log; "none": no source yet, so the domain is absent and lint_patterns.py warns). Plane C reads it.
+authority    = { attribute = "holds_title",    relational = false, source = "M7.dynasty" }
+successor    = { attribute = "is_successor",   relational = true,  source = "M7.dynasty" }
+kin          = { attribute = "is_self_or_kin", relational = true,  source = "life_course" }
+ally         = { attribute = "is_ally",        relational = true,  source = "none" }
+rival        = { attribute = "is_rival",       relational = true,  source = "none" }
+subordinate  = { attribute = "is_subordinate", relational = true,  source = "none" }
+member       = { attribute = "is_member",      relational = true,  source = "none" }
+host         = { attribute = "is_host",        relational = false, source = "none" }
+guest        = { attribute = "is_guest",       relational = false, source = "none" }
+investigator = { attribute = "is_investigator", relational = false, source = "none" }
+suspect      = { attribute = "is_suspect",     relational = false, source = "none" }
 
 [motive_edges]         # typed motive edges: refinements of motivated_by that point to the inciting event; plane A
 ids = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]
@@ -536,6 +553,19 @@ emotion_dominance         = { type = "q8_8", args = ["actor"] }          # PAD m
 emotion_occ               = { type = "enum", args = ["actor"], values = ["none", "joy", "distress", "hope", "fear", "pride", "shame", "gratitude", "anger", "love", "hate"] }
 emotion_intensity         = { type = "q8_8", args = ["actor"] }          # intensity of emotion_occ
 weather                   = { type = "enum", args = ["event"], values = ["clear", "overcast", "rain", "storm", "snow", "fog", "heat"] }   # once M3 simulates weather
+# Role domains ([role_domains]; envelope_v0.md §1): bool attributes a pattern's `roles` compile to, captured as snapshots by the
+# system that owns the source (M7's title.holder for holds_title; the life-course log for is_self_or_kin, above); "none" sources
+# have no snapshot yet and are absent.
+holds_title               = { type = "bool", args = ["actor"] }                 # the actor holds any title at the event (authority)
+is_successor              = { type = "bool", args = ["actor", "partner"] }      # the actor is the partner's legal heir at the event
+is_ally                   = { type = "bool", args = ["actor", "partner"] }      # no source yet (P1b: S7 vows, M6 factions)
+is_rival                  = { type = "bool", args = ["actor", "partner"] }      # no source yet (feud rows are T1's: a P1b declaration)
+is_subordinate            = { type = "bool", args = ["actor", "partner"] }      # no source yet (M7 liege and vassal, next version)
+is_member                 = { type = "bool", args = ["actor", "partner"] }      # no source yet (factions, P4)
+is_host                   = { type = "bool", args = ["actor"] }                 # no source yet (S5 daily life, P1b)
+is_guest                  = { type = "bool", args = ["actor"] }                 # no source yet
+is_investigator           = { type = "bool", args = ["actor"] }                 # no source yet (M5 contagion, P1b)
+is_suspect                = { type = "bool", args = ["actor"] }                 # no source yet
 
 # Concrete verbs (subset). Systems emit these. The world compiler maps setting verbs onto them.
 # tellability (required, an integer 0-255; SPR-011 ruling 11): the Registry's prior of how worth telling one event of the verb

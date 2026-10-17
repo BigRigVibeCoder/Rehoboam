@@ -1,5 +1,5 @@
-# Planted fixture for lint_odd.py's event-envelope checks (SPR-020; specs/chronicle/envelope_v0.md §2, §4, §7).
-# Never a contract: the overlay fixture of odd_emits with owned columns and envelope declarations. Case `bad_attr`: a snapshot of an attribute the Registry lacks.
+# Planted fixture for lint_odd.py's event-envelope checks (SPR-020; specs/chronicle/envelope_v0.md §2, §4, §7; REV-SPR-020 R7).
+# Never a contract: the overlay fixture of odd_emits with owned columns, an algorithm source and envelope declarations. Case `bad_attr`: a snapshot of an attribute the Registry lacks.
 # Linted with: python -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_envelope/bad_attr --overlay tests/lint_fixtures/odd_emits/overlay.toml
 odd_r = 2
 
@@ -8,7 +8,7 @@ id = "M3.agriculture"
 name = "Agriculture (lint fixture)"
 spec_version = "0.0.1"
 fidelity = "F0"
-status = "frozen"
+status = "draft"
 crate = "rh-sys-agriculture"
 adrs = []
 requirements = []
@@ -28,6 +28,7 @@ snapshots = [
   { attr = "dread", of = "actor", from = "field.fear_level" },
   { attr = "trust", of = "target", partner = "actor", from = "field.fear_level" },
   { attr = "weather", of = "event", from = "field.sky" },
+  { attr = "holds_title", of = "actor", from = "algorithm.holds", type = "bool" },
 ]
 
 [[owns]]
@@ -57,16 +58,20 @@ column = "field.ruin"
 entity = "field"
 type = "q8_8"
 plane = "A"
-meaning = "fixture: a transformation state whose cause is stored with it (SAGA-15)"
+meaning = "fixture: a transformation state whose cause is stored with it (SAGA-15); 0 = intact"
 fixed_point = true
+default = 0.0
 cause_column = "field.ruin_cause"
 [[owns]]
 column = "field.ruin_cause"
 entity = "field"
 type = "u64"
 plane = "A"
-meaning = "fixture: EventId of the event that last changed field.ruin; 0 = none"
+meaning = "fixture: EventId of the event that last changed field.ruin, set through ctx.set_cause; 0 = none"
 fixed_point = false
+[algorithm.holds]
+version = "fixture-v0"
+steps = ["S1 the fixture computes a bool"]
 
 [scales]
 spatial = "region"

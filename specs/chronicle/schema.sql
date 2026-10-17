@@ -2,8 +2,9 @@
 -- Spec: docs/05_architecture/05.2 §4, §4.1a and §6, 05.4 §2.3, ADR-0007, ADR-0024 (planes), ADR-0025, ADR-0026, ADR-0035 §7a.
 -- v0.5 (SPR-020, the event envelope; specs/chronicle/envelope_v0.md): event_role carries the Registry [event_roles] code
 --   (actor 0, target 1, witness 2, instrument 3) and is channel A's child table column for column; abstract_role is gone
---   (a pattern role's domain is derived in plane C from intervals); event_snapshot carries entity kinds; causal_edge carries
---   the motive, a fixed-point weight and evidence, and cause_told; the plane-B "what last happened here?" macros.
+--   (a pattern role's domain is an anchored bool attribute, captured as a snapshot: REV-SPR-020 R1); event_snapshot carries
+--   entity kinds; causal_edge carries the motive, a fixed-point weight and evidence, and cause_told; the plane-B
+--   "what last happened here?" macros.
 -- Conventions:
 --   * Timeline-scoped composite keys.
 --   * event_id: one counter per timeline, from 0, assigned at the scheduler's level merge (rh-events; 05.1 §2 rule 4).
@@ -34,11 +35,11 @@ CREATE TABLE IF NOT EXISTS event_role (           -- plane A
     timeline_id  UINTEGER NOT NULL,
     event_id     UBIGINT  NOT NULL,
     ordinal      UTINYINT NOT NULL,            -- position among the event's cast: by role code, then entity (envelope_v0.md §1)
-    entity_kind  UTINYINT NOT NULL,            -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region (5 artifact, P1b)
+    entity_kind  UTINYINT NOT NULL,            -- rh-ids EntityKind: 0 world, 1 person, 2 household, 3 settlement, 4 region; 5 artifact, reserved (S6)
     entity_id    UBIGINT  NOT NULL,            -- PersonId = H64(mother_id, parity) etc. (ADR-0026)
     role         UTINYINT NOT NULL,            -- Registry [event_roles] index: 0 actor, 1 target, 2 witness, 3 instrument; every role at
                                                -- most once per event except witness. A pattern's abstract role (authority, kin, ...;
-                                               -- Registry [roles]) is derived in plane C from state_interval and the life-course log
+                                               -- Registry [roles]) is a [role_domains] bool attribute captured as a snapshot (R1)
     PRIMARY KEY (timeline_id, event_id, ordinal)
 );
 
