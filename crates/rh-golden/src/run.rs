@@ -954,7 +954,9 @@ fn stream_host(
 /// (BCK-002 A-52).
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
-    rh_sys_demography::MUTANTS.to_vec()
+    let mut m = rh_sys_demography::MUTANTS.to_vec();
+    m.extend_from_slice(rh_stream::MUTANTS);
+    m
 }
 
 /// BCK-002 A-52: a build with a `mutant-*` feature compiled in never runs a world, so a mutant can

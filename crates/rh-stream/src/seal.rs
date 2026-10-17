@@ -219,3 +219,15 @@ pub fn read_segment(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, StreamError
     }
     Ok(out)
 }
+
+/// The `segment` row of the sealed channel-A segment directory `dir`, from its `segment.parquet`
+/// alone (a resumed live edge's start, SPR-026 T-02).
+///
+/// # Errors
+/// [`StreamError::Segment`] for a directory that is not a sealed segment; [`StreamError::Io`];
+/// [`StreamError`] if the row does not decode.
+pub fn read_segment_row(dir: &Path) -> Result<crate::segment::SegmentRow, StreamError> {
+    let path = dir.join(SEGMENT_FILE);
+    let bytes = fs::read(&path).map_err(io(&path))?;
+    crate::segment::read_row(&bytes)
+}
