@@ -387,6 +387,7 @@ class Pending:
     band: str | None = None
     reply: Json | None = None  # the slot: set when the engine applies or refuses it
     applied_at_ns: int | None = None
+    answered_seq: int | None = None  # the host's answer counter when the slot was filled (L1)
 
 
 def error(rid: int | str | None, reason: str, **data: object) -> Json:
@@ -463,6 +464,7 @@ class Host:
     connections_opened: int = 0
     released: list[tuple[int, int, int]] = field(default_factory=list)  # (wall_ns, tick, k)
     end: str | None = None
+    answers_given: int = 0
     published: Snapshot = field(init=False)
 
     def __post_init__(self) -> None:
@@ -534,45 +536,59 @@ class Host:
         band: str | None = None,
         until: int | str | None = None,
     ) -> Pending:
-        """Queue a validated request on its own slot, or answer it at once (K2, K3).
+        """Queue a validated request on its own slot, or answer it at once (K2, K3, L1, L3).
 
-        Answered at once: after the run ended (``run_finished``); a ``control.status`` or a
-        no-change command on a connection with nothing in flight while the queue is empty, from
-        the published snapshot. Everything else waits for the engine.
+        Answered at once, from the published snapshot: a ``control.status`` with nothing of its
+        own connection in flight (whatever other connections have queued; L3), a command after the
+        run ended (``run_finished``), and a no-change command on a connection with nothing in
+        flight while the queue is empty. Everything else waits for the engine's decision point,
+        which is atomic (L1): a request counts as queued until its slot is filled.
         """
         p = Pending(conn, rid, method, until, band)
         if method == "control.status" and not self._inflight(conn):
-            p.reply = W.response(rid, self.status())  # never waits; still answered after the end
+            self._fill(p, W.response(rid, self.status()))  # waits only behind its own connection
         elif self.cell.state == "finished":
-            p.reply = error(rid, "run_finished", end=self.end)
+            self._fill(p, error(rid, "run_finished", end=self.end))
         elif self.pending or self._inflight(conn):
             self.pending.append(p)
         elif not self._changes_published(method, band, until):
-            p.reply = W.response(rid, {**self.published.pace(), "changed": False})
+            self._fill(p, W.response(rid, {**self.published.pace(), "changed": False}))
         else:
             self.pending.append(p)
         return p
 
+    def _fill(self, p: Pending, reply: Json) -> None:
+        """Fill a request's reply slot (the answer counter orders the answers; L1)."""
+        self.answers_given += 1
+        p.reply, p.answered_seq, p.applied_at_ns = reply, self.answers_given, self.clock.now_ns
+
     # -- requests: the engine's side --------------------------------------------------------
-    def _apply_pending(self) -> None:
-        """Apply the queue in order; every answer carries the tip the command took effect at."""
+    def _apply_pending(self) -> list[Pending]:
+        """Apply the queue in order; each command's answer is the cell right after it (L2).
+
+        A queued ``control.status`` is returned, to be answered with the snapshot published at
+        the end of the decision point.
+        """
+        deferred = []
         for p in self.pending:
+            if p.method == "control.status":
+                deferred.append(p)
+                continue
             before = self.cell.effective()
             try:
                 result = self._apply(p)
             except Refused as r:
-                p.reply = error(p.rid, r.reason, **r.data)
+                reply = error(p.rid, r.reason, **r.data)
             else:
-                p.reply = W.response(p.rid, result)
+                reply = W.response(p.rid, result)
             owed = self.control == "paused-time-owed" and p.method == "control.resume"
             if self.cell.effective() != before and not owed:
                 self._anchor()  # the effective rate changed (K4); the control keeps a stale anchor
-            p.applied_at_ns = self.clock.now_ns
+            self._fill(p, reply)
         self.pending.clear()
+        return deferred
 
     def _apply(self, p: Pending) -> Json:
-        if p.method == "control.status":
-            return self.status()
         if p.method == "control.pace":
             return self._pace(p)
         if p.method == "control.pause":
@@ -619,6 +635,8 @@ class Host:
         if changed:
             self.cell.state, self.cell.step_target = "running", target
             self._log_pace(f"control.step:{target}", p.conn)
+            if nxt > target:
+                self._reach()  # already passed: reached inside its own application (L2)
         return {**self.snapshot().pace(), "changed": changed}
 
     def _reach(self) -> None:
@@ -637,11 +655,17 @@ class Host:
 
     # -- the engine's loop ------------------------------------------------------------------
     def before_instant(self) -> None:
-        """The decision point (control_v1.md §3.3 item 1): apply, re-check a step, publish."""
-        self._apply_pending()
+        """The decision point (control_v1.md §3.3 item 1): apply, re-check a step, publish.
+
+        Atomic (L1): nothing is submitted between taking the queue and publishing; a queued
+        status is answered last, with the published snapshot (L2).
+        """
+        deferred = self._apply_pending()
         if self._step_reached():
             self._reach()
         self.publish()
+        for p in deferred:
+            self._fill(p, W.response(p.rid, self.status()))
 
     def deadline(self) -> int | None:
         """The wall clock at which the next instant may run; None when paused or finished."""
@@ -675,12 +699,14 @@ class Host:
         dropped with no ``step.reached``, and every later request is refused at submission.
         """
         self.cell.state, self.cell.step_target, self.end = "finished", None, reason
-        for p in self.pending:
-            p.reply = error(p.rid, "run_finished", end=reason)
-            p.applied_at_ns = self.clock.now_ns
-        self.pending.clear()
         self._log_host("finish" if reason == "finished" else "abort")
         self.publish()
+        for p in self.pending:
+            if p.method == "control.status":
+                self._fill(p, W.response(p.rid, self.status()))
+            else:
+                self._fill(p, error(p.rid, "run_finished", end=reason))
+        self.pending.clear()
 
     # -- the socket -------------------------------------------------------------------------
     def connect(self) -> Connection:
@@ -698,12 +724,12 @@ class Host:
             self.connections.remove(conn)
 
     def status(self) -> Json:
-        """The ``control.status`` result (control_v1.md §4.1) from the published snapshot (K6).
+        """The ``control.status`` result (control_v1.md §4.1) from the published snapshot (K6, L3).
 
-        Called by the engine while it applies a queue, it reads the snapshot being built, so a
-        status queued behind a command on its connection reports that command's effect.
+        Always the published snapshot, whatever other connections have queued; a status queued
+        behind its own connection's command is answered after the publish that applied it.
         """
-        snap = self.published if not self.pending else self.snapshot()
+        snap = self.published
         return {
             "calendar": {"minutes_per_year": MINUTES_PER_YEAR},
             "control": {"format": CONTROL_FORMAT, "version": CONTROL_VERSION},
@@ -800,6 +826,7 @@ class Command:
     conn: str
     method: str
     params: Json | None = None
+    rid: int | None = None  # an explicit request id; else the issue index
 
 
 @dataclass(frozen=True)
@@ -978,6 +1005,18 @@ SCENARIOS: tuple[Scenario, ...] = (
             Command(500 * MS, "a", "control.step", {"until": "instant"}),
             Command(500 * MS, "b", "control.step", {"until": "instant"}),  # the target shown (P16)
             Command(600 * MS, "a", "control.resume"),
+            Command(655 * MS, "a", "control.pause"),  # opposite commands in one instant (L1):
+            Command(656 * MS, "b", "control.resume"),  # b is answered running, changed true
+            Command(700 * MS, "c", "control.pause", rid=50),  # a pipelined (pause, status) pair,
+            Command(700 * MS, "c", "control.status", rid=7),  # ids unsorted: answered in order
+            Command(800 * MS, "a", "control.step", {"until": {"tick": _tick(26) + 2_000}}),
+            Command(800 * MS, "a", "control.status"),  # queued in the item 1 that reached it (L2)
+            Command(900 * MS, "a", "control.resume"),
+            Command(915 * MS, "b", "control.pause"),  # queued while instant 28 computes
+            Command(
+                920 * MS, "c", "control.status"
+            ),  # at the instant's end: the published tip (L3)
+            Command(S, "a", "control.resume"),
         ),
     ),
 )
@@ -988,7 +1027,7 @@ def _issue(run: Run, conns: dict[str, Connection], cmd: Command) -> None:
     host = run.host
     if cmd.conn not in conns:
         conns[cmd.conn] = host.connect()
-    rid = len(run.issued) + 1
+    rid = len(run.issued) + 1 if cmd.rid is None else cmd.rid
     data = W.encode_frame(W.control_frame(W.request(rid, cmd.method, cmd.params)))
     frame, _ = W.decode_frame(data)
     outcome = host._answer(conns[cmd.conn], frame.payload)
@@ -1001,9 +1040,11 @@ def simulate(sc: Scenario, control: str | None = None) -> Run:
     The delivery rule (control_v1.md §9): at a decision point at time ``now``, every command with
     ``at_ns <= now`` is delivered and applied before the instant; a governor wait is cut by a
     command with ``at_ns < deadline``, which is then delivered at a new decision point; a command
-    with ``release <= at_ns <= release + INSTANT_WALL_NS`` lands while the instant computes (a
-    command at exactly the release time the engine waited for lands during the instant) and is
-    applied at the decision point after it.
+    with ``release <= at_ns < release + INSTANT_WALL_NS`` lands while the instant computes (a
+    command at exactly the release time the engine waited for lands during the instant), one with
+    ``at_ns == release + INSTANT_WALL_NS`` lands after the instant's records and before the
+    decision point (a status then still reads the snapshot published before the instant; L3),
+    and both are applied at the decision point after the instant.
     """
     host = Host(Engine(), FakeClock(), control, start_paused=sc.start_paused)
     run, conns = Run(host), dict[str, Connection]()
@@ -1023,9 +1064,11 @@ def simulate(sc: Scenario, control: str | None = None) -> Run:
             continue
         host.clock.sleep_until(deadline)
         start = host.clock.now_ns
-        while queue and queue[0].at_ns <= start + INSTANT_WALL_NS:  # lands while it computes
+        while queue and queue[0].at_ns < start + INSTANT_WALL_NS:  # lands while it computes
             _issue(run, conns, queue.pop(0))
         host.run_instant()
+        while queue and queue[0].at_ns == host.clock.now_ns:  # after the records, before item 1
+            _issue(run, conns, queue.pop(0))
         host.after_instant()
     while queue:  # after the end: run_finished at submission
         _issue(run, conns, queue.pop(0))
@@ -1279,6 +1322,10 @@ def _dispatch_cases() -> list[DispatchCase]:
             _req(11, "control.step", {"until": {"tick": FIRST_TICK - 5}}),
             years=0,
         ),
+        DispatchCase(
+            "dispatch_step_reached_at_once",
+            _req(23, "control.step", {"until": {"tick": YEAR1 - INSTANT_MINUTES + 2_000}}),
+        ),
         DispatchCase("dispatch_step_bad", _req(12, "control.step", {"until": {"year": 2}})),
         DispatchCase("dispatch_status_with_param", _req(13, "control.status", {"x": 1})),
     ]
@@ -1331,6 +1378,7 @@ EXPECTED_REASONS = {
     "dispatch_step_past": "past_tick",
     "dispatch_step_genesis": "ok",
     "dispatch_step_before_first": "past_tick",
+    "dispatch_step_reached_at_once": "ok",
     "dispatch_step_bad": "invalid_params",
     "dispatch_status_with_param": "invalid_params",
     "dispatch_oracle_whisper": "method_not_found",
@@ -1360,6 +1408,7 @@ LOGGED = {
     "dispatch_step_instant": 1,
     "dispatch_step_replace": 1,
     "dispatch_step_genesis": 1,
+    "dispatch_step_reached_at_once": 2,
 }
 # C16 as corrected: every answer with id null closes the connection; one with the request's id
 # keeps it open (method_not_found, invalid_params on a request, past_tick, run_finished).
@@ -1432,6 +1481,7 @@ def _dispatch_result_checks(name: str, obj: Json) -> list[str]:
         "dispatch_step_instant": ("running", {"until_tick": YEAR1}, True),
         "dispatch_step_replace": ("running", {"until_tick": STEP_TICK}, True),
         "dispatch_step_genesis": ("running", {"until_tick": FIRST_TICK}, True),
+        "dispatch_step_reached_at_once": ("paused", None, True),
     }
     state, step, changed = want[name]
     got = (res["state"], res["step"], res["changed"])
@@ -1726,17 +1776,60 @@ def _fold_checks(run: Run) -> list[str]:
         {"until_tick": _tick(5)},
     ):
         problems.append(f"P5: identical steps answered {p5a} and {p5b}")
-    c_pauses = [r for c, r in pauses if c.conn == "c"]
+    c_pauses = [r for c, r in pauses if c.conn == "c"][:2]  # the pipelined pair at 400 ms
     p13 = [_result(r)["changed"] for r in c_pauses]
     if p13 != [True, False]:
         problems.append(f"P13: pipelined pauses answered changed {p13}")
-    c_cmds = [outcome for c, outcome in run.issued if c.conn == "c"]
-    rids = [o.rid if isinstance(o, Pending) else o.get("id") for o in c_cmds]
-    if rids != sorted(rids, key=lambda x: int(str(x))):
-        problems.append("P13: a connection's answers are out of request order")
     p16a, p16 = _result(steps[2][1]), _result(steps[3][1])
     if p16["step"] is None or p16["step"] != p16a["step"] or p16["changed"] is not False:
         problems.append(f"P16: b's step instant behind a's answered {p16}")
+    return problems + _atomic_checks(run)
+
+
+def _answer_order(run: Run, conn: str) -> list[int]:
+    """The host's answer counter for each of ``conn``'s requests, in arrival order."""
+    out = []
+    for c, outcome in run.issued:
+        if c.conn == conn:
+            seq = outcome.answered_seq if isinstance(outcome, Pending) else None
+            out.append(-1 if seq is None else seq)
+    return out
+
+
+def _atomic_checks(run: Run) -> list[str]:
+    """L1 to L3: opposite commands, pipelined pairs, a step reached at once, a status at an end.
+
+    Opposite commands landing in one instant, a pipelined pair answered in arrival order, a step
+    reached inside its own application with a status behind it, and a status at an instant's end
+    reading the published snapshot.
+    """
+    problems = []
+    if any(_reason(r) != "ok" for _, r in run.replies):
+        return ["a scripted command was refused, so the atomic cases were not checked"]
+    order = _answer_order(run, "c")
+    if -1 in order or order != sorted(order):
+        problems.append(f"L1: c's answers were not given in arrival order: {order}")
+    resume_b = _result(_replies(run, "control.resume", "b")[0][1])
+    if (resume_b["state"], resume_b["changed"]) != ("running", True):
+        problems.append(f"L1: b's resume opposite a's pause answered {resume_b}")
+    if not any(w == 660 * MS for w, _, _ in run.host.released):
+        problems.append("L1: the cell did not end running after the opposite commands")
+    statuses = _replies(run, "control.status")
+    pipelined = _pace_of(statuses[0][1])
+    if pipelined["state"] != "paused":
+        problems.append(f"L1: a status pipelined behind a pause answered {pipelined}")
+    reached = _result(_replies(run, "control.step", "a")[-1][1])
+    if (reached["state"], reached["step"], reached["changed"]) != ("paused", None, True):
+        problems.append(f"L2: a step reached at once answered {reached}")
+    queued_status = _pace_of(statuses[1][1])
+    if (queued_status["state"], queued_status["step"]) != ("paused", None):
+        problems.append(f"L2: a status queued in the reaching item 1 answered {queued_status}")
+    by_release = {w: tick for w, tick, _ in run.host.released}
+    end_status = _pace_of(statuses[2][1])
+    if end_status["tick"] != by_release.get(900 * MS) or end_status["tick"] == by_release.get(
+        910 * MS
+    ):
+        problems.append(f"L3: a status at an instant's end answered tip {end_status['tick']}")
     return problems
 
 
