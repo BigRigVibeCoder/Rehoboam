@@ -77,8 +77,8 @@ A draft spec that still reads a column from the owner it had before the next ver
 `household.head` from M4 today) warns in `--next` mode and names the follow-up; a frozen reader errs as always.
 
 **One draft per system id.** `next/` holds at most one next version per id, and only a frozen spec takes one, so a
-second slice of the same system (SPR-016's mortality, `specs/demography/mortality_f1.toml`) cannot be linted here
-until the first next version has superseded the file; it folds into the then-frozen version's next draft.
+second slice of the same system is drafted standalone and folded into the draft once the first slice has merged (SPR-016's
+mortality was drafted as `specs/demography/mortality_f1.toml` under PR #51 and folded into the M2 draft after PR #50).
 
 A `--overlay FILE` given with `--next` may add `[verbs]` and may **replace** the `[systems]` entry
 of a system that has a next-version spec (never another), keeping `fidelity_levels`, every
@@ -110,6 +110,6 @@ never changes a committed skeleton or the index until step 4.
 
 | File | What |
 |---|---|
-| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) on the frozen rung-0 slice (0.2.1: 0.2.0 plus EVO-001's typed payloads and codes) |
-| `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`); verbs `BIRTH`, `MARRIAGE` |
-| `amendments.lock.toml` | the eighteen amendments of the M2 draft (five texts, seven column meanings, six parameter meanings), path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |
+| `M2.demography.odd.toml` | 0.3.0 draft: M2 F1 births, partnering, households, kinship (SPR-015) and F1 mortality (SPR-016, `[algorithm.mortality_f1]`, folded after PR #50) on the frozen rung-0 slice (0.2.1: 0.2.0 plus EVO-001's typed payloads and codes) |
+| `registry_delta.toml` | `[systems."M2.demography"]` with the F1 defaults (`tfr`, `elite_fertility_mult`) and mortality's two parameters with their defaults (`density_capacity`, `density_mortality_slope`); verbs `BIRTH`, `MARRIAGE` |
+| `amendments.lock.toml` | the eighteen amendments of the M2 draft (five texts, seven column meanings, six parameter meanings; four of them re-stated by the mortality fold), path and sha256 of the new text; written by `lint_odd.py --write-amendments-lock`, never typed |

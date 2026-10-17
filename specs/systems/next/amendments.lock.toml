@@ -5,7 +5,7 @@
 
 [amendments."M2.demography"]
 "algorithm.mortality_rung0.steps.S12" = "sha256:d40341e72e2aefe9e98f0e299def8f06cdca8da798525c8d6877f588f812ac8d"
-"algorithm.mortality_rung0.steps.S2" = "sha256:7a8edbf52fe65e38474f1f7ca293fc5069d199d3e49315a8e0535c58f15df2c2"
+"algorithm.mortality_rung0.steps.S2" = "sha256:30ad9c5343cb62758bf446cbad89fe85ea1b686901646914ef7af9681fce1f70"
 "emits.EXTINCTION.when" = "sha256:3e7663ca3c969ba2806a494b73ea95a9712d28e86b5ccfdaf758236d764dce48"
 "initialization.state" = "sha256:5343903b05df2606b0f3c5eecc25906fa633afecc13ba003c20e7b961f40ede6"
 "invariants.INV-M2-03.statement" = "sha256:0360341e475d4cd6fb5f34b9ed30993212d6c2b4ab7ce2fca30355306c8b9e13"
@@ -16,9 +16,9 @@
 "owns.person.mother.meaning" = "sha256:d8dd3662c7313abee6da43a99c1ea2638892f84ec600df4a01c278f4d0afcd59"
 "owns.person.sex.meaning" = "sha256:9fd5fd42d34351ebf735104ef4d417e98124fe620238f016fec5ce04abfa0008"
 "owns.person.spouse.meaning" = "sha256:2e9e4cb689b632a8be08440f54e61ad8d79c42fe72f77f4e92f1ec5452eeb1a2"
-"params.brass_alpha.meaning" = "sha256:adfd54d413e1cf67513c77831af4f45633d45f7eca2e7bff506d7aaa2905d8f3"
-"params.brass_beta.meaning" = "sha256:35955ba13362f28f872132ea0196d859d9ba8cbc64b23de9ada5e88b2a008bb0"
+"params.brass_alpha.meaning" = "sha256:8b9b29aada91c8ebf148776f3c8aac5dd890be2bb10ad95910a461dd769d7196"
+"params.brass_beta.meaning" = "sha256:787d206103839509b1f9d00e5d10ea1f37a5c5ea2d29458a6d3f15aee347de3d"
 "params.elite_fertility_mult.meaning" = "sha256:9f11aea864c5a1e43da816c9028d41c72eedad0e3dd8d623adfad970f994639e"
 "params.eps_f.meaning" = "sha256:db36451dd214115256e200f3568828dcc425c4e1da4ac88865b6fdcd4cb7df79"
-"params.eps_m.meaning" = "sha256:30761e89f3e9772599c1eb2d68fb227e2f2bd5900da7e1654edb3817145a91da"
+"params.eps_m.meaning" = "sha256:fbbfa01fa2bac7fd5377a47505a2bf93da781ba2e9266e0fcce477c8cd6c157f"
 "params.tfr.meaning" = "sha256:90a537f40ae93109a0495452bfabfecce1248e63834382e6789716885006e26a"
