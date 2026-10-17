@@ -44,8 +44,14 @@ and crate, a higher spec_version, status draft; every frozen [[owns]] column wit
 fixed_point; every frozen [algorithm.*] table equal; the frozen [[rng]] purposes as a prefix in order with the same
 key, resample_on_fork and draws; every frozen [[invariants]] id with the same statement and test; every frozen
 [[applies]] command with the same payload; every frozen schedule binding, [[emits]] kind and parameter, frozen
-defaults unchanged. With --next, an overlay may replace the Registry [systems] entry of a superseded system
-(never another), keeping fidelity_levels and every existing parameter's bounds and default.
+defaults unchanged; `from` on a frozen [[applies]] may only grow; a frozen [[emits]] `when`, the frozen
+[initialization] state and the frozen schedule steps are kept inside the new text. A next version may change a
+frozen statement only through a `[[amends]]` record (REV-SPR-015 R1): `of` names the path (invariants.<id>.statement,
+algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state, schedule.<Pulse>/<Phase>.steps.<name>),
+`frozen` quotes the frozen text byte for byte, `to` is the new text and `reason` says why; the lint checks both texts
+and prints every amendment (AMEND lines). In --next mode the superseding spec is held to frozen-level strictness on
+[[applies]] and [[emits]] (REV-SPR-015 R6). With --next, an overlay may replace the Registry [systems] entry of a
+superseded system (never another), keeping fidelity_levels and every existing parameter's bounds and default.
 """
 import copy
 import re
@@ -160,8 +166,62 @@ def semver(text):
     return tuple(int(x) for x in m.groups()) if m else None
 
 
+AMEND_PATH = re.compile(r"^(invariants\.(?P<inv>[A-Za-z0-9_-]+)\.statement|algorithm\.(?P<alg>[a-z0-9_]+)\.steps\.(?P<step>[A-Za-z0-9]+)|"
+                        r"emits\.(?P<kind>[A-Z_]+)\.when|initialization\.state|schedule\.(?P<pulse>[A-Za-z]+)/(?P<phase>[A-Za-z]+)\.steps\.(?P<sname>[a-z_]+))$")
+
+
+def text_at(spec, m):
+    """The text a `[[amends]] of` path names in ``spec``, or None when the path has no text there."""
+    if m.group("inv"):
+        return next((i.get("statement") for i in spec.get("invariants", []) if i.get("id") == m.group("inv")), None)
+    if m.group("alg"):
+        steps = spec.get("algorithm", {}).get(m.group("alg"), {}).get("steps", [])
+        return next((st for st in steps if str(st).startswith(m.group("step") + " ")), None)
+    if m.group("kind"):
+        return next((e.get("when") for e in spec.get("emits", []) if e.get("kind") == m.group("kind")), None)
+    if m.group("pulse"):
+        for x in spec.get("schedule", []):
+            if (x.get("pulse"), x.get("phase")) == (m.group("pulse"), m.group("phase")):
+                return next((st for st in x.get("steps", []) if st.split(":")[0].strip() == m.group("sname")), None)
+        return None
+    return spec.get("initialization", {}).get("state")
+
+
+def amendments(fs, ns, p, errs):
+    """The next version's `[[amends]]` records (REV-SPR-015 R1): each names a path, quotes the frozen text byte for
+    byte, gives the new text (which must be what the next version now says there) and a reason. Returns
+    path -> (frozen text, new text) for the valid ones."""
+    out = {}
+    for a in ns.get("amends", []):
+        of = str(a.get("of", ""))
+        m = AMEND_PATH.match(of)
+        if m is None:
+            errs.append(f"{p}: [[amends]] of = {of!r} is not a path this lint knows (invariants.<id>.statement, "
+                        "algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state, schedule.<Pulse>/<Phase>.steps.<name>)")
+            continue
+        if not a.get("reason"):
+            errs.append(f"{p}: [[amends]] {of} needs a reason")
+        was, now = text_at(fs, m), text_at(ns, m)
+        if was is None:
+            errs.append(f"{p}: [[amends]] {of}: the frozen spec has no text there")
+        elif a.get("frozen") != was:
+            errs.append(f"{p}: [[amends]] {of}: `frozen` is not the frozen text byte for byte")
+        if now is None:
+            errs.append(f"{p}: [[amends]] {of}: the next version has no text there")
+        elif a.get("to") != now:
+            errs.append(f"{p}: [[amends]] {of}: `to` is not what the next version says there")
+        if a.get("frozen") == a.get("to"):
+            errs.append(f"{p}: [[amends]] {of}: `to` equals `frozen`; nothing is amended")
+        if of in out:
+            errs.append(f"{p}: [[amends]] {of} is recorded twice")
+        out[of] = (a.get("frozen"), a.get("to"))
+    return out
+
+
 def lint_next(frozen, specs, errs):
-    """A next-version spec preserves the frozen slice it supersedes (SPR-015; specs/systems/next/README.md)."""
+    """A next-version spec preserves the frozen slice it supersedes, or amends it through `[[amends]]` records
+    (SPR-015; REV-SPR-015 R1, R6; specs/systems/next/README.md). Returns the amendment notes to print."""
+    notes = []
     for sid, (ff, fs) in frozen.items():
         nf, ns = specs[sid]
         p = f"{nf.name} (next of {ff.name})"
@@ -175,6 +235,8 @@ def lint_next(frozen, specs, errs):
         fv, nv = semver(fh.get("spec_version")), semver(nh.get("spec_version"))
         if fv is None or nv is None or nv <= fv:
             errs.append(f"{p}: spec_version {nh.get('spec_version')} must be a semver above the frozen {fh.get('spec_version')}")
+        amended = amendments(fs, ns, p, errs)
+        notes += [f"{nf.name}: amends {of} ({next((a.get('reason') for a in ns.get('amends', []) if a.get('of') == of), '')})" for of in amended]
         owns = {o.get("column"): o for o in ns.get("owns", [])}
         for o in fs.get("owns", []):
             col = o.get("column")
@@ -189,9 +251,16 @@ def lint_next(frozen, specs, errs):
             got = ns.get("algorithm", {}).get(name)
             if got is None:
                 errs.append(f"{p}: frozen [algorithm.{name}] is missing")
-            elif got != table:
-                keys = sorted(k for k in set(table) | set(got) if table.get(k) != got.get(k))
-                errs.append(f"{p}: frozen [algorithm.{name}] changed (keys {keys}); a changed algorithm is a new table")
+                continue
+            expect = copy.deepcopy(table)
+            for of, (was, now) in amended.items():
+                m = AMEND_PATH.match(of)
+                if m.group("alg") == name:
+                    expect["steps"] = [now if st == was else st for st in expect.get("steps", [])]
+            if got != expect:
+                keys = sorted(k for k in set(expect) | set(got) if expect.get(k) != got.get(k))
+                errs.append(f"{p}: frozen [algorithm.{name}] changed (keys {keys}); a changed algorithm is a new table, "
+                            "or an amended step is recorded in [[amends]]")
         frozen_rng, next_rng = fs.get("rng", []), ns.get("rng", [])
         for i, g in enumerate(frozen_rng):
             n = next_rng[i] if i < len(next_rng) else {}
@@ -204,23 +273,40 @@ def lint_next(frozen, specs, errs):
         invs = {i.get("id"): i for i in ns.get("invariants", [])}
         for i in fs.get("invariants", []):
             n = invs.get(i.get("id"))
+            of = f"invariants.{i.get('id')}.statement"
             if n is None:
                 errs.append(f"{p}: frozen invariant {i.get('id')} is missing")
-            elif (n.get("statement"), n.get("test")) != (i.get("statement"), i.get("test")):
-                errs.append(f"{p}: frozen invariant {i.get('id')} changed its statement or test")
+            elif n.get("test") != i.get("test"):
+                errs.append(f"{p}: frozen invariant {i.get('id')} changed its test")
+            elif n.get("statement") != i.get("statement") and of not in amended:
+                errs.append(f"{p}: frozen invariant {i.get('id')} changed its statement without an [[amends]] record")
         applies = {a.get("command"): a for a in ns.get("applies", [])}
         for a in fs.get("applies", []):
             n = applies.get(a.get("command"))
             if n is None or n.get("payload") != a.get("payload"):
                 errs.append(f"{p}: frozen [[applies]] {a.get('command')} is missing or changed its payload")
-        bindings = {(x.get("pulse"), x.get("phase")) for x in ns.get("schedule", [])}
+            elif not set(a.get("from", [])) <= set(n.get("from", [])):
+                errs.append(f"{p}: frozen [[applies]] {a.get('command')} lost a sender from `from`: {sorted(set(a.get('from', [])) - set(n.get('from', [])))}")
+        steps_by_binding = {(x.get("pulse"), x.get("phase")): x.get("steps", []) for x in ns.get("schedule", [])}
         for x in fs.get("schedule", []):
-            if (x.get("pulse"), x.get("phase")) not in bindings:
-                errs.append(f"{p}: frozen schedule binding ({x.get('pulse')}, {x.get('phase')}) is missing")
-        kinds = {e.get("kind") for e in ns.get("emits", [])}
+            key = (x.get("pulse"), x.get("phase"))
+            if key not in steps_by_binding:
+                errs.append(f"{p}: frozen schedule binding {key} is missing")
+                continue
+            for st in x.get("steps", []):
+                of = f"schedule.{key[0]}/{key[1]}.steps.{st.split(':')[0].strip()}"
+                if st not in steps_by_binding[key] and of not in amended:
+                    errs.append(f"{p}: frozen schedule step '{st.split(':')[0].strip()}' of {key} is missing or changed without an [[amends]] record")
+        whens = {e.get("kind"): e.get("when", "") for e in ns.get("emits", [])}
         for e in fs.get("emits", []):
-            if e.get("kind") not in kinds:
-                errs.append(f"{p}: frozen [[emits]] {e.get('kind')} is missing")
+            k = e.get("kind")
+            if k not in whens:
+                errs.append(f"{p}: frozen [[emits]] {k} is missing")
+            elif e.get("when", "") not in whens[k] and f"emits.{k}.when" not in amended:
+                errs.append(f"{p}: frozen [[emits]] {k} changed its `when` without an [[amends]] record (the frozen text must be kept inside the new one, or amended)")
+        was, now = fs.get("initialization", {}).get("state", ""), ns.get("initialization", {}).get("state", "")
+        if was not in now and "initialization.state" not in amended:
+            errs.append(f"{p}: frozen [initialization] state changed without an [[amends]] record (the frozen text must be kept inside the new one, or amended)")
         params = {x.get("name"): x for x in ns.get("params", [])}
         for x in fs.get("params", []):
             n = params.get(x.get("name"))
@@ -228,6 +314,7 @@ def lint_next(frozen, specs, errs):
                 errs.append(f"{p}: frozen parameter {x.get('name')} is missing")
             elif "default" in x and n.get("default") != x.get("default"):
                 errs.append(f"{p}: frozen default of {x.get('name')} changed: {x.get('default')} -> {n.get('default')}")
+    return notes
 
 
 def payload_fields(text):
@@ -238,10 +325,13 @@ def payload_fields(text):
     return [f.split(":")[0].strip() for f in inner[1:-1].split(",") if f.strip()]
 
 
-def lint_applies(specs, errs, warns):
-    """[[applies]] against the senders' [[commands]] (PR #32; REV-P1a §7)."""
+def lint_applies(specs, errs, warns, next_ids=()):
+    """[[applies]] against the senders' [[commands]] (PR #32; REV-P1a §7). A next-version spec (``next_ids``) is held
+    to frozen-level strictness (REV-SPR-015 R6)."""
+    def frozen_or_next(sid):
+        return specs[sid][1].get("system", {}).get("status") == "frozen" or sid in next_ids
     for tid, (tf, ts) in specs.items():
-        strict = errs if ts.get("system", {}).get("status") == "frozen" else warns
+        strict = errs if frozen_or_next(tid) else warns
         applies = {a.get("command"): a for a in ts.get("applies", [])}
         senders = {}                              # command -> [(sender id, its [[commands]] entry)]
         for sid, (sf, ss) in specs.items():
@@ -264,7 +354,7 @@ def lint_applies(specs, errs, warns):
                 strict.append(f"{tf.name}: {s} sends {cmd}, but [[applies]] {cmd} does not list it in from")
             for s, c in senders.get(cmd, []):
                 got = payload_fields(c.get("payload")) if "payload" in c else None
-                sp = errs if specs[s][1].get("system", {}).get("status") == "frozen" else warns
+                sp = errs if frozen_or_next(s) else warns
                 if got is None:
                     sp.append(f"{specs[s][0].name}: [[commands]] {cmd} to {tid} needs payload = \"{{ {', '.join(want)} }}\" ({tid}'s [[applies]])")
                 elif got != want:
@@ -426,16 +516,18 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=()):
         spec_defaults = {x.get("name") for x in s.get("params", []) if "default" in x}
         for n in sorted(set(reg_defaults) - spec_defaults):
             errs.append(f"{p}: Registry default for '{n}' ({reg_defaults[n]}) is not mirrored as `default` in [[params]]")
-        # event vocabulary (SPR-011 ruling 11): [[emits]] against the Registry's [verbs], both ways
+        # event vocabulary (SPR-011 ruling 11): [[emits]] against the Registry's [verbs], both ways; a next-version
+        # spec is held to frozen-level strictness here (REV-SPR-015 R6)
         verbs = reg.get("verbs", {})
         emitted = [e.get("kind") for e in s.get("emits", [])]
+        strict_emits = errs if sid in next_ids else strict
         for k in emitted:
             if k not in verbs:
-                strict.append(f"{p}: emits {k}, which is not a Registry verb ([verbs]; SPR-011 ruling 11)")
+                strict_emits.append(f"{p}: emits {k}, which is not a Registry verb ([verbs]; SPR-011 ruling 11)")
             elif verbs[k].get("emitted_by") != sid:
-                strict.append(f"{p}: emits {k}, which the Registry gives to {verbs[k].get('emitted_by')}")
+                strict_emits.append(f"{p}: emits {k}, which the Registry gives to {verbs[k].get('emitted_by')}")
         for k in sorted(v for v, d in verbs.items() if d.get("emitted_by") == sid and v not in emitted):
-            strict.append(f"{p}: the Registry gives verb {k} to {sid}, but [[emits]] does not declare it")
+            strict_emits.append(f"{p}: the Registry gives verb {k} to {sid}, but [[emits]] does not declare it")
         # submodels earn their place
         for sm in s.get("submodels", []):
             ep = sm.get("earns_its_place_by", [])
@@ -457,7 +549,7 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=()):
         for c in s.get("couplings", []):
             if c.get("system") not in reg.get("systems", {}) and c.get("system") not in ("S1.culture", "S2.technology", "S3.migration"):
                 errs.append(f"{p}: coupling to unknown system {c.get('system')}")
-    lint_applies(specs, errs, warns)
+    lint_applies(specs, errs, warns, next_ids)
     return errs, warns
 
 
@@ -552,10 +644,14 @@ def main() -> int:
         print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
         return 0
     errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids, next_ids=set(frozen))
-    lint_next(frozen, specs, errs)
+    notes = lint_next(frozen, specs, errs)
     errs = overlay_errs + errs
-    # self-check (SPR-015): a next version that changes a frozen algorithm step, a frozen column's type, a frozen
-    # default, or puts a new RNG purpose before a frozen one must be rejected; the clean one must not be
+    for note in notes:
+        print("AMEND", note)
+    # self-check (SPR-015; REV-SPR-015 R1, R6): a next version that changes a frozen algorithm step, a frozen column's
+    # type, a frozen default, a frozen invariant's statement, a frozen emits `when` or the frozen [initialization]
+    # without an [[amends]] record, records an amendment whose frozen text is wrong, drops a sender from a frozen
+    # [[applies]] `from`, or puts a new RNG purpose before a frozen one, must be rejected; the clean one must not be
     for sid, (nf, ns) in ((sid, specs[sid]) for sid in frozen):
         clean = []
         lint_next({sid: frozen[sid]}, {sid: (nf, ns)}, clean)
@@ -566,6 +662,25 @@ def main() -> int:
                 bad["algorithm"][name]["steps"] = ["S0 changed"]
                 probes.append((bad, f"frozen [algorithm.{name}] changed"))
                 break
+        bad = copy.deepcopy(ns)
+        bad["invariants"][0]["statement"] = "planted"
+        probes.append((bad, "changed its statement without an [[amends]] record"))
+        bad = copy.deepcopy(ns)
+        bad["emits"][0]["when"] = "planted"
+        probes.append((bad, "changed its `when` without an [[amends]] record"))
+        bad = copy.deepcopy(ns)
+        bad["initialization"]["state"] = "planted"
+        probes.append((bad, "frozen [initialization] state changed without an [[amends]] record"))
+        bad = copy.deepcopy(ns)
+        bad["applies"][0]["from"] = []
+        probes.append((bad, "lost a sender from `from`"))
+        if ns.get("amends"):
+            bad = copy.deepcopy(ns)
+            bad["amends"][0]["frozen"] = "planted"
+            probes.append((bad, "`frozen` is not the frozen text byte for byte"))
+            bad = copy.deepcopy(ns)
+            bad["amends"][0]["to"] = "planted"
+            probes.append((bad, "`to` is not what the next version says there"))
         bad = copy.deepcopy(ns)
         bad["owns"][0]["type"] = "u8" if bad["owns"][0].get("type") != "u8" else "u16"
         probes.append((bad, "changed type"))
@@ -581,7 +696,8 @@ def main() -> int:
         for probe, needle in probes:
             pe = []
             lint_next({sid: frozen[sid]}, {sid: (nf, probe)}, pe)
-            assert any(needle in e for e in pe), (sid, needle, pe)
+            # a planted change at a path the next version already amends is caught by the record's `to` check instead
+            assert any(needle in e or "`to` is not what the next version says there" in e for e in pe), (sid, needle, pe)
         print(f"  self-check (next of {sid}): {len(probes)} planted changes rejected, the clean next version "
               f"{'kept' if not clean else 'REJECTED'}")
     for w in warns:
