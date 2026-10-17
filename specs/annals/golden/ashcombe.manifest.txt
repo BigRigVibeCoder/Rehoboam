@@ -1,0 +1,6 @@
+#rehoboam/annals/manifest/v0 world=ashcombe chronicle_digest=d4618530ab3221c90356beaad5d9ceab templates=0.2.0 templates_digest=d78ab0226a3e2fa2
+group house:3172275184034551431 ea1525569c42166e
+group house:7252932463130708544 5a6b829693836eb4
+group line:6740622430173101898 5dbcf81f83e8bd82
+group year bc8b3a751dfa1de6
+digest 7bb4d700e4c6ed5f

@@ -1,42 +1,53 @@
-"""Family annals v0: the exact reference renderer and its self-test (SPR-029; annals_v0.md).
+r"""Family annals v0: the exact reference renderer and its self-test (SPR-029; annals_v0.md).
 
 The renderer reads a channel-A chronicle in the canonical text form (``canonical_v0.py`` parses
-and checks it), a world file (the calendar), a names file (what the chronicle does not
-carry: the manifest's cast, dynasty and title names) and, for a house annal, a keyframe extract
-(the rows of the genesis keyframe that open a house whose past is not in channel A: REV-SPR-019
-R1). It renders annals from ``templates_v0.toml`` with a provenance sidecar: one row per sentence
-with the event ids it shows, the persons it designates, the records it read, the template id and
-version, and a digest of text and sidecar.
+and checks it), the Registry (the verb and attribute dictionaries the chronicle header names), a
+world file (the calendar), a names file (what the chronicle does not carry: the manifest's cast,
+dynasty and title names) and, for a house annal, a keyframe extract (the rows of the genesis
+keyframe that open a house whose past is not in channel A: REV-SPR-019 R1). It renders annals
+from ``templates_v0.toml`` with a provenance sidecar (one row per sentence: the event ids it
+shows, the persons it designates, the records it read, the template id and version), a header
+naming every input by digest, and a digest of text and sidecar; the groups of one world are
+listed with their digests in an annals manifest.
 
 Checks (``--check``):
 
-  1. provenance (V-NAR-05): every sentence has one sidecar row; a chronicle sentence cites at least
-     one event, every cited event is in the chronicle and of an in-scope kind; a prologue sentence
-     cites keyframe rows; the control ``no-event-id`` plants a sentence with no row;
-  2. template slots (annals_v0.md §3, ``lint_templates.py``): every slot resolves to a declared
-     role, snapshot, payload slot, motive, edge or the tick; the controls ``undeclared-slot`` and
-     ``state-read`` plant a slot outside DEATH's roles and a slot that reads state;
-  3. no model (V-NAR-07): the renderer imports the standard library and the two sibling references
-     only; nothing it calls can reach a model or the network;
-  4. the calendar (05.1 §4.1): known answers for 360- and 365-day years, before and after the epoch;
-  5. the fixtures agree with the Registry: every ``EVENT``'s verb id, act classes and tellability,
-     and the ``stress`` attribute index;
-  6. determinism: two renders are byte-equal and the digest recomputes;
+  1. provenance (V-NAR-05; REV-SPR-029 R2): the sidecar is re-derived from the chronicle, the
+     templates and the extract: every in-scope event of the group is the own event of exactly one
+     ``S`` row, of its kind's template; a row's events are its own event plus the told causes its
+     sentence cites; ``P`` rows come only before the first year heading, with no events, and every
+     ``kf:`` source exists in the extract; a row's persons are its cast plus the parents designation
+     reaches; every sentence line has one row and every row a line. Controls: ``no-event-id``,
+     ``row-drops-own``, ``body-as-prologue``, ``missing-kf-source``, ``unrelated-event``,
+     ``rows-swapped``;
+  2. template slots (annals_v0.md §3, ``lint_templates.py``); controls ``undeclared-slot`` and
+     ``state-read``;
+  3. no model (V-NAR-07): after rendering, no network or process module is loaded; the imports
+     of this file are the standard library and the sibling references; control ``network-import``;
+  4. the calendar (05.1 §4.1): known answers for 360- and 365-day years, before and after the
+     epoch; ordinal and cardinal words; the q8_8 rendering;
+  5. the fixtures: every ``EVENT`` agrees with the dictionary the chronicle header names (verb id,
+     act classes, tellability, snapshot attributes), and the chronicle is a possible history under
+     M2's and M7's rules (annals_v0.md §12);
+  6. determinism: two renders are byte-equal and the digest recomputes from the files;
   7. coverage: every in-scope kind is exercised by the fixtures (unexercised variants are reported);
-  8. golden annals: the committed text and sidecar of every fixture group equal the render
-     (``STALE:`` names the first file that differs; ``--write`` regenerates them).
+  8. golden annals: the committed text, sidecar and manifest of every fixture equal the render
+     (``STALE:`` names the first file that differs; ``--write`` regenerates them);
+  9. designation is injective: no two persons of one annal share a designation.
 
-Run: python -I specs/annals/selftest_annals_v0.py --check [--golden-dir DIR]
-     [--control no-event-id | undeclared-slot | state-read]
+Run: python -I specs/annals/selftest_annals_v0.py --check [--golden-dir DIR] [--control NAME]
      python -I specs/annals/selftest_annals_v0.py --write
-     python -I specs/annals/selftest_annals_v0.py render --world DIR \
-         --group house:<id>|year|line:<id>
+     python -I specs/annals/selftest_annals_v0.py render --world DIR \\
+         --group house:<id>|year|line:<id> [--sidecar]
+     python -I specs/annals/selftest_annals_v0.py verify --text FILE --sidecar FILE
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import importlib.util
+import re
 import sys
 import tomllib
 from collections import Counter
@@ -56,42 +67,77 @@ LINT = HERE / "lint_templates.py"
 REGISTRY = ROOT / "specs" / "manifest" / "registry_v0.toml"
 REGISTRY_DELTA = ROOT / "specs" / "systems" / "next" / "registry_delta.toml"
 FORMAT = "rehoboam/annals/v0"
+MANIFEST_FORMAT = "rehoboam/annals/manifest/v0"
+EXTRACT_FORMAT = "rehoboam/annals/keyframe-extract/v0"
+RENDERER = "annals_v0/0.2.0"
 D_ANNALS = b"rehoboam/annals/v0"
 EXIT_OK, EXIT_STALE, EXIT_SELFTEST = 0, 1, 2
 
 MINUTES_PER_DAY = 1440
 MONTHS = {360: (30,) * 12, 365: (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)}
-ORDINAL_WORDS = (
-    "first",
-    "second",
-    "third",
-    "fourth",
-    "fifth",
-    "sixth",
-    "seventh",
-    "eighth",
-    "ninth",
-    "tenth",
-    "eleventh",
-    "twelfth",
+GESTATION_MONTHS = 9  # M2 0.3.0 F9: a birth in the ninth month after its conception
+WORDS_LIMIT = 1000  # the words table's range
+UNITS = (
+    "",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
 )
-TEENS = {11, 12, 13}
+TENS = ("", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety")
+ORDINAL_UNITS = {
+    "one": "first",
+    "two": "second",
+    "three": "third",
+    "five": "fifth",
+    "eight": "eighth",
+    "nine": "ninth",
+    "twelve": "twelfth",
+}
 ACTOR, TARGET, WITNESS, INSTRUMENT = 0, 1, 2, 3
 ROLE_CODES = {"actor": ACTOR, "target": TARGET, "instrument": INSTRUMENT}
 PERSON = 1
 EDGE_CODES = {"contingent": 0, "triggered": 1, "motivated_by": 3}
+TRIGGERED, MOTIVATED_BY = 1, 3
 ONE = 256
 Q8_8_DIGITS = 8
-# The groups the fixtures render; the golden file of each is golden/<world>_<group>.txt.
-FIXTURE_GROUPS = {
-    "ashcombe": ("house:9001", "house:9002", "year", "line:1003"),
-    "solitary": ("year",),
-}
-# Modules the renderer may import (V-NAR-07): the standard library and the two sibling references.
+M7_KINDS = frozenset(
+    {
+        "SUCCEED",
+        "INTERREGNUM_CRISIS",
+        "DEPOSED",
+        "REGENCY_BEGUN",
+        "REGENCY_ENDED",
+        "SEAT_GRANTED",
+        "HOUSE_EXTINCT",
+        "CLAIM_CREATED",
+        "CLAIM_PRESSED",
+        "CLAIM_RENOUNCED",
+    }
+)
+CLAIM_CAUSES = frozenset({"SUCCEED", "DEPOSED", "INTERREGNUM_CRISIS"})
+FIXTURE_WORLDS = ("ashcombe", "solitary", "untold")
+# Modules the renderer may import (V-NAR-07): the standard library and the sibling references.
 ALLOWED_IMPORTS = frozenset(
     {
         "argparse",
         "importlib",
+        "re",
         "sys",
         "tomllib",
         "collections",
@@ -99,17 +145,33 @@ ALLOWED_IMPORTS = frozenset(
         "decimal",
         "pathlib",
         "types",
+        "typing",
         "string",
-        "re",
-        "random",
         "itertools",
         "struct",
         "hashlib",
-        "typing",
-        "__future__",
     }
 )
 SIBLINGS = frozenset({"canonical_v0", "lint_templates", "gen_hash_golden"})
+FORBIDDEN_MODULES = ("socket", "ssl", "http.client", "urllib.request", "subprocess")
+CONTROLS = (
+    "no-event-id",
+    "row-drops-own",
+    "body-as-prologue",
+    "missing-kf-source",
+    "unrelated-event",
+    "rows-swapped",
+    "undeclared-slot",
+    "state-read",
+    "network-import",
+)
+PLANTED_LINE = "Thus the chronicle ended, and the land was quiet."
+IMPORT_LINE = re.compile(r"^(?:import|from)\s+([A-Za-z_][\w.]*)")
+MIN_ROWS_FOR_MUTANTS = 2
+
+
+class AnnalsError(ValueError):
+    """An input the renderer refuses by name (annals_v0.md §1)."""
 
 
 def _load(path: Path) -> ModuleType:
@@ -127,7 +189,7 @@ _canon = _load(CANONICAL)
 _lint = _load(LINT)
 
 
-# --- the calendar --------------------------------------------------------------------------------
+# --- the calendar and the words -----------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -136,6 +198,11 @@ class Calendar:
 
     days_per_year: int
     epoch_label: str
+
+    def __post_init__(self) -> None:
+        """Refuse a calendar the engine does not have (REV-SPR-029 F18)."""
+        if self.days_per_year not in MONTHS:
+            raise AnnalsError(f"days_per_year {self.days_per_year} is not 360 or 365 (05.1 §4.1)")
 
     def date(self, tick: int) -> tuple[int, int, int]:
         """``(year, month, day)`` of a tick: year 0 starts at the epoch; months and days from 1."""
@@ -149,13 +216,36 @@ class Calendar:
             month += 1
         return year, month, day_of_year + 1
 
+    def month_index(self, tick: int) -> int:
+        """Months since the epoch's first month (negative before it), for gestation arithmetic."""
+        year, month, _ = self.date(tick)
+        return year * len(MONTHS[self.days_per_year]) + month - 1
+
+
+def cardinal(n: int) -> str:
+    """``zero`` to ``nine hundred and ninety-nine`` in words."""
+    if not 0 <= n < WORDS_LIMIT:
+        raise AnnalsError(f"no words for {n}")
+    hundreds, rest = divmod(n, 100)
+    tens, units = divmod(rest, 10)
+    small = UNITS[rest] if rest < len(UNITS) else TENS[tens] + (f"-{UNITS[units]}" if units else "")
+    if hundreds == 0:
+        return small or "zero"
+    return f"{UNITS[hundreds]} hundred" + (f" and {small}" if small else "")
+
 
 def ordinal(n: int) -> str:
-    """``first`` to ``twelfth`` as words, then ``13th``, ``21st``, ... (n >= 1)."""
-    if 1 <= n <= len(ORDINAL_WORDS):
-        return ORDINAL_WORDS[n - 1]
-    suffix = "th" if n % 100 in TEENS else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    return f"{n}{suffix}"
+    """``first``, ``twelfth``, ``twenty-first``, ``one hundred and third`` in words (n >= 1)."""
+    words = cardinal(n)
+    sep = "-" if "-" in words.split()[-1] else " "
+    head, _, last = words.rpartition(sep)
+    if last in ORDINAL_UNITS:
+        tail = ORDINAL_UNITS[last]
+    elif last.endswith("y"):
+        tail = last[:-1] + "ieth"
+    else:
+        tail = last + "th"
+    return head + (sep if head else "") + tail
 
 
 def year_phrase(year: int, cal: Calendar) -> str:
@@ -211,11 +301,25 @@ class Event:
         return tuple(e for k, e, _ in self.roles if k == PERSON)
 
     def cause(self, kind: int) -> tuple[int, int | None] | None:
-        """The earliest told cause of edge kind ``kind``: ``(cause_id, motive)``."""
-        for cause, code, motive, _, _, told in self.causes:
-            if code == kind and told:
-                return cause, motive
-        return None
+        """The chosen told cause of edge kind ``kind``: ``(cause_id, motive)`` (annals_v0.md §3)."""
+        edges = [(c, m, w) for c, code, m, w, _, told in self.causes if code == kind and told]
+        if not edges:
+            return None
+        if kind == MOTIVATED_BY:  # the strongest contributor, ties to the lower cause id (R8)
+            c, m, _ = min(edges, key=lambda e: (-abs(e[2]), e[0]))
+            return c, m
+        return edges[0][0], edges[0][1]
+
+    def untold(self, kind: int) -> int | None:
+        """The earliest untold cause of edge kind ``kind``, when there is one (F15)."""
+        ids = [c for c, code, _, _, _, told in self.causes if code == kind and not told]
+        return min(ids) if ids else None
+
+    def triggered_by(self, ids: set[int]) -> bool:
+        """Whether a told ``triggered`` edge leads to one of ``ids``."""
+        return any(
+            code == TRIGGERED and told and c in ids for c, code, _, _, _, told in self.causes
+        )
 
     def snapshot(self, attr: int, entity: int) -> int | None:
         """The anchored value of attribute ``attr`` of ``entity``, without a partner."""
@@ -252,9 +356,12 @@ class Tenure:
 class Chronicle:
     """One timeline's channel A, as the annals read it."""
 
+    timeline: int = 0
+    registry_version: str = ""
+    digest: str = ""
     events: dict[int, Event] = field(default_factory=dict)
     life: dict[int, LifeRow] = field(default_factory=dict)
-    births: dict[int, Event] = field(default_factory=dict)  # child -> BIRTH event
+    exits: dict[int, int] = field(default_factory=dict)  # person -> exit tick
     records: list[Any] = field(default_factory=list)  # the canonical Records, in file order
 
 
@@ -264,12 +371,26 @@ class World:
 
     id: str
     calendar: Calendar
+    manifest_hash: str = "-"
     persons: dict[int, str] = field(default_factory=dict)
     houses: dict[int, str] = field(default_factory=dict)
     titles: dict[int, str] = field(default_factory=dict)
+    extract_digest: str = "-"
+    state_hash: str = "-"
     kf_life: dict[int, LifeRow] = field(default_factory=dict)
     members: dict[int, int] = field(default_factory=dict)  # person -> house
     tenures: list[Tenure] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Dictionary:
+    """The Registry's dictionaries the chronicle header names (annals_v0.md §1)."""
+
+    version: str
+    verbs: dict[str, dict[str, Any]]
+    verb_names: list[str]
+    act_classes: list[str]
+    attrs: dict[int, tuple[str, str, list[str]]]  # attr_id -> (name, type, enum values)
 
 
 def _event_of(rec: Any) -> Event:  # noqa: ANN401  (a canonical_v0.Record, loaded by path)
@@ -298,11 +419,19 @@ def _event_of(rec: Any) -> Event:  # noqa: ANN401  (a canonical_v0.Record, loade
     )
 
 
-def load_chronicle(path: Path) -> Chronicle:
+def load_chronicle(path: Path, dictionary: Dictionary) -> Chronicle:
     """Parse a canonical channel-A file (checked whole by the canonical reference first)."""
-    _canon.digest_file(path)
-    chron = Chronicle()
-    for raw in path.read_text(encoding="ascii").splitlines()[1:]:
+    chron = Chronicle(digest=_canon.digest_file(path).hex())
+    lines = path.read_text(encoding="ascii").splitlines()
+    header = _canon.HEADER_LINE.fullmatch(lines[0])
+    chron.timeline = int(header["timeline"])
+    chron.registry_version = str(_canon.decode_str(header["registry"]))
+    if chron.registry_version != dictionary.version:
+        raise AnnalsError(
+            f"{path}: the chronicle's registry_version {chron.registry_version!r} is not the "
+            f"dictionary this renderer read, {dictionary.version!r}"
+        )
+    for raw in lines[1:]:
         if raw.startswith("#"):
             continue
         rec = _canon.parse(raw)
@@ -310,8 +439,6 @@ def load_chronicle(path: Path) -> Chronicle:
         if rec.kind == "EVENT":
             ev = _event_of(rec)
             chron.events[ev.id] = ev
-            if ev.kind == "BIRTH" and ev.person(TARGET) is not None:
-                chron.births[ev.person(TARGET) or 0] = ev
         elif rec.kind == "LIFE_ENTRY":
             pid = int(rec["person_id"])
             chron.life[pid] = LifeRow(
@@ -323,6 +450,8 @@ def load_chronicle(path: Path) -> Chronicle:
                 None,
                 f"life/{pid}",
             )
+        elif rec.kind == "LIFE_EXIT":
+            chron.exits[int(rec["person_id"])] = int(rec["tick"])
     return chron
 
 
@@ -331,7 +460,13 @@ def _int_map(table: object) -> dict[int, str]:
 
 
 def _keyframe(w: World, path: Path) -> None:
-    kf = tomllib.loads(path.read_text(encoding="utf-8"))
+    data = path.read_bytes()
+    kf = tomllib.loads(data.decode("utf-8"))
+    extract = kf.get("extract", {})
+    if extract.get("format") != EXTRACT_FORMAT:
+        raise AnnalsError(f"{path}: [extract] format must be {EXTRACT_FORMAT!r}")
+    w.extract_digest = f"{int(_canon.xxh3_64(data)):016x}"
+    w.state_hash = str(extract.get("state_hash", "-"))
     for row in kf.get("life_course", []):
         pid = int(row["person_id"])
         exit_tick = row.get("exit_tick")
@@ -366,26 +501,105 @@ def load_world(directory: Path) -> World:
     names_path = directory / "names.toml"
     if names_path.exists():
         names = tomllib.loads(names_path.read_text(encoding="utf-8"))
-        w.persons, w.houses, w.titles = (
-            _int_map(names.get("persons")),
-            _int_map(names.get("houses")),
-            _int_map(names.get("titles")),
-        )
+        w.manifest_hash = str(names.get("world", {}).get("manifest_hash", "-"))
+        w.persons = _int_map(names.get("persons"))
+        w.houses = _int_map(names.get("houses"))
+        w.titles = _int_map(names.get("titles"))
     kf_path = directory / "keyframe.toml"
     if kf_path.exists():
         _keyframe(w, kf_path)
     return w
 
 
-def attribute_index(registry: dict[str, object]) -> dict[int, tuple[str, str, list[str]]]:
-    """``attr_id`` -> (name, type, enum values) from the Registry, sorted by name (R6)."""
-    attrs = registry.get("attributes", {})
-    out: dict[int, tuple[str, str, list[str]]] = {}
-    if isinstance(attrs, dict):
-        for i, name in enumerate(sorted(attrs)):
-            entry = attrs[name] if isinstance(attrs[name], dict) else {}
-            out[i] = (name, str(entry.get("type", "")), [str(v) for v in entry.get("values", [])])
-    return out
+def load_dictionary(registry: Path = REGISTRY, delta: Path | None = REGISTRY_DELTA) -> Dictionary:
+    """The Registry's verbs, act classes and attributes; a next delta adds its verbs, ``+next``."""
+    reg = tomllib.loads(registry.read_text(encoding="utf-8"))
+    verbs: dict[str, dict[str, Any]] = dict(reg["verbs"])
+    version = str(reg["registry_version"])
+    if delta is not None and delta.exists():
+        verbs.update(tomllib.loads(delta.read_text(encoding="utf-8")).get("verbs", {}))
+        version += "+next"
+    attrs: dict[int, tuple[str, str, list[str]]] = {}
+    for i, name in enumerate(sorted(reg["attributes"])):
+        entry = reg["attributes"][name]
+        attrs[i] = (name, str(entry.get("type", "")), [str(v) for v in entry.get("values", [])])
+    return Dictionary(version, verbs, sorted(verbs), list(reg["act_classes"]["ids"]), attrs)
+
+
+# --- designation and houses (annals_v0.md §4; one function for both: R4, R6) ----------------------
+
+
+@dataclass
+class Provenance:
+    """What a designation or a sentence read: persons and source records."""
+
+    persons: set[int] = field(default_factory=set)
+    sources: set[str] = field(default_factory=set)
+
+
+class Kinship:
+    """The life-course rows (channel A first, then the keyframe) and the names, read-only."""
+
+    def __init__(self, world: World, chron: Chronicle) -> None:
+        """Bind the rows a designation may read."""
+        self.w = world
+        self.c = chron
+        self.rows: dict[int, LifeRow] = {**world.kf_life, **chron.life}
+
+    def row(self, pid: int) -> LifeRow | None:
+        """The person's life-course row: channel A's ``LIFE_ENTRY`` first, else the keyframe's."""
+        return self.c.life.get(pid) or self.w.kf_life.get(pid)
+
+    def house_of(self, pid: int, prov: Provenance) -> int | None:
+        """M7's rule: the keyframe row; else the father's house if he has one; else the mother's."""
+        if pid in self.w.members:
+            prov.sources.add(f"kf:member/{pid}")
+            return self.w.members[pid]
+        row = self.row(pid)
+        if row is None:
+            return None
+        prov.sources.add(row.source)
+        for parent in (row.father, row.mother):
+            house = self.house_of(parent, prov) if parent else None
+            if house is not None:
+                return house
+        return None
+
+    def rank(self, pid: int, parent: int, sex: int, prov: Provenance) -> int | None:
+        """The person's birth order among the parent's children of the same sex, by birth tick."""
+        siblings = sorted(
+            (r for r in self.rows.values() if parent in (r.father, r.mother) and r.sex == sex),
+            key=lambda r: (r.birth_tick, r.person),
+        )
+        me = next(r for r in siblings if r.person == pid)
+        if sum(r.birth_tick == me.birth_tick for r in siblings) > 1:
+            return None  # twins: the rows cannot order them
+        prov.sources.update(r.source for r in siblings)
+        return siblings.index(me) + 1
+
+    def designate(self, pid: int, prov: Provenance) -> str:
+        """A name; else the Nth son or daughter of a named father, then mother; else the id."""
+        prov.persons.add(pid)
+        name = self.w.persons.get(pid)
+        if name is not None:
+            prov.sources.add(f"name/{pid}")
+            return name
+        row = self.row(pid)
+        if row is not None:
+            for parent in (row.father, row.mother):
+                if parent not in self.w.persons:
+                    continue
+                rank = self.rank(pid, parent, row.sex, prov)
+                if rank is not None:
+                    prov.sources.update({row.source, f"name/{parent}"})
+                    prov.persons.add(parent)
+                    child = "daughter" if row.sex else "son"
+                    return f"the {ordinal(rank)} {child} of {self.w.persons[parent]}"
+        house = self.house_of(pid, prov)
+        if house in self.w.houses:
+            prov.sources.add(f"house/{house}")
+            return f"person #{pid} of {self.w.houses[house or 0]}"
+        return f"person #{pid}"
 
 
 # --- rendering -----------------------------------------------------------------------------------
@@ -399,105 +613,70 @@ class Sentence:
     template: str
     version: int
     events: set[int] = field(default_factory=set)
-    persons: set[int] = field(default_factory=set)
-    sources: set[str] = field(default_factory=set)
+    prov: Provenance = field(default_factory=Provenance)
     prologue: bool = False
 
     def row(self, line: int) -> str:
         """The sidecar row: ``S|P line template version [events] [persons] [sources]``."""
         tag = "P" if self.prologue else "S"
         ev = ",".join(str(e) for e in sorted(self.events))
-        ps = ",".join(str(p) for p in sorted(self.persons))
-        src = ",".join(sorted(self.sources))
+        ps = ",".join(str(p) for p in sorted(self.prov.persons))
+        src = ",".join(sorted(self.prov.sources))
         return f"{tag} {line} {self.template} {self.version} [{ev}] [{ps}] [{src}]"
 
 
 class Renderer:
-    """Renders one group of one chronicle: a pure function of its inputs (annals_v0.md §8)."""
+    """Renders one group of one chronicle: a pure function of its inputs (annals_v0.md §9)."""
 
     def __init__(
         self,
         templates: Any,  # noqa: ANN401  (a lint_templates.Templates, loaded by path)
         world: World,
         chron: Chronicle,
-        attrs: dict[int, tuple[str, str, list[str]]],
+        dictionary: Dictionary,
     ) -> None:
-        """Bind the template set, the world (names, calendar), the chronicle, the attributes."""
+        """Bind the templates, the world (names, calendar, extract), chronicle and dictionary."""
         self.t = templates
         self.w = world
         self.c = chron
-        self.attrs = attrs
-        self.attr_ids = {name: i for i, (name, _, _) in attrs.items()}
+        self.d = dictionary
+        self.kin = Kinship(world, chron)
+        self.attr_ids = {name: i for i, (name, _, _) in dictionary.attrs.items()}
         self.used: Counter[str] = Counter()
-
-    # -- designation (annals_v0.md §4)
-
-    def life_row(self, pid: int) -> LifeRow | None:
-        """The person's life-course row: channel A's ``LIFE_ENTRY`` first, else the keyframe's."""
-        return self.c.life.get(pid) or self.w.kf_life.get(pid)
-
-    def designate(self, pid: int, s: Sentence) -> str:
-        """A name, else the mother's Nth child, else a child of a named parent, else the id."""
-        s.persons.add(pid)
-        name = self.w.persons.get(pid)
-        if name is not None:
-            s.sources.add(f"name/{pid}")
-            return name
-        birth = self.c.births.get(pid)
-        if birth is not None and (mother := birth.person(ACTOR)) in self.w.persons:
-            s.sources.update({f"birth/{birth.id}", f"name/{mother}"})
-            s.persons.add(mother or 0)
-            return f"the {ordinal(birth.payload[1])} child of {self.w.persons[mother or 0]}"
-        row = self.life_row(pid)
-        if row is not None:
-            for parent in (row.father, row.mother):
-                if parent in self.w.persons:
-                    s.sources.update({row.source, f"name/{parent}"})
-                    s.persons.add(parent)
-                    return f"a {'daughter' if row.sex else 'son'} of {self.w.persons[parent]}"
-        house = self.house_of(pid, s.sources)
-        if house in self.w.houses:
-            s.sources.add(f"house/{house}")
-            return f"person #{pid} of {self.w.houses[house or 0]}"
-        return f"person #{pid}"
-
-    def house_of(self, pid: int, sources: set[str]) -> int | None:
-        """The person's house: the keyframe's row, else the father's, else the mother's (M7)."""
-        if pid in self.w.members:
-            sources.add(f"kf:member/{pid}")
-            return self.w.members[pid]
-        row = self.c.life.get(pid)
-        if row is None:
-            return None
-        sources.add(row.source)
-        for parent in (row.father, row.mother):
-            house = self.house_of(parent, sources) if parent else None
-            if house is not None:
-                return house
-        return None
 
     # -- slots (annals_v0.md §3)
 
+    def _father_row(self, ev: Event) -> LifeRow | None:
+        child = ev.person(TARGET)
+        row = None if child is None else self.c.life.get(child)
+        return row if row is not None and row.father else None
+
     def _role_slot(self, role: str, ev: Event, s: Sentence) -> str:
         if role == "witnesses":
-            return (
-                ", ".join(
-                    self.designate(p, s) for k, p, c in ev.roles if c == WITNESS and k == PERSON
-                )
-                or "no one"
-            )
+            cast = [p for k, p, c in ev.roles if c == WITNESS and k == PERSON]
+            return ", ".join(self.kin.designate(p, s.prov) for p in cast) or "no one"
+        if role == "father":
+            row = self._father_row(ev)
+            if row is None:
+                return "no one"
+            s.prov.sources.add(row.source)
+            return self.kin.designate(row.father, s.prov)
         pid = ev.person(ROLE_CODES[role])
-        return self.designate(pid, s) if pid is not None else "no one"
+        return self.kin.designate(pid, s.prov) if pid is not None else "no one"
+
+    def _enum_word(self, enum: str, code: int, ev: Event) -> str:
+        words = self.t.enums[enum]["words"]
+        if not 0 <= code < len(words):
+            raise AnnalsError(f"event {ev.id}: code {code} is outside the enum {enum}")
+        return str(words[code])
 
     def _payload_slot(self, name: str, ev: Event) -> str:
-        layout = self.t.payloads[ev.kind]["slots"]
-        for i, slot in enumerate(layout):
+        for i, slot in enumerate(self.t.payloads[ev.kind]["slots"]):
             if slot["name"] != name:
                 continue
             value = ev.payload[i]
             if "enum" in slot:
-                enum = self.t.enums[slot["enum"]]
-                return str(enum["words"][value])
+                return self._enum_word(str(slot["enum"]), value, ev)
             return ordinal(value) if slot.get("ordinal") else str(value)
         raise KeyError(name)
 
@@ -506,44 +685,56 @@ class Renderer:
         value = None if pid is None else ev.snapshot(self.attr_ids[attr], pid)
         if value is None:
             return "not recorded"
-        _, kind, values = self.attrs[self.attr_ids[attr]]
+        _, kind, values = self.d.attrs[self.attr_ids[attr]]
         if kind == "q8_8":
             return q8_8(value)
         if kind == "enum":
+            if not 0 <= value < len(values):
+                raise AnnalsError(
+                    f"event {ev.id}: snapshot code {value} is outside the attribute {attr}"
+                )
             return values[value]
         return str(value)
 
+    def label(self, ev: Event, s: Sentence) -> str:
+        """The noun phrase naming ``ev`` as a cause: its variant's label, or its ``[[label]]``."""
+        variant = self.variant(ev)
+        if variant is not None:
+            return self.fill(str(variant["label"]), ev, s)
+        entry = self.t.labels.get(ev.kind)
+        return self.fill(str(entry["label"]), ev, s) if entry else f"event {ev.id}"
+
     def _cause_slot(self, kind: str, ev: Event, s: Sentence) -> str:
         found = ev.cause(EDGE_CODES[kind])
-        if found is None:
-            return "an event the chronicle does not tell"
-        cause_id, _ = found
-        cause = self.c.events.get(cause_id)
+        cause = None if found is None else self.c.events.get(found[0])
         if cause is None:
-            s.sources.add(f"untold/{cause_id}")
+            untold = found[0] if found is not None else ev.untold(EDGE_CODES[kind])
+            if untold is not None:
+                s.prov.sources.add(f"untold/{untold}")
             return "an event the chronicle does not tell"
-        s.events.add(cause_id)
-        variant = self.variant(cause)
-        return self.fill(str(variant["label"]), cause, s) if variant else f"event {cause_id}"
+        s.events.add(cause.id)
+        return self.label(cause, s)
 
     def _motive_slot(self, ev: Event) -> str:
-        found = ev.cause(EDGE_CODES["motivated_by"])
+        found = ev.cause(MOTIVATED_BY)
         motive = None if found is None else found[1]
-        words = self.t.enums["motive"]["words"]
-        return "for a motive the chronicle does not name" if motive is None else str(words[motive])
+        if motive is None:
+            return "for a motive the chronicle does not name"
+        return self._enum_word("motive", motive, ev)
+
+    def _tick_slot(self, which: str, ev: Event) -> str:
+        if which == "date":
+            return day_phrase(ev.tick, self.w.calendar)
+        return year_phrase(self.w.calendar.date(ev.tick)[0], self.w.calendar)
 
     def slot(self, name: str, ev: Event, s: Sentence) -> str:
         """The text of one slot of a chronicle sentence (the lint has resolved it already)."""
         slot = _lint.parse_slot(name)
         if slot is None:
-            raise ValueError(f"slot {name!r} {_lint.OUTSIDE}")
+            raise AnnalsError(f"slot {name!r} {_lint.OUTSIDE}")
         match slot.family:
             case "tick":
-                return (
-                    day_phrase(ev.tick, self.w.calendar)
-                    if slot.args[0] == "date"
-                    else year_phrase(self.w.calendar.date(ev.tick)[0], self.w.calendar)
-                )
+                return self._tick_slot(slot.args[0], ev)
             case "role":
                 return self._role_slot(slot.args[0], ev, s)
             case "payload":
@@ -555,31 +746,62 @@ class Renderer:
             case _:
                 return self._cause_slot(slot.args[0], ev, s)
 
-    def fill(self, text: str, ev: Event, s: Sentence) -> str:
-        """Substitute every slot of ``text`` for event ``ev``, recording provenance on ``s``."""
-        return "".join(
-            literal + (self.slot(name, ev, s) if name is not None else "")
-            for literal, name, _, _ in _lint.string.Formatter().parse(text)
-        )
+    def fill(
+        self, text: str, ev: Event | None, s: Sentence, values: dict[str, str] | None = None
+    ) -> str:
+        """Substitute every slot of ``text``: from the event, or from ``values`` for a prologue."""
+        out = []
+        for literal, name, spec, conversion in _lint.string.Formatter().parse(text):
+            out.append(literal)
+            if name is None:
+                continue
+            if spec or conversion is not None:
+                raise AnnalsError(f"slot {name!r} carries a conversion or format spec")
+            if values is not None:
+                out.append(values[name])
+            elif ev is not None:
+                out.append(self.slot(name, ev, s))
+        return "".join(out)
 
     # -- variants (annals_v0.md §2)
 
     def holds(self, when: dict[str, Any], ev: Event) -> bool:
-        """Whether a variant's ``when`` holds: roles present or absent, a payload enum, an edge."""
-        has = all(ev.person(ROLE_CODES[r]) is not None for r in when.get("has", []))
-        lacks = all(ev.person(ROLE_CODES[r]) is None for r in when.get("lacks", []))
+        """Whether a variant's ``when`` holds: roles, a payload enum, an edge, a named motive."""
+        has = all(self._filled(r, ev) for r in when.get("has", []))
+        lacks = all(not self._filled(r, ev) for r in when.get("lacks", []))
         edge = "edge" not in when or ev.cause(EDGE_CODES[str(when["edge"])]) is not None
-        return has and lacks and edge and self._payload_holds(when, ev)
+        return (
+            has
+            and lacks
+            and edge
+            and self._payload_holds(when, ev)
+            and self._motive_holds(when, ev)
+        )
+
+    def _filled(self, role: str, ev: Event) -> bool:
+        if role == "father":
+            return self._father_row(ev) is not None
+        return ev.person(ROLE_CODES[role]) is not None
+
+    def _motive_holds(self, when: dict[str, Any], ev: Event) -> bool:
+        if "motive" not in when:
+            return True
+        found = ev.cause(MOTIVATED_BY)
+        named = found is not None and found[1] is not None
+        return bool(named == (when["motive"] == "named"))
 
     def _payload_holds(self, when: dict[str, Any], ev: Event) -> bool:
         payload = when.get("payload", {})
         if not isinstance(payload, dict) or not payload:
             return True
-        slots = self.t.payloads[ev.kind]["slots"]
-        layout = {str(s["name"]): (i, s) for i, s in enumerate(slots)}
+        layout = {str(s["name"]): (i, s) for i, s in enumerate(self.t.payloads[ev.kind]["slots"])}
         for name, want in payload.items():
             i, slot = layout[name]
             ids = self.t.enums[slot["enum"]]["ids"]
+            if not 0 <= ev.payload[i] < len(ids):
+                raise AnnalsError(
+                    f"event {ev.id}: code {ev.payload[i]} is outside the enum {slot['enum']}"
+                )
             if ids[ev.payload[i]] != want:
                 return False
         return True
@@ -604,98 +826,88 @@ class Renderer:
 
     # -- groups (annals_v0.md §5) and prologues (§6)
 
+    def group_events(self, members: set[int] | None) -> list[Event]:
+        """The group's events in id order: a member's, or castless with a told edge into them."""
+        events = sorted(self.c.events.values(), key=lambda e: e.id)
+        if members is None:
+            return events
+        chosen = {ev.id for ev in events if set(ev.persons()) & members}
+        chosen |= {ev.id for ev in events if not ev.persons() and ev.triggered_by(chosen)}
+        return [ev for ev in events if ev.id in chosen]
+
     def house_members(self, house: int) -> set[int]:
-        """The keyframe's members of ``house`` and every in-run birth to a member parent."""
+        """The keyframe's members of ``house`` and every person whose house walk ends there."""
         members = {p for p, h in self.w.members.items() if h == house}
-        for ev in sorted(self.c.events.values(), key=lambda e: e.id):
-            if ev.kind != "BIRTH":
-                continue
-            child = ev.person(TARGET)
-            row = None if child is None else self.c.life.get(child)
-            if (
-                child is not None
-                and row is not None
-                and (row.father in members or (row.father == 0 and row.mother in members))
-            ):
-                members.add(child)
+        members |= {p for p in self.c.life if self.kin.house_of(p, Provenance()) == house}
         return members
 
     def line_members(self, root: int) -> set[int]:
         """``root`` and every descendant through the life-course rows (channel A, then keyframe)."""
-        rows = {**self.w.kf_life, **self.c.life}
         members = {root}
         changed = True
         while changed:
             changed = False
-            for row in rows.values():
+            for row in self.kin.rows.values():
                 if row.person not in members and (row.mother in members or row.father in members):
                     members.add(row.person)
                     changed = True
         return members
 
-    def _prologue_fill(self, pid: str, values: dict[str, str], s: Sentence) -> None:
+    def _prologue_sentence(self, pid: str, values: dict[str, str], s: Sentence) -> Sentence:
         entry = self.t.prologue[pid]
         s.template, s.version, s.prologue = pid, int(entry["version"]), True
-        text = str(entry["text"]).format(**values)
+        text = self.fill(str(entry["text"]), None, s, values)
         s.text = text[:1].upper() + text[1:]
+        self.used[pid] += 1
+        return s
 
     def prologue(self, house: int, members: set[int]) -> list[Sentence]:
-        """The house's opening from the keyframe extract: living count, ancestors, tenures."""
+        """The house's opening from the keyframe extract: living count, ancestors and tenures."""
         cal = self.w.calendar
-        out: list[Sentence] = []
         living = sorted(
             p for p in members if p in self.w.kf_life and self.w.kf_life[p].exit_tick is None
         )
-        s = Sentence(
-            "",
-            "",
-            0,
-            sources={f"house/{house}", *(f"kf:life/{p}" for p in living)},
-            persons=set(living),
-        )
-        self._prologue_fill(
-            "prologue.house",
-            {"house": self.w.houses.get(house, f"house #{house}"), "living": str(len(living))},
-            s,
-        )
-        out.append(s)
+        prov = Provenance(set(living), {f"house/{house}", *(f"kf:life/{p}" for p in living)})
+        count = f"{cardinal(len(living))} living member" + ("" if len(living) == 1 else "s")
+        house_name = self.w.houses.get(house, f"house #{house}")
+        out = [
+            self._prologue_sentence(
+                "prologue.house",
+                {"house": house_name, "living": count},
+                Sentence("", "", 0, prov=prov),
+            )
+        ]
         for pid in sorted(members):
             row = self.w.kf_life.get(pid)
             if row is None or row.exit_tick is None:
                 continue
-            s = Sentence("", "", 0, sources={row.source})
-            who = self.designate(pid, s)
-            self._prologue_fill(
-                "prologue.ancestor",
-                {
-                    "person": who,
-                    "birth_date": full_date(row.birth_tick, cal),
-                    "death_date": full_date(row.exit_tick, cal),
-                },
-                s,
-            )
-            out.append(s)
-        for ten in self.tenures_of(members):
+            s = Sentence("", "", 0, prov=Provenance(sources={row.source}))
+            values = {
+                "person": self.kin.designate(pid, s.prov),
+                "birth_date": full_date(row.birth_tick, cal),
+                "death_date": full_date(row.exit_tick, cal),
+            }
+            out.append(self._prologue_sentence("prologue.ancestor", values, s))
+        for ten in (t for t in self.w.tenures if t.holder in members):
             s = Sentence(
-                "", "", 0, sources={f"kf:tenure/{ten.title}/{ten.start}", f"title/{ten.title}"}
+                "",
+                "",
+                0,
+                prov=Provenance(
+                    sources={f"kf:tenure/{ten.title}/{ten.start}", f"title/{ten.title}"}
+                ),
             )
             values = {
-                "holder": self.designate(ten.holder, s),
+                "holder": self.kin.designate(ten.holder, s.prov),
                 "title": self.w.titles.get(ten.title, f"title #{ten.title}"),
                 "start_date": full_date(ten.start, cal),
             }
             if ten.end is None:
-                self._prologue_fill("prologue.tenure.open", values, s)
+                out.append(self._prologue_sentence("prologue.tenure.open", values, s))
             else:
-                self._prologue_fill(
-                    "prologue.tenure", {**values, "end_date": full_date(ten.end, cal)}, s
-                )
-            out.append(s)
+                values["end_date"] = full_date(ten.end, cal)
+                out.append(self._prologue_sentence("prologue.tenure", values, s))
         return out
-
-    def tenures_of(self, members: set[int]) -> list[Tenure]:
-        """The keyframe's tenure rows held by a member, by title then start."""
-        return [t for t in self.w.tenures if t.holder in members]
 
 
 @dataclass
@@ -707,16 +919,23 @@ class Annal:
     lines: list[str] = field(default_factory=list)
     rows: list[str] = field(default_factory=list)
     omitted: Counter[str] = field(default_factory=Counter)
+    castless: Counter[str] = field(default_factory=Counter)
 
 
-def _group(r: Renderer, group: str) -> tuple[str, set[int] | None, list[Sentence]]:
+def group_of(r: Renderer, group: str) -> tuple[str, set[int] | None, list[Sentence]]:
+    """A group's title, members (``None`` for every year) and prologue sentences."""
     kind, _, arg = group.partition(":")
     if kind == "year":
         return "The annals of the years", None, []
     if kind == "line":
         root = int(arg)
-        s = Sentence("", "", 0)
-        return f"The annals of the line of {r.designate(root, s)}", r.line_members(root), []
+        return (
+            f"The annals of the line of {r.kin.designate(root, Provenance())}",
+            r.line_members(root),
+            [],
+        )
+    if kind != "house":
+        raise AnnalsError(f"group {group!r} is not house:<id>, line:<id> or year")
     house = int(arg)
     members = r.house_members(house)
     return (
@@ -728,7 +947,7 @@ def _group(r: Renderer, group: str) -> tuple[str, set[int] | None, list[Sentence
 
 def render(r: Renderer, group: str) -> Annal:
     """Render one group: a house (``house:<id>``), a line (``line:<pid>``) or all (``year``)."""
-    title, members, prologue = _group(r, group)
+    title, members, prologue = group_of(r, group)
     annal = Annal(title, group)
     scope = set(r.t.scope)
     lines, rows = annal.lines, annal.rows
@@ -743,10 +962,13 @@ def render(r: Renderer, group: str) -> Annal:
         lines.extend(("", "## Before the chronicle began"))
         for s in prologue:
             emit(s)
+    chosen = r.group_events(members)
+    if members is not None:
+        for ev in r.c.events.values():
+            if not ev.persons() and ev not in chosen and ev.kind in scope:
+                annal.castless[ev.kind] += 1
     year: int | None = None
-    for ev in sorted(r.c.events.values(), key=lambda e: e.id):
-        if members is not None and not set(ev.persons()) & members:
-            continue
+    for ev in chosen:
         if ev.kind not in scope:
             annal.omitted[ev.kind] += 1
             continue
@@ -759,44 +981,94 @@ def render(r: Renderer, group: str) -> Annal:
     return annal
 
 
-def templates_digest(path: Path = TEMPLATES) -> bytes:
-    """XXH3-64 of the template file's bytes, little-endian: part of every annals digest."""
-    return int(_canon.xxh3_64(path.read_bytes())).to_bytes(8, "little")
+def templates_digest(path: Path = TEMPLATES) -> int:
+    """XXH3-64 of the template file's bytes: part of every annals digest (a 16-hex-digit token)."""
+    return int(_canon.xxh3_64(path.read_bytes()))
 
 
-def finish(annal: Annal, r: Renderer, tdigest: bytes) -> tuple[str, str]:
-    """The text and the sidecar as files: header, rows, the omission trailer and the digest."""
+def annals_digest(text: str, side_body: str, tdigest: int) -> str:
+    """``XXH3-64("rehoboam/annals/v0" || templates_digest LE || text || LF || sidecar)``, 16 hex."""
+    data = (
+        D_ANNALS
+        + tdigest.to_bytes(8, "little")
+        + text.encode("utf-8")
+        + b"\n"
+        + side_body.encode("utf-8")
+    )
+    return f"{int(_canon.xxh3_64(data)):016x}"
+
+
+def finish(annal: Annal, r: Renderer, tdigest: int) -> tuple[str, str]:
+    """The text and the sidecar as files: the header, rows, trailers and the digest line."""
     text = "\n".join(annal.lines) + "\n"
-    cal = r.w.calendar
     head = (
-        f"#{FORMAT} world={r.w.id} group={annal.group} templates={r.t.version} "
-        f"templates_digest={tdigest.hex()} calendar={cal.days_per_year}"
+        f"#{FORMAT} world={r.w.id} group={annal.group} timeline={r.c.timeline} "
+        f"chronicle_digest={r.c.digest} registry_version={r.c.registry_version} "
+        f"keyframe_extract={r.w.extract_digest} state_hash={r.w.state_hash} "
+        f"manifest_hash={r.w.manifest_hash} templates={r.t.version} "
+        f"templates_digest={tdigest:016x} renderer={RENDERER} calendar={r.w.calendar.days_per_year}"
     )
     body = [head, *annal.rows]
-    if annal.omitted:
-        kinds = ", ".join(f"{k} x{n}" for k, n in sorted(annal.omitted.items()))
-        n = sum(annal.omitted.values())
-        body.append(f"# omitted: {n} event(s) of kinds outside the template set: {kinds}")
-    side = "\n".join(body) + "\n"
-    digest = _canon.xxh3_64(
-        D_ANNALS + tdigest + text.encode("utf-8") + b"\n" + side.encode("utf-8")
+    trailers = (
+        ("omitted", annal.omitted, "of kinds outside the template set"),
+        ("castless", annal.castless, "with no cast and no told triggered edge into this group"),
     )
-    return text, side + f"digest {int(digest):016x}\n"
+    for label, counter, what in trailers:
+        if counter:
+            kinds = ", ".join(f"{k} x{n}" for k, n in sorted(counter.items()))
+            body.append(f"# {label}: {sum(counter.values())} event(s) {what}: {kinds}")
+    side = "\n".join(body) + "\n"
+    return text, side + f"digest {annals_digest(text, side, tdigest)}\n"
 
 
 def render_group(
     world_dir: Path,
     group: str,
     templates: Any,  # noqa: ANN401
-    attrs: dict[int, tuple[str, str, list[str]]],
+    dictionary: Dictionary,
 ) -> tuple[str, str, Renderer]:
     """Load a fixture directory and render one group: ``(text, sidecar, renderer)``."""
-    r = Renderer(
-        templates, load_world(world_dir), load_chronicle(world_dir / "chronicle_A.txt"), attrs
-    )
+    chron = load_chronicle(world_dir / "chronicle_A.txt", dictionary)
+    r = Renderer(templates, load_world(world_dir), chron, dictionary)
     annal = render(r, group)
     text, side = finish(annal, r, templates_digest(templates.path))
     return text, side, r
+
+
+def manifest(world: str, groups: dict[str, str], r: Renderer, tdigest: int) -> str:
+    """The annals manifest of one world: its groups in (kind, numeric id) order, with digests."""
+    head = (
+        f"#{MANIFEST_FORMAT} world={world} chronicle_digest={r.c.digest} "
+        f"templates={r.t.version} templates_digest={tdigest:016x}"
+    )
+    order = sorted(groups, key=lambda g: (g.partition(":")[0], int(g.partition(":")[2] or 0)))
+    lines = [head, *(f"group {g} {groups[g]}" for g in order)]
+    digest = _canon.xxh3_64(b"".join(line.encode("utf-8") + b"\n" for line in lines))
+    return "\n".join([*lines, f"digest {int(digest):016x}"]) + "\n"
+
+
+def fixture_groups(world: str) -> tuple[str, ...]:
+    """The groups a fixture renders: each house of its extract, a named person's line, the years."""
+    w = load_world(FIXTURES / world)
+    groups = tuple(f"house:{h}" for h in sorted(set(w.members.values())))
+    if w.members:
+        groups += (f"line:{min(w.persons)}",)
+    return (*groups, "year")
+
+
+def verify(text_path: Path, side_path: Path) -> list[str]:
+    """Recompute a committed sidecar's digest from its text and sidecar files (REV-SPR-029 F26)."""
+    side = side_path.read_text(encoding="utf-8")
+    body, _, tail = side.rpartition("digest ")
+    header = re.search(r"templates_digest=([0-9a-f]{16})", side.splitlines()[0])
+    if header is None or not tail.strip():
+        return [f"{side_path}: no header with templates_digest, or no digest line"]
+    want = annals_digest(text_path.read_text(encoding="utf-8"), body, int(header[1], 16))
+    return (
+        []
+        if want == tail.strip()
+        else [f"{side_path}: digest {tail.strip()} is not the recomputed {want}"]
+    )
 
 
 # --- the self-test -------------------------------------------------------------------------------
@@ -804,115 +1076,361 @@ def render_group(
 
 @dataclass(frozen=True)
 class Control:
-    """The positive controls (each must FAIL its check)."""
+    """The positive control in force (each must FAIL its check by name)."""
 
-    no_event_id: bool = False
-    undeclared_slot: bool = False
-    state_read: bool = False
+    name: str = ""
 
 
 def _plant_templates(t: Any, control: Control) -> None:  # noqa: ANN401
-    entries = t.by_kind["DEATH"]
-    natural = next(e for e in entries if e["id"] == "death.natural")
-    if control.undeclared_slot:
+    natural = next(e for e in t.by_kind["DEATH"] if e["id"] == "death.natural")
+    if control.name == "undeclared-slot":
         natural["text"] = str(natural["text"]) + " The instrument was {instrument}."
-    if control.state_read:
+    if control.name == "state-read":
         natural["text"] = str(natural["text"]) + " The title passed to {state.title.holder}."
 
 
-def check_provenance(text: str, side: str, chron: Chronicle, scope: set[str]) -> list[str]:
-    """V-NAR-05: one row per sentence; chronicle rows cite events, prologue rows keyframe rows."""
-    rows = {int(line.split(" ")[1]): line for line in side.splitlines() if line[:2] in {"S ", "P "}}
+def _plant_sidecar(side: str, control: Control) -> str:
+    """The sidecar mutants of REV-SPR-029 F2 (P1, P3, P4, P5, P6), applied to the file's rows."""
+    lines = side.splitlines()
+    rows = [i for i, line in enumerate(lines) if line.startswith("S ")]
+    if len(rows) < MIN_ROWS_FOR_MUTANTS:
+        return side
+    first, second = rows[0], rows[1]
+    tag, n, tid, ver, events, persons, sources = lines[first].split(" ")
+    match control.name:
+        case "row-drops-own":
+            own = min(int(e) for e in events[1:-1].split(","))
+            events = "[" + ",".join(e for e in events[1:-1].split(",") if int(e) != own) + "]"
+        case "body-as-prologue":
+            tag, sources = "P", "[kf:life/1]"
+        case "missing-kf-source":
+            prow = next((i for i, line in enumerate(lines) if line.startswith("P ")), first)
+            lines[prow] = lines[prow].rsplit(" ", 1)[0] + " [kf:life/99999]"
+            return "\n".join(lines) + "\n"
+        case "unrelated-event":
+            events = events[:-1] + ",999999]"
+        case "rows-swapped":
+            a, b = lines[first].split(" "), lines[second].split(" ")
+            lines[first] = " ".join([a[0], a[1], *b[2:]])
+            lines[second] = " ".join([b[0], b[1], *a[2:]])
+            return "\n".join(lines) + "\n"
+        case _:
+            return side
+    lines[first] = " ".join([tag, n, tid, ver, events, persons, sources])
+    return "\n".join(lines) + "\n"
+
+
+Row = tuple[str, str, int, list[int], list[int], list[str]]
+
+
+def _parse_rows(side: str) -> dict[int, Row]:
+    rows: dict[int, Row] = {}
+    for line in side.splitlines():
+        if line[:2] not in {"S ", "P "}:
+            continue
+        tag, n, tid, ver, events, persons, sources = line.split(" ")
+        rows[int(n)] = (
+            tag,
+            tid,
+            int(ver),
+            [int(e) for e in events[1:-1].split(",") if e],
+            [int(p) for p in persons[1:-1].split(",") if p],
+            [s for s in sources[1:-1].split(",") if s],
+        )
+    return rows
+
+
+def _expected_row(r: Renderer, ev: Event) -> tuple[str, set[int], set[int], str]:
+    """From the chronicle and the templates alone: the variant, cited events, persons and text."""
+    variant = r.variant(ev)
+    assert variant is not None
+    s = Sentence("", "", 0, {ev.id})
+    text = r.fill(str(variant["text"]), ev, s)  # the same substitution, into a scratch sentence
+    return str(variant["id"]), s.events, s.prov.persons, text[:1].upper() + text[1:]
+
+
+def _kf_source_exists(source: str, w: World) -> bool:
+    kind, _, rest = source.partition("/")
+    if kind == "kf:life":
+        return int(rest) in w.kf_life
+    if kind == "kf:member":
+        return int(rest) in w.members
+    if kind == "kf:tenure":
+        title, _, start = rest.partition("/")
+        return any(t.title == int(title) and t.start == int(start) for t in w.tenures)
+    return True
+
+
+def _check_prologue_row(n: int, row: Row, first_year: int) -> list[str]:
+    _, _, _, events, _, sources = row
+    out = []
+    if n >= first_year:
+        out.append(f"line {n}: a prologue row after the first year heading")
+    if events:
+        out.append(f"line {n}: a prologue row cites events {events}")
+    if not any(s.startswith("kf:") for s in sources):
+        out.append(f"line {n}: a prologue sentence cites no keyframe row")
+    return out
+
+
+def _check_body_row(n: int, line: str, row: Row, r: Renderer) -> tuple[list[str], int | None]:
+    _, tid, _, events, persons, _ = row
+    kind_of = {str(e["id"]): kind for kind, entries in r.t.by_kind.items() for e in entries}
+    own = [e for e in events if e in r.c.events and kind_of.get(tid) == r.c.events[e].kind]
+    if len(own) != 1:
+        return [
+            f"line {n}: the row's events {events} hold no single own event of template {tid}'s kind"
+        ], None
+    out = []
+    want_tid, want_events, want_persons, want_text = _expected_row(r, r.c.events[own[0]])
+    if tid != want_tid:
+        out.append(f"line {n}: template {tid} where event {own[0]} renders through {want_tid}")
+    if line != want_text:
+        out.append(f"line {n}: the text is not the rendering of event {own[0]} through {tid}")
+    if set(events) != want_events:
+        out.append(
+            f"line {n}: events {sorted(events)} differ from the own event and its cited told "
+            f"causes {sorted(want_events)}"
+        )
+    if set(persons) != want_persons:
+        out.append(
+            f"line {n}: persons {sorted(persons)} differ from the cast and the parents designation "
+            f"reaches {sorted(want_persons)}"
+        )
+    return out, own[0]
+
+
+def check_provenance(text: str, side: str, r: Renderer, group: str) -> list[str]:
+    """V-NAR-05 (R2): the sidecar re-derived from the chronicle, the templates and the extract."""
+    rows = _parse_rows(side)
     problems: list[str] = []
-    for n, line in enumerate(text.splitlines(), 1):
+    lines = text.splitlines()
+    year_headings = [
+        n for n, line in enumerate(lines, 1) if line.startswith("## ") and "chronicle" not in line
+    ]
+    first_year = year_headings[0] if year_headings else len(lines) + 1
+    seen_own: Counter[int] = Counter()
+    for n, line in enumerate(lines, 1):
         if not line or line.startswith("#"):
             continue
         row = rows.pop(n, None)
         if row is None:
             problems.append(f"line {n} has no sidecar row: {line!r}")
             continue
-        tag, _, _, _, events, _, sources = row.split(" ")
-        ids = [int(e) for e in events[1:-1].split(",") if e]
-        if tag == "S" and not ids:
-            problems.append(f"line {n}: a chronicle sentence cites no event")
-        if tag == "P" and "kf:" not in sources:
-            problems.append(f"line {n}: a prologue sentence cites no keyframe row")
-        for eid in ids:
-            if eid not in chron.events:
-                problems.append(f"line {n}: event {eid} is not in the chronicle")
-            elif chron.events[eid].kind not in scope:
-                kind = chron.events[eid].kind
-                problems.append(f"line {n}: event {eid} ({kind}) is outside the template scope")
+        if row[0] == "P":
+            problems += _check_prologue_row(n, row, first_year)
+        else:
+            found, own = _check_body_row(n, line, row, r)
+            problems += found
+            if own is not None:
+                seen_own[own] += 1
+        problems += [
+            f"line {n}: source {s} is not a row of the keyframe extract"
+            for s in row[5]
+            if not _kf_source_exists(s, r.w)
+        ]
     problems.extend(f"sidecar row for line {n} has no sentence" for n in sorted(rows))
+    _, members, _ = group_of(r, group)
+    for ev in r.group_events(members):
+        if ev.kind in set(r.t.scope) and seen_own[ev.id] != 1:
+            problems.append(
+                f"event {ev.id} ({ev.kind}) is the own event of {seen_own[ev.id]} rows, not one"
+            )
     return problems
 
 
 def check_calendar() -> list[str]:
-    """Known answers of the two calendars, before and after the epoch."""
+    """Known answers of the two calendars, before and after the epoch; the words; q8_8."""
     c360, c365 = Calendar(360, "Y"), Calendar(365, "Y")
+    day = MINUTES_PER_DAY
     cases = [
         (c360, 0, (0, 1, 1)),
-        (c360, 1440 * 73, (0, 3, 14)),
-        (c360, 1440 * 360 * 12 - 1440, (11, 12, 30)),
-        (c360, -1440, (-1, 12, 30)),
-        (c360, -1440 * 360, (-1, 1, 1)),
-        (c365, 1440 * 59, (0, 3, 1)),
-        (c365, 1440 * 364, (0, 12, 31)),
-        (c365, 1440 * 365 + 1439, (1, 1, 1)),
+        (c360, day * 73, (0, 3, 14)),
+        (c360, day * 360 * 12 - day, (11, 12, 30)),
+        (c360, -day, (-1, 12, 30)),
+        (c360, -day * 360, (-1, 1, 1)),
+        (c365, day * 59, (0, 3, 1)),
+        (c365, day * 364, (0, 12, 31)),
+        (c365, day * 365 + day - 1, (1, 1, 1)),
         (c365, -1, (-1, 12, 31)),
     ]
     out = [
-        f"{cal.days_per_year}-day: tick {tick} gave {cal.date(tick)}, not {want}"
-        for cal, tick, want in cases
-        if cal.date(tick) != want
+        f"{c.days_per_year}-day: tick {t} gave {c.date(t)}, not {w}"
+        for c, t, w in cases
+        if c.date(t) != w
     ]
     words = [
         (1, "first"),
+        (2, "second"),
         (12, "twelfth"),
-        (13, "13th"),
-        (21, "21st"),
-        (22, "22nd"),
-        (23, "23rd"),
-        (111, "111th"),
-        (112, "112th"),
+        (13, "thirteenth"),
+        (20, "twentieth"),
+        (21, "twenty-first"),
+        (32, "thirty-second"),
+        (100, "one hundredth"),
+        (111, "one hundred and eleventh"),
     ]
     out += [
         f"ordinal({n}) = {ordinal(n)!r}, not {want!r}" for n, want in words if ordinal(n) != want
     ]
+    cardinals = ((0, "zero"), (1, "one"), (21, "twenty-one"))
+    out += [f"cardinal({n}) = {cardinal(n)!r}" for n, want in cardinals if cardinal(n) != want]
     if q8_8(16128) != "63.0" or q8_8(64) != "0.25" or q8_8(-384) != "-1.5":
         out.append("q8_8 rendering")
+    try:
+        Calendar(364, "Y")
+        out.append("a 364-day calendar was accepted")
+    except AnnalsError:
+        pass
     return out
 
 
-def check_fixture_registry(
-    chron: Chronicle, registry: dict[str, object], attrs: dict[int, tuple[str, str, list[str]]]
-) -> list[str]:
-    """Every fixture EVENT agrees with the Registry's verb table (with the next M2 delta)."""
-    verbs: dict[str, Any] = dict(registry["verbs"])  # type: ignore[call-overload]
-    if REGISTRY_DELTA.exists():
-        verbs.update(tomllib.loads(REGISTRY_DELTA.read_text(encoding="utf-8")).get("verbs", {}))
-    names = sorted(verbs)
-    acts: list[str] = registry["act_classes"]["ids"]  # type: ignore[index]
+def check_dictionary(chron: Chronicle, d: Dictionary) -> list[str]:
+    """Every fixture EVENT agrees with the dictionary the chronicle header names."""
     out: list[str] = []
     for rec in chron.records:
         if rec.kind != "EVENT":
             continue
         verb = str(rec["verb"])
-        if verb not in verbs:
-            out.append(f"event {rec['event_id']}: verb {verb} is not in the Registry")
+        if verb not in d.verbs:
+            out.append(f"event {rec['event_id']}: verb {verb} is not in the dictionary")
             continue
-        bits = sum(1 << acts.index(a) for a in verbs[verb]["act_classes"])
-        want = (names.index(verb), bits, verbs[verb]["tellability"])
+        bits = sum(1 << d.act_classes.index(str(a)) for a in d.verbs[verb]["act_classes"])
+        want = (d.verb_names.index(verb), bits, d.verbs[verb]["tellability"])
         got = (rec["verb_id"], rec["act_classes"], rec["tellability"])
         if got != want:
             out.append(
                 f"event {rec['event_id']} ({verb}): (verb_id, act_classes, tellability) {got} "
-                f"differs from the Registry's {want}"
+                f"is not {want}"
             )
-        for attr_id, *_ in rec["snapshots"]:
-            if attr_id not in attrs:
-                out.append(f"event {rec['event_id']}: snapshot attribute {attr_id} is unknown")
+        out += [
+            f"event {rec['event_id']}: snapshot attribute {a} is unknown"
+            for a, *_ in rec["snapshots"]
+            if a not in d.attrs
+        ]
     return out
+
+
+class History:
+    """A possible history under M2's and M7's rules, as the fixtures must be (annals_v0.md §12)."""
+
+    def __init__(self, chron: Chronicle, world: World) -> None:
+        """Track holders, claims and the dead while walking the events in id order."""
+        self.c, self.w, self.cal = chron, world, world.calendar
+        self.holders: dict[int, int | None] = {
+            t.title: t.holder for t in world.tenures if t.end is None
+        }
+        self.claims: dict[int, set[int]] = {}  # claimant -> titles with an unrenounced claim
+        self.problems: list[str] = []
+
+    def same_tick(self, ev: Event, kind: str) -> list[Event]:
+        """The events of ``kind`` at the event's tick."""
+        return [e for e in self.c.events.values() if e.tick == ev.tick and e.kind == kind]
+
+    def birth(self, ev: Event) -> None:
+        """A birth nine months after a conception at or after the epoch, the father then alive."""
+        if self.cal.month_index(ev.tick) < GESTATION_MONTHS:
+            self.problems.append(
+                f"event {ev.id}: a birth from a pregnancy pending at genesis (SPR-019 D-08)"
+            )
+        child = ev.person(TARGET)
+        row = None if child is None else self.c.life.get(child)
+        if row is None or row.father not in self.c.exits:
+            return
+        if (
+            self.cal.month_index(self.c.exits[row.father])
+            < self.cal.month_index(ev.tick) - GESTATION_MONTHS
+        ):
+            self.problems.append(
+                f"event {ev.id}: a birth more than nine months after the father's death"
+            )
+
+    def death(self, ev: Event) -> None:
+        """A dead holder's title passes or falls vacant in the same instant (SAGA-13)."""
+        dead = ev.person(TARGET)
+        for title, holder in self.holders.items():
+            if holder != dead:
+                continue
+            passed = [
+                e
+                for e in self.same_tick(ev, "SUCCEED")
+                if e.person(TARGET) == dead and e.payload[:1] == (title,)
+            ]
+            vacant = [
+                e for e in self.same_tick(ev, "INTERREGNUM_CRISIS") if e.payload[:1] == (title,)
+            ]
+            if not passed and not vacant:
+                self.problems.append(
+                    f"event {ev.id}: the holder of title {title} dies with no SUCCEED or "
+                    "INTERREGNUM_CRISIS in the instant"
+                )
+            self.holders[title] = None
+
+    def m7(self, ev: Event) -> None:
+        """M7's rules: payloads name the title, claims arise at successions and depositions."""
+        if not ev.payload:
+            self.problems.append(
+                f"event {ev.id} ({ev.kind}): an M7 payload names no title (envelope_v0.md §1)"
+            )
+            return
+        title, actor, target = ev.payload[0], ev.person(ACTOR), ev.person(TARGET)
+        if ev.kind == "SUCCEED":
+            if self.holders.get(title) not in (target, None):
+                self.problems.append(f"event {ev.id}: SUCCEED's target is not the title's holder")
+            self.holders[title] = actor
+        elif ev.kind == "DEPOSED":
+            self.deposed(ev, title, actor, target)
+        elif ev.kind == "CLAIM_CREATED":
+            self.claim(ev, title, actor)
+        elif ev.kind == "CLAIM_RENOUNCED" and actor is not None:
+            self.claims.get(actor, set()).discard(title)
+        elif ev.kind == "INTERREGNUM_CRISIS":
+            self.holders[title] = None
+
+    def deposed(self, ev: Event, title: int, actor: int | None, target: int | None) -> None:
+        """A deposer holds an unrenounced claim; the deposed gains one in the instant."""
+        if actor is not None and title not in self.claims.get(actor, set()):
+            self.problems.append(
+                f"event {ev.id}: the deposer holds no unrenounced claim to title {title}"
+            )
+        if not any(e.person(ACTOR) == target for e in self.same_tick(ev, "CLAIM_CREATED")):
+            self.problems.append(f"event {ev.id}: the deposed gains no claim in the instant")
+        self.holders[title] = None
+
+    def claim(self, ev: Event, title: int, actor: int | None) -> None:
+        """A claim arises from a succession, a deposition or an interregnum it is triggered by."""
+        causes = {
+            self.c.events[c].kind
+            for c, code, _, _, _, told in ev.causes
+            if told and code == TRIGGERED and c in self.c.events
+        }
+        if not causes & CLAIM_CAUSES:
+            self.problems.append(
+                f"event {ev.id}: a claim created with no triggered edge to a succession, "
+                "deposition or interregnum"
+            )
+        if actor is not None:
+            self.claims.setdefault(actor, set()).add(title)
+
+    def murder_attempt(self, ev: Event) -> None:
+        """T1's edges: motivated_by, or triggered to a MENTAL_BREAK (envelope_v0.md §3)."""
+        for c, code, _, _, _, _ in ev.causes:
+            cause = self.c.events.get(c)
+            if code == TRIGGERED and cause is not None and cause.kind != "MENTAL_BREAK":
+                self.problems.append(f"event {ev.id}: a MURDER_ATTEMPT triggered by a {cause.kind}")
+
+    def run(self) -> list[str]:
+        """Walk the chronicle; every problem found."""
+        for ev in sorted(self.c.events.values(), key=lambda e: e.id):
+            if ev.kind == "BIRTH":
+                self.birth(ev)
+            elif ev.kind == "DEATH":
+                self.death(ev)
+            elif ev.kind in M7_KINDS:
+                self.m7(ev)
+            elif ev.kind == "MURDER_ATTEMPT":
+                self.murder_attempt(ev)
+        return self.problems
 
 
 def _golden_paths(golden: Path, world: str, group: str) -> tuple[Path, Path]:
@@ -926,103 +1444,154 @@ class Run:
 
     results: list[tuple[str, list[str]]] = field(default_factory=list)
     stale: list[str] = field(default_factory=list)
-    rendered: dict[tuple[str, str], tuple[str, str]] = field(default_factory=dict)
     used: Counter[str] = field(default_factory=Counter)
+    kinds_used: set[str] = field(default_factory=set)
+    provenance: list[str] = field(default_factory=list)
+    determinism: list[str] = field(default_factory=list)
+    injective: list[str] = field(default_factory=list)
 
     def add(self, name: str, problems: list[str]) -> None:
         """Record a check's outcome."""
         self.results.append((name, problems))
 
 
-def _render_all(
-    run: Run,
-    t: Any,  # noqa: ANN401
-    attrs: dict[int, tuple[str, str, list[str]]],
-    control: Control,
-    golden: Path,
-) -> tuple[list[str], list[str]]:
-    provenance: list[str] = []
-    determinism: list[str] = []
-    for world, groups in FIXTURE_GROUPS.items():
-        for group in groups:
-            text, side, r = render_group(FIXTURES / world, group, t, attrs)
-            if control.no_event_id and group == "year":
-                head, _, tail = text.partition("\n## ")
-                text = head + "\nThus the chronicle began, and the land was quiet.\n## " + tail
-            provenance += [
-                f"{world} {group}: {p}" for p in check_provenance(text, side, r.c, set(t.scope))
-            ]
-            again = render_group(FIXTURES / world, group, t, attrs)
-            if (again[0], again[1]) != (text, side):
-                determinism.append(f"{world} {group}: two renders differ")
-            run.used.update(r.used)
-            run.rendered[(world, group)] = (text, side)
-            for path, want in zip(_golden_paths(golden, world, group), (text, side), strict=True):
-                if not path.exists() or path.read_bytes() != want.encode("utf-8"):
-                    run.stale.append(str(path))
-    return provenance, determinism
+@dataclass(frozen=True)
+class Setup:
+    """The templates, the dictionary, the control and the golden directory of one run."""
+
+    t: Any
+    d: Dictionary
+    control: Control
+    golden: Path
+
+
+def _check_injective(r: Renderer, group: str) -> list[str]:
+    """No two persons of one annal share a designation (R6)."""
+    _, members, _ = group_of(r, group)
+    persons: set[int] = set(members or ())
+    for ev in r.group_events(members):
+        persons.update(ev.persons())
+    seen: dict[str, int] = {}
+    out: list[str] = []
+    for pid in sorted(persons):
+        text = r.kin.designate(pid, Provenance())
+        if text in seen:
+            out.append(f"{group}: persons {seen[text]} and {pid} share the designation {text!r}")
+        seen[text] = pid
+    return out
+
+
+def _render_one(run: Run, setup: Setup, world: str, group: str) -> tuple[str, Renderer]:
+    """Render a group twice, plant the control, run the per-group checks; the sidecar's digest."""
+    if setup.control.name == "network-import":
+        importlib.import_module("urllib.request")
+    text, side, r = render_group(FIXTURES / world, group, setup.t, setup.d)
+    again = render_group(FIXTURES / world, group, setup.t, setup.d)
+    if (again[0], again[1]) != (text, side):
+        run.determinism.append(f"{world} {group}: two renders differ")
+    if setup.control.name == "no-event-id":
+        text += PLANTED_LINE + "\n"
+    side = _plant_sidecar(side, setup.control)
+    run.provenance += [f"{world} {group}: {p}" for p in check_provenance(text, side, r, group)]
+    run.injective += _check_injective(r, group)
+    run.used.update(r.used)
+    run.kinds_used.update(ev.kind for ev in r.group_events(group_of(r, group)[1]) if r.variant(ev))
+    text_path, side_path = _golden_paths(setup.golden, world, group)
+    stale = [
+        p
+        for p, want in ((text_path, text), (side_path, side))
+        if not p.exists() or p.read_bytes() != want.encode("utf-8")
+    ]
+    run.stale += [str(p) for p in stale]
+    if not stale:  # the committed digest recomputes from the committed files (F26)
+        run.determinism += verify(text_path, side_path)
+    return side.rstrip("\n").rsplit(" ", 1)[1], r
+
+
+def _render_world(run: Run, setup: Setup, world: str) -> None:
+    digests: dict[str, str] = {}
+    r: Renderer | None = None
+    for group in fixture_groups(world):
+        digests[group], r = _render_one(run, setup, world, group)
+    assert r is not None
+    path = setup.golden / f"{world}.manifest.txt"
+    want = manifest(world, digests, r, templates_digest(setup.t.path))
+    if not path.exists() or path.read_text(encoding="utf-8") != want:
+        run.stale.append(str(path))
 
 
 def check_imports() -> list[str]:
-    """V-NAR-07: this file imports only the standard library and the sibling references."""
+    """V-NAR-07: the imports of this file are the standard library and the sibling references."""
     out: list[str] = []
     for line in Path(__file__).read_text(encoding="utf-8").splitlines():
-        words = line.split()
-        if len(words) > 1 and words[0] in {"import", "from"} and not line.startswith(" "):
-            module = words[1].split(".")[0]
-            if module not in ALLOWED_IMPORTS and module not in SIBLINGS and module != "__future__":
-                out.append(f"import of {module!r}")
-    loaded = {m for m in sys.modules if m in SIBLINGS}
-    return out + [
-        f"sibling {m} not loaded" for m in ("canonical_v0", "lint_templates") if m not in loaded
+        found = IMPORT_LINE.match(line)
+        if found is None:
+            continue
+        module = found[1].split(".")[0]
+        if module not in ALLOWED_IMPORTS and module not in SIBLINGS and module != "__future__":
+            out.append(f"import of {module!r}")
+    return out
+
+
+def check_modules() -> list[str]:
+    """V-NAR-07 (F16): after rendering, no network or process module is loaded."""
+    return [
+        f"module {m} was imported during the render" for m in FORBIDDEN_MODULES if m in sys.modules
     ]
+
+
+def _check_fixtures(d: Dictionary) -> list[str]:
+    problems: list[str] = []
+    for world in FIXTURE_WORLDS:
+        w = load_world(FIXTURES / world)
+        chron = load_chronicle(FIXTURES / world / "chronicle_A.txt", d)
+        problems += [f"{world}: {p}" for p in check_dictionary(chron, d) + History(chron, w).run()]
+    return problems
 
 
 def self_test(control: Control, golden: Path) -> Run:
-    """Run every check; the controls plant their defects first."""
+    """Run every check; the control plants its defect first."""
     run = Run()
     t = _lint.load_templates(TEMPLATES)
     _plant_templates(t, control)
-    registry = _lint.load_registry(REGISTRY)
-    attrs = attribute_index(registry)
-    lint_problems = _lint.check(t, _lint.load_emits(), registry)
+    lint_problems = _lint.check(t, _lint.load_specs(), _lint.load_registry(REGISTRY))
     run.add("2. template slots (annals_v0.md §3)", lint_problems)
-    run.add("3. no model (V-NAR-07)", check_imports())
     run.add("4. the calendar (05.1 §4.1)", check_calendar())
     if lint_problems:
+        run.add("3. no model (V-NAR-07)", check_imports())
         return run
-    provenance, determinism = _render_all(run, t, attrs, control, golden)
-    run.results.insert(0, ("1. provenance (V-NAR-05)", provenance))
-    fixture_problems = [
-        p
-        for world in FIXTURE_GROUPS
-        for p in check_fixture_registry(
-            load_chronicle(FIXTURES / world / "chronicle_A.txt"), registry, attrs
-        )
+    setup = Setup(t, load_dictionary(), control, golden)
+    for world in FIXTURE_WORLDS:
+        _render_world(run, setup, world)
+    run.results.insert(0, ("1. provenance (V-NAR-05)", run.provenance))
+    run.results.insert(2, ("3. no model (V-NAR-07)", check_imports() + check_modules()))
+    run.add("5. the fixtures: the dictionary, a possible history", _check_fixtures(setup.d))
+    run.add("6. determinism (byte-equal renders, the digest recomputes)", run.determinism)
+    unexercised = [
+        f"kind {k} is not exercised by any fixture" for k in t.scope if k not in run.kinds_used
     ]
-    run.add("5. fixtures agree with the Registry", fixture_problems)
-    run.add("6. determinism (byte-equal renders)", determinism)
-    kinds_used = {
-        str(e["kind"]) for entries in t.by_kind.values() for e in entries if e["id"] in run.used
-    }
-    run.add(
-        "7. coverage: every in-scope kind rendered",
-        [f"kind {k} is not exercised by any fixture" for k in t.scope if k not in kinds_used],
-    )
+    run.add("7. coverage: every in-scope kind rendered", unexercised)
+    run.add("9. designation is injective", run.injective)
     return run
 
 
 def write_golden(golden: Path) -> None:
-    """Regenerate every golden annal and sidecar from the fixtures (never by hand)."""
+    """Regenerate every golden annal, sidecar and manifest from the fixtures (never by hand)."""
     t = _lint.load_templates(TEMPLATES)
-    attrs = attribute_index(_lint.load_registry(REGISTRY))
+    d = load_dictionary()
+    tdigest = templates_digest(t.path)
     golden.mkdir(parents=True, exist_ok=True)
-    for world, groups in FIXTURE_GROUPS.items():
-        for group in groups:
-            text, side, _ = render_group(FIXTURES / world, group, t, attrs)
+    for world in FIXTURE_WORLDS:
+        digests: dict[str, str] = {}
+        for group in fixture_groups(world):
+            text, side, r = render_group(FIXTURES / world, group, t, d)
+            digests[group] = side.rstrip("\n").rsplit(" ", 1)[1]
             for path, data in zip(_golden_paths(golden, world, group), (text, side), strict=True):
                 path.write_bytes(data.encode("utf-8"))
                 print(f"wrote {path}")
+        path = golden / f"{world}.manifest.txt"
+        path.write_text(manifest(world, digests, r, tdigest), encoding="utf-8")
+        print(f"wrote {path}")
 
 
 def _report(run: Run, t: Any, control: Control) -> int:  # noqa: ANN401
@@ -1040,49 +1609,51 @@ def _report(run: Run, t: Any, control: Control) -> int:  # noqa: ANN401
     if failed:
         print("ANNALS v0: FAIL")
         return EXIT_SELFTEST
-    if control != Control():
+    if control.name:
         print("ANNALS v0: the control did not fail its check")
         return EXIT_SELFTEST
     for path in run.stale:
         print(f"STALE: {path} differs from the render (regenerate with --write)")
     if run.stale:
         return EXIT_STALE
-    print(f"8. golden annals: PASS ({sum(len(g) for g in FIXTURE_GROUPS.values())} groups)")
+    groups = sum(len(fixture_groups(w)) for w in FIXTURE_WORLDS)
+    print(f"8. golden annals and manifests: PASS ({groups} groups)")
     print("ANNALS v0: PASS")
     return EXIT_OK
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Command line: ``--check``, ``--write`` or ``render``."""
+    """Command line: ``--check``, ``--write``, ``render`` or ``verify``."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--golden-dir", type=Path, default=GOLDEN)
-    parser.add_argument("--control", choices=["no-event-id", "undeclared-slot", "state-read"])
+    parser.add_argument("--control", choices=CONTROLS)
     sub = parser.add_subparsers(dest="command")
     rp = sub.add_parser("render", help="render one group of a fixture directory to stdout")
     rp.add_argument("--world", type=Path, required=True)
     rp.add_argument("--group", default="year")
     rp.add_argument("--sidecar", action="store_true", help="print the sidecar instead of the text")
+    vp = sub.add_parser("verify", help="recompute a committed sidecar's digest")
+    vp.add_argument("--text", type=Path, required=True)
+    vp.add_argument("--sidecar", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "render":
-        t = _lint.load_templates(TEMPLATES)
         text, side, _ = render_group(
-            args.world, args.group, t, attribute_index(_lint.load_registry(REGISTRY))
+            args.world, args.group, _lint.load_templates(TEMPLATES), load_dictionary()
         )
         sys.stdout.write(side if args.sidecar else text)
         return EXIT_OK
+    if args.command == "verify":
+        problems = verify(args.text, args.sidecar)
+        print("\n".join(problems) if problems else f"OK: {args.sidecar} digest recomputes")
+        return EXIT_SELFTEST if problems else EXIT_OK
     if args.write:
         write_golden(args.golden_dir)
         return EXIT_OK
-    control = Control(
-        args.control == "no-event-id",
-        args.control == "undeclared-slot",
-        args.control == "state-read",
-    )
+    control = Control(args.control or "")
     run = self_test(control, args.golden_dir)
-    t = _lint.load_templates(TEMPLATES)
-    return _report(run, t, control)
+    return _report(run, _lint.load_templates(TEMPLATES), control)
 
 
 if __name__ == "__main__":

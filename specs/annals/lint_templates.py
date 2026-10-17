@@ -3,12 +3,14 @@
 Every slot of every template resolves to something the event it renders carries, as the emitting
 system declares it in its ``[[emits]]`` entry (``specs/systems/*.odd.toml``, a ``next/`` version
 superseding its frozen one, as ``lint_odd.py --next`` does): a role the kind fills, a snapshot it
-declares (attribute and role), a payload slot whose layout quotes the entry's ``when`` text
-verbatim, a motive only where the kind declares motives, a cause edge, or the tick. A slot outside
-that vocabulary is refused by name, so a template can never read world state or invent a fact.
-Every kind in scope has a template and a final variant without a condition, so every admitted event
-of an in-scope kind renders exactly one sentence. The enums a slot renders through agree with the
-Registry (``[motive_edges]``), and a prologue template uses only the keyframe-extract vocabulary.
+declares (attribute and role), a payload slot whose layout quotes the entry's whole ``Payload:
+[...]`` clause verbatim with one slot per item, a motive only where the kind declares motives, a
+cause edge, the tick, or ``father`` on ``BIRTH`` (the child's ``LIFE_ENTRY``). A slot outside that
+vocabulary, a conversion or a format spec is refused by name, so a template can never read world
+state or invent a fact. Every kind in scope has a template whose last variant alone is
+unconditional, every out-of-scope kind an emitter declares has a ``[[label]]`` (so a cause slot
+always renders), each enum's ids equal the emitter's column codes or the Registry list, and a
+prologue template uses only the keyframe-extract vocabulary.
 
 Run: python -I specs/annals/lint_templates.py [--templates FILE] [--specs DIR] [--next DIR]
      [--registry FILE]
@@ -27,6 +29,7 @@ import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -39,7 +42,8 @@ FORMAT = "rehoboam/annals/templates/v0"
 TICK_SLOTS = frozenset({"date", "year"})
 CAUSE_KINDS = ("triggered", "contingent", "motivated_by")
 EDGE_KINDS = frozenset(CAUSE_KINDS)
-WHEN_KEYS = frozenset({"has", "lacks", "payload", "edge"})
+WHEN_KEYS = frozenset({"has", "lacks", "payload", "edge", "motive"})
+MOTIVE_CONDITIONS = frozenset({"named", "unnamed"})
 PROLOGUE_SLOTS = frozenset(
     {
         "house",
@@ -55,28 +59,30 @@ PROLOGUE_SLOTS = frozenset(
 )
 PROLOGUE_IDS = ("prologue.house", "prologue.ancestor", "prologue.tenure", "prologue.tenure.open")
 SLOT_RE = re.compile(r"[a-z_]+(?:\.[a-zA-Z_]+)*")
+PAYLOAD_CLAUSE = re.compile(r"Payload: \[[^\]]*\]")
 WITNESS = "witness"
+FATHER = "father"
+FATHER_KINDS = frozenset(
+    {"BIRTH"}
+)  # the kinds whose target's LIFE_ENTRY is written in the same instant
+ROLE_SLOTS = frozenset({"actor", "target", "instrument", "witnesses", FATHER})
+OUTSIDE = (
+    "is outside the envelope: "
+    "a template binds only to roles, snapshots, payload, edges, the tick and a birth's father"
+)
 
 
 @dataclass(frozen=True)
 class Slot:
     """A parsed slot: its family and its arguments (annals_v0.md §3).
 
-    Families: ``tick`` (date, year), ``role`` (actor, target, instrument, witnesses), ``payload``
-    (one declared payload slot), ``snapshot`` (attribute, role), ``motive``, ``cause`` (edge kind).
+    Families: ``tick`` (date, year), ``role`` (actor, target, instrument, witnesses, father),
+    ``payload`` (one declared payload slot), ``snapshot`` (attribute, role), ``motive``, ``cause``
+    (edge kind).
     """
 
     family: str
     args: tuple[str, ...] = ()
-
-    @property
-    def text(self) -> str:
-        """The slot as written between braces."""
-        return (
-            ".".join((self.family, *self.args))
-            if self.family in {"payload", "snapshot", "cause"}
-            else (self.args[0] if self.args else self.family)
-        )
 
 
 @dataclass(frozen=True)
@@ -92,22 +98,32 @@ class Emit:
 
 
 @dataclass
+class Specs:
+    """What the lint reads from the system specs: emits by kind, and enum column codes."""
+
+    emits: dict[str, Emit] = field(default_factory=dict)
+    columns: dict[str, list[str]] = field(default_factory=dict)  # "system:entity.column" -> values
+    problems: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Templates:
     """The template file, loaded (``load_templates``)."""
 
     path: Path
-    raw: dict[str, object]
+    raw: dict[str, Any]
     version: str
     scope: tuple[str, ...]
-    enums: dict[str, dict[str, list[str]]]
-    payloads: dict[str, dict[str, object]]
-    by_kind: dict[str, list[dict[str, object]]] = field(default_factory=dict)
-    prologue: dict[str, dict[str, object]] = field(default_factory=dict)
+    enums: dict[str, dict[str, Any]]
+    payloads: dict[str, dict[str, Any]]
+    by_kind: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    labels: dict[str, dict[str, Any]] = field(default_factory=dict)
+    prologue: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
-def slot_fields(text: str) -> list[str]:
-    """The slot names of a template text, in order, through the stdlib formatter."""
-    return [name for _, name, _, _ in string.Formatter().parse(text) if name is not None]
+def slot_fields(text: str) -> list[tuple[str, str | None, str | None]]:
+    """``(name, conversion, format_spec)`` of each slot, through the stdlib formatter."""
+    return [(n, c, f) for _, n, f, c in string.Formatter().parse(text) if n is not None]
 
 
 def parse_slot(name: str) -> Slot | None:
@@ -116,8 +132,11 @@ def parse_slot(name: str) -> Slot | None:
         return None
     head, *rest = name.split(".")
     if not rest:
-        family = "tick" if head in TICK_SLOTS else "motive" if head == "motive" else "role"
-        return Slot(family, () if family == "motive" else (head,))
+        if head in TICK_SLOTS:
+            return Slot("tick", (head,))
+        if head == "motive":
+            return Slot("motive")
+        return Slot("role", (head,)) if head in ROLE_SLOTS or head == WITNESS else None
     arity = {"payload": 1, "snapshot": 2, "cause": 1}.get(head)
     if arity != len(rest) or (head == "cause" and rest[0] not in EDGE_KINDS):
         return None
@@ -130,13 +149,13 @@ def _str_list(value: object) -> tuple[str, ...]:
     return tuple(value)
 
 
-def _emits_of(path: Path) -> list[Emit]:
+def _read_spec(path: Path, specs: Specs, by_system: dict[str, list[Emit]]) -> None:
     spec = tomllib.loads(path.read_text(encoding="utf-8"))
     system = spec.get("system", {})
     sid = system.get("id") if isinstance(system, dict) else None
     if not isinstance(sid, str):
-        return []
-    out: list[Emit] = []
+        return
+    emits: list[Emit] = []
     for entry in spec.get("emits", []):
         if not isinstance(entry, dict) or not isinstance(entry.get("kind"), str):
             continue
@@ -145,7 +164,7 @@ def _emits_of(path: Path) -> list[Emit]:
             for s in entry.get("snapshots", [])
             if isinstance(s, dict)
         )
-        out.append(
+        emits.append(
             Emit(
                 sid,
                 str(entry["kind"]),
@@ -155,24 +174,42 @@ def _emits_of(path: Path) -> list[Emit]:
                 snaps,
             )
         )
-    return out
+    by_system[sid] = emits
+    for own in spec.get("owns", []):
+        if (
+            isinstance(own, dict)
+            and own.get("type") == "enum"
+            and isinstance(own.get("column"), str)
+        ):
+            specs.columns[f"{sid}:{own['column']}"] = [str(v) for v in own.get("values", [])]
 
 
-def load_emits(specs: Path = SPECS, next_dir: Path | None = NEXT) -> dict[str, Emit]:
-    """Every ``[[emits]]`` entry by kind; a ``next/`` spec supersedes the frozen spec of its id."""
+def load_specs(specs_dir: Path = SPECS, next_dir: Path | None = NEXT) -> Specs:
+    """The ``[[emits]]`` entries by kind (``next/`` supersedes frozen) and the enum column codes."""
+    specs = Specs()
     by_system: dict[str, list[Emit]] = {}
-    for path in sorted(p for p in specs.glob("*.odd.toml") if not p.name.startswith("_")):
-        for emit in _emits_of(path):
-            by_system.setdefault(emit.system, []).append(emit)
+    files = sorted(p for p in specs_dir.glob("*.odd.toml") if not p.name.startswith("_"))
     if next_dir is not None and next_dir.is_dir():
-        for path in sorted(next_dir.glob("*.odd.toml")):
-            emits = _emits_of(path)
-            if emits:
-                by_system[emits[0].system] = emits
-    return {emit.kind: emit for emits in by_system.values() for emit in emits}
+        files += sorted(p for p in next_dir.glob("*.odd.toml") if not p.name.startswith("_"))
+    for path in files:
+        _read_spec(path, specs, by_system)
+    for sid in sorted(by_system):
+        for emit in by_system[sid]:
+            other = specs.emits.get(emit.kind)
+            if other is not None and other.system != sid:
+                specs.problems.append(
+                    f"kind {emit.kind} is declared by both {other.system} and {sid}"
+                )
+            specs.emits[emit.kind] = emit
+    return specs
 
 
-def load_registry(path: Path = REGISTRY) -> dict[str, object]:
+def load_emits(specs_dir: Path = SPECS, next_dir: Path | None = NEXT) -> dict[str, Emit]:
+    """The ``[[emits]]`` entries by kind (the renderer's view of :func:`load_specs`)."""
+    return load_specs(specs_dir, next_dir).emits
+
+
+def load_registry(path: Path = REGISTRY) -> dict[str, Any]:
     """The Registry TOML (``[event_roles]``, ``[motive_edges]``, ``[attributes]`` are read)."""
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
@@ -183,11 +220,11 @@ def load_templates(path: Path = TEMPLATES) -> Templates:
     meta = raw.get("templates", {})
     meta = meta if isinstance(meta, dict) else {}
     enums_raw = raw.get("enums", {})
-    enums: dict[str, dict[str, list[str]]] = {}
-    if isinstance(enums_raw, dict):
-        for name, table in enums_raw.items():
-            if isinstance(table, dict):
-                enums[str(name)] = {k: list(v) for k, v in table.items() if isinstance(v, list)}
+    enums = (
+        {str(k): v for k, v in enums_raw.items() if isinstance(v, dict)}
+        if isinstance(enums_raw, dict)
+        else {}
+    )
     payloads_raw = raw.get("payloads", {})
     payloads = (
         {str(k): v for k, v in payloads_raw.items() if isinstance(v, dict)}
@@ -200,6 +237,9 @@ def load_templates(path: Path = TEMPLATES) -> Templates:
     for entry in raw.get("template", []):
         if isinstance(entry, dict):
             t.by_kind.setdefault(str(entry.get("kind", "")), []).append(entry)
+    for entry in raw.get("label", []):
+        if isinstance(entry, dict):
+            t.labels[str(entry.get("kind", ""))] = entry
     for entry in raw.get("prologue", []):
         if isinstance(entry, dict):
             t.prologue[str(entry.get("id", ""))] = entry
@@ -207,11 +247,6 @@ def load_templates(path: Path = TEMPLATES) -> Templates:
 
 
 # --- checks --------------------------------------------------------------------------------------
-
-OUTSIDE = (
-    "is outside the envelope: "
-    "a template binds only to roles, snapshots, payload, edges and the tick"
-)
 
 
 def _check_meta(t: Templates, errs: list[str]) -> None:
@@ -228,22 +263,59 @@ def _check_meta(t: Templates, errs: list[str]) -> None:
     for kind, entries in t.by_kind.items():
         if kind not in t.scope:
             errs.append(f"template {entries[0].get('id')}: kind {kind} is not in scope")
-        elif "when" in entries[-1]:
+        else:
+            _check_variant_order(kind, entries, errs)
+
+
+def _check_variant_order(kind: str, entries: list[dict[str, Any]], errs: list[str]) -> None:
+    if "when" in entries[-1]:
+        errs.append(
+            f"kind {kind}: its last template ({entries[-1].get('id')}) has a `when`; "
+            "the last variant must be unconditional"
+        )
+    for entry in entries[:-1]:
+        if "when" not in entry:
             errs.append(
-                f"kind {kind}: its last template ({entries[-1].get('id')}) has a `when`; "
-                "the last variant must be unconditional"
+                f"kind {kind}: template {entry.get('id')} is unconditional but not last, "
+                "so the later variants can never render"
             )
 
 
-def _check_enums(t: Templates, reg: dict[str, object], errs: list[str]) -> None:
+def _check_enums(t: Templates, reg: dict[str, Any], specs: Specs, errs: list[str]) -> None:
     for name, table in t.enums.items():
         ids, words = table.get("ids", []), table.get("words", [])
-        if len(ids) != len(words) or not ids:
+        if (
+            not isinstance(ids, list)
+            or not isinstance(words, list)
+            or len(ids) != len(words)
+            or not ids
+        ):
             errs.append(f"[enums.{name}] ids and words must be non-empty lists of equal length")
-    motives = reg.get("motive_edges", {})
-    want = motives.get("ids", []) if isinstance(motives, dict) else []
-    if t.enums.get("motive", {}).get("ids") != want:
-        errs.append("[enums.motive] ids must equal the Registry [motive_edges] in list order")
+            continue
+        if "registry" in table:
+            want = reg.get(str(table["registry"]), {})
+            want = want.get("ids") if isinstance(want, dict) else None
+            if ids != want:
+                errs.append(
+                    f"[enums.{name}] ids must equal the Registry [{table['registry']}] "
+                    "in list order"
+                )
+        elif "column" in table:
+            codes = specs.columns.get(str(table["column"]))
+            if codes is None:
+                errs.append(
+                    f"[enums.{name}] column {table['column']!r} is not an enum column "
+                    "an emitter owns"
+                )
+            elif ids != codes:
+                errs.append(
+                    f"[enums.{name}] ids {ids} must equal the codes of {table['column']}: {codes}"
+                )
+        else:
+            errs.append(
+                f"[enums.{name}] names neither a `column` nor a `registry` list to check "
+                "its ids against"
+            )
 
 
 def _check_payloads(t: Templates, emits: dict[str, Emit], errs: list[str]) -> None:
@@ -258,14 +330,23 @@ def _check_payloads(t: Templates, emits: dict[str, Emit], errs: list[str]) -> No
                 f"{where}: system {layout.get('system')!r} is not the emitter {emit.system}"
             )
         cited = layout.get("cited")
-        if not isinstance(cited, str) or cited not in emit.when:
+        clause = PAYLOAD_CLAUSE.search(emit.when)
+        if clause is None:
             errs.append(
-                f"{where}: cited text {cited!r} does not occur verbatim in {emit.system}'s "
-                f"[[emits]] {kind} when"
+                f"{where}: {emit.system}'s [[emits]] {kind} when states no `Payload: [...]` clause"
+            )
+            continue
+        if cited != clause.group(0):
+            errs.append(
+                f"{where}: cited text {cited!r} is not the whole clause {clause.group(0)!r} of "
+                f"{emit.system}'s [[emits]] {kind} when"
             )
         slots = layout.get("slots")
-        if not isinstance(slots, list) or not slots:
-            errs.append(f"{where}: slots must be a non-empty list")
+        items = [s for s in _split_clause(clause.group(0)) if s]
+        if not isinstance(slots, list) or len(slots) != len(items):
+            errs.append(
+                f"{where}: {len(items)} payload item(s) in the clause, but {slots!r} slot(s)"
+            )
             continue
         for s in slots:
             if not isinstance(s, dict) or not isinstance(s.get("name"), str):
@@ -274,7 +355,22 @@ def _check_payloads(t: Templates, emits: dict[str, Emit], errs: list[str]) -> No
                 errs.append(f"{where}: slot {s['name']} names an unknown enum {s['enum']!r}")
 
 
-def _payload_slots(t: Templates, kind: str) -> dict[str, dict[str, object]]:
+def _split_clause(clause: str) -> list[str]:
+    """The comma-separated items of ``Payload: [a, b (c, d)]``, commas inside parentheses kept."""
+    inner = clause[len("Payload: [") : -1]
+    items, depth, cur = [], 0, ""
+    for ch in inner:
+        depth += (ch == "(") - (ch == ")")
+        if ch == "," and depth == 0:
+            items.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    items.append(cur.strip())
+    return items
+
+
+def _payload_slots(t: Templates, kind: str) -> dict[str, dict[str, Any]]:
     slots = t.payloads.get(kind, {}).get("slots", [])
     return (
         {str(s["name"]): s for s in slots if isinstance(s, dict) and "name" in s}
@@ -288,6 +384,12 @@ def _role_problem(role: str, kind: str, emit: Emit) -> str | None:
         return None if WITNESS in emit.roles else f"slot 'witnesses': {kind} does not fill witness"
     if role == WITNESS:
         return "slot 'witness' is undefined (a witness is many: use 'witnesses')"
+    if role == FATHER:
+        return (
+            None
+            if kind in FATHER_KINDS
+            else f"slot 'father' is defined on {sorted(FATHER_KINDS)} only"
+        )
     if role in emit.roles:
         return None
     return f"slot {role!r} is not a role {kind} declares in [[emits]] (roles = {list(emit.roles)})"
@@ -300,6 +402,11 @@ def _slot_problem(slot: Slot, kind: str, emit: Emit, t: Templates, *, label: boo
             problem = _role_problem(slot.args[0], kind, emit)
         case "payload" if slot.args[0] not in _payload_slots(t, kind):
             problem = f"slot 'payload.{slot.args[0]}': {kind} declares no such payload slot"
+        case "snapshot" if slot.args[1] in {"event", WITNESS}:
+            problem = (
+                f"slot 'snapshot.{slot.args[0]}.{slot.args[1]}' is undefined in v0 "
+                "(annals_v0.md §3)"
+            )
         case "snapshot" if tuple(slot.args) not in emit.snapshots:
             problem = (
                 f"slot 'snapshot.{slot.args[0]}.{slot.args[1]}' is not a snapshot {kind} declares "
@@ -317,10 +424,15 @@ def _check_text(text: object, kind: str, emit: Emit, t: Templates, *, label: boo
         return ["text must be a non-empty string"]
     out: list[str] = []
     try:
-        names = slot_fields(text)
+        fields = slot_fields(text)
     except ValueError as e:
         return [f"unbalanced braces: {e}"]
-    for name in names:
+    for name, conversion, spec in fields:
+        if conversion is not None or spec:
+            out.append(
+                f"slot {name!r} carries a conversion or format spec, which the grammar refuses"
+            )
+            continue
         slot = parse_slot(name)
         if slot is None:
             out.append(f"slot {name!r} {OUTSIDE}")
@@ -331,6 +443,18 @@ def _check_text(text: object, kind: str, emit: Emit, t: Templates, *, label: boo
     return out
 
 
+def _when_roles(key: str, roles: tuple[str, ...], kind: str, emit: Emit) -> list[str]:
+    out: list[str] = []
+    for role in roles:
+        if role == WITNESS:
+            out.append(f"`when.{key}` names 'witness', which is undefined (a witness is many)")
+        elif role == FATHER and kind not in FATHER_KINDS:
+            out.append(f"`when.{key}` names 'father', defined on {sorted(FATHER_KINDS)} only")
+        elif role != FATHER and role not in emit.roles:
+            out.append(f"`when.{key}` names {role!r}, not a role {kind} declares")
+    return out
+
+
 def _check_when(when: object, kind: str, emit: Emit, t: Templates) -> list[str]:
     if not isinstance(when, dict):
         return ["`when` must be a table"]
@@ -338,9 +462,7 @@ def _check_when(when: object, kind: str, emit: Emit, t: Templates) -> list[str]:
         f"`when` key {k!r} is not one of {sorted(WHEN_KEYS)}" for k in when if k not in WHEN_KEYS
     ]
     for key in ("has", "lacks"):
-        for role in _str_list(when.get(key, [])):
-            if role not in emit.roles:
-                out.append(f"`when.{key}` names {role!r}, not a role {kind} declares")
+        out += _when_roles(key, _str_list(when.get(key, [])), kind, emit)
     payload = when.get("payload", {})
     if isinstance(payload, dict):
         slots = _payload_slots(t, kind)
@@ -350,6 +472,10 @@ def _check_when(when: object, kind: str, emit: Emit, t: Templates) -> list[str]:
                 out.append(f"`when.payload.{name}` = {value!r} is not an id of the slot's enum")
     if "edge" in when and when["edge"] not in EDGE_KINDS:
         out.append(f"`when.edge` {when['edge']!r} is not one of {CAUSE_KINDS}")
+    if "motive" in when and (when["motive"] not in MOTIVE_CONDITIONS or not emit.motives):
+        out.append(
+            f"`when.motive` {when['motive']!r} must be 'named' or 'unnamed', on a kind with motives"
+        )
     return out
 
 
@@ -374,28 +500,61 @@ def _check_templates(t: Templates, emits: dict[str, Emit], errs: list[str]) -> N
             errs.extend(f"template {tid}: {p}" for p in problems)
 
 
+def _check_labels(t: Templates, emits: dict[str, Emit], errs: list[str]) -> None:
+    for kind in sorted(emits):
+        if kind not in t.scope and kind not in t.labels:
+            errs.append(
+                f"kind {kind} ({emits[kind].system}) is out of scope and has no [[label]], "
+                "so a cause slot could not render it"
+            )
+    for kind, entry in t.labels.items():
+        emit = emits.get(kind)
+        if emit is None:
+            errs.append(f"[[label]] {kind}: no system declares it in [[emits]]")
+            continue
+        if kind in t.scope:
+            errs.append(f"[[label]] {kind}: an in-scope kind takes its label from its templates")
+        if not isinstance(entry.get("version"), int):
+            errs.append(f"[[label]] {kind}: version must be an integer")
+        text = entry.get("label")
+        errs.extend(f"[[label]] {kind}: {p}" for p in _check_text(text, kind, emit, t, label=True))
+        for name, _, _ in slot_fields(text if isinstance(text, str) else ""):
+            if (parse_slot(name) or Slot("")).family not in {"role", "tick"}:
+                errs.append(
+                    f"[[label]] {kind}: slot {name!r} is not a role "
+                    "(a label uses the cause's roles only)"
+                )
+
+
 def _check_prologue(t: Templates, errs: list[str]) -> None:
     for pid in PROLOGUE_IDS:
         if pid not in t.prologue:
             errs.append(f"prologue template {pid} is missing")
     for pid, entry in t.prologue.items():
         text = entry.get("text")
-        names = slot_fields(text) if isinstance(text, str) else []
-        for name in names:
-            if name not in PROLOGUE_SLOTS:
+        fields = slot_fields(text) if isinstance(text, str) else []
+        for name, conversion, spec in fields:
+            if conversion is not None or spec:
+                errs.append(
+                    f"prologue template {pid}: slot {name!r} carries a conversion or format spec"
+                )
+            elif name not in PROLOGUE_SLOTS:
                 errs.append(
                     f"prologue template {pid}: slot {name!r} is not in the keyframe-extract "
                     f"vocabulary {sorted(PROLOGUE_SLOTS)}"
                 )
 
 
-def check(t: Templates, emits: dict[str, Emit], reg: dict[str, object]) -> list[str]:
+def check(t: Templates, specs: Specs | dict[str, Emit], reg: dict[str, Any]) -> list[str]:
     """Every problem of the template set, in a stable order (empty when it passes)."""
-    errs: list[str] = []
+    if isinstance(specs, dict):
+        specs = Specs(specs)
+    errs: list[str] = list(specs.problems)
     _check_meta(t, errs)
-    _check_enums(t, reg, errs)
-    _check_payloads(t, emits, errs)
-    _check_templates(t, emits, errs)
+    _check_enums(t, reg, specs, errs)
+    _check_payloads(t, specs.emits, errs)
+    _check_templates(t, specs.emits, errs)
+    _check_labels(t, specs.emits, errs)
     _check_prologue(t, errs)
     return errs
 
@@ -409,7 +568,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--registry", type=Path, default=REGISTRY)
     args = parser.parse_args(argv)
     t = load_templates(args.templates)
-    errs = check(t, load_emits(args.specs, args.next_dir), load_registry(args.registry))
+    errs = check(t, load_specs(args.specs, args.next_dir), load_registry(args.registry))
     for e in errs:
         print(f"ERROR {args.templates.name}: {e}")
     if errs:
@@ -417,7 +576,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     n = sum(len(v) for v in t.by_kind.values())
     print(
-        f"PASS: {n} templates linted, {len(t.scope)} kinds in scope, "
+        f"PASS: {n} templates linted, {len(t.scope)} kinds in scope, {len(t.labels)} labels, "
         f"{len(t.prologue)} prologue templates"
     )
     return 0
