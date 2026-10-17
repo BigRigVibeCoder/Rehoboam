@@ -7,6 +7,8 @@ artifacts/
 
 # Rust build output and Python virtual environments (SPR-001)
 target/
+# A lint fixture whose source tree holds a directory named target (VER-SPR-009-TEST GAP-21).
+!tests/lint_fixtures/arch/global_allocator_src_target/rh-tool/src/target/
 .venv/
 python/.venv/
 
@@ -14,9 +16,11 @@ python/.venv/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
-
 # Downstream binary assets & raw game rips (Plane C)
 assets/
 scratch/
 upload/
 docs/red_team/games/
+
+# The document index is generated locally (python -I bin/gen_manifest.py); not committed (GOV-001 §3).
+CODEX/00_INDEX/MANIFEST.yaml

@@ -1,0 +1,83 @@
+# Planted crate-local clippy configuration (VER-SPR-003-TEST GAP-12): the root list minus f64::ln and f64::exp.
+# bin/lint_arch.py (rule clippy-config) must refuse it. Never read by a real build.
+# Clippy configuration for the whole workspace (GOV-003 §2).
+#
+# The disallowed lists are the second line of defence behind bin/lint_forbidden.py (V-DET-19). They
+# apply to every crate; a tool crate (plane "tool") that genuinely needs one of these opts out at the
+# use site with #[allow(clippy::disallowed_types, reason = "...")] or the methods equivalent.
+# Paths into crates the workspace does not depend on (rand) cannot be resolved by clippy and are
+# marked allow-invalid; the grep gate covers them.
+
+# GOV-003 §2: unwrap/expect/panic are denied in library code, not in tests.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order is unspecified; use BTreeMap, an insertion-ordered map or a sorted Vec (GOV-003 §2, V-DET-19)" },
+    { path = "std::collections::HashSet", reason = "iteration order is unspecified; use BTreeSet or a sorted Vec (GOV-003 §2, V-DET-19)" },
+    { path = "std::time::Instant", reason = "wall clock; simulation time comes from rh-core (GOV-003 §2, V-DET-19)" },
+    { path = "std::time::SystemTime", reason = "wall clock; simulation time comes from rh-core (GOV-003 §2, V-DET-19)" },
+    { path = "rand::rngs::StdRng", reason = "unkeyed RNG whose algorithm may change between releases; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::rngs::ThreadRng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::rngs::SmallRng", reason = "unkeyed RNG whose algorithm may change between releases; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::rngs::OsRng", reason = "entropy-seeded RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+]
+
+disallowed-methods = [
+    { path = "f64::mul_add", reason = "fused multiply-add rounds differently from mul-then-add across targets (docs/13 §3, V-DET-19)" },
+    { path = "f32::mul_add", reason = "fused multiply-add rounds differently from mul-then-add across targets (docs/13 §3, V-DET-19)" },
+    # SPR-003 Architect ruling item 3: transcendentals come from libm only, everywhere. sqrt stays allowed
+    # (IEEE 754 rounds it correctly); mul_add is above. Positive control: clippy/std_transcendental.
+    { path = "f64::log", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::log2", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::log10", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::ln_1p", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::exp2", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::exp_m1", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::powf", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::powi", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::sin", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::cos", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::tan", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::asin", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::acos", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::atan", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::atan2", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::sinh", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::cosh", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::tanh", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::cbrt", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f64::hypot", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::ln", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::log", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::log2", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::log10", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::ln_1p", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::exp", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::exp2", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::exp_m1", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::powf", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::powi", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::sin", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::cos", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::tan", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::asin", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::acos", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::atan", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::atan2", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::sinh", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::cosh", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::tanh", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::cbrt", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "f32::hypot", reason = "std float transcendentals vary by platform and release; use libm (SPR-003 ruling item 3, ADR-0006 item 4)" },
+    { path = "std::time::Instant::now", reason = "wall clock (GOV-003 §2, V-DET-19)" },
+    { path = "std::time::SystemTime::now", reason = "wall clock (GOV-003 §2, V-DET-19)" },
+    { path = "rand::thread_rng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::rng", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::random", reason = "thread-local RNG; use the keyed RNG (ADR-0006)", allow-invalid = true },
+    { path = "rand::random_range", reason = "thread-local RNG (rand 0.9); use the keyed RNG (ADR-0006, DEF-1)", allow-invalid = true },
+    { path = "rand::random_bool", reason = "thread-local RNG (rand 0.9); use the keyed RNG (ADR-0006, DEF-1)", allow-invalid = true },
+    { path = "rand::random_ratio", reason = "thread-local RNG (rand 0.9); use the keyed RNG (ADR-0006, DEF-1)", allow-invalid = true },
+    { path = "rand::random_iter", reason = "thread-local RNG (rand 0.9); use the keyed RNG (ADR-0006, DEF-1)", allow-invalid = true },
+]

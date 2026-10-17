@@ -11,17 +11,21 @@ Input from the director's red team: an external reviewer running on a different 
 
 This keeps in-flight sprints from building on specs that change underneath them.
 
+**Intake (director's rule, 2026-10-16):** the Architect decides whether a batch enters the repository. The batch arrives on a branch and a PR. The Architect checks it, notes where it conflicts with ratified contracts or overstates its evidence, and merges it into `docs/red_team/`. Any batch the Architect is not confident about, or believes is mistaken, goes to the director first. Entering the repository adopts nothing; adoption happens at the gate.
+
 ## Contents
 
-| Path | What |
-|---|---|
-| `inbox.md` | Batched design proposals awaiting the next gate (next: **G0**, end of P0; Batches 01, 02, 03, 04) |
-| `DISPOSITION_LEDGER.md` | Master living ledger tracking all 28 findings, Architect dispositions, and phase revisit hooks |
-| `PHILOSOPHY_AND_BACKLOG.md` | Red Team Operating Charter, 5 Immutable Laws, 14-item Action Backlog (`RT-ACT-001`–`014`) |
-| `RT-2026-10-16-simulation-bug-autopsy-and-code-theft.md` | Deep autopsy of 10 simulation bugs across 7 engines, 10 "still wanted" papers, and open code |
-| `RT-2026-10-16-bleeding-edge-frontiers.md` | Bleeding-edge frontiers: Versu practices, Qud domains, Wildermyth grammar, Nobility Thermostat |
-| `RT-2026-10-16-sota-science-analysis.md` | Mathematical formulations for Park reflection trees, Kreminski unexpectedness, Relic tensors |
-| `RT-2026-10-16-fidelity-gaps.md` | The red team's report on its initial five fidelity prototypes (Batch 01) |
+| `inbox.md` | Batched design proposals: batches 01 to 04 were disposed of at G0; batch 05 awaits G1a; batch 06 (stream viewer and compiler). Each batch has the Architect's intake notes |
+| `RT-2026-10-16-demography-inequality-science.md` | A science dossier on pre-industrial demography, inequality and empire lifespans (batch 05): calibrated against primary sources |
+| `RT-2026-10-16-primary-source-calibration-report.md` | Formal calibration report grounding demography and inequality in published historical papers |
+| `RT-2026-10-16-G0-dispositions.md` | The G0 dispositions of batches 01 to 04, with the director's rulings on Laws 2 and 3 and item 15 (2026-10-16) |
+| `DISPOSITION_LEDGER.md` | The red team's master ledger of all 34 findings (RT-001 through RT-034), Architect rulings, and phase revisit hooks |
+| `PHILOSOPHY_AND_BACKLOG.md` | The red team's operating charter, 5 Immutable Laws, autopsies of seven earlier engines, and 25-item action backlog |
+| `RT-2026-10-16-simulation-bug-autopsy-and-code-theft.md` | Autopsy of ten simulation bugs in earlier engines, the "still wanted" papers audit, and algorithms and schemas to reuse |
+| `RT-2026-10-16-bleeding-edge-frontiers.md` | Four proposed frontiers: social practices, mythic domains, the comic beat grammar and the dynastic thermostat |
+| `RT-2026-10-16-sota-science-analysis.md` | The science behind batch 02: the reflection tree, the unexpectedness metric and the relic corruption tensor |
+| `RT-2026-10-16-fidelity-gaps.md` | The red team's report on its five fidelity prototypes (batch 01, for G0) |
 | `RT-2026-10-16-external.md` | Dispositions of the first external review (folded in, closed) |
 | `handoffs/` | Historical directives and handoff dossiers kept for auditability |
-| `prototypes/` | Nine executable stdlib Python prototypes (`run_all.sh` 9/9 passing) demonstrating engine failure modes and mathematical fixes |
+| `prototypes/` | Executable stdlib Python and WebGL prototypes (`run_all.sh`). Demonstrates failure modes, fixes, and SOTA voxel stream visualization |
+| `dashboard.html` | Interactive red team tactical roadmap, executive tracker, decision war room, and live simulator showcase |

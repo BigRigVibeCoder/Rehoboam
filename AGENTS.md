@@ -4,7 +4,7 @@
 
 ## Reading order (every session)
 1. `CLAUDE.md`: the non-negotiables (determinism, three planes, single writer, Registry-only mechanics, licences) and the checks.
-2. `CODEX/README.md`, then `CODEX/00_INDEX/MANIFEST.yaml` (generated; filter it, do not crawl the repo).
+2. `CODEX/README.md`, then `CODEX/00_INDEX/MANIFEST.yaml`: generate it first with `python -I bin/gen_manifest.py` (it is not committed), then filter it; do not crawl the repo.
 3. `CODEX/10_GOVERNANCE/GOV-007` (who decides what), `GOV-005` (the work loop), `GOV-002` (testing).
 4. Your role: `CODEX/80_AGENTS/AGT-*`.
 5. Your sprint: `CODEX/05_PROJECT/SPR-*`, and everything it names as binding.
@@ -21,7 +21,7 @@
 | Command | What it does |
 |---|---|
 | `bin/check_all.sh` | The PR tier, fail-fast; writes `artifacts/check_report.md`. No report, no pass |
-| `python -I bin/gen_manifest.py` | Regenerate the document index (`--check` to verify it is current) |
+| `python -I bin/gen_manifest.py` | Generate the document index locally (`--check` validates frontmatter, tags and ids without writing) |
 | `python -I specs/systems/lint_odd.py` | Lint system specs; `--brief <id>` for the director's one-page summary; `--rust <id>` for the code skeleton |
 
 ## Commits

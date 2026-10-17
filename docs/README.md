@@ -20,3 +20,4 @@
 | — | [**CODEX**](../CODEX/README.md) | The operating system: roadmap front page, backlogs, sprints, defects, verification, governance, agent roles (ADR-0032) |
 | — | [**Your decisions, in one place**](decisions_pending.md) | Every decision waiting on you, with recommendations and defaults; answer in chat |
 | — | [Decisions log](decisions-log.md) | Running log of rulings and gate outcomes |
+| — | [Handoffs](handoffs/) | The Architect's dated summaries of the state of the work, so it survives the loss of a session |

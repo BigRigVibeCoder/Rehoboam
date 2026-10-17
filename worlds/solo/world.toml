@@ -1,0 +1,9 @@
+# The golden world solo: rung 0 of the complexity ladder (SPR-011 ruling 16; SPR-012 T-08).
+# One copy of the manifest, no drift: the runner refuses to run if the manifest's bytes do not hash
+# to manifest_sha256 (crates/rh-golden/src/world.rs, tested by tests/solo.rs). Re-pin only with
+# the baseline, in a [C3] PR. The SHA-256 is the run's manifest_hash (the history tuple, DET-1).
+world = "solo"
+manifest = "specs/manifest/examples/solo.yaml"
+manifest_sha256 = "1f0c52a43606ad0befdcc0adfe23627d83400684af525f12832a77f00abcf8c6"
+registry = "specs/manifest/registry_v0.toml"
+inputs = "worlds/solo/inputs.toml"

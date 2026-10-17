@@ -34,6 +34,8 @@ import duckdb
 HARM, AID, PROMISE, BETRAY, TRADE, CONCEAL = 1 << 0, 1 << 1, 1 << 2, 1 << 3, 1 << 4, 1 << 5
 E1_MASK, E2_MASK, UNLESS_MASK = AID | PROMISE, HARM | BETRAY | CONCEAL, AID
 TRUST_ATTR, TRUST_MIN_Q88 = 1, 154               # 0.6 in q8_8
+PERSON = 1                                        # rh-ids EntityKind
+ACTOR, TARGET = 0, 1                              # Registry [event_roles] indexes (envelope_v0.md §1)
 MIN_PER_DAY = 1440
 WINDOW_TICKS = 3650 * MIN_PER_DAY                 # 3650 days in minutes
 DEDUPE_BUCKET = 365 * MIN_PER_DAY
@@ -42,27 +44,29 @@ ACT_WEIGHTS = [0.25, 0.10, 0.15, 0.05, 0.05, 0.40]
 
 
 def _emit(rnd, state, a, b, act, trust_value, out, max_step):
-    """Append one event with emission-ordered id (day << 24 | seq) and an anchored trust(B, A) snapshot."""
+    """Append one event and an anchored trust(B, A) snapshot. The id is the timeline's event counter, as in
+    rh-events: one counter per timeline, assigned in emission order, so id order is emission order. The id
+    carries no date; the day is tick // MIN_PER_DAY."""
     events, roles, snaps, edges, last_ids = out
     state["tick"] += rnd.randint(0, max_step)
-    day = state["tick"] // MIN_PER_DAY
-    seq = state["day_seq"][day]
-    state["day_seq"][day] += 1
-    eid = (day << 24) | seq
+    eid = state["next_id"]
+    state["next_id"] += 1
     events.append((0, eid, state["tick"], 1, act, None, 0, 100, 0, 0, None, None))
-    roles.append((0, eid, a, 0, 0))
-    roles.append((0, eid, b, 1, 0))
+    roles.append((0, eid, 0, PERSON, a, ACTOR))        # event_role: ordinal, entity_kind, entity_id, role (SPR-020)
+    roles.append((0, eid, 1, PERSON, b, TARGET))
     if act & E1_MASK:
-        snaps.append((0, eid, b, TRUST_ATTR, a, trust_value))
+        snaps.append((0, eid, TRUST_ATTR, PERSON, b, PERSON, a, trust_value))   # trust(B, A)@e: entity B, partner A
     if last_ids and rnd.random() < 0.3:
-        edges.append((0, rnd.choice(last_ids[-500:]), eid, rnd.choice([0, 3, 4]), 0, None))
+        kind = rnd.choice([0, 3, 4])
+        motive = rnd.choice([0, 6]) if kind == 3 else None   # a motive only on motivated_by (envelope_v0.md §5)
+        edges.append((0, rnd.choice(last_ids[-500:]), eid, kind, motive, 0, 256, True))
     last_ids.append(eid)
 
 
 def synth_uniform(n_entities=300, n_events=200_000, seed=7):
     rnd = random.Random(seed)
     out = ([], [], [], [], [])
-    state = {"tick": 0, "day_seq": defaultdict(int)}
+    state = {"tick": 0, "next_id": 0}
     for _ in range(n_events):
         act = rnd.choices(ACTS, ACT_WEIGHTS)[0]
         a = rnd.randrange(n_entities)
@@ -90,7 +94,7 @@ def synth_clustered(n_entities=1_000, partners_each=10, n_events=200_000, events
     mean_step = 360 * MIN_PER_DAY / (events_per_actor_year * n_entities)
     trust: dict[tuple[int, int], int] = {}
     out = ([], [], [], [], [])
-    state = {"tick": 0, "day_seq": defaultdict(int)}
+    state = {"tick": 0, "next_id": 0}
     for _ in range(n_events):
         act = rnd.choices(ACTS, ACT_WEIGHTS)[0]
         a = rnd.randrange(n_entities)
@@ -111,9 +115,9 @@ def incremental_matcher(events, roles, snaps, semantics: str):
     """Reference matcher: consume events in emission order; per binding (A, B) keep open partials [(e1, tick)].
     Order per event: completion, unless, opening (see schema.sql for the semantics contract)."""
     by_event = defaultdict(dict)
-    for (_, eid, ent, crole, _ar) in roles:
-        by_event[eid]["a" if crole == 0 else "b"] = ent
-    trust = {(eid, ent, partner): v for (_, eid, ent, _attr, partner, v) in snaps}
+    for (_, eid, _ordinal, _kind, ent, role) in roles:
+        by_event[eid]["a" if role == ACTOR else "b"] = ent
+    trust = {(eid, ent, partner): v for (_, eid, _attr, _k, ent, _pk, partner, v) in snaps}
     partials: dict[tuple[int, int], list[tuple[int, int]]] = defaultdict(list)
     matches: list[tuple[int, int, int, int]] = []
     deduped: set[tuple[int, int, int]] = set()
@@ -197,6 +201,8 @@ def main() -> int:
     con.executemany("INSERT INTO state_interval VALUES (?,?,?,?,?,?)",
                     [(0, 11, 7, 1, 0, 500_000), (0, 42, 7, 1, 500_000, 1_200_000), (0, 13, 7, 1, 1_200_000, None)])
     root = next(e[2] for e in reversed(edges) if e[3] in (0, 3))      # latest contingent/motivated effect
+    bad = con.execute("SELECT count(*) FROM causal_edge WHERE kind <> 3 AND motive IS NOT NULL").fetchone()
+    assert bad == (0,), bad
     anc = con.execute("SELECT count(*), max(depth) FROM causal_ancestors(0, ?, 12)", [root]).fetchone()
     assert anc[0] > 1, anc
     print(f"causal_ancestors(root={root}): {anc[0]} events up to depth {anc[1]}: PASS")

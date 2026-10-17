@@ -2,14 +2,14 @@
 id: SPR-010
 title: "rh-core::fixed: fixed-point and money types"
 type: how-to
-status: PLANNING
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-001, PRJ-001, ADR-0006, VER-SPR-001]
+related: [BCK-001, PRJ-001, ADR-0006, VER-SPR-001, VER-SPR-010, VER-SPR-010-TEST]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** Build the fixed-point number types that every threshold quantity in plane A must use (DET-3): `Q8_8`, `Q16_16` and money in i64 minor units, with saturating arithmetic and one documented rounding rule. Found missing from the P0 plan by the SPR-001 audit; no other sprint delivered it. Developer: AGT-002-CORE. Testers: AGT-003-DET. Scope-bounded; at most about 2 agent-days.
@@ -39,22 +39,22 @@ version: 1.1.0
 ### T-01: The types
 - **Deliverable:** `Q8_8` (i16 storage) and `Q16_16` (i32 storage) newtypes and `Money` (i64 minor units) in `rh-core::fixed`; constructors from integers and from exact ratios; no conversion from or to `f32`/`f64` in plane A (a test-only or tool-only conversion is allowed behind a feature that plane-A crates may not enable)
 - **Acceptance:** Compile-fail tests: no implicit mixing of the three types, and no float conversion from a plane-A crate
-- **Status:** [ ] not started
+- **Status:** [x] done: `crates/rh-core/src/fixed/`; controls in `tests/lint_fixtures/compile_fail/fixed_point/`, run by `bin/check_all.sh`. No float conversion exists under any feature
 
 ### T-02: Arithmetic and rounding
-- **Deliverable:** Saturating add, subtract and multiply; division only through a checked function that returns `Option` (the effect language's "guarded division"); one rounding rule for multiply and divide, documented with a `DECISION:` comment (round half to even is the default proposal); comparisons and ordering
+- **Deliverable:** Saturating add, subtract and multiply; division only through a checked function that returns `Option` (the effect language's "guarded division"): `None` only for a zero divisor, while an overflowing quotient saturates (`MIN / -1` is `MAX`; Architect ruling on GAP-1, 2026-10-16); one rounding rule for multiply and divide, documented with a `DECISION:` comment (round half to even is the default proposal); comparisons and ordering
 - **Acceptance:** Property tests: saturation at both bounds, commutativity and the identity elements, monotone ordering, rounding matches an exact rational reference (Python `fractions`, run as a golden-vector generator); golden vectors committed
-- **Status:** [ ] not started
+- **Status:** [x] done: `crates/rh-core/src/fixed/{arith,money,round}.rs`; `bin/gen_fixed_vectors.py` writes `crates/rh-core/tests/golden/fixed_vectors.txt` (replayed by `tests/fixed_golden.rs`; `--check` in `bin/check_all.sh`); properties in `tests/fixed_properties.rs`
 
 ### T-03: Thresholds and draws
 - **Deliverable:** A comparison of a uniform RNG draw (a `u64` from SPR-002's API, or a placeholder trait until SPR-002 lands) against a `Q16_16` probability, with a documented exact mapping
 - **Acceptance:** Exhaustive test over the edge cases (probability 0, 1, the smallest step); frequency test against the exact probability
-- **Status:** [ ] not started
+- **Status:** [x] done: `crates/rh-core/src/fixed/draw.rs` (`draw_hits`, `chance`, the trait `UniformDraw`; mapping: hit iff `draw / 2^64 < p`); tests in `tests/fixed_draws.rs` and `draw` golden vectors. SPR-002 has landed; implementing `UniformDraw` for `rh_ids::RngStream` needs a crate edge and goes to the first sprint that draws against a probability (BCK-002 A-21)
 
 ### T-04: The float gate
 - **Deliverable:** `bin/lint_forbidden.py` gains the V-DET-19 float rule for plane A: `f32`/`f64` only in items marked as declared float fields (`f32_field` in the system spec), with the same escape syntax and a positive control
 - **Acceptance:** A float threshold planted in a plane-A fixture fails `bin/check_all.sh`
-- **Status:** [ ] not started
+- **Status:** [x] done: rule `float` in `bin/lint_forbidden.py`; a float is excused only by `// LINT-ALLOW(forbidden-api): f32_field <entity.column>` naming a column a spec declares `f32_field`; crates' `tests/`, `benches/`, `examples/` are exempt from this rule only (DECISION in the script). Controls: `tests/lint_fixtures/forbidden/planted/float_*.rs`, `forbidden/float_workspace/` (must FAIL), `forbidden/float_field/` (must pass)
 
 ## Verification assignment (Testers)
 
@@ -70,9 +70,9 @@ version: 1.1.0
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-010` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-010` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class.

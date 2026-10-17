@@ -1,0 +1,334 @@
+# ODD-R v2 system spec (ADR-0033). M1.regions F0, spec 0.1.0 DRAFT (SPR-018; WP P1.1a worldgen-lite, PRJ-002 §6):
+# the static region graph. Regions, one settlement (seat) per region, one route per region adjacency, and the u16
+# elevation raster they are cut from, all written once at genesis by rh-worldgen from the manifest's heightmap template
+# ([algorithm.worldgen_lite]) and never changed afterwards. M1 F1 (P1.8, P1b: route modes and costs, settlement growth)
+# moved to P1b with fugitives, its first consumer (D33; PRJ-002 ruling M-5): F0 leaves it seams, not mechanisms.
+# Elevation stays u16, so BCK-002 A-22 (the f32_field rule) is not due (PRJ-002 §8; red-team item 11).
+# lint_odd.py checks this file against the Registry, the other specs and the test catalogue; the exact reference is
+# specs/worldgen/selftest_worldgen_lite.py, with golden outputs in specs/worldgen/golden/.
+odd_r = 2
+# Empty sections first (TOML: a bare key after a table header would join that table). M1 F0 reads no column, binds no
+# pulse, draws nothing of its own and so has no ODD submodel: the reasons are given at each section's place below.
+reads = []
+schedule = []
+rng = []
+submodels = []
+
+[system]
+id = "M1.regions"
+name = "Regions and routes"
+spec_version = "0.1.0"
+fidelity = "F0"
+status = "draft"
+crate = "rh-sys-regions"
+adrs = ["ADR-0004", "ADR-0006", "ADR-0024", "ADR-0028", "ADR-0033"]
+requirements = ["SIM-2", "SIM-15"]
+
+[purpose]
+statement = "Give every world its map: a raster of elevation, regions cut from it, one settlement per region and the routes between adjacent regions, so that people have somewhere to live and later something to travel along."
+role = "substrate"
+patterns = []                              # F0 produces no stylized fact: it is geometry other systems stand on
+not_yet = [
+  "Route modes and costs (sea:river:land about 1:5:30; the Registry's route_cost_* parameters) and settlement growth: M1 F1, P1.8 in P1b (D33; SPR-032)",
+  "More than one settlement per region, settlement founding after genesis, and settlement capacity: F1",
+  "Rivers, climate, biomes, cultures and states (the full Azgaar-style P1.1): P4; worldgen-lite has no climate, biome or culture generation (docs/11 P1.1a)",
+  "Routes across water between islands: a region graph of an archipelago may be disconnected at F0 (REV-SPR-018 R5: accepted); sea routes are an F1 mode. Land in a component left without a seed when region_count is below the number of land components belongs to no region (cell.region = 0) at F0",
+  "Regional conditions (famine, unrest, war) are M6.polity's, not M1's (docs/11 P1.6a)",
+  "A raster above 512 cells a side is allowed by the manifest (up to 4096) but has no performance budget before bench 4 is recorded (docs/08 §9)",
+]
+
+# ----------------------------------------------------------------------------- the raster (cell.*, raster.*)
+# Plane A. The raster is authoritative geometry: regions are cut from it and settlements sit on it, so it is hashed
+# like any other plane-A table (05.1 §5 "raster fields"; chunked by rows in index order). u16 throughout: no float
+# field exists in P1a (BCK-002 A-22 stays not due). Cell index i = y * R + x, row-major, R = geography.raster_resolution.
+[[owns]]
+column = "raster.resolution"
+entity = "raster"
+type = "u16"
+plane = "A"
+meaning = "R, the raster's side in cells (64 to 4096, from geography.raster_resolution); one row. Never changes"
+fixed_point = false
+[[owns]]
+column = "raster.sea_level"
+entity = "raster"
+type = "u16"
+plane = "A"
+meaning = "The template's sea level: a cell is land iff cell.elevation >= raster.sea_level ([algorithm.worldgen_lite] W5); one row. Never changes"
+fixed_point = false
+[[owns]]
+column = "cell.elevation"
+entity = "cell"
+type = "u16"
+plane = "A"
+meaning = "Elevation of the cell in template units (0..65535, no physical unit at F0), after the template's blobs, clamp and smoothing passes (W1-W4). R*R rows in index order. Never changes"
+fixed_point = false
+[[owns]]
+column = "cell.region"
+entity = "cell"
+type = "u16"
+plane = "A"
+meaning = "RegionId of the cell: 1..K for a land cell reached from a region seed (W7), 0 for a sea cell and for land no seed reaches over land (wilderness). R*R rows in index order. Never changes"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- regions (region.*)
+# RegionId(u16) in world-gen order (05.2 §1): region j is the j-th seed placed (W6). K = geography.region_count rows,
+# ascending id, written once.
+[[owns]]
+column = "region.id"
+entity = "region"
+type = "u16"
+plane = "A"
+meaning = "RegionId, 1..K; 0 is reserved for 'no region' in cell.region. Rows ascending by it"
+fixed_point = false
+[[owns]]
+column = "region.land_cells"
+entity = "region"
+type = "u32"
+plane = "A"
+meaning = "Number of cells with cell.region = this id (W8); at least 1 (the seed). S3 F0 weighs the founders' placement by it"
+fixed_point = false
+[[owns]]
+column = "region.seed_cell"
+entity = "region"
+type = "u32"
+plane = "A"
+meaning = "Cell index of the region's seed (W6): the source of its Dijkstra flood"
+fixed_point = false
+[[owns]]
+column = "region.seat"
+entity = "region"
+type = "u32"
+plane = "A"
+meaning = "SettlementId of the region's one settlement at F0 (= the region id as a u32; W8). F1 adds settlements and this stays the seat"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- settlements (settlement.*)
+# SettlementId(u32) in world-gen order (05.2 §1). At F0 exactly one per region, id = its region's id. S3.migration's
+# person.residence names one of these; S5.daily_life reads residence as the person's home place.
+[[owns]]
+column = "settlement.id"
+entity = "settlement"
+type = "u32"
+plane = "A"
+meaning = "SettlementId, 1..K at F0; 0 is reserved for 'none' (S3's person.residence between a row insert and S3's step). Rows ascending by it"
+fixed_point = false
+[[owns]]
+column = "settlement.region"
+entity = "settlement"
+type = "u16"
+plane = "A"
+meaning = "RegionId the settlement lies in (its cell has that cell.region)"
+fixed_point = false
+[[owns]]
+column = "settlement.cell"
+entity = "settlement"
+type = "u32"
+plane = "A"
+meaning = "Cell index of the settlement: the region's cell nearest the region's floor centroid, ties to the lowest index (W8)"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- the region graph (region_edge.*) and routes (route.*)
+# The region graph is the 4-adjacency of regions over land cells (W9): an undirected edge list with a < b, sorted
+# lexicographically, no self loops, no duplicates. The crate may hold it as CSR (05.1 §5); the table is the edge list.
+[[owns]]
+column = "region_edge.a"
+entity = "region_edge"
+type = "u16"
+plane = "A"
+meaning = "The lower RegionId of the edge. Rows in lexicographic (a, b) order"
+fixed_point = false
+[[owns]]
+column = "region_edge.b"
+entity = "region_edge"
+type = "u16"
+plane = "A"
+meaning = "The higher RegionId of the edge (a < b)"
+fixed_point = false
+[[owns]]
+column = "region_edge.route"
+entity = "region_edge"
+type = "u32"
+plane = "A"
+meaning = "RouteId of the one route along this edge at F0 (= the edge's 1-based position in the sorted edge list; W9)"
+fixed_point = false
+[[owns]]
+column = "route.id"
+entity = "route"
+type = "u32"
+plane = "A"
+meaning = "RouteId, 1..m, one per region_edge row, in edge order. Rows ascending by it. 0 is reserved for 'none'"
+fixed_point = false
+[[owns]]
+column = "route.a"
+entity = "route"
+type = "u32"
+plane = "A"
+meaning = "SettlementId of the seat of region_edge.a"
+fixed_point = false
+[[owns]]
+column = "route.b"
+entity = "route"
+type = "u32"
+plane = "A"
+meaning = "SettlementId of the seat of region_edge.b"
+fixed_point = false
+[[owns]]
+column = "route.length_cells"
+entity = "route"
+type = "u32"
+plane = "A"
+meaning = "isqrt of the squared Euclidean distance in cells between the two seats (W9): the F0 stand-in for a cost. F1 (P1.8) replaces it with a mode and a cost in the Registry's route_cost_* units and leaves this column as the geometry"
+fixed_point = false
+
+# M1 F0 emits no event: genesis is not an event (05.2 §1: events exist only at t >= 0 and genesis writes the initial
+# state) and no verb in the Registry is M1's. F1 adds settlement founding and growth events with their verbs.
+# M1 F0 sends and applies no lifecycle command, and reads no column: its only input is the manifest, through rh-worldgen.
+
+[scales]
+spatial = "raster cell (geography.raster_resolution, 64 to 4096 a side) and region (geography.region_count, 1 to 5000); at F0 one settlement per region"
+temporal = "genesis only: every table is written at t = 0 before the first pulse and never again at F0 (INV-M1-06); F1 adds Year/Production (growth)"
+extent = "the whole map; there is no off-map region at F0 (off-map actors and T-1 compartments are P1b and P4)"
+restart = "The owned tables restore the system exactly; M1 holds no timer and no other state. The tables are a pure function of (template, seed, resolution, region_count) and the generator version, so a keyframe may also omit them and regenerate (V-INV-10); P1a keyframes carry them like every plane-A table"
+
+[[fidelity_ladder]]
+level = "F0"
+representation = "Static region graph: u16 elevation raster from a template, regions by keyed seeds and an integer Dijkstra flood, one seat per region, one route per adjacency with a Euclidean length ([algorithm.worldgen_lite]). Nothing moves after genesis"
+status = "target"
+[[fidelity_ladder]]
+level = "F1"
+representation = "Route modes and costs (sea:river:land about 1:5:30 from the Registry's route_cost_* parameters; 05.1 §3), settlement growth and founding at Year/Production; rivers by flux accumulation; the fugitives' route graph (P1.23). P1b, SPR-032 (D33)"
+status = "n/a"
+
+# M1 F0 binds no pulse: it has no step. Its tables are written by rh-worldgen at genesis (ruling 10 of SPR-011 extended:
+# genesis writes only columns whose owner's [initialization] names the manifest section) and only read afterwards.
+# The ODD submodel section is therefore empty at F0 (no schedule step to name); the generation algorithm is stated below as
+# [algorithm.worldgen_lite], which is the executable contract (specs/worldgen/selftest_worldgen_lite.py reproduces it).
+# No RNG purpose of M1's own: every genesis draw is rh-worldgen's, under the reserved system id rh-worldgen
+# (SPR-011 ruling 10), with the purposes [algorithm.worldgen_lite] W0 names (heightmap_blob, region_seed) declared in
+# rh-worldgen's rng_purposes.rs. M1 F1 gains purposes (growth) and this list grows then.
+
+[design]
+basic_principles = "A heightmap template is a short list of integer blob operations (domes and rings with keyed centres, heights and radii, as Azgaar FMG's templates are lists of hills, ranges, pits and troughs: PORT of the idea, docs/14 §B; R06 §4), summed on a u16 raster and smoothed by a 5-point integer stencil. Regions are the Voronoi-like cells of K seeds under a slope-weighted integer Dijkstra flood over land (FMG grows states by a cost-weighted flood over Voronoi cells, R09 §10; mewo2/terrain places cities by scoring, docs/14 §B). The first seed is keyed, the rest are farthest-point picks, so a seed change moves everything and the regions stay spread. Every quantity is an integer; every tie is broken by the lowest cell index"
+emergence = "n/a: F0 generates once and nothing moves. Region shapes, sizes and the graph's degree distribution follow from the template and the seed, which is geometry, not a dynamic"
+adaptation = "n/a: no agent in M1"
+objectives = "n/a: no agent in M1"
+learning = "n/a: no agent in M1"
+prediction = "n/a: no agent in M1"
+sensing = "n/a: M1 F0 reads no other system and no era state"
+interaction = "None at F0. Other systems read M1's tables through the contract crate: S3.migration places founders on settlements weighted by region.land_cells and gives newborns their mother's settlement; S5.daily_life reads residence as the home place; M1 F1 and P1.23 fugitives walk route.* and region_edge.*"
+stochasticity = "Keyed counter-based RNG only (ADR-0006), drawn by rh-worldgen at genesis: a fixed number of draws per blob (4 for a dome, 5 for a ring, purpose heightmap_blob, entity = the blob ordinal) and one draw for the first region seed (purpose region_seed, entity 0). Nothing else is random: farthest-point seeds, the flood, seats and edges are deterministic functions of the raster. No draw depends on visiting order or thread count"
+collectives = "Regions and settlements are the places collectives live in; they are not collectives themselves at F0"
+observation = "The tables themselves (05.9 IF-0 later exposes them to the viewer); no stream record at F0 (genesis is not an event). The generator version is part of the engine build in the history tuple (V-INV-10)"
+era_state = []                             # M1 F0 reads no era-state variable; nothing in it is era-sensitive
+scale_behaviour = "Identical at every N (nothing in M1 depends on the population). Cost scales with the raster (R*R cells: 4,096 for solo, 65,536 for hamlet, 262,144 at the default 512) and with K x land cells for the farthest-point seeds (W6: at 512 squared and K = 2,000 about 5 x 10^8 integer distance updates, under a second in Rust; the manifest allows K up to 5,000 and R up to 4,096, about 8 x 10^10 updates, where W6 is the cost to watch: a region count above 2,000 at 4,096 squared is Later, with the optional scale-up, and a grid-bucketed farthest point is the F1 remedy). Statistical bands do not apply"
+
+[algorithm.worldgen_lite]
+# SPR-018. Every quantity is an exact integer and every division is a floor of non-negative integers unless it says
+# otherwise; no float, no truncating cast to a narrower width than stated. The exact reference
+# (specs/worldgen/selftest_worldgen_lite.py, Python integers on bin/gen_rng_golden.py's rh-ids reference) reproduces every
+# table bit for bit and pins them with golden outputs (specs/worldgen/golden/worldgen_lite_v0.txt) for seven templates and
+# several seeds and resolutions. Templates are the data of specs/worldgen/templates_v0.toml (version
+# worldgen-lite-templates-v0), one per id of the Registry's [heightmap_templates].
+version = "worldgen-lite-v0"
+steps = [
+  "W0 Keys and rounding. Every draw is u = H(world_seed, salt, system_id, epoch, purpose, entity, t, k) of 05.1 §6 item 2 with world_seed = world.seed, salt = the canonical timeline's branch salt (rh-ids salt/v1 over the empty lineage), system_id = system_id(\"rh-worldgen\") (the reserved id, SPR-011 ruling 10), epoch 0, t = 0 (genesis) and the purpose, entity and k each step names. pick(u, n) = floor(u * n / 2^64) for n >= 1 (u128 product), an index in [0, n). R = geography.raster_resolution; cells are indexed i = y R + x (row-major), x and y in [0, R). isqrt is the integer square root (floor). The template T is the [templates.<id>] table of templates_v0.toml for geography.heightmap_template: base, sea_level and smooth_passes (u16, u16, 0..4) and a list of ops, each {kind: dome | ring, count (1..64), height = [h_lo, h_hi] (signed, |h| <= 65535), radius = [r_lo, r_hi], x = [x_lo, x_hi], y = [y_lo, y_hi] (per-mille of R, 0..1000), width = [w_lo, w_hi] (ring only)}. pm_coord(v) = floor(v (R - 1) / 1000), a coordinate; pm_cells(v) = max(1, floor(v R / 1000)), a length in cells.",
+  "W1 Blobs. Blobs are numbered b = 0, 1, 2, ... across the ops in file order, count blobs per op. Blob b of op o takes its draws with purpose heightmap_blob and entity b: k = 0: cx = lo + pick(u, hi - lo + 1) with lo = pm_coord(x_lo), hi = pm_coord(x_hi); k = 1: cy likewise from y; k = 2: h = h_lo + pick(u, h_hi - h_lo + 1) (signed: a negative height is a pit); k = 3: rho = pm_cells(r_lo) + pick(u, pm_cells(r_hi) - pm_cells(r_lo) + 1); k = 4, rings only: omega = pm_cells(w_lo) + pick(u, pm_cells(w_hi) - pm_cells(w_lo) + 1). A dome takes exactly 4 draws and a ring exactly 5, whatever their values (CRN).",
+  "W2 Contribution. For blob b and cell (x, y) with d2 = (x - cx)^2 + (y - cy)^2 and s = -1 if h < 0 else +1: a dome adds s floor(|h| (rho^2 - d2) / rho^2) if d2 < rho^2, else 0; a ring adds s floor(|h| (omega - q) / omega) with q = |isqrt(d2) - rho| if q < omega, else 0. acc(i) = base + the sum over every blob, an i64 (each term is at most 65535 in magnitude and there are at most 64 blobs per op).",
+  "W3 Clamp. E0(i) = min(65535, max(0, acc(i))), a u16.",
+  "W4 Smooth. smooth_passes times: E'(x, y) = floor((4 E(x, y) + E(x, y - 1) + E(x - 1, y) + E(x + 1, y) + E(x, y + 1)) / 8), where a neighbour outside the raster is replaced by the cell itself (an edge cell uses its own value in that direction); every value on the right is the previous pass's (Jacobi, never in place). The result is cell.elevation; raster.sea_level := sea_level. This 5-point pass is bench 4's kernel (docs/08 §9; specs/worldgen/worldgen_lite.md §5).",
+  "W5 Land. land(i) iff E(i) >= sea_level. L = the land cells in index order, n_L = |L|. K = geography.region_count. If n_L < K the load is refused with an error naming the template, the seed, n_L and K: a world with more regions than land is not generated (SIM-15 keeps the minimum at 1 region, which every template reaches at R = 64: the reference generates every template at R = 64 for seeds 1 to 8 with K = 1 and K = 4 and checks the invariants on each).",
+  "W6 Seeds. s_1 = L[pick(u, n_L)] with purpose region_seed, entity 0, k = 0. Every later seed is a farthest-point pick from a stated set C: the cell of C that maximises dmin(i) = min over the placed seeds s of (x_i - x_s)^2 + (y_i - y_s)^2, ties to the lowest index (dmin is kept incrementally, one pass over L per seed). The sets, in order: first, for each 4-connected component of L that holds no seed yet, taken in order of the components' lowest cell index, C = that component (one seed per land component while fewer than K seeds are placed: REV-SPR-018 R5); then C = L until K seeds are placed. Since K <= n_L, every unplaced land cell has dmin > 0 at each step, so the seeds are distinct. Region j (RegionId j, 1..K) has seed s_j, in placement order: region.id = j, region.seed_cell = s_j. When K is below the number of land components, the components left without a seed stay unregioned (W7).",
+  "W7 Regions. A multi-source Dijkstra over L with 4-neighbours and step cost c(a, b) = 1 + (|E(a) - E(b)| >> 8), an integer in [1, 256]. The priority queue holds entries (dist, cell, region) ordered lexicographically; the seeds enter as (0, s_j, j). Repeatedly pop the least entry: if its cell is settled, drop it; else settle the cell with cell.region := its region, and for each unsettled land neighbour nb in the order up, left, right, down push (dist + c(cell, nb), nb, region). Sea cells, and land cells no entry reaches (land in a component without a seed: only when K is below the number of land components, W6), keep cell.region = 0. A distance is below 2^33 (R <= 4096), held in a u64. Every region is 4-connected and contains its seed by construction (a settled cell's predecessor has the same region and was settled before it).",
+  "W8 Seats. For region j with cells C_j (n_j = |C_j| >= 1): the floor centroid (floor(sum of x / n_j), floor(sum of y / n_j)), the two sums held in u64 (n_j (R - 1) reaches about 2^36 at R = 4096); the seat is the cell of C_j that minimises ((x - cx)^2 + (y - cy)^2, i) lexicographically. settlement j: settlement.id = j, settlement.region = j, settlement.cell = the seat; region.land_cells = n_j, region.seat = j. At F0 the settlement count is K.",
+  "W9 Edges and routes. The edge set is {(min(a, b), max(a, b)) : i a land cell with cell.region = a >= 1, nb its right neighbour (x + 1) or down neighbour (y + 1) inside the raster with cell.region = b >= 1, b != a}, sorted lexicographically and without duplicates: e_1 < e_2 < ... < e_m. Route r (RouteId r, 1..m) belongs to e_r: route.a = settlement e_r.a's id, route.b = settlement e_r.b's id, route.length_cells = isqrt((x_a - x_b)^2 + (y_a - y_b)^2) over the two seats' coordinates; region_edge.route = r. m may be 0 (a one-region world, or islands) and the graph may be disconnected (archipelago): F1's sea routes connect islands.",
+  "W10 Writes. rh-worldgen writes, at genesis before the first pulse and in this order: raster.*, cell.* in index order, region.* ascending id, settlement.* ascending id, region_edge.* in edge order, route.* ascending id. Nothing in M1 is written again at F0 (INV-M1-06). The generator version is worldgen-lite-v0 plus the templates' version; either changing is a C3 change (every rung's genesis changes).",
+]
+# Facts the reference proves and the plan's acceptance criteria may use (selftest_worldgen_lite.py, golden cases):
+#   * flat at R = 64, K = 1 (solo, household): 4,096 land cells, one region, no edge, seat at the floor centroid.
+#   * desert_fringe at seed 42, R = 256, K = 4 (hamlet: hamlet.yaml sets raster_resolution 256): 53,859 land cells,
+#     regions of 27,691, 6,711, 5,996 and 13,461 cells, seats 18078, 55338, 54904 and 26409, 5 edges (1-3, 1-4, 2-3,
+#     2-4, 3-4: the complete graph on 4 regions less 1-2), route lengths 78 to 148 cells; Job's house of 42 in
+#     settlement 1, the four friends in 4, 2, 1 and 3, the 14 others 1, 2, 1, 2, 4, 3, 2, 1, 1, 4, 1, 1, 4, 1 (an
+#     independent re-implementation reproduced these numbers from the spec text alone, REV-SPR-018 §1 MAJ-1).
+#     The same template and seed at R = 128 (a smaller raster, not hamlet) give 13,453 land cells and routes 43 to 81.
+#   * The bench 4 fixture (continental_plains, seed 1, R = 512): the elevation digest and the digest of one W4 pass over
+#     its 8 shifted layers are the last three lines of the golden file.
+
+[initialization]
+state = "rh-worldgen writes every M1 table at genesis per [algorithm.worldgen_lite] W1-W10 from world.seed and the geography section: raster_resolution (R), region_count (K), heightmap_template (T). It is the first genesis writer: S3.migration's founder placement reads region.land_cells and settlement.id after it. A world whose template leaves fewer land cells than regions is refused at load (W5). rh-worldgen's draws for M1 use the purposes heightmap_blob and region_seed under its reserved system id (SPR-011 ruling 10)"
+from_manifest = ["geography"]
+
+[input_data]
+drivers = []
+
+# ODD 7.0: exactly the Registry's parameter set for M1.regions. All three are M1 F1's (route modes and costs, P1.8 in
+# P1b): F0 reads none, compiles none and needs no default (as M2's tfr at rung 0, SPR-011 ruling 8). A manifest that sets
+# one in P1a is accepted by the validator (bounds only) and reported in the run header as a parameter no built system
+# reads (SPR-011 ruling 3's wording for unbuilt systems).
+[[params]]
+name = "route_cost_sea"
+meaning = "Relative cost of a sea route per unit length (F1). Not read at F0"
+source = "05.1 §3 sea:river:land about 1:5:30 (R09 §3); the Registry fixes it at 1.0"
+[[params]]
+name = "route_cost_river"
+meaning = "Relative cost of a river route per unit length (F1). Not read at F0"
+source = "05.1 §3; R09 §3"
+[[params]]
+name = "route_cost_land"
+meaning = "Relative cost of a land route per unit length (F1). Not read at F0"
+source = "05.1 §3; R09 §3"
+
+# No schedule step at F0, so no ODD submodel (lint_odd.py requires every submodel to be named in a schedule step). The
+# generation algorithm is [algorithm.worldgen_lite]; it earns its place by V-INV-10 (identical raster, graph and routes
+# from the same seed and generator version), V-DET-01 and V-DET-02 (the genesis is part of every golden ladder), and by
+# S3.migration, S5.daily_life and P1.23 needing places (ADR-0033 §5: a coupling another system's patterns need).
+
+[[invariants]]
+id = "INV-M1-01"
+statement = "Land and sea: cell.region >= 1 implies cell.elevation >= raster.sea_level; every cell with cell.region = 0 is a sea cell or land no seed reaches over land; region ids lie in 0..K"
+test = "V-INV-10"
+[[invariants]]
+id = "INV-M1-02"
+statement = "Regions are non-empty and 4-connected over their own cells, and each contains its seed cell; the K seeds are distinct land cells; the number of 4-connected land components holding a seed is min(K, the number of components) (W6)"
+test = "V-INV-10"
+[[invariants]]
+id = "INV-M1-03"
+statement = "One seat per region at F0: settlement j lies in a cell with cell.region = j, no two settlements share a cell, region.land_cells = the count of cells with that region"
+test = "V-INV-10"
+[[invariants]]
+id = "INV-M1-04"
+statement = "The region graph is exactly the 4-adjacency of regions over land: (a, b) is an edge iff a < b and some land cell of a is a 4-neighbour of a land cell of b; the edge list is sorted and has no duplicate and no self loop"
+test = "V-INV-10"
+[[invariants]]
+id = "INV-M1-05"
+statement = "One route per edge: route r joins the seats of edge e_r, and route.length_cells is the isqrt of their squared distance"
+test = "V-INV-10"
+[[invariants]]
+id = "INV-M1-06"
+statement = "Genesis only: the per-table hash roots of every M1 table are the same at every hash point of a run and equal on every thread count (the tables never change at F0)"
+test = "V-DET-01"
+
+[[couplings]]
+system = "S3.migration"
+direction = "out"
+via = "S3 F0 places founders on settlements weighted by region.land_cells and reads settlement.id and settlement.region (at genesis, through rh-worldgen); person.residence names a settlement.id"
+lag = "genesis; lagged reads afterwards (M1 F0 never writes again)"
+[[couplings]]
+system = "S5.daily_life"
+direction = "out"
+via = "S5 reads person.residence (S3), which is a settlement.id: the home place of activity(person, day). P1b (SPR-031)"
+lag = "start of day, through S3"
+[[couplings]]
+system = "M2.demography"
+direction = "out"
+via = "M2 F1's per-settlement marriage pools (its not_yet, SPR-015) bound the partnering scan by settlement.id through S3's residence"
+lag = "lagged, through S3"
+
+[isolation]                                # docs/09 V-SF-22: M1 F0 reads nothing, so there is nothing to force
+forcing = []
+horizon = "n/a: genesis only; the isolation run is the generation itself. The reference sweeps, on every check: every template at R = 64, seeds 1 to 8, K = 1 and K = 4 (invariants on each); desert_fringe at R = 128, K = 4, seeds 1 to 8 (region-graph components); and the ten golden cases, each with its region-graph component count pinned. The sprint extends the sweep to R = 256 and 512 and K = 64 on the Rust port"
+expect = "Every case generates or is refused by W5 with its counts; INV-M1-01 to INV-M1-05 hold; the outputs equal the exact reference's; two machines agree (V-INV-10); flat gives one region and no edge; desert_fringe at R = 128 and R = 256, K = 4, gives a connected region graph for seeds 1, 2 and 4 to 8 (hamlet, seed 42, included: its neighbours can reach each other), and for seed 3 an island region with no edge (2 graph components; W6 seeds the island, F1's sea routes join it): the reference asserts the R = 128 row on every check and pins each golden case's component count"
+
+[verification]
+tests = ["V-INV-10", "V-DET-01", "V-DET-02", "V-INV-01", "V-PERF-02", "V-PERF-04"]
+prototype = "specs/worldgen/selftest_worldgen_lite.py"

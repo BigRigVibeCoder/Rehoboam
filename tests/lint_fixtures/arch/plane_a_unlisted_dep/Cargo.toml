@@ -1,0 +1,9 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# A plane-A crate depends on itoa, which is not on the reviewed list (BCK-002 A-20). Read with cargo metadata --no-deps: nothing is fetched.
+[workspace]
+members = ["rh-core"]
+resolver = "3"
+
+# Every plane-A crate inherits these lints (bin/lint_arch.py rule lints, VER-SPR-003-TEST GAP-9).
+[workspace.lints.rust]
+unsafe_code = "forbid"

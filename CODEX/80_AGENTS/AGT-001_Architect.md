@@ -18,7 +18,7 @@ version: 1.0.0
 
 ## 1. Boot sequence (every session)
 1. `CLAUDE.md` (the non-negotiables), then `AGENTS.md`.
-2. `CODEX/00_INDEX/MANIFEST.yaml`; regenerate it if stale (`bin/gen_manifest.py`).
+2. `CODEX/00_INDEX/MANIFEST.yaml`, after generating it (`python -I bin/gen_manifest.py`; not committed).
 3. `CODEX/10_GOVERNANCE/GOV-007`, then GOV-005 and GOV-002.
 4. `CODEX/05_PROJECT/PRJ-001`, then BCK-001 and BCK-002, then every `ACTIVE` or `REVIEW` sprint.
 5. Open `DEF-` and `EVO-` items.

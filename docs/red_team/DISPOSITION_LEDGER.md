@@ -3,7 +3,7 @@
 > **Purpose:** Authoritative living ledger tracking every Red Team finding, architectural proposal, handoff, and decision.  
 > **Rule:** Prevents amnesia, prevents re-arguing settled decisions, records exact Architect dispositions and rationales, and defines **Revisit Triggers** for re-testing as the engine evolves.  
 > **Maintained by:** Red Team Leader & Quality Auditor  
-> **Last Synchronized:** 2026-10-16 (Gate G0 Director Rulings & Batch 04 Intake)
+> **Last Synchronized:** 2026-10-17 (Post-G0 Walking Skeleton & SOTA Stream Engine)
 
 ---
 
@@ -11,8 +11,8 @@
 
 | Category | Count | Status Notes |
 | :--- | :---: | :--- |
-| **Total Findings Tracked** | **32** | Complete record from project pivot through Gate G0 rulings |
-| **Fully Ratified & Adopted into Code / Specs** | **18** | Integrated via ADR-0035, ADR-0036, ADR-0037, PRs #2, #3, #9, #12, #20, `S6`, `S7`, `GOV-003 §6`, RT-031–RT-033 |
+| **Total Findings Tracked** | **34** | Complete record from project pivot through Phase 1a |
+| **Fully Ratified & Adopted into Code / Specs** | **19** | Integrated via ADR-0035, ADR-0036, ADR-0037, PRs #2, #3, #9, #12, #20, `S6`, `S7`, `GOV-003 §6`, RT-031–RT-034 |
 | **Adopted with Lighter / Pragmatic Mechanism** | **2** | Gap 1 (Props from stock) and Gap 5 (Parquet reverse key) adapted for kingdom scale |
 | **Deferred by Design** | **1** | Acoustic decibel & terrain damping propagation (precision without data) |
 | **Approved / Disposed for Gate G0 Integration** | **8** | Batches 01, 02, 03, and 04 in `docs/handoffs/` and `docs/decisions-log.md` |
@@ -59,6 +59,7 @@
 | **RT-031** | **3D Voxel World Engine Standard for Plane C** | Batch 06 | Plane C (`05.10`, `05.7`) | **ADOPTED AS STANDARD** | Replaces legacy 2D sprite ripper tools with Web-Native Three.js 3D Voxel Engine. Proved locked 60 FPS across rural keeps (12k voxels) and imperial metropolis districts (1M census, 17k hydrated voxels, galleons, cathedral, aqueduct, bazaar). Leverages ADR-0031 Hydration Bubble, Greedy Meshing, and Octree LOD. | Primary Plane C visual spectator. Wire to `rh-stream` in SPR-013. |
 | **RT-032** | **Spatial Stream-to-Voxel World Compiler Engine & LLM Culture Dreamer** | Batch 06 | Plane C (`05.10`, `05.7`, ADR-0031, ADR-0036) | **RATIFIED & ADOPTED (P14, ADR-0036)** | Eliminates handcoded voxel coordinates. Reads raw Plane A simulation event streams (Arrow/WebSocket) and uses procedural spatial grammar to synthesize 3D voxel footprints in < 25 ms at locked 60 FPS. Features **👑 Peak SOTA Micro-Voxel Fidelity (0.35m)** with Tudor timber diagonal cross-braces, 3-tier stepped thatch roofs, leaded lantern windows with floral planter boxes, interior hearths, and per-voxel HSL color jittering. Integrates pluggable **Admin & LLM Studio (OpenRouter / Claude-3.5 / Gemini)** and **Deterministic Culture Caching** (zero-lag 0.0 ms replay). Proven in `voxel_stream_compiler.html`. | Core bridge between Plane A simulation stream and Plane C voxel visualizer. |
 | **RT-033** | **Plane C Simulation Stream Viewer & Live WebSocket Protocol** | Batch 06 | Plane C (`05.10`, `05.7`, ADR-0037) | **RATIFIED & ADOPTED (P15, ADR-0037)** | Zero-dependency RFC-6455 WebSocket streaming daemon (`bin/stream_server.py`) broadcasting live Plane A simulation packets (Year, Season, Demography, Harvests, Wall Breaches, Dragon Actions) on port 8089. Features live top telemetry ribbon, bidirectional control commands (Pause, 1x/2x/5x/10x speed, Step tick, trigger siege/dragon), First-Person Ground Walking Camera (1.6m eye height, WASD + mouse look, terrain collision), Luanti-grade micro-voxel aesthetics (Weeping Willow drooping vines, multi-toned Sakura cherry blossoms, PBR specular water, drifting fireflies), and zero-dark-failure offline fallback. Verified live in `tools/stream_viewer/index.html` and `bin/run_stream_viewer.sh`. | Production viewer for live Phase 1 simulation streams. |
+| **RT-034** | **Two Castles War & 100-Person Valley Village Simulation** | Batch 06 | Plane C (`tools/stream_viewer/index.html`) | **VALIDATED & OPERATIONAL** | 100-person valley village ("Val d'Or") positioned between North Sapphire Keep (House of Valois) and South Crimson Citadel (House of Lancaster). Features animated watermill with rotating 8-spoke wheel, wheat fields, timber bridge, 100 procedural animated villagers (farmers, millers, blacksmiths, carriers), 60 garrison troops, and real-time cross-valley parabolic trebuchet counter-battery ballistics with independent wall breach destruction. Verified live at 60 FPS on port 8088/8089. | Live benchmark scenario for walking skeleton C. |
 
 ---
 
@@ -68,23 +69,24 @@ These are scheduled re-entry points where the Red Team must un-pause an item, ru
 
 ```
 +-----------------------------------------------------------------------------------------+
-| TRIGGER 1: SPRINT MERGE CLEARANCE (SPR-007, SPR-008, SPR-009)                           |
-| Target: Active Phase 0 PRs                                                              |
+| TRIGGER 1: SPRINT MERGE CLEARANCE (SPR-001–SPR-010, SPR-011, SPR-012, SPR-013)          |
+| Target: Active Phase 0 & Phase 1a PRs                                                   |
 | Actions:                                                                                |
-| - Verify SPR-007 PR #25 plane hashes, keyframes, and input journal IPC negative length.  |
-| - Stand by for laptop adjutant session on SPR-008 PR #28 (T-02 cross-machine golden run).|
-| - Audit SPR-009 wall-clock performance benches (Benches 7 & 8) and Gate G0 inventory.   |
+| - Verify SPR-007 plane hashes, keyframes, and input journal IPC negative length.        |
+| - Verify SPR-008 T-02 cross-machine golden run and SPR-009 wall-clock performance.      |
+| - Audit SPR-011 engine prerequisites and SPR-012 solo living/death walking skeleton B.  |
+| - Clear Wave 4 sprint plans: SPR-014 (mortality queues), SPR-020 (envelope), SPR-026.   |
 +-----------------------------------------------------------------------------------------+
                                            │
                                            ▼
 +-----------------------------------------------------------------------------------------+
-| TRIGGER 2: GATE G0 RATIFICATION MILESTONE (CONCLUSION OF PHASE 0)                       |
+| TRIGGER 2: GATE G0 RATIFICATION MILESTONE (PASSED — VER-G0)                             |
 | Target: CODEX, Roadmap, and System Specifications                                       |
 | Actions:                                                                                |
 | - Audit VER-G0 formal gate evaluation report.                                           |
 | - Confirm Laws 2 & 3 text in docs/01 §5 with Architect causal-root clarifications.     |
 | - Confirm GOV-003 §6 ten-bug failure-modes table.                                       |
-| - Verify Benches 7 & 8 instruction baselines (Bench 4 deferred to P1a field sprint).    |
+| - Verify Benches 7 & 8 instruction baselines.                                           |
 +-----------------------------------------------------------------------------------------+
                                            │
                                            ▼

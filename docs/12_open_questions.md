@@ -2,10 +2,11 @@
 
 > **Start with [`decisions_pending.md`](decisions_pending.md)**: the one-page list of what is waiting on you, with defaults. This file holds the full reasoning.
 
-*Status: Draft v1.1 (2026-10-15). Each item lists my recommendation and the default I will assume if you don't answer. Items marked ★ block P0/P1. Question numbers are stable, so other documents can cite them.*
+*Status: Draft v1.4 (2026-10-16). Each item lists my recommendation and the default I will assume if you don't answer. Items marked ★ block P0/P1. Question numbers are stable, so other documents can cite them.*
 *v1.1 changes: ★1 now lists exactly the ★ ADRs in `06_adr/README.md`; new questions on the review-hours budget (★16), licence mode (17) and the pre-registered G2 protocol (18); rating time re-estimated at 3–4 h per seed (Q6); consult, scale-ladder and review questions updated; questions the v1.1 architecture answers are listed as resolved.*
 *v1.2 (2026-10-16): Q7 resolved by D27 (ADR-0034).*
 *v1.3 (2026-10-16): ADR-0035 (the saga engine) is decided (D28). New Q24 (image provider and monthly budget; D29) and Q25 (voice casting). Q★19's per-era 3D art question is moot: 3D is cut.*
+*v1.4 (2026-10-16): Q12: the walking skeleton validates N = 1, 5 and 60; the 100k claim for P1.0 is withdrawn (D32).*
 
 ---
 
@@ -22,7 +23,7 @@
 | 9 | **Content boundaries** for narration of atrocities (purges, pogroms, witch-hunts) | "Historian" register: depict consequences, avoid gratuitous detail. Adjustable per world. | Shapes narration prompts, style cards and refusal handling. |
 | 10 | **Oracle mortality.** Permadeath, or rebirth into a new "vessel" with lost Foresight? | Rebirth with heavy loss (years of absence, Foresight reset) to keep stakes. Permadeath as a hard mode. | Game-loop design for P3b/P7. |
 | 11 | **Foresight in Cultivator mode.** Free, or costing the Oracle's Foresight? *Partly answered:* the two console modes now exist (`05.3` §6.2), and Cultivator mode forks from the true state (`05.3` §7). | Free in Cultivator mode, which is a developer and analysis tool. In Oracle mode it costs Foresight. | Lets you use compute freely while keeping the game mechanic meaningful. |
-| 12 | **Scale ladder.** *Answered:* the target is **1 → 1M persons on one engine** (ADR-0028). The walking skeleton runs at N = 1, 60 and 100k from P1.0; 1M is proven in P3b. Above 1M is a stretch goal (implicit individuals), not required. | Hold at 1M. At 1M a millennium takes ≈ 6–14 min (PERF-1 ≤ 15 min, provisional) and Foresight is batch-only; micro worlds are near-instant. | Scale is proven early because it is cheap; eras late because they are expensive (`11` build strategy). |
+| 12 | **Scale ladder.** *Answered:* the target is **1 → 1M persons on one engine** (ADR-0028). The walking skeleton (P1.0) validates N = 1, 5 and 60, and 10k comes with P1.14 (D32, 2026-10-16, which withdrew the 100k claim for P1.0); 100k and 1M are the optional scale-up (P3.10, Later; ADR-0035). Above 1M is a stretch goal (implicit individuals), not required. | Hold at 1M. At 1M a millennium takes ≈ 6–14 min (PERF-1 ≤ 15 min, provisional) and Foresight is batch-only; micro worlds are near-instant. | Scale is proven early because it is cheap; eras late because they are expensive (`11` build strategy). |
 | 13 | **Publishing intent, ever?** See also Q17. | Keep the option open: strict licence hygiene (ADR-0021), and clear the trademark before any release. | Commercial use was not chosen as the success bar, but keeping the door open costs little now. |
 | 14 | **Multiplayer or shared worlds?** | Out of scope. Worlds can be *exported and shared* as manifest + seed + journal. | Large architectural cost. |
 | 15 | **Who reviews agent PRs?** *Largely answered* by the change classes in `13` §4.2. | You approve WPs, ADR changes, Registry semantics, breaking contract changes (C2), out-of-tolerance or determinism-machinery changes (C3), and gate decisions. C0/C1, additive C2 and within-tolerance C3 changes auto-merge through the merge queue after CI and an independent reviewer agent. | Throughput versus control. |

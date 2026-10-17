@@ -1,0 +1,12 @@
+[package]
+name = "mix-q8-q16"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "core"
+
+[dependencies]
+rh-core = { path = "../../../../../crates/rh-core" }

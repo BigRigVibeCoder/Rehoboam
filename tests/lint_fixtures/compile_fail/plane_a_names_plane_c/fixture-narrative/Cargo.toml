@@ -7,3 +7,6 @@ publish = false
 [package.metadata.rehoboam]
 plane = "C"
 kind = "machinery"
+
+[lints]
+workspace = true

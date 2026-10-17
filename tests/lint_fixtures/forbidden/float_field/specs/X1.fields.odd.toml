@@ -1,0 +1,18 @@
+# Fixture system spec for bin/lint_forbidden.py (SPR-010 T-04): declares one f32_field column, so the
+# escape in ../declared.rs is accepted. Only the [[owns]] entries are read by the gate; this is not a
+# real system spec and specs/systems/lint_odd.py never reads it.
+[[owns]]
+column = "region.soil_moisture"
+entity = "region"
+type = "f32_field"
+plane = "A"
+meaning = "soil moisture, a continuous field (05.1 §6 item 4)"
+fixed_point = false
+
+[[owns]]
+column = "region.fertility"
+entity = "region"
+type = "q16_16"
+plane = "A"
+meaning = "a fixed-point column: an f32_field escape naming it must be refused"
+fixed_point = true

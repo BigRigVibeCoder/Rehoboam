@@ -5,6 +5,7 @@
 *v1.1 changes: MOE-1 gains a precision target and a pause budget; MOE-2 uses a coupling-ablated baseline; MOE-4 is redefined as "frozen past, migrated future"; MOE-6 is reported with Clopper–Pearson bounds; fidelity-level principle relaxed to match `05.1` §3; glossary aligned with the v1.1 architecture (planes, scheduled outcomes, material inputs, genealogical IDs, console modes).*
 *v1.2 (2026-10-16): V2, principle 1 and the glossary state the LLM roles of ADR-0034 (D27): LLMs translate in and describe out, never decide; deliberation consults and pull inputs retired.*
 *v1.3 (2026-10-16): the saga engine (ADR-0035, ratified by you the same day). New north star; §1, §2, MOE-1–MOE-6 and MOP-1 re-aimed at sagas instead of economic fidelity (IDs kept); the three consumption modes; §6 re-sequenced to the new phases; principle 7 follows ADR-0021's personal-use mode; glossary entries for artifacts, vows, mythic catalysts and the chronicle pipeline.*
+*v1.4 (2026-10-16): principles 8 and 9, the red team's Laws 2 and 3, adopted narrowly by you at G0 (`docs/red_team/RT-2026-10-16-G0-dispositions.md` §2).*
 
 ---
 
@@ -108,6 +109,15 @@ These drivers rank and break ties for every decision in the architecture and the
 5. **Never delete history by fixed rule.** Information is tiered, summarised and archived, but never destroyed by a weight assigned before significance is known.
 6. **Each fidelity level must stand on its own evidence.** Every level is validated against the stylized facts. Neighbouring levels must agree on conserved quantities and declared targets, and the tested mixes are published as a supported-combinations matrix (`05.1` §3).
 7. **Licences in personal-use mode** (D19, ADR-0021 as amended). Rehoboam is never distributed, so any licence may be used, except one whose terms forbid the use itself. Unlicensed code is still not copied, and a licence ledger records what is used.
+8. **No spontaneous reality** (the red team's Law 2, adopted narrowly at G0). Every plane-A entity and every change to plane-A state, a title, a prop or a status included, originates from a simulated in-world event. There is no god-mode spawning and no global count controller. *Reading:*
+   - World creation is the root of the causal graph and seeds the initial state.
+   - "A simulated in-world event" means a system's mechanics, a timer that fires, or a journaled material input. A routine column update therefore needs no event record of its own.
+   - An ordinary prop drawn from aggregate stock is such a draw (the gap-1 ruling, D28).
+   - A count, such as the number of nobles or the population, is an outcome that tests check, never a target the engine enforces.
+9. **Tragic, not slapstick** (the red team's Law 3, adopted narrowly at G0). A mental break resolves only into a mythic, consequential act, such as usurpation, exile, a feud or a broken vow, never into a slapstick or meme break. *Reading:*
+   - This is a rule for authoring. The Registry's break acts and stress sources are written for the saga register, and plane C tells events in that register.
+   - No rule in plane A filters, suppresses or rerolls an outcome for its tone (principle 4, ADR-0009).
+   - The listed acts are examples; each break act fits the actor's station.
 
 ## 6. Scope and sequencing
 

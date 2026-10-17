@@ -1,0 +1,11 @@
+# Positive control for the libm-only rule (SPR-003 Architect ruling item 3; tests/lint_fixtures/README.md);
+# not in the Rehoboam workspace. A template: bin/check_all.sh renders it into target/rendered-fixtures/
+# with @WORKSPACE_LINTS@ replaced by the [workspace.lints.*] tables of the repository's Cargo.toml, and
+# copies the repository's clippy.toml beside it, so the control tests the real settings. rh-sample here
+# carries the float zone's crate-level allow, as the real crate does, and calls the std `ln` and `exp`:
+# `cargo clippy -p rh-sample -- -D warnings` must fail with clippy::disallowed_methods for both.
+[workspace]
+members = ["rh-sample"]
+resolver = "3"
+
+@WORKSPACE_LINTS@

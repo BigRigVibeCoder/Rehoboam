@@ -1,0 +1,139 @@
+# ODD-R v2 system spec (ADR-0033) of a DUMMY system of the smoke world (SPR-008 rulings 1-3).
+# It never enters the real Registry: its id is in worlds/smoke/registry_overlay.toml only, and bin/check_all.sh
+# lints it with lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml.
+# Its numbers are design values that keep a 1,000-year run bounded and busy; nothing here is calibrated.
+odd_r = 2
+params = []
+
+[system]
+id = "X5.smoke_polity"
+name = "Smoke world: polity"
+spec_version = "0.1.0"
+fidelity = "F0"
+status = "frozen"
+crate = "rh-sys-smoke"
+adrs = ["ADR-0006", "ADR-0024", "ADR-0025", "ADR-0033"]
+requirements = ["DET-4", "DET-5"]
+
+[purpose]
+statement = "Taxes the regions' lagged stocks each year and spends a twelfth of the treasury each month in the same phase, and each season confiscates a few estates by sending Settle. It is the smoke world's two bindings in one phase and its Polity and Military phases."
+role = "substrate"
+patterns = []
+not_yet = ["Not a model: a dummy system that exercises the engine for the golden run"]
+
+[[owns]]
+column = "polity.treasury"
+entity = "polity"
+type = "q16_16"
+plane = "A"
+meaning = "Treasury, Q16.16 bits (one row)"
+fixed_point = true
+[[owns]]
+column = "polity.decrees"
+entity = "polity"
+type = "i64"
+plane = "A"
+meaning = "Decrees issued (one row)"
+fixed_point = false
+
+[[emits]]
+kind = "DECREE"
+when = "the yearly tax is levied"
+roles = []
+[[commands]]
+target = "X4.smoke_estate"
+command = "Settle"
+payload = "{ row }"
+why = "a confiscation settles a living person's estate"
+[[reads]]
+column = "harvest.stock"
+owner = "X2.smoke_harvest"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "person.alive"
+owner = "X3.smoke_vital"
+lag = "same_instant"
+use = "identity"
+
+[scales]
+spatial = "The smoke world: 4 regions and 64 person rows"
+temporal = "Year, Month and Season pulses"
+extent = "1,000 sim-years in CI (SPR-008 ruling 5)"
+restart = "Its owned columns"
+
+[[fidelity_ladder]]
+level = "F0"
+representation = "The dummy rules below"
+status = "available"
+
+[[schedule]]
+pulse = "Year"
+phase = "Polity"
+steps = ["levy: add a tenth of the regions' total stock to the treasury; emit DECREE"]
+when = "always"
+[[schedule]]
+pulse = "Month"
+phase = "Polity"
+steps = ["spend: remove a twelfth of the treasury"]
+when = "always"
+[[schedule]]
+pulse = "Season"
+phase = "Military"
+steps = ["muster: send Settle for living persons whose keyed draw falls under 1/16"]
+when = "always"
+
+[[rng]]
+purpose = "muster_pick"
+key = ["person", "season"]
+use = "which living persons the muster confiscates"
+
+[design]
+basic_principles = "n/a: a dummy system of the smoke world (SPR-008); it exists to exercise the engine, not to model anything"
+emergence = "n/a: no modelled behaviour; only the engine's determinism is under test"
+adaptation = "n/a: no agents adapt"
+objectives = "n/a: no agents with objectives"
+learning = "n/a: no learning"
+prediction = "n/a: no prediction"
+sensing = "Reads only its declared columns, through the engine's SystemView"
+interaction = "Through declared reads, lifecycle commands and events only (05.1 §2)"
+stochasticity = "Keyed draws only (ADR-0006), under the purposes in [[rng]]"
+collectives = "n/a: no collectives"
+observation = "The hash ladder of the smoke run (SPR-008 ruling 4); no plane-B or plane-C output"
+era_state = []
+scale_behaviour = "n/a: one fixed scale; the smoke world is small on purpose"
+
+[initialization]
+state = "Treasury 0, no decrees"
+from_manifest = []
+
+[input_data]
+drivers = []
+
+[[submodels]]
+name = "levy"
+summary = "treasury += sum(stock)/10; decrees += 1"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+[[submodels]]
+name = "spend"
+summary = "treasury -= treasury/12"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+[[submodels]]
+name = "muster"
+summary = "for each living person, Settle with chance 1/16"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+
+[[invariants]]
+id = "INV-X5-01"
+statement = "The treasury is non-negative"
+test = "V-DET-02"
+
+
+[isolation]
+forcing = []
+horizon = "1,000 sim-years"
+expect = "The treasury stays bounded: levy and spend balance"
+
+[verification]
+tests = ["V-DET-01", "V-DET-02", "V-DET-11"]
+prototype = ""

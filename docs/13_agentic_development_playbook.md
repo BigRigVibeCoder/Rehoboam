@@ -3,7 +3,9 @@
 > **Since ADR-0032 (2026-10-16):** the process (roles, the work loop, sprints, defects, verification, planning) lives in `CODEX/10_GOVERNANCE/` (GOV-005, GOV-007, GOV-002). This document remains the **Rehoboam engineering supplement**: ownership rules, change classes, CI gates, the merge queue and golden-hash divergence (§4), the work-package fields now merged into `CODEX/_templates/template_sprint.md`, and context hygiene for agents.
 
 *Status: Draft v1.1 (2026-10-15). How you and the AI coding agents build Rehoboam together. It implements ADR-0022.*
-*v1.2 (2026-10-16), ADR-0035: §3 gains the engine-purity rule (V-INSP-05, planned in `bin/lint_arch.py` as BCK-002 A-14); `rh-godot` is cut.*
+*v1.4 (2026-10-16, 2026-10-17): §4.3: the golden-run tiers follow SPR-011 ruling 16, the same text as GOV-002 tier 9. §3: the engine-purity rule is enforced (`bin/lint_arch.py` rule `engine-purity`, SPR-011 T-00); `rh-stream` (planned, SPR-013) joins the engine-crate list.*
+*v1.3 (2026-10-16): §3: one engine-crate list, matching `bin/lint_arch.py` and the crates' `[package.metadata.rehoboam]`; crates not yet built are marked (planned).*
+*v1.2 (2026-10-16), ADR-0035: §3 gains the engine-purity rule (V-INSP-05, then planned in `bin/lint_arch.py` as BCK-002 A-14; enforced since v1.4); `rh-godot` is cut.*
 *v1.1 changes: new governance rules in §4 (single-writer column ownership, contract crates, lifecycle command queues, change classes C0–C3, merge queue, divergence bisect), aligned with `05.1` §2 and §6; `rh-contracts` and `rh-worldgen` added to the dependency rules; the decisions log already exists.*
 
 ---
@@ -44,10 +46,10 @@ Every task an agent receives uses this template. It is stored in `backlog/wp/<id
 ## 3. Repository conventions (summarised in `CLAUDE.md`)
 
 - **Crate boundaries are law.**
-  - System crates (`rh-sys-*`) depend only on `rh-core`, `rh-ids`, `rh-events`, `rh-registry` and `rh-contracts`.
+  - System crates (`rh-sys-*`) depend only on `rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry` and the contract crates (`rh-contracts` and any `rh-contract-*`, as `bin/lint_arch.py` allows) (`rh-sample`, the vendored samplers, by the SPR-003 Architect ruling of 2026-10-16).
   - Systems never import each other. They communicate through owned tables (read via contract crates), lifecycle commands and events (§4.1).
   - `rh-worldgen` (world generation and settlement plans) is an allowed dependency of `rh-server` (`rh-godot` is cut, ADR-0035). It follows the same determinism rules as authoritative code.
-  - **The engine only engines (ADR-0035 §6; EVO-4).** Engine crates (`rh-core`, `rh-ids`, `rh-events`, `rh-registry`, `rh-contracts`, `rh-snapshot`, `rh-sys-*`, `rh-sifter`, `rh-server`, `rh-cli`) contain no presentation, web UI, audio, image, TTS or LLM code and may not depend on media, HTTP-UI or LLM-client crates. One deny-list, kept in one place: for example `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`. **Planned rule** (V-INSP-05): BCK-002 A-14 adds it to `bin/lint_arch.py` in P1a, next to V-INSP-03. Presentation tools live in `python/`; only the P5 diorama lives in `console/`.
+  - **The engine only engines (ADR-0035 §6; EVO-4).** Engine crates (`rh-core`, `rh-ids`, `rh-sample`, `rh-events`, `rh-registry`, `rh-manifest`, `rh-contracts`, `rh-snapshot`, `rh-cli`, `rh-sys-*` (planned), `rh-sifter` (planned), `rh-server` (planned), `rh-minds` (planned), `rh-worldgen` (planned), `rh-stream` (planned)) contain no presentation, web UI, audio, image, TTS or LLM code and may not depend on media, HTTP-UI or LLM-client crates. One deny-list, kept in one place: for example `image`, `rodio`, `cpal`, `symphonia`, `reqwest`, `axum`, `tower-http`, `async-openai`, `tokenizers`. **Enforced** (V-INSP-05; BCK-002 A-14, SPR-011 T-00): rule `engine-purity` of `bin/lint_arch.py`, next to V-INSP-03, with the deny-list `ENGINE_DENY_LIST` there and nowhere else. It covers the transitive normal and build dependencies (from `Cargo.lock`) of every engine crate and of every plane-A crate; dev-dependencies are exempt. Presentation tools live in `python/`; only the P5 diorama lives in `console/`.
   - Plane-A crates never depend on plane-B or plane-C crates (`05.1` §6.7). No `rh-sys-*` or `rh-core` crate depends on the flavour-asset types (`05.5` §3).
   - `cargo-deny` and a dependency-graph lint enforce all of this.
 - **Randomness:**
@@ -56,7 +58,8 @@ Every task an agent receives uses this template. It is stored in `backlog/wp/<id
   - Never use `rand::thread_rng`, `StdRng` or `HashMap` iteration in authoritative code. Clippy lints and a custom grep gate enforce this.
 - **Numerics:**
   - Threshold quantities are fixed-point types from `rh-core::fixed`.
-  - Use `libm` for transcendentals and never call `mul_add`.
+  - Use `libm` for transcendentals and never call `mul_add`. `clippy.toml` disallows the `std` float transcendentals (`ln`, `exp`, `powf`, `sin`, ...) in every crate; `sqrt` is allowed, because IEEE 754 rounds it correctly.
+  - Floats are allowed in one plane-A crate only, `rh-sample` (the samplers' float zone, SPR-003). Distributions are drawn there, from keyed streams, and come back as integers or fixed point; no other plane-A crate computes in floats (V-DET-19).
 - **Events:**
   - New verbs, act classes and attributes need Registry entries first. Attributes a pattern reads are declared in the Registry `[attributes]`.
   - Emit roles and anchored snapshots for anything a pattern might read.
@@ -103,7 +106,7 @@ Agents must not "fix" a failing golden run by re-recording baselines. Only an ap
 | Architecture lints | Dependency-graph lint (§3), plane-isolation lint, column-ownership lint against the Registry, flavour-asset lint |
 | Unit + property tests | cargo-nextest, proptest, pytest + hypothesis |
 | Determinism | Thread-count hash ladder on reference worlds (50 sim-years); observer-invariance fuzz of read-only APIs from P2 (DET-6) |
-| Golden runs | Yearly plane-A hash ladders on `worlds/` (1,000 years for `smoke`, 200 for the others on PRs; full length nightly). On a mismatch, the divergence bisect tool runs automatically (§4.5) |
+| Golden runs | Plane-A hash ladders on `worlds/`. PR tier: `solo` end to end, plus 200-year yearly ladders for the other reference worlds; nightly: the full 1,000-year monthly ladders at 1/2/4/N threads × 3 repeats (SPR-011 ruling 16; GOV-002 tier 9). The P0 `smoke` world keeps its 1,000-year yearly ladder on every PR (ADR-0006 amendment v1.1 item 10). On a mismatch, the divergence bisect tool runs automatically (§4.5) |
 | Contracts | Protocol conformance, Python-binding parity, SQL-twin equivalence, consumer contract tests for changed contract crates |
 | Performance | criterion benches against baseline (> 10% regression fails) |
 | Licences | cargo-deny, pip-licenses, license-checker; provenance check for assets (ADR-0021) |

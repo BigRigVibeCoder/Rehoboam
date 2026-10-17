@@ -1,0 +1,7 @@
+# Positive controls for the float-api rule (SPR-003 ruling item 4; VER-SPR-003-TEST GAP-1;
+# tests/lint_fixtures/README.md); not in the Rehoboam workspace. rh-sample, the float zone, exposes a
+# float through its public surface once per file: each must be reported. internal.rs uses floats only
+# behind pub(crate) and must not be.
+[workspace]
+members = ["rh-sample"]
+resolver = "3"

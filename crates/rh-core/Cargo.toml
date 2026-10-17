@@ -12,3 +12,15 @@ kind = "core"
 
 [lints]
 workspace = true
+
+# SPR-005: the keyed RNG for StepCtx::rng. rh-core sits at the bottom with rh-ids: rh-registry
+# depends on rh-core, never the reverse (Architect ruling 2026-10-16).
+[dependencies]
+# SPR-006: the event schema and the emission-order log (plane A, no third-party dependency).
+rh-events = { version = "0.0.0", path = "../rh-events" }
+rh-ids = { version = "0.0.0", path = "../rh-ids" }
+
+
+# SPR-006: the integration tests build event drafts and read the log.
+[dev-dependencies]
+rh-events = { version = "0.0.0", path = "../rh-events" }

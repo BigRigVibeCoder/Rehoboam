@@ -1,0 +1,119 @@
+# ODD-R v2 system spec (ADR-0033) of a DUMMY system of the smoke world (SPR-008 rulings 1-3).
+# It never enters the real Registry: its id is in worlds/smoke/registry_overlay.toml only, and bin/check_all.sh
+# lints it with lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml.
+# Its numbers are design values that keep a 1,000-year run bounded and busy; nothing here is calibrated.
+odd_r = 2
+params = []
+
+[system]
+id = "X1.smoke_weather"
+name = "Smoke world: weather"
+spec_version = "0.1.0"
+fidelity = "F0"
+status = "frozen"
+crate = "rh-sys-smoke"
+adrs = ["ADR-0006", "ADR-0024", "ADR-0025", "ADR-0033"]
+requirements = ["DET-4", "DET-5"]
+
+[purpose]
+statement = "Keeps a fixed-point temperature per region that drifts every hour under keyed draws, and counts the hours of the year. It is the smoke world's Hour pulse and its Inputs and Environment phases."
+role = "substrate"
+patterns = []
+not_yet = ["Not a model: a dummy system that exercises the engine for the golden run"]
+
+[[owns]]
+column = "weather.temp"
+entity = "region"
+type = "q16_16"
+plane = "A"
+meaning = "Temperature per region, degrees, Q16.16 bits"
+fixed_point = true
+[[owns]]
+column = "weather.hours"
+entity = "world"
+type = "i64"
+plane = "A"
+meaning = "Hours elapsed in the current year (one row)"
+fixed_point = false
+
+[[emits]]
+kind = "FROST"
+when = "a region's temperature falls through 8 degrees"
+roles = ["target"]            # the region (SPR-020: the dummies fill target for their one subject)
+
+[scales]
+spatial = "The smoke world: 4 regions and 64 person rows"
+temporal = "Hour pulse (drift) and Year pulse (reset)"
+extent = "1,000 sim-years in CI (SPR-008 ruling 5)"
+restart = "Its owned columns"
+
+[[fidelity_ladder]]
+level = "F0"
+representation = "The dummy rules below"
+status = "available"
+
+[[schedule]]
+pulse = "Year"
+phase = "Inputs"
+steps = ["reset_year: zero the hour count"]
+when = "always"
+[[schedule]]
+pulse = "Hour"
+phase = "Environment"
+steps = ["drift: move each region's temperature by a keyed step, pulled toward 10 degrees"]
+when = "always"
+
+[[rng]]
+purpose = "drift_step"
+key = ["region", "hour"]
+use = "the hourly temperature step per region"
+
+[design]
+basic_principles = "n/a: a dummy system of the smoke world (SPR-008); it exists to exercise the engine, not to model anything"
+emergence = "n/a: no modelled behaviour; only the engine's determinism is under test"
+adaptation = "n/a: no agents adapt"
+objectives = "n/a: no agents with objectives"
+learning = "n/a: no learning"
+prediction = "n/a: no prediction"
+sensing = "Reads only its declared columns, through the engine's SystemView"
+interaction = "Through declared reads, lifecycle commands and events only (05.1 §2)"
+stochasticity = "Keyed draws only (ADR-0006), under the purposes in [[rng]]"
+collectives = "n/a: no collectives"
+observation = "The hash ladder of the smoke run (SPR-008 ruling 4); no plane-B or plane-C output"
+era_state = []
+scale_behaviour = "n/a: one fixed scale; the smoke world is small on purpose"
+
+[initialization]
+state = "Every region at 10 degrees; the hour count at 0"
+from_manifest = []
+
+[input_data]
+drivers = []
+
+[[submodels]]
+name = "reset_year"
+summary = "hours := 0 at each year boundary"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+[[submodels]]
+name = "drift"
+summary = "temp += (u mod 129 - 64)/256 degrees - (temp - 10)/64, clamped to [-40, 60]; hours += 1; emit FROST when a region falls through 8 degrees"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+
+[[invariants]]
+id = "INV-X1-01"
+statement = "Every temperature lies in [-40, 60] degrees"
+test = "V-DET-02"
+[[invariants]]
+id = "INV-X1-02"
+statement = "The hour count is in [0, 24 x 366]"
+test = "V-DET-02"
+
+
+[isolation]
+forcing = []
+horizon = "1,000 sim-years"
+expect = "Temperatures stay inside [-40, 60]; the hour count resets every year"
+
+[verification]
+tests = ["V-DET-01", "V-DET-02", "V-DET-11"]
+prototype = ""

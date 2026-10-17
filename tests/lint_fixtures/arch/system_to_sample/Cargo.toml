@@ -1,0 +1,9 @@
+# Negative control for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# A system crate depending on rh-sample, which the SPR-003 ruling adds to the system allow-list: must PASS.
+[workspace]
+members = ["rh-sys-a", "rh-sample"]
+resolver = "3"
+
+# Every plane-A crate inherits these lints (bin/lint_arch.py rule lints, VER-SPR-003-TEST GAP-9).
+[workspace.lints.rust]
+unsafe_code = "forbid"

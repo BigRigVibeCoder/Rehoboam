@@ -18,7 +18,7 @@ Measured hazards:
 ## Decision
 
 1. `history = f(engine_build, registry_version, manifest_hash, seed, input_journal)`.
-2. **Keyed counter-based RNG** for every draw: `H(seed, branch_salt(t), system, purpose, entity, t, k)`, using Philox or ChaCha8 streams with SplitMix64/xxh3 for scalar hashes.
+2. **Keyed counter-based RNG** for every draw: `H(seed, branch_salt(t), system, epoch, purpose, entity, t, k)`, using Philox or ChaCha8 streams with SplitMix64/xxh3 for scalar hashes. Byte layout: `05.1` §6 item 2.
 3. **Vendored samplers**, each checked against golden vectors.
 4. **Integer or fixed-point values** for every quantity that crosses a threshold. `libm` only. No FMA contraction and no fast-math.
 5. **No hash-map iteration** in authoritative code. Rayon only with fixed chunking and chunk-ordered reductions.
@@ -52,7 +52,7 @@ R03 §4, §Recommendations 4; R01 §4; R10 §R4; R04 §4.
 *Triggered by the red-team review (RT-C1, RT-C2, RT-M2, RT-M4). Sources of truth: ADR-0024, ADR-0025, ADR-0026, 05.1 §6, 05.2 §7, 05.9 IF-1, IF-2. No inline corrections were needed. Decision items 2 and 6 are restated precisely here.*
 
 1. **History function.** `history = f(engine_build, registry_version, manifest_hash, seed, input_journal)`. It covers **plane A**. Planes B and C are pure functions of A plus their own versions and inputs (ADR-0024).
-2. **Keyed RNG, exact form.** `u = H(world_seed, branch_salt(t), system_id, purpose, entity_id, t, k)`. `H` is Philox-4x64 or ChaCha8 with stream and position, with SplitMix64 or xxh3 for scalar hashes.
+2. **Keyed RNG, exact form.** `u = H(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)`. `H` is Philox-4x64 or ChaCha8 with stream and position, with SplitMix64 or xxh3 for scalar hashes.
 3. **Lineage salts (RT-M4).** `branch_salt(t) = H(lineage path of the forks covering t)`. The canonical path is empty. Every fork, Foresight job and rollout extends the path uniquely, so salts never collide. This replaces "`branch_salt = k` for rollout k".
    - **`resample_on_fork`.** Timers and polls drawn before a fork are re-drawn after it only if their purpose carries this Registry flag (vital timers, latent periods). Otherwise they are shared.
    - **What-if forks keep the parent salt** by default, for a clean counterfactual. "Reroll fate" extends it.

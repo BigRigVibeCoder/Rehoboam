@@ -1,0 +1,6 @@
+# Positive control for the fp-contract guard of bin/check_all.sh (SPR-007 ruling 4; Architect,
+# 2026-10-16; tests/lint_fixtures/README.md). Never used by a build. The right value, but not forced: a
+# CFLAGS already in the environment beats a non-forced [env] entry, so the C builds could still
+# contract. The guard must FAIL.
+[env]
+CFLAGS = "-ffp-contract=off"

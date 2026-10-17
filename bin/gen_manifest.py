@@ -6,8 +6,13 @@ Sources:
     from the filename, H1, "Status:" line and first paragraph)
   - specs/systems/*.odd.toml (system specs, ADR-0033)
 
-Run:  python -I bin/gen_manifest.py          write the manifest
-      python -I bin/gen_manifest.py --check  exit 1 if the committed manifest is stale (used by bin/check_all.sh)
+Run:  python -I bin/gen_manifest.py          write the manifest (a local file, not committed: GOV-001 §3)
+      python -I bin/gen_manifest.py --check  build it in memory and exit 1 on any error (bad or missing
+                                             frontmatter, unknown tags, duplicate ids); used by bin/check_all.sh
+
+DECISION (2026-10-16): the manifest is no longer committed. A committed generated index conflicted
+with every concurrent PR that touched a document, forcing a rebase each time. Agents generate it at
+session start; CI validates the inputs it is built from.
 Standard library only.
 """
 import re
@@ -143,11 +148,7 @@ def main() -> int:
         print("ERROR", e)
     text = render(es)
     if "--check" in sys.argv:
-        current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
-        if current != text:
-            print("STALE: CODEX/00_INDEX/MANIFEST.yaml differs from a fresh build; run python -I bin/gen_manifest.py")
-            return 1
-        print(f"MANIFEST: current ({len(es)} documents)")
+        print(f"MANIFEST: {'FAIL' if errs else 'builds cleanly'} ({len(es)} documents, {len(errs)} errors)")
         return 1 if errs else 0
     OUT.write_text(text, encoding="utf-8")
     print(f"MANIFEST: wrote {len(es)} documents to {OUT.relative_to(ROOT)}")

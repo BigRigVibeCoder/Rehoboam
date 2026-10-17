@@ -1,0 +1,39 @@
+# Parity corpus (SPR-004 V-WC-04): Structural: model validators (class shares, speculative horizon) and string bounds.
+manifest_version: 0
+registry_version: "0.1.0"
+world:
+  id: solo
+  display_name: "Solo test world"
+  template: test_solo
+  seed: 1
+  calendar: {days_per_year: 360, months: 12, seasons: 4, epoch_label: "Test era"}
+  horizon: {years: 80, label: speculative}
+  fidelity_profile: {M2.demography: F1, M4.economy: F1, S5.daily_life: F2}
+  activity_resolution: minutes   # affordable at N = 1: every minute counts
+geography:
+  raster_resolution: 64          # a tiny map: one valley, a cottage, a field, a stream, a wood
+  region_count: 1
+  heightmap_template: flat
+  climate: {zone: temperate_maritime, harvest_sigma: 0.15, autocorr: 0.1, spatial_share: 0.9, volcanic_rate: 0.0}
+  ecology: {livestock_kg_per_capita: 0, wild_prey_tonnes: 0}
+peoples:
+  - archetype: human
+    population: 1
+    class_shares: {commoner: 0.5, burgher: 0.2, elite: 0.1}
+    cultures:
+      - {id: valefolk, name: "Valefolk", naming_seed: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", value_bias: {self_direction: 0.3}}
+    faiths:
+      - {id: hearth, name: "Hearth custom", doctrine_tags: []}
+cast:
+  - {id: ada, name: "Ada", sex: female, age_years: 25, household: ada_house, flags: [protagonist]}
+households:
+  - id: ada_house
+    head: ada
+    holdings: {grain: 400, goats: 4, tools: 3}
+systems: {}
+narrative:
+  pattern_packs: [solitary_life]
+  default_style_card: historian
+presentation:
+  era_art: lofi_plain
+  palette: mono

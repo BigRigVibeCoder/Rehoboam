@@ -9,7 +9,7 @@ tags: [governance, workflow]
 related: [GOV-007, GOV-002, ADR-0032, ADR-0033]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.2.0
+version: 1.3.1
 ---
 
 > **BLUF:** Every piece of work follows one loop: conversation → spec → sprint → verification → audit → merge by change class. Specs come before code. One agent works on one branch per sprint, with one commit per task. Merges follow the change classes in `docs/13` §4.2: routine work merges on green tests plus independent audits; the director approves only contract, determinism-machinery and out-of-tolerance changes. Adapted from `agentic_architect` GOV-005.
@@ -97,6 +97,7 @@ Sprints with no dependency between them run in parallel sessions. The Architect 
   - **C0/C1:** green CI and the Architect's review.
   - **C2:** green CI, an independent Tester pass and the Architect's audit (`VER-`). A breaking change also carries its migration.
   - **C3:** as C2, plus, once golden worlds exist, the divergence bisect report and the CRN-paired ensemble (`docs/13` §4.2). A C3 change that would alter the history of a golden world **out of tolerance** is announced to the director with its evidence before the merge; the director may veto.
+    - A C3 change to a sampler (`rh-sample`) or to its reference generator (`bin/gen_sampler_reference.py`) also needs the nightly tier green on its head before the merge: the PR tier's statistics are too weak to catch a small bias (`docs/09` V-DET-09; VER-SPR-003 GAP-8). Approved by the director at G0, 2026-10-16.
 - **The director is told, not asked.** Each merge appears in the Architect's merge summary (the PR, its class, the audit verdict). The director may veto or order a revert at any time.
 - **The director still approves** sprint plans for C2/C3 work (§2), ADR changes and anything that reverses an earlier ruling: those are decisions, not merges.
 - **No one re-records golden baselines by hand** (`docs/13` §4.2).

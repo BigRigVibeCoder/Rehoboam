@@ -1,0 +1,9 @@
+# Positive-control fixture for bin/lint_arch.py (VER-SPR-003-TEST GAP-4; BCK-002 A-20): rh-sample adds the unreviewed third-party crate zerocopy.
+# Read with cargo metadata --no-deps: nothing is fetched. Not in the Rehoboam workspace.
+[workspace]
+members = ["rh-sample"]
+resolver = "3"
+
+# Every plane-A crate inherits these lints (bin/lint_arch.py rule lints, VER-SPR-003-TEST GAP-9).
+[workspace.lints.rust]
+unsafe_code = "forbid"

@@ -9,7 +9,7 @@ tags: [roadmap, project-management]
 related: [BCK-001, BCK-002, GOV-007]
 created: 2026-10-16
 updated: 2026-10-16
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF:** Rehoboam is a saga engine (ADR-0035): **it generates legends, a deterministic world whose dynasties, vows, relics and betrayals become sagas you can listen to, read and scrub through.** The engine only engines: its one output is the World Stream, and every presentation tool sits downstream. Work runs in gated phases P0–P5 and climbs a complexity ladder from one person (`solo`) to a kingdom of 10k–50k; 1M is optional. The full roadmap, with every work package, gate test and kill criterion, is `docs/11_roadmap.md`. This page is its front door for agents.
@@ -40,7 +40,7 @@ version: 1.1.0
 ## 3. The complexity ladder (D4; rung 4 re-aimed by ADR-0035)
 | Rung | World | Phase |
 |---|---|---|
-| 0 | `solo`: 1 person, 64×64 valley, every minute authoritative | P1a (P1.0 skeleton) |
+| 0 | `solo`: 1 person, 64×64 valley; ageing and death on day boundaries (D31: its household's food comes in P1b, minute-level daily life Later) | P1a (P1.0 skeleton) |
 | 1 | `household`: ~5 | P1a |
 | 2 | `hamlet`: ~60 (`uz_job`) | P1a |
 | 3 | `village`: ~1k | P1b |

@@ -1,0 +1,6 @@
+# Positive control for the fp-contract guard of bin/check_all.sh (SPR-007 ruling 4;
+# tests/lint_fixtures/README.md). Never used by a build: cargo reads .cargo/config from the current
+# directory upward, and no check runs from here. CFLAGS is the one accepted place for fp-contract, but
+# only as exactly -ffp-contract=off; this config would let the C compiler contract, and must FAIL.
+[env]
+CFLAGS = { value = "-ffp-contract=fast", force = true }

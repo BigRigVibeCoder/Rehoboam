@@ -3,15 +3,224 @@
 //! A tool, not plane A: it hosts the engine and reads its stream, and acts on a world only
 //! through journaled inputs (ADR-0030).
 //!
-//! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.10_world_stream.md`.
+//! Commands:
+//! - `rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]`: the Rust twin of
+//!   `python specs/manifest/manifest_v0.py validate` (SPR-004 T-02), with the same report and
+//!   exit codes (0 valid, 1 invalid, 2 structurally invalid).
+//! - `rh-cli manifest schema [--diff <reference.schema.json>]`: the JSON Schema emitted from the
+//!   Rust manifest types (SPR-004 T-04); with `--diff`, every unexplained difference from the
+//!   reference schema, exit 1 if there is any.
+//! - `rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]`: the
+//!   single-writer ownership lint (SPR-004 T-03). With no access files it checks the access each
+//!   spec implies; with files, the `[[access]]` declarations in them. Exit 1 on any violation.
+//! - `rh-cli run <world> …` (SPR-012 T-08: `smoke`, or a manifest world such as `solo`, with
+//!   `--strict` refusing a manifest that names a system this build lacks), `rh-cli ladder compare <a> <b>`, `rh-cli ladder cut-yearly <monthly> <out>` and `rh-cli bisect …`: the golden
+//!   runs, their hash ladders and the divergence bisect (SPR-008; `rh_golden::cli` documents the
+//!   flags and exit codes).
 //!
-//! Stub created by SPR-001 (repository bootstrap); commands arrive with SPR-009 and later.
+//! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.10_world_stream.md`.
 #![forbid(unsafe_code)]
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 
-/// Prints the tool's name and version; there are no commands yet.
+use rh_manifest::Registry;
+use rh_manifest::manifest;
+use rh_registry::ownership::{self, AccessSpec, Ownership};
+
+const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]\n       rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]\n       rh-cli run <world> [--strict] [--seed S] --years N [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--vitals]\n       rh-cli ladder compare <a.ladder> <b.ladder>\n       rh-cli ladder cut-yearly <monthly.ladder> <out.ladder>\n       rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg A ...] [--seed S] [--years N] [--threads T] --work DIR [--out REPORT]";
+/// The repository the golden runs read `worlds/` from: this binary's own source tree, so a build
+/// of another revision runs that revision's world (SPR-008 T-03).
+const DEFAULT_REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+/// The defaults are found from the source tree, not the working directory, as the reference finds
+/// its Registry next to itself (SPR-004 DEF-7).
+const DEFAULT_SPECS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../specs/systems");
+const DEFAULT_REGISTRY: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../specs/manifest/registry_v0.toml"
+);
+
+#[allow(
+    clippy::disallowed_methods,
+    reason = "tool plane: command-line arguments and environment overrides (SPR-011 A-4)"
+)]
 fn main() -> ExitCode {
-    println!("rh-cli {}", env!("CARGO_PKG_VERSION"));
-    ExitCode::SUCCESS
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .as_slice()
+    {
+        [] | ["--version"] => {
+            println!("rh-cli {}", env!("CARGO_PKG_VERSION"));
+            ExitCode::SUCCESS
+        }
+        ["manifest", "validate", rest @ ..] => manifest_validate(rest),
+        ["manifest", "schema"] => {
+            println!("{:#}", manifest::schema::manifest_schema());
+            ExitCode::SUCCESS
+        }
+        ["manifest", "schema", "--diff", reference] => schema_diff(reference),
+        ["ownership", rest @ ..] => ownership(rest),
+        ["run", "smoke", rest @ ..] => golden(rh_golden::cli::run_smoke, rest),
+        // SPR-012 T-08: a manifest world under worlds/ (its world.toml).
+        ["run", world, rest @ ..] if !world.starts_with('-') => {
+            let words: Vec<String> = rest.iter().map(|s| (*s).to_owned()).collect();
+            ExitCode::from(rh_golden::cli::run_world(
+                world,
+                &words,
+                std::path::Path::new(DEFAULT_REPO),
+            ))
+        }
+        ["ladder", "compare", a, b] => {
+            ExitCode::from(rh_golden::cli::ladder_compare(a.as_ref(), b.as_ref()))
+        }
+        ["ladder", "cut-yearly", monthly, out] => ExitCode::from(
+            rh_golden::cli::ladder_cut_yearly(monthly.as_ref(), out.as_ref()),
+        ),
+        ["bisect", rest @ ..] => golden(rh_golden::cli::bisect_cmd, rest),
+        _ => usage(),
+    }
+}
+
+fn golden(command: fn(&[String], &std::path::Path) -> u8, rest: &[&str]) -> ExitCode {
+    let words: Vec<String> = rest.iter().map(|s| (*s).to_owned()).collect();
+    ExitCode::from(command(&words, std::path::Path::new(DEFAULT_REPO)))
+}
+
+fn usage() -> ExitCode {
+    eprintln!("{USAGE}");
+    ExitCode::from(64)
+}
+
+fn manifest_validate(args: &[&str]) -> ExitCode {
+    let (path, registry) = match args {
+        [path] => (PathBuf::from(path), PathBuf::from(DEFAULT_REGISTRY)),
+        [path, "--registry", reg] | ["--registry", reg, path] => {
+            (PathBuf::from(path), PathBuf::from(reg))
+        }
+        _ => return usage(),
+    };
+    let reg = match Registry::load(&registry) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(3);
+        }
+    };
+    let outcome = manifest::validate_file(&path, &reg);
+    print!("{}", outcome.render(&path.display().to_string()));
+    ExitCode::from(outcome.exit_code())
+}
+
+fn ownership(args: &[&str]) -> ExitCode {
+    let (mut specs_dir, mut registry, mut files) = (DEFAULT_SPECS, DEFAULT_REGISTRY, Vec::new());
+    let mut it = args.iter();
+    while let Some(&a) = it.next() {
+        match (a, it.clone().next()) {
+            ("--specs", Some(&d)) => {
+                specs_dir = d;
+                it.next();
+            }
+            ("--registry", Some(&r)) => {
+                registry = r;
+                it.next();
+            }
+            (f, _) if !f.starts_with("--") => files.push(f),
+            _ => return usage(),
+        }
+    }
+    let loaded = Registry::load(&PathBuf::from(registry))
+        .map_err(|e| e.to_string())
+        .and_then(|reg| Ok((reg, ownership::load_specs(&PathBuf::from(specs_dir))?)));
+    let (reg, specs) = match loaded {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::from(3);
+        }
+    };
+    let system_ids = reg.systems.keys().cloned().collect();
+    let table = Ownership::build(&specs, &system_ids);
+    let mut accesses: Vec<AccessSpec> = Vec::new();
+    for f in &files {
+        match std::fs::read_to_string(f)
+            .map_err(|e| e.to_string())
+            .and_then(|t| AccessSpec::from_toml(&t))
+        {
+            Ok(a) => accesses.extend(a),
+            Err(e) => {
+                eprintln!("{f}: {e}");
+                return ExitCode::from(3);
+            }
+        }
+    }
+    let from_files = accesses.len();
+    // Until SPR-005 no system declares its access in code: without files, each spec's own
+    // declaration is checked (writes = owns), which exercises the two-owner and Registry rules.
+    let derived = if files.is_empty() {
+        table.specs.len()
+    } else {
+        0
+    };
+    if files.is_empty() {
+        accesses.extend(table.specs.values().map(AccessSpec::from_spec));
+    }
+    let mut violations = table.problems.clone();
+    for a in &accesses {
+        violations.extend(table.check(a));
+    }
+    for note in table.unresolved_reads() {
+        println!("NOTE {note}");
+    }
+    for v in &violations {
+        println!("{v}");
+    }
+    println!(
+        "OWNERSHIP: {} columns owned by {} systems; 0 access declarations from code (derived from \
+         specs until SPR-005: {derived}; from files: {from_files}); {} violations",
+        table.owners.len(),
+        table.specs.len(),
+        violations.len()
+    );
+    if violations.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+fn schema_diff(reference: &str) -> ExitCode {
+    let parsed = std::fs::read_to_string(reference)
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).map_err(|e| e.to_string()));
+    let reference_schema = match parsed {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{reference}: {e}");
+            return ExitCode::from(3);
+        }
+    };
+    let generated = manifest::schema::manifest_schema();
+    let differences = manifest::schema::differences(&reference_schema, &generated);
+    for d in &differences {
+        println!("SCHEMA DIFFERENCE {d}");
+    }
+    let defs = generated
+        .get("$defs")
+        .and_then(serde_json::Value::as_object)
+        .map_or(0, serde_json::Map::len);
+    if differences.is_empty() {
+        println!(
+            "SCHEMA: no unexplained difference from {reference} ({defs} definitions and the root compared)"
+        );
+        ExitCode::SUCCESS
+    } else {
+        println!(
+            "SCHEMA: {} unexplained differences from {reference}",
+            differences.len()
+        );
+        ExitCode::from(1)
+    }
 }

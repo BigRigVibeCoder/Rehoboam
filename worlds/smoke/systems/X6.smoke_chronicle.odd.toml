@@ -1,0 +1,149 @@
+# ODD-R v2 system spec (ADR-0033) of a DUMMY system of the smoke world (SPR-008 rulings 1-3).
+# It never enters the real Registry: its id is in worlds/smoke/registry_overlay.toml only, and bin/check_all.sh
+# lints it with lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml.
+# Its numbers are design values that keep a 1,000-year run bounded and busy; nothing here is calibrated.
+odd_r = 2
+params = []
+
+[system]
+id = "X6.smoke_chronicle"
+name = "Smoke world: chronicle"
+spec_version = "0.1.0"
+fidelity = "F0"
+status = "frozen"
+crate = "rh-sys-smoke"
+adrs = ["ADR-0006", "ADR-0024", "ADR-0025", "ADR-0033"]
+requirements = ["DET-4", "DET-5"]
+
+[purpose]
+statement = "Takes a monthly census of the living and notes it with a causal edge to the census, and counts the days in the Culture and Bookkeeping phases. It is the smoke world's draft-local causal edges and its Agenda, Culture and Bookkeeping phases."
+role = "substrate"
+patterns = []
+not_yet = ["Not a model: a dummy system that exercises the engine for the golden run"]
+
+[[owns]]
+column = "chronicle.census"
+entity = "world"
+type = "i64"
+plane = "A"
+meaning = "The living count at the last census (one row)"
+fixed_point = false
+[[owns]]
+column = "chronicle.days"
+entity = "world"
+type = "i64"
+plane = "A"
+meaning = "Days counted in Culture (one row)"
+fixed_point = false
+[[owns]]
+column = "chronicle.closed"
+entity = "world"
+type = "i64"
+plane = "A"
+meaning = "Days closed in Bookkeeping (one row)"
+fixed_point = false
+
+[[emits]]
+kind = "CENSUS"
+when = "the monthly census"
+roles = []
+[[emits]]
+kind = "CENSUS_NOTE"
+when = "after each census, caused by it"
+roles = []                   # its triggered edge to the CENSUS stays
+[[reads]]
+column = "person.alive"
+owner = "X3.smoke_vital"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "estate.heirs"
+owner = "X4.smoke_estate"
+lag = "lagged"
+use = "identity"
+
+[scales]
+spatial = "The smoke world: 4 regions and 64 person rows"
+temporal = "Month and Day pulses"
+extent = "1,000 sim-years in CI (SPR-008 ruling 5)"
+restart = "Its owned columns"
+
+[[fidelity_ladder]]
+level = "F0"
+representation = "The dummy rules below"
+status = "available"
+
+[[schedule]]
+pulse = "Month"
+phase = "Agenda"
+steps = ["census: count the living, emit CENSUS and a CENSUS_NOTE caused by it"]
+when = "always"
+[[schedule]]
+pulse = "Day"
+phase = "Culture"
+steps = ["tally: count the day"]
+when = "always"
+[[schedule]]
+pulse = "Day"
+phase = "Bookkeeping"
+steps = ["close_day: count the closed day"]
+when = "always"
+
+[[rng]]
+purpose = "note_tone"
+key = ["world", "month"]
+use = "the census note's tone"
+
+[design]
+basic_principles = "n/a: a dummy system of the smoke world (SPR-008); it exists to exercise the engine, not to model anything"
+emergence = "n/a: no modelled behaviour; only the engine's determinism is under test"
+adaptation = "n/a: no agents adapt"
+objectives = "n/a: no agents with objectives"
+learning = "n/a: no learning"
+prediction = "n/a: no prediction"
+sensing = "Reads only its declared columns, through the engine's SystemView"
+interaction = "Through declared reads, lifecycle commands and events only (05.1 §2)"
+stochasticity = "Keyed draws only (ADR-0006), under the purposes in [[rng]]"
+collectives = "n/a: no collectives"
+observation = "The hash ladder of the smoke run (SPR-008 ruling 4); no plane-B or plane-C output"
+era_state = []
+scale_behaviour = "n/a: one fixed scale; the smoke world is small on purpose"
+
+[initialization]
+state = "Census 0, days 0, closed 0"
+from_manifest = []
+
+[input_data]
+drivers = []
+
+[[submodels]]
+name = "census"
+summary = "census := living; emit CENSUS(living, heirs) and CENSUS_NOTE(tone) after it"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+[[submodels]]
+name = "tally"
+summary = "days += 1"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+[[submodels]]
+name = "close_day"
+summary = "closed += 1"
+earns_its_place_by = ["V-DET-01", "V-DET-02", "V-DET-11"]
+
+[[invariants]]
+id = "INV-X6-01"
+statement = "The census never exceeds the person rows"
+test = "V-DET-02"
+[[invariants]]
+id = "INV-X6-02"
+statement = "Every counted day is closed by the end of the day"
+test = "V-DET-02"
+
+
+[isolation]
+forcing = []
+horizon = "1,000 sim-years"
+expect = "The census tracks the living; days and closed days stay equal at the end of every instant"
+
+[verification]
+tests = ["V-DET-01", "V-DET-02", "V-DET-11"]
+prototype = ""

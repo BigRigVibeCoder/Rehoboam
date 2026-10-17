@@ -1,97 +1,333 @@
-# ODD-R v2 system spec (ADR-0033). Partial: the slice rung 0 (`solo`) needs. Births arrive with rung 1.
+# ODD-R v2 system spec (ADR-0033). Partial: the slice rung 0 (`solo`) and the walking skeleton (SPR-011, WP P1.0) need:
+# ageing and death of founders, no births. Births, partnering and kinship arrive with P1.3.
+# 0.2.0 (SPR-011 rulings 4-8, 11, 17): owns person.id and the life-course log; emits DEATH and EXTINCTION; parameter
+# defaults; the rung-0 mortality algorithm stated exactly ([algorithm.mortality_rung0]); death_time is resample_on_fork.
+# Amended ruling 7 (Architect, 2026-10-16): a death fires at the start of a keyed day (a Day-pulse instant), not a keyed minute.
+# Frozen 2026-10-16: the director approved D30 and D36 at G0. SPR-012 (increment B) builds against it; any change is a
+# new spec_version through the Architect (C2).
+# 0.2.1 (2026-10-17, EVO-001, the Architect's R9 and R12, merged with PR #49; no built mechanics or hashes changed: the unbuilt
+# drain loses 0.2.0's later-tick hold): enum columns carry their codes (`values`); the [[applies]] payloads are typed and name
+# their drain binding (Day/Vital, SPR-014), the living-key rule and the key field; both commands carry a sampled outcome
+# (`outcome = true`), so a command carries no date and `tick` leaves ScheduleDeath and Marry (05.1 §2 rule 2: the sender's
+# own timer submits them in the outcome's instant).
+# lint_odd.py checks this file against the Registry, the other specs and the test catalogue.
+# 0.2.2 (2026-10-17, SPR-020, the event envelope; specs/chronicle/envelope_v0.md; no mechanics or hashes changed by this text):
+# every [[emits]] entry declares the Registry [event_roles] it fills (DEATH: target the deceased, actor a culprit; EXTINCTION:
+# none), checked by lint_odd.py; the engine's role codes arrive with SPR-020.
 odd_r = 2
 
 [system]
 id = "M2.demography"
 name = "Demography"
-spec_version = "0.1.0"
+spec_version = "0.2.2"
 fidelity = "F1"
-status = "draft"
+status = "frozen"                          # 2026-10-16, director D30/D36
 crate = "rh-sys-demography"
-adrs = ["ADR-0003", "ADR-0025", "ADR-0026"]
-requirements = ["DATA-8"]
+adrs = ["ADR-0003", "ADR-0006", "ADR-0007", "ADR-0024", "ADR-0025", "ADR-0026"]
+requirements = ["DATA-8", "SIM-5", "SIM-6", "DET-13"]
 
 [purpose]
-statement = "Age every person, schedule deaths (and later births and marriages) as timers, and keep the life-course log."
+statement = "Age every person, schedule deaths (and later births and marriages) as timers, and keep the life-course log of everyone who ever lived."
 role = "substrate"
 patterns = [
   { test = "V-SF-02", pattern = "Child mortality to age 15 in the agrarian band", kind = "identity", role = "sole" },
   { test = "V-SF-02b", pattern = "Adult mortality shape on the Brass General Standard", kind = "identity", role = "sole" },
 ]
-not_yet = ["Births, marriage and fertility (rung 1)", "Famine mortality coupling (M4 entitlement; V-SF-20b)"]
+not_yet = [
+  "Births, marriage and fertility (rung 1; P1.3)",
+  "Brass at any (alpha, beta): needs fixed-point exp and ln (P1.3); rung 0 runs at beta = 1 only",
+  "An infant sub-schedule below age 1 and an old-age tail above 90 (P1.3): rung 0 interpolates linearly from l(0) = 1 to l(1), and l(100) = 0 makes death certain in the month a person reaches 100",
+  "Famine mortality coupling (M4 entitlement; V-SF-20b)",
+  "Deaths caused by other systems (ScheduleDeath from M7 and T1.minds): the command path and same-instant delivery come with P1.13 (SPR-011 ruling 6; BCK-002 A-30)",
+]
 
+# ----------------------------------------------------------------------------- the live ledger (person.*)
+# SPR-011 ruling 5: the ledger exists when person.id is registered. rh-core keeps every person.* column aligned and sorted
+# by person.id, whoever owns it. A dead row leaves at once: rh-core's compaction pass at the start of Bookkeeping of the
+# death instant removes every row with person.alive = 0 from every person.* column, before invariants and hashes. Until
+# then the dead row is readable by every system (M7 and T1.minds read it at Polity and Agenda of the same instant).
+[[owns]]
+column = "person.id"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId (ADR-0026): the ledger key. Founders get founder(seed, k) with the deterministic rehash (ruling 10); births H64(mother, parity) (P1.3). Rows are sorted ascending by it; it is never reused"
+fixed_point = false
 [[owns]]
 column = "person.birth_tick"
 entity = "person"
 type = "i64"
 plane = "A"
-meaning = "Signed sim-time of birth (ADR-0026)"
+meaning = "Signed sim-time of birth in minutes (ADR-0026); negative for founders born before the epoch. Never changes"
 fixed_point = false
 [[owns]]
 column = "person.sex"
 entity = "person"
 type = "enum"
+values = ["male", "female"]
 plane = "A"
-meaning = "male | female"
+meaning = "male | female (codes 0, 1). Never changes"
 fixed_point = false
 [[owns]]
 column = "person.alive"
 entity = "person"
 type = "bool"
 plane = "A"
-meaning = "Living flag; the dead leave the live ledger through the lifecycle queue"
+meaning = "1 on every ledger row except the dead of the current instant: apply_death writes 0, and rh-core's compaction at the start of Bookkeeping of that instant removes the row (SPR-011 ruling 5). A row with alive = 0 never survives an instant"
 fixed_point = false
 [[owns]]
 column = "person.death_tick"
 entity = "person"
 type = "i64"
 plane = "A"
-meaning = "Scheduled death time (a timer until it fires)"
+meaning = "i64::MAX while alive; the death instant (minutes), written once by apply_death together with alive = 0. The pending death time is a timer in the agenda, never this column"
 fixed_point = false
+# Proposed with the T1.minds and M7.dynasty specs (PR #32; Architect round 1, Q5, and the Q4 correction). Genealogy and marriage
+# belong to the rung-1/2 slice (P1.3: partnering, marriage, kinship); the ledger of 05.1 §5 lists mother and father.
+# Marriage is decided by T1.minds and written by M2 when it applies T1's Marry command.
+[[owns]]
+column = "person.mother"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the mother, or 0 for a founder or immigrant without one (ADR-0026); set at birth, never changed (P1.3). 0 for every founder at rung 0"
+fixed_point = false
+[[owns]]
+column = "person.father"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the father, or 0 when unknown or for a founder or immigrant without one; set at birth, never changed (P1.3). 0 for every founder at rung 0"
+fixed_point = false
+[[owns]]
+column = "person.spouse"
+entity = "person"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the living spouse, or 0; set when M2 applies a Marry command from T1.minds (P1.3), cleared on the spouse's death. 0 at rung 0: founders are unmarried until P1.3 (the household manifest's couple is a household, not yet a marriage)"
+fixed_point = false
+[[owns]]
+column = "person.death_cause"
+entity = "person"
+type = "enum"
+values = ["none", "natural", "murder", "battle", "execution", "accident"]
+plane = "A"
+meaning = "none | natural | murder | battle | execution | accident (codes 0-5); none while alive. Written by apply_death with alive = 0 and the death tick: natural for an M2 hazard death, otherwise the cause the ScheduleDeath command carried (M7, T1.minds; M8 later; P1.13). Readable, like every column of the dead row, until rh-core's compaction at the start of Bookkeeping of the death instant (SPR-011 ruling 5); the life-course log keeps it after that"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- the life-course log (life_course.*)
+# Everyone ever born, founded or immigrated (05.1 §7; ADR-0026; DATA-8). SPR-011 ruling 5: append-only. A row is appended
+# once, when the person enters the world (genesis for founders, birth, immigration), and its exit fields (exit_kind,
+# exit_tick, death_cause) are written once, when the person leaves; rh-core refuses any other write. Row order is entry
+# order: at genesis the founders in ascending PersonId; later, the order of the entering events. The log is never
+# compacted (ADR-0007): it is the plane-A record of who lived. Channel A carries it as LIFE_ENTRY and LIFE_EXIT records
+# (specs/stream/channel_a_v0.sql); the chronicle's life_course table is their join.
+# The genealogy of everyone (ADR-0026 item 3; round 4 of PR #32, NEW-1): the live ledger holds only the living and is
+# compacted at Bookkeeping of a death instant (SPR-011 ruling 5), so kinship through the dead (T1.minds, M7.dynasty) walks
+# life_course.person_id, mother, father and sex, never person.*. mother, father and sex are set once, at entry (sex as person.sex): 0 for
+# founders (pre-epoch rows appended at genesis), the parents for births (P1.3).
+[[owns]]
+column = "life_course.person_id"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the person the row records; unique in the log"
+fixed_point = false
+[[owns]]
+column = "life_course.origin"
+entity = "life_course"
+type = "enum"
+values = ["born", "founder", "immigrant"]
+plane = "A"
+meaning = "born | founder | immigrant (codes 0, 1, 2; schema.sql life_course.origin). Every row at rung 0 is founder"
+fixed_point = false
+[[owns]]
+column = "life_course.mother"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "As person.mother at entry; 0 for founders and immigrants without one"
+fixed_point = false
+[[owns]]
+column = "life_course.father"
+entity = "life_course"
+type = "u64"
+plane = "A"
+meaning = "As person.father at entry; 0 when unknown, for founders and immigrants without one"
+fixed_point = false
+[[owns]]
+column = "life_course.sex"
+entity = "life_course"
+type = "enum"
+values = ["male", "female"]
+plane = "A"
+meaning = "As person.sex at entry: male | female (codes 0, 1); written once at entry, like mother and father. Founders take their person.sex at genesis. Succession through a dead ancestor needs it (REV-P1a section 8, NEW-7)"
+fixed_point = false
+[[owns]]
+column = "life_course.birth_tick"
+entity = "life_course"
+type = "i64"
+plane = "A"
+meaning = "As person.birth_tick; negative for founders born before the epoch"
+fixed_point = false
+[[owns]]
+column = "life_course.entry_tick"
+entity = "life_course"
+type = "i64"
+plane = "A"
+meaning = "The instant the row was appended: 0 for founders (genesis), the birth tick for a birth, the arrival tick for an immigrant"
+fixed_point = false
+[[owns]]
+column = "life_course.exit_kind"
+entity = "life_course"
+type = "enum"
+values = ["open", "death", "emigration"]
+plane = "A"
+meaning = "open | death | emigration (codes 0, 1, 2). open while the person is in the ledger; written once when the person leaves (schema.sql exit_kind: NULL = open, 0 death, 1 emigration in the chronicle view)"
+fixed_point = false
+[[owns]]
+column = "life_course.exit_tick"
+entity = "life_course"
+type = "i64"
+plane = "A"
+meaning = "i64::MAX while open; the instant of the exit, written once with exit_kind"
+fixed_point = false
+[[owns]]
+column = "life_course.death_cause"
+entity = "life_course"
+type = "enum"
+values = ["none", "natural", "murder", "battle", "execution", "accident"]
+plane = "A"
+meaning = "As person.death_cause (none | natural | murder | battle | execution | accident); none unless exit_kind = death; written once with exit_kind"
+fixed_point = false
+
+# Lifecycle commands M2 applies (round 3 of PR #32, REV-P1a MAJ-4; typed by EVO-001): one payload per command, which every
+# sender uses. For P1.13 (SPR-014): M2 gains a Day/Vital binding that drains its queue each day start (not yet in
+# [[schedule]]: SPR-014 adds it; drained_by names it). A command carries no date (05.1 §2 rule 2): the drain applies it in
+# the Vital it arrives in, before the bindings that read M2 at same_instant (T1.minds, M7.dynasty). Both carry a sampled
+# outcome (outcome = true), so each arrives from its sender's own timer, fired in this Vital's timer pass: T1's DEATH_DUE
+# and MARRY_DUE at (the next day start, Vital), M7's MURDER_DUE at (the drawn day, Vital); a material input re-samples
+# them through the sender (05.1 §2 rule 2; EVO-001 R9). A ScheduleDeath or a death timer for a person already dead is dropped and counted
+# (dropped{M2, kind, dead_key | dead}: key = "living" is rh-core's drop at take, the rest is apply_death's idempotence). In P1a every death and
+# marriage takes effect at a day start (round 3, BLK-1). cause = none, culprit = 0 and cause_event = None mean "no such".
+[[applies]]
+command = "ScheduleDeath"
+payload = "{ victim: PersonId, cause: enum(person.death_cause), culprit: PersonId, cause_event: EventRef }"
+from = ["M7.dynasty", "T1.minds"]
+drained_by = "Day/Vital"
+key = "living"
+key_field = "victim"
+outcome = true
+sprint = "SPR-014"
+[[applies]]
+command = "Marry"
+payload = "{ a: PersonId, b: PersonId }"
+from = ["T1.minds"]
+drained_by = "Day/Vital"
+key = "living"
+key_field = "a"
+outcome = true
+sprint = "SPR-014"
 
 [[emits]]
 kind = "DEATH"
-when = "The death timer fires"
+when = "apply_death, when a death timer fires or the Day/Vital drain applies a ScheduleDeath (SPR-014; EVO-001): alive = 0, death tick, death cause, life-course exit. Roles: the deceased is target; there is no actor for a natural death (a ScheduleDeath's culprit is actor, P1.13). Payload: [death_cause code]. Causes: none for a natural death. Admitted under DATA-5 as the tellable act class death at rungs 0-2 (SPR-011 ruling 11)"
+roles = ["actor", "target"]   # target: the deceased; actor: the culprit of a caused death (ScheduleDeath.culprit, P1.13), none for a natural one (envelope_v0.md §3)
+[[emits]]
+kind = "EXTINCTION"
+when = "apply_death leaves no ledger row with alive = 1: emitted once, right after that DEATH, in the same fire, with the DEATH as its one cause (a draft-local cause, written as a triggered edge; SPR-011 rulings 11, 17). No roles; payload: [] . At rung 0 (no births or immigration) it happens at most once per run; the run continues to its requested end (V-SCALE-04)"
+roles = []                   # no cast; its one cause is the DEATH (triggered)
 
 [scales]
 spatial = "person"
-temporal = "Month pulse; intra-month death times as timers"
-extent = "every living person on the map"
-restart = "Owned columns plus pending death timers restore the system exactly"
+temporal = "Month pulse; each death a timer at a day start (a Day-pulse instant) inside the month, never the Month-pulse instant (amended ruling 7)"
+extent = "every living person in the ledger (on the map; there is no off-map ledger at rung 0)"
+restart = "Owned columns (ledger and life-course log) plus the pending death timers in the agenda restore the system exactly. K is a pure function of the compiled e0 and is recomputed at construction, never stored"
 
 [[fidelity_ladder]]
 level = "F1"
-representation = "Per-person Brass relational-logit hazards (specs/demography)"
+representation = "Per-person Brass relational-logit hazards on the General Standard (specs/demography); rung 0: beta = 1 in odds form, monthly Bernoulli draws ([algorithm.mortality_rung0])"
 status = "target"
 
 [[schedule]]
 pulse = "Month"
 phase = "Vital"
-steps = ["ageing: nothing stored; age is derived from birth_tick", "mortality: sample this month's death times as timers", "fire due death timers"]
+steps = [
+  "ageing: nothing stored; age is derived from birth_tick",
+  "apply_death: due death timers fire in the phase's timer pass, before the pulse steps (05.1 §2 rule 4); none is due at a Month pulse instant (INV-M2-03)",
+  "mortality: one Bernoulli per living person on this month's probability; a hit becomes a death timer at the start of a keyed day inside the month, never the Month-pulse instant",
+]
 when = "always"
 
 [[rng]]
 purpose = "death_time"
 key = ["person", "month"]
-use = "Intra-month death time from the Brass hazard"
+use = "Whether a person dies this month, and on which day: the death fires at the start of that day, the Day-pulse instant, so systems reacting to a death in the same instant (M7 succession, T1 grief) run their Day bindings at it (amended SPR-011 ruling 7; minute-level death times wait for BCK-002 A-35). [algorithm.mortality_rung0] S9"
+# SPR-011 ruling 7 and the RNG-purpose rule of 05.1 §6 item 9: a vital timer is re-drawn after a fork or a scoped input.
+resample_on_fork = true
+draws = [
+  "k = 0: the monthly Bernoulli on the month's Prob32 probability; exactly one draw per living person per month, whatever the probability (CRN)",
+  "k = 1: only on a hit, the day of death: one of the month's day starts after the Month-pulse instant (S9); in a re-sample, one of the day starts after the input's instant (S11)",
+]
+# Stream key: (world_seed, branch_salt(t), system_id(M2.demography), epoch of the person (BCK-002 A-29), purpose death_time,
+# entity person.id, t = the Month pulse instant, k). A re-sample draws through rh-core's ResampleCtx instead: the same purpose,
+# entity resample_entity_id(Person), t = the input's instant, the epoch after the input, the same k = 0 and k = 1.
 
 [design]
-basic_principles = "Brass relational logit on the General Standard (Brass 1971; R12 §9)"
-emergence = "Age structure and life expectancy emerge from per-person hazards"
-adaptation = "n/a"
-objectives = "n/a"
-learning = "n/a"
-prediction = "n/a"
-sensing = "Era-state medical level (later); none at rung 0"
-interaction = "None at rung 0"
-stochasticity = "Keyed RNG only"
-collectives = "Households (rung 1)"
-observation = "Life-course log; DEATH events in channel A"
-era_state = ["medical_level"]
-scale_behaviour = "Identical at every N; statistical bands report INSUFFICIENT below their sample minimums"
+basic_principles = "Brass relational logit on the General Standard (Brass 1971; R12 §9). At beta = 1 it is l(x) = 1 / (1 + K O(x)) with O(x) = (1 - ls(x)) / ls(x) and K = exp(2 alpha), so K can be solved from e0 without exp or ln"
+emergence = "Age structure, life expectancy and the time to extinction of a closed population emerge from per-person monthly hazards"
+adaptation = "n/a: demography has no agents that choose"
+objectives = "n/a: no agents that choose"
+learning = "n/a: no agents that choose"
+prediction = "n/a: no agents that choose"
+sensing = "n/a at rung 0: reads no other system and no era state. Era-state medical level shifts alpha from P1.3 (05.1 §3.1)"
+interaction = "None at rung 0: deaths are independent across persons. From P1.3: ScheduleDeath and Marry commands applied through apply_death and the marriage path"
+stochasticity = "Keyed counter-based RNG only (ADR-0006): one Bernoulli draw per person-month (k = 0) and one day draw per death (k = 1); no Poisson or batched draws (V-INV-08)"
+collectives = "n/a at rung 0: households have no owner yet (P1.1a, P1.3); the manifest's households only shape who the founders are"
+observation = "The life-course log (LIFE_ENTRY, LIFE_EXIT records) and DEATH and EXTINCTION events in channel A; monthly living count and deaths in STEP_DIGEST"
+era_state = []    # rung 0 reads no era state; medical_level (S2.technology) moves alpha from P1.3, when S2 has an owner
+scale_behaviour = "Identical at every N: the per-person draw does not depend on N or on visiting order. Statistical bands report INSUFFICIENT below their sample minimums"
+
+[algorithm.mortality_rung0]
+# SPR-011 ruling 7: no transcendental in plane A. Every quantity is an exact integer; every width is the smallest standard
+# width that holds every intermediate; every division is rounded exactly once, as stated. The exact reference
+# (specs/demography/selftest_m2_rung0.py, Python fractions) reproduces it bit for bit; T-05's bin/gen_m2_reference.py
+# ports that reference and generates the golden vectors.
+version = "m2-rung0-v1"
+steps = [
+  "S0 Rounding. rhe(n / d) for integers n (signed) and d > 0 is the integer nearest n / d, ties to the even integer: q = floor(n / d), r = n - q d; add 1 iff 2r > d, or 2r = d and q is odd. Every division below is rhe of exact integers unless it says floor. No float, no truncating cast, no other rounding.",
+  "S1 Standard (compiled-in constants). The 71 grid ages a_0..a_70 and four-digit survivors ls_0..ls_70 of specs/demography/brass_general_standard.toml [standard] (Brass 1971 Table 4). Held as h_i = 2 a_i (u8, half-years: 0, 2, 4, ..., 100, 105, ..., 200) and s_i = 10^4 ls_i (u16: s_0 = 10000, s_70 = 0, non-increasing). Both conversions are exact.",
+  "S2 Parameters. e0 is the Q16_16 compiled from the manifest literal (ruling 9: exact decimal, round half to even): E = e0 bits, i32, E in [1310720, 5570560] by the Registry bounds [20, 85]. rh_manifest::compile fills each parameter M2 reads from the manifest, else from the Registry default (e0 = 30, beta = 1); a parameter M2 reads with neither is a load error naming it, so the compiled WorldSpec holds no optional parameter (Architect ruling on PR #37). Rung 0 reads exactly e0 and brass_beta. brass_beta must compile to exactly 65536 (1.0); a manifest that sets brass_alpha is refused at load by name, since rung 0 reads no alpha and K comes from e0 (until P1.3); tfr, eps_f, eps_m and elite_fertility_mult are not read at rung 0, so they are not compiled and need no default.",
+  "S3 Survivors at a grid age for a level k (K = k / 2^32; k is a u64 in [0, 2^40]). L_i(k) = 0 if s_i = 0; otherwise L_i(k) = rhe(s_i 2^64 / (s_i 2^32 + k (10^4 - s_i))). Numerator u128 (< 2^78), denominator u64 (< 2^54). L_i(k) is in [0, 2^32] (32 fraction bits); L_0(k) = 2^32 for every k, and L_i(2^32) = rhe(s_i 2^32 / 10^4) is the standard itself. This is l = 1 / (1 + K (1 - ls) / ls) multiplied through by s_i 2^32.",
+  "S4 Trapezoid sum. T(k) = sum over i = 0..69 of (h_(i+1) - h_i) (L_i(k) + L_(i+1)(k)), a u64 (< 2^42). e0(k) = T(k) / 2^34 years exactly (h counts half-years and the trapezoid halves; L has 32 fraction bits). No rounding.",
+  "S5 Bisection for K. lo = 0, hi = 2^40. Repeat exactly 40 times: mid = (lo + hi) >> 1; if T(mid) >= E 2^18 then lo = mid, else hi = mid. Then K = lo (k bits). The comparison is exact (E 2^18 is e0 in units of 2^-34 years). mid is never 0, and T(2^40) / 2^34 < 1 year < 20 while T(k) / 2^34 tends to 98.75 years as k falls to 1, so every Registry e0 is bracketed. T is non-increasing in k (each L_i is, and rhe is monotone), so K is the largest k with e0(k) >= e0. Computed once, at construction.",
+  "S6 Schedule. L_i = L_i(K) for i = 0..70: 71 u64 values, the whole rung-0 schedule.",
+  "S7 Survivors at an age in minutes. Y = minutes per year of the world calendar: 518400 (360 days) or 525600 (365 days). Grid ages in minutes A_i = h_i Y / 2 (exact, Y is even; A_70 = 100 Y). For an age x (i64 minutes, x >= 0; a negative age is an error): if x >= A_70 then l(x) = 0; otherwise, for the unique i with A_i <= x < A_(i+1), l(x) = L_i + rhe((L_(i+1) - L_i) (x - A_i) / (A_(i+1) - A_i)), all i64 (|L_(i+1) - L_i| <= 2^32 and x - A_i < 2^21, so the product is < 2^53). l(x) is in [0, 2^32] and non-increasing in x.",
+  "S8 Monthly probability. At the Month pulse instant t_m, with D = t_(m+1) - t_m the month's length in minutes from the calendar (43200 for 360 days; 40320 to 44640 for 365), a living person with birth tick b has x = t_m - b. q = 2^32 if l(x) = 0, else q = rhe(2^32 (l(x) - l(x + D)) / l(x)) (numerator u128). q is a Prob32 (05.1 §6 item 4) with bits in [0, 2^32]. q = 2^32 (certain death) iff l(x + D) = 0, that is iff x + D >= 100 Y: the old-age tail is P1.3.",
+  "S9 Draws (amended SPR-011 ruling 7: deaths fire at day starts). Stream key as [[rng]] death_time with t = t_m. k = 0: draw d0 (u64); the person dies this month iff d0 hits q (Prob32 mapping: q = 2^32, or d0 < q 2^32). Exactly one k = 0 draw per living person per month, whatever q. k = 1, only on a hit: n = D / 1440, the month's length in days (30; 28 to 31 for 365 days), so the candidate instants are the n - 1 day starts t_m + 1440 j for j = 1..n-1 (the Month-pulse instant t_m itself is excluded: a timer must be strictly after the current instant and phase); draw d1; j = 1 + floor(d1 (n - 1) / 2^64) (u128 product, floor); the death instant is tau = t_m + 1440 j: uniform over the month's day starts other than the pulse instant. The probability q still covers the whole month [t_m, t_m + D): a death that would fall on the first day moves to a later day start (design simplification: the hazard is flat within a month, below the schedule's resolution; BCK-002 A-35 brings minute-level times).",
+  "S10 Timer. On a hit M2 inserts one agenda timer at (tau, Vital), a Day-pulse instant: owner M2, purpose death_time, kind 1 (DEATH_TIMER), payload b (the birth tick, which S11 needs), about the person. Persons are visited in ascending person.id, so the agenda's insertion order is PersonId order.",
+  "S11 Re-sample (resample_on_fork; ADR-0025 item 3). A material input at instant t_in that scopes the person, while the timer is pending (t_in <= tau: a timer due at t_in itself is still pending in the Inputs phase, ADR-0025 item 4), cancels it, and resample_timer re-draws through ResampleCtx (purpose death_time, the epoch after the input, t = t_in): t_end = the first month start after t_in (the pending month's end); x0 = t_in - b, x1 = t_end - b; q' = 2^32 if l(x0) = 0, else rhe(2^32 (l(x0) - l(x1)) / l(x0)). k = 0: d0 hits q'? The candidate instants are the day starts strictly after t_in and before t_end: s_1 < ... < s_c. On a miss, or when c = 0 (the input fell on the month's last day, so every candidate day has passed), the timer is dropped (None): the person lives to the next Month pulse, where the monthly draw applies again. On a hit with c >= 1, k = 1: j = floor(d1 c / 2^64) (u128 product, floor) and tau' = s_(j+1). Intended behaviour, a one-month horizon (ADR-0025 item 3; Architect ruling on PR #37): an input re-samples only the pending timers in its scope, so a person with no pending death this month is not re-drawn until the next Month pulse, which draws afresh at the new epoch. At rung 0 no input changes a hazard, so nothing is lost; reconsider when inputs change conditions (P1.3).",
+  "S12 apply_death(person, cause), in fire at the timer's instant (Vital): person.alive := 0; person.death_tick := now; person.death_cause := cause (natural for an M2 timer); on the person's open life_course row: exit_kind := death, exit_tick := now, death_cause := cause (each written once; rh-core refuses a second write, ruling 5); emit DEATH (target = person; no actor; payload [cause code]); then, if no ledger row has alive = 1, emit EXTINCTION with the DEATH as its cause. The dead row stays readable until rh-core's compaction at the start of Bookkeeping of this instant.",
+]
+# Check values of this algorithm (from the exact reference; selftest_m2_rung0.py asserts them). K is in units of 2^-32.
+check_values = [
+  { e0 = "20",    K = 18743037470 },
+  { e0 = "23.4",  K = 14691140731 },
+  { e0 = "30",    K = 9582773732 },
+  { e0 = "36.6",  K = 6442600637 },
+  { e0 = "43.44", K = 4299869756 },
+  { e0 = "60",    K = 1466952214 },
+  { e0 = "85",    K = 73327863 },
+]
+# Facts of the fixed-point schedule that the plan's acceptance criteria must use (selftest_m2_rung0.py proves them):
+#   * The four-digit standard's own trapezoid e0 is 43.45915 years exactly (T(2^32) / 2^34 is within 2^-30 years of it,
+#     S3 rounding each L_i), not 43.44 (Brass's rounded value): K = 1 is reached at e0 = 43.45915 (|K - 2^32| = 569
+#     units, from the Q16_16 rounding of e0), not at 43.44 (K = 1.00114 there).
+#   * V-SF-02's q(15) in [0.35, 0.55] holds exactly for e0 in [23.441086, 36.569855] (Q16_16 bits 1536235 to 2396642;
+#     about [23.4, 36.6]). SPR-011 T-05 and ruling 8 use these exact values (Architect, PR #37).
 
 [initialization]
-state = "Cast and generated persons from the manifest with birth_tick from age_years"
+state = "rh-worldgen (SPR-011 ruling 10) writes the founders: person.id = founder(seed, k) with the deterministic rehash, birth_tick from age_years (pre-epoch, with a keyed offset inside the year), sex as given or a keyed fair draw, alive = 1, death_tick = i64::MAX, mother = father = spouse = 0, death_cause = none; and one life_course row per founder (origin founder, sex as person.sex, mother = father = 0, birth_tick as person.birth_tick, entry_tick 0, exit_kind open, exit_tick i64::MAX, death_cause none), in ascending PersonId. No death timer exists at genesis: the first Month pulse at tick 0 draws the first month"
 from_manifest = ["peoples", "cast", "households"]
 
 [input_data]
@@ -99,54 +335,86 @@ drivers = []
 
 [[params]]
 name = "e0"
-meaning = "Life expectancy at birth, a convenience converted to brass_alpha at beta = 1"
-source = "R12 §9"
+meaning = "Life expectancy at birth in years, a convenience converted to the Brass level K = exp(2 alpha) at beta = 1 by [algorithm.mortality_rung0] S5"
+source = "R12 §9; default 30: a design value inside V-SF-02's band (e0 in [23.441086, 36.569855], about [23.4, 36.6], at beta = 1), the value uz_job already uses (SPR-011 ruling 8)"
+default = 30.0
 [[params]]
 name = "brass_alpha"
-meaning = "Level of mortality on the logit scale"
+meaning = "Level of mortality on the logit scale. Refused at rung 0 (e0 sets the level; any alpha needs fixed-point exp, P1.3)"
 source = "Brass 1971; observed -1.36 to 0.55"
 [[params]]
 name = "brass_beta"
-meaning = "Slope (shape) of mortality on the logit scale"
-source = "Brass 1971; observed 0.64 to 1.64"
+meaning = "Slope (shape) of mortality on the logit scale. Rung 0 accepts exactly 1"
+source = "Brass 1971; observed 0.64 to 1.64; default 1: the General Standard's own shape (SPR-011 ruling 8)"
+default = 1.0
 [[params]]
 name = "tfr"
-meaning = "Total fertility rate (rung 1)"
+meaning = "Total fertility rate (rung 1, P1.3). Not read at rung 0; no default until P1.3"
 source = "design range"
 [[params]]
 name = "eps_f"
-meaning = "Fertility response to food entitlement (rung 1)"
+meaning = "Fertility response to food entitlement (rung 1). Not read at rung 0"
 source = "R09"
 [[params]]
 name = "eps_m"
-meaning = "Mortality response to food entitlement"
+meaning = "Mortality response to food entitlement (P1.5). Not read at rung 0"
 source = "R09"
 [[params]]
 name = "elite_fertility_mult"
-meaning = "Elite fertility multiplier (M6 coupling)"
+meaning = "Elite fertility multiplier (M6 coupling; P1.3). Not read at rung 0"
 source = "Turchin & Nefedov 2009; R12 §12"
 
 [[submodels]]
 name = "mortality"
-summary = "Monthly hazard from the Brass life table at the person's age; the death time inside the month is a keyed draw"
-earns_its_place_by = ["V-SF-02", "V-SF-02b"]
+summary = "[algorithm.mortality_rung0] S1-S10: K from e0 by fixed-point bisection (40 steps) on the trapezoid e0 of the standard grid; l linear between grid ages in minutes of age; monthly q = 1 - l(x + D) / l(x) as Prob32; one keyed Bernoulli per living person per month (k = 0); on a hit a death timer at the start of a keyed day inside the month (k = 1), never at the Month-pulse instant"
+earns_its_place_by = ["V-SF-02", "V-SF-02b", "V-INV-08"]
+[[submodels]]
+name = "apply_death"
+summary = "[algorithm.mortality_rung0] S12: the single death path. Writes the dead row and the life-course exit once, emits DEATH and, when the last living person dies, EXTINCTION. The function that will also drain ScheduleDeath commands (P1.13)"
+earns_its_place_by = ["V-INV-01", "V-DATA-04", "V-SCALE-04"]
 
 [[invariants]]
 id = "INV-M2-01"
-statement = "People are conserved: births - deaths = change in the living population, every month"
-test = "V-DET-01"
+statement = "People are conserved: for each month, living count at its end - living count at its start = entries - exits in the life-course log over the month (at rung 0: - deaths), and the living count equals the number of open life-course rows after every Bookkeeping"
+test = "V-INV-01"
+[[invariants]]
+id = "INV-M2-02"
+statement = "Life-course consistency: every ledger row has exactly one life_course row with the same person_id and birth_tick, and it is open; every closed row's person_id is absent from the ledger after Bookkeeping; exit fields change at most once (open -> closed) and entry fields never"
+test = "V-DATA-04"
+[[invariants]]
+id = "INV-M2-03"
+statement = "Death timers stay inside their month, on day starts: every pending M2 timer drawn at the Month pulse t_m (or re-drawn in its month) lies on a day start in [t_m + 1440, t_(m+1) - 1440], so none is pending at a Month pulse instant and none fires at one"
+test = "V-DET-12"
+[[invariants]]
+id = "INV-M2-04"
+statement = "Alive and death tick agree: death_tick = i64::MAX iff alive = 1; a row with alive = 0 has death_tick = now and exists only between Vital and the Bookkeeping compaction of that instant"
+test = "V-INV-01"
+[[invariants]]
+id = "INV-M2-05"
+statement = "No death without a cause: apply_death never writes death_cause = none. A ScheduleDeath command whose cause is none (an invalid payload; effect language round 3, Q13) is dropped and reported, never applied, as a command for an already-dead victim is (BCK-002 A-30); the report names the sender, the victim and the tick. Applies from P1.13, when M2 drains ScheduleDeath; rung 0 has only natural deaths"
+test = "V-INV-01"
 
 [[couplings]]
 system = "S5.daily_life"
 direction = "out"
 via = "S5 reads birth_tick, sex and alive at the start of each day"
 lag = "start of day"
+[[couplings]]
+system = "T1.minds"
+direction = "out"
+via = "The death path: a death in the Vital slot starts grief; T1 reads the dead row (alive = 0, death_tick = now) until Bookkeeping of the instant (PR #32)"
+lag = "same instant (later phase)"
+[[couplings]]
+system = "M7.dynasty"
+direction = "out"
+via = "Succession on a titleholder's death: M7 reads the dead row at Polity of the death instant (PR #32)"
+lag = "same instant (later phase)"
 
 [isolation]                                # docs/09 V-SF-22
 forcing = []                               # the rung-0 slice reads no other system
 horizon = "1,000 sim-years"
-expect = "n/a until the entitlement hook (P1.5): then a constant, a sine and a step food-entitlement series, with survival over 1,000 years and mortality inside the V-SF-03 bands"
+expect = "Rung 0 in isolation is the whole rung-0 world: every founder population dies out (V-SCALE-04), q(15) of a 10,000-founder cohort aged 0 sits inside the schedule's binomial 99.9% band (SPR-011 T-07). From P1.5: a constant, a sine and a step food-entitlement series, with survival over 1,000 years and mortality inside the V-SF-03 bands"
 
 [verification]
-tests = ["V-SF-02", "V-SF-02b", "V-DET-01"]
-prototype = "specs/demography/selftest_brass.py"
+tests = ["V-SF-02", "V-SF-02b", "V-INV-01", "V-INV-08", "V-DET-12", "V-DET-14", "V-DATA-04", "V-SCALE-04"]
+prototype = "specs/demography/selftest_m2_rung0.py"

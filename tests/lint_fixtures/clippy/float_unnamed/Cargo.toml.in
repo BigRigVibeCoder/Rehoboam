@@ -1,0 +1,11 @@
+# Positive control for the clippy float backstop (SPR-010 GAP-3; tests/lint_fixtures/README.md); not in
+# the Rehoboam workspace. A template: bin/check_all.sh renders it into target/rendered-fixtures/ with
+# @WORKSPACE_LINTS@ replaced by the [workspace.lints.*] tables of the repository's own Cargo.toml, so the
+# control always tests the real lint settings. fixture-core (plane A, [lints] workspace = true) does float
+# arithmetic on values that ext returns as f64, without one float token of its own: bin/lint_forbidden.py
+# cannot see it, and `cargo clippy -p fixture-core -- -D warnings` must fail with clippy::float_arithmetic.
+[workspace]
+members = ["ext", "fixture-core"]
+resolver = "3"
+
+@WORKSPACE_LINTS@
