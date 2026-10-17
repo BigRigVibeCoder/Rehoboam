@@ -243,6 +243,36 @@ pub struct SpecEntry {
     /// The manifest sections its `[initialization] from_manifest` names: genesis writes the
     /// system's columns from those sections only (SPR-011 ruling 10; SPR-012 T-06).
     pub from_manifest: Vec<String>,
+    /// Each `[[emits]]` kind's envelope declaration: roles, motives and snapshots (SPR-020 T-03;
+    /// envelope v0 §1, §2, §4). `StepCtx::emit` checks every draft against it.
+    pub envelope: BTreeMap<String, EmitDecl>,
+}
+
+/// What one `[[emits]]` entry declares a kind's events fill (envelope v0 §2).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EmitDecl {
+    /// The `[event_roles]` ids the kind may fill; `witness` may repeat on an event.
+    pub roles: Vec<String>,
+    /// The `[motive_edges]` ids its `motivated_by` edges may carry.
+    pub motives: Vec<String>,
+    /// The anchored snapshots it captures.
+    pub snapshots: Vec<SnapshotDecl>,
+}
+
+/// One declared snapshot (envelope v0 §4): `attr` of the role `of` (or `event`), with `partner`
+/// for a two-argument attribute, read from `from`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotDecl {
+    /// The `[attributes]` id.
+    pub attr: String,
+    /// The role the attribute is read of, or `event`.
+    pub of: String,
+    /// The second argument's role.
+    pub partner: Option<String>,
+    /// The column (`entity.column`) or `algorithm.<name>` the value is read from.
+    pub from: String,
+    /// The value's column type, declared for an `algorithm.*` source (REV-SPR-020 R7).
+    pub ty: Option<String>,
 }
 
 impl SpecEntry {
@@ -279,13 +309,20 @@ pub struct RegistryTable {
 }
 
 impl RegistryTable {
-    /// A role's code: its index in `[event_roles]`.
+    /// The first four role codes, which the Registry loader pins (envelope v0 §8): what a role
+    /// name means when the host passes no Registry.
+    pub const PINNED_ROLES: [&'static str; 4] = ["actor", "target", "witness", "instrument"];
+
+    /// A role's code: its index in `[event_roles]`, or among the pinned four when the table is
+    /// empty (no Registry passed).
     #[must_use]
     pub fn role_code(&self, name: &str) -> Option<u8> {
-        self.event_roles
-            .iter()
-            .position(|r| r == name)
-            .and_then(|i| u8::try_from(i).ok())
+        let position = if self.event_roles.is_empty() {
+            Self::PINNED_ROLES.iter().position(|r| *r == name)
+        } else {
+            self.event_roles.iter().position(|r| r == name)
+        };
+        position.and_then(|i| u8::try_from(i).ok())
     }
 
     /// A motive's index in `[motive_edges]`.

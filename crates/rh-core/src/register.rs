@@ -76,6 +76,8 @@ pub(crate) struct Entry {
     pub(crate) purposes: Vec<&'static str>,
     /// The skeleton's role constants the system declares (SPR-020 T-01).
     pub(crate) roles: &'static [(&'static str, rh_events::RoleId)],
+    /// Its `[[emits]]` declarations, compiled against the Registry and the registered set (T-03).
+    pub(crate) envelope: crate::envelope::Envelope,
 }
 
 /// The registration entries of `systems`, sorted by id.
@@ -91,6 +93,7 @@ fn entries_of(systems: Vec<Box<dyn SystemModel>>) -> Vec<Entry> {
                 bindings: model.schedule(),
                 purposes: model.rng_purposes(),
                 roles: model.roles(),
+                envelope: crate::envelope::Envelope::new(),
                 model,
             }
         })
@@ -99,14 +102,23 @@ fn entries_of(systems: Vec<Box<dyn SystemModel>>) -> Vec<Entry> {
     entries
 }
 
-/// Rule `spec` for the envelope (SPR-020 T-01): each role constant of a system's skeleton has the
-/// code the Registry it runs under gives its name, as the bindings must equal `[[schedule]]`. With
-/// no Registry passed (an empty table), nothing is compared.
-fn check_roles(entries: &[Entry], specs: &SpecTable, violations: &mut Vec<Violation>) {
+/// The envelope at registration (SPR-020): compiles each system's `[[emits]]` declarations for
+/// `StepCtx::emit` (T-03), and applies rule `spec` to its skeleton's role constants (T-01): each
+/// has the code the Registry it runs under gives its name, as the bindings must equal
+/// `[[schedule]]`. With no Registry passed (an empty table), no constant is compared.
+fn check_envelopes(entries: &mut [Entry], specs: &SpecTable, violations: &mut Vec<Violation>) {
+    let registered: BTreeSet<&str> = entries.iter().map(|e| e.id).collect();
+    let compiled: Vec<_> = entries
+        .iter()
+        .map(|e| crate::envelope::compile(e.id, &e.access, specs, &registered))
+        .collect();
+    for (e, envelope) in entries.iter_mut().zip(compiled) {
+        e.envelope = envelope;
+    }
     if specs.registry.event_roles.is_empty() {
         return;
     }
-    for e in entries {
+    for e in entries.iter() {
         for (name, code) in e.roles {
             let constant = format!("ROLE_{}", name.to_ascii_uppercase());
             match specs.registry.role_code(name) {
@@ -276,7 +288,7 @@ pub fn register(
         }
         kept.push(e);
     }
-    let entries = kept;
+    let mut entries = kept;
 
     // Each declaration against the specs: the lint's own check.
     for e in &entries {
@@ -315,7 +327,7 @@ pub fn register(
     // Lifecycle commands and event kinds (SPR-006 ruling 5).
     check_commands(&entries, specs, &mut violations);
     check_events(&entries, specs, &mut violations, &mut reports);
-    check_roles(&entries, specs, &mut violations);
+    check_envelopes(&mut entries, specs, &mut violations);
 
     // The schedule (T-05), only when the declarations themselves are sound.
     let inputs: Vec<SchedulerInput<'_>> = entries

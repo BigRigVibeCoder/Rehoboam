@@ -186,6 +186,95 @@ pub enum SimError {
         /// The kind.
         kind: &'static str,
     },
+    /// A role row whose role the kind's `[[emits]] roles` does not list (envelope v0 §1).
+    UndeclaredRole {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The role code.
+        role: u8,
+    },
+    /// A second row of a role other than `witness`, or a repeated `(role, entity)` (§1).
+    DuplicateRole {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The role code.
+        role: u8,
+        /// The entity of the second row.
+        entity: EntityRef,
+    },
+    /// A cast of more than 256 rows: the ordinal is a `u8` (§1; R12 NIT-5).
+    CastTooLarge {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The number of rows.
+        rows: usize,
+    },
+    /// A snapshot of an attribute the kind's `[[emits]] snapshots` does not declare (§4 rule 1).
+    UndeclaredSnapshot {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The attribute.
+        attr: &'static str,
+    },
+    /// A snapshot whose entity (or partner) does not play the role its declaration names (§4
+    /// rule 3).
+    SnapshotNotOfTheCast {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The attribute.
+        attr: &'static str,
+        /// The snapshot's entity.
+        entity: EntityRef,
+    },
+    /// A snapshot value outside its attribute's domain (§4 rule 5).
+    SnapshotOutOfDomain {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The attribute.
+        attr: &'static str,
+        /// The value.
+        value: i32,
+    },
+    /// Two snapshots with one key (§4 rule 6).
+    DuplicateSnapshot {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The attribute.
+        attr: &'static str,
+    },
+    /// A declared snapshot whose roles are filled and whose source is present, absent from the
+    /// draft (§4 rule 1; R10).
+    MissingSnapshot {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The attribute.
+        attr: String,
+    },
+    /// A motive the kind's `[[emits]] motives` does not list (§2).
+    UndeclaredMotive {
+        /// The system.
+        system: &'static str,
+        /// The kind.
+        kind: &'static str,
+        /// The motive.
+        motive: &'static str,
+    },
     /// An event the log refuses at the merge: back-dated, or a cause that is not earlier
     /// (SPR-006 T-04, ruling 4).
     Event {
@@ -252,8 +341,67 @@ pub enum SimError {
 }
 
 impl fmt::Display for SimError {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one arm per error; the envelope's nine arms (SPR-020) passed the limit"
+    )]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UndeclaredRole { system, kind, role } => write!(
+                f,
+                "{system} emits {kind} with role {role}, which its [[emits]] roles do not list (UndeclaredRole; envelope_v0.md §1)"
+            ),
+            Self::DuplicateRole {
+                system,
+                kind,
+                role,
+                entity,
+            } => write!(
+                f,
+                "{system} emits {kind} with a second row of role {role} ({entity:?}); only witness repeats, and no (role, entity) twice (DuplicateRole)"
+            ),
+            Self::CastTooLarge { system, kind, rows } => write!(
+                f,
+                "{system} emits {kind} with a cast of {rows} rows; at most 256 (CastTooLarge)"
+            ),
+            Self::UndeclaredSnapshot { system, kind, attr } => write!(
+                f,
+                "{system} emits {kind} with a snapshot of {attr}, which its [[emits]] snapshots do not declare (UndeclaredSnapshot; envelope_v0.md §4)"
+            ),
+            Self::SnapshotNotOfTheCast {
+                system,
+                kind,
+                attr,
+                entity,
+            } => write!(
+                f,
+                "{system} emits {kind} with a snapshot of {attr} of {entity:?}, which does not play the declared role (SnapshotNotOfTheCast)"
+            ),
+            Self::SnapshotOutOfDomain {
+                system,
+                kind,
+                attr,
+                value,
+            } => write!(
+                f,
+                "{system} emits {kind} with {attr} = {value}, outside the attribute's domain (SnapshotOutOfDomain)"
+            ),
+            Self::DuplicateSnapshot { system, kind, attr } => write!(
+                f,
+                "{system} emits {kind} with two snapshots of {attr} with one key (DuplicateSnapshot)"
+            ),
+            Self::MissingSnapshot { system, kind, attr } => write!(
+                f,
+                "{system} emits {kind} without its declared snapshot {attr}, whose role is filled and whose source is present (MissingSnapshot; R10)"
+            ),
+            Self::UndeclaredMotive {
+                system,
+                kind,
+                motive,
+            } => write!(
+                f,
+                "{system} emits {kind} with the motive {motive}, which its [[emits]] motives do not list (UndeclaredMotive)"
+            ),
             Self::UndeclaredRead { system, column } => {
                 write!(
                     f,
@@ -364,6 +512,8 @@ pub(crate) struct Outbox {
     pub(crate) timers: Vec<(TimerSpec, PurposeId)>,
     pub(crate) commands: Vec<Command>,
     pub(crate) events: Vec<EventDraft>,
+    /// Snapshots `emit` discarded for an absent source owner, as `(KIND.attr, owner)` (§4 rule 4).
+    pub(crate) dropped: Vec<(String, String)>,
 }
 
 /// What the engine lends one job: the system's identity and declarations and the agenda as it
@@ -382,6 +532,8 @@ pub(crate) struct JobInfo<'a> {
     pub(crate) access: &'a AccessSpec,
     pub(crate) bindings: &'a [PulseBinding],
     pub(crate) agenda: &'a Agenda,
+    /// The system's compiled `[[emits]]` declarations (SPR-020 T-03).
+    pub(crate) envelope: &'a crate::envelope::Envelope,
 }
 
 /// The step context of one system at one instant and phase (`05.1` §2 rule 6): the keyed RNG,
@@ -720,6 +872,10 @@ impl<'a> StepCtx<'a> {
                 kind: draft.kind,
             });
         }
+        let mut draft = draft;
+        let none = crate::envelope::KindEnvelope::default();
+        let kind = self.info.envelope.get(draft.kind).unwrap_or(&none);
+        let dropped = crate::envelope::check(self.info.system, kind, &mut draft)?;
         let index = self.out.events.len();
         for edge in &draft.causes {
             match edge.cause {
@@ -739,6 +895,7 @@ impl<'a> StepCtx<'a> {
             }
         }
         self.out.events.push(draft);
+        self.out.dropped.extend(dropped);
         Ok(DraftRef(index))
     }
 }

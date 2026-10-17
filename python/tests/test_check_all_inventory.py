@@ -658,6 +658,8 @@ REQUIRED_GATES = (
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
     "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)",
+    "rh-core envelope by name: emit's refusals by name, the canonical cast and snapshot order, "
+    "V-DATA-08 in miniature, absent sources counted (SPR-020 T-03)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "

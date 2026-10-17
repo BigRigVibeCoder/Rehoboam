@@ -160,6 +160,11 @@ fn run_checked(e: &mut Engine, calendar: Calendar, end: SimTime) -> Vec<Event> {
                 assert!(ev.id > last.id, "V-DET-12: event ids do not increase");
             }
             if ev.kind == DEATH {
+                // SPR-020 T-03: a natural DEATH casts the deceased as target and no one else,
+                // and carries no snapshot and no edge (envelope_v0.md §3).
+                assert_eq!(ev.roles.len(), 1, "a natural DEATH's cast");
+                assert_eq!(ev.roles[0].role, rh_events::RoleId::TARGET);
+                assert!(ev.snapshots.is_empty() && ev.causes.is_empty());
                 let person = ev.roles[0].entity.raw();
                 assert_eq!(
                     pending.remove(&person),
@@ -213,6 +218,7 @@ fn v_det_12_and_v_inv_01_on_random_small_worlds() {
             vec![(last_death.id, rh_events::EdgeKind::Triggered)],
             "EXTINCTION caused by the last DEATH"
         );
+        assert!(ext[0].roles.is_empty(), "EXTINCTION has no cast");
         assert_eq!(e.tables().get("person.id").unwrap().len(), 0);
         deaths += died;
         worlds += 1;

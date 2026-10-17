@@ -25,6 +25,7 @@ pub mod agenda;
 pub mod command;
 pub mod crash;
 pub mod engine;
+pub mod envelope;
 pub mod fixed;
 pub mod ledger;
 pub mod observe;

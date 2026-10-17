@@ -12,7 +12,7 @@
 
 use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
 use rh_core::agenda::TimerEntry;
-use rh_core::ownership::{Declaration, Source, SpecEntry, SpecTable, single_writer};
+use rh_core::ownership::{Declaration, EmitDecl, Source, SpecEntry, SpecTable, single_writer};
 use rh_core::system::{
     AggregateSpec, InvariantResult, ParamSchema, PulseBinding, ResampleCtx, SimError, SpecPurpose,
     StepCtx, SystemDescriptor, SystemModel,
@@ -49,6 +49,9 @@ pub struct Stub {
     pub resample: Option<ResampleFn>,
     /// `None`: no invariants.
     pub check: Option<InvariantFn>,
+    /// The `[[emits]]` declarations its spec gives each kind (SPR-020): by default every role,
+    /// no motive and no snapshot.
+    pub envelope: std::collections::BTreeMap<String, EmitDecl>,
 }
 
 #[allow(
@@ -76,6 +79,7 @@ impl Stub {
             fire: None,
             resample: None,
             check: None,
+            envelope: std::collections::BTreeMap::new(),
         }
     }
 
@@ -148,9 +152,23 @@ impl Stub {
         self
     }
 
-    /// Declares an event kind it emits.
+    /// Declares an event kind it emits, with every role, no motive and no snapshot.
     pub fn emits(mut self, kind: &'static str) -> Self {
         self.access.emits.push(kind);
+        self.envelope
+            .entry(kind.to_owned())
+            .or_insert_with(|| EmitDecl {
+                roles: ["actor", "target", "witness", "instrument"]
+                    .map(str::to_owned)
+                    .to_vec(),
+                ..EmitDecl::default()
+            });
+        self
+    }
+
+    /// Sets the `[[emits]]` declaration its spec gives `kind` (SPR-020 T-03).
+    pub fn declares(mut self, kind: &'static str, decl: EmitDecl) -> Self {
+        self.envelope.insert(kind.to_owned(), decl);
         self
     }
 
@@ -186,6 +204,7 @@ impl Stub {
                 .collect(),
             emits: self.access.emits.iter().map(|k| (*k).to_owned()).collect(),
             from_manifest: Vec::new(),
+            envelope: self.envelope.clone(),
         };
         (declaration, entry)
     }

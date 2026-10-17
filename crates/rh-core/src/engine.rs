@@ -228,6 +228,10 @@ pub struct Engine {
     /// Bookkeeping of the step guard, never state: an instant always starts it empty. One slot
     /// per system, built once, so an instant with no draws allocates nothing (V-PERF-11).
     taken: Vec<Taken>,
+    /// Snapshots `emit` discarded because their source's owner is not registered, counted per
+    /// `dropped{system, snapshot, absent_owner}` (envelope v0 §4 rule 4; SPR-020 T-03). Host
+    /// telemetry, never state.
+    dropped: BTreeMap<crate::envelope::DroppedKey, u64>,
 }
 
 /// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
@@ -362,6 +366,7 @@ impl Engine {
             timeline: TimelineId::from_raw(0),
             provenance: Provenance::default(),
             diagnostics: VecDeque::new(),
+            dropped: BTreeMap::new(),
             at: (start, Phase::Inputs),
             crash: None,
             journal_head: None,
@@ -637,6 +642,13 @@ impl Engine {
         self.dispatch
     }
 
+    /// The `dropped{system, snapshot, absent_owner}` counter: snapshots discarded because their
+    /// source's owner is not registered (envelope v0 §4 rule 4).
+    #[must_use]
+    pub const fn dropped(&self) -> &BTreeMap<crate::envelope::DroppedKey, u64> {
+        &self.dropped
+    }
+
     /// The last diagnostic records, oldest first.
     #[must_use]
     pub fn diagnostics(&self) -> Vec<String> {
@@ -804,6 +816,15 @@ impl Engine {
             | SimError::Timer { system, .. }
             | SimError::UndeclaredCommand { system, .. }
             | SimError::UndeclaredEvent { system, .. }
+            | SimError::UndeclaredRole { system, .. }
+            | SimError::DuplicateRole { system, .. }
+            | SimError::CastTooLarge { system, .. }
+            | SimError::UndeclaredSnapshot { system, .. }
+            | SimError::SnapshotNotOfTheCast { system, .. }
+            | SimError::SnapshotOutOfDomain { system, .. }
+            | SimError::DuplicateSnapshot { system, .. }
+            | SimError::MissingSnapshot { system, .. }
+            | SimError::UndeclaredMotive { system, .. }
             | SimError::Event { system, .. }
             | SimError::Panic { system, .. }
             | SimError::Unsupported { system, .. }
@@ -1095,7 +1116,6 @@ impl Engine {
             let entries = &self.registered.entries;
             let epochs = &self.epochs;
             let (world_seed, branch_salt) = (self.world_seed, self.branch_salt);
-            let key = |e: &Entry| SystemKey::new(world_seed, branch_salt, e.system_id, 0);
             let run = |k: usize, job: &Job, (cols, inbox, taken): JobInput| {
                 let e = &entries[job.index];
                 let notice = |boundary| Notice {
@@ -1110,18 +1130,7 @@ impl Engine {
                 let started =
                     observer.map_or(Ok(()), |o| observe(o, &notice(Boundary::JobStart(job_ref))));
                 let mut view = SystemView::new(e.id, &e.access, cols, tables, snapshot);
-                let info = JobInfo {
-                    system: e.id,
-                    system_id: e.system_id,
-                    key: key(e),
-                    world_seed,
-                    branch_salt,
-                    epochs,
-                    purposes: &e.purposes,
-                    access: &e.access,
-                    bindings: &e.bindings,
-                    agenda,
-                };
+                let info = job_info(e, (world_seed, branch_salt), epochs, agenda);
                 let mut ctx = StepCtx::new(info, t, phase, inbox, taken);
                 // A failed JobStart skips the step; the instant is lost either way.
                 let result = started.and_then(|()| match &job.work {
@@ -1245,6 +1254,9 @@ impl Engine {
                 },
             );
         }
+        for (snapshot, owner) in out.dropped {
+            *self.dropped.entry((e.id, snapshot, owner)).or_default() += 1;
+        }
         let mut ids = Vec::with_capacity(out.events.len());
         for mut draft in out.events {
             let event_error = |err: rh_events::EventError| SimError::Event {
@@ -1304,6 +1316,28 @@ impl Engine {
             tally.commands += 1;
         }
         Ok(())
+    }
+}
+
+/// What the engine lends one job of entry `e` (see [`JobInfo`]).
+fn job_info<'a>(
+    e: &'a Entry,
+    (world_seed, branch_salt): (u64, BranchSalt),
+    epochs: &'a BTreeMap<EntityRef, u32>,
+    agenda: &'a Agenda,
+) -> JobInfo<'a> {
+    JobInfo {
+        system: e.id,
+        system_id: e.system_id,
+        key: SystemKey::new(world_seed, branch_salt, e.system_id, 0),
+        world_seed,
+        branch_salt,
+        epochs,
+        purposes: &e.purposes,
+        access: &e.access,
+        bindings: &e.bindings,
+        agenda,
+        envelope: &e.envelope,
     }
 }
 

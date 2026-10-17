@@ -130,6 +130,7 @@ fn specs() -> SpecTable {
         commands: Vec::new(),
         emits: Vec::new(),
         from_manifest: Vec::new(),
+        envelope: std::collections::BTreeMap::new(),
     };
     let (owners, _) = single_writer(std::slice::from_ref(&declaration), Source::Spec);
     SpecTable {

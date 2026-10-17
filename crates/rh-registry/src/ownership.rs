@@ -97,10 +97,29 @@ pub struct DeclaredCommand {
     pub command: String,
 }
 
-/// One emitted event kind, from `[[emits]]` (SPR-006).
+/// One emitted event kind, from `[[emits]]` (SPR-006), with its envelope declaration (SPR-020
+/// T-03; envelope v0 §2): `lint_odd.py` checks the declaration's values against the Registry.
 #[derive(Debug, Deserialize)]
 struct DeclaredEmit {
     kind: String,
+    #[serde(default)]
+    roles: Vec<String>,
+    #[serde(default)]
+    motives: Vec<String>,
+    #[serde(default)]
+    snapshots: Vec<DeclaredSnapshot>,
+}
+
+/// One `[[emits]] snapshots` entry (envelope v0 §4).
+#[derive(Debug, Deserialize)]
+struct DeclaredSnapshot {
+    attr: String,
+    of: String,
+    #[serde(default)]
+    partner: Option<String>,
+    from: String,
+    #[serde(default, rename = "type")]
+    ty: Option<String>,
 }
 
 /// `[initialization]`: only the manifest sections genesis initialises from (SPR-012 T-06).
@@ -150,6 +169,8 @@ pub struct SystemSpec {
     pub commands: Vec<DeclaredCommand>,
     /// The event kinds it emits (`[[emits]] kind`), in spec order (SPR-006).
     pub emits: Vec<String>,
+    /// Each kind's envelope declaration (SPR-020 T-03).
+    pub envelope: BTreeMap<String, rh_core::ownership::EmitDecl>,
     /// The manifest sections `[initialization] from_manifest` names, in spec order: genesis
     /// writes the system's columns from those sections only (SPR-011 ruling 10; SPR-012 T-06).
     pub from_manifest: Vec<String>,
@@ -171,7 +192,29 @@ impl SystemSpec {
             rng: f.rng.into_iter().map(|r| r.purpose).collect(),
             schedule: f.schedule.into_iter().map(|b| (b.pulse, b.phase)).collect(),
             commands: f.commands,
-            emits: f.emits.into_iter().map(|e| e.kind).collect(),
+            emits: f.emits.iter().map(|e| e.kind.clone()).collect(),
+            envelope: f
+                .emits
+                .into_iter()
+                .map(|e| {
+                    let decl = rh_core::ownership::EmitDecl {
+                        roles: e.roles,
+                        motives: e.motives,
+                        snapshots: e
+                            .snapshots
+                            .into_iter()
+                            .map(|x| rh_core::ownership::SnapshotDecl {
+                                attr: x.attr,
+                                of: x.of,
+                                partner: x.partner,
+                                from: x.from,
+                                ty: x.ty,
+                            })
+                            .collect(),
+                    };
+                    (e.kind, decl)
+                })
+                .collect(),
             from_manifest: f.initialization.from_manifest,
         })
     }
@@ -226,6 +269,7 @@ impl SystemSpec {
                 .collect(),
             emits: self.emits.clone(),
             from_manifest: self.from_manifest.clone(),
+            envelope: self.envelope.clone(),
         }
     }
 }
