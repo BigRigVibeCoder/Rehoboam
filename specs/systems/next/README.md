@@ -116,6 +116,29 @@ probes) run only on a clean set, so a broken spec can never bury its diagnostic 
    builds against the draft under the interim rule of its `[algorithm.parameters_f1]` P1
    (`mortality_rung0` for everyone, β ≠ 1 refused).
 
+   **Promotion checklist, extended** (the Architect's ruling on the wave-5 plans, 2026-10-17, from
+   finding W1 of their independent review, which simulated the promotion on a copy; the same ruling,
+   D-1, makes the promoting PR **SPR-015's**: the two sentences above are superseded and are corrected
+   at the promotion). Besides the file move, the delta merge, the skeleton and the two `CLAUDE.md`
+   lines:
+   (a) re-point every draft spec that reads a column the promoted spec now owns from its old owner
+   (S6's `household.head` from `M4.economy`: the frozen lint and `--next` both fail on it otherwise);
+   (b) give every reference that loads the next spec a fallback to the frozen one
+   (`specs/worldgen/selftest_population_synthesis.py` loads `NEXT_SPEC` with no fallback);
+   (c) make `specs/annals/fixtures/gen_fixtures.py` and `specs/annals/selftest_annals_v0.py` read the
+   verbs and the version from the Registry alone (today they add the delta's verbs and name the
+   dictionary `<version>+next`), and regenerate the annals fixtures and goldens with the tools;
+   (d) re-render `bin/check_all.sh`'s `odd_next_control` cases from a synthetic next version of the
+   promoted spec (as the `clean` case renders one of T1) and re-pin the `--next` gate's self-check line
+   to the draft that remains;
+   (e) point the stale-check-value controls (`m2_f1_stale_control`, `m2_f1_mortality_stale_control`)
+   at the promoted spec;
+   (f) fix the spec's own text that named the promotion point or a pre-freeze condition, and the
+   `CLAUDE.md` `--next` line;
+   (g) do not bump `registry_version` with the delta: the bump belongs to the sprint's final `[C3]`
+   commit with its baselines, and a bump alone also changes every annals golden, which pins the
+   chronicle's version.
+
 `bin/gen_skeletons.py` and `gen_manifest.py` read `specs/systems/*.odd.toml` only: a next version
 never changes a committed skeleton or the index until step 4.
 
