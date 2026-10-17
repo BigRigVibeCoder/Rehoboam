@@ -1,6 +1,7 @@
 # 03 — Requirements Specification
 
-*Status: Draft v1.5 (2026-10-16). Style: ISO/IEC/IEEE 29148-lite.*
+*Status: Draft v1.6 (2026-10-17). Style: ISO/IEC/IEEE 29148-lite.*
+*v1.6 (2026-10-17): D51 (ADR-0036): new R3D-11, the voxel viewer as a plane-B observation harness; R3D-2's generators also serve it, from the viewer lane.*
 *v1.1 changes: aligned with the v1.1 architecture (`05.x`) and ADR-0024–0026 (three planes, scheduled outcomes and material inputs, genealogical IDs). New DET-12–15, SIM-12, DATA-8–9, SIFT-8, ORA-7–9, R3D-7–9 and AUD-4. EVO-1 and EVO-3 rewritten. DET-6 binds at P2. Stale wording removed (leases, decrees, pins as retention, pre-batched consults, single burn-in). Phases aligned with the P1a/P1b and P3a/P3b split of `11`; PERF-1 (1M) and PERF-2 follow the re-baselined `08`. §3 now points to the requirement → test matrix in `09` §6.*
 *v1.2 (2026-10-16): D27 (ADR-0034): DET-15 and COG-8 withdrawn; DET-7 is push inputs only; new LLM-9 (LLMs never decide; the engine never waits on a model).*
 *v1.3 (2026-10-16): ADR-0035, the saga engine. New SAGA-1 to SAGA-15 (§2.12a), SN-12 and EVO-4 (the engine only engines). Phases re-mapped to the new roadmap (P1a Bloodlines, P1b Legends, P2 Sagas & audio v0, P3 the illustrated saga, P4 deeper worlds, P5 2D diorama, Later). R3D-1, R3D-3, R3D-5, R3D-6 and ORA-7 withdrawn (3D cut). AUD-3 delivers local MP3 chapters for the reader.*
@@ -193,7 +194,7 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | ID | Requirement | Ver. | Phase | Trace |
 |---|---|---|---|---|
 | R3D-1 | **Withdrawn (ADR-0035).** Was: the renderer as a separate process consuming binary frames (the 3D client). The 2D diorama is a separate consumer of the stream under R3D-10 and ADR-0035 §6. | — | — | DR-M12, ADR-0035 |
-| R3D-2 | Street-level content (terrain detail, roads, plots, buildings, interiors) shall be generated deterministically from a seed hierarchy plus the simulation snapshot, by versioned generators. Simulation events persist as overrides. | T | P5 | DR-M10 |
+| R3D-2 | Street-level content (terrain detail, roads, plots, buildings, interiors) shall be generated deterministically from a seed hierarchy plus the simulation snapshot, by versioned generators. Simulation events persist as overrides. | T | Viewer lane (R3D-11, ADR-0036); P5 | DR-M10 |
 | R3D-3 | **Withdrawn (ADR-0035).** Was: 3D crowd LoD tiers (rigged, VAT, impostors) and Spectacle in the 3D client. The glyph view's crowd shading is in R3D-10. | — | — | DR-M11, ADR-0035 |
 | R3D-4 | Hydration rings shall exist only at Live speed and use hysteresis (hydrate at 80 m, dehydrate at 130 m plus ≥ 10 s out of view), never dehydrate an entity in view, and stay within a budget of ~5–10 hydrations per second. | T | Later | DR-C6 |
 | R3D-5 | **Withdrawn (ADR-0035).** Was: the 3D wallpaper power policy. The glyph wallpaper's limits are in R3D-10 and V-R3D-10. | — | — | DR-M18, ADR-0035 |
@@ -202,6 +203,7 @@ The single stakeholder is you, with AI coding agents as the implementation workf
 | R3D-8 | **Replay mode.** The Diorama shall render a computed history from the chronicle, keyframes and journal without running simulation work, so it can run on laptops. Replay is read-only. | D/T | P5 | DR-M18 |
 | R3D-9 | **Investigation templates.** Street-Level shall offer scenario templates that give a purpose for walking around (e.g. *investigate the mimic*, *find the plotter*). They are built on simulation state and material inputs only, never on scripted outcomes. | D | Later | R11, `05.7` B7 |
 | R3D-10 | **Lo-fi glyph client first** (ADR-0029). Art phase 1 shall be a glyph view inside the console (deck.gl instanced glyph layer, CP437 or small-tileset glyph packs keyed by Registry IDs) serving the Diorama (including a Lively web-wallpaper mode), Street-level (with `@` movement via `player.act` and a dialogue panel), the Oracle travel map and the Time-Machine map. It shall render ≥ 10k cells at 60 FPS on a laptop iGPU and make no state decisions (no FOV, pathing or randomness). **ADR-0035:** the same layer draws Kenney CC0 tile packs; it serves the Diorama, a settlement growth view, the 2D travel map and the Time-Machine map, and lives in `console/`; Street-level is later. The 3D art phase is cut, so R3D-1, R3D-3, R3D-5 and R3D-6 are withdrawn. | T/I | P5 | Director 2026-10-15, ADR-0029 |
+| R3D-11 | **The voxel viewer is an observation harness (ADR-0036, D51).** `rh-view` shall be a separate native process in its own Cargo workspace (`viewer/`) that reads channel A and the materializer, and channel C for attention, and writes nothing to any plane except journaled material inputs over `control.sock` (P2.7). Its voxel content shall be a deterministic, keyed function of the state at the tick, the world seed, the Registry and the generator version (R3D-2), the same whether the tick is reached by rewind or by forward play. No engine crate may depend on it. It is not a G2 rating surface; text stays the thesis surface | T/I | Viewer lane (after P1.17) | D51, ADR-0036 |
 
 ### 2.12 Audio (AUD)
 

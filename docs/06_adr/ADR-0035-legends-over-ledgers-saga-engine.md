@@ -1,6 +1,6 @@
 # ADR-0035 — Legends over ledgers: the saga engine
 
-**Status:** Accepted (director's directive, 2026-10-16; the roadmap, the guardrails, the engine-purity principle and the later directives on audio delivery, the event envelope, stress and the red team's five gaps ratified the same day) · **Date:** 2026-10-16 · **Amends:** ADR-0028 (default world scale), ADR-0029 (art phase 2 cut; Kenney CC0 tiles join the glyph packs), ADR-0018 (cut), ADR-0019 (audio chronicle elevated and delivered locally; Godot audio cut), ADR-0001 and ADR-0004 (Godot consumers cut), ADR-0016 (the console is not served by the engine) · **Extends:** ADR-0028 §3 (mythic catalysts), ADR-0017 (graphic chronicle, visual style card), ADR-0007 (the event envelope, typed motive edges), ADR-0012 (stress and mental breaks) · **Spec:** `05.11`, `05.2` §4, `specs/systems/S6.artifacts.odd.toml`, `specs/systems/S7.vows.odd.toml`, `11`
+**Status:** Accepted (director's directive, 2026-10-16; the roadmap, the guardrails, the engine-purity principle and the later directives on audio delivery, the event envelope, stress and the red team's five gaps ratified the same day) · **Date:** 2026-10-16 · **Amends:** ADR-0028 (default world scale), ADR-0029 (art phase 2 cut; Kenney CC0 tiles join the glyph packs), ADR-0018 (cut), ADR-0019 (audio chronicle elevated and delivered locally; Godot audio cut), ADR-0001 and ADR-0004 (Godot consumers cut), ADR-0016 (the console is not served by the engine) · **Amended by:** ADR-0036 (D51, 2026-10-17: directive 5 and the "Cut" row of §5; a procedural voxel viewer is allowed as a plane-B observation harness) · **Extends:** ADR-0028 §3 (mythic catalysts), ADR-0017 (graphic chronicle, visual style card), ADR-0007 (the event envelope, typed motive edges), ADR-0012 (stress and mental breaks) · **Spec:** `05.11`, `05.2` §4, `specs/systems/S6.artifacts.odd.toml`, `specs/systems/S7.vows.odd.toml`, `11`
 
 ## Context
 
@@ -19,7 +19,7 @@ Five directives:
 2. Put **artifacts** and **vows, grudges and quests** into plane A.
 3. Support **mythic catalysts** as scenario seeds.
 4. Put the chronicle pipeline (text, storyboards, images and audio, read in a local reader) before interactive GUI clients.
-5. No custom 3D assets: Kenney CC0 2D tiles and glyph layers for every visual.
+5. No custom 3D assets: Kenney CC0 2D tiles and glyph layers for every visual. *(Amended by ADR-0036, D51, 2026-10-17: still no hand-made 3D models, rigs or textures; the procedural voxel viewer `rh-view`, a plane-B observation harness, is allowed.)*
 
 **Emphasis** (a guide for effort, not a quota): about 30% environmental pressure (famine, plague, war), 40% dynastic ambition, vows, betrayals and relics, and 30% story sifting, the illustrated chronicle and TTS.
 
@@ -69,7 +69,8 @@ A prototype run by the red team found five ways the plan could still produce eve
 | P4 | **Deeper worlds:** full epistemics, contagion, war, Oracle, Foresight, whispers, the translator side of the LLM gateway, the world compiler, persuasion, the other should-systems | G4 |
 | P5 | **2D diorama:** the glyph client, Kenney CC0 tile packs, a SimCity-style settlement growth view | G5 |
 | Later | 1M scale-up (the default saga world is meso), M4 F2, era packs, the lo-fi street-level inhabitant | — |
-| Cut | Every custom-3D, Godot and VR work package | — |
+| Viewer lane (ADR-0036, D51) | `rh-view`, the procedural voxel viewer: a read-only plane-B observation harness after SPR-027 (PRJ-003), off every gate's critical path; Gandalf's inputs with P2.7 | — |
+| Cut | Every custom-3D (hand-made models, rigs, textures), Godot and VR work package (the procedural voxel viewer is ADR-0036's, not cut) | — |
 
 ### 5a. The engine simulates truth; downstream tools generate perception (ratified 2026-10-16)
 **The engine simulates ontological truth:** matter, space, time, state and the causal graph. **Downstream tools generate perception:** pixels, prompts, dialogue, sound and prose. This is the rule behind §6, §7 and §7a: if a fact changes what can happen next, it is simulated and stored in plane A; if it only changes how something looks, sounds or reads, it is derived downstream in plane C.
@@ -104,7 +105,7 @@ The stored part costs about 35 bytes per event beyond what the event already hol
 2. **Vows must be able to fail.** A vow can be broken under pressure, its vower can die first, and a relic can be lost. Outcomes are simulated, never scripted (ADR-0034); this is the main defence against sagas that feel scripted (R-31).
 3. **The G2 thesis gate stays pre-registered and honest.** It is rated on template-only text against the coupling-ablated control, with a report-only ablation of the saga mechanics beside it.
 
-These hold alongside the rules already stated above: P0 and the non-negotiables do not move; the chronicle pipeline is plane C and downstream of the engine (§6, §7); no custom 3D (§5).
+These hold alongside the rules already stated above: P0 and the non-negotiables do not move; the chronicle pipeline is plane C and downstream of the engine (§6, §7); no custom 3D (§5; ADR-0036 allows the procedural voxel viewer as an observation harness).
 
 ## What stays
 
@@ -121,7 +122,7 @@ These hold alongside the rules already stated above: P0 and the non-negotiables 
 | Keep the economy-first order and add narration earlier | A reader still waits a year for the first saga, and the economy WPs absorb the review hours that minds, vows and relics need |
 | Scripted saga beats (authored quest lines with fixed outcomes) | It breaks "the simulation decides" and makes sagas feel scripted, which is the main risk this ADR names (R-31). Vows and relics are state; their outcomes are simulated |
 | Vows and artifacts as plane-C narrative readings of ordinary events | They would not change behaviour: a vow that does not move its vower's agenda is a caption, not a cause. They must be plane A, with lifecycle commands into minds |
-| Keep the optional 3D art phase | The director is not a gamer and does not want custom 3D. It was the largest content cost in the plan (R-28) |
+| Keep the optional 3D art phase | The director is not a gamer and does not want custom 3D. It was the largest content cost in the plan (R-28). *ADR-0036 (D51) later allowed a procedural voxel viewer as an observation harness: voxels remove the hand-made content cost, and the red team needs to see the world* |
 | Local image generation on the laptop | Its GPU is 4 GB, too small for SDXL or Flux. `adjutant` has no GPU |
 | A GPU VM on demand for images | Viable, but it adds operations work for a batch job a serverless API does per panel. Kept as the fallback if API terms, quality or consistency fail (`12` Q24) |
 
