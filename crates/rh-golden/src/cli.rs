@@ -136,6 +136,13 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--journal" => journal = Some(PathBuf::from(value)),
             "--keyframes" => args.keyframes = Some(PathBuf::from(value)),
             "--resume" => args.resume = Some(PathBuf::from(value)),
+            "--run-dir" => args.run_dir = Some(PathBuf::from(value)),
+            "--test-stall" => {
+                args.stall = Some(
+                    crate::stream::Stall::parse(value)
+                        .ok_or_else(|| bad("--test-stall is seal:YEAR:FILE or sealed:YEAR"))?,
+                );
+            }
             "--dump" => {
                 let (m, p) = value
                     .split_once(':')
@@ -162,8 +169,14 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
         }
     }
     args.years = years.ok_or_else(|| bad("--years is required"))?;
-    args.out = out.ok_or_else(|| bad("--out is required"))?;
-    args.journal = journal.unwrap_or_else(|| args.out.with_extension("journal.sqlite"));
+    // SPR-013 T-09: a run directory holds the ladder and the journal unless they are named.
+    let run_dir = args.run_dir.clone().map(crate::stream::RunDir);
+    args.out = out
+        .or_else(|| run_dir.as_ref().map(crate::stream::RunDir::ladder))
+        .ok_or_else(|| bad("--out is required (or --run-dir)"))?;
+    args.journal = journal
+        .or_else(|| run_dir.as_ref().map(crate::stream::RunDir::journal))
+        .unwrap_or_else(|| args.out.with_extension("journal.sqlite"));
     Ok(args)
 }
 
@@ -217,6 +230,16 @@ pub fn run_world(world: &str, words: &[String], repo: &Path) -> u8 {
                 None => {
                     if let Some(systems) = &ladder.header.systems {
                         println!("{world}: {systems}");
+                    }
+                    if let (Some(s), Some(dir)) = (&outcome.stream, &args.run_dir) {
+                        println!(
+                            "{world}: stream: {} segments sealed, {} verified, {} records, next seq {}; {}",
+                            s.sealed,
+                            s.verified,
+                            s.records,
+                            s.next_seq,
+                            dir.join("stream").display()
+                        );
                     }
                     println!(
                         "{world}: {} {} rungs to year {} at {} thread(s){last}; ladder {}",

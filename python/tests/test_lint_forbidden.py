@@ -833,6 +833,10 @@ def test_the_float_dep_fixture_reports_each_plant_and_not_tests(
     out = capsys.readouterr().out
     for name in ("accessor.rs", "arrow_float.rs", "real_bits.rs", "real_cmp.rs", "real_floor.rs"):
         assert "float-dep] `" in out and f"rh-snapshot/src/{name}" in out, name
+    # SPR-013: parquet's float names in rh-stream, the one crate allowed parquet.
+    stream = "tests/lint_fixtures/forbidden/float_dep/rh-stream/src"
+    assert f"float-dep] `get_double` at {stream}/lib.rs" in out
+    assert f"float-dep] `Float` at {stream}/field_float.rs" in out
     assert "tests/allowed.rs" not in out
 
 

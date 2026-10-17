@@ -406,6 +406,10 @@ REQUIRED_GATES = (
     "lint_forbidden float-dep positive control: accessor in rh-snapshot must FAIL (SPR-007 GAP-1)",
     "lint_forbidden float-dep positive control: arrow_float in rh-snapshot must FAIL (SPR-007 "
     "T-02)",
+    "lint_forbidden float-dep positive control: parquet's Field::Float in rh-stream must FAIL "
+    "(SPR-013; the Architect's parquet review)",
+    "lint_forbidden float-dep positive control: parquet's get_double in rh-stream must FAIL "
+    "(SPR-013; the Architect's parquet review)",
     "lint_forbidden float-dep positive control: real_bits in rh-snapshot must FAIL (SPR-007 GAP-1)",
     "lint_forbidden float-dep positive control: real_cmp in rh-snapshot must FAIL (SPR-007 GAP-1)",
     "lint_forbidden float-dep positive control: real_floor in rh-snapshot must FAIL (SPR-007 "

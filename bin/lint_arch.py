@@ -126,6 +126,10 @@ PINNED_LABELS = MappingProxyType(
         # SPR-012: the first real system crate (M2.demography) and the worldgen stub (ruling 10).
         "rh-sys-demography": ("A", "system"),
         "rh-worldgen": ("A", "machinery"),
+        # SPR-013 (SPR-011 rulings 13, 14): the World Stream's one channel-A writer, and the
+        # downstream sifter of plane C.
+        "rh-stream": ("A", "machinery"),
+        "rh-sifter": ("C", "machinery"),
     }
 )
 SYSTEM_LABELS = ("A", "system")
@@ -190,6 +194,13 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
             NO_DEFAULT_FEATURES,
             NO_FEATURES,
         ),
+        "bytes": (
+            frozenset({"rh-stream"}),
+            "no floats: a byte buffer; parquet's in-memory reader reads `Bytes` (SPR-013 T-09). "
+            "Already in the lock through parquet, so no new crate; default features off",
+            NO_DEFAULT_FEATURES,
+            NO_FEATURES,
+        ),
         "libm": (
             frozenset({"rh-sample"}),
             "returns f32/f64: the transcendentals of the sampler float zone, the only "
@@ -197,6 +208,19 @@ PLANE_A_EXTERNAL_DEPS = MappingProxyType(
             "swap in architecture-specific routines (VER-SPR-003-TEST GAP-10)",
             NO_DEFAULT_FEATURES,
             NO_FEATURES,
+        ),
+        "parquet": (
+            frozenset({"rh-stream"}),
+            "can hand plane A floats (FloatType, DoubleType, Field::Float/Double/Float16, "
+            "Row::get_float/get_double, the Float/Double column writers and readers); refused by "
+            "FLOAT_YIELDING_APIS. rh-stream writes through the low-level typed column writers "
+            "(no `arrow` feature) and its segment schemas declare no FLOAT or DOUBLE column "
+            "(tests/parquet_props.rs). Reviewed by the Architect for SPR-013 (=60.0.0, the arrow "
+            "pins' release; default features off, feature zstd only, whose zstd-sys build takes "
+            "CFLAGS=-ffp-contract=off). New to the lock with it: seq-macro (a proc-macro). The "
+            "writer properties are pinned (parquet_io.rs) and a golden segment's bytes are pinned",
+            NO_DEFAULT_FEATURES,
+            frozenset({"zstd"}),
         ),
         "rusqlite": (
             frozenset({"rh-snapshot"}),
@@ -257,6 +281,23 @@ FLOAT_YIELDING_APIS = MappingProxyType(
         ),
         "arrow-buffer": ("f16", "half"),
         "arrow-schema": ("Float16", "Float32", "Float64"),
+        "parquet": (
+            "DOUBLE",
+            "Double",
+            "DoubleColumnReader",
+            "DoubleColumnWriter",
+            "DoubleType",
+            "FLOAT",
+            "Float",
+            "Float16",
+            "Float16Type",
+            "FloatColumnReader",
+            "FloatColumnWriter",
+            "FloatType",
+            "get_double",
+            "get_float",
+            "get_float16",
+        ),
         "rusqlite": ("Real", "as_f64", "as_f64_or_null"),
     }
 )

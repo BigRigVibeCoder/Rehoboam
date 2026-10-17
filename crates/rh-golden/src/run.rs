@@ -69,8 +69,11 @@ use std::sync::Arc;
 
 use crate::dump;
 use crate::ladder::{Header, Ladder, Rung, RungKind};
+use crate::stream::{Hook, RunDir, RunToml, Stall, StreamHost, keyframe_rel, writer_config};
 use crate::vitals::{Timing, Vitals};
 use crate::world::{SMOKE, Setup, setup};
+use rh_snapshot::journal::JournaledInput;
+use rh_stream::writer::Summary as StreamSummary;
 
 /// The world name in ladders.
 pub const WORLD: &str = "smoke";
@@ -154,6 +157,11 @@ pub struct RunArgs {
     /// Attach the timing observer and report the vitals (SPR-009 T-03): per-system times, the
     /// serial fraction and the vitals line. It changes no result.
     pub vitals: bool,
+    /// The run directory (SPR-013 T-09; [`crate::stream`]): the World Stream, the journal, the
+    /// keyframes and `run.toml`. A manifest world only.
+    pub run_dir: Option<PathBuf>,
+    /// A test hook that blocks the run while it seals (never on a baseline).
+    pub stall: Option<Stall>,
 }
 
 impl RunArgs {
@@ -180,6 +188,8 @@ impl RunArgs {
             leak_thread: false,
             require_parallel: None,
             vitals: false,
+            run_dir: None,
+            stall: None,
         }
     }
 }
@@ -193,6 +203,8 @@ pub struct Outcome {
     pub dispatch: DispatchStats,
     /// The vitals, when the run was asked for them (`--vitals`; SPR-009 T-03).
     pub vitals: Option<Vitals>,
+    /// What the stream writer did, for a run with a run directory (SPR-013 T-09).
+    pub stream: Option<StreamSummary>,
 }
 
 impl Outcome {
@@ -332,9 +344,15 @@ fn date_in(calendar: Calendar, t: SimTime) -> String {
 
 /// One place the run stops: a rung, a perturbation, a dump, or a keyframe year.
 #[derive(Clone, Debug, Default)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "each bool says what one stop of the run loop does"
+)]
 struct Stop {
     rung: Option<u64>,
     month_end: bool,
+    /// A Month pulse instant: the stream's `STEP_DIGEST` (SPR-013 T-09).
+    digest: bool,
     inject: bool,
     dump: bool,
     year_end: Option<i64>,
@@ -349,6 +367,18 @@ fn stops(args: &RunArgs, calendar: Calendar) -> BTreeMap<SimTime, Stop> {
         stops.entry(end).or_default().year_end = Some(year);
         if args.rung == RungKind::Yearly {
             stops.entry(end).or_default().rung = u64::try_from(year).ok();
+        }
+    }
+    if args.run_dir.is_some() {
+        // A Month pulse at the start of every month of the run: tick 0 and each month end + 1.
+        let end = year_end_in(calendar, last);
+        for t in std::iter::once(SimTime::EPOCH).chain(
+            months
+                .iter()
+                .filter_map(|m| m.checked_add_minutes(1))
+                .filter(|&t| t <= end),
+        ) {
+            stops.entry(t).or_default().digest = true;
         }
     }
     for (i, &t) in months.iter().enumerate() {
@@ -380,6 +410,10 @@ pub fn run(args: &RunArgs) -> Result<Ladder, Error> {
 ///
 /// # Errors
 /// As [`run`].
+#[allow(
+    clippy::too_many_lines,
+    reason = "the run loop in one place: every stop's steps in their order (ladder, keyframe, stream)"
+)]
 pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     refuse_mutants()?;
     let smoke = args.world == SMOKE;
@@ -395,7 +429,17 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         register((world.systems)(args.leak_thread), &world.specs)
             .map_err(|e| error("registration")(&e))
     };
-    let (mut engine, journal, identity) = start(args, &world, &registered)?;
+    let run_dir = args.run_dir.clone().map(RunDir);
+    if run_dir.is_some() && world.stream.is_none() {
+        return Err(Error(format!(
+            "--run-dir streams a manifest world; {} has no World Stream (SPR-013 T-09)",
+            world.name
+        )));
+    }
+    if let Some(dir) = &run_dir {
+        std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
+    }
+    let (mut engine, journal, identity, rows) = start(args, &world, &registered)?;
     // SPR-009 T-03: the host's clock-free observer; the engine carries no clock (ruling 4).
     let timing = args.vitals.then(|| Arc::new(Timing::default()));
     let attach = |e: &mut Engine| {
@@ -428,9 +472,22 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
     ladder.header.journal = identity.map(|p| (p.inputs, dump::hex(&p.head)));
     ladder.header.until = args.until.filter(|&u| u < args.years);
     let store = KeyframeStore::default();
-    if let (Some(dir), Some(j)) = (&args.keyframes, &journal) {
+    // Keyframes: the --keyframes directory of a full run (SPR-008), or the run directory's of
+    // any streaming run, resumed ones included (their markers are part of channel A).
+    let keyframes: Option<PathBuf> = run_dir
+        .as_ref()
+        .map(RunDir::keyframes)
+        .or_else(|| args.keyframes.clone().filter(|_| journal.is_some()));
+    let mut host = match (&run_dir, &world.stream) {
+        (Some(dir), Some(info)) => {
+            Some(stream_host(args, dir, &world, info, &engine, start, rows)?)
+        }
+        _ => None,
+    };
+    if let (Some(dir), Some(position), false) = (&keyframes, identity, args.resume.is_some()) {
         std::fs::create_dir_all(dir).map_err(|e| error("keyframes")(&e))?;
-        keyframe(&engine, j, dir, 0)?;
+        let (bytes, _) = write_keyframe(&engine, position).map_err(|e| error("keyframe")(&e))?;
+        write_file(&keyframe_path(dir, 0), &bytes)?;
     }
     let mut months: Vec<u8> = Vec::new();
     // A perturbation restores the engine, which starts its count again: keep the earlier part.
@@ -445,12 +502,20 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         .into_iter()
         .filter(|(t, _)| first.is_some_and(|f| *t >= f))
     {
-        if let Err(e) = engine.advance_until(t, |_, _| {}) {
+        let advanced = match host.as_mut() {
+            Some(h) => engine.advance_until(t, |_, tables| h.after_instant(tables)),
+            None => engine.advance_until(t, |_, _| {}),
+        };
+        if let Err(e) = advanced {
             let tick = engine.crash_artifact().map_or(t.minutes(), |a| a.tick);
             ladder.failed = Some((tick, e.to_string()));
+            host = None;
             break;
         }
-        drop(engine.drain_events());
+        match host.as_mut() {
+            Some(h) => h.collect(&mut engine, t, stop.digest)?,
+            None => drop(engine.drain_events()),
+        }
         if let Some(inject) = args.inject.as_ref().filter(|_| stop.inject) {
             dispatched = add(dispatched, engine.dispatch_stats());
             engine = perturb(&engine, inject, args, &world, registered()?)?;
@@ -469,18 +534,82 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         if let Some((_, path)) = args.dump.as_ref().filter(|_| stop.dump) {
             dump::write(&engine.snapshot(), t, path)?;
         }
-        if let (Some(year), Some(dir), Some(j)) = (stop.year_end, &args.keyframes, &journal)
-            && store.is_permanent_year(year)
-        {
-            keyframe(&engine, j, dir, year)?;
+        // A permanent year's keyframe: its marker goes into the stream (which seals the year),
+        // and only then is the file written (crate::stream module docs).
+        let kf = match (stop.year_end, &keyframes, identity) {
+            (Some(year), Some(_), Some(position)) if store.is_permanent_year(year) => Some((
+                year,
+                write_keyframe(&engine, position).map_err(|e| error("keyframe")(&e))?,
+            )),
+            _ => None,
+        };
+        if let Some(h) = host.as_mut() {
+            let rel = kf.as_ref().map(|(year, _)| keyframe_rel(*year));
+            let marker = rel
+                .as_deref()
+                .zip(kf.as_ref().map(|(_, (_, header))| header));
+            h.push(t, marker)?;
+        }
+        if let (Some((year, (bytes, _))), Some(dir)) = (&kf, &keyframes) {
+            write_file(&keyframe_path(dir, *year), bytes)?;
         }
     }
+    let stream = host.map(StreamHost::finish).transpose()?;
     std::fs::write(&args.out, ladder.render()).map_err(|e| error("ladder")(&e))?;
     Ok(Outcome {
         ladder,
         dispatch: add(dispatched, engine.dispatch_stats()),
         vitals: timing.and_then(|t| t.vitals()),
+        stream,
     })
+}
+
+/// Writes a run's file: atomically for the run directory's keyframes, so that a keyframe on disk
+/// is whole (SPR-013 T-09).
+fn write_file(path: &Path, bytes: &[u8]) -> Result<(), Error> {
+    rh_stream::seal::write_atomic(path, bytes).map_err(|e| error("keyframe")(&e))
+}
+
+/// The stream of a run into `dir` (SPR-013 T-09): `run.toml`, then a new stream at genesis or a
+/// resumed one after the keyframe's year end.
+fn stream_host(
+    args: &RunArgs,
+    dir: &RunDir,
+    world: &Setup,
+    info: &crate::world::StreamInfo,
+    engine: &Engine,
+    start: SimTime,
+    rows: Vec<JournaledInput>,
+) -> Result<StreamHost, Error> {
+    std::fs::create_dir_all(&dir.0).map_err(|e| error("run directory")(&e))?;
+    let cfg = writer_config(
+        dir,
+        world.calendar,
+        info.provenance.clone(),
+        info.dictionaries.clone(),
+    );
+    let hook = Hook(args.stall);
+    if args.resume.is_some() {
+        // Keyframes are taken at year ends; the restored cursor is the last instant run + 1, so the
+        // resume point is the last minute of the sim-year that instant is in (-1 at genesis).
+        let mpy = world.calendar.minutes_per_year();
+        let tick = ((start.minutes() - 1).div_euclid(mpy) + 1) * mpy - 1;
+        StreamHost::resume(cfg, tick, engine.tables(), rows, hook)
+    } else {
+        RunToml {
+            format: crate::stream::RUN_FORMAT.to_owned(),
+            world: world.name.clone(),
+            seed: world.seed,
+            years: args.years,
+            minutes_per_year: world.calendar.minutes_per_year(),
+            engine_build: world.provenance.build.clone(),
+            registry_version: world.provenance.registry_version.clone(),
+            manifest_hash: world.provenance.manifest_hash.clone(),
+            inputs: None,
+        }
+        .write(&dir.0)?;
+        StreamHost::create(cfg, engine.tables(), rows, hook)
+    }
 }
 
 /// The `mutant-*` Cargo features compiled into this build, from every crate that has any
@@ -519,7 +648,12 @@ const fn add(a: DispatchStats, b: DispatchStats) -> DispatchStats {
     }
 }
 
-type Started = (Engine, Option<Journal>, Option<JournalPosition>);
+type Started = (
+    Engine,
+    Option<Journal>,
+    Option<JournalPosition>,
+    Vec<JournaledInput>,
+);
 
 /// The engine a run starts from, the journal a full run writes, and the journal's identity: a
 /// full run creates the journal and journals every synthetic input of the horizon in the host
@@ -553,7 +687,8 @@ fn start(
         let (mut engine, _) = resume(&bytes, world.calendar, registered()?, &history, &replay)
             .map_err(|e| error("resume")(&e))?;
         engine.set_threads(args.threads);
-        return Ok((engine, None, Some(replay.position())));
+        let rows = replay.inputs().to_vec();
+        return Ok((engine, None, Some(replay.position()), rows));
     }
     for suffix in ["", "-wal", "-shm"] {
         let mut path = args.journal.clone().into_os_string();
@@ -572,13 +707,14 @@ fn start(
     );
     engine.set_provenance(world.provenance.clone());
     engine.set_threads(args.threads);
+    let mut rows = Vec::new();
     for (at, entity) in (world.inputs)(args.years) {
-        accept(&mut engine, &mut journal, at, entity)?;
+        rows.push(accept(&mut engine, &mut journal, at, entity)?);
     }
     let identity = journal
         .position(TIMELINE)
         .map_err(|e| error("journal")(&e))?;
-    Ok((engine, Some(journal), Some(identity)))
+    Ok((engine, Some(journal), Some(identity), rows))
 }
 
 /// DEF-1: a resumed run's horizon must be the journal's. The journal must hold exactly the
@@ -628,7 +764,7 @@ fn accept(
     journal: &mut Journal,
     at: SimTime,
     entity: rh_ids::EntityRef,
-) -> Result<(), Error> {
+) -> Result<JournaledInput, Error> {
     if engine.snapshot().cursor.is_none_or(|c| at < c) {
         return Err(Error(format!(
             "the synthetic input at {at} is before the cursor"
@@ -656,15 +792,7 @@ fn accept(
         .map_err(|e| error("journal")(&e))?
         .head;
     engine.set_journal_head(Some(dump::hex(&head)));
-    Ok(())
-}
-
-fn keyframe(engine: &Engine, journal: &Journal, dir: &Path, year: i64) -> Result<(), Error> {
-    let position = journal
-        .position(TIMELINE)
-        .map_err(|e| error("journal")(&e))?;
-    let (bytes, _) = write_keyframe(engine, position).map_err(|e| error("keyframe")(&e))?;
-    std::fs::write(keyframe_path(dir, year), bytes).map_err(|e| error("keyframe")(&e))
+    Ok(row)
 }
 
 /// Where a full run writes the keyframe of the end of `year` (year 0: the start).
@@ -751,6 +879,7 @@ mod tests {
                 max_jobs,
             },
             vitals: None,
+            stream: None,
         }
     }
 

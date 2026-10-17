@@ -27,3 +27,5 @@ rh-sys-demography = { version = "0.0.0", path = "../rh-sys-demography" }
 rh-worldgen = { version = "0.0.0", path = "../rh-worldgen" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.8"
+# SPR-013 T-09: the World Stream of a manifest world's run.
+rh-stream = { version = "0.0.0", path = "../rh-stream" }

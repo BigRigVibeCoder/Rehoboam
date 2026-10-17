@@ -71,6 +71,18 @@ pub struct Setup {
     pub systems_line: Option<String>,
     /// The systems the manifest names that this build lacks.
     pub not_built: Vec<String>,
+    /// What its World Stream carries (SPR-013 T-09): a manifest world's dictionaries and history
+    /// tuple. The smoke world has none (no life-course log, no Registry verbs).
+    pub stream: Option<StreamInfo>,
+}
+
+/// A manifest world's stream dictionaries and the history tuple its segments carry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StreamInfo {
+    /// The Registry's verbs and act classes.
+    pub dictionaries: rh_stream::segment::Dictionaries,
+    /// The history tuple.
+    pub provenance: rh_stream::segment::Provenance,
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,9 +172,12 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
     if let Some(s) = seed {
         spec.seed = s;
     }
+    // A template may name a system the Registry's [systems] does not list yet (pastoral_household's
+    // S1.culture): its name comes from the template, so the header never shows a bare id.
     let names: BTreeMap<SystemId, &str> = registry
         .systems
         .keys()
+        .chain(registry.templates.values().flat_map(|t| &t.default_systems))
         .map(|n| (system_id(n), n.as_str()))
         .collect();
     let name_of = |id: SystemId| {
@@ -212,6 +227,16 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
         manifest_hash: format!("sha256:{manifest_hash}"),
     };
     let (tuple, systems_line) = header_lines(&provenance, spec.seed, &built, &not_built);
+    let stream = StreamInfo {
+        dictionaries: crate::stream::dictionaries(&registry)?,
+        provenance: rh_stream::segment::Provenance {
+            engine_build: provenance.build.clone(),
+            manifest_hash: hex_bytes(&manifest_hash)?,
+            world_seed: spec.seed,
+            built_systems: built.clone(),
+            not_built: not_built.clone(),
+        },
+    };
     Ok(Setup {
         name: name.to_owned(),
         calendar,
@@ -236,7 +261,19 @@ pub fn setup(repo: &Path, name: &str, seed: Option<u64>, strict: bool) -> Result
         tuple: Some(tuple),
         systems_line: Some(systems_line),
         not_built,
+        stream: Some(stream),
     })
+}
+
+/// The bytes of a lowercase hex digest.
+fn hex_bytes(hex: &str) -> Result<Vec<u8>, Error> {
+    (0..hex.len() / 2)
+        .map(|i| {
+            hex.get(2 * i..2 * i + 2)
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
+                .ok_or_else(|| Error(format!("{hex} is not a hex digest")))
+        })
+        .collect()
 }
 
 /// The header's `tuple …` and `systems …` lines (without their prefixes) of a manifest world.
@@ -309,5 +346,6 @@ fn smoke(repo: &Path, seed: u64) -> Result<Setup, Error> {
         tuple: None,
         systems_line: None,
         not_built: Vec::new(),
+        stream: None,
     })
 }

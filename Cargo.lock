@@ -681,6 +681,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "parquet"
+version = "60.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8af83d2940bc0510f9aef86d865f56fdc6095f87ab115ac885a80b7c5226d3ba"
+dependencies = [
+ "ahash",
+ "bytes",
+ "chrono",
+ "half",
+ "hashbrown",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "seq-macro",
+ "twox-hash",
+ "zstd",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -869,6 +888,7 @@ dependencies = [
  "rh-manifest",
  "rh-registry",
  "rh-snapshot",
+ "rh-stream",
  "rh-sys-demography",
  "rh-sys-smoke",
  "rh-worldgen",
@@ -930,6 +950,18 @@ dependencies = [
  "rh-ids",
  "rusqlite",
  "twox-hash",
+]
+
+[[package]]
+name = "rh-stream"
+version = "0.0.0"
+dependencies = [
+ "bytes",
+ "parquet",
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-snapshot",
 ]
 
 [[package]]
@@ -1042,6 +1074,12 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+
+[[package]]
+name = "seq-macro"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bc711410fbe7399f390ca1c3b60ad0f53f80e95c5eb935e52268a0e2cd49acc"
 
 [[package]]
 name = "serde"

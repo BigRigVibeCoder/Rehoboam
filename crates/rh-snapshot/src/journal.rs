@@ -673,6 +673,21 @@ fn encode(r: &JournaledInput) -> Encoded<'_> {
     (r.kind.encode(), r.scope.encode(), producer)
 }
 
+/// How the World Stream's `INPUT` record spells a journal row (`specs/stream/channel_a_v0.sql`
+/// `input`; SPR-013 T-09): the kind as the journal stores it, with its argument after a `:`
+/// (`player_action:<verb>`), the scope name and id, and the producer name (with the job id after a
+/// `:` for an LLM job). The digest that ties the record to the row is [`row_digest`].
+#[must_use]
+pub fn stream_fields(r: &JournaledInput) -> (String, String, Option<u64>, String) {
+    let ((kind, arg), (scope, id), producer) = encode(r);
+    let kind = arg.map_or_else(|| kind.to_owned(), |a| format!("{kind}:{a}"));
+    let producer = match producer {
+        (name, Some(job), ..) => format!("{name}:{job}"),
+        (name, ..) => name.to_owned(),
+    };
+    (kind, scope.to_owned(), id.map(i64::cast_unsigned), producer)
+}
+
 fn put_bytes(out: &mut Vec<u8>, b: &[u8]) {
     let len = u32::try_from(b.len()).unwrap_or(u32::MAX);
     out.extend_from_slice(&len.to_le_bytes());

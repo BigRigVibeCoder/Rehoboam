@@ -9,6 +9,8 @@
 //!   two builds (T-03, ruling 7; V-DET-11).
 //! - [`leak`]: the planted thread-identity leak behind `--leak-thread` (DEF-2 control).
 //! - [`cli`]: the command-line form `rh-cli` exposes and spawned builds read.
+//! - [`stream`]: the World Stream of a run (SPR-013 T-09): feeding `rh-stream`'s writer, the run
+//!   directory.
 //!
 //! The baselines are ladders this crate writes, never typed; `bin/check_baseline.py` gates them
 //! (T-04, ruling 6).
@@ -23,5 +25,6 @@ pub mod ladder;
 pub mod leak;
 pub mod run;
 pub mod sha256;
+pub mod stream;
 pub mod vitals;
 pub mod world;
