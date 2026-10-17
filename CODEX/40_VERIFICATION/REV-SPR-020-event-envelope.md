@@ -2,26 +2,34 @@
 id: REV-SPR-020
 title: "Independent review of the event envelope and role codes spec (PR #61)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-020, SPR-013, SPR-021, SPR-026, SPR-029, EVO-001, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.3.0
+version: 1.0.0
 ---
 
-> **BLUF: round 1 on `742ed09` found 0 blockers, 3 majors, 9 minors and 5 nits. Not ready to merge.**
-> - **Sound:** the role reconciliation, the v2 field list, plane separation, the provenance macros and the canonical order.
-> - **The majors:**
->   - abstract-role domains read from `state_interval` at the event's tick are unanchored, so a deposed ruler is never "authority" at their own deposition;
->   - `cause_column` cannot be implemented with today's merge;
->   - four event-level fields are outside both the draft and the digest.
-> - **Rulings:** R1–R12 in §0.
-> - **Round 2** (`9755956`): round 1's majors are fixed on paper. One new major (the `origin` slot is always hashed, so `smoke`'s timers and commands change too), 8 minors and 5 nits. Rulings R13–R22 in §2.0.
-> - **Round 3** (`99691b0`): R15–R22 applied; round 2's narrowing probes now FAIL. One major (§6's divergence prediction is wrong), 3 minors and 8 nits. Rulings R23–R27 in §3.0.
-> - **Reviewer:** a session on a different model from the drafter's.
+> **BLUF: CLOSED, approved.** The event envelope spec (PR #61) took four rounds:
+>
+> | Round | Head | Findings | Rulings |
+> |---|---|---|---|
+> | 1 | `742ed09` | 0 blockers, 3 majors, 9 minors, 5 nits | R1–R12 (§0) |
+> | 2 | `9755956` | 1 major, 8 minors, 5 nits | R13–R22 (§2.0) |
+> | 3 | `99691b0` | 1 major, 3 minors, 8 nits | R23–R27 (§3.0) |
+> | 4 | `c855441` | Verified by the Architect (§4) | — |
+>
+> - **What it settles:**
+>   - one role vocabulary, with domains as anchored attributes, so D45 is withdrawn;
+>   - emitter-filled snapshots;
+>   - nine typed edge kinds with total coalescing;
+>   - the digest v2, with hash-neutral origin tails;
+>   - provenance through `set_cause` into `event_ref` columns;
+>   - channel A and canonical v0 amended in place.
+> - **D44** (DATA-2: eight or nine edge kinds) goes to the director.
+> - **Reviewers:** rounds 1 to 3 ran in sessions on a different model from the drafter's.
 
 # REV-SPR-020: independent review of the event envelope
 
@@ -679,4 +687,26 @@ Reviewer: independent, on a different model from the drafter's. Head reviewed: *
 - `manifest_parity.py`.
 
 `$R/target` was deleted after the run.
+
+## 4. Round 4: the Architect's check (2026-10-17, `c855441`)
+
+Everything below ran on an archive copy of `c855441`, which is merged with `main` at `a53cac2`:
+
+| Check | Result |
+|---|---|
+| `lint_odd.py` default / `--next` / smoke | PASS (8 / 8 / 7 specs). The self-check reads "33 planted changes rejected (3 of them by the amendments lock), 19 amendments recorded and locked" |
+| `lint_patterns.py` on both packs | Exit 0 |
+| `selftest_envelope.py` (venv Python, DuckDB) | ENVELOPE v0: PASS. `--control origin-lost` and `--control budget-bloat` both FAIL, as required |
+| `selftest.py`, `selftest_channel_a.py`, `selftest_channel_c.py` | PASS |
+| `canonical_v0.py --check`, `selftest_wire_v1.py --check` | OK: 78 and 191 lines |
+| `gen_manifest --check`, `gen_skeletons --check` | Clean; 8 skeletons up to date |
+| pytest | 655 passed |
+| CI on `c855441` | PASS (core and golden) |
+
+**The text, read:**
+- §6 is rewritten from the code's path and marked as a prediction. `engine.inputs` and `events.meta` move at yearly rungs; `agenda.timers` and `engine.commands` move only inside an input year. The acceptance is robust to it: the measured first divergence is recorded, and every table that differs must be a named one.
+- R24's tail encodings are stated byte for byte.
+- R25 covers S6's `chain_head` and `origin_event` and M7's `claim.cause_event`. **Accepted:** S6 `origin_event` as `event_ref` (7/10).
+
+**Merge:** PR #61 merges `main` at `5bf6ec6` (PR #65's SPR-013 T-09 line; both kept in SPR-013 1.0.3), then merges on green CI. PR #62's `next/M7` 0.4.0 then carries M7 0.3.3's `roles`.
 
