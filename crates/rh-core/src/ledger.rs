@@ -1,7 +1,8 @@
 //! The person ledger and the life-course log, kept by the core (SPR-011 T-03, ruling 5).
 //!
 //! **The ledger** exists when `person.id` is a column of the world (its owner, `M2.demography`,
-//! declares it). Every `person.*` column, whoever owns it, is one row per living person, aligned
+//! declares it); a world without `person.id` has no ledger, whatever other `person.*` columns it
+//! has (the P0 smoke world). Every `person.*` column, whoever owns it, is one row per living person, aligned
 //! with `person.id` and sorted ascending by it (as a `u64`; the column stores its bits as `i64`).
 //! A death writes `person.alive = 0`; the dead row stays readable for the rest of the instant, and
 //! the core removes it from **every** `person.*` column by a compaction pass at the start of
@@ -65,13 +66,19 @@ pub struct Ledger {
 }
 
 impl Ledger {
-    /// The ledger of `tables`: `None` when the world has no `person.*` or `life_course.*` column.
+    /// The ledger of `tables`: `None` when the world has no `person.id` column. Ruling 5: the
+    /// ledger exists when `person.id` is registered; a world with other `person.*` columns and no
+    /// `person.id` (the P0 smoke world's `person.alive`, `person.deaths`, `person.pending`) has no
+    /// ledger, and the core neither compacts nor checks those columns.
     ///
     /// # Errors
-    /// [`SimError::Ledger`] when the world has `person.*` or `life_course.*` columns without
-    /// `person.id`, `person.alive`, `life_course.person_id` or the exit fields: rows could not be
-    /// compacted or checked, so the engine refuses to run rather than fail open.
+    /// [`SimError::Ledger`] when the world has `person.id` but not `person.alive`,
+    /// `life_course.person_id` or the life-course exit fields: its rows could not be compacted or
+    /// checked, so the engine refuses to run rather than fail open.
     pub fn of(tables: &WorldTables) -> Result<Option<Self>, SimError> {
+        if tables.get(PERSON_ID).is_none() {
+            return Ok(None);
+        }
         let names = |prefix: &str| -> Vec<String> {
             tables
                 .names()
@@ -83,20 +90,14 @@ impl Ledger {
             person: names(PERSON_PREFIX),
             life_course: names(LIFE_COURSE_PREFIX),
         };
-        if ledger.person.is_empty() && ledger.life_course.is_empty() {
-            return Ok(None);
-        }
-        let required = [PERSON_ID, PERSON_ALIVE, LIFE_COURSE_PERSON]
+        let required = [PERSON_ALIVE, LIFE_COURSE_PERSON]
             .into_iter()
             .chain(LIFE_COURSE_EXIT_FIELDS);
         for column in required {
             if tables.get(column).is_none() {
                 return Err(error(format!(
-                    "the world has ledger columns ({}) but no {column}: the ledger exists only with \
-                     person.id, person.alive and the life-course log (SPR-011 ruling 5)",
-                    [ledger.person.as_slice(), ledger.life_course.as_slice()]
-                        .concat()
-                        .join(", ")
+                    "the world has person.id but no {column}: the ledger needs person.alive and \
+                     the life-course log to compact and check its rows (SPR-011 ruling 5)"
                 )));
             }
         }

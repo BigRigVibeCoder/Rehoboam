@@ -456,15 +456,12 @@ fn a_death_whose_life_course_entry_stays_open_breaks_the_invariant() {
 }
 
 #[test]
-fn a_world_with_ledger_columns_but_no_person_id_never_runs() {
-    let mut tables = world(5, 0, 1);
-    let mut t = WorldTables::new();
-    for name in tables.names().map(str::to_owned).collect::<Vec<_>>() {
-        if name != PERSON_ID {
-            t.insert(&name, tables.get(&name).unwrap().clone());
-        }
+fn a_world_with_person_id_but_no_life_course_log_never_runs() {
+    let full = world(5, 0, 1);
+    let mut tables = WorldTables::new();
+    for name in full.names().filter(|n| !n.starts_with("life_course.")) {
+        tables.insert(name, full.get(name).unwrap().clone());
     }
-    tables = t;
     let stubs = vec![
         Stub::new("T1.namer")
             .writes("person.named")
@@ -474,8 +471,30 @@ fn a_world_with_ledger_columns_but_no_person_id_never_runs() {
     match e.advance_until(SimTime::from_minutes(MONTH), |_, _| {}) {
         Err(SimError::Ledger { system, message }) => {
             assert_eq!(system, "rh-core");
-            assert!(message.contains("but no person.id"), "{message}");
+            assert!(
+                message.starts_with("the world has person.id but no life_course.person_id"),
+                "{message}"
+            );
         }
         other => panic!("{other:?}"),
     }
+}
+
+/// Ruling 5: without `person.id` there is no ledger, whatever other `person.*` columns the world
+/// has (the P0 smoke world keeps `person.alive` and friends): nothing is compacted or checked.
+#[test]
+fn person_columns_without_person_id_are_not_a_ledger() {
+    let full = world(5, 0, 1);
+    let mut tables = WorldTables::new();
+    tables.insert("person.alive", vec![1, 0, 1]);
+    tables.insert("person.named", full.get("person.named").unwrap().clone());
+    let stubs = vec![
+        Stub::new("T1.namer")
+            .writes("person.named")
+            .at(Pulse::Month, Phase::Culture),
+    ];
+    let mut e = engine(stubs, tables, 1, 1);
+    e.advance_until(SimTime::from_minutes(3 * MONTH), |_, _| {})
+        .unwrap();
+    assert_eq!(get(e.tables(), "person.alive"), [1, 0, 1], "not compacted");
 }
