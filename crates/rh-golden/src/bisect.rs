@@ -23,6 +23,10 @@
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+#[allow(
+    clippy::disallowed_types,
+    reason = "tool plane: the bisect runs the baseline and candidate rh-cli binaries (SPR-008 T-03)"
+)]
 use std::process::Command;
 
 use rh_snapshot::hash::Divergence;
@@ -94,6 +98,10 @@ impl Build for Process {
         let mut command = vec!["run".to_owned(), "smoke".to_owned()];
         command.extend(crate::cli::to_argv(args, false));
         command.extend(self.extra.iter().cloned());
+        #[allow(
+            clippy::disallowed_types,
+            reason = "tool plane: the bisect runs the baseline and candidate rh-cli binaries"
+        )]
         let out = Command::new(&self.bin)
             .args(&command)
             .output()

@@ -170,7 +170,8 @@ fn systems_and_fidelity(
             out.err(format!("systems.{sid}"), "unknown system");
             continue;
         };
-        for (p, &v) in params.iter() {
+        for (p, a) in params.iter() {
+            let v = a.value;
             match def.params.get(p) {
                 None => out.err(format!("systems.{sid}.{p}"), "unknown parameter"),
                 Some(b) if !b.contains(v) => out.err(

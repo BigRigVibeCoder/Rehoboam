@@ -10,11 +10,13 @@ from lint_forbidden import (
     EXIT_OK,
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
+    FILE_IO_CRATES,
     FLOAT_EXEMPT_CRATES,
     FloatScan,
     FloatScope,
     Report,
     declared_float_fields,
+    expand_use,
     float_yielding_apis,
     lex,
     main,
@@ -295,6 +297,30 @@ PLANTED = {
     "float_escape_reason": ("float", "f64"),
     "float_undeclared_field": ("float", "f32"),
     "allow_disallowed": ("lint-allow", "allow(clippy::disallowed_methods"),
+    "file_modified": ("file-clock", ".modified("),
+    "process_command": ("process", "std::process"),
+    "process_rename": ("process", "std::process"),
+    "fs_group_rename": ("file-io", "std::fs"),
+    "metadata_ext": ("file-clock", "MetadataExt"),
+    "metadata_ufcs": ("file-clock", "Metadata::modified"),
+    "mtime": ("file-clock", ".mtime("),
+    "env_rename": ("env", "std::env"),
+    "env_var": ("env", "std::env"),
+    "env_current_dir": ("env", "std::env"),
+    "env_current_exe": ("env", "std::env"),
+    "env_temp_dir": ("env", "std::env"),
+    "env_home_dir": ("env", "std::env"),
+    "env_set_current_dir": ("env", "std::env"),
+    "env_split_paths": ("env", "std::env"),
+    "env_join_paths": ("env", "std::env"),
+    "fs_renamed_std": ("file-io", "fs::r"),
+    "fs_os_symlink": ("file-io", "fs::s"),
+    "raw_ident_fs": ("file-io", "std::fs"),
+    "std_rename": ("std-rename", "std as"),
+    "std_rename_root": ("std-rename", "std as"),
+    "std_rename_self": ("std-rename", "std as"),
+    "extern_crate_std": ("std-rename", "extern crate std as"),
+    "file_io": ("file-io", "std::fs"),
 }
 
 
@@ -317,7 +343,7 @@ def test_check_all_runs_a_control_for_every_planted_file() -> None:
     parsed = {}
     for spec in listed:
         name, rule, token = spec.split(":", 2)
-        parsed[name] = (rule, token)
+        parsed[name] = (rule, token.replace("~", " "))
     assert parsed == PLANTED
 
 
@@ -1017,3 +1043,207 @@ def test_an_include_resolves_from_the_symlink_not_its_target(tmp_path: Path) -> 
     report = scan_file(tmp_path / "link.rs", tmp_path)
     (violation,) = report.violations
     assert "[V-DET-19/wall-clock]" in violation, "the compiled include is ./gen.rs, not real/gen.rs"
+
+
+# --- File clocks, processes and file I/O (BCK-002 A-44; SPR-011 T-00) ----------------------------
+
+
+@pytest.mark.parametrize(
+    ("code", "rule"),
+    [
+        ("let t = meta.modified()?;", "file-clock"),
+        ("let t = meta . accessed ();", "file-clock"),
+        ("let t = std::fs::metadata(p)?.created()?;", "file-clock"),
+        ("use std::process::{Child, Command};", "process"),
+        ("use std::process::*;", "process"),
+        ("let c = std :: process :: Command :: new(x);", "process"),
+        # DEF-1: the module, in any form of use tree.
+        ("let id = std::process::id();", "process"),
+        ("std::process::exit(2);", "process"),
+        ('use std::process as p; fn a() { p::Command::new("date"); }', "process"),
+        ("use std::process::{self as p};", "process"),
+        ("use std::process::{self}; fn a() { self::Command::new(x); }", "process"),
+        ("use ::std::{io, process::{self as q}};", "process"),
+        ('use std::{fs as f, io}; fn a() { f::read("x"); }', "file-io"),
+        ("use std::{io, fs::{self as g}};", "file-io"),
+        ("pub use std::{fs};", "file-io"),
+        # DEF-2: every read of a file's timestamps.
+        ("let _ = Metadata::modified(&m);", "file-clock"),
+        ("let g = <Metadata>::accessed;", "file-clock"),
+        ("use std::os::linux::fs::MetadataExt;", "file-clock"),
+        ("let t = m.mtime() + m.ctime_nsec();", "file-clock"),
+        ("let t = m.st_atime();", "file-clock"),
+        ("let t = m.last_write_time();", "file-clock"),
+        # A-4: the environment, in any import form.
+        ('let s = std::env::var("EPOCHREALTIME");', "env"),
+        ("let a: Vec<String> = std::env::args().collect();", "env"),
+        ("use std::env as e;", "env"),
+        ("use std::{io, env::{self as e}};", "env"),
+        ("use std::env::vars_os;", "env"),
+        ("use std::fs;", "file-io"),
+        ("let f = fs::File::open(p);", "file-io"),
+        ("let f = File::create(p);", "file-io"),
+        ("let o = OpenOptions::new();", "file-io"),
+    ],
+)
+def test_a_44_rules_catch_their_forms(code: str, rule: str) -> None:
+    """Each A-44 form is reported under its own rule, in engine code."""
+    report = Report(violations=[], escaped=[])
+    scan_source(code + "\n", "snippet.rs", report)
+    assert any(f"[V-DET-19/{rule}]" in v for v in report.violations), report.violations
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "use std::{io, path::Path};",
+        "use std::os::unix::ffi::OsStrExt;",
+        "let t = clock.datetime();",
+        "let c = builder.args(&[1, 2]);",
+        "let e = self.environment();",
+        "let m = state.modified_rows;",
+        "let r = ledger.created_at(t);",
+        "let p = std::path::Path::new(x);",
+    ],
+)
+def test_a_44_rules_leave_allowed_forms_alone(code: str) -> None:
+    """Field names, paths and other std modules are not file clocks, processes or I/O."""
+    report = Report(violations=[], escaped=[])
+    scan_source(code + "\n", "snippet.rs", report)
+    assert report.violations == []
+
+
+def test_file_io_is_allowed_only_where_the_list_says() -> None:
+    """The reviewed list of plane-A crates allowed file I/O (A-44): widening it is a review."""
+    assert set(FILE_IO_CRATES) == {"rh-registry", "rh-snapshot"}
+
+
+def test_file_io_is_exempt_in_tests_and_in_listed_crates() -> None:
+    """A test reads its golden file; a listed crate's src/ may do I/O; neither is reported."""
+    cases: tuple[tuple[FloatScope, bool], ...] = (("none", False), ("rule", True), ("zone", True))
+    for scope, allowed in cases:
+        report = Report(violations=[], escaped=[])
+        scan_source("std::fs::read(p);\n", "x.rs", report, floats=FloatScan(scope, (), allowed))
+        assert report.violations == [], (scope, allowed)
+    report = Report(violations=[], escaped=[])
+    scan_source("std::fs::read(p);\n", "x.rs", report, floats=FloatScan("zone"))
+    assert len(report.violations) == 1
+
+
+def test_the_file_io_workspace_reports_src_only(capsys: pytest.CaptureFixture[str]) -> None:
+    """rh-core's src/ is reported; its tests/ and rh-snapshot's src/ are not."""
+    assert main(["--manifest-path", str(FIXTURES / "file_io_workspace" / "Cargo.toml")]) == 1
+    out = capsys.readouterr().out
+    violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
+    assert len(violations) == 1
+    assert "file_io_workspace/rh-core/src/lib.rs:4:5" in violations[0]
+    assert "file I/O allowed in rh-registry, rh-snapshot only (A-44)" in out
+
+
+def test_def_1_a_path_after_a_grouped_import_is_reported_on_its_own_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The `fs::<item>` pattern is not dead weight behind the use-tree check (DEF-1 test gap)."""
+    assert main(["--scan", str(FIXTURES / "fs_path_after_group.rs")]) == EXIT_VIOLATIONS
+    lines = [v for v in capsys.readouterr().out.splitlines() if v.startswith("VIOLATION")]
+    assert [line.split(" at ", 1)[1].split(";")[0][-4:] for line in lines] == [":4:1", "5:18"]
+    assert "`fs::r`" in lines[1]
+
+
+@pytest.mark.parametrize(
+    ("tree", "paths"),
+    [
+        ("std::process as p", [("std", "process")]),
+        ("std::process::{self as p}", [("std", "process")]),
+        (
+            "::std::{io, fs::{self as g, File}}",
+            [("std", "io"), ("std", "fs"), ("std", "fs", "File")],
+        ),
+        ("std::{fs, io}", [("std", "fs"), ("std", "io")]),
+        ("a::b::*", [("a", "b", "*")]),
+    ],
+)
+def test_use_trees_expand_to_the_paths_they_import(tree: str, paths: list[tuple[str, ...]]) -> None:
+    """Renames are dropped, `self` is its prefix, groups nest (DEF-1)."""
+    assert expand_use(f" {tree};") == paths
+
+
+def test_a_4_the_env_workspace_reports_src_only(capsys: pytest.CaptureFixture[str]) -> None:
+    """rh-core's src/ read is reported; its tests/ override and a builder's `args` are not."""
+    assert main(["--manifest-path", str(FIXTURES / "env_workspace" / "Cargo.toml")]) == 1
+    lines = [v for v in capsys.readouterr().out.splitlines() if v.startswith("VIOLATION")]
+    assert len(lines) == 1
+    assert "env_workspace/rh-core/src/lib.rs:5:35" in lines[0]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "fn f() { let _ = std::env::current_dir(); }",
+        "fn f() { let _ = ::std::env::current_exe(); }",
+        "fn f() { let _ = std :: env :: temp_dir(); }",
+        "fn f() { let _ = std::env::home_dir(); }",
+        'fn f() { let _ = std::env::set_current_dir("/"); }',
+        'fn f() { let _ = std::env::split_paths("a"); }',
+        'fn f() { let _ = std::env::join_paths(["a"]); }',
+        "fn f() { let _ = std::env::set_var; }",
+        "fn f() { let _ = env::current_dir(); }",
+        "use std::env::{self, consts};",
+        "use std::env::*;",
+        "use std::{env::consts, env::temp_dir};",
+    ],
+)
+def test_def_5_any_path_into_std_env_is_refused(source: str) -> None:
+    """Every form of std::env but its constants is the env rule (DEF-5)."""
+    assert "env" in rules_hit(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "fn f() -> &'static str { std::env::consts::OS }",
+        "use std::env::consts;",
+        "use std::env::consts::{ARCH, FAMILY};",
+        'fn f() -> &\'static str { env!("CARGO_PKG_NAME") }',
+        'fn f() -> Option<&\'static str> { option_env!("X") }',
+        "fn f(env: u8) -> u8 { env }",
+        "fn f() { let _ = my_env::current_dir(); }",
+    ],
+)
+def test_def_5_the_constants_and_the_compile_time_macros_pass(source: str) -> None:
+    """std::env::consts is fixed by the build; env! and option_env! are compile-time (DEF-5)."""
+    assert rules_hit(source) == []
+
+
+@pytest.mark.parametrize(
+    ("source", "rule"),
+    [
+        ("use std as s;\nuse s::process as p;\nfn f() -> u32 { p::id() }", "std-rename"),
+        ("extern crate std as s;\nfn f() { s::process::exit(0) }", "std-rename"),
+        ("use ::std as s;", "std-rename"),
+        ("use std::{self as s, io};", "std-rename"),
+        ("fn f() { let _ = r#std::r#process::id(); }", "process"),
+        ("fn f() { let _ = r#std::r#env::current_dir(); }", "env"),
+        ("use r#std::r#fs;", "file-io"),
+        ('fn f() { let _ = s::fs::read("a"); }', "file-io"),
+        ('fn f() { let _ = std::os::unix::fs::symlink("a", "b"); }', "file-io"),
+    ],
+)
+def test_maj_1_min_2_renamed_std_raw_identifiers_and_nested_fs_are_refused(
+    source: str, rule: str
+) -> None:
+    """A renamed std, a raw identifier or an `X::fs::` path reaches no module (MAJ-1, MIN-2)."""
+    assert rule in rules_hit(source)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "use std::collections::BTreeMap as Map;",
+        "fn f(r#type: u8) -> u8 { r#type }",
+        'fn f() -> &\'static str { r#"std::fs"# }',
+    ],
+)
+def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
+    """Only std itself may not be renamed; a raw identifier or raw string is not a path (MIN-2)."""
+    assert rules_hit(source) == []

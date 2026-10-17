@@ -96,3 +96,8 @@ def test_a_hard_coded_part_fails() -> None:
     assert problems(flow, declared_parts()) == ["the step's $CHECK_PART is not ${{ matrix.part }}"]
     step["run"] = "bin/check_all.sh"
     assert problems(flow, declared_parts()) != []
+
+
+def test_the_pr_tier_times_out_at_20_minutes() -> None:
+    """BCK-002 A-38: each PR-tier job's timeout guards the 15-minute budget (V-PERF-04)."""
+    assert workflow()["jobs"]["check-all"]["timeout-minutes"] == 20

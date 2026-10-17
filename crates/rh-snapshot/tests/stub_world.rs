@@ -291,6 +291,11 @@ fn render_stub_golden(ladder: &[u64]) -> String {
 /// comparisons cannot see a change that alters every run alike (phase order, scheduler order, pulse
 /// order, draw keys); this golden can.
 #[test]
+// LINT-ALLOW(forbidden-api): a test reads an environment override for its golden file; tests never link into the engine (SPR-011 A-4)
+#[allow(
+    clippy::disallowed_methods,
+    reason = "a test reads an environment override for its golden file"
+)]
 fn the_stub_world_hash_ladder_matches_its_golden() {
     let ladder: Vec<u64> = monthly_hashes(1, 0x5EED).into_iter().take(120).collect();
     let text = render_stub_golden(&ladder);
