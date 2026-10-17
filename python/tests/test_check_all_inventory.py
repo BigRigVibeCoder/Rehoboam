@@ -117,6 +117,7 @@ REQUIRED_GATES = (
     "V-DET-09)",
     "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
     "--check; SPR-007 T-01)",
+    "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
@@ -375,6 +376,9 @@ REQUIRED_GATES = (
     "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
     "small-scale V-DET-01/02 (SPR-008 T-01)",
     "uv lock --check positive control: drifted lock must FAIL",
+    "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)",
+    "worldgen-lite positive control: an altered template number must FAIL against the golden "
+    "outputs (SPR-018)",
 )
 
 # Functions the chain calls, each running a loop of controls. Their lists are pinned below

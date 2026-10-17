@@ -264,6 +264,26 @@ canonical_golden_control() {
   "$PY" -I specs/stream/canonical_v0.py --check --golden "$planted"
 }
 
+# Worldgen-lite golden control (SPR-018): the committed golden outputs with one land count off by one; the exact reference
+# must FAIL on them (selftest_worldgen_lite.py --golden).
+worldgen_lite_golden_control() {
+  local planted=target/rendered-fixtures/worldgen_lite_altered_golden.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^land 4096$/s//land 4095/' specs/worldgen/golden/worldgen_lite_v0.txt > "$planted" || return 1
+  grep -q '^land 4095$' "$planted" || { echo "control not planted: no 'land 4096' line in the worldgen-lite golden file"; return 1; }
+  "$PY" -I specs/worldgen/selftest_worldgen_lite.py --golden "$planted"
+}
+
+# Worldgen-lite template control (SPR-018): a template number changed in a copy of templates_v0.toml must change the
+# golden outputs, so the reference must FAIL against the committed file (the templates are part of the contract).
+worldgen_lite_template_control() {
+  local planted=target/rendered-fixtures/worldgen_lite_templates_altered.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/^base = 30000$/base = 30001/' specs/worldgen/templates_v0.toml > "$planted" || return 1
+  grep -q '^base = 30001$' "$planted" || { echo "control not planted: no 'base = 30000' line in templates_v0.toml"; return 1; }
+  "$PY" -I specs/worldgen/selftest_worldgen_lite.py --templates "$planted"
+}
+
 # Channel-C float control (SPR-013 T-11): the channel-C DDL with closed_by_seq made a DOUBLE; the self-test must FAIL.
 channel_c_float_control() {
   local planted=target/rendered-fixtures/channel_c_float_column.sql
@@ -759,11 +779,11 @@ run "Clippy float backstop positive control: unnamed float arithmetic in plane A
 run "Clippy libm-only positive control: std ln in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::ln`' clippy_control std_transcendental rh-sample &&
 run "Clippy libm-only positive control: std exp in rh-sample must FAIL (SPR-003 T-00)" 'fail:use of a disallowed method `f64::exp`' clippy_control std_transcendental rh-sample &&
 run "System specs (lint_odd)" pass "$PY" -I specs/systems/lint_odd.py &&
-run "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling 11)" "fail:ERROR M1.regions.odd.toml: emits NOT_A_VERB, which is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/frozen &&
-run "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)" "pass:WARN  M1.regions.odd.toml: emits SUCCEED, which the Registry gives to M7.dynasty" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/draft &&
-run "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 ruling 11)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/overlay --overlay tests/lint_fixtures/odd_emits/overlay.toml &&
+run "lint_odd emits positive control: a frozen spec emitting a non-verb must FAIL (SPR-011 ruling 11)" "fail:ERROR M3.agriculture.odd.toml: emits NOT_A_VERB, which is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/frozen &&
+run "lint_odd emits control: a draft spec emitting a non-verb warns and passes (SPR-011 ruling 11)" "pass:WARN  M3.agriculture.odd.toml: emits SUCCEED, which the Registry gives to M7.dynasty" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/draft &&
+run "lint_odd emits control: a Registry overlay declares a world's own event kinds (SPR-011 ruling 11)" "pass:PASS: 9 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_emits/overlay --overlay tests/lint_fixtures/odd_emits/overlay.toml &&
 run "lint_odd applies positive control: a sender's payload fields differ from [[applies]], frozen, must FAIL (REV-P1a section 7)" "fail:has payload fields ['a', 'c', 'b'], but [[applies]] declares ['a', 'b', 'c']" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/mismatch &&
-run "lint_odd applies control: a sender's payload matching [[applies]] field for field passes (REV-P1a section 7)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/match &&
+run "lint_odd applies control: a sender's payload matching [[applies]] field for field passes (REV-P1a section 7)" "pass:PASS: 9 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_applies/match &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
 run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&
@@ -840,6 +860,9 @@ run "gen_sampler_reference positive control: stale reference must FAIL" "fail:ST
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
 run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.py &&
 run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
+run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
+run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:WORLDGEN-LITE: FAIL" worldgen_lite_golden_control &&
+run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:WORLDGEN-LITE: FAIL" worldgen_lite_template_control &&
 run "Golden vectors: M4 basket and price rule" pass "$PY" -I specs/economy/selftest_economy.py &&
 # Tier 6/8 — determinism-style and contract prototypes
 run "Virtual telemetry (S5 prototype)" pass "$PY" -I specs/stream/selftest_virtual_telemetry.py &&
