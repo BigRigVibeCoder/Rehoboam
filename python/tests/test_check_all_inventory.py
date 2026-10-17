@@ -602,11 +602,41 @@ REQUIRED_GATES = (
     "(REV-SPR-020 R26)",
     "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound "
     "must FAIL (SPR-015)",
+    "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)",
+    "lint_odd next positive control: a frozen coupling via changed without a record must FAIL (R3)",
+    "lint_odd next positive control: a frozen design concept changed without a record "
+    "must FAIL (R3)",
+    "lint_odd next positive control: a frozen fidelity-ladder representation changed "
+    "without a record must FAIL (R3)",
+    "lint_odd next positive control: a frozen isolation expectation changed without a "
+    "record must FAIL (R3)",
+    "lint_odd next positive control: a frozen parameter source changed without a record "
+    "must FAIL (R3)",
+    "lint_odd next positive control: a frozen purpose statement changed without a record "
+    "must FAIL (R3)",
+    "lint_odd next positive control: a frozen scales field changed without a record must FAIL (R3)",
+    "lint_odd next positive control: a frozen submodel summary changed without a record "
+    "must FAIL (deny by default; PR #79 review R3)",
     "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)",
     "lint_odd next positive control: a next version that changes a frozen algorithm step must "
     "FAIL (SPR-015)",
     "lint_odd next positive control: an amendment whose text changed since the committed lock "
     "must FAIL (SPR-015)",
+    "lint_odd next positive control: an applied command's drained_by moved to Year/Polity "
+    "must FAIL (N4)",
+    "lint_odd next positive control: an enum code renamed must FAIL (deny by default; PR "
+    "#79 review N4)",
+    "lint_odd next positive control: the frozen from_manifest list edited must FAIL (N4)",
+    "lint_odd next positive control: the frozen requirement ids changed without a record "
+    "must FAIL (R3)",
+    "lint_odd next positive control: the person.sex read moved from same_instant to "
+    "lagged must FAIL (N4)",
+    "lint_odd next positive control: the reviewer's q5_frozen_onbirth case, a far adult "
+    "heir made dormant-eligible, must FAIL (R3)",
+    "lint_odd next positive control: the reviewer's q5_summary case, on_birth's rule made "
+    "cognatic again in the summary, must FAIL (R3)",
+    "lint_odd next positive control: the reviewer's q5_why case, Demote's why applied "
+    "to minors, must FAIL (R3)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
