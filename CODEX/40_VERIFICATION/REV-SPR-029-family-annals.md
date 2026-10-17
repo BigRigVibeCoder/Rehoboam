@@ -9,10 +9,12 @@ tags: [verification]
 related: [PRJ-002, SPR-029, SPR-019, SPR-020, SPR-021, SPR-030, REV-SPR-019, REV-SPR-020, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.2.0
+version: 0.3.0
 ---
 
-> **BLUF: round 2 on `214fbd8`. Changes are needed before the merge: no blocker, 3 majors, 7 minors and 5 nits** (§2). An independent renderer reproduces all 15 golden files, and all 27 gates pass with their controls. The majors:
+> **BLUF: round 3 on `e3fa495`. Nearly ready: no blocker, 1 major (a non-positive motive edge still reads "moved by"), 4 minors and 3 nits** (§3). Every round-2 mutant now fails by name. Rulings R31–R38 are in §0c.
+>
+> **Round 2** on `214fbd8`. Changes are needed before the merge: no blocker, 3 majors, 7 minors and 5 nits** (§2). An independent renderer reproduces all 15 golden files, and all 27 gates pass with their controls. The majors:
 > - the house walk is not M7's rule;
 > - check 1 re-derives `S` rows only;
 > - the motive can name an inhibitor.
@@ -79,6 +81,29 @@ Round 2 was reviewed on `214fbd8` by an independent session on a different model
 | R30 | Drafter Q4, Q5 | **Q4:** the broad label set (every out-of-scope kind any `[[emits]]` declares) is accepted. **Q5:** re-derivation is enough for v0. The tool recovers k by re-running `founder(seed, k)` with the deterministic rehash over the genesis rows. `life_course.founder_index` would be an M2 amendment that moves every hash (C3) and is not justified | 75% |
 
 **Round 3:** the drafter applies R18–R30, regenerates the goldens with the tool, and re-runs `check_all --part core`. The Architect verifies round 3 with the round-2 scripts (`work_r2/`: `mutants.py`, `probes.py`, `compare_indep.sh`, `fixture_check.py`, `lint_probes.py`, `determinism.sh`).
+
+## 0c. Architect rulings, round 3 (2026-10-17)
+
+Round 3 was verified on `e3fa495` by the round-2 reviewer, with its scripts re-targeted by row content (§3). Results:
+- **Gates:** all 36 pass. Each lint control gives exactly one diagnostic; each self-test control fails its own check.
+- **Mutants:** all 28 round-2 mutants fail check 1 by name.
+- **Contract:** the 6 annal texts reproduce from the contract alone.
+- **Determinism:** renders hold across hash seeds, locales and shuffled extracts.
+- **Fixtures:** `fixture_check.py` finds 0 problems.
+- **Rulings:** R18, R22, R25, R26, R27 and R28 hold. The rest hold partly, for the reasons below. Drafter call 2 (the infant death that keeps Thorne's extinction) is accepted.
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R31 | H1; drafter call 1 | **Accepted as the reviewer proposes.** A `motivated_by` edge is chosen only if its weight is positive: the largest positive, ties to the lower `cause_id`. An edge of weight zero or less never moved the actor (envelope §5). With no positive edge, no edge is chosen and the kind's plain variant renders. `when.motive = "unnamed"` means the strongest positive edge carries no Registry motive. Add a fixture `FEUD_DECLARED` whose only told edge has a weight of zero or less, so that `feud.declared` is exercised | 80% |
+| R32 | H2 | §9's text drops the `\n` from the extract's domain prefix, to match the code and the goldens. No golden changes | 95% |
+| R33 | H3 | **Disambiguation is run-wide, which matches R28.** A name borne by two persons of the run is followed by its bearer's compact label. A kin designation whose parent's name is shared is followed by the *designated person's own* label, and the parent stays a bare name inside the phrase. The label cites its source row. Add a golden case with two fathers who share a name | 75% |
+| R34 | H4 | Check 1 reports a text shorter than the render ("line N: missing: …"), with a control | 95% |
+| R35 | H5 | §1's keyframe-extract row states R30's re-derivation of k | 95% |
+| R36 | H6 | Fix the text slips: the deposition's day of the *month*; three births with their father named; three sibling references; §4 rule 2 worded as §8; §8's fold of the segment digests worded as §9 | 95% |
+| R37 | H7 | The three R19 controls plant the defects R19 names: an altered prologue text, another house's root, and a forged source row. `fixture-deposed-day-one` moves each deposition's claims with it. The header message names the differing token | 85% |
+| R38 | H8 | The person pool includes the parent ids of `LIFE_ENTRY` records. A father named in a birth sentence is then always in the pool, and his label stays unique | 70% |
+
+**Round 4:** the drafter applies R31–R38, regenerates with the tool, runs `check_all --part core`, and pushes once. The Architect verifies round 4 with `annals_review_r3/work_r3/`, then closes the review.
 
 ## 1. The review (round 1, independent reviewer)
 
@@ -346,3 +371,53 @@ Severity: **MAJ**, wrong in a way a later sprint inherits; **MIN**, fix now; **N
 | `determinism.sh` | Hash seeds, locales and shuffles |
 
 **Not run:** the full `bin/check_all.sh`; real engine chronicles (none are written yet); `en_US.UTF-8` and `tr_TR.UTF-8`, which are not installed.
+
+## 3. The verification (round 3, the round-2 reviewer)
+
+Copy verified: a git archive of `e3fa495` (`annals_review_r3/src/`). The scripts are in `annals_review_r3/work_r3/`: the round-2 scripts re-targeted by row content, and new probes.
+
+**BLUF: changes are still needed, all small. 0 blockers, 1 major, 4 minors, 3 nits.**
+- R18, R22, R25, R26, R27 and R28 hold. R19, R20, R21, R23, R24, R29 and R30 hold partly.
+- All 36 gates pass, with one diagnostic per lint control.
+- All 28 round-2 mutants fail by name. Of 6 new mutants, only P23 survives (H4).
+- All 6 annal texts reproduce from the contract alone, and R21's (a) and (b), read literally, match. The only literal mismatch left is H2.
+- 96 renders across hash seeds and locales, and shuffled or comment-stripped extracts, are byte-identical.
+- `fixture_check.py` finds 0 problems, and all 22 lint probes are refused.
+
+| # | Verdict | Evidence |
+|---|---|---|
+| R18 | Holds | Probe `r18`. Xan is in neither house. His in-run son is in Thorne. Ashcombe has "four living members" |
+| R19 | Partly | Every round-2 mutant fails by name (P12, P13, P7b, P15, P17 …). A shorter text goes unreported (H4) |
+| R20 | Partly | "+128/+128" goes to the lower id, and "−200/+90" renders the retaliation. When every weight is ≤ 0, the sentence still reads "moved by" (H1) |
+| R21 | Partly | (a) and (b) hold literally. The extract prefix differs (H2), and §4 rule 2 still has the old wording (H6) |
+| R22 | Holds | Probe `r22`: the castless chain joins |
+| R23 | Partly | The digest is canonical and check 10 runs. The domain prefix differs between text and code (H2) |
+| R24 | Partly | Two Mauds render as "Maud (Founder #2)" and "Maud (Founder #4)", and check 9 holds. Scope and kin-phrase placement disagree (H3) |
+| R25 | Holds | "The one thousand and first year"; 1,000,000 is refused |
+| R26 | Holds | The deposition is on day 2 and claim 31 is dropped. Check 5's controls are committed. The cast is founders 0–3, and `Founder #5` = k 4 |
+| R27 | Holds | An unnamed house, title or cause kind is refused by name |
+| R28 | Holds | Run-wide pool; zero-padded hex (`p-00bc0`) |
+| R29 | Partly | Fixed, except two §12 counts (H6) |
+| R30 | Partly | The labels equal the 16 out-of-scope kinds, `next/M7` 0.4.0 included. Q5's sentence is missing from §1 (H5) |
+
+**Findings:**
+- **H1 (MAJ):** with every told `motivated_by` weight ≤ 0, "moved by <cause>" cites an inhibiting edge (probe `r20`: −200/−90, −90 and 0).
+- **H2 (MIN):** §9's prefix has `\n`, and the code does not. With the code's reading, 15 of 15 files match.
+- **H3 (MIN):**
+  - R24's text says "of one annal", while the code is run-wide.
+  - In a kin phrase the parent's label is printed, and its source is not cited (probe `parent_label_source`).
+  - "the first son of Hugh Thorne (Founder #3) succeeded Hugh Thorne (Founder #3)".
+- **H4 (MIN):** `check_provenance` compares `zip(got, want)` and never reports missing lines (P23).
+- **H5 (MIN):** §14 cites Q5's re-derivation to §1, and §1 lacks it.
+- **H6 (NIT):** text slips:
+  - "day 2 of its year";
+  - two births and two sibling references, where there are three of each;
+  - §4 rule 2;
+  - §8's fold of the segment digests.
+- **H7 (NIT):**
+  - The R19 controls plant other defects than R19 names.
+  - The day-one control also leaves claims unmoved.
+  - The header message prints `None`.
+- **H8 (NIT):** whether `LIFE_ENTRY` parent ids are in the pool is unstated.
+
+**Scripts:** `indep_render.py` (literal defaults, new flags), `compare_indep.sh`, `mutants.py` (34 mutants), `probes.py` (20 probes), `compare_worlds.py`, `fixture_check.py`, `lint_probes.py` (22 files), `run_gates.sh`, `determinism.sh`.
