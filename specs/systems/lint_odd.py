@@ -100,9 +100,11 @@ frozen slice is compared too, as a generic path, and changes only through a reco
 commands.<command>.<field>, couplings.<system>/<direction>.<field>, params.<name>.<field> (source and the rest),
 fidelity_ladder.<level>.<field>, purpose.<field> and purpose.patterns.<test>.<field>, isolation.<field> and
 isolation.forcing.<input>.<field>, design.<field>, scales.<field>, verification.prototype, system.name, system.adrs
-and system.requirements; a list-valued field is quoted as JSON. Entries may be added (a submodel, a command, a
-coupling, a pattern, a forcing input); a frozen entry's fields may not change. [[reads]] are declarations, not the
-frozen slice, and stay free.
+and system.requirements, and (N4) every other leaf: reads.<column>.<field>, applies.<command>.<field>, emits.<kind>.<field>,
+owns.<column>.<field>, initialization.<field>, input_data.<field>; a list-valued field is quoted as JSON. Entries may be
+added (a read, an emitted kind, a submodel, a command, a coupling, a pattern, a forcing input); a frozen entry's fields
+may not change; an enum column's values may only be appended. The exemptions (the versions, the status, the fidelity,
+the lists that may only grow) are listed in specs/systems/next/README.md.
 """
 import copy
 import hashlib
@@ -301,12 +303,29 @@ def text_at(spec, m):
     return spec.get("initialization", {}).get("state")
 
 
-GENERIC_PATH = re.compile(r"^(?P<sec>submodels|commands|couplings|params|fidelity_ladder|purpose|isolation|design|scales|verification|system)\.(?P<rest>.+)$")
-KEYED = {"submodels": "name", "commands": "command", "params": "name", "fidelity_ladder": "level"}
-# the table fields of the frozen slice the generic comparison protects (the rest of [system] is checked by name:
-# id, crate, spec_version, status; fidelity moves with the slice)
-TABLE_FIELDS = {"purpose": None, "isolation": None, "design": None, "scales": None, "verification": ("prototype",),
-                "system": ("name", "adrs", "requirements")}
+GENERIC_PATH = re.compile(r"^(?P<sec>system|purpose|owns|emits|commands|applies|reads|scales|fidelity_ladder|schedule|rng|design|initialization|input_data|params|submodels|invariants|couplings|isolation|verification)\.(?P<rest>.+)$")
+# keyed sections: the field that names an entry (a repeated key carries its ordinal: key, key[1], key[2], in file order)
+KEYED = {"owns": "column", "emits": "kind", "commands": "command", "applies": "command", "reads": "column", "fidelity_ladder": "level",
+         "rng": "purpose", "params": "name", "submodels": "name", "invariants": "id"}
+PAIR_KEYED = {"couplings": ("system", "direction"), "schedule": ("pulse", "phase")}  # key = "<a>/<b>"
+SUBKEYED = {"patterns": "test", "forcing": "input"}  # purpose.patterns.<test>, isolation.forcing.<input>
+# Deny by default (PR #79's review R3, N4): every frozen leaf is compared unless it is listed here. The list is the
+# exemption list specs/systems/next/README.md states (the Architect rules on it).
+EXEMPT = {
+    ("system", "spec_version"), ("system", "status"), ("system", "fidelity"),   # a next version moves these by definition
+    ("verification", "tests"), ("emits", "roles"), ("emits", "motives"), ("applies", "from"),   # may only grow (own checks)
+    ("owns", "values"),   # an enum's codes may be appended, never renamed or moved (the prefix rule below)
+}
+# fields with a check of their own (a specialised diagnostic, or an amendable path of their own); the generic walk
+# skips them so that one change gives one diagnostic
+SPECIALISED = {
+    ("system", "id"), ("system", "crate"), ("owns", "meaning"), ("owns", "default"), ("owns", "cause_column"),
+    ("owns", "entity"), ("owns", "type"), ("owns", "plane"), ("owns", "fixed_point"), ("emits", "when"), ("emits", "snapshots"),
+    ("rng", "use"), ("rng", "key"), ("rng", "resample_on_fork"), ("rng", "draws"), ("invariants", "statement"),
+    ("invariants", "test"), ("schedule", "steps"), ("schedule", "when"), ("initialization", "state"), ("params", "meaning"),
+    ("params", "default"), ("applies", "payload"),
+}
+TABLES = ("system", "purpose", "scales", "design", "initialization", "input_data", "isolation", "verification")
 
 
 def leaf_text(value):
@@ -315,12 +334,12 @@ def leaf_text(value):
 
 
 def generic_text_at(spec, path):
-    """The text a generic amendment path names in ``spec`` (deny by default, R3), or None when there is none."""
+    """The text a generic amendment path names in ``spec`` (deny by default, R3, N4), or None when there is none."""
     m = GENERIC_PATH.match(path)
     if m is None:
         return None
     sec, rest = m.group("sec"), m.group("rest")
-    if sec in KEYED or sec == "couplings":
+    if sec in KEYED or sec in PAIR_KEYED:
         key, _, field = rest.rpartition(".")
         entry = keyed_entry(spec.get(sec, []), sec, key)
         return None if entry is None or field not in entry else leaf_text(entry[field])
@@ -330,24 +349,20 @@ def generic_text_at(spec, path):
             entry = keyed_entry(spec.get(sec, {}).get(sub, []), sub, key)
             return None if entry is None or field not in entry else leaf_text(entry[field])
     table = spec.get(sec, {})
-    allowed = TABLE_FIELDS.get(sec)
-    if allowed is not None and rest not in allowed:
-        return None
     return leaf_text(table[rest]) if rest in table else None
 
 
-SUBKEYED = {"patterns": "test", "forcing": "input"}  # purpose.patterns.<test>, isolation.forcing.<input>
-
-
 def entry_key(x, sec):
-    """The key of a keyed entry: its name, command, level, test, input, or system/direction for a coupling."""
-    if sec == "couplings":
-        return f"{x.get('system')}/{x.get('direction')}"
+    """The key of a keyed entry: its naming field, or "<a>/<b>" for a coupling or a schedule binding."""
+    if sec in PAIR_KEYED:
+        a, b = PAIR_KEYED[sec]
+        return f"{x.get(a)}/{x.get(b)}"
     return str(x.get(KEYED.get(sec) or SUBKEYED[sec]))
 
 
 def keyed_paths(entries, sec):
-    """(path key, entry) for each entry of a keyed section; a repeated key carries its ordinal: key, key[1], key[2]."""
+    """(path key, entry) for each entry of a keyed section; a repeated key carries its ordinal: key, key[1], key[2]
+    (the entries after the first, in file order: an amendment names the n-th repeat by its ordinal)."""
     seen = {}
     out = []
     for x in entries:
@@ -363,36 +378,48 @@ def keyed_entry(entries, sec, key):
     return next((x for k, x in keyed_paths(entries, sec) if k == key), None)
 
 
+def key_fields(sec):
+    """The fields that name an entry of ``sec`` (never leaves)."""
+    if sec in PAIR_KEYED:
+        return set(PAIR_KEYED[sec])
+    return {KEYED.get(sec) or SUBKEYED[sec]}
+
+
 def frozen_leaves(fs):
-    """Every generic path of a frozen spec with its text: the fields deny-by-default protects (R3)."""
+    """Every generic path of a frozen spec with its text: every leaf the deny-by-default walk protects (R3, N4):
+    each field of each entry of each keyed section, each field of each table, the sub-keyed patterns and forcing
+    entries; minus EXEMPT (listed in next/README.md) and SPECIALISED (a check of their own)."""
     out = {}
-    for sec, keyfield in KEYED.items():
+    for sec in list(KEYED) + list(PAIR_KEYED):
         for key, x in keyed_paths(fs.get(sec, []), sec):
             for field, value in x.items():
-                if sec == "params" and field in ("meaning", "default"):
-                    continue  # params.<name>.meaning has its own path; a frozen default must keep its value
-                if field != keyfield:
-                    out[f"{sec}.{key}.{field}"] = leaf_text(value)
-    for key, x in keyed_paths(fs.get("couplings", []), "couplings"):
-        for field, value in x.items():
-            if field not in ("system", "direction"):
-                out[f"couplings.{key}.{field}"] = leaf_text(value)
-    for sec, sub in (("purpose", "patterns"), ("isolation", "forcing")):
+                if field in key_fields(sec) or (sec, field) in EXEMPT or (sec, field) in SPECIALISED:
+                    continue
+                out[f"{sec}.{key}.{field}"] = leaf_text(value)
+    for sec in TABLES:
         for field, value in fs.get(sec, {}).items():
-            if field == sub:
-                for key, x in keyed_paths(value, sub):
+            if (sec, field) in EXEMPT or (sec, field) in SPECIALISED:
+                continue
+            if field in SUBKEYED:
+                for key, x in keyed_paths(value, field):
                     for f2, v2 in x.items():
-                        if f2 != SUBKEYED[sub]:
-                            out[f"{sec}.{sub}.{key}.{f2}"] = leaf_text(v2)
+                        if f2 != SUBKEYED[field]:
+                            out[f"{sec}.{field}.{key}.{f2}"] = leaf_text(v2)
             else:
                 out[f"{sec}.{field}"] = leaf_text(value)
-    for sec in ("design", "scales"):
-        for field, value in fs.get(sec, {}).items():
-            out[f"{sec}.{field}"] = leaf_text(value)
-    for sec, fields in (("verification", TABLE_FIELDS["verification"]), ("system", TABLE_FIELDS["system"])):
-        for field in fields:
-            if field in fs.get(sec, {}):
-                out[f"{sec}.{field}"] = leaf_text(fs[sec][field])
+    return out
+
+
+def values_prefix_problems(fs, ns, p):
+    """An enum column's codes are its values' indexes: a next version may append a value, never rename or move one."""
+    out = []
+    nexts = {o.get("column"): o for o in ns.get("owns", [])}
+    for o in fs.get("owns", []):
+        was, now = o.get("values"), nexts.get(o.get("column"), {}).get("values")
+        if was is None:
+            continue
+        if now is None or list(now[:len(was)]) != list(was):
+            out.append(f"{p}: frozen owns.{o.get('column')}.values changed ({was} -> {now}): an enum's codes may be appended, never renamed or moved")
     return out
 
 
@@ -664,7 +691,8 @@ def lint_next(frozen, specs, errs):
                 errs.append(f"{p}: frozen default of {x.get('name')} changed: {x.get('default')} -> {n.get('default')}")
             if n is not None and n.get("meaning") != x.get("meaning") and f"params.{x.get('name')}.meaning" not in amended:
                 errs.append(f"{p}: frozen parameter {x.get('name')} changed its meaning without an [[amends]] record")
-        # deny by default (PR #79's review R3): every other field of the frozen slice, equal or amended
+        # deny by default (PR #79's review R3, N4): every other frozen leaf, equal or amended; enum codes append only
+        errs.extend(values_prefix_problems(fs, ns, p))
         for of, was in frozen_leaves(fs).items():
             now = generic_text_at(ns, of)
             if now is None:
@@ -1601,11 +1629,33 @@ def main() -> int:
                 if k == target_key:
                     x[field] = "planted " + str(x.get(field, ""))
             probes.append((bad, f"frozen {sec}."))
-        for sec, field in (("purpose", "statement"), ("isolation", "expect"), ("design", "basic_principles"), ("scales", "extent"), ("verification", "prototype"), ("system", "requirements")):
+        for sec, field in (("purpose", "statement"), ("isolation", "expect"), ("design", "basic_principles"), ("scales", "extent"), ("verification", "prototype"), ("system", "requirements"), ("initialization", "from_manifest")):
             if field in fzs.get(sec, {}):
                 bad = copy.deepcopy(ns)
                 bad[sec][field] = ["planted"] if isinstance(fzs[sec][field], list) else "planted " + str(bad[sec].get(field, ""))
                 probes.append((bad, f"frozen {sec}.{field}"))
+        # N4: an enum code renamed, an [[applies]] drained_by changed, a [[reads]] lag changed
+        enum_col = next((o.get("column") for o in fzs.get("owns", []) if o.get("values")), None)
+        if enum_col:
+            bad = copy.deepcopy(ns)
+            for o in bad["owns"]:
+                if o.get("column") == enum_col:
+                    o["values"] = ["planted", *o["values"][1:]]
+            probes.append((bad, f"frozen owns.{enum_col}.values changed"))
+        if fzs.get("applies"):
+            bad = copy.deepcopy(ns)
+            target = keyed_paths(fzs["applies"], "applies")[0][0]
+            for k, x in keyed_paths(bad.get("applies", []), "applies"):
+                if k == target:
+                    x["drained_by"] = "Year/Polity"
+            probes.append((bad, f"frozen applies.{target}.drained_by"))
+        if fzs.get("reads"):
+            bad = copy.deepcopy(ns)
+            target = keyed_paths(fzs["reads"], "reads")[0][0]
+            for k, x in keyed_paths(bad.get("reads", []), "reads"):
+                if k == target:
+                    x["lag"] = "planted"
+            probes.append((bad, f"frozen reads.{target}.lag"))
         for probe, needle in probes:
             pe = []
             lint_duplicate_keys(nf.name, probe, pe)

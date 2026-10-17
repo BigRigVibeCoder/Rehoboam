@@ -331,8 +331,8 @@ odd_next_control() {
   local dir=target/rendered-fixtures/odd_next/$1 src=specs/systems/next/M2.demography.odd.toml
   rm -rf "$dir" && mkdir -p "$dir" || return 1
   local lock=specs/systems/next/amendments.lock.toml m7=specs/systems/next/M7.dynasty.odd.toml
-  # the M7 draft rides along unchanged where the overlay is the real delta: its verb HOUSE_JOINED (M7 0.5.0,
-  # BCK-002 A-56) would otherwise fail the frozen M7 for a reason that is not the control's own
+  # the M7 draft rides along unchanged where the overlay is the real delta: a next version with a verb of its own
+  # would otherwise fail the frozen spec for a reason that is not the control's own
   case "$1" in
     algorithm)
       cp "$lock" "$m7" "$dir/" || return 1
@@ -354,7 +354,7 @@ odd_next_control() {
       sed '0,/= "sha256:[0-9a-f]/s//= "sha256:x/' "$lock" > "$dir/amendments.lock.toml" || return 1
       grep -q 'sha256:x' "$dir/amendments.lock.toml" || { echo "control not planted: no digest found"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
-    submodel|command|coupling|source|ladder|purpose|isolation|design|scales|requirements|q5_summary|q5_why|q5_frozen_onbirth)
+    submodel|command|coupling|source|ladder|purpose|isolation|design|scales|requirements|q5_summary|q5_why|q5_frozen_onbirth|enum|drained|manifest|readlag)
       # deny by default (PR #79's review R3): one planted change per newly covered path class of the frozen slice, on
       # the M7 draft beside the M2 one and the lock; and the reviewer's three q5 cases, which linted PASS before R3
       cp "$src" "$lock" "$dir/" || return 1
@@ -372,8 +372,12 @@ odd_next_control() {
         q5_summary) sed '/^summary = "MAJ-5/s/else no row (the membership rule of house_member.house/else the mother'"'"'s house (the membership rule of house_member.house/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         q5_why) sed 's/^why = "A named great-house member, an adult, meets no naming criterion/why = "A named great-house member of any age meets no naming criterion/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         q5_frozen_onbirth) sed '/^summary = "Yearly, and at world start\. The naming/s/beyond the degrees, is named and not dormant-eligible/beyond the degrees, is dormant-eligible/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        enum) sed '0,/^values = \["held", "awaiting", "interregnum"\]/s//values = ["PLANTED", "awaiting", "interregnum"]/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        drained) sed '/^command = "PressClaim"$/,/^drained_by = /s/^drained_by = "Day\/Agenda"/drained_by = "Year\/Polity"/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        manifest) sed '0,/^from_manifest = \["dynasties", "cast", "polities", "institutions"\]/s//from_manifest = ["dynasties", "cast", "polities"]/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        readlag) sed '/^column = "person.sex"$/,/^lag = /s/^lag = "same_instant"/lag = "lagged"/' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
       esac
-      grep -q "PLANTED\|\"DATA-8\", \"SIM-3\"\|the mother's house (the membership\|of any age meets\|beyond the degrees, is dormant-eligible" "$dir/M7.dynasty.odd.toml" || { echo "control not planted: $1"; return 1; }
+      grep -q "PLANTED\|\"DATA-8\", \"SIM-3\"\|the mother's house (the membership\|of any age meets\|beyond the degrees, is dormant-eligible\|drained_by = \"Year/Polity\"\|\"cast\", \"polities\"\]\|^lag = \"lagged\"" "$dir/M7.dynasty.odd.toml" || { echo "control not planted: $1"; return 1; }
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     clean)
       # REV-SPR-020 R26 (NIT-7): a next version that amends nothing (the frozen T1 as a draft, version bumped) lints
@@ -1172,25 +1176,29 @@ run "lint_odd neutral positive control: an enum neutral outside the column's cod
 run "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)" "pass:WARN  M3.agriculture.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
 run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
 run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
-run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 43 planted changes rejected (3 of them by the amendments lock), 45 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
+run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 45 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
 run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
 run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.exit_hazards.summary changed without an [[amends]] record" odd_next_control submodel &&
-run "lint_odd next positive control: a frozen command `why` changed without a record must FAIL (R3)" "fail:frozen commands.ScheduleDeath.why changed without an [[amends]] record" odd_next_control command &&
-run "lint_odd next positive control: a frozen coupling `via` changed without a record must FAIL (R3)" "fail:frozen couplings.M6.polity/in.via changed without an [[amends]] record" odd_next_control coupling &&
-run "lint_odd next positive control: a frozen parameter `source` changed without a record must FAIL (R3)" "fail:frozen params.murder_hazard_base.source changed without an [[amends]] record" odd_next_control source &&
+run "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)" "fail:frozen commands.ScheduleDeath.why changed without an [[amends]] record" odd_next_control command &&
+run "lint_odd next positive control: a frozen coupling via changed without a record must FAIL (R3)" "fail:frozen couplings.M6.polity/in.via changed without an [[amends]] record" odd_next_control coupling &&
+run "lint_odd next positive control: a frozen parameter source changed without a record must FAIL (R3)" "fail:frozen params.murder_hazard_base.source changed without an [[amends]] record" odd_next_control source &&
 run "lint_odd next positive control: a frozen fidelity-ladder representation changed without a record must FAIL (R3)" "fail:frozen fidelity_ladder.F0.representation changed without an [[amends]] record" odd_next_control ladder &&
 run "lint_odd next positive control: a frozen purpose statement changed without a record must FAIL (R3)" "fail:frozen purpose.statement changed without an [[amends]] record" odd_next_control purpose &&
 run "lint_odd next positive control: a frozen isolation expectation changed without a record must FAIL (R3)" "fail:frozen isolation.expect changed without an [[amends]] record" odd_next_control isolation &&
 run "lint_odd next positive control: a frozen design concept changed without a record must FAIL (R3)" "fail:frozen design.basic_principles changed without an [[amends]] record" odd_next_control design &&
 run "lint_odd next positive control: a frozen scales field changed without a record must FAIL (R3)" "fail:frozen scales.extent changed without an [[amends]] record" odd_next_control scales &&
 run "lint_odd next positive control: the frozen requirement ids changed without a record must FAIL (R3)" "fail:frozen system.requirements changed without an [[amends]] record" odd_next_control requirements &&
-run "lint_odd next positive control: the reviewer's q5_summary case, on_birth's rule made cognatic again in the summary, must FAIL (R3)" "fail:[[amends]] submodels.on_birth.summary: `to` is not what the next version says there" odd_next_control q5_summary &&
-run "lint_odd next positive control: the reviewer's q5_why case, Demote's `why` applied to minors, must FAIL (R3)" "fail:[[amends]] commands.Demote.why: `to` is not what the next version says there" odd_next_control q5_why &&
-run "lint_odd next positive control: the reviewer's q5_frozen_onbirth case, a far adult heir made dormant-eligible, must FAIL (R3)" "fail:[[amends]] submodels.dormancy.summary: `to` is not what the next version says there" odd_next_control q5_frozen_onbirth &&
-run "lint_odd next control: a next version with no amendment lints and plants nothing in the lock (REV-SPR-020 R26)" "pass:self-check (next of T1.minds): 35 planted changes rejected (0 of them by the amendments lock), 0 amendments recorded and locked" odd_next_control clean &&
+run "lint_odd next positive control: the reviewer's q5_summary case, on_birth's rule made cognatic again in the summary, must FAIL (R3)" 'fail:[[amends]] submodels.on_birth.summary: `to` is not what the next version says there' odd_next_control q5_summary &&
+run "lint_odd next positive control: the reviewer's q5_why case, Demote's why applied to minors, must FAIL (R3)" 'fail:[[amends]] commands.Demote.why: `to` is not what the next version says there' odd_next_control q5_why &&
+run "lint_odd next positive control: the reviewer's q5_frozen_onbirth case, a far adult heir made dormant-eligible, must FAIL (R3)" 'fail:[[amends]] submodels.dormancy.summary: `to` is not what the next version says there' odd_next_control q5_frozen_onbirth &&
+run "lint_odd next positive control: an enum code renamed must FAIL (deny by default; PR #79 review N4)" "fail:frozen owns.title.state.values changed" odd_next_control enum &&
+run "lint_odd next positive control: an applied command's drained_by moved to Year/Polity must FAIL (N4)" "fail:frozen applies.PressClaim.drained_by changed without an [[amends]] record" odd_next_control drained &&
+run "lint_odd next positive control: the frozen from_manifest list edited must FAIL (N4)" "fail:frozen initialization.from_manifest changed without an [[amends]] record" odd_next_control manifest &&
+run "lint_odd next positive control: the person.sex read moved from same_instant to lagged must FAIL (N4)" "fail:frozen reads.person.sex.lag changed without an [[amends]] record" odd_next_control readlag &&
+run "lint_odd next control: a next version with no amendment lints and plants nothing in the lock (REV-SPR-020 R26)" "pass:self-check (next of T1.minds): 39 planted changes rejected (0 of them by the amendments lock), 0 amendments recorded and locked" odd_next_control clean &&
 run "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 T-03)" "pass:up to date" "$PY" -I bin/gen_skeletons.py --check &&
 run "gen_skeletons positive control: hand-edited skeleton must FAIL" "fail:STALE: tests/lint_fixtures/skeletons/stale/M2_demography.rs" "$PY" -I bin/gen_skeletons.py --check --out tests/lint_fixtures/skeletons/stale &&
 run "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)" "pass:PASS: 7 system specs linted" "$PY" -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml &&

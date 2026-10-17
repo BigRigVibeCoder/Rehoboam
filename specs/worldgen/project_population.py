@@ -23,8 +23,8 @@ level; a commoner woman's husband is a member with the share h of members among 
     births of member mothers   B_e = W_e (1 - v) NRR_e
     births of commoner mothers B_c = W_c NRR_c
     cognatic (M7 0.3.4):  W_e' = B_e + h B_c              the father's house, else the mother's
-    agnatic:              W_e' = h (B_e + B_c)            the father's house, else none
-    bounded (M7 0.5.0):   W_e' = h (B_e + B_c)            the father's house, else the mother's
+    agnatic (M7 0.5.0):   W_e' = h (B_e + B_c)            the father's house, else none
+    bounded (PR #79's first draft): W_e' = h (B_e + B_c)  the father's house, else the mother's
                               + (1 - h) min(W_e, 2 H W_n) (1 - v) NRR_e
                                                           only when she is named-eligible
     W_c' = (everyone born) - W_e'       with h = m (1 - v) / (m (1 - v) + 1 - m)
@@ -72,6 +72,7 @@ import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
+from typing import Protocol
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -100,7 +101,7 @@ CHECKPOINTS = (0, 50, 100, 150, 200, 300, 400, 500, 750, 1000)
 MEMBER_MILESTONES = (0.5, 0.9, 0.98)
 
 
-# BCK-002 A-56: M7 0.3.4's rule, the back-fill's, and M7 0.5.0's
+# BCK-002 A-56: M7 0.3.4's rule, the back-fill's (M7 0.5.0's), and PR #79's first draft's
 RULES = ("cognatic", "agnatic", "bounded")
 # REV of PR #79 R1: the regime decides who marries whom. "isolation": M7's isolation run, T1
 # stubbed, nobody named, everyone on M2's market (N3/N4: random within the settlement). "t1": T1
@@ -113,7 +114,7 @@ REGIMES = ("isolation", "t1")
 # submodel's "not first in any title's line"), "later" for later children only (the first-born
 # exempt: the frozen [[params]] meaning, the frozen schedule step and RT-2026-10-16 item 12), the
 # primary reading
-VOCATION_READINGS = ("all", "later")
+VOCATION_READINGS = ("all", "later", "literal")
 
 
 @dataclass(frozen=True)
@@ -172,34 +173,196 @@ LEVERS = (
 
 @dataclass
 class Rates:
-    """The chain's NRRs, the generation length and survival to it."""
+    """The chain's NRRs, the generation length, survival to it, and the holy-orders shares."""
 
     nrr_c: float
     nrr_e: float
     t_years: float
     l_t: float
+    births_c: float = 0.0  # E[B]: births per woman born, commoner level (the counter chain)
+    births_e: float = 0.0  # and at the elite level
+    mothers_c: float = 0.0  # P(B >= 1), commoner level
+    mothers_e: float = 0.0
+    v_later_c: float = 0.0  # holy orders' share under the ruled reading (N2), commoner mothers
+    v_later_e: float = 0.0  # and member mothers
+    v_literal_c: float = 0.0  # under the literal reading (the eldest by birth tick, dead included)
+    v_literal_e: float = 0.0
 
 
-def rates(mult: str) -> Rates:
-    """NRR of commoner and member women, the mean age of net maternity, and l(T)."""
+class ChainLike(Protocol):
+    """What the extensions below need of ``selftest_m2_f1.Chain`` (loaded by path, so untyped)."""
+
+    st: object
+
+    def survival(self, age_min: int) -> float:
+        """l(age) of the rung-0 schedule."""
+        ...
+
+    def husband_death(self, x: int) -> float:
+        """The husband's probability of dying this month at the woman's age x."""
+        ...
+
+    def step(
+        self, p: dict[tuple[int, int], float], band: int, q_h: float
+    ) -> dict[tuple[int, int], float]:
+        """The next month's state distribution."""
+        ...
+
+
+def gestation(chain: ChainLike) -> int:
+    """The chain's gestation pulse count (the Standards' G)."""
+    return int(getattr(chain.st, "gestation"))  # noqa: B009  (st is a Standards, typed object here)
+
+
+BIRTHS_MAX = 12  # the counter chain's cap on births per woman (the mass beyond it is negligible)
+MAJORITY_MONTHS = 16 * 12  # majority_age 16: the vocation draw's age, in months of the 360-day year
+GAP_MAX = 40 * 12  # an inter-birth gap longer than this cannot happen inside the fertile span
+
+
+def counter_chain(chain: ChainLike) -> list[list[float]]:
+    """The widowhood chain with a birth counter.
+
+    Returns births_by_order[j][a], the mass of a woman's j-th birth at month a of her fertile
+    span (j from 1), weighted by her survival as the chain weights every birth (the mother alive
+    at the birth).
+    """
+    x15 = m2f1.FIRST_AGE * m2f1.YEAR_360 + m2f1.MONTH_360 // 2
+    p: dict[tuple[int, int, int], float] = {(0, 0, 0): 1.0}
+    by_order = [[0.0] * (m2f1.BANDS * m2f1.BAND_MONTHS) for _ in range(BIRTHS_MAX + 2)]
+    for a in range(m2f1.BANDS * m2f1.BAND_MONTHS):
+        x = x15 + a * m2f1.MONTH_360
+        alive = chain.survival(x + m2f1.MONTH_360 // 2)
+        counted: dict[tuple[int, int, int], float] = {}
+        for (mm, k, b), v in p.items():  # a state at k = G is a birth this month: the counter moves
+            if k == gestation(chain) and b < BIRTHS_MAX:
+                by_order[b + 1][a] += v * alive
+                counted[(mm, k, b + 1)] = counted.get((mm, k, b + 1), 0.0) + v
+            else:
+                counted[(mm, k, b)] = counted.get((mm, k, b), 0.0) + v
+        q_h = chain.husband_death(x)
+        nxt: dict[tuple[int, int, int], float] = {}
+        for b in range(BIRTHS_MAX + 1):
+            sub = {(mm, k): v for (mm, k, bb), v in counted.items() if bb == b}
+            if sub:
+                for (mm, k), v in chain.step(sub, a // m2f1.BAND_MONTHS, q_h).items():
+                    nxt[(mm, k, b)] = nxt.get((mm, k, b), 0.0) + v
+        p = nxt
+    return by_order
+
+
+def gap_distribution(chain: ChainLike, by_order: list[list[float]]) -> list[float]:
+    """The inter-birth gap in months, g[d].
+
+    From the state just after a birth (married, at the gestation pulse) at each birth age, the
+    next birth's month, weighted by the mother's survival across the gap and mixed over the ages
+    at which births happen.
+    """
+    x15 = m2f1.FIRST_AGE * m2f1.YEAR_360 + m2f1.MONTH_360 // 2
+    span = m2f1.BANDS * m2f1.BAND_MONTHS
+    g = [0.0] * (GAP_MAX + 1)
+    # one start per five-year band, at its middle month, weighted by the band's births (a start
+    # per month gives the same shares to the third decimal at sixty times the cost)
+    weights = {
+        band * m2f1.BAND_MONTHS + m2f1.BAND_MONTHS // 2: sum(
+            by_order[j][a]
+            for j in range(1, BIRTHS_MAX + 1)
+            for a in range(band * m2f1.BAND_MONTHS, (band + 1) * m2f1.BAND_MONTHS)
+        )
+        for band in range(m2f1.BANDS)
+    }
+    for a0, w0 in weights.items():
+        if w0 == 0:
+            continue
+        x0 = x15 + a0 * m2f1.MONTH_360
+        s0 = chain.survival(x0 + m2f1.MONTH_360 // 2)
+        p: dict[tuple[int, int], float] = {(1, gestation(chain)): 1.0}
+        for a in range(a0, span):
+            x = x15 + a * m2f1.MONTH_360
+            p = chain.step(p, a // m2f1.BAND_MONTHS, chain.husband_death(x))
+            d = a + 1 - a0
+            due = sum(v for (_, k), v in p.items() if k == gestation(chain))
+            if due and d <= GAP_MAX:
+                survived = chain.survival(x + m2f1.MONTH_360 + m2f1.MONTH_360 // 2) / s0
+                g[d] += w0 * due * survived
+            p = {key: v for key, v in p.items() if key[1] != gestation(chain)}  # absorb
+    total = sum(g)
+    return [v / total for v in g] if total else g
+
+
+def exempt_share(chain: ChainLike, by_order: list[list[float]], g: list[float]) -> float:
+    """The share of births exempt under the ruled reading.
+
+    The j-th child is exempt when every elder sibling is dead at its majority. With the gaps
+    between consecutive births drawn from g (independent, the approximation), the elder sibling
+    i steps back is alive at the child's majority with probability l(majority + the cumulative
+    gap), and the expectation of the product over the elder siblings is a convolution over the
+    cumulative gaps.
+    """
+    span = m2f1.BANDS * m2f1.BAND_MONTHS
+    orders = [sum(by_order[j][a] for a in range(span)) for j in range(BIRTHS_MAX + 1)]
+    total = sum(orders[1:])
+    majority = MAJORITY_MONTHS * m2f1.MONTH_360
+    l_at = [chain.survival(majority + d * m2f1.MONTH_360) for d in range(GAP_MAX * 2 + 1)]
+    # f[s]: the mass of cumulative gap s with the product of (1 - l) over the elder siblings so far
+    f = [1.0] + [0.0] * (GAP_MAX * 2)
+    exempt = orders[1]
+    for j in range(2, BIRTHS_MAX + 1):
+        nf = [0.0] * len(f)
+        for s0, m in enumerate(f):
+            if m == 0:
+                continue
+            for d, pg in enumerate(g):
+                if pg == 0 or s0 + d >= len(nf):
+                    continue
+                nf[s0 + d] += m * pg * (1 - l_at[s0 + d])
+        f = nf
+        exempt += orders[j] * sum(f)
+    return exempt / total
+
+
+def vocation_shares(chain: ChainLike, holy: float) -> tuple[float, float, float, float]:
+    """(E[B], P(B >= 1), v under the ruled reading, v under the literal reading) for one chain."""
+    by_order = counter_chain(chain)
+    span = m2f1.BANDS * m2f1.BAND_MONTHS
+    births = sum(by_order[j][a] for j in range(1, BIRTHS_MAX + 1) for a in range(span))
+    mothers = sum(by_order[1])
+    g = gap_distribution(chain, by_order)
+    v_later = holy * (1 - exempt_share(chain, by_order, g))
+    v_literal = holy * (1 - mothers / births)
+    return births, mothers, v_later, v_literal
+
+
+def rates(mult: str, holy: float = 0.2) -> Rates:
+    """NRR of commoner and member women, the mean age of net maternity, l(T) and the shares."""
     st = m2f1.Standards(m2f1.load_spec(m2f1.NEXT_SPEC))
     tfr_bits = m2f1.q16(TFR)
     level = m2f1.level_bits(st, tfr_bits)
     nrr_c, t_years = m2f1.nrr_with_widowhood(st, tfr_bits)
     elite = m2f1.elite_level_bits(level, m2f1.q16(mult))
+    chain_c = m2f1.Chain(st, level, E0, mortality=True, gap=HUSBAND_GAP)
     chain = m2f1.Chain(st, elite, E0, mortality=True, gap=HUSBAND_GAP)
     nrr_e, _ = m2f1.nrr_and_mean_age(chain.run()[0], st)
     l_t = chain.survival(round(t_years * YEAR_360))
-    return Rates(nrr_c, nrr_e, t_years, l_t)
+    b_c, m_c, vl_c, vlit_c = vocation_shares(chain_c, holy)
+    b_e, m_e, vl_e, vlit_e = vocation_shares(chain, holy)
+    return Rates(nrr_c, nrr_e, t_years, l_t, b_c, b_e, m_c, m_e, vl_c, vl_e, vlit_c, vlit_e)
 
 
-def holy_share(w: World, r: Rates) -> float:
-    """The share of a member cohort holy orders removes at majority, by the vocation reading."""
+def holy_share(w: World, r: Rates, mothers: str) -> float:
+    """The share a member cohort born of ``mothers`` loses to holy orders at majority.
+
+    By the vocation reading: "all" (the frozen submodel: every member not first in a line
+    draws, v = vocation_holy_orders), "later" (the ruled reading, N2 of PR #79's round 2: a
+    later child is one with an elder child of the same father alive at the draw, so the
+    father's eldest living child is exempt; a child first or second in a line is exempt too, a
+    handful the model ignores), "literal" (the eldest by birth tick, dead included: the
+    first-born only). ``mothers`` is "commoner" or "member", the chain the cohort was born of.
+    """
     if w.vocation == "all":
         return w.holy
-    # later children only: the first-born of each couple is exempt; with 2 NRR_c surviving
-    # children per couple, the first-born share of a cohort is 1 / (2 NRR_c)
-    return w.holy * (1 - 1 / (2 * r.nrr_c))
+    if w.vocation == "later":
+        return r.v_later_c if mothers == "commoner" else r.v_later_e
+    return r.v_literal_c if mothers == "commoner" else r.v_literal_e
 
 
 @dataclass
@@ -212,25 +375,29 @@ class Point:
     members: float
 
 
-def step(w: World, r: Rates, w_e: float, w_c: float) -> tuple[float, float]:
+def step(w: World, r: Rates, w_e: float, w_c: float, s_c: float) -> tuple[float, float, float]:
     """One generation under the world's regime, rule and levers (the docstring's recursion).
 
     Counts are persons with a constant sex ratio: a group of P persons bears P x NRR persons in a
-    generation (its P/2 women, 2 NRR children each).
+    generation (its P/2 women, 2 NRR children each). ``s_c`` is the share of the members born of
+    commoner mothers, whose holy-orders share is the commoner chain's; the rest is the member
+    chain's. Returns the members, the commoners and the next ``s_c``.
     """
     n = w_e + w_c
     m_d = 1.0
     if w.capacity is not None and n > w.capacity:
         m_d = min(MODIFIER_CAP, 1.0 + (n / w.capacity - 1.0))
     s = r.l_t ** (m_d - 1.0)
-    v = holy_share(w, r)
-    nrr_w = r.nrr_e if w.elite_read == "couple" else r.nrr_c  # a member man's commoner wife
+    v_e, v_c = holy_share(w, r, "member"), holy_share(w, r, "commoner")
+    v = (1 - s_c) * v_e + s_c * v_c  # the members' own share, by their mothers
+    couple = w.elite_read == "couple"
+    nrr_w = r.nrr_e if couple else r.nrr_c  # a member man's commoner wife
     if w.regime == "isolation":
         core, u = 0.0, w_e  # nobody is named: every member is on M2's market
     else:
         core = min(w_e, 2 * w.houses * w.named_women)  # the named core, persons
         u = w_e - core  # the un-named members, on M2's market
-    h = u * (1 - v) / (u * (1 - v) + w_c) if u + w_c > 0 else 0.0  # member share of M2's husbands
+    h = u * (1 - v) / (u * (1 - v) + w_c) if u + w_c > 0 else 0.0  # member share, M2's husbands
     q = w.hypergamy if w.regime == "t1" else 0.0
     # births, in persons: the core within itself, the core's women and men marrying out, the
     # un-named member women (M2 husbands), the commoner women (member husbands with share h)
@@ -241,16 +408,16 @@ def step(w: World, r: Rates, w_e: float, w_c: float) -> tuple[float, float]:
     b_c = w_c * ((1 - h) * r.nrr_c + h * nrr_w) * s
     b_c_member_father = w_c * h * nrr_w * s
     births = b_core + b_core_women_out + b_core_men_out + b_u + b_c
+    of_commoner_mothers = b_core_men_out + b_c_member_father  # member children of commoner wives
     if w.rule == "cognatic":
         members = b_core + b_core_women_out + b_core_men_out + b_u + b_c_member_father
     elif w.rule == "agnatic":
         members = b_core + b_core_men_out + h * b_u + b_c_member_father
     elif w.rule == "bounded":
-        # the mother branch: a named-eligible woman and a houseless father. In isolation
-        # the named women (M7's own criteria, not T1's column) bear on M2's market; under
-        # T1 they marry within the core, so the branch fires only for a named woman
-        # married out (hypergamy) or for one who became eligible after an M2 marriage,
-        # which the model puts at zero
+        # the mother branch: a named-eligible woman and a houseless father. In isolation the named
+        # women (M7's own criteria, not T1's column) bear on M2's market; under T1 they marry
+        # within the core, so the branch fires only for a named woman married out (hypergamy) or
+        # for one who became eligible after an M2 marriage, which the model puts at zero
         if w.regime == "isolation":
             named = min(w_e, 2 * w.houses * w.named_women)
             extra = (1 - h) * named * (1 - v) * r.nrr_e * s
@@ -259,16 +426,19 @@ def step(w: World, r: Rates, w_e: float, w_c: float) -> tuple[float, float]:
         members = b_core + b_core_men_out + h * b_u + b_c_member_father + extra
     else:
         raise SystemExit(f"unknown membership rule {w.rule!r}")
-    return members, births - members
+    # under the couple read a commoner wife bears at the elite level, so her children carry the
+    # member chain's sibling structure
+    next_s_c = 0.0 if couple or members <= 0 else of_commoner_mothers / members
+    return members, births - members, next_s_c
 
 
 def project(w: World, r: Rates) -> list[Point]:
     """The generational recursion over the horizon, one point per generation."""
-    w_e, w_c = float(w.members), float(w.population - w.members)
+    w_e, w_c, s_c = float(w.members), float(w.population - w.members), 0.0
     points = [Point(0.0, w.population, w.members / w.population, w.members)]
     year = 0.0
     while year < w.horizon:
-        w_e, w_c = step(w, r, w_e, w_c)
+        w_e, w_c, s_c = step(w, r, w_e, w_c, s_c)
         year += r.t_years
         points.append(Point(year, w_e + w_c, w_e / (w_e + w_c), w_e))
     return points
@@ -280,8 +450,11 @@ def at(points: list[Point], year: float) -> Point:
         if p0.year <= year <= p1.year:
             f = (year - p0.year) / (p1.year - p0.year)
             n = p0.n * (p1.n / p0.n) ** f
-            share = p0.share + (p1.share - p0.share) * f
-            return Point(year, n, share, p0.members + (p1.members - p0.members) * f)
+            if p0.members > 0 and p1.members > 0:
+                members = p0.members * (p1.members / p0.members) ** f
+            else:
+                members = p0.members + (p1.members - p0.members) * f
+            return Point(year, n, members / n, members)
     return points[-1]
 
 
@@ -350,6 +523,12 @@ def lever_lines(base: Rates) -> list[str]:
         for w in WORLDS:
             world = replace(w, rule="cognatic", regime=regime, vocation="later")
             out.append("lever d " + summary(world, base))
+    # the literal reading (the eldest by birth tick, dead included) as a sensitivity (N2): the
+    # agnatic rule under T1 with (d) and with (d)+(e)
+    for read in ("woman", "couple"):
+        for w in WORLDS:
+            world = replace(w, rule="agnatic", regime="t1", vocation="literal", elite_read=read)
+            out.append("sensitivity literal-reading " + summary(world, base))
     return out
 
 
@@ -383,7 +562,6 @@ def sensitivity_lines(base: Rates) -> list[str]:
 def render() -> str:
     """The whole golden text."""
     base = rates("1.2")
-    v_later = holy_share(replace(TWIN_VALES, vocation="later"), base)
     lines = [
         "# population projection of the SPR-030 fixture worlds (REV-SPR-030 R1) under the three",
         "# membership rules of BCK-002 A-56, in M7's isolation regime and the T1-registered",
@@ -392,8 +570,12 @@ def render() -> str:
         "constants population-projection-v2",
         f"rates mult 1.2 nrr_c {base.nrr_c:.4f} nrr_e {base.nrr_e:.4f} "
         f"r_c {100 * math.log(base.nrr_c) / base.t_years:+.3f}%/yr "
-        f"generation_years {base.t_years:.2f} l_T {base.l_t:.4f} "
-        f"holy_all {TWIN_VALES.holy} holy_later {v_later:.4f}",
+        f"generation_years {base.t_years:.2f} l_T {base.l_t:.4f}",
+        f"vocation holy {TWIN_VALES.holy} births_per_woman commoner {base.births_c:.3f} "
+        f"member {base.births_e:.3f} mothers commoner {base.mothers_c:.3f} "
+        f"member {base.mothers_e:.3f} holy_later commoner {base.v_later_c:.4f} "
+        f"member {base.v_later_e:.4f} holy_literal commoner {base.v_literal_c:.4f} "
+        f"member {base.v_literal_e:.4f}",
     ]
     # the blocks: every regime and rule on every world, at the frozen readings (all, woman, 0)
     for regime in REGIMES:

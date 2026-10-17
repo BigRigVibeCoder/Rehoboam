@@ -93,8 +93,8 @@ birth_tick = -9804960
 person_id = 12076042259415950935   # nell
 founder = 16
 sex = 1
-mother_id = 0
-father_id = 0
+mother_id = 13404045530391465978
+father_id = 6759579853571863877
 birth_tick = -4102560
 [[life_course]]
 person_id = 13404045530391465978   # alys
@@ -124,6 +124,13 @@ sex = 0
 mother_id = 9074827264899753041
 father_id = 2008906306131934606
 birth_tick = -295200
+[[life_course]]
+person_id = 17599797159864274579   # sibby
+founder = 17
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -3021120
 [[life_course]]
 person_id = 18145486546762629703   # aldwin
 founder = 8
@@ -160,6 +167,9 @@ house = 7252932463130708544
 [[house_member]]
 person = 9074827264899753041   # wynn
 house = 3172275184034551431
+[[house_member]]
+person = 12076042259415950935   # nell
+house = 7252932463130708544
 [[house_member]]
 person = 14639768203977341493   # giles
 house = 7252932463130708544
