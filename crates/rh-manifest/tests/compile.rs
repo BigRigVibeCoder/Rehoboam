@@ -246,3 +246,38 @@ fn an_invalid_manifest_is_never_compiled() {
         );
     }
 }
+
+#[test]
+fn g_2_bounds_are_checked_on_the_exact_decimal_not_the_float() {
+    // 85.0000000000000001 is one unit past e0's upper bound (85) in its last digit; as an f64 it
+    // is exactly 85.0, so the reference's float check passes it. The compiled value must not.
+    for (literal, ok) in [
+        ("85.0000000000000001", false),
+        ("19.9999999999999999", false),
+        ("85", true),
+        ("20.0", true),
+    ] {
+        let manifest = solo_text().replace(
+            "systems: {}",
+            &format!("systems:\n  M2.demography: {{e0: {literal}}}"),
+        );
+        let result = text(&manifest, &registry());
+        if ok {
+            assert!(result.is_ok(), "{literal}: {result:?}");
+        } else {
+            let errors: Vec<String> = result
+                .expect_err("one unit past the bound")
+                .0
+                .iter()
+                .map(ToString::to_string)
+                .collect();
+            assert_eq!(errors.len(), 1, "{errors:?}");
+            assert!(
+                errors[0].starts_with("systems.M2.demography.e0: ")
+                    && errors[0]
+                        .contains(" is outside its Registry bounds [20, 85], compared exactly"),
+                "{errors:?}"
+            );
+        }
+    }
+}

@@ -38,6 +38,8 @@ pub enum DecimalError {
     Syntax(String),
     /// An infinity or NaN: a float with no decimal value.
     NotFinite(String),
+    /// An exponent beyond [`MAX_EXPONENT`] in magnitude.
+    ExponentRange(String),
 }
 
 impl fmt::Display for DecimalError {
@@ -45,15 +47,19 @@ impl fmt::Display for DecimalError {
         match self {
             Self::Syntax(text) => write!(f, "`{text}` is not a decimal number"),
             Self::NotFinite(text) => write!(f, "`{text}` is not finite"),
+            Self::ExponentRange(text) => {
+                write!(f, "`{text}` has an exponent beyond ±{MAX_EXPONENT}")
+            }
         }
     }
 }
 
 impl std::error::Error for DecimalError {}
 
-/// Exponents past this many digits from the coefficient make a value certainly out of range (above)
-/// or certainly below half a step of any type here (below); they are clamped, never materialised.
-const EXPONENT_CLAMP: i64 = 1 << 20;
+/// The largest exponent a literal may write, by magnitude: a stated bound (review nit), refused by
+/// name past it ([`DecimalError::ExponentRange`]), never clamped. No authored number comes near
+/// (the Registry's largest is `1.0e9`), and within it `to_fixed` loops at most this many times.
+pub const MAX_EXPONENT: i64 = 1 << 20;
 
 impl Decimal {
     /// Zero.
@@ -87,7 +93,7 @@ impl Decimal {
         Self {
             negative,
             coefficient,
-            exponent: exponent.clamp(-EXPONENT_CLAMP, EXPONENT_CLAMP),
+            exponent,
         }
     }
 
@@ -121,12 +127,12 @@ impl Decimal {
                 if digits.is_empty() || !digits.bytes().all(|c| c.is_ascii_digit()) {
                     return Err(syntax());
                 }
-                // Saturating: past the clamp the value is out of range or below half a step.
-                let magnitude = digits.bytes().fold(0_i64, |acc, d| {
-                    acc.saturating_mul(10)
-                        .saturating_add(i64::from(d - b'0'))
-                        .min(EXPONENT_CLAMP * 4)
+                let magnitude = digits.bytes().try_fold(0_i64, |acc, d| {
+                    let next = acc * 10 + i64::from(d - b'0');
+                    (next <= MAX_EXPONENT).then_some(next)
                 });
+                let magnitude =
+                    magnitude.ok_or_else(|| DecimalError::ExponentRange(original.to_owned()))?;
                 if neg { -magnitude } else { magnitude }
             }
         };
@@ -261,6 +267,54 @@ impl Decimal {
             floor + i128::from(up)
         };
         Some(if self.negative { -magnitude } else { magnitude })
+    }
+}
+
+/// The exact order of the values (SPR-011 G-2: bounds compare as decimals, not as floats).
+impl Ord for Decimal {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        use core::cmp::Ordering;
+        let sign = |d: &Self| match (d.coefficient.is_empty(), d.negative) {
+            (true, _) => 0,
+            (false, true) => -1,
+            (false, false) => 1,
+        };
+        match sign(self).cmp(&sign(other)) {
+            Ordering::Equal if sign(self) == 0 => Ordering::Equal,
+            Ordering::Equal => {
+                let magnitude = self.cmp_magnitude(other);
+                if self.negative {
+                    magnitude.reverse()
+                } else {
+                    magnitude
+                }
+            }
+            unequal => unequal,
+        }
+    }
+}
+
+impl PartialOrd for Decimal {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Decimal {
+    /// Compares `|self|` with `|other|`, both non-zero: by the position of the leading digit,
+    /// then digit by digit (the coefficients have no leading or trailing zeros).
+    fn cmp_magnitude(&self, other: &Self) -> core::cmp::Ordering {
+        let lead = |d: &Self| {
+            i128::from(d.exponent) + i128::try_from(d.coefficient.len()).unwrap_or(i128::MAX)
+        };
+        lead(self).cmp(&lead(other)).then_with(|| {
+            let n = self.coefficient.len().max(other.coefficient.len());
+            let digit = |d: &Self, i: usize| d.coefficient.get(i).copied().unwrap_or(0);
+            (0..n)
+                .map(|i| digit(self, i).cmp(&digit(other, i)))
+                .find(|o| o.is_ne())
+                .unwrap_or(core::cmp::Ordering::Equal)
+        })
     }
 }
 
@@ -410,13 +464,45 @@ mod tests {
     }
 
     #[test]
-    fn huge_and_tiny_exponents_never_materialise() {
+    fn the_order_is_the_order_of_the_exact_values() {
+        let d = |t: &str| Decimal::parse_python_float(t).unwrap_or_else(|e| panic!("{e}"));
+        let ascending = [
+            "-85.0000000000000001",
+            "-85",
+            "-1e-30",
+            "0",
+            "1e-30",
+            "0.6",
+            "0.60000000000000001",
+            "20",
+            "84.9999999999999999",
+            "85",
+            "85.0000000000000001",
+            "1e9",
+        ];
+        for w in ascending.windows(2) {
+            assert!(d(w[0]) < d(w[1]), "{} < {}", w[0], w[1]);
+        }
+        assert_eq!(d("0.50").cmp(&d(".5")), core::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn exponents_past_the_stated_bound_are_refused_by_name() {
+        for text in ["1e999999999999", "1e-999999999999", "1e1048577"] {
+            assert!(
+                matches!(
+                    Decimal::parse_toml_float(text),
+                    Err(DecimalError::ExponentRange(_))
+                ),
+                "{text}"
+            );
+        }
         assert_eq!(
-            Decimal::parse_toml_float("1e999999999999").map(|d| d.to_fixed(16)),
+            Decimal::parse_toml_float("1e1048576").map(|d| d.to_fixed(16)),
             Ok(None)
         );
         assert_eq!(
-            Decimal::parse_toml_float("1e-999999999999").map(|d| d.to_fixed(32)),
+            Decimal::parse_toml_float("1e-1048576").map(|d| d.to_fixed(32)),
             Ok(Some(0))
         );
         assert_eq!(

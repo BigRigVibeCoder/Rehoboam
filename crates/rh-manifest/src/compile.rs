@@ -26,8 +26,8 @@ use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear};
 use rh_registry::{DemographyParams, Founder, FounderRole, NamedSystem, Sex, WorldSpec};
 
 use crate::exact::{Decimal, DecimalError};
-use crate::manifest::{Manifest, Outcome, People, Verdict, validate_file};
-use crate::registry::Registry;
+use crate::manifest::{Authored, Manifest, Outcome, People, Verdict, validate_file};
+use crate::registry::{ExactBounds, Registry};
 
 /// The demography system's Registry id.
 pub const DEMOGRAPHY: &str = "M2.demography";
@@ -270,13 +270,8 @@ fn demography(
     let mut values = Vec::new();
     for name in DEMOGRAPHY_READS {
         let (path, value) = if let Some(a) = set.and_then(|s| s.get(name)) {
-            if let Some(b) = def.and_then(|d| d.params.get(name))
-                && !b.contains(a.value)
-            {
-                errors.push(
-                    format!("systems.{DEMOGRAPHY}.{name}"),
-                    "outside its Registry bounds",
-                );
+            if let Some(message) = outside_bounds(def.and_then(|d| d.bound_literals.get(name)), a) {
+                errors.push(format!("systems.{DEMOGRAPHY}.{name}"), message);
             }
             (format!("systems.{DEMOGRAPHY}.{name}"), to_q16_16(&a.exact))
         } else if let Some(exact) = def.and_then(|d| d.default_literals.get(name)) {
@@ -306,6 +301,23 @@ fn demography(
         );
     }
     Some(DemographyParams { e0, brass_beta })
+}
+
+/// Why an authored value is outside its Registry bounds, compared as exact decimals (G-2): a
+/// literal a hair past a bound is refused even where its `f64` rounds onto the bound. `None` when it
+/// is inside; a bound or a value with no exact decimal is refused (never fail open).
+fn outside_bounds(bounds: Option<&ExactBounds>, value: &Authored) -> Option<String> {
+    let Some((lo, hi)) = bounds else {
+        return Some("has no Registry bounds read from the Registry's text".to_owned());
+    };
+    match (lo, hi, &value.exact) {
+        (Ok(lo), Ok(hi), Ok(v)) if lo <= v && v <= hi => None,
+        (Ok(lo), Ok(hi), Ok(v)) => Some(format!(
+            "{v} is outside its Registry bounds [{lo}, {hi}], compared exactly (SPR-011 G-2)"
+        )),
+        (Err(e), _, _) | (_, Err(e), _) => Some(format!("its Registry bound {e}")),
+        (_, _, Err(e)) => Some(e.to_string()),
+    }
 }
 
 fn founders(manifest: &Manifest, errors: &mut Errors) -> Vec<Founder> {
