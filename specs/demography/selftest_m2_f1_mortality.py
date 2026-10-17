@@ -15,7 +15,8 @@ alone under ``python -I``. It checks:
      (F8), and the modifier is exactly 1 at or under the capacity (F11);
   2. the widths the spec states hold at the extremes (k w_i, the F4 numerator, knot products, A_j);
   3. at the Registry's corners (e0 in {20, 85}, beta in {0.6, 1.65}) and the design points: the
-     bisection brackets e0, T(k) is non-increasing, the knots are strictly increasing in age and
+     bisection brackets e0, T(k) is non-increasing, the spec's check values (K, a, b) hold, the
+     knots are strictly increasing in age and
      non-increasing in survivorship, and the tail's preconditions hold (m2 > m1, mu < 1,
      30 b <= 16);
   4. the tail: continuous at 90, zero at 120, its first month's hazard within 1% of its anchor
@@ -455,6 +456,11 @@ def check_corners(opt: Options) -> bool:
         )
     samples = [trapezoid(grid(k, odds_grid(q16("1.3"), opt))) for k in range(1, K_HI, K_HI // 97)]
     ok &= all(a >= b for a, b in itertools.pairwise(samples))
+    rows = tomllib.loads(SPEC_F1.read_text(encoding="utf-8"))["algorithm"]["mortality_f1"]
+    for row in rows["check_values"]:
+        sched = compile_schedule(row["e0"], row["beta"], opt)
+        ok &= (sched.k, sched.tail.a, sched.tail.b) == (row["K"], row["tail_a"], row["tail_b"])
+    print(f"   the spec's {len(rows['check_values'])} check values (K, a, b) hold")
     return ok
 
 

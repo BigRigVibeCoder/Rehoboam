@@ -65,8 +65,8 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
-    "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden vectors "
-    "(exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)",
+    "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden "
+    "vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)",
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
     "T-03)",
