@@ -160,6 +160,15 @@ def test_raw_identifiers_are_code() -> None:
         ('#[cfg_attr(test, path = "mock.rs")] mod clock;', "source-include"),
         ('include!("../../outside.rs");', "source-include"),
         ('include! { "gen.rs" }', "source-include"),
+        ("use std::net::TcpListener;", "network"),
+        ("use std::os::unix::net::{UnixListener, UnixStream};", "network"),
+        ("let s = UnixStream::connect(path)?;", "network"),
+        ("let l = TcpListener::bind(addr)?;", "network"),
+        ("use std::os::unix::net::*;", "network"),
+        ("use std::os::unix as u; let l = u::net::UnixListener::bind(p);", "network"),
+        ("use std::os::unix::*; let l = net::UnixListener::bind(p);", "network"),
+        ("use std::os::unix::{self as x}; let d = x::net::UnixDatagram::bind(p);", "network"),
+        ("use std::os as o; let l = o::unix::net::TcpListener::bind(p);", "network"),
     ],
 )
 def test_each_forbidden_api_is_caught_by_its_rule(snippet: str, rule: str) -> None:
@@ -266,6 +275,10 @@ def test_rust_files_skip_only_the_top_level_target_directory(tmp_path: Path) -> 
 
 # file stem -> (rule, the token the report names); mirrors FORBIDDEN_API_CONTROLS in check_all.sh.
 PLANTED = {
+    "net_socket": ("network", "std::os::unix::net"),
+    "net_parent_alias": ("network", "net::UnixListener"),
+    "net_parent_glob": ("network", "net::TcpListener"),
+    "net_parent_self": ("network", "net::UnixDatagram"),
     "hash_map": ("hash-collections", "HashMap"),
     "hash_set": ("hash-collections", "HashSet"),
     "thread_rng": ("thread-rng", "thread_rng"),
@@ -299,6 +312,7 @@ PLANTED = {
     "allow_disallowed": ("lint-allow", "allow(clippy::disallowed_methods"),
     "file_modified": ("file-clock", ".modified("),
     "process_command": ("process", "std::process"),
+    "process_glob_std": ("process", "process::C"),
     "process_rename": ("process", "std::process"),
     "fs_group_rename": ("file-io", "std::fs"),
     "metadata_ext": ("file-clock", "MetadataExt"),
@@ -350,6 +364,35 @@ def test_check_all_runs_a_control_for_every_planted_file() -> None:
 def test_every_planted_file_is_covered_by_a_test() -> None:
     """A planted file without a test would be a positive control nobody checks."""
     assert sorted(p.stem for p in (FIXTURES / "planted").glob("*.rs")) == sorted(PLANTED)
+
+
+def test_a_network_scoped_tool_crate_is_scanned_for_sockets_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """SPR-026 R7: rh-cli's socket outside src/serve.rs is the one finding; its float is not."""
+    manifest = FIXTURES / "network_workspace" / "Cargo.toml"
+    assert main(["--manifest-path", str(manifest)]) == EXIT_VIOLATIONS
+    out = capsys.readouterr().out
+    violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
+    assert len(violations) == 1
+    assert "[V-DET-19/network] `std::os::unix::net` at" in violations[0]
+    assert "rh-cli/src/main.rs:3:14" in violations[0]
+    assert "sockets in rh-cli only in src/serve.rs (SPR-026)" in out
+
+
+def test_the_six_bypasses_of_the_serving_module_are_refused(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """REV-SPR-026 R19: re-exports in serve.rs, #[path] and include! in main.rs, each a finding."""
+    manifest = FIXTURES / "network_bypasses" / "Cargo.toml"
+    assert main(["--manifest-path", str(manifest)]) == EXIT_VIOLATIONS
+    out = capsys.readouterr().out
+    violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
+    rules = sorted(v.split("]")[0].split("/")[1] for v in violations)
+    reexport = ["network-reexport"] * 3
+    assert rules == ["network", *reexport, "source-include", "source-include"]
+    assert sum("serve.rs" in v for v in violations) == 3
+    assert sum("tests/socket.rs" in v and "[V-DET-19/network]" in v for v in violations) == 1
 
 
 def test_main_scans_plane_a_and_undeclared_crates_only(capsys: pytest.CaptureFixture[str]) -> None:
@@ -1247,3 +1290,57 @@ def test_maj_1_min_2_renamed_std_raw_identifiers_and_nested_fs_are_refused(
 def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
     """Only std itself may not be renamed; a raw identifier or raw string is not a path (MIN-2)."""
     assert rules_hit(source) == []
+
+
+def test_spec_loaders_are_refused_in_plane_a_outside_their_home() -> None:
+    """A-47 (review MAJ-2): the loaders named in plane-A src/, in every form, but ownership.rs."""
+    forms = (
+        "use rh_registry::ownership::load_specs;\n",
+        "use rh_registry::ownership::{registry_system_ids as ids};\n",
+        "let _ = rh_registry::ownership::load_specs(p);\n",
+        "let f = registry_system_ids;\n",
+        "let _ = ownership :: load_specs (p);\n",
+        "pub use ownership::load_specs as read_dir;\n",
+        "macro_rules! ids { () => { $crate::ownership::registry_system_ids() }; }\n",
+    )
+    for code in forms:
+        report = Report(violations=[], escaped=[])
+        scan = FloatScan(spec_loader=True, crate="rh-worldgen")
+        scan_source(code, "src/lib.rs", report, floats=scan)
+        assert len(report.violations) == 1, code
+        assert "[V-DET-19/spec-loader]" in report.violations[0], code
+        home = FloatScan(spec_loader=True, crate="rh-registry")
+        report = Report(violations=[], escaped=[])
+        scan_source(code, "crates/rh-registry/src/lib.rs", report, floats=home)
+        assert len(report.violations) == 1, ("rh-registry outside ownership.rs", code)
+        quiet = (
+            (FloatScan(), "src/lib.rs"),
+            (FloatScan("none", spec_loader=True, crate="rh-worldgen"), "tests/t.rs"),
+            (home, "crates/rh-registry/src/ownership.rs"),
+        )
+        for floats, path in quiet:
+            report = Report(violations=[], escaped=[])
+            scan_source(code, path, report, floats=floats)
+            assert report.violations == [], (code, path)
+    # Names that merely contain the loaders' names are not them.
+    report = Report(violations=[], escaped=[])
+    scan_source(
+        "let load_specs_count = 1;\nfn my_registry_system_ids() {}\n",
+        "x.rs",
+        report,
+        floats=FloatScan(spec_loader=True, crate="rh-worldgen"),
+    )
+    assert report.violations == []
+
+
+def test_the_spec_loader_workspace_reports_plane_a_src_outside_the_home(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Seven forms: rh-sys-x's src/ five, rh-registry's lib.rs two; tests/ and ownership.rs none."""
+    manifest = FIXTURES / "spec_loader_workspace" / "Cargo.toml"
+    assert main(["--manifest-path", str(manifest)]) == 1
+    out = capsys.readouterr().out
+    assert out.count("[V-DET-19/spec-loader]") == 7
+    assert out.count("rh-registry/src/lib.rs") == 2
+    assert "rh-sys-x/tests" not in out
+    assert "spec_loader_workspace/rh-registry/src/ownership.rs" not in out

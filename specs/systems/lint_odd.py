@@ -941,6 +941,19 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
         for x in s.get("params", []):
             if not x.get("source"):
                 errs.append(f"{p}: parameter '{x.get('name')}' needs a source (a reference or 'design value')")
+        # parameter type (SPR-016 MR2; REV-SPR-016-FOLD MIN-4): a [[params]] entry is q16_16 unless it declares
+        # type = "count", an integer (u64 in the skeleton); a count's Registry bounds and default are integers
+        for x in s.get("params", []):
+            t = x.get("type")
+            if t is None:
+                continue
+            if t != "count":
+                errs.append(f"{p}: parameter '{x.get('name')}' has type '{t}'; the only declared type is 'count' "
+                            "(an integer); without `type` a parameter is q16_16")
+                continue
+            values = list(sysdef.get("params", {}).get(x.get("name"), [])) + ([x["default"]] if "default" in x else [])
+            if not all(isinstance(v, int) and not isinstance(v, bool) for v in values):
+                errs.append(f"{p}: count parameter '{x.get('name')}' needs integer Registry bounds and default (SPR-016 MR2)")
         # defaults (SPR-011 ruling 8): the spec mirrors the Registry's defaults exactly, both ways
         reg_defaults = sysdef.get("defaults", {})
         for x in s.get("params", []):
@@ -1028,7 +1041,9 @@ def rust(sid, specs):
               "    pub const fn name(self) -> &'static str {", "        match self {"]
     lines += [f'            Self::{camel(g["purpose"])} => "{g["purpose"]}",' for g in s["rng"]]
     lines += ["        }", "    }", "}", "pub struct Params {"]
-    lines += [f"    pub {x['name']}: Fixed,  // bounds checked against the Registry at load" for x in s["params"]]
+    # a count parameter (type = "count", SPR-016 MR2) is a u64; every other parameter is q16_16 (Fixed)
+    lines += [f"    pub {x['name']}: {'u64' if x.get('type') == 'count' else 'Fixed'},  "
+              "// bounds checked against the Registry at load" for x in s["params"]]
     lines += ["}"]
     return "\n".join(lines)
 

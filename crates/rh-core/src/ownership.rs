@@ -240,6 +240,9 @@ pub struct SpecEntry {
     pub commands: Vec<(String, String)>,
     /// The `[[emits]] kind` names, in spec order (SPR-006).
     pub emits: Vec<String>,
+    /// The manifest sections its `[initialization] from_manifest` names: genesis writes the
+    /// system's columns from those sections only (SPR-011 ruling 10; SPR-012 T-06).
+    pub from_manifest: Vec<String>,
 }
 
 impl SpecEntry {

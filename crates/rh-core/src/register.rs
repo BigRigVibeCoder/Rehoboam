@@ -8,7 +8,7 @@
 //! | Rule | Check | Source |
 //! |---|---|---|
 //! | `registry` | each system id is registered once and has a spec | ADR-0033 |
-//! | `system-id` | no two ids hash to the same RNG `system_id` | this module |
+//! | `system-id` | no two ids hash to the same RNG `system_id`, nor to a reserved one ([`RESERVED_SYSTEM_IDS`]: `rh-worldgen`) | this module; SPR-011 ruling 10 |
 //! | `single-writer`, `undeclared-read`, `plane` | each `AccessSpec` against the specs: the ownership lint's own check (`ownership::check_access`) | ruling 3 |
 //! | `single-writer` | across the registered `AccessSpec`s: one writer per column, reads name the writer (`ownership::single_writer`) | ruling 3; T-04 |
 //! | `plane` | a plane-A system reads no plane-B/C column a registered system writes (`ownership::plane_leak`) | ADR-0024 |
@@ -60,6 +60,11 @@ pub fn system_id(id: &str) -> SystemId {
     let h = rh_ids::rng::h64_bytes(TAG_SYSTEM_ID, id.as_bytes());
     SystemId::from_raw(u32::try_from(h >> 32).unwrap_or(0))
 }
+
+/// Ids no system may take: the keyed draws of world generation run under `rh-worldgen` (SPR-011
+/// ruling 10), so a system whose RNG `system_id` equals it would share its streams. Registration
+/// refuses such a system with rule `system-id`.
+pub const RESERVED_SYSTEM_IDS: [&str; 1] = ["rh-worldgen"];
 
 /// One registered system and what registration read from it.
 pub(crate) struct Entry {
@@ -206,7 +211,10 @@ pub fn register(
     // Identity: one registration per id; distinct RNG system ids. A second registration of an id
     // is its own error and takes no further part, so it is never reported as conflicting with its
     // first registration (Tester DEF-2).
-    let mut seen_ids: BTreeMap<SystemId, &str> = BTreeMap::new();
+    let mut seen_ids: BTreeMap<SystemId, &str> = RESERVED_SYSTEM_IDS
+        .iter()
+        .map(|&id| (system_id(id), id))
+        .collect();
     let mut kept: Vec<Entry> = Vec::with_capacity(entries.len());
     for e in entries {
         if kept.last().is_some_and(|k| k.id == e.id) {

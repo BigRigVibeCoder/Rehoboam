@@ -37,6 +37,18 @@ reports its metadata). Rules:
                       overrides of their golden files.
     process           the module std::process, in src/ and build.rs: Command, and exit, abort and
                       id too (A-44; DEF-1). tests/ may name temporary files by process id.
+    network           a socket, in src/ and build.rs: std::net, std::os::unix::net, `net::<Type>`
+                      through a renamed or glob-imported parent, and the listener, stream and
+                      datagram types (SPR-026; specs/stream/wire_v1.md §7). The World Stream's
+                      live edge is served by the tool-plane host, so the engine's append has no
+                      path to a reader (05.10 §7 item 3; V-PERF-09). tests/ may open a socket to
+                      test a host. The tool crates on NETWORK_FILES (rh-cli, the engine host,
+                      by package name) are scanned for this rule and source-include alone (a
+                      `#[path]` is refused and a literal include! followed, so a socket cannot
+                      be spliced in from another file), with their serving module allowed
+                      (src/serve.rs; REV-SPR-026 R7, R19).
+    network-reexport  in a NETWORK_FILES file only: a `pub use` or `pub type` of a socket type
+                      would hand the socket to the rest of the crate (REV-SPR-026 R19).
     file-io           std::fs, fs::<item>, File::open/create/options and OpenOptions, in src/ and
                       build.rs (where the float rule's scope says engine code) of a plane-A crate
                       not on FILE_IO_CRATES, the plane-A crates allowed file I/O: rh-snapshot
@@ -51,6 +63,16 @@ reports its metadata). Rules:
                       carry std::process, std::fs and std::env past every path pattern. Raw
                       identifiers are normalised first (`r#std::r#fs` is `std::fs`); on a line
                       that holds one, the reported column counts without the `r#` prefixes.
+    spec-loader       (BCK-002 A-47; SPR-012, review MAJ-2) rh-registry's spec loaders, load_specs
+                      and registry_system_ids, named in src/ or build.rs of any plane-A crate other
+                      than their home, crates/rh-registry/src/ownership.rs: rh-registry is on
+                      FILE_IO_CRATES for its load path, so plane-A code calling them would read
+                      spec files at step time. Matched as tokens, so a grouped or renamed import,
+                      a path call, a function pointer, a re-export under another name and a macro
+                      that expands to a call are all reported. Not covered: a wrapper written
+                      inside ownership.rs itself, under another name; the structural fix (pure
+                      parsers in rh-registry, file reading in a tool crate) is BCK-002 A-51, after
+                      which the rule retires. tests/ are not scanned for it.
     unsafe            the unsafe keyword: a backstop to #![forbid(unsafe_code)].
     source-include    #[path = ...] (also inside cfg_attr) and include!(...): they pull in source
                       from a file the gate may never scan, such as one outside the crate (DEF-4).
@@ -194,9 +216,20 @@ FLOAT_API_RULE = "float-api"
 # read their golden files anywhere. python/tests/test_lint_forbidden.py asserts the set: widening it
 # is a reviewed change. --scan has no crate context and allows no one.
 FILE_IO_RULE = "file-io"
+NETWORK_RULE = "network"
+# REF: specs/stream/wire_v1.md §7 (REV-SPR-026 R7, MAJ-2 c). Tool-plane crates scanned for the
+# network rule only, with the files allowed a socket: the engine host's tick loop lives in rh-cli,
+# so a socket anywhere in it but the serving module would put a reader on the tick path.
+NETWORK_FILES = MappingProxyType({"rh-cli": frozenset({"src/serve.rs"})})
+NETWORK_REEXPORT_RULE = "network-reexport"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
 STD_RENAME_RULE = "std-rename"
+# BCK-002 A-47 (SPR-012 T-07; review MAJ-2): rh-registry may read spec files (FILE_IO_CRATES), so no
+# plane-A code but their home may name its loaders: the specs are read by the host at load, never at
+# step time. The home is (crate, file); everything else in plane A src/ and build.rs is scanned.
+SPEC_LOADER_RULE = "spec-loader"
+SPEC_LOADER_HOME = ("rh-registry", ("src", "ownership.rs"))
 # MIN-2: `r#ident` is `ident`; stripped before any rule matches (a raw string, r#"..."#, is a
 # literal the lexer has already blanked).
 RAW_IDENT = re.compile(r"\br#(?=[A-Za-z_])")
@@ -206,6 +239,8 @@ BANNED_MODULES = (
     (("std", "process"), PROCESS_RULE),
     (("std", "fs"), FILE_IO_RULE),
     (("std", "env"), ENV_RULE),
+    (("std", "net"), NETWORK_RULE),
+    (("std", "os", "unix", "net"), NETWORK_RULE),
 )
 # DEF-5: the one path into a banned module that is allowed: the target's constants.
 ALLOWED_PATHS = frozenset({("std", "env", "consts")})
@@ -228,6 +263,17 @@ class FloatScan:
     deps: tuple[tuple[str, re.Pattern[str]], ...] = ()
     # The file's crate is on FILE_IO_CRATES (BCK-002 A-44); the file-io rule then does not apply.
     file_io: bool = False
+    # The file's crate is on NETWORK_FILES (SPR-026): the network and source-include rules apply
+    # (REV-SPR-026 R19: `#[path]` is refused, a literal include! is followed), and in the crate's
+    # allowed files (``network_files``, by package name) the network rule gives way to
+    # network-reexport: a `pub use` or `pub type` of a socket type is refused there.
+    network_only: bool = False
+    network_allowed: bool = False
+    network_files: frozenset[str] = frozenset()
+    # The file's crate is a plane-A workspace crate, scanned for the spec-loader rule (A-47).
+    spec_loader: bool = False
+    # The file's crate name: the spec-loader rule exempts its home (SPEC_LOADER_HOME).
+    crate: str = ""
 
 
 FLOAT_API_WHY = (
@@ -361,6 +407,39 @@ RULES: tuple[Rule, ...] = (
         _rx(r"\bstd::fs\b|\bfs::\w|\bFile::(?:open|create|options)\b|\bOpenOptions\b"),
         "file I/O in plane A outside the crates allowed it (FILE_IO_CRATES): plane A reads its "
         "inputs through the journal and the compiled world, never from files (BCK-002 A-44)",
+    ),
+    Rule(
+        NETWORK_RULE,
+        # SPR-026 (specs/stream/wire_v1.md §7): a socket in plane A would put a reader on the tick
+        # path. `net::<Type>` catches the parent-module bypasses (`use std::os::unix as u;
+        # u::net::UnixListener`, a glob, `{self as x}`; REV-SPR-026 MIN-1). A type name right
+        # after `::` is part of a path the first alternatives match.
+        _rx(
+            r"\bstd::net\b|\bstd::os::unix::net\b|\bunix::net\b|\bnet::(?:Unix|Tcp|Udp)\w*"
+            r"|(?<![:\w])(?:Unix|Tcp)(?:Listener|Stream)\b|(?<![:\w])(?:UnixDatagram|UdpSocket)\b"
+        ),
+        "a socket in plane A (std::net, std::os::unix::net): the World Stream's live edge is "
+        "served by the tool-plane host, never by plane-A code, so the engine's append has no path "
+        "to a reader (05.10 §7 item 3; specs/stream/wire_v1.md §7; V-PERF-09)",
+    ),
+    Rule(
+        NETWORK_REEXPORT_RULE,
+        # REV-SPR-026 R19: applied only in a NETWORK_FILES file (serve.rs), where the network rule
+        # is allowed; a `pub use` or `pub type` would hand the socket type to the rest of the crate.
+        _rx(
+            r"\bpub\b[^;{]*?\b(?:use|type)\b[^;]*?(?:\bnet::|\b(?:Unix|Tcp)(?:Listener|Stream)\b"
+            r"|\bUnixDatagram\b|\bUdpSocket\b)"
+        ),
+        "a public re-export or alias of a socket type in the host's serving module hands the "
+        "socket to the rest of the crate; keep socket types inside src/serve.rs (specs/stream/"
+        "wire_v1.md §7; REV-SPR-026 R19)",
+    ),
+    Rule(
+        SPEC_LOADER_RULE,
+        _rx(r"\b(?:load_specs|registry_system_ids)\b"),
+        "plane-A code outside crates/rh-registry/src/ownership.rs names rh-registry's spec "
+        "loaders, which read files: specs are read by the host at load and reach systems as data, "
+        "never at step time (BCK-002 A-47; review MAJ-2)",
     ),
     Rule(
         "unsafe",
@@ -677,17 +756,41 @@ def _with_use_trees(code: str, path: str) -> list[Finding]:
     return sorted(found + extra, key=lambda f: (f.line, f.column, f.rule))
 
 
+def _applies_network_only(finding: Finding, scan: "FloatScan") -> bool:
+    """The rules of a NETWORK_FILES crate (REV-SPR-026 R7, R19): sockets, splices, re-exports."""
+    if scan.scope == "none":
+        return False
+    if scan.network_allowed:
+        return finding.rule == NETWORK_REEXPORT_RULE
+    return finding.rule in (NETWORK_RULE, SOURCE_INCLUDE_RULE)
+
+
 def _applies(finding: Finding, scan: "FloatScan") -> bool:
     """Whether a finding's rule applies under the file's scan (module DECISION; A-44; DEF-1)."""
+    if scan.network_only:
+        return _applies_network_only(finding, scan)
+    if finding.rule == NETWORK_REEXPORT_RULE or (
+        finding.rule == NETWORK_RULE and scan.network_allowed
+    ):
+        return False  # the re-export rule exists for NETWORK_FILES files; plane A has `network`
     if finding.rule == FLOAT_RULE:
         return scan.scope == "rule"
     # File I/O and std::process are refused where the float rule's scope says engine code (src/,
     # build.rs; and the float zone's src/): tests may read their golden files and name temporary
     # directories by process id. File I/O is allowed in FILE_IO_CRATES.
-    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE)
+    rules = (FILE_IO_RULE, PROCESS_RULE, ENV_RULE, STD_RENAME_RULE, NETWORK_RULE, SPEC_LOADER_RULE)
     if finding.rule in rules and scan.scope == "none":
         return False
+    if finding.rule == SPEC_LOADER_RULE:
+        return _applies_spec_loader(finding, scan)
     return not (finding.rule == FILE_IO_RULE and scan.file_io)
+
+
+def _applies_spec_loader(finding: Finding, scan: "FloatScan") -> bool:
+    """The spec-loader rule (A-47) applies in plane-A crates, except at the loaders' home."""
+    home_crate, home_file = SPEC_LOADER_HOME
+    at_home = scan.crate == home_crate and Path(finding.path).parts[-2:] == home_file
+    return scan.spec_loader and not at_home
 
 
 def find_escapes(lexed: Lexed, path: str) -> list[Escape]:
@@ -924,7 +1027,7 @@ def scan_source(
         report.scanned.add((file, scan))
     lexed = lex(source)
     findings = [f for f in _with_use_trees(lexed.code, name) if _applies(f, scan)]
-    if floats == "rule":
+    if floats == "rule" and not scan.network_only:
         findings += find_float_dep(lexed.code, name, dep_floats)
     # Includes resolve from the file as it was reached, not from its symlink target (MIN-3).
     reached = path if isinstance(path, Path) else None
@@ -1083,6 +1186,11 @@ def float_rule_applies(file: Path, root: Path) -> bool:
     return file.relative_to(root).parts[0] not in FLOAT_FREE_DIRS
 
 
+def _network_allowed(file: Path, root: Path, scan: "FloatScan") -> bool:
+    """Whether ``file`` is one of its crate's NETWORK_FILES (by its path relative to the root)."""
+    return root.is_dir() and file.relative_to(root).as_posix() in scan.network_files
+
+
 def scan_paths(
     paths: Iterable[Path],
     float_fields: frozenset[str] = frozenset(),
@@ -1115,7 +1223,10 @@ def scan_paths(
                 scopes.setdefault(file, "none")
             else:
                 scopes.setdefault(file, "zone" if root in float_exempt else "rule")
-            crate_of.setdefault(file, (crate_scans or {}).get(root, FloatScan()))
+            scan = (crate_scans or {}).get(root, FloatScan())
+            if scan.network_only and _network_allowed(file, root, scan):
+                scan = replace(scan, network_allowed=True)
+            crate_of.setdefault(file, scan)
     for file in sorted(scopes):
         source = file.read_text(encoding="utf-8")
         scan_source(
@@ -1170,6 +1281,28 @@ def plane_a_crate_dirs(manifest_path: Path) -> list[tuple[str, Path]]:
     Raises:
         WorkspaceError: cargo is missing or fails, or its output has an unexpected shape.
     """
+    return [
+        (name, directory)
+        for name, directory, plane in workspace_crate_dirs(manifest_path)
+        if plane in (None, "A")
+    ]
+
+
+def network_scoped_crate_dirs(manifest_path: Path) -> list[tuple[str, Path]]:
+    """Return (name, directory) for each tool crate on NETWORK_FILES (scanned for sockets only)."""
+    return [
+        (name, directory)
+        for name, directory, plane in workspace_crate_dirs(manifest_path)
+        if plane == "tool" and name in NETWORK_FILES
+    ]
+
+
+def workspace_crate_dirs(manifest_path: Path) -> list[tuple[str, Path, str | None]]:
+    """Return (name, directory, declared plane) for every workspace crate.
+
+    Raises:
+        WorkspaceError: cargo is missing or fails, or its output has an unexpected shape.
+    """
     command = ["cargo", "metadata", "--format-version", "1", "--no-deps", "--offline"]
     try:
         result = subprocess.run(
@@ -1187,9 +1320,8 @@ def plane_a_crate_dirs(manifest_path: Path) -> list[tuple[str, Path]]:
         members = set(document["workspace_members"])
         packages = [p for p in document["packages"] if p["id"] in members]
         crates = [
-            (str(p["name"]), Path(p["manifest_path"]).parent)
+            (str(p["name"]), Path(p["manifest_path"]).parent, _plane(p.get("metadata")))
             for p in packages
-            if _plane(p.get("metadata")) in (None, "A")
         ]
     except (json.JSONDecodeError, KeyError, TypeError) as err:
         raise WorkspaceError(f"unexpected cargo metadata output: {err!r}") from err
@@ -1239,6 +1371,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         if users is None or name in users
                     ),
                     file_io=name in FILE_IO_CRATES,
+                    spec_loader=True,
+                    crate=name,
                 )
                 for name, directory in crates
             }
@@ -1253,8 +1387,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             if zone:
                 exempt = ", ".join(sorted(n for n, d in crates if d in zone))
                 scope += f"; float rule exempts {exempt} only (SPR-003 float zone)"
+            scoped = network_scoped_crate_dirs(args.manifest_path)
+            for name, directory in scoped:
+                crate_scans[directory] = FloatScan(
+                    network_only=True, network_files=NETWORK_FILES[name]
+                )
+                files = ", ".join(sorted(NETWORK_FILES[name]))
+                scope += f"; sockets in {name} only in {files} (SPR-026)"
             report = scan_paths(
-                [directory for _, directory in crates], float_fields, zone, crate_scans
+                [directory for _, directory in [*crates, *scoped]],
+                float_fields,
+                zone,
+                crate_scans,
             )
     except (WorkspaceError, SpecError, OSError, UnicodeDecodeError) as err:
         print(f"lint_forbidden: cannot read the code to scan: {err}", file=sys.stderr)

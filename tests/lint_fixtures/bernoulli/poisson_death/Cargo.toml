@@ -1,0 +1,9 @@
+# Fixture for V-INV-08 (not a workspace member, never built): a system crate depending on rh-sample.
+[package]
+name = "rh-sys-poisson"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+rh-sample = { path = "../../../../crates/rh-sample" }

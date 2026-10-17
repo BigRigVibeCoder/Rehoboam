@@ -185,6 +185,7 @@ impl Stub {
                 .map(|c| (c.target.to_owned(), c.command.to_owned()))
                 .collect(),
             emits: self.access.emits.iter().map(|k| (*k).to_owned()).collect(),
+            from_manifest: Vec::new(),
         };
         (declaration, entry)
     }

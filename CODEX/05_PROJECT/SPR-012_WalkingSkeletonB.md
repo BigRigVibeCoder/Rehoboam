@@ -2,14 +2,14 @@
 id: SPR-012
 title: "Walking skeleton B: solo lives and dies (P1.0, increment B)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-002, SPR-011, SPR-013, SPR-008, ADR-0025, ADR-0026, ADR-0031]
 created: 2026-10-16
 updated: 2026-10-17
-version: 1.0.1
+version: 1.1.0
 ---
 
 > **BLUF:** Increment B of the walking skeleton (WP P1.0): `solo` lives and dies. The M2 rung-0 mortality schedule in fixed point, the `rh-worldgen` stub that writes founders, `rh-sys-demography` (the first real system crate) and `rh-cli run <world>` with the `solo` golden ladder. Developer: AGT-002-CORE. Testers: AGT-003-DET and AGT-003-STAT (one Tester session may hold both roles, on a different model from the Developer's). About 3 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). SPR-011's rulings 1–19 bind this sprint and are not repeated here.
@@ -50,7 +50,7 @@ version: 1.0.1
 
 #### T-05: The M2 rung-0 schedule in fixed point (ruling 7)
 - **Deliverable:** In `rh-sys-demography`: the Brass General Standard as exact decimals, K from e₀ by bisection, l on the monthly grid, monthly death probabilities as `Prob32`. `bin/gen_m2_reference.py` (Python `fractions`, the same algorithm and rounding) with `--check`, and golden vectors in `crates/rh-sys-demography/tests/golden/m2_schedule_v1.txt`.
-- **Acceptance:** Bit-equal to the reference at e₀ ∈ {20, 23.441086, 30, 36.569855, 43.45915, 60, 85}. At the standard's own e₀ (43.45915, the trapezoid on the standard grid; corrected from 43.44 by the skeleton-spec drafter), K = 1 within one unit. At the e₀ values that Brass Table 19's α rows imply, l(x) matches Table 19 within 1 per 10,000 (the `selftest_brass.py` tolerance). The implied e₀ of a row is the trapezoid e₀ of its β = 1 schedule on M2's age grid, rounded to `Q16_16` half to even, as `selftest_m2_rung0.py` check 4 computes it; the tool computes these inputs and the golden file carries them. The published two-decimal `golden_e0` values are not inputs to this comparison: they bound the recomputed e₀ (within 0.06 years) only (Architect ruling, 2026-10-17). The e₀ recomputed from the fixed-point schedule is within 0.06 years of the input. q(15) ∈ [0.35, 0.55] exactly when e₀ ∈ [23.441086, 36.569855] (V-SF-02's identity at the schedule level).
+- **Acceptance:** Bit-equal to the reference at e₀ ∈ {20, 23.441086, 30, 36.569855, 43.45915, 60, 85}. At the standard's own e₀ (43.45915, the trapezoid on the standard grid; corrected from 43.44 by the skeleton-spec drafter), K = 1 within the spec's 2^10 units (M2 lines 296–297: e₀'s `Q16_16` rounding puts K at 2^32 − 569; Architect ruling at the audit, `VER-SPR-012` §3). At the e₀ values that Brass Table 19's α rows imply, l(x) matches Table 19 within 1 per 10,000 (the `selftest_brass.py` tolerance). The implied e₀ of a row is the trapezoid e₀ of its β = 1 schedule on M2's age grid, rounded to `Q16_16` half to even, as `selftest_m2_rung0.py` check 4 computes it; the tool computes these inputs and the golden file carries them. The published two-decimal `golden_e0` values are not inputs to this comparison: they bound the recomputed e₀ (within 0.06 years) only (Architect ruling, 2026-10-17). The e₀ recomputed from the fixed-point schedule is within 0.06 years of the input. q(15) ∈ [0.35, 0.55] exactly when e₀ ∈ [23.441086, 36.569855] (V-SF-02's identity at the schedule level).
 - **Status:** [ ] not started
 
 #### T-06: The `rh-worldgen` stub (ruling 10)
@@ -60,7 +60,7 @@ version: 1.0.1
 
 #### T-07: `rh-sys-demography`, the rung-0 slice
 - **Deliverable:** System `M2.demography`, with the skeleton from `lint_odd.py --rust` brought in by `include!`, bound to Month/Vital. For each living person: one Bernoulli on the month's probability (k = 0); on a hit, a death timer at the start of a keyed day inside the month (k = 1), never at the Month-pulse instant (ruling 7, amended). `fire` calls `apply_death` (ruling 6): alive flag, death tick, life-course exit with cause `natural`, `DEATH` with the deceased as `target`. `EXTINCTION` once when the ledger empties (ruling 17). `resample_timer` re-draws a pending death at the new epoch. Invariants `INV-M2-01` (conservation) and life-course consistency.
-- **Acceptance:** V-DET-12: every event's tick ≥ its instant, ids strictly increase, a sampled death sits in the agenda as a timer until it fires. V-INV-01 subset after every pulse on random small worlds. V-INV-08: Bernoulli draws only (a grep gate: no Poisson death draw). Registration rule `spec` passes against the frozen spec. M2 refuses `brass_alpha` or β ≠ 1 at construction with a named error (ruling 7). A fixture `WorldSpec` of 10,000 founders aged 0 gives, over 32 seeds, an observed q(15) inside the schedule's value ± its binomial 99.9% band; the band harness itself (V-SF-02, V-SCALE-02) is P1.10. V-DATA-04 subset on the same fixture over 1,000 years: every `PersonId` ever emitted has exactly one life-course entry with founder provenance, and a death record if and only if it is absent from the ledger (residence and occupation intervals wait for S3 and M4).
+- **Acceptance:** V-DET-12: every event's tick ≥ its instant, ids strictly increase, a sampled death sits in the agenda as a timer until it fires. V-INV-01 subset after every pulse on random small worlds. V-INV-08: Bernoulli draws only (a grep gate: no Poisson death draw). Registration rule `spec` passes against the frozen spec. M2 refuses `brass_alpha` or β ≠ 1 at construction with a named error (ruling 7). A fixture `WorldSpec` of 10,000 founders aged 0 (born in the year before tick 0, ruling 10) gives, for each of 32 fixed seeds, deaths by age 15 inside the 99.9% two-sided band of the schedule's conditional expectation Σ(1 − l(15)/l(x_i)) with its exact Poisson-binomial variance, and over the 32 seeds pooled, the same band (Architect rulings, `VER-SPR-012` §3 and §4, MAJ-1); the band harness itself (V-SF-02, V-SCALE-02) is P1.10. V-DATA-04 subset on the same fixture over 1,000 years: every `PersonId` ever emitted has exactly one life-course entry with founder provenance, and a death record if and only if it is absent from the ledger (residence and occupation intervals wait for S3 and M4).
 - **Status:** [ ] not started
 
 #### T-08: `rh-cli run <world>` and the `solo` golden ladder (rulings 3, 16)
@@ -101,3 +101,6 @@ version: 1.0.1
 - [ ] No open DEF- against this sprint.
 - [ ] Merge route matches the CI-detected change class; each golden-corpus change was announced to the director first.
 - [ ] Rung checkpoint (GOV-007 §3.5): when `solo` first runs green, the director watches its stream through `rh-cli tail` for 15–30 minutes once SPR-013 lands `tail`. The Architect records the notes as `EVO-` or `DEF-` items.
+
+## Closure (2026-10-17)
+Closed by `VER-SPR-012` (PASS). The acceptance sentences of T-05 and T-07 above carry the Architect's rulings at the audit; the deviations, gaps and backlog items are in `VER-SPR-012` §3, §4 and §7.

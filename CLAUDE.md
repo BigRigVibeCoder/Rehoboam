@@ -66,13 +66,21 @@ cargo nextest run -p rh-sample --locked --release --test golden   # V-DET-09 sam
 cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler statistics, nightly tier (64x the PR samples)
 python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
+python -I bin/gen_m2_reference.py --check   # rh-sys-demography's rung-0 schedule vectors = the exact reference (SPR-012 T-05)
+cargo nextest run -p rh-sys-demography --locked --test schedule_golden   # the fixed-point schedule: bit-equal, Table 19, e0 bounds, the q(15) band (SPR-012 T-05)
+python -I bin/gen_m2_draws_reference.py --check   # M2's death instants on fixture worlds from an independent model of S8-S12 on the RNG and schedule references, every re-sample case covered (SPR-012)
+cargo nextest run -p rh-sys-demography --locked --test draws_golden   # the engine's death instants = that model's; --features mutant-resample-hit-k1 or mutant-resample-day-k0 must FAIL (SPR-012)
+cargo nextest run -p rh-worldgen --locked --test genesis   # worldgen stub: V-DATA-05 founder ids, bit-equal genesis, refused writes (SPR-012 T-06)
+cargo nextest run -p rh-worldgen --locked --test keyframe --test m2_system   # V-INV-11 birth ticks through a keyframe; M2: V-DET-12, V-INV-01, EXTINCTION, re-sampling (SPR-012 T-06, T-07)
+cargo nextest run -p rh-worldgen --locked --release --test m2_system   # also the 10,000-founder q(15) band over 32 seeds and V-DATA-04 over 1,000 years (release only)
 python -I specs/demography/selftest_m2_f1.py      # M2 F1 fertility and partnering: the exact reference of [algorithm.fertility_f1] and [algorithm.partnering_f1] in the next-version spec (SPR-015)
 python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml   # the next version of a frozen spec (M2 F1 draft 0.3.0) supersedes it for the run and must preserve the frozen slice (SPR-015; specs/systems/next/README.md)
 python -I specs/worldgen/selftest_worldgen_lite.py   # worldgen-lite v0 and S3 F0 residence: the exact reference of M1's [algorithm.worldgen_lite] and S3's [algorithm.residence_f0], golden outputs in specs/worldgen/golden/ (SPR-018)
-python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of specs/demography/mortality_f1.toml [algorithm.mortality_f1] (SPR-016); --control beta-one-power, --control infant-discontinuous and --control newborn-uncovered must FAIL (each isolates one check)
+python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of the M2 spec's [algorithm.mortality_f1] (specs/systems/next while it is a draft; SPR-016); --control beta-one-power, --control infant-discontinuous and --control newborn-uncovered must FAIL (each isolates one check)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)
 python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C segment DDL: sift matches, with a life_ends twin (SPR-013)
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
+python -I specs/stream/selftest_wire_v1.py --check   # World Stream wire format v1 (IF-0 live edge): framing, control messages, refusals, the live-edge rule simulated with slow, stalled and reconnecting viewers, golden frames (SPR-026); --control window-gap must FAIL
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
 python -I specs/systems/lint_odd.py   # system specs; a foreign [[reads]] entry says whether its owner is `required`, with a typed `neutral` on rate and mode reads of absent owners; [[applies]] payloads are typed and name their drain binding (EVO-001); planted both ways in tests/lint_fixtures/odd_neutral/ and odd_applies/
@@ -82,6 +90,9 @@ python -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smo
 cargo nextest run -p rh-sys-smoke --locked --test smoke   # smoke world: registration against its specs, coverage, small-scale V-DET-01/02 (SPR-008 T-01)
 cargo build --release -p rh-cli && target/release/rh-cli run smoke --years 1000 --ladder yearly --require-parallel 5 --out target/golden/smoke.ladder   # the golden run: 1,000 sim-years, plane-A hash ladder, at least 5% parallel levels (SPR-008 T-02, DEF-2)
 python -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed target/golden/smoke.ladder   # baseline = recomputation; changed only in a [C3] PR (T-04)
+target/release/rh-cli run solo --years 200 --ladder yearly --out target/golden/solo.ladder   # solo, rung 0: compile, genesis, M2; the header carries the history tuple and the built and not-built systems (SPR-012 T-08); --strict refuses it
+python -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed target/golden/solo.ladder   # solo's baseline = recomputation; changed only in a [C3] PR
+cargo nextest run -p rh-golden --release --test solo   # solo: resume through 10-year keyframes = continuous, thread invariance, the manifest pin, Ada, the input re-sampling her pending death (SPR-012 T-08)
 cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
 python -I bin/check_all_selftest.py verdict --or-true   # must FAIL: check_all's own verdict fails a gate hidden by || true (VER-SPR-008-TEST GAP-3)
 bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), the yearly cut = the baseline (GAP-6), V-DET-11 x 64
@@ -106,7 +117,7 @@ target/release/rh-cli run smoke --years 1000 --threads 4 --vitals --out target/g
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml   # life_ends (SPR-011)
 ```
 
-Not a check: `bin/regen_baseline.sh` regenerates the smoke golden baseline, only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`). Nor is `lint_odd.py --next … --write-amendments-lock`, which rewrites `specs/systems/next/amendments.lock.toml` (every amendment of a next-version spec, by path and text digest) after the Architect has read the new `AMEND` lines; the lock is never typed (SPR-015, REV-SPR-015 round 3 MIN-1).
+Not a check: `bin/regen_baseline.sh [smoke|solo]` regenerates the golden baselines (both without an argument), only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`). Nor is `lint_odd.py --next … --write-amendments-lock`, which rewrites `specs/systems/next/amendments.lock.toml` (every amendment of a next-version spec, by path and text digest) after the Architect has read the new `AMEND` lines; the lock is never typed (SPR-015, REV-SPR-015 round 3 MIN-1).
 
 ## Conventions
 - Docs are Markdown, and diagrams are Mermaid.
