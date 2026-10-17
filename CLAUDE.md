@@ -91,7 +91,7 @@ cargo build --release -p rh-cli && target/release/rh-cli run smoke --years 1000 
 python -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed target/golden/smoke.ladder   # baseline = recomputation; changed only in a [C3] PR (T-04)
 target/release/rh-cli run solo --years 200 --ladder yearly --out target/golden/solo.ladder   # solo, rung 0: compile, genesis, M2; the header carries the history tuple and the built and not-built systems (SPR-012 T-08); --strict refuses it
 python -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed target/golden/solo.ladder   # solo's baseline = recomputation; changed only in a [C3] PR
-cargo nextest run -p rh-golden --release --test solo   # solo: resume through 10-year keyframes = continuous, thread invariance, the manifest pin, Ada (SPR-012 T-08)
+cargo nextest run -p rh-golden --release --test solo   # solo: resume through 10-year keyframes = continuous, thread invariance, the manifest pin, Ada, the input re-sampling her pending death (SPR-012 T-08)
 cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
 python -I bin/check_all_selftest.py verdict --or-true   # must FAIL: check_all's own verdict fails a gate hidden by || true (VER-SPR-008-TEST GAP-3)
 bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), the yearly cut = the baseline (GAP-6), V-DET-11 x 64

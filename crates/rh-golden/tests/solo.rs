@@ -89,7 +89,7 @@ fn the_solo_ladder_does_not_depend_on_the_thread_count() {
 #[test]
 fn the_header_carries_the_history_tuple_and_the_built_systems() {
     let dir = scratch("solo_header");
-    let ladder = run(&solo(12, 1, RungKind::Yearly, &dir.join("h.ladder"))).unwrap();
+    let ladder = run(&solo(60, 1, RungKind::Yearly, &dir.join("h.ladder"))).unwrap();
     let h = &ladder.header;
     assert_eq!((h.world.as_str(), h.seed), ("solo", 1));
     let tuple = h.tuple.as_deref().unwrap();
@@ -154,5 +154,76 @@ fn strict_refuses_solo_and_genesis_gives_ada() {
     assert!(
         (25 * year..26 * year).contains(&-birth),
         "Ada's age at tick 0: {birth}"
+    );
+}
+
+/// The golden history takes the re-sample path (the Architect's ruling on the Tester's interim
+/// report): Ada's death is pending at the scripted input, the input cancels it, the re-sample at
+/// epoch 1 misses, and she dies later, at the instant `worlds/solo/inputs.toml` states.
+#[test]
+fn solos_input_re_samples_adas_pending_death() {
+    use rh_core::engine::{Engine, MaterialInput};
+    use rh_core::register::register;
+    use rh_core::time::SimTime;
+    use rh_ids::BranchSalt;
+
+    let world = setup(&repo(), "solo", None, false).unwrap();
+    let registered = register((world.systems)(false), &world.specs).unwrap();
+    let mut e = Engine::new(
+        world.calendar,
+        world.seed,
+        BranchSalt::from_raw(0),
+        registered,
+        world.tables.clone(),
+        SimTime::EPOCH,
+    );
+    let inputs = (world.inputs)(200);
+    assert_eq!(inputs.len(), 1);
+    let (t_in, ada) = inputs[0];
+    assert_eq!(t_in.minutes(), 27_786_607);
+    e.submit_input(
+        t_in,
+        MaterialInput {
+            scope: std::collections::BTreeSet::from([ada]),
+        },
+    )
+    .unwrap();
+    e.advance_until(SimTime::from_minutes(t_in.minutes() - 1), |_, _| {})
+        .unwrap();
+    let pending: Vec<i64> = e
+        .agenda()
+        .pending()
+        .iter()
+        .map(|(k, _)| k.time.minutes())
+        .collect();
+    assert_eq!(
+        pending,
+        vec![27_796_320],
+        "Ada's death is pending at the input"
+    );
+    e.advance_until(t_in, |_, _| {}).unwrap();
+    assert_eq!(e.epoch(ada), 1);
+    assert!(
+        e.agenda().pending().is_empty(),
+        "the re-sample missed: the death is dropped"
+    );
+    e.advance_until(
+        SimTime::from_minutes(60 * world.calendar.minutes_per_year()),
+        |_, _| {},
+    )
+    .unwrap();
+    let deaths: Vec<i64> = e
+        .drain_events()
+        .into_iter()
+        .filter(|ev| ev.kind == "DEATH")
+        .map(|ev| ev.tick)
+        .collect();
+    assert_eq!(
+        deaths,
+        vec![29_975_040],
+        "Ada dies at the instant inputs.toml states"
+    );
+    println!(
+        "T-08: solo's input re-samples Ada's pending death (a miss); she dies at tick 29975040"
     );
 }

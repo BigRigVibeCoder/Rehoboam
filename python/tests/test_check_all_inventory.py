@@ -481,7 +481,8 @@ REQUIRED_GATES = (
     "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
     "perturbations (SPR-008 T-02, T-03)",
     "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread "
-    "invariance, the manifest pin, Ada at genesis (SPR-012 T-08)",
+    "invariance, the manifest pin, Ada at genesis, the input's re-sample of her pending death "
+    "(SPR-012 T-08)",
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
