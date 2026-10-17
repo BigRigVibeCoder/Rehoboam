@@ -294,6 +294,9 @@ REQUIRED_GATES = (
     "causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and "
     "constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; "
     "SPR-020 shape)",
+    "V-DATA-10 subset on the envelope world: DuckDB reads the engine's snapshot, role and "
+    "typed edge rows with the DDL's types and constraints, and the reference recomputes every "
+    "canonical_digest (SPR-020 T-06)",
     "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's "
     "and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, "
     "and the reference's canonical digests (SPR-013 T-09)",
@@ -681,6 +684,9 @@ REQUIRED_GATES = (
     "rh-golden by name: tail prints every record once in seq order from any cursor, its "
     "canonical output digests to each segment's canonical_digest, it never writes to the run "
     "directory, and the display form matches its snapshots (SPR-013 T-10)",
+    "rh-golden envelope world by name: a stub world's full envelope through the admission "
+    "bitset and event_body, canonical round trip, cause_told across a kill and a resume, "
+    "V-STR-01 (SPR-020 T-06)",
     "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
     "perturbations (SPR-008 T-02, T-03)",
     "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread "

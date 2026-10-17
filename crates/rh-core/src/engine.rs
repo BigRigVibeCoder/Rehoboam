@@ -70,7 +70,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
-use rh_events::{CausalEdge, Event, EventLog, EventRef, Origin};
+use rh_events::{CausalEdge, Event, EventDraft, EventLog, EventRef, Origin};
 use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
 
 use crate::access::Lag;
@@ -232,6 +232,10 @@ pub struct Engine {
     /// `dropped{system, snapshot, absent_owner}` (envelope v0 §4 rule 4; SPR-020 T-03). Host
     /// telemetry, never state.
     dropped: BTreeMap<crate::envelope::DroppedKey, u64>,
+    /// The chronicle's admission rule (`05.2` §4.0; D38): every draft is admitted (P1.0) unless
+    /// the host sets a predicate. The flag is carried on the event and never hashed, so plane A
+    /// never branches on it. Until DATA-5's rule lands (P1.11) only tests set one (SPR-020 T-06).
+    admission: Option<fn(&EventDraft) -> bool>,
 }
 
 /// What the scheduler dispatched since the engine was built or restored (SPR-008 DEF-2): the
@@ -367,6 +371,7 @@ impl Engine {
             provenance: Provenance::default(),
             diagnostics: VecDeque::new(),
             dropped: BTreeMap::new(),
+            admission: None,
             at: (start, Phase::Inputs),
             crash: None,
             journal_head: None,
@@ -647,6 +652,12 @@ impl Engine {
     #[must_use]
     pub const fn dropped(&self) -> &BTreeMap<crate::envelope::DroppedKey, u64> {
         &self.dropped
+    }
+
+    /// Sets the chronicle's admission predicate (`None`: admit every draft, the P1.0 rule). The
+    /// flag only decides which events the Chronicle Writer records; it is in no hash.
+    pub fn set_admission(&mut self, admission: Option<fn(&EventDraft) -> bool>) {
+        self.admission = admission;
     }
 
     /// The last diagnostic records, oldest first.
@@ -1296,9 +1307,17 @@ impl Engine {
                 })
                 .chain(unresolved)
                 .collect();
+            let admitted = self.admission.is_none_or(|admit| admit(&draft));
             let id = self
                 .events
-                .append(t.minutes(), phase.index(), e.id, Origin::Sim, draft)
+                .append_admitted(
+                    t.minutes(),
+                    phase.index(),
+                    e.id,
+                    Origin::Sim,
+                    admitted,
+                    draft,
+                )
                 .map_err(event_error)?;
             ids.push(id);
             tally.events += 1;
