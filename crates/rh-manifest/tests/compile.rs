@@ -100,10 +100,11 @@ fn uz_job_household_and_hamlet_compile_with_their_founders_in_genesis_order() {
     let children: Vec<_> = uz.founders[6..16].iter().map(|f| f.sex).collect();
     assert_eq!(children[..7], [Some(Sex::Male); 7]);
     assert_eq!(children[7..], [Some(Sex::Female); 3]);
+    // the couple, their three children and the unrelated founder Wulf (SPR-015, REV-SPR-015 R8)
     let household = example("household").unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
         roles(&household),
-        [(FounderRole::Cast, 2), (FounderRole::Child, 3)]
+        [(FounderRole::Cast, 3), (FounderRole::Child, 3)]
     );
     let hamlet = example("hamlet").unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(roles(&hamlet), roles(&uz));

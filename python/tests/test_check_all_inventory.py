@@ -115,6 +115,7 @@ REQUIRED_GATES = (
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
+    "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)",
     "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality "
     "--check; SPR-016)",
     "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)",
@@ -133,6 +134,7 @@ REQUIRED_GATES = (
     "M2 F1 positive control: an infant table that misses l(1) must FAIL continuity at age 1 "
     "(SPR-016 MR7)",
     "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)",
+    "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
     "Manifest: aethelgard",
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
@@ -175,6 +177,8 @@ REQUIRED_GATES = (
     "ruling 2)",
     "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)",
     "System specs (lint_odd)",
+    "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves "
+    "it (lint_odd --next; SPR-015)",
     "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails "
     "(SPR-009)",
     "T-02b wall-clock control: another CPU model must report machine changed, never compare "
@@ -414,6 +418,13 @@ REQUIRED_GATES = (
     "(EVO-001)",
     "lint_odd neutral positive control: an identity read carrying a neutral must FAIL "
     "(REV-EVO-001 R12)",
+    "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must "
+    "FAIL (SPR-015)",
+    "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)",
+    "lint_odd next positive control: a next version that changes a frozen algorithm step must "
+    "FAIL (SPR-015)",
+    "lint_odd next positive control: an amendment whose text changed since the committed lock must "
+    "FAIL (SPR-015)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
