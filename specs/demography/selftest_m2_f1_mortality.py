@@ -21,7 +21,8 @@ alone under ``python -I``. It checks:
      30 b <= 16);
   4. the tail: continuous at 90, its first month's hazard within 1% of its anchor mu(90) (Brass's
      own interval hazards around 90 are printed beside it); l(x) > 0 below the spec's zero knot and
-     0 from it, 120 the cap; survival from 90 to 100 reported; the monthly-q drops at the grid
+     0 from it, the closed form for u_0 within 2 knots of it, 120 the cap; survival from 90 to
+     100 reported; the monthly-q drops at the grid
      boundaries 82.5, 85, 87.5 and at the join 90 printed (rung 0's sawtooth; REV-SPR-016 R6);
   5. the infant table: recomputed from its formula, normalised, non-decreasing; continuity at age 1;
      the first-month share reported;
@@ -89,6 +90,7 @@ INFANT_KNOTS = 13
 E0_TOL = Fraction(1, 10)  # the realized e0 is within 0.1 years of the input for e0 <= 60 ...
 E0_TOL_HIGH = Fraction(1)  # ... and within 1 year up to 85, where the tail adds life past 100
 E0_TOL_SPLIT = 60
+ZERO_KNOT_TOL = 2  # MR8's closed form for u_0 lies within 2 knots of the exact zero knot
 TAIL_HAZARD_TOL = Fraction(1, 100)  # the tail's first month against its own mu(90)
 CORNERS = [("20", "0.6"), ("20", "1.65"), ("85", "0.6"), ("85", "1.65")]
 DESIGN_POINTS = [
@@ -523,6 +525,18 @@ def q_drops(sched: Schedule) -> list[tuple[float, float]]:
     return out
 
 
+def zero_age_closed_form(sched: Schedule) -> Decimal:
+    """Return MR8's u_0 as an age in twelfths: 90 + (1/b) ln(((1 + a)(2 L_66)^b - 1) / a) years.
+
+    L_66 in bits. Oracle arithmetic (Decimal), for the check that the closed form is within 2
+    knots of the exact zero knot j_0.
+    """
+    a, b = Decimal(sched.tail.a) / ONE, Decimal(sched.tail.b) / ONE
+    power = (b * Decimal(2 * sched.grid[GRID_90]).ln()).exp()
+    u0 = (((1 + a) * power - 1) / a).ln() / b
+    return AGE_90 * MONTHS + u0 * MONTHS
+
+
 def check_tail() -> bool:
     """Check 4: continuity at 90, the zero knot, the hazard join, survival 90 to 100, the drops."""
     ok = True
@@ -533,6 +547,10 @@ def check_tail() -> bool:
         ok &= l90 == sched.grid[GRID_90] and ell(sched, AGE_120 * year, year) == 0
         zero = sched.zero_twelfths * year // MONTHS
         last = zero - year // MONTHS  # the knot before j_0: l > 0 there, 0 at and after j_0
+        closed = min(
+            zero_age_closed_form(sched), Decimal(AGE_120 * MONTHS)
+        )  # the cap wins past 120
+        ok &= abs(closed - sched.zero_twelfths) <= ZERO_KNOT_TOL
         ok &= ell(sched, last, year) > 0 and ell(sched, zero, year) == 0
         ok &= AGE_90 * MONTHS < sched.zero_twelfths <= AGE_120 * MONTHS
         ok &= month_q(sched, zero - MONTH_360, MONTH_360, year) == ONE

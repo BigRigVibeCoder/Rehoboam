@@ -42,7 +42,7 @@ RH_GOLDEN_V_DET_11_CASES=64 cargo nextest run -p rh-golden --release --locked --
   v_det_11_the_bisect_names_an_injected_month_table_and_row
 # SPR-016 (05.1 §6 item 4 v1.10; REV-SPR-016 R5): the exhaustive sweep of the fixed-point exp/ln reference
 # against its 60-digit oracle: every Q16_16-granular input of exp and ln, plus 2^16 pseudo-random Q32_32
-# inputs of each (about 5 minutes of Python).
-PY="${PYTHON:-python/.venv/bin/python}"
-"$PY" -I specs/numerics/exp_ln_v0.py --check --exhaustive
+# inputs of each (about 5 minutes of Python). The reference is standard-library only, so the system
+# python3 serves: the nightly job has no python/.venv (REV-SPR-016 round 2).
+"${PYTHON:-python3}" -I specs/numerics/exp_ln_v0.py --check --exhaustive
 echo "exp/ln v0: the exhaustive sweep is faithful and the golden file is current"
