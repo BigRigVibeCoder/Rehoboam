@@ -2,14 +2,14 @@
 id: SPR-013
 title: "Walking skeleton C: the stream, the sifter, replay and rungs 1-2 (P1.0, increment C)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-002, SPR-011, SPR-012, SPR-007, SPR-009, ADR-0006, ADR-0024, ADR-0030, ADR-0035]
 created: 2026-10-16
 updated: 2026-10-17
-version: 1.0.3
+version: 1.1.0
 ---
 
 > **BLUF:** Increment C of the walking skeleton (WP P1.0): World Stream v0 and the sealed Parquet chronicle (`rh-stream`), `rh-cli tail`, the `life_ends` pattern with its DuckDB twin (`rh-sifter` v0), journal replay end to end, and rungs 1 and 2 (`household`, `hamlet`) on the same binary. Developers: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3.5 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). SPR-011's rulings 1–19 bind this sprint and are not repeated here.
@@ -57,7 +57,7 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 
 #### T-10: `rh-cli tail`
 - **Deliverable:** `rh-cli tail <run-dir> [--from-seq N] [--follow <person>] [--kind K …] [--canonical] [--wait]`. It reads sealed segments in `seq` order and follows new ones as they seal. It prints the display line (date in the world calendar, kind, roles, causes; cast names from the manifest, tool side) or the canonical line, and the status line of `05.10` §2: last sealed tick and `seq`, the cursor, the lag. Channel-C matches appear as annotations when a channel-C segment exists.
-- **Acceptance:** On a `solo` run, every channel-A record prints exactly once, in `seq` order, from any `--from-seq`. A tail started mid-run and one started after the run print the same lines (V-STR-05 for sealed segments). Tail never writes to the run directory (a read-only test). A stopped tail does not slow `rh-cli run` (wall time against headless, reported). `insta` snapshots of the display form.
+- **Acceptance:** On a `solo` run, every channel-A record prints exactly once, in `seq` order, from any `--from-seq`. A tail started mid-run and one started after the run print the same lines (V-STR-05 for sealed segments). Tail never writes to the run directory (a read-only test). A stopped tail does not slow `rh-cli run` (wall time against headless, reported). File snapshots of the display form: committed files, updated only with `RH_UPDATE_SNAPSHOTS=1`, where a missing file fails and a planted control must FAIL (the Architect's ruling at T-10; `insta` was rejected; text amended by `VER-SPR-013`).
 - **Status:** [x] done (`d927077`, `2c925f2`; file snapshots per the Architect's ruling, `0c33aa8`; review round 1 MIN-9, MIN-10)
 
 #### T-11: The trivial sifter pattern and its twin (ruling 14)
@@ -72,7 +72,7 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 
 #### T-13: Rungs 1 and 2 on the same binary (rulings 16–19)
 - **Deliverable:** `worlds/household/` and `worlds/hamlet/`, pointing at A-06's manifests, with input scripts and baselines. The PR-tier and nightly jobs of ruling 16. Nightly V-SCALE jobs. The keyframe-size report.
-- **Acceptance:** One `rh-cli` build runs all three rungs; only the manifest changes. V-SCALE-01 at N ∈ {1, 5, 60}: 0 invariant violations, equal hashes across threads, exact replay. V-SCALE-04: each world reaches zero population, emits one `EXTINCTION`, and its chronicle, tail and replay stay consistent after it. V-WC-04: both manifests validate in Python and in Rust (`manifest_parity.py`). V-DET-01/02 nightly on all three rungs. V-INV-02: a 1,000-year debug soak with invariants on, 0 violations. V-PERF-11: steady-state allocations per tick recorded for each rung as its budget (SPR-009's counting allocator). Keyframe sizes per rung reported. The `household` and `hamlet` golden runs carry `--require-parallel` with a stated floor, as `smoke` does: `solo` is a one-person world, so its thread invariance cannot fail (`VER-SPR-012` GAP-2, GAP-7).
+- **Acceptance:** One `rh-cli` build runs all three rungs; only the manifest changes. V-SCALE-01 at N ∈ {1, 5, 60}: 0 invariant violations, equal hashes across threads, exact replay. V-SCALE-04: each world reaches zero population, emits one `EXTINCTION`, and its chronicle, tail and replay stay consistent after it. V-WC-04: both manifests validate in Python and in Rust (`manifest_parity.py`). V-DET-01/02 nightly on all three rungs. V-INV-02: a 1,000-year debug soak with invariants on, 0 violations. V-PERF-11: steady-state allocations per tick recorded for each rung as its budget (SPR-009's counting allocator). Keyframe sizes per rung reported. The `household` and `hamlet` golden runs carry `--expect-serial`: M2 is their only system, so no scheduler level can hold two jobs and `--require-parallel` could never pass. That first text was the Architect's error, and this ruling corrects it. `--expect-serial` passes only while every level holds one job, and fails, naming the floor to set, once a second system arrives (`VER-SPR-012` GAP-2, GAP-7; text amended by `VER-SPR-013`).
 - **Status:** [x] done (`322ff7f`, `0e3addc`, `b6f3157`; baselines `3f938a0` [C3] [perf-baseline])
 
 ## Out of scope (explicit)
@@ -102,10 +102,10 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 
 ## Completion
 
-- [ ] All tasks meet their acceptance criteria.
-- [ ] `bin/check_all.sh` passes; the report is attached.
-- [ ] Tester verdicts are PASS.
-- [ ] Architect audit `VER-SPR-013` is PASS.
-- [ ] No open DEF- against this sprint.
-- [ ] Merge route matches the CI-detected change class; each golden-corpus change was announced to the director first.
-- [ ] Rung checkpoints (GOV-007 §3.5): when `solo`, then `household`, then `hamlet` first runs green, the director watches its stream through `rh-cli tail` for 15–30 minutes. The Architect records the notes as `EVO-` or `DEF-` items.
+- [x] All tasks meet their acceptance criteria.
+- [x] `bin/check_all.sh` passes; the report is attached.
+- [x] Tester verdicts are PASS.
+- [x] Architect audit `VER-SPR-013` is PASS.
+- [x] No open DEF- against this sprint.
+- [x] Merge route matches the CI-detected change class; each golden-corpus change was announced to the director first.
+- [ ] **Open after the merge, a director activity.** Rung checkpoints (GOV-007 §3.5): when `solo`, then `household`, then `hamlet` first runs green, the director watches its stream through `rh-cli tail` for 15–30 minutes. The Architect records the notes as `EVO-` or `DEF-` items.
