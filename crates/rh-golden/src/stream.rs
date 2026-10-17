@@ -13,7 +13,11 @@
 //! (`KeyframeStore`'s 10-year cadence), its marker in that year's last instant: the marker is
 //! pushed, the year's segment seals, and only then is the keyframe file written, atomically. A
 //! keyframe on disk therefore always has its year's sealed segment before it, which is what a
-//! resume needs. The genesis keyframe (year 0) has no marker: it is the state before tick 0.
+//! resume needs. A run directory holds no genesis keyframe (year 0): a marker at tick 0 would sort
+//! after that instant's records while the state is the one before them, so every keyframe in a
+//! run directory has its marker, and a tick of years 0-9 is rebuilt from genesis, which the history
+//! tuple determines (the Architect's ruling on SPR-013 deviation 6). A full run's `--keyframes`
+//! directory (SPR-008) keeps its year-0 file.
 //!
 //! **The run directory** (`--run-dir D`): `D/run.toml` (what the tools that read the stream need:
 //! the world, the seed, the horizon, the calendar and the history tuple), `D/journal.sqlite`,

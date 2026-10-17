@@ -530,7 +530,13 @@ pub fn run_reporting(args: &RunArgs) -> Result<Outcome, Error> {
         )?),
         _ => None,
     };
-    if let (Some(dir), Some(position), false) = (&keyframes, identity, args.resume.is_some()) {
+    // The genesis keyframe (year 0) is written for a full run's --keyframes directory (SPR-008)
+    // only. A run directory has none: every keyframe there has its KEYFRAME marker in channel A,
+    // and a tick of years 0-9 is rebuilt from genesis, which the history tuple determines (the
+    // Architect's ruling on SPR-013 deviation 6).
+    if let (Some(dir), Some(position), false, None) =
+        (&keyframes, identity, args.resume.is_some(), &run_dir)
+    {
         std::fs::create_dir_all(dir).map_err(|e| error("keyframes")(&e))?;
         let (bytes, _) = write_keyframe(&engine, position).map_err(|e| error("keyframe")(&e))?;
         write_file(&keyframe_path(dir, 0), &bytes)?;
