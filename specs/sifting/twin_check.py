@@ -272,7 +272,11 @@ def check_segment_rows(
     next_seq, want = 0, []
     for year, tl, a_first, a_last, build, reg, mhash, seed in a:
         ms = [m for m in twin if a_first <= int(str(m[1])) <= a_last]
-        lines = [_line(tl, next_seq + i, m) for i, m in enumerate(ms)]
+        try:
+            lines = [_line(tl, next_seq + i, m) for i, m in enumerate(ms)]
+        except CANON.CanonicalError as e:
+            # A planted twin (--control other-status) may not render: the digest cannot match.
+            lines = [f"unrenderable: {e}"]
         ticks = [m[4][3] for m in ms if isinstance(m[4], tuple)]
         n = len(ms)
         want.append(
