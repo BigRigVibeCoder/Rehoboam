@@ -2,17 +2,27 @@
 id: REV-SPR-015
 title: "Independent review of the M2 F1 births spec (PR #50)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-015, SPR-016, EVO-001, REV-EVO-001, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.3.0
+version: 1.0.0
 ---
 
-> **BLUF:** Round 2, on PR #50 at `35226c0` plus the delta to `13fbb70`: **not ready to freeze, but close. No blockers, 4 majors, 7 minors, 7 nits.** The arithmetic reproduces independently. At the default tfr of 4.9, r is +0.114 %/yr; NRR is 1 at about 4.74. The new V-SF-24 identity is exact across 3.9 M simulated conceptions. The 13fbb70 delta (a husband drawn from the bride's settlement) is legal, deterministic and CRN-stable. The rulings are in §2.0. Commanded deaths and marriages follow REV-EVO-001 R9, shape (b): the sender's timer submits at the outcome's instant, and M2 holds no pending commanded outcomes. Round 1 found 1 blocker, 5 majors, 10 minors and 7 nits (§0, §1). Both rounds ran in sessions on a different model from the drafter's.
+> **BLUF: CLOSED.** The M2 F1 births spec (PR #50) is ready to freeze as `specs/systems/next/M2.demography.odd.toml` 0.3.0. It took three review rounds, all in sessions on a different model from the drafter's:
+>
+> | Round | Head | Findings | Architect rulings |
+> |---|---|---|---|
+> | 1 | `421f2e1` | 1 blocker, 5 majors, 10 minors, 7 nits | R1–R11 (§0) |
+> | 2 | `35226c0`, plus the `13fbb70` delta | 0 blockers, 4 majors, 7 minors, 7 nits | R12–R18 (§2.0) |
+> | 3 | `f9aca53` | 0 blockers, 0 majors, 3 minors, 6 nits | R19–R22 (§3.0) |
+>
+> - **The merge head.** The Architect checked the fixes on `d6dbdb9` and `3a87d8f`, then the merge head `5732e3d` (§4).
+> - **Commanded outcomes.** Commanded deaths and marriages follow REV-EVO-001 R9, shape (b): M2 holds no pending commanded outcomes.
+> - **For the director.** Two questions go as D-items: D40, the `tfr` default of 4.9 with the early marriage pattern; and D41, V-SF-24 and V-SF-25 reported at G1a and gating from G1b.
 
 # REV-SPR-015: independent review of the M2 F1 births spec
 
@@ -926,3 +936,36 @@ All of these ran on `f9aca53` in `$R/src`:
 - the full `check_all.sh`;
 - a 365-day calendar;
 - T1, M7 or S3 coupled.
+
+## 4. Closing: the Architect's check of the merge head (2026-10-17, `5732e3d`)
+
+`5732e3d` merges `origin/main` at `cdf7d86` (EVO-001, SPR-018) into `3a87d8f`, the head that carries R19–R22.
+
+### What was run
+All of it ran on a worktree of `5732e3d`:
+
+| Check | Result |
+|---|---|
+| `lint_odd.py` (frozen mode) | PASS: 8 system specs, 14 warnings, the self-check rejects the broken spec |
+| `lint_odd.py --next specs/systems/next --overlay registry_delta.toml` | PASS. The self-check reads "29 planted changes rejected (3 of them by the amendments lock), 18 amendments recorded and locked" |
+| `--write-amendments-lock` | Regenerates `amendments.lock.toml` byte for byte (no diff) |
+| `selftest_m2_f1.py` | All 8 checks PASS |
+| `gen_manifest --check`; `gen_skeletons --check` | PASS |
+| `household.yaml`, `hamlet.yaml` | VALID |
+| pytest, the whole suite in a git worktree | 619 passed |
+| `cargo nextest run -p rh-manifest --test compile` | 10/10 |
+
+The drafter's `bin/check_all.sh` on the committed tree, both parts, gives PASS with 344 checks.
+
+### The merge decisions
+Each is accepted:
+- **The frozen 0.2.1 `[[applies]]` entries** come byte for byte, with the typed payloads and no `tick`.
+- **No `[[amends]]` record for `DEATH`'s `when`.** The frozen 0.2.1 text already names the Day/Vital drain, and the lint refuses a record that amends nothing.
+- **`rh-manifest`'s compile test** now expects three cast founders in `household.yaml`, the third being the unrelated founder Wulf (R8). No engine code changes.
+
+### What stays open
+These are not blockers:
+- **Q1.** The Coale–Trussell n(a) values, the 105 : 100 sex ratio and Barrett's 11 months are cited-pending. A research batch confirms them before SPR-015 is planned, and a corrected value moves every check value.
+- **Folding mortality into `next/`.** `specs/demography/mortality_f1.toml` (SPR-016) moves into the next M2 as a new `[algorithm.*]` table beside the frozen one, by the SPR-016 drafter, after this merge.
+- **D40 and D41** go to the director (`docs/decisions_pending.md`).
+
