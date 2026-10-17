@@ -843,3 +843,91 @@ fn m2_m7_and_t1_register_together_as_specified() {
         "{e}"
     );
 }
+
+/// SPR-020 T-01: a system whose skeleton's role constants are those of another Registry. It is M2
+/// on its skeleton, declaring `roles` instead of the skeleton's `ROLES`.
+struct WithRoles(OnSkeleton, &'static [(&'static str, rh_core::RoleId)]);
+
+impl SystemModel for WithRoles {
+    fn descriptor(&self) -> SystemDescriptor {
+        self.0.descriptor()
+    }
+    fn access(&self) -> AccessSpec {
+        self.0.access()
+    }
+    fn schedule(&self) -> Vec<PulseBinding> {
+        self.0.schedule()
+    }
+    fn rng_purposes(&self) -> Vec<&'static str> {
+        self.0.rng_purposes()
+    }
+    fn roles(&self) -> &'static [(&'static str, rh_core::RoleId)] {
+        self.1
+    }
+    fn params_schema(&self) -> ParamSchema {
+        self.0.params_schema()
+    }
+    fn step(
+        &self,
+        b: PulseBinding,
+        v: &mut SystemView<'_>,
+        c: &mut StepCtx<'_>,
+    ) -> Result<(), SimError> {
+        self.0.step(b, v, c)
+    }
+    fn invariants(&self, w: &WorldTables) -> Vec<InvariantResult> {
+        self.0.invariants(w)
+    }
+    fn declared_aggregates(&self) -> Vec<AggregateSpec> {
+        self.0.declared_aggregates()
+    }
+}
+
+/// SPR-020 T-01: registration compares a skeleton's `ROLE_*` constants with the Registry it runs
+/// under, as it compares `SCHEDULE`: M2's generated `ROLES` pass, and a stale constant (or a role
+/// the Registry lacks) is refused under rule `spec`, by the constant's name.
+#[test]
+fn a_skeleton_role_constant_is_checked_against_the_registry() {
+    static STALE: [(&str, rh_core::RoleId); 2] = [
+        ("actor", rh_core::RoleId(0)),
+        ("target", rh_core::RoleId(2)),
+    ];
+    static UNKNOWN: [(&str, rh_core::RoleId); 1] = [("partner", rh_core::RoleId(2))];
+    let registry = repo().join("specs/manifest/registry_v0.toml");
+    let text = std::fs::read_to_string(&registry).expect("registry");
+    let table = rh_registry::ownership::parse_registry_table("registry_v0.toml", &text)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        table.event_roles,
+        ["actor", "target", "witness", "instrument"]
+    );
+    let specs = real_ownership().spec_table_with(table);
+    assert_eq!(m2::ROLE_TARGET, rh_core::RoleId(1));
+    let generated = WithRoles(m2_system(), m2::ROLES);
+    register(vec![Box::new(generated)], &specs).unwrap_or_else(|e| panic!("{e}"));
+    let Err(e) = register(vec![Box::new(WithRoles(m2_system(), &STALE))], &specs) else {
+        panic!("a stale ROLE_TARGET must be refused");
+    };
+    let shown: Vec<String> = e.violations.iter().map(ToString::to_string).collect();
+    assert_eq!(
+        shown,
+        [
+            "VIOLATION [spec] M2.demography: skeleton constant ROLE_TARGET is 2, but the Registry's [event_roles] gives target the code 1: regenerate the skeleton (bin/gen_skeletons.py)"
+        ]
+    );
+    let Err(e) = register(vec![Box::new(WithRoles(m2_system(), &UNKNOWN))], &specs) else {
+        panic!("a role the Registry lacks must be refused");
+    };
+    assert!(
+        e.violations.iter().any(|v| v
+            .to_string()
+            .contains("ROLE_PARTNER names the role partner")),
+        "{e}"
+    );
+    // With no Registry passed, nothing is compared.
+    register(
+        vec![Box::new(WithRoles(m2_system(), &STALE))],
+        &real_ownership().spec_table(),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+}

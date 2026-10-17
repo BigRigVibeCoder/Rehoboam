@@ -802,6 +802,11 @@ pub trait SystemModel: Send + Sync {
     fn schedule(&self) -> Vec<PulseBinding>;
     /// The RNG purposes it draws under: `<RngPurpose as SpecPurpose>::names()` (T-06).
     fn rng_purposes(&self) -> Vec<&'static str>;
+    /// The role constants of its skeleton (`ROLES`), which registration compares with the
+    /// Registry's codes (SPR-020 T-01). The default declares none.
+    fn roles(&self) -> &'static [(&'static str, rh_events::RoleId)] {
+        &[]
+    }
     /// Its parameters.
     fn params_schema(&self) -> ParamSchema;
     /// One step at one binding of the current instant.

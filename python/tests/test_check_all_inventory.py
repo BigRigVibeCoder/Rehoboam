@@ -236,6 +236,9 @@ REQUIRED_GATES = (
     "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, "
     "GITHUB_EVENT_NAME, RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
+    "Registry envelope plants: lint_patterns refuses every planted [event_roles] and "
+    "[role_domains] Registry by name, the real one passes (registry_envelope_plants; SPR-020 "
+    "T-01)",
     "Replay positive control: a journal with its row deleted must hard-FAIL the replay (SPR-013 "
     "T-12)",
     "Required tools present (core part)",
@@ -408,6 +411,7 @@ REQUIRED_GATES = (
     "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must "
     "FAIL (SPR-007 GAP-2)",
     "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)",
+    "gen_hash_golden positive control: one changed event digest v2 must FAIL (SPR-020 T-02)",
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)",
     "gen_m2_reference positive control: one altered vector must FAIL (SPR-012 T-05)",

@@ -130,6 +130,7 @@ cargo build -p rh-cli && python -I bin/manifest_parity.py specs/manifest/example
 target/debug/rh-cli ownership    # single-writer column ownership from specs/systems (SPR-004)
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
+python -I specs/manifest/registry_envelope_plants.py   # the Registry's [event_roles] and [role_domains] (envelope_v0.md §8): every planted Registry in tests/lint_fixtures/registry_envelope/plants.toml is refused by lint_patterns by name; rh-manifest's tests/registry_envelope.rs refuses all of them (SPR-020 T-01)
 # Performance (SPR-009): instruction counts under valgrind (needs valgrind and iai-callgrind-runner 0.16.1)
 python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8, and the draw-cost bench (SPR-011 A-37), within 10% of the baseline
 python -I bin/perf_gate.py integrity --measured artifacts/perf/instructions.txt   # ruling 3: a changed baseline = the tool's output, [perf-baseline] PR

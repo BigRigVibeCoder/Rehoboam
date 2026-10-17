@@ -15,7 +15,7 @@ use rh_core::system::{
 use rh_core::time::SimTime;
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::{EventDraft, RoleId};
+use rh_events::EventDraft;
 
 use crate::common::{
     PERSONS, check, degrees, fail, from_skeleton, person, person_entity, purposes, r64, row,
@@ -47,7 +47,7 @@ impl Vital {
             if alive[r] == 0 {
                 if ctx.rng(&RngPurpose::Birth, p, 0)? % 3 == 0 {
                     alive[r] = 1;
-                    ctx.emit(EventDraft::new("BIRTH").role(RoleId::TARGET, person_entity(r)))?;
+                    ctx.emit(EventDraft::new("BIRTH").role(ROLE_TARGET, person_entity(r)))?;
                 }
             } else if pending[r] == 0 {
                 if ctx.rng(&RngPurpose::DeathTime, p, 0)? % odds == 0 {
@@ -73,7 +73,7 @@ impl Vital {
                     ctx.cancel(t.id())?;
                 }
                 pending[r] = 0;
-                ctx.emit(EventDraft::new("CURED").role(RoleId::TARGET, person_entity(r)))?;
+                ctx.emit(EventDraft::new("CURED").role(ROLE_TARGET, person_entity(r)))?;
             }
         }
         view.write(ALIVE)?.copy_from_slice(&alive);
@@ -140,7 +140,7 @@ impl SystemModel for Vital {
         view.write(DEATHS)?[0] += 1;
         let death = ctx.emit(
             EventDraft::new("X_DEATH")
-                .role(RoleId::TARGET, person_entity(r))
+                .role(ROLE_TARGET, person_entity(r))
                 .with_payload(vec![r64(r), timer.key.time.minutes()]),
         )?;
         ctx.submit(Command {

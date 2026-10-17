@@ -269,6 +269,14 @@ hash_golden_control() {
   "$PY" -I bin/gen_hash_golden.py --check --golden "$planted"
 }
 
+# Event digest golden control (SPR-020 T-02): the committed event digest file with one digest changed.
+event_digest_golden_control() {
+  local planted=target/rendered-fixtures/stale_event_digest_v2.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^event 0 /s/ [0-9a-f]\{16\}$/ 0000000000000000/' crates/rh-events/tests/golden/event_digest_v2.txt > "$planted" || return 1
+  "$PY" -I bin/gen_hash_golden.py --check --events-golden "$planted"
+}
+
 # Canonical-form golden control (SPR-013 T-09): the committed canonical golden file with one digest changed.
 canonical_golden_control() {
   local planted=target/rendered-fixtures/stale_canonical_v0.txt
@@ -1165,6 +1173,7 @@ run "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)" "pass:PASS: 1 patterns linted." "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml &&
 run "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the Registry by name (REV-SPR-020 R22, R26)" "fail:FAIL: the Registry is refused; no pattern was linted." bad_domains_control &&
+run "Registry envelope plants: lint_patterns refuses every planted [event_roles] and [role_domains] Registry by name, the real one passes (registry_envelope_plants; SPR-020 T-01)" "pass:OK: 12 planted Registries refused by lint_patterns by name" "$PY" -I specs/manifest/registry_envelope_plants.py &&
 run "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)" "fail:ERROR life_ends.e1: UNANCHORED state read" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml &&
 run "lint_patterns positive control: life_ends with a declared role that no clause binds must FAIL (VER-SPR-013-TEST GAP-4; parity with rh-sifter)" "fail:ERROR life_ends: role B is declared but no clause binds it" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unbound_role.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
@@ -1252,6 +1261,7 @@ run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
 run "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden --check; SPR-007 T-01)" "pass:OK:" "$PY" -I bin/gen_hash_golden.py --check &&
 run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:" hash_golden_control &&
+run "gen_hash_golden positive control: one changed event digest v2 must FAIL (SPR-020 T-02)" "fail:STALE: target/rendered-fixtures/stale_event_digest_v2.txt differs" event_digest_golden_control &&
 run "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 --check; SPR-013 T-09)" "pass:OK:" "$PY" -I specs/stream/canonical_v0.py --check &&
 run "Canonical differential: rh-stream's parser and canonical_v0.py give every generated, golden, planted and mutated line, and every planted and header-mutated file, the same verdict (canonical_v0.md §3; REV-SPR-013 MAJ-1)" "pass:differential: rh-stream and the reference agree on" "$PY" -I specs/stream/differential_v0.py --rust-bin "$RH_CLI" &&
 run "Canonical differential positive control: a reference with its header domain check relaxed must FAIL (REV-SPR-013 MAJ-1)" "fail:DIFFERENTIAL DISAGREES" "$PY" -I specs/stream/differential_v0.py --rust-bin "$RH_CLI" --control relax-header &&

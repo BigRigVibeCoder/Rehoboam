@@ -38,5 +38,6 @@ pub mod time;
 pub mod world;
 
 pub use phase::Phase;
+pub use rh_events::RoleId;
 pub use system::Fixed;
 pub use time::Pulse;

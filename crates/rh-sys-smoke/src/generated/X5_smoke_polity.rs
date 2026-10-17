@@ -21,3 +21,6 @@ impl RngPurpose {
 }
 pub struct Params {
 }
+/// The role constants by Registry name: registration compares each code with the Registry's.
+pub const ROLES: &[(&str, rh_core::RoleId)] = &[
+];

@@ -272,6 +272,62 @@ pub fn parse_registry_system_ids(name: &str, text: &str) -> Result<BTreeSet<Stri
     }
 }
 
+/// The Registry's envelope vocabulary (`[event_roles]`, `[motive_edges]`, `[attributes]`) as
+/// registration and `emit` read it (SPR-020 T-01; envelope v0 §8): the compiled table the host
+/// hands to [`Ownership::spec_table_with`]. The typed loader (`rh-manifest`'s `Registry`) refuses
+/// a malformed section first; this parser reads only what plane A needs.
+///
+/// # Errors
+/// The text is not TOML, a section is missing or not a list of strings, or an attribute has no
+/// known `type` (or an enum no `values`).
+pub fn parse_registry_table(
+    name: &str,
+    text: &str,
+) -> Result<rh_core::ownership::RegistryTable, String> {
+    use rh_core::ownership::{AttributeDomain, RegistryTable};
+    let table: toml::Table = toml::from_str(text).map_err(|e| format!("{name}: {e}"))?;
+    let ids = |section: &str| -> Result<Vec<String>, String> {
+        table
+            .get(section)
+            .and_then(|v| v.get("ids"))
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| format!("{name}: no [{section}] ids"))?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| format!("{name}: [{section}] holds a non-string id"))
+            })
+            .collect()
+    };
+    let mut attributes = BTreeMap::new();
+    if let Some(toml::Value::Table(attrs)) = table.get("attributes") {
+        for (attr, def) in attrs {
+            let ty = def.get("type").and_then(toml::Value::as_str);
+            let domain = match ty {
+                Some("q8_8") => AttributeDomain::Q8_8,
+                Some("bool") => AttributeDomain::Bool,
+                Some("int") => AttributeDomain::Int,
+                Some("enum") => AttributeDomain::Enum(
+                    def.get("values")
+                        .and_then(toml::Value::as_array)
+                        .map(Vec::len)
+                        .ok_or_else(|| {
+                            format!("{name}: attributes.{attr}: an enum without values")
+                        })?,
+                ),
+                other => return Err(format!("{name}: attributes.{attr}: type {other:?}")),
+            };
+            attributes.insert(attr.clone(), domain);
+        }
+    }
+    Ok(RegistryTable {
+        event_roles: ids("event_roles")?,
+        motives: ids("motive_edges")?,
+        attributes,
+    })
+}
+
 /// The access a system declares: what it reads and what it writes. A stub of `rh-core`'s
 /// `AccessSpec` (SPR-005 adds lifecycle commands, events and lags).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -403,6 +459,17 @@ impl Ownership {
     /// The table as data for `rh-core`'s registration (`rh_core::register::register`).
     #[must_use]
     pub fn spec_table(&self) -> rh_core::ownership::SpecTable {
+        self.spec_table_with(rh_core::ownership::RegistryTable::default())
+    }
+
+    /// The spec table with the Registry's envelope vocabulary ([`parse_registry_table`]), which
+    /// registration compares the skeletons' role constants with and `emit` checks drafts against
+    /// (SPR-020 T-01, T-03).
+    #[must_use]
+    pub fn spec_table_with(
+        &self,
+        registry: rh_core::ownership::RegistryTable,
+    ) -> rh_core::ownership::SpecTable {
         rh_core::ownership::SpecTable {
             owners: self.owners.clone(),
             specs: self
@@ -410,7 +477,7 @@ impl Ownership {
                 .iter()
                 .map(|(id, s)| (id.clone(), s.entry()))
                 .collect(),
-            registry: rh_core::ownership::RegistryTable::default(),
+            registry,
         }
     }
 

@@ -37,7 +37,7 @@ use rh_registry::ownership::Ownership;
 use rh_registry::{DemographyParams, Founder, FounderRole, Sex, WorldSpec};
 use rh_sys_demography::demography::{DEATH, EXTINCTION};
 use rh_sys_demography::{Demography, DemographyError};
-use spec_files::{load_specs, registry_system_ids};
+use spec_files::{load_specs, registry_system_ids, registry_table};
 
 mod spec_files;
 
@@ -53,7 +53,8 @@ fn specs() -> SpecTable {
     let ids =
         registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
     let specs = load_specs(&repo().join("specs/systems")).expect("specs");
-    Ownership::build(&specs, &ids).spec_table()
+    let table = registry_table(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
+    Ownership::build(&specs, &ids).spec_table_with(table)
 }
 
 fn world(seed: u64, calendar: Calendar, e0: i16, founders: Vec<Founder>) -> WorldSpec {

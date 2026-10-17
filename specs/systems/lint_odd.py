@@ -1205,7 +1205,28 @@ def brief(sid, specs, reg):
     return "\n".join(out)
 
 
-def rust(sid, specs):
+def envelope_constants(s, reg):
+    """The skeleton's envelope constants (SPR-020 T-01; envelope_v0.md §2): one ``ROLE_*`` per [event_roles] id the
+    spec's [[emits]] fill, with its code (the index in the Registry's list, read at generation time), one ``ATTR_*`` per
+    snapshot attribute and one ``MOTIVE_*`` per motive, so that no system crate types a name; and ``ROLES``, the role
+    constants by name, which registration compares with the Registry it runs under (as it compares SCHEDULE)."""
+    order = reg.get("event_roles", {}).get("ids", [])
+    emits = s.get("emits", [])
+    roles = sorted({r for e in emits for r in e.get("roles", []) if r in order}, key=order.index)
+    attrs = sorted({x["attr"] for e in emits for x in e.get("snapshots", [])})
+    motives = sorted({m for e in emits for m in e.get("motives", [])})
+    up = lambda n: re.sub(r"[^A-Za-z0-9]", "_", n).upper()
+    lines = [f"pub const ROLE_{up(r)}: rh_core::RoleId = rh_core::RoleId({order.index(r)});" for r in roles]
+    lines += ["/// The role constants by Registry name: registration compares each code with the Registry's.",
+              "pub const ROLES: &[(&str, rh_core::RoleId)] = &["]
+    lines += [f'    ("{r}", ROLE_{up(r)}),' for r in roles]
+    lines += ["];"]
+    lines += [f'pub const ATTR_{up(a)}: &str = "{a}";' for a in attrs]
+    lines += [f'pub const MOTIVE_{up(m)}: &str = "{m}";' for m in motives]
+    return lines
+
+
+def rust(sid, specs, reg):
     f, s = specs[sid]
     camel = lambda n: "".join(w.capitalize() for w in n.split("_"))
     shown = f.resolve().relative_to(ROOT).as_posix() if f.resolve().is_relative_to(ROOT) else f.name
@@ -1228,6 +1249,7 @@ def rust(sid, specs):
     lines += [f"    pub {x['name']}: {'u64' if x.get('type') == 'count' else 'Fixed'},  "
               "// bounds checked against the Registry at load" for x in s["params"]]
     lines += ["}"]
+    lines += envelope_constants(s, reg)
     return "\n".join(lines)
 
 
@@ -1276,7 +1298,7 @@ def main() -> int:
         if overlay_errs:
             print("\n".join(overlay_errs))
             return 1
-        print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs))
+        print(brief(sid, specs, reg) if gen[0] == "--brief" else rust(sid, specs, reg))
         return 0
     lint_notes = []
     errs, warns = lint(reg, specs, req_ids, test_ids, adr_ids, lint_notes, next_ids=set(frozen))

@@ -53,7 +53,7 @@ use rh_core::register::register;
 use rh_core::system::SystemModel;
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_ids::BranchSalt;
-use rh_manifest::specs::{load_specs, registry_system_ids};
+use rh_manifest::specs::{load_specs, registry_system_ids, registry_table};
 use rh_registry::ownership::Ownership;
 use rh_snapshot::hash::{LAYOUT, PlaneDigest, xxh3};
 use rh_snapshot::journal::{
@@ -353,7 +353,9 @@ fn journal_key(p: &Provenance, seed: u64) -> HistoryKey {
 pub fn spec_table(repo: &Path) -> Result<SpecTable, Error> {
     let ids = registry_system_ids(&repo.join(OVERLAY)).map_err(|e| error("overlay")(&e))?;
     let specs = load_specs(&repo.join(SPECS_DIR)).map_err(|e| error("specs")(&e))?;
-    Ok(Ownership::build(&specs, &ids).spec_table())
+    let table = registry_table(&repo.join("specs/manifest/registry_v0.toml"))
+        .map_err(|e| error("registry")(&e))?;
+    Ok(Ownership::build(&specs, &ids).spec_table_with(table))
 }
 
 /// The last minute of sim-year `year` (1-based), on the smoke calendar.

@@ -33,3 +33,17 @@ pub struct Params {
     pub theft_success: Fixed,  // bounds checked against the Registry at load
     pub loss_on_death: Fixed,  // bounds checked against the Registry at load
 }
+pub const ROLE_ACTOR: rh_core::RoleId = rh_core::RoleId(0);
+pub const ROLE_TARGET: rh_core::RoleId = rh_core::RoleId(1);
+pub const ROLE_INSTRUMENT: rh_core::RoleId = rh_core::RoleId(3);
+/// The role constants by Registry name: registration compares each code with the Registry's.
+pub const ROLES: &[(&str, rh_core::RoleId)] = &[
+    ("actor", ROLE_ACTOR),
+    ("target", ROLE_TARGET),
+    ("instrument", ROLE_INSTRUMENT),
+];
+pub const ATTR_CONTAMINANTS: &str = "contaminants";
+pub const MOTIVE_CORRUPTION_BY: &str = "CORRUPTION_BY";
+pub const MOTIVE_GREED_FOR: &str = "GREED_FOR";
+pub const MOTIVE_LOYALTY_TO: &str = "LOYALTY_TO";
+pub const MOTIVE_VOW_OF: &str = "VOW_OF";

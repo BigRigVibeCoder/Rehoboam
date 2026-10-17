@@ -11,7 +11,7 @@ use rh_core::fixed::Q16_16;
 use rh_core::system::{InvariantResult, PulseBinding, SimError, StepCtx, SystemModel};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::{EventDraft, RoleId};
+use rh_events::EventDraft;
 use rh_ids::EntityRef;
 
 use crate::common::{REGIONS, check, degrees, fixed, from_skeleton, purposes, region};
@@ -56,7 +56,7 @@ impl Weather {
         for r in frost {
             ctx.emit(
                 EventDraft::new("FROST")
-                    .role(RoleId::TARGET, EntityRef::region(region(r)))
+                    .role(ROLE_TARGET, EntityRef::region(region(r)))
                     .with_payload(vec![crate::common::r64(r)]),
             )?;
         }

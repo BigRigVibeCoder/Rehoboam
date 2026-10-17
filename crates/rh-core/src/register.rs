@@ -74,6 +74,59 @@ pub(crate) struct Entry {
     pub(crate) access: AccessSpec,
     pub(crate) bindings: Vec<PulseBinding>,
     pub(crate) purposes: Vec<&'static str>,
+    /// The skeleton's role constants the system declares (SPR-020 T-01).
+    pub(crate) roles: &'static [(&'static str, rh_events::RoleId)],
+}
+
+/// The registration entries of `systems`, sorted by id.
+fn entries_of(systems: Vec<Box<dyn SystemModel>>) -> Vec<Entry> {
+    let mut entries: Vec<Entry> = systems
+        .into_iter()
+        .map(|model| {
+            let d = model.descriptor();
+            Entry {
+                id: d.id,
+                system_id: system_id(d.id),
+                access: model.access(),
+                bindings: model.schedule(),
+                purposes: model.rng_purposes(),
+                roles: model.roles(),
+                model,
+            }
+        })
+        .collect();
+    entries.sort_by(|a, b| a.id.cmp(b.id));
+    entries
+}
+
+/// Rule `spec` for the envelope (SPR-020 T-01): each role constant of a system's skeleton has the
+/// code the Registry it runs under gives its name, as the bindings must equal `[[schedule]]`. With
+/// no Registry passed (an empty table), nothing is compared.
+fn check_roles(entries: &[Entry], specs: &SpecTable, violations: &mut Vec<Violation>) {
+    if specs.registry.event_roles.is_empty() {
+        return;
+    }
+    for e in entries {
+        for (name, code) in e.roles {
+            let constant = format!("ROLE_{}", name.to_ascii_uppercase());
+            match specs.registry.role_code(name) {
+                Some(c) if c == code.0 => {}
+                Some(c) => violations.push(violation(
+                    e.id,
+                    "spec",
+                    format!(
+                        "skeleton constant {constant} is {}, but the Registry's [event_roles] gives {name} the code {c}: regenerate the skeleton (bin/gen_skeletons.py)",
+                        code.0
+                    ),
+                )),
+                None => violations.push(violation(
+                    e.id,
+                    "spec",
+                    format!("skeleton constant {constant} names the role {name}, which the Registry's [event_roles] lacks"),
+                )),
+            }
+        }
+    }
 }
 
 /// A registered, conflict-free set of systems with its derived schedule.
@@ -193,21 +246,7 @@ pub fn register(
     systems: Vec<Box<dyn SystemModel>>,
     specs: &SpecTable,
 ) -> Result<Registered, RegistrationError> {
-    let mut entries: Vec<Entry> = systems
-        .into_iter()
-        .map(|model| {
-            let d = model.descriptor();
-            Entry {
-                id: d.id,
-                system_id: system_id(d.id),
-                access: model.access(),
-                bindings: model.schedule(),
-                purposes: model.rng_purposes(),
-                model,
-            }
-        })
-        .collect();
-    entries.sort_by(|a, b| a.id.cmp(b.id));
+    let entries = entries_of(systems);
     let mut violations = Vec::new();
     let mut reports = Vec::new();
 
@@ -276,6 +315,7 @@ pub fn register(
     // Lifecycle commands and event kinds (SPR-006 ruling 5).
     check_commands(&entries, specs, &mut violations);
     check_events(&entries, specs, &mut violations, &mut reports);
+    check_roles(&entries, specs, &mut violations);
 
     // The schedule (T-05), only when the declarations themselves are sound.
     let inputs: Vec<SchedulerInput<'_>> = entries

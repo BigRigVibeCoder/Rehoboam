@@ -53,3 +53,18 @@ pub struct Params {
     pub thought_decay: Fixed,  // bounds checked against the Registry at load
     pub marriage_min_age: Fixed,  // bounds checked against the Registry at load
 }
+pub const ROLE_ACTOR: rh_core::RoleId = rh_core::RoleId(0);
+pub const ROLE_TARGET: rh_core::RoleId = rh_core::RoleId(1);
+/// The role constants by Registry name: registration compares each code with the Registry's.
+pub const ROLES: &[(&str, rh_core::RoleId)] = &[
+    ("actor", ROLE_ACTOR),
+    ("target", ROLE_TARGET),
+];
+pub const ATTR_STRESS: &str = "stress";
+pub const MOTIVE_AMBITION_FOR: &str = "AMBITION_FOR";
+pub const MOTIVE_FEAR_OF: &str = "FEAR_OF";
+pub const MOTIVE_GRIEF_FOR: &str = "GRIEF_FOR";
+pub const MOTIVE_JEALOUSY_OF: &str = "JEALOUSY_OF";
+pub const MOTIVE_LOYALTY_TO: &str = "LOYALTY_TO";
+pub const MOTIVE_RETALIATION_FOR: &str = "RETALIATION_FOR";
+pub const MOTIVE_VOW_OF: &str = "VOW_OF";

@@ -23,7 +23,7 @@ use rh_core::system::{
 };
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_core::world::{SystemView, WorldTables};
-use rh_events::{EventDraft, RoleId};
+use rh_events::EventDraft;
 use rh_ids::{EntityKind, EntityRef, PersonId};
 
 use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day};
@@ -40,7 +40,7 @@ mod skeleton {
     include!("../../rh-core/tests/generated/M2_demography.rs");
 }
 
-use skeleton::{RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
+use skeleton::{ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
 
 impl SpecPurpose for RngPurpose {
     const ALL: &'static [Self] = &[Self::DeathTime];
@@ -291,7 +291,7 @@ pub fn apply_death(
     view.write(LC_DEATH_CAUSE)?[open] = cause;
     let death = ctx.emit(
         EventDraft::new(DEATH)
-            .role(RoleId::TARGET, EntityRef::person(person))
+            .role(ROLE_TARGET, EntityRef::person(person))
             .with_payload(vec![cause]),
     )?;
     if view.read(PERSON_ALIVE)?.iter().all(|&a| a == 0) {
@@ -320,6 +320,10 @@ impl SystemModel for Demography {
             emits: vec![DEATH, EXTINCTION],
             ..AccessSpec::default()
         }
+    }
+
+    fn roles(&self) -> &'static [(&'static str, rh_events::RoleId)] {
+        ROLES
     }
 
     fn schedule(&self) -> Vec<PulseBinding> {

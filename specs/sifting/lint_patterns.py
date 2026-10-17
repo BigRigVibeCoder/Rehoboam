@@ -78,6 +78,23 @@ DOMAIN_KEYS = {"attribute", "relational", "owner", "column"}
 SOURCE_COLUMN = re.compile(r"^([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|algorithm\.[a-z][a-z0-9_]*|life_course)$")
 
 
+PINNED_EVENT_ROLES = ["actor", "target", "witness", "instrument"]
+ROLE_ID = re.compile(r"^[a-z][a-z0-9_]*$")
+
+
+def _event_roles_shape(reg: dict) -> list[str]:
+    """The Registry [event_roles] list as envelope_v0.md §8 fixes it (SPR-020 T-01; R22 NIT-3, as rh-manifest's
+    Registry::problems refuses it): not empty, each id [a-z][a-z0-9_]*, the first four actor, target, witness,
+    instrument in that order (the role codes schema.sql, channel A and the life_ends twin read as literals)."""
+    ids = reg["event_roles"].get("ids", []) if isinstance(reg["event_roles"], dict) else []
+    errs = [f"Registry [event_roles]: id {i!r} is not [a-z][a-z0-9_]*" for i in ids if not ROLE_ID.match(str(i))]
+    if not ids:
+        errs.append("Registry [event_roles]: the list is empty (envelope_v0.md §8)")
+    elif ids[:4] != PINNED_EVENT_ROLES:
+        errs.append(f"Registry [event_roles]: the first four ids are not actor, target, witness, instrument: {ids[:4]}")
+    return errs
+
+
 def _domain_shape(reg: dict) -> list[str]:
     """The Registry [role_domains] table as envelope_v0.md §8 fixes it (REV-SPR-020 R16, R22 NIT-3): one entry per
     [roles] id but `any`, no other key; a bool [attributes] entry whose arity matches `relational` (one argument, or
@@ -119,6 +136,9 @@ def lint(patterns: dict, reg: dict, warns: list[str] | None = None) -> list[str]
     for section in ("event_roles", "role_domains"):      # SPR-020: both are required (envelope_v0.md §8)
         if section not in reg:
             return [f"Registry: missing [{section}] (SPR-020, envelope_v0.md §8)"]
+    roles_shape = _event_roles_shape(reg)
+    if roles_shape:
+        return roles_shape
     cast_keys = set(reg["event_roles"]["ids"])           # the clause keys that bind a cast member (envelope_v0.md §1)
     clause_keys, unless_keys = CLAUSE_KEYS | cast_keys, UNLESS_KEYS | cast_keys
     anchor_keys = cast_keys - {"witness"}                # the keys whose binding anchors a domain read (R16)

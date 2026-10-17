@@ -23,3 +23,10 @@ pub struct Params {
     pub blocks_per_day: Fixed,  // bounds checked against the Registry at load
     pub encounter_tie_rate: Fixed,  // bounds checked against the Registry at load
 }
+pub const ROLE_ACTOR: rh_core::RoleId = rh_core::RoleId(0);
+pub const ROLE_TARGET: rh_core::RoleId = rh_core::RoleId(1);
+/// The role constants by Registry name: registration compares each code with the Registry's.
+pub const ROLES: &[(&str, rh_core::RoleId)] = &[
+    ("actor", ROLE_ACTOR),
+    ("target", ROLE_TARGET),
+];
