@@ -85,6 +85,9 @@ python -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smo
 cargo nextest run -p rh-sys-smoke --locked --test smoke   # smoke world: registration against its specs, coverage, small-scale V-DET-01/02 (SPR-008 T-01)
 cargo build --release -p rh-cli && target/release/rh-cli run smoke --years 1000 --ladder yearly --require-parallel 5 --out target/golden/smoke.ladder   # the golden run: 1,000 sim-years, plane-A hash ladder, at least 5% parallel levels (SPR-008 T-02, DEF-2)
 python -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed target/golden/smoke.ladder   # baseline = recomputation; changed only in a [C3] PR (T-04)
+target/release/rh-cli run solo --years 200 --ladder yearly --out target/golden/solo.ladder   # solo, rung 0: compile, genesis, M2; the header carries the history tuple and the built and not-built systems (SPR-012 T-08); --strict refuses it
+python -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed target/golden/solo.ladder   # solo's baseline = recomputation; changed only in a [C3] PR
+cargo nextest run -p rh-golden --release --test solo   # solo: resume through 10-year keyframes = continuous, thread invariance, the manifest pin, Ada (SPR-012 T-08)
 cargo nextest run -p rh-golden --release --test golden   # resume = continuous, thread invariance, V-DET-11 bisect (SPR-008 T-02, T-03)
 python -I bin/check_all_selftest.py verdict --or-true   # must FAIL: check_all's own verdict fails a gate hidden by || true (VER-SPR-008-TEST GAP-3)
 bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02), the yearly cut = the baseline (GAP-6), V-DET-11 x 64
@@ -109,7 +112,7 @@ target/release/rh-cli run smoke --years 1000 --threads 4 --vitals --out target/g
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml   # life_ends (SPR-011)
 ```
 
-Not a check: `bin/regen_baseline.sh` regenerates the smoke golden baseline, only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`).
+Not a check: `bin/regen_baseline.sh [smoke|solo]` regenerates the golden baselines (both without an argument), only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`).
 
 ## Conventions
 - Docs are Markdown, and diagrams are Mermaid.

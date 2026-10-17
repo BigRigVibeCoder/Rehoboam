@@ -81,14 +81,20 @@ REQUIRED_GATES = (
     "Golden baseline positive control: [C3] outside the title's trailing tag group must FAIL "
     "(VER-SPR-008 MAJ-1)",
     "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)",
+    "Golden baseline positive control: a hand-edited solo baseline must FAIL (SPR-012 T-08; SPR-008"
+    " ruling 6)",
     "Golden baseline positive control: a pull_request run with no base must FAIL closed "
     "(VER-SPR-008 MAJ-1)",
     "Golden baseline positive control: a push that changes the baseline with no [C3] commit must "
     "FAIL (VER-SPR-008 MAJ-1)",
     "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL "
     "(SPR-008 T-04)",
+    "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must "
+    "FAIL (SPR-012 T-08; SPR-008 ruling 6)",
     "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR "
     "(check_baseline; SPR-008 T-04)",
+    "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
+    "SPR-012 T-08)",
     "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for "
     "byte (VER-SPR-008-TEST GAP-6)",
     "Golden ladder positive control: CRLF line ends must FAIL ladder compare (VER-SPR-008-TEST "
@@ -98,6 +104,7 @@ REQUIRED_GATES = (
     "Golden ladder positive control: an injected run never compares equal to a clean one "
     "(VER-SPR-008 MIN-2)",
     "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)",
+    "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)",
     "Golden parallel-level positive control: a floor above the run's share of parallel levels "
     "must FAIL (VER-SPR-008 DEF-2)",
     "Golden resume control: past the journal's last input with --extend passes, and the header "
@@ -107,10 +114,15 @@ REQUIRED_GATES = (
     "--extend (VER-SPR-008 DEF-1)",
     "Golden resume positive control: a --years shorter than the journal's horizon must FAIL "
     "(VER-SPR-008 DEF-1)",
+    "Golden run positive control: --strict refuses solo, whose manifest names systems this build "
+    "lacks (SPR-011 ruling 3; SPR-012 T-08)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% "
     "(SPR-008 T-02, DEF-2)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, "
     "with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)",
+    "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and "
+    "not-built systems in its header (SPR-012 T-08; rulings 3, 16)",
+    "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)",
     "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)",
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
@@ -232,6 +244,7 @@ REQUIRED_GATES = (
     "V-PLN-01 compile-fail control: plane A naming a plane-C type must FAIL",
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
     "V-PLN-01 compile-fail fixture has a clean dependency graph",
+    "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)",
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
@@ -439,6 +452,8 @@ REQUIRED_GATES = (
     "crash replay (SPR-006)",
     "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
     "perturbations (SPR-008 T-02, T-03)",
+    "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread "
+    "invariance, the manifest pin, Ada at genesis (SPR-012 T-08)",
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",

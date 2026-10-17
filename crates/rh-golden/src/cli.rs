@@ -76,6 +76,9 @@ pub fn to_argv(args: &RunArgs, repo: bool) -> Vec<String> {
     if args.leak_thread {
         v.push("--leak-thread".to_owned());
     }
+    if args.strict {
+        v.push("--strict".to_owned());
+    }
     v
 }
 
@@ -89,10 +92,11 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
     let (mut years, mut out, mut journal) = (None, None, None);
     let mut it = words.iter();
     while let Some(flag) = it.next() {
-        if flag == "--extend" || flag == "--leak-thread" || flag == "--vitals" {
+        if ["--extend", "--leak-thread", "--vitals", "--strict"].contains(&flag.as_str()) {
             args.extend |= flag == "--extend";
             args.leak_thread |= flag == "--leak-thread";
             args.vitals |= flag == "--vitals";
+            args.strict |= flag == "--strict";
             continue;
         }
         let value = it
@@ -110,8 +114,12 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
                 );
             }
             "--repo" => args.repo = PathBuf::from(value),
+            "--world" => args.world.clone_from(value),
             "--require-parallel" => args.require_parallel = Some(number("--require-parallel")?),
-            "--seed" => args.seed = number("--seed")?,
+            "--seed" => {
+                args.seed = number("--seed")?;
+                args.seed_set = true;
+            }
             "--years" => {
                 years = Some(
                     i64::try_from(number("--years")?).map_err(|_| bad("--years is too large"))?,
@@ -163,7 +171,17 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
 /// `run smoke`: runs and reports. Returns the exit code.
 #[must_use]
 pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
-    let result = parse_run(words, repo).and_then(|args| run_reporting(&args).map(|o| (args, o)));
+    run_world(crate::world::SMOKE, words, repo)
+}
+
+/// `run <world>`: runs world `world` (`smoke`, or a manifest world under `worlds/`; SPR-012 T-08)
+/// and reports. Returns the exit code.
+#[must_use]
+pub fn run_world(world: &str, words: &[String], repo: &Path) -> u8 {
+    let result = parse_run(words, repo).and_then(|mut args| {
+        world.clone_into(&mut args.world);
+        run_reporting(&args).map(|o| (args, o))
+    });
     match result {
         Ok((args, outcome)) => {
             let Outcome {
@@ -189,7 +207,7 @@ pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
             match (&ladder.failed, parallel) {
                 (Some(_), _) | (None, Ok(())) => {}
                 (None, Err(message)) => {
-                    println!("smoke: {message}");
+                    println!("{world}: {message}");
                     return DIFFERENT;
                 }
             }
@@ -198,8 +216,11 @@ pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
             }
             match &ladder.failed {
                 None => {
+                    if let Some(systems) = &ladder.header.systems {
+                        println!("{world}: {systems}");
+                    }
                     println!(
-                        "smoke: {} {} rungs to year {} at {} thread(s){last}; ladder {}",
+                        "{world}: {} {} rungs to year {} at {} thread(s){last}; ladder {}",
                         ladder.rungs.len(),
                         args.rung.name(),
                         args.years,
@@ -209,7 +230,7 @@ pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
                     OK
                 }
                 Some((tick, message)) => {
-                    println!("smoke: FAILED at tick {tick}: {message}{last}");
+                    println!("{world}: FAILED at tick {tick}: {message}{last}");
                     DIFFERENT
                 }
             }

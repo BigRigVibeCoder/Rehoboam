@@ -22,4 +22,6 @@ pub mod dump;
 pub mod ladder;
 pub mod leak;
 pub mod run;
+pub mod sha256;
 pub mod vitals;
+pub mod world;

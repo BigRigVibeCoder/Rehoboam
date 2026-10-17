@@ -355,6 +355,26 @@ baseline_hand_edited_control() {
   "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed no
 }
 
+# SPR-012 T-08: solo's hand-edited baseline control, as smoke's: one hex digit of rung 1's hash typed over.
+solo_baseline_hand_edited_control() {
+  local edited="$TARGET_DIR/rendered-fixtures/solo_baseline_hand_edited.ladder"
+  mkdir -p "$TARGET_DIR/rendered-fixtures" || return 1
+  awk '/^rung 1 /{n=split($0, w, " "); h=w[5]; c=substr(h,16,1); w[5]=substr(h,1,15) (c=="0" ? "1" : "0"); $0=w[1]; for(i=2;i<=n;i++) $0=$0 " " w[i]} {print}' \
+    worlds/solo/baselines/solo_yearly_200y.ladder > "$edited" || return 1
+  "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/solo_yearly_t1.ladder" --changed no
+}
+# V-SCALE-03 (SPR-012 T-08): solo's 1,000-year wall time, measured by the host around the release run
+# (the engine reads no clock). Reported, not gated: solo is one person.
+solo_scale_run() {
+  local start end out
+  start=$(date +%s%N)
+  out="$("$RH_CLI_RELEASE" run solo --years 1000 --threads 1 --ladder yearly --out "$GOLDEN/solo_yearly_1000y.ladder" \
+    --journal "$GOLDEN/solo_yearly_1000y.journal.sqlite")" || { echo "$out"; return 1; }
+  end=$(date +%s%N)
+  echo "$out"
+  echo "V-SCALE-03: solo, 1,000 sim-years at 1 thread in $(( (end - start) / 1000000 )) ms of wall time"
+}
+
 # The push form of the C3 rule (VER-SPR-008 MAJ-1): a two-commit repository whose second commit, with
 # subject $1, adds the baseline; the gate runs over before..after there.
 baseline_push_control() {
@@ -644,7 +664,8 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-worldgen::genesis
-  rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden"
+  rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
+  rh-golden::solo"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -995,6 +1016,15 @@ run "Golden resume positive control: a --years shorter than the journal's horizo
 run "Golden resume positive control: a --years past the journal's last input must FAIL without --extend (VER-SPR-008 DEF-1)" "fail:past the journal's last input" def1_resume 30 &&
 run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
 run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
+run "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and not-built systems in its header (SPR-012 T-08; rulings 3, 16)" "pass:solo: 200 yearly rungs to year 200 at 1 thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads 1 --ladder yearly --out "$GOLDEN/solo_yearly_t1.ladder" &&
+run "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)" "pass:solo: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-012 T-08)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden baseline positive control: a hand-edited solo baseline must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE MISMATCH" solo_baseline_hand_edited_control &&
+run "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" --changed yes --title "SPR-012: walking skeleton B" &&
+run "Golden run positive control: --strict refuses solo, whose manifest names systems this build lacks (SPR-011 ruling 3; SPR-012 T-08)" "fail:--strict refuses solo: the manifest names systems this build lacks (M1.regions, M3.agriculture, M4.economy, S5.daily_life)" "$RH_CLI_RELEASE" run solo --strict --years 2 --out "$TARGET_DIR/rendered-fixtures/solo_strict.ladder" &&
+run "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)" "pass:V-SCALE-03: solo, 1,000 sim-years at 1 thread in" solo_scale_run &&
+run "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread invariance, the manifest pin, Ada at genesis (SPR-012 T-08)" "pass:T-08: solo resumed from" cargo nextest run -p rh-golden --release --locked --test solo --no-capture &&
 run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture
 status=$?
 chain_done=1

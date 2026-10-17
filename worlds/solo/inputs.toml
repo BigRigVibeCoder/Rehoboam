@@ -1,0 +1,9 @@
+# solo's committed input script (SPR-011 ruling 15): one scope-only material input, so the
+# epoch-keyed draws (BCK-002 A-29) and the re-sampling of a pending death (ADR-0025 item 3) are
+# inside the golden run. Each input is journaled before the first instant, in this order.
+#   tick:    minutes from the epoch (360-day calendar): year 10, day 100, 06:07, between pulse
+#            boundaries, so the input's instant is its own (10 x 518400 + 99 x 1440 + 6 x 60 + 7).
+#   founder: the founder's index in genesis order (0 = Ada); its PersonId is founder(seed, 0).
+[[input]]
+tick = 5326927
+founder = 0

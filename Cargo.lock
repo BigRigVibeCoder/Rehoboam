@@ -866,9 +866,14 @@ version = "0.0.0"
 dependencies = [
  "rh-core",
  "rh-ids",
+ "rh-manifest",
  "rh-registry",
  "rh-snapshot",
+ "rh-sys-demography",
  "rh-sys-smoke",
+ "rh-worldgen",
+ "serde",
+ "toml",
 ]
 
 [[package]]
