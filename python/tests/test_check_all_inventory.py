@@ -125,8 +125,8 @@ REQUIRED_GATES = (
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
     "M2 F1 positive control: a stale golden file must FAIL (SPR-016)",
     "M2 F1 positive control: an unnormalised infant table must FAIL continuity at age 1 (SPR-016 "
-    "F7)",
-    "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 F3)",
+    "M7)",
+    "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 M3)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
     "Manifest: aethelgard",
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",

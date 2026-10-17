@@ -1,6 +1,6 @@
 """Exact reference and self-test of M2 F1 mortality (SPR-016; ``mortality_f1.toml`` beside it).
 
-The algorithm is ``[algorithm.mortality_f1]``, steps F0 to F13: Brass at any (alpha, beta)
+The algorithm is ``[algorithm.mortality_f1]``, steps M0 to M13: Brass at any (alpha, beta)
 through the fixed-point ``exp`` and ``ln`` of `05.1` §6 item 4 (v1.10), the infant sub-schedule
 below age 1, the old-age tail above 90 and the density modifier. This file implements those steps
 with Python integers only, so it reproduces the engine's integers bit for bit; ``decimal`` is only
@@ -11,9 +11,9 @@ alone under ``python -I``. It checks:
   1. **rung 0 is the beta = 1 special case:** at beta = 1 the odds grid is the exact rational
      one, so K equals the rung-0 K of ``M2.demography.odd.toml``'s check values for every e0
      there, the 71 grid survivors equal rung 0's S3 bit for bit, and l(x) equals rung 0's at every
-     minute of age from 1 to 90 years; F1 differs from rung 0 only below age 1 (F7) and above 90
-     (F8), and the modifier is exactly 1 at or under the capacity (F11);
-  2. the widths the spec states hold at the extremes (k w_i, the F4 numerator, knot products, A_j);
+     minute of age from 1 to 90 years; F1 differs from rung 0 only below age 1 (M7) and above 90
+     (M8), and the modifier is exactly 1 at or under the capacity (M11);
+  2. the widths the spec states hold at the extremes (k w_i, the M4 numerator, knot products, A_j);
   3. at the Registry's corners (e0 in {20, 85}, beta in {0.6, 1.65}) and the design points: the
      bisection brackets e0, T(k) is non-increasing, the spec's check values (K, a, b) hold, the
      knots are strictly increasing in age and
@@ -26,7 +26,7 @@ alone under ``python -I``. It checks:
      the first-month share reported;
   6. the density modifier: exactly 2^16 for N <= K, the slope, the ceiling of 4, q' = q when m = 1,
      q' a Prob32;
-  7. the draws (F12 = rung 0's S9-S11): day starts inside the month, re-samples after the input;
+  7. the draws (M12 = rung 0's S9-S11): day starts inside the month, re-samples after the input;
   8. the realized e0 of the F1 schedule (trapezoid over its knots) is within 0.1 years of the input
      for e0 <= 60 and within 1 year up to 85 (the tail adds life past Brass's l(100) = 0 where
      l(90) is large), and V-SF-02b's l(65) / l(15) is reported at beta in {0.64, 1, 1.64};
@@ -107,7 +107,7 @@ getcontext().prec = 60
 
 
 def rhe(n: int, d: int) -> int:
-    """Return n / d rounded to the nearest integer, ties to even (F0 = S0); d > 0, n signed."""
+    """Return n / d rounded to the nearest integer, ties to even (M0 = S0); d > 0, n signed."""
     q, r = divmod(n, d)
     if 2 * r > d or (2 * r == d and q % 2 == 1):
         q += 1
@@ -187,7 +187,7 @@ LAMBDA = [0, *(ln_ratio(SCALE - s, s) for s in S[1:-1]), 0]  # F1: ln O_i at the
 
 
 def infant_shares() -> list[int]:
-    """Return F7's cumulative shares c_j (per 2^16) from the data file."""
+    """Return M7's cumulative shares c_j (per 2^16) from the data file."""
     t = tomllib.loads(INFANT.read_text(encoding="utf-8"))["infant_sub_schedule"]
     shares: list[int] = list(t["cumulative_share_q16"])
     return shares
@@ -198,7 +198,7 @@ def q16(literal: str) -> int:
     return round(Fraction(Decimal(literal)) * Q16)
 
 
-# ------------------------------------------------------------------------ F3-F6: the Brass schedule
+# ------------------------------------------------------------------------ M3-M6: the Brass schedule
 @dataclass
 class Options:
     """The controls that must fail, and the knobs of the reference."""
@@ -208,14 +208,14 @@ class Options:
 
 
 def odds_grid(beta_bits: int, opt: Options) -> list[int | None]:
-    """Return F3's w_i (Q32_32 bits) for i = 1..69, or None when the rational form applies."""
+    """Return M3's w_i (Q32_32 bits) for i = 1..69, or None when the rational form applies."""
     if beta_bits == Q16 and not opt.power_at_beta_one:
         return [None] * GRID_POINTS
     return [0, *(exp_q32(rhe(beta_bits * lam, Q16)) for lam in LAMBDA[1:-1]), 0]
 
 
 def survivor(i: int, k: int, w: list[int | None]) -> int:
-    """Return F4's L_i(k): 2^32 / (1 + K W_i) rounded once, in the rational or the power form."""
+    """Return M4's L_i(k): 2^32 / (1 + K W_i) rounded once, in the rational or the power form."""
     if i == 0:
         return ONE
     if i == GRID_POINTS - 1:
@@ -232,12 +232,12 @@ def grid(k: int, w: list[int | None]) -> list[int]:
 
 
 def trapezoid(lx: Sequence[int]) -> int:
-    """Return F5's T (S4): e0 in units of 2^-34 years over the standard grid."""
+    """Return M5's T (S4): e0 in units of 2^-34 years over the standard grid."""
     return sum((H[i + 1] - H[i]) * (lx[i] + lx[i + 1]) for i in range(GRID_POINTS - 1))
 
 
 def solve_k(e_bits: int, w: list[int | None]) -> int:
-    """Return F5's K (S5): 40 bisection steps on the trapezoid e0 of the standard grid."""
+    """Return M5's K (S5): 40 bisection steps on the trapezoid e0 of the standard grid."""
     target = e_bits << 18
     lo, hi = 0, K_HI
     for _ in range(STEPS):
@@ -249,16 +249,16 @@ def solve_k(e_bits: int, w: list[int | None]) -> int:
     return lo
 
 
-# ----------------------------------------------------------------------------- F7-F9: the F1 knots
+# ----------------------------------------------------------------------------- M7-F9: the F1 knots
 def infant_knots(l1: int, shares: Sequence[int]) -> list[int]:
-    """Return F7's 13 survivors at ages j / 12 years: 2^32 - rhe(q0 c_j / 2^16), q0 = 2^32 - l1."""
+    """Return M7's 13 survivors at ages j / 12 years: 2^32 - rhe(q0 c_j / 2^16), q0 = 2^32 - l1."""
     q0 = ONE - l1
     return [ONE - rhe(q0 * c, Q16) for c in shares]
 
 
 @dataclass(frozen=True)
 class Tail:
-    """F8's derived logistic (Beard's Perks logistic, R12 §9 p. 59): mu at 90 and its log-slope."""
+    """M8's derived logistic (Beard's Perks logistic, R12 §9 p. 59): mu at 90 and its log-slope."""
 
     m1: int  # Brass's per-year hazard over [87.5, 90], Q32_32
     m2: int  # over [90, 92.5]
@@ -268,23 +268,23 @@ class Tail:
 
 
 def tail_parameters(lx: Sequence[int]) -> Tail:
-    """Return F8's (a, b) from the Brass survivors at 87.5, 90 and 92.5."""
+    """Return M8's (a, b) from the Brass survivors at 87.5, 90 and 92.5."""
     l87, l90, l92 = lx[GRID_87], lx[GRID_90], lx[GRID_92]
-    assert l87 > l90 > l92 > 0, "F8 precondition: strictly decreasing survivors around 90"
+    assert l87 > l90 > l92 > 0, "M8 precondition: strictly decreasing survivors around 90"
     m1 = rhe(2 * ln_ratio(l87, l90), HALF_YEARS_PER_INTERVAL)
     m2 = rhe(2 * ln_ratio(l90, l92), HALF_YEARS_PER_INTERVAL)
-    assert m2 > m1 > 0, "F8 precondition: the hazard rises through 90"
+    assert m2 > m1 > 0, "M8 precondition: the hazard rises through 90"
     mu = rhe(m1 + m2, 2)
-    assert mu < ONE, "F8 precondition: the hazard at 90 is below one per year"
+    assert mu < ONE, "M8 precondition: the hazard at 90 is below one per year"
     a = rhe(mu * ONE, ONE - mu)
     g = rhe(2 * ln_ratio(m2, m1), HALF_YEARS_PER_INTERVAL)
     b = rhe(g * ONE, ONE - mu)
-    assert b > 0 and b * (AGE_120 - AGE_90) <= EXP_MAX, "F8 precondition: 30 b <= 16"
+    assert b > 0 and b * (AGE_120 - AGE_90) <= EXP_MAX, "M8 precondition: 30 b <= 16"
     return Tail(m1, m2, mu, a, b)
 
 
 def tail_knots(l90: int, tail: Tail) -> list[int]:
-    """Return F8's 361 survivors at ages 90 + j / 12 years, j = 0..360 (the last is 0)."""
+    """Return M8's 361 survivors at ages 90 + j / 12 years, j = 0..360 (the last is 0)."""
     knots = [l90]
     for j in range(1, TAIL_MONTHS):
         e_j = exp_q32(rhe(tail.b * j, MONTHS))
@@ -314,7 +314,7 @@ class Schedule:
 
 
 def compile_schedule(e0: str, beta: str, opt: Options | None = None) -> Schedule:
-    """Return the F1 schedule of the manifest literals ``e0`` and ``beta`` (F2-F9)."""
+    """Return the F1 schedule of the manifest literals ``e0`` and ``beta`` (M2-F9)."""
     opt = opt or Options()
     e_bits, beta_bits = q16(e0), q16(beta)
     w = odds_grid(beta_bits, opt)
@@ -333,9 +333,9 @@ def compile_schedule(e0: str, beta: str, opt: Options | None = None) -> Schedule
     return Schedule(e_bits, beta_bits, k, lx, tail, twelfths, survivors)
 
 
-# ----------------------------------------------------------------------------- F9-F13: the month
+# ----------------------------------------------------------------------------- M9-M13: the month
 def ell(sched: Schedule, x: int, year: int) -> int:
-    """Return F9's l(x) for an age of ``x`` minutes: linear between knots (S7), 0 from 120."""
+    """Return M9's l(x) for an age of ``x`` minutes: linear between knots (S7), 0 from 120."""
     assert x >= 0, "a negative age is an error"
     ages = sched.ages(year)
     if x >= ages[-1]:
@@ -346,20 +346,26 @@ def ell(sched: Schedule, x: int, year: int) -> int:
 
 
 def month_q(sched: Schedule, x: int, month: int, year: int) -> int:
-    """Return F10's Prob32 bits of dying within ``month`` minutes from age ``x`` (S8)."""
+    """Return M10's Prob32 bits of dying within ``month`` minutes from age ``x`` (S8)."""
     now = ell(sched, x, year)
     return ONE if now == 0 else rhe(ONE * (now - ell(sched, x + month, year)), now)
 
 
+def newborn_q(sched: Schedule, x: int, month: int, year: int) -> int:
+    """Return M10's first draw of a newborn (b > the previous pulse): 2^32 - l(x + month)."""
+    assert 0 <= x < month, "a newborn is less than a month old at its first pulse"
+    return ONE - ell(sched, x + month, year)
+
+
 def density_multiplier(living: int, capacity: int, slope_bits: int) -> int:
-    """Return F11's m (Q16_16 bits): 1 at or under the capacity, 1 + slope (N / K - 1) above."""
+    """Return M11's m (Q16_16 bits): 1 at or under the capacity, 1 + slope (N / K - 1) above."""
     if living <= capacity:
         return Q16
     return min(MODIFIER_CAP, Q16 + rhe(slope_bits * (living - capacity), capacity))
 
 
 def modified_q(q: int, m: int) -> int:
-    """Return F11's q' = min(2^32, rhe(q m / 2^16)); exactly q when m = 2^16."""
+    """Return M11's q' = min(2^32, rhe(q m / 2^16)); exactly q when m = 2^16."""
     return min(ONE, rhe(q * m, Q16))
 
 
@@ -430,7 +436,7 @@ def check_widths(opt: Options) -> bool:
     worst_a = max(t.a for t in tails)
     a_j = ONE + rhe(worst_a * exp_q32(rhe(worst_b * (TAIL_MONTHS - 1), MONTHS)), ONE)
     print(
-        f"   bit lengths: k w_i {worst_kw} (<= 94), F4 numerator 97 (2^96), knot product "
+        f"   bit lengths: k w_i {worst_kw} (<= 94), M4 numerator 97 (2^96), knot product "
         f"{worst_knot} (<= 53), A_j {a_j.bit_length()} (< 63); w_max = {w_max / ONE:.4e}"
     )
     narrow = a_j.bit_length() < LN_OPERAND_BITS
@@ -531,7 +537,7 @@ def check_density() -> bool:
 
 
 def check_draws() -> bool:
-    """Check 7: F12 = S9-S11, unchanged from rung 0 (its check 6, repeated)."""
+    """Check 7: M12 = S9-S11, unchanged from rung 0 (its check 6, repeated)."""
     ok = True
     for d in (0, 1, (1 << 63), (1 << 64) - 1):
         tau = death_day(0, MONTH_360, d)
@@ -542,7 +548,19 @@ def check_draws() -> bool:
             ok &= r is not None and r % DAY == 0 and t_in < r < MONTH_360
         ok &= resample_day(MONTH_360 - DAY, MONTH_360, d) is None
     ok &= hits((1 << 64) - 1, ONE) and not hits(0, 0) and hits(0, 1) and not hits(1 << 32, 1)
-    print("   death days 1..29 inside the month; re-samples after the input; the Prob32 mapping")
+    sched = compile_schedule("30", "1")
+    ten_days = 10 * DAY
+    q_new = newborn_q(sched, ten_days, MONTH_360, YEAR_360)
+    q_old = month_q(sched, ten_days, MONTH_360, YEAR_360)
+    forty = ONE - ell(sched, ten_days + MONTH_360, YEAR_360)
+    ok &= q_new == forty > q_old and newborn_q(sched, 0, MONTH_360, YEAR_360) == month_q(
+        sched, 0, MONTH_360, YEAR_360
+    )
+    print(
+        f"   death days 1..29 inside the month; re-samples after the input; the Prob32 mapping; "
+        f"a newborn 10 days old at the pulse: q = {q_new / ONE:.4f} (40 days from birth) against "
+        f"{q_old / ONE:.4f} without M10's rule"
+    )
     return ok
 
 
@@ -569,7 +587,7 @@ def render(opt: Options) -> str:
         "# Golden vectors of M2 F1 mortality (specs/demography/mortality_f1.toml). GENERATED by",
         "# specs/demography/selftest_m2_f1_mortality.py; never edit. Q32_32 and Prob32 as bits.",
         "# schedule <e0> <beta> <K> <a> <b>; knot <twelfths> <l>; q <year> <age_minutes> <q>;",
-        "# modifier <living> <capacity> <slope_q16> <m>; qmod <q> <m> <q'>",
+        "# modifier <living> <capacity> <slope_q16> <m>; qmod <q> <m> <q'>; qnew <year> <age> <q>",
     ]
     for e0, beta in DESIGN_POINTS + CORNERS:
         sched = compile_schedule(e0, beta, opt)
@@ -595,6 +613,10 @@ def render(opt: Options) -> str:
         lines.append(f"modifier {living} {cap} {slope} {density_multiplier(living, cap, slope)}")
     for q, m in ((131070, Q16), (131070, Q16 + Q16 // 2), (ONE - 1, MODIFIER_CAP), (ONE, Q16)):
         lines.append(f"qmod {q} {m} {modified_q(q, m)}")
+    sched = compile_schedule("30", "1")
+    for year, month in ((YEAR_360, MONTH_360), (YEAR_365, 31 * DAY)):
+        for x in (0, DAY, 10 * DAY, month - DAY):
+            lines.append(f"qnew {year} {x} {newborn_q(sched, x, month, year)}")
     return "\n".join(lines) + "\n"
 
 
