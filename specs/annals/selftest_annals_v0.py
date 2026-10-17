@@ -166,6 +166,7 @@ CONTROLS = (
     "network-import",
 )
 PLANTED_LINE = "Thus the chronicle ended, and the land was quiet."
+HEX_PREFIX_MIN = 4  # the shortest id prefix a bare label may show (REV-SPR-029 R17)
 IMPORT_LINE = re.compile(r"^(?:import|from)\s+([A-Za-z_][\w.]*)")
 MIN_ROWS_FOR_MUTANTS = 2
 
@@ -378,6 +379,7 @@ class World:
     extract_digest: str = "-"
     state_hash: str = "-"
     kf_life: dict[int, LifeRow] = field(default_factory=dict)
+    founders: dict[int, int] = field(default_factory=dict)  # person -> founder index k
     members: dict[int, int] = field(default_factory=dict)  # person -> house
     tenures: list[Tenure] = field(default_factory=list)
 
@@ -479,6 +481,8 @@ def _keyframe(w: World, path: Path) -> None:
             None if exit_tick is None else int(exit_tick),
             f"kf:life/{pid}",
         )
+        if "founder" in row:
+            w.founders[pid] = int(row["founder"])
     for row in kf.get("house_member", []):
         w.members[int(row["person"])] = int(row["house"])
     for row in kf.get("tenure", []):
@@ -545,6 +549,19 @@ class Kinship:
         self.w = world
         self.c = chron
         self.rows: dict[int, LifeRow] = {**world.kf_life, **chron.life}
+        self.pool: set[int] = set()  # the persons of the annal being rendered (§4 rule 4)
+
+    def label_of(self, pid: int, prov: Provenance) -> str:
+        """``Founder #k`` from the extract, else ``p-`` and the shortest unique hex prefix (R17)."""
+        if pid in self.w.founders:
+            prov.sources.add(f"kf:life/{pid}")
+            return f"Founder #{self.w.founders[pid]}"
+        own = f"{pid:016x}"
+        others = [f"{p:016x}" for p in self.pool if p != pid]
+        n = HEX_PREFIX_MIN
+        while any(o.startswith(own[:n]) for o in others) and n < len(own):
+            n += 1
+        return f"p-{own[:n]}"
 
     def row(self, pid: int) -> LifeRow | None:
         """The person's life-course row: channel A's ``LIFE_ENTRY`` first, else the keyframe's."""
@@ -595,11 +612,7 @@ class Kinship:
                     prov.persons.add(parent)
                     child = "daughter" if row.sex else "son"
                     return f"the {ordinal(rank)} {child} of {self.w.persons[parent]}"
-        house = self.house_of(pid, prov)
-        if house in self.w.houses:
-            prov.sources.add(f"house/{house}")
-            return f"person #{pid} of {self.w.houses[house or 0]}"
-        return f"person #{pid}"
+        return self.label_of(pid, prov)
 
 
 # --- rendering -----------------------------------------------------------------------------------
@@ -945,8 +958,23 @@ def group_of(r: Renderer, group: str) -> tuple[str, set[int] | None, list[Senten
     )
 
 
+def annal_persons(r: Renderer, members: set[int] | None) -> set[int]:
+    """Every person an annal may designate: members, its events' and their causes' cast, fathers."""
+    pool = set(members or ())
+    for ev in r.group_events(members):
+        pool.update(ev.persons())
+        for c, _, _, _, _, told in ev.causes:
+            if told and c in r.c.events:
+                pool.update(r.c.events[c].persons())
+        row = r._father_row(ev) if ev.kind == "BIRTH" else None
+        if row is not None:
+            pool.add(row.father)
+    return pool
+
+
 def render(r: Renderer, group: str) -> Annal:
     """Render one group: a house (``house:<id>``), a line (``line:<pid>``) or all (``year``)."""
+    r.kin.pool = annal_persons(r, group_of(r, group)[1])
     title, members, prologue = group_of(r, group)
     annal = Annal(title, group)
     scope = set(r.t.scope)
@@ -1467,10 +1495,7 @@ class Setup:
 
 def _check_injective(r: Renderer, group: str) -> list[str]:
     """No two persons of one annal share a designation (R6)."""
-    _, members, _ = group_of(r, group)
-    persons: set[int] = set(members or ())
-    for ev in r.group_events(members):
-        persons.update(ev.persons())
+    persons = annal_persons(r, group_of(r, group)[1])
     seen: dict[str, int] = {}
     out: list[str] = []
     for pid in sorted(persons):

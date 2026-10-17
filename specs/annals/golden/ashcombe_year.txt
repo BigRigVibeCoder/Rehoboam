@@ -3,7 +3,7 @@
 
 ## The second year (Year of Ash)
 On day 5 of month 2, the first son of Edric Ashcombe and the first daughter of Hugh Thorne were married.
-On day 20 of month 11, the first daughter of Hugh Thorne bore the first son of Edric Ashcombe a son, person #12313099716791886200 of House Ashcombe, the first child of that mother.
+On day 20 of month 11, the first daughter of Hugh Thorne bore the first son of Edric Ashcombe a son, p-aae0, the first child of that mother.
 
 ## The fourth year (Year of Ash)
 On day 9 of month 4, Maud bore Edric Ashcombe a daughter, the first daughter of Edric Ashcombe, the third child of that mother.
@@ -17,10 +17,10 @@ On day 7 of month 5, Hugh Thorne declared a feud against the first son of Edric 
 
 ## The tenth year (Year of Ash)
 On day 13 of month 1, the first son of Edric Ashcombe was murdered by Hugh Thorne.
-On day 13 of month 1, after the death of the first son of Edric Ashcombe, person #12313099716791886200 of House Ashcombe succeeded the first son of Edric Ashcombe.
-On day 13 of month 1, the first daughter of Hugh Thorne became regent for person #12313099716791886200 of House Ashcombe, who was under age.
+On day 13 of month 1, after the death of the first son of Edric Ashcombe, p-aae0 succeeded the first son of Edric Ashcombe.
+On day 13 of month 1, the first daughter of Hugh Thorne became regent for p-aae0, who was under age.
 On day 13 of month 1, with the death of the first son of Edric Ashcombe, the feud between the first son of Edric Ashcombe and Hugh Thorne ended.
-On day 1 of month 9, the first daughter of Hugh Thorne bore the first son of Edric Ashcombe a son, person #16429412308034766705 of House Ashcombe, the second child of that mother.
+On day 1 of month 9, the first daughter of Hugh Thorne bore the first son of Edric Ashcombe a son, p-e400, the second child of that mother.
 
 ## The thirteenth year (Year of Ash)
 On day 9 of month 7, the second son of Edric Ashcombe declared a feud against Hugh Thorne, moved by the death of the first son of Edric Ashcombe.
@@ -33,30 +33,30 @@ On day 30 of month 11, Hugh Thorne died of natural causes.
 On day 30 of month 11, after the death of Hugh Thorne, the first son of Hugh Thorne succeeded Hugh Thorne.
 
 ## The eighteenth year (Year of Ash)
-On day 20 of month 11, the regency of the first daughter of Hugh Thorne for person #12313099716791886200 of House Ashcombe ended.
+On day 20 of month 11, the regency of the first daughter of Hugh Thorne for p-aae0 ended.
 
 ## The nineteenth year (Year of Ash)
 On day 8 of month 8, Alys died by accident.
 
 ## The twenty-third year (Year of Ash)
-On day 1 of month 3, person #12313099716791886200 of House Ashcombe was deposed.
-On day 1 of month 3, after the deposition of person #12313099716791886200 of House Ashcombe, person #16429412308034766705 of House Ashcombe succeeded person #12313099716791886200 of House Ashcombe.
-On day 1 of month 3, person #12313099716791886200 of House Ashcombe gained a claim against person #16429412308034766705 of House Ashcombe.
-On day 1 of month 3, the first daughter of Hugh Thorne became regent for person #16429412308034766705 of House Ashcombe, who was under age.
+On day 1 of month 3, p-aae0 was deposed.
+On day 1 of month 3, after the deposition of p-aae0, p-e400 succeeded p-aae0.
+On day 1 of month 3, p-aae0 gained a claim against p-e400.
+On day 1 of month 3, the first daughter of Hugh Thorne became regent for p-e400, who was under age.
 
 ## The twenty-fourth year (Year of Ash)
-On day 9 of month 1, person #12313099716791886200 of House Ashcombe pressed a claim against person #16429412308034766705 of House Ashcombe.
+On day 9 of month 1, p-aae0 pressed a claim against p-e400.
 
 ## The twenty-sixth year (Year of Ash)
-On day 1 of month 9, the regency of the first daughter of Hugh Thorne for person #16429412308034766705 of House Ashcombe ended.
+On day 1 of month 9, the regency of the first daughter of Hugh Thorne for p-e400 ended.
 
 ## The twenty-seventh year (Year of Ash)
-On day 5 of month 5, person #16429412308034766705 of House Ashcombe was deposed, person #12313099716791886200 of House Ashcombe standing as the leading claimant.
-On day 5 of month 5, after the deposition of person #16429412308034766705 of House Ashcombe, person #12313099716791886200 of House Ashcombe succeeded person #16429412308034766705 of House Ashcombe.
-On day 5 of month 5, person #16429412308034766705 of House Ashcombe gained a claim against person #12313099716791886200 of House Ashcombe.
+On day 5 of month 5, p-e400 was deposed, p-aae0 standing as the leading claimant.
+On day 5 of month 5, after the deposition of p-e400, p-aae0 succeeded p-e400.
+On day 5 of month 5, p-e400 gained a claim against p-aae0.
 
 ## The twenty-eighth year (Year of Ash)
-On day 3 of month 3, person #16429412308034766705 of House Ashcombe renounced a claim.
+On day 3 of month 3, p-e400 renounced a claim.
 
 ## The thirty-first year (Year of Ash)
 On day 6 of month 6, the first daughter of Hugh Thorne died of natural causes.
@@ -64,11 +64,11 @@ On day 6 of month 6, the first daughter of Hugh Thorne died of natural causes.
 ## The thirty-fourth year (Year of Ash)
 On day 6 of month 6, the first son of Hugh Thorne died of natural causes.
 On day 6 of month 6, after the death of the first son of Hugh Thorne, the succession to a sovereign title found no clear heir, and an interregnum began.
-On day 6 of month 6, person #12313099716791886200 of House Ashcombe gained a claim to a vacant title.
+On day 6 of month 6, p-aae0 gained a claim to a vacant title.
 On day 6 of month 6, with the death of the first son of Hugh Thorne, the house of the first son of Hugh Thorne was extinguished.
 
 ## The thirty-fifth year (Year of Ash)
-On day 1 of month 1, after the interregnum, person #12313099716791886200 of House Ashcombe succeeded the first son of Hugh Thorne.
+On day 1 of month 1, after the interregnum, p-aae0 succeeded the first son of Hugh Thorne.
 
 ## The thirty-sixth year (Year of Ash)
-On day 2 of month 2, person #12313099716791886200 of House Ashcombe granted a seat to person #16429412308034766705 of House Ashcombe.
+On day 2 of month 2, p-aae0 granted a seat to p-e400.
