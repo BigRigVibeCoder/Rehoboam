@@ -2110,18 +2110,20 @@ def effect_world(g: Genesis, title: Title, s: Succession) -> dict[str, Any]:
 
 
 def effect_differential(ref_dir: Path, seeds: int) -> list[str]:
-    """Run every genealogical-law succession of both sweep configurations through effect_ref.py."""
+    """Run every genealogical-law succession of both sweep configurations through effect_ref.py.
+
+    Then (REV-SPR-030 R27) the control on the same genesis and the same successions: with
+    effect_ref.py's ``succession_line`` reversed, the differential must report differences (the
+    lines of two or more candidates), else the control itself failed.
+    """
     ref = _load("effect_ref", ref_dir / "effect_ref.py")
     golden = ref.load_golden(ref_dir / "effect_language_golden_v0.toml")
-    failures: list[str] = []
-    compared = 0
+    cases: list[tuple[str, int, int, int, list[int], Any, dict[str, Any]]] = []
     for m, law in itertools.product(SWEEP_CONFIGS, GENEALOGICAL_LAWS):
-        programs = golden.reg.programs["succession_laws"][law]
         for seed in range(1, seeds + 1):
             g = build(with_law(m, law, seed), synthesise=False)
             for title in g.titles:
                 for s in title.successions:
-                    golden.worlds["backfill"] = effect_world(g, title, s)
                     case = {
                         "kind": "succession",
                         "system": "M7.dynasty",
@@ -2129,17 +2131,40 @@ def effect_differential(ref_dir: Path, seeds: int) -> list[str]:
                         "world": "backfill",
                         "bind": {"holder": f"person:{s.holder}", "title": f"title:{title.id}"},
                     }
-                    line = ref.succession_line(ref.prepare(golden, case), programs)
-                    compared += 1
-                    if line != s.line:
-                        failures.append(
-                            f"{m.id} law {law} seed {seed} title {title.k} at {s.tick}: the "
-                            f"reference's line {s.line} differs from effect_ref.py's {line}"
-                        )
+                    cases.append(
+                        (law, seed, title.k, s.tick, s.line, effect_world(g, title, s), case)
+                    )
+    patched: Any = ref  # the module's attribute is swapped for the control, then restored
+    original = ref.succession_line
+
+    def compare(label: str) -> list[str]:
+        out = []
+        for law, seed, k, tick, expected, world, case in cases:
+            golden.worlds["backfill"] = world
+            programs = golden.reg.programs["succession_laws"][law]
+            line = ref.succession_line(ref.prepare(golden, case), programs)
+            if line != expected:
+                out.append(
+                    f"{label} law {law} seed {seed} title {k} at {tick}: the reference's line "
+                    f"{expected} differs from effect_ref.py's {line}"
+                )
+        return out
+
+    failures = compare("")
     print(
-        f"EFFECT DIFFERENTIAL: {compared} successions of {len(GENEALOGICAL_LAWS)} laws over "
+        f"EFFECT DIFFERENTIAL: {len(cases)} successions of {len(GENEALOGICAL_LAWS)} laws over "
         f"{len(SWEEP_CONFIGS)} configurations compared"
     )
+    patched.succession_line = lambda run, programs: list(reversed(original(run, programs)))
+    reversed_failures = compare("reversed")
+    patched.succession_line = original
+    if not reversed_failures:
+        failures.append("REVERSED LINE CONTROL FAILED: a reversed succession_line differs nowhere")
+    else:
+        print(
+            f"effect differential reversed-line control: {len(reversed_failures)} of "
+            f"{len(cases)} successions differ (as required)"
+        )
     return failures
 
 

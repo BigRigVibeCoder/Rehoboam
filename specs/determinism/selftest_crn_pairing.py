@@ -251,13 +251,27 @@ class Rollout:
             self.order[i] = self.order[-1]
             self.order.pop()
 
-    def run(self, keys: Keys, m: Mortality, until: int, inputs: dict[int, list[int]]) -> None:
-        """Pulses, timers and inputs in tick order from self.t up to (excluding) ``until``."""
+    def run(
+        self,
+        keys: Keys,
+        m: Mortality,
+        until: int,
+        inputs: dict[int, list[int]],
+        snapshots: dict[int, Rollout] | None = None,
+    ) -> None:
+        """Pulses, timers and inputs in tick order from self.t up to (excluding) ``until``.
+
+        With ``snapshots``, the state at the start of every Month pulse is copied into it (R27:
+        run A is snapshotted, and the state at the input is the snapshot before it run forward).
+        """
         pulses = {k * MONTH for k in range(HORIZON_YEARS * MONTHS)}
         instants = sorted({x for x in pulses | set(inputs) if self.t <= x < until})
         instants = sorted(set(instants) | {tau for tau in self.pending.values() if tau < until})
         while instants:
             t = instants.pop(0)
+            if snapshots is not None and t in pulses:
+                self.t = t
+                snapshots[t] = deepcopy(self)
             for p in inputs.get(t, []):
                 self.input_on(keys, m, t, p)
             for p in sorted(q for q, tau in self.pending.items() if tau == t):
@@ -460,7 +474,10 @@ def digest(deaths: dict[int, int]) -> str:
 
 
 def choose_target(g: Genesis, a: Rollout) -> tuple[Any, list[str]]:
-    """R14: the first sovereign (primogeniture, then tanistry) whose run-A death leaves the window.
+    """R14, R25: the first sovereign whose run-A death leaves the window and the pairs floor.
+
+    Primogeniture first, then tanistry; the pairs floor is read from run A's unaffected deaths
+    after the input, a lower bound of the pair's informative pairs.
 
     Returns the title, or None when no sovereign qualifies (the seed is then SKIPPED and the
     protocol moves to the next seed), and the log of every candidate considered. A run-A death
@@ -472,12 +489,23 @@ def choose_target(g: Genesis, a: Rollout) -> tuple[Any, list[str]]:
     chosen = None
     for title in sorted((t for t in g.titles if t.tier == 0), key=lambda t: t.k):
         tau = a.deaths.get(title.holder)
-        window = None if tau is None else T_END - (tau - DAY + INPUT_OFFSET)
-        ok = window is not None and window >= MIN_WINDOW
-        years = "none" if tau is None else f"{tau / YEAR:.2f}"
+        if tau is None:
+            log.append(
+                f"candidate title {title.k} {title.law} founder {g.persons[title.holder].k} "
+                f"runA_death_year none rejected"
+            )
+            continue
+        t_in = tau - DAY + INPUT_OFFSET
+        window = T_END - t_in
+        s_all = set().union(*affected(g, title.holder, title).values())
+        informative = sum(
+            1 for p in a.alive_at(t_in) - s_all if t_in < a.deaths.get(p, T_END + 1) < T_END
+        )
+        ok = window >= MIN_WINDOW and informative >= MIN_INFORMATIVE
         log.append(
             f"candidate title {title.k} {title.law} founder {g.persons[title.holder].k} "
-            f"runA_death_year {years} {'chosen' if ok and chosen is None else 'rejected'}"
+            f"runA_death_year {tau / YEAR:.2f} runA_informative {informative} "
+            f"{'chosen' if ok and chosen is None else 'rejected'}"
         )
         if ok and chosen is None:
             chosen = title
@@ -491,18 +519,20 @@ def run_pair(seed: int, m: Mortality) -> Pair | None:
     keys = Keys(seed)
     a = Rollout(births)
     a.start()
-    a.run(keys, m, T_END, {})
+    snapshots: dict[int, Rollout] = {}
+    a.run(keys, m, T_END, {}, snapshots=snapshots)
     title, log = choose_target(g, a)
     SKIPPED[seed] = log
     if title is None:
+        SKIPPED[seed].append(f"deaths_sha256 A {digest(a.deaths)}")  # R25: run A is pinned
         return None
     target = title.holder
     tau = a.deaths[target]
     # The input: the day before the target's run-A death, 06:07 (inside that death's month, after
     # its Month pulse since death days start at the pulse's day + 1).
     t_in = tau - DAY + INPUT_OFFSET
-    at_input = Rollout(births)  # run A again up to the input: the controls' common starting point
-    at_input.start()
+    # The state at the input: run A's snapshot at that month's pulse, run forward (R27).
+    at_input = deepcopy(snapshots[t_in // MONTH * MONTH])
     at_input.run(keys, m, t_in, {})
     before = {p: t for p, t in a.deaths.items() if t < t_in}
     assert at_input.deaths == before, "run A to the input equals run A's deaths before it"
@@ -583,12 +613,14 @@ def run_controls(seed: int, pair: Pair, m: Mortality) -> tuple[list[str], int]:
         a, b = mutant(name, pair, keys, m)
         v = evaluate(a, b, pair.s_all, pair.target, pair.t_in)
         f = v.failures(f"PROTOCOL FAILED: seed {seed} [{name}]")
+        needs_valid = reason == "pairs differ"  # R25: a differing pair is only evidence if VALID
         if not f:
             lines.append(f"CONTROL PASSED: seed {seed} [{name}]: the protocol did not fail")
-        elif not any(reason in x for x in f):
+        elif not any(reason in x for x in f) or (needs_valid and not v.valid):
             lines += f
             lines.append(
                 f"CONTROL FAILED FOR ANOTHER REASON: seed {seed} [{name}]: wanted {reason!r}"
+                + ("" if v.valid else " on a VALID pair")
             )
         else:
             failed += 1

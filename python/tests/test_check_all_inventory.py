@@ -155,8 +155,8 @@ REQUIRED_GATES = (
     "exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, "
     "R10)",
     "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the "
-    "effect_ref differential and the altered-golden and stale-spec controls in the same run "
-    "(SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10)",
+    "effect_ref differential, its reversed-line control, and the altered-golden and stale-spec "
+    "controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
@@ -583,8 +583,6 @@ REQUIRED_GATES = (
     "FAIL (REV-SPR-029 F13)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
-    "population synthesis positive control: effect_ref.py with its succession order reversed must "
-    "FAIL the effect differential (REV-SPR-019 R3)",
     "population synthesis positive control: floors in place of the age-sex allocation must FAIL "
     "INV-PS-01 (SPR-019 P3)",
     "population synthesis positive control: floors in place of the couple-table rounding must "

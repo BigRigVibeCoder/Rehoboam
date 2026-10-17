@@ -410,8 +410,9 @@ worldgen_lite_template_control() {
   "$PY" -I specs/worldgen/selftest_worldgen_lite.py --templates "$planted"
 }
 
-# Population synthesis gate (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10): the exact reference with the effect_ref
-# differential, and the two controls that need no second build on the same run: a copy of the golden outputs with
+# Population synthesis gate (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27): the exact reference with the effect_ref
+# differential (whose reversed-line control runs on the same genesis inside the reference), and the two controls that
+# need no second build on the same run: a copy of the golden outputs with
 # hamlet's leftover count changed must be reported STALE, and a copy of the spec with one check value off by one must
 # be reported SPEC MISMATCH (selftest_population_synthesis.py --altered-golden, --stale-spec).
 population_synthesis_gate() {
@@ -423,15 +424,6 @@ population_synthesis_gate() {
   sed 's/hamlet_42_married = 1,/hamlet_42_married = 2,/' specs/worldgen/population_synthesis.toml > "$spec" || return 1
   grep -q "hamlet_42_married = 2," "$spec" || { echo "control not planted: hamlet_42_married not found"; return 1; }
   "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref specs/registry --altered-golden "$golden" --stale-spec "$spec"
-}
-
-population_synthesis_effect_control() {
-  local planted=target/rendered-fixtures/effect_ref_reversed
-  rm -rf "$planted" && mkdir -p "$planted" || return 1
-  cp specs/registry/effect_ref.py specs/registry/effect_language_golden_v0.toml "$planted"/ || return 1
-  sed -i 's/return \[ident for _, ident in sorted(keyed)\]/return [ident for _, ident in sorted(keyed, reverse=True)]/' "$planted/effect_ref.py" || return 1
-  grep -q 'sorted(keyed, reverse=True)' "$planted/effect_ref.py" || { echo "control not planted: no 'sorted(keyed)' line in effect_ref.py"; return 1; }
-  "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref "$planted"
 }
 
 # Fixture worlds gate (SPR-030; REV-SPR-030 R6, R10): the PR tier's cases (twin_vales at seeds 1 to 3, kingdom_10k at
@@ -1188,8 +1180,7 @@ run "M2 F1 reference positive control: a stale check value in the next M2 spec m
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
-run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential and the altered-golden and stale-spec controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10)" "pass:EFFECT DIFFERENTIAL: 1389 successions of 5 laws over 2 configurations compared" population_synthesis_gate &&
-run "population synthesis positive control: effect_ref.py with its succession order reversed must FAIL the effect differential (REV-SPR-019 R3)" "fail:differs from effect_ref.py's" population_synthesis_effect_control &&
+run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential, its reversed-line control, and the altered-golden and stale-spec controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)" "pass:EFFECT DIFFERENTIAL: 1389 successions of 5 laws over 2 configurations compared" population_synthesis_gate &&
 run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
 run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
 run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
