@@ -58,6 +58,7 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
 python -I specs/chronicle/selftest.py
+python -I specs/chronicle/selftest_envelope.py   # the event envelope v0: anchored snapshots, typed edges, cause_told, the plane-B index, the byte budget (SPR-020; specs/chronicle/envelope_v0.md); --control snapshot-drift, motive-on-triggered and cause-later must FAIL
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
 python -I bin/gen_decimal_vectors.py --check   # authored numbers: rh-manifest exact decimals -> fixed point match Python decimal (SPR-011 T-04)
 python -I specs/numerics/exp_ln_v0.py --check   # fixed-point exp and ln v0 (Q32_32): constants, convergence, faithful rounding, golden vectors (05.1 §6 item 4 v1.10; SPR-016); --exhaustive nightly
@@ -73,7 +74,7 @@ python -I specs/stream/selftest_channel_c.py      # World Stream v0 channel-C se
 python -I specs/stream/canonical_v0.py --check    # the canonical text form v0 and segment.canonical_digest: round trip and golden lines (SPR-013)
 python -I specs/economy/selftest_economy.py
 python -I specs/stream/selftest_virtual_telemetry.py
-python -I specs/systems/lint_odd.py   # system specs; a foreign [[reads]] entry says whether its owner is `required`, with a typed `neutral` on rate and mode reads of absent owners; [[applies]] payloads are typed and name their drain binding (EVO-001); planted both ways in tests/lint_fixtures/odd_neutral/ and odd_applies/
+python -I specs/systems/lint_odd.py   # system specs; [[emits]] roles, motives and snapshots against the Registry and the spec's columns, cause_column on a state column (SPR-020; planted in tests/lint_fixtures/odd_envelope/); a foreign [[reads]] entry says whether its owner is `required`, with a typed `neutral` on rate and mode reads of absent owners; [[applies]] payloads are typed and name their drain binding (EVO-001); planted both ways in tests/lint_fixtures/odd_neutral/ and odd_applies/
 python -I bin/gen_skeletons.py --check     # committed rh-core skeletons = lint_odd.py --rust (SPR-005)
 python -I specs/systems/lint_odd.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml   # the smoke world's dummy specs, outside the real Registry (SPR-008)
 python -I bin/gen_skeletons.py --specs worlds/smoke/systems --overlay worlds/smoke/registry_overlay.toml --out crates/rh-sys-smoke/src/generated --check

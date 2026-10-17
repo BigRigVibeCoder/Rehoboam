@@ -139,6 +139,21 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `odd_neutral/draft_missing/` | as above | the `missing` case on a draft spec | must succeed and warn `needs a neutral value` |
 | (rendered) `target/rendered-fixtures/worldgen_lite_altered_golden.txt` | `specs/worldgen/selftest_worldgen_lite.py --golden` (SPR-018) | the committed worldgen-lite golden outputs with the first `land 4096` count made 4095 | `STALE:` (the reference's own-failure path prints another text, REV-SPR-018 NIT-1) |
 | (rendered) `target/rendered-fixtures/worldgen_lite_templates_altered.toml` | `specs/worldgen/selftest_worldgen_lite.py --templates` (SPR-018) | `templates_v0.toml` with `flat`'s base raised by one, so the rasters of the flat cases change | `STALE:` |
+| `odd_envelope/ok/` | `specs/systems/lint_odd.py --extra-specs … --overlay tests/lint_fixtures/odd_emits/overlay.toml` (the event envelope; SPR-020, `specs/chronicle/envelope_v0.md` §2, §4, §7) | **negative control**: the overlay fixture with owned columns, `roles`, `motives`, three `snapshots` (an actor's `fear`, a relational `trust`, the event's `weather` from an enum column with the attribute's values) and a `cause_column` on a ruin state | must succeed: `PASS: 9 system specs linted` |
+| `odd_envelope/missing_roles/` | as above | the `[[emits]]` entry with no `roles` | must succeed and warn `declares no roles: the [event_roles] it fills` |
+| `odd_envelope/bad_role/` | as above | `roles = ["actor", "target", "victim"]` | `role 'victim' is not in the Registry [event_roles]` |
+| `odd_envelope/dup_role/` | as above | `roles = ["actor", "actor", "witness"]` | `role(s) ['actor'] listed twice` |
+| `odd_envelope/bad_motive/` | as above | `motives = ["SPITE_AT"]` | `motive 'SPITE_AT' is not in the Registry [motive_edges]` |
+| `odd_envelope/bad_attr/` | as above | a snapshot of `dread`, which `[attributes]` lacks | `snapshot attr 'dread' is not in the Registry [attributes]` |
+| `odd_envelope/unfilled_role/` | as above | `roles = ["target"]` while a snapshot is `of = "actor"` | `snapshot fear: of = 'actor' is not one of the kind's roles ['target']` |
+| `odd_envelope/unknown_source/` | as above | a snapshot `from = "field.dread"`, a column the spec neither owns nor reads | `from = field.dread is neither owned by this spec nor one of its [[reads]]` |
+| `odd_envelope/mistyped_source/` | as above | the q8_8 attribute `fear` filled from the bool column `field.flooded` | `snapshot fear is a q8_8 attribute; from = field.flooded is a bool column` |
+| `odd_envelope/enum_values/` | as above | the enum attribute `weather` filled from an enum column whose codes are `["clear", "rain"]` | `the enum column field.sky codes ['clear', 'rain'] differ from the attribute's values` |
+| `odd_envelope/no_source/` | as above | a snapshot without `from` | `snapshot weather needs from =` |
+| `odd_envelope/cause_column/` | as above (SAGA-15) | `field.ruin`'s `cause_column` names a `u32` column | `cause_column field.ruin_cause must be a u64 (EventId, 0 = none) of the same entity field` |
+| (planted by flag) `specs/chronicle/selftest_envelope.py --control snapshot-drift` | the envelope self-test (V-DATA-08; SPR-020) | every stress snapshot replaced by the column's end-of-run value | `1. anchored snapshots: FAIL` |
+| (planted by flag) `… --control motive-on-triggered` | the envelope self-test (V-DATA-09) | a motive on every `triggered` edge | `2. typed edges: FAIL` |
+| (planted by flag) `… --control cause-later` | the envelope self-test (V-SAGA-21) | a ruin state whose cause is the run's last event | `4. provenance of change: FAIL` |
 | `sifting/life_ends_unanchored.toml` | `specs/sifting/lint_patterns.py` (V-SIFT-05; SPR-011 ruling 14) | `life_ends` with a `where` read that is not anchored to a bound event | `ERROR life_ends.e1: UNANCHORED state read` |
 
 Since SPR-003 GAP-9, every plane-A crate in the `arch/` and `compile_fail/plane_a_names_plane_*` fixtures declares `[lints] workspace = true` (each fixture root has a `[workspace.lints]` table), so each control fails only for the rule it plants.
