@@ -129,6 +129,22 @@ mod s7 {
     purposes!(GrudgeForm, BreakMode);
 }
 
+// SPR-018: M1 F0 binds no pulse and draws nothing of its own (genesis only, through rh-worldgen), and S3 F0 draws
+// nothing in a step: both skeletons have an empty `RngPurpose`, which `purposes!()` with no variant covers.
+#[allow(dead_code, reason = "generated items a stub does not use")]
+mod m1 {
+    use rh_core::{Fixed, Phase, Pulse};
+    include!("../../rh-core/tests/generated/M1_regions.rs");
+    purposes!();
+}
+
+#[allow(dead_code, reason = "generated items a stub does not use")]
+mod s3 {
+    use rh_core::{Fixed, Phase, Pulse};
+    include!("../../rh-core/tests/generated/S3_migration.rs");
+    purposes!();
+}
+
 /// A system built on a skeleton: everything the spec fixes comes from the generated module.
 struct OnSkeleton {
     id: &'static str,
