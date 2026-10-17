@@ -66,6 +66,7 @@ mod support;
 /// V-INV-04; REV-EVO-001 R1–R19.
 mod lifecycle_queues {
     pub mod delivery;
+    pub mod insert;
     pub mod owners;
     pub mod slots;
     pub mod stale;
