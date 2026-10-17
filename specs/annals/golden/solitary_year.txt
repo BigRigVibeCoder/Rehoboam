@@ -1,5 +1,5 @@
 # The annals of the years
-# From the chronicle of solitary; templates 0.2.0
+# From the chronicle of solitary; templates 0.3.0
 
 ## The fourth year (Test era)
 On day 10 of month 2, Ada died of natural causes.
