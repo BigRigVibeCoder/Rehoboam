@@ -46,6 +46,7 @@ fixed_point = false
 [[emits]]
 kind = "INHERITANCE"
 when = "a Settle command is applied"
+roles = ["target"]            # the heir
 [[commands]]
 target = "X7.smoke_market"
 command = "Audit"

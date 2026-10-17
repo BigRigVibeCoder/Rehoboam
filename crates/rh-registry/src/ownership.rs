@@ -42,7 +42,7 @@ pub struct OwnedColumn {
 /// The planes a column may live in (ADR-0024).
 pub const PLANES: [&str; 3] = ["A", "B", "C"];
 /// The column types an ODD-R spec may declare (`specs/systems/lint_odd.py` `TYPES`).
-pub const COLUMN_TYPES: [&str; 11] = [
+pub const COLUMN_TYPES: [&str; 12] = [
     "i64",
     "u64",
     "i32",
@@ -54,6 +54,7 @@ pub const COLUMN_TYPES: [&str; 11] = [
     "q8_8",
     "q16_16",
     "f32_field",
+    "event_ref",
 ];
 
 /// One declared read, from `[[reads]]`.

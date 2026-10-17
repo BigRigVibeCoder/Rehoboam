@@ -46,12 +46,15 @@ fixed_point = false
 [[emits]]
 kind = "X_DEATH"
 when = "a death timer fires"
+roles = ["target"]            # the person
 [[emits]]
 kind = "CURED"
 when = "a pending death is cancelled"
+roles = ["target"]
 [[emits]]
 kind = "BIRTH"
 when = "a dead row is revived"
+roles = ["target"]
 [[commands]]
 target = "X4.smoke_estate"
 command = "Settle"
