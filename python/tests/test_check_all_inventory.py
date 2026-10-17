@@ -95,6 +95,8 @@ REQUIRED_GATES = (
     "(check_baseline; SPR-008 T-04)",
     "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
     "SPR-012 T-08)",
+    "Golden draws: M2's death instants on fixture worlds are the independent model's, every S11 "
+    "re-sample case covered (gen_m2_draws_reference --check; SPR-012, Tester's interim report)",
     "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for "
     "byte (VER-SPR-008-TEST GAP-6)",
     "Golden ladder positive control: CRLF line ends must FAIL ladder compare (VER-SPR-008-TEST "
@@ -149,6 +151,13 @@ REQUIRED_GATES = (
     "(SPR-016 MR7)",
     "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)",
     "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)",
+    "M2 draws differential golden: the engine's death instants equal the independent model's, "
+    "re-samples included (SPR-012, Tester's interim report)",
+    "M2 draws positive control: one altered death line in the golden must FAIL (SPR-012)",
+    "M2 draws positive control: the re-sample's Bernoulli taken from k = 1 must FAIL (SPR-012, the "
+    "Tester's first mutant)",
+    "M2 draws positive control: the re-sample's day taken from k = 0 must FAIL (SPR-012, the "
+    "Tester's second mutant)",
     "Manifest JSON Schema from the Rust types = manifest_v0.schema.json (SPR-004 T-04)",
     "Manifest: aethelgard",
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
@@ -308,6 +317,7 @@ REQUIRED_GATES = (
     "(SPR-007 GAP-2)",
     "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)",
     "gen_hash_golden positive control: one changed hash must FAIL",
+    "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)",
     "gen_m2_reference positive control: one altered vector must FAIL (SPR-012 T-05)",
     "gen_rng_golden positive control: stale golden file must FAIL",
     "gen_sampler_reference positive control: stale reference must FAIL",

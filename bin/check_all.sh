@@ -705,7 +705,7 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
-  rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-worldgen::genesis
+  rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
   rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
   rh-golden::solo"
 workspace_tests() {
@@ -954,6 +954,10 @@ run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-1
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
+run "M2 draws differential golden: the engine's death instants equal the independent model's, re-samples included (SPR-012, Tester's interim report)" "pass:M2 draws: 188 death instants in 6 worlds equal the independent model's" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
+run "M2 draws positive control: one altered death line in the golden must FAIL (SPR-012)" "fail:death 0 differs: engine" env RH_M2_DRAWS_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_draws_v1.txt" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
+run "M2 draws positive control: the re-sample's Bernoulli taken from k = 1 must FAIL (SPR-012, the Tester's first mutant)" "fail:differs: engine" cargo nextest run -p rh-sys-demography --locked --features mutant-resample-hit-k1 --test draws_golden --no-capture &&
+run "M2 draws positive control: the re-sample's day taken from k = 0 must FAIL (SPR-012, the Tester's second mutant)" "fail:differs: engine" cargo nextest run -p rh-sys-demography --locked --features mutant-resample-day-k0 --test draws_golden --no-capture &&
 run "T-06 rh-worldgen: V-DATA-05 founder ids and a forced collision, bit-equal genesis twice and across threads, Ada at 25, refused writes (SPR-012)" "pass:V-DATA-05: a forced collision resolves to the same rehash on every run" cargo nextest run -p rh-worldgen --locked --test genesis --no-capture &&
 run "T-06 V-INV-11: founders' negative birth ticks round-trip through a keyframe, and the loaded engine advances as the continuous one (SPR-012)" "pass:V-INV-11: negative birth ticks round-trip through a keyframe in 4 worlds" cargo nextest run -p rh-worldgen --locked --test keyframe --no-capture &&
 run "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)" "pass:V-DET-12, V-INV-01: 24 random worlds" cargo nextest run -p rh-worldgen --locked --test m2_system --no-capture &&
@@ -1004,6 +1008,8 @@ run "Golden vectors: Brass (M2)" pass "$PY" -I specs/demography/selftest_brass.p
 run "Golden vectors: M2 rung-0 mortality schedule, exact reference (SPR-011 ruling 7)" "pass:M2 RUNG-0 SCHEDULE: PASS" "$PY" -I specs/demography/selftest_m2_rung0.py &&
 run "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference --check; SPR-012 T-05)" pass "$PY" -I bin/gen_m2_reference.py --check &&
 run "gen_m2_reference positive control: one altered vector must FAIL (SPR-012 T-05)" "fail:STALE:" "$PY" -I bin/gen_m2_reference.py --check --output tests/lint_fixtures/golden/altered_m2_schedule_v1.txt &&
+run "Golden draws: M2's death instants on fixture worlds are the independent model's, every S11 re-sample case covered (gen_m2_draws_reference --check; SPR-012, Tester's interim report)" "pass:gen_m2_draws_reference: current" "$PY" -I bin/gen_m2_draws_reference.py --check &&
+run "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)" "fail:STALE:" "$PY" -I bin/gen_m2_draws_reference.py --check --output tests/lint_fixtures/golden/altered_m2_draws_v1.txt &&
 run "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)" "pass:M2 F1 FERTILITY AND PARTNERING: PASS" "$PY" -I specs/demography/selftest_m2_f1.py &&
 run "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)" "fail:M2 F1 FERTILITY AND PARTNERING: FAIL" m2_f1_stale_control &&
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&

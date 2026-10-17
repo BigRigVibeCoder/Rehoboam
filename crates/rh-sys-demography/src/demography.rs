@@ -93,6 +93,20 @@ pub const OWNED: [&str; 19] = [
     "life_course.death_cause",
 ];
 
+/// S11's draws: k = 0 decides whether the re-drawn death happens, k = 1 picks its day. The two
+/// `mutant-*` features exist only for the planted controls of `tests/draws_golden.rs` (the
+/// Tester's surviving mutants, SPR-012): each moves one draw to the other k, and the differential
+/// golden must FAIL. No build of a world enables them.
+#[cfg(not(feature = "mutant-resample-hit-k1"))]
+const K_HIT: u64 = 0;
+#[cfg(feature = "mutant-resample-hit-k1")]
+const K_HIT: u64 = 1;
+/// See [`K_HIT`].
+#[cfg(not(feature = "mutant-resample-day-k0"))]
+const K_DAY: u64 = 1;
+#[cfg(feature = "mutant-resample-day-k0")]
+const K_DAY: u64 = 0;
+
 /// The death timer's closure id (S10).
 pub const DEATH_TIMER: u32 = 1;
 /// `death_cause` natural (codes: none 0, natural 1, murder 2, battle 3, execution 4, accident 5).
@@ -371,10 +385,10 @@ impl SystemModel for Demography {
             .schedule
             .interval_q(t_in.minutes() - birth, end.minutes() - birth)
             .map_err(Self::sched_err)?;
-        if !q.hits(ctx.draw(0)) {
+        if !q.hits(ctx.draw(K_HIT)) {
             return Ok(None);
         }
-        Ok(resample_day(t_in.minutes(), end.minutes(), ctx.draw(1)).map(SimTime::from_minutes))
+        Ok(resample_day(t_in.minutes(), end.minutes(), ctx.draw(K_DAY)).map(SimTime::from_minutes))
     }
 
     fn invariants(&self, world: &WorldTables) -> Vec<InvariantResult> {

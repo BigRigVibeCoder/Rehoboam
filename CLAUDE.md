@@ -68,6 +68,8 @@ python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
 python -I bin/gen_m2_reference.py --check   # rh-sys-demography's rung-0 schedule vectors = the exact reference (SPR-012 T-05)
 cargo nextest run -p rh-sys-demography --locked --test schedule_golden   # the fixed-point schedule: bit-equal, Table 19, e0 bounds, the q(15) band (SPR-012 T-05)
+python -I bin/gen_m2_draws_reference.py --check   # M2's death instants on fixture worlds from an independent model of S8-S12 on the RNG and schedule references, every re-sample case covered (SPR-012)
+cargo nextest run -p rh-sys-demography --locked --test draws_golden   # the engine's death instants = that model's; --features mutant-resample-hit-k1 or mutant-resample-day-k0 must FAIL (SPR-012)
 cargo nextest run -p rh-worldgen --locked --test genesis   # worldgen stub: V-DATA-05 founder ids, bit-equal genesis, refused writes (SPR-012 T-06)
 cargo nextest run -p rh-worldgen --locked --test keyframe --test m2_system   # V-INV-11 birth ticks through a keyframe; M2: V-DET-12, V-INV-01, EXTINCTION, re-sampling (SPR-012 T-06, T-07)
 cargo nextest run -p rh-worldgen --locked --release --test m2_system   # also the 10,000-founder q(15) band over 32 seeds and V-DATA-04 over 1,000 years (release only)

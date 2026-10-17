@@ -22,3 +22,10 @@ rh-ids = { version = "0.0.0", path = "../rh-ids" }
 # WorldSpec: M2's compiled parameters (SPR-011 ruling 9). A system never reads spec files (A-47).
 rh-registry = { version = "0.0.0", path = "../rh-registry" }
 
+
+# Planted controls only (tests/draws_golden.rs; bin/check_all.sh): each feature moves one of
+# resample_timer's draws to the other k, and the differential golden of M2's draws must FAIL. No
+# world or host enables them.
+[features]
+mutant-resample-hit-k1 = []
+mutant-resample-day-k0 = []

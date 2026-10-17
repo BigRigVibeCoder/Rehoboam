@@ -150,6 +150,8 @@ cases (into `target/lint-fixtures/`). Everything runs offline; the git-source an
 | `bernoulli/poisson_death/` | `bernoulli_only` in `bin/check_all.sh` (V-INV-08; SPR-012 T-07) | a system crate drawing a month's deaths from `rh_sample::poisson`, with `rh-sample` in its `Cargo.toml` | `VIOLATION [V-INV-08] tests/lint_fixtures/bernoulli/poisson_death` |
 | `arch/engine_deny_list.txt` | `python/tests/test_lint_arch.py` (VER-SPR-011-TEST GAP-2, BCK-002 A-49) | not a violation: the whole `ENGINE_DENY_LIST`, one package per line, written without quote marks (G-3's defined-once scan) | the constant equals it; an added or removed entry fails |
 | `golden/altered_m2_schedule_v1.txt` | `bin/gen_m2_reference.py --check --output …` and `RH_M2_SCHEDULE_GOLDEN=… cargo nextest run -p rh-sys-demography --test schedule_golden` (SPR-012 T-05) | M2's rung-0 schedule vectors with K at e0 = 30 one unit too high | `STALE:` and `K at e0 bits 1966080` |
+| `golden/altered_m2_draws_v1.txt` | `bin/gen_m2_draws_reference.py --check --output …` and `RH_M2_DRAWS_GOLDEN=… cargo nextest run -p rh-sys-demography --test draws_golden` (SPR-012, the Tester's interim report) | the differential golden of M2's draws with world w1's first death one day later | `STALE:` and `death 0 differs: engine` |
+| (feature) `rh-sys-demography/mutant-resample-hit-k1`, `mutant-resample-day-k0` | `cargo nextest run -p rh-sys-demography --features … --test draws_golden` (SPR-012) | the Tester's two surviving mutants: `resample_timer`'s Bernoulli from k = 1, or its day from k = 0 | `differs: engine` |
 
 **What the textual rules flag, and what they do not scan** (VER-SPR-011-TEST GAP-4, GAP-6; BCK-002
 A-49). The `process`, `file-io`, `file-clock` and `env` rules of `bin/lint_forbidden.py` match text,
