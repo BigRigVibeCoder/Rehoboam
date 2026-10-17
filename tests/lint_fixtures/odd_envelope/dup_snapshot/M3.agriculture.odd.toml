@@ -66,9 +66,9 @@ cause_column = "field.ruin_cause"
 [[owns]]
 column = "field.ruin_cause"
 entity = "field"
-type = "u64"
+type = "event_ref"
 plane = "A"
-meaning = "fixture: EventId of the event that last changed field.ruin, set through ctx.set_cause; 0 = none"
+meaning = "fixture: the event that last changed field.ruin, an Option<EventId> set through ctx.set_cause; none by default (REV-SPR-020 R17)"
 fixed_point = false
 [algorithm.holds]
 version = "fixture-v0"

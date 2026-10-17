@@ -218,7 +218,11 @@ CREATE TABLE IF NOT EXISTS input_journal (
     tick          BIGINT   NOT NULL,
     seq           UINTEGER NOT NULL,
     input_class   UTINYINT NOT NULL,           -- 0 push (the only class; pull inputs retired by ADR-0034)
-    kind          VARCHAR  NOT NULL,
+    kind          VARCHAR  NOT NULL,           -- IF-2 InputKind. Its origin on plane A (event.origin and the Timer and QueuedCommand
+                                               -- origin of its consequences; envelope_v0.md §2): OracleMove, OracleWhisper, OraclePierce,
+                                               -- OracleOmen, OracleWard -> 3 oracle; PlayerAction, SpeechAct -> 1 player; ForkOverride ->
+                                               -- 4 director; ManifestSet, SettingChange, ConsoleMode are not material and reach no plane-A job.
+                                               -- The producer does not decide it: a system-produced OracleMove is oracle.
     scope_kind    UTINYINT NOT NULL,           -- 0 none, 1 person, 2 household, 3 settlement, 4 region
     scope_id      UBIGINT,
     pull_key      BLOB,                        -- reserved, always NULL (ADR-0034)

@@ -14,7 +14,8 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     [event_roles] ids, each once (witness may repeat on an event, not in the list); its `motives` are [motive_edges] ids;
     each of its `snapshots` names a Registry attribute, the role (`of`) it is read of (or "event"), a `partner` role for
     a two-argument attribute, and the owned or read column (`from`) it is filled from, whose type matches the
-    attribute's; a `cause_column` on an [[owns]] state column names an owned u64 column of the same entity (SAGA-15).
+    attribute's; a `cause_column` on an [[owns]] state column names an owned `event_ref` column of the same entity
+    (SAGA-15; an Option<EventId>, none by default, so no id is reserved: REV-SPR-020 R17).
     A missing `roles` is an error on a frozen spec and a warning on a draft; a wrong value is always an error
     (REV-SPR-020 R7). `of = "witness"` is refused (a witness is many); a repeated motive or snapshot key is an error;
     an `algorithm.<name>` source declares its `type`, checked like a column's; a foreign enum source's codes are
@@ -113,7 +114,9 @@ REQUIRED = ["system", "purpose", "scales", "schedule", "rng", "design", "initial
             "params", "submodels", "invariants", "verification"]
 DESIGN_KEYS = ["basic_principles", "emergence", "adaptation", "objectives", "learning", "prediction", "sensing",
                "interaction", "stochasticity", "collectives", "observation", "era_state", "scale_behaviour"]
-TYPES = {"i64", "u64", "i32", "u32", "u16", "u8", "bool", "enum", "q8_8", "q16_16", "f32_field"}
+TYPES = {"i64", "u64", "i32", "u32", "u16", "u8", "bool", "enum", "q8_8", "q16_16", "f32_field", "event_ref"}
+# event_ref: an Option<EventId>, none by default; the type of a cause column (envelope_v0.md §7, REV-SPR-020 R17). Its
+# hashed and keyframe encoding is opt(u64), so a present cause may be EventId 0 (the first event) and none is distinct.
 SNAKE = re.compile(r"^[a-z][a-z0-9_]*$")
 READ_USES = ("identity", "mode", "rate")
 IN_COUPLING_FIELDS = ("form", "neutral", "output_bounds", "data_range", "beyond_range", "source")
@@ -230,7 +233,32 @@ def semver(text):
 
 AMEND_PATH = re.compile(r"^(params\.(?P<param>[a-z0-9_]+)\.meaning|invariants\.(?P<inv>[A-Za-z0-9_-]+)\.statement|algorithm\.(?P<alg>[a-z0-9_]+)\.steps\.(?P<step>[A-Za-z0-9]+)|"
                         r"emits\.(?P<kind>[A-Z_]+)\.when|initialization\.state|schedule\.(?P<pulse>[A-Za-z]+)/(?P<phase>[A-Za-z]+)\.steps\.(?P<sname>[a-z_]+)|"
-                        r"schedule\.(?P<wpulse>[A-Za-z]+)/(?P<wphase>[A-Za-z]+)\.when|owns\.(?P<col>[a-z_]+\.[a-z_]+)\.meaning|rng\.(?P<rpurpose>[a-z_]+)\.use)$")
+                        r"schedule\.(?P<wpulse>[A-Za-z]+)/(?P<wphase>[A-Za-z]+)\.when|owns\.(?P<col>[a-z_]+\.[a-z_]+)\.meaning|rng\.(?P<rpurpose>[a-z_]+)\.use|"
+                        r"emits\.(?P<skind>[A-Z_]+)\.snapshots|owns\.(?P<dcol>[a-z_]+\.[a-z_]+)\.default|owns\.(?P<ccol>[a-z_]+\.[a-z_]+)\.cause_column)$")
+# The last three are the envelope's (SPR-020; REV-SPR-020 R15): a next version keeps a frozen kind's snapshots and a
+# frozen column's default and cause_column equal unless a record amends them; roles and motives may only grow.
+
+
+def snapshots_text(entry):
+    """The text of an [[emits]] entry's snapshots, for an `[[amends]] of = "emits.<KIND>.snapshots"` record: each
+    snapshot as `attr of ROLE [with PARTNER] from SOURCE [as TYPE]`, joined by `; `, in declaration order; `none`."""
+    rows = []
+    for x in entry.get("snapshots", []):
+        if not isinstance(x, dict):
+            return "malformed"
+        text = f"{x.get('attr')} of {x.get('of')}"
+        if x.get("partner"):
+            text += f" with {x.get('partner')}"
+        text += f" from {x.get('from')}"
+        if x.get("type"):
+            text += f" as {x.get('type')}"
+        rows.append(text)
+    return "; ".join(rows) if rows else "none"
+
+
+def owns_field_text(column, key):
+    """The text of an [[owns]] column's `default` or `cause_column`: the value as written, or `none`."""
+    return "none" if key not in column else str(column[key])
 
 
 def text_at(spec, m):
@@ -242,6 +270,11 @@ def text_at(spec, m):
         return next((st for st in steps if str(st).startswith(m.group("step") + " ")), None)
     if m.group("kind"):
         return next((e.get("when") for e in spec.get("emits", []) if e.get("kind") == m.group("kind")), None)
+    if m.group("skind"):
+        return next((snapshots_text(e) for e in spec.get("emits", []) if e.get("kind") == m.group("skind")), None)
+    if m.group("dcol") or m.group("ccol"):
+        col, key = (m.group("dcol"), "default") if m.group("dcol") else (m.group("ccol"), "cause_column")
+        return next((owns_field_text(o, key) for o in spec.get("owns", []) if o.get("column") == col), None)
     if m.group("pulse"):
         for x in spec.get("schedule", []):
             if (x.get("pulse"), x.get("phase")) == (m.group("pulse"), m.group("phase")):
@@ -270,7 +303,8 @@ def amendments(fs, ns, p, errs):
         if m is None:
             errs.append(f"{p}: [[amends]] of = {of!r} is not a path this lint knows (invariants.<id>.statement, "
                         "algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state, schedule.<Pulse>/<Phase>.steps.<name>, "
-                        "schedule.<Pulse>/<Phase>.when, owns.<entity.column>.meaning, rng.<purpose>.use, params.<name>.meaning)")
+                        "schedule.<Pulse>/<Phase>.when, owns.<entity.column>.meaning, rng.<purpose>.use, params.<name>.meaning, "
+                        "emits.<KIND>.snapshots, owns.<entity.column>.default, owns.<entity.column>.cause_column)")
             continue
         if not a.get("reason"):
             errs.append(f"{p}: [[amends]] {of} needs a reason")
@@ -402,6 +436,10 @@ def lint_next(frozen, specs, errs):
                     errs.append(f"{p}: frozen column {col} changed {k}: {o.get(k)!r} -> {n.get(k)!r}")
             if n.get("meaning") != o.get("meaning") and f"owns.{col}.meaning" not in amended:
                 errs.append(f"{p}: frozen column {col} changed its meaning without an [[amends]] record")
+            for key in ("default", "cause_column"):   # SPR-020; REV-SPR-020 R15: equal unless amended
+                if owns_field_text(n, key) != owns_field_text(o, key) and f"owns.{col}.{key}" not in amended:
+                    errs.append(f"{p}: frozen column {col} changed its {key} without an [[amends]] record "
+                                f"({owns_field_text(o, key)} -> {owns_field_text(n, key)}; envelope_v0.md §7)")
         for name, table in fs.get("algorithm", {}).items():
             got = ns.get("algorithm", {}).get(name)
             if got is None:
@@ -482,12 +520,23 @@ def lint_next(frozen, specs, errs):
             if bindings[key].get("when") != x.get("when") and f"schedule.{key[0]}/{key[1]}.when" not in amended:
                 errs.append(f"{p}: frozen schedule binding {key} changed its `when` without an [[amends]] record")
         whens = {e.get("kind"): e.get("when", "") for e in ns.get("emits", [])}
+        next_emits = {e.get("kind"): e for e in ns.get("emits", [])}
         for e in fs.get("emits", []):
             k = e.get("kind")
             if k not in whens:
                 errs.append(f"{p}: frozen [[emits]] {k} is missing")
-            elif e.get("when", "") != whens[k] and f"emits.{k}.when" not in amended:
+                continue
+            if e.get("when", "") != whens[k] and f"emits.{k}.when" not in amended:
                 errs.append(f"{p}: frozen [[emits]] {k} changed its `when` without an [[amends]] record (REV-SPR-015 R15: equal text or an amendment; a prefix or suffix is a change)")
+            # the envelope declarations (SPR-020; REV-SPR-020 R15): roles and motives may only grow; snapshots stay equal
+            # unless an [[amends]] record changes them (a next version that captures a new attribute records why)
+            for key in ("roles", "motives"):
+                lost = [x for x in e.get(key, []) if x not in next_emits[k].get(key, [])]
+                if lost:
+                    errs.append(f"{p}: frozen [[emits]] {k} narrowed its {key}: {lost} dropped (a next version may only add; envelope_v0.md §2)")
+            if snapshots_text(e) != snapshots_text(next_emits[k]) and f"emits.{k}.snapshots" not in amended:
+                errs.append(f"{p}: frozen [[emits]] {k} changed its snapshots without an [[amends]] record "
+                            f"({snapshots_text(e)} -> {snapshots_text(next_emits[k])}; envelope_v0.md §4)")
         was, now = fs.get("initialization", {}).get("state", ""), ns.get("initialization", {}).get("state", "")
         if was != now and "initialization.state" not in amended:
             errs.append(f"{p}: frozen [initialization] state changed without an [[amends]] record (equal text or an amendment)")
@@ -1041,8 +1090,8 @@ def lint_envelope(p, s, reg, enum_names, errs, warns, frozen=False):
         target = own.get(cc)
         if cc == col or target is None:
             errs.append(f"{p}: {col} cause_column {cc} must name another column this spec owns (SAGA-15; envelope_v0.md §7)")
-        elif target.get("type") != "u64" or target.get("entity") != entity:
-            errs.append(f"{p}: {col} cause_column {cc} must be a u64 (EventId, 0 = none) of the same entity {entity}")
+        elif target.get("type") != "event_ref" or target.get("entity") != entity:
+            errs.append(f"{p}: {col} cause_column {cc} must be an event_ref (an Option<EventId>, none by default; REV-SPR-020 R17) of the same entity {entity}")
         if "default" not in o:
             errs.append(f"{p}: {col} has a cause_column, so it needs a declared default (the state rh-core compares against; envelope_v0.md §7, REV-SPR-020 R2)")
         else:
@@ -1336,6 +1385,37 @@ def main() -> int:
         bad = copy.deepcopy(ns)
         bad["owns"][0]["type"] = "u8" if bad["owns"][0].get("type") != "u8" else "u16"
         probes.append((bad, "changed type"))
+        # SPR-020; REV-SPR-020 R15: a narrowed cast, a narrowed motive list, changed snapshots, a changed default and a
+        # changed cause_column of the frozen slice must be rejected (the first two may only grow; the rest need a record)
+        cast_kind = next((e for e in fz.get("emits", []) if e.get("roles")), None)
+        if cast_kind is not None:
+            bad = copy.deepcopy(ns)
+            for e in bad["emits"]:
+                if e.get("kind") == cast_kind.get("kind"):
+                    e["roles"] = list(cast_kind["roles"])[:-1]
+            probes.append((bad, "narrowed its roles"))
+        motive_kind = next((e for e in fz.get("emits", []) if e.get("motives")), None)
+        if motive_kind is not None:
+            bad = copy.deepcopy(ns)
+            for e in bad["emits"]:
+                if e.get("kind") == motive_kind.get("kind"):
+                    e["motives"] = list(motive_kind["motives"])[:-1]
+            probes.append((bad, "narrowed its motives"))
+        bad = copy.deepcopy(ns)
+        for e in bad["emits"]:
+            if e.get("kind") == fz["emits"][0].get("kind"):
+                e["snapshots"] = [{"attr": "planted", "of": "actor", "from": "planted.column"}]
+        probes.append((bad, "changed its snapshots without an [[amends]] record"))
+        bad = copy.deepcopy(ns)
+        for o in bad["owns"]:
+            if o.get("column") == fz["owns"][0].get("column"):
+                o["default"] = "planted"
+        probes.append((bad, "changed its default without an [[amends]] record"))
+        bad = copy.deepcopy(ns)
+        for o in bad["owns"]:
+            if o.get("column") == fz["owns"][0].get("column"):
+                o["cause_column"] = "planted.cause"
+        probes.append((bad, "changed its cause_column without an [[amends]] record"))
         bad = copy.deepcopy(ns)
         bad["rng"].insert(0, {"purpose": "planted_first", "key": ["person"]})
         probes.append((bad, "must stay at position 0"))

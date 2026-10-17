@@ -64,6 +64,9 @@ REFERENCING_VERBS = {
 }  # verbs with a Registry `references` list: the only contingent emitters
 MOTIVES = 9  # [motive_edges] ids 0..8
 T1_VERBS = {BREAK, FEUD, REVENGE}  # the acts that carry a stress snapshot and a motive edge
+SIM, ORACLE = 0, 3  # event.origin codes; an OracleMove input maps to oracle (envelope_v0.md §2)
+INPUT_EVERY_YEARS = 7  # the smoke world's cadence: one material input every seven years
+HOPS = 3  # the input's consequence chain: a timer fire, its timer's fire, its command's drain
 VERB_WEIGHTS = {DEATH: 25, BIRTH: 30, MARRIAGE: 10, SUCCEED: 10, BREAK: 10, FEUD: 10, REVENGE: 5}
 REFUSAL = (
     0.08  # share of BIRTH drafts the admission rule refuses (a P1.11 world; P1a tells every draft)
@@ -94,6 +97,8 @@ class Chronicle:
         default_factory=list
     )  # tl, place, value, from, cause
     admitted: set[int] = field(default_factory=set)
+    hops: list[tuple[int, int]] = field(default_factory=list)  # (cause, effect) of one job
+    inputs: int = 0
     at_emission: dict[tuple[int, int], int] = field(
         default_factory=dict
     )  # (event, actor) -> stress read
@@ -109,6 +114,7 @@ class Control:
     motive_on_triggered: bool = False
     cause_later: bool = False
     budget_bloat: bool = False
+    origin_lost: bool = False
 
 
 def _drift(rnd: random.Random, chron: Chronicle, actor: int) -> int:
@@ -171,6 +177,26 @@ def _emit(rnd: random.Random, chron: Chronicle, tick: int, control: Control) -> 
         chron.ruins.append((0, place, rnd.randint(1, ONE), tick, eid))
 
 
+def _hop(chron: Chronicle, tick: int, origin: int, cause: int | None) -> int:
+    """One mechanical consequence of a job, under the job's origin (envelope_v0.md §2, R14).
+
+    A DEATH triggered by the previous hop: every timer, command and draft a job creates carries
+    the job's origin, so the chain keeps the input's.
+    """
+    eid = chron.next_id
+    chron.next_id += 1
+    chron.admitted.add(eid)
+    row = (0, eid, tick, DEATH, 1 << DEATH, eid % PLACES, 0, 128, 0, origin, None, None)
+    chron.events.append(row)
+    actor, target = eid % PERSONS, (eid + 1) % PERSONS
+    for ordinal, (role, who) in enumerate(sorted([(ACTOR, actor), (TARGET, target)])):
+        chron.roles.append((0, eid, ordinal, PERSON, who, role))
+    if cause is not None:
+        chron.edges.append((0, cause, eid, TRIGGERED, None, 0, ONE, True))
+        chron.hops.append((cause, eid))
+    return eid
+
+
 def _plant(chron: Chronicle, control: Control) -> None:
     """Apply the planted defects of the positive controls."""
     if control.snapshot_drift:  # the end-of-run value where the emitter's value should be
@@ -188,11 +214,20 @@ def generate(control: Control, seed: int = 2020) -> Chronicle:
     rnd = random.Random(seed)
     chron = Chronicle()
     for year in range(YEARS):
-        ticks = sorted(
-            rnd.randrange(year * YEAR, (year + 1) * YEAR) for _ in range(EVENTS_PER_YEAR)
-        )
-        for tick in ticks:
-            _emit(rnd, chron, tick, control)
+        ticks: list[tuple[int, int | None]] = [
+            (rnd.randrange(year * YEAR, (year + 1) * YEAR), None) for _ in range(EVENTS_PER_YEAR)
+        ]
+        if year and year % INPUT_EVERY_YEARS == 0:  # a material input: its consequences hop on
+            at = year * YEAR + 99 * DAY + 6 * 60 + 7
+            ticks += [(at + i * DAY, i) for i in range(HOPS)]
+            chron.inputs += 1
+        last: int | None = None
+        for tick, hop in sorted(ticks):
+            if hop is None:
+                _emit(rnd, chron, tick, control)
+            else:  # the first hop is the input's job; the control drops the origin after it
+                origin = SIM if hop and control.origin_lost else ORACLE
+                last = _hop(chron, tick, origin, None if hop == 0 else last)
     for actor in list(chron.stress):  # the column keeps moving after the last emission
         _drift(rnd, chron, actor)
     _plant(chron, control)
@@ -227,6 +262,9 @@ def load(chron: Chronicle) -> duckdb.DuckDBPyConnection:
     )
     if chron.ruins:
         con.executemany("INSERT INTO ruin VALUES (?, ?, ?, ?, ?)", chron.ruins)
+    con.execute("CREATE TABLE hop (cause_id UBIGINT, effect_id UBIGINT)")
+    if chron.hops:
+        con.executemany("INSERT INTO hop VALUES (?, ?)", chron.hops)
     return con
 
 
@@ -319,6 +357,25 @@ def check_provenance(con: duckdb.DuckDBPyConnection) -> bool:
     total = count(con, "SELECT count(*) FROM ruin")
     print(f"   {total} ruin states, {unresolved} without an existing earlier cause")
     return unresolved == 0 and total > 0
+
+
+def check_origin(con: duckdb.DuckDBPyConnection, chron: Chronicle) -> bool:
+    """Check 7: an input's origin survives every hop (envelope_v0.md §2; 05.2 §4.0 item 4; R14)."""
+    lost = count(
+        con,
+        "SELECT count(*) FROM hop h JOIN event c ON c.event_id = h.cause_id "
+        "JOIN event e ON e.event_id = h.effect_id WHERE e.origin <> c.origin",
+    )
+    sim = count(
+        con,
+        f"SELECT count(*) FROM event e WHERE e.origin = {SIM} AND EXISTS "
+        "(SELECT 1 FROM hop h WHERE h.effect_id = e.event_id OR h.cause_id = e.event_id)",
+    )
+    print(
+        f"   {chron.inputs} inputs, {len(chron.hops)} hops ({HOPS - 1} per input); "
+        f"{lost} hops lost the origin, {sim} chain events stamped sim"
+    )
+    return chron.inputs > 0 and lost == 0 and sim == 0
 
 
 @dataclass
@@ -452,7 +509,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument(
         "--control",
-        choices=["snapshot-drift", "motive-on-triggered", "cause-later", "budget-bloat"],
+        choices=[
+            "snapshot-drift",
+            "motive-on-triggered",
+            "cause-later",
+            "budget-bloat",
+            "origin-lost",
+        ],
         help="plant one defect",
     )
     args = parser.parse_args(argv)
@@ -461,6 +524,7 @@ def main(argv: list[str] | None = None) -> int:
         motive_on_triggered=args.control == "motive-on-triggered",
         cause_later=args.control == "cause-later",
         budget_bloat=args.control == "budget-bloat",
+        origin_lost=args.control == "origin-lost",
     )
     chron = generate(control)
     con = load(chron)
@@ -476,6 +540,7 @@ def main(argv: list[str] | None = None) -> int:
         ("4. provenance of change", lambda: check_provenance(con)),
         ("5. the plane-B index", lambda: check_index(con, chron)),
         ("6. the byte budget", lambda: check_budget(con, chron)),
+        ("7. origin through hops", lambda: check_origin(con, chron)),
     ]
     ok = True
     for name, fn in checks:

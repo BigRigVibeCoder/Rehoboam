@@ -268,20 +268,22 @@ ids = ["actor", "target", "witness", "instrument"]   # instrument: the S6 artifa
                                                      # (schema.sql, channel A, the canonical form); a role is only ever appended (envelope_v0.md §8)
 
 [role_domains]         # a pattern role's domain ([roles]) as an anchored bool attribute, captured as a snapshot at emission (SPR-020,
-                       # envelope_v0.md §1, R1): `A = "authority"` compiles to holds_title(A)@eN == true; a relational domain names its
-                       # partner variable (`S = "successor of A"` -> is_successor(S, A)@eN). source: the system that declares the snapshot
-                       # ("life_course": the log; "none": no source yet, so the domain is absent and lint_patterns.py warns). Plane C reads it.
-authority    = { attribute = "holds_title",    relational = false, source = "M7.dynasty" }
-successor    = { attribute = "is_successor",   relational = true,  source = "M7.dynasty" }
-kin          = { attribute = "is_self_or_kin", relational = true,  source = "life_course" }
-ally         = { attribute = "is_ally",        relational = true,  source = "none" }
-rival        = { attribute = "is_rival",       relational = true,  source = "none" }
-subordinate  = { attribute = "is_subordinate", relational = true,  source = "none" }
-member       = { attribute = "is_member",      relational = true,  source = "none" }
-host         = { attribute = "is_host",        relational = false, source = "none" }
-guest        = { attribute = "is_guest",       relational = false, source = "none" }
-investigator = { attribute = "is_investigator", relational = false, source = "none" }
-suspect      = { attribute = "is_suspect",     relational = false, source = "none" }
+                       # envelope_v0.md §1, R1): `A = "authority"` compiles to holds_title(A)@e1 == true at A's anchor, the first clause
+                       # whose cast binds A (R16); a relational domain names its partner variable (`S = "successor of A"` ->
+                       # is_successor(S, A)@e1). owner: the system that owns the source column (or "life_course": the ledger's rows;
+                       # "none": no source yet, so the domain is absent and lint_patterns.py warns); column: the column, algorithm or
+                       # log the attribute is read from. Any emitter that reads the column may declare the snapshot. Plane C reads it.
+authority    = { attribute = "holds_title",    relational = false, owner = "M7.dynasty",  column = "title.holder" }
+successor    = { attribute = "is_successor",   relational = true,  owner = "M7.dynasty",  column = "claim.rank" }
+kin          = { attribute = "is_self_or_kin", relational = true,  owner = "life_course", column = "life_course" }
+ally         = { attribute = "is_ally",        relational = true,  owner = "none", column = "none" }
+rival        = { attribute = "is_rival",       relational = true,  owner = "none", column = "none" }
+subordinate  = { attribute = "is_subordinate", relational = true,  owner = "none", column = "none" }
+member       = { attribute = "is_member",      relational = true,  owner = "none", column = "none" }
+host         = { attribute = "is_host",        relational = false, owner = "none", column = "none" }
+guest        = { attribute = "is_guest",       relational = false, owner = "none", column = "none" }
+investigator = { attribute = "is_investigator", relational = false, owner = "none", column = "none" }
+suspect      = { attribute = "is_suspect",     relational = false, owner = "none", column = "none" }
 
 [motive_edges]         # typed motive edges: refinements of motivated_by that point to the inciting event; plane A
 ids = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]

@@ -58,7 +58,7 @@ python -I specs/manifest/manifest_v0.py validate specs/manifest/examples/invalid
 python -I bin/gen_rng_golden.py --check  # rh-ids golden vectors match the independent reference (SPR-002)
 python -I bin/gen_hash_golden.py --check  # rh-snapshot plane-hash and XXH3 golden vectors match the independent stdlib reference (SPR-007)
 python -I specs/chronicle/selftest.py
-python -I specs/chronicle/selftest_envelope.py   # the event envelope v0: anchored snapshots, typed edges, cause_told, the plane-B index, the byte budget (SPR-020; specs/chronicle/envelope_v0.md); --control snapshot-drift, motive-on-triggered, cause-later and budget-bloat must FAIL
+python -I specs/chronicle/selftest_envelope.py   # the event envelope v0: anchored snapshots, typed edges, cause_told, the plane-B index, the byte budget (SPR-020; specs/chronicle/envelope_v0.md); --control snapshot-drift, motive-on-triggered, cause-later, budget-bloat and origin-lost must FAIL
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
 python -I bin/gen_decimal_vectors.py --check   # authored numbers: rh-manifest exact decimals -> fixed point match Python decimal (SPR-011 T-04)
 python -I specs/numerics/exp_ln_v0.py --check   # fixed-point exp and ln v0 (Q32_32): constants, convergence, faithful rounding, golden vectors (05.1 §6 item 4 v1.10; SPR-016); --exhaustive nightly
@@ -68,7 +68,7 @@ cargo nextest run -p rh-sample --run-ignored only --test stats   # sampler stati
 python -I specs/demography/selftest_brass.py
 python -I specs/demography/selftest_m2_rung0.py   # M2 rung-0 mortality: the exact reference of [algorithm.mortality_rung0] (SPR-011)
 python -I specs/demography/selftest_m2_f1.py      # M2 F1 fertility and partnering: the exact reference of [algorithm.fertility_f1] and [algorithm.partnering_f1] in the next-version spec (SPR-015)
-python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml   # the next version of a frozen spec (M2 F1 draft 0.3.0) supersedes it for the run and must preserve the frozen slice (SPR-015; specs/systems/next/README.md)
+python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml   # the next version of a frozen spec (M2 F1 draft 0.3.0) supersedes it for the run and must preserve the frozen slice (SPR-015; specs/systems/next/README.md); its [[emits]] roles and motives may only grow, and snapshots, default and cause_column stay equal unless an [[amends]] record changes them (SPR-020; REV-SPR-020 R15)
 python -I specs/worldgen/selftest_worldgen_lite.py   # worldgen-lite v0 and S3 F0 residence: the exact reference of M1's [algorithm.worldgen_lite] and S3's [algorithm.residence_f0], golden outputs in specs/worldgen/golden/ (SPR-018)
 python -I specs/demography/selftest_m2_f1_mortality.py --check   # M2 F1 mortality: the exact reference of the M2 spec's [algorithm.mortality_f1] (specs/systems/next while it is a draft; SPR-016); --control beta-one-power, --control infant-discontinuous and --control newborn-uncovered must FAIL (each isolates one check)
 python -I specs/stream/selftest_channel_a.py      # World Stream v0 channel-A segment DDL (SPR-011)

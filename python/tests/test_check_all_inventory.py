@@ -408,8 +408,8 @@ REQUIRED_GATES = (
     "cause_column that all resolve pass (SPR-020)",
     "lint_odd envelope positive control: a cause_column on a state column without a declared "
     "default must FAIL (REV-SPR-020 R2)",
-    "lint_odd envelope positive control: a cause_column that is not an owned u64 of the same "
-    "entity must FAIL (SAGA-15; SPR-020)",
+    "lint_odd envelope positive control: a cause_column that is not an owned event_ref of the "
+    "same entity must FAIL (SAGA-15; SPR-020, REV-SPR-020 R17)",
     "lint_odd envelope positive control: a frozen spec's [[emits]] entry without roles must "
     "FAIL (SPR-020; REV-SPR-020 R7)",
     "lint_odd envelope positive control: a motive listed twice must FAIL (REV-SPR-020 R7)",
@@ -482,6 +482,8 @@ REQUIRED_GATES = (
     "must FAIL (V-DATA-08; SPR-020)",
     "selftest_envelope positive control: a state value whose cause is a later event must FAIL "
     "(V-SAGA-21; SPR-020)",
+    "selftest_envelope positive control: an input's consequence that loses the origin after one "
+    "hop must FAIL (05.2 §4.0 criterion 4; REV-SPR-020 R14)",
     "selftest_envelope positive control: fifty witnesses on every event must FAIL the byte "
     "budget (V-SAGA-15; REV-SPR-020 R11)",
     "uv lock --check positive control: drifted lock must FAIL",

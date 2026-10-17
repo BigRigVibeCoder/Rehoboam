@@ -451,6 +451,10 @@ MOTIVATED_BY = 3  # the one edge kind that may carry a motive (envelope_v0.md §
 DETERMINISTIC_KINDS = frozenset(
     {0, 1, 6, 7, 8}
 )  # contingent, triggered, player, oracle, director: evidence is 1
+UNWRITTEN_KINDS = frozenset(
+    {6, 7, 8}
+)  # player, oracle, director: no writer until the input-event format exists (§5; R22 NIT-5)
+WRITTEN_KINDS = 6  # a generated edge's kind is in range(WRITTEN_KINDS)
 WITNESS = 2  # the one role that may repeat on an event (envelope_v0.md §1)
 EVIDENCE_ONE = 256  # q8_8 raw bits of 1
 MAX_CAST = 256  # the ordinal is a u8
@@ -644,9 +648,18 @@ def _check_cast(roles: tuple[object, ...]) -> str | None:
     return None
 
 
-def _check_edge(edge: tuple[object, ...]) -> str | None:
-    """A motive on motivated_by only; weight 0 off it; evidence 1 on a deterministic kind (§5)."""
-    kind, motive, weight, evidence = edge[1], edge[2], edge[3], edge[4]
+def _check_edge(edge: tuple[object, ...], event_id: object) -> str | None:
+    """The edge domains of envelope_v0.md §5 (REV-SPR-020 R8, R22 NIT-5).
+
+    A cause earlier than its effect; a written kind; a motive on motivated_by only; weight 0 off
+    it; evidence 1 on a deterministic kind: what `EventLog::append` refuses, the parser refuses.
+    """
+    cause, kind, motive, weight, evidence = edge[0], edge[1], edge[2], edge[3], edge[4]
+    assert isinstance(cause, int) and isinstance(event_id, int)
+    if cause >= event_id:
+        return f"cause {edge!r}: cause {cause} is not earlier than event {event_id} (ForwardCause)"
+    if kind in UNWRITTEN_KINDS:
+        return f"cause {edge!r}: kind {kind} (player, oracle, director) has no writer in P1a (§5)"
     if motive is not None and kind != MOTIVATED_BY:
         return f"cause {edge!r}: a motive refines motivated_by (kind {MOTIVATED_BY}) only"
     if kind != MOTIVATED_BY and weight != 0:
@@ -669,7 +682,7 @@ def _check_event(rec: Record) -> str | None:
             return f"snapshot {snap!r}: partner_kind and partner_id are both NULL or both set"
     for edge in causes:
         assert isinstance(edge, tuple)
-        problem = _check_edge(edge)
+        problem = _check_edge(edge, rec["event_id"])
         if problem:
             return problem
     return None
@@ -718,7 +731,15 @@ def _fix_event(rec: Record, rng: random.Random) -> Record:
             )
             fixed = (*snap[:3], *partner, snap[5])
         fixed_snapshots.append(fixed)
-    fixed_causes = tuple(_fix_edge(edge) for edge in causes if isinstance(edge, tuple))
+    event_id = rec["event_id"]
+    assert isinstance(event_id, int)
+    by_cause: dict[int, tuple[object, ...]] = {}
+    for edge in causes:  # a cause earlier than the event, one edge per cause, ascending
+        assert isinstance(edge, tuple) and isinstance(edge[0], int)
+        if event_id == 0:
+            break
+        by_cause.setdefault(edge[0] % event_id, _fix_edge((edge[0] % event_id, *edge[1:])))
+    fixed_causes = tuple(by_cause[c] for c in sorted(by_cause))
     roles = rec["roles"]
     assert isinstance(roles, tuple)
     seen: set[object] = set()
@@ -737,7 +758,8 @@ def _fix_event(rec: Record, rng: random.Random) -> Record:
 
 def _fix_edge(edge: tuple[object, ...]) -> tuple[object, ...]:
     """A generated edge within its kind's domains (:func:`_check_edge`)."""
-    kind = edge[1]
+    assert isinstance(edge[1], int)
+    kind = edge[1] % WRITTEN_KINDS  # 6-8 have no writer (R22 NIT-5)
     motive = edge[2] if kind == MOTIVATED_BY else None
     weight = edge[3] if kind == MOTIVATED_BY else 0
     evidence = EVIDENCE_ONE if kind in DETERMINISTIC_KINDS else edge[4]
@@ -969,6 +991,18 @@ REFUSED: tuple[tuple[str, str], ...] = (
     ),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [1/7/1,1/7/1] [] []", "a repeated cast row"),
     ("EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/9/~/0/256/1]", "an edge kind of 9"),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/6/~/0/256/1]",
+        "an edge of kind 6 (player), which has no writer (R22 NIT-5)",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [1/1/~/0/256/1]",
+        "a cause at the event's own id (a forward cause; R22 NIT-5)",
+    ),
+    (
+        "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1/~/0/256/1,2/1/~/0/256/1]",
+        "a cause after the event (a forward cause)",
+    ),
     (
         "EVENT 0 0 0 1 4 0 DEATH 32768 ~ 0 128 0 0 [] [] [] [0/1]",
         "a cause tuple with two parts (the P1.0 shape)",

@@ -3,7 +3,7 @@
 # (fathers), households and the kinship the effect language walks, added on top of the frozen rung-0 slice.
 #
 # HOW THIS FILE RELATES TO THE FROZEN ONE (lint_odd.py --next; specs/systems/next/README.md). specs/systems/M2.demography.odd.toml
-# is 0.2.1 (0.2.0 frozen 2026-10-16, D30/D36; 0.2.1 by EVO-001, PR #49: typed payloads, codes, no date on a command); SPR-012 and SPR-013 built against it and its skeleton is committed. This file
+# is 0.2.2 (0.2.0 frozen 2026-10-16, D30/D36; 0.2.1 by EVO-001, PR #49: typed payloads, codes, no date on a command; 0.2.2 by SPR-020: `roles` on its [[emits]]); SPR-012 and SPR-013 built against it and its skeleton is committed. This file
 # is its next version. It is linted with `python -I specs/systems/lint_odd.py --next specs/systems/next --overlay
 # specs/systems/next/registry_delta.toml`, which supersedes 0.2.0 by this file for that run (so M7 and T1's reads and
 # commands are checked against it) and then checks that the frozen slice is preserved: every 0.2.0 [[owns]] column with
