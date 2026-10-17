@@ -88,7 +88,7 @@ target/debug/rh-cli ownership    # single-writer column ownership from specs/sys
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
 # Performance (SPR-009): instruction counts under valgrind (needs valgrind and iai-callgrind-runner 0.16.1)
-python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8 within 10% of the baseline
+python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8, and the draw-cost bench (SPR-011 A-37), within 10% of the baseline
 python -I bin/perf_gate.py integrity --measured artifacts/perf/instructions.txt   # ruling 3: a changed baseline = the tool's output, [perf-baseline] PR
 python -I bin/perf_gate.py record   # regenerate the baseline (never by hand); only in a [perf-baseline] PR with a perf-baseline-reason: line
 cargo nextest run -p rh-snapshot --locked --test observer   # observer invariance: a host observer changes no hash (SPR-009 ruling 4)
