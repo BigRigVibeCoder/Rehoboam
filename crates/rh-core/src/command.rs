@@ -103,9 +103,9 @@ pub enum ArgType {
     /// `bool`: 0 or 1.
     Bool,
     /// `q8_8` raw bits: an `i16`.
-    Q8_8,
+    Fixed8_8,
     /// `q16_16` raw bits: an `i32`.
-    Q16_16,
+    Fixed16_16,
     /// `enum(<column>)`: a code below the count, or any code `>= 0` when the count is unknown.
     Enum(Option<usize>),
 }
@@ -126,8 +126,8 @@ impl ArgType {
             "u64" => Self::U64,
             "i64" => Self::I64,
             "bool" => Self::Bool,
-            "q8_8" => Self::Q8_8,
-            "q16_16" => Self::Q16_16,
+            "q8_8" => Self::Fixed8_8,
+            "q16_16" => Self::Fixed16_16,
             _ => {
                 let column = ty.strip_prefix("enum(")?.strip_suffix(')')?;
                 Self::Enum(enum_codes.get(column).copied())
@@ -143,8 +143,8 @@ impl ArgType {
             Self::Event => false,
             Self::Unsigned(bits) => (0..1_i64 << bits).contains(&v),
             Self::Bool => v == 0 || v == 1,
-            Self::Q8_8 => i16::try_from(v).is_ok(),
-            Self::Q16_16 => i32::try_from(v).is_ok(),
+            Self::Fixed8_8 => i16::try_from(v).is_ok(),
+            Self::Fixed16_16 => i32::try_from(v).is_ok(),
             Self::Enum(count) => {
                 v >= 0 && count.is_none_or(|n| usize::try_from(v).is_ok_and(|v| v < n))
             }
