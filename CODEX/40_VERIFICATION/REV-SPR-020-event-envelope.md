@@ -9,7 +9,7 @@ tags: [verification]
 related: [PRJ-002, SPR-020, SPR-013, SPR-021, SPR-026, SPR-029, EVO-001, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF: round 1 on `742ed09` found 0 blockers, 3 majors, 9 minors and 5 nits. Not ready to merge.**
@@ -20,6 +20,7 @@ version: 0.2.0
 >   - four event-level fields are outside both the draft and the digest.
 > - **Rulings:** R1–R12 in §0.
 > - **Round 2** (`9755956`): round 1's majors are fixed on paper. One new major (the `origin` slot is always hashed, so `smoke`'s timers and commands change too), 8 minors and 5 nits. Rulings R13–R22 in §2.0.
+> - **Round 3** (`99691b0`): R15–R22 applied; round 2's narrowing probes now FAIL. One major (§6's divergence prediction is wrong), 3 minors and 8 nits. Rulings R23–R27 in §3.0.
 > - **Reviewer:** a session on a different model from the drafter's.
 
 # REV-SPR-020: independent review of the event envelope
@@ -465,4 +466,217 @@ Reviewer: independent and adversarial, on a different model from the drafter's. 
 - MAJ-1's ladder movement was not measured. It rests on EVO-001 R15's measurement of the same encoding, and on the code paths cited.
 - The `selftest_m2_f1` controls: unchanged from `main`.
 - Gates of the other PRs after a trial merge, except #61 + #59's `lint_odd` (both modes) and the mortality `--check`.
+
+## 3. Round 3 (2026-10-17, `99691b0`)
+
+### 3.0 Architect rulings, round 3
+
+| # | Finding | Ruling | Confidence |
+|---|---|---|---|
+| R23 | MAJ-1 | **Accepted.** Rewrite §6's prediction from the code's actual path.<ul><li>Queued inputs carry the origin, and a resume restores it from the keyframe, so `engine.inputs` moves from rung 1 in `smoke` and in `solo`. `solo` has an `OracleMove` input on `main` since `df4a7f4`.</li><li>The bisect names `engine.inputs` before `events.meta`.</li><li>`agenda.timers` and `engine.commands` are not visible at a yearly rung.</li></ul>Make the SPR-020 sprint's acceptance robust: the audit records the measured first divergence, and every table that differs must be one that envelope v2 names. The prose prediction stays, marked as a prediction | 9/10 |
+| R24 | MIN-1, MIN-2 | **Accepted.**<ul><li>State the origin tail's exact width and encoding, and its order relative to EVO-001's timer `cause` tail (origin after cause, both written only when non-zero, each with its presence marker).</li><li>Commands and timers created by a drain inherit the drained command's origin (smoke X4's `Audit`). Add this case to self-test check 7</li></ul> | 8/10 |
+| R25 | MIN-3 | **Accepted.** `S6`'s `chain_head` and M7's `claim.cause_event` are set in the same step as their event, so they become `event_ref` columns written through `ctx.set_cause`. This is a declaration-only change: the frozen M7 text changes through its version bump in this PR, and S6 is a draft | 8/10 |
+| R26 | NITs | All accepted:<ul><li>a bad `[role_domains]` gives a named refusal, not a traceback;</li><li>a `match_event` clause never anchors a domain;</li><li>the "source" wording;</li><li>the `opt(u64)` claim;</li><li>`default` is refused on an `event_ref` column;</li><li>rows a level inserts are covered by the `ChangeWithoutCause` check;</li><li>materiality is decided by the journal's own rule, and the spec's kind list follows it;</li><li>`lint_odd --next` handles a next spec with zero amendments without crashing (SPR-019's `next/M7` needs it);</li><li>check 7 compares the origin it expects, so a lost origin fails</li></ul> | 9/10 |
+| R27 | Merge | Merge `origin/main`: SPR-012 `df4a7f4`, and PR #60 if it has landed by then. Then regenerate `golden/wire_v1.txt` with the tool if PR #60 is already on `main` (the merge order is free; the second to merge regenerates) | 9/10 |
+
+The Architect verifies round 4 without another review agent unless the delta is large.
+
+### 3.1 The review (round 3, independent reviewer)
+
+Reviewer: independent and adversarial, on a different model from the drafter's. Copy reviewed: `$R3/src`, a git archive of `99691b0`. `$R3` = the Architect's scratchpad `envelope_review_r3/`.
+
+Reviewer: independent, on a different model from the drafter's. Head reviewed: **`99691b0`** (`origin/arch/SPR-020-envelope`, equal to PR #61's head SHA by the REST API). Its merge base with `main` is `11b300d`. The review copy is `$R/src`, a git archive of the head. `$R` is `envelope_review_r3/` in the Architect's scratchpad. Nothing in the repository was modified. Line numbers refer to `99691b0`.
+
+### BLUF
+
+**Not ready to merge: 0 BLK, 1 MAJ, 3 MIN, 8 NIT.**
+
+- **Applied:** R15 to R22, cleanly. Most of R13 and R14 is applied too.
+- **Gates:** every gate I ran is green, and round 2's planted narrowings now FAIL (details under "Run").
+- **The one MAJ:** §6's divergence prediction is wrong once you follow the code.
+  - The queued input must carry its origin, because a keyframe resume does not re-submit queued inputs. So `rh-core/engine.inputs` moves from rung 1 in `smoke`, and in `solo` too: `solo` now has an `OracleMove` input on `main`.
+  - `engine.inputs` sorts before `events.meta`, so the bisect names it first.
+  - `agenda.timers` and `engine.commands` never differ at any yearly rung. The oracle-origin rows they hold live at most about 62 days after day 100.
+- **Main has moved.** `main` is now `df4a7f4` (SPR-012, #56), which landed 20 minutes before the round-3 push. A trial merge conflicts in `python/tests/test_check_all_inventory.py` only.
+
+### R13–R22
+
+| # | Status | Note |
+|---|---|---|
+| R13 | **Partial** | <ul><li>**Done.** The tail is hash-neutral: rows are hashed length-prefixed (`hash.rs` chunk layout), and a 0 origin adds no bytes. The kind → origin mapping is stated (`envelope_v0.md:51`, `schema.sql` `input_journal.kind`). §6 is restated.</li><li>**Open: the prediction is wrong** (MAJ-1).</li><li>**Open: the tail's width and its position next to EVO-001's timer `cause` tail are not stated** (MIN-1).</li></ul> |
+| R14 | Applied, with a gap | <ul><li>**Done.** The rule is in `05.1:89` (v1.13) and `envelope_v0.md:51`. Check 7 passes, and `--control origin-lost` fails check 7 by name.</li><li>**Gap.** A drain's own commands and timers have no rule or API (MIN-2).</li><li>Check 7 is shape-only (NIT-8).</li></ul> |
+| R15 | Applied | <ul><li>`roles` and `motives` may only grow. Three new amendable paths.</li><li>The self-check reads "33 planted changes rejected (3 of them by the amendments lock), 19 amendments recorded and locked".</li><li>My probes are listed under "Run".</li></ul> |
+| R16 | Applied | <ul><li>The anchor is defined, and an unbound domain is refused.</li><li>The three example patterns are fixed. `source` is split into `owner` and `column`.</li><li>Nits: NIT-1 and NIT-2, plus stale wording (NIT-3).</li></ul> |
+| R17 | Applied | <ul><li>`event_ref` is an `Option<EventId>`, and no event is renumbered. S6 declares `default` and `cause_column` on its three columns.</li><li>The one Rust line compiles. `nextest -p rh-registry` passes 18/18, and `rh-cli ownership` reports 148 columns and 0 violations.</li><li>It is vocabulary only: no storage changes.</li><li>Nits: NIT-3 and NIT-4.</li></ul> |
+| R18 | Applied | `canonical_v0.md`: the status rule, the §3 record checks, `entity_kind` 0–5 and a change log (§8). The golden file still has a motive edge and an untold cause. |
+| R19 | Applied | `envelope_v0.md:88`. The `next/` lint path has a pre-existing crash (NIT-7). |
+| R20 | Applied | `envelope_v0.md:147` and the PR body. |
+| R21 | Applied; deviation stated | <ul><li>The precedence is total: `motivated_by`, then `contingent`, `triggered`, `enabled`, `probabilistic`, `relayed_knowledge`.</li><li>The deviation is argued at §11 (6/10) and in the PR body. I find it sound: `contingent` first would drop the motive edge from a `REVENGE`.</li></ul> |
+| R22 | Applied | <ul><li>Version entries are in order and the stale text is gone.</li><li>The next M2 says 0.2.2.</li><li>The shape check exists (NIT-1).</li><li>The guard wording is fixed (NIT-5).</li><li>The parser refuses forward causes and kinds 6–8.</li></ul> |
+
+### Findings
+
+#### MAJ-1: §6's prediction misses `rh-core/engine.inputs` and is wrong at ladder granularity
+
+- **Where:**
+  - `specs/chronicle/envelope_v0.md:143` (smoke);
+  - `:144` (solo, household and hamlet);
+  - the PR body's acceptance checklist.
+- **Evidence:**
+  1. **The engine must carry the origin through the input queue.**
+     - The `Inputs` job needs the input's origin, but `MaterialInput` holds only `scope` (`rh-core/src/engine.rs:102`).
+     - Queued inputs are plane-A state, hashed as `rh-core/engine.inputs` (`rh-snapshot/src/state.rs:199`).
+     - A resume restores them from the keyframe and does not re-submit them from the journal (`rh-snapshot/src/resume.rs:8`).
+     - So the origin has to ride in the queued row. At `oracle`, that row moves whatever the tail rule.
+     - The spec never mentions `MaterialInput` or `engine.inputs`.
+  2. **Smoke journals and submits all 1,136 inputs before the first instant** (`rh-golden/src/run.rs:502`; ladder header `journal 1136`). `engine.inputs` is non-empty from rung 1 (baseline root `90eef272…` at rungs 1–7), so it moves from rung 1 until the last input in year 994.
+  3. **The bisect names the wrong table.** `PlaneDigest::first_divergence` walks tables in name order (`hash.rs:337`), and `rh-core/engine.inputs` sorts before `rh-core/events.meta`. At month 1 the bisect therefore names `engine.inputs`, not `events.meta`, and `events.meta` is not "alone at that instant".
+  4. **The re-sampled X3 timers never reach a yearly rung.** They land 1 to 60 days after the input on day 100 (`vital.rs:32`, `resample_timer`). Their `Settle`, and X4's per-`Settle` `Audit`, are drained within a day or two each. No oracle-origin timer or command is pending at any year end, so the ladder never shows `agenda.timers` or `engine.commands`. "Each from the rung predicted here" (year 7) would fail. Those rows are visible only at instant or month granularity inside input years.
+  5. **`solo` now has an input.** On `main` (`df4a7f4`), `worlds/solo/inputs.toml` holds one scope-only `OracleMove` on Ada, journaled before the first instant. So `solo`'s `engine.inputs` moves from rung 1 to rung 53. The claim that `solo` "submits no material input" is false once main is merged.
+- **Fix:**
+  - Add `MaterialInput.origin`, and write the `engine.inputs` row as `… list(entity scope)` followed by a `u8 origin` tail only when non-zero.
+  - Restate §6:
+    - the yearly ladders of `smoke` and `solo` name `engine.inputs` (`smoke` rungs 1–994, `solo` rungs 1–53) and `events.meta`;
+    - the bisect names `rh-core/engine.inputs` first, at month 1;
+    - `agenda.timers` and `engine.commands` move only at instants inside an input year, so test them with a targeted monthly ladder over year 7, or an engine test, and not with the yearly ladder.
+  - Re-merge `main` (one conflict, in the inventory test).
+- **Confidence:** 85%. The movement is inferred from the code paths and the baseline's roots. I did not implement origin or run the ladder.
+
+#### MIN-1: the origin tail's encoding is not exact
+
+- **Where:** `envelope_v0.md:51` (the tail and "a keyframe carries them as a nullable column"), `:139` (§6); `05.1:89`.
+- **Problem:**
+  - The text says "a tail written after the row's last field only when non-zero", but it gives no width (`u8`?).
+  - EVO-001 puts the timer's `cause` slot "after the payload only when present" (`05.1` rule 2). Today the payload is followed by `u8 tombstoned` (`state.rs:29`). So the two optional tails have no stated order.
+  - Rows are length-delimited, so a decoder can tell the four lengths apart only if the order and widths are fixed. Two implementations could hash differently.
+  - "A keyframe carries them as a nullable column" does not match the keyframe, which stores each row as bytes (`keyframe.rs:13`).
+- **Fix:** state the full rows:
+  - `agenda.timers`: `… i64 payload, u8 tombstoned[, u64 cause if present][, u8 origin if ≠ 0]`;
+  - `engine.commands`: `… opt(u64 draft)[, u8 origin if ≠ 0]`, decoded by the remaining length;
+  - the same for `engine.inputs` (MAJ-1).
+- **Confidence:** 75%.
+
+#### MIN-2: a drain's own commands and timers have no origin rule
+
+- **Where:** `envelope_v0.md:51` (only `ctx.emit_from(&command, draft)`) against `05.1:89` ("a drain runs a command's effects under that command's origin").
+- **Problem:** the two texts give two readings.
+- **Evidence:**
+  - Smoke's X4 drain submits an `Audit` for some `Settle`s (`estate.rs:60`). Is it the job's `sim`, or the `Settle`'s `oracle`? Nothing names a `submit_from` or a `schedule_from`.
+  - X7 emits one aggregate `TRADE` per drain, over audits of mixed origins, and no rule covers it.
+  - So `engine.commands` bytes can differ between implementations.
+- **Fix:**
+  - Add a scoped `ctx.under(&command, |ctx| …)`, or `submit_from` and `schedule_from`, so that everything created for a command carries the command's origin.
+  - An effect over several commands carries the job's origin.
+- **Confidence:** 70%.
+
+#### MIN-3: event-id state columns set in the same step have no slot (outside R13–R22, surfaced by R17)
+
+- **Where:**
+  - `S6.artifacts.odd.toml:48` (`artifact.chain_head`, the latest chain event, which the same step emits);
+  - `M7.dynasty.odd.toml:292` (`claim.cause_event`, "the SUCCEED or DEPOSED event that created it").
+- **Problem:**
+  - Both are `u64` and written by the step, but the step holds only a `DraftRef`. This is round 1's MAJ-2 again.
+  - `set_cause` covers only `cause_column` siblings.
+  - SPR-021 codes M7 against this text.
+- **Fix:**
+  - Let the buffered slot write any `event_ref` column (`ctx.set_event_ref`).
+  - Type these columns `event_ref` at their next versions.
+  - Or state that they are written from a known id only.
+- **Confidence:** 60%.
+
+#### NITs
+
+- **NIT-1: a bad `[role_domains]` is refused by a crash, not by name.**
+  - **Where:** `lint_patterns.py:126`, `:322`.
+  - **Problem:** `lint()` returns the shape errors, and then the self-check `assert`s, which run on the supplied Registry, raise `AssertionError`. Round 2's `reg_bad`, my planted variants and its old `source` shape all exit 1 with a traceback.
+  - **Fix:** print and return the shape errors before the self-checks.
+- **NIT-2: a `match_event` clause with a cast key anchors a domain.**
+  - **Where:** `lint_patterns.py:140`.
+  - **Problem:** `{match_event = "m1", actor = "A"}` with `A = "authority"` passes, yet §1 says a `match_event` has no cast.
+  - **Fix:** refuse cast keys on a `match_event` clause.
+- **NIT-3: stale or inaccurate wording.**
+  - `envelope_v0.md:211` says "one whose source is `none` warns"; it should say `owner`.
+  - `:151` says `opt(u64)` is "the encoding `rh-snapshot` already defines". That holds for engine tables only. World columns are `i64` rows, 8 bytes (`keyframe.rs:18`), so an `event_ref` world column is a new encoding: say it is the sprint's.
+- **NIT-4: a `default` on an `event_ref` column is accepted.**
+  - **Problem:** `lint_odd` passes `default = 0` on `artifact.condition_cause`, but 0 is a real id and the type's default is none by definition.
+  - **Fix:** refuse a `default` on `event_ref`.
+- **NIT-5: rows a level inserts are not "kept rows".**
+  - **Where:** `envelope_v0.md:151`, `05.1:89`.
+  - **Problem:** a new artifact created with condition below 1 and no cause escapes the `ChangeWithoutCause` check.
+  - **Fix:** say that an inserted row counts as changed from the default.
+- **NIT-6: materiality is a function of scope.**
+  - **Where:** `rh-snapshot/src/journal.rs:233`.
+  - **Problem:** a `ManifestSet`, `SettingChange` or `ConsoleMode` row with a scope is material, and has no origin. §2 says they "reach no plane-A job", which holds only by convention.
+  - **Fix:** refuse a scope on them at append, or map them to an origin.
+- **NIT-7 (pre-existing, from SPR-015): `lint_odd --next` crashes on a next spec with no amendments.**
+  - **Where:** `lint_odd.py:1494`.
+  - **Problem:** `next(iter(want))` raises `StopIteration`. A clean `next/T1.minds.odd.toml` reproduces it. R19's `next/M7.dynasty.odd.toml` hits it if it amends nothing.
+  - **Fix:** guard the lock probes with `if want:`.
+- **NIT-8: check 7 cannot catch a lost origin.**
+  - **Where:** `selftest_envelope.py:362`.
+  - **Problem:** the generator stamps each hop's origin itself, so the check proves only that the data shape is right. It models no timer, command or drain.
+  - **Fix:** fine for a spec self-test. Name the engine test that owns the property (V-DET-21 or a new V-*).
+
+### Run (all on `99691b0`)
+
+- **`selftest_envelope`:** PASS (checks 1–7, including "14 inputs, 28 hops"). Each of its five controls fails only its own check, by name.
+- **`lint_odd`:**
+  - real mode: PASS, 14 warnings;
+  - `--next`: PASS, with "33 planted changes rejected (3 of them by the amendments lock), 19 amendments recorded and locked";
+  - smoke: PASS;
+  - `--write-amendments-lock` leaves no diff.
+- **The 19 `odd_envelope` gates of `check_all`:** each passes or fails as designed. This covers round 2's `fx_cases.txt`; the `cause_column` case now expects `event_ref`.
+- **The four `odd_next_control` cases:** each FAILs with its diagnostic.
+- **Round 2's next-mode probes, re-planted on the merged next M2** (`$R/fx_next/`). The five changes must FAIL, and they do:
+  - `next_roles` (DEATH narrowed to `target`);
+  - `next_noroles` (DEATH's `roles` removed);
+  - `next_badrole` (`mother`, and MARRIAGE's `roles` dropped);
+  - `next_t1_motive` (a next T1 drops `VOW_OF`);
+  - `next_t1_snap` (a next T1 drops `stress`).
+
+  `next_snap` grows EXTINCTION to `[witness]` and `GRIEF_FOR`, and passes, as R15 allows.
+- **The next M2 against `11b300d`:** it differs only in the four `roles` lines and the 0.2.2 mentions.
+- **`lint_patterns`:**
+  - both packs PASS, with 2 `owner = none` warnings on the example pack;
+  - every bad `[role_domains]` probe exits 1, via NIT-1 (`$R/fx_dom/`);
+  - `$R/fx_pat/`: an unbound domain on an `unless` clause is refused; NIT-2's planted pattern passes.
+- **S6 probes** (`$R/fx_s6/`). These must FAIL, and they do:
+  - a missing default;
+  - a `u64` cause column;
+  - a mistyped default;
+  - a foreign cause column.
+
+  Round 2's S6 with a `u64` cause now FAILs. NIT-4's planted default passes.
+- **Other spec gates:**
+  - `canonical_v0 --check` (78 golden lines);
+  - `selftest_channel_a`, `selftest_channel_c` and `selftest.py`;
+  - `selftest_m2_f1`, and `selftest_m2_f1_mortality --check`.
+- **Generators:**
+  - `gen_manifest --check`;
+  - `gen_skeletons --check` (8 real, 7 smoke);
+  - `gen_hash_golden --check`.
+- **Architecture lints:** `lint_arch` and `lint_forbidden`.
+- **Python tooling:**
+  - ruff: clean;
+  - mypy: 44 files;
+  - pytest: 619 passed.
+- **Rust:**
+  - `cargo nextest run -p rh-registry --locked`: 18/18;
+  - `rh-cli` built (debug);
+  - `ownership`: 0 violations;
+  - `manifest schema --diff`: clean.
+
+  The only hand-written Rust change in the PR is `COLUMN_TYPES`. The rest is generated `SPEC_VERSION` constants.
+- **Trial merge with `origin/main` `df4a7f4`:** one conflict, in the inventory test.
+
+### Not run
+
+- `bin/check_all.sh` as a whole.
+- The `nextest` suites of `rh-core`, `rh-snapshot` and `rh-golden`.
+- The smoke and solo golden runs, the bisect, and the perf and allocation gates.
+- MAJ-1's ladder movement was not measured: nothing implements origin yet. It rests on the code paths and the baseline's per-table roots.
+- The gates after a full merge with `df4a7f4`: only `git merge-tree` was run.
+- `manifest_parity.py`.
+
+`$R/target` was deleted after the run.
 
