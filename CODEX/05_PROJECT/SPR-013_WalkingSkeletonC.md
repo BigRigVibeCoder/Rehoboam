@@ -9,7 +9,7 @@ tags: [sprint]
 related: [BCK-001, BCK-002, PRJ-002, SPR-011, SPR-012, SPR-007, SPR-009, ADR-0006, ADR-0024, ADR-0030, ADR-0035]
 created: 2026-10-16
 updated: 2026-10-17
-version: 1.0.1
+version: 1.0.2
 ---
 
 > **BLUF:** Increment C of the walking skeleton (WP P1.0): World Stream v0 and the sealed Parquet chronicle (`rh-stream`), `rh-cli tail`, the `life_ends` pattern with its DuckDB twin (`rh-sifter` v0), journal replay end to end, and rungs 1 and 2 (`household`, `hamlet`) on the same binary. Developers: AGT-002-CORE (AGT-002-TOOLS for the twin and its check). Testers: AGT-003-DET and AGT-003-IF (one Tester session may hold both roles, on a different model from the Developer's). About 3.5 agent-days. **APPROVED by the director at G0** (C3; D30, 2026-10-16). SPR-011's rulings 1–19 bind this sprint and are not repeated here.
@@ -52,7 +52,7 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 
 #### T-09: `rh-stream`: channel A and the sealed chronicle (rulings 11, 12, 13)
 - **Deliverable:** Crate `rh-stream`, pinned (A, machinery), with `parquet` reviewed in. The record header and the P1.0 kinds; the in-instant order; per-sim-year sealed segments matching `schema.sql` and `specs/stream/channel_a_v0.sql`; atomic sealing; the per-segment canonical digest; the lossless one-line canonical text form and its parser. The host writes after each instant, from `Engine::drain_events`, the journal and the life-course delta.
-- **Acceptance:** V-STR-01 on `solo` and a 60-person fixture: segments byte-identical across two runs and across 1 and N threads, and canonical digests equal. V-DATA-10 subset: a Python test reads every sealed table with DuckDB, with `schema.sql`'s types. `seq` is contiguous from 0 across segments. The canonical form round-trips every record (property test; the parser joins the nightly fuzz tier). A `kill -9` during sealing leaves no partial segment, and the resumed run reseals the same bytes (GOV-002 tier 15). No channel-A table has a float column.
+- **Acceptance:** V-STR-01 on `solo` and a 60-person fixture: segments byte-identical across two runs and across 1 and N threads, and canonical digests equal. V-DATA-10 subset: a Python test reads every sealed table with DuckDB, with `schema.sql`'s types. `seq` is contiguous from 0 across segments. The canonical form round-trips every record (property test; the parser joins the nightly fuzz tier). A mid-year `kill -9` of `rh-cli run`, followed by a resume from the 10-year keyframe, re-emits no seq below the first sim-year not on disk. That year's lines, `STEP_DIGEST` included, are byte-identical to the unbroken run's. A seal in flight at the kill is lost, and the year is resealed to the same bytes. SPR-026's host starts its live edge from that same point (`specs/stream/wire_v1.md` §6.2 and §11; REV-SPR-026 R18). A `kill -9` during sealing leaves no partial segment, and the resumed run reseals the same bytes (GOV-002 tier 15). No channel-A table has a float column.
 - **Status:** [ ] not started
 
 #### T-10: `rh-cli tail`
@@ -96,7 +96,7 @@ Fixed in SPR-013's plan before it starts (PR #37's carried questions): what make
 
 | # | Blocker | Status |
 |---|---|---|
-| 1 | SPR-012 not merged | Open |
+| 1 | SPR-012 not merged | Closed: SPR-012 merged (`df4a7f4`) |
 | 2 | `specs/stream/channel_c_v0.sql` does not exist (PR #37 Q10) | Closed: PR #45 (reviewed) |
 | 3 | The canonical line grammar and the general DATA-5 tellability rule are not written (PR #37 Q8, Q11) | Closed: PR #45 (reviewed) for the grammar. The DATA-5 amendment (`05.2` §4.0) awaits the director (D38); P1.0 admits every draft, so T-09 does not wait on it |
 
