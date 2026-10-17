@@ -2,17 +2,26 @@
 id: REV-SPR-029
 title: "Independent review of the family annals v0 spec (PR #69)"
 type: record
-status: OPEN
+status: CLOSED
 owner: architect
 agents: [architect]
 tags: [verification]
 related: [PRJ-002, SPR-029, SPR-019, SPR-020, SPR-021, SPR-030, REV-SPR-019, REV-SPR-020, BCK-002]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.4.0
+version: 1.0.0
 ---
 
-> **BLUF: round 4 on `70b4c67`. Ready once two small fixes land: no blocker, no major, 2 minors (stale golden files; §2's edge predicate) and 3 nits** (§4). The contract alone reproduces every golden the manifest lists. Rulings R39–R42 are in §0d.
+> **BLUF: CLOSED on `03b9890` (round 5, verified by the Architect, 2026-10-17). The family annals v0 spec is ready to merge** (§0e).
+> - An independent renderer written from the contract alone reproduces all 17 golden files byte for byte.
+> - All 34 provenance mutants fail check 1 by name.
+> - All 38 gates pass with their controls.
+> - Renders are deterministic across hash seeds, locales and shuffled extracts.
+> - The fixture is a possible history under M2's and M7's rules.
+>
+> Five rounds; rulings R1–R42.
+>
+> **Round 4** on `70b4c67`. Ready once two small fixes land: no blocker, no major, 2 minors (stale golden files; §2's edge predicate) and 3 nits** (§4). The contract alone reproduces every golden the manifest lists. Rulings R39–R42 are in §0d.
 >
 > **Round 3** on `e3fa495`. Nearly ready: no blocker, 1 major (a non-positive motive edge still reads "moved by"), 4 minors and 3 nits** (§3). Every round-2 mutant now fails by name. Rulings R31–R38 are in §0c.
 >
@@ -124,6 +133,21 @@ The round-2 reviewer verified round 4 on `e3fa495`'s successor, `70b4c67` (§4).
 **Round 5:**
 1. The drafter applies R39–R42, regenerates with the tool, runs `check_all --part core`, and pushes once.
 2. The Architect verifies with `annals_review_r4/work_r4/`, closes this review, and merges PR #69.
+
+## 0e. Round 5: the Architect's verification (2026-10-17), CLOSED
+
+Verified on `03b9890` with the round-4 scripts (`annals_review_r5/work_r5/`):
+
+| Check | Result |
+|---|---|
+| Gates | 38 of 38. The new orphan control (`annals_orphan_control`) fails with `STALE: orphan …/ashcombe_line-1.txt: no rendered group owns it` |
+| Mutants | 34 of 34 fail check 1. P26's message now names the position: "header: token 13 differs: extra=1 where the render gives nothing" (R41) |
+| Contract alone | The independent renderer reproduces all 15 files the manifest lists, plus Edric's line group, which check 8 renders (R39): 17 of 17 |
+| Fixture and lint | `fixture_check.py` finds 0 problems in the three fixtures; all 22 lint probes are refused |
+| Determinism | Shuffled, comment-stripped extracts render identically; `--check` passes under `PYTHONHASHSEED` 0 and 999 |
+| Text | R40: §2's chosen-edge predicate. R42: a `p-` label cites nothing beyond the id, and only channel-A `LIFE_ENTRY` parents enter the pool |
+
+**Carried forward:** BCK-002 A-56, M7 house membership (R18; filed with REV-SPR-030), which SPR-021 decides. The envelope's coalesced-motive sign (R20) goes into the SPR-020 sprint brief.
 
 ## 1. The review (round 1, independent reviewer)
 
