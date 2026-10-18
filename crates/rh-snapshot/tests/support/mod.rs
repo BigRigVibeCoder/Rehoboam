@@ -261,7 +261,7 @@ impl Stub {
     }
 
     /// Boxes it for registration.
-    pub fn boxed(self) -> Box<dyn SystemModel> {
+    pub fn boxed(self) -> Box<dyn SystemModel<Index = ()>> {
         Box::new(self)
     }
 

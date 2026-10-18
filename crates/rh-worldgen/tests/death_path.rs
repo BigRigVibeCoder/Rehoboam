@@ -317,7 +317,7 @@ impl SystemModel for Sender {
     }
 }
 
-fn senders() -> Vec<Box<dyn SystemModel>> {
+fn senders() -> Vec<Box<dyn SystemModel<Index = ()>>> {
     vec![
         Box::new(Sender {
             id: "X7.murder",
@@ -384,6 +384,8 @@ fn engine_with(
         demography: Some(DemographyParams {
             e0: Q16_16::from_int(e0),
             brass_beta: Q16_16::ONE,
+            tfr: Q16_16::from_bits(321126), // 4.9 in Q16_16
+            elite_fertility_mult: Q16_16::ONE,
         }),
         founders: (0..founders)
             .map(|_| Founder {
@@ -398,7 +400,7 @@ fn engine_with(
     tables.insert("x7.plan", x7.to_vec());
     tables.insert("x1.plan", x1.to_vec());
     edit(&mut tables);
-    let mut systems: Vec<Box<dyn SystemModel>> =
+    let mut systems: Vec<Box<dyn SystemModel<Index = ()>>> =
         vec![Box::new(Demography::from_world(&spec).unwrap().unwrap())];
     systems.extend(senders());
     let registered = register(systems, &table).unwrap_or_else(|e| panic!("{e}"));

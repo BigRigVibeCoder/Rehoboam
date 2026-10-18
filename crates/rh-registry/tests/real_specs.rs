@@ -301,6 +301,8 @@ fn the_generated_params_are_q16_16() {
         eps_f: Fixed::from_ratio(1, 10).unwrap(),
         eps_m: Fixed::from_int(3),
         elite_fertility_mult: Fixed::from_ratio(16, 10).unwrap(),
+        density_capacity: 10_000_000,
+        density_mortality_slope: Fixed::ONE,
     };
     assert_eq!(p.e0.to_bits(), 85 << 16);
     let _ = s5::Params {
@@ -368,7 +370,7 @@ fn commands_and_event_kinds_are_checked_against_the_real_specs() {
     use rh_core::access::CommandSend;
     let t = real_ownership();
     let with =
-        |emits: Vec<&'static str>, target: Option<&'static str>| -> Vec<Box<dyn SystemModel>> {
+        |emits: Vec<&'static str>, target: Option<&'static str>| -> Vec<Box<dyn SystemModel<Index = ()>>> {
             let mut s5 = s5_system(s5::RngPurpose::names());
             if let Some(target) = target {
                 s5.access.sends.push(CommandSend {
@@ -848,10 +850,10 @@ fn as_specified(t: &Ownership, system: &'static str, _world: &[&'static str]) ->
 fn m2_m7_and_t1_register_together_as_specified() {
     let t = real_ownership();
     let world = ["M2.demography", "M7.dynasty", "T1.minds"];
-    let trio = || -> Vec<Box<dyn SystemModel>> {
+    let trio = || -> Vec<Box<dyn SystemModel<Index = ()>>> {
         world
             .iter()
-            .map(|&id| Box::new(as_specified(&t, id, &world)) as Box<dyn SystemModel>)
+            .map(|&id| Box::new(as_specified(&t, id, &world)) as Box<dyn SystemModel<Index = ()>>)
             .collect()
     };
     let r = register(trio(), &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
@@ -990,9 +992,9 @@ fn register_world(
     t: &Ownership,
     world: &[&'static str],
 ) -> Result<rh_core::register::Registered, rh_core::register::RegistrationError> {
-    let systems: Vec<Box<dyn SystemModel>> = world
+    let systems: Vec<Box<dyn SystemModel<Index = ()>>> = world
         .iter()
-        .map(|&id| Box::new(as_specified(t, id, world)) as Box<dyn SystemModel>)
+        .map(|&id| Box::new(as_specified(t, id, world)) as Box<dyn SystemModel<Index = ()>>)
         .collect();
     register(systems, &t.spec_table())
 }
