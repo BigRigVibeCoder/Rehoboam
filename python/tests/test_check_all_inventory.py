@@ -405,8 +405,7 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
-    "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 "
-    "T-06)",
+    "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 T-06)",
     "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL "
     "(SPR-013 T-09; R2)",
     "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)",

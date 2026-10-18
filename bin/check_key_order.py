@@ -45,8 +45,12 @@ def main(argv: list[str]) -> int:
     if "--rust-output" in args:
         rust = Path(args["--rust-output"]).read_text(encoding="utf-8")
     elif "--rust-bin" in args:
-        done = subprocess.run([args["--rust-bin"], "effect", "keys", "--registry", str(registry)],
-                              capture_output=True, text=True, check=False)
+        done = subprocess.run(
+            [args["--rust-bin"], "effect", "keys", "--registry", str(registry)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         if done.returncode != 0:
             print(f"FAIL: rh-cli effect keys exited {done.returncode}: {done.stderr.strip()}")
             return 1
