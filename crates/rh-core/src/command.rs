@@ -21,25 +21,220 @@
 
 use std::collections::BTreeMap;
 
-use rh_events::DraftRef;
+use rh_events::{DraftRef, EventRef};
 use rh_ids::{EventId, PersonId};
 
 use crate::phase::Phase;
+use crate::system::PulseBinding;
 use crate::time::SimTime;
+
+/// One payload field of a command as a system submits it: an integer, or an event-typed slot
+/// (`05.1` §2 rule 2, "Event-typed slots"). The owner's spec types each field
+/// ([`ArgType`]); `StepCtx::submit` refuses an `Int` in an `EventRef` field, an `Event` anywhere
+/// else, and an integer outside its field's type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Arg {
+    /// An integer field: an id's bits, a time, a code, a fixed-point value's raw bits.
+    Int(i64),
+    /// An `EventRef` field; the merge resolves a `Draft` to its id.
+    Event(EventRef),
+}
+
+impl From<i64> for Arg {
+    fn from(v: i64) -> Self {
+        Self::Int(v)
+    }
+}
+
+impl From<EventRef> for Arg {
+    fn from(r: EventRef) -> Self {
+        Self::Event(r)
+    }
+}
+
+impl Arg {
+    /// The integer, if it is an integer field.
+    #[must_use]
+    pub const fn int(self) -> Option<i64> {
+        match self {
+            Self::Int(v) => Some(v),
+            Self::Event(_) => None,
+        }
+    }
+
+    /// The event slot, if it is one.
+    #[must_use]
+    pub const fn event(self) -> Option<EventRef> {
+        match self {
+            Self::Event(r) => Some(r),
+            Self::Int(_) => None,
+        }
+    }
+
+    /// The field as its hashed row stores it (`rh-core/engine.commands`, `05.1` v1.14): an
+    /// integer as itself, an event slot as its resolved id, or -1 for none. An unresolved `Draft`
+    /// never reaches a queue.
+    #[must_use]
+    pub fn encoded(self) -> i64 {
+        match self {
+            Self::Int(v) => v,
+            Self::Event(r) => r.known().map_or(-1, |id| id.to_raw().cast_signed()),
+        }
+    }
+}
+
+/// A payload field's type, from the closed vocabulary of `[[applies]] payload` (EVO-001 R5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ArgType {
+    /// A `PersonId` (any `u64` bits).
+    Person,
+    /// An event-typed slot.
+    Event,
+    /// A `SimTime` (any `i64` minutes).
+    Time,
+    /// Any other typed id (`TitleId`, `HouseId`, ...): any `u64` bits.
+    Id,
+    /// `u8`, `u16`, `u32`: `0..=max`.
+    Unsigned(u32),
+    /// `u64`: any bits.
+    U64,
+    /// `i64`.
+    I64,
+    /// `bool`: 0 or 1.
+    Bool,
+    /// `q8_8` raw bits: an `i16`.
+    Fixed8_8,
+    /// `q16_16` raw bits: an `i32`.
+    Fixed16_16,
+    /// `enum(<column>)`: a code below the count, or any code `>= 0` when the count is unknown.
+    Enum(Option<usize>),
+}
+
+impl ArgType {
+    /// The type a spec spells `ty`; `enum_codes` counts the codes of `enum(<column>)` columns.
+    #[must_use]
+    pub fn parse(ty: &str, enum_codes: &BTreeMap<String, usize>) -> Option<Self> {
+        Some(match ty {
+            "PersonId" => Self::Person,
+            "EventRef" => Self::Event,
+            "SimTime" => Self::Time,
+            "TitleId" | "OfficeId" | "ClaimId" | "HouseId" | "VowId" | "ArtifactId"
+            | "HouseholdId" | "PlaceId" => Self::Id,
+            "u8" => Self::Unsigned(8),
+            "u16" => Self::Unsigned(16),
+            "u32" => Self::Unsigned(32),
+            "u64" => Self::U64,
+            "i64" => Self::I64,
+            "bool" => Self::Bool,
+            "q8_8" => Self::Fixed8_8,
+            "q16_16" => Self::Fixed16_16,
+            _ => {
+                let column = ty.strip_prefix("enum(")?.strip_suffix(')')?;
+                Self::Enum(enum_codes.get(column).copied())
+            }
+        })
+    }
+
+    /// Whether `v` is a value of this (integer) type.
+    #[must_use]
+    pub fn admits(self, v: i64) -> bool {
+        match self {
+            Self::Person | Self::Time | Self::Id | Self::U64 | Self::I64 => true,
+            Self::Event => false,
+            Self::Unsigned(bits) => (0..1_i64 << bits).contains(&v),
+            Self::Bool => v == 0 || v == 1,
+            Self::Fixed8_8 => i16::try_from(v).is_ok(),
+            Self::Fixed16_16 => i32::try_from(v).is_ok(),
+            Self::Enum(count) => {
+                v >= 0 && count.is_none_or(|n| usize::try_from(v).is_ok_and(|v| v < n))
+            }
+        }
+    }
+}
+
+/// Whether a command's key person must be living when its draining binding takes it
+/// (`[[applies]] key`; the dead-person drop, BCK-002 A-30).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum KeyRule {
+    /// `living`: in a world with a ledger, `rh-core` drops it if its key person is dead.
+    Living,
+    /// `any`: never dropped by `rh-core`.
+    Any,
+}
+
+/// What registration knows about one registered command (`05.1` §2 rule 2): its owner and
+/// draining binding from the owner's `AccessSpec`, its typing from the owner's spec.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommandDecl {
+    /// The owner.
+    pub owner: &'static str,
+    /// The binding that drains it.
+    pub drained_by: PulseBinding,
+    /// The key rule.
+    pub key: KeyRule,
+    /// The payload field that repeats the key person, or `None` when it is `Command::person`
+    /// itself (`key_field = "person"`).
+    pub key_field: Option<usize>,
+    /// The typed payload, `(field, type)`; `None` when untyped (a draft spec, or a test stub).
+    pub payload: Option<Vec<(String, ArgType)>>,
+    /// Whether it carries a sampled outcome (EVO-001 R9).
+    pub outcome: bool,
+}
+
+impl CommandDecl {
+    /// A declaration with no typing: `key = "any"`, untyped payload.
+    #[must_use]
+    pub const fn untyped(owner: &'static str, drained_by: PulseBinding) -> Self {
+        Self {
+            owner,
+            drained_by,
+            key: KeyRule::Any,
+            key_field: None,
+            payload: None,
+            outcome: false,
+        }
+    }
+
+    /// Whether field `i` is an event-typed slot.
+    #[must_use]
+    pub fn is_event_field(&self, i: usize) -> bool {
+        self.payload
+            .as_ref()
+            .and_then(|p| p.get(i))
+            .is_some_and(|(_, t)| *t == ArgType::Event)
+    }
+}
 
 /// A lifecycle command as a system submits it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Command {
     /// The command's Registry name (`[[commands]] command`, e.g. `TieDelta`).
     pub kind: &'static str,
-    /// The person it concerns: the queue orders by it.
+    /// The person it concerns: the queue orders by it, and the dead-person drop reads it.
     pub person: PersonId,
-    /// Command-specific integer arguments.
-    pub args: Vec<i64>,
-    /// The event that caused it, if the submitting step emitted one: resolved to its `EventId` at
-    /// the merge ([`QueuedCommand::cause`]), so the owner can link its own events to it (the death
-    /// path of `05.1` §2 rule 2).
-    pub cause: Option<DraftRef>,
+    /// The payload, in the owner's `[[applies]] payload` order.
+    pub args: Vec<Arg>,
+    /// The event that caused it: a draft of the submitting step, an id read from state, or none.
+    /// The merge resolves a draft to its `EventId` ([`QueuedCommand::cause`]), so the owner can
+    /// link its own events to it (the death path of `05.1` §2 rule 2).
+    pub cause: EventRef,
+}
+
+impl Command {
+    /// The integer of field `i`, if it is one.
+    #[must_use]
+    pub fn int(&self, i: usize) -> Option<i64> {
+        self.args.get(i).and_then(|a| a.int())
+    }
+
+    /// The event id of field `i`, if it is a resolved event slot.
+    #[must_use]
+    pub fn event(&self, i: usize) -> Option<EventId> {
+        self.args
+            .get(i)
+            .and_then(|a| a.event())
+            .and_then(EventRef::known)
+    }
 }
 
 /// The queue order key: `(tick, phase, person, seq)`.
@@ -58,7 +253,11 @@ pub struct QueuedCommand {
     pub sender: &'static str,
     /// The `EventId` of the command's cause, resolved from [`Command::cause`].
     pub cause: Option<EventId>,
-    /// The command.
+    /// The draft index the submitting step named its cause by, if it named one by a draft: kept
+    /// for the hashed row's `opt(u64 draft)` field (`specs/chronicle/envelope_v0.md` §2), whose
+    /// layout SPR-014 does not change.
+    pub cause_draft: Option<DraftRef>,
+    /// The command, every event slot resolved (`Known` or `None`).
     pub command: Command,
 }
 
@@ -101,7 +300,7 @@ impl CommandQueues {
         tick: SimTime,
         phase: Phase,
         sender: &'static str,
-        cause: Option<EventId>,
+        cause_draft: Option<DraftRef>,
         command: Command,
     ) {
         let queued = QueuedCommand {
@@ -109,7 +308,8 @@ impl CommandQueues {
             phase,
             seq: self.next_seq,
             sender,
-            cause,
+            cause: command.cause.known(),
+            cause_draft,
             command,
         };
         self.next_seq += 1;
@@ -120,11 +320,50 @@ impl CommandQueues {
     }
 
     /// Takes `owner`'s whole queue, in key order.
+    #[cfg(test)]
     pub(crate) fn take(&mut self, owner: &'static str) -> Vec<QueuedCommand> {
         self.queues
             .remove(owner)
             .map(|q| q.into_values().collect())
             .unwrap_or_default()
+    }
+
+    /// Takes the commands of `owner`'s queue whose kind `takes`, in key order; the others stay
+    /// queued, in order (`05.1` §2 rule 2: a binding drains only the kinds it is `drained_by`).
+    pub(crate) fn take_kinds(
+        &mut self,
+        owner: &'static str,
+        takes: impl Fn(&str) -> bool,
+    ) -> Vec<QueuedCommand> {
+        let Some(q) = self.queues.get_mut(owner) else {
+            return Vec::new();
+        };
+        if q.values().all(|c| !takes(c.command.kind)) {
+            return Vec::new();
+        }
+        if q.values().all(|c| takes(c.command.kind)) {
+            // The common case, as before SPR-014: the whole queue, with no partition.
+            return self
+                .queues
+                .remove(owner)
+                .map(|q| q.into_values().collect())
+                .unwrap_or_default();
+        }
+        let (drained, kept): (BTreeMap<_, _>, BTreeMap<_, _>) = std::mem::take(q)
+            .into_iter()
+            .partition(|(_, c)| takes(c.command.kind));
+        *q = kept;
+        if q.is_empty() {
+            self.queues.remove(owner);
+        }
+        drained.into_values().collect()
+    }
+
+    /// Every queued command, owners in name order, each queue in key order.
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &QueuedCommand)> {
+        self.queues
+            .iter()
+            .flat_map(|(owner, q)| q.values().map(move |c| (*owner, c)))
     }
 
     /// Puts back commands an owner did not take (they keep their keys and order).
@@ -227,7 +466,7 @@ mod tests {
             kind: "Die",
             person: PersonId::from_raw(person),
             args: vec![],
-            cause: None,
+            cause: rh_events::EventRef::None,
         }
     }
 
@@ -266,6 +505,80 @@ mod tests {
         );
         assert_eq!(q.waiting("M2"), 0);
         assert_eq!(q.len(), 1, "S1's queue is untouched");
+    }
+
+    fn of(kind: &'static str, person: u64) -> Command {
+        Command {
+            kind,
+            ..cmd(person)
+        }
+    }
+
+    /// SPR-014 (the Tester's probe): a partial take across two kinds takes one kind in key order
+    /// and leaves the other queued in key order; taking the rest empties the queue, and the
+    /// whole-queue path gives the same order as the partition.
+    #[test]
+    fn a_partial_take_across_two_kinds_keeps_both_orders() {
+        let t = SimTime::from_minutes;
+        let fill = |q: &mut CommandQueues| {
+            for (i, (kind, person)) in [
+                ("Kill", 9),
+                ("Bury", 4),
+                ("Kill", 2),
+                ("Bury", 7),
+                ("Kill", 5),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let tick = t(i64::try_from(i % 2).unwrap_or(0));
+                q.push("E1", tick, Phase::Vital, "F1", None, of(kind, person));
+            }
+        };
+        let key = |c: &super::QueuedCommand| {
+            (c.tick.minutes(), c.command.person.to_raw(), c.command.kind)
+        };
+        let mut q = CommandQueues::new();
+        fill(&mut q);
+        let kills: Vec<_> = q
+            .take_kinds("E1", |k| k == "Kill")
+            .iter()
+            .map(key)
+            .collect();
+        assert_eq!(kills, [(0, 2, "Kill"), (0, 5, "Kill"), (0, 9, "Kill")]);
+        assert_eq!(q.waiting("E1"), 2, "the other kind stays queued");
+        assert!(
+            q.take_kinds("E1", |k| k == "Kill").is_empty(),
+            "nothing left of the kind"
+        );
+        let buries: Vec<_> = q
+            .take_kinds("E1", |k| k == "Bury")
+            .iter()
+            .map(key)
+            .collect();
+        assert_eq!(buries, [(1, 4, "Bury"), (1, 7, "Bury")]);
+        assert_eq!(q.len(), 0, "the emptied queue is removed");
+        let mut whole = CommandQueues::new();
+        fill(&mut whole);
+        let all: Vec<_> = whole.take_kinds("E1", |_| true).iter().map(key).collect();
+        let mut partitioned = kills;
+        partitioned.extend(buries);
+        partitioned.sort_unstable();
+        assert_eq!(all, partitioned, "the whole-queue path keeps key order");
+    }
+
+    /// SPR-014 (the Tester's probe): an event slot with no event is hashed as -1, never as an id.
+    #[test]
+    fn an_empty_event_slot_encodes_as_minus_one() {
+        use super::Arg;
+        use rh_events::EventRef;
+        use rh_ids::EventId;
+        assert_eq!(Arg::Event(EventRef::None).encoded(), -1);
+        assert_eq!(
+            Arg::Event(EventRef::Known(EventId::from_raw(0))).encoded(),
+            0
+        );
+        assert_eq!(Arg::Int(-1).encoded(), -1, "an integer field is itself");
     }
 
     /// SPR-007 T-02 (SPR-006 GAP-6): the state round-trips, and only the canonical form restores.

@@ -14,13 +14,13 @@
     reason = "generated skeleton items (Params) a parameterless system does not use"
 )]
 
-use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
-use rh_core::command::Command;
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandApply, CommandSend, Lag, Plane};
+use rh_core::command::{Arg, Command};
 use rh_core::fixed::Q16_16;
 use rh_core::system::{InvariantResult, PulseBinding, SimError, StepCtx, SystemModel};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EventDraft, EventRef};
 use rh_ids::EntityRef;
 
 use crate::common::{
@@ -97,8 +97,8 @@ impl Market {
                 ctx.submit(Command {
                     kind: "Settle",
                     person: person(r),
-                    args: vec![r64(r)],
-                    cause: None,
+                    args: vec![Arg::Int(r64(r))],
+                    cause: EventRef::None,
                 })?;
                 defaults += 1;
             }
@@ -135,8 +135,9 @@ impl SystemModel for Market {
                 command: "Settle",
                 target: "X4.smoke_estate",
             }],
-            applies: vec!["Audit"],
+            applies: CommandApply::from_drains(DRAINS),
             emits: vec!["TRADE"],
+            drain_only: Vec::new(),
         }
     }
 

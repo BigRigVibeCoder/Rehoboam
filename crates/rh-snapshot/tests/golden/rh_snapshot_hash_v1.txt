@@ -10,6 +10,7 @@
 #   engine_table <name> <rows> <root> <chunks..>  the synthetic engine state's tables
 #   engine <plane hash>   its state_hash: the synthetic world columns and engine tables,
 #   rh-core/events.held excepted (a carried table: in a keyframe, outside the hash)
+#   engine_cause_table, engine_cause: two timers with a cause (SPR-014 T-02)
 xxh3_64 0 2d06800538d394c2
 xxh3_64 1 e12ef9d2eb86ceeb
 xxh3_64 2 71470e6b39ce0012
@@ -572,3 +573,5 @@ engine_table rh-core/engine.meta 1 5c0512c39e5f5d73 2d197aaa9c682058
 engine_table rh-core/events.held 2 2293276c893846c1 50e24fddeb21b451
 engine_table rh-core/events.meta 1 1e07edcff2ba0af0 6c72c055589c094a
 engine 538f960fd22fe036
+engine_cause_table rh-core/agenda.timers 3 70700055d9869bd4 4e4c18fb63d587bd
+engine_cause a81d32c444a688f1

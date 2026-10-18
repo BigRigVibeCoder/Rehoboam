@@ -6,6 +6,20 @@ P0 (foundations) is under way. SPR-001 created the Cargo workspace (stub crates 
 ## Operating model (ADR-0032)
 Day-to-day work runs through `CODEX/`: roles (`CODEX/80_AGENTS/`), sprints and backlogs (`CODEX/05_PROJECT/`), governance (`CODEX/10_GOVERNANCE/`), and the generated index (`CODEX/00_INDEX/MANIFEST.yaml`: run `python -I bin/gen_manifest.py` to create it; it is not committed). Start each session with `AGENTS.md`. Run `bin/check_all.sh` before asking for an audit; no report, no pass. Be direct: no flattery, no softened bad news; bring the director decisions with a recommendation and a confidence rating, not open questions.
 
+## Token discipline (GOV-011 §8)
+Cost is roughly context size times number of calls: in 2026-10-15..18, re-reading context was about 70% of all usage and output about 12%.
+- **Keep context small.** `.claude/settings.json` compacts at 200k tokens. Restart a long-running role daily from `HANDOFF.md`, `/clear` between unrelated tasks, and keep state in files, not in the conversation.
+- **Make fewer calls.** Batch independent tool calls in one turn, wait for notifications instead of polling, and make one status pass per check-in.
+- **Keep output short.** Use quiet flags, `| tail`, or grep for FAIL; read sections, not whole files; pass long texts by path instead of pasting them.
+- **Pick the helper by job** (`.claude/agents/`):
+  - `drafter` for design;
+  - `reviewer` for independent review;
+  - `mechanic` for edits already decided;
+  - `scout` for lookups.
+
+  Other helpers default to a mid-tier model. Brief them tightly, and never resume one that has been idle for more than an hour (its cache is gone).
+- **Effort is high by default.** Use `/effort xhigh` for a hard call, then go back. Watch `/usage` and `/context`.
+
 ## Read before any work
 1. `docs/00_executive_summary.md`
 2. `docs/01_vision_and_intent.md` (success criteria S1–S4, principles)
@@ -42,7 +56,7 @@ cargo nextest run -p rh-ids --run-ignored only --test stream_independence   # V-
 # Architecture lints: stdlib Python
 python -I bin/lint_arch.py        # crate boundaries (V-INSP-03), plane isolation (V-PLN-01), engine purity (V-INSP-05, SPR-011)
 python -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_kind_unpinned/Cargo.toml   # must FAIL: kind "system" belongs to rh-sys-* and the crates pinned to (A, system), rh-minds alone (T1-A; REV-MINDS finding 3); arch/relabelled_minds/ must FAIL too
-python -I bin/lint_forbidden.py   # forbidden APIs in plane-A crates (V-DET-19), floats outside declared f32_field columns, file clocks, std::process::Command and file I/O outside FILE_IO_CRATES included (A-44)
+python -I bin/lint_forbidden.py   # forbidden APIs in plane-A crates (V-DET-19), floats outside declared f32_field columns, file clocks, std::process::Command and file I/O outside FILE_IO_CRATES included (A-44); env!/option_env! other than a literal CARGO_PKG_* name (rule build-env, A-50; SPR-014)
 # Python: configuration in python/pyproject.toml, run from the repository root
 python -m ruff check --config python/pyproject.toml .
 python -m mypy --config-file python/pyproject.toml
@@ -131,6 +145,15 @@ python -I bin/ci_scope.py trace population-synthesis -- specs/worldgen/selftest_
 bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x 3 (V-DET-01/02) for smoke, solo, household and hamlet, the yearly cut = the baseline (GAP-6), V-SCALE-01/04 at 1,000 years, the V-INV-02 debug soak, V-DET-11 x 64
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
+cargo nextest run -p rh-core --locked --test agenda_events lifecycle_queues   # SPR-014: V-DET-21 delivery and slots, V-INV-15 with its controls, V-INV-04 on stubs, the ledger row insert; --features mutant-deliver-every-job must FAIL ("delivered to a non-draining job")
+cargo nextest run -p rh-core --locked --features reference-gating-off --test per_instant   # SPR-038 stage A: the gated engine = Gating::Off after every instant on random worlds; eleven planted violations fail alike; --features reference-gating-off,mutant-unmarked-put-back or ...,mutant-stale-lagged-snapshot must FAIL, and --features mutant-late-pre-image --test agenda_events lifecycle_queues::guard must FAIL
+cargo nextest run -p rh-snapshot --locked --test per_instant_cache   # SPR-038 S11: a plane-A MerkleCache kept across instants = the full hash after every instant; --features rh-core/mutant-compact-keeps-version must FAIL
+cargo nextest run -p rh-sys-demography --locked --test invariants_oracle   # SPR-038 T-03: M2's O(N + L) invariants = the oracle on random and planted tables
+cargo bench -p rh-bench --features arena-alloc --bench instant   # SPR-038: the per-instant cost (gated in V-PERF-04 through perf_gate.py); a quiet instant allocates nothing; --features arena-alloc,instant-alloc-control must FAIL ("allocated on a quiet instant"); --bench instant_sweep gives the plan's ungated figures
+cargo nextest run -p rh-registry --locked --test real_specs v_inv_04 a_drain   # SPR-014: V-INV-04 on the real specs ({M2}, {M2, M7}, {M2, T1} refused, {M2, M7, T1}); a DRAINS that differs from [[applies]] drained_by refused by name
+cargo nextest run -p rh-snapshot --locked --test lifecycle   # SPR-014: queued event slots, timer causes and inserted rows through keyframes; the dropped{} counter changes no hash; --features mutant-cause-u8-zero --test golden must FAIL at agenda.timers (R15)
+cargo nextest run -p rh-worldgen --locked --test death_path   # SPR-014: V-INV-03 subset, the single death path with the real M2 0.2.3 and two test-only senders; same-slot deaths; the sender's re-sample
+cargo nextest run -p rh-contracts --locked --test drift --test consumer   # SPR-014: rh-contracts v0 equals M2's spec; RH_CONTRACTS_M2_SPEC=tests/lint_fixtures/contracts/M2_sex_reordered.odd.toml must FAIL (DRIFT in person.sex)
 cargo nextest run -p rh-snapshot --test hash --test golden --test journal --test keyframe --test guard --test unsynced_guard --test stub_world   # plane hashes, input journal, V-DET-05 keyframes, V-DET-10 unsynced guard, stub-world hash golden (SPR-007)
 cargo nextest run -p rh-snapshot --release --test guard   # the unsynced guard is compiled out of release builds (SPR-007)
 cargo nextest run -p rh-snapshot --run-ignored only --test keyframe   # DEF-3 full sweep: every bit of a keyframe's Arrow body flipped, nightly tier (SPR-007)
@@ -139,7 +162,7 @@ target/debug/rh-cli ownership    # single-writer column ownership from specs/sys
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
 # Performance (SPR-009): instruction counts under valgrind (needs valgrind and iai-callgrind-runner 0.16.1)
-python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8, and the draw-cost bench (SPR-011 A-37), within 10% of the baseline
+python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8, the draw-cost bench (SPR-011 A-37) and the per-instant bench (SPR-038), within 10% of the baseline
 python -I bin/perf_gate.py integrity --measured artifacts/perf/instructions.txt   # ruling 3: a changed baseline = the tool's output, [perf-baseline] PR
 python -I bin/perf_gate.py record   # regenerate the baseline (never by hand); only in a [perf-baseline] PR with a perf-baseline-reason: line
 cargo nextest run -p rh-snapshot --locked --test observer   # observer invariance: a host observer changes no hash (SPR-009 ruling 4)

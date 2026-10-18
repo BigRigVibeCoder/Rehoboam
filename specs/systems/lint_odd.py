@@ -1438,6 +1438,12 @@ def rust(sid, specs):
              f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
              "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
     lines += [f"    (Pulse::{x['pulse']}, Phase::{x['phase']})," for x in s["schedule"]]
+    # DECISION (SPR-014 T-01; REV-EVO-001 NIT-10): one (command, Pulse, Phase) per [[applies]] entry, its drained_by, so
+    # registration can compare the code's draining bindings with the spec as it compares SCHEDULE.
+    lines += ["];", "pub const DRAINS: &[(&str, Pulse, Phase)] = &["]
+    for a in s.get("applies", []):
+        pulse, _, phase = str(a.get("drained_by", "")).partition("/")
+        lines.append(f'    ("{a["command"]}", Pulse::{pulse}, Phase::{phase}),')
     # DECISION: the enum carries the spec's purpose names, so code never maps variants to names by
     # hand (registration checks the names against [[rng]], SPR-005 T-06). An empty enum takes no
     # #[repr]: Rust refuses a representation for a zero-variant enum. REF: SPR-005 ruling 2.
@@ -1824,7 +1830,7 @@ def main() -> int:
             ("draft", [], [ap(payload="{ a: PersonId, a: u64 }")], [], "field a is repeated", True),
             ("frozen", [], [dict(ap(), drained_by=None)], [], "needs drained_by", True),
             ("frozen", [], [ap(drained_by="Day/Agenda")], [], "is drained_by Day/Agenda, which [[schedule]] does not declare", True),
-            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-014")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-014", False),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-015")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-015", False),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-999")], [], "sprint SPR-999 names no sprint: no document under CODEX/05_PROJECT and no PRJ row", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-006")], [], "(SPR-006 is CLOSED: declare the binding)", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="P1.13 (SPR-014)")], [], "sprint must be \"SPR-NNN\"", True),
@@ -1839,7 +1845,7 @@ def main() -> int:
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }"}], "carries an outcome, so it needs timer", True),
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "nope"}], "needs purpose = one of its [[rng]] purposes", True),
             ("frozen", [], [ap(outcome=True, **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "", False),
-            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-014", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
+            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-015", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
             ("frozen", [], [ap(**{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "names a timer, but the owner's [[applies]] says it carries no outcome", False),
             ("frozen", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
             ("draft", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
@@ -1848,7 +1854,7 @@ def main() -> int:
         for status, reads, applies, commands, needle, want_err in probes:
             probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies, commands=commands)
             CLOSED_SPRINTS.add("SPR-006")
-            KNOWN_SPRINTS.update({"SPR-006", "SPR-014"})
+            KNOWN_SPRINTS.update({"SPR-006", "SPR-014", "SPR-015"})
             pe, pw = lint(reg, {M2: specs[M2], "M7.dynasty": specs["M7.dynasty"], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids) if "M7.dynasty" in specs else lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
             pe = [e for e in pe if e.startswith("probe.odd.toml")]
             pw = [e for e in pw if e.startswith("probe.odd.toml")]
