@@ -106,6 +106,23 @@ def test_the_pr_tier_times_out_at_20_minutes() -> None:
     assert workflow()["jobs"]["check-all"]["timeout-minutes"] == 20
 
 
+OVERFLOW = 'if [ "$1" = stream ]; then export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true; fi'
+STREAM_KEY = "${{ matrix.part == 'stream' && 'stream-overflow-checks' || matrix.part }}"
+
+
+def test_the_stream_part_s_cache_names_its_overflow_checks() -> None:
+    """PR #89's review C5: part stream builds its release profile with overflow checks.
+
+    check_all.sh's `part` turns them on, where Swatinem/rust-cache cannot see them; a cache
+    restored by its exact key is not saved again, so the stream job's key names them, and a cache
+    of the build without them is never its exact match.
+    """
+    assert OVERFLOW in SCRIPT.read_text(encoding="utf-8")
+    steps = workflow()["jobs"]["check-all"]["steps"]
+    cache = next(s for s in steps if str(s.get("uses", "")).startswith("Swatinem/rust-cache@"))
+    assert cache["with"]["key"] == STREAM_KEY
+
+
 # The director's ruling of 2026-10-17: documentation-only changes skip the golden part's work, and a
 # scheduled nightly skips when main has not moved. These pin the wiring; test_ci_scope.py pins the
 # classification.

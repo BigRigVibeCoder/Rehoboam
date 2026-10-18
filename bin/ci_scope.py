@@ -15,23 +15,35 @@ when any changed file is one of KEY's declared inputs (`SCOPED_GATES[KEY]`, plus
 the chain, this rule, the workflow and the Python lock), and are skipped only when the changed
 files are known and none of them is. check_all reports a skipped gate as SKIP with this reason.
 Nearly every sprint edits the chain to add its own gates, so `bin/check_all.sh` counts as changed
-for KEY only when KEY's own text in it changed (`scoped_text`: the `scope KEY` block and the
-definitions of the functions it names, `run`, `part` and `scope`), compared with the base of the
-pull request or the push; any doubt about that base counts it as changed.
+for KEY only when KEY's own text in it changed (`scoped_text`: the `scope KEY` block; the
+definitions of `run`, `part`, `scope`, `finish` and of every function the block calls, followed
+through the functions they call in turn; and the top-level lines that set `PY`, `TARGET_DIR`,
+`GOLDEN` and `RH_CLI_RELEASE`), compared with the base of the pull request or the push; any
+doubt about that base counts it as changed.
 
 `trace KEY -- SCRIPT [ARGS]` runs the Python script SCRIPT in this process under an audit hook
 (`sys.addaudithook`) and fails when it read a repository file, or listed a repository directory,
 that is not one of KEY's inputs. The scoped gates run through it, so every run of a gate checks
 that its input list still covers what its code reads: a reference that starts reading a new file
 must change a declared input to do so, which runs the gate, whose trace then names the new file.
+The trace fails closed where it cannot see: a script that starts a process (`subprocess.Popen`,
+`os.system`, `os.exec*`, `os.posix_spawn`, `os.spawn*`) fails it, since the child's reads are
+invisible. A directory listing is exempt only when the import system made it, or when the directory
+was on `sys.path` before the script ran (a snapshot; directories the script adds are not exempt).
+Its one blind spot: an existence probe (`Path.exists`, `is_file`, `os.stat`) raises no audit
+event, so a reference whose behaviour turns on whether a file exists, without reading it, must
+declare that file by hand.
 
 Both rules fail closed: anything they cannot classify runs everything.
 
-- `pull_request`: the files are `git diff --name-only <base>...HEAD` (`--base-ref`, default
-  `$RH_BASELINE_BASE`). No base, or a git error, runs everything.
-- `push`: the files are `git diff --name-only <before> <after>` (`--before`, `--after`, default
-  `$RH_PUSH_BEFORE`, `$RH_PUSH_AFTER`). An empty or all-zero `before` (a new branch) runs
-  everything.
+- `pull_request`: the files are `git diff --no-renames --name-only <base>...HEAD` (`--base-ref`,
+  default `$RH_BASELINE_BASE`). No base, or a git error, runs everything.
+- `push`: the files are `git diff --no-renames --name-only <before> <after>` (`--before`,
+  `--after`, default `$RH_PUSH_BEFORE`, `$RH_PUSH_AFTER`). An empty or all-zero `before` (a new
+  branch) runs everything.
+- `--no-renames` (the review of PR #89, C1): a rename lists both its old and its new path, so a
+  renamed declared input still runs its gate, and a source file moved under `docs/` or to a `.md`
+  name is not a documentation-only change.
 - `workflow_dispatch` and anything else (`local` included): everything runs. A manual run is a
   request to run everything, and a local `bin/check_all.sh` never skips a gate.
 - An empty file list runs everything.
@@ -70,6 +82,13 @@ PATH_TYPES = (str, bytes, os.PathLike)
 FUNCTION = re.compile(r"^([A-Za-z_]\w*)\(\) \{$")
 WORD = re.compile(r"[A-Za-z_]\w*")
 LISTING_EVENTS = ("os.listdir", "os.scandir")
+# Audit events of a started process: the trace cannot follow its reads, so each one fails it.
+PROCESS_EVENTS = ("subprocess.Popen", "os.system", "os.exec", "os.posix_spawn", "os.spawn")
+# The code that lists a sys.path entry to find a module: such a listing is the import system's.
+IMPORT_SYSTEM = "<frozen importlib._bootstrap_external>"
+# Top-level lines of check_all.sh that every scoped gate depends on (`scoped_text`).
+SETTINGS = re.compile(r"^(?:\S.*\b)?(?:PY|TARGET_DIR|GOLDEN|RH_CLI_RELEASE)=")
+HARNESS = ("run", "part", "scope", "finish")
 
 # Every path-scoped gate also runs when one of these changes: the chain that runs it (its own
 # text in it: `scoped_text`), this rule, the workflow, and the Python environment.
@@ -135,11 +154,11 @@ def changed_files(event: str, base_ref: str, before: str, after: str) -> list[st
     if event == "pull_request":
         if not base_ref:
             return None
-        cmd = ["git", "diff", "--name-only", f"{base_ref}...HEAD"]
+        cmd = ["git", "diff", "--no-renames", "--name-only", f"{base_ref}...HEAD"]
     elif event == "push":
         if not before or set(before) == {"0"}:
             return None
-        cmd = ["git", "diff", "--name-only", before, after or "HEAD"]
+        cmd = ["git", "diff", "--no-renames", "--name-only", before, after or "HEAD"]
     else:
         return None
     try:
@@ -167,11 +186,22 @@ def decide(part: str, files: list[str] | None) -> tuple[bool, str]:
     return True, f"part {part}: runs in full ({len(others)} other file(s): {_shown(others)})"
 
 
-def scoped_text(script: str, key: str) -> str:
-    """KEY's own text in check_all.sh: its `scope KEY` block and the functions it relies on.
+def _functions(lines: list[str]) -> dict[str, list[str]]:
+    """check_all.sh's function definitions, by name (from `name() {` to the first `}` line)."""
+    found = {}
+    for at, line in enumerate(lines):
+        if (m := FUNCTION.match(line)) and "}" in lines[at:]:
+            found[m.group(1)] = lines[at : lines.index("}", at) + 1]
+    return found
 
-    The block runs from `scope KEY &&` to the next `scope` or `part` line; the functions are `run`,
-    `part`, `scope` and every function whose name is a word of the block. Empty without a block.
+
+def scoped_text(script: str, key: str) -> str:
+    """KEY's own text in check_all.sh: its `scope KEY` block and everything that block relies on.
+
+    The block runs from `scope KEY &&` to the next `scope` or `part` line. Added to it: the
+    top-level lines that set PY, TARGET_DIR, GOLDEN or RH_CLI_RELEASE; and the definitions of the
+    harness (`run`, `part`, `scope`, `finish`) and of every function the block names, closed over
+    the functions those definitions name in turn. Empty without a block.
     """
     lines = script.splitlines()
     marker = f"scope {key} &&"
@@ -182,12 +212,17 @@ def scoped_text(script: str, key: str) -> str:
         if line.startswith(("scope ", "part ")):
             break
         block.append(line)
-    names = {"run", "part", "scope", *WORD.findall("\n".join(block))}
-    defined = []
-    for at, line in enumerate(lines):
-        if (m := FUNCTION.match(line)) and m.group(1) in names and "}" in lines[at:]:
-            defined += lines[at : lines.index("}", at) + 1]
-    return "\n".join(block + defined)
+    functions = _functions(lines)
+    wanted = [*HARNESS, *WORD.findall("\n".join(block))]
+    taken: set[str] = set()
+    while wanted:
+        name = wanted.pop()
+        if name in functions and name not in taken:
+            taken.add(name)
+            wanted += WORD.findall("\n".join(functions[name]))
+    settings = [line for line in lines if SETTINGS.match(line)]
+    defined = [line for name in sorted(taken) for line in functions[name]]
+    return "\n".join(block + settings + defined)
 
 
 def decide_gate(key: str, files: list[str] | None, *, chain_moved: bool = True) -> tuple[bool, str]:
@@ -283,35 +318,71 @@ def _run_script(script: str, args: Sequence[str]) -> int:
     return 0
 
 
+def _started(key: str, what: str) -> str:
+    return (
+        f"SCOPE INCOMPLETE: gate {key} started a process ({what}), whose reads the trace cannot "
+        "see (fail closed)"
+    )
+
+
+class _Recorder:
+    """What a traced script touched: repository files read, directories listed, processes."""
+
+    def __init__(self, key: str) -> None:
+        self.key = key
+        self.read: set[str] = set()
+        self.listed: set[str] = set()
+        self.started: list[str] = []
+        # Directories on sys.path before the script runs; those it adds are not exempt.
+        self.on_path = {str(Path(p).resolve()) for p in sys.path if p}
+
+    def hook(self, event: str, args: tuple[object, ...]) -> None:
+        """The audit hook (sys.addaudithook)."""
+        if event == "open" and args and (rel := _repo_path(args[0])):
+            self.read.add(rel)
+        elif event in LISTING_EVENTS and args and isinstance(args[0], PATH_TYPES):
+            # The import system lists a sys.path entry to find a module; the modules it then
+            # loads are opened, and checked, like any other file.
+            if sys._getframe(1).f_code.co_filename != IMPORT_SYSTEM:
+                self.listed.add(str(Path(os.fsdecode(args[0])).resolve()))
+        elif event in PROCESS_EVENTS:
+            self.started.append(f"{event} {str(args[:2])[:120]}")
+            if event == "os.exec":  # the process is about to be replaced: report and stop here
+                sys.stdout.flush()
+                print(_started(self.key, self.started[-1]), flush=True)
+                os._exit(1)
+
+    def findings(self) -> list[str]:
+        """One SCOPE INCOMPLETE line per undeclared read or listing and per started process."""
+        dirs = {rel + "/" for d in self.listed - self.on_path if (rel := _repo_path(d))}
+        undeclared = sorted(p for p in self.read | dirs if not is_input(p, self.key))
+        return [
+            *(
+                f"SCOPE INCOMPLETE: gate {self.key} read {path}, which is not among its declared "
+                "inputs (bin/ci_scope.py SCOPED_GATES): add it, or the gate would be skipped when "
+                "it changes"
+                for path in undeclared
+            ),
+            *(_started(self.key, what) for what in self.started),
+        ]
+
+
 def trace(key: str, script: str, args: Sequence[str]) -> int:
     """Run ``script`` and check that every repository file it read is an input of ``key``."""
     if key not in SCOPED_GATES:
         print(f"ci_scope trace: {key!r} is not a path-scoped gate", file=sys.stderr)
         return 2
-    read: set[str] = set()
-    listed: set[str] = set()
-
-    def hook(event: str, hook_args: tuple[object, ...]) -> None:
-        if event == "open" and hook_args and (rel := _repo_path(hook_args[0])):
-            read.add(rel)
-        elif event in LISTING_EVENTS and hook_args and isinstance(hook_args[0], PATH_TYPES):
-            listed.add(str(Path(os.fsdecode(hook_args[0])).resolve()))
-
-    sys.addaudithook(hook)
+    recorder = _Recorder(key)
+    sys.addaudithook(recorder.hook)
     status = _run_script(script, args)
     sys.stdout.flush()
-    # A directory on sys.path is listed by the import system, not by the script.
-    on_path = {str(Path(p).resolve()) for p in sys.path if p}
-    dirs = {rel + "/" for d in listed - on_path if (rel := _repo_path(d))}
-    undeclared = sorted(p for p in read | dirs if not is_input(p, key))
-    for path in undeclared:
-        print(
-            f"SCOPE INCOMPLETE: gate {key} read {path}, which is not among its declared inputs "
-            "(bin/ci_scope.py SCOPED_GATES): add it, or the gate would be skipped when it changes"
-        )
-    if not undeclared:
-        print(f"SCOPE TRACE: gate {key}: {len(read)} repository file(s) read, all declared inputs")
-    return status if status or not undeclared else 1
+    findings = recorder.findings()
+    for line in findings:
+        print(line)
+    if not findings:
+        n = len(recorder.read)
+        print(f"SCOPE TRACE: gate {key}: {n} repository file(s) read, all declared inputs")
+    return status if status or not findings else 1
 
 
 def _trace_main(argv: Sequence[str]) -> int:

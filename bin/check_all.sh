@@ -11,6 +11,10 @@
 # its own). CI runs them as three parallel jobs so the PR tier fits its 15 minutes (V-PERF-04);
 # every gate still runs on every PR (or is reported SKIP by a path scope, BCK-002 A-64), and a local
 # run with no flag runs all three, in order.
+# Merging a branch that edits this chain (PR #89's review C6): take both sides of every hunk, put each new gate in the
+# part where its kind lives (PART_OF_PREFIX in python/tests/test_check_all_inventory.py pins the kinds), and keep every
+# REQUIRED_GATES entry of both sides, re-wrapped ones included; context lines a hunk carries are not new gates. Then
+# `python -I bin/check_all_selftest.py inventory` names any gate lost or unlisted on either side (BCK-002 A-65).
 # Needs the Rust toolchain from rust-toolchain.toml, cargo-nextest, cargo-deny, valgrind,
 # iai-callgrind-runner (SPR-009), uv, and the uv environment from `uv sync --frozen --project python` (RUN-001 §2-4). A missing tool fails the
 # first check by name; nothing is ever skipped silently.
@@ -91,10 +95,16 @@ run() {
     fail:*) if [ $rc -ne 0 ] && grep -qF -- "${expect#fail:}" <<<"$out"; then ok=1; fi ;;
     pass:*) if [ $rc -eq 0 ] && grep -qF -- "${expect#pass:}" <<<"$out"; then ok=1; fi ;;
   esac
+  # BCK-002 A-64 (PR #89's review C2): a traced gate that read an undeclared input says SCOPE INCOMPLETE. A control
+  # that fails for its own reason would hide that, so the line fails any gate whose expectation does not name it.
+  local why=""
+  if [ $ok -eq 1 ] && grep -qF "SCOPE INCOMPLETE" <<<"$out" && [[ "$expect" != *"SCOPE INCOMPLETE"* ]]; then
+    ok=0; why=" (SCOPE INCOMPLETE: an undeclared input of a path-scoped gate; bin/ci_scope.py)"
+  fi
   if [ $ok -eq 1 ]; then
     echo "| $n | $name | PASS | $dt |" >> "$REPORT"; echo "PASS  $name"
   else
-    echo "| $n | $name | **FAIL** | $dt |" >> "$REPORT"; echo "FAIL  $name"
+    echo "| $n | $name | **FAIL**$why | $dt |" >> "$REPORT"; echo "FAIL  $name$why"
     { echo; echo "## First failure: $name"; echo; echo '```'; echo "$out" | tail -40; echo '```'; } >> "$REPORT"
     failed="$name"
     return 1
@@ -105,6 +115,9 @@ run() {
 # stream). Each gate belongs to exactly one part (test_check_all_inventory.py); --part runs one.
 part() {
   current_part="$1" scope_skip=""
+  # PR #89's review C5: the stream part builds and tests in release with overflow checks on, as the debug kill and
+  # tail_live gates it took over from part core had them on the host and stream path (its cost: BCK-002 A-63).
+  if [ "$1" = stream ]; then export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true; fi
   if [ -n "${PART:-}" ] && [ "$1" != "$PART" ]; then
     echo "SKIP  part $1: its gates run with --part $1 (in CI, a parallel job)"
     echo "| - | part $1: not run here (--part $PART); its gates run in their own job | SKIP | 0 |" >> "$REPORT"
@@ -696,6 +709,10 @@ solo_stream_run() {
 # BCK-002 A-63: the stream part's input, on its own runner: solo, household and hamlet's 200-year runs streamed into
 # their run directories exactly as the golden part's golden runs stream them (the same functions), so the stream,
 # sift, twin and replay gates read the golden part's history without depending on its job.
+stream_release_build() {
+  [ "${CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS:-}" = true ] || { echo "overflow checks are off in the stream part"; return 1; }
+  cargo build --release --locked --quiet -p rh-cli && echo "rh-cli release build with overflow checks"
+}
 stream_inputs() {
   solo_stream_run && world_golden_run household && world_golden_run hamlet
 }
@@ -1350,6 +1367,7 @@ run "check_all chain positive control: a run line mutated with || exit 0 must FA
 run "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-exit &&
 run "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness error, not match any failure (VER-SPR-012-TEST GAP-6)" "fail:HARNESS ERROR" "$PY" -I bin/check_all_selftest.py verdict --empty-fail &&
 run "check_all harness positive control: a fail: expectation with whitespace-only text must FAIL as a harness error (VER-SPR-012-TEST GAP-9; BCK-002 A-53)" "fail:HARNESS ERROR" "$PY" -I bin/check_all_selftest.py verdict --blank-fail &&
+run "check_all harness positive control: a control that fails for its own reason but read an undeclared input (SCOPE INCOMPLETE) must FAIL (PR #89 review C2)" 'fail:Verdict: FAIL at "planted control whose output says SCOPE INCOMPLETE"' "$PY" -I bin/check_all_selftest.py verdict --scope-incomplete &&
 run "check_all verdict per part: --part core passes while only a golden-part gate fails (check_all_selftest; SPR-009 review 2b)" "pass:Verdict: PASS (1 checks, part core)" "$PY" -I bin/check_all_selftest.py verdict --part-core &&
 run "check_all verdict per part positive control: --part golden fails at its failing gate (SPR-009 review 2b)" 'fail:Verdict: FAIL at "planted failing golden gate"' "$PY" -I bin/check_all_selftest.py verdict --part-golden &&
 run "check_all verdict per part: --part stream passes while only a golden-part gate fails (check_all_selftest; BCK-002 A-63)" "pass:Verdict: PASS (1 checks, part stream)" "$PY" -I bin/check_all_selftest.py verdict --part-stream &&
@@ -1567,7 +1585,7 @@ part stream &&
 run "Required tools present (stream part)" pass require_tools stream &&
 # BCK-002 A-63: the third PR-tier job. Its own release build and its own run directories (stream_inputs), then the
 # stream, serve, tail, sift, replay, rungs and twin gates; kill -9 and the live tail run here in release.
-run "Rust: build rh-cli in release for the stream part (BCK-002 A-63)" pass cargo build --release --locked --quiet -p rh-cli &&
+run "Rust: build rh-cli in release, with overflow checks, for the stream part (BCK-002 A-63; PR #89 review C5)" "pass:rh-cli release build with overflow checks" stream_release_build &&
 run "Stream part input: solo, household and hamlet's 200-year golden runs streamed into their run directories, as the golden part streams them (BCK-002 A-63)" "pass:hamlet: 200 yearly rungs to year 200 at 1 thread(s)" stream_inputs &&
 run "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, and the reference's canonical digests (SPR-013 T-09)" "pass:check_segments: 200 segments, 2425 records" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" &&
 run "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL (SPR-013 T-09; R2)" "fail:TYPE: y000000/step_digest: float columns ['living DOUBLE']" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" --plant float-column &&

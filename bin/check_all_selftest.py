@@ -14,7 +14,9 @@ checks both:
   `--empty-fail` (VER-SPR-012-TEST GAP-6) plants a failing gate whose expectation is `fail:` with
   no text, which would match any failure: `run` refuses it as a harness error, and the verdict is
   FAIL (exit 1). `--blank-fail` (GAP-9, BCK-002 A-53) does the same with `fail:` followed by
-  spaces only, which is empty once trimmed.
+  spaces only, which is empty once trimmed. `--scope-incomplete` (PR #89's review C2) plants a
+  control that fails with its own expected text but also prints `SCOPE INCOMPLETE` (it read an
+  undeclared input of a path-scoped gate): `run` fails it, and the verdict is FAIL (exit 1).
   `--part-core`, `--part-golden` and `--part-stream` (SPR-009 review 2; BCK-002 A-63) plant a
   three-part chain whose golden gate fails, and run it with `--part core` and `--part stream`
   (PASS, 1 check each: the other parts are skipped and say so) and `--part golden` (FAIL at the
@@ -49,7 +51,8 @@ checks both:
 
 Usage: python -I bin/check_all_selftest.py verdict [--or-true | --or-exit | --early-exit |
                                                     --empty-fail | --blank-fail | --part-core |
-                                                    --part-golden | --part-stream | --all-parts]
+                                                    --part-golden | --part-stream | --all-parts |
+                                                    --scope-incomplete]
        python -I bin/check_all_selftest.py lint bin/check_all.sh [--plant-or-true | --plant-or-exit]
        python -I bin/check_all_selftest.py abs-target [--plant-pwd-join]
        python -I bin/check_all_selftest.py baseline-controls [--plant-committed]
@@ -91,6 +94,10 @@ PLANTED_CHAINS = {
     "--early-exit": 'run "planted gate" pass true && exit 0' + LATER,
     "--empty-fail": 'run "planted gate with an empty expectation" "fail:" false &&' + LATER,
     "--blank-fail": 'run "planted gate with a blank expectation" "fail:   " false &&' + LATER,
+    "--scope-incomplete": (
+        'run "planted control whose output says SCOPE INCOMPLETE" "fail:STALE:" '
+        "sh -c 'echo STALE: x; echo SCOPE INCOMPLETE: y; exit 1' &&" + LATER
+    ),
     "--part-core": PARTS,
     "--part-golden": PARTS,
     "--part-stream": PARTS,

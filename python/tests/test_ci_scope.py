@@ -237,3 +237,176 @@ def test_files_without_a_base_chain_run_the_gate(capsys: pytest.CaptureFixture[s
     """`--files bin/check_all.sh` with no `--script-base` cannot know the base: it runs."""
     main(["--gate", "fixture-worlds", "--files", CHAIN])
     assert "runs (1 of its inputs changed: bin/check_all.sh)" in capsys.readouterr().out
+
+
+def _commit(repo: Path, message: str) -> str:
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", message)
+    return _git(repo, "rev-parse", "HEAD")
+
+
+def _repo_with(tmp_path: Path, files: dict[str, str]) -> str:
+    _git(tmp_path, "init", "-q", "-b", "main")
+    for name, text in files.items():
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text(text)
+    return _commit(tmp_path, "base")
+
+
+INPUT = "specs/worldgen/templates_v0.toml"  # a declared input of both scoped gates
+SOURCE = "crates/rh-core/src/lib.rs"
+
+
+def _renamed_only(repo: Path, base: str, head: str) -> list[str]:
+    """What `git diff --name-only` lists with rename detection on: the bug C1 fixed."""
+    out = _git(repo, "-c", "diff.renames=true", "diff", "--name-only", base, head)
+    return out.splitlines()
+
+
+def _both_events(base: str, head: str) -> list[list[str]]:
+    found = [changed_files("push", "", base, head), changed_files("pull_request", base, "", "")]
+    assert None not in found
+    return [sorted(files) for files in found if files is not None]
+
+
+def test_a_renamed_input_lists_both_paths_and_runs_its_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review C1: with rename detection, a renamed declared input listed only its new path."""
+    moved = "specs/worldgen/templates_v1.toml"
+    base = _repo_with(tmp_path, {INPUT: "base = 30000\n" * 20})
+    _git(tmp_path, "mv", INPUT, moved)
+    head = _commit(tmp_path, "rename")
+    monkeypatch.chdir(tmp_path)
+    assert _renamed_only(tmp_path, base, head) == [moved]
+    for key in SCOPED_GATES:
+        assert decide_gate(key, [moved])[0] is False  # the new path alone would skip the gate
+    for files in _both_events(base, head):
+        assert files == [INPUT, moved]
+        for key in SCOPED_GATES:
+            assert decide_gate(key, files)[0] is True
+
+
+def test_a_source_file_moved_to_docs_is_not_a_docs_only_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review C1: a source file moved under docs/ (or to a .md name) still runs every part."""
+    base = _repo_with(tmp_path, {SOURCE: "pub fn f() {}\n" * 20})
+    (tmp_path / "docs").mkdir()
+    for moved in ("docs/lib.rs", "crates/rh-core/src/lib.md"):
+        _git(tmp_path, "mv", SOURCE, moved)
+        head = _commit(tmp_path, f"move to {moved}")
+        monkeypatch.chdir(tmp_path)
+        assert _renamed_only(tmp_path, base, head) == [moved]
+        assert docs_only([moved])  # the new path alone would skip golden and stream
+        for files in _both_events(base, head):
+            assert files == sorted([SOURCE, moved])
+            for part in ("golden", "stream"):
+                assert decide(part, files)[0] is True, (moved, part)
+        _git(tmp_path, "reset", "-q", "--hard", base)
+
+
+def test_a_deleted_input_or_source_file_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review C1: a deleted declared input runs its gate; a deleted source file runs the parts."""
+    base = _repo_with(tmp_path, {INPUT: "x\n", SOURCE: "y\n", "docs/a.md": "z\n"})
+    (tmp_path / INPUT).unlink()
+    (tmp_path / SOURCE).unlink()
+    (tmp_path / "docs" / "a.md").write_text("w\n")
+    head = _commit(tmp_path, "delete")
+    monkeypatch.chdir(tmp_path)
+    for files in _both_events(base, head):
+        assert files == [SOURCE, "docs/a.md", INPUT]
+        for key in SCOPED_GATES:
+            assert decide_gate(key, files)[0] is True
+        for part in ("golden", "stream"):
+            assert decide(part, files)[0] is True
+
+
+def test_trace_fails_a_started_process(tmp_path: Path) -> None:
+    """Review C3: a child process's reads are invisible, so starting one fails the trace."""
+    for body, event in (
+        (
+            "import subprocess\nsubprocess.run(['true'], check=True)\n",
+            "subprocess.Popen",
+        ),
+        ("import os\nos.system('true')\n", "os.system"),
+    ):
+        done = _trace(tmp_path, body)
+        assert done.returncode == 1, done.stdout
+        assert f"SCOPE INCOMPLETE: gate fixture-worlds started a process ({event}" in done.stdout
+    done = _trace(tmp_path, "import os\nos.execv('/bin/true', ['true'])\n")
+    assert done.returncode == 1
+    assert "started a process (os.exec" in done.stdout
+
+
+def test_trace_exempts_only_import_listings_and_the_path_before_the_run(tmp_path: Path) -> None:
+    """Review C3: a directory the script adds to sys.path is not exempt when the script lists it.
+
+    The import system's own listing of it is (the module it loads is opened and checked).
+    """
+    done = _trace(tmp_path, "import sys\nsys.path.insert(0, 'bin')\nimport gen_rng_golden\n")
+    assert done.returncode == 0, done.stdout + done.stderr
+    done = _trace(tmp_path, "import os, sys\nsys.path.insert(0, 'bin')\nos.listdir('bin')\n")
+    assert done.returncode == 1
+    assert "SCOPE INCOMPLETE: gate fixture-worlds read bin/, which" in done.stdout
+
+
+def test_trace_cannot_see_an_existence_probe(tmp_path: Path) -> None:
+    """Review C3, documented blind spot: exists/is_file/stat raise no audit event."""
+    probe = "from pathlib import Path\nimport os\n"
+    probe += "Path('specs/stream/canonical_v0.py').exists()\n"
+    probe += "Path('specs/stream/canonical_v0.py').is_file()\n"
+    probe += "os.stat('specs/stream/canonical_v0.py')\n"
+    done = _trace(tmp_path, probe)
+    assert done.returncode == 0, done.stdout
+    assert "SCOPE TRACE: gate fixture-worlds: 0 repository file(s) read" in done.stdout
+
+
+SYNTHETIC = """#!/usr/bin/env bash
+if [ -n "${PYTHON:-}" ]; then PY="$PYTHON"; else PY=python3; fi
+TARGET_DIR="${CARGO_TARGET_DIR:-target}"
+GOLDEN="$TARGET_DIR/golden"
+RH_CLI_RELEASE="$TARGET_DIR/release/rh-cli"
+deep() {
+  echo deep
+}
+middle() {
+  deep
+}
+unrelated() {
+  echo other
+}
+finish() {
+  exit 0
+}
+run() {
+  "$@"
+}
+part core &&
+scope k &&
+run "gate" pass middle &&
+scope - &&
+run "other gate" pass unrelated
+"""
+
+
+def test_the_gate_s_own_text_follows_calls_and_settings() -> None:
+    """Review C4: the closure of the functions it calls, the settings lines and finish()."""
+    own = scoped_text(SYNTHETIC, "k")
+    for line in ("echo deep", 'GOLDEN="$TARGET_DIR/golden"', "finish() {", 'PY="$PYTHON"'):
+        assert line in own, line
+    assert "echo other" not in own
+    for old, new in (
+        ("echo deep", "echo deeper"),
+        ('GOLDEN="$TARGET_DIR/golden"', 'GOLDEN="$TARGET_DIR/elsewhere"'),
+        ('RH_CLI_RELEASE="$TARGET_DIR/release/rh-cli"', 'RH_CLI_RELEASE="/bin/rh-cli"'),
+        ('TARGET_DIR="${CARGO_TARGET_DIR:-target}"', "TARGET_DIR=t"),
+        ("else PY=python3", "else PY=python3.12"),
+        ("  exit 0\n", "  exit 1\n"),
+    ):
+        changed = SYNTHETIC.replace(old, new)
+        assert changed != SYNTHETIC, old
+        assert scoped_text(changed, "k") != own, old
+    assert scoped_text(SYNTHETIC.replace("echo other", "echo changed"), "k") == own

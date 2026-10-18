@@ -101,8 +101,11 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         with:
           # One cache per part: they build different profiles and targets (the stream part's
-          # release tests are not the golden part's benches).
-          key: ${{ matrix.part }}
+          # release tests are not the golden part's benches). The stream part builds its release
+          # dependencies with overflow checks (check_all.sh `part`; PR #89's review C5), which this
+          # action cannot see, so its key names them: a cache restored by its exact key is never
+          # saved again, and one keyed `stream` holds the build without them.
+          key: ${{ matrix.part == 'stream' && 'stream-overflow-checks' || matrix.part }}
 
       - name: cargo-nextest, cargo-deny and iai-callgrind-runner (prebuilt binaries)
         if: steps.scope.outputs.run == 'true'

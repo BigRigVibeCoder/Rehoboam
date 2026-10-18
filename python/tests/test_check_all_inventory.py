@@ -25,6 +25,7 @@ from pathlib import Path
 
 import check_all_selftest
 import ci_scope
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "bin" / "check_all.sh"
@@ -251,7 +252,8 @@ REQUIRED_GATES = (
     "Required tools present (stream part)",
     "Rust: bans and sources (cargo deny: crates.io only, no wildcards)",
     "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)",
-    "Rust: build rh-cli in release for the stream part (BCK-002 A-63)",
+    "Rust: build rh-cli in release, with overflow checks, for the stream part (BCK-002 A-63; PR "
+    "#89 review C5)",
     "Rust: build the workspace (cargo build)",
     "Rust: doctests (cargo test --doc)",
     "Rust: format (cargo fmt --check)",
@@ -387,6 +389,8 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-3)",
     "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; "
     "VER-SPR-008-TEST GAP-3, GAP-7)",
+    "check_all harness positive control: a control that fails for its own reason but read an "
+    "undeclared input (SCOPE INCOMPLETE) must FAIL (PR #89 review C2)",
     "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness"
     " error, not match any failure (VER-SPR-012-TEST GAP-6)",
     "check_all harness positive control: a fail: expectation with whitespace-only text must "
@@ -998,6 +1002,43 @@ def test_the_verdict_fails_when_any_gate_failed_or_the_chain_exits_early() -> No
     assert check_all_selftest.verdict() == 0
     for mode in ("--or-true", "--or-exit", "--early-exit"):
         assert check_all_selftest.verdict(mode) == 1, mode
+
+
+def test_a_control_that_read_an_undeclared_input_fails(capsys: pytest.CaptureFixture[str]) -> None:
+    """PR #89's review C2: SCOPE INCOMPLETE fails a gate whose expectation does not name it.
+
+    The planted control fails with its own expected text, so only that rule fails it; the chain's
+    verdict control expects that failure by the planted name. The trace's own positive control
+    names SCOPE INCOMPLETE in its expectation, and still passes.
+    """
+    assert check_all_selftest.verdict("--scope-incomplete") == 1
+    out = capsys.readouterr().out
+    planted = "planted control whose output says SCOPE INCOMPLETE"
+    assert f"FAIL  {planted} (SCOPE INCOMPLETE: an undeclared input" in out
+    assert f'Verdict: FAIL at "{planted}"' in out
+    control = [line for line in _chain_lines() if "verdict --scope-incomplete" in line]
+    assert len(control) == 1
+    assert f"'fail:Verdict: FAIL at \"{planted}\"'" in control[0]
+    # Without the rule, the planted control would pass: it fails with its own text.
+    assert check_all_selftest.verdict() == 0
+    named = [
+        line
+        for line in _chain_lines()
+        if "SCOPE INCOMPLETE" in line and line.startswith('run "ci_scope trace positive control')
+    ]
+    assert len(named) == 1
+    assert '"fail:SCOPE INCOMPLETE: ' in named[0]
+
+
+def test_the_stream_part_builds_with_overflow_checks() -> None:
+    """PR #89's review C5: part stream turns release overflow checks on; its build gate checks."""
+    script = SCRIPT.read_text(encoding="utf-8")
+    part = script.split("\npart() {\n", 1)[1].split("\n}\n", 1)[0]
+    assert (
+        'if [ "$1" = stream ]; then export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true; fi' in part
+    )
+    stream = script.split("\npart stream &&\n", 1)[1]
+    assert 'pass:rh-cli release build with overflow checks" stream_release_build &&' in stream
 
 
 def test_the_baseline_push_controls_hold_with_an_absolute_target_dir() -> None:
