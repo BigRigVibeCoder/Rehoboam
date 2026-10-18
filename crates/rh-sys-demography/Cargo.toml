@@ -29,3 +29,6 @@ rh-registry = { version = "0.0.0", path = "../rh-registry" }
 [features]
 mutant-resample-hit-k1 = []
 mutant-resample-day-k0 = []
+# SPR-016 T-02: the F1 compile evaluates MR3's power form at beta = 1 too; tests/schedule_f1_golden.rs's
+# rung-0 equality must FAIL (the Rust twin of selftest_m2_f1_mortality.py --control beta-one-power).
+mutant-beta-one-power = []

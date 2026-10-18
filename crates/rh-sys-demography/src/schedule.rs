@@ -10,12 +10,17 @@
 //! `bin/gen_m2_reference.py` ports it and writes `tests/golden/m2_schedule_v1.txt`, which
 //! `tests/schedule_golden.rs` replays bit for bit.
 //!
+//! [`f1`] compiles the F1 schedule (`[algorithm.mortality_f1]` MR1–MR9; SPR-016 T-02) on the same
+//! S0, S3 and S4, which it reuses verbatim at β = 1.
+//!
 //! REF: `specs/systems/M2.demography.odd.toml` `[algorithm.mortality_rung0]`; R12 §9;
 //! `05.1` §6 item 4 (`Prob32`); `CODEX/05_PROJECT/SPR-012_WalkingSkeletonB.md` T-05.
 
 use core::fmt;
 
 use rh_core::fixed::{Prob32, Q16_16};
+
+pub mod f1;
 use rh_core::time::{Calendar, Pulse, SimTime};
 
 /// The number of grid ages of the General Standard (S1).

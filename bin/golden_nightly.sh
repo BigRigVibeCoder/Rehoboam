@@ -131,6 +131,9 @@ emitted="$(cd "$work" && pwd)/exp_ln_emit.txt"
 RH_EXP_LN_EMIT="$emitted" cargo nextest run -p rh-core --release --locked --test exp_ln_golden \
   --run-ignored all --no-capture
 echo "exp/ln v0: rh-core in release is bit-equal to the golden file and to 2^20 emitted vectors of each"
+# SPR-016 T-02 (V-DET-09's opt-level-3 clause): the F1 schedule in a release build against the reference's golden file.
+cargo nextest run -p rh-sys-demography --release --locked --test schedule_f1_golden --no-capture
+echo "M2 F1 schedule: rh-sys-demography in release is bit-equal to specs/demography/golden/m2_f1_mortality.txt"
 # SPR-030 (REV-SPR-030 R10): the fixture worlds' every case (the PR tier renders kingdom_10k at seed 1 only) and
 # the CRN pairing protocol at seeds 1 to 3 with its controls (the PR tier runs seed 1; a seed whose sovereigns leave
 # no 5-year window after the input is pinned as skipped, REV-SPR-030 R14). Standard-library references.

@@ -40,4 +40,6 @@ pub const MUTANTS: &[&str] = &[
     "mutant-resample-hit-k1",
     #[cfg(feature = "mutant-resample-day-k0")]
     "mutant-resample-day-k0",
+    #[cfg(feature = "mutant-beta-one-power")]
+    "mutant-beta-one-power",
 ];

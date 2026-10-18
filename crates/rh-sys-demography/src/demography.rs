@@ -133,6 +133,14 @@ pub enum DemographyError {
     },
     /// The schedule refused e₀.
     Schedule(ScheduleError),
+    /// The F1 schedule refused at a step of `[algorithm.mortality_f1]` (MR0: a refusal during
+    /// construction is a load error naming the step; SPR-016 W22).
+    Construction {
+        /// The step: `MR2`, `MR3` or `MR8`.
+        step: &'static str,
+        /// What was refused.
+        reason: String,
+    },
 }
 
 impl fmt::Display for DemographyError {
@@ -149,6 +157,10 @@ impl fmt::Display for DemographyError {
                  (65536) runs until P1.3 (SPR-011 ruling 7)"
             ),
             Self::Schedule(e) => write!(f, "M2.demography: {e}"),
+            Self::Construction { step, reason } => write!(
+                f,
+                "M2.demography: construction refused at {step} ([algorithm.mortality_f1]): {reason}"
+            ),
         }
     }
 }

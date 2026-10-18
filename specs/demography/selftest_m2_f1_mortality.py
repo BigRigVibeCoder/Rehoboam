@@ -36,6 +36,11 @@ alone under ``python -I``. It checks:
      l(90) is large; the corners are included so that the second band runs), and V-SF-02b's
      l(65) / l(15) is reported at beta in {0.64, 1, 1.64};
   9. the golden file ``specs/demography/golden/m2_f1_mortality.txt`` is current (``--check``).
+     Besides the design points and corners it carries what the engine's test reads (SPR-016 T-02;
+     D-6, no copy): MR1's 69 ``lambda`` constants, 32 pseudo-random (e0, beta) points of the
+     Registry box (SplitMix64, Q16_16 bits written as their exact decimals), and per schedule
+     ``ell`` samples of MR9's l(x) at pseudo-random minutes on both calendars, under 1 year,
+     from 1 to 90 and over 90, with the edges 0, 1, 90 and 120 years.
 
 Controls that must FAIL (``--control NAME``; bin/check_all.sh runs each; each control reaches
 exactly one check, so deleting that check makes the control pass: REV-SPR-016 R7):
@@ -106,6 +111,13 @@ DESIGN_POINTS = [
     ("45", "1"),
 ]
 SF02B_BETAS = ("0.64", "1", "1.64")
+# SPR-016 T-02: the golden file's pseudo-random box points and l(x) samples (the engine's test).
+BOX_POINTS = 32
+BOX_SEED = 0x5016_7002
+E0_BITS_BOX = (20 << 16, 85 << 16)  # the Registry bounds of e0, Q16_16 bits
+BETA_BITS_BOX = (39322, 108134)  # the Registry bounds [0.6, 1.65], Q16_16 bits half to even
+ELL_PER_BAND = 6
+MASK64 = (1 << 64) - 1
 AGE_15, AGE_65 = 15, 65
 
 # ---------------------------------------------------------------------- exp and ln (05.1 §6 item 4)
@@ -685,6 +697,51 @@ def check_e0() -> bool:
 
 
 # ----------------------------------------------------------------------------- the golden file
+class SplitMix64:
+    """SplitMix64: a fixed, version-independent input stream (as specs/numerics/exp_ln_v0.py)."""
+
+    def __init__(self, seed: int) -> None:
+        """Start the stream at ``seed``."""
+        self.state = seed & MASK64
+
+    def next_u64(self) -> int:
+        """Return the next 64-bit output."""
+        self.state = (self.state + 0x9E3779B97F4A7C15) & MASK64
+        z = self.state
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & MASK64
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & MASK64
+        return z ^ (z >> 31)
+
+    def within(self, lo: int, hi: int) -> int:
+        """Return a value in [lo, hi] (modulo bias is irrelevant for test inputs)."""
+        return lo + self.next_u64() % (hi - lo + 1)
+
+
+def literal(bits: int) -> str:
+    """Return the exact decimal of the Q16_16 ``bits`` (finite: the scale is 2^16), as a literal."""
+    text = format((Decimal(bits) / Q16).normalize(), "f")
+    assert q16(text) == bits
+    return text
+
+
+def box_points() -> list[tuple[str, str]]:
+    """Return the golden file's 32 pseudo-random (e0, beta) literals inside the Registry box."""
+    rng = SplitMix64(BOX_SEED)
+    return [
+        (literal(rng.within(*E0_BITS_BOX)), literal(rng.within(*BETA_BITS_BOX)))
+        for _ in range(BOX_POINTS)
+    ]
+
+
+def ell_ages(rng: SplitMix64, year: int) -> list[int]:
+    """Return MR9's sample ages in minutes: the edges, then each band at pseudo-random minutes."""
+    ages = [0, year - 1, year, AGE_90 * year - 1, AGE_90 * year, AGE_120 * year - 1]
+    ages += [AGE_120 * year, AGE_120 * year + 1]
+    for lo, hi in ((0, year - 1), (year, AGE_90 * year - 1), (AGE_90 * year, AGE_120 * year + DAY)):
+        ages += [rng.within(lo, hi) for _ in range(ELL_PER_BAND)]
+    return ages
+
+
 def draw_vectors() -> list[str]:
     """Return the qnew and qresample vectors of the golden file (MR10, MR12) at e0 30, beta 1."""
     lines: list[str] = []
@@ -716,14 +773,20 @@ def render() -> str:
         "# schedule <e0> <beta> <K> <a> <b> <zero_twelfths>; knot <twelfths> <l>;",
         "# q <year> <age_minutes> <q>; modifier <living> <capacity> <slope_q16> <m>;",
         "# qmod <q> <m> <q'>; qnew <year> <age> <prev_month> <month> <q>;",
-        "# qresample <year> <x> <x0> <x1> <newborn> <q>",
+        "# qresample <year> <x> <x0> <x1> <newborn> <q>; lambda <i> <ln O_i>; ell <year> <age> <l>",
     ]
-    for e0, beta in DESIGN_POINTS + CORNERS:
+    lines += [f"lambda {i} {LAMBDA[i]}" for i in range(1, GRID_POINTS - 1)]
+    rng = SplitMix64(BOX_SEED ^ 1)
+    for index, (e0, beta) in enumerate(DESIGN_POINTS + CORNERS + box_points()):
         sched = compile_schedule(e0, beta)
         lines.append(
             f"schedule {e0} {beta} {sched.k} {sched.tail.a} {sched.tail.b} {sched.zero_twelfths}"
         )
         lines += [f"knot {t} {lx}" for t, lx in zip(sched.knot_twelfths, sched.knot_l, strict=True)]
+        for year in (YEAR_360, YEAR_365):
+            lines += [f"ell {year} {x} {ell(sched, x, year)}" for x in ell_ages(rng, year)]
+        if index >= len(DESIGN_POINTS + CORNERS):
+            continue  # the box points carry no q lines: MR10 is SPR-016 T-03's
         for year, month in ((YEAR_360, MONTH_360), (YEAR_365, 31 * DAY), (YEAR_365, 28 * DAY)):
             for x in (0, DAY, MONTH_360, year // 2, year, 10 * year + 7, 50 * year, 89 * year):
                 lines.append(f"q {year} {x} {month_q(sched, x, month, year)}")

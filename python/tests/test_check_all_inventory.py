@@ -268,6 +268,13 @@ REQUIRED_GATES = (
     "T-01 rh-core exp, ln_ratio and prob_from_hazard: every constant and vector of "
     "specs/numerics/golden/exp_ln_v0.txt bit for bit, read directly; monotone, exact anchors, "
     "refusals by name (exp_ln_golden; SPR-016 T-01)",
+    "T-02 M2 F1 schedule at construction: every lambda, schedule, knot and ell line of "
+    "specs/demography/golden/m2_f1_mortality.txt bit for bit, read directly; rung 0 is the beta "
+    "= 1 case; INV-M2-21; the corners; refusals by name (schedule_f1_golden; SPR-016 T-02)",
+    "T-02 positive control: MR3's power form at beta = 1 must FAIL rung 0's equality "
+    "(mutant-beta-one-power; SPR-016 T-02)",
+    "T-02 positive control: the F1 golden file with its first knot one bit off must FAIL "
+    "(SPR-016 T-02)",
     "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails "
     "(SPR-009)",
     "T-02b wall-clock control: another CPU model must report machine changed, never compare "

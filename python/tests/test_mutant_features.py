@@ -27,9 +27,13 @@ def _mutant_features() -> dict[str, list[str]]:
 
 
 def test_there_are_mutant_features_to_guard() -> None:
-    """SPR-012's two planted switches exist; if they move, this test is updated with them."""
+    """SPR-012's two planted switches and SPR-016's exist; if they move, this test follows."""
     assert _mutant_features() == {
-        "rh-sys-demography": ["mutant-resample-day-k0", "mutant-resample-hit-k1"]
+        "rh-sys-demography": [
+            "mutant-beta-one-power",
+            "mutant-resample-day-k0",
+            "mutant-resample-hit-k1",
+        ]
     }
 
 

@@ -803,6 +803,17 @@ fixed_point_compile_controls() {
   done <<<"$FIXED_POINT_COMPILE_FAIL"
 }
 
+# SPR-016 T-02: the F1 golden file with its first knot (schedule 30 1, age 0) one bit off, which the engine's
+# schedule test must refuse by "golden line differs" (the reference's own stale control is
+# tests/lint_fixtures/golden/stale_m2_f1_mortality.txt).
+m2_f1_schedule_control() {
+  local planted=target/rendered-fixtures/altered_m2_f1_mortality.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^knot 0 4294967296$/s//knot 0 4294967295/' specs/demography/golden/m2_f1_mortality.txt > "$planted" || return 1
+  RH_M2_F1_GOLDEN="$PWD/$planted" cargo nextest run -p rh-sys-demography --locked --test schedule_f1_golden \
+    --no-capture every_lambda_schedule_knot_and_ell_line_is_reproduced
+}
+
 # SPR-016 T-01: N pseudo-random vectors of each of exp and ln from the exact reference (exp_ln_v0.py --emit),
 # replayed by rh-core's ignored test; the PR tier runs 2^14, the nightly tier 2^20 (nightly.yml, golden_nightly.sh).
 exp_ln_emitted() {
@@ -971,7 +982,7 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-core::exp_ln_golden rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
-  rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
+  rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::schedule_f1_golden rh-sys-demography::draws_golden rh-worldgen::genesis
   rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
   rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs"
@@ -1279,6 +1290,9 @@ run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-1
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&
 run "T-05 M2 schedule in fixed point: bit-equal to the exact reference, K = 1 at the standard's e0, Table 19, e0 within 0.06 years, the q(15) band (SPR-012)" "pass:T-05: " cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
 run "T-05 positive control: one altered schedule vector must FAIL (SPR-012)" "fail:K at e0 bits 1966080" env RH_M2_SCHEDULE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_schedule_v1.txt" cargo nextest run -p rh-sys-demography --locked --test schedule_golden --no-capture &&
+run "T-02 M2 F1 schedule at construction: every lambda, schedule, knot and ell line of specs/demography/golden/m2_f1_mortality.txt bit for bit, read directly; rung 0 is the beta = 1 case; INV-M2-21; the corners; refusals by name (schedule_f1_golden; SPR-016 T-02)" "pass:T-02: every lambda, schedule, knot and ell line reproduced bit for bit" cargo nextest run -p rh-sys-demography --locked --test schedule_f1_golden --no-capture &&
+run "T-02 positive control: the F1 golden file with its first knot one bit off must FAIL (SPR-016 T-02)" "fail:golden line differs" m2_f1_schedule_control &&
+run "T-02 positive control: MR3's power form at beta = 1 must FAIL rung 0's equality (mutant-beta-one-power; SPR-016 T-02)" "fail:rung 0 differs at beta = 1" cargo nextest run -p rh-sys-demography --locked --features mutant-beta-one-power --test schedule_f1_golden --no-capture rung_0_is_the_beta_one_case &&
 run "M2 draws differential golden: the engine's death instants equal the independent model's, re-samples included (SPR-012, Tester's interim report)" "pass:M2 draws: 388 death instants in 7 worlds equal the independent model's" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
 run "M2 draws positive control: one altered death line in the golden must FAIL (SPR-012)" "fail:death 0 differs: engine" env RH_M2_DRAWS_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_m2_draws_v1.txt" cargo nextest run -p rh-sys-demography --locked --test draws_golden --no-capture &&
 run "M2 draws positive control: the re-sample's Bernoulli taken from k = 1 must FAIL (SPR-012, the Tester's first mutant)" "fail:differs: engine" cargo nextest run -p rh-sys-demography --locked --features mutant-resample-hit-k1 --test draws_golden --no-capture &&
