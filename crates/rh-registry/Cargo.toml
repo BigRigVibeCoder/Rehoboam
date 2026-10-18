@@ -13,6 +13,11 @@ kind = "machinery"
 [lints]
 workspace = true
 
+[features]
+# SPR-017 T-05: honour the planted effect-language mutants (`effect::Mutant`). Test-only: BCK-002
+# A-52's refusal of `mutant-*` features in `rh-cli run` and `bin/regen_baseline.sh` covers it.
+mutant-effect = []
+
 [dependencies]
 # SPR-005: the single-writer and plane rules live in rh-core (rh-registry -> rh-core, never the
 # reverse; Architect ruling 2026-10-16).
