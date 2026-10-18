@@ -9,7 +9,7 @@ tags: [sprint, simulation]
 related: [BCK-002, PRJ-002, REV-MINDS, REV-WAVE5, REV-WAVE6, REV-WAVE7, REV-P1a, EVO-001, EVO-002, SPR-017, SPR-020, SPR-021, SPR-023, SPR-024, SPR-028, SPR-030, SPR-038, ADR-0006, ADR-0009, ADR-0012, ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF:** Builds the stress half of `T1.minds` 0.5.0 in `rh-minds` (SAGA-11; `05.3` §2.1). T1-I/S, promoted by SPR-024a, specifies it.
@@ -25,14 +25,14 @@ version: 0.2.0
 >   - the acts: an assassination attempt (through `break_outcome` and `DEATH_DUE`), flight and a pact of despair. Flight and the pact are the first real verb programs, run by SPR-017's evaluator;
 >   - relief, then a **refractory period** (red-team item 1);
 >   - `mind.break_timer` is a flag, and the timers themselves are found through `own_timers` (REV-MINDS P2).
-> - **V-SAGA-16b, made non-vacuous** (REV-MINDS P1). The gate runs on a stress-capable fixture court, plus a massacre variant. It fails as "NOT EXERCISED" below 30 breaks. `twin_vales` is reported only: at its values no actor breaks (0 breaks in 92,160 actor-years, `minds_review/work/cascade_mc.py`).
+> - **V-SAGA-16b, made non-vacuous** (REV-MINDS P1). The gate runs on a stress-capable fixture court, plus a massacre variant. Each variant fails as "NOT EXERCISED" below 30 breaks of its own; the gate is **nightly-only**, and a planted FAIL is asserted (round-2 ruling R13). `twin_vales` is reported only: at its values no actor breaks (0 breaks in 92,160 actor-years, `minds_review/work/cascade_mc.py`).
 >
 > **No golden effect.** No golden world names `T1.minds`, and `BUILT` does not change here. Every ladder, header and segment stays byte-identical. The class is **C2** (X12). The Registry's new content (the typed tables, two verb programs) does not bump `registry_version`; SPR-030's C3 bumps it (REV-MINDS P7).
 >
 > - **Developer:** AGT-002-CORE, with AGT-002-TOOLS for the Registry loader, the verb programs and the gates.
 > - **Testers:** AGT-003-DET, AGT-003-IF and AGT-003-STAT.
 > - **Size and class:** **about 5.25–6 agent-days** (X8; T-01 0.5–0.75, T-02 1.5, T-03 1.75–2.0, T-04 1.0–1.25, T-05 0.5). **One sprint with a hard checkpoint after T-02.** **C2.**
-> - **Status:** PLANNING, revision 1. REV-MINDS round 1 (P1–P7, Q1–Q3) and X1–X12 are applied. It needs SPR-024b merged and the director's plan approval (D59).
+> - **Status:** PLANNING, revision 2. REV-MINDS round 1 (P1–P7, Q1–Q3), X1–X13 and the round-2 rulings R13 and R14 are applied. It needs SPR-024b merged and the director's plan approval (D59).
 
 # SPR-025 — Minds v0, part c: stress, grief, breaks, refractory period (WP P3.2a, part c)
 
@@ -48,7 +48,7 @@ version: 0.2.0
     - T1 0.5.0 frozen (T1-I/S: the S-steps, `[[observes]]`, the `break_timer` flag, the gate fixture);
     - SPR-021's instant-log events and genealogy index (X1(c), X2);
     - SPR-038 stage B's `exited()` (X1(b));
-    - SPR-023's `DropReason::Deferred` and cancel counter.
+    - SPR-038 stage B's `DropReason::Deferred` and `cancelled{…}` counter (R14).
   - **SPR-017 merged:** the evaluator and the `[verbs] effects` field (`specs/registry/effect_language_v0.md` §6, §7.3), for `FLED` and `DESPAIR_PACT`.
 - **Binding contracts:**
   - **`specs/systems/T1.minds.odd.toml` 0.5.0:**
@@ -91,10 +91,10 @@ version: 0.2.0
 | **6. The typed break table** (BCK-002 A-24, `BCK-002_ArchitectBacklog.md:44`) | `[mental_breaks]` and `[act_dissonance]` are untyped (`registry_v0.toml:291–299`, `:324–329`) | The loader accepts anything | **Proposed (8.5/10):** each of these is refused by name: <ul><li>an act class not in `[act_classes]`;</li><li>`relief` outside (0, 100];</li><li>a `verb` not emitted by `T1.minds`;</li><li>a `needs` entry outside {`stressor`, `seat`, `kin`, `holdings`};</li><li>a weight key that is not a HEXACO trait;</li><li>an `[act_dissonance]` class or trait that is unknown.</li></ul> Acts are read in source order | T-01 |
 | **7. A decision's act class** | "a chosen act whose class is in [act_dissonance] adds dissonance stress" (`T1.minds.odd.toml:903`); "break acts never add dissonance" (`:841`) | `press_claim` and `marry` only send commands | **Proposed (7.5/10):** a decision takes its verb's class: <ul><li>a feud attack: `harm`;</li><li>a declaration: `accuse`;</li><li>a reconciliation: `restore`;</li><li>`press_claim`: `claim` (`registry_v0.toml:620`);</li><li>`marry`: `marry`;</li><li>`seek_office`: none.</li></ul> Dissonance is applied when the decision is applied, and accounted | T-02 |
 | **8. Stress arithmetic** | INV-T1-01 (`T1.minds.odd.toml:917`); "the clipped amounts never enter the three accounting columns" (`:141`) | Order decides the bytes | **Proposed (8.5/10):** one order per binding: <ul><li>grief: add, clip, account;</li><li>month: sources, clip, account, decay, floor, account;</li><li>break: relief, floor, account.</li></ul> All in raw `q8_8` units; the products are rounded down | T-02 |
-| **9. `break_timer` and the life cycle** (REV-MINDS P2) | `mind.break_timer` "TimerId of the pending break or of the refractory end" (`T1.minds.odd.toml:177`); INV-T1-02 (`:921`) | `schedule` returns `()`, a re-sample changes the id, and `invariants()` cannot see the agenda. The next-version lint refuses a type change (`lint_odd.py:576–578`) | **Ruled (90%), in T1-I/S:** <ul><li>`mind.break_timer` keeps its `u64` type, and its meaning is amended to a **0/1 flag**: 1 while a break or refractory-end timer is pending;</li><li>the timers themselves are found by kind through `own_timers` (SPR-014 `system.rs:820–828`);</li><li>INV-T1-02 is checked by a **test observer with agenda access** at every month end, at the run's end, through a re-sample and through a keyframe;</li><li>a death cancels the actor's break or refractory-end timer at the death instant (`exited()`), counted by SPR-023's `cancelled{T1.minds, break, dead}`;</li><li>a `Demote` met while `pending` or `refractory` is dropped as `Deferred` (SPR-023), and INV-T1-02's "went dormant first" clause is amended away</li></ul> | T-03 |
+| **9. `break_timer` and the life cycle** (REV-MINDS P2) | `mind.break_timer` "TimerId of the pending break or of the refractory end" (`T1.minds.odd.toml:177`); INV-T1-02 (`:921`) | `schedule` returns `()`, a re-sample changes the id, and `invariants()` cannot see the agenda. The next-version lint refuses a type change (`lint_odd.py:576–578`) | **Ruled (90%), in T1-I/S:** <ul><li>`mind.break_timer` keeps its `u64` type, and its meaning is amended to a **0/1 flag**: 1 while a break or refractory-end timer is pending;</li><li>the timers themselves are found by kind through `own_timers` (SPR-014 `system.rs:820–828`);</li><li>INV-T1-02 is checked by a **test observer with agenda access** at every month end, at the run's end, through a re-sample and through a keyframe;</li><li>a death cancels the actor's break or refractory-end timer at the death instant (`exited()`), by SPR-038b's `cancel_because(id, Dead)`, counted in `cancelled{T1.minds, break, dead}` (R14);</li><li>a `Demote` met while `pending` or `refractory` is dropped as `Deferred` (SPR-023), and INV-T1-02's "went dormant first" clause is amended away</li></ul> | T-03 |
 | **10. Breaks in one slot** (REV-MINDS P4) | Due timers of one `(t, phase)` fire in key order on one view (SPR-014 branch `engine.rs:1262–1264`) | A second break would see the first's relief, which changes a pact's target | **Proposed (7.5/10):** <ul><li>a break timer's fire marks the actor due in the `due` table (kind `break`; SPR-024 row 4);</li><li>in the binding, every due break chooses its act and target against the binding's start state, then the acts apply in `action_order`;</li><li>a golden case has two breaks in one slot, one choosing the other as its pact target</li></ul> | T-03 |
 | **11. The first real verb programs** | `FLED.effects`, `DESPAIR_PACT.effects` (`effect_language_v0.md:438–439`); SPR-017 lands none (`SPR-017_EffectLanguage.md:27`) | The host seam in a real system is untried | **Proposed (8/10):** <ul><li>both programs join `[verbs]`, checked against T1 0.5.0's `[[commands]]`;</li><li>`rh-minds` evaluates them at the act, with the verb's event as `cause`;</li><li>`MURDER_ATTEMPT` keeps no program (SPR-024 row 8);</li><li>`HOLDINGS_BURNED`'s program waits for M4 (P1b);</li><li>no `registry_version` bump: SPR-030 bumps it (P7)</li></ul> | T-01, T-03 |
-| **12. V-SAGA-16b, non-vacuous** (REV-MINDS P1) | "branching ratio … < 1, upper 95% bound included", 32 seeds (`docs/09:422`); `[isolation]` (`T1.minds.odd.toml:1030`) | At `twin_vales`' values (threshold 70, gain 20, cap 40; `twin_vales.yaml:88–93`) the cap stays below the threshold, and `cascade_mc.py` finds **0 breaks in 92,160 actor-years**. The ratio is 0/0, and the mutants that should show the gate's teeth cannot fire | **Ruled (80%):** <ul><li>**the gate runs on a stress-capable fixture court:** parameters inside the Registry box where a cascade is possible, stated in T1-I/S with the arithmetic that breaks occur;</li><li>**a massacre variant:** 4 deaths at closeness 1 in one instant;</li><li>**the gate fails below 30 breaks over the ensemble**, reported as "NOT EXERCISED";</li><li>the band leaves the gate, so the gate is the ratio's upper bound below 1 plus no second break inside the refractory period;</li><li>**`twin_vales` is reported only;**</li><li>a T-04 probe asserts that breaks occurred.</li></ul> The attribution is a test observer on plane-A state: each crossing is linked to its instant's `exited()`, and each death to the break whose `DEATH_DUE` caused it. The bound comes from a keyed bootstrap over seeds | T-04 |
+| **12. V-SAGA-16b, non-vacuous** (REV-MINDS P1) | "branching ratio … < 1, upper 95% bound included", 32 seeds (`docs/09:422`); `[isolation]` (`T1.minds.odd.toml:1030`) | At `twin_vales`' values (threshold 70, gain 20, cap 40; `twin_vales.yaml:88–93`) the cap stays below the threshold, and `cascade_mc.py` finds **0 breaks in 92,160 actor-years**. The ratio is 0/0, and the mutants that should show the gate's teeth cannot fire | **Ruled (80%):** <ul><li>**the gate runs on a stress-capable fixture court:** parameters inside the Registry box where a cascade is possible, stated in T1-I/S with the arithmetic that breaks occur;</li><li>**a massacre variant:** 4 deaths at closeness 1 in one instant;</li><li>**the floor applies per variant (R13): the scenario and the massacre variant each need at least 30 breaks over their 32-seed ensemble**, else that variant fails as "NOT EXERCISED"; **the gate is nightly-only** (the PR tier runs 4 seeds of each variant and asserts INV-T1-01 to 04 and the refractory clause only, with no ratio and no floor); **one planted FAIL is asserted:** the massacre variant under `mutant-no-refractory` must fail the gate's refractory clause, by name;</li><li>the band leaves the gate, so the gate is the ratio's upper bound below 1 plus no second break inside the refractory period;</li><li>**`twin_vales` is reported only;**</li><li>a T-04 probe asserts that breaks occurred.</li></ul> The attribution is a test observer on plane-A state: each crossing is linked to its instant's `exited()`, and each death to the break whose `DEATH_DUE` caused it. The bound comes from a keyed bootstrap over seeds | T-04 |
 | **13. The break band under P1a's two sources** | 0.5–5 per 100 named-actor-years, a design value; it "may fall below 0.5" (`T1.minds.odd.toml:68–69`); reported at G1a and gated at G1b (D34) | Only grief and dissonance are sources in P1a | **Ruled:** measured at the fixture worlds' values and at the Registry corners, and reported to the director with the shortfall. Nothing is tuned | T-04 |
 | **14. Re-sampling a break** | SPR-024 row 15 | The default `resample_timer` refuses | **Proposed (7/10), in T1-I/S:** a break is re-drawn by `break_delay` from the input's day, keyed at the actor's new epoch; it keeps its `cause`. A refractory end keeps its tick | T-03 |
 | **15. Edges** (REV-MINDS P6) | `envelope_v0.md:86`: a break's `MURDER_ATTEMPT` carries "`triggered` to the `MENTAL_BREAK` of the same step" | Missing from revision 0 | **Ruled:** added (T-03) | T-03 |
@@ -116,7 +116,7 @@ version: 0.2.0
 | Tests that gate this sprint | **V-SAGA-16** (gates G1a), **V-SAGA-16b** (gates G1a; nightly, power stated), V-INV-03 (subset), V-INV-15, V-DET-01, 02, 05 and 12, V-GOLD-01 (unchanged). Reported: the band; V-SF-22's evidence for SPR-028 |
 | Docs updated in the same sprint | `check_all.sh`, the inventory test and `CLAUDE.md`; the `docs/09` method lines for V-SAGA-16 and 16b; the erratum to `effect_language_v0.md` §9; PRJ-002's row; BCK-002 A-24 (the T1 part done) |
 
-**Rules carried:** SPR-023's list, with **one statistical gate, V-SAGA-16b, in the nightly tier**. At the PR tier: 4 seeds, asserting INV-T1-01 to 04 and "no second break inside the refractory period".
+**Rules carried:** SPR-023's list, with **one statistical gate, V-SAGA-16b, nightly-only** (R13). At the PR tier: 4 seeds of each variant, asserting INV-T1-01 to 04 and "no second break inside the refractory period"; no ratio and no floor are asserted there.
 
 ## Tasks
 
@@ -183,17 +183,17 @@ A **hard checkpoint** follows T-02: the Tester's interim pass on the accounting 
 #### T-04: V-SAGA-16b, the band, the isolation evidence (rows 12, 13)
 - **Deliverable:**
   - **The cascade on T1-I/S's stress-capable gate court:** the sovereign is murdered in front of the court at year 50, and there is a massacre variant (4 closeness-1 deaths in one instant).
-  - **Runs:** 32 seeds × 60 years nightly; 4 seeds at the PR tier.
+  - **Runs:** 32 seeds × 60 years of each variant, nightly (the gate); 4 seeds of each at the PR tier (invariants only, R13).
   - **`twin_vales`,** run for reporting only.
   - **The observer** (row 12), and the band report.
   - **The isolation run's observers** and a sanity run for SPR-028's V-SF-22.
 - **Acceptance:**
-  - **The probe:** breaks occurred, and the ensemble total is at least 30. Fewer fails the gate as "NOT EXERCISED".
+  - **The probe, per variant (R13):** the scenario's ensemble has at least 30 breaks, and so has the massacre variant's. A variant with fewer fails as "NOT EXERCISED", naming the variant and its count.
   - **V-SAGA-16b (nightly gate):**
     - the ratio's upper 95% bound is below 1, on both the scenario and the massacre variant;
     - no second break inside `break_refractory_days`;
     - counts are back to baseline within 5 years (reported).
-    - A run with `mutant-grief-no-cap` and `mutant-no-refractory` together shows the ratio rising (reported: the gate's teeth).
+    - **The planted FAIL (asserted):** the massacre variant under `mutant-no-refractory` fails the gate's refractory clause by name, every night. A run with `mutant-grief-no-cap` as well shows the ratio rising (reported).
   - **Reported only:** the band at the fixture values and at the Registry corners, and `twin_vales`' break count, with the shortfall stated. AGT-003-STAT reads it before the audit. Nothing is tuned.
 - **Status:** [ ] not started
 
@@ -208,9 +208,9 @@ A **hard checkpoint** follows T-02: the Tester's interim pass on the accounting 
     | Typed-table and program tests, the seam | by-name tests | core | debug | 4 s |
     | S-cases: grief, stress, break unit tests, one mutant rebuilt | by-name tests and mutants | core | debug | 25 s |
     | The court at 200 years with the identity and agenda observers | release system gate | golden | release | 6 s |
-    | The cascade, 4 seeds, and the massacre variant | release system gate | golden | release | 8 s |
+    | The cascade and the massacre variant, 4 seeds each, invariants only (R13) | release system gate | golden | release | 8 s |
     | The dynastic run at 50 years | release system gate | golden | release | 5 s |
-    | 1,000-year soak, 32-seed cascade, band report, other mutants, 600 actors | soak | nightly | release | — |
+    | V-SAGA-16b (both variants, 32 seeds each, with the planted FAIL), 1,000-year soak, band report, other mutants, 600 actors | gate and soak | nightly | release | — |
 
 - **Acceptance:**
   - **Hash-neutral, robust form (true for a correct build):** no golden world names T1, and `BUILT` does not change.
@@ -224,7 +224,7 @@ A **hard checkpoint** follows T-02: the Tester's interim pass on the accounting 
 |---|---|---|
 | **Size: about 5.25–6 agent-days, one sprint** (X8; D59 item 1; 65%) | One C2 PR, with a checkpoint after T-02 | A split at the checkpoint: two audits |
 | **The grief edge through the instant log** (X1(c); D59 item 6; 75%) | `GRIEF_FOR` to the same-instant `DEATH`, read through `[[observes]]` | No edge. Then V-SAGA-16b's attribution stays on plane-A state anyway |
-| **The break band and a non-vacuous V-SAGA-16b** (P1; D59 item 7; 75%) | The gate runs on a stress-capable court with at least 30 breaks; `twin_vales` and the band are reported | The gate on `twin_vales`: vacuous (0/0) at its values |
+| **The break band and a non-vacuous V-SAGA-16b** (P1; D59 item 7; 75%) | The nightly gate runs on a stress-capable court, each variant with at least 30 breaks, with one planted FAIL; `twin_vales` and the band are reported | The gate on `twin_vales`: vacuous (0/0) at its values |
 
 ## Out of scope (explicit)
 - **Vow and kin-loyalty stress** (P1b); `HOLDINGS_BURNED` (M4, P1b); fugitive status after `FLED` (S3 F1, P1b).
@@ -273,5 +273,5 @@ flowchart LR
 
 - [ ] Every task meets its acceptance criteria; the checkpoint was held.
 - [ ] `bin/check_all.sh` passes, with each part's time.
-- [ ] DET, IF and STAT PASS. The audit `VER-SPR-025` PASS, with the C2 record, the V-SAGA-16b result (at least 30 breaks) and the band report.
+- [ ] DET, IF and STAT PASS. The audit `VER-SPR-025` PASS, with the C2 record, the V-SAGA-16b result (at least 30 breaks per variant, the planted FAIL failing) and the band report.
 - [ ] V-SAGA-16 gates in the PR tier and V-SAGA-16b in the nightly tier; BCK-002 A-24's T1 part is done.

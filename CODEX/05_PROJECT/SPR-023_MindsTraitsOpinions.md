@@ -9,7 +9,7 @@ tags: [sprint, simulation]
 related: [BCK-002, PRJ-002, REV-MINDS, REV-WAVE5, REV-WAVE6, REV-WAVE7, REV-P1a, REV-M7-membership, EVO-001, EVO-002, SPR-014, SPR-015, SPR-017, SPR-019, SPR-020, SPR-021, SPR-022, SPR-024, SPR-025, SPR-028, SPR-030, SPR-038, ADR-0002, ADR-0006, ADR-0007, ADR-0012, ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF:** Builds the first slice of `T1.minds` in a new plane-A crate, `rh-minds`, against the **T1-A** spec (T1 0.4.0, a reviewed spec PR the Architect is commissioning; X7):
@@ -17,14 +17,14 @@ version: 0.2.0
 > - **promotion and demotion** by M7's `Promote` and `Demote` (M7 0.6.0's one-list criteria, D56). They are developed against a **stub M7 owner with a scripted `Promote` set** (X5; EVO-001 R12). **World start** has one route (X4): M7's dormancy pass sends `Promote` at tick 0, and genesis names only the manifest's cast;
 > - **relations** (liege and vassal rows, refreshed monthly) and **opinion modifiers** (CK3 style: applied from commands, summed in `i32` and clamped on read, expired monthly), with thoughts and goals applied from stub S6/S7 senders;
 > - **the death path through the instant log:** T1 consumes SPR-038 stage B's `StepCtx::exited()` (X1), so a quiet day start costs O(1);
-> - **two core additions** (C2): `DropReason::Deferred` and a timer-cancel counter, each with its `05.1` sentence (REV-MINDS M5).
+> - **`DropReason::Deferred` and the timer-cancel counter consumed:** SPR-038 stage B adds them to `rh-core` with the generic `Ended` and their `05.1` sentence (round-2 ruling R14); this sprint uses them for a deferred `Demote` and for the timers `Demote` cancels (REV-MINDS M5, M6).
 >
 > **No baseline moves.** No golden world names `T1.minds` or `M7.dynasty`, and `BUILT` does not change here: M7 and T1 join the build together in SPR-024b (X6). So every ladder, header included, stays byte-identical. The class is **C2** under `docs/13` §4.2's rule for a system that no golden world registers (X12, a D58 director item); the PR proves it by its `systems` lines and `BUILT`.
 >
-> - **Developer:** AGT-002-CORE (`rh-minds`, `rh-core`, `rh-registry`, `rh-contracts`), with AGT-002-TOOLS for the Registry loader, the gates and the reference port checks. One Developer session may hold both roles.
+> - **Developer:** AGT-002-CORE (`rh-minds`, `rh-registry`, `rh-contracts`), with AGT-002-TOOLS for the Registry loader, the gates and the reference port checks. One Developer session may hold both roles.
 > - **Testers:** AGT-003-DET and AGT-003-IF. One session may hold both, on a different model from the Developer's.
 > - **Size and class:** **about 4.75–5.25 agent-days** (X8; T-01 0.75, T-02 0.5, T-03 1.5, T-04 1.0, T-05 1.0–1.5). **One sprint with a hard checkpoint after T-03.** **C2.** The T1-A spec PR is counted separately, in PRJ-002 §6.
-> - **Status:** PLANNING, revision 1. REV-MINDS round 1 (M1–M11, Q1–Q3; the Architect's rulings) and the cross-plan rulings X1–X12 are applied. It needs T1-A merged and the director's plan approval (D59; GOV-005 §2).
+> - **Status:** PLANNING, revision 2. REV-MINDS round 1 (M1–M11, Q1–Q3), the cross-plan rulings X1–X13 and the round-2 rulings R8, R9, R14 and R17 are applied. It needs T1-A merged and the director's plan approval (D59; GOV-005 §2).
 
 # SPR-023 — Minds v0, part a: rh-minds, promotion, traits, relations, opinions (WP P3.2a, part a)
 
@@ -32,7 +32,7 @@ version: 0.2.0
 - **Depends on (the precondition head; X9):**
   - **SPR-015 merged:** M2 0.3.0 frozen (`person.id`, `person.spouse` and `life_course.mother`/`father` live; T1's M2 reads, `T1.minds.odd.toml:589–638`, plus `person.id` per M1), `rh-contracts::m2` v0.1, and **the derived per-system index** (W4, `REV-WAVE5-plans.md:59`), which holds every lookup this sprint needs over T1's own columns. SPR-014 comes before it: same-instant delivery, the absent-owner rule (`T1.minds.odd.toml:576–588`), typed `[[applies]]` (`:526–574`) and the dead-person drop.
   - **The T1-A spec PR merged** (X7; specs table row 1): T1 0.4.0's A-steps, `person.id`, `mind.person`, world start by X4, the `rh-minds` pin in `bin/lint_arch.py`, and the exact reference `specs/minds/selftest_minds_v0.py` with its A-cases.
-  - **SPR-038 stage B merged** (X1): the instant log with `StepCtx::inserted()` and `exited()`.
+  - **SPR-038 stage B merged** (X1; R9, R14): the instant log with `StepCtx::inserted()` and `exited()`, ascending by `PersonId` across the whole instant (SPR-038's ruling T5, `SPR-038_PerInstantCost.md` T-07), and the `DropReason` changes: the generic `Ended` ("the timer's or command's premise no longer holds"), `Deferred`, the `cancelled{system, timer kind, reason}` counter and their `05.1` sentence.
   - **Not a dependency:**
     - SPR-017: no kinship walk is read in this part; SPR-024a is the first.
     - SPR-021 and SPR-022: the stub M7 stands in (X5).
@@ -49,7 +49,7 @@ version: 0.2.0
     - the `person.named` mode read, with `neutral = false` (`:522–527`);
     - the dormancy criteria (`:756–757`, amended at `:898–900`) and the T1 couplings (`:817–825`).
     The stub M7 implements the sender side of these and nothing else.
-  - `05.1`: §2 rule 2 (delivery, absent owners, the dead-person drop; SPR-038's instant-log text; this sprint's `Deferred` and cancel-counter sentences, T-02), rule 4, §4.2, §4.3 (`docs/05_architecture/05.1_simulation_core.md:175–195`), §6 items 2–3. `05.3` §2 (`05.3_cognition_epistemics_oracle.md:27–60`).
+  - `05.1`: §2 rule 2 (delivery, absent owners, the dead-person drop; SPR-038's instant-log text; SPR-038b's `DropReason` sentence: the generic `Ended`, `Deferred`, the cancel counter; R14), rule 4, §4.2, §4.3 (`docs/05_architecture/05.1_simulation_core.md:175–195`), §6 items 2–3. `05.3` §2 (`05.3_cognition_epistemics_oracle.md:27–60`).
   - The Registry (`specs/manifest/registry_v0.toml`): `[systems."T1.minds"]` (`:121–141`, no `defaults`), `[relation_kinds]` (`:301–310`), `[opinion_modifiers]` (`:312–322`), `[overlay_traits]` (`:331–337`).
   - Code: `crates/rh-core/src/fixed/q.rs:103–104` (`Q16_16::narrow_saturating`, half to even); `crates/rh-sample/src/normal.rs:58`, `:73`; on SPR-014's branch, `system.rs:437–458` (`DropReason`), `:802–815` (`cancel`), `:820–828` (`own_timers`) and `world.rs:249–255` (`person_row` needs a declared `person.id` read).
   - ADRs: ADR-0002 (as amended by D59 item 4, X11), ADR-0006, ADR-0007 (mind rows are kept), ADR-0012, ADR-0024 (no pin sets `person.named`, `T1.minds.odd.toml:85`), ADR-0025, ADR-0033, **ADR-0034** (no model chooses anything: `docs/06_adr/ADR-0034-llm-roles-translate-describe-never-decide.md:31`), ADR-0035.
@@ -76,11 +76,11 @@ version: 0.2.0
 | **5. `bevy_ecs` or columns (MIN-12)** | `T1.minds.odd.toml:75`; ADR-0002 §2 puts T1 in a pinned `bevy_ecs` World behind `rh-minds` (`docs/06_adr/ADR-0002-state-model-ecs.md:16`); the same in `docs/07_technology_stack.md:28`, `docs/14_reuse_inventory.md:120, :149`, `05.0_overview.md:243` and `05.1` §5 (`05.1_simulation_core.md:211`) | The plane hash, keyframes, single-writer ownership, `AccessSpec`, lagged snapshots and the absent-owner rule all work on `WorldTables` columns; a World would need its own paths and a `plane-A-external` review (`lint_arch.py:189`) | **Ruled (X11; 80%): a director item, D59 item 4.** An **ADR-0002 §2 addendum** reads "P1a: named actors are columns behind `rh-minds`; `bevy_ecs` is revisited at P3.2b", and names the five doc lines above. This plan builds columns on that ruling. If it is declined, a plane-A `bevy_ecs` review and a World's hash and keyframe paths come first (about 2–3 agent-days) | T-01 |
 | **6. The instant's dead** | Day/Vital "work only where M2's apply_death ran" (`T1.minds.odd.toml:732`); the dead are "persons with alive = 0 and death_tick = now" (`:879`) | Without an engine list, a scan of `person.alive` at every day start: O(persons) about 360 times a year (A-60) | **Ruled (X1; REV-MINDS M2; 70%):** consume SPR-038 stage B's **`StepCtx::exited()`**, part (b) of the engine-owned instant log: the persons whose `person.alive` went 1 → 0 at a merge of this instant, filled at the serial merges, read-only, cleared at the instant's end, outside every hash and keyframe. This plan builds no list; T-02 is a consumer test. `inserted()` has no consumer here | T-02, T-04 |
 | **7. World-start naming and the cast's traits** | `[initialization]` (`T1.minds.odd.toml:804–805`): the cast and the members who meet M7's criteria are named at world creation; traits come from the cast entry "where given" | No manifest path gives traits (`CastMember.initial`, `specs/manifest/manifest_v0.py:256`; no HEXACO trait in `[attributes]`, `registry_v0.toml:525–560`). Two naming routes would draw under two keys | **Ruled (X4; 85%):** one route. Genesis names only the manifest's `cast` (`person.named`, under T1's `from_manifest`). M7's dormancy pass at tick 0's `Year/Polity` (SPR-022) sends `Promote` for the rest. **T1 creates a mind for each person `Promote`d at t = 0, and for the cast** at t = 0's Day/Agenda, in ascending `PersonId`, every trait drawn by `trait_draw` at t = 0 (no cast seeding in P1a). T1-A and M7's T-00a reconcile their `[initialization]` texts. Here the stub M7 sends the scripted t = 0 `Promote` set | T-03 |
-| **8. Deferred `Demote` and timer cancels** (REV-MINDS M5, M6) | "Demote{person}: deferred while break_state is pending or refractory" (`T1.minds.odd.toml:891`); `DropReason` has `DeadKey`, `Dead`, `Ended` and `AbsentOwner` only (SPR-014 `system.rs:437–458`); `cancel` counts nothing (`:802–815`); `own_timers` also returns `DEATH_DUE` and `MARRY_DUE` (`:820–828`) | A deferral has no reason code and no state; cancels leave no count; "cancel the actor's timers" would cancel decided outcomes (ADR-0025 item 1) | **Ruled (85%):** `DropReason::Deferred` (`"deferred"`) and a counter `cancelled{system, timer kind, reason}` in `rh-core`, each with a `05.1` §2 rule 2 sentence (T-02). A `Demote` met while `break_state ≠ calm` is dropped as `deferred`, and M7's yearly pass sends it again (`next/M7:579`). `Demote` cancels **poll, interrupt, break and refractory-end** timers by kind, never `DEATH_DUE` or `MARRY_DUE`. The kinds are T1-I/S's (SPR-024's row 15); in this sprint only the rule and the counter exist | T-02, T-03 |
+| **8. Deferred `Demote` and timer cancels** (REV-MINDS M5, M6) | "Demote{person}: deferred while break_state is pending or refractory" (`T1.minds.odd.toml:891`); `DropReason` has `DeadKey`, `Dead`, `Ended` and `AbsentOwner` only (SPR-014 `system.rs:437–458`); `cancel` counts nothing (`:802–815`); `own_timers` also returns `DEATH_DUE` and `MARRY_DUE` (`:820–828`) | A deferral has no reason code and no state; cancels leave no count; "cancel the actor's timers" would cancel decided outcomes (ADR-0025 item 1) | **Ruled (85%; R14: built once, by SPR-038 stage B):** this sprint consumes `DropReason::Deferred` (`"deferred"`) and the counter `cancelled{system, timer kind, reason}` with their `05.1` §2 rule 2 sentence (T-02 tests them). A `Demote` met while `break_state ≠ calm` is dropped as `Deferred`, and M7's yearly pass sends it again (`next/M7:579`). **`Demote` cancels exactly four timer kinds: poll, interrupt, break and refractory end**, each through SPR-038b's `StepCtx::cancel_because(id, Ended)` and so counted under its kind; **never `DEATH_DUE` or `MARRY_DUE`** (decided outcomes stand). The kind codes and purposes are T1-I/S's (SPR-024's row 11 (b)); in this sprint the rule and its test (with planted timers of all six kinds) exist | T-02, T-03 |
 | **9. Liege and vassal rows are never refreshed** | `relation.ended_at`: "b died, or the liege structure changed" (`T1.minds.odd.toml:227`) | No step ends or adds a row when M7's titles change | **Proposed (7.5/10), in T1-A:** a `relations` step in Month/Agenda compares each named actor's open rows with what its lagged title and office reads imply, ends those that no longer hold and appends new ones (O(named + titles) a month). The death path ends rows with `b` dead at the death instant (row 6) | T-04 |
 | **10. Month and opinion arithmetic** | `opinion.expires` (`T1.minds.odd.toml:270`); `opinion(a, b) = clamp(sum …, −100, 100)` (`:256`) on `q8_8` | Unequal months on a 365-day calendar; five −60 modifiers sum to −300, outside `q8_8` | **Proposed (8/10), in T1-A:** a month is `minutes_per_year / 12` (`05.1` §4.4's `1mo`); the sum in `i32` raw units, then clamped and narrowed | T-04 |
 | **11. Index freshness inside a binding** (REV-MINDS M7) | W4's hook applies a level's merged writes after the level (`SPR-015_BirthsF1.md:129–130`) | A step that appends an opinion row and then sums the pair's opinion in the same step reads a stale index | **Ruled (85%):** a step reads the index as of its start, plus a step-local overlay of the rows it appended itself (a scan of its own column past the index's covered length). The A-steps say so; a test appends and reads in one step | T-03, T-04 |
-| **12. Registry typing (BCK-002 A-24, the minds part)** | `rh-registry` types none of T1's sections (`crates/rh-registry/src/lib.rs`); T1 has no Registry `defaults` (`registry_v0.toml:141`; M2's at `:33`) | The engine needs fixed-point tables, and T1's 16 parameters need a `WorldSpec` home | **Proposed (8/10):** `[relation_kinds]`, `[opinion_modifiers]` and `[overlay_traits]` typed in `rh-manifest` and compiled into `rh-registry` tables. `WorldSpec.minds` is compiled when T1 is in the caller's built list, with **no defaults**: SPR-011 ruling 8 refuses a built system's missing parameter by name (`registry_v0.toml:26–31`), and `twin_vales.yaml:20–23` sets all sixteen | T-01 |
+| **12. Registry typing (BCK-002 A-24, the minds part)** | `rh-registry` types none of T1's sections (`crates/rh-registry/src/lib.rs`); T1 has no Registry `defaults` (`registry_v0.toml:141`; M2's at `:33`) | The engine needs fixed-point tables, and T1's 16 parameters need a `WorldSpec` home | **Proposed (8/10):** `[relation_kinds]`, `[opinion_modifiers]` and `[overlay_traits]` typed in `rh-manifest` and compiled into `rh-registry` tables. `WorldSpec.minds` is compiled when T1 is in the caller's built list, with **no defaults in this sprint**: SPR-011 ruling 8 refuses a built system's missing parameter by name (`registry_v0.toml:26–31`), and `twin_vales.yaml:20–23` sets all sixteen. **T1-I/S then gives the sixteen parameters `default`s** through `specs/systems/next/registry_delta.toml` (M2's mechanism), and SPR-024a T-01 moves them into the Registry, so `manor.yaml` compiles with T1 built and is not edited (round-2 ruling R8) | T-01 |
 | **13. Where the invariants run** (REV-WAVE6 X1) | INV-T1-05 and 06 cover every mind and opinion (`T1.minds.odd.toml:931–938`); `check_invariants` runs at every instant's Bookkeeping (SPR-014 `engine.rs:929–932`) | O(minds + opinions) per instant | **Ruled by REV-WAVE6 X1:** `invariants()` is O(1) (column lengths). The step asserts INV-T1-05 on each row it creates and INV-T1-06's clamp on each sum it computes. Both run in full as test observers at month ends and at the run's end. Each `statement` states its cadence; `test` keeps its V-id (V3) | T-03, T-04 |
 | **14. Reading M7's columns before `rh-contracts::m7`** | `rh-contracts::m7` is SPR-021 T-02's (REV-MINDS Q1); this sprint does not follow SPR-021 (X9) | The stub owns M7's columns, but no typed accessor exists | **Proposed (8/10):** T1 reads the twelve M7 columns by name through `SystemView` with their declared lags, as SPR-015 reads T1's `person.named` before `rh-contracts::t1` exists (`SPR-015_BirthsF1.md:81`). SPR-024a switches them to `rh-contracts::m7`, with a consumer test | T-03, T-04 |
 | **15. The class** | PRJ-002 classed SPR-023 C3 (`PRJ-002_P1aPlan.md:44`) | No golden world names T1, and `BUILT` (`crates/rh-golden/src/world.rs:46`) does not change | **Ruled (X6, X12; 80%):** **C2**. The PR shows that the four worlds' `systems` lines (`worlds/*/baselines/*.ladder`) and `BUILT` do not change. The court's measured rates go to the director at the merge (X12) | T-05 |
@@ -89,8 +89,8 @@ version: 0.2.0
 
 | Rule | This sprint |
 |---|---|
-| Change class (`docs/13` §4.2) | **C2** (X6, X12). What changes: the T1 0.4.0 freeze, the Registry typing and `WorldSpec.minds`, `rh-contracts::t1` v0, and `DropReason::Deferred` with the cancel counter in `rh-core`. `state_hash` is unchanged on all four golden worlds; no baseline, snapshot or budget moves. PR title `SPR-023: … [C2]` |
-| Planes touched (ADR-0024) | **A:** `rh-minds` (new, pinned `("A", "system")`), `rh-core` (`Deferred`, the counter), `rh-registry`, `rh-contracts` (`t1`). **Tool:** `rh-manifest`, `specs/` (the promotion), `bin/check_all.sh`. **B, C:** none |
+| Change class (`docs/13` §4.2) | **C2** (X6, X12). What changes: the T1 0.4.0 freeze, the Registry typing and `WorldSpec.minds` and `rh-contracts::t1` v0. `rh-core` is not changed: `DropReason` and the cancel counter are SPR-038b's (R14). `state_hash` is unchanged on all four golden worlds; no baseline, snapshot or budget moves. PR title `SPR-023: … [C2]` |
+| Planes touched (ADR-0024) | **A:** `rh-minds` (new, pinned `("A", "system")`), `rh-registry`, `rh-contracts` (`t1`). **Tool:** `rh-manifest`, `specs/` (the promotion), `bin/check_all.sh`. **B, C:** none |
 | Owned columns written | `T1.minds`: `person.named` (by `Promote`, `Demote` and the cast only); `mind.person` and the six traits and ambition (once, at creation); the stress, accounting and break columns (initial values only); `relation.*`, `opinion.*`, `thought.*`, `goal.*`. Not `feud.*` (SPR-024b), `due.*` (SPR-024a) or `knowledge.*` (P1b) |
 | Reads | M2, `same_instant` identity, through `rh-contracts::m2`: `person.id` (M1), `alive`, `death_tick`, `birth_tick`, `sex`, `mother`, `father`, `spouse`, `life_course.person_id`, `mother`, `father`. M7, lagged identity, by name (row 14): the twelve columns of `T1.minds.odd.toml:640–698`. S7's `vow.conflict` and S6's `artifact.rumour_reach`: rate reads, dropped, neutral. **The engine's `StepCtx::exited()`** (X1(b)). Registration refuses T1 without M2 or M7 |
 | RNG purposes | All nine skeleton purposes are declared (rule `rng-purpose`); this sprint **draws only `trait_draw`**: entity the person, k = 0..6, t the creation instant, one `Normal(0, trait_sd)` call per k, ambition's mean the A-steps'. Not re-sampled on a fork |
@@ -99,7 +99,7 @@ version: 0.2.0
 | Determinism lints (GOV-003 §2, §6) | Must pass. No `HashMap`; iteration in ascending `PersonId` through the index; no interior mutability (W31); `rh-minds` depends only on `SYSTEM_ALLOWED_DEPS` and contract crates (`lint_arch.py:115`); engine purity, with no LLM client (ADR-0034; V-INSP-05) |
 | Per-instant cost (REV-WAVE6 X1; A-60) | Day/Vital and Day/Agenda are **O(1) when idle** (an empty `exited()`, an empty inbox, no due timer) and O(exits + commands) otherwise. Month/Agenda is O(named + opinions + thoughts + titles) **once a month**. `invariants()` is O(1). Lagged clones: once T1 is live, M2's and M7's lagged reads of `person.named` are cloned per instant (SPR-014 `engine.rs:863–868`; SPR-038 refreshes them only after a write), plus T1's twelve lagged M7 reads. Counted, no budget moves (REV-WAVE6 X7) |
 | Tests that gate this sprint | V-COG-01, V-INV-04, V-INV-12 (the T1 half), V-INV-15 (the court subset), V-DET-01, V-DET-02, V-DET-05 and V-DET-12 on the fixture court, V-DET-19, V-PLN-01, V-INSP-03, V-INSP-05, V-GOLD-01 (four ladders unchanged), plus `bin/check_all.sh` |
-| Docs updated in the same sprint | `bin/check_all.sh` and `python/tests/test_check_all_inventory.py` (same commit); `CLAUDE.md`; `specs/systems/next/README.md`; the two `05.1` §2 rule 2 sentences (`Deferred`, the cancel counter; the Architect's wording); `05.0` §6 (`rh-minds` built); `docs/09` V-COG-01, V-INV-12 method lines; `specs/README.md`; PRJ-002's row; BCK-002 A-24 (the minds part, partly done). The ADR-0002 addendum and its five doc lines are the Architect's, on D59 item 4 |
+| Docs updated in the same sprint | `bin/check_all.sh` and `python/tests/test_check_all_inventory.py` (same commit); `CLAUDE.md`; `specs/systems/next/README.md`; `05.0` §6 (`rh-minds` built); `docs/09` V-COG-01, V-INV-12 method lines; `specs/README.md`; PRJ-002's row; BCK-002 A-24 (the minds part, partly done). The ADR-0002 addendum and its five doc lines are the Architect's, on D59 item 4 |
 
 **Rules carried from P0–SPR-019 (every task):**
 - **Property tests vary world size and seed:** three court sizes (6, 60, 600 named actors) and eight seeds, fixed-seed SplitMix64. The 600 size runs nightly (W42).
@@ -134,13 +134,13 @@ A **hard checkpoint** follows T-03: the Tester's interim pass (`VER-SPR-023-TEST
   - The four golden ladders are unchanged.
 - **Status:** [ ] not started
 
-#### T-02: The core additions and the instant log consumed (C2; rows 6, 8; X1; REV-MINDS M2, M5)
+#### T-02: The instant log and the drop reasons consumed (rows 6, 8; X1; R9, R14; REV-MINDS M2, M5)
 - **Deliverable:**
-  - `DropReason::Deferred` (`"deferred"`) and `cancelled{system, timer kind, reason}` in `rh-core`, with the two `05.1` §2 rule 2 sentences.
+  - **Consumer tests of SPR-038b's `DropReason::Deferred` and `cancelled{…}` counter** from `rh-minds` (no `rh-core` change here; R14).
   - **A consumer test of `StepCtx::exited()`.** On M2 0.3.0 worlds, a T1 Day/Vital step after M2's level reads `exited()` and checks it against a brute-force scan. Natural deaths, a commanded death through M2's drain, and two deaths at one day start.
 - **Acceptance:**
-  - `exited()` equals the scan, ascending, at every Day/Vital of three sizes and eight seeds.
-  - A planted `Deferred` drop and a planted cancel each show up in the counters.
+  - `exited()` equals the scan **as a sorted set**, and is ascending by `PersonId` across the whole instant (SPR-038's ruling T5; R9), at every Day/Vital of three sizes and eight seeds; T1 does not sort it.
+  - A planted `Deferred` drop and planted cancels of the four kinds each show up in SPR-038b's counters; planted `DEATH_DUE` and `MARRY_DUE` timers survive a `Demote`.
   - The counters change no hash: the four ladders are byte-identical at 1 and N threads.
   - The probe counts T1's visited rows at a death instant: they equal the instant's exits.
 - **Status:** [ ] not started
@@ -150,7 +150,7 @@ A **hard checkpoint** follows T-03: the Tester's interim pass (`VER-SPR-023-TEST
   - **Declarations:** `AccessSpec` with every 0.4.0 `[[owns]]`, the 25 `[[reads]]` (with `person.id`), the three bindings, the nine purposes, the `[[commands]]`, and the `DRAINS` of the seven `[[applies]]`.
   - **The mind table** (row 3): `create_mind` draws traits and ambition by `trait_draw`, starts stress and the accounting columns at 0, and sets `calm`.
   - **World start** (row 7): at t = 0's Day/Agenda, a mind for each cast member and each person `Promote`d at t = 0, in ascending `PersonId`.
-  - **`promote`:** `Promote` sets `person.named` and creates or reuses the mind; it builds liege and vassal rows (T-04's builder). `Demote` clears `person.named`, goals and thoughts, keeps every row, and cancels the actor's timers of row 8's kinds (counted). When `break_state ≠ calm`, it is dropped as `Deferred`.
+  - **`promote`:** `Promote` sets `person.named` and creates or reuses the mind; it builds liege and vassal rows (T-04's builder). `Demote` clears `person.named`, goals and thoughts, keeps every row, and cancels the actor's poll, interrupt, break and refractory-end timers by `cancel_because(id, Ended)` (row 8; counted per kind), never its `DEATH_DUE` or `MARRY_DUE`. When `break_state ≠ calm`, it is dropped as `Deferred`.
   - **Derived indexes (W4):**
     - the maps: person → mind row; (holder, about) → opinion rows; `b` → open relation rows; holder → thought and goal rows;
     - the step-local overlay rule (row 11);
@@ -252,7 +252,7 @@ flowchart LR
 ```
 
   - **After SPR-015, T1-A and SPR-038 stage B.** Independent of SPR-021 and SPR-022: the stub M7 stands in, and M7's columns are read by name (row 14).
-- **Shared files.** `bin/check_all.sh`, the inventory test, `CLAUDE.md`, `crates/rh-contracts`, `crates/rh-core/src/system.rs` (`DropReason`, `cancel`; SPR-038 and SPR-021 edit the same file), `crates/rh-registry` and `rh-manifest` (with SPR-017 and SPR-021).
+- **Shared files.** `bin/check_all.sh`, the inventory test, `CLAUDE.md`, `crates/rh-contracts`, `crates/rh-registry` and `rh-manifest` (with SPR-017 and SPR-021).
 - **Re-verified after merging `origin/main`:** all three parts; the promotion checklist against `next/`; the hash-neutral record.
 
 ## Risks
@@ -270,7 +270,7 @@ flowchart LR
 |---|---|---|
 | 1 | SPR-015 merged | Open (wave 5) |
 | 2 | T1-A (row 1) | Open: commissioned by the Architect |
-| 3 | SPR-038 stage B (`exited()`) | Open |
+| 3 | SPR-038 stage B (`exited()`, ascending across the instant; `Deferred`, the generic `Ended`, `cancel_because` and `cancelled{…}`; R9, R14) | Open |
 | 4 | The director's plan approval (D59), and the ADR-0002 addendum (D59 item 4) | Open |
 
 ## Completion
@@ -279,4 +279,4 @@ flowchart LR
 - [ ] `bin/check_all.sh` passes, with each part's time in the report.
 - [ ] Tester verdicts PASS (DET, IF); the Architect's audit `VER-SPR-023` PASS with the C2 record, the reported rates and the cost record.
 - [ ] No open DEF-; the CI-detected class is C2.
-- [ ] T1 0.4.0 is frozen on `main`; `rh-minds` is pinned `("A", "system")`; `05.1` §2 rule 2 states `Deferred` and the cancel counter.
+- [ ] T1 0.4.0 is frozen on `main`; `rh-minds` is pinned `("A", "system")`; `Deferred` and the cancel counter (SPR-038b's) are consumed and tested.

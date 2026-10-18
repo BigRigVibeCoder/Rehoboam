@@ -9,7 +9,7 @@ tags: [sprint, simulation]
 related: [BCK-002, PRJ-002, REV-MINDS, REV-WAVE5, REV-WAVE6, REV-WAVE7, REV-P1a, REV-SPR-017, REV-M7-membership, EVO-001, EVO-002, SPR-014, SPR-015, SPR-017, SPR-019, SPR-020, SPR-021, SPR-022, SPR-023, SPR-025, SPR-028, SPR-029, SPR-030, SPR-038, ADR-0006, ADR-0012, ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.2.0
+version: 0.3.0
 ---
 
 > **BLUF:** Builds the decision half of `T1.minds` in `rh-minds`, in **two stages** (X8; REV-MINDS N2). Each stage is its own PR, Tester pass and audit.
@@ -40,13 +40,13 @@ version: 0.2.0
 >   - **024b** is about **3.25–3.75** (T-03 1.5, T-04 0.75, T-05 1.0–1.5), **C3 for `BUILT`**.
 >   - The total is **6.25–7** (X8). Each stage has a hard checkpoint: after T-02's IAUS core (before V-COG-04's harness lands), and after T-03.
 >   - The T1-I/S spec PR is counted separately (PRJ-002 §6).
-> - **Status:** PLANNING, revision 1. REV-MINDS round 1 (N1–N7, Q1–Q3, finding 13) and X1–X12 are applied. It needs the director's plan approval (D59).
+> - **Status:** PLANNING, revision 2. REV-MINDS round 1 (N1–N7, Q1–Q3, finding 13), X1–X13 and the round-2 rulings R4, R5, R7, R8, R10, R11 and R14 are applied. It needs the director's plan approval (D59).
 
 # SPR-024 — Minds v0, part b: IAUS and same-instant semantics (024a); four decisions and the build (024b) (WP P3.2a, part b)
 
 - **Roadmap item:** `docs/11` P3.2a (`docs/11_roadmap.md:183`), part b under PRJ-002 ruling M-3 · **Phase / rung:** P1a; the T1 fixture court (024a) and the dynastic fixture worlds `manor` and `twin_vales` (024b). Neither world is golden before SPR-030.
 - **Depends on (X9):**
-  - **024a:** SPR-021b (M7 0.6.0 frozen; `rh-contracts::m7`; EVO-002's genealogy index and the instant log's events, X1(c), X2); SPR-023; **the T1-I/S spec PR** (a `next/` draft after T-00a); SPR-017 (relations in `rh-registry`, `specs/registry/effect_language_v0.md:240–270`); SPR-020 (the envelope's checked `emit`).
+  - **024a:** SPR-021b (M7 0.6.0 frozen; `rh-contracts::m7`; EVO-002's genealogy index and the instant log's events, X1(c), X2); SPR-023; **the T1-I/S spec PR**, which merges after T-00a **and after SPR-023 T-01 promotes T1 0.4.0**, as a new `next/T1` 0.5.0 draft (`next/` holds one draft per system; round-2 ruling R7). **It sits on 024a's critical path:** SPR-023 T-01, then T1-I/S's review, then 024a T-01; SPR-017 (relations in `rh-registry`, `specs/registry/effect_language_v0.md:240–270`); SPR-020 (the envelope's checked `emit`).
   - **024b:** 024a and **SPR-022a** (dormancy: M7 sends `Promote` at t = 0, X4, X5). T-05's probes on `manor` and `twin_vales` also need **SPR-019b** (the dynastic back-fill: both manifests' dynasties are back-filled, `specs/manifest/examples/manor.yaml:7`).
 - **Binding contracts:**
   - **`specs/systems/T1.minds.odd.toml` 0.5.0** (T1-I/S, promoted by 024a T-01). It covers:
@@ -77,13 +77,13 @@ version: 0.2.0
 
 | Spec | Exists? | Gap | Architect ruling | Needed by |
 |---|---|---|---|---|
-| **1. T1-I/S** | Missing (X7) | The I- and S-steps depend on SPR-017, SPR-020 and SPR-021 (T-00a, EVO-002) | **Ruled (X7; 75%):** a `next/` draft after T-00a merges, reviewed as its own PR, promoted here by 024a T-01. Its contents: <ul><li>the I- and S-steps;</li><li>`[[observes]]` of `MARRIAGE` and `DEATH` (X1(c));</li><li>`break_timer` as a flag (SPR-025's row 9) and V-SAGA-16b's gate fixture (SPR-025 row 11);</li><li>rows 2–8, 10, 11 and 15 below;</li><li>the reference's I- and S-cases with every mutant of SPR-024 and SPR-025 shown on them.</li></ul> It has its own `check_all` line. The Architect commissions it | T-01 |
+| **1. T1-I/S** | Missing (X7) | The I- and S-steps depend on SPR-017, SPR-020 and SPR-021 (T-00a, EVO-002) | **Ruled (X7, R7; 70–75%):** a new `next/T1` 0.5.0 draft, written over the frozen 0.4.0 **after SPR-023 T-01 promotes it** and after T-00a merges (`next/` holds one draft per system), reviewed as its own PR and promoted here by 024a T-01; on 024a's critical path. Its contents: <ul><li>the I- and S-steps;</li><li>**`default`s for T1's sixteen parameters** on `[[params]]` and in `specs/systems/next/registry_delta.toml` under `[systems."T1.minds"]` (M2's mechanism; R8), so `manor.yaml` compiles with T1 built and is not edited;</li><li>`[[observes]]` of `MARRIAGE` and `DEATH` (X1(c));</li><li>`break_timer` as a flag (SPR-025's row 9) and V-SAGA-16b's gate fixture (SPR-025 row 11);</li><li>rows 2–8, 10, 11 and 15 below;</li><li>the reference's I- and S-cases with every mutant of SPR-024 and SPR-025 shown on them;</li><li>proposed (row 16): a `manor` case in `specs/worldgen/selftest_fixture_worlds.py`, whose golden `named_at_start` line 024b's probe reads.</li></ul> It has its own `check_all` line. The Architect commissions it | T-01 |
 | **2. The considerations are prose** | Inputs are text (`registry_v0.toml:355`, `:357`) | No free-string semantics (ADR-0010); `target_reachable` reads columns that T1 does not declare (`:375`; P1b) | **Proposed (7.5/10):** a closed, code-implemented input per id. The effect language's `needs_code` model for relations applies (`effect_language_v0.md:234`). The loader types `domain`, `unit` and `reads`. `lint_odd.py` checks that the `reads` are declared by T1 for every type whose `requires` names only frozen specs, and warns for the others (`pursue_goal`) | T-01 |
 | **3. The curves and types, typed** | `registry_v0.toml:377–379`, `:341–342` | No loader check | **Proposed (8.5/10):** refused by name: knots not ascending; y outside [0, 1]; a value not exact in `Q16_16`; a missing or orphan curve; `poll_months` outside 1..12; `idle_score` outside [0, 1]; an unknown `requires`. Interpolation is linear, clamped at the ends and rounded down. The product and the compensation are rounded down at each multiply, in the I-steps' order | T-01 |
 | **4. Polls cannot be decided inside the timer pass** | `fire` runs once per timer, in key order, on one view (SPR-014 branch `engine.rs:1262–1264`), before every binding (`:925–929`); T1's Day/Agenda order (`T1.minds.odd.toml:736`) | Deciding inside `fire` applies decisions in entity-id order, which V-COG-04 forbids. The spec's step order is unrealisable | **Proposed (8/10; the review: feasible):** a T1-owned `due.person`, `due.type` and `due.interrupt` table. `fire` appends a row; `decide`, in the binding, scores, applies and empties it. The table is empty at every instant's end (an invariant). The order is restated as it runs: the timer pass, then `apply_commands`, `promote`, `decide`, `threshold` | T-02 |
-| **5. The court of an actor with no seat or office** | `T1.minds.odd.toml:798`, `:903`; relation rows exist only for holders (`:205`) | Most named members have no court and no marriage candidates, while M2 excludes the named from its own marriages (`next/M2.demography.odd.toml:365–371`; `next/M7_membership.md:82`, `:105`) | **Proposed (6.5/10):** it is the court of the highest-tier holder of its house (ties by ascending `TitleId`), else none. SPR-030 measures the member share. Hypergamy stays P1b (`M7_membership.md:69`) | T-03 |
-| **6. `marry`'s candidates and `MARRY_DUE` at fire** (REV-MINDS N5) | T1 excludes "parent, child or sibling" (`:903`); N7 drops a pair within `kin(a, 2)` or in holy orders (`next/M2:643`); `MARRY_DUE` fires a day after the decision | A pair can become invalid in that day | **Ruled (85%):** the candidate predicate is N7's, with a lagged identity read of `person.vocation` (T1-I/S). **The fire revalidates:** both alive, both unmarried, not `related(a, b, 2)`, neither in holy orders. Otherwise the timer is dropped with its reason (`dead` or `ended`), counted | T-03 |
-| **7. `FEUD_WITH` and `MARRIED_TO` have no writer** | `registry_v0.toml:317–318`; no spec writes them | Two P1a opinion kinds never occur | **Ruled (N5; 85%):** T1 writes its own rows. `FEUD_WITH` is written both ways when `FEUD_DECLARED` is applied. **`MARRIED_TO` is written both ways after M2 applies the marriage:** T1's Day/Vital step, after M2's drain, reads the instant log's `MARRIAGE` events (X1(c); `[[observes]]`), confirms `person.spouse`, and writes the rows for a named party. This is O(marriages this instant) | T-03 |
+| **5. The court of an actor with no seat or office** | `T1.minds.odd.toml:798`, `:903`; relation rows exist only for holders (`:205`) | Most named members have no court and no marriage candidates, while M2 excludes the named from its own marriages (`next/M2.demography.odd.toml:365–371`; `next/M7_membership.md:82`, `:105`) | **Proposed (6.5/10):** it is the court of the highest-tier holder of its house (ties by ascending `TitleId`), else none. The house's title holders come from **the M7-owned house → title-holders derived index, exposed by `rh-contracts::m7` (SPR-021a; round-2 ruling R11)**, not from `rh-core` and not from a scan. SPR-030 measures the member share. Hypergamy stays P1b (`M7_membership.md:69`) | T-03 |
+| **6. `marry`'s candidates and `MARRY_DUE` at fire** (REV-MINDS N5) | T1 excludes "parent, child or sibling" (`:903`); N7 drops a pair within `kin(a, 2)` or in holy orders (`next/M2:643`); `MARRY_DUE` fires a day after the decision | A pair can become invalid in that day | **Ruled (85%):** the candidate predicate is N7's, with a lagged identity read of `person.vocation` (T1-I/S). **The fire revalidates:** both alive, both unmarried, not `related(a, b, 2)`, neither in holy orders. Otherwise the timer is dropped with its reason (`dead`, or `ended` in SPR-038b's generic meaning, "the premise no longer holds"; R14), counted | T-03 |
+| **7. `FEUD_WITH` and `MARRIED_TO` have no writer** | `registry_v0.toml:317–318`; no spec writes them | Two P1a opinion kinds never occur | **Ruled (N5; 85%):** T1 writes its own rows. `FEUD_WITH` is written both ways when `FEUD_DECLARED` is applied. **`MARRIED_TO` is written both ways after M2 applies the marriage:** T1's Day/Vital step, after M2's drain, lists the instant's merged `MARRIAGE` events through EVO-002's **`events_of(MARRIAGE)`**, in merge order (X1(c); `[[observes]]`; round-2 ruling R10), confirms `person.spouse`, and writes the rows for a named party. This is O(marriages this instant) | T-03 |
 | **8. `MURDER_ATTEMPT`'s outcome path and payload** (REV-MINDS N4) | `effect_language_v0.md:437` dates a command (EVO-001 R9); the language cannot schedule a timer (`:294`) | A `[verbs] payload` field would be a third payload convention | **Ruled (85%):** no `effects` program. The payload goes in **F-8's `when`-clause convention**: T1-I/S amends `emits.MURDER_ATTEMPT.when` with `Payload: [success]` (as M2's and M7's kinds do; SPR-021 F-8), and adds no Registry field. On success, a `DEATH_DUE` timer is set with the attempt as its `cause`. §9's sample is marked superseded by an Architect erratum | T-01, T-03 |
 | **9. Q8: the seven `rh-minds` verbs** | `registry_v0.toml:584–597` | A rename fails `lint_odd.py` and changes channel A's verb dictionary (`emitted_by`, `crates/rh-golden/src/stream.rs:273`) | **Ruled (the Architect, REV-MINDS finding 13; 75%): no rename in P1a.** The Architect files the BCK-002 item at close | — |
 | **10. V-COG-10's edges** | `docs/09:290`; `envelope_v0.md:116`, `:122`, `:124`; no T1 event for `marry`, `seek_office` or `press_claim` (`T1.minds.odd.toml:417–457`) | Three types have nowhere to write their edges; trait contributors have no cause | **Accepted (6/10):** edges go on T1's own decision events. There is one per top-3 contributor that has a cause. `weight` = curve value − 0.5 (`Q8_8`); `evidence` = the margin, min(1, chosen − runner-up). The command-only types send `cause = None`, and decision events for them are a BCK-002 item for P1b. V-COG-10 is not a G1a gate (`docs/09:705`) | T-04 |
@@ -92,7 +92,7 @@ version: 0.2.0
 | **13. V-COG-04 as a gate** | `docs/09:284`, `:90`; G1a gates it (`:705`) | No sample size | **Proposed (8/10; the review checked it):** 4,000 fixture instants × 8 contenders for one vacant office on the probe type; n = 32,000; **SE 0.0057**; TOST at α = 0.05 per side with δ = 0.05. The seeds are fixed, so the gate is deterministic. The by-id mutant gives ρ = −0.577 (`minds_review/work/cogs04_se.py`). AGT-003-STAT states the power | T-02 |
 | **14. `rh-contracts::m7`** | SPR-021 T-02's (REV-MINDS Q1); SPR-023 read M7's columns by name (SPR-023 row 14) | — | **Ruled:** 024a switches T1's twelve M7 reads to `rh-contracts::m7`, with a consumer test | T-01 |
 | **15. Re-sampling T1's timers** | A material input asks `resample_timer` (SPR-014 branch `engine.rs:33–40`); the default refuses (`system.rs:1093–1105`); only `outcome_delay` has a rule (`T1.minds.odd.toml:784`); V-DET-17's input targets a named sovereign (`specs/determinism/crn_pairing_v0.md:5`, `:33`) | Without a rule a run stops | **Proposed (7/10; the review: legal):** polls, interrupts, refractory ends, `MARRY_DUE` and `DEATH_DUE` keep their tick. A break is re-drawn by `break_delay` (SPR-025's row). This is stated in T1-I/S | T-02 |
-| **16. The first real integration** (REV-MINDS N1) | After SPR-021 alone, M7 sends no `Promote` (dormancy is SPR-022's) | No plan owned the M7 + T1 integration | **Ruled (X5; 80%): 024b owns it, after SPR-022a.** 024a integrates against the stub with a scripted `Promote` set. **024b's probes:** at least 50 minds at t = 0 on `manor` and on `twin_vales`; at least one marriage; at least one pressed claim | T-05 |
+| **16. The first real integration** (REV-MINDS N1) | After SPR-021 alone, M7 sends no `Promote` (dormancy is SPR-022's) | No plan owned the M7 + T1 integration | **Ruled (X5; 80%): 024b owns it, after SPR-022a.** 024a integrates against the stub with a scripted `Promote` set. **024b's probes (round-2 ruling R4):** on `twin_vales`, the minds at t = 0 equal the golden's `named_at_start full` count for that world and seed, read from `specs/worldgen/golden/fixture_worlds_v0.txt` by the test (never typed; seeds 1–3 give 33, 35 and 26 today, `:16`, `:62`, `:106`), and are at least 20; on `manor`, they equal the golden's figure for `manor` and seed, with no floor; plus at least one marriage and one pressed claim. (Revision 1's "at least 50 minds" was false for a correct build.) **No golden holds a `manor` figure today:** the file has `twin_vales` and `kingdom_10k` only (`:13`, `:59`, `:103`, `:156`, `:266`), and its reference knows only those two (`WORLDS`, `specs/worldgen/selftest_fixture_worlds.py:170`; `SEEDS`, `:95–98`). **Proposed (7/10), for the Architect:** the T1-I/S spec PR adds a `manor` case at seeds 1 and 2 (the seeds SPR-019's golden pins, `specs/worldgen/golden/population_synthesis_v0.txt:70`, `:107`) to that reference, and renders its `named_at_start` line by `--write`, never by hand. Until it lands, the `manor` probe has no figure and 024b T-05 is blocked (blockers row 2) | T-05 |
 | **17. The class and the build** | PRJ-002 classed SPR-024 C3 | — | **Ruled (X6, X12; 80%):** **024a is C2** (no `BUILT` move; its PR shows the `systems` lines and `BUILT` unchanged; its rates are reported). **024b is C3 for `BUILT` only:** M7 and T1 join together in its `[C3]` commit. SPR-021, SPR-022, SPR-023 and 024a test with their own built list | T-05 |
 
 ## Compliance (every task)
@@ -126,11 +126,13 @@ version: 0.2.0
 - **Deliverable:**
   - **The promotion of T1-I/S**, with SPR-023 T-01's checklist: (a) the `clean` control and its pinned line re-derived; (b) the frozen and `--next` lints; (c) S6's and S7's reads; (d) the annals lints; (e) the skeleton; (f) the reference's I- and S-case gate.
   - **The typed tables:** `[decision_types]`, `[considerations]` and `[response_curves]` typed and compiled into `rh-registry`, with the rows 2–3 refusals and `lint_odd.py`'s reads check.
-  - **Consumer tests:** the genealogy index (row 12) and `rh-contracts::m7` (row 14).
+  - **Consumer tests:** the genealogy index (row 12), `rh-contracts::m7` (row 14) and its house → title-holders index (row 5; R11).
+  - **T1's defaults (R8):** T1-I/S's sixteen `default`s move from `registry_delta.toml` into `registry_v0.toml` (`[systems."T1.minds"] defaults`), and the delta's T1 section is removed. SPR-023's missing-parameter control is retired (every T1 parameter now has a default); a planted default outside its Registry bound fails `lint_odd.py` by name instead.
 - **Acceptance:**
   - Each refusal, planted once, fails by name in both the loader and the lint.
   - The compiled tables equal the reference's exact decimals.
-  - The index's consumer test and the contract's consumer test pass.
+  - The index's consumer test and the contract's consumer tests pass.
+  - `manor.yaml`, unedited, compiles with `M7.dynasty` and `T1.minds` in the built list against the defaults; SPR-019's `manor` goldens are unchanged (R8).
   - The four ladders are unchanged.
 - **Status:** [ ] not started
 
@@ -206,7 +208,8 @@ version: 0.2.0
   - **The integration (X5)** on `manor` and `twin_vales`, with M2, M7 (0.6.0, with SPR-022a's dormancy) and T1:
     - 50 years at the PR tier, 300 years nightly;
     - INV-T1-01 to 08 checked by observers, plus V-INV-15 and thread invariance;
-    - **the probes:** at least 50 minds at t = 0 on each world, at least one marriage, at least one pressed claim;
+    - **the probes (row 16; R4):** on `twin_vales`, minds at t = 0 equal to the golden's `named_at_start full` count for the world and seed, read from `fixture_worlds_v0.txt`, and at least 20; on `manor`, equal to the golden's `manor` figure for the seed (the `manor` case that row 16 proposes T1-I/S adds); at least one marriage and one pressed claim;
+    - `manor` is compiled with T1 built against the Registry defaults (R8);
     - the stub remains only in the unit tests.
   - **The final commit, `[C3]`:**
     - `BUILT` gains `M7.dynasty` and `T1.minds` (X6);
@@ -281,7 +284,8 @@ version: 0.2.0
 flowchart LR
   S021b[SPR-021b] --> S024a[SPR-024a C2<br/>IAUS core]
   S023[SPR-023 C2] --> S024a
-  T1IS[T1-I/S spec PR<br/>after T-00a] --> S024a
+  S023 -.T-01 promotes T1 0.4.0.-> T1IS[T1-I/S spec PR<br/>next/T1 0.5.0, after T-00a]
+  T1IS --> S024a
   S024a --> S024b[SPR-024b C3<br/>M7 and T1 in BUILT]
   S022a[SPR-022a<br/>dormancy] --> S024b
   S019b[SPR-019b<br/>back-fill] -.manor, twin_vales probes.-> S024b
@@ -307,8 +311,8 @@ flowchart LR
 
 | # | Blocker | Status |
 |---|---|---|
-| 1 | SPR-023, SPR-021b, the T1-I/S spec PR (024a) | Open |
-| 2 | SPR-022a; SPR-019b for the probes (024b) | Open |
+| 1 | SPR-023, SPR-021b, the T1-I/S spec PR after SPR-023 T-01 (024a) | Open |
+| 2 | SPR-022a; SPR-019b for the probes; a `manor` case in `selftest_fixture_worlds.py` with its golden line in `fixture_worlds_v0.txt`, rendered by `--write` (row 16; proposed for T1-I/S), before T-05 (024b; R4, R5) | Open |
 | 3 | The director's plan approval (D59) | Open |
 
 ## Completion
