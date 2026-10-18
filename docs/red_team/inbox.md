@@ -201,3 +201,43 @@ These are not dispositions; those come at G0. The Architect ran prototypes 6 to 
 | N15 | §4, Taagepera | The repository already holds a reading of Taagepera's empires through Arbesman (2011): 41 empires, mean 215 years, median 130, Weibull k̂ = 1.26 (R12 §16). The dossier's "120 empires", "median 140 to 180 years", β = 1.35 and the 85% fracture risk have no source. M6 imposes no age-dependent hazard; mild ageing must emerge from the secular dynamics (R12 §16), so a Weibull hazard written into M6 is declined. V-SF-07 already tests the shape | `09` V-SF-07; M6 |
 | N16 | §5, "invariants to enforce" | "Wealth Gini clamped to [0.65, 0.85]" and any enforced band are global controllers, which principle 8 (Law 2) and ADR-0009 forbid. A band is a validation test (V-SF), never a rule the engine enforces | `01` §5 principle 8; ADR-0009 |
 | N17 | §2, Alfani | The qualitative claim matches what the repository already holds (R12: inequality fell only after the Black Death). The compression coefficients (0.85, 0.70) are the red team's, not Alfani's. V-SF-17 stays soft (sign tests) until Alfani (2021) is read | `09` V-SF-17; R12 |
+
+---
+
+## Batch 06 (2026-10-18): The historical fidelity scorecard (for the P1b planning gate)
+
+From the red team's batch-08 handoff on its branch (`68b0ee3`, `docs/red_team/handoffs/HANDOFF-2026-10-18-BATCH-08-WRECK-IT-RALPH-SCRATCHPAD.md` §5), remanded here by the director (D62). Five design proposals; none enters a current sprint.
+
+| Pillar | Proposal (the red team's words, shortened) | Proposed P1b task |
+|---|---|---|
+| 1. Sieges and starvation | Castles are food and water stores; most sieges end by starvation, poisoned wells and dysentery; sapping brings down towers | A granary countdown and camp-disease hazards in `M8.war` |
+| 2. Plagues | The Black Death killed 30–50% in 18 months; childbed fever drove remarriage and half-sibling wars | Discrete mortality pulses across ranks |
+| 3. The manorial economy | Land and grain are the wealth; transport costs run 1 : 5 : 30, water about 30 times cheaper than land; famine is local | Levy capacity bound to the region's grain surplus |
+| 4. Cadet feuds | Primogeniture leaves younger sons landless; they become mercenaries, pretenders and assassins | Cadet lines produce rival claim factions in `M7` and `T1` |
+| 5. Battle panic and the rout | Few casualties in the clash, most in the rout; levies break when their lord falls | Morale-shock thresholds that trigger routs |
+
+### Architect's intake notes on batch 06 (2026-10-18)
+
+| # | Item | Finding | Contract |
+|---|---|---|---|
+| N18 | The whole scorecard | The percentages (90% of sieges, 30–50% plague mortality, 20% of mothers, 40% dying in the rout) carry no citation in the handoff. They are proposals until their sources are read; none enters a band or a spec before then | `research/reading_list.md`; R12 |
+| N19 | Pillar 2, "M2 uses static Coale–Demeny curves" | M2 uses Brass's relational logit system on a General Standard (R12; N14), and M2 F1 adds the time-varying terms. `M5.epidemics` is the planned owner of mortality pulses (P1b) | `specs/systems/M2*`; `docs/11` P1b |
+| N20 | Pillar 4, "the nobility thermostat demotes cadets at 35" | That is prototype 7 (N7). Rehoboam's rule is D56's: agnatic membership and vocations for later children (M7 0.5.0). Cadet claim factions are M7 and T1 work in P1b, read against D56 | D56; `specs/systems/next/M7_membership.md` |
+| N21 | Pillars 1, 3 and 5 | They map to `M8.war`, `M3`/`M4` and `M6`, which are P1b and P4 systems in `docs/11`. Each becomes a design question for its system's spec, weighed at the gate | `docs/11` P1b, P4 |
+
+---
+
+## Batch 07 (2026-10-18): Settlement-level medieval assets (for the P1b planning gate)
+
+An advisory ideation note relayed by the director on 2026-10-18. It is not a requirement or a sprint gate, and priorities stay on P1 and the SPR-033 viewer spike (D62).
+
+**The proposal, in the note's own terms.** When M3 (agriculture) and M4 (economy) arrive in P1b, the physical world should feel grounded in real medieval assets: iron veins and quarries, watermills, village smiths. They would not be abstract trade tokens. To keep the tick budget light, the assets live at the settlement level (manorial asset flags and resource slots), with no individual commoner agents or supply-chain arithmetic in the core. The viewer can then render a working waterwheel and a smoking forge.
+
+### Architect's intake notes on batch 07 (2026-10-18)
+
+| # | Item | Finding | Contract |
+|---|---|---|---|
+| N22 | Settlement-level grain | Sound, and it matches the existing plan. M4 F0 (P1.5a) already keeps household and lord stores and holdings, and M3 F0/F1 (P1.4) works at regional and household level. Settlement-level asset slots fit fidelity by zoom and add no per-instant cost beyond a few columns per settlement | `docs/11` P1.4, P1.5a; ADR-0031 |
+| N23 | Mechanical, or only visual? | The gate must decide each asset's side. If an asset changes an outcome (a mill raises the grain a harvest yields, a smith equips a levy, a quarry feeds a keep's repair), it is a plane-A column. It is owned by one system (M3 or M4), its kinds are Registry entries rather than free strings, and it is written only through that system's rules. If it only shows, it is plane-B hydration that the viewer derives deterministically from the settlement seed, the era and the state it already reads, with no engine change at all | ADR-0010; ADR-0024; ADR-0036 §2; `05.1` §2 (single-writer columns) |
+| N24 | Plane | The viewer's rendering of a waterwheel or forge is plane B, hydration under V-R3D-13; plane C is the narrative camera director (PRJ-003 §2). Visual-only assets can be prototyped in the viewer lane (V.2) without waiting for P1b; mechanical ones wait for their owning system's spec | PRJ-003 §2, §4; `docs/11` viewer lane V.2 |
+| N25 | Sources | "Real medieval assets" should be calibrated, not assumed. Where an asset carries a mechanical effect, the gate needs sources for its rates (mill yields, the density of smiths, the spacing of quarries) before it enters a band or a spec, as for batch 06 (N18) | `research/reading_list.md`; R12 |
