@@ -26,7 +26,7 @@ version: 1.0.0
 >   - Rulings: §0, with the cross-plan rulings X1–X13 that bind wave 7, the minds plans, SPR-038 and SPR-015 (§0a). Revision 1 is `f791a38`.
 > - **Round 2** (`f791a38`, a joint re-check with wave 7): AFTER SMALL FIXES, 0 BLK, 1 MAJ (R4, the X5 probe "at least 50 minds" is false for a correct build), 5 MIN, 1 NIT (§2). Rulings: §0b. Revision 2 is `0e3337a`, merged with `main` `7031f6a` as `653c5e9`.
 > - **Architect's verification of revision 2** (§0c): every minds row of §0b is present.
->   - R4: the probe reads `named_at_start full` from `fixture_worlds_v0.txt` (33, 35 and 26 on `twin_vales` seeds 1–3), at least 20 there; `manor` has no floor.
+>   - R4: the probe reads `named_at_start full` from `fixture_worlds_v0.txt` (33, 35 and 26 on `twin_vales` seeds 1–3 on `main`; 24, 29 and 25 after A-62, PR #94), at least 20 there; `manor` has no floor.
 >   - R5: 024b waits for SPR-022a and SPR-019b in D59, the graph and the lane.
 >   - R7: T1-I/S is a new `next/T1` 0.5.0 after SPR-023 T-01, on 024a's critical path.
 >   - R8: T1's defaults go through `registry_delta.toml`; `manor.yaml` is not edited.
