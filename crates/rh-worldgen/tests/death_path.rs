@@ -640,3 +640,70 @@ fn a_death_clears_the_survivors_spouse_by_command_and_by_timer() {
     assert_eq!(spouse_of(&e, a), Some(0), "A's spouse cleared");
     println!("DEF-2: a death clears the survivor's spouse, by command and by timer");
 }
+
+/// The Tester's probe: two `ScheduleDeath`s for one victim in one slot (X7's and X1's) apply
+/// once; M2 drops the second as `dead`, and there is one `DEATH` and one closed row.
+#[test]
+fn two_commanded_deaths_of_one_person_in_one_slot_apply_once() {
+    for seed in [3, 11] {
+        let v = founder_ids(seed, 8, 20, 85)[0];
+        let due = MONTH + 12 * DAY;
+        let mut e = engine(
+            seed,
+            8,
+            20,
+            85,
+            plan(v, MONTH, due),
+            plan(v, due - DAY, due),
+        );
+        let events = run(&mut e, 2 * MONTH);
+        assert_eq!(deaths_of(&events, v).len(), 1, "seed {seed}: one DEATH");
+        assert_eq!(
+            exit(&e, v),
+            (1, due, CAUSE_MURDER),
+            "seed {seed}: one closed row"
+        );
+        assert_eq!(
+            e.dropped().get(&(
+                "M2.demography",
+                DropKind::Command("ScheduleDeath"),
+                DropReason::Dead
+            )),
+            Some(&1),
+            "seed {seed}: the second command found the victim dead"
+        );
+    }
+    println!("probes: a double commanded death applies once");
+}
+
+/// The Tester's probe: a person killed by command keeps M2's natural death timer; when it fires,
+/// M2 drops it as `dead` and nothing else happens.
+#[test]
+fn a_natural_timer_after_a_commanded_death_is_dropped_as_dead() {
+    let mut probe = engine(5, 30, 99, 20, IDLE, IDLE);
+    probe.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
+    let (key, _) = probe
+        .agenda()
+        .pending()
+        .into_iter()
+        .find(|(k, t)| t.owner == system_id("M2.demography") && k.time.minutes() > 3 * DAY)
+        .expect("a natural death timer after day 3 of month 0");
+    let (who, tau) = (key.entity.raw(), key.time.minutes());
+    let due = 2 * DAY;
+    let mut e = engine(5, 30, 99, 20, IDLE, plan(who, due - DAY, due));
+    let events = run(&mut e, MONTH - 1);
+    assert_eq!(
+        deaths_of(&events, who).len(),
+        1,
+        "one DEATH, the commanded one"
+    );
+    assert_eq!(exit(&e, who), (1, due, CAUSE_MURDER));
+    assert!(tau > due, "the natural timer was later");
+    assert_eq!(
+        e.dropped()
+            .get(&("M2.demography", DropKind::Timer(1), DropReason::Dead)),
+        Some(&1),
+        "M2's natural timer fired for the dead and was dropped"
+    );
+    println!("probes: a natural timer after a commanded death is dropped as dead");
+}

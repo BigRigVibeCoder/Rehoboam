@@ -507,6 +507,80 @@ mod tests {
         assert_eq!(q.len(), 1, "S1's queue is untouched");
     }
 
+    fn of(kind: &'static str, person: u64) -> Command {
+        Command {
+            kind,
+            ..cmd(person)
+        }
+    }
+
+    /// SPR-014 (the Tester's probe): a partial take across two kinds takes one kind in key order
+    /// and leaves the other queued in key order; taking the rest empties the queue, and the
+    /// whole-queue path gives the same order as the partition.
+    #[test]
+    fn a_partial_take_across_two_kinds_keeps_both_orders() {
+        let t = SimTime::from_minutes;
+        let fill = |q: &mut CommandQueues| {
+            for (i, (kind, person)) in [
+                ("Kill", 9),
+                ("Bury", 4),
+                ("Kill", 2),
+                ("Bury", 7),
+                ("Kill", 5),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let tick = t(i64::try_from(i % 2).unwrap_or(0));
+                q.push("E1", tick, Phase::Vital, "F1", None, of(kind, person));
+            }
+        };
+        let key = |c: &super::QueuedCommand| {
+            (c.tick.minutes(), c.command.person.to_raw(), c.command.kind)
+        };
+        let mut q = CommandQueues::new();
+        fill(&mut q);
+        let kills: Vec<_> = q
+            .take_kinds("E1", |k| k == "Kill")
+            .iter()
+            .map(key)
+            .collect();
+        assert_eq!(kills, [(0, 2, "Kill"), (0, 5, "Kill"), (0, 9, "Kill")]);
+        assert_eq!(q.waiting("E1"), 2, "the other kind stays queued");
+        assert!(
+            q.take_kinds("E1", |k| k == "Kill").is_empty(),
+            "nothing left of the kind"
+        );
+        let buries: Vec<_> = q
+            .take_kinds("E1", |k| k == "Bury")
+            .iter()
+            .map(key)
+            .collect();
+        assert_eq!(buries, [(1, 4, "Bury"), (1, 7, "Bury")]);
+        assert_eq!(q.len(), 0, "the emptied queue is removed");
+        let mut whole = CommandQueues::new();
+        fill(&mut whole);
+        let all: Vec<_> = whole.take_kinds("E1", |_| true).iter().map(key).collect();
+        let mut partitioned = kills;
+        partitioned.extend(buries);
+        partitioned.sort_unstable();
+        assert_eq!(all, partitioned, "the whole-queue path keeps key order");
+    }
+
+    /// SPR-014 (the Tester's probe): an event slot with no event is hashed as -1, never as an id.
+    #[test]
+    fn an_empty_event_slot_encodes_as_minus_one() {
+        use super::Arg;
+        use rh_events::EventRef;
+        use rh_ids::EventId;
+        assert_eq!(Arg::Event(EventRef::None).encoded(), -1);
+        assert_eq!(
+            Arg::Event(EventRef::Known(EventId::from_raw(0))).encoded(),
+            0
+        );
+        assert_eq!(Arg::Int(-1).encoded(), -1, "an integer field is itself");
+    }
+
     /// SPR-007 T-02 (SPR-006 GAP-6): the state round-trips, and only the canonical form restores.
     #[test]
     fn state_round_trips_and_only_the_canonical_form_restores() {

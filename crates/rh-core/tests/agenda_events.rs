@@ -69,6 +69,7 @@ mod lifecycle_queues {
     pub mod guard;
     pub mod insert;
     pub mod owners;
+    pub mod probes;
     pub mod slots;
     pub mod stale;
 }

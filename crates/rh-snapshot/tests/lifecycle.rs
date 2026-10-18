@@ -58,7 +58,8 @@ fn person(row: usize) -> PersonId {
 }
 
 /// `C1.cause` at Day/Agenda: emits `SENT`, submits `Note` with the draft as its cause and its
-/// `source_event`, and schedules a timer three days on with the draft as its cause. `D1.keep`
+/// `source_event`, and schedules a timer three days on with the draft as its cause; it also
+/// submits one `Note` a day with no source event. `D1.keep`
 /// drains `Note` at Day/Agenda, in the same level, so every `Note` waits a day in the queue.
 fn cause_step(
     _: &Stub,
@@ -92,6 +93,13 @@ fn cause_step(
             },
         )?;
     }
+    // Each day one Note carries no source event: its field is hashed as -1 (the Tester's probe).
+    c.submit(Command {
+        kind: "Note",
+        person: person(0),
+        args: vec![Arg::Int(-day), Arg::Event(EventRef::None)],
+        cause: EventRef::None,
+    })?;
     Ok(())
 }
 
@@ -241,9 +249,10 @@ fn ladder(e: &mut Engine, end: i64) -> Vec<(i64, u64)> {
     out
 }
 
-/// T-02: a keyframe taken while a `Note` with a resolved `EventRef` field waits in its queue and
-/// timers with causes are pending loads to the same state, and the loaded run continues exactly
-/// like the continuous one, on three world sizes and three seeds.
+/// T-02: a keyframe taken while a `Note` with a resolved `EventRef` field and one with an empty
+/// field (hashed as -1) wait in their queue and timers with causes are pending loads to the same
+/// state, and the loaded run continues exactly like the continuous one, on three world sizes and
+/// three seeds.
 #[test]
 fn queued_event_slots_and_timer_causes_survive_a_keyframe() {
     for size in SIZES {
@@ -257,6 +266,12 @@ fn queued_event_slots_and_timer_causes_survive_a_keyframe() {
             assert!(
                 queued.clone().any(|q| q.command.event(1).is_some()),
                 "{size} {seed}: no queued command with a resolved event field"
+            );
+            assert!(
+                queued
+                    .clone()
+                    .any(|q| q.command.args.get(1) == Some(&Arg::Event(EventRef::None))),
+                "{size} {seed}: no queued command with an empty event field"
             );
             assert!(
                 state
