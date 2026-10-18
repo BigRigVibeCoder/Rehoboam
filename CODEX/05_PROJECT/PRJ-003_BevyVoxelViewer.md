@@ -8,8 +8,8 @@ agents: [coder, tester, architect]
 tags: [roadmap, project-management, stream, observability]
 related: [PRJ-001, PRJ-002, ADR-0030, ADR-0031, ADR-0035, ADR-0036, SPR-026, SPR-027, SPR-033]
 created: 2026-10-17
-updated: 2026-10-17
-version: 1.2.1
+updated: 2026-10-18
+version: 1.3.0
 ---
 
 # PRJ-003 — Bevy Native Voxel Viewer (`rh-view`): Project Plan
@@ -20,6 +20,7 @@ version: 1.2.1
 > - **How it connects.** `rh-view` reads the World Stream (IF-0, `specs/stream/wire_v1.md`, through `rh-protocol`), sealed segments (through `rh-stream`'s reader) and SPR-027's materializer.
 > - **Where it lives.** In the tool plane, in its own Cargo workspace (`viewer/`). No engine crate may depend on it.
 > - **What it does not touch.** The text-first simulation contracts and the G2 thesis gate.
+> - **Priority (D62, 2026-10-18).** The viewer lane is the director's priority 2, behind the engine core (P1a, P1b). SPR-033 starts when SPR-026 merges; SPR-035's scrubber waits for SPR-027. Priority 1 wins every contention for CI minutes, review time and merge slots.
 > - **Decision.** ADR-0036 (D51, approved 2026-10-17) governs this plan. v1.2.0 aligns v1.1.0 with ADR-0036; the Architect's changes are listed in §8.
 
 ---
@@ -81,9 +82,12 @@ To ensure that core simulation velocity and determinism are never compromised:
 | **Engine framework** | **Bevy 0.20 (Rust)**, an exact pin in `viewer/Cargo.lock` | Native Rust compatibility (the same `bevy_ecs` line as the engine); zero FFI overhead; GPU-driven mesh rendering and atmospheric scattering |
 | **Graphics API** | **WGPU (Vulkan / Metal / DX12 / WebGPU)**, through Bevy | Cross-platform native rendering, with a later path to WebAssembly and WebGPU |
 | **Meshing algorithm** | **Binary greedy meshing** | Merges coplanar adjacent voxel faces into single quads with bitwise integer math. Drops the quad count by 85–92% against naive voxels, aiming at ≥ 60 FPS on integrated GPUs |
+| **Voxel size** | **0.35 m by default** (D62), with a measured level-of-detail fallback for distant terrain | The director's choice; the fallback keeps the frame rate when 0.35 m is too dense |
 | **Chunk architecture** | **64×64×32 diorama bubbles** | Block detail only in the camera's observation bubble; outer terrain as low-poly heightfield meshes (ADR-0031, fidelity by zoom) |
-| **Stream ingestion** | **IF-0's live edge** (`wire_v1.md`; canonical lines, D43) over a Unix socket through `rh-protocol` (SPR-026), and sealed segments through `rh-stream`'s reader | The engine's own stream code, in the same language. The viewer never parses Parquet or frames by hand |
+| **Stream ingestion** | **IF-0's live edge** (`wire_v1.md`; canonical lines, D43) over a Unix socket through `rh-protocol` (SPR-026), and sealed segments through `rh-stream`'s reader. The socket is on `adjutant`; the director's laptop reaches it through an SSH tunnel (D62) | The engine's own stream code, in the same language. The viewer never parses Parquet or frames by hand |
 | **Timeline replay** | **The materializer (SPR-027)** | The nearest keyframe (every 10 sim-years) plus deterministic replay gives the exact state at any tick |
+| **Watched-history cache** (D62) | **The viewer keeps the states it has already shown in a bounded local cache** (its size and eviction set in SPR-035) | Scrubbing back within watched history needs no materializer call, so it is immediate; jumps into unwatched history go through the materializer. The cache is plane B and never authoritative; it may live in `/dev/shm`, while authoritative runs keep disk and fsync |
+| **Camera** | **A free spectator camera, including first-person roaming at ground level, in V.1**; acting on the world in V.3 (D62) | Seeing the world from inside it needs no input path; acting does (`control.sock`, P2.7) |
 | **Gandalf avatar hook** | **`control.sock` (P2.7)** | Keyboard and mouse actions become journaled `PlayerAction` and `SpeechAct` inputs at the tip. An act in the past is a fork (ADR-0025). `T1.minds` decides the NPCs' reactions |
 
 ---
@@ -94,9 +98,9 @@ The work runs in a dedicated tool lane that does not contend with the core simul
 
 | Sprint | Phase | Title | Scope & Deliverables | Class | Prerequisite |
 |---|---|---|---|---|---|
-| **SPR-033** | V.1 | **Bevy 0.20 scaffold & binary greedy mesher** | The `viewer/` workspace and `rh-view`; a Bevy 0.20 app; the binary greedy chunk mesher; a procedural demo diorama; an orbital camera; the isolation gate (V-R3D-14) | C1 (tool) | D51 (ratified); started after SPR-027 lands, per the director |
+| **SPR-033** | V.1 | **Bevy 0.20 scaffold & binary greedy mesher** | The `viewer/` workspace and `rh-view`; a Bevy 0.20 app; the binary greedy chunk mesher; a procedural demo diorama; an orbital camera; the isolation gate (V-R3D-14) | C1 (tool) | D51 (ratified); starts when SPR-026 merges (D62) |
 | **SPR-034** | V.1 | **Stream ingestion & plane-B procedural hydration** | The IF-0 reader through `rh-protocol` and the sealed-segment reader; a deterministic building grammar (Tudor houses, stone towers, church, roads) hydrated from the settlement seed; the hydration determinism gate (V-R3D-13) | C1 (tool) | SPR-033, SPR-026 (`rh-protocol`) |
-| **SPR-035** | V.1 | **Materializer hookup & timeline scrubber** | SPR-027's materializer; a timeline scrubber that jumps to keyframes and replays forward; rewind equal to forward play (V-R3D-13) | C1 (tool) | SPR-034, SPR-027 |
+| **SPR-035** | V.1 | **Materializer hookup & timeline scrubber** | SPR-027's materializer; a timeline scrubber that jumps to keyframes and replays forward; the watched-history cache (D62); rewind equal to forward play (V-R3D-13) | C1 (tool) | SPR-034, SPR-027 |
 | **SPR-036** | V.1–V.2 | **Narrative camera director & sifter binding** | Channel C sift matches drive the camera (R3D-7); cinematic framing on drama nodes (coronations, deaths, battles); smoke and fire particles | C1 (tool) | SPR-035, SPR-020 (the event envelope) |
 | **SPR-037** | V.3 | **Avatar embodiment ("Being Gandalf") & WebGPU** | WASD and mouse inputs become `PlayerAction` over `control.sock`; a first-person street-level walk; a WebGPU build of `rh-view` | C1 (tool) | SPR-036, P2.7 (`control.sock`) |
 
@@ -112,9 +116,9 @@ Each sprint passes these before merging. The `docs/09` IDs are the gates; the Re
 |---|---|---|
 | **V-VIEW-01, engine non-interference** | V-R3D-14 with V-PERF-09 | With `rh-view` attached as one harness, throughput is at least 95% of headless and the `state_hash` ladder is identical. The measured delta is reported; the Red Team's target of ≤ 0.5% is a report, not a gate, because a shared CI runner cannot resolve it |
 | **V-VIEW-02, deterministic content** | V-R3D-13 | The voxel content digest of a fixed bubble at a fixed tick is equal across runs, thread counts, builds, and rewind against forward play. The mesh's vertex and index buffers are hashed too, as a second check bound to the mesher's version |
-| **V-VIEW-03, performance floor** | Reported | ≥ 60 FPS on a 4-core developer machine (the ThinkPad P51 baseline) for a 64×64 diorama with 50 animated actors. Measured on the director's machine; CI has no GPU |
+| **V-VIEW-03, performance floor** | Reported (D62) | ≥ 60 FPS on a 4-core developer machine (the ThinkPad P51 baseline) for a 64×64 diorama with 50 animated actors, at the default 0.35 m voxel size, with the level-of-detail fallback's trigger reported. Measured on the director's machine; neither CI nor `adjutant` has a GPU |
 | **V-VIEW-04, zero reverse dependencies** | V-R3D-14 | No crate under `crates/` depends on `viewer/`, and the engine's `Cargo.lock` is unchanged. `rh-view`'s own code carries `#![deny(unsafe_code)]` |
-| **V-VIEW-05, timeline scrub latency** | Reported (depends on V-STR-02) | Scrubbing back 20 sim-years and rebuilding the diorama through the materializer takes ≤ 250 ms |
+| **V-VIEW-05, timeline scrub latency** | Reported (D62; depends on V-STR-02) | Within watched history, from the viewer's cache: ≤ 250 ms (the red team's aim is one frame). Into unwatched history, through the materializer: reported with the world's size, because at 10,000 people a jump means a keyframe plus up to 10 sim-years of replay |
 
 **CI:** the viewer's job builds `viewer/` and runs headless: the hydration data path, the mesher, and the determinism and isolation gates, with no window and no GPU. It runs only when `viewer/` or a crate it reads changes, because compiling Bevy is expensive and CI minutes are billed. `rh-golden` on the path list widens that trigger to the crates `rh-golden` itself reads (the engine crates, `rh-sys-*`, `rh-worldgen`, `rh-snapshot`), so the job fires on more engine changes than before (W40 of the wave-5 review). If its cost exceeds its budget, it moves to the nightly (ADR-0036).
 
@@ -125,7 +129,7 @@ Each sprint passes these before merging. The `docs/09` IDs are the gates; the Re
 ```mermaid
 flowchart TD
   D51([D51 / ADR-0036, approved 2026-10-17]) --> S033[SPR-033: Bevy 0.20 scaffold & greedy mesher]
-  S027[SPR-027: materializer] -.->|director: start after it lands| S033
+  S026a[SPR-026: wire_v1, rh-protocol] -.->|D62: start when it merges| S033
   S033 --> S034[SPR-034: stream ingestion & plane-B hydration]
   S026[SPR-026: rh-protocol, IF-0] -.-> S034
   S034 --> S035[SPR-035: materializer hookup & timeline scrubber]
@@ -154,5 +158,6 @@ This plan was submitted to the Architect with the following affirmations:
 5. Sprints are at most about 3 agent-days (GOV-005 §3); SPR-033's own estimate is corrected.
 6. A Tester on a different model verifies each sprint. The Red Team audits, and its findings close only with automated checks (ADR-0036 §4).
 7. **Procedural assets only** (Invariant 5). No art extracted from third-party games enters `rh-view` or `main`.
-8. The schedule follows the director: SPR-033 starts after SPR-027 lands.
+8. The schedule follows the director: SPR-033 starts after SPR-027 lands. (Superseded by D62, item 10.)
 9. (v1.2.1, 2026-10-17; the Architect's rulings at the wave-5 plans, D-7 and W40.) The path list of §2 invariant 3 gains `rh-golden`, where SPR-027's materializer lives on SPR-013's replay path; §5 notes that this widens the viewer's CI trigger.
+10. (v1.3.0, 2026-10-18; D62, the director's priorities.) The viewer lane is priority 2, behind the engine core, and loses every contention to it. SPR-033 starts when SPR-026 merges; SPR-035 waits for SPR-027. FPS and scrub latency stay reported targets, measured on the director's P51. New in §3: the 0.35 m default voxel size with a level-of-detail fallback, the SSH tunnel to `adjutant`, the watched-history cache (`/dev/shm` allowed for it), and the first-person free camera in V.1. V-VIEW-03 and V-VIEW-05 are restated in §5.
