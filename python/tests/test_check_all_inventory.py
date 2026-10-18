@@ -254,6 +254,9 @@ REQUIRED_GATES = (
     "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, "
     "GITHUB_EVENT_NAME, RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
+    "Registry envelope plants: lint_patterns refuses every planted [event_roles] and "
+    "[role_domains] Registry by name, the real one passes (registry_envelope_plants; SPR-020 "
+    "T-01)",
     "Replay positive control: a journal with its row deleted must hard-FAIL the replay (SPR-013 "
     "T-12)",
     "Required tools present (core part)",
@@ -358,6 +361,9 @@ REQUIRED_GATES = (
     "causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and "
     "constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; "
     "SPR-020 shape)",
+    "V-DATA-10 subset on the envelope world: DuckDB reads the engine's snapshot, role and "
+    "typed edge rows with the DDL's types and constraints, and the reference recomputes every "
+    "canonical_digest (SPR-020 T-06)",
     "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's "
     "and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, "
     "and the reference's canonical digests (SPR-013 T-09)",
@@ -523,6 +529,7 @@ REQUIRED_GATES = (
     "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must "
     "FAIL (SPR-007 GAP-2)",
     "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)",
+    "gen_hash_golden positive control: one changed event digest v2 must FAIL (SPR-020 T-02)",
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)",
     "gen_m2_reference positive control: one altered vector must FAIL (SPR-012 T-05)",
@@ -858,6 +865,8 @@ REQUIRED_GATES = (
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
     "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)",
+    "rh-core envelope by name: emit's refusals by name, the canonical cast and snapshot order, "
+    "V-DATA-08 in miniature, absent sources counted (SPR-020 T-03)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
@@ -879,6 +888,9 @@ REQUIRED_GATES = (
     "rh-golden by name: tail prints every record once in seq order from any cursor, its "
     "canonical output digests to each segment's canonical_digest, it never writes to the run "
     "directory, and the display form matches its snapshots (SPR-013 T-10)",
+    "rh-golden envelope world by name: a stub world's full envelope through the admission "
+    "bitset and event_body, canonical round trip, cause_told across a kill and a resume, "
+    "V-STR-01 (SPR-020 T-06)",
     "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
     "perturbations (SPR-008 T-02, T-03)",
     "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread "

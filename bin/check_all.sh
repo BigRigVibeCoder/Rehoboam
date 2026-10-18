@@ -308,6 +308,14 @@ hash_golden_control() {
   "$PY" -I bin/gen_hash_golden.py --check --golden "$planted"
 }
 
+# Event digest golden control (SPR-020 T-02): the committed event digest file with one digest changed.
+event_digest_golden_control() {
+  local planted=target/rendered-fixtures/stale_event_digest_v2.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^event 0 /s/ [0-9a-f]\{16\}$/ 0000000000000000/' crates/rh-events/tests/golden/event_digest_v2.txt > "$planted" || return 1
+  "$PY" -I bin/gen_hash_golden.py --check --events-golden "$planted"
+}
+
 # Canonical-form golden control (SPR-013 T-09): the committed canonical golden file with one digest changed.
 canonical_golden_control() {
   local planted=target/rendered-fixtures/stale_canonical_v0.txt
@@ -1106,12 +1114,12 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-ids::fork_trees rh-ids::stream_independence rh-sample::golden rh-sample::stats
   rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
-  rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
+  rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events rh-core::envelope_emit
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
   rh-worldgen::keyframe rh-worldgen::m2_system rh-worldgen::death_path rh-snapshot::lifecycle
   rh-contracts::drift rh-contracts::consumer rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
-  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs
+  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-golden::envelope_world rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs
   rh-snapshot::per_instant_cache rh-sys-demography::invariants_oracle rh-core::per_instant"
 workspace_tests() {
   local id filter=""
@@ -1382,6 +1390,7 @@ run "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR
 run "Sifting patterns (lint_patterns)" pass "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml &&
 run "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)" "pass:PASS: 1 patterns linted." "$PY" -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml &&
 run "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the Registry by name (REV-SPR-020 R22, R26)" "fail:FAIL: the Registry is refused; no pattern was linted." bad_domains_control &&
+run "Registry envelope plants: lint_patterns refuses every planted [event_roles] and [role_domains] Registry by name, the real one passes (registry_envelope_plants; SPR-020 T-01)" "pass:OK: 12 planted Registries refused by lint_patterns by name" "$PY" -I specs/manifest/registry_envelope_plants.py &&
 run "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)" "fail:ERROR life_ends.e1: UNANCHORED state read" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unanchored.toml specs/manifest/registry_v0.toml &&
 run "lint_patterns positive control: life_ends with a declared role that no clause binds must FAIL (VER-SPR-013-TEST GAP-4; parity with rh-sifter)" "fail:ERROR life_ends: role B is declared but no clause binds it" "$PY" -I specs/sifting/lint_patterns.py tests/lint_fixtures/sifting/life_ends_unbound_role.toml specs/manifest/registry_v0.toml &&
 run "Manifest: solo" pass "$PY" -I specs/manifest/manifest_v0.py validate specs/manifest/examples/solo.yaml &&
@@ -1420,6 +1429,7 @@ run "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 
 run "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)" "fail:golden vector differs" env RH_SAMPLE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_samplers_v1.txt" cargo nextest run -p rh-sample --locked --test golden --no-capture &&
 run "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes (SPR-005)" "pass:V-DET-01: 600 monthly states equal at 1, 2, 4 and 8 threads" cargo nextest run -p rh-core -p rh-registry --locked --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract --no-capture &&
 run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and crash replay (SPR-006)" "pass:V-DET-12: golden event log of 196 events checked" cargo nextest run -p rh-core -p rh-events --locked --test agenda --test agenda_events --test invariants --lib --no-capture &&
+run "rh-core envelope by name: emit's refusals by name, the canonical cast and snapshot order, V-DATA-08 in miniature, absent sources counted (SPR-020 T-03)" "pass:V-DATA-08 miniature: 24 pre-act snapshots equal the oracle; 24 late controls caught" cargo nextest run -p rh-core --locked --test envelope_emit --no-capture &&
 run "SPR-014 V-DET-21 delivery: a command reaches only its owner's draining binding, within the instant or at its next run, in key order, equal at 1, 2, 4 and 8 threads (T-01)" "pass:V-DET-21 delivery: " cargo nextest run -p rh-core --locked --test agenda_events --no-capture v_det_21_delivery &&
 run "SPR-014 V-DET-21 slots: every EventRef an owner sees is its sender's merged id; integers in event slots and out-of-type fields refused by name (T-02)" "pass:V-DET-21 slots: " cargo nextest run -p rh-core --locked --test agenda_events --no-capture lifecycle_queues::slots &&
 run "SPR-014 keyframes and the drop counter: queued event slots, timer causes and inserted rows round-trip; a planted drop changes no state_hash (T-02, T-03, T-05)" "pass:T-02 keyframes: queued EventRef fields and timer causes round-trip in 9 worlds" cargo nextest run -p rh-snapshot --locked --test lifecycle --no-capture &&
@@ -1489,6 +1499,7 @@ run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
 run "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden --check; SPR-007 T-01)" "pass:OK:" "$PY" -I bin/gen_hash_golden.py --check &&
 run "gen_hash_golden positive control: one changed hash must FAIL" "fail:STALE:" hash_golden_control &&
+run "gen_hash_golden positive control: one changed event digest v2 must FAIL (SPR-020 T-02)" "fail:STALE: target/rendered-fixtures/stale_event_digest_v2.txt differs" event_digest_golden_control &&
 run "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 --check; SPR-013 T-09)" "pass:OK:" "$PY" -I specs/stream/canonical_v0.py --check &&
 run "Canonical differential: rh-stream's parser and canonical_v0.py give every generated, golden, planted and mutated line, and every planted and header-mutated file, the same verdict (canonical_v0.md §3; REV-SPR-013 MAJ-1)" "pass:differential: rh-stream and the reference agree on" "$PY" -I specs/stream/differential_v0.py --rust-bin "$RH_CLI" &&
 run "Canonical differential positive control: a reference with its header domain check relaxed must FAIL (REV-SPR-013 MAJ-1)" "fail:DIFFERENTIAL DISAGREES" "$PY" -I specs/stream/differential_v0.py --rust-bin "$RH_CLI" --control relax-header &&
@@ -1693,6 +1704,8 @@ run "Golden resume positive control: a --years past the journal's last input mus
 run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
 run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
 run "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and not-built systems in its header, streaming into its run directory (SPR-012 T-08; rulings 3, 16; SPR-013 T-09)" "pass:solo: 200 yearly rungs to year 200 at 1 thread(s)" solo_stream_run &&
+run "rh-golden envelope world by name: a stub world's full envelope through the admission bitset and event_body, canonical round trip, cause_told across a kill and a resume, V-STR-01 (SPR-020 T-06)" "pass:T-06 cause_told: 180 untold edges to refused causes of a year before; a resumed writer seals the unbroken run's bytes" cargo nextest run -p rh-golden --locked --release --test envelope_world --no-capture &&
+run "V-DATA-10 subset on the envelope world: DuckDB reads the engine's snapshot, role and typed edge rows with the DDL's types and constraints, and the reference recomputes every canonical_digest (SPR-020 T-06)" "pass:check_segments: 3 segments, 2700 records" "$PY" -I specs/stream/check_segments.py "$TARGET_DIR/tmp/rh-golden/envelope_world" &&
 run "Golden run: household, the six-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run household &&
 run "Golden run: household, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run household --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/household_yearly_tN.ladder" &&
 run "Golden ladders: household at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&

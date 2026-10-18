@@ -24,7 +24,7 @@ use rh_core::system::{
 };
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_core::world::{SystemView, WorldTables};
-use rh_events::{EventDraft, EventRef};
+use rh_events::{EdgeKind, EventDraft, EventRef};
 use rh_ids::{EntityKind, EntityRef, PersonId};
 
 use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day};
@@ -41,7 +41,7 @@ mod skeleton {
     include!("../../rh-core/tests/generated/M2_demography.rs");
 }
 
-use skeleton::{DRAINS, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
+use skeleton::{DRAINS, ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
 
 impl SpecPurpose for RngPurpose {
     const ALL: &'static [Self] = &[Self::DeathTime];
@@ -272,7 +272,7 @@ pub enum Death {
 
 /// The single death path (S12; SPR-011 ruling 6; `05.1` §2 rule 2): the dead row (alive 0, death
 /// tick, cause), the person's open life-course exit (written once), `DEATH` with the deceased as
-/// subject, the cause code as payload and a causal edge from `cause_event` when there is one,
+/// `target`, the cause code as payload and a causal edge from `cause_event` when there is one,
 /// then `EXTINCTION` caused by that `DEATH` if no ledger row is alive. A timer fire and M2's
 /// `Day`/`Vital` drain of `ScheduleDeath` both call it (SPR-014). Idempotent: a person with no
 /// living ledger row is left as is ([`Death::AlreadyDead`]). The culprit's `actor` role on `DEATH`
@@ -319,10 +319,10 @@ pub fn apply_death(
         }
     }
     let mut draft = EventDraft::new(DEATH)
-        .subject(EntityRef::person(person))
+        .role(ROLE_TARGET, EntityRef::person(person))
         .with_payload(vec![cause]);
-    if let Some(cause) = cause_event.known() {
-        draft = draft.caused_by(cause);
+    if !cause_event.is_none() {
+        draft = draft.caused_by(cause_event, EdgeKind::Triggered);
     }
     let death = ctx.emit(draft)?;
     if view.read(PERSON_ALIVE)?.iter().all(|&a| a == 0) {
@@ -434,6 +434,10 @@ impl SystemModel for Demography {
             }],
             ..AccessSpec::default()
         }
+    }
+
+    fn roles(&self) -> &'static [(&'static str, rh_events::RoleId)] {
+        ROLES
     }
 
     fn schedule(&self) -> Vec<PulseBinding> {

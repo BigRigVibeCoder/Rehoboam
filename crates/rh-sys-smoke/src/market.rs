@@ -70,7 +70,7 @@ impl Market {
         for (r, k) in large {
             ctx.emit(
                 EventDraft::new("TRADE")
-                    .subject(EntityRef::region(region(r)))
+                    .role(ROLE_TARGET, EntityRef::region(region(r)))
                     .with_payload(vec![r64(r), i64::from(k)]),
             )?;
         }

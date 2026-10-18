@@ -1,4 +1,5 @@
       5 0000-01-01 00:00 ENTERS Job: founder, male, born -0051-11-27
-    555 0034-04-25 00:00 DEATH target Jacob (natural) [event #40]
-    556 0034-04-25 00:00 LEAVES Job: death (natural) <- #40
-STATUS sealed through y000119 (tick 62207999, seq 1632) | cursor 1633 | lag 0 records
+    555 0034-04-13 06:07 INPUT oracle_move on Jacob by system (journal #0)
+    569 0035-03-08 00:00 DEATH target Job (natural) [event #41]
+    570 0035-03-08 00:00 LEAVES Job: death (natural) <- #41
+STATUS sealed through y000119 (tick 62207999, seq 1633) | cursor 1634 | lag 0 records

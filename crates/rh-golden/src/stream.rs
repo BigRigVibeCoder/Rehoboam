@@ -245,7 +245,8 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
         .map_err(fail)
 }
 
-/// The dictionaries of a Registry (R6): `[verbs]` sorted by name and `[act_classes].ids`.
+/// The dictionaries of a Registry (R6): `[verbs]` sorted by name, `[act_classes].ids`, and the
+/// typed envelope sections `[event_roles]`, `[motive_edges]` and `[attributes]` by `attr_id`.
 ///
 /// # Errors
 /// [`Error`] if a verb names an act class the Registry does not list, or there are too many.
@@ -275,27 +276,13 @@ pub fn dictionaries(registry: &rh_manifest::Registry) -> Result<Dictionaries, Er
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
-    let ids = |section: &str| -> Result<Vec<String>, Error> {
-        registry
-            .sections
-            .get(section)
-            .and_then(|v| v.get("ids"))
-            .and_then(toml::Value::as_array)
-            .ok_or_else(|| Error(format!("the Registry has no [{section}] ids")))?
-            .iter()
-            .map(|v| {
-                v.as_str()
-                    .map(str::to_owned)
-                    .ok_or_else(|| Error(format!("[{section}]: an id that is not a string")))
-            })
-            .collect()
-    };
     Ok(Dictionaries {
         registry_version: registry.registry_version.clone(),
         verbs,
         act_classes: classes.clone(),
-        event_roles: ids("event_roles")?,
-        motive_edges: ids("motive_edges")?,
+        // The typed sections (envelope_v0.md §8; SPR-020 T-01, T-06).
+        event_roles: registry.event_roles.ids.clone(),
+        motive_edges: registry.motive_edges.ids.clone(),
         // `[attributes]` sorted by name: the map's order (envelope_v0.md §2).
         attributes: registry
             .attributes
@@ -525,7 +512,11 @@ impl StreamHost {
         }
         let t = at.minutes();
         for e in engine.drain_events() {
-            let body = event_body(&e, &self.dictionaries).map_err(|e| stream_error(&e))?;
+            if !self.writer.admissions_mut().admits(&e) {
+                continue;
+            }
+            let body = event_body(&e, &self.dictionaries, self.writer.admissions())
+                .map_err(|e| stream_error(&e))?;
             self.pending.push((e.tick, body));
         }
         while let Some(row) = self

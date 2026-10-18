@@ -25,6 +25,7 @@ pub mod agenda;
 pub mod command;
 pub mod crash;
 pub mod engine;
+pub mod envelope;
 pub mod fixed;
 pub mod ledger;
 pub mod observe;
@@ -38,6 +39,7 @@ pub mod time;
 pub mod world;
 
 pub use phase::Phase;
+pub use rh_events::RoleId;
 pub use system::Fixed;
 pub use time::Pulse;
 

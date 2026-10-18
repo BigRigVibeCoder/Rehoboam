@@ -33,7 +33,7 @@ use rh_core::world::WorldTables;
 use rh_ids::person::PersonIdTable;
 use rh_ids::{EntityRef, SystemId};
 use rh_manifest::Registry;
-use rh_manifest::specs::{load_specs, registry_system_ids};
+use rh_manifest::specs::{load_specs, registry_system_ids, registry_table};
 use rh_registry::WorldSpec;
 use rh_registry::ownership::Ownership;
 use rh_sys_demography::Demography;
@@ -245,7 +245,8 @@ pub fn setup_with(
     let ids = registry_system_ids(&registry_path).map_err(|e| Error(format!("registry: {e}")))?;
     let specs_loaded =
         load_specs(&repo.join("specs/systems")).map_err(|e| Error(format!("specs: {e}")))?;
-    let specs = Ownership::build(&specs_loaded, &ids).spec_table();
+    let table = registry_table(&registry_path).map_err(|e| Error(format!("registry: {e}")))?;
+    let specs = Ownership::build(&specs_loaded, &ids).spec_table_with(table);
     let tables = rh_worldgen::genesis(&spec, &specs).map_err(|e| Error(e.to_string()))?;
     // Constructed once here, so a refusal (alpha, beta) fails the setup, not a registration.
     let m2 = Demography::from_world(&spec).map_err(|e| Error(e.to_string()))?;

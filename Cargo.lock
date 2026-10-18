@@ -896,6 +896,7 @@ name = "rh-golden"
 version = "0.0.0"
 dependencies = [
  "rh-core",
+ "rh-events",
  "rh-ids",
  "rh-manifest",
  "rh-registry",

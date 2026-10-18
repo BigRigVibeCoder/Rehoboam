@@ -178,6 +178,12 @@ typed_id! {
 }
 
 typed_id! {
+    /// A place: a settlement or site an event happens at (`event.place_id`, `u32`; `envelope_v0.md`
+    /// §2). No system allocates one before places exist (SPR-018); an event's place is optional.
+    PlaceId(u32)
+}
+
+typed_id! {
     /// An event in the chronicle. Allocated by the emitter in emission order, so the order of
     /// `EventId`s is the emission order `(tick, phase, seq)` (ADR-0025).
     EventId(u64)

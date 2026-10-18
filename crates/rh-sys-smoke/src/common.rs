@@ -87,7 +87,8 @@ macro_rules! purposes {
 pub(crate) use purposes;
 
 /// The `SystemModel` items every smoke system takes from its generated skeleton: the descriptor
-/// (`SYSTEM_ID`, `SPEC_VERSION`), the bindings (`SCHEDULE`), the purposes (`RngPurpose`) and no
+/// (`SYSTEM_ID`, `SPEC_VERSION`), the bindings (`SCHEDULE`), the purposes (`RngPurpose`), the role
+/// constants (`ROLES`, SPR-020) and no
 /// parameters or aggregates.
 macro_rules! from_skeleton {
     () => {
@@ -103,6 +104,9 @@ macro_rules! from_skeleton {
         }
         fn rng_purposes(&self) -> Vec<&'static str> {
             <RngPurpose as rh_core::system::SpecPurpose>::names()
+        }
+        fn roles(&self) -> &'static [(&'static str, rh_core::RoleId)] {
+            ROLES
         }
         fn params_schema(&self) -> rh_core::system::ParamSchema {
             rh_core::system::ParamSchema::default()

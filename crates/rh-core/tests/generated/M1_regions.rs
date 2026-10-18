@@ -20,3 +20,6 @@ pub struct Params {
     pub route_cost_river: Fixed,  // bounds checked against the Registry at load
     pub route_cost_land: Fixed,  // bounds checked against the Registry at load
 }
+/// The role constants by Registry name: registration compares each code with the Registry's.
+pub const ROLES: &[(&str, rh_core::RoleId)] = &[
+];

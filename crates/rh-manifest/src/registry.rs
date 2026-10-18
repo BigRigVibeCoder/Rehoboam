@@ -244,6 +244,22 @@ pub struct Eras {
     pub frontier: String,
 }
 
+/// A pattern role's domain as an anchored bool attribute: `[role_domains]` (envelope v0 §1, §8;
+/// REV-SPR-020 R1, R16).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoleDomain {
+    /// The bool `[attributes]` entry the domain is read as.
+    pub attribute: String,
+    /// Whether the attribute takes a partner (`actor, partner`) rather than one argument.
+    pub relational: bool,
+    /// The system that owns the source column, `life_course`, or `none` (no source yet).
+    pub owner: String,
+    /// The column (`entity.column`), `algorithm.<name>` or `life_course` it is read from; `none`
+    /// exactly when the owner is `none`.
+    pub column: String,
+}
+
 /// An anchored attribute readable by sifting patterns (`attr(args)@eN`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -338,6 +354,15 @@ pub struct Registry {
     pub attributes: BTreeMap<String, Attribute>,
     #[serde(default)]
     pub verbs: BTreeMap<String, Verb>,
+    /// The event-role vocabulary, in code order (envelope v0 §1): the first four are pinned.
+    #[serde(default)]
+    pub event_roles: IdList,
+    /// The typed motive edges, in index order (envelope v0 §5).
+    #[serde(default)]
+    pub motive_edges: IdList,
+    /// Each pattern role's domain attribute (envelope v0 §1, §8).
+    #[serde(default)]
+    pub role_domains: BTreeMap<String, RoleDomain>,
     /// Every other section, by name, loaded generically: an id list (`ids = [...]`) or a table
     /// of keyed entries. Plane-C presentation tables (`place_types`, `visual_*`) live here too;
     /// mechanics never read them.
@@ -534,12 +559,14 @@ impl Registry {
             "doctrine_tags" => &self.doctrine_tags,
             "heightmap_templates" => &self.heightmap_templates,
             "climate_zones" => &self.climate_zones,
+            "event_roles" => &self.event_roles,
+            "motive_edges" => &self.motive_edges,
             _ => return None,
         })
     }
 
     /// The id-list sections, by name, in a fixed order.
-    pub const ID_LIST_SECTIONS: [&'static str; 17] = [
+    pub const ID_LIST_SECTIONS: [&'static str; 19] = [
         "governments",
         "succession_laws",
         "institutions",
@@ -557,7 +584,43 @@ impl Registry {
         "doctrine_tags",
         "heightmap_templates",
         "climate_zones",
+        "event_roles",
+        "motive_edges",
     ];
+
+    /// The role codes `schema.sql`, channel A and the `life_ends` twin read as literals: the first
+    /// four `[event_roles]` ids, in this order (envelope v0 §8).
+    pub const PINNED_EVENT_ROLES: [&'static str; 4] = ["actor", "target", "witness", "instrument"];
+
+    /// The attribute's id: its index in `[attributes]` sorted by name (envelope v0 §8). The digest
+    /// hashes the name; the segment dictionary and the canonical form use this index.
+    #[must_use]
+    pub fn attr_id(&self, name: &str) -> Option<u16> {
+        self.attributes
+            .keys()
+            .position(|k| k == name)
+            .and_then(|i| u16::try_from(i).ok())
+    }
+
+    /// A role's code: its index in `[event_roles]`.
+    #[must_use]
+    pub fn role_id(&self, name: &str) -> Option<u8> {
+        self.event_roles
+            .ids
+            .iter()
+            .position(|k| k == name)
+            .and_then(|i| u8::try_from(i).ok())
+    }
+
+    /// A motive's index in `[motive_edges]`.
+    #[must_use]
+    pub fn motive_index(&self, name: &str) -> Option<u16> {
+        self.motive_edges
+            .ids
+            .iter()
+            .position(|k| k == name)
+            .and_then(|i| u16::try_from(i).ok())
+    }
 
     /// Internal consistency problems, in a stable order; empty for a sound Registry.
     ///
@@ -635,7 +698,102 @@ impl Registry {
             }
         }
         self.reference_problems(&mut out);
+        self.envelope_problems(&mut out);
         out
+    }
+
+    /// The envelope sections' refusals of envelope v0 §8, in this order: `[event_roles]`,
+    /// `[motive_edges]`, `[role_domains]` (part of [`Registry::problems`]; duplicates are the
+    /// generic id-list rule).
+    fn envelope_problems(&self, out: &mut Vec<String>) {
+        let roles = &self.event_roles.ids;
+        if roles.is_empty() {
+            out.push("event_roles: the list is empty or missing (envelope_v0.md §8)".to_owned());
+        }
+        for id in roles.iter().filter(|id| !is_id(id, false)) {
+            out.push(format!("event_roles: id '{id}' is not [a-z][a-z0-9_]*"));
+        }
+        if !roles.is_empty() && roles.iter().take(4).ne(Self::PINNED_EVENT_ROLES.iter()) {
+            out.push(format!(
+                "event_roles: the first four ids are {:?}, not actor, target, witness, instrument in that order (role codes are pinned; a role is only appended)",
+                roles.iter().take(4).collect::<Vec<_>>()
+            ));
+        }
+        let motives = &self.motive_edges.ids;
+        if motives.is_empty() {
+            out.push("motive_edges: the list is empty or missing (envelope_v0.md §8)".to_owned());
+        }
+        for id in motives {
+            if !is_id(id, true) {
+                out.push(format!("motive_edges: id '{id}' is not [A-Z][A-Z0-9_]*"));
+            }
+            if self.verbs.contains_key(id) {
+                out.push(format!(
+                    "motive_edges: id '{id}' is also a [verbs] key; a motive and a verb never share a name"
+                ));
+            }
+        }
+        let pattern_roles: BTreeSet<&str> = self
+            .roles
+            .ids
+            .iter()
+            .map(String::as_str)
+            .filter(|r| *r != "any")
+            .collect();
+        for role in &pattern_roles {
+            if !self.role_domains.contains_key(*role) {
+                out.push(format!(
+                    "role_domains: no entry for the [roles] id '{role}'"
+                ));
+            }
+        }
+        for (key, d) in &self.role_domains {
+            if !pattern_roles.contains(key.as_str()) {
+                out.push(format!(
+                    "role_domains: '{key}' is not a [roles] id (or is 'any', which has no domain)"
+                ));
+            }
+            match self.attributes.get(&d.attribute) {
+                Some(a) if a.ty == "bool" => {
+                    let arity_ok = if d.relational {
+                        a.args == ["actor", "partner"]
+                    } else {
+                        a.args.len() == 1
+                    };
+                    if !arity_ok {
+                        out.push(format!(
+                            "role_domains.{key}: attribute '{}' takes {:?}; relational = {} needs {}",
+                            d.attribute,
+                            a.args,
+                            d.relational,
+                            if d.relational { "actor, partner" } else { "one argument" }
+                        ));
+                    }
+                }
+                _ => out.push(format!(
+                    "role_domains.{key}: attribute '{}' is not a bool [attributes] entry",
+                    d.attribute
+                )),
+            }
+            let none = d.owner == "none";
+            if !none && d.owner != "life_course" && !self.systems.contains_key(&d.owner) {
+                out.push(format!(
+                    "role_domains.{key}: owner '{}' is not a [systems] id, 'life_course' or 'none'",
+                    d.owner
+                ));
+            }
+            if none != (d.column == "none") {
+                out.push(format!(
+                    "role_domains.{key}: column '{}' must be \"none\" exactly when the owner is none",
+                    d.column
+                ));
+            } else if !none && !is_source_column(&d.column) {
+                out.push(format!(
+                    "role_domains.{key}: column '{}' is not entity.column, algorithm.<name> or life_course",
+                    d.column
+                ));
+            }
+        }
     }
 
     /// Cross-section references and type names (part of [`Registry::problems`]).
@@ -732,6 +890,27 @@ impl Registry {
     }
 }
 
+/// `[a-z][a-z0-9_]*` (or `[A-Z][A-Z0-9_]*` when `upper`).
+fn is_id(id: &str, upper: bool) -> bool {
+    let letter = |c: u8| {
+        if upper {
+            c.is_ascii_uppercase()
+        } else {
+            c.is_ascii_lowercase()
+        }
+    };
+    let mut b = id.bytes();
+    b.next().is_some_and(letter) && b.all(|c| letter(c) || c.is_ascii_digit() || c == b'_')
+}
+
+/// `entity.column` (two ids), `algorithm.<name>` (a case of it) or `life_course`.
+fn is_source_column(column: &str) -> bool {
+    column == "life_course"
+        || column
+            .split_once('.')
+            .is_some_and(|(e, c)| is_id(e, false) && is_id(c, false))
+}
+
 fn push_duplicates(out: &mut Vec<String>, what: &str, ids: &[String]) {
     let mut seen = BTreeSet::new();
     for id in ids {
@@ -803,7 +982,7 @@ mod tests {
     /// verb carries a tellability in 0..=255.
     #[test]
     fn defaults_and_tellability_are_checked() {
-        let base = "registry_version = \"0.1.0\"\n[act_classes]\nids = [\"death\"]\n\
+        let base = "registry_version = \"0.1.0\"\n[event_roles]\nids = [\"actor\", \"target\", \"witness\", \"instrument\"]\n[motive_edges]\nids = [\"X_FOR\"]\n[act_classes]\nids = [\"death\"]\n\
             [systems.\"M1.x\"]\nfidelity_levels = [\"F1\"]\nparams = { a = [1.0, 2.0] }\n";
         let ok = format!("{base}defaults = {{ a = 1.5 }}\n");
         assert_eq!(
@@ -865,6 +1044,7 @@ mod tests {
                 "eras",
                 "attributes",
                 "verbs",
+                "role_domains",
             ],
         ]
         .concat()
@@ -876,7 +1056,7 @@ mod tests {
         }
         let systems: BTreeSet<&String> = raw["systems"].as_table().unwrap().keys().collect();
         assert_eq!(systems, reg.systems.keys().collect());
-        let extra = "registry_version = \"0.1.0\"\n[act_classes]\nids = [\"harm\"]\n\
+        let extra = "registry_version = \"0.1.0\"\n[event_roles]\nids = [\"actor\", \"target\", \"witness\", \"instrument\"]\n[motive_edges]\nids = [\"X_FOR\"]\n[act_classes]\nids = [\"harm\"]\n\
             [new_vocab]\nids = [\"a\", \"b\"]\n[new_table]\nx = { act_classes = [\"harm\"], w = 1.0 }\n";
         let reg = Registry::from_toml(extra).unwrap();
         assert_eq!(reg.ids("new_vocab"), BTreeSet::from(["a", "b"]));
@@ -912,12 +1092,14 @@ mod tests {
     #[test]
     fn malformed_generic_sections_and_unknown_fields_are_refused() {
         let bad = "registry_version = \"0.1.0\"\nstray = 1\n[spells]\nids = [\"a\", \"a\"]\n\
-            [rites]\nx = { act_classes = [\"bless\"] }\n";
+            [rites]\nx = { act_classes = [\"bless\"] }\n[event_roles]\n\
+            ids = [\"actor\", \"target\", \"witness\", \"instrument\"]\n\
+            [motive_edges]\nids = [\"X_FOR\"]\n";
         let Err(RegistryError::Inconsistent(p)) = Registry::from_toml(bad) else {
             panic!("accepted")
         };
         assert_eq!(p.len(), 3, "{p:?}");
-        let unknown_field = "registry_version = \"0.1.0\"\n[systems.\"M1.x\"]\nfidelity_levels = [\"F1\"]\nmagic = 1\n";
+        let unknown_field = "registry_version = \"0.1.0\"\n[event_roles]\nids = [\"actor\", \"target\", \"witness\", \"instrument\"]\n[motive_edges]\nids = [\"X_FOR\"]\n[systems.\"M1.x\"]\nfidelity_levels = [\"F1\"]\nmagic = 1\n";
         assert!(matches!(
             Registry::from_toml(unknown_field),
             Err(RegistryError::Parse(_))

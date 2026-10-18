@@ -78,6 +78,10 @@ pub(crate) struct Entry {
     pub(crate) access: AccessSpec,
     pub(crate) bindings: Vec<PulseBinding>,
     pub(crate) purposes: Vec<&'static str>,
+    /// The skeleton's role constants the system declares (SPR-020 T-01).
+    pub(crate) roles: &'static [(&'static str, rh_events::RoleId)],
+    /// Its `[[emits]]` declarations, compiled against the Registry and the registered set (T-03).
+    pub(crate) envelope: crate::envelope::Envelope,
     /// The entity kind each purpose's `[[rng]] key` names, where it names one (BCK-002 A-50).
     pub(crate) purpose_kinds: BTreeMap<&'static str, EntityKind>,
     /// The rate and mode reads whose owner the world does not register, each with its neutral
@@ -86,9 +90,75 @@ pub(crate) struct Entry {
     pub(crate) dropped_reads: BTreeMap<&'static str, i64>,
 }
 
+/// The registration entries of `systems`, sorted by id.
+fn entries_of(systems: Vec<Box<dyn SystemModel>>) -> Vec<Entry> {
+    let mut entries: Vec<Entry> = systems
+        .into_iter()
+        .map(|model| {
+            let d = model.descriptor();
+            Entry {
+                id: d.id,
+                system_id: system_id(d.id),
+                access: model.access(),
+                bindings: model.schedule(),
+                purposes: model.rng_purposes(),
+                roles: model.roles(),
+                envelope: crate::envelope::Envelope::new(),
+                purpose_kinds: BTreeMap::new(),
+                dropped_reads: BTreeMap::new(),
+                model,
+            }
+        })
+        .collect();
+    entries.sort_by(|a, b| a.id.cmp(b.id));
+    entries
+}
+
+/// The envelope at registration (SPR-020): compiles each system's `[[emits]]` declarations for
+/// `StepCtx::emit` (T-03), and applies rule `spec` to its skeleton's role constants (T-01): each
+/// has the code the Registry it runs under gives its name, as the bindings must equal
+/// `[[schedule]]`. With no Registry passed (an empty table), no constant is compared.
+fn check_envelopes(entries: &mut [Entry], specs: &SpecTable, violations: &mut Vec<Violation>) {
+    let registered: BTreeSet<&str> = entries.iter().map(|e| e.id).collect();
+    let compiled: Vec<_> = entries
+        .iter()
+        .map(|e| crate::envelope::compile(e.id, &e.access, specs, &registered))
+        .collect();
+    for (e, envelope) in entries.iter_mut().zip(compiled) {
+        e.envelope = envelope;
+    }
+    if specs.registry.event_roles.is_empty() {
+        return;
+    }
+    for e in entries.iter() {
+        for (name, code) in e.roles {
+            let constant = format!("ROLE_{}", name.to_ascii_uppercase());
+            match specs.registry.role_code(name) {
+                Some(c) if c == code.0 => {}
+                Some(c) => violations.push(violation(
+                    e.id,
+                    "spec",
+                    format!(
+                        "skeleton constant {constant} is {}, but the Registry's [event_roles] gives {name} the code {c}: regenerate the skeleton (bin/gen_skeletons.py)",
+                        code.0
+                    ),
+                )),
+                None => violations.push(violation(
+                    e.id,
+                    "spec",
+                    format!("skeleton constant {constant} names the role {name}, which the Registry's [event_roles] lacks"),
+                )),
+            }
+        }
+    }
+}
+
 /// A registered, conflict-free set of systems with its derived schedule.
 pub struct Registered {
     pub(crate) entries: Vec<Entry>,
+    /// The Registry's `[motive_edges]` ids in list order: a motive's index breaks coalescing ties
+    /// (envelope §5), from [`SpecTable::motives`].
+    pub(crate) motives: Vec<String>,
     schedule: Schedule,
     reports: Vec<String>,
     /// Every registered command: its owner, draining binding and typing (`05.1` §2 rule 2).
@@ -238,23 +308,7 @@ pub fn register(
     systems: Vec<Box<dyn SystemModel>>,
     specs: &SpecTable,
 ) -> Result<Registered, RegistrationError> {
-    let mut entries: Vec<Entry> = systems
-        .into_iter()
-        .map(|model| {
-            let d = model.descriptor();
-            Entry {
-                id: d.id,
-                system_id: system_id(d.id),
-                access: model.access(),
-                bindings: model.schedule(),
-                purposes: model.rng_purposes(),
-                purpose_kinds: BTreeMap::new(),
-                dropped_reads: BTreeMap::new(),
-                model,
-            }
-        })
-        .collect();
-    entries.sort_by(|a, b| a.id.cmp(b.id));
+    let entries = entries_of(systems);
     let mut violations = Vec::new();
     let mut reports = Vec::new();
 
@@ -312,6 +366,7 @@ pub fn register(
     // Lifecycle commands and event kinds (SPR-006 ruling 5).
     let commands = check_commands(&entries, specs, &mut violations, &mut reports);
     check_events(&entries, specs, &mut violations, &mut reports);
+    check_envelopes(&mut entries, specs, &mut violations);
 
     // The schedule (T-05), only when the declarations themselves are sound.
     let inputs: Vec<SchedulerInput<'_>> = entries
@@ -323,7 +378,6 @@ pub fn register(
         })
         .collect();
     let derived = schedule::derive(&inputs);
-    drop(inputs);
     let violations = once_each(violations);
     match derived {
         Ok(schedule) if violations.is_empty() => {
@@ -334,6 +388,7 @@ pub fn register(
                 .collect();
             Ok(Registered {
                 entries,
+                motives: specs.registry.motives.clone(),
                 schedule,
                 reports,
                 commands,

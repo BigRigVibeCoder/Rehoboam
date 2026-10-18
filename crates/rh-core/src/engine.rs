@@ -79,7 +79,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 
-use rh_events::{Event, EventLog};
+use rh_events::{Event, EventDraft, EventLog, EventRef, Origin};
 use rh_ids::{BranchSalt, EntityRef, SystemId, SystemKey, TimelineId};
 
 use crate::access::Lag;
@@ -262,6 +262,14 @@ pub struct Engine {
     /// Bookkeeping of the step guard, never state: an instant always starts it empty. One slot
     /// per system, built once, so an instant with no draws allocates nothing (V-PERF-11).
     taken: Vec<Taken>,
+    /// Snapshots `emit` discarded because their source's owner is not registered, counted per
+    /// `dropped{system, snapshot, absent_owner}` (envelope v0 §4 rule 4; SPR-020 T-03). Host
+    /// telemetry, never state.
+    dropped_snapshots: BTreeMap<crate::envelope::DroppedKey, u64>,
+    /// The chronicle's admission rule (`05.2` §4.0; D38): every draft is admitted (P1.0) unless
+    /// the host sets a predicate. The flag is carried on the event and never hashed, so plane A
+    /// never branches on it. Until DATA-5's rule lands (P1.11) only tests set one (SPR-020 T-06).
+    admission: Option<fn(&EventDraft) -> bool>,
     /// Every drop so far, `dropped{system, kind, reason}` (`05.1` §2 rule 2; REV-EVO-001 R11): a
     /// diagnostic, printed with the run's vitals, outside every plane hash and every keyframe
     /// (GOV-006 §3: observability never changes history). A restored engine counts from zero.
@@ -497,6 +505,8 @@ impl Engine {
             timeline: TimelineId::from_raw(0),
             provenance: Provenance::default(),
             diagnostics: VecDeque::new(),
+            dropped_snapshots: BTreeMap::new(),
+            admission: None,
             at: (start, Phase::Inputs),
             crash: None,
             journal_head: None,
@@ -789,6 +799,19 @@ impl Engine {
         self.dispatch
     }
 
+    /// The `dropped{system, snapshot, absent_owner}` counter: snapshots discarded because their
+    /// source's owner is not registered (envelope v0 §4 rule 4).
+    #[must_use]
+    pub const fn dropped_snapshots(&self) -> &BTreeMap<crate::envelope::DroppedKey, u64> {
+        &self.dropped_snapshots
+    }
+
+    /// Sets the chronicle's admission predicate (`None`: admit every draft, the P1.0 rule). The
+    /// flag only decides which events the Chronicle Writer records; it is in no hash.
+    pub fn set_admission(&mut self, admission: Option<fn(&EventDraft) -> bool>) {
+        self.admission = admission;
+    }
+
     /// What the gated passes ran so far (SPR-038 T-03).
     #[must_use]
     pub const fn check_stats(&self) -> CheckStats {
@@ -975,6 +998,15 @@ impl Engine {
             | SimError::Timer { system, .. }
             | SimError::UndeclaredCommand { system, .. }
             | SimError::UndeclaredEvent { system, .. }
+            | SimError::UndeclaredRole { system, .. }
+            | SimError::DuplicateRole { system, .. }
+            | SimError::CastTooLarge { system, .. }
+            | SimError::UndeclaredSnapshot { system, .. }
+            | SimError::SnapshotNotOfTheCast { system, .. }
+            | SimError::SnapshotOutOfDomain { system, .. }
+            | SimError::DuplicateSnapshot { system, .. }
+            | SimError::MissingSnapshot { system, .. }
+            | SimError::UndeclaredMotive { system, .. }
             | SimError::EventSlot { system, .. }
             | SimError::Payload { system, .. }
             | SimError::EntityKind { system, .. }
@@ -1454,7 +1486,6 @@ impl Engine {
             let commands = &self.registered.commands;
             let epochs = &self.epochs;
             let (world_seed, branch_salt) = (self.world_seed, self.branch_salt);
-            let key = |e: &Entry| SystemKey::new(world_seed, branch_salt, e.system_id, 0);
             let run = |k: usize, job: &Job, (cols, inbox, taken): JobInput| {
                 let e = &entries[job.index];
                 let notice = |boundary| Notice {
@@ -1473,7 +1504,7 @@ impl Engine {
                 let info = JobInfo {
                     system: e.id,
                     system_id: e.system_id,
-                    key: key(e),
+                    key: SystemKey::new(world_seed, branch_salt, e.system_id, 0),
                     world_seed,
                     branch_salt,
                     epochs,
@@ -1481,6 +1512,7 @@ impl Engine {
                     access: &e.access,
                     bindings: &e.bindings,
                     agenda,
+                    envelope: &e.envelope,
                     commands,
                     purpose_kinds: &e.purpose_kinds,
                 };
@@ -1646,18 +1678,36 @@ impl Engine {
         }
         let mut ids = Vec::with_capacity(out.events.len());
         for mut draft in out.events {
-            let local = std::mem::take(&mut draft.local_causes);
-            // INVARIANT: `StepCtx::emit` admits only references to earlier drafts.
-            draft
-                .causes
-                .extend(local.iter().filter_map(|r| ids.get(r.index()).copied()));
+            let event_error = |err: rh_events::EventError| SimError::Event {
+                system: e.id,
+                message: err.to_string(),
+            };
+            // Resolve every draft-local cause to the id this merge gave it, in place, then
+            // coalesce to one edge per cause (envelope §5). INVARIANT: `StepCtx::emit` admits
+            // only references to earlier drafts, so every `Draft` resolves; one that does not
+            // (or a `None`) stays and `append` refuses it.
+            for edge in &mut draft.causes {
+                if let EventRef::Draft(r) = edge.cause
+                    && let Some(&id) = ids.get(r.index())
+                {
+                    edge.cause = EventRef::Known(id);
+                }
+            }
+            let motives = &self.registered.motives;
+            rh_events::coalesce_draft(&mut draft, |m| motives.iter().position(|x| x == m))
+                .map_err(event_error)?;
+            let admitted = self.admission.is_none_or(|admit| admit(&draft));
             let id = self
                 .events
-                .append(t.minutes(), phase.index(), e.id, draft)
-                .map_err(|err| SimError::Event {
-                    system: e.id,
-                    message: err.to_string(),
-                })?;
+                .append_admitted(
+                    t.minutes(),
+                    phase.index(),
+                    e.id,
+                    Origin::Sim,
+                    admitted,
+                    draft,
+                )
+                .map_err(event_error)?;
             ids.push(id);
             tally.events += 1;
         }
@@ -1676,6 +1726,12 @@ impl Engine {
                     cause: resolve(spec.cause),
                 },
             );
+        }
+        for (snapshot, owner) in out.dropped {
+            *self
+                .dropped_snapshots
+                .entry((e.id, snapshot, owner))
+                .or_default() += 1;
         }
         for mut command in out.commands {
             let Some(decl) = self.registered.commands.get(command.kind) else {

@@ -18,7 +18,7 @@ use rh_core::system::{PulseBinding, ResampleCtx, SimError, SpecPurpose, StepCtx,
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EdgeKind, EventDraft, EventRef, RoleId};
 use rh_ids::rng::{h64_words, tag};
 use rh_ids::{BranchSalt, EntityRef, PersonId};
 
@@ -110,7 +110,7 @@ fn vital_step(
                 c.cancel(t.id())?;
             }
             pending[row] = 0;
-            c.emit(EventDraft::new("CURED").subject(entity(row)))?;
+            c.emit(EventDraft::new("CURED").role(RoleId::TARGET, entity(row)))?;
         }
     }
     v.write("vital.pending")?.copy_from_slice(&pending);
@@ -141,7 +141,7 @@ fn vital_fire(
     v.write("vital.pending")?[row] = 0;
     let death = c.emit(
         EventDraft::new("DEATH")
-            .subject(entity(row))
+            .role(RoleId::TARGET, entity(row))
             .with_payload(vec![r64(row), timer.key.time.minutes()]),
     )?;
     c.submit(Command {
@@ -205,9 +205,10 @@ fn estate_step(
         *order = order
             .wrapping_mul(31)
             .wrapping_add(q.command.person.to_raw().cast_signed());
-        let mut e = EventDraft::new("INHERITANCE").subject(EntityRef::person(q.command.person));
+        let mut e = EventDraft::new("INHERITANCE")
+            .role(RoleId::TARGET, EntityRef::person(q.command.person));
         if let Some(cause) = q.cause {
-            e = e.caused_by(cause);
+            e = e.caused_by(EventRef::Known(cause), EdgeKind::Triggered);
         }
         c.emit(e)?;
     }
@@ -229,7 +230,7 @@ fn rumor_step(
     let alive = v.read("vital.alive")?.to_vec();
     for (row, &a) in alive.iter().enumerate() {
         if a == 1 && row % 7 == usize::try_from(c.now().minutes().rem_euclid(7)).unwrap() {
-            c.emit(EventDraft::new("RUMOR").subject(entity(row)))?;
+            c.emit(EventDraft::new("RUMOR").role(RoleId::TARGET, entity(row)))?;
         }
     }
     Ok(())
