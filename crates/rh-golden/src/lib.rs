@@ -25,6 +25,7 @@ pub mod cli;
 pub mod dump;
 pub mod ladder;
 pub mod leak;
+pub mod materialize;
 pub mod replay;
 pub mod run;
 pub mod sha256;
@@ -33,3 +34,10 @@ pub mod stream;
 pub mod tail;
 pub mod vitals;
 pub mod world;
+
+/// The planted `mutant-*` controls compiled into `rh-golden`.
+pub const MUTANTS: &[&str] = &[
+    #[cfg(feature = "mutant-materialize-no-journal")]
+    "mutant-materialize-no-journal",
+];
+

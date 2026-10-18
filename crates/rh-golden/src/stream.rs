@@ -417,7 +417,14 @@ pub struct RunToml {
     /// The ladder's rung kind (`yearly` or `monthly`), so a replay writes a comparable ladder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rung: Option<String>,
+    /// The run log path, relative to the run directory (SPR-027).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_log: Option<String>,
+    /// The first keyframe year, if recorded (SPR-027).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_keyframe_year: Option<i64>,
 }
+
 
 impl RunToml {
     /// Reads `run.toml` from a run directory.

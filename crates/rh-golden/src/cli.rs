@@ -761,3 +761,127 @@ pub fn canonical_cmd(words: &[String], _repo: &Path) -> u8 {
         }
     }
 }
+
+/// `materialize <run-dir> (--tick T | --at-digest SEQ) [--dump <file>|-] [--hash-only] [--any-tick] [--repo R]`
+/// (SPR-027 T-02; [`crate::materialize`]).
+///
+/// Exit 0 on success, 64 on usage error, 2 on tool error.
+#[must_use]
+pub fn materialize_cmd(words: &[String], repo: &Path) -> u8 {
+    let args = match parse_materialize(words, repo) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("materialize: {e}");
+            return USAGE;
+        }
+    };
+    match crate::materialize::materialize_args(&args) {
+        Ok(m) => {
+            if args.dump_stdout {
+                print!("{}", m.dump.render());
+                eprintln!(
+                    "materialize: tick {} state_hash {:016x} from {}",
+                    m.tick,
+                    m.state_hash,
+                    if m.keyframe_tick >= 0 {
+                        format!("keyframe at tick {}", m.keyframe_tick)
+                    } else {
+                        "genesis".to_owned()
+                    }
+                );
+            } else if args.hash_only {
+                println!("{:016x}", m.state_hash);
+            } else {
+                if let Some(path) = &args.dump {
+                    if let Err(e) = std::fs::write(path, m.dump.render()) {
+                        eprintln!("materialize: {}: {e}", path.display());
+                        return TOOL;
+                    }
+                }
+                println!(
+                    "materialize: tick {} state_hash {:016x} from {}",
+                    m.tick,
+                    m.state_hash,
+                    if m.keyframe_tick >= 0 {
+                        format!("keyframe at tick {}", m.keyframe_tick)
+                    } else {
+                        "genesis".to_owned()
+                    }
+                );
+            }
+            OK
+        }
+        Err(e) => {
+            eprintln!("materialize: {e}");
+            TOOL
+        }
+    }
+}
+
+fn parse_materialize(
+    words: &[String],
+    repo: &Path,
+) -> Result<crate::materialize::MaterializeArgs, Error> {
+    let bad = |what: &str| Error(what.to_owned());
+    let mut run_dir = None;
+    let mut tick = None;
+    let mut at_digest = None;
+    let mut dump = None;
+    let mut dump_stdout = false;
+    let mut hash_only = false;
+    let mut any_tick = false;
+    let mut repo = repo.to_path_buf();
+    let mut it = words.iter();
+    while let Some(w) = it.next() {
+        let mut value = || it.next().ok_or_else(|| bad(&format!("{w} needs a value")));
+        match w.as_str() {
+            "--tick" => {
+                tick = Some(value()?.parse().map_err(|_| bad("--tick is a number"))?);
+            }
+            "--at-digest" => {
+                at_digest = Some(
+                    value()?
+                        .parse()
+                        .map_err(|_| bad("--at-digest is a sequence number"))?,
+                );
+            }
+            "--dump" => {
+                let v = value()?;
+                if v == "-" {
+                    dump_stdout = true;
+                } else {
+                    dump = Some(PathBuf::from(v));
+                }
+            }
+            "--hash-only" => hash_only = true,
+            "--any-tick" => any_tick = true,
+            "--repo" => repo = PathBuf::from(value()?),
+            flag if flag.starts_with("--") => return Err(bad(&format!("unknown flag {flag}"))),
+            dir if run_dir.is_none() => run_dir = Some(PathBuf::from(dir)),
+            extra => return Err(bad(&format!("unexpected {extra}"))),
+        }
+    }
+    let Some(run_dir) = run_dir else {
+        return Err(bad("a run directory is required"));
+    };
+    if tick.is_none() && at_digest.is_none() {
+        return Err(bad("either --tick <T> or --at-digest <SEQ> is required"));
+    }
+    if tick.is_some() && at_digest.is_some() {
+        return Err(bad("--tick and --at-digest are mutually exclusive"));
+    }
+    if dump_stdout && hash_only {
+        return Err(bad("--dump - and --hash-only are mutually exclusive"));
+    }
+    Ok(crate::materialize::MaterializeArgs {
+        repo,
+        run_dir,
+        tick,
+        at_digest,
+        dump,
+        dump_stdout,
+        hash_only,
+        any_tick,
+    })
+}
+

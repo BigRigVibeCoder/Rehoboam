@@ -1160,6 +1160,8 @@ fn stream_host(
             journal_inputs: identity.map(|p| p.inputs),
             journal_head: identity.map(|p| dump::hex(&p.head)),
             rung: Some(args.rung.name().to_owned()),
+            run_log: None,
+            first_keyframe_year: None,
         }
         .write(&dir.0)?;
         StreamHost::create(cfg, engine.tables(), rows, hook)
@@ -1172,6 +1174,7 @@ fn stream_host(
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
     let mut all = [
+        crate::MUTANTS,
         rh_core::MUTANTS,
         rh_manifest::MUTANTS,
         rh_protocol::MUTANTS,
