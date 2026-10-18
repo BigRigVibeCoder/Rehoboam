@@ -9,7 +9,7 @@ tags: [sprint, simulation]
 related: [BCK-002, PRJ-002, REV-SPR-019, REV-SPR-018, REV-SPR-017, REV-SPR-015, REV-SPR-016, REV-SPR-029, REV-SPR-030, REV-WAVE5, REV-WAVE6, EVO-001, SPR-012, SPR-014, SPR-015, SPR-016, SPR-017, SPR-018, SPR-020, SPR-021, SPR-029, SPR-030, ADR-0006, ADR-0007, ADR-0024, ADR-0025, ADR-0026, ADR-0033]
 created: 2026-10-17
 updated: 2026-10-18
-version: 0.3.1
+version: 0.3.2
 ---
 
 > **BLUF:** Builds `specs/worldgen/population_synthesis.toml` (PR #62, `REV-SPR-019` closed on `698e23d`; D46 approved) in `rh-worldgen`, bit-equal to `specs/worldgen/golden/population_synthesis_v0.txt` (hamlet and the manor at two seeds each; the manor's tenure logs under all seven laws over twenty seeds in two configurations) and to the genesis digests of SPR-030's fixture worlds (`golden/fixture_worlds_v0.txt`):
@@ -187,6 +187,7 @@ version: 0.3.1
     - The soak writes `artifacts/manor_cohorts.txt`: the age-sex pyramid every 50 years, the living count each decade, and peak RSS (reported, not gated).
     - If the projection cannot model the manor without mechanics it lacks, the Developer says so at T-07, and the band is a 64-seed engine run frozen as a golden range with the Architect's approval.
     - Nothing is added to the PR tier.
+    - The band assertion applies only when the run's registered systems are those the band was projected for (M1, M2, S3); with M7 registered it is reported, not asserted, until SPR-022b re-derives the band once (REV-WAVE7 K21).
   - **The gates.** Part `core`: the `LifeTracker` unit test and the stream order control; the `GenesisInputs` and compile fixtures of stage B; the M7 draft's lint and stale-spec lines. Part `golden`: the release back-fill goldens (the manor's two seeds and the sweep, about 10 s), the fixture digests (about 5 s in Rust), the manor's thread and keyframe tests (about 15 s), one mutant rebuild. Nightly: the 60-seed sweep, `kingdom_10k` seed 2, the 1,000-year manor soak with invariants on, the other mutants, the random dynastic manifests at the 1,500-person size. The inventory test in the same commit.
   - The docs of the compliance table (stage B's share); BCK-002 A-56 and A-57 updated with what was built under D56.
 - **Acceptance:**
