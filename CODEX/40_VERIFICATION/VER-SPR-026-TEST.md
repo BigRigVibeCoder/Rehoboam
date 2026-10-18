@@ -9,7 +9,7 @@ tags: [verification, testing, determinism, stream]
 related: [SPR-026, REV-SPR-026, VER-SPR-013-TEST, AGT-003-DET, AGT-003-IF, ADR-0024, ADR-0030, ADR-0031, BCK-002]
 created: 2026-10-18
 updated: 2026-10-18
-version: 1.1.0
+version: 1.2.0
 ---
 
 > **BLUF: T-01 to T-06 and the A-58 items meet their acceptance criteria. I found no blocking defect, one test defect (DEF-1, a flaky V-STR-05 test under CPU load) and seven gaps, the largest being GAP-1: at full speed the D42 (b) window is not two sim-years.** `bin/check_all.sh` is **528 of 528** (both parts, one run) on a clean clone of `1d7f9a1`. My probes use my own codec, viewers and oracles, never the code under test, and agree with the implementation everywhere except the items below. Tested head: `1d7f9a1d5b628ae823ccefbc78fdc6ea208fbc02` on `sprint/SPR-026-stream-v1` (PR #82; base `772478f`). Tester model: Claude Sonnet 5.5 (the Developer's differs).
@@ -211,3 +211,66 @@ Does the 2 MiB allowance hide a real gap? **Partly.**
 ### 7.3 Verdicts
 
 DEF-1 is closed. GAP-1 is met as ruled (the bound holds in 16 of 16 runs), with GAP-8 recording that its margin is thin on my machine. The previous gaps GAP-2 to GAP-7 are unchanged and go to BCK-002 at the Architect's audit. No new defect.
+
+## 8. Phase 4: GAP-8 and the merge by gate name (head `762bd84`)
+
+`762bd84` merges `main` `99a5b3d` (PR #89, the third CI job; #95) into the branch. Since my phase-3 report (`f610915`) it adds `ba017f4` (GAP-8: the memory gate's baseline is the highest of three headless runs) and main's CI work. Method as before: a clean checkout, a fresh release build, the repository's own test and my own mutants. I did not run `bin/check_all.sh` whole again; CI is green on all three parts (the Architect's run 39095148268).
+
+| Item | Verdict | Basis |
+|---|---|---|
+| GAP-8: `tests/memory.rs`, 3 runs at 1,500 years | **PASS** | Margins 4.05, 2.65 and 2.58 MiB; rise 1.51 to 1.85 times `bytes()` (§8.1) |
+| GAP-8: "the old canonical count must still fail" | **NOT MET: DEF-2** | The window-only count fails; the canonical-text count fails in 3 of 4 runs and passes in 1 (§8.2) |
+| The merge by gate name | **PASS** | 503 gates, each once, both ways; nothing lost from `main`; nothing moved against `main` (§8.3) |
+
+### 8.1 GAP-8: the gate, three runs
+
+`cargo nextest run -p rh-cli --locked --release --test memory --no-capture`, scratch on `/dev/shm`, four cores idle. The test runs the three headless processes in parallel (each process has its own `VmHWM`), takes the highest, then runs `--socket` under policy (b). Bound: rise `<= 2 x peak bytes() + 2 MiB`.
+
+| Run | Headless, highest of three (B) | With `--socket` (B) | Rise (B) | Peak `bytes()` (B) | Rise / `bytes()` | Bound (B) | Margin | Test wall time |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 20,017,152 | 26,710,016 | 6,692,864 | 4,421,954 | 1.51 | 10,941,060 | 4,248,196 (4.05 MiB) | 30.4 s |
+| 2 | 19,861,504 | 28,176,384 | 8,314,880 | 4,496,858 | 1.85 | 11,090,868 | 2,775,988 (2.65 MiB) | 30.1 s |
+| 3 | 19,922,944 | 27,607,040 | 7,684,096 | 4,145,848 | 1.85 | 10,388,848 | 2,704,752 (2.58 MiB) | 28.8 s |
+
+The thin margin I saw in phase 3 (0.15 MB) is gone: the highest-of-three baseline removes the headless noise (the three headless peaks in one run differ by up to 2.1 MB). These ratios agree with the Developer's 1.76 to 1.88.
+
+### 8.2 The control: the old counts against the new rule
+
+The repository has no planted control for the memory gate, so I built two mutants of `bytes()` (one edit each, reverted afterwards; `git status` is clean) and ran the same test.
+
+| Mutant | Runs | Result | Rise / `bytes()` | Margin |
+|---|---|---|---|---|
+| MA: the window only (the count before GAP-1) | 1 | **FAIL** | 4.15 | rise 7,913,472 against a bound of 5,913,348 |
+| MB: the seal queue counted as canonical text (the count the Developer rejected) | 4 | **FAIL, FAIL, FAIL, PASS** | 2.94, 2.93, 2.83, **2.41** | the passing run: rise 6,430,720 against a bound of 7,434,642, a margin of 1.0 MB |
+
+The window-only count is rejected, as the ruling requires. The canonical-text count is rejected in three of four runs but **passes in one**: with the baseline now the highest of three (about 3 MB higher than the median I used in phase 3), the rise of the canonical-text mutant fell from the 2.75 to 3.4 times the Developer saw to 2.4 to 2.9 times, and the 2 MiB allowance is large next to the gap between the two counts. A control that must fail and passes one run in four is not a control. The clean count passes 3 of 3, so there is room to tighten.
+
+#### DEF-2 (low): the gate does not reliably reject the canonical-text count
+
+Contract: the Architect's GAP-8 ruling ("the bound stays at 2 x peak `bytes()` + 2 MiB, and the old canonical count must still fail it").
+Reproduce: replace `crate::record::allocated(&records)` in `StreamWriter`'s enqueue (`writer.rs`) with the sum of the canonical lines' lengths (+1 each), then run the test four times.
+Expected: FAIL every time. Actual: 3 FAIL, 1 PASS.
+Suggestion, from the data: the smallest clean margin is 2.58 MiB, so an allowance of 1 MiB leaves 1.5 MiB clean margin and would have failed the passing mutant run by 44 KB; 0.5 MiB fails it by 0.57 MB and leaves 2.1 MiB clean. Either is better than 2 MiB now that the baseline absorbs the noise. Add the two mutants as planted controls in `check_all.sh`, each expected to FAIL with the gate's own message (as `mutant-window-gap` does for the window), so the gate's power is itself tested. Confidence 70%.
+
+### 8.3 The merge by gate name
+
+`python -I bin/check_all_selftest.py inventory`: `INVENTORY OK: 503 gates chained and listed, each once, both ways; 2 control loop(s) called; no run line outside the chain and its loops`.
+
+My own count (`gates.py`: the first quoted string of every `run "…"` line, assigned to the part whose `part X &&` marker precedes it), on three versions of `check_all.sh`:
+
+| Version | Gates | core | golden | stream |
+|---|---|---|---|---|
+| `main` `99a5b3d` | 485 | 381 | 78 | 26 |
+| the branch before the merge (`433e42d`) | 485 | 378 | 107 | none (two parts) |
+| `762bd84` | **503** | 389 | 78 | 36 |
+
+- No name appears twice. No gate of `main` is missing from `762bd84`. No gate exists in `762bd84` that is in neither side.
+- One name of the branch is absent: "CRN pairing v0 … at seed 1 …". `main` reworded the same gate ("the PR tier (the first VALID seed of 1 to 4)"), so the merge took main's text; nothing is lost.
+- **Moved against `main`: 0.** The branch adds 18 gates that `main` lacks (8 in `core`, 10 in `stream`). Against the branch's old two-part layout, 37 gates sit in another part, all by the third job's kind rule (PART_OF_PREFIX): 31 `golden` to `stream` (stream, tail, sift, replay, rungs, `check_segments` and twin gates, and this sprint's serve, channel C, run-directory, V-STR, memory and V-PERF-09 gates), 2 `core` to `stream`, 3 `core` to `golden` (V-DET-10 release; the two release M2 gates) and 1 `golden` to `core` (a population-synthesis control). 27 of the 37 are `main`'s own placements; the other 10 are this sprint's gates, placed by the same rule.
+- Part `core` keeps `rh-protocol` golden and method_table with their two planted controls (a fourth method; a nonzero flag), and `rh-stream` live with its `window-gap` control. Part `stream` has round_trip, serve, channel_c, run_dir, vstr, memory, the V-PERF-09 bench and the three twin_check controls (seq, pattern, segment column).
+- `kill` and `tail_live` run only as release copies in `stream` (the "kill -9 by name" and "tail by name" gates); the workspace-wide debug run in `core` filters every by-name binary out (`BY_NAME_TESTS` includes them, `rh-cli::memory` too).
+- No household golden line moved: its five golden gates (baseline, ladders, two runs, keyframe sizes) are in `golden`, and its three stream-side gates (stream part input, V-SIFT-01, V-SCALE-04) are in `stream`, exactly as on `main`.
+
+### 8.4 Verdicts
+
+GAP-8's bound is met (3 of 3 clean runs with margins of 2.6 to 4.1 MiB). Its second requirement is not: **DEF-2**, the canonical-text count passes the gate in one of four runs. The merge is faithful by gate name. GAP-2 to GAP-7 are unchanged.
