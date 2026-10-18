@@ -1,5 +1,5 @@
 # The annals of House Thorne
-# From the chronicle of ashcombe; templates 0.3.0
+# From the chronicle of ashcombe; templates 0.4.0
 
 ## Before the chronicle began
 House Thorne entered the chronicle with five living members.
@@ -59,8 +59,5 @@ On day 5 of month 5, the second daughter of Hugh Thorne died of natural causes.
 
 ## The thirty-fourth year (Year of Ash)
 On day 6 of month 6, the first son of Hugh Thorne died of natural causes.
-On day 6 of month 6, after the death of the first son of Hugh Thorne, the succession to a sovereign title found no clear heir, and an interregnum began.
+On day 6 of month 6, after the death of the first son of Hugh Thorne, p-aae0 succeeded the first son of Hugh Thorne.
 On day 6 of month 6, with the death of the first son of Hugh Thorne, the house of the first son of Hugh Thorne was extinguished.
-
-## The thirty-fifth year (Year of Ash)
-On day 1 of month 1, after the interregnum, p-aae0 succeeded the first son of Hugh Thorne.
