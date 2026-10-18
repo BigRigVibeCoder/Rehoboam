@@ -9,9 +9,10 @@ workspace crates, of every dependency kind (normal, build and dev):
                      goes with kind "tool". Labels cannot be chosen to pass the law: the seven
                      SPR-001 crates, rh-manifest (SPR-004) and rh-sample (SPR-003) are pinned to
                      their (plane, kind) by name; crates named rh-sys-* are (A, system), and only
-                     they are kind "system"; kind "contract" belongs only to rh-contracts and
-                     rh-contract-* crates. Edges are judged with the pinned labels, not the
-                     declared ones.
+                     they and the crates pinned to (A, system) by name (rh-minds: T1's crate,
+                     REV-MINDS finding 3) are kind "system"; kind "contract" belongs only to
+                     rh-contracts and rh-contract-* crates. Edges are judged with the pinned
+                     labels, not the declared ones.
     V-INSP-03        A system crate depends only on rh-core, rh-ids, rh-events, rh-registry,
                      rh-sample and contract crates, never on another system crate (docs/13 §3;
                      EVO-1; rh-sample by the SPR-003 Architect ruling).
@@ -142,6 +143,11 @@ PINNED_LABELS = MappingProxyType(
         # downstream sifter of plane C.
         "rh-stream": ("A", "machinery"),
         "rh-sifter": ("C", "machinery"),
+        # The T1-A spec PR (REV-MINDS finding 3; Architect ruling, 70%): T1.minds' crate keeps the
+        # name its spec gives it (`crate = "rh-minds"`, which a next version may not change), so it
+        # is a system crate by this pin, not by the rh-sys-* prefix: the pinned-names clause of
+        # _label_problems lets it, and only the names pinned here, declare kind "system".
+        "rh-minds": ("A", "system"),
     }
 )
 PROTOCOL_CRATE = "rh-protocol"
@@ -671,8 +677,14 @@ def _label_problems(crate: Crate) -> list[str]:
     is_system_name = crate.name.startswith(SYSTEM_CRATE_PREFIX)
     if is_system_name and declared != SYSTEM_LABELS:
         problems.append(f"crates named {SYSTEM_CRATE_PREFIX}* are {SYSTEM_LABELS}, not {declared}")
-    if crate.kind == "system" and not is_system_name:
-        problems.append(f'only crates named {SYSTEM_CRATE_PREFIX}* are kind "system"')
+    # The pinned-names clause: a crate pinned to (A, system) by name is a system crate too.
+    if crate.kind == "system" and not (is_system_name or pinned == SYSTEM_LABELS):
+        pinned_systems = sorted(n for n, labels in PINNED_LABELS.items() if labels == SYSTEM_LABELS)
+        named = ", ".join(n for n in pinned_systems if not n.startswith(SYSTEM_CRATE_PREFIX))
+        problems.append(
+            f"only crates named {SYSTEM_CRATE_PREFIX}* and the pinned system crates ({named}) are "
+            'kind "system"'
+        )
     is_contract_name = crate.name == CONTRACT_CRATE or crate.name.startswith(CONTRACT_CRATE_PREFIX)
     if crate.kind == "contract" and not is_contract_name:
         problems.append(

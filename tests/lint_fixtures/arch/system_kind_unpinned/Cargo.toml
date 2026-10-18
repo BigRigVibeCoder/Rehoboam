@@ -1,0 +1,10 @@
+# Positive-control fixture for bin/lint_arch.py (tests/lint_fixtures/README.md); not in the Rehoboam workspace.
+# The T1-A pin (REV-MINDS finding 3): rh-minds declares (A, system) and passes by its pin, while rh-agents, a crate
+# neither named rh-sys-* nor pinned, declares kind "system" to take a system's place: the naming rule refuses it.
+[workspace]
+members = ["rh-minds", "rh-agents"]
+resolver = "3"
+
+# Every plane-A crate inherits these lints (bin/lint_arch.py rule lints, VER-SPR-003-TEST GAP-9).
+[workspace.lints.rust]
+unsafe_code = "forbid"
