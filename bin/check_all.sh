@@ -363,6 +363,39 @@ annals_orphan_control() {
   "$PY" -I specs/annals/selftest_annals_v0.py --check --golden-dir "$planted"
 }
 
+# The instant-log model's vectors (EVO-002; T-00a revision 1, MIN-5): a copy of the committed vectors with the first state
+# hash altered must FAIL --check with STALE:, as the repository's other generated vectors do.
+instant_log_vectors_stale_control() {
+  local planted=target/rendered-fixtures/instant_log_vectors_altered.json
+  mkdir -p target/rendered-fixtures || return 1
+  sed '0,/"state_hash": "/s/"state_hash": "/"state_hash": "planted/' specs/engine/golden/instant_log_vectors_v0.json > "$planted" || return 1
+  "$PY" -I specs/engine/instant_log_model.py --check --vectors "$planted"
+}
+
+# [[observes]] controls (EVO-002; T-00a revision 1, MIN-8): rendered from tests/lint_fixtures/odd_observes/ok with sed, one
+# planted change per rule the three committed FAIL fixtures do not cover. odd_observes_control <case>: why (the why line
+# removed), field (an unknown field), duplicate (the entry twice), own (the system observes its own kind, a verb the
+# odd_emits overlay gives it), phase (the observer binds only a phase before the emitter's), table (a non-table entry).
+# Each must FAIL with its own diagnostic.
+odd_observes_control() {
+  local dir=target/rendered-fixtures/odd_observes/$1 src=tests/lint_fixtures/odd_observes/ok/M3.agriculture.odd.toml
+  local out=target/rendered-fixtures/odd_observes/$1/M3.agriculture.odd.toml
+  local overlay=()
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  case "$1" in
+    why) sed '/^why = "planted: the fixture reads/d' "$src" > "$out" ;;
+    field) sed '/^why = "planted: the fixture reads/a note = "planted"' "$src" > "$out" ;;
+    duplicate) sed '/^why = "planted: the fixture reads/a [[observes]]\nkind = "DEATH"\nowner = "M2.demography"\nwhy = "planted: a second entry"' "$src" > "$out" ;;
+    own) sed -e '/^\[\[observes\]\]$/,/^why = /{s/^kind = "DEATH"$/kind = "X_FIXTURE_FORMED"/;s/^owner = "M2.demography"$/owner = "M3.agriculture"/}' \
+             -e '/^\[scales\]$/i [[emits]]\nkind = "X_FIXTURE_FORMED"\nwhen = "planted"\nroles = ["actor"]\n' "$src" > "$out"
+         overlay=(--overlay tests/lint_fixtures/odd_emits/overlay.toml) ;;
+    phase) sed 's/^phase = "Agenda"$/phase = "Environment"/' "$src" > "$out" ;;
+    table) sed -e '/^\[\[observes\]\]$/,/^why = /d' -e 's/^odd_r = 2$/odd_r = 2\nobserves = ["DEATH"]/' "$src" > "$out" ;;
+    *) echo "odd_observes_control: unknown case $1"; return 1 ;;
+  esac
+  "$PY" -I specs/systems/lint_odd.py --extra-specs "$dir" "${overlay[@]}"
+}
+
 # lint_odd --next controls (SPR-015; REV-SPR-015 NIT-4): rendered from the next M2 spec itself, never copied, so they
 # cannot drift. odd_next_control <case>: algorithm (a frozen S0 step reworded), rng (a purpose planted before
 # death_time), bound (the Registry delta with tfr's upper bound moved). Each must FAIL with its own diagnostic.
@@ -398,7 +431,7 @@ odd_next_control() {
       # the M7 draft beside the M2 one and the lock; and the reviewer's three q5 cases, which linted PASS before R3
       cp "$src" "$lock" "$dir/" || return 1
       case "$1" in
-        submodel) sed '/^name = "exit_hazards"$/{n;s/^summary = "/summary = "PLANTED /}' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        submodel) sed '/^name = "regency"$/{n;s/^summary = "/summary = "PLANTED /}' "$m7" > "$dir/M7.dynasty.odd.toml" ;;   # regency: no record amends it (exit_hazards has one since 0.6.0, F-3)
         command) sed '/^command = "ScheduleDeath"$/,/^why = "/s/^why = "/why = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         coupling) sed '0,/^via = "/s//via = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         source) sed '0,/^source = "/s//source = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
@@ -1266,12 +1299,18 @@ run "lint_odd observes control: an [[observes]] entry naming a Registry verb, it
 run "lint_odd observes positive control: an observed kind that is not a Registry verb must FAIL (EVO-002)" "fail:ERROR M3.agriculture.odd.toml: [[observes]] NOT_A_VERB is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/unknown_kind &&
 run "lint_odd observes positive control: an observed kind whose owner is not its emitter must FAIL (EVO-002)" "fail:[[observes]] DEATH: owner M7.dynasty is not its emitter; the Registry gives DEATH to M2.demography" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/wrong_owner &&
 run "lint_odd observes positive control: an observed kind whose emitter is none of the system's same_instant reads must FAIL (EVO-002)" "fail:[[observes]] DEATH: M3.agriculture reads none of M2.demography's columns at same_instant" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/no_read &&
+run "lint_odd observes positive control: an entry without its why must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH needs a why" odd_observes_control why &&
+run "lint_odd observes positive control: an entry with an unknown field must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH: unknown field(s) ['note']" odd_observes_control field &&
+run "lint_odd observes positive control: a kind observed twice must FAIL (EVO-002; T-00a MIN-8)" "fail:observed kind 'DEATH' is declared twice" odd_observes_control duplicate &&
+run "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] X_FIXTURE_FORMED: a system does not observe its own kind" odd_observes_control own &&
+run "lint_odd observes positive control: an observer bound only before its emitter's phase must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH: M3.agriculture binds no phase at or after one M2.demography binds" odd_observes_control phase &&
+run "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a MIN-8)" "fail:an [[observes]] entry must be a table" odd_observes_control table &&
 run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 45 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
 run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
-run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.exit_hazards.summary changed without an [[amends]] record" odd_next_control submodel &&
+run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.regency.summary changed without an [[amends]] record" odd_next_control submodel &&
 run "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)" "fail:frozen commands.ScheduleDeath.why changed without an [[amends]] record" odd_next_control command &&
 run "lint_odd next positive control: a frozen coupling via changed without a record must FAIL (R3)" "fail:frozen couplings.M6.polity/in.via changed without an [[amends]] record" odd_next_control coupling &&
 run "lint_odd next positive control: a frozen parameter source changed without a record must FAIL (R3)" "fail:frozen params.murder_hazard_base.source changed without an [[amends]] record" odd_next_control source &&
@@ -1458,14 +1497,16 @@ run "control_v1 positive control: a step that pauses one instant past its target
 run "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 §4.5; SPR-027 T-01)" "fail:the stream method table carries control.pace" "$PY" -I specs/stream/selftest_control_v1.py --control pace-on-stream &&
 run "control_v1 positive control: a resume that owes the paused wall time must FAIL (SPR-027 T-01)" "fail:paused time was owed" "$PY" -I specs/stream/selftest_control_v1.py --control paused-time-owed &&
 run "control_v1 positive control: a sixth method on the control table must FAIL the method-table check (REV-SPR-027-control C4; SPR-027 T-01)" "fail:the control method table is not exactly the five methods of" "$PY" -I specs/stream/selftest_control_v1.py --control extra-method &&
-run "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted scenarios; what each step sees in inserted(), exited() and the observed events, the merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume (instant_log_model --check; EVO-002)" "pass:OK:" "$PY" -I specs/engine/instant_log_model.py --check &&
+run "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted scenarios; what each step sees in inserted(), exited() and the observed events, the merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; the transcript and the vectors current (instant_log_model --check; EVO-002)" "pass:OK:" "$PY" -I specs/engine/instant_log_model.py --check &&
 run "instant_log_model positive control: jobs that merge as they finish, so a later job sees its level's peers, must FAIL thread invariance (EVO-002)" "fail:THREAD INVARIANCE: job order" "$PY" -I specs/engine/instant_log_model.py --control peer-visible &&
 run "instant_log_model positive control: an append in place of inserted()'s sorted insert must FAIL the order check (EVO-002)" "fail:ORDER: inserted() is not in ascending row order" "$PY" -I specs/engine/instant_log_model.py --control unsorted-inserted &&
+run "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)" "fail:ORDER: exited() is not in ascending row order" "$PY" -I specs/engine/instant_log_model.py --control unsorted-exited &&
 run "instant_log_model positive control: a log not cleared at the instant's end must FAIL (EVO-002)" "fail:CLEARED: the instant log held" "$PY" -I specs/engine/instant_log_model.py --control log-not-cleared &&
 run "instant_log_model positive control: a state hash that covers the log must FAIL (EVO-002)" "fail:HASH: the state hash of day" "$PY" -I specs/engine/instant_log_model.py --control hash-includes-log &&
 run "instant_log_model positive control: a genealogy index kept only at the instant's end must FAIL (EVO-002)" "fail:GENEALOGY: children(P" "$PY" -I specs/engine/instant_log_model.py --control genealogy-late &&
 run "instant_log_model positive control: the merge-time form resolved against the log at the job's own merge must FAIL visibility (EVO-002)" "fail:VISIBILITY: X2.observer resolved the merge-time form" "$PY" -I specs/engine/instant_log_model.py --control late-watermark &&
 run "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)" "fail:NAMED: world_start_cast ends with" "$PY" -I specs/engine/instant_log_model.py --control cast-demoted &&
+run "instant_log_model positive control: vectors with one state hash altered must FAIL as stale (EVO-002; T-00a MIN-5)" "fail:STALE: target/rendered-fixtures/instant_log_vectors_altered.json differs from the reference" instant_log_vectors_stale_control &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py &&
 run "Chronicle envelope v0: anchored snapshots, typed edges, cause_told, provenance index, byte budget (selftest_envelope; SPR-020)" "pass:ENVELOPE v0: PASS" "$PY" -I specs/chronicle/selftest_envelope.py &&
 run "selftest_envelope positive control: a snapshot that is not the emitter's value at emission must FAIL (V-DATA-08; SPR-020)" "fail:1. anchored snapshots: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control snapshot-drift &&

@@ -38,29 +38,41 @@ records (each job's buffers), never from the log:
 2. VISIBILITY: every step sees exactly what earlier merges of its instant recorded, never its own
    level's (as sets), and every resolution names an id that an earlier merge assigned;
 3. ORDER: (a) and (b) ascending, (c) in id (merge) order;
-4. GENEALOGY: every ``children(p)`` a step reads equals a rebuild over the rows merged before it;
-5. HASH: every instant's state hash equals the plane-A digest, which reads no log and no index;
-6. READERS: removing the pure readers changes no hash;
-7. RESUME: a run resumed from a keyframe cut at an instant's end equals the continuous run;
-8. THREAD INVARIANCE: every permutation of the job order within each level gives the same
+4. SCAN: (b)'s scan of ``person.alive`` runs exactly at the merges whose job wrote it;
+5. GENEALOGY: every ``children(p)`` a step reads equals a rebuild over the rows merged before it;
+6. HASH: every instant's state hash equals the plane-A digest, which reads no log and no index;
+7. READERS: removing the pure readers changes no hash;
+8. RESUME: a run resumed from a keyframe cut at an instant's end equals the continuous run;
+9. THREAD INVARIANCE: every permutation of the job order within each level gives the same
    transcript (log, views, resolutions, refusals, hashes);
-9. EXPECT: each scenario completes, or is refused where and why its script says;
-10. NAMED: where a scenario names its expected named set (M7's world-start pass, X4), the run ends
+10. EXPECT: each scenario completes, or is refused where and why its script says, and its
+    transcript shows what its script says it must (the Year pass sees the pre-death holder, K12);
+11. NAMED: where a scenario names its expected named set (M7's world-start pass, X4), the run ends
     with it: a member of the manifest's cast who meets no other criterion stays named.
 
-Usage:  python -I specs/engine/instant_log_model.py            (self-test only; the golden is
-                                                              neither compared nor written)
-        python -I specs/engine/instant_log_model.py --check    (self-test; exit 1 if the golden
-                                                              differs)
-        python -I specs/engine/instant_log_model.py --check --golden PATH  (check another file)
-        python -I specs/engine/instant_log_model.py --write    (self-test, then rewrite the golden:
-                                                              the only way it is ever written)
+The run also writes vectors, ``specs/engine/golden/instant_log_vectors_v0.json``: per scenario
+its systems (bindings, same-instant edges, observed kinds), its world at creation, every job with
+the view it saw, the actions it buffered (its scripted actions) and what its merge recorded, every
+resolution and refusal, and each instant's log and state hash at its end; an engine test replays the
+actions through stub systems and compares the views and merges (V-DET-22).
+
+Usage:  python -I specs/engine/instant_log_model.py            (self-test only; the golden files
+                                                              are neither compared nor written)
+        python -I specs/engine/instant_log_model.py --check    (self-test; exit 1 if the transcript
+                                                              or the vectors differ)
+        python -I specs/engine/instant_log_model.py --check --golden PATH --vectors PATH
+                                                             (check other files)
+        python -I specs/engine/instant_log_model.py --write    (self-test, then rewrite both files,
+                                                              the only way either is written)
+        python -I specs/engine/instant_log_model.py --emit-vectors  (self-test, then rewrite the
+                                                              vectors only, as --write would)
         python -I specs/engine/instant_log_model.py --control <name>  (a planted fault that must
                                                               FAIL with its own message; the golden
                                                               is never written)
 Controls, each failing its own check: peer-visible (jobs merge as they finish, so a later job sees
 its peers: THREAD INVARIANCE), unsorted-inserted (an append for (a)'s sorted insert: ORDER),
-log-not-cleared (CLEARED), hash-includes-log (HASH), genealogy-late (the index kept only at the
+unsorted-exited (an append for (b)'s sorted insert: ORDER, R9), log-not-cleared (CLEARED),
+hash-includes-log (HASH), genealogy-late (the index kept only at the
 instant's end: GENEALOGY), late-watermark (the merge-time form resolved against the log as it stands
 at the job's own merge, so an earlier job of its level in canonical order is visible to it:
 VISIBILITY, and the same-level refusal is lost: EXPECT), cast-demoted (M7's naming criteria without
@@ -75,6 +87,7 @@ import argparse
 import bisect
 import hashlib
 import itertools
+import json
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -82,7 +95,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 GOLDEN = HERE / "golden" / "instant_log_v0.txt"
+VECTORS = HERE / "golden" / "instant_log_vectors_v0.json"
 FORMAT = "rehoboam/engine/instant-log-model/v0"
+VECTOR_FORMAT = "rehoboam/engine/instant-log-vectors/v0"
 EXIT_OK = 0
 EXIT_STALE = 1
 EXIT_SELFTEST = 2
@@ -122,6 +137,7 @@ TIMERS = "timers"
 BINDINGS = "bindings"
 PEER_VISIBLE = "peer-visible"
 UNSORTED_INSERTED = "unsorted-inserted"
+UNSORTED_EXITED = "unsorted-exited"
 LOG_NOT_CLEARED = "log-not-cleared"
 HASH_INCLUDES_LOG = "hash-includes-log"
 GENEALOGY_LATE = "genealogy-late"
@@ -130,6 +146,7 @@ CAST_DEMOTED = "cast-demoted"
 CONTROLS = (
     PEER_VISIBLE,
     UNSORTED_INSERTED,
+    UNSORTED_EXITED,
     LOG_NOT_CLEARED,
     HASH_INCLUDES_LOG,
     GENEALOGY_LATE,
@@ -444,6 +461,7 @@ class InstantLog:
     inserted: list[tuple[int, int]] = field(default_factory=list)
     exited: list[tuple[int, int]] = field(default_factory=list)
     events: list[Entry] = field(default_factory=list)
+    scans: list[int] = field(default_factory=list)  # the merges at which (b)'s scan ran
 
     def size(self) -> int:
         """How many entries the log holds."""
@@ -477,16 +495,20 @@ class InstantLog:
         else:
             self.inserted.append((pid, merge))
 
-    def scan_exits(self, ledger: dict[int, int], merge: int) -> list[int]:
+    def scan_exits(self, ledger: dict[int, int], merge: int, *, sort: bool) -> list[int]:
         """(b): the ledger rows at ``person.alive = 0`` not yet listed, each by a sorted insert.
 
         Rows enter alive and no row is at 0 when an instant starts (the previous Bookkeeping
         compacted them), so every row found went from 1 to 0 at this merge.
         """
+        self.scans.append(merge)
         listed = {p for p, _ in self.exited}
         new = [p for p, alive in sorted(ledger.items()) if alive == 0 and p not in listed]
         for p in new:
-            bisect.insort(self.exited, (p, merge))
+            if sort:
+                bisect.insort(self.exited, (p, merge))
+            else:
+                self.exited.append((p, merge))
         return new
 
 
@@ -547,6 +569,8 @@ class Script:
     delay: int = 2
     cast: tuple[int, ...] = ()
     criteria: tuple[tuple[int, str], ...] = ()
+    late_births: tuple[tuple[int, int, int], ...] = ()  # (child, mother, father) at M2's drain
+    kin_probe: tuple[int, ...] = ()  # the persons whose children M7's Day/Polity reads each instant
 
 
 @dataclass(frozen=True)
@@ -567,6 +591,7 @@ class Scenario:
     keyframe_after: int = NONE
     readers: tuple[str, ...] = ()
     expect_named: tuple[int, ...] | None = None
+    expect_seen: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -691,6 +716,9 @@ class Run:
     levels: list[tuple[LevelKey, int]] = field(default_factory=list)
     keyframe: World | None = None
     named_at_end: tuple[int, ...] = ()
+    scans: dict[int, list[int]] = field(default_factory=dict)
+    jobs: list[dict[str, object]] = field(default_factory=list)
+    instants: list[dict[str, object]] = field(default_factory=list)
 
     def outcome(self) -> str:
         """``complete``, or ``refused:<reason>``."""
@@ -906,6 +934,7 @@ class Engine:
         self.merge = 0
         self.run.log_at_start.append((day, self.log.size()))
         self.run.rows_at_start[day] = list(self.world.life_course)
+        self.log.scans.clear()
         fired = pulses(day)
         self.line(f"instant day {day} t={day * MINUTES_PER_DAY} pulses={','.join(fired)}")
         for phase in PHASES:
@@ -989,9 +1018,10 @@ class Engine:
         STEPS.get((ctx.job.sid, ctx.job.pulse, ctx.job.phase), no_op)(ctx)
 
     def show_view(self, ctx: Ctx, where: str) -> None:
-        """Record and print what a job saw."""
+        """Record and print what a job saw, and keep its view and actions for the vectors."""
         rec = ctx.record(where)
         self.run.views.append(rec)
+        self.run.jobs.append(job_vector(ctx, rec))
         parts = [f"(a)={list(rec.view.persons('a'))}", f"(b)={list(rec.view.persons('b'))}"]
         for kind in rec.observes:
             seen = " ".join(f"{ref_text(t)}#{e}" for e, _, t in rec.view.of_kind(kind))
@@ -1014,6 +1044,20 @@ class Engine:
         plane_a = plane_a_text(self.world)
         hashed = plane_a + ("\nlog " + self.log.text() if HASH_INCLUDES_LOG in self.flags else "")
         self.run.hashes.append((self.day, digest(hashed), digest(plane_a)))
+        self.run.scans[self.day] = list(self.log.scans)
+        self.run.instants.append(
+            {
+                "day": self.day,
+                "log_at_end": {
+                    "inserted": [p for p, _ in self.log.inserted],
+                    "exited": [p for p, _ in self.log.exited],
+                    "events": [
+                        [k, ref_text(t), ref_text(a), e] for k, t, a, e, _ in self.log.events
+                    ],
+                },
+                "state_hash": digest(hashed),
+            }
+        )
         self.line(f"  end: log {self.log.text()}")
         self.line(f"  end: state_hash {digest(hashed)}; the log is cleared")
         if LOG_NOT_CLEARED not in self.flags:
@@ -1058,7 +1102,8 @@ class Engine:
             self.world.ledger[pid] = 0
         for pid, mother, father in out.inserts:
             self.insert_row(ctx, pid, mother, father)
-        exits = self.log.scan_exits(self.world.ledger, ctx.merge) if out.kills else []
+        sort = UNSORTED_EXITED not in self.flags
+        exits = self.log.scan_exits(self.world.ledger, ctx.merge, sort=sort) if out.kills else []
         if out.inserts and GENEALOGY_LATE not in self.flags:
             self.genealogy.extend(self.world.life_course)
         self.record_merge(ctx, where, assigned, exits)
@@ -1131,9 +1176,18 @@ class Engine:
         self.log.add_inserted(pid, ctx.merge, sort=UNSORTED_INSERTED not in self.flags)
 
     def record_merge(self, ctx: Ctx, where: str, assigned: list[int], exits: list[int]) -> None:
-        """Keep the job's merge for the oracles, and print it."""
+        """Keep the job's merge for the oracles and the vectors, and print it."""
         out = ctx.out
         events = tuple((d.kind, d.target, e) for d, e in zip(out.events, assigned, strict=True))
+        merged = {
+            "event_ids": list(assigned),
+            "inserted": [pid for pid, _, _ in out.inserts],
+            "exits": list(exits),
+        }
+        for job in reversed(self.run.jobs):
+            if (job["day"], job["merge"], job["job"]) == (self.day, ctx.merge, ctx.job.label()):
+                job["merged"] = merged
+                break
         self.run.merges.append(
             JobMerge(
                 self.day,
@@ -1234,7 +1288,8 @@ def m2_marry(ctx: Ctx, timer: Timer) -> None:
 def m2_day_vital(ctx: Ctx) -> None:
     """M2's Day/Vital binding.
 
-    Drain ``ScheduleDeath``; the model-only newborn death and re-entry of two scenarios.
+    Drain ``ScheduleDeath``; the model-only newborn death, re-entry and late birth (a later merge's
+    insert below an earlier one) of three scenarios.
     """
     for command in ctx.take_commands():
         if ctx.alive(command.victim):
@@ -1246,6 +1301,9 @@ def m2_day_vital(ctx: Ctx) -> None:
         ctx.emit(Draft(DEATH, person(ctx.script.newborn_kill), None))
     if ctx.script.reinsert_at == VITAL:
         ctx.insert(ctx.script.reinsert, 0, 0)
+    for child, mother, father in ctx.script.late_births:
+        ctx.insert(child, mother, father)
+        ctx.emit(Draft(BIRTH, person(child), person(mother)))
 
 
 def m2_day_bookkeeping(ctx: Ctx) -> None:
@@ -1270,6 +1328,8 @@ def m7_day_polity(ctx: Ctx) -> None:
     arbitrates by tier then TitleId, and HOUSE_EXTINCT follows the step's successions and crises, in
     ascending HouseId.
     """
+    for parent in ctx.script.kin_probe:
+        ctx.children(parent)
     for child in ctx.inserted():
         father = ctx.father(child)
         if father:
@@ -1508,9 +1568,11 @@ X3_SYS = System(X3, ((DAY, POLITY),), (M2,), (DEATH,))
 def succession_world() -> World:
     """The succession day.
 
-    P3 holds the sovereign T707 and the major T505 and dies; P5, the last of House 11, dies; P8,
-    holder of the minor T303, is murdered through M7's timer and M2's drain; P40 and P30 are born
-    (in that key order, so (a)'s sorted insert matters); P9 marries P7.
+    P5, the last of House 11, and P8, holder of the minor T303, die in M2's timer pass; P3, who
+    holds the sovereign T707 and the major T505, is murdered later in the same Vital through M7's
+    timer and M2's drain, so the later merge's death has the lower PersonId ((b)'s sorted insert
+    across merges, R9); P40 and P30 are born (in that key order, so (a)'s sorted insert within a
+    merge matters); P9 marries P7. P1 and P3 are founder parents (rows written at creation).
     """
     w = founders(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, parents=((2, 0, 1), (3, 0, 1), (4, 0, 3)))
     w.titles = {
@@ -1519,10 +1581,10 @@ def succession_world() -> World:
         303: Title(MINOR, 707, 8),
     }
     w.houses = {11: ((5,), False), 12: ((1, 2, 3, 4), False)}
-    for draft in (death(1, 3), death(1, 5), birth(1, 6, 40), birth(1, 7, 30)):
+    for draft in (death(1, 5), death(1, 8), birth(1, 6, 40), birth(1, 7, 30)):
         w.seed(M2, draft)
     w.seed(M2, TimerDraft(1, VITAL, person(7), "MARRY_TIMER", 9))
-    return w.seed(M7, TimerDraft(1, VITAL, person(8), "MURDER_DUE", 9))
+    return w.seed(M7, TimerDraft(1, VITAL, person(3), "MURDER_DUE", 9))
 
 
 def one_death(pid: int, *others: int) -> Callable[[], World]:
@@ -1546,7 +1608,7 @@ def cast_world() -> World:
 
 
 def newborn_world() -> World:
-    """P50 is born at day 1 to P6 and P2."""
+    """P50 is born at day 1 to P6 and P2 (M2's timer pass)."""
     return founders(2, 6).seed(M2, birth(1, 6, 50))
 
 
@@ -1555,12 +1617,14 @@ NEXT_SYS = System(X2, ((DAY, AGENDA),), (X1,), (X_MARK,))
 SCENARIOS = (
     Scenario(
         "succession_day",
-        "deaths by timer and by drain at three merges, two births, a marriage, M7's successions "
-        "and crises, T1's grief and feud, a keyframe after day 1, the crisis resolved at day 3",
+        "deaths by timer and by drain at two merges, the drain's death below the timer pass's "
+        "(R9), two births, a marriage, M7's successions and crises, T1's grief and feud, a "
+        "founder parent's children read every day, a keyframe after day 1, the crisis resolved "
+        "at day 3",
         (M2_SYS, M7_SYS, S3_SYS, T1_SYS, B1_SYS),
         succession_world,
         (1, 2, 3),
-        Script(fathers=((40, 2), (30, 10)), crossings=((5, 6),), feuds=((9, 8),)),
+        Script(fathers=((40, 2), (30, 10)), crossings=((5, 6),), feuds=((9, 8),), kin_probe=(1, 3)),
         keyframe_after=1,
         readers=(S3, B1),
     ),
@@ -1631,13 +1695,14 @@ SCENARIOS = (
     ),
     Scenario(
         "newborn_dies",
-        "model only (no P1a sender kills a person born in the same instant): P50 is born at "
-        "the timer pass and dies at M2's binding, in both lists; compaction removes its row, "
-        "not its entries",
+        "model only (no P1a sender kills a person born in the same instant, and every P1a "
+        "birth is a timer fire): P50 is born at the timer pass and dies at M2's binding, in both "
+        "lists; P45 is born at M2's binding, a later merge, below P50 ((a)'s sorted insert "
+        "across merges); compaction removes P50's row, not its entries",
         (M2_SYS, S3_SYS, B1_SYS),
         newborn_world,
         (1,),
-        Script(fathers=((50, 2),), newborn_kill=50),
+        Script(fathers=((50, 2),), newborn_kill=50, late_births=((45, 6, 2),)),
     ),
     Scenario(
         "year_start",
@@ -1646,6 +1711,7 @@ SCENARIOS = (
         (M2_SYS, System(M7, ((DAY, VITAL), (YEAR, POLITY), (DAY, POLITY)), (M2,), (DEATH,))),
         year_world,
         (DAYS_PER_YEAR,),
+        expect_seen=("K12: T707 is still held by P3, dead this instant, for this Year pass",),
     ),
     Scenario(
         "world_start_cast",
@@ -1660,6 +1726,108 @@ SCENARIOS = (
         expect_named=(1, 2),
     ),
 )
+
+
+# ----------------------------------------------------------------------------- vectors
+
+
+def opt_ref(ref: Ref | None) -> str | None:
+    """An entity for the vectors: ``"P5"``, ``"T707"``, or null."""
+    return None if ref is None else ref_text(ref)
+
+
+def job_vector(ctx: Ctx, rec: ViewRecord) -> dict[str, object]:
+    """One job for the vectors: where it ran, what it saw, and what it buffered (its actions)."""
+    out = ctx.out
+    view = rec.view
+    return {
+        "day": rec.day,
+        "merge": rec.merge,
+        "where": rec.where,
+        "job": rec.job,
+        "view": {
+            "inserted": list(view.persons("a")),
+            "exited": list(view.persons("b")),
+            "events": {
+                kind: [[opt_ref(t), opt_ref(a), e] for e, a, t in view.of_kind(kind)]
+                for kind in rec.observes
+            },
+            "children": [[p, list(kids)] for p, kids in rec.children],
+        },
+        "actions": {
+            "events": [
+                {
+                    "kind": d.kind,
+                    "target": opt_ref(d.target),
+                    "actor": opt_ref(d.actor),
+                    "payload": d.payload,
+                    "causes": [c.text() for c in d.causes],
+                }
+                for d in out.events
+            ],
+            "timers": [
+                [
+                    t.day,
+                    t.phase,
+                    ref_text(t.entity),
+                    t.kind,
+                    t.payload,
+                    None if t.cause is None else t.cause.text(),
+                ]
+                for t in out.timers
+            ],
+            "commands": [[c.owner, c.kind, c.victim, c.culprit] for c in out.commands],
+            "taken": [[c.owner, c.kind, c.victim, c.culprit] for c in out.taken],
+            "kills": list(out.kills),
+            "inserts": [list(r) for r in out.inserts],
+            "named": [[pid, v] for pid, v in sorted(out.named.items())],
+        },
+    }
+
+
+def world_vector(world: World) -> dict[str, object]:
+    """A world at creation, for the vectors."""
+    return {
+        "ledger": [[pid, alive] for pid, alive in sorted(world.ledger.items())],
+        "life_course": [list(r) for r in world.life_course],
+        "titles": [
+            [tid, x.tier, x.liege, x.holder, x.heir, x.resolve_to, x.state]
+            for tid, x in sorted(world.titles.items())
+        ],
+        "houses": [[hid, list(m), x] for hid, (m, x) in sorted(world.houses.items())],
+        "named": [[pid, v] for pid, v in sorted(world.named.items())],
+        "agenda": [
+            [t.day, t.phase, ref_text(t.entity), t.seq, t.owner, t.kind, t.payload]
+            for t in sorted(world.agenda, key=Timer.key)
+        ],
+    }
+
+
+def scenario_vector(sc: Scenario, run: Run) -> dict[str, object]:
+    """One scenario's vectors.
+
+    Its registration, its world, each job's view, actions and merge, each resolution and refusal,
+    and each instant's log and state hash at its end.
+    """
+    return {
+        "name": sc.name,
+        "days": list(sc.days),
+        "systems": [
+            {
+                "id": s.sid,
+                "bindings": [[pu, ph] for pu, ph in s.bindings],
+                "same_instant_after": list(s.after),
+                "observes": list(s.observes),
+            }
+            for s in sc.systems
+        ],
+        "world": world_vector(sc.world()),
+        "jobs": run.jobs,
+        "resolutions": [[r.day, r.merge, r.sid, r.cause.text(), r.eid] for r in run.resolutions],
+        "instants": run.instants,
+        "outcome": run.outcome(),
+        "refusal": None if run.refusal is None else run.refusal[1],
+    }
 
 
 # ----------------------------------------------------------------------------- runs and checks
@@ -1756,6 +1924,19 @@ def check_visibility(run: Run) -> list[str]:
     return errs
 
 
+def check_scan(run: Run) -> list[str]:
+    """4. (b)'s scan of ``person.alive`` ran exactly at the merges whose job wrote it."""
+    errs = []
+    for day, scans in run.scans.items():
+        want = sorted({jm.merge for jm in run.merges if jm.day == day and jm.killed})
+        if sorted(set(scans)) != want:
+            errs.append(
+                f"SCAN: on day {day} (b)'s scan ran at merges {sorted(set(scans))}; only the "
+                f"merges whose job wrote person.alive, {want}, may run it (SPR-038's written flag)"
+            )
+    return errs
+
+
 def check_order(run: Run) -> list[str]:
     """3. (a) and (b) ascending without repeats; (c) in id order."""
     errs = []
@@ -1773,7 +1954,7 @@ def check_order(run: Run) -> list[str]:
 
 
 def check_genealogy(run: Run) -> list[str]:
-    """4. Every children(p) a step read equals a rebuild over the rows merged before it."""
+    """5. Every children(p) a step read equals a rebuild over the rows merged before it."""
     errs = []
     for v in run.views:
         rows = run.rows_at_start[v.day] + [
@@ -1790,7 +1971,7 @@ def check_genealogy(run: Run) -> list[str]:
 
 
 def check_hash(run: Run) -> list[str]:
-    """5. The state hash is plane A's digest: no log, no index."""
+    """6. The state hash is plane A's digest: no log, no index."""
     return [
         f"HASH: the state hash of day {d} covers the instant log ({h} where plane A alone "
         f"gives {a})"
@@ -1809,7 +1990,7 @@ class Verdict:
 
 
 def check_readers(sc: Scenario, run: Run, flags: frozenset[str]) -> tuple[list[str], str]:
-    """6. Removing the pure readers changes no hash."""
+    """7. Removing the pure readers changes no hash."""
     if not sc.readers:
         return [], ""
     bare = replace(sc, systems=tuple(s for s in sc.systems if s.sid not in sc.readers))
@@ -1820,7 +2001,7 @@ def check_readers(sc: Scenario, run: Run, flags: frozenset[str]) -> tuple[list[s
 
 
 def check_resume(sc: Scenario, run: Run, flags: frozenset[str]) -> tuple[list[str], str]:
-    """7. A run resumed from the keyframe cut after day k equals the continuous run."""
+    """8. A run resumed from the keyframe cut after day k equals the continuous run."""
     if run.keyframe is None:
         return [], ""
     tail = tuple(d for d in sc.days if d > sc.keyframe_after)
@@ -1835,7 +2016,7 @@ def check_resume(sc: Scenario, run: Run, flags: frozenset[str]) -> tuple[list[st
 
 
 def check_threads(sc: Scenario, run: Run, flags: frozenset[str]) -> tuple[list[str], int]:
-    """8.
+    """9.
 
     Every permutation of every multi-job level's execution order gives the same transcript.
     """
@@ -1856,7 +2037,7 @@ def check_threads(sc: Scenario, run: Run, flags: frozenset[str]) -> tuple[list[s
 
 def verdict(sc: Scenario, run: Run, flags: frozenset[str]) -> Verdict:
     """Every check of one scenario."""
-    errs = check_cleared(run) + check_visibility(run) + check_order(run)
+    errs = check_cleared(run) + check_visibility(run) + check_order(run) + check_scan(run)
     errs += check_genealogy(run) + check_hash(run)
     readers, readers_note = check_readers(sc, run, flags)
     resume, resume_note = check_resume(sc, run, flags)
@@ -1864,6 +2045,11 @@ def verdict(sc: Scenario, run: Run, flags: frozenset[str]) -> Verdict:
     errs += readers + resume + threads
     if run.outcome() != sc.expect:
         errs.append(f"EXPECT: {sc.name} ended {run.outcome()}; its script expects {sc.expect}")
+    errs += [
+        f"EXPECT: {sc.name}'s transcript lacks {seen!r}"
+        for seen in sc.expect_seen
+        if not any(seen in line for line in run.lines)
+    ]
     if sc.expect_named is not None and run.named_at_end != sc.expect_named:
         errs.append(
             f"NAMED: {sc.name} ends with {list(run.named_at_end)} named where its script expects "
@@ -1873,14 +2059,16 @@ def verdict(sc: Scenario, run: Run, flags: frozenset[str]) -> Verdict:
     return Verdict(errs, count, notes)
 
 
-def self_test(control: str | None) -> tuple[list[str], str]:
-    """Run every scenario and its checks; return the report and the golden text."""
+def self_test(control: str | None) -> tuple[list[str], str, str]:
+    """Run every scenario and its checks; return the report, the golden text and the vectors."""
     flags = frozenset({control} if control else set())
     report: list[str] = []
     golden = [f"# {FORMAT}", "# Generated by specs/engine/instant_log_model.py; never typed."]
+    vectors: list[dict[str, object]] = []
     failed = False
     for sc in SCENARIOS:
         run = run_scenario(sc, flags)
+        vectors.append(scenario_vector(sc, run))
         v = verdict(sc, run, flags)
         failed |= bool(v.errors)
         status = "FAIL" if v.errors else "PASS"
@@ -1891,7 +2079,12 @@ def self_test(control: str | None) -> tuple[list[str], str]:
         report.extend(f"  {e}" for e in v.errors)
         golden += scenario_block(sc, run, v)
     report.append(f"INSTANT LOG MODEL v0: {'FAIL' if failed else 'PASS'}")
-    return report, "\n".join(golden) + "\n"
+    doc = {
+        "format": VECTOR_FORMAT,
+        "generated_by": "specs/engine/instant_log_model.py --write or --emit-vectors; never typed",
+        "scenarios": vectors,
+    }
+    return report, "\n".join(golden) + "\n", json.dumps(doc, indent=1) + "\n"
 
 
 def scenario_block(sc: Scenario, run: Run, v: Verdict) -> list[str]:
@@ -1914,7 +2107,7 @@ def scenario_block(sc: Scenario, run: Run, v: Verdict) -> list[str]:
 
 
 def check_golden(golden: Path, text: str) -> int:
-    """Compare the rendered golden text with a file."""
+    """Compare a rendered file (the transcript or the vectors) with the committed one."""
     try:
         current = golden.read_text(encoding="utf-8")
     except OSError as e:
@@ -1927,18 +2120,31 @@ def check_golden(golden: Path, text: str) -> int:
     return EXIT_OK
 
 
+def write(path: Path, text: str) -> None:
+    """Write one generated file (never typed)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    print(f"wrote {path} ({text.count(chr(10))} lines)")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the self-test, then write or check the golden file (never with --control)."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="fail if the committed file is stale")
-    mode.add_argument("--write", action="store_true", help="rewrite the golden file (never typed)")
-    parser.add_argument("--golden", type=Path, default=GOLDEN, help="the file to write or check")
+    mode.add_argument("--write", action="store_true", help="rewrite both files (never typed)")
+    mode.add_argument("--emit-vectors", action="store_true", help="rewrite the vectors file only")
+    parser.add_argument(
+        "--golden", type=Path, default=GOLDEN, help="the transcript to write or check"
+    )
+    parser.add_argument(
+        "--vectors", type=Path, default=VECTORS, help="the vectors to write or check"
+    )
     parser.add_argument("--control", choices=CONTROLS, help="a planted fault that must FAIL")
     args = parser.parse_args(argv)
-    if args.control and args.write:
-        parser.error("--control never writes the golden file")
-    report, text = self_test(args.control)
+    if args.control and (args.write or args.emit_vectors):
+        parser.error("--control never writes the golden file or the vectors")
+    report, text, vectors = self_test(args.control)
     print("\n".join(report))
     if report[-1].endswith("FAIL"):
         return EXIT_SELFTEST
@@ -1946,13 +2152,17 @@ def main(argv: list[str] | None = None) -> int:
         print("CONTROL PASSED: the planted fault was not detected", file=sys.stderr)
         return EXIT_SELFTEST
     if args.check:
-        return check_golden(args.golden, text)
-    if not args.write:
-        print("self-test only: the golden file is neither compared (--check) nor written (--write)")
+        return max(check_golden(args.golden, text), check_golden(args.vectors, vectors))
+    if args.emit_vectors:
+        write(args.vectors, vectors)
         return EXIT_OK
-    args.golden.parent.mkdir(parents=True, exist_ok=True)
-    args.golden.write_text(text, encoding="utf-8")
-    print(f"wrote {args.golden} ({text.count(chr(10))} lines)")
+    if not args.write:
+        print(
+            "self-test only: the golden files are neither compared (--check) nor written (--write)"
+        )
+        return EXIT_OK
+    write(args.golden, text)
+    write(args.vectors, vectors)
     return EXIT_OK
 
 

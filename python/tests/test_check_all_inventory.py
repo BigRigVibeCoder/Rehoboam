@@ -201,8 +201,8 @@ REQUIRED_GATES = (
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
     "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted "
     "scenarios; what each step sees in inserted(), exited() and the observed events, the "
-    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume "
-    "(instant_log_model --check; EVO-002)",
+    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; "
+    "the transcript and the vectors current (instant_log_model --check; EVO-002)",
     "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; "
     "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
@@ -491,12 +491,16 @@ REQUIRED_GATES = (
     "instant_log_model positive control: a log not cleared at the instant's end must FAIL "
     "(EVO-002)",
     "instant_log_model positive control: a state hash that covers the log must FAIL (EVO-002)",
+    "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL "
+    "the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)",
     "instant_log_model positive control: an append in place of inserted()'s sorted insert must "
     "FAIL the order check (EVO-002)",
     "instant_log_model positive control: jobs that merge as they finish, so a later job sees its "
     "level's peers, must FAIL thread invariance (EVO-002)",
     "instant_log_model positive control: the merge-time form resolved against the log at the job's "
     "own merge must FAIL visibility (EVO-002)",
+    "instant_log_model positive control: vectors with one state hash altered must FAIL as stale "
+    "(EVO-002; T-00a MIN-5)",
     "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals "
     "the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 "
     "T-09; GOV-002 tier 15; wire_v1.md §11)",
@@ -721,12 +725,22 @@ REQUIRED_GATES = (
     "to minors, must FAIL (R3)",
     "lint_odd observes control: an [[observes]] entry naming a Registry verb, its emitter and a "
     "same_instant read of the emitter passes (EVO-002)",
+    "lint_odd observes positive control: a kind observed twice must FAIL (EVO-002; T-00a MIN-8)",
+    "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry with an unknown field must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry without its why must FAIL (EVO-002; T-00a MIN-8)",
     "lint_odd observes positive control: an observed kind that is not a Registry verb must FAIL "
     "(EVO-002)",
     "lint_odd observes positive control: an observed kind whose emitter is none of the system's "
     "same_instant reads must FAIL (EVO-002)",
     "lint_odd observes positive control: an observed kind whose owner is not its emitter must FAIL "
     "(EVO-002)",
+    "lint_odd observes positive control: an observer bound only before its emitter's phase must "
+    "FAIL (EVO-002; T-00a MIN-8)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
