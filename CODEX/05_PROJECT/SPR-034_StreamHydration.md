@@ -2,7 +2,7 @@
 id: SPR-034
 title: "Stream ingestion and plane-B procedural hydration: the IF-0 reader with catch-up from sealed segments (local, or over SSH from adjutant), the stream-derived view state and its digest, building grammar v0 from a written spec with a Python reference, and V-R3D-13 on two digests across runs, threads, builds and rewind by re-reading"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, observability, stream]

@@ -2,7 +2,7 @@
 id: SPR-023
 title: "Minds v0, part a: rh-minds, named actors promoted by M7's criteria, HEXACO traits and ambition, relations and opinion modifiers (P3.2a, part a)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
