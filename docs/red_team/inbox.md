@@ -244,3 +244,16 @@ An advisory ideation note relayed by the director on 2026-10-18. It is not a req
 | N23 | Mechanical, or only visual? | The gate must decide each asset's side. If an asset changes an outcome (a mill raises the grain a harvest yields, a smith equips a levy, a quarry feeds a keep's repair), it is a plane-A column. It is owned by one system (M3 or M4), its kinds are Registry entries rather than free strings, and it is written only through that system's rules. If it only shows, it is plane-B hydration that the viewer derives deterministically from the settlement seed, the era and the state it already reads, with no engine change at all | ADR-0010; ADR-0024; ADR-0036 §2; `05.1` §2 (single-writer columns) |
 | N24 | Plane | The viewer's rendering of a waterwheel or forge is plane B, hydration under V-R3D-13; plane C is the narrative camera director (PRJ-003 §2). Visual-only assets can be prototyped in the viewer lane (V.2) without waiting for P1b; mechanical ones wait for their owning system's spec | PRJ-003 §2, §4; `docs/11` viewer lane V.2 |
 | N25 | Sources | "Real medieval assets" should be calibrated, not assumed. Where an asset carries a mechanical effect, the gate needs sources for its rates (mill yields, the density of smiths, the spacing of quarries) before it enters a band or a spec, as for batch 06 (N18) | `research/reading_list.md`; R12 |
+
+---
+
+## Batch 09 (2026-10-18): Demography Traps, G1a Performance Crucible & Epistemic Horizon (for Gate G1a)
+
+From the red team's batch-09 dossier (`RT-2026-10-18-batch-09-dossier.md`) on `arch/red-team-batch-04` with executable probe `tests/probes/probe_fertility_adversarial_traps.py` (B09-01).
+
+| Item | Proposal | Proposed Target |
+|---|---|---|
+| 1. Adversarial Demography Traps (RT-039) | Strict boundary enforcement for F9 `apply_birth` in `SPR-015`: childbirth maternal death, sole-member household immediate re-open (`INV-M2-09`), compacted mother clean drops, and S12 newborn-aware extinction shield | `SPR-015` verification |
+| 2. G1a 60-Second Crucible (RT-040) | Leverage `type Index` in `rh-core` to maintain an active susceptible woman set, preventing $3.6 \times 10^7$ unindexed iterations during 1,000-year runs in `kingdom_10k` | `SPR-015` / `SPR-038b` / `SPR-030` |
+| 3. Feudal Epistemic Horizon (RT-041) | Route sovereign succession interregnum crises (`K2`) through event envelope latency rather than instantaneous global omniscience | Wave 7 (`SPR-021` / `SPR-022`) & G1a |
+
