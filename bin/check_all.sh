@@ -363,6 +363,39 @@ annals_orphan_control() {
   "$PY" -I specs/annals/selftest_annals_v0.py --check --golden-dir "$planted"
 }
 
+# The instant-log model's vectors (EVO-002; T-00a revision 1, MIN-5): a copy of the committed vectors with the first state
+# hash altered must FAIL --check with STALE:, as the repository's other generated vectors do.
+instant_log_vectors_stale_control() {
+  local planted=target/rendered-fixtures/instant_log_vectors_altered.json
+  mkdir -p target/rendered-fixtures || return 1
+  sed '0,/"state_hash": "/s/"state_hash": "/"state_hash": "planted/' specs/engine/golden/instant_log_vectors_v0.json > "$planted" || return 1
+  "$PY" -I specs/engine/instant_log_model.py --check --vectors "$planted"
+}
+
+# [[observes]] controls (EVO-002; T-00a revision 1, MIN-8): rendered from tests/lint_fixtures/odd_observes/ok with sed, one
+# planted change per rule the three committed FAIL fixtures do not cover. odd_observes_control <case>: why (the why line
+# removed), field (an unknown field), duplicate (the entry twice), own (the system observes its own kind, a verb the
+# odd_emits overlay gives it), phase (the observer binds only a phase before the emitter's), table (a non-table entry).
+# Each must FAIL with its own diagnostic.
+odd_observes_control() {
+  local dir=target/rendered-fixtures/odd_observes/$1 src=tests/lint_fixtures/odd_observes/ok/M3.agriculture.odd.toml
+  local out=target/rendered-fixtures/odd_observes/$1/M3.agriculture.odd.toml
+  local overlay=()
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  case "$1" in
+    why) sed '/^why = "planted: the fixture reads/d' "$src" > "$out" ;;
+    field) sed '/^why = "planted: the fixture reads/a note = "planted"' "$src" > "$out" ;;
+    duplicate) sed '/^why = "planted: the fixture reads/a [[observes]]\nkind = "DEATH"\nowner = "M2.demography"\nwhy = "planted: a second entry"' "$src" > "$out" ;;
+    own) sed -e '/^\[\[observes\]\]$/,/^why = /{s/^kind = "DEATH"$/kind = "X_FIXTURE_FORMED"/;s/^owner = "M2.demography"$/owner = "M3.agriculture"/}' \
+             -e '/^\[scales\]$/i [[emits]]\nkind = "X_FIXTURE_FORMED"\nwhen = "planted"\nroles = ["actor"]\n' "$src" > "$out"
+         overlay=(--overlay tests/lint_fixtures/odd_emits/overlay.toml) ;;
+    phase) sed 's/^phase = "Agenda"$/phase = "Environment"/' "$src" > "$out" ;;
+    table) sed -e '/^\[\[observes\]\]$/,/^why = /d' -e 's/^odd_r = 2$/odd_r = 2\nobserves = ["DEATH"]/' "$src" > "$out" ;;
+    *) echo "odd_observes_control: unknown case $1"; return 1 ;;
+  esac
+  "$PY" -I specs/systems/lint_odd.py --extra-specs "$dir" "${overlay[@]}"
+}
+
 # annals_fold_control (annals_v0.md §9.1; AN-0): the committed solitary chronicle cut by the reference into its two
 # sim-year segments, which must fold, then with the second #segment line's digest zeroed, which must FAIL the fold.
 annals_fold_control() {
@@ -410,7 +443,7 @@ odd_next_control() {
       # the M7 draft beside the M2 one and the lock; and the reviewer's three q5 cases, which linted PASS before R3
       cp "$src" "$lock" "$dir/" || return 1
       case "$1" in
-        submodel) sed '/^name = "exit_hazards"$/{n;s/^summary = "/summary = "PLANTED /}' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
+        submodel) sed '/^name = "regency"$/{n;s/^summary = "/summary = "PLANTED /}' "$m7" > "$dir/M7.dynasty.odd.toml" ;;   # regency: no record amends it (exit_hazards has one since 0.6.0, F-3)
         command) sed '/^command = "ScheduleDeath"$/,/^why = "/s/^why = "/why = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         coupling) sed '0,/^via = "/s//via = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
         source) sed '0,/^source = "/s//source = "PLANTED /' "$m7" > "$dir/M7.dynasty.odd.toml" ;;
@@ -432,10 +465,13 @@ odd_next_control() {
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     clean)
       # REV-SPR-020 R26 (NIT-7): a next version that amends nothing (the frozen T1 as a draft, version bumped) lints
-      # and plants nothing in the lock; SPR-019's next M7 needs this path
-      sed -e 's/^status = "frozen"/status = "draft"/' -e 's/^spec_version = "0.3.3"/spec_version = "0.4.0"/' specs/systems/T1.minds.odd.toml > "$dir/T1.minds.odd.toml" || return 1
-      grep -q '^spec_version = "0.4.0"' "$dir/T1.minds.odd.toml" || { echo "control not rendered: T1 is not 0.3.3"; return 1; }
-      cp "$lock" "$dir/" || return 1
+      # and plants nothing in the lock; SPR-019's next M7 needs this path. The bump is version-agnostic (99.0.0 is above
+      # any frozen T1; the T1-A review's N6). The real T1 draft's lock section (T1-A) belongs to that draft, not to this
+      # synthetic one, so the copy of the lock leaves it out.
+      sed -e 's/^status = "frozen"/status = "draft"/' -e 's/^spec_version = "[0-9.]*"/spec_version = "99.0.0"/' specs/systems/T1.minds.odd.toml > "$dir/T1.minds.odd.toml" || return 1
+      grep -q '^spec_version = "99.0.0"' "$dir/T1.minds.odd.toml" || { echo "control not rendered: no spec_version line in the frozen T1"; return 1; }
+      sed '/^\[amendments\."T1\.minds"\]$/,/^$/d' "$lock" > "$dir/amendments.lock.toml" || return 1
+      if grep -q '^\[amendments\."T1\.minds"\]' "$dir/amendments.lock.toml"; then echo "control not rendered: the T1 draft's lock section remains"; return 1; fi
       "$PY" -I specs/systems/lint_odd.py --next "$dir" ;;
     *) echo "odd_next_control: unknown case $1"; return 1 ;;
   esac
@@ -470,6 +506,23 @@ m2_f1_mortality_stale_control() {
   sed 's/K = 27498377919,/K = 27498377920,/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
   grep -q 'K = 27498377920,' "$planted" || { echo "control not planted: K = 27498377919 not found in the next M2 spec"; return 1; }
   "$PY" -I specs/demography/selftest_m2_f1_mortality.py --spec "$planted"
+}
+
+# Minds v0 part A reference controls (T1-A): the committed golden file with one ambition off by one, and the next T1
+# spec with one check value off by one; the exact reference must FAIL on each (selftest_minds_v0.py --golden, --spec).
+minds_golden_control() {
+  local planted=target/rendered-fixtures/minds_v0_altered_golden.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/ ambition=12666 named=1 break=calm$/s// ambition=12667 named=1 break=calm/' specs/minds/golden/minds_v0.txt > "$planted" || return 1
+  grep -q ' ambition=12667 named=1' "$planted" || { echo "control not planted: no 'ambition=12666 named=1' line in the minds golden file"; return 1; }
+  "$PY" -I specs/minds/selftest_minds_v0.py --check --golden "$planted"
+}
+minds_stale_control() {
+  local planted=target/rendered-fixtures/minds_stale_check_value.odd.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/sigma_q16 = 2479700524,/sigma_q16 = 2479700525,/' specs/systems/next/T1.minds.odd.toml > "$planted" || return 1
+  grep -q 'sigma_q16 = 2479700525,' "$planted" || { echo "control not planted: sigma_q16 = 2479700524 not found in the next T1 spec"; return 1; }
+  "$PY" -I specs/minds/selftest_minds_v0.py --spec "$planted"
 }
 
 # Worldgen-lite golden control (SPR-018): the committed golden outputs with one land count off by one; the exact reference
@@ -1172,6 +1225,8 @@ run "lint_arch positive control: missing plane/kind must FAIL" "fail:VIOLATION [
 run "lint_arch positive control: relabelled rh-snapshot must FAIL" "fail:VIOLATION [metadata] rh-snapshot: declares (plane, kind) = ('A', 'contract'), but rh-snapshot is pinned" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_snapshot/Cargo.toml &&
 run "lint_arch positive control: kind contract outside rh-contract-* must FAIL" 'fail:VIOLATION [metadata] rh-shadow: kind "contract" belongs only to' "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/contract_name/Cargo.toml &&
 run "lint_arch positive control: rh-sample relabelled out of plane A must FAIL (SPR-003 T-00)" "fail:VIOLATION [metadata] rh-sample: declares (plane, kind) = ('tool', 'tool'), but rh-sample is pinned" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_sample/Cargo.toml &&
+run "lint_arch positive control: a crate neither named rh-sys-* nor pinned declaring kind system must FAIL, beside rh-minds passing by its pin (T1-A; REV-MINDS finding 3)" 'fail:VIOLATION [metadata] rh-agents: only crates named rh-sys-* and the pinned system crates (rh-minds) are kind "system"' "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_kind_unpinned/Cargo.toml &&
+run "lint_arch positive control: rh-minds relabelled out of kind system must FAIL (T1-A; REV-MINDS finding 3)" "fail:VIOLATION [metadata] rh-minds: declares (plane, kind) = ('A', 'machinery'), but rh-minds is pinned to ('A', 'system')" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_minds/Cargo.toml &&
 run "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)" pass "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_sample/Cargo.toml &&
 run "lint_arch positive control: plane A -> rand must FAIL" "fail:VIOLATION [rng-crate] rh-core: plane-A crate depends on rand;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_rng_crate/Cargo.toml &&
 run "lint_arch positive control: rand_chacha outside rh-ids must FAIL" "fail:VIOLATION [rng-crate] rh-core: depends on rand_chacha;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/rng_building_block_outside_ids/Cargo.toml &&
@@ -1274,12 +1329,22 @@ run "lint_odd neutral positive control: an enum neutral outside the column's cod
 run "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)" "pass:WARN  M3.agriculture.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
 run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
 run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
+run "lint_odd observes control: an [[observes]] entry naming a Registry verb, its emitter and a same_instant read of the emitter passes (EVO-002)" "pass:PASS: 9 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/ok &&
+run "lint_odd observes positive control: an observed kind that is not a Registry verb must FAIL (EVO-002)" "fail:ERROR M3.agriculture.odd.toml: [[observes]] NOT_A_VERB is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/unknown_kind &&
+run "lint_odd observes positive control: an observed kind whose owner is not its emitter must FAIL (EVO-002)" "fail:[[observes]] DEATH: owner M7.dynasty is not its emitter; the Registry gives DEATH to M2.demography" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/wrong_owner &&
+run "lint_odd observes positive control: an observed kind whose emitter is none of the system's same_instant reads must FAIL (EVO-002)" "fail:[[observes]] DEATH: M3.agriculture reads none of M2.demography's columns at same_instant" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/no_read &&
+run "lint_odd observes positive control: an entry without its why must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH needs a why" odd_observes_control why &&
+run "lint_odd observes positive control: an entry with an unknown field must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH: unknown field(s) ['note']" odd_observes_control field &&
+run "lint_odd observes positive control: a kind observed twice must FAIL (EVO-002; T-00a MIN-8)" "fail:observed kind 'DEATH' is declared twice" odd_observes_control duplicate &&
+run "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] X_FIXTURE_FORMED: a system does not observe its own kind" odd_observes_control own &&
+run "lint_odd observes positive control: an observer bound only before its emitter's phase must FAIL (EVO-002; T-00a MIN-8)" "fail:[[observes]] DEATH: M3.agriculture binds no phase at or after one M2.demography binds" odd_observes_control phase &&
+run "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a MIN-8)" "fail:an [[observes]] entry must be a table" odd_observes_control table &&
 run "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and preserves it (lint_odd --next; SPR-015)" "pass:self-check (next of M2.demography): 46 planted changes rejected (3 of them by the amendments lock), 45 amendments recorded and locked, the clean next version kept" "$PY" -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml &&
 run "lint_odd next positive control: a next version that changes a frozen algorithm step must FAIL (SPR-015)" "fail:frozen [algorithm.mortality_rung0] changed" odd_next_control algorithm &&
 run "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)" "fail:frozen RNG purpose death_time must stay at position 0" odd_next_control rng &&
 run "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound must FAIL (SPR-015)" "fail:replacement changes or drops parameter tfr bounds" odd_next_control bound &&
 run "lint_odd next positive control: an amendment whose text changed since the committed lock must FAIL (SPR-015)" "fail:changed its text since amendments.lock.toml" odd_next_control lock &&
-run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.exit_hazards.summary changed without an [[amends]] record" odd_next_control submodel &&
+run "lint_odd next positive control: a frozen submodel summary changed without a record must FAIL (deny by default; PR #79 review R3)" "fail:frozen submodels.regency.summary changed without an [[amends]] record" odd_next_control submodel &&
 run "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)" "fail:frozen commands.ScheduleDeath.why changed without an [[amends]] record" odd_next_control command &&
 run "lint_odd next positive control: a frozen coupling via changed without a record must FAIL (R3)" "fail:frozen couplings.M6.polity/in.via changed without an [[amends]] record" odd_next_control coupling &&
 run "lint_odd next positive control: a frozen parameter source changed without a record must FAIL (R3)" "fail:frozen params.murder_hazard_base.source changed without an [[amends]] record" odd_next_control source &&
@@ -1420,6 +1485,18 @@ run "gen_m2_draws_reference positive control: one altered death line must FAIL (
 run "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)" "pass:M2 F1 FERTILITY AND PARTNERING: PASS" "$PY" -I specs/demography/selftest_m2_f1.py &&
 run "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)" "fail:M2 F1 FERTILITY AND PARTNERING: FAIL" m2_f1_stale_control &&
 run "M2 F1 reference positive control: the elite read reverted to the woman's own row must FAIL F6's couple read (D56 (e); BCK-002 A-62)" "fail:9. F6 table choice, the couple read: FAIL" "$PY" -I specs/demography/selftest_m2_f1.py --control woman-row &&
+run "Golden vectors: minds v0 part A, the A-steps of T1 0.4.0, exact reference and golden file (selftest_minds_v0 --check; T1-A)" "pass:MINDS V0 (A-STEPS): PASS" "$PY" -I specs/minds/selftest_minds_v0.py --check &&
+run "minds v0 positive control: an altered golden line must FAIL (T1-A)" "fail:STALE:" minds_golden_control &&
+run "minds v0 positive control: a stale check value in the next T1 spec must FAIL (T1-A)" "fail:check_values.sigma_q16 = 2479700525" minds_stale_control &&
+run "minds v0 positive control: a re-promotion that redraws the traits must FAIL INV-T1-05 (REV-P1a MAJ-9; T1-A)" "fail:CONTROL redraw-on-repromote: FAIL for its own reason (INV-T1-05 (immutable))" "$PY" -I specs/minds/selftest_minds_v0.py --control redraw-on-repromote &&
+run "minds v0 positive control: a Demote that cancels an owed DEATH_DUE or MARRY_DUE must FAIL A7 (REV-MINDS M6; T1-A)" "fail:CONTROL demote-cancels-death-due: FAIL for its own reason (A7 (owed outcome))" "$PY" -I specs/minds/selftest_minds_v0.py --control demote-cancels-death-due &&
+run "minds v0 positive control: an index lookup that misses rows its own binding appended must FAIL A2 (REV-MINDS M7; T1-A)" "fail:CONTROL stale-index: FAIL for its own reason (A2 (index freshness))" "$PY" -I specs/minds/selftest_minds_v0.py --control stale-index &&
+run "minds v0 positive control: a trait draw keyed at the wrong instant must FAIL INV-T1-05 (A3; T1-A)" "fail:CONTROL trait-key-wrong-t: FAIL for its own reason (INV-T1-05 (key))" "$PY" -I specs/minds/selftest_minds_v0.py --control trait-key-wrong-t &&
+run "minds v0 positive control: genesis naming more than the manifest's cast must FAIL INV-T1-11 (Architect ruling X4; T1-A)" "fail:CONTROL world-start-genesis-names: FAIL for its own reason (INV-T1-11 (genesis))" "$PY" -I specs/minds/selftest_minds_v0.py --control world-start-genesis-names &&
+run "minds v0 mutant: repromote-redraw changes the re-promoted mind's golden line (SPR-023 T-03; T1-A)" "fail:golden: promote_cycle mind row=1 person=1007 traits=-3289," "$PY" -I specs/minds/selftest_minds_v0.py --mutant repromote-redraw &&
+run "minds v0 mutant: trait-k-swap changes the first created mind's golden line (SPR-023 T-03; T1-A)" "fail:golden: world_start t=0/d0 Day/Agenda world_start: create 1251091979667339840 row=0" "$PY" -I specs/minds/selftest_minds_v0.py --mutant trait-k-swap &&
+run "minds v0 mutant: opinion-no-expiry changes the probe at the modifier's expiry (SPR-023 T-04; T1-A)" "fail:golden: opinions t=5260320/d3653 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3002, 3001) = -3200" "$PY" -I specs/minds/selftest_minds_v0.py --mutant opinion-no-expiry &&
+run "minds v0 mutant: relation-not-ended changes the first monthly refresh's end line (SPR-023 T-04; T1-A)" "fail:golden: relations_monthly t=44640/d31 Month/Agenda relations: refresh 2001: end row=1" "$PY" -I specs/minds/selftest_minds_v0.py --mutant relation-not-ended &&
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
@@ -1466,6 +1543,16 @@ run "control_v1 positive control: a step that pauses one instant past its target
 run "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 §4.5; SPR-027 T-01)" "fail:the stream method table carries control.pace" "$PY" -I specs/stream/selftest_control_v1.py --control pace-on-stream &&
 run "control_v1 positive control: a resume that owes the paused wall time must FAIL (SPR-027 T-01)" "fail:paused time was owed" "$PY" -I specs/stream/selftest_control_v1.py --control paused-time-owed &&
 run "control_v1 positive control: a sixth method on the control table must FAIL the method-table check (REV-SPR-027-control C4; SPR-027 T-01)" "fail:the control method table is not exactly the five methods of" "$PY" -I specs/stream/selftest_control_v1.py --control extra-method &&
+run "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted scenarios; what each step sees in inserted(), exited() and the observed events, the merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; the transcript and the vectors current (instant_log_model --check; EVO-002)" "pass:OK:" "$PY" -I specs/engine/instant_log_model.py --check &&
+run "instant_log_model positive control: jobs that merge as they finish, so a later job sees its level's peers, must FAIL thread invariance (EVO-002)" "fail:THREAD INVARIANCE: job order" "$PY" -I specs/engine/instant_log_model.py --control peer-visible &&
+run "instant_log_model positive control: an append in place of inserted()'s sorted insert must FAIL the order check (EVO-002)" "fail:ORDER: inserted() is not in ascending row order" "$PY" -I specs/engine/instant_log_model.py --control unsorted-inserted &&
+run "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)" "fail:ORDER: exited() is not in ascending row order" "$PY" -I specs/engine/instant_log_model.py --control unsorted-exited &&
+run "instant_log_model positive control: a log not cleared at the instant's end must FAIL (EVO-002)" "fail:CLEARED: the instant log held" "$PY" -I specs/engine/instant_log_model.py --control log-not-cleared &&
+run "instant_log_model positive control: a state hash that covers the log must FAIL (EVO-002)" "fail:HASH: the state hash of day" "$PY" -I specs/engine/instant_log_model.py --control hash-includes-log &&
+run "instant_log_model positive control: a genealogy index kept only at the instant's end must FAIL (EVO-002)" "fail:GENEALOGY: children(P" "$PY" -I specs/engine/instant_log_model.py --control genealogy-late &&
+run "instant_log_model positive control: the merge-time form resolved against the log at the job's own merge must FAIL visibility (EVO-002)" "fail:VISIBILITY: X2.observer resolved the merge-time form" "$PY" -I specs/engine/instant_log_model.py --control late-watermark &&
+run "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)" "fail:NAMED: world_start_cast ends with" "$PY" -I specs/engine/instant_log_model.py --control cast-demoted &&
+run "instant_log_model positive control: vectors with one state hash altered must FAIL as stale (EVO-002; T-00a MIN-5)" "fail:STALE: target/rendered-fixtures/instant_log_vectors_altered.json differs from the reference" instant_log_vectors_stale_control &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py &&
 run "Chronicle envelope v0: anchored snapshots, typed edges, cause_told, provenance index, byte budget (selftest_envelope; SPR-020)" "pass:ENVELOPE v0: PASS" "$PY" -I specs/chronicle/selftest_envelope.py &&
 run "selftest_envelope positive control: a snapshot that is not the emitter's value at emission must FAIL (V-DATA-08; SPR-020)" "fail:1. anchored snapshots: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control snapshot-drift &&
