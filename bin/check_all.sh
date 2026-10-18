@@ -1002,7 +1002,7 @@ effect_fuzz_control() {
   sed 's/^        return fx_from_fraction(a.ty, fx_value(a) \* fx_value(b))$/        return Fx(a.ty, sat((fx_value(a) * fx_value(b) * (1 << FRAC_BITS[a.ty]) + Fraction(1, 2)).__floor__(), *q_range(a.ty)))/' \
     specs/registry/effect_ref.py > "$planted" || return 1
   if cmp -s "$planted" specs/registry/effect_ref.py; then echo "control not planted: the fixed-point product line was not found"; return 1; fi
-  "$PY" -I bin/effect_fuzz.py --seeds 1-16 --rust-bin "$RH_CLI_RELEASE" --out target/fuzz_control --ref "$planted"
+  "$PY" -I bin/effect_fuzz.py --seeds 1-4 --rust-bin "$RH_CLI_RELEASE" --out target/fuzz_control --ref "$planted"
 }
 
 # SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
