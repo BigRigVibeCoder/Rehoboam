@@ -917,6 +917,17 @@ perf_local_control() {
     --baseline "$PERF_RUN" --measured "$PERF_RUN" --base-file "$PERF_FIXTURES/base.txt"
 }
 
+# SPR-038 S16: a quiet instant allocates nothing (the instant bench's teardown reads the arena's bump offset). Its
+# control plants one allocation in the quiet drain; the bench must fail at its first quiet case, by name.
+instant_alloc_control() {
+  local home
+  home="$(mktemp -d)" || return 2
+  IAI_CALLGRIND_HOME="$home" cargo bench --locked --quiet -p rh-bench --bench instant \
+    --features arena-alloc,instant-alloc-control
+  local rc=$?
+  rm -rf "$home"
+  return $rc
+}
 # SPR-009 T-05: V-PERF-11, the smoke world's heap allocations per steady-state tick (bin/perf_gate.py
 # alloc-*). The budget is the recorded count and any increase fails (ruling 5); counts are exact (R-8).
 ALLOC_BASELINE=crates/rh-bench/baselines/allocations_v1.txt
@@ -1469,6 +1480,7 @@ run "T-02b wall-clock harness: criterion benches 7 and 8 at a smoke size, median
 run "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails (SPR-009)" "fail:wall-clock ALERT above +10% (gating)" wall_control slower &&
 run "T-02b wall-clock control: another CPU model must report machine changed, never compare (RUN-002 §5)" "fail:machine changed: new trend baseline required" wall_control machine &&
 run "T-02b wall-clock positive control: a NaN median must be refused, never compared (SPR-009 DEF-3)" "fail:not a rehoboam/rh-bench/wall/v1 line" wall_control nan &&
+run "SPR-038 positive control: one allocation planted in the quiet drain must FAIL the instant bench's zero-allocation assertion (instant-alloc-control; S16)" "fail:allocated on a quiet instant" instant_alloc_control &&
 run "V-PERF-11 allocation budget: smoke-world steady-state ticks within the recorded budget at 1 and 4 threads (SPR-009 T-05)" "pass:V-PERF-11 PASS" "$PY" -I bin/perf_gate.py alloc-gate --out "$ALLOC_RUN" &&
 run "V-PERF-11 repeatability: a second run on the same commit gives identical allocation counts (SPR-009 T-05)" "pass:identical allocation counts in two runs" alloc_repeat &&
 run "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output exactly (SPR-009 ruling 3, R-8)" pass "$PY" -I bin/perf_gate.py integrity --exact --baseline "$ALLOC_BASELINE" --measured "$ALLOC_RUN" &&

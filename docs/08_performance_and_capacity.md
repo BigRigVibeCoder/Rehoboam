@@ -248,6 +248,8 @@ They run under the V-PERF suite in `09`.
 | 13 | `bench/foresight_256x25y_100k` | Interactive-class Foresight | P3b |
 | 14 | `bench/foresight_64x50y_1M` | Batch Foresight; nightly on a cluster node | P3b |
 
+Unnumbered gated benches, outside the plan's list: `draws` (the per-draw cost of `StepCtx`'s keyed draws; SPR-011, BCK-002 A-37) and **`instant`** (SPR-038 stage A, BCK-002 A-60): the per-instant engine cost on a stub that owns M2's 19 columns, at N living persons and L life-course rows. Its cases are a quiet instant (`quiet/n1_l1`, `quiet/n10k_l100k`), a death (`death/n10k_l10k`, `death/n10k_l100k`), a row insert (`insert/n10k_l100k`) and a held year (`year/n10k_l10k`, `year/n10k_l100k`). Each asserts its path (the levels, the rows, `Engine::check_stats`), and a quiet instant must allocate nothing (the arena's bump offset; S16). The targets: a quiet instant at most 20,000 instructions, and the same within 5% at N = 10⁴, L = 10⁵. Its ungated companion `instant_sweep` holds the plan's N × L sweep, M2's invariants per call, the month-end digest per stop and `solo` over 20 years.
+
 **Regression policy.**
 - **Slowdowns fail.** A slowdown of more than 10% against the recorded baseline fails the PR (V-PERF-04 in `09`; `13` §4.3).
 - **Speed-ups never re-baseline automatically.** A faster build does not tighten the gate. Auto-tightening would turn one lucky run, or ordinary runner noise, into red builds for everyone after it. It would also make a speed-up that came from skipped work the new bar.

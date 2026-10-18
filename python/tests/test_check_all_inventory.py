@@ -288,6 +288,8 @@ REQUIRED_GATES = (
     "test's lagged reader (mutant-stale-lagged-snapshot; T-03)",
     "SPR-038 positive control: a put-back that ignores person.alive's written flag must FAIL: a "
     "dead row survives (mutant-unmarked-put-back; T-03)",
+    "SPR-038 positive control: one allocation planted in the quiet drain must FAIL the instant "
+    "bench's zero-allocation assertion (instant-alloc-control; S16)",
     "SPR-038 positive control: positional compaction that keeps the old versions must FAIL the "
     "per-instant cache test (mutant-compact-keeps-version; S11)",
     "SPR-038 the cached plane hash equals the full hash after every instant of random ledger "
