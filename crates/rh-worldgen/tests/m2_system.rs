@@ -37,7 +37,7 @@ use rh_registry::ownership::Ownership;
 use rh_registry::{DemographyParams, Founder, FounderRole, Sex, WorldSpec};
 use rh_sys_demography::demography::{DEATH, EXTINCTION};
 use rh_sys_demography::{Demography, DemographyError};
-use spec_files::{load_specs, registry_system_ids};
+use spec_files::{load_specs, registry_system_ids, registry_table};
 
 mod spec_files;
 
@@ -53,7 +53,8 @@ fn specs() -> SpecTable {
     let ids =
         registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
     let specs = load_specs(&repo().join("specs/systems")).expect("specs");
-    Ownership::build(&specs, &ids).spec_table()
+    let table = registry_table(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
+    Ownership::build(&specs, &ids).spec_table_with(table)
 }
 
 fn world(seed: u64, calendar: Calendar, e0: i16, founders: Vec<Founder>) -> WorldSpec {
@@ -159,7 +160,12 @@ fn run_checked(e: &mut Engine, calendar: Calendar, end: SimTime) -> Vec<Event> {
                 assert!(ev.id > last.id, "V-DET-12: event ids do not increase");
             }
             if ev.kind == DEATH {
-                let person = ev.subjects[0].raw();
+                // SPR-020 T-03: a natural DEATH casts the deceased as target and no one else,
+                // and carries no snapshot and no edge (envelope_v0.md §3).
+                assert_eq!(ev.roles.len(), 1, "a natural DEATH's cast");
+                assert_eq!(ev.roles[0].role, rh_events::RoleId::TARGET);
+                assert!(ev.snapshots.is_empty() && ev.causes.is_empty());
+                let person = ev.roles[0].entity.raw();
                 assert_eq!(
                     pending.remove(&person),
                     Some(t.minutes()),
@@ -204,10 +210,15 @@ fn v_det_12_and_v_inv_01_on_random_small_worlds() {
         assert_eq!(ext.len(), 1, "EXTINCTION once");
         let last_death = events.iter().rev().find(|ev| ev.kind == DEATH).unwrap();
         assert_eq!(
-            ext[0].causes,
-            vec![last_death.id],
+            ext[0]
+                .causes
+                .iter()
+                .map(|c| (c.cause, c.kind))
+                .collect::<Vec<_>>(),
+            vec![(last_death.id, rh_events::EdgeKind::Triggered)],
             "EXTINCTION caused by the last DEATH"
         );
+        assert!(ext[0].roles.is_empty(), "EXTINCTION has no cast");
         assert_eq!(e.tables().get("person.id").unwrap().len(), 0);
         deaths += died;
         worlds += 1;
@@ -455,7 +466,7 @@ fn v_data_04_every_person_has_one_founder_entry_and_a_death_iff_absent() {
         at = SimTime::from_minutes((at.minutes() + step.minutes()).min(end.minutes()));
         e.advance_until(at, |_, _| {}).unwrap();
         for ev in e.drain_events() {
-            emitted.extend(ev.subjects.iter().map(|s| s.raw()));
+            emitted.extend(ev.roles.iter().map(|r| r.entity.raw()));
         }
         let t = e.tables();
         let ledger: BTreeSet<u64> = t

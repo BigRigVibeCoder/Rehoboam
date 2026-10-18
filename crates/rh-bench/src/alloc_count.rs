@@ -34,6 +34,36 @@ static ALLOCATIONS: AtomicU64 = AtomicU64::new(0);
 static GROWTHS: AtomicU64 = AtomicU64::new(0);
 static SHRINKS: AtomicU64 = AtomicU64::new(0);
 static DEALLOCATIONS: AtomicU64 = AtomicU64::new(0);
+// SPR-026 T-05 (V-PERF-09's ingredients): the bytes live now and the most live since the last
+// reset. Counting them changes no call count.
+static LIVE_BYTES: AtomicUsize = AtomicUsize::new(0);
+static PEAK_BYTES: AtomicUsize = AtomicUsize::new(0);
+
+fn grow(n: usize) {
+    let now = LIVE_BYTES.fetch_add(n, Ordering::Relaxed) + n;
+    PEAK_BYTES.fetch_max(now, Ordering::Relaxed);
+}
+
+fn shrink(n: usize) {
+    LIVE_BYTES.fetch_sub(n, Ordering::Relaxed);
+}
+
+/// The heap bytes live now (requested sizes, through [`Counting`]).
+#[must_use]
+pub fn live_bytes() -> usize {
+    LIVE_BYTES.load(Ordering::Relaxed)
+}
+
+/// The most heap bytes live since the last [`reset_peak`] (or the start).
+#[must_use]
+pub fn peak_bytes() -> usize {
+    PEAK_BYTES.load(Ordering::Relaxed)
+}
+
+/// Starts a new peak at the bytes live now.
+pub fn reset_peak() {
+    PEAK_BYTES.store(LIVE_BYTES.load(Ordering::Relaxed), Ordering::Relaxed);
+}
 
 /// The system allocator, counting.
 pub struct Counting;
@@ -80,18 +110,21 @@ pub fn snapshot() -> Snapshot {
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        grow(layout.size());
         // SAFETY: the caller's guarantees for `alloc` (a non-zero-size layout) pass on unchanged.
         unsafe { System.alloc(layout) }
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         ALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        grow(layout.size());
         // SAFETY: as `alloc`.
         unsafe { System.alloc_zeroed(layout) }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         DEALLOCATIONS.fetch_add(1, Ordering::Relaxed);
+        shrink(layout.size());
         // SAFETY: the caller guarantees `ptr` came from this allocator (that is, from `System`
         // through it) with `layout`.
         unsafe { System.dealloc(ptr, layout) }
@@ -100,8 +133,10 @@ unsafe impl GlobalAlloc for Counting {
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         if new_size > layout.size() {
             GROWTHS.fetch_add(1, Ordering::Relaxed);
+            grow(new_size - layout.size());
         } else {
             SHRINKS.fetch_add(1, Ordering::Relaxed);
+            shrink(layout.size() - new_size);
         }
         // SAFETY: the caller's guarantees for `realloc` (`ptr` from this allocator with `layout`,
         // a valid non-zero `new_size`) pass on unchanged.
@@ -174,6 +209,13 @@ unsafe impl GlobalAlloc for Arena {
     }
 
     unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
+}
+
+/// The bytes the arena has handed out so far: its bump offset. Nothing is freed, so an unchanged
+/// offset across a stretch of code proves it allocated nothing (SPR-038 S16: the quiet instant).
+#[must_use]
+pub fn arena_used() -> usize {
+    ARENA_NEXT.load(Ordering::Relaxed)
 }
 
 /// Stops the process when the arena is spent: a message naming the request and the reservation,

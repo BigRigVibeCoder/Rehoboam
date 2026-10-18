@@ -26,6 +26,7 @@ use core::cmp::Reverse;
 use core::fmt;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
+use rh_events::EventRef;
 use rh_ids::{EntityRef, PurposeId, SystemId};
 
 use crate::phase::Phase;
@@ -78,7 +79,7 @@ impl AgendaKey {
 
 /// What fires: the owning system, the RNG purpose its time was drawn under, and a closure id
 /// with an integer argument ("a heap entry plus a closure ID", ADR-0025).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Timer {
     /// The owning system's RNG `system_id` (name-derived, stable): only it can cancel the timer,
     /// and it handles the firing.
@@ -89,10 +90,15 @@ pub struct Timer {
     pub kind: u32,
     /// The owner's argument.
     pub payload: i64,
+    /// The event that caused the outcome, if any (`05.1` §2 rule 2; EVO-001 R9): the merge
+    /// resolves a draft of the scheduling step to its id, so in the agenda it is `Known` or
+    /// `None`. A re-sample keeps it. Hash-neutral when `None` (R15): the timer row's tail
+    /// `u8 1 ‖ u64 cause` is written only when present.
+    pub cause: EventRef,
 }
 
 /// A timer with its key: what a system's `fire` and `resample_timer` receive.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimerEntry {
     /// The key.
     pub key: AgendaKey,
@@ -392,6 +398,7 @@ mod tests {
             purpose: PurposeId::from_raw(2),
             kind,
             payload: 0,
+            cause: rh_events::EventRef::None,
         }
     }
 

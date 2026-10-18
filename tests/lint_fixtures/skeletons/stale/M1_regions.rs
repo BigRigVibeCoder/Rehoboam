@@ -3,6 +3,8 @@ pub const SYSTEM_ID: &str = "M1.regions";
 pub const SPEC_VERSION: &str = "0.1.0";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
 ];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+];
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {
 }

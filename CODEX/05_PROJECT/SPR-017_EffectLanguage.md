@@ -2,14 +2,14 @@
 id: SPR-017
 title: "The Registry effect language v0 in rh-registry: the evaluator, succession laws, the kinship prelude and verb effects (P1.15)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
 related: [BCK-002, PRJ-002, REV-SPR-017, REV-P1a, EVO-001, REV-EVO-001, REV-SPR-019, SPR-014, SPR-015, SPR-019, SPR-020, SPR-021, SPR-024, SPR-026, ADR-0006, ADR-0010, ADR-0024, ADR-0033, ADR-0034]
 created: 2026-10-17
-updated: 2026-10-17
-version: 0.1.0
+updated: 2026-10-18
+version: 1.0.0
 ---
 
 > **BLUF:** Builds the Registry effect language v0 in `rh-registry`. The spec is `specs/registry/effect_language_v0.md` 0.5.0 (PR #41, `50e3c61`), approved by the director as D37 with D14, D4 and D12. The sprint delivers:

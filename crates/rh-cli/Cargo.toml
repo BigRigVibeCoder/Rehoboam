@@ -18,3 +18,11 @@ rh-manifest = { version = "0.0.0", path = "../rh-manifest" }
 rh-golden = { version = "0.0.0", path = "../rh-golden" }
 rh-registry = { version = "0.0.0", path = "../rh-registry" }
 serde_json = "=1.0.154"
+# SPR-026: the live edge's host and viewer (src/serve.rs, the one file allowed a socket).
+rh-protocol = { version = "0.0.0", path = "../rh-protocol" }
+rh-stream = { version = "0.0.0", path = "../rh-stream" }
+rh-sifter = { version = "0.0.0", path = "../rh-sifter" }
+
+[dev-dependencies]
+# SPR-026 T-04: the channel-C test checks live bodies against XXH3-128 (no new crate).
+rh-snapshot = { version = "0.0.0", path = "../rh-snapshot" }

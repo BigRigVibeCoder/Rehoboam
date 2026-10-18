@@ -92,6 +92,16 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
+    "Effect emit parity positive control: one case's program altered on the Rust side must "
+    "FAIL (SPR-017 T-08)",
+    "Effect emit parity: effect_ref --emit and rh-cli effect eval print the same line for "
+    "every golden case (SPR-017 T-08)",
+    "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's "
+    "(check_key_order; SPR-017 T-06)",
+    "Effect programs positive control: a Registry whose seniority has no order must FAIL "
+    "(SPR-017 T-06)",
+    "Effect programs: every Registry program compiles against the real environment (rh-cli "
+    "effect check; SPR-017 T-06)",
     "Family annals v0: provenance re-derived by a whole-group re-render, template slots, no "
     "model, calendar, a possible history under M7's rules, determinism in two processes, "
     "coverage, injective designation, a canonical extract digest, golden annals and manifests "
@@ -99,6 +109,9 @@ REQUIRED_GATES = (
     "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden "
     "vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)",
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
+    "GAP-1 by name in release: the host's VmHWM over headless stays within 2 x peak "
+    "LiveEdge::bytes() (the window and the seal queue as allocated) + 2 MiB, solo 1,500 years at "
+    "full speed (SPR-026; VER-SPR-026-TEST GAP-1)",
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; SPR-005 "
     "T-03)",
     "Golden baseline control: a local run with no base says the C3 rule was not checked "
@@ -209,6 +222,13 @@ REQUIRED_GATES = (
     "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
+    "Live edge overhead (C1; reported): solo 3,000 years monthly headless vs --socket",
+    "LiveEdge positive control: a window that moves before the dropped year is on disk must "
+    "FAIL with I1 broken (SPR-026 T-02)",
+    "LiveEdge positive control: bytes() counting only the window must FAIL the accounting test "
+    "(DEF-2)",
+    "LiveEdge positive control: queue counted as canonical text must FAIL the accounting test "
+    "(DEF-2)",
     "M2 F1 mortality reference positive control: a stale check value in the next M2 spec must FAIL "
     "(SPR-016)",
     "M2 F1 positive control: a newborn drawn on rung 0's S8 must FAIL the first-draw rule (SPR-016 "
@@ -254,6 +274,9 @@ REQUIRED_GATES = (
     "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, "
     "GITHUB_EVENT_NAME, RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
+    "Registry envelope plants: lint_patterns refuses every planted [event_roles] and "
+    "[role_domains] Registry by name, the real one passes (registry_envelope_plants; SPR-020 "
+    "T-01)",
     "Replay positive control: a journal with its row deleted must hard-FAIL the replay (SPR-013 "
     "T-12)",
     "Required tools present (core part)",
@@ -271,6 +294,50 @@ REQUIRED_GATES = (
     "-D warnings; SPR-009 R-7)",
     "Rust: lint rh-bench with the counting allocator (cargo clippy -D warnings; SPR-009 T-05)",
     "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)",
+    "SPR-014 A-50: a draw of the wrong entity kind is refused by name (T-07)",
+    "SPR-014 DRAINS: a skeleton's drain that differs from its spec, or a spec drain the code "
+    "leaves out, is refused by name under rule spec (T-01; NIT-10)",
+    "SPR-014 R15 positive control: a timer encoder that writes u8 0 for an absent cause must FAIL "
+    "the hash golden at agenda.timers (T-02)",
+    "SPR-014 V-DET-21 delivery: a command reaches only its owner's draining binding, within the "
+    "instant or at its next run, in key order, equal at 1, 2, 4 and 8 threads (T-01)",
+    "SPR-014 V-DET-21 positive control: an engine that hands an owner's inbox to every job "
+    "(EVO-001 option D1) must FAIL (T-01)",
+    "SPR-014 V-DET-21 slots: every EventRef an owner sees is its sender's merged id; integers in "
+    "event slots and out-of-type fields refused by name (T-02)",
+    "SPR-014 V-INV-03 subset: commanded deaths from two test-only senders take M2's single death "
+    "path; same-slot deaths; the sender's re-sample (T-05)",
+    "SPR-014 V-INV-04 on stub systems: dropped rate and mode reads give their typed neutrals, "
+    "sends to an absent owner discarded and counted, identity reads refused (T-04)",
+    "SPR-014 V-INV-04 on the real specs: {M2}, {M2, M7}, {M2, T1} refused by name, {M2, M7, T1} "
+    "(T-04; REV-P1a NEW-4, NEW-6)",
+    "SPR-014 V-INV-15: the dead-person drop at take, the owner's drops, the dead timer, key = "
+    "any; queue-no-stale-command and the non-idempotent death as controls (T-03)",
+    "SPR-014 keyframes and the drop counter: queued event slots, timer causes and inserted rows "
+    "round-trip; a planted drop changes no state_hash (T-02, T-03, T-05)",
+    "SPR-014 rh-contracts positive control: a spec with person.sex's values reordered must FAIL "
+    "naming the column (T-06)",
+    "SPR-014 rh-contracts v0: every M2 accessor matches the spec; a reader beside the real M2 "
+    "reads through the crate (T-06)",
+    "SPR-014 the ledger row insert: sorted, aligned, defaults, read the same instant, duplicates "
+    "refused, over 48 random worlds (T-05)",
+    "SPR-038 M2's O(N + L) invariants give the oracle's results, names and texts on random and "
+    "planted tables (invariants_oracle; T-03)",
+    "SPR-038 exactness: the gated engine equals Gating::Off after every instant on random "
+    "worlds (3 sizes x 8 seeds), and every planted violation fails by name at the same instant "
+    "gated and off (per_instant; T-03, S12)",
+    "SPR-038 positive control: a guard pre-image taken after the step must FAIL the entry-field "
+    "refusal (mutant-late-pre-image; T-03)",
+    "SPR-038 positive control: a lagged column never copied again must FAIL the differential "
+    "test's lagged reader (mutant-stale-lagged-snapshot; T-03)",
+    "SPR-038 positive control: a put-back that ignores person.alive's written flag must FAIL: a "
+    "dead row survives (mutant-unmarked-put-back; T-03)",
+    "SPR-038 positive control: one allocation planted in the quiet drain must FAIL the instant "
+    "bench's zero-allocation assertion (instant-alloc-control; S16)",
+    "SPR-038 positive control: positional compaction that keeps the old versions must FAIL the "
+    "per-instant cache test (mutant-compact-keeps-version; S11)",
+    "SPR-038 the cached plane hash equals the full hash after every instant of random ledger "
+    "worlds (per_instant_cache; S11, T4)",
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment "
@@ -310,10 +377,17 @@ REQUIRED_GATES = (
     "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, "
     "streaming, and streaming with a tail stopped mid-run (after it printed a sealed segment), "
     "within twice streaming plus 1 s",
+    "Test hooks positive control: --test-poison planted in regen_baseline.sh's solo run "
+    "must FAIL (SPR-026)",
+    "Test hooks: no --test-* flag in a baseline or golden rh-cli run command line (SPR-026; "
+    "the poison ruling)",
     "V-DATA-10 subset on the envelope fixture: DuckDB reads its event_snapshot rows and typed "
     "causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and "
     "constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; "
     "SPR-020 shape)",
+    "V-DATA-10 subset on the envelope world: DuckDB reads the engine's snapshot, role and "
+    "typed edge rows with the DDL's types and constraints, and the reference recomputes every "
+    "canonical_digest (SPR-020 T-06)",
     "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's "
     "and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, "
     "and the reference's canonical digests (SPR-013 T-09)",
@@ -341,6 +415,9 @@ REQUIRED_GATES = (
     "T-02)",
     "V-PERF-04 toolchain control: a baseline from another valgrind must report re-baseline "
     "required (SPR-009 ruling 2)",
+    "V-PERF-09 ingredients: the host's live bytes under the counting allocator against "
+    "LiveEdge::bytes() and the per-viewer frame cap, solo and hamlet (SPR-026 T-05; no "
+    "gate, SPR-030's)",
     "V-PERF-11 allocation budget: smoke-world steady-state ticks within the recorded budget at "
     "1 and 4 threads (SPR-009 T-05)",
     "V-PERF-11 baseline integrity: a changed allocation baseline equals the tool's output "
@@ -365,9 +442,31 @@ REQUIRED_GATES = (
     "event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)",
     "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter "
     "(SPR-013 T-11)",
+    "V-STR-01, V-STR-03 and V-STR-05 by name in release: four viewers change no stream byte "
+    "(solo, hamlet), a sleeper catches up, a jumper jumps to live, a viewer survives kill "
+    "-9 with a seal in flight (SPR-026 T-05)",
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
+    "V-WC-10 data-only extension positive control: the law's id without its programs must "
+    "FAIL by name (SPR-017 T-09)",
+    "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep "
+    "reproduce in the Rust evaluator (rh-manifest effect_golden; SPR-017 T-09)",
+    "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep "
+    "reproduce in the reference (effect_ref --check; SPR-017 T-09)",
+    "V-WC-10 data-only extension: the fixture Registry's 8 laws compile against the real "
+    "environment (rh-cli effect check, tests/registry_effect; SPR-017 T-09)",
+    "V-WC-10 differential fuzz: effect_ref.py and the Rust evaluator agree on 16 SplitMix64 "
+    "seeds, with every code, invariant, relation, builtin, aggregate and kind covered "
+    "(bin/effect_fuzz.py; SPR-017 T-08)",
+    "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug "
+    "(rh-manifest effect_golden; SPR-017 T-05)",
+    "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release "
+    "(SPR-017 T-05)",
+    "V-WC-10 effect language: twelve planted mutants each fail their sentinel cases with the "
+    "predicted wrong value, and Mutant::None passes (SPR-017 T-05)",
+    "V-WC-10 positive control: the golden file with one expected value altered must FAIL the "
+    "Rust test (SPR-017 T-05)",
     "Virtual telemetry (S5 prototype)",
     "Workspace tests positive control: a by-name entry that names no test binary must FAIL "
     "(SPR-009 review 2a)",
@@ -428,6 +527,7 @@ REQUIRED_GATES = (
     " the tier, so every part runs (BCK-002 A-63)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
+    "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 T-06)",
     "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL "
     "(SPR-013 T-09; R2)",
     "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)",
@@ -458,6 +558,8 @@ REQUIRED_GATES = (
     "method table (D47; SPR-027 T-01)",
     "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 "
     "§4.5; SPR-027 T-01)",
+    "effect_fuzz positive control: a reference copy whose fixed-point products round half up "
+    "must FAIL with MISMATCH (SPR-017 T-08)",
     "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
     "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start "
@@ -479,6 +581,7 @@ REQUIRED_GATES = (
     "fp-contract guard positive control: a target-specific CXX with -ffp-contract=fast must "
     "FAIL (SPR-007 GAP-2)",
     "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)",
+    "gen_hash_golden positive control: one changed event digest v2 must FAIL (SPR-020 T-02)",
     "gen_hash_golden positive control: one changed hash must FAIL",
     "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)",
     "gen_m2_reference positive control: one altered vector must FAIL (SPR-012 T-05)",
@@ -625,6 +728,11 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: the six ways round sockets-only-in-serve.rs (re-exports, "
     "#[path], include!) must FAIL (SPR-026 R19)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
+    "lint_odd [commands] positive control: a ScheduleDeath with a tick parameter must FAIL, "
+    "naming M2's [[applies]] (SPR-017 T-06)",
+    "lint_odd [commands] positive control: a cause_event typed int must FAIL (SPR-017 T-06)",
+    "lint_odd [commands] positive control: an [[applies]] with no Registry [commands] entry "
+    "must FAIL (SPR-017 T-06)",
     "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, "
     "with its drain binding, passes (REV-P1a section 7; EVO-001)",
     "lint_odd applies positive control: a sender's payload fields differ from [[applies]], "
@@ -814,6 +922,15 @@ REQUIRED_GATES = (
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
     "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)",
+    "rh-cli channel C live by name: C.sock beside the run, empty years announced, lines = "
+    "tail --channel C, follow = batch, sifted_through bounded (SPR-026 T-04)",
+    "rh-cli run directory by name: no kill during creation leaves an unusable directory, a "
+    "resume keeps run.toml's rung, a torn keyframe rung is refused, replay names a running "
+    "writer (BCK-002 A-58)",
+    "rh-cli serve by name: A.sock read-only, the corrupt-frame fuzz, the cap, abort, the "
+    "lock, the path limit, probe (c) on solo and hamlet (SPR-026 T-03)",
+    "rh-core envelope by name: emit's refusals by name, the canonical cast and snapshot order, "
+    "V-DATA-08 in miniature, absent sources counted (SPR-020 T-03)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
@@ -835,12 +952,25 @@ REQUIRED_GATES = (
     "rh-golden by name: tail prints every record once in seq order from any cursor, its "
     "canonical output digests to each segment's canonical_digest, it never writes to the run "
     "directory, and the display form matches its snapshots (SPR-013 T-10)",
+    "rh-golden envelope world by name: a stub world's full envelope through the admission "
+    "bitset and event_body, canonical round trip, cause_told across a kill and a resume, "
+    "V-STR-01 (SPR-020 T-06)",
     "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
     "perturbations (SPR-008 T-02, T-03)",
     "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread "
     "invariance, the manifest pin, Ada at genesis, the input's re-sample of her pending death "
     "(SPR-012 T-08)",
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
+    "rh-protocol by name: SplitMix64 round trips of frames from 0 bytes to 1 MiB, RECORDS "
+    "payloads and control messages, every split point of a frame stream (SPR-026 T-01)",
+    "rh-protocol by name: every golden frame, refusal, dispatch answer and the Catchup "
+    "transcript of golden/wire_v1.txt (SPR-026 T-01)",
+    "rh-protocol by name: the method table is exactly the three stream.* reads, every other "
+    "method the read-only refusal (SPR-026 T-01; wire_v1.md \u00a74.5)",
+    "rh-protocol positive control: a decoder that accepts a nonzero flag must FAIL its "
+    "golden refuse line (SPR-026 T-01)",
+    "rh-protocol positive control: a dispatcher with a fourth method (stream.pace) must "
+    "FAIL the method-table test (SPR-026 T-01)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
     "rh-sifter by name: the golden channel-A segment sifts to the golden life_ends matches and "
@@ -848,6 +978,9 @@ REQUIRED_GATES = (
     "T-11)",
     "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced "
     "guard (SPR-007 T-01..T-04)",
+    "rh-stream LiveEdge by name: probe (b), the seal race, the copy race, the window "
+    "bounds, headless = (a) = (b) sealed bytes, the resumed start, abort (SPR-026 T-02; "
+    "wire_v1.md \u00a76, \u00a79)",
     "rh-stream by name: byte-identical sealing over seeds and world sizes, contiguous seq, R4 "
     "order refused when broken, resume verification, tampered segments refused (SPR-013 T-09)",
     "rh-stream by name: the canonical form reproduces the reference's golden lines, digests and "
@@ -910,6 +1043,11 @@ REQUIRED_GATES = (
     "(SPR-013 T-10; the file-snapshot ruling)",
     "tail snapshot positive control: a stale snapshot must FAIL with the first differing line "
     "(SPR-013 T-10)",
+    "twin_check positive control: a match record's seq off by one must FAIL (BCK-002 A-58 GAP-10)",
+    "twin_check positive control: a pattern row the packs do not give must FAIL (BCK-002 "
+    "A-58 GAP-10)",
+    "twin_check positive control: a segment column channel A does not give must FAIL "
+    "(BCK-002 A-58 GAP-10)",
     "twin_check positive control: a twin expecting another status (a column the match id does "
     "not cover) must FAIL (REV-SPR-013 MIN-2)",
     "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)",

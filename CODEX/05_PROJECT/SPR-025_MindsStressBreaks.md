@@ -2,7 +2,7 @@
 id: SPR-025
 title: "Minds v0, part c: stress and its exact accounting, grief with damping, mental breaks from the typed break table, the refractory period, the cascade scenario (P3.2a, part c)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]

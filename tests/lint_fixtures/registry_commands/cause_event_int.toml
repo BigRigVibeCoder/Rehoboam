@@ -1,0 +1,16 @@
+# A [commands] ScheduleDeath whose cause_event is typed int: an event is only ever `event` (§3.1, N3).
+# lint_odd.py --commands this file must FAIL.
+[commands]
+ScheduleDeath   = { owner = "M2.demography", person = "victim", outcome = true, params = [{ name = "cause", type = "enum:death_cause" }, { name = "culprit", type = "person" }, { name = "cause_event", type = "int" }] }
+Marry           = { owner = "M2.demography", person = "a", outcome = true, params = [{ name = "b", type = "person" }] }
+PressClaim      = { owner = "M7.dynasty", person = "claimant", outcome = false, params = [{ name = "claim", type = "claim" }] }
+PetitionSeat    = { owner = "M7.dynasty", person = "person", outcome = false, params = [{ name = "target", type = "int" }] }
+RenounceClaim   = { owner = "M7.dynasty", person = "claimant", outcome = false, params = [{ name = "claim", type = "claim" }] }
+Resign          = { owner = "M7.dynasty", person = "person", outcome = false, params = [{ name = "office", type = "office" }] }
+OpinionModifier = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "about", type = "person" }, { name = "kind", type = "enum:opinion_modifiers" }, { name = "magnitude", type = "q8_8" }, { name = "source_event", type = "event" }] }
+AgendaGoal      = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "vow", type = "vow" }, { name = "kind", type = "enum:vow_kinds" }, { name = "target", type = "int" }, { name = "priority", type = "q8_8" }] }
+ClearGoal       = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "vow", type = "vow" }] }
+ApplyThought    = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "overlay", type = "enum:overlays" }, { name = "delta", type = "q8_8" }, { name = "source_event", type = "event" }] }
+ApplyInfluence  = { owner = "T1.minds", person = "bearer", outcome = false, params = [{ name = "overlay", type = "enum:overlays" }, { name = "delta", type = "q8_8" }] }
+Promote         = { owner = "T1.minds", person = "person", outcome = false, params = [] }
+Demote          = { owner = "T1.minds", person = "person", outcome = false, params = [] }

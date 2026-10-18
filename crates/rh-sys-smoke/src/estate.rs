@@ -7,12 +7,12 @@
     reason = "generated skeleton items (Params) a parameterless system does not use"
 )]
 
-use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
-use rh_core::command::Command;
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandApply, CommandSend, Lag, Plane};
+use rh_core::command::{Arg, Command};
 use rh_core::system::{InvariantResult, PulseBinding, SimError, StepCtx, SystemModel};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EdgeKind, EventDraft, EventRef};
 use rh_ids::EntityRef;
 
 use crate::common::{PERSONS, WORLD, check, fail, from_skeleton, purposes, row};
@@ -38,11 +38,7 @@ impl Estate {
             ));
         }
         for q in queue {
-            let r = row(
-                SYSTEM_ID,
-                q.command.args.first().copied().unwrap_or(-1),
-                PERSONS,
-            )?;
+            let r = row(SYSTEM_ID, q.command.int(0).unwrap_or(-1), PERSONS)?;
             // DEF-2: the Activity siblings both draw, write, emit and send commands.
             let fee = ctx.rng(&RngPurpose::SettleFee, q.command.person, q.seq)?;
             view.write(HEIRS)?[r] += 1 + i64::from(fee % 2 == 1);
@@ -50,17 +46,18 @@ impl Estate {
             *order = order
                 .wrapping_mul(31)
                 .wrapping_add(q.command.person.to_raw().cast_signed());
-            let mut e = EventDraft::new("INHERITANCE").subject(EntityRef::person(q.command.person));
+            let mut e = EventDraft::new("INHERITANCE")
+                .role(ROLE_TARGET, EntityRef::person(q.command.person));
             if let Some(cause) = q.cause {
-                e = e.caused_by(cause);
+                e = e.caused_by(EventRef::Known(cause), EdgeKind::Triggered);
             }
             let inheritance = ctx.emit(e)?;
             if (fee >> 8) % 4 == 0 {
                 ctx.submit(Command {
                     kind: "Audit",
                     person: q.command.person,
-                    args: vec![crate::common::r64(r)],
-                    cause: Some(inheritance),
+                    args: vec![Arg::Int(crate::common::r64(r))],
+                    cause: EventRef::Draft(inheritance),
                 })?;
             }
         }
@@ -91,12 +88,13 @@ impl SystemModel for Estate {
                     plane: Plane::A,
                 })
                 .to_vec(),
-            applies: vec!["Settle"],
+            applies: CommandApply::from_drains(DRAINS),
             sends: vec![CommandSend {
                 command: "Audit",
                 target: "X7.smoke_market",
             }],
             emits: vec!["INHERITANCE"],
+            drain_only: Vec::new(),
         }
     }
 

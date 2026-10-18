@@ -13,6 +13,10 @@ Usage:  python -I specs/registry/effect_ref.py            (report every case)
         python -I specs/registry/effect_ref.py --check    (exit 1 on any mismatch)
         python -I specs/registry/effect_ref.py --case ID  (one case, verbose)
         python -I specs/registry/effect_ref.py --golden PATH   (another golden file)
+        python -I specs/registry/effect_ref.py --emit     (each case's result and diagnostics, one
+                                                           line each; cases need no `expect`; a
+                                                           world's `draw_seed` gives the draws it
+                                                           does not list: SPR-017 T-08's fuzz)
 
 Refs: 05.5 §2.1, §3.2; 05.1 §2, §6; ADR-0006; ADR-0010; SPR-017 (PRJ-002); V-WC-10.
 """
@@ -22,6 +26,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import threading
 import tomllib
 from collections import deque
 from collections.abc import Callable
@@ -30,9 +35,14 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
+# F-2 (Architect, 2026-10-18): the reference is total. A long literal is a number like any other
+# (05.5 §3.2 rounds it exactly), so Python's 4,300-digit guard on int <-> str is lifted.
+if hasattr(sys, "set_int_max_str_digits"):
+    sys.set_int_max_str_digits(0)
+
 REPO = Path(__file__).resolve().parents[2]
 GOLDEN = REPO / "specs" / "registry" / "effect_language_golden_v0.toml"
-LANGUAGE_VERSION = "0.5.0"
+LANGUAGE_VERSION = "0.5.1"
 
 # ----------------------------------------------------------------------------- numeric limits
 I64_MIN = -(1 << 63)
@@ -349,6 +359,7 @@ class World:
     neutral_reads: int = 0
     drawn: set[tuple[str, str, int, int]] = field(default_factory=set)
     children_index: dict[int, list[int]] | None = None
+    draw_seed: int | None = None  # T-08: draws for keys the world does not list (seeded_draw)
 
     def children(self, ident: int) -> list[int]:
         """The children-by-parent index over the life-course log (the host's derived index)."""
@@ -536,12 +547,13 @@ def load_world(reg: Registry, raw: dict[str, Any]) -> World:
         params,
         draws,
         enum_defaults=reg.enum_defaults,
+        draw_seed=int(raw["draw_seed"]) & MASK64 if "draw_seed" in raw else None,
     )
 
 
 # ----------------------------------------------------------------------------- lexer
 TOKEN_RE = re.compile(
-    r"(?P<ws>\s+|#[^\n]*)"
+    r"(?P<ws>[ \t\n\r]+|#[^\n]*)"
     r"|(?P<num>[0-9][0-9A-Za-z_.]*|\.[0-9][0-9A-Za-z_.]*)"
     r"|(?P<ident>[A-Za-z_][A-Za-z0-9_]*)"
     r"|(?P<op>==|!=|<=|>=|[-+*/<>().,:;\[\]])"
@@ -709,13 +721,20 @@ def concrete(ty: str) -> str:
 
 
 def mentions(node: object, name: str) -> bool:
-    """Whether a variable occurs in a node (the loop-variable rule of the draw lint)."""
-    if isinstance(node, Var):
-        return node.name == name
-    if isinstance(node, Node):
-        return any(mentions(v, name) for v in vars(node).values())
-    if isinstance(node, list):
-        return any(mentions(item, name) for item in node)
+    """Whether a variable occurs in a node (the loop-variable rule of the draw lint).
+
+    Iterative, so a 10^5-term operator chain under a draw key is walked without recursion (F-2).
+    """
+    stack: list[object] = [node]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, Var):
+            if item.name == name:
+                return True
+        elif isinstance(item, Node):
+            stack.extend(vars(item).values())
+        elif isinstance(item, list):
+            stack.extend(item)
     return False
 
 
@@ -740,6 +759,13 @@ def require_numeric(ty: str) -> None:
     """``E_TYPE`` unless the type is numeric or a numeric literal."""
     if ty not in NUMERIC and ty not in ("lit_int", "lit_dec"):
         raise CompileError("E_TYPE", f"{ty} is not numeric")
+
+
+def no_rel(ty: str) -> str:
+    """``E_TYPE`` for a relation outside ``in`` and a ``candidates`` program (§3.5; 0.5.1)."""
+    if ty.startswith("rel:"):
+        raise CompileError("E_TYPE", "a relation is not a value")
+    return ty
 
 
 def no_event(ty: str) -> str:
@@ -1149,9 +1175,12 @@ class Call(Node):
         if key in ev.world.drawn:  # minor 3: the run-time layer of the reuse rule
             raise InvariantError(f"E_RNG_REUSE: {key} drawn twice in one evaluation")
         ev.world.drawn.add(key)
-        if key not in ev.world.draws:
+        if key in ev.world.draws:
+            u = ev.world.draws[key]
+        elif ev.world.draw_seed is not None:
+            u = seeded_draw(ev.world.draw_seed, *key)
+        else:
             raise KeyError(f"the golden world lists no draw for {key}")
-        u = ev.world.draws[key]
         if self.name == "draw":
             return u >> 1
         p = self.args[3].eval(ev)
@@ -1166,14 +1195,58 @@ def site_key(node: Node) -> str:
 
 
 def canon(node: object) -> str:
-    """A canonical text of a node: its class and attributes, recursively (the draw-site lint)."""
-    if isinstance(node, Node):
-        skip = {"ty", "bits", "column", "neutral", "index"}
-        parts = [f"{k}={canon(v)}" for k, v in sorted(vars(node).items()) if k not in skip]
-        return f"{type(node).__name__}({', '.join(parts)})"
-    if isinstance(node, list):
-        return "[" + ", ".join(canon(item) for item in node) + "]"
-    return repr(node)
+    """A canonical text of a node: its class and attributes, recursively (the draw-site lint).
+
+    Built with an explicit stack into one list, so a long operator chain costs linear time (F-2).
+    """
+    skip = {"ty", "bits", "column", "neutral", "index"}
+    out: list[str] = []
+    stack: list[tuple[bool, object]] = [(False, node)]  # (is literal text, item)
+    while stack:
+        literal, item = stack.pop()
+        if literal:
+            out.append(str(item))
+        elif isinstance(item, Node):
+            parts = [(k, v) for k, v in sorted(vars(item).items()) if k not in skip]
+            stack.append((True, ")"))
+            for i in range(len(parts) - 1, -1, -1):
+                key, value = parts[i]
+                stack.append((False, value))
+                stack.append((True, (", " if i else "") + f"{key}="))
+            out.append(f"{type(item).__name__}(")
+        elif isinstance(item, list):
+            stack.append((True, "]"))
+            for i in range(len(item) - 1, -1, -1):
+                stack.append((False, item[i]))
+                if i:
+                    stack.append((True, ", "))
+            out.append("[")
+        else:
+            out.append(repr(item))
+    return "".join(out)
+
+
+MASK64 = (1 << 64) - 1
+
+
+def splitmix64(z: int) -> int:
+    """SplitMix64's step and finaliser."""
+    z = (z + 0x9E3779B97F4A7C15) & MASK64
+    z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & MASK64
+    z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & MASK64
+    return z ^ (z >> 31)
+
+
+def seeded_draw(seed: int, purpose: str, kind: str, ident: int, k: int) -> int:
+    """A world's ``draw_seed`` draw (T-08; the fold of rh-manifest's ``seeded_draw``).
+
+    SplitMix64 over the seed, then each byte of ``purpose/kind/``, the id and ``k`` as 64-bit words.
+    """
+    h = splitmix64(seed)
+    for b in f"{purpose}/{kind}/".encode():
+        h = splitmix64(h ^ b)
+    h = splitmix64(h ^ (ident & MASK64))
+    return splitmix64(h ^ (k & MASK64))
 
 
 def draw_hits(u: int, p: Fx) -> bool:
@@ -1338,6 +1411,9 @@ class Agg(Node):
             if self.where is None or self.where.eval(ev):
                 picked.append(self.body.eval(ev) if self.body is not None else True)
         ev.vars.pop(self.var, None)
+        if self.op == "all" and self.body is None:
+            # 0.5.1: `where` is the predicate of a bodyless `all`, as of `any` (§5.4).
+            return len(picked) == len(elements)
         return self.fold(ev, picked)
 
     def fold(self, ev: Ev, picked: list[Value]) -> Value:
@@ -1374,7 +1450,7 @@ class Tuple(Node):
         parts = []
         for item in self.items:
             item.check(cx)
-            parts.append(no_event(item.finish()))
+            parts.append(no_rel(no_event(item.finish())))
         self.ty = f"tuple({','.join(parts)})"
         return self.ty
 
@@ -1401,7 +1477,7 @@ class ListKey(Node):
         cx.bind(self.var, f"ent:{rel_ty[4:]}", loop=True)
         try:
             self.body.check(cx)
-            element = no_event(self.body.finish())
+            element = no_rel(no_event(self.body.finish()))
         finally:
             cx.unbind(self.var)
             cx.leave(self.rel.bound)
@@ -1432,7 +1508,7 @@ class If(Node):
     def check(self, cx: Ctx) -> str:
         """The condition is ``bool``; the branches unify."""
         self.cond.resolve(unify(self.cond.check(cx), "bool"))
-        self.ty = unify(self.a.check(cx), self.b.check(cx))
+        self.ty = no_rel(unify(self.a.check(cx), self.b.check(cx)))
         if self.ty not in LITERALS:
             self.resolve(self.ty)
         return self.ty
@@ -1525,8 +1601,12 @@ class Bin(Node):
         """Arithmetic: same numeric type; ``div``/``mod`` on ``int``; guarded division."""
         ty = unify(self.a.check(cx), self.b.check(cx))
         require_numeric(ty)
-        if self.op in ("div", "mod") and ty not in ("int", "lit_int"):
-            raise CompileError("E_TYPE", f"{self.op} on {ty}")
+        if self.op in ("div", "mod"):
+            if ty not in ("int", "lit_int"):
+                raise CompileError("E_TYPE", f"{self.op} on {ty}")
+            # DEF-2 (0.5.1): div and mod demand int operands; a literal under them is int whatever
+            # the outer context, and their result is a concrete int.
+            ty = "int"
         if ty not in LITERALS:
             self.resolve(ty)
         if self.op in DIVISION_OPS:
@@ -1543,7 +1623,14 @@ class Bin(Node):
         raise CompileError("E_DIV", "divisor is not a constant with non-zero bits")
 
     def resolve(self, ty: str) -> None:
-        """Arithmetic passes the type down; comparisons and logic are already concrete."""
+        """Arithmetic passes the type down; comparisons and logic are already concrete.
+
+        An arithmetic node already of the concrete type ``ty`` has its operands resolved to it
+        (``check_arith`` resolves them as soon as the type is concrete), so it returns at once: a
+        long chain resolves in linear time, not quadratic (F-2).
+        """
+        if self.op in ARITH_OPS and self.ty == ty and ty not in LITERALS:
+            return
         self.ty = ty
         if self.op in ARITH_OPS:
             self.a.resolve(ty)
@@ -2194,7 +2281,7 @@ def relation(world: World, name: str, args: list[Value]) -> list[Et]:
 def compile_expr(text: str, cx: Ctx, expected: str | None = None) -> Node:
     """Parse, check and resolve an expression program; the kind's result type is a context."""
     node = Parser(text).program()
-    ty = no_event(node.check(cx))
+    ty = no_rel(no_event(node.check(cx)))
     if expected is not None:
         node.resolve(unify(ty, expected))
     else:
@@ -2456,8 +2543,48 @@ RUNNERS = {
 DIAGNOSTICS = ("missing_reads", "dropped_actions", "neutral_reads", "truncated")
 
 
+# F-2 and GAP-A (Architect, 2026-10-18): operator chains and prefix operators do not nest, so a
+# 10^5-term chain is a valid program. The parser, checker and evaluator recurse along a chain, so
+# each case runs in a thread with a large stack under a raised recursion limit; no RecursionError
+# escapes compile or evaluate.
+DEEP_RECURSION_LIMIT = 2_000_000
+DEEP_STACK_BYTES = 1 << 30
+
+
+def run_deep[T](fn: Callable[[], T]) -> T:
+    """Run ``fn`` in a thread with a large stack and a raised recursion limit; return its value."""
+    out: dict[str, Any] = {}
+
+    def body() -> None:
+        try:
+            out["value"] = fn()
+        except BaseException as error:  # re-raised in the caller's thread
+            out["error"] = error
+
+    old_limit = sys.getrecursionlimit()
+    old_stack = threading.stack_size()
+    sys.setrecursionlimit(max(old_limit, DEEP_RECURSION_LIMIT))
+    threading.stack_size(DEEP_STACK_BYTES)
+    try:
+        worker = threading.Thread(target=body)
+        worker.start()
+        worker.join()
+    finally:
+        threading.stack_size(old_stack)
+        sys.setrecursionlimit(old_limit)
+    if "error" in out:
+        raise out["error"]
+    value: T = out["value"]
+    return value
+
+
 def run_case(golden: Golden, case: dict[str, Any]) -> tuple[str, dict[str, int]]:
     """Run one case; return the rendered result (or ``error:CODE``) and the diagnostics."""
+    return run_deep(lambda: run_case_here(golden, case))
+
+
+def run_case_here(golden: Golden, case: dict[str, Any]) -> tuple[str, dict[str, int]]:
+    """Run one case in the calling thread (``run_case`` gives it a deep stack)."""
     run = prepare(golden, case)
     try:
         texts: list[str] = []
@@ -2510,15 +2637,36 @@ def report_case(golden: Golden, case: dict[str, Any], verbose: bool) -> int:
     return 0 if ok else 1
 
 
+def emit_all(golden: Golden) -> None:
+    """``--emit`` (T-08): one line per case.
+
+    ``id result`` and, for a case that evaluated, the four diagnostics as ``name=value``;
+    ``crash:<kind>`` for a case the reference cannot run. Cases need not carry ``expect``.
+    """
+    for case in golden.cases:
+        ident = str(case["id"])
+        try:
+            got, diags = run_case(golden, case)
+        except Exception as error:  # a crash is a result of the fuzz, never a traceback
+            print(f"{ident} crash:{type(error).__name__}")
+            continue
+        tail = "".join(f" {name}={diags[name]}" for name in DIAGNOSTICS) if diags else ""
+        print(f"{ident} {got}{tail}")
+
+
 def main(argv: list[str]) -> int:
     """Command line."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--check", action="store_true", help="exit 1 on any mismatch")
+    parser.add_argument("--emit", action="store_true", help="print each case's result (T-08)")
     parser.add_argument("--case", help="run one case by id, verbosely")
     parser.add_argument("--golden", type=Path, default=GOLDEN, help="the golden file")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args(argv)
     golden = load_golden(args.golden)
+    if args.emit:
+        emit_all(golden)
+        return 0
     failures = check_all(golden, args.verbose or args.case is not None, args.case)
     total = len(golden.cases) if args.case is None else 1
     if failures:
