@@ -90,6 +90,9 @@ REQUIRED_GATES = (
     "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden "
     "vectors (exp_ln_v0 --check; 05.1 \u00a76 item 4 v1.10; SPR-016)",
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
+    "GAP-1 by name in release: the host's VmHWM over headless stays within 2 x peak "
+    "LiveEdge::bytes() (the window and the seal queue as allocated) + 2 MiB, solo 1,500 years at "
+    "full speed (SPR-026; VER-SPR-026-TEST GAP-1)",
     "Generated skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; "
     "SPR-005 T-03)",
     "Golden baseline control: a local run with no base says the C3 rule was not checked "

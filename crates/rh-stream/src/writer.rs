@@ -95,10 +95,14 @@ enum Job {
         year: i64,
         records: Vec<Record>,
         closed: u64,
+        /// The year's records as allocated, counted in `LiveEdge::queued_bytes` until the job has
+        /// run.
+        queued: usize,
     },
     Verify {
         path: PathBuf,
         records: Vec<Record>,
+        queued: usize,
     },
     Skip {
         year: i64,
@@ -159,8 +163,8 @@ impl Live {
             self.first = record.header.seq;
             self.year = year;
         }
-        self.pending
-            .extend_from_slice(crate::canonical::render(record)?.as_bytes());
+        let line = crate::canonical::render(record)?;
+        self.pending.extend_from_slice(line.as_bytes());
         self.pending.push(b'\n');
         self.ends.push(
             u32::try_from(self.pending.len())
@@ -265,7 +269,14 @@ fn seal_thread(
     let (mut sealed, mut verified) = (0, 0);
     let mut failed = false;
     for job in jobs {
+        // A queued year leaves the count once its job has run, or is dropped after a failure.
+        let queued = match &job {
+            Job::Seal { queued, .. } | Job::Verify { queued, .. } => *queued,
+            Job::Skip { .. } | Job::Then(_) => 0,
+        };
         if failed {
+            drop(job);
+            edge.dequeue(queued);
             continue;
         }
         let done = match job {
@@ -273,6 +284,7 @@ fn seal_thread(
                 year,
                 records,
                 closed,
+                ..
             } => seal_year(dir, cfg, year, &records, hook).map(|entry| {
                 edge.seal_landed(year, Some(&entry));
                 if let Some(c) = clock {
@@ -280,7 +292,7 @@ fn seal_thread(
                 }
                 sealed += 1;
             }),
-            Job::Verify { path, records } => {
+            Job::Verify { path, records, .. } => {
                 verify_year(&path, &records, cfg.minutes_per_year).map(|()| verified += 1)
             }
             Job::Skip { year } => {
@@ -289,6 +301,7 @@ fn seal_thread(
             }
             Job::Then(f) => f().map_err(StreamError::Io),
         };
+        edge.dequeue(queued);
         if let Err(e) = done {
             // Nothing after a failed seal is sealed: a later segment would leave a gap.
             failed = true;
@@ -625,10 +638,24 @@ impl StreamWriter {
         }
         let records = std::mem::take(&mut self.buffer);
         self.summary.records += u64::try_from(records.len()).unwrap_or(u64::MAX);
+        // The year's records as allocated, counted in `LiveEdge::queued_bytes` while they wait
+        // for the seal thread (GAP-1).
+        let queued = crate::record::allocated(&records);
         let sealer = self.live.as_ref().and_then(|l| l.sealer.as_ref());
+        // Counted before the job is sent, so the seal thread never subtracts first.
+        let enqueue = |n: usize| {
+            if let Some(l) = self.live.as_ref() {
+                l.edge.queue(n);
+            }
+        };
         if let Some(path) = self.existing.remove(&year) {
             if let Some(s) = sealer {
-                s.send(Job::Verify { path, records });
+                enqueue(queued);
+                s.send(Job::Verify {
+                    path,
+                    records,
+                    queued,
+                });
                 return Ok(());
             }
             verify_year(&path, &records, self.cfg.minutes_per_year)?;
@@ -641,10 +668,12 @@ impl StreamWriter {
                 .as_ref()
                 .and_then(|l| l.clock.as_ref())
                 .map_or(0, |c| c.now());
+            enqueue(queued);
             s.send(Job::Seal {
                 year,
                 records,
                 closed,
+                queued,
             });
             return Ok(());
         }

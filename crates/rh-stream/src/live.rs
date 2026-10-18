@@ -35,6 +35,7 @@
 //! REF: `specs/stream/wire_v1.md` §6.1, §6.2; REV-SPR-026 R2–R4, R16–R18, R22; ADR-0030.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use arc_swap::ArcSwap;
 
@@ -315,6 +316,9 @@ impl Snapshot {
 #[derive(Clone, Debug)]
 pub struct LiveEdge {
     state: Arc<ArcSwap<Snapshot>>,
+    /// The bytes of the completed years queued for the seal thread and not yet sealed
+    /// (`LiveEdge::queued_bytes`; the Architect's GAP-1 ruling).
+    queued: Arc<AtomicUsize>,
 }
 
 impl LiveEdge {
@@ -339,6 +343,7 @@ impl LiveEdge {
         };
         Self {
             state: Arc::new(ArcSwap::from_pointee(snap)),
+            queued: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -367,10 +372,39 @@ impl LiveEdge {
         snap.read(from, max)
     }
 
-    /// The window's bytes as allocated, now.
+    /// The live edge's bytes now: the window as allocated ([`Self::window_bytes`]) plus the
+    /// completed years queued for the seal thread ([`Self::queued_bytes`]). The term V-PERF-09
+    /// sets the host's live bytes against (GAP-1: under (b) at full speed the queue holds most of
+    /// the run, and a window-only count understated the host by about five times).
     #[must_use]
     pub fn bytes(&self) -> usize {
+        self.window_bytes() + self.queued_bytes()
+    }
+
+    /// The window's bytes as allocated (lines and their offsets), now.
+    #[must_use]
+    pub fn window_bytes(&self) -> usize {
         self.snapshot().bytes()
+    }
+
+    /// The seal queue's bytes, now: each completed year queued for sealing (or verifying) counts
+    /// its records as allocated (`rh_stream::record::allocated`: the vector's capacity and each
+    /// record's strings and vectors), from the moment it is queued until its job has run. The
+    /// canonical text would understate it: a queued `Record` takes the size of its largest body
+    /// variant, about 2.5 times its line on solo.
+    #[must_use]
+    pub fn queued_bytes(&self) -> usize {
+        self.queued.load(Ordering::Relaxed)
+    }
+
+    /// A completed year of `n` bytes was queued for the seal thread.
+    pub(crate) fn queue(&self, n: usize) {
+        self.queued.fetch_add(n, Ordering::Relaxed);
+    }
+
+    /// A queued year of `n` bytes was sealed, verified or dropped by the seal thread.
+    pub(crate) fn dequeue(&self, n: usize) {
+        self.queued.fetch_sub(n, Ordering::Relaxed);
     }
 
     fn update(&self, f: impl Fn(&Snapshot) -> Option<Snapshot>) {

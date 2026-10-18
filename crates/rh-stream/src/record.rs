@@ -459,6 +459,44 @@ impl Record {
         let (k1, k2) = self.body.order_k();
         (self.header.tick, self.kind().class(), k1, k2)
     }
+
+    /// The heap bytes this record owns beyond its own `size_of` (its strings' and vectors'
+    /// capacities, nested ones included): with `size_of::<Record>()`, its memory as allocated, the
+    /// measure of `LiveEdge::queued_bytes` (GAP-1). The allocator's own overhead is not counted.
+    #[must_use]
+    pub fn heap_bytes(&self) -> usize {
+        fn vec<T>(v: &Vec<T>) -> usize {
+            v.capacity() * std::mem::size_of::<T>()
+        }
+        match &self.body {
+            Body::Input(i) => i.input_kind.capacity() + i.scope.capacity() + i.producer.capacity(),
+            Body::Event(e) => {
+                e.verb.capacity()
+                    + vec(&e.payload)
+                    + vec(&e.roles)
+                    + vec(&e.snapshots)
+                    + vec(&e.causes)
+            }
+            Body::LifeEntry(_) | Body::LifeExit(_) | Body::StepDigest(_) => 0,
+            Body::Keyframe(k) => k.keyframe_format.capacity() + k.keyframe_path.capacity(),
+            Body::Match(m) => {
+                m.pack.capacity()
+                    + m.pattern_id.capacity()
+                    + vec(&m.bindings)
+                    + m.bindings.iter().map(|b| b.role.capacity()).sum::<usize>()
+                    + vec(&m.events)
+                    + m.events.iter().map(|c| c.clause.capacity()).sum::<usize>()
+            }
+        }
+    }
+}
+
+/// The memory of `records` as allocated: the vector's capacity in records, and each record's own
+/// heap ([`Record::heap_bytes`]).
+#[must_use]
+pub fn allocated(records: &Vec<Record>) -> usize {
+    records.capacity() * std::mem::size_of::<Record>()
+        + records.iter().map(Record::heap_bytes).sum::<usize>()
 }
 
 /// The sim-year of `tick` on a calendar of `minutes_per_year` minutes (R5): `floor(tick / mpy)`.

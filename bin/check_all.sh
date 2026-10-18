@@ -926,7 +926,7 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
   rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs
   rh-protocol::golden rh-protocol::method_table rh-protocol::round_trip rh-stream::live rh-cli::serve
-  rh-cli::channel_c rh-cli::vstr rh-cli::run_dir"
+  rh-cli::channel_c rh-cli::vstr rh-cli::run_dir rh-cli::memory"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -1039,7 +1039,7 @@ run "lint_arch positive control: unsafe outside the allow-listed file must FAIL 
 run "lint_arch positive control: rh-protocol depending on a workspace crate must FAIL (protocol-leaf; SPR-026)" "fail:VIOLATION [protocol-leaf] rh-protocol: depends on workspace crate rh-core" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/protocol_depends_on_plane_a/Cargo.toml &&
 run "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf allow-list; SPR-026 R7)" "fail:VIOLATION [protocol-leaf] rh-protocol: depends on third-party crate tokio" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/protocol_third_party/Cargo.toml &&
 run "lint_arch positive control: plane A -> rh-protocol must FAIL (plane-A closure; SPR-026)" "fail:VIOLATION [plane-A-closure] rh-stream: plane-A crate depends on plane-\"tool\" crate rh-protocol" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_protocol/Cargo.toml &&
-run "Test hooks: no --test-* flag in a baseline or golden rh-cli run command line (SPR-026; the poison ruling)" "pass:test hooks: none of --test-pace-ms, --test-poison, --test-stall" "$PY" -I bin/check_test_hooks.py &&
+run "Test hooks: no --test-* flag in a baseline or golden rh-cli run command line (SPR-026; the poison ruling)" "pass:test hooks: none of --test-pace-ms, --test-poison, --test-stall, --test-wait-viewer in" "$PY" -I bin/check_test_hooks.py &&
 run "Test hooks positive control: --test-poison planted in regen_baseline.sh's solo run must FAIL (SPR-026)" "fail:TEST HOOK IN A BASELINE OR GOLDEN COMMAND: bin/regen_baseline.sh:41: --test-poison" "$PY" -I bin/check_test_hooks.py --plant &&
 run "lint_arch positive control: system -> system must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_system/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_disallowed/Cargo.toml &&
@@ -1424,6 +1424,7 @@ run "rh-cli serve by name: A.sock read-only, the corrupt-frame fuzz, the cap, ab
 run "rh-cli channel C live by name: C.sock beside the run, empty years announced, lines = tail --channel C, follow = batch, sifted_through bounded (SPR-026 T-04)" "pass:channel C live:" cargo nextest run -p rh-cli --locked --release --test channel_c --no-capture &&
 run "rh-cli run directory by name: no kill during creation leaves an unusable directory, a resume keeps run.toml's rung, a torn keyframe rung is refused, replay names a running writer (BCK-002 A-58)" "pass:DEF-3: a kill at each of the 5 creation steps leaves a usable run directory" cargo nextest run -p rh-cli --locked --release --test run_dir --no-capture &&
 run "V-STR-01, V-STR-03 and V-STR-05 by name in release: four viewers change no stream byte (solo, hamlet), a sleeper catches up, a jumper jumps to live, a viewer survives kill -9 with a seal in flight (SPR-026 T-05)" "pass:V-STR-05 resume: future_seq" cargo nextest run -p rh-cli --locked --release --test vstr --no-capture &&
+run "GAP-1 by name in release: the host's VmHWM over headless stays within 2 x peak LiveEdge::bytes() (the window and the seal queue as allocated) + 2 MiB, solo 1,500 years at full speed (SPR-026; VER-SPR-026-TEST GAP-1)" "pass:GAP-1: solo 1500 years at full speed" cargo nextest run -p rh-cli --locked --release --test memory --no-capture &&
 run "V-PERF-09 ingredients: the host's live bytes under the counting allocator against LiveEdge::bytes() and the per-viewer frame cap, solo and hamlet (SPR-026 T-05; no gate, SPR-030's)" "pass:V-PERF-09 ingredients hamlet" cargo bench --locked --quiet -p rh-bench --features count-alloc --bench live_edge &&
 run "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment (SPR-013 T-11; ruling 14)" "pass:sift: 1 matches of solitary_life in 200 channel-C segments" "$RH_CLI_RELEASE" sift "$GOLDEN/solo_run" &&
 run "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 1 matches of solitary_life" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" &&
