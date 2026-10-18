@@ -182,7 +182,7 @@ def decode_ws_frame(data: bytes):
     return (opcode, decoded), rest
 
 class StreamServer:
-    def __init__(self, host="0.0.0.0", port=8089, interval=1.2, run_dir=None):
+    def __init__(self, host="127.0.0.1", port=8089, interval=1.2, run_dir=None):
         self.host = host
         self.port = port
         self.interval = interval
@@ -561,12 +561,13 @@ class StreamServer:
 
 def main():
     parser = argparse.ArgumentParser(description="Rehoboam Plane A Stream Server")
+    parser.add_argument("--host", type=str, default="127.0.0.1", help="Binding host (default 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8089, help="WebSocket port (default 8089)")
     parser.add_argument("--interval", type=float, default=1.2, help="Tick interval in seconds (default 1.2)")
     parser.add_argument("--run-dir", type=str, default=None, help="Optional path to real Rehoboam run directory to stream live")
     args = parser.parse_args()
 
-    srv = StreamServer(port=args.port, interval=args.interval, run_dir=args.run_dir)
+    srv = StreamServer(host=args.host, port=args.port, interval=args.interval, run_dir=args.run_dir)
     try:
         asyncio.run(srv.start())
     except KeyboardInterrupt:
