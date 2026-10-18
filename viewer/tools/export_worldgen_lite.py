@@ -9,7 +9,8 @@ Usage:
   python -I viewer/tools/export_worldgen_lite.py --world hamlet
   python -I viewer/tools/export_worldgen_lite.py --world hamlet --check
   python -I viewer/tools/export_worldgen_lite.py --world hamlet --check --control shifted-seed
-  python -I viewer/tools/export_worldgen_lite.py --manifest specs/manifest/examples/twin_vales.yaml --check
+  python -I viewer/tools/export_worldgen_lite.py \
+    --manifest specs/manifest/examples/twin_vales.yaml --check
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import importlib.util
 import sys
 import tomllib
 from array import array
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
@@ -28,6 +30,10 @@ ROOT = HERE.parents[1]
 
 EXIT_OK = 0
 EXIT_FAIL = 1
+
+SPLIT_PARTS = 2
+SOLO_POPULATION = 1
+HAMLET_POPULATION = 60
 
 SCALE_CONSTANTS = {
     "metres_per_cell": 30,
@@ -39,6 +45,24 @@ SCALE_CONSTANTS = {
     "elevation_units_per_voxel_num": 2240,
     "elevation_units_per_voxel_den": 100,
 }
+
+
+@dataclass(frozen=True)
+class ExportContext:
+    """Context holding manifest, world, and generator parameters."""
+
+    world_id: str
+    manifest_path: Path
+    actual_sha: str
+    template_name: str
+    seed: int
+    r: int
+    k: int
+    world: object
+    pop: object | None
+    total_pop: int
+    golden_case_key: str
+    case_key: str
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -68,7 +92,7 @@ def load_golden_cases(golden_path: Path) -> dict[str, dict[str, str]]:
             lines = {}
         elif current_case is not None:
             parts = line.split(maxsplit=1)
-            if len(parts) == 2:
+            if len(parts) == SPLIT_PARTS:
                 lines[parts[0]] = parts[1]
             elif len(parts) == 1:
                 lines[parts[0]] = ""
@@ -115,34 +139,15 @@ def extract_population(manifest: object, wl: ModuleType) -> tuple[object | None,
     return pop, total_pop
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--world", help="World name (e.g. hamlet, solo, household)")
-    parser.add_argument("--manifest", type=Path, help="Manifest file path")
-    parser.add_argument(
-        "--out",
-        type=Path,
-        default=ROOT / "target" / "viewer" / "exports",
-        help="Output directory (default: target/viewer/exports)",
-    )
-    parser.add_argument("--check", action="store_true", help="Check outputs against golden reference")
-    parser.add_argument(
-        "--control",
-        choices=["shifted-seed"],
-        help="Apply control mutation (must fail check)",
-    )
-    args = parser.parse_args()
-
-    if not args.world and not args.manifest:
-        print("Error: either --world <name> or --manifest <path> must be specified", file=sys.stderr)
-        return EXIT_FAIL
-
-    # 1. Resolve manifest and verify SHA-256 pin if world.toml exists
-    if args.world:
-        world_toml_path = ROOT / "worlds" / args.world / "world.toml"
+def _resolve_manifest(
+    world_arg: str | None, manifest_arg: Path | None
+) -> tuple[Path, str, str] | None:
+    """Resolve manifest path, SHA-256 hash, and world ID."""
+    if world_arg:
+        world_toml_path = ROOT / "worlds" / world_arg / "world.toml"
         if not world_toml_path.exists():
             print(f"Error: world config not found: {world_toml_path}", file=sys.stderr)
-            return EXIT_FAIL
+            return None
         w_cfg = tomllib.loads(world_toml_path.read_text(encoding="utf-8"))
         manifest_rel = Path(w_cfg["manifest"])
         manifest_path = ROOT / manifest_rel if not manifest_rel.is_absolute() else manifest_rel
@@ -151,155 +156,135 @@ def main() -> int:
         actual_sha = hashlib.sha256(manifest_bytes).hexdigest()
         if expected_sha and actual_sha != expected_sha:
             print(
-                f"Error: manifest SHA-256 mismatch for world {args.world}:\n"
+                f"Error: manifest SHA-256 mismatch for world {world_arg}:\n"
                 f"  expected: {expected_sha}\n  actual:   {actual_sha}",
                 file=sys.stderr,
             )
-            return EXIT_FAIL
-        world_id = args.world
-    else:
-        manifest_path = args.manifest if args.manifest.is_absolute() else ROOT / args.manifest
+            return None
+        return manifest_path, actual_sha, world_arg
+
+    if manifest_arg:
+        manifest_path = manifest_arg if manifest_arg.is_absolute() else ROOT / manifest_arg
         manifest_bytes = manifest_path.read_bytes()
         actual_sha = hashlib.sha256(manifest_bytes).hexdigest()
-        world_id = manifest_path.stem
+        return manifest_path, actual_sha, manifest_path.stem
 
-    # 2. Load manifest through manifest_v0
-    manifest_mod = _load("manifest_v0", ROOT / "specs" / "manifest" / "manifest_v0.py")
-    manifest = manifest_mod.load_manifest(manifest_path)
+    return None
 
-    geo = manifest.geography
-    world_meta = manifest.world
 
-    template_name = geo.heightmap_template
-    seed = world_meta.seed
-    r = geo.raster_resolution
-    k = geo.region_count
+def _check_golden_lines(
+    ctx: ExportContext,
+    g_lines: dict[str, str],
+    wl: ModuleType,
+) -> int:
+    """Check computed worldgen results against golden case expectations."""
+    edges_val = (
+        f"{len(ctx.world.edges)} " + " ".join(f"{a}-{b}" for a, b in ctx.world.edges)
+        if ctx.world.edges
+        else f"{len(ctx.world.edges)}"
+    )
+    graph_comp = wl.graph_components(ctx.world.k, ctx.world.edges)
+    connected_str = "yes" if graph_comp == 1 else "no"
+    checks = [
+        ("elevation_sha256", wl.sha(ctx.world.elevation)),
+        ("land", str(len(ctx.world.land))),
+        ("seeds", " ".join(map(str, ctx.world.seeds))),
+        ("regions_sha256", wl.sha(ctx.world.region)),
+        ("land_cells", " ".join(map(str, ctx.world.land_count))),
+        ("seats", " ".join(map(str, ctx.world.seat))),
+        ("edges", edges_val),
+        ("routes", " ".join(map(str, ctx.world.route_length))),
+        ("graph", f"components {graph_comp} connected {connected_str}"),
+    ]
+    if ctx.pop is not None:
+        place = wl.placement(ctx.world.seed, ctx.world.land_count, ctx.pop)
+        hh_str = ",".join(f"{hid}:{head}:{n}" for hid, head, n in ctx.pop.households)
+        res_str = f"cast={len(ctx.pop.cast)} households={hh_str} rest={ctx.pop.rest} " + " ".join(
+            map(str, place)
+        )
+        if ctx.world_id == "hamlet" or (
+            "residence" in g_lines and g_lines["residence"].startswith(f"cast={len(ctx.pop.cast)} ")
+        ):
+            checks.append(("residence", res_str))
 
-    if args.control == "shifted-seed":
-        seed += 1
-
-    # 3. Load worldgen-lite reference and generate case
-    wl = _load("selftest_worldgen_lite", ROOT / "specs" / "worldgen" / "selftest_worldgen_lite.py")
-    templates = wl.load_templates(wl.TEMPLATES)
-    if template_name not in templates:
-        print(f"Error: template '{template_name}' not found in templates", file=sys.stderr)
-        return EXIT_FAIL
-    tpl = templates[template_name]
-
-    world = wl.generate(templates, template_name, seed, r, k)
-    _, total_pop = extract_population(manifest, wl)
-    ref_pops = {
-        "solo": wl.SOLO,
-        "household": wl.HOUSEHOLD,
-        "hamlet": wl.HAMLET,
-    }
-    if world_id in ref_pops:
-        pop = ref_pops[world_id]
-    else:
-        pop, _ = extract_population(manifest, wl)
-
-    golden_case_key = f"{template_name} {world_meta.seed} {r} {k}"
-    case_key = f"{template_name} {seed} {r} {k}"
-
-    # 4. Check mode
-    if args.check:
-        golden_file = ROOT / "specs" / "worldgen" / "golden" / "worldgen_lite_v0.txt"
-        golden_cases = load_golden_cases(golden_file)
-
-        if golden_case_key in golden_cases:
-            g_lines = golden_cases[golden_case_key]
-            # Compare every golden line
-            edges_val = (
-                f"{len(world.edges)} " + " ".join(f"{a}-{b}" for a, b in world.edges)
-                if world.edges
-                else f"{len(world.edges)}"
+    for key, computed_val in checks:
+        if key not in g_lines:
+            print(f"STALE: missing golden line {key}", file=sys.stderr)
+            return EXIT_FAIL
+        if g_lines[key] != computed_val:
+            print(
+                f"STALE: {key} mismatch:\n  golden:   {g_lines[key]}\n  computed: {computed_val}",
+                file=sys.stderr,
             )
-            checks = [
-                ("elevation_sha256", wl.sha(world.elevation)),
-                ("land", str(len(world.land))),
-                ("seeds", " ".join(map(str, world.seeds))),
-                ("regions_sha256", wl.sha(world.region)),
-                ("land_cells", " ".join(map(str, world.land_count))),
-                ("seats", " ".join(map(str, world.seat))),
-                ("edges", edges_val),
-                ("routes", " ".join(map(str, world.route_length))),
-                (
-                    "graph",
-                    (
-                        f"components {wl.graph_components(world.k, world.edges)} "
-                        f"connected {'yes' if wl.graph_components(world.k, world.edges) == 1 else 'no'}"
-                    ),
-                ),
-            ]
-            if pop is not None:
-                place = wl.placement(world.seed, world.land_count, pop)
-                hh_str = ",".join(f"{hid}:{head}:{n}" for hid, head, n in pop.households)
-                res_str = (
-                    f"cast={len(pop.cast)} households={hh_str} rest={pop.rest} "
-                    + " ".join(map(str, place))
-                )
-                if world_id == "hamlet" or (
-                    "residence" in g_lines and g_lines["residence"].startswith(f"cast={len(pop.cast)} ")
-                ):
-                    checks.append(("residence", res_str))
+            return EXIT_FAIL
 
-            for key, computed_val in checks:
-                if key not in g_lines:
-                    print(f"STALE: missing golden line {key}", file=sys.stderr)
-                    return EXIT_FAIL
-                if g_lines[key] != computed_val:
-                    print(f"STALE: {key} mismatch:", file=sys.stderr)
-                    print(f"  golden:   {g_lines[key]}", file=sys.stderr)
-                    print(f"  computed: {computed_val}", file=sys.stderr)
-                    return EXIT_FAIL
+    if ctx.world_id == "solo" and ctx.total_pop != SOLO_POPULATION:
+        print(f"STALE: solo population {ctx.total_pop} != {SOLO_POPULATION}", file=sys.stderr)
+        return EXIT_FAIL
+    if ctx.world_id == "household" and ctx.total_pop not in (5, 6):
+        print(f"STALE: household population {ctx.total_pop} not in (5, 6)", file=sys.stderr)
+        return EXIT_FAIL
+    if ctx.world_id == "hamlet" and ctx.total_pop != HAMLET_POPULATION:
+        print(f"STALE: hamlet population {ctx.total_pop} != {HAMLET_POPULATION}", file=sys.stderr)
+        return EXIT_FAIL
 
-            # Check population matches reference constant for rung worlds
-            if world_id == "solo" and total_pop != 1:
-                print(f"STALE: solo population {total_pop} != 1", file=sys.stderr)
-                return EXIT_FAIL
-            if world_id == "household" and total_pop not in (5, 6):
-                print(f"STALE: household population {total_pop} not in (5, 6)", file=sys.stderr)
-                return EXIT_FAIL
-            if world_id == "hamlet" and total_pop != 60:
-                print(f"STALE: hamlet population {total_pop} != 60", file=sys.stderr)
-                return EXIT_FAIL
+    print(f"EXPORT-CHECK: PASS ({ctx.world_id} matches golden case {ctx.case_key})")
+    return EXIT_OK
 
-            print(f"EXPORT-CHECK: PASS ({world_id} matches golden case {case_key})")
-        else:
-            # Self-agreement check (e.g. twin_vales)
-            world2 = wl.generate(templates, template_name, seed, r, k)
-            if wl.sha(world.elevation) != wl.sha(world2.elevation) or wl.sha(world.region) != wl.sha(world2.region):
-                print("STALE: self-agreement check failed between repeated runs", file=sys.stderr)
-                return EXIT_FAIL
-            print(f"EXPORT-CHECK: PASS ({world_id} self-agreement verified for case {case_key})")
 
-    # 5. Write export files
-    out_dir = args.out
+def _verify_export(
+    ctx: ExportContext,
+    wl: ModuleType,
+    templates: dict[str, object],
+) -> int:
+    """Verify export against golden reference file or self-agreement."""
+    golden_file = ROOT / "specs" / "worldgen" / "golden" / "worldgen_lite_v0.txt"
+    golden_cases = load_golden_cases(golden_file)
+
+    if ctx.golden_case_key in golden_cases:
+        return _check_golden_lines(ctx, golden_cases[ctx.golden_case_key], wl)
+
+    # Self-agreement check
+    world2 = wl.generate(templates, ctx.template_name, ctx.seed, ctx.r, ctx.k)
+    if wl.sha(ctx.world.elevation) != wl.sha(world2.elevation) or wl.sha(
+        ctx.world.region
+    ) != wl.sha(world2.region):
+        print("STALE: self-agreement check failed between repeated runs", file=sys.stderr)
+        return EXIT_FAIL
+    print(f"EXPORT-CHECK: PASS ({ctx.world_id} self-agreement verified for case {ctx.case_key})")
+    return EXIT_OK
+
+
+def _write_export(
+    ctx: ExportContext,
+    out_dir: Path,
+    sea_level: int,
+    templates_version: str,
+    wl: ModuleType,
+) -> None:
+    """Write binary rasters and TOML metadata to out_dir."""
     out_dir.mkdir(parents=True, exist_ok=True)
+    toml_path = out_dir / f"{ctx.world_id}.toml"
+    elev_path = out_dir / f"{ctx.world_id}_elevation.bin"
+    reg_path = out_dir / f"{ctx.world_id}_regions.bin"
 
-    toml_path = out_dir / f"{world_id}.toml"
-    elev_path = out_dir / f"{world_id}_elevation.bin"
-    reg_path = out_dir / f"{world_id}_regions.bin"
+    elev_path.write_bytes(array("H", ctx.world.elevation).tobytes())
+    reg_path.write_bytes(array("H", ctx.world.region).tobytes())
 
-    # Write little-endian u16 binary rasters
-    elev_path.write_bytes(array("H", world.elevation).tobytes())
-    reg_path.write_bytes(array("H", world.region).tobytes())
-
-    # Build TOML metadata
-    edges_str = ", ".join(f"[{a}, {b}]" for a, b in world.edges)
-    seats_str = ", ".join(str(s) for s in world.seat)
-    routes_str = ", ".join(str(r_len) for r_len in world.route_length)
+    edges_str = ", ".join(f"[{a}, {b}]" for a, b in ctx.world.edges)
+    seats_str = ", ".join(str(s) for s in ctx.world.seat)
+    routes_str = ", ".join(str(r_len) for r_len in ctx.world.route_length)
 
     toml_lines = [
         'format = "rehoboam-worldgen-lite-export-v0"',
-        f'templates_version = "{templates.get("version", "worldgen-lite-templates-v0")}"',
-        f'case = "{case_key}"',
-        f'world = "{world_id}"',
-        f'manifest_path = "{manifest_path}"',
-        f'manifest_sha256 = "{actual_sha}"',
-        f"raster_resolution = {r}",
-        f"sea_level = {tpl.sea_level}",
-        f"land_count = {len(world.land)}",
+        f'templates_version = "{templates_version}"',
+        f'case = "{ctx.case_key}"',
+        f'world = "{ctx.world_id}"',
+        f'manifest_path = "{ctx.manifest_path}"',
+        f'manifest_sha256 = "{ctx.actual_sha}"',
+        f"raster_resolution = {ctx.r}",
+        f"sea_level = {sea_level}",
+        f"land_count = {len(ctx.world.land)}",
         f"seats = [{seats_str}]",
         f"edges = [{edges_str}]",
         f"routes = [{routes_str}]",
@@ -315,21 +300,97 @@ def main() -> int:
         f"elevation_units_per_voxel_den = {SCALE_CONSTANTS['elevation_units_per_voxel_den']}",
     ]
 
-    if pop is not None:
-        place = wl.placement(world.seed, world.land_count, pop)
+    if ctx.pop is not None:
+        place = wl.placement(ctx.world.seed, ctx.world.land_count, ctx.pop)
         toml_lines.append("")
         for k_idx, settlement in enumerate(place):
-            pid = wl.founder(world.seed, k_idx)
-            toml_lines.extend([
-                "[[founders]]",
-                f"person_id = {pid}",
-                f"settlement = {settlement}",
-            ])
+            pid = wl.founder(ctx.world.seed, k_idx)
+            toml_lines.extend(
+                [
+                    "[[founders]]",
+                    f"person_id = {pid}",
+                    f"settlement = {settlement}",
+                ]
+            )
 
-    toml_content = "\n".join(toml_lines) + "\n"
-    toml_path.write_text(toml_content, encoding="utf-8")
-
+    toml_path.write_text("\n".join(toml_lines) + "\n", encoding="utf-8")
     print(f"EXPORT: wrote {toml_path}, {elev_path}, {reg_path}")
+
+
+def main() -> int:
+    """Run worldgen-lite export tool with parsed CLI arguments."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--world", help="World name (e.g. hamlet, solo, household)")
+    parser.add_argument("--manifest", type=Path, help="Manifest file path")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=ROOT / "target" / "viewer" / "exports",
+        help="Output directory (default: target/viewer/exports)",
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="Check outputs against golden reference"
+    )
+    parser.add_argument(
+        "--control",
+        choices=["shifted-seed"],
+        help="Apply control mutation (must fail check)",
+    )
+    args = parser.parse_args()
+
+    resolved = _resolve_manifest(args.world, args.manifest)
+    if resolved is None:
+        print("Error: specify valid --world <name> or --manifest <path>", file=sys.stderr)
+        return EXIT_FAIL
+
+    manifest_path, actual_sha, world_id = resolved
+    manifest_mod = _load("manifest_v0", ROOT / "specs" / "manifest" / "manifest_v0.py")
+    manifest = manifest_mod.load_manifest(manifest_path)
+
+    geo = manifest.geography
+    world_meta = manifest.world
+    template_name = geo.heightmap_template
+    seed = world_meta.seed + (1 if args.control == "shifted-seed" else 0)
+    r = geo.raster_resolution
+    k = geo.region_count
+
+    wl = _load("selftest_worldgen_lite", ROOT / "specs" / "worldgen" / "selftest_worldgen_lite.py")
+    templates = wl.load_templates(wl.TEMPLATES)
+    if template_name not in templates:
+        print(f"Error: template '{template_name}' not found", file=sys.stderr)
+        return EXIT_FAIL
+    tpl = templates[template_name]
+
+    world = wl.generate(templates, template_name, seed, r, k)
+    _, total_pop = extract_population(manifest, wl)
+    ref_pops = {"solo": wl.SOLO, "household": wl.HOUSEHOLD, "hamlet": wl.HAMLET}
+    pop = ref_pops.get(world_id) or extract_population(manifest, wl)[0]
+
+    golden_case_key = f"{template_name} {world_meta.seed} {r} {k}"
+    case_key = f"{template_name} {seed} {r} {k}"
+
+    ctx = ExportContext(
+        world_id=world_id,
+        manifest_path=manifest_path,
+        actual_sha=actual_sha,
+        template_name=template_name,
+        seed=seed,
+        r=r,
+        k=k,
+        world=world,
+        pop=pop,
+        total_pop=total_pop,
+        golden_case_key=golden_case_key,
+        case_key=case_key,
+    )
+
+    if args.check:
+        res = _verify_export(ctx, wl, templates)
+        if res != EXIT_OK:
+            return res
+
+    tpl_ver = str(templates.get("version", "worldgen-lite-templates-v0"))
+    _write_export(ctx, args.out, tpl.sea_level, tpl_ver, wl)
     return EXIT_OK
 
 

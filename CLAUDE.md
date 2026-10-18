@@ -54,9 +54,10 @@ cargo nextest run --workspace --locked
 cargo test --doc --workspace --locked             # doctests: rh-ids compile-fail cases, counted per file by check_all (SPR-002)
 cargo nextest run -p rh-ids --run-ignored only --test stream_independence   # V-DET-20 full sweep, 10^6 draws (nightly)
 # Architecture lints: stdlib Python
-python -I bin/lint_arch.py        # crate boundaries (V-INSP-03), plane isolation (V-PLN-01), engine purity (V-INSP-05, SPR-011)
+python -I bin/lint_arch.py        # crate boundaries (V-INSP-03), plane isolation (V-PLN-01), engine purity (V-INSP-05, SPR-011), viewer isolation (V-R3D-14, V-VIEW-04, SPR-033)
 python -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_kind_unpinned/Cargo.toml   # must FAIL: kind "system" belongs to rh-sys-* and the crates pinned to (A, system), rh-minds alone (T1-A; REV-MINDS finding 3); arch/relabelled_minds/ must FAIL too
 python -I bin/lint_forbidden.py   # forbidden APIs in plane-A crates (V-DET-19), floats outside declared f32_field columns, file clocks, std::process::Command and file I/O outside FILE_IO_CRATES included (A-44); env!/option_env! other than a literal CARGO_PKG_* name (rule build-env, A-50; SPR-014)
+bin/check_viewer.sh               # viewer workspace check tier: fmt, clippy, deny, lock age, exports, tests, planted controls (SPR-033 T-06)
 # Python: configuration in python/pyproject.toml, run from the repository root
 python -m ruff check --config python/pyproject.toml .
 python -m mypy --config-file python/pyproject.toml

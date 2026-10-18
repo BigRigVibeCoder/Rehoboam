@@ -1,0 +1,82 @@
+# The viewer CI workflow (SPR-033 T-06; B1).
+# Runs bin/check_viewer.sh on PRs that touch viewer paths, and on a schedule twice a week.
+# No push trigger on main (B1; V4).
+name: viewer
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "viewer/**"
+      - "specs/viewer/**"
+      - "bin/check_viewer.sh"
+      - ".github/workflows/viewer.yml"
+      - "python/tests/test_viewer_workflow.py"
+  schedule:
+    - cron: "43 4 * * 1,4"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check-viewer:
+    name: Viewer workspace checks (bin/check_viewer.sh)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Base branch for pull requests (for merge base check)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
+      - name: Rust toolchain (pinned by rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "viewer -> ../target/viewer"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: cargo-nextest and cargo-deny (prebuilt binaries)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest@0.9,cargo-deny@0.20
+
+      - name: uv and Python 3.12
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Python environment from the lock (RUN-001 §4)
+        run: uv sync --frozen --project python
+
+      - name: Run bin/check_viewer.sh
+        run: bin/check_viewer.sh
+
+      - name: Upload the viewer check report and licence ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viewer-report
+          path: |
+            artifacts/viewer_report.md
+            artifacts/viewer_licence_ledger.txt
+          if-no-files-found: warn

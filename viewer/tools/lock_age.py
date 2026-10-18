@@ -26,6 +26,7 @@ VIEWER_DIR = HERE.parent
 LOCK_FILE = VIEWER_DIR / "Cargo.lock"
 TABLE_FILE = VIEWER_DIR / "lock_age.txt"
 MIN_AGE_DAYS = 14
+MIN_PARTS = 5
 
 
 def get_direct_pins() -> set[str]:
@@ -36,7 +37,7 @@ def get_direct_pins() -> set[str]:
             continue
         try:
             data = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception as e:
+        except Exception:
             continue
         for section in ("dependencies", "dev-dependencies", "build-dependencies"):
             table = data.get(section, {})
@@ -66,12 +67,12 @@ def parse_table() -> dict[str, dict[str, str]]:
     if not TABLE_FILE.exists():
         return {}
     res: dict[str, dict[str, str]] = {}
-    for line in TABLE_FILE.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+    for raw_line in TABLE_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
         parts = line.split()
-        if len(parts) >= 5:
+        if len(parts) >= MIN_PARTS:
             name, ver, pub, ent, direct = parts[0], parts[1], parts[2], parts[3], parts[4]
             res[name] = {
                 "version": ver,
@@ -92,7 +93,35 @@ def fetch_published_date(name: str, version: str) -> str:
     with urllib.request.urlopen(req) as resp:
         data = json.loads(resp.read().decode("utf-8"))
         created_at = data["version"]["created_at"]
-        return created_at[:10]
+        return str(created_at[:10])
+
+
+def _verify_package_age(name: str, ver: str, entry: dict[str, str], is_direct: bool) -> list[str]:
+    """Verify lock version, direct classification, and the 14-day rule for one package."""
+    errors: list[str] = []
+    if entry["version"] != ver:
+        errors.append(f"{name}: lock version {ver} != table version {entry['version']}")
+        return errors
+
+    expected_direct_str = "direct" if is_direct else "transitive"
+    if entry["direct"] != expected_direct_str:
+        errors.append(f"{name}: table direct={entry['direct']} but expected {expected_direct_str}")
+
+    if is_direct:
+        try:
+            pub_date = datetime.date.fromisoformat(entry["published"])
+            ent_date = datetime.date.fromisoformat(entry["entered"])
+        except ValueError as e:
+            errors.append(f"{name}: invalid date format: {e}")
+            return errors
+
+        age_days = (ent_date - pub_date).days
+        if age_days < MIN_AGE_DAYS:
+            errors.append(
+                f"{name} {ver}: direct pin entered on {ent_date} but published on {pub_date} "
+                f"({age_days} days old, must be >= {MIN_AGE_DAYS} days)"
+            )
+    return errors
 
 
 def check() -> int:
@@ -108,48 +137,35 @@ def check() -> int:
     # 1. Exactly the lock's packages
     missing_in_table = set(lock_pkgs.keys()) - set(table.keys())
     if missing_in_table:
-        print(f"FAIL: packages in Cargo.lock missing from {TABLE_FILE.name}: {sorted(missing_in_table)}", file=sys.stderr)
+        print(
+            f"FAIL: packages in Cargo.lock missing from {TABLE_FILE.name}: "
+            f"{sorted(missing_in_table)}",
+            file=sys.stderr,
+        )
         return 1
 
     extra_in_table = set(table.keys()) - set(lock_pkgs.keys())
     if extra_in_table:
-        print(f"FAIL: packages in {TABLE_FILE.name} not in Cargo.lock: {sorted(extra_in_table)}", file=sys.stderr)
+        print(
+            f"FAIL: packages in {TABLE_FILE.name} not in Cargo.lock: {sorted(extra_in_table)}",
+            file=sys.stderr,
+        )
         return 1
 
     # Check versions and 14-day rule
-    errors = []
+    errors: list[str] = []
     for name, ver in sorted(lock_pkgs.items()):
-        entry = table[name]
-        if entry["version"] != ver:
-            errors.append(f"{name}: lock version {ver} != table version {entry['version']}")
-            continue
-
-        is_direct = name in direct_pins
-        expected_direct_str = "direct" if is_direct else "transitive"
-        if entry["direct"] != expected_direct_str:
-            errors.append(f"{name}: table direct={entry['direct']} but expected {expected_direct_str}")
-
-        if is_direct:
-            try:
-                pub_date = datetime.date.fromisoformat(entry["published"])
-                ent_date = datetime.date.fromisoformat(entry["entered"])
-            except ValueError as e:
-                errors.append(f"{name}: invalid date format: {e}")
-                continue
-
-            age_days = (ent_date - pub_date).days
-            if age_days < MIN_AGE_DAYS:
-                errors.append(
-                    f"{name} {ver}: direct pin entered on {ent_date} but published on {pub_date} "
-                    f"({age_days} days old, must be >= {MIN_AGE_DAYS} days)"
-                )
+        errors.extend(_verify_package_age(name, ver, table[name], name in direct_pins))
 
     if errors:
         for err in errors:
             print(f"FAIL: {err}", file=sys.stderr)
         return 1
 
-    print(f"PASS: {len(lock_pkgs)} packages checked, all direct pins >= {MIN_AGE_DAYS} days old at lock entry")
+    print(
+        f"PASS: {len(lock_pkgs)} packages checked, "
+        f"all direct pins >= {MIN_AGE_DAYS} days old at lock entry"
+    )
     return 0
 
 
@@ -158,12 +174,16 @@ def write() -> int:
     lock_pkgs = get_lock_packages()
     direct_pins = get_direct_pins()
     existing = parse_table()
-    today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    today = datetime.datetime.now(datetime.UTC).date().isoformat()
 
     rows: list[str] = []
-    rows.append("# viewer/lock_age.txt: publication and lock-entry dates for packages in viewer/Cargo.lock.")
-    rows.append("# Generated by viewer/tools/lock_age.py --write; checked offline by lock_age.py --check.")
-    rows.append(f"# Columns: package version published entered direct")
+    rows.append(
+        "# viewer/lock_age.txt: publication and lock-entry dates for packages in viewer/Cargo.lock."
+    )
+    rows.append(
+        "# Generated by viewer/tools/lock_age.py --write; checked offline by lock_age.py --check."
+    )
+    rows.append("# Columns: package version published entered direct")
 
     for name in sorted(lock_pkgs.keys()):
         ver = lock_pkgs[name]
@@ -178,7 +198,10 @@ def write() -> int:
             try:
                 pub = fetch_published_date(name, ver)
             except Exception as e:
-                print(f"Error fetching crates.io data for {name} {ver}: {e}", file=sys.stderr)
+                print(
+                    f"Error fetching crates.io data for {name} {ver}: {e}",
+                    file=sys.stderr,
+                )
                 return 1
             ent = today
 
@@ -191,6 +214,7 @@ def write() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run lock_age tool with command line arguments."""
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="Run offline check")

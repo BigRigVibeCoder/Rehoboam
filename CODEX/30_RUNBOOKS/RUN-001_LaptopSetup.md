@@ -8,11 +8,11 @@ agents: [all]
 tags: [infrastructure, workflow]
 related: [GOV-008, SPR-001, GOV-002]
 created: 2026-10-16
-updated: 2026-10-16
-version: 1.2.1
+updated: 2026-10-18
+version: 1.3.0
 ---
 
-> **BLUF:** Six steps take the director's laptop from a clean Ubuntu 24.04 to running `bin/check_all.sh` green: system packages, Rust, the Cargo tools, Python through `uv` (Ubuntu blocks `pip` into the system Python), a first check run, and benchmark hygiene. Phase 1 needs no GPU. About 20–30 minutes, mostly compiling the Cargo tools.
+> **BLUF:** Seven steps take the director's laptop from a clean Ubuntu 24.04 to running `bin/check_all.sh` and `bin/check_viewer.sh` green: system packages, Rust, the Cargo tools, Python through `uv` (Ubuntu blocks `pip` into the system Python), a first check run, benchmark hygiene, and the viewer workspace. Phase 1 needs no GPU. About 20–30 minutes, mostly compiling the Cargo tools.
 
 # RUN-001 — Laptop setup
 
@@ -70,3 +70,14 @@ Expect `Verdict: PASS (71 checks)`. The first run compiles the workspace; later 
 - **Close heavy applications** during benchmark runs; keep the vents clear. Sustained all-core loads throttle a mobile CPU.
 - **A session (SPR-009 T-04):** on AC power with the performance profile, run `bin/bench_session.sh laptop`. It refuses to run otherwise, then records the run conditions, 5 separate wall-clock runs of benches 7 and 8 and their run-to-run spread, and the instruction counts, under `artifacts/perf/session_laptop_<time>/`.
 - **Wall-clock timings on this laptop vary by more than 10% between runs.** The per-PR performance gate therefore uses **instruction counts** (deterministic, via `iai-callgrind`), and wall-clock benchmarks run nightly on the VM `adjutant` with repeated samples (GOV-002 tier 10, SPR-009, RUN-002).
+
+## 7. The viewer workspace (SPR-033 Stage a)
+```bash
+# Export worldgen-lite rasters and metadata for the viewer
+python -I viewer/tools/export_worldgen_lite.py --world hamlet --check
+# Run the viewer check suite (fail-fast, writes artifacts/viewer_report.md)
+bin/check_viewer.sh
+less artifacts/viewer_report.md
+```
+Expect `Verdict: PASS (22 checks)`.
+

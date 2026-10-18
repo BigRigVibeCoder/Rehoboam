@@ -82,6 +82,34 @@ fn main() {
         radius: 90,
     };
 
+    let mesh_200_mode = args.iter().any(|a| a == "--mesh-200");
+    if mesh_200_mode {
+        let mut mesher = binary_greedy_meshing::Mesher::<{ rh_view_core::chunk::CS }>::new();
+        let mut count = 0;
+        'outer: for dx in -10..=10 {
+            for dz in -10..=10 {
+                for dy in 10..25 {
+                    let coord = rh_view_core::chunk::ChunkCoord {
+                        level: 0,
+                        x: 218 + dx,
+                        y: dy,
+                        z: 97 + dz,
+                    };
+                    let chunk = ctx.generate_chunk(coord);
+                    if !chunk.is_interior_all_air() {
+                        let _m = rh_view_core::mesh::mesh_chunk(&chunk, &mut mesher);
+                        count += 1;
+                        if count == 200 {
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+        }
+        println!("MESH-200: meshed {count} terrain chunks");
+        return;
+    }
+
     let l0_chunks = ctx.generate_bubble_chunks(&bubble, 0);
     let l0_digest = compute_content_digest(GENERATOR_VERSION, &bubble, &l0_chunks);
 

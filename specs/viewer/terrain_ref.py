@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
@@ -39,6 +40,11 @@ PLAZA_SIZE = 34
 PLAZA_HALF_EXTENT = 17
 ROUTE_WIDTH = 4
 
+CELL_HALF_VOXEL_OFFSET = 300
+CLIFF_HEIGHT_DIFF = 3
+SAND_BEACH_MAX_ELEVATION_DIFF = 5
+CLIFF_SUB_COUNT = 5
+
 # Material palette IDs:
 AIR = 0
 WATER = 1
@@ -58,9 +64,11 @@ class SplitMix64:
     """SplitMix64 deterministic pseudo-random number generator."""
 
     def __init__(self, seed: int) -> None:
+        """Initialize generator state from 64-bit seed."""
         self.state = seed & 0xFFFF_FFFF_FFFF_FFFF
 
     def next_u64(self) -> int:
+        """Advance generator state and return next 64-bit unsigned integer."""
         self.state = (self.state + 0x9E37_79B9_7F4A_7C15) & 0xFFFF_FFFF_FFFF_FFFF
         z = self.state
         z = ((z ^ (z >> 30)) * 0xBF58_476D_1CE4_E5B9) & 0xFFFF_FFFF_FFFF_FFFF
@@ -68,6 +76,7 @@ class SplitMix64:
         return (z ^ (z >> 31)) & 0xFFFF_FFFF_FFFF_FFFF
 
     def below(self, n: int) -> int:
+        """Return pseudo-random integer in range [0, n)."""
         return self.next_u64() % n
 
 
@@ -88,28 +97,28 @@ def interpolate_elevation(raster: list[int], r: int, vx: int, vz: int) -> int:
     vz_scaled = 7 * vz
 
     # X axis
-    if vx_scaled <= 300:
+    if vx_scaled <= CELL_HALF_VOXEL_OFFSET:
         i0, i1 = 0, 0
         wx0, wx1 = 600, 0
-    elif vx_scaled >= 600 * (r - 1) + 300:
+    elif vx_scaled >= 600 * (r - 1) + CELL_HALF_VOXEL_OFFSET:
         i0, i1 = r - 1, r - 1
         wx0, wx1 = 600, 0
     else:
-        x_prime = vx_scaled - 300
+        x_prime = vx_scaled - CELL_HALF_VOXEL_OFFSET
         i0 = x_prime // 600
         i1 = i0 + 1
         wx1 = x_prime % 600
         wx0 = 600 - wx1
 
     # Z axis
-    if vz_scaled <= 300:
+    if vz_scaled <= CELL_HALF_VOXEL_OFFSET:
         j0, j1 = 0, 0
         wz0, wz1 = 600, 0
-    elif vz_scaled >= 600 * (r - 1) + 300:
+    elif vz_scaled >= 600 * (r - 1) + CELL_HALF_VOXEL_OFFSET:
         j0, j1 = r - 1, r - 1
         wz0, wz1 = 600, 0
     else:
-        z_prime = vz_scaled - 300
+        z_prime = vz_scaled - CELL_HALF_VOXEL_OFFSET
         j0 = z_prime // 600
         j1 = j0 + 1
         wz1 = z_prime % 600
@@ -120,12 +129,7 @@ def interpolate_elevation(raster: list[int], r: int, vx: int, vz: int) -> int:
     e01 = raster[j1 * r + i0]
     e11 = raster[j1 * r + i1]
 
-    num = (
-        e00 * wx0 * wz0
-        + e10 * wx1 * wz0
-        + e01 * wx0 * wz1
-        + e11 * wx1 * wz1
-    )
+    num = e00 * wx0 * wz0 + e10 * wx1 * wz0 + e01 * wx0 * wz1 + e11 * wx1 * wz1
     den = 360_000
     return num // den
 
@@ -198,28 +202,20 @@ def choose_sample_columns(
     return cols
 
 
+@dataclass(frozen=True)
 class ColumnData:
     """Evaluated voxel column properties."""
 
-    def __init__(
-        self,
-        vx: int,
-        vz: int,
-        e: int,
-        h: int,
-        surface: int,
-        stack: list[int],
-        flag: str,
-    ) -> None:
-        self.vx = vx
-        self.vz = vz
-        self.e = e
-        self.h = h
-        self.surface = surface
-        self.stack = stack
-        self.flag = flag
+    vx: int
+    vz: int
+    e: int
+    h: int
+    surface: int
+    stack: list[int]
+    flag: str
 
     def line(self, idx: int) -> str:
+        """Format the column as a deterministic text line for comparison."""
         stk_str = ",".join(str(m) for m in self.stack)
         return (
             f"col i={idx} vx={self.vx} vz={self.vz} e={self.e} h={self.h} "
@@ -227,41 +223,44 @@ class ColumnData:
         )
 
 
-def evaluate_column(
-    raster: list[int],
-    r: int,
-    sea_level: int,
-    max_voxels: int,
-    plaza_map: dict[tuple[int, int], tuple[int, int]],  # (vx, vz) -> (h_plaza, seat_idx)
-    route_map: dict[tuple[int, int], int],             # (vx, vz) -> edge_idx
-    vx: int,
-    vz: int,
-) -> ColumnData:
+@dataclass(frozen=True)
+class TerrainContext:
+    """World raster and layout context for column evaluation."""
+
+    raster: list[int]
+    r: int
+    sea_level: int
+    max_voxels: int
+    plaza_map: dict[tuple[int, int], tuple[int, int]]
+    route_map: dict[tuple[int, int], int]
+
+
+def evaluate_column(ctx: TerrainContext, vx: int, vz: int) -> ColumnData:
     """Computes terrain properties for column (vx, vz) according to terrain_v0."""
-    e = interpolate_elevation(raster, r, vx, vz)
+    e = interpolate_elevation(ctx.raster, ctx.r, vx, vz)
     h = height_from_elevation(e)
-    h_sea = height_from_elevation(sea_level)
+    h_sea = height_from_elevation(ctx.sea_level)
 
     # 1. Cliff detection against 4-neighbours
     cliff = False
     for dx, dz in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-        nb_x = max(0, min(max_voxels - 1, vx + dx))
-        nb_z = max(0, min(max_voxels - 1, vz + dz))
-        nb_e = interpolate_elevation(raster, r, nb_x, nb_z)
+        nb_x = max(0, min(ctx.max_voxels - 1, vx + dx))
+        nb_z = max(0, min(ctx.max_voxels - 1, vz + dz))
+        nb_e = interpolate_elevation(ctx.raster, ctx.r, nb_x, nb_z)
         nb_h = height_from_elevation(nb_e)
-        if h - nb_h > 3:
+        if h - nb_h > CLIFF_HEIGHT_DIFF:
             cliff = True
             break
 
     # 2. Base terrain material and shell
-    if e < sea_level or h - h_sea <= 5:
+    if e < ctx.sea_level or h - h_sea <= SAND_BEACH_MAX_ELEVATION_DIFF:
         surf = SAND
         sub = DIRT
         sub_count = 3
     elif cliff:
         surf = ROCK
         sub = ROCK
-        sub_count = 5
+        sub_count = CLIFF_SUB_COUNT
     else:
         surf = GRASS
         sub = DIRT
@@ -270,8 +269,8 @@ def evaluate_column(
     flag = "none"
 
     # 3. Plazas: levelled height, STONE surface
-    if (vx, vz) in plaza_map:
-        h_plaza, seat_idx = plaza_map[(vx, vz)]
+    if (vx, vz) in ctx.plaza_map:
+        h_plaza, seat_idx = ctx.plaza_map[(vx, vz)]
         h = h_plaza
         surf = STONE
         sub = DIRT
@@ -279,13 +278,13 @@ def evaluate_column(
         flag = f"plaza:{seat_idx}"
 
     # 4. Routes: draped over surface, PACKED_EARTH
-    if (vx, vz) in route_map:
-        edge_idx = route_map[(vx, vz)]
+    if (vx, vz) in ctx.route_map:
+        edge_idx = ctx.route_map[(vx, vz)]
         surf = PACKED_EARTH
         flag = f"route:{edge_idx}"
 
     # Build 6-voxel solid shell [y=h down to y=h-5]
-    if sub == ROCK and sub_count == 5:
+    if sub == ROCK and sub_count == CLIFF_SUB_COUNT:
         # All rock cliff
         stack = [surf] + [ROCK] * 5
     else:
@@ -293,6 +292,43 @@ def evaluate_column(
         stack = [surf, DIRT, DIRT, DIRT, ROCK, ROCK]
 
     return ColumnData(vx, vz, e, h, surf, stack, flag)
+
+
+def _build_plaza_map(
+    elevation: list[int], r: int, seats: list[tuple[int, int]]
+) -> dict[tuple[int, int], tuple[int, int]]:
+    """Build coordinate lookup map for plazas."""
+    plaza_map: dict[tuple[int, int], tuple[int, int]] = {}
+    for seat_idx, (svx, svz) in enumerate(seats):
+        e_seat = interpolate_elevation(elevation, r, svx, svz)
+        h_plaza = height_from_elevation(e_seat)
+        for dx in range(-PLAZA_HALF_EXTENT, PLAZA_HALF_EXTENT):
+            for dz in range(-PLAZA_HALF_EXTENT, PLAZA_HALF_EXTENT):
+                plaza_map[(svx + dx, svz + dz)] = (h_plaza, seat_idx)
+    return plaza_map
+
+
+def _build_route_map(
+    seats: list[tuple[int, int]], edges: list[tuple[int, int]], reverse_routes: bool
+) -> dict[tuple[int, int], int]:
+    """Build coordinate lookup map for draped routes."""
+    edge_list = list(reversed(edges)) if reverse_routes else edges
+    route_map: dict[tuple[int, int], int] = {}
+    for edge_idx, (a, b) in enumerate(edge_list):
+        actual_idx = (len(edges) - 1 - edge_idx) if reverse_routes else edge_idx
+        sa = seats[a - 1]
+        sb = seats[b - 1]
+        dx = abs(sb[0] - sa[0])
+        dz = -abs(sb[1] - sa[1])
+        line = bresenham_line(sa[0], sa[1], sb[0], sb[1])
+        for lx, lz in line:
+            if dx >= -dz:
+                for k in (-1, 0, 1, 2):
+                    route_map[(lx, lz + k)] = actual_idx
+            else:
+                for k in (-1, 0, 1, 2):
+                    route_map[(lx + k, lz)] = actual_idx
+    return route_map
 
 
 def generate_columns(reverse_routes: bool = False) -> list[str]:
@@ -311,50 +347,26 @@ def generate_columns(reverse_routes: bool = False) -> list[str]:
     for s_cell in world.seat:
         scx = s_cell % r
         scz = s_cell // r
-        svx = (600 * scx + 300) // 7
-        svz = (600 * scz + 300) // 7
+        svx = (600 * scx + CELL_HALF_VOXEL_OFFSET) // 7
+        svz = (600 * scz + CELL_HALF_VOXEL_OFFSET) // 7
         seats.append((svx, svz))
 
-    # Build plaza lookup map
-    plaza_map: dict[tuple[int, int], tuple[int, int]] = {}
-    for seat_idx, (svx, svz) in enumerate(seats):
-        e_seat = interpolate_elevation(world.elevation, r, svx, svz)
-        h_plaza = height_from_elevation(e_seat)
-        for dx in range(-PLAZA_HALF_EXTENT, PLAZA_HALF_EXTENT):
-            for dz in range(-PLAZA_HALF_EXTENT, PLAZA_HALF_EXTENT):
-                plaza_map[(svx + dx, svz + dz)] = (h_plaza, seat_idx)
-
-    # Build route lookup map
-    edge_list = list(reversed(world.edges)) if reverse_routes else world.edges
-    route_map: dict[tuple[int, int], int] = {}
-    for edge_idx, (a, b) in enumerate(edge_list):
-        actual_idx = (len(world.edges) - 1 - edge_idx) if reverse_routes else edge_idx
-        sa = seats[a - 1]
-        sb = seats[b - 1]
-        dx = abs(sb[0] - sa[0])
-        dz = -abs(sb[1] - sa[1])
-        line = bresenham_line(sa[0], sa[1], sb[0], sb[1])
-        for lx, lz in line:
-            if dx >= -dz:
-                for k in (-1, 0, 1, 2):
-                    route_map[(lx, lz + k)] = actual_idx
-            else:
-                for k in (-1, 0, 1, 2):
-                    route_map[(lx + k, lz)] = actual_idx
+    plaza_map = _build_plaza_map(world.elevation, r, seats)
+    route_map = _build_route_map(seats, world.edges, reverse_routes)
+    ctx = TerrainContext(world.elevation, r, sea_level, max_voxels, plaza_map, route_map)
 
     # Sample the 400 columns
     sample_cols = choose_sample_columns(seats, world.edges, max_voxels)
     lines: list[str] = []
     for idx, (vx, vz) in enumerate(sample_cols):
-        col = evaluate_column(
-            world.elevation, r, sea_level, max_voxels, plaza_map, route_map, vx, vz
-        )
+        col = evaluate_column(ctx, vx, vz)
         lines.append(col.line(idx))
 
     return lines
 
 
 def main() -> int:
+    """Run reference column generator or golden comparator."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write", action="store_true", help="Write golden columns file")
     parser.add_argument("--check", action="store_true", help="Check against golden columns file")
@@ -365,7 +377,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    reverse = (args.control == "route-order")
+    reverse = args.control == "route-order"
     lines = generate_columns(reverse_routes=reverse)
 
     if args.write:
@@ -384,10 +396,11 @@ def main() -> int:
         ln.strip() for ln in GOLDEN_COLUMNS.read_text(encoding="utf-8").splitlines() if ln.strip()
     ]
     if len(golden_lines) != len(lines):
-        print(f"STALE: count mismatch: golden has {len(golden_lines)}, computed {len(lines)}", file=sys.stderr)
+        msg = f"STALE: count mismatch: golden has {len(golden_lines)}, computed {len(lines)}"
+        print(msg, file=sys.stderr)
         return EXIT_FAIL
 
-    for i, (g_ln, c_ln) in enumerate(zip(golden_lines, lines)):
+    for i, (g_ln, c_ln) in enumerate(zip(golden_lines, lines, strict=True)):
         if g_ln != c_ln:
             print(f"STALE: col {i} mismatch:", file=sys.stderr)
             print(f"  golden:   {g_ln}", file=sys.stderr)
