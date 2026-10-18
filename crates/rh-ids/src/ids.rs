@@ -190,6 +190,14 @@ typed_id! {
 }
 
 typed_id! {
+    /// A household: `H64(seed, "household", t, k)` where `t` is the household's formation
+    /// instant and `k` its serial number at `t` (SPR-015). Unlike `PersonId`, which is issued by
+    /// the person ledger, `HouseholdId` is issued by the demography system itself: the hash
+    /// carries the seed that issued it, so the engine can reissue the same id in any branch.
+    HouseholdId(u64)
+}
+
+typed_id! {
     /// A sifting-pattern match (plane C; ADR-0008). Defined here so that every crate shares one
     /// identifier vocabulary.
     MatchId(u64)
@@ -275,6 +283,7 @@ mod sealed {
     impl Sealed for super::RegionId {}
     impl Sealed for super::EventId {}
     impl Sealed for super::WorldKey {}
+    impl Sealed for super::HouseholdId {}
 }
 
 impl EntityKey for PersonId {

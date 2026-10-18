@@ -90,6 +90,8 @@ const READS: [&str; 6] = [
 struct Reader;
 
 impl SystemModel for Reader {
+    type Index = ();
+    
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: "Z1.reader",
@@ -243,6 +245,8 @@ struct AllReader {
 }
 
 impl SystemModel for AllReader {
+    type Index = ();
+    
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: "Z2.all",

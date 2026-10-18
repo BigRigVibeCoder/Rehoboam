@@ -36,9 +36,11 @@ pub const CONTROL_SYSTEM: &str = "X1.smoke_weather";
 pub const CONTROL_BYTES: usize = 64;
 
 /// A system that also allocates after every step: V-PERF-11's positive control.
-pub struct Allocating(pub Box<dyn SystemModel>);
+pub struct Allocating(pub Box<dyn SystemModel<Index = ()>>);
 
 impl SystemModel for Allocating {
+    type Index = ();
+    
     fn descriptor(&self) -> SystemDescriptor {
         self.0.descriptor()
     }
@@ -98,9 +100,9 @@ pub fn engine(repo: &Path, threads: usize, control: bool) -> Result<Engine, Stri
         .into_iter()
         .map(|s| {
             if control && s.descriptor().id == CONTROL_SYSTEM {
-                Box::new(Allocating(s)) as Box<dyn SystemModel>
+                Box::new(Allocating(s)) as Box<dyn SystemModel<Index = ()>>
             } else {
-                s
+                s as Box<dyn SystemModel<Index = ()>>
             }
         })
         .collect();

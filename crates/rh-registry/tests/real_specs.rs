@@ -164,6 +164,8 @@ struct OnSkeleton {
 }
 
 impl SystemModel for OnSkeleton {
+    type Index = ();
+    
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
@@ -578,6 +580,8 @@ struct Declared {
 }
 
 impl SystemModel for Declared {
+    type Index = ();
+    
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
@@ -896,6 +900,8 @@ fn m2_m7_and_t1_register_together_as_specified() {
 struct WithRoles(OnSkeleton, &'static [(&'static str, rh_core::RoleId)]);
 
 impl SystemModel for WithRoles {
+    type Index = ();
+    
     fn descriptor(&self) -> SystemDescriptor {
         self.0.descriptor()
     }

@@ -88,6 +88,7 @@ impl Harvest {
 }
 
 impl SystemModel for Harvest {
+    type Index = ();
     from_skeleton!();
 
     fn access(&self) -> AccessSpec {

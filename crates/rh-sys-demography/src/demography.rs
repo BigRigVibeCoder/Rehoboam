@@ -409,6 +409,8 @@ fn marry(
 }
 
 impl SystemModel for Demography {
+    type Index = ();
+    
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: SYSTEM_ID,

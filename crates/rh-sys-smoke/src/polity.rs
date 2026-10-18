@@ -67,6 +67,7 @@ impl Polity {
 }
 
 impl SystemModel for Polity {
+    type Index = ();
     from_skeleton!();
 
     fn access(&self) -> AccessSpec {

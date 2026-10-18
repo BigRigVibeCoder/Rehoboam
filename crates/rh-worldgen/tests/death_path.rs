@@ -187,6 +187,8 @@ fn living(v: &SystemView<'_>, who: PersonId) -> Result<bool, SimError> {
 }
 
 impl SystemModel for Sender {
+    type Index = ();
+    
     fn descriptor(&self) -> SystemDescriptor {
         SystemDescriptor {
             id: self.id,
