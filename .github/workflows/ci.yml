@@ -34,10 +34,12 @@ concurrency:
 
 jobs:
   check-all:
-    # Two parallel jobs, one per part of the chain (SPR-009 review 2b; BCK-002 A-38), so the tier
-    # fits V-PERF-04's 15 minutes on a slow runner: `core` (lints, builds, workspace and by-name
-    # tests, Python, specs) and `golden` (release builds, golden runs with the vitals observer,
-    # performance gates). Every gate runs on every PR, in exactly one of them.
+    # Three parallel jobs, one per part of the chain (SPR-009 review 2b; BCK-002 A-38, A-63), so the
+    # tier fits V-PERF-04's 15 minutes on a slow runner: `core` (lints, builds, workspace and by-name
+    # tests, Python, specs), `golden` (the release build, golden runs with the vitals observer,
+    # baselines, ladders, performance gates) and `stream` (the stream, serve, tail, sift, replay,
+    # rungs and twin gates, on run directories of its own). Every gate runs on every PR, in exactly
+    # one of them, unless a path scope reports it SKIP (BCK-002 A-64).
     name: PR tier (bin/check_all.sh --part ${{ matrix.part }})
     runs-on: ubuntu-24.04
     # 20 minutes guards the 15-minute PR budget (V-PERF-04): a part that runs past it is a red
@@ -46,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: [core, golden]
+        part: [core, golden, stream]
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
@@ -77,11 +79,13 @@ jobs:
         run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
       # The director's ruling of 2026-10-17: a change whose every file is documentation (docs/,
-      # CODEX/, *.md) skips the golden part's work, which cannot move for it, and reports green;
-      # the core part always runs in full. bin/ci_scope.py fails closed (an unknown scope runs
-      # everything). Every later step of this job carries the verdict in its `if`, which
-      # python/tests/test_ci_workflow.py pins.
-      - name: Scope (documentation-only changes skip the golden part)
+      # CODEX/, *.md) skips the golden and stream parts' work, which cannot move for it, and reports
+      # green; the core part always runs in full. bin/ci_scope.py fails closed (an unknown scope
+      # runs everything). Every later step of this job carries the verdict in its `if`, which
+      # python/tests/test_ci_workflow.py pins. Inside the core part, bin/check_all.sh asks the same
+      # script which path-scoped gates a change needs (`scope`; BCK-002 A-64), from RH_EVENT and
+      # the base or push range in this job's env.
+      - name: Scope (documentation-only changes skip the golden and stream parts)
         id: scope
         env:
           CHECK_PART: ${{ matrix.part }}
@@ -96,8 +100,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         if: steps.scope.outputs.run == 'true'
         with:
-          # One cache per part: they build different profiles and targets.
-          key: ${{ matrix.part }}
+          # One cache per part: they build different profiles and targets (the stream part's
+          # release tests are not the golden part's benches). The stream part builds its release
+          # dependencies with overflow checks (check_all.sh `part`; PR #89's review C5), which this
+          # action cannot see, so its key names them: a cache restored by its exact key is never
+          # saved again, and one keyed `stream` holds the build without them.
+          key: ${{ matrix.part == 'stream' && 'stream-overflow-checks' || matrix.part }}
 
       - name: cargo-nextest, cargo-deny and iai-callgrind-runner (prebuilt binaries)
         if: steps.scope.outputs.run == 'true'

@@ -17,6 +17,7 @@ This keeps in-flight sprints from building on specs that change underneath them.
 
 | Path | What |
 |---|---|
+| `RT-2026-10-18-batch-08-dispositions.md` | The Architect's dispositions of batch 08's three demography "defects" (probe B08-01, on its branch): the genesis trap declined (the count reproduces, but agnatic membership continues a house through its men, who marry out); the agnatic bleed and the cognatic explosion already decided by D56. Each claim re-run on the repository's own references. The rest of batch 08 is D62 and inbox batch 06 |
 | `RT-2026-10-18-batch-07-dispositions.md` | The Architect's dispositions of the red team's batch 07 ("reality check", RT-035 to RT-038, on its branch): the stream bridge not adopted, the control bridge declined before P2.6, the manor population band adopted into SPR-019 T-07, three ledger rows corrected, and an action on `adjutant`'s port 8089 |
 | `RT-2026-10-17-voxel-engine-synthesis-and-architect-analysis.md` | The red team's synthesis of the Architect's voxel-viewer analysis (Bevy against Veloren and Luanti) and its D51 recommendation; D51 was approved, and the decision is ADR-0036 and PRJ-003 |
 | `RT-2026-10-16-proposal-voxel-compiler-and-culture-dreamer.md` | The red team's proposal (drafted as "ADR-0036" on its branch): a stream-to-voxel shape grammar and an LLM "culture dreamer" for style cards; with the Architect's intake note placing it in the viewer lane (V.1, proposed V.1b) |
