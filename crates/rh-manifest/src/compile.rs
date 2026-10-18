@@ -32,7 +32,7 @@ use crate::registry::{ExactBounds, Registry};
 /// The demography system's Registry id.
 pub const DEMOGRAPHY: &str = "M2.demography";
 /// The parameters rung 0 of `M2.demography` reads (ruling 7), in spec order.
-pub const DEMOGRAPHY_READS: [&str; 2] = ["e0", "brass_beta"];
+pub const DEMOGRAPHY_READS: [&str; 4] = ["e0", "brass_beta", "tfr", "elite_fertility_mult"];
 /// Parameters a manifest may not set until P1.3 adds fixed-point `exp` and `ln` (ruling 7).
 pub const DEMOGRAPHY_REFUSED: [&str; 1] = ["brass_alpha"];
 
@@ -297,13 +297,19 @@ fn demography(
     }
     let get = |n: &str| values.iter().find(|(name, _)| *name == n).map(|(_, q)| *q);
     let (e0, brass_beta) = (get("e0")?, get("brass_beta")?);
+    let (tfr, elite_fertility_mult) = (get("tfr")?, get("elite_fertility_mult")?);
     if brass_beta != Q16_16::ONE {
         errors.push(
             format!("systems.{DEMOGRAPHY}.brass_beta"),
             "rung 0 runs Brass at beta = 1 only until P1.3 (SPR-011 ruling 7)",
         );
     }
-    Some(DemographyParams { e0, brass_beta })
+    Some(DemographyParams {
+        e0,
+        brass_beta,
+        tfr,
+        elite_fertility_mult,
+    })
 }
 
 /// Why an authored value is outside its Registry bounds, compared as exact decimals (G-2): a

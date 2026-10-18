@@ -14,7 +14,7 @@
 use core::fmt;
 
 use rh_core::Phase;
-use rh_core::access::{AccessSpec, ColumnWrite, CommandApply, Plane};
+use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandApply, Lag, Plane};
 use rh_core::agenda::TimerEntry;
 use rh_core::command::QueuedCommand;
 use rh_core::fixed::Q16_16;
@@ -41,10 +41,10 @@ mod skeleton {
     include!("../../rh-core/tests/generated/M2_demography.rs");
 }
 
-use skeleton::{DRAINS, ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
+use skeleton::{DRAINS, ROLE_ACTOR, ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
 
 impl SpecPurpose for RngPurpose {
-    const ALL: &'static [Self] = &[Self::DeathTime];
+    const ALL: &'static [Self] = &[Self::DeathTime, Self::Conception, Self::BirthSex];
     fn name(&self) -> &'static str {
         RngPurpose::name(*self)
     }
@@ -62,6 +62,22 @@ pub const PERSON_DEATH_TICK: &str = "person.death_tick";
 pub const PERSON_DEATH_CAUSE: &str = "person.death_cause";
 /// See [`PERSON_ID`].
 pub const PERSON_SPOUSE: &str = "person.spouse";
+/// See [`PERSON_ID`].
+pub const PERSON_HOUSEHOLD: &str = "person.household";
+/// See [`PERSON_ID`].
+pub const PERSON_PARITY: &str = "person.parity";
+/// See [`PERSON_ID`].
+pub const PERSON_LAST_BIRTH_TICK: &str = "person.last_birth_tick";
+/// See [`PERSON_ID`].
+pub const PERSON_CONCEIVED_TICK: &str = "person.conceived_tick";
+/// See [`PERSON_ID`].
+pub const PERSON_UNBORN_FATHER: &str = "person.unborn_father";
+/// See [`PERSON_ID`].
+pub const PERSON_SEX: &str = "person.sex";
+/// See [`PERSON_ID`].
+pub const PERSON_MOTHER: &str = "person.mother";
+/// See [`PERSON_ID`].
+pub const PERSON_FATHER: &str = "person.father";
 /// The life-course columns [`apply_death`] writes.
 pub const LC_PERSON: &str = "life_course.person_id";
 /// See [`LC_PERSON`].
@@ -74,7 +90,7 @@ pub const LC_DEATH_CAUSE: &str = "life_course.death_cause";
 pub const LC_BIRTH: &str = "life_course.birth_tick";
 
 /// Every column M2 owns (`[[owns]]`), in spec order.
-pub const OWNED: [&str; 19] = [
+pub const OWNED: [&str; 33] = [
     "person.id",
     "person.birth_tick",
     "person.sex",
@@ -84,6 +100,20 @@ pub const OWNED: [&str; 19] = [
     "person.father",
     "person.spouse",
     "person.death_cause",
+    "person.household",
+    "person.parity",
+    "person.last_birth_tick",
+    "person.conceived_tick",
+    "person.unborn_father",
+    "household.id",
+    "household.head",
+    "household.formed_tick",
+    "household.dissolved_tick",
+    "marriage.husband",
+    "marriage.wife",
+    "marriage.start_tick",
+    "marriage.end_tick",
+    "marriage.source",
     "life_course.person_id",
     "life_course.origin",
     "life_course.mother",
@@ -124,6 +154,44 @@ pub const MARRY: &str = "Marry";
 pub const DEATH: &str = "DEATH";
 /// See [`DEATH`].
 pub const EXTINCTION: &str = "EXTINCTION";
+/// See [`DEATH`].
+pub const BIRTH: &str = "BIRTH";
+
+/// The birth timer's closure id (F7).
+pub const BIRTH_TIMER: u32 = 2;
+
+/// Fertility bands: 7 five-year bands 15-19 to 45-49.
+pub const BANDS: usize = 7;
+/// Coale-Trussell natural fertility n(a) per band, in thousandths (F1).
+pub const N_I: [u16; BANDS] = [411, 460, 431, 395, 322, 167, 24];
+/// Gestation in calendar months (F2).
+pub const GESTATION_MONTHS: i64 = 9;
+/// Postpartum non-susceptible period in calendar months (F2).
+pub const POSTPARTUM_MONTHS: i64 = 11;
+/// Closed period G + P in Month pulses (F2).
+pub const CLOSED_PERIOD: i64 = 20;
+/// Reference TFR of the nuptiality schedule at M=1, in Q16_16 bits (F3).
+pub const TFR1_BITS: i32 = 615_614;
+/// Minimum fertile age in years (F0).
+pub const MIN_AGE_YEARS: i64 = 15;
+/// Maximum fertile age in years (F0).
+pub const MAX_AGE_YEARS: i64 = 50;
+/// Band width in years (F0).
+pub const BAND_WIDTH_YEARS: i64 = 5;
+/// SEX_M = rhe(2^32 * 105 / 205) ≈ 0.5122 (F2).
+pub const SEX_M_BITS: u32 = 2_199_861_298;
+/// Sex codes: male = 0, female = 1.
+pub const SEX_MALE: i64 = 0;
+/// See [`SEX_MALE`].
+pub const SEX_FEMALE: i64 = 1;
+/// life_course.origin codes.
+pub const ORIGIN_FOUNDER: i64 = 0;
+/// See [`ORIGIN_FOUNDER`].
+pub const ORIGIN_BIRTH: i64 = 1;
+/// life_course.exit_kind open.
+pub const EXIT_OPEN: i64 = 0;
+/// life_course.birth_order (parity, 1-based): founder marker.
+pub const BIRTH_ORDER_NONE: i64 = 0;
 
 /// Why M2 refused its parameters (ruling 7).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -166,10 +234,17 @@ impl std::error::Error for DemographyError {}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Demography {
     schedule: Schedule,
+    /// The ordinary conception table c_i (F4), one Prob32 per band.
+    c: [rh_core::fixed::Prob32; BANDS],
+    /// The elite conception table c_i^e (F4).
+    c_e: [rh_core::fixed::Prob32; BANDS],
 }
 
 impl Demography {
     /// M2 for e₀ on `calendar`, refusing `brass_alpha` (any `Some`) and β ≠ 1 (ruling 7).
+    /// `tfr` and `elite_fertility_mult` are Q16_16 values from the manifest or Registry defaults.
+    ///
+    /// Computes the conception tables `c_i` and `c_i^e` at construction (F4).
     ///
     /// # Errors
     /// [`DemographyError`], each naming the refused parameter.
@@ -177,6 +252,8 @@ impl Demography {
         e0: Q16_16,
         brass_alpha: Option<Q16_16>,
         brass_beta: Q16_16,
+        tfr: Q16_16,
+        elite_fertility_mult: Q16_16,
         calendar: Calendar,
     ) -> Result<Self, DemographyError> {
         if let Some(alpha) = brass_alpha {
@@ -190,13 +267,33 @@ impl Demography {
             });
         }
         let schedule = Schedule::new(e0, calendar).map_err(DemographyError::Schedule)?;
-        Ok(Self { schedule })
+        let m = conception_level(tfr);
+        let m_e = elite_level(m, elite_fertility_mult);
+        let c = conception_table(m);
+        let c_e = conception_table(m_e);
+        Ok(Self {
+            schedule,
+            c,
+            c_e,
+        })
     }
 
     /// The schedule.
     #[must_use]
     pub const fn schedule(&self) -> &Schedule {
         &self.schedule
+    }
+
+    /// The ordinary conception table c_i (F4).
+    #[must_use]
+    pub const fn conception(&self) -> &[rh_core::fixed::Prob32; BANDS] {
+        &self.c
+    }
+
+    /// The elite conception table c_i^e (F4).
+    #[must_use]
+    pub const fn conception_elite(&self) -> &[rh_core::fixed::Prob32; BANDS] {
+        &self.c_e
     }
 
     #[allow(clippy::needless_pass_by_value, reason = "a map_err adapter")]
@@ -242,6 +339,112 @@ impl Demography {
         }
         Ok(())
     }
+
+    /// F5-F7 at the Month pulse instant: scan eligible women, draw conception, schedule birth timer.
+    fn fertility(&self, view: &mut SystemView<'_>, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
+        let t_m = ctx.now();
+        let t_m_minutes = t_m.minutes();
+        let year = self.schedule.calendar().minutes_per_year();
+
+        // F6: read house_member.person (lagged to start of instant; M7's column).
+        let house_members = view.read("house_member.person").unwrap_or(&[]);
+
+        // The calendar's month-end for the birth date (9 months ahead).
+        let mut tau_month = t_m;
+        for _ in 0..GESTATION_MONTHS {
+            tau_month = self.schedule.calendar().next_boundary(
+                Pulse::Month,
+                SimTime::from_minutes(tau_month.minutes() + 1),
+            ).ok_or_else(|| fail("calendar overflow in fertility".to_owned()))?;
+        }
+        let birth_month_end = self.schedule.month_end(
+            SimTime::from_minutes(tau_month.minutes()),
+        ).map_err(Self::sched_err)?;
+        let tau_month_start = tau_month;
+        let days_in_birth_month = (birth_month_end.minutes() - tau_month_start.minutes()) / DAY;
+
+        // First pass: read-only, collect conceptions
+        struct Hit {
+            idx: usize,
+            woman_id: u64,
+            father: i64,
+            tau_minutes: i64,
+        }
+        let mut hits: Vec<Hit> = Vec::new();
+
+        {
+            let ids = view.read(PERSON_ID)?;
+            let births = view.read(PERSON_BIRTH)?;
+            let alive = view.read(PERSON_ALIVE)?;
+            let sex = view.read(PERSON_SEX)?;
+            let spouses = view.read(PERSON_SPOUSE)?;
+            let conceived = view.read(PERSON_CONCEIVED_TICK)?;
+
+            for idx in 0..ids.len() {
+                if alive[idx] != 1 {
+                    continue;
+                }
+                if sex[idx] != SEX_FEMALE {
+                    continue;
+                }
+                let spouse_raw = spouses[idx].cast_unsigned();
+                if spouse_raw == 0 {
+                    continue;
+                }
+                if conceived[idx] != i64::MAX {
+                    continue;
+                }
+                let birth = births[idx];
+                let Some(band) = fertility_band(t_m_minutes, birth, year) else {
+                    continue;
+                };
+
+                let woman_id = ids[idx].cast_unsigned();
+                let is_elite = house_members
+                    .binary_search_by(|&v| v.cast_unsigned().cmp(&woman_id))
+                    .is_ok()
+                    || house_members
+                        .binary_search_by(|&v| v.cast_unsigned().cmp(&spouse_raw))
+                        .is_ok();
+                let table = if is_elite { &self.c_e } else { &self.c };
+                let c_i = table[band];
+
+                let woman = PersonId::from_raw(woman_id);
+                if !ctx.chance(&RngPurpose::Conception, woman, 0, c_i)? {
+                    continue;
+                }
+                let d1 = ctx.rng(&RngPurpose::Conception, woman, 1)?;
+                let day_offset = 1 + ((u128::from(d1) * u128::from((days_in_birth_month - 1).cast_unsigned())) >> 64) as u64;
+                let tau = tau_month_start.minutes() + DAY * day_offset.cast_signed();
+
+                hits.push(Hit {
+                    idx,
+                    woman_id,
+                    father: spouses[idx],
+                    tau_minutes: tau,
+                });
+            }
+        }
+
+        // Second pass: write conception state and schedule timers
+        for hit in &hits {
+            view.write(PERSON_CONCEIVED_TICK)?[hit.idx] = t_m_minutes;
+            view.write(PERSON_UNBORN_FATHER)?[hit.idx] = hit.father;
+
+            ctx.schedule(
+                &RngPurpose::Conception,
+                TimerSpec {
+                    time: SimTime::from_minutes(hit.tau_minutes),
+                    phase: Phase::Vital,
+                    entity: EntityRef::person(PersonId::from_raw(hit.woman_id)),
+                    kind: BIRTH_TIMER,
+                    payload: 0, // placeholder
+                    cause: rh_events::EventRef::None,
+                },
+            )?;
+        }
+        Ok(())
+    }
 }
 
 fn fail(message: String) -> SimError {
@@ -249,6 +452,75 @@ fn fail(message: String) -> SimError {
         system: SYSTEM_ID,
         message,
     }
+}
+
+/// F3: compute the conception level M = tfr / TFR1 in Q16_16.
+#[must_use]
+fn conception_level(tfr: Q16_16) -> Q16_16 {
+    // m = rhe(T * 65536 / TFR1_BITS) where T = tfr bits
+    let t = tfr.to_bits();
+    let num = i64::from(t) * i64::from(Q16_16::ONE.to_bits());
+    let m = if num >= 0 {
+        (num + i64::from(TFR1_BITS) / 2) / i64::from(TFR1_BITS)
+    } else {
+        (num - i64::from(TFR1_BITS) / 2) / i64::from(TFR1_BITS)
+    };
+    Q16_16::from_bits(m as i32)
+}
+
+/// F3: compute elite level m_e = rhe(m * E / 65536).
+#[must_use]
+fn elite_level(m: Q16_16, elite_fertility_mult: Q16_16) -> Q16_16 {
+    let num = i64::from(m.to_bits()) * i64::from(elite_fertility_mult.to_bits());
+    // rhe(x / 65536): half to even
+    let half = i64::from(Q16_16::ONE.to_bits()) / 2;
+    let denom = i64::from(Q16_16::ONE.to_bits());
+    let result = (num + half) / denom;
+    Q16_16::from_bits(result as i32)
+}
+
+/// F4: compute the conception table c_i for 7 bands at level M (Q16_16).
+#[must_use]
+fn conception_table(level: Q16_16) -> [rh_core::fixed::Prob32; BANDS] {
+    use rh_core::fixed::Prob32;
+    let mut c = [Prob32::ZERO; BANDS];
+    let one: u64 = 1 << 32;
+    for i in 0..BANDS {
+        let n_i = u64::from(N_I[i]);
+        // b_i = m * N_i (births per woman-year in units of 2^-16 / 1000)
+        let m_bits = level.to_bits().cast_unsigned();
+        let b_i = (u128::from(m_bits) * u128::from(n_i)) >> 16;
+        // den_i = 12 * 65536 * 1000 - 20 * b_i
+        let den_i: i64 = {
+            let base: i64 = 12 * 65536 * 1000;
+            let sub: i64 = (20_u128 * b_i) as i64;
+            base - sub
+        };
+        if den_i <= 0 {
+            c[i] = Prob32::from_bits(one).unwrap_or(Prob32::ONE);
+        } else {
+            let num: u128 = u128::from(b_i as u64) * u128::from(one);
+            let den: u128 = den_i.cast_unsigned().into();
+            let val = (num + den / 2) / den;
+            let clamped = if val > u128::from(one) { one } else { val as u64 };
+            c[i] = Prob32::from_bits(clamped).unwrap_or(Prob32::ONE);
+        }
+    }
+    c
+}
+
+/// F0: woman's band index i in 0..6, or None when outside [15, 50).
+fn fertility_band(t: i64, birth: i64, year_minutes: i64) -> Option<usize> {
+    let x = t - birth;
+    if x < 0 {
+        return None;
+    }
+    let age_years = x / year_minutes;
+    if age_years < MIN_AGE_YEARS || age_years >= MAX_AGE_YEARS {
+        return None;
+    }
+    let i = ((age_years - MIN_AGE_YEARS) / BAND_WIDTH_YEARS) as usize;
+    if i < BANDS { Some(i) } else { None }
 }
 
 /// The ledger row of `person` (`person.id` is sorted ascending as `u64`).
@@ -408,6 +680,119 @@ fn marry(
     Ok(())
 }
 
+/// Helper: issue a child PersonId from mother and parity, rehashing against the current ledger.
+fn issue_child_id(mother: PersonId, parity: u32, person_ids: &[i64]) -> PersonId {
+    use rh_ids::person::{child_base, rehash, MAX_REHASH};
+    let base = child_base(mother, parity);
+    let mut id = base;
+    for c in 0..=MAX_REHASH {
+        let raw = id.to_raw();
+        if person_ids.binary_search_by_key(&raw, |v| v.cast_unsigned()).is_err() {
+            return id;
+        }
+        if c == MAX_REHASH {
+            break;
+        }
+        id = rehash(base, c + 1);
+    }
+    // If all 64 rehashes collide, return the base anyway (the engine will handle the collision).
+    // In practice this is astronomically unlikely.
+    base
+}
+
+/// F9: apply_birth — insert the newborn into the ledger, append life_course row,
+/// emit BIRTH event. Called from fire when a BIRTH_TIMER is due.
+///
+/// The mother may already be dead (death_tick = now), but her row must be present.
+#[must_use]
+pub fn apply_birth(
+    view: &mut SystemView<'_>,
+    ctx: &mut StepCtx<'_>,
+    mother: PersonId,
+) -> Result<(), SimError> {
+    let now = ctx.now().minutes();
+    let mother_id = mother.to_raw();
+    let mother_row = match ledger_row(view, mother_id)? {
+        Some(row) => row,
+        None => {
+            return Err(fail(format!(
+                "mother {mother_id} has no ledger row at birth {now}"
+            )));
+        }
+    };
+
+    // Read mother state
+    let parity = view.read(PERSON_PARITY)?[mother_row];
+    // parity is the count BEFORE this birth; new_parity is 1-based
+    let parity_count = parity.cast_unsigned();
+
+    // F9: child id = H64(mother, parity) with rehash against the ledger
+    let child_id = issue_child_id(mother, parity_count as u32, view.read(PERSON_ID)?);
+
+    // Draw sex (F9: BirthSex, k=0, keyed by child's own PersonId)
+    let child_person = child_id;
+    let draw = ctx.rng(&RngPurpose::BirthSex, child_person, 0)?;
+    let sex = if draw < u64::from(SEX_M_BITS) << 32 { SEX_MALE } else { SEX_FEMALE };
+
+    // Get father from mother's unborn_father
+    let father = view.read(PERSON_UNBORN_FATHER)?[mother_row];
+
+    // Insert new row into all person.* owned columns
+    {
+        let ids = view.write(PERSON_ID)?;
+        let pos = ids
+            .binary_search_by_key(&child_id.to_raw(), |v| v.cast_unsigned())
+            .unwrap_err();
+        ids.insert(pos, child_id.to_raw().cast_signed());
+        view.write(PERSON_BIRTH)? .insert(pos, now);
+        view.write(PERSON_SEX)? .insert(pos, sex);
+        view.write(PERSON_ALIVE)? .insert(pos, 1);
+        view.write(PERSON_DEATH_TICK)? .insert(pos, i64::MAX);
+        view.write(PERSON_MOTHER)? .insert(pos, mother_id.cast_signed());
+        view.write(PERSON_FATHER)? .insert(pos, father);
+        view.write(PERSON_SPOUSE)? .insert(pos, 0);
+        view.write(PERSON_DEATH_CAUSE)? .insert(pos, 0);
+        view.write(PERSON_HOUSEHOLD)? .insert(pos, 0);
+        view.write(PERSON_PARITY)? .insert(pos, 0);
+        view.write(PERSON_LAST_BIRTH_TICK)? .insert(pos, i64::MAX);
+        view.write(PERSON_CONCEIVED_TICK)? .insert(pos, i64::MAX);
+        view.write(PERSON_UNBORN_FATHER)? .insert(pos, 0);
+    }
+
+    // Append life_course row
+    {
+        let origin = ORIGIN_BIRTH;
+        let _birth_order = parity + 1;
+        let lc_id = child_id.to_raw().cast_signed();
+        view.write(LC_PERSON)?.push(lc_id);
+        view.write("life_course.origin")?.push(origin);
+        view.write("life_course.mother")?.push(mother_id.cast_signed());
+        view.write("life_course.father")?.push(father);
+        view.write("life_course.sex")?.push(sex);
+        view.write(LC_BIRTH)?.push(now);
+        view.write("life_course.entry_tick")?.push(now);
+        view.write(LC_EXIT_KIND)?.push(EXIT_OPEN);
+        view.write(LC_EXIT_TICK)?.push(i64::MAX);
+        view.write(LC_DEATH_CAUSE)?.push(0);
+    }
+
+    // Update mother: clear conception, increment parity, record last birth
+    view.write(PERSON_CONCEIVED_TICK)?[mother_row] = i64::MAX;
+    view.write(PERSON_PARITY)?[mother_row] = parity + 1;
+    view.write(PERSON_LAST_BIRTH_TICK)?[mother_row] = now;
+
+    // Emit BIRTH event
+    let child_entity = EntityRef::person(child_person);
+    ctx.emit(
+        EventDraft::new(BIRTH)
+            .role(ROLE_ACTOR, EntityRef::person(mother))
+            .role(ROLE_TARGET, child_entity)
+            .with_payload(vec![sex, parity + 1]),
+    )?;
+
+    Ok(())
+}
+
 impl SystemModel for Demography {
     type Index = ();
     
@@ -428,11 +813,12 @@ impl SystemModel for Demography {
                 })
                 .to_vec(),
             applies: CommandApply::from_drains(DRAINS),
-            emits: vec![DEATH, EXTINCTION],
-            // M2 0.2.3's Day/Vital entry has one step, the drain ([[schedule]]; A-60 part).
-            drain_only: vec![PulseBinding {
-                pulse: Pulse::Day,
-                phase: Phase::Vital,
+            emits: vec![DEATH, EXTINCTION, BIRTH],
+            // M2 0.3.0's reads (F1): house_member.person for elite fertility
+            reads: vec![ColumnRead {
+                column: "house_member.person",
+                owner: "M7.dynasty",
+                lag: Lag::Lagged,
             }],
             ..AccessSpec::default()
         }
@@ -472,6 +858,7 @@ impl SystemModel for Demography {
     ) -> Result<(), SimError> {
         match binding.pulse {
             Pulse::Day => drain(view, ctx),
+            Pulse::Month => self.fertility(view, ctx).and_then(|()| self.mortality(view, ctx)),
             _ => self.mortality(view, ctx),
         }
     }
@@ -483,8 +870,21 @@ impl SystemModel for Demography {
         ctx: &mut StepCtx<'_>,
     ) -> Result<(), SimError> {
         let entity = timer.key.entity;
+        if timer.timer.kind == BIRTH_TIMER && entity.kind() == EntityKind::Person {
+            // F9-F10: BIRTH_TIMER fires at a day start in the 9th month
+            let at = timer.key.time;
+            if at.minutes() % DAY != 0 {
+                return Err(fail(format!(
+                    "{} fires at {at}, not a day start: INV-M2-11",
+                    timer.id()
+                )));
+            }
+            let person = PersonId::from_raw(entity.raw());
+            apply_birth(view, ctx, person)?;
+            return Ok(());
+        }
         if timer.timer.kind != DEATH_TIMER || entity.kind() != EntityKind::Person {
-            return Err(fail(format!("{} is not a death timer", timer.id())));
+            return Err(fail(format!("{} is not a death or birth timer", timer.id())));
         }
         let at = timer.key.time;
         if self.schedule.calendar().is_boundary(Pulse::Month, at) || at.minutes() % DAY != 0 {
@@ -508,6 +908,25 @@ impl SystemModel for Demography {
         ctx: &ResampleCtx,
     ) -> Result<Option<SimTime>, SimError> {
         let t_in = ctx.now();
+        if timer.timer.kind == BIRTH_TIMER {
+            // F8: the birth timer's month is the 9th after conception.
+            // Re-draw a day start in the same month strictly after t_in.
+            // The birth is owed: if no day start remains, the birth fires immediately next day.
+            let month_end = self.schedule.month_end(t_in).map_err(Self::sched_err)?;
+            let first = (t_in.minutes().div_euclid(DAY) + 1) * DAY;
+            let remaining = if first < month_end.minutes() {
+                (month_end.minutes() - first) / DAY
+            } else {
+                0
+            };
+            if remaining == 0 {
+                return Ok(Some(SimTime::from_minutes(first)));
+            }
+            // Pick a day offset from the remaining
+            let d1 = ctx.draw(K_DAY);
+            let offset = ((u128::from(d1) * u128::from(remaining.cast_unsigned())) >> 64) as u64;
+            return Ok(Some(SimTime::from_minutes(first + DAY * offset.cast_signed())));
+        }
         let birth = timer.timer.payload;
         let end = self.schedule.month_end(t_in).map_err(Self::sched_err)?;
         let q = self

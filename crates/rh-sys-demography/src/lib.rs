@@ -26,7 +26,7 @@ impl Demography {
     /// [`DemographyError`].
     pub fn from_world(spec: &WorldSpec) -> Result<Option<Self>, DemographyError> {
         spec.demography
-            .map(|p| Self::new(p.e0, None, p.brass_beta, spec.calendar))
+            .map(|p| Self::new(p.e0, None, p.brass_beta, p.tfr, p.elite_fertility_mult, spec.calendar))
             .transpose()
     }
 }

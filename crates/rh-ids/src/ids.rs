@@ -318,6 +318,16 @@ impl EntityKey for EventId {
     }
 }
 
+impl EntityKey for HouseholdId {
+    fn entity_key(self) -> u64 {
+        self.0
+    }
+
+    fn entity(self) -> Option<EntityRef> {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

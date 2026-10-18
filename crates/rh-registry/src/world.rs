@@ -57,6 +57,10 @@ pub struct DemographyParams {
     pub e0: Q16_16,
     /// The Brass slope; exactly 1 at rung 0.
     pub brass_beta: Q16_16,
+    /// Total fertility rate target (F2), in Q16_16.
+    pub tfr: Q16_16,
+    /// Fertility multiplier for house members (F2), in Q16_16.
+    pub elite_fertility_mult: Q16_16,
 }
 
 /// A founder's sex: as the manifest gives it, else drawn by `rh-worldgen` (ruling 10).

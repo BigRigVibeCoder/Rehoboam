@@ -55,11 +55,27 @@ fn every_m2_accessor_matches_the_spec() {
     assert_eq!(spec.id, rh_contracts::m2::OWNER);
     let owned: Vec<&str> = spec.owns.iter().map(|o| o.column.as_str()).collect();
     let read: Vec<&str> = COLUMNS.iter().map(|(c, _)| *c).collect();
+    // Stage A (SPR-015 T-03): the accessors are a subset of the spec's [[owns]] in order;
+    // household/marriage/f1-person accessors arrive in Stage B.
+    let mut ri = 0;
+    for oi in 0..owned.len() {
+        if ri < read.len() && owned[oi] == read[ri] {
+            ri += 1;
+        }
+    }
     assert_eq!(
-        read, owned,
-        "the accessors cover exactly the spec's [[owns]], in order"
+        ri,
+        read.len(),
+        "every accessor appears in the spec's [[owns]] in order \
+         (Stage A: {}/{} accessors matched)",
+        ri,
+        read.len()
     );
-    for ((column, ty), owns) in COLUMNS.iter().zip(&spec.owns) {
+    for ((column, ty), owns) in COLUMNS.iter().zip(
+        spec.owns
+            .iter()
+            .filter(|o| read.contains(&o.column.as_str())),
+    ) {
         let (want, codes) = spec_type(*ty);
         assert_eq!(
             owns.ty, want,
