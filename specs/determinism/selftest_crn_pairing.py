@@ -30,13 +30,21 @@ events, which this model does not run), no M7 and no T1 (their deaths fall on so
 named actors, who are in the affected set by construction: companion §3.3). The controls that
 must fail (R3, R4) run in the same process on the one run A, from its state at the input.
 
-Run: python -I specs/determinism/selftest_crn_pairing.py              (seeds 1 to 3)
-     python -I specs/determinism/selftest_crn_pairing.py --seeds 1    (the PR tier)
-     python -I specs/determinism/selftest_crn_pairing.py --write      (regenerate the golden)
+The tiers (the A-62 review's E4: D56 (e) moved the genesis and left one VALID seed of 1 to 3, so
+the redundancy is restored by searching): the nightly tier tries seeds 1, 2, ... in order until
+NIGHTLY_VALID of them are VALID, up to seed NIGHTLY_CAP, and fails with fewer; the PR tier takes the
+first VALID seed of PR_SEEDS and fails with none. The golden pins every seed the nightly search
+tries (`--write` renders it), so a VALID seed that turns skipped, or the reverse, is STALE.
+
+Run: python -I specs/determinism/selftest_crn_pairing.py                 (the nightly tier)
+     python -I specs/determinism/selftest_crn_pairing.py --tier pr       (the PR tier)
+     python -I specs/determinism/selftest_crn_pairing.py --write         (regenerate the golden)
      python -I specs/determinism/selftest_crn_pairing.py --golden PATH
-     python -I specs/determinism/selftest_crn_pairing.py --seeds 1 --controls   (also run the five
-         mutants, each of which must make the protocol FAIL: no-op-input, swap-remove-after-input,
-         shift-one-day, rekey-2pct, global-epoch)
+     python -I specs/determinism/selftest_crn_pairing.py --seeds 1,2     (exactly these seeds; at
+         least one must be VALID)
+     python -I specs/determinism/selftest_crn_pairing.py --tier pr --controls   (also run the five
+         mutants on every VALID seed of the tier, each of which must make the protocol FAIL:
+         no-op-input, swap-remove-after-input, shift-one-day, rekey-2pct, global-epoch)
 Exit: 0 pass, 1 fail (the protocol, a stale golden, or a control that did not fail), 2 the model
 failed its own checks. Standard library only (GOV-003 §3).
 """
@@ -82,11 +90,12 @@ Genesis = Any  # the SPR-019 reference's types, loaded by path
 
 # ------------------------------------------------------------------------- the protocol's constants
 WORLD = fw.TWIN_VALES  # the dynastic fixture world; the target is its primogeniture sovereign
-SEEDS = (
-    1,
-    2,
-    3,
-)  # the PR tier runs seed 1 (check_all); the nightly tier every seed (REV-SPR-030 R10)
+# The tiers (REV-SPR-030 R10; the A-62 review's E4): the PR tier (check_all) takes the first VALID
+# seed of PR_SEEDS; the nightly tier (golden_nightly.sh) searches seeds 1 to NIGHTLY_CAP in order
+# until NIGHTLY_VALID are VALID, and fails with fewer.
+PR_SEEDS = (1, 2, 3, 4)
+NIGHTLY_CAP = 12
+NIGHTLY_VALID = 2
 DAY = 1440
 MONTH_DAYS = 30  # twin_vales.yaml: days_per_year 360, months 12 (the mirror test checks)
 MONTHS = 12
@@ -638,9 +647,12 @@ HEADER = [
     "# pending death; the affected set by component, with how many of it are alive at the input;",
     "# the living at the input and the unaffected; the pair's validity, the deaths, the pairs,",
     "# the identical pairs and rho^2 (exact rationals, rounded down); the target's death in each",
-    "# run; the digests of both runs' death instants.",
+    "# run; the digests of both runs' death instants. The seeds are those the nightly tier",
+    "# tries: 1, 2, ... until enough are VALID (the PR tier takes the first VALID of its seeds).",
     f"constants crn-pairing-v0 horizon_years {HORIZON_YEARS} input_offset {INPUT_OFFSET}"
-    f" threshold {THRESHOLD} min_unaffected {MIN_UNAFFECTED} e0 {E0} beta {BETA}",
+    f" threshold {THRESHOLD} min_unaffected {MIN_UNAFFECTED} e0 {E0} beta {BETA}"
+    f" pr_seeds {','.join(map(str, PR_SEEDS))} nightly_valid {NIGHTLY_VALID}"
+    f" nightly_cap {NIGHTLY_CAP}",
 ]
 
 
@@ -687,15 +699,74 @@ def parse(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--write", action="store_true", help="regenerate the golden file")
     parser.add_argument("--golden", type=Path, default=GOLDEN, help="the golden file to check")
-    parser.add_argument("--seeds", default=",".join(map(str, SEEDS)), help="the seeds to run")
+    parser.add_argument(
+        "--tier", choices=("pr", "nightly"), default="nightly", help="the seed search (E4)"
+    )
+    parser.add_argument("--seeds", help="exactly these seeds, comma-separated (overrides --tier)")
     parser.add_argument("--controls", action="store_true", help="also run the five mutants")
     return parser.parse_args(argv)
 
 
-def main(argv: list[str] | None = None) -> int:  # noqa: C901
+def plan(args: argparse.Namespace) -> tuple[str, tuple[int, ...], int, bool]:
+    """(the label, the seeds to try in order, the VALID seeds required, stop once that many).
+
+    ``--write`` renders the nightly search, which covers the PR tier's seeds up to its first VALID
+    one, so the golden pins every seed either tier tries.
+    """
+    if args.seeds and not args.write:
+        seeds = tuple(int(s) for s in args.seeds.split(","))
+        return f"seeds {','.join(map(str, seeds))}", seeds, 1, False
+    if args.tier == "pr" and not args.write:
+        return "tier pr", PR_SEEDS, 1, True
+    return "tier nightly", tuple(range(1, NIGHTLY_CAP + 1)), NIGHTLY_VALID, True
+
+
+@dataclass
+class Search:
+    """What a tier's seed search found: the golden blocks, failures and the controls' outcome."""
+
+    seeds: list[int] = field(default_factory=list)  # the seeds tried, in order
+    valid: int = 0
+    blocks: dict[str, str] = field(default_factory=dict)
+    failures: list[str] = field(default_factory=list)
+    control_lines: list[str] = field(default_factory=list)
+    controls_failed: int = 0
+
+
+def search(args: argparse.Namespace, m: Mortality) -> tuple[str, Search]:
+    """Try the tier's seeds in order (E4), stopping once it has its VALID seeds."""
+    label, candidates, required, stop_early = plan(args)
+    s = Search()
+    for seed in candidates:
+        if stop_early and s.valid >= required:
+            break  # the search has its VALID seeds; later seeds are not tried
+        s.seeds.append(seed)
+        pair = run_pair(seed, m)
+        if pair is None:  # R14: no sovereign of this seed meets the power floor: pinned, skipped
+            key = f"world {WORLD.id} {seed} horizon_years {HORIZON_YEARS} t_end {T_END}"
+            s.blocks[key] = (
+                "\n".join([key, *SKIPPED[seed], "pair SKIPPED no_sovereign_qualifies"]) + "\n"
+            )
+            continue
+        s.valid += 1
+        lines = render_seed(seed, pair)
+        s.blocks[lines[0]] = "\n".join(lines) + "\n"
+        s.failures += pair.verdict.failures(f"PROTOCOL FAILED: seed {seed}")
+        if args.controls:
+            seed_lines, failed = run_controls(seed, pair, m)
+            s.control_lines += seed_lines
+            s.controls_failed += failed
+    if s.valid < required:
+        s.failures.append(
+            f"PROTOCOL FAILED: {s.valid} VALID seed(s) among {','.join(map(str, s.seeds))}; "
+            f"{label} needs {required}"
+        )
+    return label, s
+
+
+def main(argv: list[str] | None = None) -> int:
     """Check or regenerate the golden file; run the controls that must fail."""
     args = parse(argv)
-    seeds = SEEDS if args.write else tuple(int(s) for s in args.seeds.split(","))
     m = Mortality()
     model = m.check(
         [0, DAY, MONTH - DAY, YEAR, 16 * YEAR + 3 * DAY, 61 * YEAR + 7 * DAY, 119 * YEAR]
@@ -705,29 +776,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
             print(f"MODEL FAILED: {f}")
         print("CRN PAIRING: FAIL (the model's own checks)")
         return EXIT_MODEL
-    blocks: dict[str, str] = {}
-    failures: list[str] = []
-    control_lines: list[str] = []
-    controls_failed = 0
-    valid_seeds = 0
-    for seed in seeds:
-        pair = run_pair(seed, m)
-        if pair is None:  # R14: no sovereign of this seed meets the power floor: pinned, skipped
-            key = f"world {WORLD.id} {seed} horizon_years {HORIZON_YEARS} t_end {T_END}"
-            blocks[key] = (
-                "\n".join([key, *SKIPPED[seed], "pair SKIPPED no_sovereign_qualifies"]) + "\n"
-            )
-            continue
-        valid_seeds += 1
-        lines = render_seed(seed, pair)
-        blocks[lines[0]] = "\n".join(lines) + "\n"
-        failures += pair.verdict.failures(f"PROTOCOL FAILED: seed {seed}")
-        if args.controls:
-            seed_lines, failed = run_controls(seed, pair, m)
-            control_lines += seed_lines
-            controls_failed += failed
-    if not valid_seeds:
-        failures.append("PROTOCOL FAILED: no seed produced a pair")
+    label, s = search(args, m)
+    blocks, failures, control_lines = s.blocks, s.failures, s.control_lines
+    controls_failed, valid_seeds, seeds = s.controls_failed, s.valid, s.seeds
     text = "\n".join(HEADER) + "\n" + "".join(blocks.values())
     print(text, end="")
     for line in control_lines:
@@ -755,8 +806,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901
     note = f", controls {controls_failed} of {wanted} FAIL as required" if args.controls else ""
     skipped = len(seeds) - valid_seeds
     print(
-        f"CRN PAIRING: PASS (seeds {','.join(map(str, seeds))}: {valid_seeds} VALID and exact "
-        f"pair(s), {skipped} seed(s) skipped for power{note})"
+        f"CRN PAIRING: PASS ({label}, seeds tried {','.join(map(str, seeds))}: {valid_seeds} "
+        f"VALID and exact pair(s), {skipped} seed(s) skipped for power{note})"
     )
     return EXIT_OK
 
