@@ -56,7 +56,7 @@ Run: python -I specs/annals/selftest_annals_v0.py --check [--golden-dir DIR] [--
          --group house:<id>|year|line:<id> [--sidecar] [--out FILE]
      python -I specs/annals/selftest_annals_v0.py verify --text FILE --sidecar FILE
      python -I specs/annals/selftest_annals_v0.py fold FILE      (exit 1 and FOLD REFUSED: on a
-         refusal; else one line per segment, or the one-segment line, then chronicle_digest=<32 hex>)
+         refusal; else one line per segment or one-segment line, then chronicle_digest=<32 hex>)
      python -I specs/annals/selftest_annals_v0.py segment --world DIR [--out FILE]   (exit 1 and
          SEGMENT REFUSED: on a refusal)
 """
@@ -699,7 +699,9 @@ def segment_chronicle(data: bytes, days_per_year: int, where: str) -> str:
     return "\n".join(out) + "\n"
 
 
-def load_chronicle(path: Path, dictionary: Dictionary, calendar: Calendar) -> Chronicle:
+def load_chronicle(
+    path: Path, dictionary: Dictionary, calendar: Calendar | None = None
+) -> Chronicle:
     """Parse a canonical channel-A file of one segment or several (§9.1), checked whole first.
 
     The records are the ones ``fold`` parsed from the file split on LF alone (REV-AN-0 R1), and
@@ -707,7 +709,8 @@ def load_chronicle(path: Path, dictionary: Dictionary, calendar: Calendar) -> Ch
     """
     data = path.read_bytes()
     checked = fold(data, str(path))
-    check_segment_years(checked, calendar, str(path))
+    if calendar is not None:
+        check_segment_years(checked, calendar, str(path))
     chron = Chronicle(digest=checked.chronicle_digest.hex())
     header = _canon.HEADER_LINE.fullmatch(data.split(b"\n", 1)[0].decode("ascii"))
     chron.timeline = int(header["timeline"])
@@ -1371,8 +1374,9 @@ def render_group(
     disambiguate: bool = True,
 ) -> tuple[str, str, Renderer]:
     """Load a fixture directory and render one group: ``(text, sidecar, renderer)``."""
-    chron = load_chronicle(world_dir / "chronicle_A.txt", dictionary)
-    r = Renderer(templates, load_world(world_dir), chron, dictionary, disambiguate=disambiguate)
+    world = load_world(world_dir)
+    chron = load_chronicle(world_dir / "chronicle_A.txt", dictionary, world.calendar)
+    r = Renderer(templates, world, chron, dictionary, disambiguate=disambiguate)
     annal = render(r, group)
     text, side = finish(annal, r, templates_digest(templates.path))
     return text, side, r
@@ -1910,7 +1914,7 @@ def _check_injective(r: Renderer, group: str) -> list[str]:
 def _check_shared_name(d: Dictionary) -> list[str]:
     """A planted shared name is disambiguated with each person's compact label (R24)."""
     world = load_world(FIXTURES / "ashcombe")
-    chron = load_chronicle(FIXTURES / "ashcombe" / "chronicle_A.txt", d)
+    chron = load_chronicle(FIXTURES / "ashcombe" / "chronicle_A.txt", d, world.calendar)
     named = sorted(world.persons)
     world.persons[named[1]] = world.persons[named[0]]
     kin = Kinship(world, chron)
@@ -2028,7 +2032,7 @@ def _check_fixtures(d: Dictionary, control: Control) -> list[str]:
     problems: list[str] = []
     for world in FIXTURE_WORLDS:
         w = load_world(FIXTURES / world)
-        chron = load_chronicle(FIXTURES / world / "chronicle_A.txt", d)
+        chron = load_chronicle(FIXTURES / world / "chronicle_A.txt", d, w.calendar)
         _plant_chronicle(chron, control)
         problems += [f"{world}: {p}" for p in check_dictionary(chron, d) + History(chron, w).run()]
     return problems
@@ -2072,7 +2076,21 @@ KAT_SEG3 = f"#segment y000003 first_seq=1 last_seq=3 canonical_digest={KAT_D3}"
 KAT_BLOCK0 = f"{KAT_SEG0}\n{KAT_LIFE}\n"
 KAT_BLOCK3 = "\n".join((KAT_SEG3, *KAT_YEAR3)) + "\n"
 KAT_TEXT = f"{KAT_HEADER}\n{KAT_BLOCK0}{KAT_BLOCK3}"
+KAT_REC4 = "LIFE_ENTRY 0 4 1634400 1328186490420642309 1 1 0 0 -12875040"
+KAT_RECORDS_COUNT = 4
 EMPTY_DIGEST = "99aa06d3014798d86001c324468d497f"  # XXH3-128 of no bytes (canonical_v0.md §4)
+
+
+def _xxh128(data: bytes) -> bytes:
+    """XXH3-128 straight from bin/gen_hash_golden.py, in canonical form (canonical_v0.md §4)."""
+    return int(_xxh.xxh3_128(data)).to_bytes(16, "big")
+
+
+def _lines_digest(lines: tuple[str, ...] | list[str]) -> bytes:
+    """canonical_digest of record lines (canonical_v0.md §4), from the XXH3 reference alone."""
+    return _xxh128(b"".join(line.encode("ascii") + b"\n" for line in lines))
+
+
 # Every refusal of §9.1, planted in the known-answer file: (case, text replaced, its replacement,
 # the words the refusal must hold).
 FOLD_REFUSALS = (
@@ -2089,6 +2107,12 @@ FOLD_REFUSALS = (
         ":4: segment y000001 holds no record",
     ),
     (
+        "a file with no records",
+        KAT_BLOCK0 + KAT_BLOCK3,
+        "",
+        "a chronicle holds at least one record (annals_v0.md §9.1)",
+    ),
+    (
         "a repeated year",
         KAT_SEG3,
         KAT_SEG3.replace("y000003", "y000000"),
@@ -2099,6 +2123,15 @@ FOLD_REFUSALS = (
         KAT_SEG0,
         KAT_SEG0.replace("y000000", "y000005"),
         ":4: segment y000003 follows y000005: the years must increase",
+    ),
+    (
+        "a year one lower than the last (y000002 after y000003)",
+        KAT_YEAR3[-1],
+        (
+            f"{KAT_YEAR3[-1]}\n#segment y000002 first_seq=4 last_seq=4 "
+            f"canonical_digest={_lines_digest([KAT_REC4]).hex()}\n{KAT_REC4}"
+        ),
+        "segment y000002 follows y000003: the years must increase",
     ),
     (
         "the segment lines swapped, the records in place",
@@ -2131,10 +2164,21 @@ FOLD_REFUSALS = (
         KAT_SEG3.replace("last_seq=3", "last_seq=4"),
         ":4: segment y000003: last_seq=4 on its #segment line, but its last record has seq 3",
     ),
+    (
+        "a seq past u64",
+        KAT_SEG3,
+        KAT_SEG3.replace("first_seq=1", "first_seq=18446744073709551616"),
+        ":4: not a segment line (annals_v0.md §9.1): first_seq=18446744073709551616 is past u64",
+    ),
     *(
         (f"not a segment line: {case}", KAT_SEG3, planted, ":4: not a segment line")
         for case, planted in (
             ("a five-digit year", KAT_SEG3.replace("y000003", "y00003")),
+            ("a seven-digit year", KAT_SEG3.replace("y000003", "y0000003")),
+            (
+                "a seq of 21 digits",
+                KAT_SEG3.replace("first_seq=1", "first_seq=100000000000000000000"),
+            ),
             ("a double space", KAT_SEG3.replace(" first_seq", "  first_seq")),
             ("a leading zero", KAT_SEG3.replace("first_seq=1", "first_seq=01")),
             ("an uppercase hex digit", KAT_SEG3.replace("497ac", "497AC")),
@@ -2144,16 +2188,6 @@ FOLD_REFUSALS = (
         )
     ),
 )
-
-
-def _xxh128(data: bytes) -> bytes:
-    """XXH3-128 straight from bin/gen_hash_golden.py, in canonical form (canonical_v0.md §4)."""
-    return int(_xxh.xxh3_128(data)).to_bytes(16, "big")
-
-
-def _lines_digest(lines: tuple[str, ...] | list[str]) -> bytes:
-    """canonical_digest of record lines (canonical_v0.md §4), from the XXH3 reference alone."""
-    return _xxh128(b"".join(line.encode("ascii") + b"\n" for line in lines))
 
 
 def _expected_fold(text: str, days_per_year: int) -> tuple[int, bytes]:
@@ -2204,6 +2238,111 @@ def _fold_known_answers() -> list[str]:
     return out
 
 
+def _fold_comments_and_seq() -> list[str]:
+    """R11 (start at seq 5) and R2/R8 (free comments anywhere leave fold unchanged)."""
+    out: list[str] = []
+    # R11: the first block may start at any seq; the exporter starts at 0
+    rec5 = KAT_LIFE.replace("LIFE_ENTRY 0 0 0", "LIFE_ENTRY 0 5 0")
+    want_seq5 = _lines_digest([rec5]).hex()
+    seq5 = (
+        f"{KAT_HEADER}\n"
+        f"#segment y000000 first_seq=5 last_seq=5 canonical_digest={want_seq5}\n"
+        f"{rec5}\n"
+    )
+    if (have := _fold_text(seq5, "seq5")) != want_seq5:
+        out.append(f"block starting at seq 5: {have}, not {want_seq5}")
+
+    # R2 / R8: free comments inside a block, right after a segment line, at EOF
+    commented = (
+        f"{KAT_HEADER}\n"
+        f"{KAT_SEG0}\n"
+        "# free comment right after segment line\n"
+        "#Segment capital S free comment (R8)\n"
+        f"{KAT_LIFE}\n"
+        "# free comment inside block 0\n"
+        "# segment spaced free comment (R8)\n"
+        f"{KAT_SEG3}\n"
+        f"{KAT_YEAR3[0]}\n"
+        "# STATUS sim_tick=1634400\n"
+        f"{KAT_YEAR3[1]}\n"
+        "# free comment before last record\n"
+        f"{KAT_YEAR3[2]}\n"
+        "# STATUS final\n"
+        "#^ stream footer\n"
+    )
+    if (have := _fold_text(commented, "commented")) != KAT_FOLD:
+        out.append(f"free comments changed the fold: {have}, not {KAT_FOLD}")
+    return out
+
+
+def _fold_calendar_check() -> list[str]:
+    """R2 plant: one-record world at tick 520,000 cut on 360- and 365-day calendars."""
+    out: list[str] = []
+    tick_mid = 520000  # between 360-day (518400) and 365-day (525600) year boundaries
+    one_rec = (
+        f"{KAT_HEADER}\nLIFE_ENTRY 0 0 {tick_mid} 1328186490420642308 1 1 0 0 -12875040\n"
+    ).encode("ascii")
+    cut360 = segment_chronicle(one_rec, 360, "mid360")
+    cut365 = segment_chronicle(one_rec, 365, "mid365")
+    if "#segment y000001 " not in cut360:
+        out.append("segment_chronicle on 360-day calendar did not cut tick 520000 into y000001")
+    if "#segment y000000 " not in cut365:
+        out.append("segment_chronicle on 365-day calendar did not cut tick 520000 into y000000")
+    try:
+        check_segment_years(fold(cut360.encode("ascii"), "c360"), Calendar(365, ""), "c360")
+        out.append("check_segment_years accepted 360-day cut on 365-day calendar")
+    except AnnalsError as e:
+        if "sim-year 0" not in str(e):
+            out.append(f"check_segment_years wrong error on 360-day cut: {e}")
+    try:
+        check_segment_years(fold(cut365.encode("ascii"), "c365"), Calendar(360, ""), "c365")
+        out.append("check_segment_years accepted 365-day cut on 360-day calendar")
+    except AnnalsError as e:
+        if "sim-year 1" not in str(e):
+            out.append(f"check_segment_years wrong error on 360-day cut: {e}")
+    return out
+
+
+def _fold_plants_and_differentials() -> list[str]:
+    """R1 (form feed), R2 (calendar boundaries), R3 (canonical differential), R10 (CLI)."""
+    out: list[str] = _fold_calendar_check()
+    # R1 plant: form feed inside a comment must never expose a hidden record to load_chronicle
+    hidden_comment = (
+        f"{KAT_HEADER}\n"
+        f"{KAT_SEG0}\n"
+        "# note\x0cEVENT 0 9 0 0 4 15 DEATH 32768 ~ 0 128 0 0 [1] [1/1/1] [] []\n"
+        f"{KAT_LIFE}\n"
+        f"{KAT_BLOCK3}"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp) / "hidden.txt"
+        p.write_bytes(hidden_comment.encode("ascii"))
+        chron = load_chronicle(p, Dictionary("0.2.0+next", {}, [], [], {}), Calendar(365, ""))
+        if len(chron.records) != KAT_RECORDS_COUNT:
+            out.append(
+                f"load_chronicle rendered a record hidden behind form feed (R1): "
+                f"{len(chron.records)} != {KAT_RECORDS_COUNT}"
+            )
+
+    # R3: canonical_v0.REFUSED_FILES differential
+    for data, why in _canon.REFUSED_FILES:
+        try:
+            fold(data, f"canonical refusal: {why}")
+            out.append(f"fold accepted {why} from canonical_v0.REFUSED_FILES")
+        except (_canon.CanonicalError, AnnalsError):
+            pass
+
+    # R10: CLI error handling returns non-zero without traceback
+    with contextlib.redirect_stderr(io.StringIO()):
+        if _fold_command(argparse.Namespace(file=Path("/nonexistent/file.txt"))) == EXIT_OK:
+            out.append("_fold_command on nonexistent file returned EXIT_OK")
+        world_ns = argparse.Namespace(world=Path("/nonexistent/world"), out=None)
+        if _segment_command(world_ns) == EXIT_OK:
+            out.append("_segment_command on nonexistent world returned EXIT_OK")
+
+    return out
+
+
 def _fold_refusals() -> list[str]:
     """Every refusal of §9.1, each with its words."""
     out: list[str] = []
@@ -2251,7 +2390,12 @@ def _fold_fixture(setup: Setup, world: str) -> list[str]:
 def check_fold(setup: Setup) -> list[str]:
     """Check 11 (annals_v0.md §9.1; AN-0): the chronicle digest of a file of several segments."""
     try:
-        out = _fold_known_answers() + _fold_refusals()
+        out = (
+            _fold_known_answers()
+            + _fold_comments_and_seq()
+            + _fold_plants_and_differentials()
+            + _fold_refusals()
+        )
         for world in FIXTURE_WORLDS:
             out += _fold_fixture(setup, world)
     except (AnnalsError, _canon.CanonicalError) as e:
@@ -2304,7 +2448,7 @@ def _shared_name_control(d: Dictionary) -> list[str]:
     r = Renderer(
         _lint.load_templates(TEMPLATES),
         world,
-        load_chronicle(FIXTURES / "ashcombe" / "chronicle_A.txt", d),
+        load_chronicle(FIXTURES / "ashcombe" / "chronicle_A.txt", d, world.calendar),
         d,
         disambiguate=False,
     )
@@ -2380,9 +2524,12 @@ def _render_command(args: argparse.Namespace) -> int:
 def _fold_command(args: argparse.Namespace) -> int:
     """Print each segment's digest and the ``chronicle_digest``, or the refusal (§9.1)."""
     path: Path = args.file
+    if not path.is_file():
+        print(f"FOLD REFUSED: {path}: file does not exist", file=sys.stderr)
+        return EXIT_SELFTEST
     try:
         result = fold(path.read_bytes(), str(path))
-    except (AnnalsError, _canon.CanonicalError) as e:
+    except (AnnalsError, _canon.CanonicalError, OSError) as e:
         print(f"FOLD REFUSED: {e}", file=sys.stderr)
         return EXIT_STALE
     for s in result.segments:
@@ -2391,7 +2538,7 @@ def _fold_command(args: argparse.Namespace) -> int:
             f"canonical_digest={s.digest.hex()}"
         )
     if not result.segments:
-        print("one segment: the file has no #segment line (annals_v0.md §9.1 rule 2)")
+        print(ONE_SEGMENT_LINE)
     print(f"chronicle_digest={result.chronicle_digest.hex()}")
     return EXIT_OK
 
@@ -2399,8 +2546,15 @@ def _fold_command(args: argparse.Namespace) -> int:
 def _segment_command(args: argparse.Namespace) -> int:
     """Write a fixture directory's chronicle with one ``#segment`` block per sim-year (§9.1)."""
     path = args.world / "chronicle_A.txt"
-    days = load_world(args.world).calendar.days_per_year
-    text = segment_chronicle(path.read_bytes(), days, str(path))
+    if not path.is_file():
+        print(f"SEGMENT REFUSED: {path}: file does not exist", file=sys.stderr)
+        return EXIT_SELFTEST
+    try:
+        days = load_world(args.world).calendar.days_per_year
+        text = segment_chronicle(path.read_bytes(), days, str(path))
+    except (AnnalsError, _canon.CanonicalError, OSError) as e:
+        print(f"SEGMENT REFUSED: {e}", file=sys.stderr)
+        return EXIT_STALE
     if args.out is None:
         sys.stdout.write(text)
     else:
