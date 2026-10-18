@@ -9,7 +9,7 @@ tags: [verification, testing, determinism, stream]
 related: [SPR-026, REV-SPR-026, VER-SPR-013-TEST, AGT-003-DET, AGT-003-IF, ADR-0024, ADR-0030, ADR-0031, BCK-002]
 created: 2026-10-18
 updated: 2026-10-18
-version: 1.0.0
+version: 1.1.0
 ---
 
 > **BLUF: T-01 to T-06 and the A-58 items meet their acceptance criteria. I found no blocking defect, one test defect (DEF-1, a flaky V-STR-05 test under CPU load) and seven gaps, the largest being GAP-1: at full speed the D42 (b) window is not two sim-years.** `bin/check_all.sh` is **528 of 528** (both parts, one run) on a clean clone of `1d7f9a1`. My probes use my own codec, viewers and oracles, never the code under test, and agree with the implementation everywhere except the items below. Tested head: `1d7f9a1d5b628ae823ccefbc78fdc6ea208fbc02` on `sprint/SPR-026-stream-v1` (PR #82; base `772478f`). Tester model: Claude Sonnet 5.5 (the Developer's differs).
@@ -157,3 +157,57 @@ My own test mistakes, fixed before reporting (none is a finding): three golden-c
 ## 6. Recommendation
 
 Merge-ready from the Tester side once DEF-1 is fixed or the Architect accepts it as a known flake. GAP-1 needs an Architect decision before SPR-030 writes V-PERF-09's terms. GAP-2 and GAP-3 are small and can go to BCK-002.
+
+## 7. Phase 3: DEF-1 and GAP-1 re-checked (heads `53ecbe9` and `433e42d`)
+
+The Developer's batch is `8b6385f` (DEF-1) and `53ecbe9` (GAP-1). `433e42d` merges `main` on top; it changes nothing under `crates/`, `Cargo.*` or the toolchain (`git diff 53ecbe9 433e42d` is empty there), and I ran both probes on it as well. Method as before: a clean checkout, a fresh release build, my own probes (`flake3.sh`, `p_mem3.py`).
+
+| Item | Verdict | Basis |
+|---|---|---|
+| DEF-1 | **CLOSED** | 12 of 12 loaded runs pass (was 2 of 6) |
+| GAP-1 | **MET, with a caveat on the allowance** | The bound `VmHWM growth <= 2 x peak bytes() + 2 MiB` holds in every run (16 of 16); the ratio without the allowance is 1.9 to 2.5 |
+| Deviation in how the queue is measured | **Meets the purpose, not the letter of "encoded size"** | See below |
+
+### 7.1 DEF-1
+
+The fix is `--test-wait-viewer` (the host emits nothing until a viewer's first request is answered, so the viewer receives every year live; the flag is refused by `sift` and by a run without `--socket`), a wait on the viewer's progress in place of the 300 ms sleep, and a 2 ms backoff poll in the harness. The Developer's trace (the viewer's 64-poll backoff of 1.28 s outlasting a 300 ms window, so the years were re-read from disk and none was verified) is consistent with my reading of the failure.
+
+My hunt: the same four test binaries as phase 2 (`serve`, `channel_c`, `run_dir`, `vstr`, 15 tests), release build, four busy loops on four cores, six rounds on `/dev/shm` and six on `/tmp`.
+
+| Condition | Runs | Failures (before the fix) | Failures (after) |
+|---|---|---|---|
+| loaded, `/dev/shm` | 6 | 1 of 3 | 0 |
+| loaded, `/tmp` | 6 | 1 of 3 | 0 |
+
+12 of 12 passed (each 15 of 15; the slowest run took 151 s with the build). On `433e42d` the three `vstr` tests pass once more (45 s). The new flag is in `check_test_hooks.py`'s list: a `--test-wait-viewer` planted in `regen_baseline.sh` fails the guard (line 36), and the clean tree passes.
+
+One design note, not a finding: the probe is now less adversarial. It no longer covers a viewer that returns after the resumed host has re-emitted the lost years. That path is correct by the spec (the viewer reads the sealed segments and never hears that year's `stream.sealed`), and my phase-2 kill probe, which has no handshake, covered it (18 of 18).
+
+### 7.2 GAP-1
+
+The measure: `bytes()` is now the window plus `queued_bytes()`, where a completed year queued for the seal thread counts its records as allocated (`record::allocated`: capacity in records times `size_of::<Record>()`, plus each record's strings and vectors) from the enqueue until the job has run. The ruling said "encoded size at enqueue". The Developer counts memory as allocated instead, because the canonical-text count left the host at 2.75 to 3.4 times `bytes()`. I read the commit and the code (`live.rs`, `record.rs`, `writer.rs`): the count is added at enqueue and removed after the seal or verify job (or when a failed seal drops the queue), as intended. The allocator's own overhead is not counted, which the comment says. This follows the purpose of the ruling (what the live edge holds) better than the letter, and I accept it; it is a deviation from the wording.
+
+My probe: `solo`, full speed, policy (b), headless `VmHWM` measured separately in the same session, the host's own `peak LiveEdge::bytes()`. The bound is the Architect's: growth over the headless median `<= 2 x peak bytes() + 2 MiB`.
+
+| Years | Runs | Headless `VmHWM` (MB) | Growth (MB) | Peak `bytes()` (MB) | Growth / `bytes()` vs median | Margin to the bound (MB) |
+|---|---|---|---|---|---|---|
+| 600 | 3 | 14.9, 14.9, 15.0 | 4.4 to 5.3 | 2.34 to 2.48 | 1.87 to 2.15 | 1.6 to 2.3 |
+| 1,500 | 3 | 16.7, 17.4, 19.6 | 9.0 to 9.4 | 3.76 to 3.93 | 2.28 to 2.49 | **0.15** to 0.9 |
+| 1,500 (5 runs on `53ecbe9`, earlier) | 5 | 16.4 to 18.3 | 8.4 to 9.7 | 3.69 to 4.13 | 2.04 to 2.44 | 0.4 to 1.9 |
+| 1,500 (on `433e42d`) | 2 | 17.3, 18.0 | 8.8, 9.2 | 3.93, 4.04 | 2.24, 2.29 | 0.8, 1.1 |
+| 3,000 | 3 | 23.8 to 25.5 | 10.0 to 10.2 | 4.32 to 4.61 | 2.19 to 2.31 | 0.7 to 1.2 |
+
+All 16 runs are within the bound. Policy (a) on the same runs: `bytes()` 2.5 KB, growth about 0, as before. Wall time did not change.
+
+Does the 2 MiB allowance hide a real gap? **Partly.**
+- The allowance covers real noise: identical headless runs differ by 1.9 MB at 1,500 years (16.7 to 18.3) and by 2.9 MB in one batch (16.7 to 19.6), more than 2 MiB. Measured against the headless maximum instead of the median, the ratio is 1.7 to 2.2.
+- But the count is still about 2.2 times too small. The uncounted part, growth minus `bytes()`, is 2.0 to 2.9 MB at 600 years and 4.9 to 5.7 MB at 1,500 and 3,000 years, which is 0.9 to 1.5 times `bytes()`. It does not grow without limit: the queue plateaus (peak `bytes()` about 4.5 MB at 3,000 years), so I withdraw the worry I had that the gap grows with run length. It is allocator residency and fragmentation of tens of thousands of small allocations, plus the seal thread's working set (Parquet buffers), none of which `allocated` counts.
+- It is the factor 2, not the allowance, that absorbs this under-count, and it leaves a thin margin: 0.15 MB in two of three runs at 1,500 years on `53ecbe9`. The Developer's own gate (`tests/memory.rs`, part golden) measured 1.76 to 1.88 times on its machine. On mine the same bound is nearly tight, so the gate could fail on a slower or noisier runner.
+
+| # | Gap | Recommendation | Confidence |
+|---|---|---|---|
+| GAP-8 | The V-PERF-09 term "live bytes <= `bytes()` + V x 1 MiB + allowance" is met with `bytes()` that understates the host by about 2.2 times at the median baseline (1.7 to 2.5 across baselines); the 2 MiB allowance in `tests/memory.rs` is smaller than headless noise (up to 2.9 MB) and the margin was 0.15 MB in two of three of my 1,500-year runs | Take the headless baseline as the maximum of three runs, or widen the allowance to 4 MiB, or add a stated per-allocation overhead to `allocated`; carry the factor into SPR-030's V-PERF-09 terms (BCK-002 A-67) | 65% |
+
+### 7.3 Verdicts
+
+DEF-1 is closed. GAP-1 is met as ruled (the bound holds in 16 of 16 runs), with GAP-8 recording that its margin is thin on my machine. The previous gaps GAP-2 to GAP-7 are unchanged and go to BCK-002 at the Architect's audit. No new defect.
