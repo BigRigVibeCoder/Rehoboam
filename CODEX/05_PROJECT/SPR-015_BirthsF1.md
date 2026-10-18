@@ -2,7 +2,7 @@
 id: SPR-015
 title: "M2 F1 births: age-specific fertility, partnering, households and kinship, genealogical ids at runtime, the derived per-system index, and the 0.3.0 promotion (P1.3, part a)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]

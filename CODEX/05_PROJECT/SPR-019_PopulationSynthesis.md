@@ -2,14 +2,14 @@
 id: SPR-019
 title: "Population synthesis v0 and the dynastic back-fill: the anonymous rest of a people from the compiled schedule, couples by fixed-point IPF, dependent children and households; each dynasty's pre-epoch genealogy and tenure log by its succession law; the M2 fold (0.3.2) and the back-fill table in the unpromoted M7 draft (P1.2)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
 related: [BCK-002, PRJ-002, REV-SPR-019, REV-SPR-018, REV-SPR-017, REV-SPR-015, REV-SPR-016, REV-SPR-029, REV-SPR-030, REV-WAVE5, REV-WAVE6, EVO-001, SPR-012, SPR-014, SPR-015, SPR-016, SPR-017, SPR-018, SPR-020, SPR-021, SPR-029, SPR-030, ADR-0006, ADR-0007, ADR-0024, ADR-0025, ADR-0026, ADR-0033]
 created: 2026-10-17
-updated: 2026-10-17
-version: 0.3.0
+updated: 2026-10-18
+version: 0.3.1
 ---
 
 > **BLUF:** Builds `specs/worldgen/population_synthesis.toml` (PR #62, `REV-SPR-019` closed on `698e23d`; D46 approved) in `rh-worldgen`, bit-equal to `specs/worldgen/golden/population_synthesis_v0.txt` (hamlet and the manor at two seeds each; the manor's tenure logs under all seven laws over twenty seeds in two configurations) and to the genesis digests of SPR-030's fixture worlds (`golden/fixture_worlds_v0.txt`):
@@ -181,10 +181,17 @@ version: 0.3.0
 - **Deliverable:**
   - **The fixture digests:** a release test that builds the genesis of `twin_vales` at seeds 1–3 and `kingdom_10k` at seed 1 (the PR tier, R10) with the engine's `rh_worldgen::genesis` and compares the SHA-256 of the person, marriage, household and house_member rows with the `_sha256` lines of `golden/fixture_worlds_v0.txt`, and the counts lines (`persons`, `living`, `dynasts`, `households`); `kingdom_10k` seed 2 nightly.
   - **The manor in the engine:** 50 years at 1, 2, 4 and N threads with M2, S3 and M1 built and M7 `not_built` (bit-equal ladders); a keyframe at year 10 with the closed pre-epoch rows round-trips and the resumed run equals the continuous one (V-DET-05); INV-BF-05 re-checked by a test observer at every year end (M7 absent: the log never changes; never in a per-instant `invariants()`, X1's rule); `EXTINCTION` once if the manor dies out in the nightly 1,000-year soak; the `rh-golden::rungs` style test extended with the manor as a non-rung case (no baseline).
+  - **The manor's population band (0.3.1; RT-037 as adapted in `docs/red_team/RT-2026-10-18-batch-07-dispositions.md` §1.3, Architect, 70%).**
+    - `manor` joins `specs/worldgen/project_population.py`'s worlds (C1), projected under the M2 F1 rates the engine runs.
+    - The nightly 1,000-year soak asserts that the living count at years 50, 100 and 200 lies inside the projection's band. The band is the projection's own spread, stated in the PR and approved by the Architect at the audit.
+    - The soak writes `artifacts/manor_cohorts.txt`: the age-sex pyramid every 50 years, the living count each decade, and peak RSS (reported, not gated).
+    - If the projection cannot model the manor without mechanics it lacks, the Developer says so at T-07, and the band is a 64-seed engine run frozen as a golden range with the Architect's approval.
+    - Nothing is added to the PR tier.
   - **The gates.** Part `core`: the `LifeTracker` unit test and the stream order control; the `GenesisInputs` and compile fixtures of stage B; the M7 draft's lint and stale-spec lines. Part `golden`: the release back-fill goldens (the manor's two seeds and the sweep, about 10 s), the fixture digests (about 5 s in Rust), the manor's thread and keyframe tests (about 15 s), one mutant rebuild. Nightly: the 60-seed sweep, `kingdom_10k` seed 2, the 1,000-year manor soak with invariants on, the other mutants, the random dynastic manifests at the 1,500-person size. The inventory test in the same commit.
   - The docs of the compliance table (stage B's share); BCK-002 A-56 and A-57 updated with what was built under D56.
 - **Acceptance:**
   - Every `_sha256` and counts line of the PR-tier cases is reproduced (twin_vales 1: 1,653 persons, 70 living back-filled, 744 households; kingdom_10k 1: 10,352 persons, 161, 4,914), so `crn_pairing_v0.txt`'s genesis is the engine's; the altered-golden control (`fixture_worlds_gate`'s, in part core) still fails `STALE:`.
+  - The manor's living count at years 50, 100 and 200 is inside the approved band in the nightly soak, and a planted fertility mutant (`mutant-manor-fertility-x2`, nightly) leaves it by name (RT-037).
   - The manor's ladders are equal at 1, 2, 4 and N threads; the keyframe round trip holds with closed rows; the header lists `M7.dynasty` as `not_built` and `--strict` refuses it (ruling 3).
   - **No golden world was added:** `worlds/` has four directories and `bin/regen_baseline.sh` four worlds; `smoke`, `solo`, `household` and `hamlet` are byte-identical to stage A's baselines (stage B is hash-neutral).
   - **CI time (W42, Z1).** Against the same state, this stage adds **about +5 s to part core** (the tracker test, the fixtures, the lint lines) and **about +30 s to part golden** (the release back-fill goldens, the fixture digests, the manor's tests, one mutant build), **+10 s and +45 s budgeted ×1.5 for slow runners**. **Nightly candidates if a part is over:** the manor's thread and keyframe tests (about 15 s; the PR keeps one thread count), the mutant build, and the seven-law sweep's second configuration. No gate moves part; both parts' times are reported; the third job is D54 item 6.
