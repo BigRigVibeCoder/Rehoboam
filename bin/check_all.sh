@@ -519,7 +519,9 @@ FORBIDDEN_API_CONTROLS="hash_map:hash-collections:HashMap hash_set:hash-collecti
   env_temp_dir:env:std::env env_home_dir:env:std::env env_set_current_dir:env:std::env
   env_split_paths:env:std::env env_join_paths:env:std::env
   build_env_home:build-env:env!( build_env_option:build-env:option_env!( build_env_concat:build-env:env!(
-  build_env_manifest:build-env:env![
+  build_env_manifest:build-env:env![ build_env_rename_core:build-env:core::env
+  build_env_rename_option:build-env:std::option_env build_env_rename_group:build-env:core::option_env
+  build_env_rename_reexport:build-env:some_crate::env
   fs_renamed_std:file-io:fs::r fs_os_symlink:file-io:fs::s raw_ident_fs:file-io:std::fs
   std_rename:std-rename:std~as std_rename_root:std-rename:std~as std_rename_self:std-rename:std~as
   extern_crate_std:std-rename:extern~crate~std~as

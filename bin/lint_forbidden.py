@@ -224,6 +224,7 @@ NETWORK_FILES = MappingProxyType({"rh-cli": frozenset({"src/serve.rs"})})
 NETWORK_REEXPORT_RULE = "network-reexport"
 PROCESS_RULE = "process"
 ENV_RULE = "env"
+BUILD_ENV_RULE = "build-env"
 STD_RENAME_RULE = "std-rename"
 # MIN-2: `r#ident` is `ident`; stripped before any rule matches (a raw string, r#"..."#, is a
 # literal the lexer has already blanked).
@@ -236,7 +237,15 @@ BANNED_MODULES = (
     (("std", "env"), ENV_RULE),
     (("std", "net"), NETWORK_RULE),
     (("std", "os", "unix", "net"), NETWORK_RULE),
+    # The review's K2 (A-50): the build-environment macros, which `use` can rename past the
+    # build-env pattern (`use core::env as e; e!("HOME")`).
+    (("core", "env"), BUILD_ENV_RULE),
+    (("core", "option_env"), BUILD_ENV_RULE),
+    (("std", "option_env"), BUILD_ENV_RULE),
 )
+# The review's K2: a renamed path ending in one of these names is a renamed build-environment macro
+# whatever crate it comes through (a re-export), so `use … as` of it is refused under build-env.
+BUILD_ENV_NAMES = frozenset({"env", "option_env"})
 # DEF-5: the one path into a banned module that is allowed: the target's constants.
 ALLOWED_PATHS = frozenset({("std", "env", "consts")})
 USE_TOKEN = re.compile(r"::|[{},*;]|\w+")
@@ -308,7 +317,6 @@ SOURCE_INCLUDE_RULE = "source-include"
 DATA_INCLUDE_RULE = "data-include"
 INCLUDE_MACRO = re.compile(r"\binclude\s*!\s*(?P<open>[(\[{])")
 DATA_INCLUDE_MACRO = re.compile(r"\binclude_(?:str|bytes)\s*!\s*(?P<open>[(\[{])")
-BUILD_ENV_RULE = "build-env"
 BUILD_ENV_MACRO = re.compile(r"\b(?:option_)?env\s*!\s*(?P<open>[(\[{])")
 PACKAGE_ENV = re.compile(r"CARGO_PKG_[A-Z_]+")
 CLOSING = {"(": ")", "[": "]", "{": "}"}
@@ -749,6 +757,15 @@ def find_use_modules(code: str, path: str) -> list[Finding]:
                 continue
             why = next(r.why for r in RULES if r.name == rule)
             found.append(Finding(rule, path, line + 1, column, "::".join(module), why))
+        flagged = {f.rule for f in found if f.line == line + 1}
+        renamed_macro = next(
+            (p for p in renamed if p and p[-1] in BUILD_ENV_NAMES and p != ("std", "env")), None
+        )
+        if renamed_macro is not None and BUILD_ENV_RULE not in flagged:
+            why = next(r.why for r in RULES if r.name == BUILD_ENV_RULE)
+            found.append(
+                Finding(BUILD_ENV_RULE, path, line + 1, column, "::".join(renamed_macro), why)
+            )
     return found
 
 
