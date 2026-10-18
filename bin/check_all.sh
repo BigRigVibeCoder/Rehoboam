@@ -381,10 +381,11 @@ odd_next_control() {
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     clean)
       # REV-SPR-020 R26 (NIT-7): a next version that amends nothing (the frozen T1 as a draft, version bumped) lints
-      # and plants nothing in the lock; SPR-019's next M7 needs this path. The real T1 0.4.0 draft's lock section (T1-A)
-      # belongs to that draft, not to this synthetic one, so the copy of the lock leaves it out.
-      sed -e 's/^status = "frozen"/status = "draft"/' -e 's/^spec_version = "0.3.3"/spec_version = "0.4.0"/' specs/systems/T1.minds.odd.toml > "$dir/T1.minds.odd.toml" || return 1
-      grep -q '^spec_version = "0.4.0"' "$dir/T1.minds.odd.toml" || { echo "control not rendered: T1 is not 0.3.3"; return 1; }
+      # and plants nothing in the lock; SPR-019's next M7 needs this path. The bump is version-agnostic (99.0.0 is above
+      # any frozen T1; the T1-A review's N6). The real T1 draft's lock section (T1-A) belongs to that draft, not to this
+      # synthetic one, so the copy of the lock leaves it out.
+      sed -e 's/^status = "frozen"/status = "draft"/' -e 's/^spec_version = "[0-9.]*"/spec_version = "99.0.0"/' specs/systems/T1.minds.odd.toml > "$dir/T1.minds.odd.toml" || return 1
+      grep -q '^spec_version = "99.0.0"' "$dir/T1.minds.odd.toml" || { echo "control not rendered: no spec_version line in the frozen T1"; return 1; }
       sed '/^\[amendments\."T1\.minds"\]$/,/^$/d' "$lock" > "$dir/amendments.lock.toml" || return 1
       if grep -q '^\[amendments\."T1\.minds"\]' "$dir/amendments.lock.toml"; then echo "control not rendered: the T1 draft's lock section remains"; return 1; fi
       "$PY" -I specs/systems/lint_odd.py --next "$dir" ;;
@@ -1360,7 +1361,7 @@ run "minds v0 positive control: a trait draw keyed at the wrong instant must FAI
 run "minds v0 positive control: genesis naming more than the manifest's cast must FAIL INV-T1-11 (Architect ruling X4; T1-A)" "fail:CONTROL world-start-genesis-names: FAIL for its own reason (INV-T1-11 (genesis))" "$PY" -I specs/minds/selftest_minds_v0.py --control world-start-genesis-names &&
 run "minds v0 mutant: repromote-redraw changes the re-promoted mind's golden line (SPR-023 T-03; T1-A)" "fail:golden: promote_cycle mind row=1 person=1007 traits=-3289," "$PY" -I specs/minds/selftest_minds_v0.py --mutant repromote-redraw &&
 run "minds v0 mutant: trait-k-swap changes the first created mind's golden line (SPR-023 T-03; T1-A)" "fail:golden: world_start t=0/d0 Day/Agenda world_start: create 1251091979667339840 row=0" "$PY" -I specs/minds/selftest_minds_v0.py --mutant trait-k-swap &&
-run "minds v0 mutant: opinion-no-expiry changes the probe at the modifier's expiry (SPR-023 T-04; T1-A)" "fail:golden: opinions t=5260320/d3653 Day/Agenda stand-in (T1-I/S): probe opinion(3002, 3001) = -3200" "$PY" -I specs/minds/selftest_minds_v0.py --mutant opinion-no-expiry &&
+run "minds v0 mutant: opinion-no-expiry changes the probe at the modifier's expiry (SPR-023 T-04; T1-A)" "fail:golden: opinions t=5260320/d3653 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3002, 3001) = -3200" "$PY" -I specs/minds/selftest_minds_v0.py --mutant opinion-no-expiry &&
 run "minds v0 mutant: relation-not-ended changes the first monthly refresh's end line (SPR-023 T-04; T1-A)" "fail:golden: relations_monthly t=44640/d31 Month/Agenda relations: refresh 2001: end row=1" "$PY" -I specs/minds/selftest_minds_v0.py --mutant relation-not-ended &&
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&

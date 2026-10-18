@@ -10,7 +10,7 @@ traits seed=7 person=1001 epoch=0 t=0 trait_sd=15: S=142355,110291,125952,137401
 traits seed=7 person=1001 epoch=0 t=0 trait_sd=50: S=142355,110291,125952,137401,113212,193225,197459 -> 3818,-7029,-1731,2142,-6041,21026 ambition=25600
 traits seed=7 person=1251091979667339840 epoch=0 t=0 trait_sd=20: S=84103,76325,193445,62632,158988,54765,106700 -> -6355,-7408,8440,-9261,3778,-10325 ambition=9502
 traits clamp witness seed=7 person=1 trait_sd=50: unclamped 17209,-21710,-22146,-26410,-2207,10323,6495 -> 17209,-21710,-22146,-25600,-2207,10323 ambition=19295
-case world_start days_per_year=360 month=43200 seed=7: X4: genesis names the cast (F0-F2); M7's tick-0 pass promotes F3-F6; M7 demotes F2
+case world_start days_per_year=360 month=43200 seed=7: X4: genesis names the cast (F0-F2), kept named by M7 0.6.0's criterion (e); M7's tick-0 pass promotes F3-F6
 world_start t=0/d0 genesis: names 1251091979667339840 6268496742317920045 18101335812623683693
 world_start t=0/d0 Day/Agenda world_start: create 1251091979667339840 row=0 key=(t=0, epoch=0) traits=-6355,-7408,8440,-9261,3778,-10325 ambition=9502
 world_start t=0/d0 Day/Agenda world_start: refresh 1251091979667339840: append row=0 (1251091979667339840, 41086449282618072, vassal)
@@ -27,9 +27,8 @@ world_start t=0/d0 Day/Agenda promote: refresh 4434921694440898296: append row=5
 world_start t=0/d0 Day/Agenda promote: refresh 4434921694440898296: append row=6 (4434921694440898296, 18101335812623683693, vassal)
 world_start t=0/d0 Day/Agenda promote: create 6151115322459143024 row=6 key=(t=0, epoch=0) traits=3024,-4288,-5479,3995,2491,-10739 ambition=14492
 world_start t=0/d0 Day/Agenda promote: refresh 6151115322459143024: append row=7 (6151115322459143024, 4434921694440898296, liege)
-world_start t=0/d0 Day/Agenda promote: demote 6268496742317920045: cancelled none; goals 0, thoughts 0 deleted; rows ended none
 world_start mind row=0 person=1251091979667339840 traits=-6355,-7408,8440,-9261,3778,-10325 ambition=9502 named=1 break=calm
-world_start mind row=1 person=6268496742317920045 traits=-3465,-2309,-3939,-7354,-388,3297 ambition=19891 named=0 break=calm
+world_start mind row=1 person=6268496742317920045 traits=-3465,-2309,-3939,-7354,-388,3297 ambition=19891 named=1 break=calm
 world_start mind row=2 person=18101335812623683693 traits=7184,-4410,-1732,-7812,8007,5550 ambition=15058 named=1 break=calm
 world_start mind row=3 person=41086449282618072 traits=-12769,-12489,-7789,1582,585,11295 ambition=5368 named=1 break=calm
 world_start mind row=4 person=1781156560453768555 traits=-2006,2332,4660,-4449,5077,-9338 ambition=3849 named=1 break=calm
@@ -43,7 +42,7 @@ world_start relation row=4 (4434921694440898296, 1251091979667339840, vassal) en
 world_start relation row=5 (4434921694440898296, 6151115322459143024, vassal) ended_at=0
 world_start relation row=6 (4434921694440898296, 18101335812623683693, vassal) ended_at=0
 world_start relation row=7 (6151115322459143024, 4434921694440898296, liege) ended_at=0
-case promote_cycle days_per_year=360 month=43200 seed=11: MAJ-9 re-promotion, epochs, ended and deferred drops, the timers a Demote keeps
+case promote_cycle days_per_year=360 month=43200 seed=11: MAJ-9 re-promotion, epochs, ended and deferred drops (pending and refractory), the timers a Demote cancels and keeps, a natural death before T1's timer pass
 promote_cycle t=0/d0 genesis: names none
 promote_cycle t=0/d0 Day/Agenda promote: create 1003 row=0 key=(t=0, epoch=0) traits=-12210,3085,4775,-2248,-1027,-2194 ambition=12666
 promote_cycle t=0/d0 Day/Agenda promote: refresh 1003: append row=0 (1003, 1006, vassal)
@@ -57,19 +56,26 @@ promote_cycle t=7200/d5 Day/Agenda promote: create 1008 row=3 key=(t=7200, epoch
 promote_cycle t=7200/d5 Day/Agenda promote: refresh 1008: append row=4 (1008, 1003, liege)
 promote_cycle t=8640/d6 Day/Agenda apply_commands: goal insert (1007, vow 501) priority=10240
 promote_cycle t=8640/d6 Day/Agenda apply_commands: thought (1007, paranoia) magnitude=6400
-promote_cycle t=8640/d6 Day/Agenda stand-in (T1-I/S): schedule poll entity=1007 due=d400
-promote_cycle t=8640/d6 Day/Agenda stand-in (T1-I/S): schedule interrupt entity=1007 due=d300
-promote_cycle t=8640/d6 Day/Agenda stand-in (T1-I/S): schedule MARRY_DUE entity=1007 due=d45
-promote_cycle t=8640/d6 Day/Agenda stand-in (T1-I/S): schedule DEATH_DUE entity=1008 due=d70
-promote_cycle t=57600/d40 Day/Agenda promote: demote 1007: cancelled interrupt,poll; goals 1, thoughts 1 deleted; rows ended 3
+promote_cycle t=8640/d6 Day/Agenda decide (stand-in, T1-I/S): schedule poll entity=1007 due=d400
+promote_cycle t=8640/d6 Day/Agenda decide (stand-in, T1-I/S): schedule interrupt entity=1007 due=d300
+promote_cycle t=8640/d6 Day/Agenda decide (stand-in, T1-I/S): schedule MARRY_DUE entity=1007 due=d45
+promote_cycle t=8640/d6 Day/Agenda decide (stand-in, T1-I/S): schedule DEATH_DUE entity=1008 due=d70
+promote_cycle t=8640/d6 Day/Agenda decide (stand-in, T1-I/S): schedule break entity=1007 due=d500
+promote_cycle t=8640/d6 Day/Agenda decide (stand-in, T1-I/S): schedule refractory_end entity=1007 due=d600
+promote_cycle t=8640/d6 Day/Agenda decide (stand-in, T1-I/S): schedule MARRY_DUE entity=1003 due=d80
+promote_cycle t=57600/d40 Day/Agenda promote: demote 1007: cancelled interrupt,poll,break,refractory_end; goals 1, thoughts 1 deleted; rows ended 3
 promote_cycle t=57600/d40 Day/Agenda promote: demote 1008: cancelled none; goals 0, thoughts 0 deleted; rows ended 4
 promote_cycle t=57600/d40 Day/Agenda promote: drop Demote 1009 ended
 promote_cycle t=64800/d45 Vital T1's timer pass: fire MARRY_DUE: Marry a=1007 b=1005 submitted to M2
-promote_cycle t=66240/d46 Day/Agenda stand-in (T1-I/S): break_state 1005 := pending
+promote_cycle t=66240/d46 Day/Agenda break_act (stand-in, T1-I/S): break_state 1005 := pending
 promote_cycle t=72000/d50 Day/Agenda promote: drop Demote 1005 deferred
-promote_cycle t=79200/d55 Day/Agenda stand-in (T1-I/S): break_state 1005 := calm
+promote_cycle t=74880/d52 Day/Agenda break_act (stand-in, T1-I/S): break_state 1005 := refractory
+promote_cycle t=76320/d53 Day/Agenda promote: drop Demote 1005 deferred
+promote_cycle t=79200/d55 Day/Agenda break_act (stand-in, T1-I/S): break_state 1005 := calm
 promote_cycle t=100800/d70 Vital T1's timer pass: fire DEATH_DUE: ScheduleDeath victim=1008 culprit=1003; M2 applies it
 promote_cycle t=100800/d70 Day/Vital exits: 1008: rows ended 2, thoughts 0 deleted
+promote_cycle t=115200/d80 Vital T1's timer pass: drop_timer MARRY_DUE 1003 dead
+promote_cycle t=115200/d80 Day/Vital exits: 1009: rows ended none, thoughts 0 deleted
 promote_cycle t=144000/d100 Day/Agenda promote: create 1006 row=4 key=(t=144000, epoch=0) traits=-8105,910,2125,1274,3836,-2158 ambition=12728
 promote_cycle t=144000/d100 Day/Agenda promote: refresh 1006: append row=5 (1006, 1003, liege)
 promote_cycle t=144000/d100 Day/Agenda promote: demote 1006: cancelled none; goals 0, thoughts 0 deleted; rows ended 5
@@ -88,12 +94,15 @@ promote_cycle relation row=3 (1007, 1003, liege) ended_at=57600
 promote_cycle relation row=4 (1008, 1003, liege) ended_at=57600
 promote_cycle relation row=5 (1006, 1003, liege) ended_at=144000
 promote_cycle relation row=6 (1007, 1003, liege) ended_at=0
-promote_cycle dropped Demote deferred 1
+promote_cycle dropped Demote deferred 2
 promote_cycle dropped Demote ended 1
+promote_cycle dropped MARRY_DUE dead 1
 promote_cycle dropped Promote ended 1
+promote_cycle cancelled break ended 1
 promote_cycle cancelled interrupt ended 1
 promote_cycle cancelled poll ended 1
-case relations_monthly days_per_year=365 month=43800 seed=13: 365-day months: a regrant, a death and a resignation reach the rows at the next pulse
+promote_cycle cancelled refractory_end ended 1
+case relations_monthly days_per_year=365 month=43800 seed=13: 365-day months: a regrant, a death, a resignation and a pulse-day regrant reach the rows at the next pulse; a promotion on the instant its liege died
 relations_monthly t=0/d0 genesis: names none
 relations_monthly t=0/d0 Day/Agenda promote: create 2001 row=0 key=(t=0, epoch=0) traits=3299,-7360,-6713,-1243,-7335,21 ambition=17971
 relations_monthly t=0/d0 Day/Agenda promote: refresh 2001: append row=0 (2001, 2002, vassal)
@@ -112,21 +121,27 @@ relations_monthly t=44640/d31 Month/Agenda relations: refresh 2001: append row=7
 relations_monthly t=44640/d31 Month/Agenda relations: refresh 2003: end row=5 (2003, 2001, liege)
 relations_monthly t=44640/d31 Month/Agenda relations: refresh 2006: append row=8 (2006, 2001, liege)
 relations_monthly t=57600/d40 Day/Vital exits: 2002: rows ended 0,3,4, thoughts 0 deleted
-relations_monthly t=57600/d40 Day/Agenda promote: create 2007 row=5 key=(t=57600, epoch=0) traits=-9529,-1329,5617,-1860,-3,-1552 ambition=14881
+relations_monthly t=57600/d40 Day/Agenda promote: create 2005 row=5 key=(t=57600, epoch=0) traits=1828,-7396,945,-4704,6168,-3568 ambition=9471
+relations_monthly t=57600/d40 Day/Agenda promote: create 2007 row=6 key=(t=57600, epoch=0) traits=-9529,-1329,5617,-1860,-3,-1552 ambition=14881
 relations_monthly t=84960/d59 Month/Agenda relations: refresh 2001: append row=9 (2001, 2007, vassal)
-relations_monthly t=84960/d59 Month/Agenda relations: refresh 2007: append row=10 (2007, 2001, liege)
-relations_monthly t=84960/d59 Month/Agenda relations: refresh 2007: append row=11 (2007, 2005, vassal)
+relations_monthly t=84960/d59 Month/Agenda relations: refresh 2005: append row=10 (2005, 2007, liege)
+relations_monthly t=84960/d59 Month/Agenda relations: refresh 2007: append row=11 (2007, 2001, liege)
+relations_monthly t=84960/d59 Month/Agenda relations: refresh 2007: append row=12 (2007, 2005, vassal)
 relations_monthly t=129600/d90 Month/Agenda relations: refresh 2001: end row=2 (2001, 2004, vassal)
 relations_monthly t=129600/d90 Month/Agenda relations: refresh 2004: end row=6 (2004, 2001, liege)
-relations_monthly t=144000/d100 Day/Vital exits: 2005: rows ended 11, thoughts 0 deleted
+relations_monthly t=144000/d100 Day/Vital exits: 2005: rows ended 10,12, thoughts 0 deleted
 relations_monthly t=144000/d100 Day/Vital exits: 2008: rows ended none, thoughts 0 deleted
+relations_monthly t=217440/d151 Month/Agenda relations: refresh 2001: end row=7 (2001, 2006, vassal)
+relations_monthly t=217440/d151 Month/Agenda relations: refresh 2001: append row=13 (2001, 2009, vassal)
+relations_monthly t=217440/d151 Month/Agenda relations: refresh 2006: end row=8 (2006, 2001, liege)
 relations_monthly t=525600/d365 Day/Agenda promote: demote 2003: cancelled none; goals 0, thoughts 0 deleted; rows ended none
 relations_monthly mind row=0 person=2001 traits=3299,-7360,-6713,-1243,-7335,21 ambition=17971 named=1 break=calm
 relations_monthly mind row=1 person=2002 traits=-6946,-619,472,4986,2986,-5572 ambition=15183 named=- break=calm
 relations_monthly mind row=2 person=2003 traits=1366,2794,-2024,2794,286,8050 ambition=10093 named=0 break=calm
 relations_monthly mind row=3 person=2004 traits=-2331,-1066,2,-3101,691,19 ambition=6119 named=1 break=calm
 relations_monthly mind row=4 person=2006 traits=-5316,3977,-26,-7589,5136,2101 ambition=11448 named=1 break=calm
-relations_monthly mind row=5 person=2007 traits=-9529,-1329,5617,-1860,-3,-1552 ambition=14881 named=1 break=calm
+relations_monthly mind row=5 person=2005 traits=1828,-7396,945,-4704,6168,-3568 ambition=9471 named=- break=calm
+relations_monthly mind row=6 person=2007 traits=-9529,-1329,5617,-1860,-3,-1552 ambition=14881 named=1 break=calm
 relations_monthly relation row=0 (2001, 2002, vassal) ended_at=57600
 relations_monthly relation row=1 (2001, 2003, vassal) ended_at=44640
 relations_monthly relation row=2 (2001, 2004, vassal) ended_at=129600
@@ -134,36 +149,38 @@ relations_monthly relation row=3 (2002, 2001, liege) ended_at=57600
 relations_monthly relation row=4 (2002, 2005, vassal) ended_at=57600
 relations_monthly relation row=5 (2003, 2001, liege) ended_at=44640
 relations_monthly relation row=6 (2004, 2001, liege) ended_at=129600
-relations_monthly relation row=7 (2001, 2006, vassal) ended_at=0
-relations_monthly relation row=8 (2006, 2001, liege) ended_at=0
+relations_monthly relation row=7 (2001, 2006, vassal) ended_at=217440
+relations_monthly relation row=8 (2006, 2001, liege) ended_at=217440
 relations_monthly relation row=9 (2001, 2007, vassal) ended_at=0
-relations_monthly relation row=10 (2007, 2001, liege) ended_at=0
-relations_monthly relation row=11 (2007, 2005, vassal) ended_at=144000
+relations_monthly relation row=10 (2005, 2007, liege) ended_at=144000
+relations_monthly relation row=11 (2007, 2001, liege) ended_at=0
+relations_monthly relation row=12 (2007, 2005, vassal) ended_at=144000
+relations_monthly relation row=13 (2001, 2009, vassal) ended_at=0
 case opinions days_per_year=365 month=43800 seed=17: 365 days: Registry and payload magnitudes, the clamp, expiry, freshness, dead keys
 opinions t=0/d0 genesis: names none
 opinions t=0/d0 Day/Agenda promote: create 3001 row=0 key=(t=0, epoch=0) traits=-3723,4393,1421,4821,-6129,6104 ambition=17077
 opinions t=0/d0 Day/Agenda promote: create 3002 row=1 key=(t=0, epoch=0) traits=4083,10406,570,2286,-6769,-1045 ambition=14308
 opinions t=1440/d1 Day/Agenda apply_commands: opinion row=0 (3003 about 3001) GRANTED_BY magnitude=5120 expires=10513440 source=900
 opinions t=1440/d1 Day/Agenda promote: create 3003 row=2 key=(t=1440, epoch=0) traits=6931,4254,-3749,-8189,5892,-3683 ambition=9685
-opinions t=1440/d1 Day/Agenda stand-in (T1-I/S): probe opinion(3003, 3001) = 5120 over 1 rows
+opinions t=1440/d1 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3003, 3001) = 5120 over 1 rows
 opinions t=2880/d2 Day/Agenda apply_commands: opinion row=1 (3001 about 3002) KIN_HARMED_BY magnitude=-15360 expires=26282880 source=901
 opinions t=2880/d2 Day/Agenda apply_commands: opinion row=2 (3001 about 3002) KIN_HARMED_BY magnitude=-15360 expires=26282880 source=902
 opinions t=2880/d2 Day/Agenda apply_commands: opinion row=3 (3001 about 3002) KIN_HARMED_BY magnitude=-15360 expires=26282880 source=903
 opinions t=2880/d2 Day/Agenda apply_commands: opinion row=4 (3001 about 3002) KIN_HARMED_BY magnitude=-15360 expires=26282880 source=904
 opinions t=2880/d2 Day/Agenda apply_commands: opinion row=5 (3001 about 3002) KIN_HARMED_BY magnitude=-15360 expires=26282880 source=905
-opinions t=2880/d2 Day/Agenda stand-in (T1-I/S): probe opinion(3001, 3002) = -25600 over 5 rows
+opinions t=2880/d2 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3001, 3002) = -25600 over 5 rows
 opinions t=4320/d3 Day/Agenda apply_commands: opinion row=6 (3002 about 3001) VOW_BROKEN_BY magnitude=-3200 expires=10516320 source=906
 opinions t=4320/d3 Day/Agenda apply_commands: opinion row=7 (3002 about 3005) VOW_BROKEN_BY magnitude=-25600 expires=10516320 source=907
 opinions t=4320/d3 Day/Agenda apply_commands: opinion row=8 (3002 about 3001) CLAIM_PRESSED_BY magnitude=-7680 expires=5260320 source=908
-opinions t=4320/d3 Day/Agenda stand-in (T1-I/S): probe opinion(3002, 3001) = -10880 over 2 rows
-opinions t=4320/d3 Day/Agenda stand-in (T1-I/S): probe opinion(3002, 3005) = -25600 over 1 rows
+opinions t=4320/d3 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3002, 3001) = -10880 over 2 rows
+opinions t=4320/d3 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3002, 3005) = -25600 over 1 rows
 opinions t=7200/d5 Day/Agenda apply_commands: opinion row=9 (3001 about 3004) FEUD_WITH magnitude=-10240 expires=10519200 source=909
 opinions t=14400/d10 Day/Vital exits: 3004: rows ended none, thoughts 0 deleted
 opinions t=14400/d10 Day/Agenda take: drop OpinionModifier 3004 dead_key
-opinions t=28800/d20 Day/Agenda stand-in (T1-I/S): probe opinion(3001, 3004) = -10240 over 1 rows
+opinions t=28800/d20 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3001, 3004) = -10240 over 1 rows
 opinions t=43200/d30 Day/Agenda take: drop OpinionModifier 3004 dead_key
-opinions t=5258880/d3652 Day/Agenda stand-in (T1-I/S): probe opinion(3002, 3001) = -10880 over 2 rows
-opinions t=5260320/d3653 Day/Agenda stand-in (T1-I/S): probe opinion(3002, 3001) = -3200 over 1 rows
+opinions t=5258880/d3652 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3002, 3001) = -10880 over 2 rows
+opinions t=5260320/d3653 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3002, 3001) = -3200 over 1 rows
 opinions mind row=0 person=3001 traits=-3723,4393,1421,4821,-6129,6104 ambition=17077 named=1 break=calm
 opinions mind row=1 person=3002 traits=4083,10406,570,2286,-6769,-1045 ambition=14308 named=1 break=calm
 opinions mind row=2 person=3003 traits=6931,4254,-3749,-8189,5892,-3683 ambition=9685 named=1 break=calm
@@ -183,9 +200,9 @@ opinions_360 t=0/d0 genesis: names none
 opinions_360 t=0/d0 Day/Agenda promote: create 3101 row=0 key=(t=0, epoch=0) traits=-3868,-2522,3759,-2655,-7429,-3461 ambition=10695
 opinions_360 t=0/d0 Day/Agenda promote: create 3102 row=1 key=(t=0, epoch=0) traits=-1928,2790,-7867,-4865,-11333,2044 ambition=20697
 opinions_360 t=1440/d1 Day/Agenda apply_commands: opinion row=0 (3101 about 3102) CLAIM_PRESSED_BY magnitude=-7680 expires=5185440 source=950
-opinions_360 t=1440/d1 Day/Agenda stand-in (T1-I/S): probe opinion(3101, 3102) = -7680 over 1 rows
-opinions_360 t=5184000/d3600 Day/Agenda stand-in (T1-I/S): probe opinion(3101, 3102) = -7680 over 1 rows
-opinions_360 t=5185440/d3601 Day/Agenda stand-in (T1-I/S): probe opinion(3101, 3102) = 0 over 0 rows
+opinions_360 t=1440/d1 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3101, 3102) = -7680 over 1 rows
+opinions_360 t=5184000/d3600 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3101, 3102) = -7680 over 1 rows
+opinions_360 t=5185440/d3601 Day/Agenda decide (stand-in, T1-I/S): probe opinion(3101, 3102) = 0 over 0 rows
 opinions_360 mind row=0 person=3101 traits=-3868,-2522,3759,-2655,-7429,-3461 ambition=10695 named=1 break=calm
 opinions_360 mind row=1 person=3102 traits=-1928,2790,-7867,-4865,-11333,2044 ambition=20697 named=1 break=calm
 opinions_360 opinion row=0 (3101 about 3102) CLAIM_PRESSED_BY magnitude=-7680 expires=5185440 source=950
@@ -209,28 +226,28 @@ thoughts_goals t=86400/d60 Month/Agenda expire: thought (4001, hubris) decays to
 thoughts_goals t=86400/d60 Month/Agenda expire: thought (4001, corruption) decays to 6528
 thoughts_goals t=86400/d60 Month/Agenda expire: thought (4002, despair) decays to 6528
 thoughts_goals t=86400/d60 Month/Agenda expire: thought (4003, filial_piety) decays to 5248
+thoughts_goals t=86400/d60 Day/Agenda apply_commands: thought (4003, filial_piety) magnitude=7680
 thoughts_goals t=129600/d90 Month/Agenda expire: thought (4001, paranoia) decays to 5376
 thoughts_goals t=129600/d90 Month/Agenda expire: thought (4001, filial_piety) decays to 0
 thoughts_goals t=129600/d90 Month/Agenda expire: thought (4001, hubris) decays to 296
 thoughts_goals t=129600/d90 Month/Agenda expire: thought (4001, corruption) decays to 5376
 thoughts_goals t=129600/d90 Month/Agenda expire: thought (4002, despair) decays to 5376
-thoughts_goals t=129600/d90 Month/Agenda expire: thought (4003, filial_piety) decays to 4096
 thoughts_goals t=144000/d100 Day/Agenda apply_commands: thought (4001, paranoia) magnitude=5376
 thoughts_goals t=172800/d120 Month/Agenda expire: thought (4001, hubris) decays to 0
 thoughts_goals t=172800/d120 Month/Agenda expire: thought (4001, corruption) decays to 4224
 thoughts_goals t=172800/d120 Month/Agenda expire: thought (4002, despair) decays to 4224
-thoughts_goals t=172800/d120 Month/Agenda expire: thought (4003, filial_piety) decays to 2944
+thoughts_goals t=172800/d120 Month/Agenda expire: thought (4003, filial_piety) decays to 6528
 thoughts_goals t=187200/d130 Day/Vital exits: 4002: rows ended none, thoughts 1 deleted
 thoughts_goals t=201600/d140 Day/Agenda apply_commands: drop ClearGoal 4001 ended
 thoughts_goals t=201600/d140 Day/Agenda apply_commands: goal removed (4002, vow 9002)
 thoughts_goals t=216000/d150 Month/Agenda expire: thought (4001, paranoia) decays to 4224
 thoughts_goals t=216000/d150 Month/Agenda expire: thought (4001, corruption) decays to 3072
-thoughts_goals t=216000/d150 Month/Agenda expire: thought (4003, filial_piety) decays to 1792
+thoughts_goals t=216000/d150 Month/Agenda expire: thought (4003, filial_piety) decays to 5376
 thoughts_goals t=216000/d150 Day/Agenda promote: demote 4001: cancelled none; goals 1, thoughts 4 deleted; rows ended none
 thoughts_goals t=230400/d160 Day/Agenda apply_commands: thought (4001, despair) magnitude=6400
-thoughts_goals t=259200/d180 Month/Agenda expire: thought (4003, filial_piety) decays to 640
+thoughts_goals t=259200/d180 Month/Agenda expire: thought (4003, filial_piety) decays to 4224
 thoughts_goals mind row=0 person=4001 traits=-15702,-2053,5272,-5010,1352,-2503 ambition=22500 named=0 break=calm
 thoughts_goals mind row=1 person=4002 traits=4502,5729,-1057,-2403,1401,-2126 ambition=10368 named=- break=calm
 thoughts_goals thought (4001, despair) magnitude=6400 refreshed_at=230400 source=708
-thoughts_goals thought (4003, filial_piety) magnitude=640 refreshed_at=4320 source=705
+thoughts_goals thought (4003, filial_piety) magnitude=4224 refreshed_at=86400 source=709
 thoughts_goals dropped ClearGoal ended 1

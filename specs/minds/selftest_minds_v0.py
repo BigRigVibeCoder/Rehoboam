@@ -16,7 +16,8 @@ worlds stand in for them with scripted writes, timers and probes, each named as 
 checks:
 
   1. the spec's ``check_values`` and ``constants`` against this file's arithmetic and the Registry
-     (codes, q8_8 values, the trait draw's SIGMA, the month's length on both calendars);
+     (codes, q8_8 values, the trait draw's SIGMA, the month's length on both calendars); the HEXACO
+     order is read from the spec's [[owns]], each binding's steps from its [[schedule]];
   2. the widths the steps state (the trait product below 2^47, the thought sum needing i32);
   3. the step prose states the numbers this file computes (a reviewer reads the steps, the engine
      compiles the constants: they must not drift apart);
@@ -24,9 +25,11 @@ checks:
      persons are trait_sd's, and a clamp witness at the Registry's largest trait_sd;
   5. the Registry typing of A14 and its refusals, on planted copies of the three tables;
   6. six scripted worlds through world start, promotion, demotion, re-promotion, the deferred
-     Demote, timers a Demote cancels and keeps, exits, the monthly relation refresh on both
-     calendars, opinion modifiers, their sum and expiry, index freshness, thoughts and goals, with
-     every invariant the A-steps state observed at every instant's Bookkeeping;
+     Demote (pending and refractory), the timers a Demote cancels and keeps, a natural death
+     before T1's timer pass, exits, the monthly relation refresh on both calendars (a pulse-day
+     title change, a promotion on the instant its liege died), opinion modifiers, their sum and
+     expiry, index freshness, thoughts (a command on a pulse day) and goals, with every invariant
+     the A-steps state observed at every instant's Bookkeeping;
   7. the golden file ``specs/minds/golden/minds_v0.txt`` equals this reference's output.
 
 Run: python -I specs/minds/selftest_minds_v0.py --check        (check; the default)
@@ -78,22 +81,17 @@ I32_MAX = (1 << 31) - 1
 WIDTH_TRAIT_BITS = 47  # A3: |256 x B x c_k| < 2^47
 Q8 = 256  # q8_8 raw units per point
 Q16 = 1 << 16  # Q16_16 bits per unit
-THOUGHT_GAIN = 100  # A12: trait points per overlay point
 DELTA_MAX = Q8  # A12: an overlay delta is clamped to [0, 1] overlay point
-HEXACO = (
-    "honesty_humility",
-    "emotionality",
-    "extraversion",
-    "agreeableness",
-    "conscientiousness",
-    "openness",
-)
 LIEGE, VASSAL = "liege", "vassal"
 KIN_KINDS = ("parent", "child", "spouse", "sibling", "grandparent", "grandchild", "kin_other")
 BREAK_STATES = ("calm", "pending", "refractory")
 CALM = 0
-CANCELLED_KINDS = frozenset({"poll", "interrupt", "break", "refractory_end"})  # A7 (a)
-OWED_KINDS = frozenset({"DEATH_DUE", "MARRY_DUE"})  # A7: never cancelled by a Demote
+OWED_KINDS = frozenset({"DEATH_DUE", "MARRY_DUE"})  # A7: the only own timers a Demote never cancels
+# A15: the steps of each binding come from the spec's [[schedule]] (N9). The A-part runs its own
+# steps; the T1-I/S steps run their stand-ins here, or nothing; outcome_due is the fire in the timer
+# pass, not a step.
+STAND_INS = {"break_act": ("break",), "decide": ("timer", "probe")}
+NO_A_PART = frozenset({"outcome_due", "grief", "threshold", "stress_month", "refractory_end"})
 PHASES = (
     "Inputs",
     "Environment",
@@ -192,16 +190,33 @@ class Spec:
     steps: dict[str, str]
     version: str
     applies: dict[str, tuple[str, str]]  # command -> (key, key_field)
+    hexaco: tuple[str, ...]  # A3's k = 0..5: the HEXACO columns in [[owns]] order
+    schedule: dict[str, tuple[str, ...]]  # "Pulse/Phase" -> its step names in order (A15)
 
     @staticmethod
     def load(path: Path) -> Spec:
-        """Read ``[algorithm.minds_f1]`` and the ``[[applies]]`` keys of ``path``."""
+        """Read the algorithm table, the HEXACO columns, ``[[applies]]`` and ``[[schedule]]``."""
         doc = load_toml(path)
         alg = doc["algorithm"][TABLE]
         steps = {str(s).split(None, 1)[0]: str(s) for s in alg["steps"]}
         applies = {str(a["command"]): (str(a["key"]), str(a["key_field"])) for a in doc["applies"]}
+        hexaco = tuple(
+            str(o["column"]).removeprefix("mind.")
+            for o in doc["owns"]
+            if o.get("entity") == "mind" and str(o.get("meaning", "")).startswith("HEXACO")
+        )
+        schedule = {
+            f"{b['pulse']}/{b['phase']}": tuple(str(x).split(":", 1)[0] for x in b["steps"])
+            for b in doc["schedule"]
+        }
         return Spec(
-            dict(alg["constants"]), dict(alg["check_values"]), steps, str(alg["version"]), applies
+            dict(alg["constants"]),
+            dict(alg["check_values"]),
+            steps,
+            str(alg["version"]),
+            applies,
+            hexaco,
+            schedule,
         )
 
 
@@ -219,6 +234,8 @@ class Consts:
     amb_mean: int
     months: int
     day: int
+    thought_gain: int  # A12's G, a design value (the T1-A review's F4)
+    hexaco: tuple[str, ...]
 
     @staticmethod
     def of(spec: Spec) -> Consts:
@@ -237,6 +254,8 @@ class Consts:
             int(c["ambition_mean"]) * Q8,
             int(c["months_per_year"]),
             int(c["minutes_per_day"]),
+            int(c["thought_gain"]),
+            spec.hexaco,
         )
 
     @property
@@ -335,7 +354,7 @@ def type_opinion_modifiers(t: dict[str, Any]) -> tuple[dict[str, tuple[int, int]
 
 
 def type_overlay_traits(
-    t: dict[str, Any], overlays: Sequence[str]
+    t: dict[str, Any], overlays: Sequence[str], hexaco: Sequence[str]
 ) -> tuple[dict[str, dict[str, int]], list[str]]:
     """A14 [overlay_traits]: an [overlays] id -> {HEXACO trait: a decimal in [-100, 100]}."""
     errs: list[str] = []
@@ -347,7 +366,7 @@ def type_overlay_traits(
         row = t[k] if isinstance(t[k], dict) else {}
         for trait in sorted(row):
             v = row[trait]
-            if trait not in HEXACO:
+            if trait not in hexaco:
                 errs.append(f"[overlay_traits] {k}: {trait} is not a HEXACO trait")
             elif not (_number(v) and -100 <= v <= 100):  # noqa: PLR2004  (the A14 bounds)
                 errs.append(f"[overlay_traits] {k}.{trait}: {v} outside [-100, 100]")
@@ -356,12 +375,12 @@ def type_overlay_traits(
     return out, errs
 
 
-def load_registry(doc: dict[str, Any]) -> tuple[Reg, list[str]]:
+def load_registry(doc: dict[str, Any], hexaco: Sequence[str]) -> tuple[Reg, list[str]]:
     """Type the three tables and read the codes and the T1 parameter bounds."""
     rel, e1 = type_relation_kinds(doc["relation_kinds"])
     ops, e2 = type_opinion_modifiers(doc["opinion_modifiers"])
     overlays = tuple(str(i) for i in doc["overlays"]["ids"])
-    traits, e3 = type_overlay_traits(doc["overlay_traits"], overlays)
+    traits, e3 = type_overlay_traits(doc["overlay_traits"], overlays, hexaco)
     bounds = {
         str(n): (Decimal(lo), Decimal(hi))
         for n, (lo, hi) in doc["systems"]["T1.minds"]["params"].items()
@@ -425,8 +444,8 @@ def draw_values(
 ) -> tuple[tuple[int, ...], int, list[int]]:
     """The clamped values of seven draws at ``sd_bits``: one rounding, then the clamp."""
     v = [scaled(k, d, sd_bits) for d in draws]
-    traits = tuple(clamp(x, k.trait_lo, k.trait_hi) for x in v[: len(HEXACO)])
-    ambition = clamp(k.amb_mean + v[len(HEXACO)], k.amb_lo, k.amb_hi)
+    traits = tuple(clamp(x, k.trait_lo, k.trait_hi) for x in v[: len(k.hexaco)])
+    ambition = clamp(k.amb_mean + v[len(k.hexaco)], k.amb_lo, k.amb_hi)
     return traits, ambition, [field_sum(k, d) for d in draws]
 
 
@@ -638,6 +657,7 @@ SENDS_VITAL = {  # stub senders' commands (S6, S7 at their Day/Vital binding)
 }
 SENDS_POLITY = {"promote": "Promote", "demote": "Demote", "m7_opinion": "OpinionModifier"}
 APPLY_KINDS = frozenset(SENDS_VITAL.values())
+Lagged = tuple[dict[int, Any], ...]  # M7's titles and offices at the start of the instant
 PROMOTE_KINDS = frozenset({"Promote", "Demote"})
 
 
@@ -649,9 +669,10 @@ class Sim:
     ``demote`` and ``m7_opinion`` (M7 sends at Polity), ``dormancy0`` (M7's tick-0 pass: Promote
     each person of the case's criteria set whose lagged person.named is 0), ``s7_opinion``,
     ``thought``, ``influence``, ``goal`` and ``clear_goal`` (the stub senders, at Vital), and the
-    stand-ins for T1-I/S at the end of Day/Agenda: ``break`` (a break state the S-steps would
-    write), ``timer`` (a timer the I- or S-steps would schedule) and ``probe`` (an opinion read
-    of ``decide``, in the binding that applied the instant's modifiers).
+    stand-ins for T1-I/S, run at the step of the spec's [[schedule]] they stand in for: ``break``
+    (a break state the S-steps would write) at ``break_act``, ``timer`` (a timer the I- or S-steps
+    would schedule) and ``probe`` (an opinion read, in the binding that applied the instant's
+    modifiers) at ``decide``. Every binding runs its steps in the spec's [[schedule]] order (A15).
     """
 
     def __init__(self, case: Case, k: Consts, reg: Reg, spec: Spec, cfg: Config) -> None:
@@ -678,7 +699,13 @@ class Sim:
         self.cancelled: Counter[tuple[str, str]] = Counter()
         self.lines: list[str] = []
         self.failures: list[str] = []
+        # INV-T1-05's observer: (instant, epoch, traits, ambition) of each mind, recorded by the
+        # observer when the row first appears (at the post-merge hook of the binding that appended
+        # it), not by the creating step
         self.created: dict[int, tuple[int, int, tuple[int, ...], int]] = {}
+        self.recorded = 0
+        self.exited: list[int] = []
+        self.inbox: list[Command] = []
         self.t = 0
         self.binding = ""
         self.step = ""
@@ -734,6 +761,9 @@ class Sim:
             ix.hook(table)
             if self.cfg.observe and ix.rows != ix.rebuild(table):
                 self.fail(f"INV-T1-14: {ix.name} differs from its rebuild at t={self.t}")
+        for m in self.minds[self.recorded :]:
+            self.created[m.person] = (self.t, self.ledger[m.person].epoch, m.traits, m.ambition)
+        self.recorded = len(self.minds)
 
     def drop(self, c: Command, reason: str) -> None:
         """StepCtx::drop_command: counted under dropped{T1.minds, kind, reason}."""
@@ -795,30 +825,47 @@ class Sim:
         for op in ops:
             if op.verb == "epoch":
                 self.ledger[op.ints[0]].epoch += 1
-        exited = self.vital(ops)
-        self.at("Day/Vital", "exits")
-        if exited:
-            self.exits(exited)
-        self.hook()
+        self.exited = self.vital(ops)
+        self.binding_steps("Day/Vital", ops, lagged)
         self.polity(ops, lagged_named)
-        if t in self.pulses:
-            self.at("Month/Agenda", "relations")
-            self.relations_step(lagged)
-            self.at("Month/Agenda", "expire")
-            self.expire()
-            self.hook()
-        self.day_agenda(ops, lagged)
-        self.hook()
+        if t in self.pulses:  # the coarser pulse first, at one level (05.1 §2 rule 4; A15)
+            self.binding_steps("Month/Agenda", ops, lagged)
+        self.at("Day/Agenda", "take")
+        self.inbox = self.take()
+        self.binding_steps("Day/Agenda", ops, lagged)
         self.bookkeeping()
 
+    def binding_steps(self, binding: str, ops: Sequence[Op], lagged: Lagged) -> None:
+        """A15: one binding's steps in the spec's [[schedule]] order; then the post-merge hook."""
+        handlers: dict[str, Callable[[Lagged], None]] = {
+            "exits": lambda _lagged: self.exits(self.exited),
+            "relations": self.relations_step,
+            "expire": lambda _lagged: self.expire(),
+            "world_start": self.world_start,
+            "apply_commands": lambda _lagged: self.apply_commands(),
+            "promote": self.promote_step,
+        }
+        for step in self.spec.schedule[binding]:
+            self.at(binding, step)
+            if step in handlers:
+                handlers[step](lagged)
+            elif step in STAND_INS:
+                self.at(binding, f"{step} (stand-in, T1-I/S)")
+                for op in ops:
+                    if op.verb in STAND_INS[step]:
+                        self.stand_in(op)
+            elif step not in NO_A_PART:
+                self.fail(f"A15: step {step} of {binding} is unknown to the reference")
+        self.hook()
+
     def vital(self, ops: Sequence[Op]) -> list[int]:
-        """Vital: T1's timer pass, M2's deaths, the stub senders; the instant's exits."""
+        """Vital: M2's deaths, then T1's timer pass (outcome_due), the stub senders; the exits."""
         self.at("Vital", "T1's timer pass")
         before = {p for p, x in self.ledger.items() if x.alive}
-        self.fire_owed()
-        for op in ops:
+        for op in ops:  # M2's level, whose timer pass precedes T1's (N4; outcome_due's text)
             if op.verb == "die":
                 self.ledger[op.ints[0]].alive = False
+        self.fire_owed()
         for op in ops:
             if op.verb in SENDS_VITAL:
                 self.stub_send(op)
@@ -898,25 +945,14 @@ class Sim:
                 kept.append(c)
         return kept
 
-    def day_agenda(self, ops: Sequence[Op], lagged: tuple[dict[int, Any], ...]) -> None:
-        """A15's Day/Agenda: world_start, apply_commands, promote; then the stand-ins."""
-        self.at("Day/Agenda", "take")
-        inbox = self.take()
-        if self.t == 0:
-            self.at("Day/Agenda", "world_start")
-            self.world_start(lagged)
-        self.at("Day/Agenda", "apply_commands")
-        for c in inbox:
+    def apply_commands(self) -> None:
+        """The apply_commands step: the inbox's thought, goal and opinion commands in key order."""
+        for c in self.inbox:
             if c.kind in APPLY_KINDS:
                 self.apply_command(c)
-        self.at("Day/Agenda", "promote")
-        self.promote_step([c for c in inbox if c.kind in PROMOTE_KINDS], lagged)
-        self.at("Day/Agenda", "stand-in (T1-I/S)")
-        for op in ops:
-            self.stand_in(op)
 
     def stand_in(self, op: Op) -> None:
-        """The T1-I/S stand-ins at the end of Day/Agenda (break_act ... threshold, decide)."""
+        """A T1-I/S stand-in: a break state (break_act), a scheduled timer or a read (decide)."""
         if op.verb == "break":
             mind = self.mind_of(op.ints[0])
             if mind is not None:
@@ -948,14 +984,15 @@ class Sim:
         if self.mut("trait-k-swap"):
             traits = (traits[1], traits[0], *traits[2:])
         self.minds.append(Mind(p, traits, ambition))
-        self.created[p] = (self.t, epoch, traits, ambition)
         self.trace(
             f"create {p} row={len(self.minds) - 1} key=(t={t_key}, epoch={epoch}) "
             f"traits={','.join(map(str, traits))} ambition={ambition}",
         )
 
-    def world_start(self, lagged: tuple[dict[int, Any], ...]) -> None:
+    def world_start(self, lagged: Lagged) -> None:
         """A5: at t = 0, a mind for each living named person without one, ascending."""
+        if self.t != 0:
+            return
         pairs = implied_pairs(lagged)
         for p in sorted(self.ledger):
             row = self.ledger[p]
@@ -964,8 +1001,9 @@ class Sim:
                 self.refresh(p, pairs)
 
     # ------------------------------------------------------------------ A6, A7: Promote, Demote
-    def promote_step(self, cmds: Sequence[Command], lagged: tuple[dict[int, Any], ...]) -> None:
+    def promote_step(self, lagged: Lagged) -> None:
         """The promote step: Promote and Demote in key order, the pairs computed once."""
+        cmds = [c for c in self.inbox if c.kind in PROMOTE_KINDS]
         if not cmds:
             return
         pairs = implied_pairs(lagged)
@@ -1008,6 +1046,9 @@ class Sim:
         self.ledger[p].named = 0
         goals = self.delete_goals(p)
         thoughts = self.delete_thoughts(p)
+        left = [x.holder for x in self.thoughts] + [g.holder for g in self.goals]
+        if self.cfg.observe and p in left:
+            self.fail(f"INV-T1-13 (Demote): {p} keeps a thought or goal row right after its Demote")
         ended = self.end_rows(self.look(self.ix_a, self.relations, (p,)))
         self.trace(
             f"demote {p}: cancelled {cancelled or 'none'}; goals {goals}, thoughts {thoughts} "
@@ -1015,25 +1056,25 @@ class Sim:
         )
 
     def cancel_own(self, p: int) -> str:
-        """A7 (a): p's own poll, interrupt, break and refractory-end timers, by kind."""
+        """A7 (a): every own timer of p but DEATH_DUE and MARRY_DUE, as the level started."""
         out = []
         for tm in sorted((x for x in self.timers if x.entity == p), key=lambda x: (x.due, x.tid)):
-            if tm.kind in CANCELLED_KINDS or self.mut("demote-cancels-death-due"):
+            if tm.kind not in OWED_KINDS or self.mut("demote-cancels-death-due"):
                 self.timers.remove(tm)
                 self.cancelled[(tm.kind, "ended")] += 1
                 out.append(tm.kind)
                 if tm.kind in OWED_KINDS and self.cfg.observe:
                     self.fail(
                         f"A7 (owed outcome): a Demote of {p} at t={self.t} cancelled the owed "
-                        f"{tm.kind} due t={tm.due}: a Demote cancels poll, interrupt, break and "
-                        "refractory-end timers only (ADR-0025 item 1)"
+                        f"{tm.kind} due t={tm.due}: a Demote cancels every own timer but DEATH_DUE "
+                        "and MARRY_DUE (ADR-0025 item 1)"
                     )
         return ",".join(out)
 
     # ------------------------------------------------------------------ A8: exits
     def exits(self, exited: Sequence[int]) -> None:
         """A8: end the exited persons' open rows, as a or b; delete their thought rows."""
-        for d in exited:
+        for d in exited:  # O(1) when the instant has no exit
             rows = sorted(
                 set(self.look(self.ix_a, self.relations, (d,)))
                 | set(self.look(self.ix_b, self.relations, (d,)))
@@ -1041,6 +1082,8 @@ class Sim:
             ended = self.end_rows(rows)
             thoughts = self.delete_thoughts(d)
             self.trace(f"{d}: rows ended {ended or 'none'}, thoughts {thoughts} deleted")
+            if self.cfg.observe and any(x.holder == d for x in self.thoughts):
+                self.fail(f"INV-T1-13 (exit): {d} keeps a thought row right after its exit")
 
     def end_rows(self, rows: Sequence[int]) -> str:
         """ended_at := now on each open row of ``rows``, in row order."""
@@ -1085,7 +1128,7 @@ class Sim:
                     f"are {now}, its implied pairs {sorted(want)}"
                 )
 
-    def relations_step(self, lagged: tuple[dict[int, Any], ...]) -> None:
+    def relations_step(self, lagged: Lagged) -> None:
         """A9's Month/Agenda step: refresh every named living actor, ascending PersonId."""
         pairs = implied_pairs(lagged)
         for key in sorted(self.ix_person.rows):
@@ -1159,7 +1202,7 @@ class Sim:
         if i == len(self.thoughts) or (self.thoughts[i].holder, self.thoughts[i].overlay) != key:
             self.thoughts.insert(i, Thought(holder, overlay, 0, source, self.t))
         row = self.thoughts[i]
-        row.magnitude = min(self.cap, row.magnitude + THOUGHT_GAIN * d)
+        row.magnitude = min(self.cap, row.magnitude + self.k.thought_gain * d)
         row.source_event, row.refreshed_at = source, self.t
         name = self.reg.overlay_codes[overlay]
         self.trace(f"thought ({holder}, {name}) magnitude={row.magnitude}")
@@ -1306,7 +1349,7 @@ class Sim:
         self.lines += [f"{n} cancelled {k} {r} {c}" for (k, r), c in sorted(self.cancelled.items())]
 
 
-def implied_pairs(lagged: tuple[dict[int, Any], ...]) -> dict[int, list[tuple[int, str]]]:
+def implied_pairs(lagged: Lagged) -> dict[int, list[tuple[int, str]]]:
     """A9: the liege and vassal pairs M7's lagged titles and offices imply, a -> sorted (b, kind).
 
     A title's vassal titles' holders and its offices' holders serve its holder (the court of
@@ -1343,7 +1386,8 @@ F = founders(7, 8)
 CASES: tuple[Case, ...] = (
     Case(
         "world_start",
-        "X4: genesis names the cast (F0-F2); M7's tick-0 pass promotes F3-F6; M7 demotes F2",
+        "X4: genesis names the cast (F0-F2), kept named by M7 0.6.0's criterion (e); M7's tick-0 "
+        "pass promotes F3-F6",
         360,
         7,
         F,
@@ -1351,12 +1395,13 @@ CASES: tuple[Case, ...] = (
         F[3:7],
         ((100, F[3], 0), (200, F[0], 100), (300, F[4], 100)),
         ((1, 100, F[1]), (2, 200, F[5])),
-        (Op(0, "dormancy0"), Op(0, "demote", (F[2],))),
+        (Op(0, "dormancy0"),),
         30,
     ),
     Case(
         "promote_cycle",
-        "MAJ-9 re-promotion, epochs, ended and deferred drops, the timers a Demote keeps",
+        "MAJ-9 re-promotion, epochs, ended and deferred drops (pending and refractory), the timers "
+        "a Demote cancels and keeps, a natural death before T1's timer pass",
         360,
         11,
         tuple(range(1001, 1010)),
@@ -1374,6 +1419,9 @@ CASES: tuple[Case, ...] = (
             Op(6, "timer", (1007, 300, 0), "interrupt"),
             Op(6, "timer", (1007, 45, 1005), "MARRY_DUE"),
             Op(6, "timer", (1008, 70, 1003), "DEATH_DUE"),
+            Op(6, "timer", (1007, 500, 0), "break"),
+            Op(6, "timer", (1007, 600, 0), "refractory_end"),
+            Op(6, "timer", (1003, 80, 1009), "MARRY_DUE"),
             Op(6, "goal", (501, 1007, 1008, 40 * Q8), "AVENGE_KIN"),
             Op(6, "thought", (1007, 64, 600), "paranoia"),
             Op(40, "demote", (1007,)),
@@ -1381,7 +1429,10 @@ CASES: tuple[Case, ...] = (
             Op(40, "demote", (1009,)),
             Op(46, "break", (1005,), "pending"),
             Op(50, "demote", (1005,)),
+            Op(52, "break", (1005,), "refractory"),
+            Op(53, "demote", (1005,)),
             Op(55, "break", (1005,), "calm"),
+            Op(80, "die", (1009,)),
             Op(100, "promote", (1006,)),
             Op(100, "demote", (1006,)),
             Op(360, "demote", (1005,)),
@@ -1391,7 +1442,8 @@ CASES: tuple[Case, ...] = (
     ),
     Case(
         "relations_monthly",
-        "365-day months: a regrant, a death and a resignation reach the rows at the next pulse",
+        "365-day months: a regrant, a death, a resignation and a pulse-day regrant reach the rows "
+        "at the next pulse; a promotion on the instant its liege died",
         365,
         13,
         tuple(range(2001, 2011)),
@@ -1406,9 +1458,11 @@ CASES: tuple[Case, ...] = (
             Op(40, "die", (2002,)),
             Op(40, "title", (2, 2007, 1)),
             Op(40, "promote", (2007,)),
+            Op(40, "promote", (2005,)),
             Op(70, "office", (1, 1, 0)),
             Op(100, "die", (2005,)),
             Op(100, "die", (2008,)),
+            Op(120, "title", (3, 2009, 1)),
             Op(365, "demote", (2003,)),
         ),
         365,
@@ -1486,6 +1540,7 @@ CASES: tuple[Case, ...] = (
             Op(3, "thought", (4002, 128, 704), "despair"),
             Op(3, "thought", (4003, 64, 705), "filial_piety"),
             Op(3, "thought", (4001, 13, 706), "filial_piety"),
+            Op(60, "thought", (4003, 64, 709), "filial_piety"),
             Op(100, "influence", (4001, 0, 707), "paranoia"),
             Op(130, "die", (4002,)),
             Op(140, "clear_goal", (9002, 4002)),
@@ -1537,8 +1592,8 @@ def check_values(spec: Spec, reg: Reg, k: Consts) -> list[str]:
         if _plain(spec.check.get(name)) != value
     ]
     errs += [f"check_values.{n} is not checked" for n in sorted(set(spec.check) - set(want))]
-    if k.trait_k != len(HEXACO) + 1:
-        errs.append(f"constants.trait_k = {k.trait_k}: six HEXACO traits and ambition are 7")
+    if k.trait_k != len(k.hexaco) + 1:
+        errs.append(f"constants.trait_k = {k.trait_k}; [[owns]] has {len(k.hexaco)} HEXACO columns")
     return errs
 
 
@@ -1559,7 +1614,7 @@ def check_widths(k: Consts, reg: Reg) -> list[str]:
     if product >= 1 << WIDTH_TRAIT_BITS:
         errs.append(f"A3: 256 x B x c reaches {product}, not below 2^47")
     cap_max = narrow(fixed(reg.bounds["thought_cap"][1], Q16))
-    worst = cap_max + THOUGHT_GAIN * DELTA_MAX
+    worst = cap_max + k.thought_gain * DELTA_MAX
     if not I16_MAX < worst <= I32_MAX:
         errs.append(f"A12: the thought sum reaches {worst}: the step says it needs i32, not i16")
     for name in ("trait_sd", "thought_cap", "thought_decay"):
@@ -1590,8 +1645,9 @@ def prose_needles(k: Consts, reg: Reg) -> dict[str, list[str]]:
         ],
         "A11": [f"({kin // Q8} each)", f"sum to {five}", f"read {-100 * Q8}"],
         "A12": [
-            f"{commas(cap_max)} + {commas(THOUGHT_GAIN * DELTA_MAX)} = "
-            f"{commas(cap_max + THOUGHT_GAIN * DELTA_MAX)}"
+            f"G = constants.thought_gain = {k.thought_gain}",
+            f"{commas(cap_max)} + {commas(k.thought_gain * DELTA_MAX)} = "
+            f"{commas(cap_max + k.thought_gain * DELTA_MAX)}",
         ],
     }
 
@@ -1641,7 +1697,7 @@ def clamp_witness(k: Consts) -> str:
         draws = raw_draws(k, MOMENT_SEED, p, 0, 0)
         v = [scaled(k, d, sd) for d in draws]
         traits, amb, _ = draw_values(k, draws, sd)
-        if list(traits) != v[: len(HEXACO)] or amb != k.amb_mean + v[len(HEXACO)]:
+        if list(traits) != v[: len(k.hexaco)] or amb != k.amb_mean + v[len(k.hexaco)]:
             return (
                 f"traits clamp witness seed={MOMENT_SEED} person={p} trait_sd={CLAMP_SD}: "
                 f"unclamped {','.join(map(str, v))} -> {','.join(map(str, traits))} ambition={amb}"
@@ -1669,7 +1725,7 @@ def moments(k: Consts) -> list[str]:
     return errs
 
 
-def check_typing(doc: dict[str, Any]) -> list[str]:
+def check_typing(doc: dict[str, Any], hexaco: Sequence[str]) -> list[str]:
     """Check 5: A14's refusals on planted copies of the three tables, each by its message."""
     errs = []
     rel, ops, ovt = doc["relation_kinds"], doc["opinion_modifiers"], doc["overlay_traits"]
@@ -1710,15 +1766,15 @@ def check_typing(doc: dict[str, Any]) -> list[str]:
             "missing field months",
         ),
         (
-            lambda: type_overlay_traits({**ovt, "rage": {"emotionality": 10}}, overlays)[1],
+            lambda: type_overlay_traits({**ovt, "rage": {"emotionality": 10}}, overlays, hexaco)[1],
             "rage is not an [overlays] id",
         ),
         (
-            lambda: type_overlay_traits({**ovt, "hubris": {"ambition": 10}}, overlays)[1],
+            lambda: type_overlay_traits({**ovt, "hubris": {"ambition": 10}}, overlays, hexaco)[1],
             "ambition is not a HEXACO trait",
         ),
         (
-            lambda: type_overlay_traits({**ovt, "despair": {"openness": 120}}, overlays)[1],
+            lambda: type_overlay_traits({**ovt, "despair": {"openness": 120}}, overlays, hexaco)[1],
             "120 outside [-100, 100]",
         ),
     ]
@@ -1738,7 +1794,7 @@ def render(spec: Spec, reg: Reg, k: Consts, cfg: Config) -> tuple[str, dict[str,
         "3. step prose": check_prose(spec, k, reg),
     }
     trait_lines, failures["4. trait draw"] = trait_table(k)
-    failures["5. Registry typing"] = check_typing(load_toml(REGISTRY))
+    failures["5. Registry typing"] = check_typing(load_toml(REGISTRY), k.hexaco)
     case_lines, failures["6. scripted worlds"] = run_cases(k, reg, spec, cfg)
     params = " ".join(f"{n}={v}" for n, v in PARAMS.items())
     header = [
@@ -1775,9 +1831,15 @@ def report(failures: dict[str, list[str]]) -> bool:
     return ok
 
 
-def run_control(name: str, failures: dict[str, list[str]]) -> int:
+def label(given: str) -> str:
+    """The mutant's name as given on the command line, and the canonical name of an alias."""
+    return f"{given} (alias of {ALIASES[given]})" if given in ALIASES else given
+
+
+def run_control(given: str, failures: dict[str, list[str]]) -> int:
     """--control: the planted mutant must fail its own observer."""
-    own = MUTANTS[name]
+    own = MUTANTS[ALIASES.get(given, given)]
+    name = label(given)
     found = [e for errs in failures.values() for e in errs]
     report(failures)
     if any(own in e for e in found):
@@ -1793,8 +1855,9 @@ def run_control(name: str, failures: dict[str, list[str]]) -> int:
     return EXIT_OK
 
 
-def run_mutant(name: str, text: str, golden: Path) -> int:
+def run_mutant(given: str, text: str, golden: Path) -> int:
     """--mutant: the planted mutant must change a named golden line."""
+    name = label(given)
     current = golden.read_text(encoding="utf-8") if golden.exists() else ""
     line, old, new, count = first_change(current, text)
     if count == 0:
@@ -1837,21 +1900,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the checks; then check, write, or run a control or a mutant."""
     args = parse(argv)
     spec = Spec.load(args.spec or default_spec())
-    reg, typing_errs = load_registry(load_toml(REGISTRY))
+    reg, typing_errs = load_registry(load_toml(REGISTRY), spec.hexaco)
     if typing_errs:
         print("\n".join(f"REGISTRY REFUSED: {e}" for e in typing_errs))
         return EXIT_FAIL
     k = Consts.of(spec)
-    name = ALIASES.get(args.control or args.mutant or "", args.control or args.mutant or "")
-    cfg = Config(name, observe=not args.mutant)
+    given = args.control or args.mutant or ""
+    cfg = Config(ALIASES.get(given, given), observe=not args.mutant)
     text, failures = render(spec, reg, k, cfg)
     if args.control:
-        return run_control(name, failures)
+        return run_control(given, failures)
     if not report(failures):
         print("MINDS V0 (A-STEPS): FAIL (the reference's own checks)")
         return EXIT_FAIL
     if args.mutant:
-        return run_mutant(name, text, args.golden)
+        return run_mutant(given, text, args.golden)
     if args.write:
         args.golden.parent.mkdir(parents=True, exist_ok=True)
         args.golden.write_text(text, encoding="utf-8")
