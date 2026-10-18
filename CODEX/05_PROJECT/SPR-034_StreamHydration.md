@@ -281,7 +281,7 @@ flowchart LR
   - **The workflow (B1):**
     - no new pull-request path;
     - no push trigger;
-    - the daily scheduled run covers engine changes on `main` as SPR-033 set it up;
+    - the scheduled run (twice a week, SPR-033 F17) covers engine changes on `main` as SPR-033 set it up;
     - the root workspace's `target/` is in the one cache entry since T-01, saved by runs on `main` only.
   - **Docs:** the compliance table's list; `viewer/README.md` with the commands below.
 - **Acceptance:**
@@ -314,7 +314,7 @@ The viewer reads the years it missed through `rh-cli tail` over the shared SSH c
 
 Every push of this PR touches only viewer paths and documentation, so `ci.yml` costs about 12 minutes a push: core in full, golden and stream skipped (SPR-033's cost section; V4). The viewer job grows (minutes):
 
-| Item | Cold | A PR run | Warm (a full daily run on `main`) | Basis |
+| Item | Cold | A PR run | Warm (a full scheduled run on `main`) | Basis |
 |---|---|---|---|---|
 | SPR-033b's job | 11–16 | 4–7 | 4–7 | SPR-033's cost section. A PR run restores Bevy from `main`'s entry by prefix |
 | The engine's path crates and their crates.io dependencies in the viewer's build (`rh-stream`, `rh-ids` and the crates they read), in debug and in release for the digest test | 2–3 | 2–3: the dependencies are new to the viewer's lock, so not in `main`'s entry | 1–1.5: the path crates rebuild on every run (F10) | 40 s measured for 71 crates on a 4-core sandbox, scaled by about 1.8 for 2 vCPU, plus the release build |
@@ -322,7 +322,7 @@ Every push of this PR touches only viewer paths and documentation, so `ci.yml` c
 | The runs and probes (debug) | 2–4 | 2–4 | 2–4 | A debug 200-year `hamlet` run takes 6.8 s (the re-check); then the 40-, 55- and 30-year runs, the sleeper, the kill and resume, and the five clauses |
 | **The viewer job** | **17–27** | **10–18** | **8–14.5** | 11 + 2 + 2 + 2 = 17 to 16 + 3 + 4 + 4 = 27; 4 + 2 + 2 + 2 = 10 to 7 + 3 + 4 + 4 = 18; 4 + 1 + 1 + 2 = 8 to 7 + 1.5 + 2 + 4 = 14.5 |
 
-**Totals.** About 15 pushes: the PR costs 15 × (12 + 10–18) + 12 (`ci.yml` on the merge's push) = 330–450 + 12 = **about 342–462 minutes**. Each month after the merge, the daily runs cost 30 × 8–14.5 = **about 240–435 minutes** (SPR-033 F17). The cache's one entry grows by about 0.5 GB for the root target.
+**Totals.** About 15 pushes: the PR costs 15 × (12 + 10–18) + 12 (`ci.yml` on the merge's push) = 330–450 + 12 = **about 342–462 minutes**. Each month after the merge, the scheduled runs (twice a week, SPR-033 F17 as ruled) cost about 9 × 8–14.5 = **about 72–131 minutes**. The cache's one entry grows by about 0.5 GB for the root target.
 
 **If caches churn,** SPR-033's rule applies (V4b): this sprint's gates are in the Bevy-free half and stay on pull requests; only the Bevy half would move to a weekly schedule. The hosted runner's 14 GB of disk is watched through `df -h` (risk 8).
 
@@ -347,7 +347,7 @@ Every push of this PR touches only viewer paths and documentation, so `ci.yml` c
 - **Class and conditions.** C1: green CI, the Tester's interim and final passes, and the Architect's audit. Nothing is announced beyond the merge summary.
 - **Contention (D62).** Priority 1 wins every merge slot, review hour and CI minute.
 - **Shared files.** Only `viewer/`, `specs/viewer/`, `bin/check_viewer.sh`, the workflow and `CLAUDE.md`.
-- **After SPR-015, SPR-018 or SPR-020 merge:** the viewer job's daily run shows the new content (births, places). The cross-check and the five clauses compare paths of one run with each other, so they need no regeneration; the hydration golden depends on the generator only. A new record kind that breaks the fold is a priority-2 follow-up, never a condition on the engine PR.
+- **After SPR-015, SPR-018 or SPR-020 merge:** the viewer job's scheduled run shows the new content (births, places). The cross-check and the five clauses compare paths of one run with each other, so they need no regeneration; the hydration golden depends on the generator only. A new record kind that breaks the fold is a priority-2 follow-up, never a condition on the engine PR.
 
 ## Risks
 
@@ -386,7 +386,7 @@ Every push of this PR touches only viewer paths and documentation, so `ci.yml` c
 | F3 | **Plane-B purposes have no registry; PRJ-003 §2's list lacks `rh-ids`** | Purposes under the system id `rh-view`; `rh-ids` on the list | Accepted; `rh-ids` and `rh-core` (dev) are on rule (e)'s list (A11) |
 | F4 | **"Tudor houses" are outside E1** | Cruck and box-framed dwellings, a stone church | Accepted |
 | F5 | **`rh-worldgen` is not needed in SPR-034** | Off the dependencies; SPR-035 compares the engine's genesis with the export | Accepted |
-| F6 | **The engine build in the job widens what the job tests** | Debug engine in the job | Ruled B1 (no push trigger, the daily run) and B5 (measure, release if slow) |
+| F6 | **The engine build in the job widens what the job tests** | Debug engine in the job | Ruled B1 (no push trigger, the scheduled run, twice a week by SPR-033 F17) and B5 (measure, release if slow) |
 | F7 | **R23's `tail` path as a public interface** | — | Withdrawn: `wire_v1.md` §6.3 already names it |
 | F8 | **`BIRTH.place_id` is an opaque `PlaceId`,** and the settlement mapping is not pinned anywhere | Ask SPR-018's and SPR-020's owners to pin the settlement namespace of `PlaceId` in their sprints, as a table the viewer reads | **Withdrawn (V8):** SPR-018 X6 already says an event's `place` is a `SettlementId(u32)`, a `BIRTH`'s being the mother's; the viewer's table is `PlaceId` = `SettlementId`, tested against the golden's seat numbering |
 | F9 | **The checkpoint after T-02** costs the Tester a second session | Accept it: T-03 is the largest task, and the fold it builds on should be verified first | New in revision 1 (B7) |

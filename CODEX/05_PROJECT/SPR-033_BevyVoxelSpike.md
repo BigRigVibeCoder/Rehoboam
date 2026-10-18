@@ -98,7 +98,7 @@ version: 1.5.0
 | **Wayland** | — | The `wayland` feature needs `libwayland-dev` at build time (the drafter's measurement; the review could not reproduce it without building Bevy) | **Ruled (A10):** X11 by default; `wayland` an opt-in feature of `rh-view`, for a machine that has the package | T-01b |
 | **The isolation rule's names** | — | v1.3.0 banned `bevy_*` from the root lock, which would block an engine PR adopting `bevy_ecs` (`docs/07`: Trial) (A3) | **Ruled (A3, A11):** rule (b) names the render and window stack explicitly; a passing fixture puts `bevy_ecs` in the root lock; rule (e) is a forward allow-list of the viewer's path dependencies | T-06 |
 | **The catch-up machine after `stream.behind`** | `Catchup` (SPR-026) cannot skip history | — | **Ruled (A8):** stage b restarts `Catchup` from a fresh `stream.status`'s `live.next_seq`. SPR-026's owner is asked for a skip input only if that proves insufficient | T-05 |
-| **The CI trigger** | PRJ-003 §5 | A `main` push trigger fires about 10 times a day (B1). Every viewer PR push also runs `ci.yml`'s part core, and all three parts when the diff leaves the viewer's paths (V4) | **Ruled (B1; V4, V4b):**<ul><li>pull requests on the viewer's own paths;</li><li>no push trigger on `main`;</li><li>a daily scheduled run and `workflow_dispatch`, with the cache saved only by runs on `main`, so PR runs restore what `main` saved;</li><li>**the fallback when caches churn:** the Bevy half of the job moves to a weekly hosted schedule plus dispatch, and the Bevy-free half keeps running on pull requests (the cost section).</li></ul> | T-06, T-01b |
+| **The CI trigger** | PRJ-003 §5 | A `main` push trigger fires about 10 times a day (B1). Every viewer PR push also runs `ci.yml`'s part core, and all three parts when the diff leaves the viewer's paths (V4) | **Ruled (B1; V4, V4b):**<ul><li>pull requests on the viewer's own paths;</li><li>no push trigger on `main`;</li><li>a scheduled run twice a week (F17, ruled at the close) and `workflow_dispatch`, with the cache saved only by runs on `main`, so PR runs restore what `main` saved;</li><li>**the fallback when caches churn:** the Bevy half of the job moves to a weekly hosted schedule plus dispatch, and the Bevy-free half keeps running on pull requests (the cost section).</li></ul> | T-06, T-01b |
 
 ## Compliance (every task)
 
@@ -342,12 +342,12 @@ flowchart LR
   - **`.github/workflows/viewer.yml` (B1):**
     - **Triggers:**
       - `pull_request` on `viewer/**`, `specs/viewer/**`, `bin/check_viewer.sh`, `.github/workflows/viewer.yml` and `python/tests/test_viewer_workflow.py`;
-      - **`schedule`: daily at 04:43 UTC** (`43 4 * * *`; V17): off the hour, and off `nightly.yml`'s 03:17 and `advisories.yml`'s 05:17;
+      - **`schedule`: twice a week, Monday and Thursday at 04:43 UTC** (`43 4 * * 1,4`; V17; F17 ruled by the Architect at the close, 75%, until the director answers D61 item 8's allowance question; daily is a one-field change): off the hour, and off `nightly.yml`'s 03:17 and `advisories.yml`'s 05:17;
       - `workflow_dispatch`;
       - **no push trigger.**
-    - **The daily run:**
+    - **The scheduled run:**
       - it runs the whole of `check_viewer.sh` on `main`, catching engine changes that break the viewer, as a priority-2 follow-up and never a blocker;
-      - **when `main` has not moved since the last successful daily run,** it only restores the cache and stops, in about a minute, which keeps the cache alive (GitHub evicts a cache unused for 7 days). **This is rare while `main` moves daily** (D61 item 8: the PR tier ran 462 times in 7 days), so the cost section counts every daily run as a full warm run (V4).
+      - **when `main` has not moved since the last successful scheduled run,** it only restores the cache and stops, in about a minute, which keeps the cache alive (GitHub evicts a cache unused for 7 days). **This is rare while `main` moves daily** (D61 item 8: the PR tier ran 462 times in 7 days), so the cost section counts every scheduled run as a full warm run (V4).
     - **One job:** `ubuntu-24.04`, `timeout-minutes: 30`, PR runs cancelled by a newer push.
     - **The cache (V4, V17):** `Swatinem/rust-cache` with `workspaces: viewer -> ../target/viewer`, **no `key` of its own** and **`save-if: ${{ github.ref == 'refs/heads/main' }}`**:
       - rust-cache keys on its own hash of every `Cargo.lock` and `Cargo.toml` and of every installed `rustc`, and on a lock change restores the newest entry of the same job by prefix, so only changed dependencies rebuild. An explicit `hashFiles('viewer/Cargo.lock')` would duplicate that hash and defeat the prefix fallback;
@@ -358,19 +358,19 @@ flowchart LR
     - **The workflow's pins go in a new file, `python/tests/test_viewer_workflow.py`** (A4): the trigger lists, no `push`, the schedule (and that no other workflow's cron has its minute and hour), the `save-if`, no `hashFiles` in the cache step, and the timeout.
   - **The decision rule (B1, as V4b restates it):**
     - **A run counts as cold** when rust-cache restored nothing at all, not even by prefix; the report prints the restore result (exact, prefix or none). A PR run whose lock adds packages restores by prefix and builds only the new ones: that is expected, not churn.
-    - **If two of five consecutive viewer runs are cold,** the Architect splits the job (a C1 edit; no director action): the Bevy-free half keeps running on pull requests and daily, and the Bevy half moves to a weekly hosted schedule plus dispatch (the cost section). `adjutant.yml` is not the fallback: it is dispatch-only and runs only while the director has the VM started (about $0.83 an hour, RUN-002).
+    - **If two of five consecutive viewer runs are cold,** the Architect splits the job (a C1 edit; no director action): the Bevy-free half keeps running on pull requests and on the schedule, and the Bevy half moves to a weekly hosted schedule plus dispatch (the cost section). `adjutant.yml` is not the fallback: it is dispatch-only and runs only while the director has the VM started (about $0.83 an hour, RUN-002).
   - **Docs:** the compliance table's list.
 - **Acceptance:**
   - `lint_arch` is green on the workspace; the three fixtures FAIL by the rule's name and `lock_has_bevy_ecs` passes.
   - The scope tests pass; the inventory is green both ways.
   - The viewer job is green on the PR.
   - **Its cold time, `df -h` and the cache usage are in the PR,** against the estimate below. Every PR run is cold, since no cache exists before the merge (V4).
-  - **The warm time is measured after the merge, on `main`** (V4): the first run there saves the cache, cold; the next full run (the next daily run on a moved `main`, or a dispatch) restores it. That time is reported to the Architect, as the FPS report is (A6), and is not a merge condition.
+  - **The warm time is measured after the merge, on `main`** (V4): the first run there saves the cache, cold; the next full run (the next scheduled run on a moved `main`, or a dispatch) restores it. That time is reported to the Architect, as the FPS report is (A6), and is not a merge condition.
 - **Status:** [ ] not started
 
 **Stage a's size and cut order.** T-01a 0.3, T-02 0.6, T-03 0.9, T-06 0.7: **2.5 agent-days.** If it runs long:
 1. `twin_vales`' export (0.05 day).
-2. The restore-only shortcut of the daily run (0.1 day): it then runs in full every day, as it nearly always does while `main` moves daily (V4).
+2. The restore-only shortcut of the scheduled run (0.1 day): it then runs in full each time, as it nearly always does while `main` moves daily (V4).
 
 Nothing in the differentials, the golden checks, the isolation rule or the scope tests is cut.
 
@@ -604,8 +604,8 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 | `ci.yml` on a PR push | **about 25 min:** all three parts, since stage a's diff holds `bin/`, `python/tests/` and `tests/lint_fixtures/` (and before T-06, `viewer/` is not yet `VIEWER_ONLY`) | **about 12 min:** core in full; golden and stream skip in under a minute each, billed a minute each | PR #89's first run: core 10:00, golden 7:10, stream 7:32 |
 | The viewer job, cold | about 3–5 min (no Bevy; the Python environment; `rh-view-core` at `opt-level = 2`) | about 11–16 min (Bevy built twice, for the build and for clippy's check mode) | The drafter's 178 s cold Bevy build on 4 cores, scaled by about 1.8 for 2 vCPU, for the larger feature set. T-01b re-measures |
 | The viewer job on a PR push | cold, 3–5 min: no cache exists before the merge | cold, 11–16 min: `main`'s cache is stage a's, and the second toolchain starts a new cache line | Only runs on `main` save the cache (T-06) |
-| The viewer job warm (a full daily run on `main`) | about 2 min | about 4–7 min | crates.io dependencies come from the cache; the viewer's own crates rebuild |
-| A daily run when `main` has not moved | about 1 min (restore only) | about 1 min | Rare while `main` moves daily, so the totals count every daily run as a full warm run |
+| The viewer job warm (a full scheduled run on `main`) | about 2 min | about 4–7 min | crates.io dependencies come from the cache; the viewer's own crates rebuild |
+| A scheduled run when `main` has not moved | about 1 min (restore only) | about 1 min | Rare while `main` moves daily, so the totals count every scheduled run as a full warm run |
 | Actions cache | one entry, under 0.5 GB | one entry of about 1–1.5 GB | Saved by runs on `main` only. GitHub's limit is 10 GB per repository, shared with the engine's three parts |
 
 **Totals.** About 15 pushes per stage: one commit per task, the merges of `main`, the fixes after the Tester and the audit. A superseded run is cancelled, but bills the minutes it used.
@@ -613,14 +613,14 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 | | Stage a | Stage b |
 |---|---|---|
 | **The PR** | 15 × 25 (`ci.yml`) + 25 (`ci.yml` on the merge's push to `main`) + about 8 × 3–5 (the viewer job, from T-06's commit on) = 375 + 25 + 24–40 = **about 424–440 min** | 15 × (12 + 11–16) + 12 = 345–420 + 12 = **about 357–432 min** |
-| **Each month after the merge** | 30 daily runs × about 2 = **about 60 min** | 30 × 4–7 = **about 120–210 min** |
+| **Each month after the merge** | about 9 scheduled runs (twice a week) × about 2 = **about 18 min** | 9 × 4–7 = **about 36–63 min** |
 
 Against GOV-008's about 2,000 minutes a month on the Free plan (the real allowance is D61 item 8's question), stage a's PR is about a fifth of a month, nearly all of it `ci.yml`'s, as for any C1 change that edits `bin/`. SPR-034 and SPR-035 add their own rows.
 
 **If caches churn (B1's rule, as V4b restates it).**
 - A run counts as cold when rust-cache restored nothing, not even by prefix (T-06's report prints it).
 - Two cold runs in five consecutive ones split the job, as a C1 edit by the Architect; the director does nothing:
-  - the Bevy-free half (`check_viewer.sh --part core`: `rh-view-core`, the terrain, the export, the lock checks, and from SPR-034 on the run-based gates) keeps running on pull requests and daily;
+  - the Bevy-free half (`check_viewer.sh --part core`: `rh-view-core`, the terrain, the export, the lock checks, and from SPR-034 on the run-based gates) keeps running on pull requests and on the schedule;
   - the Bevy half (`--part app`) moves to a weekly hosted schedule plus dispatch.
 - **`adjutant.yml` is not the fallback:** it is dispatch-only, and runs only while the director has the VM started (about $0.83 an hour, RUN-002), so it cannot serve as a nightly.
 - Before stage b the job is all Bevy-free, and the rule has nothing to move. The engine's caches win any cache contention (D62).
@@ -700,7 +700,7 @@ Against GOV-008's about 2,000 minutes a month on the Free plan (the real allowan
 | F4 | **Worldgen-lite has no physical scale** | Plane-B constants, written into the export; M1 F1 should own a scale | Accepted, with the constants in the export file |
 | F5 | **The terrain is the reference's until SPR-018** | Show it, labelled; SPR-035 compares | Accepted |
 | F6 | **What fits in SPR-033** | As planned | Accepted, with the split (A1) |
-| F7 | **The CI trigger** | PRs on viewer paths only | Ruled B1: no `main` push trigger; a daily schedule; save on `main` only; the two-in-five rule. V4 and V4b: `ci.yml` counted, PR runs cold, the fallback a weekly schedule for the Bevy half |
+| F7 | **The CI trigger** | PRs on viewer paths only | Ruled B1: no `main` push trigger; a scheduled run (twice a week by F17); save on `main` only; the two-in-five rule. V4 and V4b: `ci.yml` counted, PR runs cold, the fallback a weekly schedule for the Bevy half |
 | F8 | **`ci_scope` treats viewer-only PRs as engine work** | Extend the skip | Ruled A4: on PR #89's framework, with the rename test |
 | F9 | **`adjutant`'s idle shutdown counts `who` logins only** | `ssh -t` | Accepted, with tmux inside it |
 | F10 | **The root `clippy.toml` applies to `viewer/`** | Keep it. `rh-view-core` takes one named allow (`std::process::Command` in `source.rs`, from SPR-034); `rh-view` will need many use-site allows with reasons (Bevy's float math, frame timing) | Accepted (A18's wording); V6: exactly that one allow in `rh-view-core` |
@@ -710,5 +710,5 @@ Against GOV-008's about 2,000 minutes a month on the Free plan (the real allowan
 | F14 | **GOV-005 §2 and the director** | D63 asks only for what is the director's | Accepted; D63's restatement is the Architect's (P3) |
 | F15 | **`sha2` 0.11.1 is six days old** (2026-10-12) | Pin `=0.11.0` (2026-03-25) as the dev-dependency | New in revision 1 |
 | F16 | **Dropping `ktx2` and the LUT features changes the look:** no TonyMcMapface tonemapping and no SMAA | `AcesFitted` and FXAA; revisit if the red team's audit dislikes the look, since restoring the LUTs is a feature line and F11's ruling | New in revision 1 |
-| F17 | **After SPR-034 the daily run is the job's largest steady cost.** It runs in full nearly every day, since `main` moves daily: 30 × 8–14.5 = 240–435 minutes a month after SPR-034, and 30 × 10.5–18.5 = 315–555 after SPR-035 (their cost sections), against GOV-008's about 2,000 | Run the full job twice a week (Monday and Thursday) plus dispatch: about 9 runs, so about 90–160 minutes a month after SPR-035. The cache, used every 3–4 days, is never evicted for age; an engine change that breaks the viewer is seen within 3–4 days instead of one, which priority 2 allows (D62) | New in revision 2 (65%); B1 is the Architect's |
+| F17 | **After SPR-034 the daily run is the job's largest steady cost.** It runs in full nearly every day, since `main` moves daily: 30 × 8–14.5 = 240–435 minutes a month after SPR-034, and 30 × 10.5–18.5 = 315–555 after SPR-035 (their cost sections), against GOV-008's about 2,000 | Run the full job twice a week (Monday and Thursday) plus dispatch: about 9 runs, so about 90–160 minutes a month after SPR-035. The cache, used every 3–4 days, is never evicted for age; an engine change that breaks the viewer is seen within 3–4 days instead of one, which priority 2 allows (D62) | **Ruled by the Architect at the close (75%): twice a week (Monday and Thursday) plus dispatch,** until the director answers D61 item 8's allowance question; daily is a one-field change of the cron |
 | F18 | **The warm time cannot come from "the first daily run after the merge"** (V4's wording): no PR run saves, so the first run on `main` after the merge finds no entry for the new lock (at best the previous stage's, by prefix), builds what is new, and is the run that saves | Measure warm at the next full run on `main` (the next daily run, or a dispatch), as T-06's acceptance now says | New in revision 2 (85%) |

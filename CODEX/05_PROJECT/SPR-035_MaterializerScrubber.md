@@ -304,7 +304,7 @@ flowchart LR
 #### T-05: The job, the protocol and the docs (0.3 day)
 - **Deliverable:**
   - **`bin/check_viewer.sh`** gains T-03's and T-04's tests and controls. The live-host probe and the `solo` and `household` run directories are T-01's, and the second `hamlet` run with its input script T-02's, so the Tester's checkpoint runs them in CI (V5).
-  - **The workflow:** unchanged (B1: viewer-path PRs and the daily run; no push trigger; the cache saved by runs on `main` only).
+  - **The workflow:** unchanged (B1: viewer-path PRs and the scheduled run, twice a week by SPR-033 F17; no push trigger; the cache saved by runs on `main` only).
   - **The docs** of the compliance table, with the commands below.
 - **Acceptance:** the viewer job is green; its cold time is in the PR, against the estimate below, and the warm time is measured after the merge, on `main`, as SPR-033 T-06's is (V4).
 - **Status:** [ ] not started
@@ -332,14 +332,14 @@ Never cut: the five-path equality on both digests, non-vacuity, the cache's exac
 
 `ci.yml` costs about 12 minutes a push, as for SPR-034 (V4). The viewer job grows (minutes):
 
-| Item | Cold | A PR run | Warm (a full daily run on `main`) | Basis |
+| Item | Cold | A PR run | Warm (a full scheduled run on `main`) | Basis |
 |---|---|---|---|---|
 | SPR-034's job | 17–27 | 8–14.5 | 8–14.5 | SPR-034's cost section; once it has merged, `main`'s entry holds its dependencies |
 | `rh-golden` and the crates it reads, linked in every viewer build (C6), in debug and in release for the digest test | 1–2 | 1–2: its dependencies are new to the viewer's lock | 0.5–1: the path crates rebuild on every run (SPR-034 F10) | Built in the viewer's own target with the viewer's toolchain: nothing is shared with SPR-034's `rh-cli`, which revision 1 assumed |
 | The materialize probes, the live-host probe (at least 40 wall-seconds at `1y`), the `solo` and `household` run directories and the second `hamlet` run | 2–3 | 2–3 | 2–3 | Debug, under SPR-034's B5 rule |
 | **The viewer job** | **20–32** | **11–19.5** | **10.5–18.5** | 17 + 1 + 2 = 20 to 27 + 2 + 3 = 32; 8 + 1 + 2 = 11 to 14.5 + 2 + 3 = 19.5; 8 + 0.5 + 2 = 10.5 to 14.5 + 1 + 3 = 18.5 |
 
-**Totals.** About 15 pushes: the PR costs 15 × (12 + 11–19.5) + 12 = 345–472.5 + 12 = **about 357–485 minutes**. Each month after the merge, the daily runs cost 30 × 10.5–18.5 = **about 315–555 minutes**, the lane's steady cost from then on (SPR-033 F17 proposes fewer full runs). If caches churn, SPR-033's rule applies (V4b): this sprint's gates are in the Bevy-free half, except the scrubber's headless app test.
+**Totals.** About 15 pushes: the PR costs 15 × (12 + 11–19.5) + 12 = 345–472.5 + 12 = **about 357–485 minutes**. Each month after the merge, the scheduled runs (twice a week, SPR-033 F17 as ruled) cost about 9 × 10.5–18.5 = **about 95–167 minutes**, the lane's steady cost from then on (daily would be 315–555). If caches churn, SPR-033's rule applies (V4b): this sprint's gates are in the Bevy-free half, except the scrubber's headless app test.
 
 ## How the director runs it (as planned)
 
@@ -432,4 +432,4 @@ The same against a run on `adjutant` (with the `--remote` options) gives the rem
 | F6 | **SPR-027's seek figures cover the rungs only** | SPR-030 reports the 10k figure with its G1a run | Accepted |
 | F7 | **Prefetch on by default** | — | Disagreed by the review; ruled C1: off while the run is live, on for a finished run |
 | F8 | **S3 F1's moves before kind 7 would split the fold from the materialized state** (C7) | `from_dump` ignores `person.residence` (V13). **The viewer lane recommends,** without requiring it of the engine (D62), that S3 F1's moves ship with kind 7, so the viewer can fold them: a recommendation beside BCK-002 A-61, the Architect's text | New in revision 1; reworded at V13 |
-| F9 | **V13 leaves synthesised worlds' founders unplaced.** For `twin_vales` the export has no placement (SPR-034's specs table), and `from_dump` no longer reads residence, so its founders are never placed; the genesis cross-check also reads `person.residence`, which stops being genesis once S3 F1 can move a founder in the first month | Take a founder's genesis settlement once from the dump's `residence_interval` row whose `from_tick` is 0 (S3's interval table, in plane A after SPR-018: a founder's first interval opens at 0), never from `person.residence`: exact at genesis whatever S3 does later. The same row serves the genesis cross-check | New in revision 2 (70%) |
+| F9 | **V13 leaves synthesised worlds' founders unplaced.** For `twin_vales` the export has no placement (SPR-034's specs table), and `from_dump` no longer reads residence, so its founders are never placed; the genesis cross-check also reads `person.residence`, which stops being genesis once S3 F1 can move a founder in the first month | Take a founder's genesis settlement once from the dump's `residence_interval` row whose `from_tick` is 0 (S3's interval table, in plane A after SPR-018: a founder's first interval opens at 0), never from `person.residence`: exact at genesis whatever S3 does later. The same row serves the genesis cross-check | New in revision 2 (70%). **Accepted by the Architect at the close (70%)**: once, from the `residence_interval` row with `from_tick` 0, and only as the founder's genesis placement |
