@@ -381,10 +381,12 @@ odd_next_control() {
       "$PY" -I specs/systems/lint_odd.py --next "$dir" --overlay specs/systems/next/registry_delta.toml ;;
     clean)
       # REV-SPR-020 R26 (NIT-7): a next version that amends nothing (the frozen T1 as a draft, version bumped) lints
-      # and plants nothing in the lock; SPR-019's next M7 needs this path
+      # and plants nothing in the lock; SPR-019's next M7 needs this path. The real T1 0.4.0 draft's lock section (T1-A)
+      # belongs to that draft, not to this synthetic one, so the copy of the lock leaves it out.
       sed -e 's/^status = "frozen"/status = "draft"/' -e 's/^spec_version = "0.3.3"/spec_version = "0.4.0"/' specs/systems/T1.minds.odd.toml > "$dir/T1.minds.odd.toml" || return 1
       grep -q '^spec_version = "0.4.0"' "$dir/T1.minds.odd.toml" || { echo "control not rendered: T1 is not 0.3.3"; return 1; }
-      cp "$lock" "$dir/" || return 1
+      sed '/^\[amendments\."T1\.minds"\]$/,/^$/d' "$lock" > "$dir/amendments.lock.toml" || return 1
+      if grep -q '^\[amendments\."T1\.minds"\]' "$dir/amendments.lock.toml"; then echo "control not rendered: the T1 draft's lock section remains"; return 1; fi
       "$PY" -I specs/systems/lint_odd.py --next "$dir" ;;
     *) echo "odd_next_control: unknown case $1"; return 1 ;;
   esac
@@ -419,6 +421,23 @@ m2_f1_mortality_stale_control() {
   sed 's/K = 27498377919,/K = 27498377920,/' specs/systems/next/M2.demography.odd.toml > "$planted" || return 1
   grep -q 'K = 27498377920,' "$planted" || { echo "control not planted: K = 27498377919 not found in the next M2 spec"; return 1; }
   "$PY" -I specs/demography/selftest_m2_f1_mortality.py --spec "$planted"
+}
+
+# Minds v0 part A reference controls (T1-A): the committed golden file with one ambition off by one, and the next T1
+# spec with one check value off by one; the exact reference must FAIL on each (selftest_minds_v0.py --golden, --spec).
+minds_golden_control() {
+  local planted=target/rendered-fixtures/minds_v0_altered_golden.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/ ambition=12666 named=1 break=calm$/s// ambition=12667 named=1 break=calm/' specs/minds/golden/minds_v0.txt > "$planted" || return 1
+  grep -q ' ambition=12667 named=1' "$planted" || { echo "control not planted: no 'ambition=12666 named=1' line in the minds golden file"; return 1; }
+  "$PY" -I specs/minds/selftest_minds_v0.py --check --golden "$planted"
+}
+minds_stale_control() {
+  local planted=target/rendered-fixtures/minds_stale_check_value.odd.toml
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/sigma_q16 = 2479700524,/sigma_q16 = 2479700525,/' specs/systems/next/T1.minds.odd.toml > "$planted" || return 1
+  grep -q 'sigma_q16 = 2479700525,' "$planted" || { echo "control not planted: sigma_q16 = 2479700524 not found in the next T1 spec"; return 1; }
+  "$PY" -I specs/minds/selftest_minds_v0.py --spec "$planted"
 }
 
 # Worldgen-lite golden control (SPR-018): the committed golden outputs with one land count off by one; the exact reference
@@ -1084,6 +1103,8 @@ run "lint_arch positive control: missing plane/kind must FAIL" "fail:VIOLATION [
 run "lint_arch positive control: relabelled rh-snapshot must FAIL" "fail:VIOLATION [metadata] rh-snapshot: declares (plane, kind) = ('A', 'contract'), but rh-snapshot is pinned" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_snapshot/Cargo.toml &&
 run "lint_arch positive control: kind contract outside rh-contract-* must FAIL" 'fail:VIOLATION [metadata] rh-shadow: kind "contract" belongs only to' "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/contract_name/Cargo.toml &&
 run "lint_arch positive control: rh-sample relabelled out of plane A must FAIL (SPR-003 T-00)" "fail:VIOLATION [metadata] rh-sample: declares (plane, kind) = ('tool', 'tool'), but rh-sample is pinned" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_sample/Cargo.toml &&
+run "lint_arch positive control: a crate neither named rh-sys-* nor pinned declaring kind system must FAIL, beside rh-minds passing by its pin (T1-A; REV-MINDS finding 3)" 'fail:VIOLATION [metadata] rh-agents: only crates named rh-sys-* and the pinned system crates (rh-minds) are kind "system"' "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_kind_unpinned/Cargo.toml &&
+run "lint_arch positive control: rh-minds relabelled out of kind system must FAIL (T1-A; REV-MINDS finding 3)" "fail:VIOLATION [metadata] rh-minds: declares (plane, kind) = ('A', 'machinery'), but rh-minds is pinned to ('A', 'system')" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/relabelled_minds/Cargo.toml &&
 run "lint_arch control: a system may depend on rh-sample (SPR-003 T-00)" pass "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_sample/Cargo.toml &&
 run "lint_arch positive control: plane A -> rand must FAIL" "fail:VIOLATION [rng-crate] rh-core: plane-A crate depends on rand;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_rng_crate/Cargo.toml &&
 run "lint_arch positive control: rand_chacha outside rh-ids must FAIL" "fail:VIOLATION [rng-crate] rh-core: depends on rand_chacha;" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/rng_building_block_outside_ids/Cargo.toml &&
@@ -1329,6 +1350,18 @@ run "gen_m2_draws_reference positive control: one altered death line must FAIL (
 run "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)" "pass:M2 F1 FERTILITY AND PARTNERING: PASS" "$PY" -I specs/demography/selftest_m2_f1.py &&
 run "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)" "fail:M2 F1 FERTILITY AND PARTNERING: FAIL" m2_f1_stale_control &&
 run "M2 F1 reference positive control: the elite read reverted to the woman's own row must FAIL F6's couple read (D56 (e); BCK-002 A-62)" "fail:9. F6 table choice, the couple read: FAIL" "$PY" -I specs/demography/selftest_m2_f1.py --control woman-row &&
+run "Golden vectors: minds v0 part A, the A-steps of T1 0.4.0, exact reference and golden file (selftest_minds_v0 --check; T1-A)" "pass:MINDS V0 (A-STEPS): PASS" "$PY" -I specs/minds/selftest_minds_v0.py --check &&
+run "minds v0 positive control: an altered golden line must FAIL (T1-A)" "fail:STALE:" minds_golden_control &&
+run "minds v0 positive control: a stale check value in the next T1 spec must FAIL (T1-A)" "fail:check_values.sigma_q16 = 2479700525" minds_stale_control &&
+run "minds v0 positive control: a re-promotion that redraws the traits must FAIL INV-T1-05 (REV-P1a MAJ-9; T1-A)" "fail:CONTROL redraw-on-repromote: FAIL for its own reason (INV-T1-05 (immutable))" "$PY" -I specs/minds/selftest_minds_v0.py --control redraw-on-repromote &&
+run "minds v0 positive control: a Demote that cancels an owed DEATH_DUE or MARRY_DUE must FAIL A7 (REV-MINDS M6; T1-A)" "fail:CONTROL demote-cancels-death-due: FAIL for its own reason (A7 (owed outcome))" "$PY" -I specs/minds/selftest_minds_v0.py --control demote-cancels-death-due &&
+run "minds v0 positive control: an index lookup that misses rows its own binding appended must FAIL A2 (REV-MINDS M7; T1-A)" "fail:CONTROL stale-index: FAIL for its own reason (A2 (index freshness))" "$PY" -I specs/minds/selftest_minds_v0.py --control stale-index &&
+run "minds v0 positive control: a trait draw keyed at the wrong instant must FAIL INV-T1-05 (A3; T1-A)" "fail:CONTROL trait-key-wrong-t: FAIL for its own reason (INV-T1-05 (key))" "$PY" -I specs/minds/selftest_minds_v0.py --control trait-key-wrong-t &&
+run "minds v0 positive control: genesis naming more than the manifest's cast must FAIL INV-T1-11 (Architect ruling X4; T1-A)" "fail:CONTROL world-start-genesis-names: FAIL for its own reason (INV-T1-11 (genesis))" "$PY" -I specs/minds/selftest_minds_v0.py --control world-start-genesis-names &&
+run "minds v0 mutant: repromote-redraw changes the re-promoted mind's golden line (SPR-023 T-03; T1-A)" "fail:golden: promote_cycle mind row=1 person=1007 traits=-3289," "$PY" -I specs/minds/selftest_minds_v0.py --mutant repromote-redraw &&
+run "minds v0 mutant: trait-k-swap changes the first created mind's golden line (SPR-023 T-03; T1-A)" "fail:golden: world_start t=0/d0 Day/Agenda world_start: create 1251091979667339840 row=0" "$PY" -I specs/minds/selftest_minds_v0.py --mutant trait-k-swap &&
+run "minds v0 mutant: opinion-no-expiry changes the probe at the modifier's expiry (SPR-023 T-04; T1-A)" "fail:golden: opinions t=5260320/d3653 Day/Agenda stand-in (T1-I/S): probe opinion(3002, 3001) = -3200" "$PY" -I specs/minds/selftest_minds_v0.py --mutant opinion-no-expiry &&
+run "minds v0 mutant: relation-not-ended changes the first monthly refresh's end line (SPR-023 T-04; T1-A)" "fail:golden: relations_monthly t=44640/d31 Month/Agenda relations: refresh 2001: end row=1" "$PY" -I specs/minds/selftest_minds_v0.py --mutant relation-not-ended &&
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&

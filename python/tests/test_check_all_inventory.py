@@ -181,6 +181,8 @@ REQUIRED_GATES = (
     "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, "
     "exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, "
     "R10)",
+    "Golden vectors: minds v0 part A, the A-steps of T1 0.4.0, exact reference and golden file "
+    "(selftest_minds_v0 --check; T1-A)",
     "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the "
     "effect_ref differential, its reversed-line control, and the altered-golden and stale-spec "
     "controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)",
@@ -455,6 +457,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",
     "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: a crate neither named rh-sys-* nor pinned declaring kind system "
+    "must FAIL, beside rh-minds passing by its pin (T1-A; REV-MINDS finding 3)",
     "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)",
     "lint_arch positive control: a non-bench target requiring count-alloc must FAIL (SPR-009 T-05)",
     "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL "
@@ -485,6 +489,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: rand_chacha outside rh-ids must FAIL",
     "lint_arch positive control: relabelled rh-snapshot must FAIL",
     "lint_arch positive control: rh-manifest relabelled as plane A must FAIL (SPR-004)",
+    "lint_arch positive control: rh-minds relabelled out of kind system must FAIL (T1-A; "
+    "REV-MINDS finding 3)",
     "lint_arch positive control: rh-protocol depending on a workspace crate must FAIL "
     "(protocol-leaf; SPR-026)",
     "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf "
@@ -698,6 +704,26 @@ REQUIRED_GATES = (
     "(REV-SPR-029 F14)",
     "lint_templates positive control: enum ids that differ from the emitter's column codes must "
     "FAIL (REV-SPR-029 F13)",
+    "minds v0 mutant: opinion-no-expiry changes the probe at the modifier's expiry (SPR-023 T-04; "
+    "T1-A)",
+    "minds v0 mutant: relation-not-ended changes the first monthly refresh's end line (SPR-023 "
+    "T-04; T1-A)",
+    "minds v0 mutant: repromote-redraw changes the re-promoted mind's golden line (SPR-023 T-03; "
+    "T1-A)",
+    "minds v0 mutant: trait-k-swap changes the first created mind's golden line (SPR-023 T-03; "
+    "T1-A)",
+    "minds v0 positive control: a Demote that cancels an owed DEATH_DUE or MARRY_DUE must FAIL A7 "
+    "(REV-MINDS M6; T1-A)",
+    "minds v0 positive control: a re-promotion that redraws the traits must FAIL INV-T1-05 "
+    "(REV-P1a MAJ-9; T1-A)",
+    "minds v0 positive control: a stale check value in the next T1 spec must FAIL (T1-A)",
+    "minds v0 positive control: a trait draw keyed at the wrong instant must FAIL INV-T1-05 (A3; "
+    "T1-A)",
+    "minds v0 positive control: an altered golden line must FAIL (T1-A)",
+    "minds v0 positive control: an index lookup that misses rows its own binding appended must "
+    "FAIL A2 (REV-MINDS M7; T1-A)",
+    "minds v0 positive control: genesis naming more than the manifest's cast must FAIL INV-T1-11 "
+    "(Architect ruling X4; T1-A)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
     "population synthesis positive control: floors in place of the age-sex allocation must FAIL "

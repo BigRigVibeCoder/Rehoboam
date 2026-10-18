@@ -1,0 +1,1235 @@
+# ODD-R v2 system spec (ADR-0033): minds v0 for named actors (T1), WP P3.2a, moved into P1a (docs/11 v1.3). Draft.
+# Every number is a design value: there is no empirical band for stress, breaks or IAUS weights. Each parameter says what
+# would settle it. lint_odd.py checks this file against the Registry, the other specs and the test catalogue.
+# Phasing: P1a is traits, ambition, relations, opinions, four decision types (marry, seek_office, press_claim, feud),
+# stress from grief and value conflict, and mental breaks. P1b adds the vow, relic and knowledge couplings (S6, S7,
+# secrets v0) and the swear_vow and pursue_goal decision types. Items that wait for P1b say so.
+# Round 1 rulings (Architect, PR #32): decisions 1-20 accepted; grief finds the instant's dead through minds' own relation
+# rows (alive = 0, death_tick = now); the dead are readable until Bookkeeping of their death instant (SPR-011 ruling 5),
+# and a read of a dead row after that instant is a bug; every death takes effect as an M2 death timer in Vital (A-30);
+# no P1a-only stress source (the P1a break rate is measured in isolation and taken to the director before G1a);
+# respond_to_threat goes to the P1b sprint; action_order stays here until a second system needs the permutation;
+# the cascade scenario test is V-SAGA-16b.
+# Round 3 rulings (Architect, on the independent review REV-P1a): BLK-1 deaths fire at day-start instants in P1a, so grief
+# runs in the Day/Vital binding of the death instant, after M2's timer pass; minute-level death times wait for BCK-002
+# A-35. MAJ-1 no previous_pulse read (A-28 is P1b). MAJ-2 (superseded by round 4 NEW-4) the coupling's neutral
+# value applies to a read of an absent owner. MAJ-4 Marry and ScheduleDeath carry M2's declared payloads; an
+# attempt's death is at the next day start. MAJ-5 kinship is derived from M2's mother, father and spouse at read time;
+# relation rows hold only liege and vassal. MAJ-6 considerations and response curves are typed Registry tables. MAJ-9
+# re-promotion reuses the kept mind; traits are drawn once. Minor findings: RNG key mapping, enumeration order, separate
+# outcome purposes, grief_instant_cap below stress_threshold by its bounds, decision types gated by `requires`.
+# Round 4 rulings (REV-P1a §7): NEW-1 derived kinship walks M2's life-course columns (the dead stay in it), read at same_instant (round 4c, NEW-6),
+# through the effect language's kin(p, n) (SPR-017), so grandparents through a dead parent and cousins are reached; the
+# living spouse stays person.spouse. NEW-3 claim_rank reads M7's claim.rank column. NEW-4 every read is declared, and
+# SPR-014's registration rule drops a read of an absent owner and applies the coupling's neutral value.
+# Round 4d (from the effect-language spec, PR #41 §5.3): relations by their exact names, kin(p, n) and related(a, b, n);
+# DESPAIR_PACT's opinion effect is a declared self-send (OpinionModifier to T1), with T1's [[applies]].
+# Frozen 2026-10-16, director D36 (PR #32 approved; merges before PR #37).
+# 0.3.2 (2026-10-17, EVO-001, the Architect's R9 and R12, merged with PR #49): the rate reads of S6 and S7 carry the
+# machine-readable `neutral` SPR-014's absent-owner rule serves (05.1 §2 rule 2; the effect language's loader reads it,
+# REV-SPR-017 round 3); an identity read requires its owner (R12), so a world that registers minds registers M2 and M7, and
+# the P1b identity reads of S6 and S7 (vow.vower, artifact.bearer, artifact.location) are declared with those specs in P1b,
+# not here; enum columns carry their codes; the [[applies]] payloads are typed, drained at Day/Agenda and keyed by a named
+# PersonId field; Marry and ScheduleDeath carry no date and a sampled outcome (EVO-001 R9): the decision schedules a T1
+# timer, MARRY_DUE or DEATH_DUE, at (the next day start, Vital) under the new purpose outcome_delay, whose fire in that
+# Vital's timer pass submits the command, and M2's drain applies it in the same Vital (the timing MAJ-4 asked for); the
+# Day/Vital `when` names apply_death (timer fire or drain) rather than the timer pass alone (REV-EVO-001 MIN-1). Round 4
+# (NIT-15): a due timer whose victim or partner is already dead is dropped (drop_timer), never submitted.
+# 0.3.3 (2026-10-17, SPR-020, the event envelope; specs/chronicle/envelope_v0.md; no mechanics changed): every [[emits]] entry
+# declares the Registry [event_roles] it fills, the [motive_edges] its motivated_by edges may carry and the one anchored snapshot
+# of P1a, stress(actor) read from mind.stress at emit on its seven acts, the pre-act value (envelope_v0.md §4), checked by lint_odd.py.
+# 0.4.0 (2026-10-18, draft in specs/systems/next/; the T1-A spec PR, before SPR-023; the Architect's cross-plan rulings X1, X4, X7, X13
+# and the minds-plans rulings on REV-MINDS M1, M5-M7, M10, findings 2, 3, 15 and 16): [algorithm.minds_f1] with the A-steps only
+# (A0-A16: the mind table and its key mind.person, the derived indexes and their freshness inside a binding, the trait draw, world
+# start, Promote and Demote with the deferred Demote dropped, the instant's exits through the engine's instant log, liege and
+# vassal rows refreshed monthly, opinion modifiers, thoughts and goals, the Registry tables the A-part reads, the invariants'
+# cadence); the I-steps (decisions) and S-steps (stress, grief, breaks) follow in T1-I/S, a later next-version draft. New:
+# mind.person, thought.refreshed_at, the reads person.id and title.id, the steps world_start, exits and relations, INV-T1-11 to 14.
+# It consumes SPR-038 stage B's instant log (StepCtx::exited(), ascending by PersonId: ruling R9) and its one DropReason change
+# (Ended's generic meaning, Deferred, cancelled{...} with cancel_because: ruling R14); a command whose premise no longer holds
+# (a Promote of a named person, a Demote of an unnamed one, a ClearGoal of no row) is dropped as ended.
+# The frozen texts this changes are the [[amends]] records at the end. The exact reference is specs/minds/selftest_minds_v0.py
+# (golden file specs/minds/golden/minds_v0.txt).
+odd_r = 2
+
+[system]
+id = "T1.minds"
+name = "Minds of named actors (minds v0)"
+spec_version = "0.4.0"
+fidelity = "F1"
+status = "draft"
+crate = "rh-minds"
+adrs = ["ADR-0012", "ADR-0034", "ADR-0035", "ADR-0025", "ADR-0024", "ADR-0009", "ADR-0006", "ADR-0033"]
+requirements = ["COG-1", "COG-3", "SIM-7", "SAGA-11", "SAGA-4", "SAGA-2", "DET-13"]
+
+[purpose]
+statement = "Give each named actor (T1) a small mind: fixed traits, ambition, relations and opinions, and an agenda that chooses among a few decisions (marry, seek office, press a claim, feud, swear and pursue a goal) by event-driven utility scoring. Accumulate stress from declared sources and, when it crosses the Registry threshold, schedule a mental break whose act comes from the Registry break table. The simulation decides; no language model takes part (ADR-0034)."
+role = "drama_coupling"
+patterns = [
+  { test = "V-SAGA-16", pattern = "stress(t) = stress(t0) + accrual - decay - break relief exactly, inside [0, 100]; each threshold crossing schedules exactly one break timer, which fires at its own tick with an act from the Registry break table", kind = "identity", role = "sole" },
+  { test = "V-SAGA-16", pattern = "Breaks per 100 named-actor-years inside 0.5 to 5 on the kingdom ensemble (the band this spec declares; a design value)", kind = "emergent", role = "sole" },
+  { test = "V-SAGA-16b", pattern = "Cascade scenario: one court death keeps the break rate inside V-SAGA-16's band, and the chain branching ratio (breaks caused per break) stays below 1 over the fixture", kind = "emergent", role = "sole" },
+  { test = "V-COG-03", pattern = "Decisions happen only at polls or interrupts; interrupts at t + 1 day or later, within the daily cap", kind = "identity", role = "sole" },
+  { test = "V-COG-04", pattern = "Same-instant actions: invalidated actors re-score once, then defer; the first-applied rate is unbiased by entity id", kind = "identity", role = "sole" },
+  { test = "V-COG-10", pattern = "Every utility decision records its top contributors and its margin over the runner-up as motivated_by edges", kind = "identity", role = "sole" },
+  { test = "V-SAGA-13", pattern = "(a) A son who is a named actor and learns that his father was murdered by a known culprit swears AVENGE_KIN within 12 months at a rate in [0.2, 0.8] (P1b; the declared range, a design value); (b) ambitious actors inside a relic's rumour reach seek it more often than those outside", kind = "emergent", role = "contributing" },
+  { test = "V-SAGA-09", pattern = "No vow weight enters a survival decision", kind = "identity", role = "contributing" },
+  { test = "V-SAGA-18", pattern = "No decision, feud or vow responds to an event its actor does not know (P1b, secrets v0)", kind = "identity", role = "contributing" },
+]
+not_yet = [
+  "No empirical band for stress or breaks: the 0.5 to 5 breaks per 100 named-actor-years is a design value (V-SAGA-16); the director judges it at G1a and G1b from the family histories",
+  "In P1a only grief and value conflict raise stress; vow conflict (S7) and kin-loyalty conflict (which needs knowledge rows) arrive in P1b. The P1a break rate may fall below 0.5 per 100 actor-years: measured in the isolation run before G1a, and reported to the director if the Registry bounds cannot reach the band",
+  "Needs are a stub: the needs input to every consideration is the neutral constant 1 until P3.2b",
+  "Schwartz values, PAD mood, OCC emotions and memory are P3.2b (P4); no emotion snapshot is stored for the event envelope until then (05.2 §4.1a: only what is simulated)",
+  "No survival-response decision type exists in v0: respond_to_threat goes to the P1b sprint (Architect round 1, Q8), reads no vow weight by construction, and serves V-SAGA-09's paired fixture at G1b",
+  "HTN plans, beliefs with distortion and channels are P3.2b and P3.3 (P4): a decision is one act, not a plan",
+  "Minute-level death times: in P1a every death fires at a day-start instant (round 3, BLK-1); a successful MURDER_ATTEMPT kills at the next day start. Same-instant reactions at minute resolution wait for BCK-002 A-35",
+  "Open for SPR-023 (MIN-12): this spec declares minds' state as plane-A entity.column tables, the form state_hash and keyframes cover (05.1 §6 item 6); 05.1 §5 puts named actors in a bevy_ecs World. Decide before SPR-023: columns in rh-core tables (no bevy_ecs in P1a), or the plane-A bevy_ecs review",
+  "Social practices (Versu; RT-2026-10-16 item 10a): evaluated and not adopted in v0 (see design.interaction); a candidate for the inquest institution with M6-lite",
+]
+
+# ----------------------------------------------------------------------------- owned columns
+[[owns]]
+column = "person.named"
+entity = "person"
+type = "bool"
+plane = "A"
+meaning = "T1 flag: the person holds a mind. Set and cleared only by Promote and Demote commands (M7's dormancy criteria, SIM-9) or by world creation; never by a pin (ADR-0024)"
+fixed_point = false
+[[owns]]
+column = "mind.person"
+entity = "mind"
+type = "u64"
+plane = "A"
+meaning = "PersonId whose mind the row is: the mind table's key (0.4.0; REV-MINDS finding 2). One row per person ever named, appended when the mind is created ([algorithm.minds_f1] A4: world start or a first Promote), in creation order, never removed or moved, kept through dormancy and death (ADR-0007) and reused by a re-promotion (REV-P1a MAJ-9). No sort claim: every iteration goes through the person-to-row index in ascending PersonId (A1, A2; REV-MINDS M10). A foreign reader (S6, S7 in P1b) finds a person's traits through this column"
+fixed_point = false
+[[owns]]
+column = "mind.honesty_humility"
+entity = "mind"
+type = "q8_8"
+plane = "A"
+meaning = "HEXACO Honesty-Humility on -100..100; static for life (05.3 §2). Artifacts and curses change what IAUS reads through bounded thoughts, never this column (RT-2026-10-16 item 8)"
+fixed_point = true
+[[owns]]
+column = "mind.emotionality"
+entity = "mind"
+type = "q8_8"
+plane = "A"
+meaning = "HEXACO Emotionality on -100..100; static"
+fixed_point = true
+[[owns]]
+column = "mind.extraversion"
+entity = "mind"
+type = "q8_8"
+plane = "A"
+meaning = "HEXACO eXtraversion on -100..100; static"
+fixed_point = true
+[[owns]]
+column = "mind.agreeableness"
+entity = "mind"
+type = "q8_8"
+plane = "A"
+meaning = "HEXACO Agreeableness on -100..100; static"
+fixed_point = true
+[[owns]]
+column = "mind.conscientiousness"
+entity = "mind"
+type = "q8_8"
+plane = "A"
+meaning = "HEXACO Conscientiousness on -100..100; static. S7 reads it for resolve"
+fixed_point = true
+[[owns]]
+column = "mind.openness"
+entity = "mind"
+type = "q8_8"
+plane = "A"
+meaning = "HEXACO Openness to experience on -100..100; static"
+fixed_point = true
+[[owns]]
+column = "mind.ambition"
+entity = "mind"
+type = "q8_8"
+plane = "A"
+meaning = "Ambition on 0..100: the drive for seats, offices and claims; static (05.3 has no ambition trait: a v0 scalar, docs/11 P3.2a)"
+fixed_point = true
+[[owns]]
+column = "mind.stress"
+entity = "mind"
+type = "q8_8"
+plane = "A"
+meaning = "Stress on 0..100 (SAGA-11). Saturating at both ends; the clipped amounts never enter the three accounting columns, so V-SAGA-16's identity is exact"
+fixed_point = true
+[[owns]]
+column = "mind.stress_in"
+entity = "mind"
+type = "u64"
+plane = "A"
+meaning = "Cumulative stress applied (after the clip at 100), in raw q8_8 units (1/256 point), since the mind was created"
+fixed_point = false
+[[owns]]
+column = "mind.stress_decayed"
+entity = "mind"
+type = "u64"
+plane = "A"
+meaning = "Cumulative stress removed by monthly decay (after the floor at 0), raw q8_8 units"
+fixed_point = false
+[[owns]]
+column = "mind.stress_relieved"
+entity = "mind"
+type = "u64"
+plane = "A"
+meaning = "Cumulative stress removed by break relief (after the floor at 0), raw q8_8 units"
+fixed_point = false
+[[owns]]
+column = "mind.break_state"
+entity = "mind"
+type = "enum"
+values = ["calm", "pending", "refractory"]
+plane = "A"
+meaning = "calm | pending (a break timer is scheduled) | refractory (a break fired; no new break until refractory_until)"
+fixed_point = false
+[[owns]]
+column = "mind.break_timer"
+entity = "mind"
+type = "u64"
+plane = "A"
+meaning = "TimerId of the pending break or of the refractory end, or 0; lets a death cancel it. A Demote met while it is set is dropped as deferred and cancels nothing ([algorithm.minds_f1] A7), so no demotion is held; T1-I/S makes the column a 0/1 flag with the timers found through own_timers (REV-MINDS P2; X13f)"
+fixed_point = false
+[[owns]]
+column = "mind.refractory_until"
+entity = "mind"
+type = "i64"
+plane = "A"
+meaning = "Sim-time the refractory period ends (0 when not refractory)"
+fixed_point = false
+[[owns]]
+column = "mind.interrupt_day"
+entity = "mind"
+type = "i64"
+plane = "A"
+meaning = "The day index of the last interrupt counted against the daily cap"
+fixed_point = false
+[[owns]]
+column = "mind.interrupts_today"
+entity = "mind"
+type = "u8"
+plane = "A"
+meaning = "Interrupt re-evaluations scheduled for interrupt_day; at most interrupt_daily_cap"
+fixed_point = false
+[[owns]]
+column = "relation.a"
+entity = "relation"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the named actor who holds the edge. Rows hold only the non-genealogical kinds (liege, vassal); kinship (parent, child, spouse, sibling, grandparent, grandchild, kin_other) is derived at read time from M2's life-course mother and father (through dead kin; round 4, NEW-1) and the living spouse, so it cannot drift from the ledger and covers kin born after promotion (round 3, MAJ-5)"
+fixed_point = false
+[[owns]]
+column = "relation.b"
+entity = "relation"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the other person (the liege's or vassal's holder), named or not"
+fixed_point = false
+[[owns]]
+column = "relation.kind"
+entity = "relation"
+type = "enum"
+registry = "relation_kinds"
+plane = "A"
+meaning = "Registry [relation_kinds] id: liege or vassal in a row; the kinship ids of the same table name the derived kinds, and every kind's closeness scales grief"
+fixed_point = false
+[[owns]]
+column = "relation.ended_at"
+entity = "relation"
+type = "i64"
+plane = "A"
+meaning = "Sim-time the row ended, or 0: b or a died (the exits step at the death instant), a was demoted (Demote), or the liege structure changed (the monthly relations refresh, or a re-promotion's refresh) ([algorithm.minds_f1] A7-A9); written once; ended rows are kept, never compacted"
+fixed_point = false
+[[owns]]
+column = "opinion.holder"
+entity = "opinion"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the person holding the opinion modifier: a living person when the command is applied, named or not (M7 may send GRANTED_BY to a grantee its same-instant dormancy pass promotes, and apply_commands precedes promote); the row counts in opinion(holder, about) whenever it is read and unexpired, which only steps of named actors do ([algorithm.minds_f1] A10, A11)"
+fixed_point = false
+[[owns]]
+column = "opinion.about"
+entity = "opinion"
+type = "u64"
+plane = "A"
+meaning = "PersonId the modifier is about"
+fixed_point = false
+[[owns]]
+column = "opinion.kind"
+entity = "opinion"
+type = "enum"
+registry = "opinion_modifiers"
+plane = "A"
+meaning = "Registry [opinion_modifiers] id"
+fixed_point = false
+[[owns]]
+column = "opinion.magnitude"
+entity = "opinion"
+type = "q8_8"
+plane = "A"
+meaning = "Modifier on the -100..100 opinion scale, constant until it expires; opinion(a, b) = clamp(sum of unexpired modifiers, -100, 100), derived, never stored"
+fixed_point = true
+[[owns]]
+column = "opinion.source_event"
+entity = "opinion"
+type = "u64"
+plane = "A"
+meaning = "EventId that caused the modifier (provenance; V-COG-10)"
+fixed_point = false
+[[owns]]
+column = "opinion.expires"
+entity = "opinion"
+type = "i64"
+plane = "A"
+meaning = "Sim-time the modifier expires: created + the Registry months of its kind"
+fixed_point = false
+[[owns]]
+column = "thought.holder"
+entity = "thought"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the person under the thought (an artifact's pull or a curse): a living person when the command is applied, named or not, as for opinions; a Demote and the holder's death delete the holder's thought rows ([algorithm.minds_f1] A7, A8, A12)"
+fixed_point = false
+[[owns]]
+column = "thought.overlay"
+entity = "thought"
+type = "enum"
+registry = "overlays"
+plane = "A"
+meaning = "Registry [overlays] id; [overlay_traits] maps it to trait deltas. One row per (holder, overlay)"
+fixed_point = false
+[[owns]]
+column = "thought.magnitude"
+entity = "thought"
+type = "q8_8"
+plane = "A"
+meaning = "Accumulated overlay strength in trait points, in [0, thought_cap]; decays by thought_decay a month without a refreshing command"
+fixed_point = true
+[[owns]]
+column = "thought.source_event"
+entity = "thought"
+type = "u64"
+plane = "A"
+meaning = "EventId of the latest command's cause (the artifact's chain head, or the broken vow)"
+fixed_point = false
+[[owns]]
+column = "thought.refreshed_at"
+entity = "thought"
+type = "i64"
+plane = "A"
+meaning = "Sim-time of the latest ApplyThought or ApplyInfluence applied to the row (0.4.0): the expire step decays a thought with no command since the previous Month pulse ([algorithm.minds_f1] A12), which needs this state; the frozen expire summary's 'without a command this month'"
+fixed_point = false
+[[owns]]
+column = "goal.holder"
+entity = "goal"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the person whose agenda holds the goal (from S7's AgendaGoal, P1b): a living person when AgendaGoal is applied, named or not; a Demote deletes the holder's goal rows and ClearGoal (key = any) removes one, the holder dead or not ([algorithm.minds_f1] A7, A12)"
+fixed_point = false
+[[owns]]
+column = "goal.vow"
+entity = "goal"
+type = "u64"
+plane = "A"
+meaning = "VowId the goal comes from (S7 owns the vow; minds holds only its agenda entry)"
+fixed_point = false
+[[owns]]
+column = "goal.kind"
+entity = "goal"
+type = "enum"
+registry = "vow_kinds"
+plane = "A"
+meaning = "Registry [vow_kinds] id"
+fixed_point = false
+[[owns]]
+column = "goal.target"
+entity = "goal"
+type = "u64"
+plane = "A"
+meaning = "The entity aimed at (PersonId, ArtifactId, TitleId or PlaceId, by kind)"
+fixed_point = false
+[[owns]]
+column = "goal.priority"
+entity = "goal"
+type = "q8_8"
+plane = "A"
+meaning = "The vow's priority as S7 last sent it (at most vow_priority_cap); a consideration of pursue_goal only, never of a survival decision (V-SAGA-09)"
+fixed_point = true
+[[owns]]
+column = "feud.id"
+entity = "feud"
+type = "u64"
+plane = "A"
+meaning = "FeudId = H64(party_a, party_b, since); never reused"
+fixed_point = false
+[[owns]]
+column = "feud.party_a"
+entity = "feud"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the named actor who declared the feud"
+fixed_point = false
+[[owns]]
+column = "feud.party_b"
+entity = "feud"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the declared enemy"
+fixed_point = false
+[[owns]]
+column = "feud.since"
+entity = "feud"
+type = "i64"
+plane = "A"
+meaning = "Sim-time of FEUD_DECLARED"
+fixed_point = false
+[[owns]]
+column = "feud.status"
+entity = "feud"
+type = "enum"
+values = ["active", "ended"]
+plane = "A"
+meaning = "active | ended (FEUD_ENDED: reconciled, or a party died). Ended is absorbing"
+fixed_point = false
+[[owns]]
+column = "feud.cause_event"
+entity = "feud"
+type = "u64"
+plane = "A"
+meaning = "EventId of the inciting event (a harm, a deposition, a pressed claim, a succession); the FEUD_DECLARED motive edge points to it"
+fixed_point = false
+[[owns]]
+column = "knowledge.knows"
+entity = "knowledge"
+type = "bool"
+plane = "A"
+meaning = "Secrets v0 (P1b, P1.22): true on a (holder, event) row while the holder knows the event; rows exist only for known events and are never deleted. S7 and SAGA-4 read it"
+fixed_point = false
+[[owns]]
+column = "knowledge.holder"
+entity = "knowledge"
+type = "u64"
+plane = "A"
+meaning = "PersonId of the holder (P1b)"
+fixed_point = false
+[[owns]]
+column = "knowledge.event"
+entity = "knowledge"
+type = "u64"
+plane = "A"
+meaning = "EventId known (P1b)"
+fixed_point = false
+[[owns]]
+column = "knowledge.acquired_at"
+entity = "knowledge"
+type = "i64"
+plane = "A"
+meaning = "Sim-time the holder learned it: the acting, witnessing or scheduled-outcome instant (P1b; V-SAGA-11, V-SAGA-18)"
+fixed_point = false
+[[owns]]
+column = "knowledge.via_event"
+entity = "knowledge"
+type = "u64"
+plane = "A"
+meaning = "EventId of the acquisition (the act itself, a discovery timer, news arriving, testimony), or the event itself for its actor and witnesses (P1b)"
+fixed_point = false
+
+# ----------------------------------------------------------------------------- events
+[[emits]]
+kind = "MENTAL_BREAK"
+when = "A break timer fires: the actor drops rational self-preservation for one act (SAGA-11); its motive edge points to the event that pushed stress over the threshold"
+roles = ["actor"]
+motives = ["GRIEF_FOR", "RETALIATION_FOR", "AMBITION_FOR", "JEALOUSY_OF", "VOW_OF"]   # the motivated_by edge to the event that pushed stress over the threshold
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]   # stress(actor)@eN (envelope_v0.md §4)
+[[emits]]
+kind = "MURDER_ATTEMPT"
+when = "The act of an ASSASSINATION_ATTEMPT break, or a feud's attack option chosen by IAUS; the outcome (success or failure) is in the event; success schedules a DEATH_DUE timer at (the next day start, Vital) whose fire submits ScheduleDeath to M2, and the victim dies at the next day start (the attempt-to-death delay is one day; round 3, MAJ-4; EVO-001 R9)"
+roles = ["actor", "target"]
+motives = ["RETALIATION_FOR", "AMBITION_FOR", "JEALOUSY_OF", "VOW_OF"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
+[[emits]]
+kind = "FLED"
+when = "The act of a FLIGHT break (P1a: the actor resigns every office and leaves the court; P1b: the actor becomes a fugitive, SAGA-14)"
+roles = ["actor"]
+motives = ["FEAR_OF"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
+[[emits]]
+kind = "HOLDINGS_BURNED"
+when = "The act of a BURN_HOLDINGS break (available only when M4 is registered, P1b)"
+roles = ["actor"]
+motives = ["GRIEF_FOR", "RETALIATION_FOR"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
+[[emits]]
+kind = "DESPAIR_PACT"
+when = "The act of a PACT_OF_DESPAIR break: a bond with a stressed named relation and the renunciation of the actor's claims"
+roles = ["actor", "target"]   # actor: the breaking actor; target: the stressed relation
+motives = ["GRIEF_FOR", "LOYALTY_TO"]
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
+[[emits]]
+kind = "FEUD_DECLARED"
+when = "IAUS chooses the feud decision's declare option against a target"
+roles = ["actor", "target"]
+motives = ["RETALIATION_FOR", "JEALOUSY_OF", "AMBITION_FOR"]   # to feud.cause_event
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]
+[[emits]]
+kind = "FEUD_ENDED"
+when = "IAUS chooses the reconcile option, or a party dies (the death path)"
+roles = ["actor", "target"]   # the party who reconciled (or died: the death path) and the other party
+snapshots = [{ attr = "stress", of = "actor", from = "mind.stress" }]   # the pre-act value (envelope_v0.md §4)
+
+# ----------------------------------------------------------------------------- lifecycle commands sent
+[[commands]]
+target = "M2.demography"
+command = "Marry"
+payload = "{ a, b }"
+timer = "MARRY_DUE"
+purpose = "outcome_delay"
+why = "The marry decision at Agenda d schedules a T1 timer MARRY_DUE at (d + 1 day start, Vital) under outcome_delay (entity = a, payload = b, cause = None), whose fire in that Vital's timer pass submits Marry {a, b} with M2's declared payload, and M2's Day/Vital binding drains it in the same Vital (EVO-001 R9: a command carries no date, and a decided outcome due later is the decider's timer); M2 owns marriages (P1.3) and writes person.spouse when it applies the command"
+[[commands]]
+target = "M2.demography"
+command = "ScheduleDeath"
+payload = "{ victim, cause, culprit, cause_event }"
+timer = "DEATH_DUE"
+purpose = "outcome_delay"
+why = "A successful MURDER_ATTEMPT at Agenda d kills only through the single death path (05.1 §2 rule 2): it schedules a T1 timer DEATH_DUE at (d + 1 day start, Vital) under outcome_delay (entity = the victim, payload = the actor, cause = the MURDER_ATTEMPT as a DraftRef, rewritten to its EventId at the merge), whose fire in that Vital's timer pass submits ScheduleDeath {victim, cause = murder, culprit = the actor, cause_event = the timer's cause} with M2's declared payload, and M2's Day/Vital binding drains it in the same Vital (EVO-001 R9), so the victim dies at the next day start"
+[[commands]]
+target = "T1.minds"
+command = "OpinionModifier"
+payload = "{ holder, about, kind, magnitude, source_event }"
+why = "A self-send (round 4d): DESPAIR_PACT's opinion effect, the DESPAIR_PACT_WITH modifiers both ways, is a command from minds to minds, applied at the next tick boundary like any other OpinionModifier"
+[[commands]]
+target = "M7.dynasty"
+command = "PetitionSeat"
+payload = "{ person, target }"
+why = "The seek_office decision asks for a vacant office or a seat held in demesne; M7 grants by its rule"
+[[commands]]
+target = "M7.dynasty"
+command = "PressClaim"
+payload = "{ claimant, claim }"
+why = "The press_claim decision; M7 owns claims"
+[[commands]]
+target = "M7.dynasty"
+command = "RenounceClaim"
+payload = "{ claimant, claim }"
+why = "A PACT_OF_DESPAIR renounces the actor's claims"
+[[commands]]
+target = "M7.dynasty"
+command = "Resign"
+payload = "{ person, office }"
+why = "FLIGHT resigns the actor's offices; M7 owns offices"
+[[commands]]
+target = "M4.economy"
+command = "BurnHoldings"
+payload = "{ actor, household, cause_event }"
+why = "The act of a BURN_HOLDINGS break (HOLDINGS_BURNED): destroy the stocks of the actor's household (actor = the breaking named actor, household = its household, cause_event = the HOLDINGS_BURNED event); M4 owns the stocks (P1b). In a P1a world M4 is not registered, so SPR-014's absent-owner rule drops and reports the send; BURN_HOLDINGS is then unavailable anyway (its needs include holdings)"
+[[commands]]
+target = "S7.vows"
+command = "SwearVow"
+why = "The swear_vow decision (P1b): {vower, kind, target, public}; S7 owns vows"
+[[commands]]
+target = "S6.artifacts"
+command = "Transfer"
+why = "pursue_goal steps on artifacts (P1b): gift, trade or theft; S6 owns artifacts"
+[[commands]]
+target = "S6.artifacts"
+command = "Search"
+why = "pursue_goal for RECOVER_RELIC at the artifact's believed place (P1b)"
+[[commands]]
+target = "S6.artifacts"
+command = "Destroy"
+why = "pursue_goal for DESTROY_RELIC (P1b)"
+
+# ----------------------------------------------------------------------------- lifecycle commands applied
+# For PR #37's [[applies]] lint (round 4d); typed by EVO-001 (05.1 §2 rule 2). Each payload is the one every sender uses.
+# All are drained by the Day/Agenda binding (apply_commands and promote). Keyed by the holder, bearer or person named by
+# key_field, who must be living (key = "living": rh-core drops a command for someone dead, dropped{T1, kind, dead_key});
+# ClearGoal clears what may belong to a dead holder, so it takes any key. kind, overlay and the event slots are typed by the columns and the merge rewrite.
+[[applies]]
+command = "OpinionModifier"
+payload = "{ holder: PersonId, about: PersonId, kind: enum(opinion.kind), magnitude: q8_8, source_event: EventRef }"
+from = ["M7.dynasty", "S7.vows", "T1.minds"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "holder"
+[[applies]]
+command = "AgendaGoal"
+payload = "{ vow: VowId, holder: PersonId, kind: enum(goal.kind), target: u64, priority: q8_8 }"
+from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "holder"
+[[applies]]
+command = "ClearGoal"
+payload = "{ vow: VowId, holder: PersonId }"
+from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "any"
+key_field = "holder"
+[[applies]]
+command = "ApplyThought"
+payload = "{ holder: PersonId, overlay: enum(thought.overlay), delta: q8_8, source_event: EventRef }"
+from = ["S7.vows"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "holder"
+[[applies]]
+command = "ApplyInfluence"
+payload = "{ bearer: PersonId, overlay: enum(thought.overlay), delta: q8_8 }"
+from = ["S6.artifacts"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "bearer"
+[[applies]]
+command = "Promote"
+payload = "{ person: PersonId }"
+from = ["M7.dynasty"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "person"
+[[applies]]
+command = "Demote"
+payload = "{ person: PersonId }"
+from = ["M7.dynasty"]
+drained_by = "Day/Agenda"
+key = "living"
+key_field = "person"
+
+# ----------------------------------------------------------------------------- reads
+# Round 4 (NEW-4) and EVO-001 (R12): the reads below are declared unconditionally. An identity read requires its owner, so a world
+# that registers minds registers M2 and M7 (registration refuses one that does not, by name; SPR-023 develops against a stub M7 owner,
+# as [isolation] says, and integrates into real worlds after SPR-021).
+# A rate read carries its neutral and is dropped when its owner is absent: SPR-014's registration rule reports it, the dropped
+# column enumerates as an empty table (no vows, no artifacts) and a keyed lookup returns the neutral (S7: vow conflict 0, so
+# s_vow = 0; S6: rumour_reach 0, so the seek consideration is as at R = 0). The P1b identity reads of S6 and S7 (the vower, the
+# bearer and the place of an artifact) are declared when those specs are frozen (P1b); the [[couplings]] entries keep the rules.
+# Kinship walks life_course.mother/father through kin(p, n) (SPR-017), read at same_instant (round 4c, NEW-6: the log is append-only and written only by M2 in Vital, so same_instant is exact and avoids P0's per-instant clone of a lagged column) (round 4, NEW-1). minds rebuilds a
+# children-by-parent index over those columns at restore and on each birth: derived state, outside the plane-A hash and
+# the keyframe. Neutral values (S7: vow conflict 0, so s_vow = 0, and no goals; S6: rumour_reach 0, so the
+# seek consideration is as at R = 0). M2 is read at same_instant (M2 binds only Vital and precedes minds there).
+# No read is previous_pulse (MAJ-1: Engine::new refuses it until BCK-002 A-28).
+# 0.4.0: person.id (M2, same_instant, identity) is the read StepCtx's person_row needs to find a ledger row (SystemView::person_row
+# reads person.id; SPR-014's crates/rh-core/src/world.rs:249-255, branch sprint/SPR-014-lifecycle-queues; REV-MINDS M1), and
+# title.id (M7, lagged, identity) maps a TitleId (title.liege, office.title) to its row for the liege and vassal rows
+# ([algorithm.minds_f1] A9). SPR-023 reads M7's columns by name through SystemView (X13c).
+[[reads]]
+column = "person.id"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "person.alive"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "person.death_tick"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "person.birth_tick"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "person.sex"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "person.mother"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "person.father"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "life_course.person_id"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "life_course.mother"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "life_course.father"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "person.spouse"
+owner = "M2.demography"
+lag = "same_instant"
+use = "identity"
+[[reads]]
+column = "house_member.person"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "house_member.house"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "claim.rank"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "title.holder"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "title.id"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "title.liege"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "title.tier"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "title.regent"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "office.holder"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "office.title"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "claim.claimant"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "claim.title"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "claim.status"
+owner = "M7.dynasty"
+lag = "lagged"
+use = "identity"
+[[reads]]
+column = "vow.conflict"
+owner = "S7.vows"
+lag = "lagged"
+use = "rate"
+neutral = 0.0
+[[reads]]
+column = "artifact.rumour_reach"
+owner = "S6.artifacts"
+lag = "lagged"
+use = "rate"
+neutral = 0
+
+[scales]
+spatial = "named actor; candidate targets come from the actor's situation sets (relations, court, own claims, agenda goals), never from a scan of the world (GOV-003 §6 row 5)"
+temporal = "Day pulse for deaths (grief), decisions, breaks and commands at the instants they occur; Month pulse for stress accrual, decay and expiry. Decision polls every poll_months of the type (1 to 12), interrupts at t + 1 day or later"
+extent = "named actors only: 1 to 5,000 (05.3 §1); a kingdom world 200 to 2,000; the G1a performance world at most 500. The count is an outcome of M7's dormancy criteria, never a target (docs/01 principle 8)"
+restart = "Owned columns plus minds' pending agenda timers (polls, interrupts, break and refractory timers, DEATH_DUE and MARRY_DUE with their payload and cause; the agenda's keyframe dump) restore the system exactly. Traits are restored from the keyframe, never recomputed: their draw was keyed by the instant of the first promotion (round 3, MAJ-9)"
+
+[[fidelity_ladder]]
+level = "F1"
+representation = "Minds v0: HEXACO traits and ambition (static), relation edges, CK3-style opinion modifiers, bounded thoughts from artifacts and curses, event-driven IAUS over six decision types with fixed-point curves, stress in q8_8 with Registry sources and a break table; knowledge rows (P1b)"
+status = "target"
+[[fidelity_ladder]]
+level = "F2"
+representation = "The full psychological core of 05.3 §2 (values, PAD mood, OCC emotions, needs, memory with ACT-R activation), bounded HTN, beliefs with distortion, channels (P3.2b, P3.3)"
+status = "n/a"
+
+# ----------------------------------------------------------------------------- schedule (05.1 §4.2)
+[[schedule]]
+pulse = "Day"
+phase = "Vital"
+steps = ["outcome_due: the fire of due DEATH_DUE and MARRY_DUE timers in this Vital's timer pass (T1's fire, after M2's level, before every binding; not the binding's step): submit ScheduleDeath or Marry to M2, which drains them in this same Vital before this binding (05.1 §2 rule 2; EVO-001 R9); a DEATH_DUE whose victim is already dead, or a MARRY_DUE whose a or b is dead (a natural death drawn for the same day start fires in M2's pass, before T1's; the grief step drops a dead actor's mind timers, but a victim or partner who is not a named actor holds none), is dropped with drop_timer(dead), never submitted (REV-EVO-001 NIT-15)", "exits: the persons who exited this instant, from the engine's instant log (StepCtx::exited(), Architect ruling X1; never a scan of person.alive), in ascending PersonId: end every open relation row with a or b among them and delete their thought rows ([algorithm.minds_f1] A8); O(1) when the list is empty", "grief: for each death this instant, add grief stress to every named actor kin to the dead (derived kinship) or holding a liege or vassal row to them, saturating per instant; end the dead's rows and feuds; drop a dead actor's mind timers", "threshold: schedule a break for every actor whose stress crossed stress_threshold in this binding"]
+when = "every day start (rh-core runs every binding whose pulse fires); work only where M2's apply_death ran in this instant's Vital, in its timer pass (which precedes every binding, round 3, BLK-1) or in its Day/Vital drain (which precedes T1's Vital binding by the M2 -> T1 edge; EVO-001)"
+[[schedule]]
+pulse = "Day"
+phase = "Agenda"
+steps = ["world_start: at t = 0 only, create a mind for each person genesis named (the manifest's cast; ruling X4) and build its liege and vassal rows ([algorithm.minds_f1] A5); M7's tick-0 Promotes follow in promote", "apply_commands: apply AgendaGoal, ClearGoal, OpinionModifier, ApplyThought and ApplyInfluence from S6 and S7", "promote: apply Promote and Demote from M7 (create or retire a mind)", "break_act: fire due break timers: choose the act from the Registry break table, apply it, relieve stress, start the refractory period", "refractory_end: fire due refractory-end timers", "decide: score and apply the decisions due at this instant (polls and interrupts), same-instant semantics of 05.1 §4.3", "threshold: schedule a break for every actor whose stress crossed stress_threshold in this binding"]
+when = "every day start; work only with queued commands for minds or a minds timer due in this phase (break, refractory end, poll, interrupt: all at day starts), and at t = 0 (world_start, [algorithm.minds_f1] A5); an idle run is O(1) (A15)"
+[[schedule]]
+pulse = "Month"
+phase = "Agenda"
+steps = ["relations: refresh every named living actor's liege and vassal rows from M7's lagged titles and offices, in ascending PersonId: end the rows the titles no longer imply, append the new ones ([algorithm.minds_f1] A9; REV-MINDS finding 16)", "stress_month: add this month's conflict stress (vow, kin loyalty) and subtract decay", "expire: drop expired opinion modifiers from the sums, decay thoughts", "threshold: schedule a break for every actor whose stress crossed stress_threshold in this binding"]
+when = "always"
+
+# ----------------------------------------------------------------------------- RNG (ADR-0006)
+# Mapping onto H (05.1 §6 item 2; MIN-1): StepCtx::rng(purpose, entity, k) supplies the world seed, branch salt, system id,
+# the entity's epoch and the instant t itself; each purpose below names its entity and k. Every rh-sample call draws from
+# its own keyed stream (05.1 §6 item 3), so k indexes sampler calls, never stream positions. Decision-type indices are
+# the [decision_types] keys in byte-wise ascending order. Enumeration before any draw is in ascending PersonId (MIN-2).
+[[rng]]
+purpose = "trait_draw"
+key = ["person", "k"]
+use = "entity = the person, k = 0..5 the HEXACO traits in the column order of [[owns]], 6 ambition; t = the instant the mind is created: a first Promote's instant, or t = 0 at world start (a cast member named at genesis, or M7's tick-0 Promote); the person's epoch at that instant. One StepCtx::rng draw per k, its four 16-bit fields summed and scaled exactly to sd trait_sd, rounded half to even to q8_8 and clamped to the scale ([algorithm.minds_f1] A3: a sampler call takes its own stream and StepCtx::stream has no k, so seven normal calls on one (purpose, person) pair would be refused); every mind is drawn, no manifest seeding traits in P1a. Drawn once: a re-promotion reuses the kept rows (round 3, MAJ-9)"
+[[rng]]
+purpose = "poll_jitter"
+key = ["person", "decision_type"]
+use = "entity = the person, k = the decision type's index, t = the promotion instant: the first poll's offset, draw mod (poll_months in days), at a day start"
+[[rng]]
+purpose = "iaus_select"
+key = ["person", "decision_type", "tick"]
+use = "entity = the person, k = the decision type's index, t = the decision instant: the weighted choice among the iaus_top_k best-scoring candidates (05.3 §3), candidates ordered by score, ties in ascending target id"
+[[rng]]
+purpose = "action_order"
+key = ["tick", "person"]
+use = "entity = the person, k = 0, t = the instant: the keyed permutation H(seed, salt, t, entity) in which same-instant actions apply (05.1 §4.3 item 4), ascending draw, ties in ascending PersonId. Kept in T1 for v0; it moves to rh-core when a second system needs it (Architect round 1, Q9)"
+[[rng]]
+purpose = "break_delay"
+key = ["person", "tick"]
+use = "entity = the person, k = 0, t = the crossing instant: d = 1 + draw mod break_delay_max_days days; the break timer is at that day's start, Agenda"
+[[rng]]
+purpose = "break_act"
+key = ["person", "tick"]
+use = "entity = the person, k = 0, t = the break instant: the weighted choice among the available acts, in [mental_breaks] key order"
+[[rng]]
+purpose = "break_outcome"
+key = ["actor", "target", "tick"]
+use = "entity = the actor, k = the target's PersonId, t = the break instant: whether a break's MURDER_ATTEMPT succeeds, hits iff draw < attempt_success (Prob32). Separate from attack_outcome, so a break and a feud attack at one Day/Agenda never share a draw (MIN-3)"
+[[rng]]
+purpose = "attack_outcome"
+key = ["actor", "target", "tick"]
+use = "entity = the actor, k = the target's PersonId, t = the decision instant: whether a feud attack's MURDER_ATTEMPT succeeds, hits iff draw < attempt_success (Prob32)"
+[[rng]]
+purpose = "outcome_delay"
+key = ["person", "tick"]
+use = "No draw (EVO-001 R9, R10). The purpose of the DEATH_DUE (entity = the victim, payload = the actor, cause = the MURDER_ATTEMPT) and MARRY_DUE (entity = a, payload = b, cause = None) timers at (the next day start, Vital): the one-day delay of a decided outcome is not a draw, and its event is already in the log. resample_timer (a material input in the person's scope) returns the timer's own tick and keeps its payload and cause; it never errors"
+resample_on_fork = false
+
+# ----------------------------------------------------------------------------- design concepts (ODD 4)
+[design]
+basic_principles = "Named actors are utility agents (IAUS; Dill, Mark; 05.3 §3) with a CK3-style social layer (opinion modifiers) and a stress-and-break mechanism inspired by Crusader Kings 3's design (no code; ADR-0035). The simulation decides: no language model, no director (ADR-0034, ADR-0009). Stress is conserved and every change has a declared source"
+emergence = "Marriages, petitions, pressed claims, feuds, revenge, despair and the breaks that end in murder or flight emerge from traits, relations, opinions and the situations M2, M7, S6 and S7 create; family histories (G1a) are their record"
+adaptation = "IAUS: score = product of fixed-point response curves over the considerations of [decision_types], times the IAUS compensation factor; candidates come from the actor's situation; choice by keyed top-k weighted draw. No learning: traits are static, opinions expire"
+objectives = "Implicit in the curves: ambition rewards seats, offices and claims; agreeableness and honesty-humility penalise harm and betrayal; vows add a bounded goal weight (S7). There is no survival decision in v0 (see not_yet)"
+learning = "n/a: minds v0 does not learn; memory and consolidation are P3.2b (RT-2026-10-16 item 6)"
+prediction = "n/a: actors do not forecast; a consideration reads the present snapshot"
+sensing = "Kin through the life-course columns and the living spouse at the same instant (derived from M2), house, seats, offices and claims at the start of the instant (lagged reads), deaths in the same instant, S7's vow conflict and S6's rumour reach at the start of the instant; a read of an absent owner is dropped by SPR-014's registration rule and its neutral value applies. From P1b an actor reacts only to events it holds a knowledge row for (SAGA-4, V-SAGA-18); in P1a it senses only its relations' deaths, which every kin knows by the death path"
+interaction = "Lifecycle commands only (05.1 §2 rule 2): Marry and ScheduleDeath to M2; PetitionSeat, PressClaim, RenounceClaim and Resign to M7; SwearVow to S7 and Transfer, Search and Destroy to S6 (P1b). Applied from others: Promote and Demote (M7); AgendaGoal, ClearGoal, OpinionModifier, ApplyThought (S7); ApplyInfluence (S6). Social practices (RT-2026-10-16 item 10a) were evaluated and not adopted in v0: the six decision types already bound their candidate sets by the actor's situation (the row-5 guard), so a practice layer would add a mechanism with no band to earn its place (ADR-0033 §5); its natural first use is the inquest, an institution that waits for M6-lite"
+stochasticity = "Keyed RNG only: trait draws, poll jitter, top-k selection, action order, break delay, break act, attempt outcome. Threshold crossings are deterministic"
+collectives = "Houses and courts (M7) define the situation sets: the court of an actor is the named actors whose seats or offices share its top liege. Feuds are person-level at F1 (house feuds are F2)"
+observation = "MENTAL_BREAK, MURDER_ATTEMPT, FLED, DESPAIR_PACT, FEUD_* events in channel A with motive edges (GRIEF_FOR, RETALIATION_FOR, AMBITION_FOR, JEALOUSY_OF, VOW_OF); stress as the anchored attribute stress(actor)@eN; motivated_by edges for every utility decision (V-COG-10); the stress accounting columns for V-SAGA-16"
+era_state = []
+scale_behaviour = "Identical at every N; cost scales with named actors and their bounded candidate sets (05.3 §3: about 2 ms per 5,000-actor decision wave). At micro scale (uz_job) one or two named minds carry the story; the break band reports INSUFFICIENT below 1,000 named-actor-years"
+
+# ----------------------------------------------------------------------------- algorithm (0.4.0, the A-steps)
+[algorithm.minds_f1]
+# Minds v0, part A (the T1-A spec PR, before SPR-023; Architect rulings X1, X4, X7, X13; REV-MINDS M1, M5-M7, M10 and findings 2, 3,
+# 15, 16; REV-P1a MAJ-9). The A-steps only: the mind table, its indexes, the trait draw, world start, Promote and Demote, the
+# instant's exits, liege and vassal rows, opinion modifiers, thoughts and goals, the Registry tables they read, the invariants'
+# cadence. The I-steps (decisions) and S-steps (stress, grief, breaks) are T1-I/S's, a later next-version draft. Every quantity is
+# an exact integer and every division is rounded once, as stated. The exact reference specs/minds/selftest_minds_v0.py reproduces
+# every step on scripted worlds (golden file specs/minds/golden/minds_v0.txt), reads `constants` from this table and asserts
+# `check_values` against its own arithmetic and the Registry.
+version = "t1-minds-a-v1"
+constants = { trait_k = 7, trait_fields = 4, trait_field_bits = 16, trait_scale = [-100, 100], ambition_scale = [0, 100], ambition_mean = 50, months_per_year = 12, minutes_per_day = 1440 }
+steps = [
+  "A0 Integers, rounding, calendar. Every quantity is an exact integer: q8_8 raw values (1/256 point: traits, ambition, stress, opinion and thought magnitudes), Q16_16 parameter bits (1/65536: rh_manifest::compile from the manifest literal, rounded half to even, SPR-011 ruling 9; T1 has no Registry default in P1a, so a built T1 missing a parameter is refused by name, SPR-011 ruling 8), SimTime minutes (i64), and PersonIds, TitleIds and EventIds (u64). rhe(n / d) is n / d rounded half to even, n signed, d > 0 (M2's S0). narrow(b) = rhe(b / 256) takes a Q16_16 parameter to q8_8 (Q16_16::narrow_saturating, crates/rh-core/src/fixed/q.rs:103-104; never saturating here: every T1 parameter's Registry bounds lie inside q8_8's range). No float, no transcendental, no other rounding. The calendar is 05.1 §4.1's: Y = 1440 x days_per_year minutes (360 or 365 days), the Month pulse at each calendar month's first instant t_m. MONTH = Y / 12 minutes (05.1 §4.4's twelfth of a year: 43,200 at 360 days, 43,800 at 365, both exact) is the unit of an opinion's months (A10) and nothing else; the Month pulse follows the calendar months. In P1a every T1 instant is a day start.",
+  "A1 The mind table (REV-MINDS finding 2, M10). A mind is one row of the mind.* columns: mind.person (the key, new in 0.4.0) and the sixteen frozen columns, plane-A columns like every [[owns]] entry (MIN-12's choice of columns over bevy_ecs is the director's item D59 item 4, an ADR-0002 section 2 addendum, ruling X11; these steps assume columns). A row is appended when a mind is created (A4), in creation order, and is never removed or moved: a dead or dormant actor keeps its row (ADR-0007) and a re-promotion reuses it (A6; REV-P1a MAJ-9). There is no sort claim on the table: no step depends on its row order, and every iteration over minds goes through the person-to-row index (A2) in ascending PersonId. A person has at most one row (INV-T1-11).",
+  "A2 Derived indexes and their freshness inside a binding (REV-MINDS M7). T1 keeps four derived indexes, outside every hash, keyframe and journal (REV-WAVE5 W4): person -> mind row (mind.person), relation.a -> rows, relation.b -> rows, and (opinion.holder, opinion.about) -> rows. Each maps a key to its rows in ascending row order, ended and expired rows included, so an in-place write (ended_at) never makes an index stale: readers filter on ended_at and expires. Each records covered, the length of its table it reflects: after every level that ran a T1 job, rh-core's post-merge hook adds the rows [covered, len) and sets covered = len, and construction and restore rebuild it from its table (the same index: INV-T1-14). The rule inside a binding (REV-MINDS M7; the minds plan's specs table row 11: the index as of the binding's start plus a step-local overlay of the rows the binding appended, the overlay being a scan of its own column past the covered length, so it keeps no state of its own): every lookup returns the index's rows for the key followed by the table's rows [covered, len) whose key matches, in ascending row order, so a step sees the rows it appended earlier in the same binding (an opinion summed after the modifier it just applied; a Demote of a mind that a Promote created in the same drain). The scan costs O(rows this binding appended), bounded by its commands; no other state is kept. The thought and goal tables have no index: they are kept sorted (A12) and searched.",
+  "A3 The trait draw (trait_draw). A mind created for person p at instant t draws d_k = H(world_seed, branch_salt(t), system_id(T1.minds), epoch(p), purpose_id(trait_draw), p, t, k) for k = 0..6, through StepCtx::rng(trait_draw, p, k) (05.1 §6 item 2; epoch(p) is p's count of material inputs as of t's Inputs, ADR-0025): k = 0..5 the HEXACO traits in [[owns]] order (honesty_humility, emotionality, extraversion, agreeableness, conscientiousness, openness), k = 6 ambition. For each k: S_k = the sum of the four 16-bit fields of d_k (bits 0-15, 16-31, 32-47 and 48-63; constants.trait_fields), an integer in [0, 262140] with mean 131070 and variance (2^32 - 1) / 3 exactly; c_k = S_k - 131070; v_k = rhe(256 x B x c_k / SIGMA), with B = trait_sd's Q16_16 bits and SIGMA = check_values.sigma_q16 = 2479700524, the integer nearest 2^16 x sqrt((2^32 - 1) / 3) = 2479700524.2176 (math.isqrt of (2^64 - 2^32) / 3 and its remainder), so v_k is trait_sd x c_k / sd(S_k) in q8_8 raw units (|256 x B x c_k| < 2^47 with B <= 50 x 2^16 by the Registry bound: i64 throughout). Trait k (0..5) := clamp(v_k, -25600, 25600) (the scale -100..100); ambition := clamp(12800 + v_6, 0, 25600) (constants.ambition_mean = 50 on 0..100). One rounding, then the clamp. Why not rh-sample's normal (the frozen use text): a sampler call takes its own stream (05.1 §6 item 3), StepCtx::stream(purpose, entity) has no k, and seven normal calls on one (trait_draw, p) pair would be refused (SimError::StreamReuse); one rng draw per k keeps the frozen key (person, k), uses no float, and the reference reproduces it bit for bit. The shape is the sum of four uniforms (Irwin-Hall, n = 4): mean 0, sd trait_sd to SIGMA's rounding (relative 10^-10), support +-3.46 sd, excess kurtosis -0.3; like trait_sd itself, a design value.",
+  "A4 Creating a mind. create(p, t) appends one row: mind.person = p; the six traits and ambition by A3, keyed at t; stress, stress_in, stress_decayed and stress_relieved = 0; break_state = calm (code 0); break_timer = 0; refractory_until = 0; interrupt_day = 0; interrupts_today = 0. The step asserts INV-T1-05's trait half on the row (written once, never again). Only A5 (world start) and A6 (a first Promote) create a mind; t is the creation instant: 0 at world start, the Promote's instant otherwise (0 again for M7's tick-0 Promotes).",
+  "A5 World start (Architect ruling X4: one route, M7's). Genesis (rh-worldgen, SPR-011 ruling 10) names only the manifest's cast: it writes person.named = 1 for each cast member and 0 for every other founder, writes no mind.*, relation.*, opinion.*, thought.* or goal.* row, and draws nothing under T1's purposes. M7's dormancy pass at tick 0's Year/Polity sends Promote for the persons who meet its naming criteria (SPR-022), reading person.named lagged, so it sends none for a cast member. At t = 0, T1's Day/Agenda runs world_start before its other steps: one ascending pass over person.id (T1's only O(ledger) pass, once per run) creates a mind (A4, t = 0) for each person with person.named = 1, person.alive = 1 and no mind, in ascending PersonId, and refreshes its liege and vassal rows (A9's refresh(p), the implied pairs computed once for the step); then apply_commands and promote run as at any instant, so M7's tick-0 Promotes create their minds at t = 0 too, after the cast's, and a Demote M7 sends at tick 0 for a cast member applies by A7 to the mind world_start has just created (it is calm), so world_start never meets a Demote first. The Month/Agenda binding at t = 0 (A15) runs before world_start and finds no mind. Both routes key every draw at t = 0. No manifest seeds traits in P1a (CastMember.initial holds Registry [attributes], none of which is a HEXACO trait or ambition), so every trait is drawn. A run resumed from a keyframe (t > 0) never runs world_start.",
+  "A6 Promote{person: p} (from M7; drained by Day/Agenda in promote; key = living, so rh-core has already dropped one whose p is dead or absent, dropped{T1.minds, Promote, dead_key}). Applied in the inbox's key order (tick, phase, PersonId, seq). If person.named(p) = 1 as this step has it, the command's premise no longer holds: StepCtx::drop_command(command, DropReason::Ended), counted under dropped{T1.minds, Promote, ended} (two Promotes of one person reaching one drain, for one), and nothing changes. Else person.named(p) := 1, and p's mind, found through the person-to-row index with A2's scan, is reused as it is: traits, ambition, stress and its three accounting columns and every other mind column keep their kept values, never redrawn (REV-P1a MAJ-9; no accrual, decay or relief applies while dormant, so INV-T1-01's identity holds across promotions); with no mind, create(p, now) (A4). Then refresh(p) (A9) builds p's liege and vassal rows from the implied pairs the step computes once. p's opinion rows, expired or not, are kept as they are. The first polls are the I-steps' (T1-I/S).",
+  "A7 Demote{person: p} (from M7; drained by Day/Agenda in promote; key = living). If p has no mind (the person-to-row index with A2's scan) or person.named(p) = 0, the command's premise no longer holds: drop_command(command, DropReason::Ended), counted under dropped{T1.minds, Demote, ended}, and nothing changes. If p's break_state is pending or refractory, the command is dropped as deferred: drop_command(command, DropReason::Deferred), counted under dropped{T1.minds, Demote, deferred}, and nothing changes; M7's yearly dormancy pass sends Demote again while p still meets no naming criterion (REV-MINDS finding 15; next/M7's dormancy), so the deferral is re-scheduled under a new command, no state holds a deferred demotion and no dormant actor has a break pending. The reasons and the counter are SPR-038 stage B's one DropReason change (Architect ruling R14 of the wave-7 and minds re-check; CODEX/05_PROJECT/SPR-038_PerInstantCost.md, the specs table's DropReason row and T-07): Ended with the generic meaning 'the timer's or command's premise no longer holds', Deferred (reason name deferred), cancelled{system, timer kind, reason} through StepCtx::cancel_because(id, reason), and the Architect's 05.1 §2 rule 2 sentence; SPR-023 consumes them and adds no variant. Else (break_state = calm): (a) cancel p's own pending timers of the kinds poll, interrupt, break and refractory_end (StepCtx::own_timers(p) filtered by kind, each by cancel_because(id, DropReason::Ended), counted under cancelled{T1.minds, <kind>, ended}; the I- and S-steps schedule them, and while break_state = calm no break or refractory-end timer of p exists, INV-T1-02, so in practice polls and interrupts), and no other kind: never DEATH_DUE (entity = a victim: a decided murder is owed whoever the victim is, ADR-0025 item 1) nor MARRY_DUE (entity = the chooser: a decided marriage fires, and M2's N7 revalidates it then). In P1a a DEATH_DUE or MARRY_DUE is due at the next day start's Vital, before any Agenda that could apply a Demote, so the rule keeps an owed outcome whatever its delay (BCK-002 A-35 may lengthen it). (b) person.named(p) := 0. (c) Delete p's goal and thought rows (A12). (d) End p's open relation rows, those with relation.a = p (A9, through the a index with A2's scan; rows with p as b stay open, b need not be named). The mind row with its traits and stress, and p's opinion rows, are kept (ADR-0007).",
+  "A8 The instant's exits (Architect ruling X1). T1's Day/Vital binding runs after M2's Day/Vital level (the M2 -> T1 edge of the same_instant reads), so the engine's instant log already holds every death of the instant in exited() (SPR-038b: the persons whose person.alive went 1 -> 0 at a merge of this instant; every P1a death takes effect in Vital at a day start, from M2's timer pass or its drain). The exits step reads StepCtx::exited(), never a scan of person.alive: the list is ascending by PersonId across the whole instant, none listed twice (SPR-038 stage B T-07, its ruling T5; Architect ruling R9 of the minds re-check: the reader does not sort), and a reader sees only the merges completed before its job, which the M2 -> T1 edge gives. For each exited d, in that order, every open relation row with relation.b = d or relation.a = d gets ended_at := now (A9; through the b and a indexes), and d's thought rows are deleted (A12: no mind reads them; d's goal rows are S7's to clear, ClearGoal being key = any). d's mind row, its traits and its opinion rows are kept. With exited() empty the step does nothing (O(1)); otherwise it costs O(exits + rows ended). The grief step (T1-I/S) reads the same list.",
+  "A9 Liege and vassal rows (REV-MINDS finding 16). A relation row holds liege (b is a's liege) or vassal (b is a's vassal): the Registry [relation_kinds] codes 4 and 8 (its keys in byte-wise order, check_values.relation_codes); kinship is derived at read time (MAJ-5). The implied pairs at instant t come from M7's lagged columns (the start of t): for each title row j with h = title.holder(j) != 0 and L = title.liege(j) != 0, g = title.holder of the row whose title.id = L; for each office row o with h = office.holder(o) != 0, g = title.holder of the row whose title.id = office.title(o); each (h, g) with g != 0 and g != h implies (h, g, liege) and (g, h, vassal): the court of effect_language_v0.md §5 (a title's vassal titles' holders and its offices' holders). A pair (a, b, kind) is kept when person.named(a) = 1 as the step has it and both a and b have a ledger row with person.alive = 1 (same_instant; person_row through person.id); a repeated pair is one pair. refresh(a): O = a's open rows (ended_at = 0), through the a index with A2's scan, in row order; I = a's kept pairs sorted by (b, kind code); each row of O whose (b, kind) is not in I gets ended_at := t, in row order; then for each (b, kind) of I with no row in O, in that order, a row (a, b, kind, ended_at = 0) is appended. The relations step (Month/Agenda, at every Month pulse t_m) computes the implied pairs once and runs refresh(a) for each person a of the person-to-row index, in ascending PersonId, that has a ledger row with person.named(a) = 1 and person.alive(a) = 1 (a dead actor's mind outlives its ledger row: person_row is None, and it is skipped): a pair whose titles did not change since the previous refresh changes nothing, so rows change only where M7's titles or offices, or the named set, changed. Cost O(titles + offices + minds log minds) a month, nothing per instant. A6 runs refresh(p) for a promoted p (the pairs computed once per step), A7 ends every open row of a demoted p and A8 the rows of the exited. A row lags a title change by at most one calendar month; a death ends rows at its instant. So every open row has a named living a and a living b (INV-T1-12).",
+  "A10 OpinionModifier{holder, about, kind, magnitude, source_event} (from M7, S7 and T1's own DESPAIR_PACT send; drained by Day/Agenda in apply_commands; key = living on holder). Applied in key order for a living holder, named or not: M7 may send GRANTED_BY to a grantee that its same-instant dormancy pass promotes, and apply_commands precedes promote. One opinion row is appended: holder; about; kind (its [opinion_modifiers] code); magnitude := the kind's Registry magnitude (q8_8, A14) when that is not 0, else the command's magnitude clamped to [-25600, 25600] (VOW_BROKEN_BY, whose magnitude comes with S7's command; any other kind's payload magnitude is not read, so a sender passes 0 or the Registry's value); source_event := the command's source_event (an EventId after the merge; none as 2^64 - 1, 05.1 §2 rule 2's -1); expires := now + months(kind) x MONTH (A0, A14), so a CLAIM_PRESSED_BY (120 months) applied at t expires at t + 5,256,000 at 365 days and t + 5,184,000 at 360. about is not checked: a modifier about a person who dies is kept and counts until it expires. Rows are never removed or changed. The interrupt that follows a new KIN_HARMED_BY or PASSED_OVER is the I-steps'.",
+  "A11 opinion(a, b) at instant t, read by any step: the rows of the (opinion.holder, opinion.about) = (a, b) index, with A2's scan, whose expires > t (a modifier counts from the instant it is applied to the last instant before expires, never at expires); sum = the sum of their magnitudes in i64 (each |magnitude| <= 25600); opinion = clamp(sum, -25600, 25600), q8_8 on -100..100 (INV-T1-06), derived and never stored. Five KIN_HARMED_BY (-60 each) on one pair sum to -76800 and read -25600. The expire step does no opinion work: expiry is the read's filter, and the index keeps expired rows so that it always equals its rebuild (A2); a pair's rows grow by one per command, so a read costs O(the pair's rows).",
+  "A12 Thoughts and goals (from S6 and S7: stub senders in SPR-023's tests, P1b's real ones). The thought table is kept sorted by (thought.holder, overlay code) with one row per pair, the goal table by (goal.holder, goal.vow) with one row per pair; an insertion or a removal keeps the order. Each command applies to its living key person, named or not, as A10. ApplyThought{holder, overlay, delta, source_event} and ApplyInfluence{bearer, overlay, delta}: d = clamp(delta, 0, 256) in q8_8 raw (delta is in overlay points, 0..1); the (holder, overlay) row is found, or inserted with magnitude 0; magnitude := min(cap, magnitude + 100 x d) with cap = narrow(thought_cap), the sum in i32 (12,800 + 25,600 = 38,400 at the Registry's largest cap exceeds i16; the result fits q8_8); source_event := the payload's source_event (ApplyThought) or the command's cause (ApplyInfluence), none as 2^64 - 1; refreshed_at := now. AgendaGoal{vow, holder, kind, target, priority}: the (holder, vow) row is inserted, or overwritten, with kind, target and priority. ClearGoal{vow, holder} (key = any: applied for a dead holder too): the (holder, vow) row is removed if present; else the command's premise no longer holds and it is dropped as ended (dropped{T1.minds, ClearGoal, ended}). Thought decay, in the expire step (Month/Agenda at t_m): each thought row with refreshed_at < t_prev, the previous Month pulse (i64::MIN at the first), that is with no command applied at an instant in [t_prev, t_m), gets magnitude := max(0, magnitude - narrow(thought_decay)), in table order; a row at 0 is kept. A Demote deletes the holder's rows in both tables (A7), an exit its thought rows (A8).",
+  "A13 Absent owners. T1's identity reads require M2 and M7 (EVO-001 R12): registration refuses a world that registers T1 without either, naming the system, the column and the owner (rule absent-owner); SPR-023 develops against a stub M7 owner (ruling X5). The rate reads vow.conflict (S7; q8_8; neutral 0.0, raw 0) and artifact.rumour_reach (S6; u16; neutral 0) are dropped and reported in a world without their owners: their columns enumerate as empty tables and a keyed lookup returns the neutral; no A-step reads them (stress_month and the seek consideration are T1-I/S's). The A-steps send nothing; the I- and S-steps' sends to M4, S6 and S7 are dropped at submit as absent_owner. Thoughts and goals come only from S6 and S7, so a world without them has no thought or goal row.",
+  "A14 The Registry tables the A-part reads, as rh-manifest types them (unknown fields refused) and rh-registry compiles them, every decimal exact and rounded half to even to q8_8 (SPR-011 ruling 9; the Rust typing is SPR-023 T-01's). [relation_kinds]: snake_case ids, each { closeness: a decimal in [0, 1] }; refused: an unknown or missing field, a closeness outside [0, 1], a missing liege or vassal id (A9), or a missing kinship id the grief step reads (parent, child, spouse, sibling, grandparent, grandchild, kin_other); codes are the ids in byte-wise order. [opinion_modifiers]: UPPER_SNAKE ids, each { magnitude: a decimal in [-100, 100]; months: an integer in [1, 65535] (u16) }; refused: an unknown or missing field, a magnitude outside [-100, 100], months not an integer or outside [1, 65535]; codes are the ids in byte-wise order. [overlay_traits]: each key an [overlays] id, each value a table from a HEXACO trait name (the six of A3, mind. dropped) to a decimal in [-100, 100], trait points per overlay point; refused: a key that is no [overlays] id, a trait name not among the six (ambition is not shifted by a thought), a value outside [-100, 100]; an [overlays] id without an entry shifts nothing (dragon_sympathy). The A-steps read [relation_kinds]' liege and vassal codes and [opinion_modifiers]; [overlay_traits] is typed here and read by the I-steps' effective traits. check_values pins the v0 Registry's compiled values.",
+  "A15 The order of the steps. Day/Vital: outcome_due (the timer pass), exits (A8), grief, threshold. Month/Agenda, which runs before Day/Agenda at a month's first instant (two bindings of one system at one level run in turn, the coarser pulse first, with a merge between them: 05.1 §2 rule 4): relations (A9), stress_month, expire (A11, A12), threshold. Day/Agenda: world_start (A5, t = 0 only), apply_commands (A10, A12), promote (A6, A7), break_act, refractory_end, decide, threshold; the binding takes its whole inbox at the start of its step, and each step applies its own kinds in the inbox's key order. Commands that M7, S6 and S7 submit in an earlier phase of the instant (M7 at Polity, the stub senders at theirs) reach this drain in the same instant (05.1 §2 rule 2). An idle binding is O(1): Day/Vital with exited() empty and no T1 timer due, Day/Agenda with an empty inbox and no timer due at t > 0.",
+  "A16 Invariant cadence (REV-WAVE6 X1 and V3). T1's invariants(), which rh-core calls at every instant's Bookkeeping, is O(1): every mind.* column as long as mind.person, and relation.*, opinion.*, thought.* and goal.* each aligned. A step asserts each invariant on the rows it writes (INV-T1-05 on the mind it creates, INV-T1-06 on each sum it computes, INV-T1-11 on each Promote and Demote it applies, INV-T1-12 on each actor it refreshes and each row it ends); the full checks over every row are test observers at every month end and at the run's end, and INV-T1-14 at every keyframe and at the run's end. Each statement names its cadence; each test field keeps its V-id. No invariant is O(rows) per instant.",
+]
+# Check values (specs/minds/selftest_minds_v0.py asserts them; every integer exact). A Registry table's codes are its `ids` list in
+# order where it has one ([overlays]), else its keys in byte-wise order (lint_odd.py enum_codes); closeness, magnitudes and trait
+# shifts are q8_8 raw, rounded half to even from the exact decimal.
+check_values = { sigma_q16 = 2479700524, trait_field_mean = 131070, trait_field_max = 262140, ambition_mean_raw = 12800, trait_bounds_raw = [-25600, 25600], month_minutes = [43200, 43800], relation_codes = ["child", "grandchild", "grandparent", "kin_other", "liege", "parent", "sibling", "spouse", "vassal"], closeness_raw = [256, 128, 102, 51, 51, 256, 154, 256, 26], opinion_codes = ["CLAIM_PRESSED_BY", "DEPOSED_BY", "DESPAIR_PACT_WITH", "FEUD_WITH", "GRANTED_BY", "KIN_HARMED_BY", "MARRIED_TO", "PASSED_OVER", "VOW_BROKEN_BY", "VOW_FULFILLED_BY"], opinion_magnitude_raw = [-7680, -15360, 7680, -10240, 5120, -15360, 7680, -7680, 0, 5120], opinion_months = [120, 600, 240, 240, 240, 600, 600, 240, 240, 240], overlay_codes = ["paranoia", "filial_piety", "despair", "hubris", "corruption", "dragon_sympathy"], overlay_traits_raw = { corruption = { honesty_humility = -25600 }, hubris = { honesty_humility = -12800, extraversion = 12800 }, paranoia = { agreeableness = -12800, emotionality = 12800 }, despair = { extraversion = -12800, emotionality = 12800 }, filial_piety = { conscientiousness = 12800, agreeableness = 12800 } } }
+
+[initialization]
+state = "World creation (journaled) names only the manifest's cast: person.named = 1 for each cast member, 0 for every other founder, and no T1 row (Architect ruling X4). The members of great houses who meet M7's criteria (SIM-9) are named by M7's dormancy pass at tick 0's Year/Polity, which sends Promote; at t = 0 T1's Day/Agenda creates a mind for each cast member (world_start) and then for each person Promoted at t = 0 (promote) ([algorithm.minds_f1] A5). Every named actor's traits and ambition come from trait_draw keyed at t = 0 (no manifest seeds traits in P1a); stress 0, calm; liege and vassal rows from M7's titles as they stand at the start of t = 0 (kinship is derived from M2 when read, so nothing is built for it); no opinion modifiers; first polls at poll_jitter offsets (T1-I/S)"
+from_manifest = ["cast", "dynasties", "peoples"]
+
+[input_data]
+drivers = []
+
+# ----------------------------------------------------------------------------- parameters (exactly the Registry's set)
+[[params]]
+name = "stress_threshold"
+meaning = "Stress (0-100) at which a calm adult actor crosses into a pending break"
+source = "design value (ADR-0035; 05.3 §2.1). Settled by the break band V-SAGA-16 on the kingdom ensemble and the director's reading of G1a histories"
+[[params]]
+name = "stress_decay"
+meaning = "Stress removed per month (points), floored at 0"
+source = "design value (ADR-0035). Settled with stress_threshold by V-SAGA-16"
+[[params]]
+name = "vow_conflict_gain"
+meaning = "Stress per month at full vow conflict: vow_conflict_gain x min(1, sum of the actor's active vows' conflict) (P1b)"
+source = "design value (ADR-0035; 05.3 §2.1). Settled by V-SAGA-16 and the G1b saga digests"
+[[params]]
+name = "break_delay_max_days"
+meaning = "Upper bound of the keyed delay from a threshold crossing to the break (the delay is 1..this many days)"
+source = "design value (ADR-0035). No band: it shapes pacing, not rates"
+[[params]]
+name = "grief_gain"
+meaning = "Stress from the death of a relation of closeness 1 (parent, child, spouse); a relation of closeness c gives c x grief_gain"
+source = "design value (RT-2026-10-16 item 1). Settled by the cascade scenario test and V-SAGA-16"
+[[params]]
+name = "grief_instant_cap"
+meaning = "The most grief stress one actor takes in one instant, whatever the number of deaths (saturation per instant, RT-2026-10-16 item 1)"
+source = "design value (RT-2026-10-16 item 1). The Registry bounds keep it below stress_threshold ([5, 45] against [50, 95]; MIN-5), so one massacre alone cannot push a calm actor at stress 0 over it"
+[[params]]
+name = "loyalty_conflict_gain"
+meaning = "Stress per month while the actor serves (office under, or vassal of) a person it knows harmed its kin, with no active vow against that person (the vow's conflict covers that case, so the two never add) (P1b)"
+source = "design value (ADR-0035 'being made to serve a father's murderer'). Settled by V-SAGA-16 and G1b readings"
+[[params]]
+name = "dissonance_gain"
+meaning = "Stress from committing an act whose class [act_dissonance] ties to a trait: dissonance_gain x max(0, trait)/100 (value conflict); break acts never add dissonance"
+source = "design value (ADR-0035 'a value conflicts with the situation'). Settled by V-SAGA-16"
+[[params]]
+name = "break_refractory_days"
+meaning = "Days after a break during which stress still accrues but no new break is scheduled (per-actor refractory period, RT-2026-10-16 item 1)"
+source = "design value (RT-2026-10-16 item 1). Settled by the cascade scenario test: an actor never breaks twice inside it"
+[[params]]
+name = "attempt_success"
+meaning = "Chance that one MURDER_ATTEMPT kills its target"
+source = "design value; no source on medieval assassination success read. Interacts with M7's background murder hazard (see couplings): settled by recalibrating murder_hazard_base so V-SF-06 holds coupled"
+[[params]]
+name = "trait_sd"
+meaning = "Standard deviation of drawn traits and ambition, in points on their scales"
+source = "design value; HEXACO scales have no natural unit on -100..100, so this is a mapping choice"
+[[params]]
+name = "iaus_top_k"
+meaning = "How many best-scoring candidates the keyed weighted choice draws among (1 = argmax)"
+source = "design value (05.3 §3; Dill's IAUS practice of weighted random among the top scores)"
+[[params]]
+name = "interrupt_daily_cap"
+meaning = "Interrupt re-evaluations per actor per day (05.1 §4.3)"
+source = "design value (05.1 §4.3; V-COG-03)"
+[[params]]
+name = "thought_cap"
+meaning = "Upper bound on a thought's magnitude in trait points: an artifact or curse can shift what IAUS reads by at most this much per overlay"
+source = "design value (RT-2026-10-16 item 8). Settled by V-SAGA-13 (b) and the corrupted-bearer readings at G1b"
+[[params]]
+name = "thought_decay"
+meaning = "Trait points a thought loses per month without a refreshing command (a relic taken away loosens its hold)"
+source = "design value (RT-2026-10-16 item 8)"
+[[params]]
+name = "marriage_min_age"
+meaning = "Youngest age (years) at which an actor is a marry candidate or chooser"
+source = "design value; canonical minimums of 12 and 14 are the lower end (not yet read from a source)"
+
+# ----------------------------------------------------------------------------- submodels (ODD 7)
+[[submodels]]
+name = "grief"
+summary = "In the Day/Vital binding of a death instant (a day start; round 3, BLK-1). The dead are the persons with alive = 0 and death_tick = now, readable until Bookkeeping of this instant (SPR-011 ruling 5; a read of a dead row after it is a bug), in ascending PersonId. For each dead d, the grievers are the named actors kin to d, derived through kin(d, 2), the effect-language relation (SPR-017, PR #41 §5.3) over M2's life_course.mother and life_course.father (so a grandparent is reached through a dead parent; round 4, NEW-1), plus the living spouse from person.spouse, (parents, children, spouse, siblings, grandparents, grandchildren; kin_other: uncles, aunts, nephews, nieces, first cousins), plus the holders of unended liege or vassal rows with b = d; a pair related in several ways counts its closest kind once. For each griever a: g_a = min(grief_instant_cap, sum over this instant's dead of grief_gain x closeness(kind)); stress_a := min(100, stress_a + g_a); stress_in += the applied amount; rows with b = d get ended_at := now. A child born after its parent's promotion is grieved like any other: kinship is read, not stored (MAJ-5); A dead named actor: cancel its polls, interrupts and break or refractory timer, end its feuds (FEUD_ENDED), keep its rows (no compaction). The deaths are M2's death timers in this Vital slot: every death, however caused, takes effect there (BCK-002 A-30)"
+earns_its_place_by = ["V-SAGA-16", "V-SAGA-16b"]
+[[submodels]]
+name = "threshold"
+summary = "For each actor changed in this binding: if adult (age >= marriage_min_age), break_state = calm and stress >= stress_threshold, then break_state := pending and a break timer is scheduled at (now + d days, Agenda) with d = 1 + break_delay draw mod break_delay_max_days; break_timer := its TimerId. A crossing is the false-to-true transition of (adult and calm and stress >= threshold); a minor's stress accrues and is evaluated at majority. Deterministic: no draw decides whether"
+earns_its_place_by = ["V-SAGA-16"]
+[[submodels]]
+name = "apply_commands"
+summary = "AgendaGoal{vow, holder, kind, target, priority}: upsert the goal row; ClearGoal{vow, holder}: delete the goal row (goals are agenda entries, not history; the vow keeps the history). OpinionModifier{holder, about, kind, magnitude?, source_event}: add a row expiring after the kind's months. ApplyInfluence{bearer, overlay, delta} and ApplyThought{holder, overlay, delta, source_event}: thought.magnitude := min(thought_cap, magnitude + delta x 100) (delta in overlay points, 0..1). An interrupt (re-evaluation at t + 1 day, within interrupt_daily_cap) follows a new goal or a new KIN_HARMED_BY or PASSED_OVER modifier"
+earns_its_place_by = ["V-SAGA-13", "V-SAGA-03"]
+[[submodels]]
+name = "promote"
+summary = "First Promote{person}: person.named := true; a mind row appended with mind.person = person; traits and ambition from trait_draw (keyed by this instant, drawn once; no manifest seeds traits in P1a); stress 0 and the three accounting columns 0, calm; liege and vassal rows from M7's titles (refresh); first polls at poll_jitter offsets (T1-I/S). A Promote of a named person is dropped as ended and changes nothing. Demote{person}: of an unnamed person, dropped as ended; while break_state is pending or refractory, dropped as deferred (dropped{T1.minds, Demote, deferred}) and changes nothing, M7's yearly dormancy pass sending it again; else cancel the actor's poll, interrupt, break and refractory-end timers (counted under cancelled{T1.minds, kind, ended}; never a DEATH_DUE or MARRY_DUE: an owed outcome), person.named := false, delete its goals and thoughts, end its open relation rows; every mind row is kept (no history is compacted, ADR-0007). Re-promotion (round 3, MAJ-9): person.named := true and the kept rows are reused as they are, never redrawn: traits, ambition, stress and stress_in, stress_decayed, stress_relieved resume their kept values (no accrual, decay or relief applies while dormant, so INV-T1-01's identity holds across any number of promotions); expired opinions stay expired; liege rows are rebuilt; new polls at poll_jitter offsets keyed by the re-promotion instant ([algorithm.minds_f1] A6, A7)"
+earns_its_place_by = ["V-INV-12", "V-SAGA-16"]
+[[submodels]]
+name = "break_act"
+summary = "When a break timer fires for actor a: the available acts are the [mental_breaks] entries whose needs a meets (stressor: the target of a's highest-conflict vow (P1b), else the culprit of a's most recent known kin harm (P1b), else a's active feud enemy with the lowest opinion; seat: a holds a title; kin: a living named relation; holdings: M4 registered). FLIGHT needs nothing, so the set is never empty. Weight of act k = clamp(1 + sum over traits of w_k,t x trait_t/100, 0.1, 2.0); the break_act draw picks one. Emit MENTAL_BREAK (motive edge to the crossing's cause) and the act's verb; apply its effects: MURDER_ATTEMPT on the stressor, break_outcome against attempt_success, success schedules a DEATH_DUE timer at (the next day start, Vital) (entity = stressor, payload = a, cause = the MURDER_ATTEMPT; EVO-001 R9) whose fire submits ScheduleDeath {victim = stressor, cause = murder, culprit = a, cause_event = the MURDER_ATTEMPT}; FLED sends Resign for each office of a (P1b: fugitive status via S3); HOLDINGS_BURNED destroys a's household stocks (M4, P1b); DESPAIR_PACT adds DESPAIR_PACT_WITH modifiers both ways with the stressed relation (an OpinionModifier self-send, applied at the next tick boundary) and sends RenounceClaim for a's claims. Then stress := max(0, stress - relief); stress_relieved += the applied amount; break_state := refractory; refractory_until := now + break_refractory_days; a refractory-end timer is scheduled"
+earns_its_place_by = ["V-SAGA-16"]
+[[submodels]]
+name = "refractory_end"
+summary = "At refractory_until: break_state := calm, break_timer := 0; if the actor is adult and stress >= stress_threshold, this is a crossing (threshold schedules the next break). Stress accrued during the refractory period is kept, so a still-overwhelmed actor breaks again, at most once per refractory period"
+earns_its_place_by = ["V-SAGA-16"]
+[[submodels]]
+name = "decide"
+summary = "Due decisions are polls (every poll_months of the type) and interrupts. Candidates come from the actor's situation only (GOV-003 §6 row 5): marry: unmarried named adults of the other sex, age >= marriage_min_age, in the actor's court or relation set, not parent, child or sibling; seek_office: vacant offices and seats held in demesne in the actor's court; press_claim: the actor's own active unpressed claims; feud: declare against persons the actor holds a negative opinion of in its court or relation set, attack an active feud's enemy, or reconcile; swear_vow (P1b): harms to the actor or its kin by a culprit it knows; pursue_goal (P1b): the next step toward each agenda goal. Every type also scores 'do nothing'. Score (round 3, MAJ-6) = the product, over the type's considerations in [decision_types], of response_curve(input), where each input is defined in the Registry's [considerations] (what it reads, its domain, its type) and each curve in [response_curves] (piecewise-linear, Q16_16 knots, clamped at the ends, output in [0, 1]); then the IAUS compensation for n considerations: score + (1 - score) x (1 - 1/n) x score, in Q16_16, rounded down. Traits are read through thoughts: effective trait = clamp(trait + clamped sum of thought deltas, -100, 100). 'Do nothing' scores the type's idle_score. Candidates are listed in ascending target id; the iaus_select draw chooses among the iaus_top_k best (ties in ascending target id). A feud attack's success is drawn with attack_outcome and kills through ScheduleDeath at the next day start. Scoring reads the start-of-Agenda snapshot; actions apply in action_order; an action whose read set an earlier write intersects and whose precondition now fails re-scores once, then defers to the next poll (05.1 §4.3). Each applied decision records its top contributors and margin as motivated_by edges; a chosen act whose class is in [act_dissonance] adds dissonance stress. Vow weight (goal.priority) is a consideration of pursue_goal only"
+earns_its_place_by = ["V-COG-03", "V-COG-04", "V-COG-10", "V-SAGA-13", "V-SAGA-09"]
+[[submodels]]
+name = "stress_month"
+summary = "For each named actor: s_vow = vow_conflict_gain x min(1, sum of vow.conflict over its active vows) (P1b); s_loy = loyalty_conflict_gain if it serves a known harmer of its kin with no active vow against them (P1b); stress := min(100, stress + s_vow + s_loy), then stress := max(0, stress - stress_decay); stress_in and stress_decayed take the applied amounts. All arithmetic in q8_8, saturating"
+earns_its_place_by = ["V-SAGA-16"]
+[[submodels]]
+name = "expire"
+summary = "Opinion modifiers whose expires <= now leave the sums (rows kept); each thought without a command this month loses thought_decay points, floored at 0"
+earns_its_place_by = ["V-COG-01"]
+[[submodels]]
+name = "world_start"
+summary = "At t = 0 only ([algorithm.minds_f1] A5; Architect ruling X4): genesis named only the manifest's cast (person.named = 1); one ascending pass over person.id creates a mind (A4, keyed at t = 0) for each named person without one, in ascending PersonId, and builds its liege and vassal rows (A9); M7's tick-0 Promotes are applied after it by promote, at t = 0 too. T1's only O(ledger) pass, once per run"
+earns_its_place_by = ["V-INV-12"]
+[[submodels]]
+name = "exits"
+summary = "In Day/Vital, after M2's level ([algorithm.minds_f1] A8; Architect ruling X1): the instant's exited persons from the engine's instant log (StepCtx::exited(), SPR-038b), in ascending PersonId; their open relation rows, as a or as b, end at this instant and their thought rows are deleted; minds and opinions are kept. O(1) with no exit, never a scan of person.alive"
+earns_its_place_by = ["V-SAGA-16", "V-INV-15"]
+[[submodels]]
+name = "relations"
+summary = "In Month/Agenda at every Month pulse ([algorithm.minds_f1] A9; REV-MINDS finding 16): the liege and vassal pairs M7's lagged titles and offices imply (a title's vassal titles' holders and its offices' holders serve its holder), kept for a named living a and a living b; each named living actor's open rows are brought to its pairs, the rows no longer implied ended and the new pairs appended, in ascending PersonId. O(titles + offices + minds log minds) a month"
+earns_its_place_by = ["V-SAGA-16"]
+
+# ----------------------------------------------------------------------------- invariants
+[[invariants]]
+id = "INV-T1-01"
+statement = "For every mind at every tick boundary: stress = stress_at_creation + (stress_in - stress_decayed - stress_relieved)/256 exactly, and 0 <= stress <= 100. Cadence ([algorithm.minds_f1] A16; REV-WAVE6 X1): asserted by each step on each mind whose stress it writes (the S-steps, T1-I/S); checked over every mind by a test observer at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+test = "V-SAGA-16"
+[[invariants]]
+id = "INV-T1-02"
+statement = "Each threshold crossing schedules exactly one break timer; a break timer fires at its own tick unless its actor died first (then it is cancelled and counted as cancelled); a Demote met while break_state is pending or refractory is dropped as deferred and changes nothing ([algorithm.minds_f1] A7), so no actor goes dormant with a break pending; break_state is pending exactly while that timer is live; every fired break's act is a [mental_breaks] entry. Cadence (A16): asserted by the S-steps on each break they schedule or fire and by the promote step on each Demote; checked over every mind and T1 timer by a test observer with agenda access at every month end and at the run's end (REV-MINDS P2); invariants() checks only that the columns are aligned (O(1))"
+test = "V-SAGA-16"
+[[invariants]]
+id = "INV-T1-03"
+statement = "No break is scheduled while the actor is refractory; two breaks of one actor are at least break_refractory_days apart. Cadence (A16): asserted by the S-steps on each break they schedule; checked over every actor's breaks by a test observer at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+test = "V-SAGA-16"
+[[invariants]]
+id = "INV-T1-04"
+statement = "The grief stress one actor takes in one instant is at most grief_instant_cap. Cadence (A16): asserted by the grief step on each griever (T1-I/S); checked over every instant's grief by a test observer at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+test = "V-SAGA-16"
+[[invariants]]
+id = "INV-T1-05"
+statement = "Trait and ambition columns never change after a mind is created, a re-promotion included (the kept row is reused, never redrawn: [algorithm.minds_f1] A6); each thought's magnitude stays in [0, thought_cap] (q8_8, the cap narrowed from its Q16_16 bits: A12). Cadence (A16): the creating step asserts the trait half on the row it appends and each thought write asserts the bound; a test observer compares every mind's traits with the draw keyed at its creation instant (A3), and checks every thought, at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+test = "V-COG-01"
+[[invariants]]
+id = "INV-T1-06"
+statement = "Opinion = clamp(sum of unexpired modifiers, -100, 100), summed in i64 and clamped in q8_8 ([algorithm.minds_f1] A11); a modifier counts at t iff t < expires, so an expired modifier never counts; a sum read in the binding that appended a modifier includes it (A2). Cadence (A16): each step asserts the clamp on every sum it computes; a test observer recomputes every (holder, about) sum from the whole table at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+test = "V-COG-01"
+[[invariants]]
+id = "INV-T1-07"
+statement = "Decisions happen only at polls and interrupts; an interrupt fires at t + 1 day or later; at most interrupt_daily_cap interrupts per actor per day and one re-score per actor per instant. Cadence (A16): asserted by the decide step on each decision and interrupt (T1-I/S); checked over every decision by a test observer of the agenda (V-COG-03's instrumentation); nothing per instant in invariants()"
+test = "V-COG-03"
+[[invariants]]
+id = "INV-T1-08"
+statement = "T1.minds writes only its own columns; marriages, deaths, claims, seats, vows and artifacts change only through lifecycle commands to their owners. Cadence (A16): at registration (the AccessSpec against this spec, V-INV-04) and by rh-core's write guard on every step (SystemView refuses an unowned write); nothing per instant in invariants()"
+test = "V-INV-04"
+[[invariants]]
+id = "INV-T1-09"
+statement = "No vow priority enters a survival decision (no decision type other than pursue_goal reads goal.priority). Cadence (A16): at load (no [decision_types] entry other than pursue_goal names a consideration that reads goal.priority, T1-I/S) and by a test observer of the decide step; nothing per instant in invariants()"
+test = "V-SAGA-09"
+[[invariants]]
+id = "INV-T1-10"
+statement = "From P1b, every decision, feud declaration and vow that responds to an event references a knowledge row of its actor acquired at or before its tick. Cadence (A16): asserted by the step that records each such act (P1b) and checked by a test observer at every month end and at the run's end; nothing per instant in invariants()"
+test = "V-SAGA-18"
+[[invariants]]
+id = "INV-T1-11"
+statement = "Naming ([algorithm.minds_f1] A4-A7): person.named is written only by genesis, for exactly the manifest's cast (Architect ruling X4), and by T1's promote step (Promote sets it, Demote clears it); every person with person.named = 1 has exactly one mind row and mind.person is unique; a mind row is never removed, and a re-promotion reuses it. Cadence (A16): the promote step asserts it on each Promote and Demote it applies; a test observer checks the genesis named set and every row at every month end and at the run's end; invariants() checks only that the mind columns are aligned (O(1))"
+test = "V-INV-12"
+[[invariants]]
+id = "INV-T1-12"
+statement = "Relations ([algorithm.minds_f1] A9): every open relation row (ended_at = 0) is liege or vassal, with a named living a and a living b != a, and no two open rows share (a, b, kind); right after a refresh of a, a's open rows are exactly a's implied pairs; ended_at is written once. Cadence (A16): the relations, promote and exits steps assert it on each actor they refresh and each row they end; a test observer checks every row at every month end and at the run's end; invariants() checks only that the relation columns are aligned (O(1))"
+test = "V-SAGA-16"
+[[invariants]]
+id = "INV-T1-13"
+statement = "Thoughts and goals ([algorithm.minds_f1] A12): the thought table is sorted by (holder, overlay) with one row per pair, the goal table by (holder, vow) with one row per pair; right after a Demote of p, p has no thought or goal row, and right after p's exit, no thought row (a later command may add rows for a living holder, named or not: A10, A12). Cadence (A16): each write asserts the order and the uniqueness at its position; a test observer checks both tables at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+test = "V-COG-01"
+[[invariants]]
+id = "INV-T1-14"
+statement = "Derived indexes ([algorithm.minds_f1] A2): each of the four (person to mind row, relation.a, relation.b, (opinion.holder, opinion.about)) equals its rebuild from its table once rh-core's post-merge hook has run, and a lookup inside a binding returns what it would after the hook (the scan past the covered length); no index is in a hash, a keyframe or the journal. Cadence (A16): at every keyframe write and load and at the run's end (REV-WAVE5 W4's debug invariant), never per instant"
+test = "V-DET-05"
+
+# ----------------------------------------------------------------------------- couplings (ODD-R 8)
+[[couplings]]
+system = "S7.vows"
+direction = "in"
+via = "vow.conflict, read at the start of the instant, raises stress monthly (in a world without S7, SPR-014's registration rule drops the read and the neutral applies: s_vow = 0) (P1b; RT-2026-10-16 items 5 and 8: the collision rule lives in S7, minds reads its signal)"
+lag = "start of instant (lagged)"
+column = "vow.conflict"
+form = "s_vow = vow_conflict_gain x min(1, sum over the actor's active vows of vow.conflict), points per month"
+neutral = "vow.conflict = 0 for every vow (no vow stress)"
+output_bounds = ["0", "vow_conflict_gain points per month (at most 20 by the Registry bound)"]
+data_range = "conflict in [0, 1] by S7's definition. No empirical data on oath dissonance: a design choice, not a fit"
+beyond_range = "Not reachable: S7 bounds each conflict to [0, 1]; min(1, sum) saturates when several vows conflict at once, so max_active_vows cannot multiply it"
+source = "design value (ADR-0035; 05.3 §2.1; the design is inspired by Crusader Kings 3's stress, no code taken)"
+[[couplings]]
+system = "S6.artifacts"
+direction = "in"
+via = "artifact.rumour_reach, read at the start of the instant (in a world without S6, SPR-014's registration rule drops the read and the neutral applies: the seek consideration as at R = 0), enters the seek consideration of pursue_goal and of an ambitious actor's seek candidates (P1b; V-SAGA-13 b)"
+lag = "start of instant (lagged)"
+column = "artifact.rumour_reach"
+form = "seek consideration = 1 - h/(R + 1) when the actor's route-graph distance h to the artifact's place or bearer is at most R = rumour_reach, else 0; it multiplies the seek score"
+neutral = "rumour_reach = 0: only an actor at the artifact's own place (h = 0) knows of it"
+output_bounds = ["0", "1"]
+data_range = "R in [0, rumour_max_hops] (S6). No empirical data: fiction, so the form is a design choice"
+beyond_range = "Not reachable: S6 bounds R to [0, rumour_max_hops]"
+source = "design value (ADR-0035)"
+[[couplings]]
+system = "S6.artifacts"
+direction = "in"
+via = "ApplyInfluence commands become bounded thoughts that shift the traits IAUS reads (RT-2026-10-16 item 8); the trait columns never change"
+lag = "applied at the next tick boundary"
+[[couplings]]
+system = "S7.vows"
+direction = "in"
+via = "AgendaGoal, ClearGoal, OpinionModifier and ApplyThought commands (P1b)"
+lag = "applied at the next tick boundary"
+[[couplings]]
+system = "M2.demography"
+direction = "in"
+via = "the death path: deaths in the Vital slot of a day-start instant start grief in the same instant; the life-course mother and father give derived kinship (through the dead) and person.spouse marry eligibility. The dead row stays readable until rh-core compacts it at the start of Bookkeeping of the death instant (SPR-011 ruling 5); a read of a dead row after that instant is a bug"
+lag = "same instant for deaths; start of instant for genealogy"
+[[couplings]]
+system = "M7.dynasty"
+direction = "in"
+via = "Promote and Demote (dormancy, SIM-9); seats, offices, claims, houses and regencies define the situation sets"
+lag = "start of instant (lagged): a succession at Polity is seen by the next decision, which an interrupt schedules at t + 1 day or later anyway"
+[[couplings]]
+system = "M2.demography"
+direction = "out"
+via = "Marry and ScheduleDeath commands. A successful MURDER_ATTEMPT on a sovereign is a foreground murder on top of M7's background murder hazard: coupled, murder_hazard_base is recalibrated so V-SF-06 holds (see the M7 spec)"
+lag = "applied by M2's death path (BCK-002 A-30 sets the instant)"
+[[couplings]]
+system = "M7.dynasty"
+direction = "out"
+via = "PetitionSeat, PressClaim, RenounceClaim, Resign; M7 reads person.named as a mode read with neutral = false (nobody holds a mind when T1 is absent, so M7's dormancy sends nothing; R12) and reads no mind column"
+lag = "applied at the next tick boundary"
+[[couplings]]
+system = "S7.vows"
+direction = "out"
+via = "SwearVow (P1b); S7 reads mind.conscientiousness (resolve) and knowledge.knows (grudges)"
+lag = "applied at the next tick boundary; traits read at the previous pulse"
+[[couplings]]
+system = "S6.artifacts"
+direction = "out"
+via = "Transfer, Search, Destroy (P1b); S6 reads mind.honesty_humility (resistance)"
+lag = "applied at the next tick boundary"
+
+# ----------------------------------------------------------------------------- isolation (V-SF-22)
+[isolation]
+forcing = [
+  { input = "vow.conflict", series = "step", note = "P1b: one vow per actor; conflict 0 for 10 years, then 0.5, then 1.0 from year 20, then 0 from year 30; plus constant runs at 0, 0.5 and 1" },
+  { input = "artifact.rumour_reach", series = "step", note = "P1b: one relic; reach 0, then 3 hops from year 10, then rumour_max_hops from year 20; ambitious and unambitious actors at distances 0..6" },
+  { input = "person.alive", series = "historical:court_deaths", note = "scripted deaths on a fixture court: natural deaths at Brass rates, plus the cascade scenario: the sovereign murdered in front of the court at year 50" },
+]
+horizon = "1,000 sim-years on a fixture court of 60 named actors in 3 houses (genealogy and seats scripted, M7 and S7 stubbed: no petitions applied, no vows unless forced); the cascade scenario in an ensemble of 32 seeds"
+expect = "INV-T1-01 to 07 hold with 0 violations; stress stays in [0, 100] with exact accounting; breaks per 100 named-actor-years inside 0.5 to 5 under the P1b forcing and reported (with the shortfall stated) under P1a sources alone; cascade scenario: in the year after the sovereign's murder the court's break rate rises but stays inside the band in the ensemble mean, no actor breaks twice within break_refractory_days, and the chain branching ratio (breaks caused per break, via MURDER_ATTEMPT deaths and grief) is below 1, so no chain runs away without a lock or a cap; break counts fall back to baseline within 5 years"
+
+[verification]
+tests = ["V-SAGA-16", "V-SAGA-16b", "V-COG-01", "V-COG-03", "V-COG-04", "V-COG-10", "V-SAGA-09", "V-SAGA-13", "V-SAGA-18", "V-INV-04", "V-INV-12", "V-SF-22", "V-SF-23", "V-DET-12", "V-DET-05", "V-INV-15"]
+prototype = ""
+
+# ----------------------------------------------------------------------------- amendments of the frozen 0.3.3 text (T1-A)
+# A frozen text changes only through an [[amends]] record, lint-checked and locked (REV-SPR-015 R1; specs/systems/next/README.md).
+[[amends]]
+of = "initialization.state"
+frozen = "World creation (journaled) names the cast and the members of great houses who meet M7's criteria (SIM-9). A named actor's traits and ambition come from the manifest's cast entry where given, else from trait_draw; stress 0, calm; liege and vassal rows from M7's titles (kinship is derived from M2 when read, so nothing is built for it); no opinion modifiers; first polls at poll_jitter offsets"
+to = "World creation (journaled) names only the manifest's cast: person.named = 1 for each cast member, 0 for every other founder, and no T1 row (Architect ruling X4). The members of great houses who meet M7's criteria (SIM-9) are named by M7's dormancy pass at tick 0's Year/Polity, which sends Promote; at t = 0 T1's Day/Agenda creates a mind for each cast member (world_start) and then for each person Promoted at t = 0 (promote) ([algorithm.minds_f1] A5). Every named actor's traits and ambition come from trait_draw keyed at t = 0 (no manifest seeds traits in P1a); stress 0, calm; liege and vassal rows from M7's titles as they stand at the start of t = 0 (kinship is derived from M2 when read, so nothing is built for it); no opinion modifiers; first polls at poll_jitter offsets (T1-I/S)"
+reason = "Architect ruling X4: world-start naming has one route, M7's dormancy pass at tick 0's Year/Polity; genesis names only the cast, and T1 creates a mind for the cast and for each person Promoted at t = 0 ([algorithm.minds_f1] A5). No manifest path seeds traits (CastMember.initial holds Registry attributes, none of them HEXACO), so the cast-entry clause is dropped"
+[[amends]]
+of = "rng.trait_draw.use"
+frozen = "entity = the person, k = 0..5 the HEXACO traits in the column order of [[owns]], 6 ambition; t = the instant of the first promotion (or world creation). One rh-sample normal call per k, sd trait_sd, clamped to the scale, for actors the manifest does not seed. Drawn once: a re-promotion reuses the kept rows (round 3, MAJ-9)"
+to = "entity = the person, k = 0..5 the HEXACO traits in the column order of [[owns]], 6 ambition; t = the instant the mind is created: a first Promote's instant, or t = 0 at world start (a cast member named at genesis, or M7's tick-0 Promote); the person's epoch at that instant. One StepCtx::rng draw per k, its four 16-bit fields summed and scaled exactly to sd trait_sd, rounded half to even to q8_8 and clamped to the scale ([algorithm.minds_f1] A3: a sampler call takes its own stream and StepCtx::stream has no k, so seven normal calls on one (purpose, person) pair would be refused); every mind is drawn, no manifest seeding traits in P1a. Drawn once: a re-promotion reuses the kept rows (round 3, MAJ-9)"
+reason = "The frozen text cannot be built: a sampler call takes its own stream (05.1 §6 item 3), StepCtx::stream(purpose, entity) has no k, and seven normal calls on one (trait_draw, person) pair are refused as StreamReuse; one StepCtx::rng draw per k keeps the frozen key (person, k) and is exact in integers ([algorithm.minds_f1] A3). The key's t is stated: the creation instant, 0 at world start (the minds plan's specs table, rows 1 and 6; ruling X4)"
+[[amends]]
+of = "submodels.promote.summary"
+frozen = "First Promote{person}: person.named := true; traits and ambition from the manifest or trait_draw (keyed by this instant, drawn once); stress 0 and the three accounting columns 0, calm; liege and vassal rows from M7's titles; first polls at poll_jitter offsets. Demote{person}: deferred while break_state is pending or refractory; else cancel the actor's timers, person.named := false, clear goals and thoughts; every mind row is kept (no history is compacted, ADR-0007). Re-promotion (round 3, MAJ-9): person.named := true and the kept rows are reused as they are, never redrawn: traits, ambition, stress and stress_in, stress_decayed, stress_relieved resume their kept values (no accrual, decay or relief applies while dormant, so INV-T1-01's identity holds across any number of promotions); expired opinions stay expired; liege rows are rebuilt; new polls at poll_jitter offsets keyed by the re-promotion instant"
+to = "First Promote{person}: person.named := true; a mind row appended with mind.person = person; traits and ambition from trait_draw (keyed by this instant, drawn once; no manifest seeds traits in P1a); stress 0 and the three accounting columns 0, calm; liege and vassal rows from M7's titles (refresh); first polls at poll_jitter offsets (T1-I/S). A Promote of a named person is dropped as ended and changes nothing. Demote{person}: of an unnamed person, dropped as ended; while break_state is pending or refractory, dropped as deferred (dropped{T1.minds, Demote, deferred}) and changes nothing, M7's yearly dormancy pass sending it again; else cancel the actor's poll, interrupt, break and refractory-end timers (counted under cancelled{T1.minds, kind, ended}; never a DEATH_DUE or MARRY_DUE: an owed outcome), person.named := false, delete its goals and thoughts, end its open relation rows; every mind row is kept (no history is compacted, ADR-0007). Re-promotion (round 3, MAJ-9): person.named := true and the kept rows are reused as they are, never redrawn: traits, ambition, stress and stress_in, stress_decayed, stress_relieved resume their kept values (no accrual, decay or relief applies while dormant, so INV-T1-01's identity holds across any number of promotions); expired opinions stay expired; liege rows are rebuilt; new polls at poll_jitter offsets keyed by the re-promotion instant ([algorithm.minds_f1] A6, A7)"
+reason = "REV-MINDS finding 15 and M5: a deferred Demote is dropped (DropReason::Deferred, SPR-038 stage B's under ruling R14) and M7's yearly pass resends it, so no state holds it; a Promote of a named person and a Demote of an unnamed one are dropped as ended (R14's generic Ended); M6: the timers a Demote cancels are named (poll, interrupt, break, refractory end, counted under cancelled{...}; never DEATH_DUE or MARRY_DUE); a Demote ends the actor's relation rows; mind.person; no manifest traits ([algorithm.minds_f1] A6, A7)"
+[[amends]]
+of = "schedule.Day/Agenda.when"
+frozen = "every day start; work only with queued commands for minds or a minds timer due in this phase (break, refractory end, poll, interrupt: all at day starts)"
+to = "every day start; work only with queued commands for minds or a minds timer due in this phase (break, refractory end, poll, interrupt: all at day starts), and at t = 0 (world_start, [algorithm.minds_f1] A5); an idle run is O(1) (A15)"
+reason = "The world_start step works at t = 0 with no command queued (Architect ruling X4; [algorithm.minds_f1] A5, A15)"
+[[amends]]
+of = "owns.mind.break_timer.meaning"
+frozen = "TimerId of the pending break or of the refractory end, or 0; lets a death or a deferred demotion cancel it"
+to = "TimerId of the pending break or of the refractory end, or 0; lets a death cancel it. A Demote met while it is set is dropped as deferred and cancels nothing ([algorithm.minds_f1] A7), so no demotion is held; T1-I/S makes the column a 0/1 flag with the timers found through own_timers (REV-MINDS P2; X13f)"
+reason = "A deferred Demote is dropped and cancels nothing ([algorithm.minds_f1] A7; REV-MINDS finding 15), so the 'deferred demotion' clause no longer holds; the column becomes a flag in T1-I/S (X13f), which re-amends this text"
+[[amends]]
+of = "owns.relation.ended_at.meaning"
+frozen = "Sim-time the row ended (b died, or the liege structure changed), or 0; ended rows are kept, never compacted"
+to = "Sim-time the row ended, or 0: b or a died (the exits step at the death instant), a was demoted (Demote), or the liege structure changed (the monthly relations refresh, or a re-promotion's refresh) ([algorithm.minds_f1] A7-A9); written once; ended rows are kept, never compacted"
+reason = "Rows also end when a dies (the exits step), when a is demoted, and at the monthly refresh that follows a title change ([algorithm.minds_f1] A7-A9; REV-MINDS finding 16)"
+[[amends]]
+of = "owns.opinion.holder.meaning"
+frozen = "PersonId of the named actor holding the opinion modifier"
+to = "PersonId of the person holding the opinion modifier: a living person when the command is applied, named or not (M7 may send GRANTED_BY to a grantee its same-instant dormancy pass promotes, and apply_commands precedes promote); the row counts in opinion(holder, about) whenever it is read and unexpired, which only steps of named actors do ([algorithm.minds_f1] A10, A11)"
+reason = "An OpinionModifier applies to its living holder, named or not: M7 may send GRANTED_BY to a grantee its same-instant dormancy pass promotes, and apply_commands precedes promote in Day/Agenda ([algorithm.minds_f1] A10)"
+[[amends]]
+of = "owns.thought.holder.meaning"
+frozen = "PersonId of the named actor under the thought (an artifact's pull or a curse)"
+to = "PersonId of the person under the thought (an artifact's pull or a curse): a living person when the command is applied, named or not, as for opinions; a Demote and the holder's death delete the holder's thought rows ([algorithm.minds_f1] A7, A8, A12)"
+reason = "ApplyThought and ApplyInfluence apply to their living holder, named or not, as opinions do; a Demote and an exit delete the holder's thoughts ([algorithm.minds_f1] A7, A8, A12)"
+[[amends]]
+of = "owns.goal.holder.meaning"
+frozen = "PersonId of the named actor whose agenda holds the goal (from S7's AgendaGoal, P1b)"
+to = "PersonId of the person whose agenda holds the goal (from S7's AgendaGoal, P1b): a living person when AgendaGoal is applied, named or not; a Demote deletes the holder's goal rows and ClearGoal (key = any) removes one, the holder dead or not ([algorithm.minds_f1] A7, A12)"
+reason = "AgendaGoal applies to its living holder, named or not, as opinions do; a Demote deletes the holder's goals and ClearGoal (key = any) removes one ([algorithm.minds_f1] A7, A12)"
+[[amends]]
+of = "invariants.INV-T1-01.statement"
+frozen = "For every mind at every tick boundary: stress = stress_at_creation + (stress_in - stress_decayed - stress_relieved)/256 exactly, and 0 <= stress <= 100"
+to = "For every mind at every tick boundary: stress = stress_at_creation + (stress_in - stress_decayed - stress_relieved)/256 exactly, and 0 <= stress <= 100. Cadence ([algorithm.minds_f1] A16; REV-WAVE6 X1): asserted by each step on each mind whose stress it writes (the S-steps, T1-I/S); checked over every mind by a test observer at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+reason = "REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-02.statement"
+frozen = "Each threshold crossing schedules exactly one break timer; a break timer fires at its own tick unless its actor died or went dormant first (then it is cancelled and counted as cancelled); break_state is pending exactly while that timer is live; every fired break's act is a [mental_breaks] entry"
+to = "Each threshold crossing schedules exactly one break timer; a break timer fires at its own tick unless its actor died first (then it is cancelled and counted as cancelled); a Demote met while break_state is pending or refractory is dropped as deferred and changes nothing ([algorithm.minds_f1] A7), so no actor goes dormant with a break pending; break_state is pending exactly while that timer is live; every fired break's act is a [mental_breaks] entry. Cadence (A16): asserted by the S-steps on each break they schedule or fire and by the promote step on each Demote; checked over every mind and T1 timer by a test observer with agenda access at every month end and at the run's end (REV-MINDS P2); invariants() checks only that the columns are aligned (O(1))"
+reason = "REV-MINDS finding 15 (the minds plan's row 7): a Demote met during a break is dropped as deferred, so no actor goes dormant with a break pending and the 'or went dormant first' clause is withdrawn; and REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-03.statement"
+frozen = "No break is scheduled while the actor is refractory; two breaks of one actor are at least break_refractory_days apart"
+to = "No break is scheduled while the actor is refractory; two breaks of one actor are at least break_refractory_days apart. Cadence (A16): asserted by the S-steps on each break they schedule; checked over every actor's breaks by a test observer at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+reason = "REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-04.statement"
+frozen = "The grief stress one actor takes in one instant is at most grief_instant_cap"
+to = "The grief stress one actor takes in one instant is at most grief_instant_cap. Cadence (A16): asserted by the grief step on each griever (T1-I/S); checked over every instant's grief by a test observer at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+reason = "REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-05.statement"
+frozen = "Trait and ambition columns never change after a mind is created; each thought's magnitude stays in [0, thought_cap]"
+to = "Trait and ambition columns never change after a mind is created, a re-promotion included (the kept row is reused, never redrawn: [algorithm.minds_f1] A6); each thought's magnitude stays in [0, thought_cap] (q8_8, the cap narrowed from its Q16_16 bits: A12). Cadence (A16): the creating step asserts the trait half on the row it appends and each thought write asserts the bound; a test observer compares every mind's traits with the draw keyed at its creation instant (A3), and checks every thought, at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+reason = "Exactness: re-promotion reuses the traits (MAJ-9) and the thought bound is q8_8 ([algorithm.minds_f1] A6, A12); and REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-06.statement"
+frozen = "Opinion = clamp(sum of unexpired modifiers, -100, 100); an expired modifier never counts"
+to = "Opinion = clamp(sum of unexpired modifiers, -100, 100), summed in i64 and clamped in q8_8 ([algorithm.minds_f1] A11); a modifier counts at t iff t < expires, so an expired modifier never counts; a sum read in the binding that appended a modifier includes it (A2). Cadence (A16): each step asserts the clamp on every sum it computes; a test observer recomputes every (holder, about) sum from the whole table at every month end and at the run's end; invariants() checks only that the columns are aligned (O(1))"
+reason = "Exactness: the sum's width, the expiry instant and the read's freshness inside a binding ([algorithm.minds_f1] A2, A11; REV-MINDS M7); and REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-07.statement"
+frozen = "Decisions happen only at polls and interrupts; an interrupt fires at t + 1 day or later; at most interrupt_daily_cap interrupts per actor per day and one re-score per actor per instant"
+to = "Decisions happen only at polls and interrupts; an interrupt fires at t + 1 day or later; at most interrupt_daily_cap interrupts per actor per day and one re-score per actor per instant. Cadence (A16): asserted by the decide step on each decision and interrupt (T1-I/S); checked over every decision by a test observer of the agenda (V-COG-03's instrumentation); nothing per instant in invariants()"
+reason = "REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-08.statement"
+frozen = "T1.minds writes only its own columns; marriages, deaths, claims, seats, vows and artifacts change only through lifecycle commands to their owners"
+to = "T1.minds writes only its own columns; marriages, deaths, claims, seats, vows and artifacts change only through lifecycle commands to their owners. Cadence (A16): at registration (the AccessSpec against this spec, V-INV-04) and by rh-core's write guard on every step (SystemView refuses an unowned write); nothing per instant in invariants()"
+reason = "REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-09.statement"
+frozen = "No vow priority enters a survival decision (no decision type other than pursue_goal reads goal.priority)"
+to = "No vow priority enters a survival decision (no decision type other than pursue_goal reads goal.priority). Cadence (A16): at load (no [decision_types] entry other than pursue_goal names a consideration that reads goal.priority, T1-I/S) and by a test observer of the decide step; nothing per instant in invariants()"
+reason = "REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
+[[amends]]
+of = "invariants.INV-T1-10.statement"
+frozen = "From P1b, every decision, feud declaration and vow that responds to an event references a knowledge row of its actor acquired at or before its tick"
+to = "From P1b, every decision, feud declaration and vow that responds to an event references a knowledge row of its actor acquired at or before its tick. Cadence (A16): asserted by the step that records each such act (P1b) and checked by a test observer at every month end and at the run's end; nothing per instant in invariants()"
+reason = "REV-WAVE6 X1 and V3, for every invariant: the cadence moves into the statement and the test field keeps its V-id; nothing O(rows) per instant ([algorithm.minds_f1] A16)"
