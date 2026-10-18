@@ -2,14 +2,14 @@
 id: SPR-026
 title: "World Stream v1: the live edge over a local socket, viewer cursors and rh-protocol (P1.17, part a)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-002, PRJ-002, REV-SPR-026, SPR-013, SPR-014, SPR-020, SPR-027, SPR-030, ADR-0024, ADR-0030, ADR-0031, ADR-0035]
+related: [BCK-002, PRJ-002, REV-SPR-026, SPR-013, SPR-014, SPR-020, SPR-027, SPR-030, ADR-0024, ADR-0030, ADR-0031, ADR-0035, VER-SPR-026]
 created: 2026-10-17
-updated: 2026-10-17
-version: 0.2.0
+updated: 2026-10-18
+version: 1.0.0
 ---
 
 > **BLUF:** Builds the live edge of IF-0 (`specs/stream/wire_v1.md`, PR #60). This document calls it World Stream v1. The sprint delivers:
