@@ -120,7 +120,7 @@ A **hard checkpoint** follows T-03: the Tester's interim pass (`VER-SPR-023-TEST
 - **Acceptance:**
   - On SPR-014's stub worlds and M2 0.3.0 worlds (three sizes, eight seeds): at every Day/Vital binding after M2's level, `exits()` equals the brute-force set `{p : alive = 0}` and `entries()` the rows with `birth_tick = now`, both ascending; a planted `mutant-exits-skip-drain` (deaths from the Day/Vital drain of `ScheduleDeath` not recorded) fails by name on a world with a commanded death.
   - **Hash-neutral:** the four golden ladders byte-identical at 1 and N threads; `gen_hash_golden.py --check` unchanged; a keyframe round trip mid-run gives the same ladder.
-  - **Cost:** a counter of visited rows equals the instant's exits plus entries (a probe); the 200-year `hamlet` wall time with the lists maintained is within noise of `main`'s (reported under A-60).
+  - **Cost:** a reader visits only the lists (a probe counts the rows T1's Day/Vital visits: the instant's exits); the core collects them inside the ledger guard it already runs on a job that writes a ledger column with work (A-60: that guard is O(rows) today, so the list adds no pass of its own; if A-60 removes the guard from release builds, M2's `apply_death` reports each exit through a core call instead, the Architect's choice at T-02); the 200-year `hamlet` wall time with the lists maintained is within noise of `main`'s (reported under A-60).
 - **Status:** [ ] not started
 
 #### T-03: `rh-minds`: the mind table, world start, `Promote` and `Demote`, the trait draw, the derived indexes, the contracts (the checkpoint; specs table rows 2, 6, 7, 11; MAJ-9)
