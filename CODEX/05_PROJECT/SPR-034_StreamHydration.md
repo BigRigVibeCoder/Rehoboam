@@ -341,7 +341,7 @@ The viewer reads the years it missed through `rh-cli tail` over the shared SSH c
 
 | # | Risk | Likelihood / effect | Mitigation |
 |---|---|---|---|
-| 1 | The villages look thin: residents are the only input, households are not in the stream | High / medium (the red team's audit) | F1's backlog item (B6); SPR-035's household panel at materialized ticks; the HUD states what is unknown |
+| 1 | The villages look thin: residents are the only input, households are not in the stream | High / medium (the red team's audit) | F1's backlog item (B6; BCK-002 A-71); SPR-035's household panel at materialized ticks; the HUD states what is unknown |
 | 2 | SSH sealed reads are slow over IAP | Medium / low | `ControlMaster`; reads per sealed year in one call; the read cost reported |
 | 3 | An engine change moves `hamlet`'s history | High over P1a / none for the gates | Every run-based check compares two paths of one run; the hydration golden depends on the generator alone |
 | 4 | The fold misses a record kind a later engine sprint adds | Medium / medium | The cross-check stops the viewer by name; unknown kinds are skipped only after the frozen prefix is checked |
@@ -369,7 +369,7 @@ The viewer reads the years it missed through `rh-cli tail` over the shared SSH c
 
 | # | Finding | Recommendation | Ruling (round 1) |
 |---|---|---|---|
-| F1 | **Channel A cannot carry households, M7 houses or titles** as it stands | Grammar v0 reads residents per settlement; a backlog item for P1b | Accepted, with B6: the item lists both forms, preferring a kind-8 record that shares A-61's format bump |
+| F1 | **Channel A cannot carry households, M7 houses or titles** as it stands | Grammar v0 reads residents per settlement; a backlog item for P1b | Accepted, with B6: the item lists both forms, preferring a kind-8 record that shares A-61's format bump. **Filed by the Architect as BCK-002 A-71** |
 | F2 | **Residence before SPR-018 is genesis-only; births before SPR-015 do not exist** | Content-only edges in PRJ-003 §6 | Accepted (in PRJ-003 v1.4.0) |
 | F3 | **Plane-B purposes have no registry; PRJ-003 §2's list lacks `rh-ids`** | Purposes under the system id `rh-view`; `rh-ids` on the list | Accepted; `rh-ids` and `rh-core` (dev) are on rule (e)'s list (A11) |
 | F4 | **"Tudor houses" are outside E1** | Cruck and box-framed dwellings, a stone church | Accepted |

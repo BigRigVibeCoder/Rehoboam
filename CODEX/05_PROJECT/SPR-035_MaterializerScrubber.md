@@ -411,7 +411,7 @@ The same against a run on `adjutant` (with the `--remote` options) gives the rem
 
 | # | Finding | Recommendation | Ruling (round 1) |
 |---|---|---|---|
-| F1 | **`engine_build` does not name a commit** | Replay with the run's own `rh-cli`; verify the dump's digest in the viewer; in process only after a keyframe's hash is reproduced | Accepted. The backlog item (the builder's commit in `run.toml`) is the Architect's (C2) |
+| F1 | **`engine_build` does not name a commit** | Replay with the run's own `rh-cli`; verify the dump's digest in the viewer; in process only after a keyframe's hash is reproduced | Accepted. The backlog item (the builder's commit in `run.toml`) is the Architect's (C2): **filed as BCK-002 A-70**; the key uses the commit when `run.toml` has it, and the sealed-digest chain head otherwise |
 | F2 | **`--dump <file>` cannot stream a dump over SSH cleanly** | `--dump -` | Accepted; the Architect edits SPR-027 T-02 (C8) |
 | F3 | **What the cache holds** | View-state checkpoints and deltas, and content by its inputs | Accepted; the persisted key gains the sealed-history chain head and the state hashes (C2) |
 | F4 | **Households and M7 data exist only at materialized ticks** | A labelled HUD panel, never in a digest | Accepted |

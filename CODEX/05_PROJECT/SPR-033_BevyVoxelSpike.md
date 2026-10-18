@@ -658,7 +658,7 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 - [ ] T-01b, T-04 and T-05 meet their acceptance; Bevy entered the lock at or after 2026-10-22 22:31Z.
 - [ ] `bin/check_viewer.sh` passes; the root lock is unchanged.
 - [ ] The Tester's verdict is PASS; the Architect's audit `VER-SPR-033b` is PASS.
-- [ ] At the merge, the director is asked for the 10-minute render check; the FPS report follows when he has the time, and is not a merge condition.
+- [ ] At the merge, the director is asked for the 10-minute render check; the FPS report follows when the director has the time, and is not a merge condition.
 
 ## Findings for the Architect
 
@@ -674,9 +674,9 @@ GitHub's hosted runners for a private repository on the Free plan have 2 vCPU, 7
 | F8 | **`ci_scope` treats viewer-only PRs as engine work** | Extend the skip | Ruled A4: on PR #89's framework, with the rename test |
 | F9 | **`adjutant`'s idle shutdown counts `who` logins only** | `ssh -t` | Accepted, with tmux inside it |
 | F10 | **The root `clippy.toml` applies to `viewer/`** | Keep it. `rh-view-core` takes no `allow`; `rh-view` will need many use-site allows with reasons (Bevy's float math, frame timing) | Accepted (A18's wording) |
-| F11 | **D53 and dependency data:** Bevy's `default_font` embeds Fira Mono (SIL OFL 1.1) | Rule that D53 covers world content, and that a font embedded in a dependency is that dependency's code, in the licence ledger; otherwise Unscii 16 (public domain, not `unscii-16-full`). The LUTs are gone with A15's feature set | Open: the font is the Architect's to rule |
+| F11 | **D53 and dependency data:** Bevy's `default_font` embeds Fira Mono (SIL OFL 1.1) | Rule that D53 covers world content, and that a font embedded in a dependency is that dependency's code, in the licence ledger; otherwise Unscii 16 (public domain, not `unscii-16-full`). The LUTs are gone with A15's feature set | **Ruled by the Architect at the close (80%; PRJ-003 v1.4.1 §8 item 12):** D53 covers world content; Bevy's embedded Fira Mono is dependency code, recorded in `artifacts/viewer_licence_ledger.txt` and allowed under ADR-0021 as amended. A font file the HUD ships itself is public domain or CC0 (Unscii 16, not `unscii-16-full`) |
 | F12 | **Wayland needs a system package to build** | X11 by default | Ruled A10: `wayland` is an opt-in feature |
 | F13 | **The clippy-config crawl and a `viewer/target/`** | `target-dir = "../target/viewer"` | Accepted, with cargo run from `viewer/` (A13) |
-| F14 | **GOV-005 §2 and the director** | D63 asks only for what is his | Accepted; D63's restatement is the Architect's (P3) |
+| F14 | **GOV-005 §2 and the director** | D63 asks only for what is the director's | Accepted; D63's restatement is the Architect's (P3) |
 | F15 | **`sha2` 0.11.1 is six days old** (2026-10-12) | Pin `=0.11.0` (2026-03-25) as the dev-dependency | New in revision 1 |
 | F16 | **Dropping `ktx2` and the LUT features changes the look:** no TonyMcMapface tonemapping and no SMAA | `AcesFitted` and FXAA; revisit if the red team's audit dislikes the look, since restoring the LUTs is a feature line and F11's ruling | New in revision 1 |
