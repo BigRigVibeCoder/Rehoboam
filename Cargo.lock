@@ -56,6 +56,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
 
 [[package]]
+name = "arc-swap"
+version = "1.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69f7f8c3906b62b754cd5326047894316021dcfe5a194c8ea52bdd94934a3457"
+
+[[package]]
 name = "arraydeque"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -850,6 +856,7 @@ dependencies = [
  "rh-manifest",
  "rh-registry",
  "rh-snapshot",
+ "rh-stream",
  "rh-sys-demography",
  "rh-sys-smoke",
  "rh-worldgen",
@@ -861,7 +868,11 @@ version = "0.0.0"
 dependencies = [
  "rh-golden",
  "rh-manifest",
+ "rh-protocol",
  "rh-registry",
+ "rh-sifter",
+ "rh-snapshot",
+ "rh-stream",
  "serde_json",
 ]
 
@@ -899,6 +910,7 @@ dependencies = [
  "rh-events",
  "rh-ids",
  "rh-manifest",
+ "rh-protocol",
  "rh-registry",
  "rh-sifter",
  "rh-snapshot",
@@ -931,6 +943,14 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
+]
+
+[[package]]
+name = "rh-protocol"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -981,6 +1001,7 @@ dependencies = [
 name = "rh-stream"
 version = "0.0.0"
 dependencies = [
+ "arc-swap",
  "bytes",
  "parquet",
  "rh-core",

@@ -27,7 +27,10 @@ def _mutant_features() -> dict[str, list[str]]:
 
 
 def test_there_are_mutant_features_to_guard() -> None:
-    """The planted switches of SPR-012, SPR-014 and SPR-038 exist; if they move, this follows."""
+    """The planted switches of SPR-012, SPR-014, SPR-026 and SPR-038 exist.
+
+    If they move, this follows.
+    """
     assert _mutant_features() == {
         "rh-core": [
             "mutant-compact-keeps-version",
@@ -36,7 +39,13 @@ def test_there_are_mutant_features_to_guard() -> None:
             "mutant-stale-lagged-snapshot",
             "mutant-unmarked-put-back",
         ],
+        "rh-protocol": ["mutant-accept-flags", "mutant-pace-method"],
         "rh-snapshot": ["mutant-cause-u8-zero"],
+        "rh-stream": [
+            "mutant-bytes-queue-canonical",
+            "mutant-bytes-window-only",
+            "mutant-window-gap",
+        ],
         "rh-sys-demography": ["mutant-resample-day-k0", "mutant-resample-hit-k1"],
     }
 
