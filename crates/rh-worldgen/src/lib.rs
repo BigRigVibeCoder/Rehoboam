@@ -338,7 +338,7 @@ pub fn write_columns(
             "person.death_tick" | "life_course.exit_tick" => vec![i64::MAX; n],
             "person.conceived_tick" | "person.last_birth_tick" => vec![i64::MIN; n],
             "life_course.origin" => vec![ORIGIN_FOUNDER; n],
-            "life_course.entry_tick" => vec![0; n],
+"life_course.entry_tick" => vec![0; n],
             // household.* and marriage.* tables are empty at genesis.
             "household.id"
             | "household.head"
@@ -351,6 +351,7 @@ pub fn write_columns(
             | "marriage.source" => vec![],
             // mother, father, spouse, death_cause none, exit_kind open,
             // household, parity, unborn_father zero.
+            _ => vec![0; n],
             _ => vec![0; n],
         };
         tables.insert(column, values);
