@@ -404,6 +404,18 @@ odd_observes_control() {
   "$PY" -I specs/systems/lint_odd.py --extra-specs "$dir" "${overlay[@]}"
 }
 
+# annals_fold_control (annals_v0.md §9.1; AN-0): the committed solitary chronicle cut by the reference into its two
+# sim-year segments, which must fold, then with the second #segment line's digest zeroed, which must FAIL the fold.
+annals_fold_control() {
+  local dir=target/rendered-fixtures/annals_fold
+  rm -rf "$dir" && mkdir -p "$dir" || return 1
+  "$PY" -I specs/annals/selftest_annals_v0.py segment --world specs/annals/fixtures/solitary --out "$dir/cut.txt" || return 1
+  "$PY" -I specs/annals/selftest_annals_v0.py fold "$dir/cut.txt" >/dev/null || { echo "HARNESS ERROR: the unaltered cut does not fold"; return 1; }
+  sed 's/^\(#segment y000003 .* canonical_digest=\)[0-9a-f]*$/\100000000000000000000000000000000/' "$dir/cut.txt" > "$dir/altered.txt" || return 1
+  if cmp -s "$dir/cut.txt" "$dir/altered.txt"; then echo "HARNESS ERROR: the sed planted nothing"; return 1; fi
+  "$PY" -I specs/annals/selftest_annals_v0.py fold "$dir/altered.txt"
+}
+
 # lint_odd --next controls (SPR-015; REV-SPR-015 NIT-4): rendered from the next M2 spec itself, never copied, so they
 # cannot drift. odd_next_control <case>: algorithm (a frozen S0 step reworded), rng (a purpose planted before
 # death_time), bound (the Registry delta with tfr's upper bound moved). Each must FAIL with its own diagnostic.
@@ -1734,6 +1746,7 @@ run "selftest_annals positive control: a template that reads world state must FA
 run "selftest_annals positive control: a network module imported during the render must FAIL (V-NAR-07; REV-SPR-029 F16)" "fail:was imported during the render" "$PY" -I specs/annals/selftest_annals_v0.py --check --control network-import &&
 run "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)" "fail:STALE:" annals_golden_control &&
 run "selftest_annals positive control: a golden file no rendered group owns must FAIL as an orphan (REV-SPR-029 R39)" "fail:STALE: orphan target/rendered-fixtures/annals_orphan/ashcombe_line-1.txt: no rendered group owns it" annals_orphan_control &&
+run "selftest_annals positive control: a two-segment cut of solitary's chronicle with one #segment digest altered must FAIL the fold (annals_v0.md §9.1; AN-0)" "fail:altered.txt:4: segment y000003 (records on lines 5-7): its #segment line says canonical_digest=00000000000000000000000000000000; its records recompute to" annals_fold_control &&
 run "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive or edge; every in-scope kind has a template and every out-of-scope kind a label (lint_templates; SPR-029)" "pass:PASS: 29 templates linted" "$PY" -I specs/annals/lint_templates.py &&
 run "lint_templates positive control: a slot naming a role the kind does not declare must FAIL (SPR-029)" "fail:slot 'instrument' is not a role DEATH declares in [[emits]]" annals_lint_control undeclared_role &&
 run "lint_templates positive control: a snapshot slot the kind does not declare must FAIL (SPR-029)" "fail:slot 'snapshot.stress.actor' is not a snapshot BIRTH declares" annals_lint_control undeclared_snapshot &&
