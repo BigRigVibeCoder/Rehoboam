@@ -190,6 +190,10 @@ REQUIRED_GATES = (
     "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
     "--check; SPR-007 T-01)",
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
+    "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted "
+    "scenarios; what each step sees in inserted(), exited() and the observed events, the "
+    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume "
+    "(instant_log_model --check; EVO-002)",
     "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; "
     "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
@@ -438,6 +442,19 @@ REQUIRED_GATES = (
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that "
+    "tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)",
+    "instant_log_model positive control: a genealogy index kept only at the instant's end must "
+    "FAIL (EVO-002)",
+    "instant_log_model positive control: a log not cleared at the instant's end must FAIL "
+    "(EVO-002)",
+    "instant_log_model positive control: a state hash that covers the log must FAIL (EVO-002)",
+    "instant_log_model positive control: an append in place of inserted()'s sorted insert must "
+    "FAIL the order check (EVO-002)",
+    "instant_log_model positive control: jobs that merge as they finish, so a later job sees its "
+    "level's peers, must FAIL thread invariance (EVO-002)",
+    "instant_log_model positive control: the merge-time form resolved against the log at the job's "
+    "own merge must FAIL visibility (EVO-002)",
     "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals "
     "the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 "
     "T-09; GOV-002 tier 15; wire_v1.md §11)",
@@ -660,6 +677,14 @@ REQUIRED_GATES = (
     "cognatic again in the summary, must FAIL (R3)",
     "lint_odd next positive control: the reviewer's q5_why case, Demote's why applied "
     "to minors, must FAIL (R3)",
+    "lint_odd observes control: an [[observes]] entry naming a Registry verb, its emitter and a "
+    "same_instant read of the emitter passes (EVO-002)",
+    "lint_odd observes positive control: an observed kind that is not a Registry verb must FAIL "
+    "(EVO-002)",
+    "lint_odd observes positive control: an observed kind whose emitter is none of the system's "
+    "same_instant reads must FAIL (EVO-002)",
+    "lint_odd observes positive control: an observed kind whose owner is not its emitter must FAIL "
+    "(EVO-002)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
