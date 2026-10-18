@@ -41,10 +41,14 @@ Checks (``--check``):
  11. the chronicle fold (annals_v0.md §9.1; AN-0): a chronicle file of several ``#segment``
      blocks folds to known answers derived outside this file and re-derived here from the XXH3
      reference; one block gives the plain ``canonical_digest``, no block the one-segment form; a
-     changed byte changes the fold; every refusal of §9.1 is planted and named; each fixture cut by
-     sim-year (``solitary`` into two segments) folds as first principles say and renders the
-     same annals, only the header's ``chronicle_digest`` changed (``bin/check_all.sh`` adds the
-     control: a cut with one ``#segment`` digest altered must FAIL ``fold``).
+     changed byte changes the fold; free comments anywhere leave it unchanged; every refusal of
+     §9.1 is planted and named, every file ``canonical_v0.py`` refuses is refused with its words,
+     and the load path refuses a block holding a record of another sim-year; a comment hiding a
+     record behind a form feed renders nothing; ``fold`` and ``segment`` refuse an unreadable file
+     cleanly, and ``segment`` cuts by the world's calendar; each fixture cut by sim-year
+     (``solitary`` into two segments) folds as first principles say and renders the same annals,
+     only the header's ``chronicle_digest`` changed (``bin/check_all.sh`` adds the control: a cut
+     with one ``#segment`` digest altered must FAIL ``fold``).
 
 Run: python -I specs/annals/selftest_annals_v0.py --check [--golden-dir DIR] [--control NAME]
      python -I specs/annals/selftest_annals_v0.py --write
@@ -52,16 +56,19 @@ Run: python -I specs/annals/selftest_annals_v0.py --check [--golden-dir DIR] [--
          --group house:<id>|year|line:<id> [--sidecar] [--out FILE]
      python -I specs/annals/selftest_annals_v0.py verify --text FILE --sidecar FILE
      python -I specs/annals/selftest_annals_v0.py fold FILE      (exit 1 and FOLD REFUSED: on a
-         refusal; else one line per segment, then chronicle_digest=<32 hex>)
-     python -I specs/annals/selftest_annals_v0.py segment --world DIR [--out FILE]
+         refusal; else one line per segment, or the one-segment line, then chronicle_digest=<32 hex>)
+     python -I specs/annals/selftest_annals_v0.py segment --world DIR [--out FILE]   (exit 1 and
+         SEGMENT REFUSED: on a refusal)
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import dataclasses
 import importlib
 import importlib.util
+import io
 import os
 import re
 import sys
@@ -163,8 +170,10 @@ MANIFEST_HASH = re.compile(r"sha256:[0-9a-f]{64}")
 ALLOWED_IMPORTS = frozenset(
     {
         "argparse",
+        "contextlib",
         "dataclasses",
         "importlib",
+        "io",
         "os",
         "re",
         "sys",
@@ -484,12 +493,16 @@ def _event_of(rec: Any) -> Event:  # noqa: ANN401  (a canonical_v0.Record, loade
 
 # --- a chronicle of several segments: the #segment blocks and the fold (annals_v0.md §9.1) ------
 
-SEGMENT_PREFIX = "#segment"  # a comment line that begins so is a segment line, or is refused
+# Only this exact prefix is reserved (REV-AN-0 R8): a line that begins so is a segment line or is
+# refused; other spellings (``#Segment``, ``# segment``) are free comments.
+SEGMENT_PREFIX = "#segment"
+SEQ = r"0|[1-9][0-9]{0,19}"  # a canonical int of 1 to 20 digits; u64 checked after (REV-AN-0 R9)
 SEGMENT_LINE = re.compile(
-    r"#segment y(?P<year>[0-9]{6}) first_seq=(?P<first>0|[1-9][0-9]*) "
-    r"last_seq=(?P<last>0|[1-9][0-9]*) canonical_digest=(?P<digest>[0-9a-f]{32})"
+    rf"#segment y(?P<year>[0-9]{{6}}) first_seq=(?P<first_seq>{SEQ}) "
+    rf"last_seq=(?P<last_seq>{SEQ}) canonical_digest=(?P<digest>[0-9a-f]{{32}})"
 )
 YEARS_LIMIT = 1_000_000  # six digits: y000000 to y999999 (channel_a_v0.sql R5)
+ONE_SEGMENT_LINE = "one segment: no line begins #segment (annals_v0.md §9.1 rule 2)"
 Numbered = list[tuple[int, Any]]  # (1-based file line, canonical_v0.Record)
 
 
@@ -501,14 +514,18 @@ class Segment:
     first_seq: int
     last_seq: int
     digest: bytes  # canonical_digest of the block's record lines (canonical_v0.md §4), 16 bytes
+    line: int  # the file line of its #segment line
 
 
 @dataclass(frozen=True)
 class Fold:
-    """A chronicle file's segments and its ``chronicle_digest`` (annals_v0.md §9, §9.1)."""
+    """A checked chronicle file: its segments, its ``chronicle_digest`` and its records (§9.1)."""
 
-    segments: tuple[Segment, ...]  # empty: the file has no segment line (one segment)
+    segments: tuple[Segment, ...]  # empty: no line begins #segment (one segment)
     chronicle_digest: bytes
+    # (file line, canonical_v0.Record) of every record, in file order, from the file split on LF
+    # alone: what a render reads, so a comment never hides a record (REV-AN-0 R1)
+    records: tuple[tuple[int, Any], ...]
 
 
 @dataclass
@@ -529,7 +546,10 @@ def fold_digests(digests: list[bytes]) -> bytes:
 
 
 def _canonical_records(data: bytes, where: str) -> tuple[list[str], Numbered]:
-    """The file checked whole as a canonical file, exactly as ``canonical_v0.py --digest`` does."""
+    """The file checked whole as a canonical file, exactly as ``canonical_v0.py --digest`` does.
+
+    Rule 1 of §9.1, then the rule a chronicle adds: it holds at least one record (REV-AN-0 R5).
+    """
     lines = _canon._file_lines(data, where)
     header = _canon.HEADER_LINE.fullmatch(lines[0])
     if header is None or not _canon._header_values_ok(header):
@@ -543,6 +563,8 @@ def _canonical_records(data: bytes, where: str) -> tuple[list[str], Numbered]:
         except _canon.CanonicalError as e:
             raise _canon.CanonicalError(f"{where}:{n}: {e}") from None
     _canon._check_records(records, where, int(header["timeline"]), header["channel"])
+    if not records:
+        raise AnnalsError(f"{where}: a chronicle holds at least one record (annals_v0.md §9.1)")
     return lines, records
 
 
@@ -551,6 +573,11 @@ def _segment_line(raw: str, n: int, where: str, seen: dict[int, int]) -> _Block:
     m = SEGMENT_LINE.fullmatch(raw)
     if m is None:
         raise AnnalsError(f"{where}:{n}: not a segment line (annals_v0.md §9.1): {raw!r}")
+    for key in ("first_seq", "last_seq"):
+        if int(m[key]) > _canon.MASK64:
+            raise AnnalsError(
+                f"{where}:{n}: not a segment line (annals_v0.md §9.1): {key}={m[key]} is past u64"
+            )
     year = int(m["year"])
     if year in seen:
         raise AnnalsError(f"{where}:{n}: segment y{year:06d} repeats (line {seen[year]})")
@@ -559,7 +586,7 @@ def _segment_line(raw: str, n: int, where: str, seen: dict[int, int]) -> _Block:
             f"{where}:{n}: segment y{year:06d} follows y{max(seen):06d}: the years must increase"
         )
     seen[year] = n
-    return _Block(n, year, int(m["first"]), int(m["last"]), m["digest"])
+    return _Block(n, year, int(m["first_seq"]), int(m["last_seq"]), m["digest"])
 
 
 def _blocks(lines: list[str], records: Numbered, where: str) -> list[_Block]:
@@ -602,21 +629,45 @@ def _check_block(b: _Block, lines: list[str], where: str) -> Segment:
             f"its #segment line says canonical_digest={b.digest}; its records recompute to "
             f"{digest.hex()}"
         )
-    return Segment(b.year, first, last, digest)
+    return Segment(b.year, first, last, digest, b.line)
 
 
 def fold(data: bytes, where: str) -> Fold:
     """Check a chronicle file and compute its ``chronicle_digest`` (annals_v0.md §9.1).
 
     The file is checked whole as a canonical file first (its own refusals, two swapped blocks
-    among them); with no segment line it is one segment and its digest is its ``canonical_digest``;
-    otherwise every block is checked against its segment line and the digests are folded.
+    among them) and must hold a record; when no line begins ``#segment`` it is one segment and its
+    digest is its ``canonical_digest``; otherwise every block is checked against its segment line
+    and the digests are folded. The fold reads no calendar (REV-AN-0 R7: ``load_chronicle`` checks
+    each record's sim-year against its block's).
     """
     lines, records = _canonical_records(data, where)
     if not any(raw.startswith(SEGMENT_PREFIX) for raw in lines[1:]):
-        return Fold((), bytes(_canon.digest(lines[n - 1] for n, _ in records)))
+        plain = bytes(_canon.digest(lines[n - 1] for n, _ in records))
+        return Fold((), plain, tuple(records))
     segments = tuple(_check_block(b, lines, where) for b in _blocks(lines, records, where))
-    return Fold(segments, fold_digests([s.digest for s in segments]))
+    return Fold(segments, fold_digests([s.digest for s in segments]), tuple(records))
+
+
+def check_segment_years(f: Fold, calendar: Calendar, where: str) -> None:
+    """Every record of a block is of the block's sim-year on the world's calendar (REV-AN-0 R7).
+
+    The exporter cuts by sim-year (``tick div minutes per year``, channel_a_v0.sql R5), so a block
+    holding a record of another year was not cut so; ``fold`` cannot tell without the calendar.
+    """
+    if not f.segments:
+        return
+    per_year = calendar.days_per_year * MINUTES_PER_DAY
+    base = int(f.records[0][1]["seq"])  # seq is contiguous (§9.1 rule 1), so seq - base indexes
+    for s in f.segments:
+        for n, rec in f.records[s.first_seq - base : s.last_seq - base + 1]:
+            tick = int(rec["tick"])
+            if tick // per_year != s.year:
+                raise AnnalsError(
+                    f"{where}:{n}: segment y{s.year:06d} (line {s.line}) holds a record of "
+                    f"sim-year {tick // per_year} (tick {tick} on the {calendar.days_per_year}-day "
+                    "calendar): a block holds the records of its own sim-year (annals_v0.md §9.1)"
+                )
 
 
 def segment_chronicle(data: bytes, days_per_year: int, where: str) -> str:
@@ -648,12 +699,17 @@ def segment_chronicle(data: bytes, days_per_year: int, where: str) -> str:
     return "\n".join(out) + "\n"
 
 
-def load_chronicle(path: Path, dictionary: Dictionary) -> Chronicle:
-    """Parse a canonical channel-A file of one segment or several (§9.1), checked whole first."""
+def load_chronicle(path: Path, dictionary: Dictionary, calendar: Calendar) -> Chronicle:
+    """Parse a canonical channel-A file of one segment or several (§9.1), checked whole first.
+
+    The records are the ones ``fold`` parsed from the file split on LF alone (REV-AN-0 R1), and
+    each block's records are checked against its sim-year on the world's calendar (R7).
+    """
     data = path.read_bytes()
-    chron = Chronicle(digest=fold(data, str(path)).chronicle_digest.hex())
-    lines = data.decode("ascii").splitlines()
-    header = _canon.HEADER_LINE.fullmatch(lines[0])
+    checked = fold(data, str(path))
+    check_segment_years(checked, calendar, str(path))
+    chron = Chronicle(digest=checked.chronicle_digest.hex())
+    header = _canon.HEADER_LINE.fullmatch(data.split(b"\n", 1)[0].decode("ascii"))
     chron.timeline = int(header["timeline"])
     chron.registry_version = str(_canon.decode_str(header["registry"]))
     if chron.registry_version != dictionary.version:
@@ -661,10 +717,7 @@ def load_chronicle(path: Path, dictionary: Dictionary) -> Chronicle:
             f"{path}: the chronicle's registry_version {chron.registry_version!r} is not the "
             f"dictionary this renderer read, {dictionary.version!r}"
         )
-    for raw in lines[1:]:
-        if raw.startswith("#"):
-            continue
-        rec = _canon.parse(raw)
+    for _, rec in checked.records:
         chron.records.append(rec)
         if rec.kind == "EVENT":
             ev = _event_of(rec)
