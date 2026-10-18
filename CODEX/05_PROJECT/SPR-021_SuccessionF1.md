@@ -9,7 +9,7 @@ tags: [sprint, simulation]
 related: [BCK-002, PRJ-002, EVO-001, REV-WAVE5, REV-WAVE6, REV-WAVE7, REV-M7-membership, REV-SPR-017, REV-SPR-019, REV-SPR-020, REV-SPR-029, REV-SPR-030, SPR-014, SPR-015, SPR-017, SPR-019, SPR-020, SPR-022, SPR-023, SPR-024, SPR-029, SPR-030, SPR-038, ADR-0006, ADR-0007, ADR-0009, ADR-0024, ADR-0025, ADR-0027, ADR-0033, ADR-0035]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.3.0
+version: 0.3.1
 ---
 
 > **BLUF (the one-page brief).** M7 F1, first half, in a new system crate, `rh-sys-dynasty`. It runs as two sprints (X8), and both are **C2**.
@@ -17,7 +17,7 @@ version: 0.3.0
 > | | SPR-021a (T-01 to T-03) | SPR-021b (T-04 to T-06) |
 > |---|---|---|
 > | Builds | **T-01:** the promotion of M7 0.6.0 (T-00a's text), with the Registry's M7 defaults. **T-02:** in `rh-core`, the instant log's merged events by (kind, target) with their ids (X1 (c): BCK-002 A-59) and the core genealogy index (X2); `OfficeId` and `ClaimId`; `EntityKey` for `TitleId` and `OfficeId`, and the `EntityKind::Title` tag (`TitleId` and `HouseId` are SPR-019 T-01's: X13a); `rh-contracts::m7` v0, with M7's own house → title-holders index (R11). **T-03:** the crate, its registration and parameters, the effect-language host over the core index, and `on_birth` (agnatic; a sorted insert, X3) | **T-04:** `on_death` in two phases; `arbitrate` with the legal heir by the title's law, pressed claims and the court's offices; the interregnum and its resolution (a vassal that joins it emits its own crisis, K2); reversion in demesne; the tenure log; `HOUSE_EXTINCT`; the four commands from T1. **T-05:** scripted dynastic worlds, the succession checker, determinism, cost probes. **T-06:** CI and docs |
-> | Size | about 4 agent-days | about 4 agent-days |
+> | Size | about 4.5 agent-days (T-02 +0.5 for the merge-time form; T-00a review MIN-14) | about 4 agent-days |
 > | Depends on | SPR-014, SPR-015, SPR-017, SPR-020, **SPR-019 stage A** (the ids: X13a), **T-00a and T-00b** (X9, R6); SPR-038b (the instant log, `inserted()`, `exited()` and the `DropReason` changes: X1, R14) before T-02 | SPR-021a |
 > | Baselines | none | none |
 > | CI, one runner (×1.5) | core +23 s (+35 s), golden +18 s (+27 s) | core +4 s (+6 s), golden +43 s (+65 s), stream +12 s (+18 s) |
@@ -134,8 +134,9 @@ version: 0.3.0
   - AGT-003-IF simulates the promotion on a copy before T-01 is pushed (W1; the review's simulation of `d37fc5b` is the precedent).
 - **Status:** [ ] not started
 
-#### T-02: The engine surfaces: instant-log part (c), the genealogy index, the id keys, `rh-contracts::m7` (021a; about 1.75 days; X1, X2, X13a, X13c, K1, K11, R1, R14; EVO-002)
+#### T-02: The engine surfaces: instant-log part (c), the genealogy index, the id keys, `rh-contracts::m7` (021a; about 2.25 days; X1, X2, X13a, X13c, K1, K11, R1, R14; EVO-002)
 - **Deliverable:**
+  - **EVO-002's merge-time citation form** (T-00a review MIN-14, Architect, 75%; +0.5 day): `EventRef::SameInstant(kind, target)` resolved at the merge against part (c) as the citing job's level started, with its named refusals (`absent`, `same_level`, `own_draft`, `ambiguous`) and `UndeclaredObserve` at the step; `InstantCause` where EVO-002 names it; the Rust analogues of the instant-log model's controls as `mutant-*` features (A-52), each failing its test; and the engine's (kind, target, id) sequences equal to the model's `--emit-vectors` on its scripted instants (V-DET-22).
   - **The instant log's part (c)** (X1), on SPR-038b's log: the events merged so far this instant, keyed by (kind, target), with their EventIds. It is appended at each serial merge for the kinds some registered system declares in `[[observes]]`, read-only through `StepCtx`, cleared at the instant's end, outside every hash, keyframe and journal. The merge-time `EventRef` form is added too if EVO-002 assigns it here. Registration refuses an observer in an earlier phase than the kind's emitter, by name.
   - **The core genealogy index** (X2): children by parent, and the life-course row by person. It is maintained at the core's life-course append (O(births)), rebuilt at construction and restore, outside every hash, and read through SPR-017's `Indexes` by M7, and by T1 and M2 where wanted. The house → title-holders lookup is not here: it is M7's own (T-03; R11).
   - **`rh-ids`:** `OfficeId`, `ClaimId` and their `gen_rng_golden.py` vectors; `EntityKey` for SPR-019's `TitleId` and for `OfficeId`; the `EntityKind::Title` tag (F-4). `TitleId` and `HouseId` themselves are SPR-019 T-01's (X13a, R1). A-50's kind check covers `title` keys.
@@ -344,7 +345,7 @@ The review judged the 26 findings 22 real and 4 partly real (REV-WAVE7 §6). The
 - **F-18:** the `docs/13` class gap. X12, D58 item 2.
 - **F-19:** the vocation draw's year. Superseded by K19 (a timer at majority; T-00b; SPR-022).
 - **F-20:** at a year's first instant, the Year pass runs before `on_death` (`schedule.rs:22–27`). **K12: one rule.** A holder who died in the instant's `Vital` still holds for the Year pass, as for `on_birth` (`next/M7:725`); his titles are arbitrated in `Day/Polity` afterwards. T-00b; a fixture in SPR-022.
-- **F-21:** the annals fixture's interregnum on a vassal seat. SPR-029's to resolve. With K2, a vassal joining its liege's interregnum now emits one, so the fixture is possible when the liege is in interregnum.
+- **F-21:** the annals fixture's interregnum on a vassal seat. Resolved by the spec PR **AN-1** (annals fixtures for M7 F1: K2's vassal `INTERREGNUM_CRISIS`, F-21's distinguishing child, check 5's rule and its control; after T-00a, before SPR-029 T-02; REV-WAVE8 A1, PRJ-002 §6). With K2, a vassal joining its liege's interregnum now emits one, so the fixture is possible when the liege is in interregnum.
 - **F-22:** `holds_title` snapshots. Deferred to P2.4, with a note in envelope §3.
 - **F-23:** M2's elite read. X3: a sorted `house_member`, M2's binary search, tested in T-05.
 - **F-24:** V-INV-15. 021b covers the applied commands; SPR-022a covers the murder timer's sends.
