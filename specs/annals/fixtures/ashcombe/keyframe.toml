@@ -2,7 +2,9 @@
 # genesis
 # keyframe a house prologue reads, because the back-filled dead have no channel-A record
 # (REV-SPR-019 R1). `founder` is the founder index k of founder(seed, k) (SPR-019 D-02;
-# the cast first), shown as `Founder #k+1` (annals_v0.md §4). GENERATED; do not edit.
+# the cast first), shown as `Founder #k+1` (annals_v0.md §4). A title's `tier` and
+# `liege` are M7's title.tier and title.liege, fixed at world creation (check 5; AN-1).
+# GENERATED; do not edit.
 [extract]
 format = "rehoboam/annals/keyframe-extract/v0"
 keyframe = "kf/y000000/t000000000.arrow"   # the genesis keyframe the rows came from
@@ -14,8 +16,12 @@ id = 3172275184034551431   # ashcombe
 id = 7252932463130708544   # thorne
 [[title]]
 id = 1
+tier = "sovereign"
+liege = 0
 [[title]]
 id = 2
+tier = "major"
+liege = 1
 [[life_course]]
 person_id = 52998799569557452   # ash_root
 founder = 5

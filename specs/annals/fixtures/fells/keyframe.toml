@@ -1,0 +1,135 @@
+# The keyframe extract of the fells fixture (annals_v0.md §1, §6): the rows of the
+# genesis
+# keyframe a house prologue reads, because the back-filled dead have no channel-A record
+# (REV-SPR-019 R1). `founder` is the founder index k of founder(seed, k) (SPR-019 D-02;
+# the cast first), shown as `Founder #k+1` (annals_v0.md §4). A title's `tier` and
+# `liege` are M7's title.tier and title.liege, fixed at world creation (check 5; AN-1).
+# GENERATED; do not edit.
+[extract]
+format = "rehoboam/annals/keyframe-extract/v0"
+keyframe = "kf/y000000/t000000000.arrow"   # the genesis keyframe the rows came from
+state_hash = "c4f1a29e07b3d586"                 # its plane-A state_hash (illustrative)
+
+[[house]]
+id = 8380881677373783717   # fell
+[[house]]
+id = 12427197615358897272   # carrow
+[[title]]
+id = 1
+tier = "sovereign"
+liege = 0
+[[title]]
+id = 2
+tier = "major"
+liege = 1
+[[life_course]]
+person_id = 4554286092881966386   # fergus
+founder = 5
+sex = 0
+mother_id = 9323831268412229055
+father_id = 6480668151967117525
+birth_tick = -7603200
+[[life_course]]
+person_id = 6480668151967117525   # brannoc
+founder = 0
+sex = 0
+mother_id = 6693397770357243490
+father_id = 16077101286934785090
+birth_tick = -24749280
+[[life_course]]
+person_id = 6693397770357243490   # fell_root_wife
+founder = 3
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -37235520
+exit_tick = -15552000
+[[life_course]]
+person_id = 8599830639058873818   # cathal
+founder = 9
+sex = 0
+mother_id = 9099717786551247302
+father_id = 15729040449112377638
+birth_tick = -5139360
+[[life_course]]
+person_id = 9099717786551247302   # mairead
+founder = 8
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -16839360
+[[life_course]]
+person_id = 9323831268412229055   # ardith
+founder = 4
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -19476000
+exit_tick = -4782240
+[[life_course]]
+person_id = 10920779051904117653   # carrow_root_wife
+founder = 7
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -33991200
+exit_tick = -12915360
+[[life_course]]
+person_id = 13831978776912696371   # carrow_root
+founder = 6
+sex = 0
+mother_id = 0
+father_id = 0
+birth_tick = -36109440
+exit_tick = -7686720
+[[life_course]]
+person_id = 15729040449112377638   # ulric
+founder = 1
+sex = 0
+mother_id = 10920779051904117653
+father_id = 13831978776912696371
+birth_tick = -21460320
+[[life_course]]
+person_id = 16077101286934785090   # fell_root
+founder = 2
+sex = 0
+mother_id = 0
+father_id = 0
+birth_tick = -38835360
+exit_tick = -10010880
+[[house_member]]
+person = 4554286092881966386   # fergus
+house = 8380881677373783717
+[[house_member]]
+person = 6480668151967117525   # brannoc
+house = 8380881677373783717
+[[house_member]]
+person = 8599830639058873818   # cathal
+house = 12427197615358897272
+[[house_member]]
+person = 13831978776912696371   # carrow_root
+house = 12427197615358897272
+[[house_member]]
+person = 15729040449112377638   # ulric
+house = 12427197615358897272
+[[house_member]]
+person = 16077101286934785090   # fell_root
+house = 8380881677373783717
+[[tenure]]
+title = 1
+holder = 16077101286934785090   # fell_root
+start = -30540960
+end = -10010880
+[[tenure]]
+title = 1
+holder = 6480668151967117525   # brannoc
+start = -10010880
+[[tenure]]
+title = 2
+holder = 13831978776912696371   # carrow_root
+start = -27815040
+end = -7686720
+[[tenure]]
+title = 2
+holder = 15729040449112377638   # ulric
+start = -7686720

@@ -26,8 +26,10 @@ Checks (``--check``):
   4. the calendar (05.1 §4.1): known answers for 360- and 365-day years, before and after the
      epoch; ordinal and cardinal words to 999,999; the q8_8 rendering;
   5. the fixtures: every ``EVENT`` agrees with the dictionary the chronicle header names, and
-     the chronicle is a possible history under M2's and M7's rules (annals_v0.md §12); controls
-     ``fixture-deposed-day-one`` and ``fixture-claim-untriggered``;
+     the chronicle is a possible history under M2's and M7's rules (annals_v0.md §12), an
+     ``INTERREGNUM_CRISIS`` on a non-sovereign title only while its liege's interregnum is open
+     (REV-WAVE7 K2; AN-1); controls ``fixture-deposed-day-one``, ``fixture-claim-untriggered``
+     and ``fixture-vassal-liege-held``;
   6. determinism: a render in this process equals renders in two other processes under different
      ``PYTHONHASHSEED`` values, and every committed sidecar's digest recomputes from the files;
   7. coverage: every in-scope kind is exercised by the fixtures (unexercised variants are reported);
@@ -141,7 +143,11 @@ M7_KINDS = frozenset(
 )
 CLAIM_CAUSES = frozenset({"SUCCEED", "DEPOSED"})  # M7: a passed-over heir, or a deposition
 DEPOSITION_FIRST_DAY = 2  # M7: a deposition timer fires on days 2 to the last of its month
-FIXTURE_WORLDS = ("ashcombe", "solitary", "untold")
+SOVEREIGN = "sovereign"  # the Registry [title_tiers] id whose title has no liege (M7 title.liege)
+TITLE_TIERS = tuple(  # the extract's tier ids (annals_v0.md §1; AN-1)
+    str(t) for t in tomllib.loads(REGISTRY.read_text(encoding="utf-8"))["title_tiers"]["ids"]
+)
+FIXTURE_WORLDS = ("ashcombe", "fells", "solitary", "untold")
 # Groups check 8 renders beyond the manifest's (REV-SPR-029 R39): Edric Ashcombe's line keeps the
 # line grouping covered now that §9's `line:<least named id>` is Orm's. The self-test lists them;
 # the annals manifest does not.
@@ -189,6 +195,7 @@ CONTROLS = (
     "shared-name",
     "fixture-deposed-day-one",
     "fixture-claim-untriggered",
+    "fixture-vassal-liege-held",
 )
 PLANTED_LINE = "Thus the chronicle ended, and the land was quiet."
 FORGED_ROW = 424242  # a life row no fixture holds, for the forged-source control (R37)
@@ -422,6 +429,8 @@ class World:
     state_hash: str = "-"
     house_ids: list[int] = field(default_factory=list)
     title_ids: list[int] = field(default_factory=list)
+    title_tier: dict[int, str] = field(default_factory=dict)  # title -> Registry [title_tiers] id
+    title_liege: dict[int, int] = field(default_factory=dict)  # title -> liege title, 0 sovereign
     kf_life: dict[int, LifeRow] = field(default_factory=dict)
     members: dict[int, int] = field(default_factory=dict)  # person -> house
     tenures: list[Tenure] = field(default_factory=list)
@@ -517,7 +526,7 @@ def _keyframe(w: World, kf: dict[str, Any], where: str) -> None:
     w.keyframe = str(extract.get("keyframe", "-"))
     w.state_hash = str(extract.get("state_hash", "-"))
     w.house_ids = sorted(int(h["id"]) for h in kf.get("house", []))
-    w.title_ids = sorted(int(t["id"]) for t in kf.get("title", []))
+    _titles(w, kf.get("title", []), where)
     for row in kf.get("life_course", []):
         pid = int(row["person_id"])
         exit_tick = row.get("exit_tick")
@@ -548,6 +557,29 @@ def _keyframe(w: World, kf: dict[str, Any], where: str) -> None:
     w.tenures.sort(key=lambda t: (t.title, t.start))
 
 
+def _titles(w: World, rows: list[dict[str, Any]], where: str) -> None:
+    """The extract's title rows: id, tier and liege (annals_v0.md §1; AN-1), refused by name."""
+    for row in rows:
+        title = int(row["id"])
+        if "tier" not in row or "liege" not in row:
+            raise AnnalsError(f"{where}: title {title}: a [[title]] row needs a tier and a liege")
+        tier, liege = str(row["tier"]), int(row["liege"])
+        if tier not in TITLE_TIERS:
+            raise AnnalsError(
+                f"{where}: title {title}: tier {tier!r} is not a Registry [title_tiers] id"
+            )
+        if (tier == SOVEREIGN) != (liege == 0):
+            raise AnnalsError(
+                f"{where}: title {title}: a {tier} title with liege {liege} (M7 title.liege: 0 "
+                "for a sovereign, the liege's TitleId for every other title)"
+            )
+        w.title_tier[title], w.title_liege[title] = tier, liege
+    w.title_ids = sorted(w.title_tier)
+    for title, liege in sorted(w.title_liege.items()):
+        if liege and liege not in w.title_tier:
+            raise AnnalsError(f"{where}: title {title}: its liege {liege} has no [[title]] row")
+
+
 def _opt(v: int | None) -> str:
     """``~`` for an absent value, else its decimal form."""
     return "~" if v is None else str(v)
@@ -557,7 +589,7 @@ def extract_digest(w: World) -> str:
     """XXH3-64 of the extract's canonical form: fixed table order, rows sorted by key (R23)."""
     lines = [f"extract {w.keyframe} {w.state_hash}"]
     lines += [f"house {h}" for h in w.house_ids]
-    lines += [f"title {t}" for t in w.title_ids]
+    lines += [f"title {t} {w.title_tier[t]} {w.title_liege[t]}" for t in w.title_ids]
     for r in sorted(w.kf_life.values(), key=lambda r: r.person):
         lines.append(
             f"life {r.person} {r.sex} {r.mother} {r.father} {r.birth_tick}"
@@ -1199,8 +1231,12 @@ def _plant_templates(t: Any, control: Control) -> None:  # noqa: ANN401
         natural["text"] = str(natural["text"]) + " The title passed to {state.title.holder}."
 
 
-def _plant_chronicle(chron: Chronicle, control: Control) -> None:
-    """The fixture controls of check 5 (R26): a deposition on day 1; a claim with no cause."""
+def _plant_chronicle(chron: Chronicle, control: Control, w: World) -> None:
+    """The fixture controls of check 5 (R26, AN-1).
+
+    A deposition on day 1; a claim with no cause; a vassal's crisis while its liege is held, both
+    where the liege was never in interregnum and after the liege's interregnum has closed.
+    """
     moved: set[int] = set()
     for ev in list(chron.events.values()):
         triggered = {c for c, code, _, _, _, _ in ev.causes if code == TRIGGERED}
@@ -1211,6 +1247,42 @@ def _plant_chronicle(chron: Chronicle, control: Control) -> None:
             moved.add(ev.id)
         if control.name == "fixture-claim-untriggered" and ev.kind == "CLAIM_CREATED":
             chron.events[ev.id] = dataclasses.replace(ev, causes=())
+    if control.name == "fixture-vassal-liege-held":
+        _plant_vassal_crisis(chron, w)
+
+
+def _plant_vassal_crisis(chron: Chronicle, w: World) -> None:
+    """``fixture-vassal-liege-held`` (AN-1): two vassal crises while the liege is held.
+
+    Each vassal crisis is replayed after the chronicle's last event, once its liege is seated
+    again (``fells``: the closing end of "open"); then SPR-029 F-24's event is planted back: the
+    last vassal SUCCEED a death triggered becomes a castless crisis (``ashcombe``: the lordship is
+    held throughout).
+    """
+    events = sorted(chron.events.values(), key=lambda e: e.id)
+    on_vassal = [  # successions and crises of a title with a liege
+        ev
+        for ev in events
+        if ev.kind in {"SUCCEED", "INTERREGNUM_CRISIS"}
+        and ev.payload
+        and w.title_tier.get(ev.payload[0], SOVEREIGN) != SOVEREIGN
+    ]
+    last_id, tick = (events[-1].id, events[-1].tick) if events else (-1, 0)
+    replays = [ev for ev in on_vassal if ev.kind == "INTERREGNUM_CRISIS"]
+    for n, ev in enumerate(replays, 1):
+        chron.events[last_id + n] = dataclasses.replace(ev, id=last_id + n, tick=tick)
+    after_death = [  # a vassal SUCCEED triggered by its holder's death
+        ev
+        for ev in on_vassal
+        if ev.kind == "SUCCEED"
+        and any(
+            code == TRIGGERED and c in chron.events and chron.events[c].kind == "DEATH"
+            for c, code, _, _, _, _ in ev.causes
+        )
+    ]
+    if after_death:
+        last = after_death[-1]
+        chron.events[last.id] = dataclasses.replace(last, kind="INTERREGNUM_CRISIS", roles=())
 
 
 def _row_fields(line: str) -> list[str]:
@@ -1499,6 +1571,10 @@ class History:
             t.title: t.holder for t in world.tenures if t.end is None
         }
         self.claims: dict[int, set[int]] = {}  # claimant -> titles with an unrenounced claim
+        # Titles whose interregnum is open: from an INTERREGNUM_CRISIS of the title to the SUCCEED
+        # of that title that ends it, in EventId order (annals_v0.md §12 check 5; K2). None at
+        # genesis: every title has a holder (M7 [initialization]).
+        self.open: set[int] = set()
         self.problems: list[str] = []
 
     def same_tick(self, ev: Event, kind: str) -> list[Event]:
@@ -1556,6 +1632,7 @@ class History:
             if self.holders.get(title) not in (target, None):
                 self.problems.append(f"event {ev.id}: SUCCEED's target is not the title's holder")
             self.holders[title] = actor
+            self.open.discard(title)
         elif ev.kind == "DEPOSED":
             self.deposed(ev, title, actor, target)
         elif ev.kind == "CLAIM_CREATED":
@@ -1563,7 +1640,25 @@ class History:
         elif ev.kind == "CLAIM_RENOUNCED" and actor is not None:
             self.claims.get(actor, set()).discard(title)
         elif ev.kind == "INTERREGNUM_CRISIS":
-            self.holders[title] = None
+            self.interregnum(ev, title)
+
+    def interregnum(self, ev: Event, title: int) -> None:
+        """K2: a non-sovereign title's crisis only while its liege's interregnum is open."""
+        tier = self.w.title_tier.get(title)
+        if tier is None:
+            self.problems.append(
+                f"event {ev.id}: title {title} has no row in the keyframe extract, so its tier "
+                "and liege are unknown"
+            )
+        elif tier != SOVEREIGN and self.w.title_liege[title] not in self.open:
+            self.problems.append(
+                f"event {ev.id}: an INTERREGNUM_CRISIS on title {title} ({tier}, liege "
+                f"{self.w.title_liege[title]}) while its liege's interregnum is closed (M7's "
+                "arbitrate: a vassal with no candidate reverts to its liege's holder in demesne, "
+                "and joins only an open interregnum; REV-WAVE7 K2)"
+            )
+        self.holders[title] = None
+        self.open.add(title)
 
     def deposed(self, ev: Event, title: int, actor: int | None, target: int | None) -> None:
         """A deposition on day 2 or later; the deposer holds a claim; the deposed gains one."""
@@ -1796,7 +1891,7 @@ def _check_fixtures(d: Dictionary, control: Control) -> list[str]:
     for world in FIXTURE_WORLDS:
         w = load_world(FIXTURES / world)
         chron = load_chronicle(FIXTURES / world / "chronicle_A.txt", d)
-        _plant_chronicle(chron, control)
+        _plant_chronicle(chron, control, w)
         problems += [f"{world}: {p}" for p in check_dictionary(chron, d) + History(chron, w).run()]
     return problems
 

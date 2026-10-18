@@ -1,0 +1,8 @@
+# The annals of the line of Brannoc Fell
+# From the chronicle of fells; templates 0.4.0
+
+## The second year (Year of the Fells)
+On day 10 of month 3, Brannoc Fell died of natural causes.
+On day 10 of month 3, after the death of Brannoc Fell, the succession to a title found no clear heir, and an interregnum began.
+On day 1 of month 6, after the interregnum, the first son of Brannoc Fell succeeded Brannoc Fell.
+On day 1 of month 6, after the interregnum, the first son of Brannoc Fell succeeded Ulric Carrow.

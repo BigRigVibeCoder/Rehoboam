@@ -863,6 +863,8 @@ REQUIRED_GATES = (
     "deposition must FAIL the possible-history check (REV-SPR-029 R26)",
     "selftest_annals positive control: a fixture deposition moved to a month's first day, its "
     "claims with it, must FAIL the possible-history check (REV-SPR-029 R26, R37)",
+    "selftest_annals positive control: a fixture vassal crisis while its liege is held must FAIL "
+    "the possible-history check (REV-WAVE7 K2; AN-1)",
     "selftest_annals positive control: a forged source row on a sidecar row must FAIL provenance "
     "(REV-SPR-029 R19 P7b, R37)",
     "selftest_annals positive control: a golden file no rendered group owns must FAIL as an "

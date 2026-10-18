@@ -1,0 +1,6 @@
+#rehoboam/annals/manifest/v0 world=fells chronicle_digest=946c79dcde9ceb04408d55a519a82a01 templates=0.4.0 templates_digest=80e215546e2cd0fe
+group house:8380881677373783717 51b659cc88918004
+group house:12427197615358897272 c0aea65d9ea64291
+group line:6480668151967117525 28d49287a09dfbb8
+group year 9b3294635cb041ad
+digest 0a16e27ec5d87cc6
