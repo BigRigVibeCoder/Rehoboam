@@ -353,6 +353,14 @@ impl<'e> Checker<'e> {
         }
     }
 
+    /// `E_TYPE` for a relation outside `in` and a `candidates` program (§3.5; 0.5.1).
+    pub(crate) fn no_rel(ty: Ty, span: Span) -> CResult<Ty> {
+        if matches!(ty, Ty::Rel(_)) {
+            return err(ErrorCode::Type, span, "a relation is not a value");
+        }
+        Ok(ty)
+    }
+
     pub(crate) fn no_event(ty: Ty, span: Span) -> CResult<Ty> {
         if ty == Ty::Event {
             return err(
@@ -558,7 +566,7 @@ impl<'e> Checker<'e> {
             for item in items.iter_mut() {
                 self.check(item)?;
                 let t = self.finish(item)?;
-                parts.push(Self::no_event(t, item.span)?);
+                parts.push(Self::no_rel(Self::no_event(t, item.span)?, item.span)?);
             }
             Ty::Tuple(parts)
         })
@@ -588,7 +596,8 @@ impl<'e> Checker<'e> {
             self.check(body)?;
             let element = self
                 .finish(body)
-                .and_then(|t| Self::no_event(t, body.span))?;
+                .and_then(|t| Self::no_event(t, body.span))
+                .and_then(|t| Self::no_rel(t, body.span))?;
             self.unbind(var);
             self.leave(bound);
             Ty::List(Box::new(element))
@@ -608,7 +617,7 @@ impl<'e> Checker<'e> {
             self.resolve(cond, ct)?;
             let ta = self.check(a)?;
             let tb = self.check(b)?;
-            let ty = self.unify(&ta, &tb, span)?;
+            let ty = Self::no_rel(self.unify(&ta, &tb, span)?, span)?;
             if !ty.is_literal() {
                 self.resolve(a, ty.clone())?;
                 self.resolve(b, ty.clone())?;

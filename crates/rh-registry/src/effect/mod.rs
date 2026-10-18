@@ -48,7 +48,7 @@ use parse::Parser;
 
 /// The language version this evaluator implements (§11): a Registry or golden file of another
 /// version is refused.
-pub const LANGUAGE_VERSION: &str = "0.5.0";
+pub const LANGUAGE_VERSION: &str = "0.5.1";
 
 /// A byte range of the program text.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -537,7 +537,7 @@ fn compile_body(
         Form::Expr => {
             let mut node = parser.program()?;
             let ty = cx.check(&mut node)?;
-            let ty = Checker::no_event(ty, node.span)?;
+            let ty = Checker::no_rel(Checker::no_event(ty, node.span)?, node.span)?;
             match expected {
                 Some(want) => {
                     let t = cx.unify(&ty, want, node.span)?;

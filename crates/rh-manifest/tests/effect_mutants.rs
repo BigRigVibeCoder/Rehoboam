@@ -1,5 +1,5 @@
 //! V-WC-10's mutation tests (SPR-017 T-05): each planted mutant of the evaluator fails its named
-//! sentinel cases with the wrong value it predicts, and the unmutated evaluator passes all 558.
+//! sentinel cases with the wrong value it predicts, and the unmutated evaluator passes every case.
 //!
 //! Run with `--features mutant-effect`; a build without the feature ignores every mutant, which
 //! `a_build_without_the_feature_ignores_mutants` checks.

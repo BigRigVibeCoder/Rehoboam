@@ -321,6 +321,7 @@ impl Ev<'_> {
         };
         {
             let (kind, elements) = self.relation(rel)?;
+            let total = elements.len();
             let mut picked = Vec::new();
             for id in elements {
                 self.set(*slot, Value::Ent(kind, id));
@@ -336,6 +337,10 @@ impl Ev<'_> {
                 }
             }
             self.clear(*slot);
+            if *op == AggOp::All && body.is_none() {
+                // 0.5.1: `where` is the predicate of a bodyless `all`, as of `any` (§5.4).
+                return Ok(Value::Bool(picked.len() == total));
+            }
             self.fold(*op, &node.ty, picked, orelse.as_deref())
         }
     }

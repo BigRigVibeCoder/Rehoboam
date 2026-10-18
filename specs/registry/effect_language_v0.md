@@ -1,6 +1,6 @@
 # Registry effect language v0
 
-*Status: Draft for the director's approval at the SPR-017 plan gate (C2). Version `0.5.0` of the language (round 5 of PR #41, the closing nits r4-1 to r4-5, on top of rounds 2–4). Checked against the frozen system specs on `main`: `M7.dynasty` 0.3.4, `T1.minds` 0.3.3, `M2.demography` 0.2.2. Contract for WP P1.15 (`docs/11`), SPR-017 (`CODEX/05_PROJECT/PRJ-002_P1aPlan.md`) and its dependants SPR-021 (M7 succession) and SPR-024 (minds' verbs). Sources: `05.5` §2.1 and §3.2, `05.1` §2, §4.3 and §6, ADR-0006, ADR-0010 (amendment v1.1 item 4), ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035, `docs/01` §5 principles 8 and 9, `crates/rh-core/src/fixed/`. Golden cases: `specs/registry/effect_language_golden_v0.toml`. Reference implementation: `specs/registry/effect_ref.py` (standard-library Python; `--check` reproduces every golden case).*
+*Status: Draft for the director's approval at the SPR-017 plan gate (C2). Version `0.5.1` of the language: `0.5.0` (round 5 of PR #41, the closing nits r4-1 to r4-5, on top of rounds 2–4, approved as D37) with the Architect's erratum of 2026-10-18 (a relation is not a value; a bodyless `all` takes `where` as its predicate; rows added, none moved). Checked against the frozen system specs on `main`: `M7.dynasty` 0.3.4, `T1.minds` 0.3.3, `M2.demography` 0.2.2. Contract for WP P1.15 (`docs/11`), SPR-017 (`CODEX/05_PROJECT/PRJ-002_P1aPlan.md`) and its dependants SPR-021 (M7 succession) and SPR-024 (minds' verbs). Sources: `05.5` §2.1 and §3.2, `05.1` §2, §4.3 and §6, ADR-0006, ADR-0010 (amendment v1.1 item 4), ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035, `docs/01` §5 principles 8 and 9, `crates/rh-core/src/fixed/`. Golden cases: `specs/registry/effect_language_golden_v0.toml`. Reference implementation: `specs/registry/effect_ref.py` (standard-library Python; `--check` reproduces every golden case).*
 
 > **BLUF.** The effect language is the small, typed, total expression language in which the Registry states succession laws (who may inherit a title and in what order), verb effects (which lifecycle commands an act queues), and the vows' completion and conflict predicates. A program reads only the columns its declaring system has declared, iterates only over Registry relations with declared bounds, draws randomness only from the keyed RNG with a declared purpose, and changes the world only by queuing typed commands to the column's owner. Every well-typed program terminates and yields a value: there is no recursion, every loop is bounded, and division by zero, overflow and reads of missing entities have defined results (the saturating, round-half-to-even rules of `rh-core::fixed`). Floats do not exist in the language. This document is the grammar, the type system, the evaluation rules, the v0 prelude of relations and accessors, the seven succession laws of the Registry as programs, the error classes a program can be rejected with, and the versioning rule. The Rust evaluator of SPR-017 (`rh-registry`) must reproduce every golden case bit for bit; the Python reference is the independent oracle, as `bin/gen_fixed_vectors.py` is for `rh-core::fixed`.
 
@@ -169,7 +169,7 @@ Candidates sort by key ascending, then by entity id ascending (§7.2), so two ca
 
 ### 3.5 What has no type
 
-Relations, programs and command names are not values: a relation appears only after `in` or as the `candidates` program; a command only as an action. Keys exist only as the result of an `order` program and inside its tuples and lists. An `event` exists only as an event-typed command argument (§3.1). The checker rejects any other use (`E_TYPE`).
+Relations, programs and command names are not values: a relation appears only after `in` or as the `candidates` program; a command only as an action. Keys exist only as the result of an `order` program and inside its tuples and lists. An `event` exists only as an event-typed command argument (§3.1). The checker rejects any other use (`E_TYPE`): an expression program, an `if` or a key element (of a tuple or a list) whose type is a relation is `E_TYPE` (0.5.1).
 
 ## 4. Semantics
 
@@ -276,7 +276,7 @@ A relation yields its elements in **ascending entity id** (`none` never appears)
 |---|---|---|---|---|
 | `count(y in R where c)` | none | `int` | 0 | no body, no `else` |
 | `any(y in R where c)` | none | `bool` | `false` | `where` is the predicate |
-| `all(y in R where c)` | none | `bool` | `true` | |
+| `all(y in R where c)` | none | `bool` | `true` | `where` is the predicate: true iff every element satisfies `c` (0.5.1) |
 | `sum(y in R where c: e)` | `num` | the body's type | 0 | saturating left fold |
 | `min(y in R where c: e else d)`, `max(…)` | `num` | the body's type | `d` | `else` is required |
 
@@ -325,7 +325,7 @@ The programs live next to the ids they belong to. `ids` stays the enumeration ma
 
 ```toml
 [effect_language]
-version = "0.5.0"                 # this document's version; the Registry's registry_version covers it
+version = "0.5.1"                 # this document's version; the Registry's registry_version covers it
 
 [succession_laws]
 ids = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", "tanistry", "sortition"]
@@ -482,7 +482,7 @@ A command to an owner the world does not register is not a rejection: it compile
 
 ## 11. Versioning and change classes
 
-- The language is versioned `MAJOR.MINOR.PATCH`, recorded in `[effect_language] version` of the Registry and in the golden file's header; this document is `0.5.0` (`0.1.0` to `0.4.0` were the earlier rounds of PR #41; nothing evaluates them, so the value changes of rounds 3 to 5, the `death_cause` ordinals, the event encoding, the sortition key, the blood rule, its window and the guard, are re-approved golden rows rather than a MAJOR bump). The Rust evaluator refuses a Registry whose language version it does not implement.
+- The language is versioned `MAJOR.MINOR.PATCH`, recorded in `[effect_language] version` of the Registry and in the golden file's header; this document is `0.5.1` (`0.5.1` is a PATCH erratum of `0.5.0` that adds golden rows and moves none; `0.1.0` to `0.4.0` were the earlier rounds of PR #41; nothing evaluates them, so the value changes of rounds 3 to 5, the `death_cause` ordinals, the event encoding, the sortition key, the blood rule, its window and the guard, are re-approved golden rows rather than a MAJOR bump). The Rust evaluator refuses a Registry whose language version it does not implement.
 - **Additive** changes (a builtin, a relation, a program kind, a new error class that only rejects programs that were already invalid) bump MINOR and are **C2** (Registry schema): `state_hash` is unchanged on every golden world because no existing program's value changes.
 - A change to the **value of any existing construct** (a rounding rule, an order, a missing-read result, a bound, a tie rule, the draw mapping) bumps MAJOR and is **C3** as soon as any registered system evaluates a program on a golden world; until then (before SPR-021 lands) it is C2 with the golden file re-approved by the director. The golden file is the detector: a change that alters any expected value is at least the class above.
 - Editing a **program** in the Registry (a law, a verb's effects) is a Registry edit: C2 for the schema, and C3 if a golden world's hash moves (`docs/13` §4.2: CI detects the class independently). Adding a law or a verb with effects is `data_only` (S4), C2.
@@ -548,6 +548,6 @@ Each decision is the Architect's recommendation with a confidence; the director 
 ## 13. Conformance
 
 - The golden file is the contract's test: every grammar rule, every row of §4.3, every relation and accessor of §5.3, every aggregate, every program kind, the seven laws and the four extensions on the fixture, the deep world, the rota world and the uncle–niece world, the lineage bound on generated fan trees, both invariants, and every error class, each with an expected value or code.
-- `python -I specs/registry/effect_ref.py --check` exits 0 iff every golden case reproduces (558 cases at v0.5.0); `bin/check_all.sh` runs it, with a positive control (an altered expected value must fail).
+- `python -I specs/registry/effect_ref.py --check` exits 0 iff every golden case reproduces (564 cases at v0.5.1); `bin/check_all.sh` runs it, with a positive control (an altered expected value must fail).
 - SPR-017's Rust evaluator (`rh-registry`, V-WC-10) reads the same file and must reproduce every case bit for bit, in debug and release builds, as `rh-sample`'s golden vectors do at both optimisation levels.
 - The Python reference is standard-library only, exact (`fractions.Fraction`), and shares no code with the engine.

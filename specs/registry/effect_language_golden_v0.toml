@@ -35,12 +35,12 @@
 # day ago and is compacted: life-course rows only). The Rust test builds the same rows from the same table.
 
 language = "effect_language_v0"
-version = "0.5.0"
+version = "0.5.1"
 spec = "specs/registry/effect_language_v0.md"
 
 # ============================================================================= the Registry slice (§7.4)
 [registry]
-effect_language_version = "0.5.0"
+effect_language_version = "0.5.1"
 
 # Every enum declares its default: the value a missing read yields (minor 2); it is not the first value by position.
 [registry.enums]
@@ -5699,3 +5699,51 @@ bind = { actor = "person:9", target = "person:5" }
 events = [{ actor = "person:9", target = "person:5" }, { actor = "person:16", target = "person:5" }]
 text = 'when chance(break_outcome, actor, target, 0.5): Resign(person: actor, office: none)'
 expect = "effects:[Resign(person=9, args=[0])]"
+
+# ----------------------------------------------------------------------------- erratum 0.5.1 (Architect, 2026-10-18)
+# A relation is not a value (§3.5): an expression program, an `if` or a key element of relation type is E_TYPE; a
+# relation is legal only after `in` and as a `candidates` program. A bodyless `all` takes `where` as its predicate,
+# as `any` does (§5.4): true iff every element satisfies it, true on an empty relation. Rows added; none moved.
+[[case]]
+id = "relation_as_an_expression_program_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:10" }
+text = 'children(x)'
+expect = "error:E_TYPE"
+[[case]]
+id = "relation_typed_if_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:10" }
+text = 'if true then children(x) else children(x)'
+expect = "error:E_TYPE"
+[[case]]
+id = "relation_in_a_key_tuple_is_e_type"
+kind = "order"
+system = "M7.dynasty"
+bind = { x = "person:10" }
+text = '(children(x), 1)'
+expect = "error:E_TYPE"
+[[case]]
+id = "all_where_on_an_empty_relation_is_true"   # Thora (18) has no children
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:18" }
+text = 'all(y in children(x) where false)'
+expect = "bool:true"
+[[case]]
+id = "all_where_on_a_mixed_relation_is_false"   # Halvard's children: Kell and Mara alive, Nils and Brynja dead and compacted
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'all(y in children(holder) where person.alive(y))'
+expect = "bool:false"
+missing_reads = 2
+[[case]]
+id = "all_where_on_an_all_true_relation_is_true"
+kind = "expr"
+system = "M7.dynasty"
+bind = { holder = "person:7" }
+text = 'all(y in children(holder) where y != none)'
+expect = "bool:true"

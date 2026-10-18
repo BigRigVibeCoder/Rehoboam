@@ -38,7 +38,7 @@ if hasattr(sys, "set_int_max_str_digits"):
 
 REPO = Path(__file__).resolve().parents[2]
 GOLDEN = REPO / "specs" / "registry" / "effect_language_golden_v0.toml"
-LANGUAGE_VERSION = "0.5.0"
+LANGUAGE_VERSION = "0.5.1"
 
 # ----------------------------------------------------------------------------- numeric limits
 I64_MIN = -(1 << 63)
@@ -755,6 +755,13 @@ def require_numeric(ty: str) -> None:
         raise CompileError("E_TYPE", f"{ty} is not numeric")
 
 
+def no_rel(ty: str) -> str:
+    """``E_TYPE`` for a relation outside ``in`` and a ``candidates`` program (§3.5; 0.5.1)."""
+    if ty.startswith("rel:"):
+        raise CompileError("E_TYPE", "a relation is not a value")
+    return ty
+
+
 def no_event(ty: str) -> str:
     """``E_TYPE`` for an ``event`` outside an event-typed payload field (spec §3.1)."""
     if ty == "event":
@@ -1372,6 +1379,9 @@ class Agg(Node):
             if self.where is None or self.where.eval(ev):
                 picked.append(self.body.eval(ev) if self.body is not None else True)
         ev.vars.pop(self.var, None)
+        if self.op == "all" and self.body is None:
+            # 0.5.1: `where` is the predicate of a bodyless `all`, as of `any` (§5.4).
+            return len(picked) == len(elements)
         return self.fold(ev, picked)
 
     def fold(self, ev: Ev, picked: list[Value]) -> Value:
@@ -1408,7 +1418,7 @@ class Tuple(Node):
         parts = []
         for item in self.items:
             item.check(cx)
-            parts.append(no_event(item.finish()))
+            parts.append(no_rel(no_event(item.finish())))
         self.ty = f"tuple({','.join(parts)})"
         return self.ty
 
@@ -1435,7 +1445,7 @@ class ListKey(Node):
         cx.bind(self.var, f"ent:{rel_ty[4:]}", loop=True)
         try:
             self.body.check(cx)
-            element = no_event(self.body.finish())
+            element = no_rel(no_event(self.body.finish()))
         finally:
             cx.unbind(self.var)
             cx.leave(self.rel.bound)
@@ -1466,7 +1476,7 @@ class If(Node):
     def check(self, cx: Ctx) -> str:
         """The condition is ``bool``; the branches unify."""
         self.cond.resolve(unify(self.cond.check(cx), "bool"))
-        self.ty = unify(self.a.check(cx), self.b.check(cx))
+        self.ty = no_rel(unify(self.a.check(cx), self.b.check(cx)))
         if self.ty not in LITERALS:
             self.resolve(self.ty)
         return self.ty
@@ -2235,7 +2245,7 @@ def relation(world: World, name: str, args: list[Value]) -> list[Et]:
 def compile_expr(text: str, cx: Ctx, expected: str | None = None) -> Node:
     """Parse, check and resolve an expression program; the kind's result type is a context."""
     node = Parser(text).program()
-    ty = no_event(node.check(cx))
+    ty = no_rel(no_event(node.check(cx)))
     if expected is not None:
         node.resolve(unify(ty, expected))
     else:
