@@ -504,8 +504,8 @@ population_synthesis_gate() {
 fixture_worlds_gate() {
   local planted=target/rendered-fixtures/fixture_worlds_altered_golden.txt
   mkdir -p "$(dirname "$planted")" || return 1
-  sed '0,/^named_at_start narrow 31 /s//named_at_start narrow 32 /' specs/worldgen/golden/fixture_worlds_v0.txt > "$planted" || return 1
-  grep -q '^named_at_start narrow 32 ' "$planted" || { echo "control not planted: no 'named_at_start narrow 31' line in the fixture-worlds golden file"; return 1; }
+  sed '0,/^named_at_start narrow 23 /s//named_at_start narrow 24 /' specs/worldgen/golden/fixture_worlds_v0.txt > "$planted" || return 1
+  grep -q '^named_at_start narrow 24 ' "$planted" || { echo "control not planted: no 'named_at_start narrow 23' line in the fixture-worlds golden file"; return 1; }
   "$PY" -I bin/ci_scope.py trace fixture-worlds -- specs/worldgen/selftest_fixture_worlds.py --tier pr --altered-golden "$planted"
 }
 
@@ -1407,6 +1407,7 @@ run "Golden draws power: a one-day error in q' either way changes re-sample outc
 run "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)" "fail:STALE:" "$PY" -I bin/gen_m2_draws_reference.py --check --output tests/lint_fixtures/golden/altered_m2_draws_v1.txt &&
 run "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)" "pass:M2 F1 FERTILITY AND PARTNERING: PASS" "$PY" -I specs/demography/selftest_m2_f1.py &&
 run "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)" "fail:M2 F1 FERTILITY AND PARTNERING: FAIL" m2_f1_stale_control &&
+run "M2 F1 reference positive control: the elite read reverted to the woman's own row must FAIL F6's couple read (D56 (e); BCK-002 A-62)" "fail:9. F6 table choice, the couple read: FAIL" "$PY" -I specs/demography/selftest_m2_f1.py --control woman-row &&
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
@@ -1419,7 +1420,7 @@ run "ci_scope control: a change to check_all.sh outside a scoped gate's own text
 run "ci_scope control: a change to a scoped gate's own text in check_all.sh runs the gate (BCK-002 A-64)" "pass:CI SCOPE: gate fixture-worlds: runs (1 of its inputs changed: bin/check_all.sh)" scope_chain_control inside &&
 run "ci_scope trace positive control: a scoped gate that reads a file outside its declared inputs must FAIL (BCK-002 A-64)" "fail:SCOPE INCOMPLETE: gate population-synthesis read specs/stream/canonical_v0.py" "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/stream/canonical_v0.py --check &&
 scope population-synthesis &&
-run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential, its reversed-line control, and the altered-golden and stale-spec controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)" "pass:EFFECT DIFFERENTIAL: 1389 successions of 5 laws over 2 configurations compared" population_synthesis_gate &&
+run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential, its reversed-line control, and the altered-golden and stale-spec controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)" "pass:EFFECT DIFFERENTIAL: 1481 successions of 5 laws over 2 configurations compared" population_synthesis_gate &&
 run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
 run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
 run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/worldgen/selftest_population_synthesis.py --control spacing &&
@@ -1500,8 +1501,9 @@ run "lint_templates positive control: a prologue template with an unknown id mus
 run "lint_templates positive control: a control character in a template text must FAIL (REV-SPR-029 R27)" "fail:text carries a control character U+0007" annals_lint_control control_char &&
 part golden &&
 run "Required tools present (golden part)" pass require_tools golden &&
-# SPR-030 CRN pairing in part golden: pure Python, about 28 s (REV-SPR-030 R27: part core passed 12 minutes on PR #79's CI, 12:13)
-run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)" "pass:CRN PAIRING: PASS" "$PY" -I specs/determinism/selftest_crn_pairing.py --seeds 1 --controls &&
+# SPR-030 CRN pairing in part golden: pure Python, about 28 s (REV-SPR-030 R27: part core passed 12 minutes on PR #79's CI, 12:13).
+# The PR tier takes the first VALID seed of 1 to 4 (seed 1 today); the nightly tier searches until two are VALID (BCK-002 A-62, the review's E4).
+run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales, the PR tier (the first VALID seed of 1 to 4), with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10; BCK-002 A-62)" "pass:CRN PAIRING: PASS (tier pr," "$PY" -I specs/determinism/selftest_crn_pairing.py --tier pr --controls &&
 # Tier 10 — performance: instruction counts (SPR-009 T-02a; GOV-002 tier 10)
 run "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 T-02a)" "pass:V-PERF-04 PASS" "$PY" -I bin/perf_gate.py gate --baseline "$PERF_BASELINE" --out "$PERF_RUN" &&
 run "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 T-02)" "pass:identical counts in two runs" sh -c '"$1" -I bin/perf_gate.py measure --out artifacts/perf/instructions_run2.txt && "$1" -I bin/perf_gate.py same "$2" artifacts/perf/instructions_run2.txt' sh "$PY" "$PERF_RUN" &&
