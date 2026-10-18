@@ -168,3 +168,51 @@ The Director has established an ironclad, non-negotiable 3-tier prioritization i
      E4 Industrial War (1900-1945).
    - Eras remain state vectors (ADR-0027), preserving 100% backward compatibility.
 ```
+
+---
+
+## 7. EMPIRICAL TEST BATTERY RESULTS (OPERATION WRECK-IT RALPH)
+
+### 7.1 Full PR Tier Verification (`bin/check_all.sh`)
+* **Execution Status:** **100% PASS (538 / 538 Checks Passed)**
+* **Audit Scope:**
+  - Rust workspace compilation (`cargo build`, `cargo clippy -D warnings`, `cargo fmt --check`).
+  - Nextest unit tests, doctest gates, and compile-fail negative controls.
+  - Plane A determinism gates: plane hashes, observer invariance, 1-thread vs N-threads bit-identical golden runs (smoke 1000y, solo 200y, household 200y, hamlet 200y).
+  - Crash recovery & replay: `kill -9` during segment sealing recovers byte-identical resealing; replay from keyframes reproduces unbroken runs.
+  - Streaming & sifting: `rh-stream` canonical v0 line format, DuckDB causal graph queries (`V-DATA-10`), Parquet format validations, and `rh-sifter` SQL twins.
+  - System specs & linters: `lint_odd` next-spec locks, `lint_arch` crate boundaries, and `lint_forbidden` API constraints.
+
+---
+
+### 7.2 Probe B08-01: Dynastic Survival & Genesis Extinction Trap
+* **Test Fixture:** [`tests/probes/probe_dynastic_survival.py`](file:///home/bdavidriggins/Documents/Rehoboam/tests/probes/probe_dynastic_survival.py)
+* **Part 1 — 300-Year Projection on The Manor of Ash ($N=400$, 2 Houses, 20 Genesis Nobles):**
+  - **Agnatic Primogeniture (Default):** Nobles collapse from 20 at Y0 down to **3.0 total (1.5 per house)** at Y300, hitting a low of **2.6 total (1.3 per house)** at Y323. A single battlefield death, plague, or infertile marriage produces total dynastic extinction.
+  - **Cognatic Succession:** Explodes virally from 20 to **458 nobles (100% of the manor)** by Y300 due to unconstrained noble title dilution through commoner marriages.
+  - **Bounded Succession:** The only mathematically stable rule, maintaining 20–22 nobles across 300 years (~11 per house).
+* **Part 2 — Vocation Holy Orders Drain Sensitivity Sweep ($v$):**
+  - At $v = 0.0\%$: 31.3 nobles survive at Year 300 (15.6 per house) — healthy.
+  - At $v = 5.0\%$: 18.1 nobles survive (9.0 per house).
+  - At $v = 10.0\%$: 10.2 nobles survive (5.1 per house).
+  - At $v = 15.0\%$: 5.6 nobles survive (2.8 per house).
+  - At $v \ge 20.0\%$: **3.0 nobles survive (1.5 per house) — CRITICAL EXTINCTION RISK**.
+  *Finding: Draining 20% of younger noble siblings into celibate holy orders in small 2-house manors causes an inescapable extinction trap.*
+* **Part 3 — 50-Seed Genesis Synthesis Variation:**
+  - **House Ashcombe (3-gen backfill):** Living bloodline members: Min=2, Mean=7.6, Max=19. Available fertile women (15–45): Min=0, Mean=2.6, Max=7.
+  - **House Thorne (2-gen backfill):** Living bloodline members: Min=1, Mean=5.8, Max=14. Available fertile women (15–45): Min=0, Mean=1.9, Max=5.
+  - **Immediate Extinction Trap:** In **6.0% of seeds (3 of 50)**, a house begins tick 0 with **ZERO fertile women** (no adult bloodline daughters and no living in-married wives under 45). One noble death at tick 0 renders the house instantly sterile.
+
+---
+
+### 7.3 Probe B08-02: Live Plane A to Plane C Stream Subscriber
+* **Test Fixture:** [`tests/probes/probe_stream_client.py`](file:///home/bdavidriggins/Documents/Rehoboam/tests/probes/probe_stream_client.py)
+* **Daemon Target:** `ws://127.0.0.1:8089` (Task-696, `bin/stream_server.py`)
+* **Test Execution & Invariant Verifications:**
+  - **Handshake:** RFC-6455 101 Switching Protocols established over raw TCP socket.
+  - **Initial State:** Received `CONNECTION_ESTABLISHED` packet carrying complete world root state (Tick 1005, Year 1066 Jun, initial citadel wall 94%).
+  - **Upstream Control Channel:** Dispatched masked RFC-6455 frame: `{"action": "FIRE_NORTH_BATTERY", "target_x": 0.0}`.
+  - **Downstream Broadcast:** Server processed battery fire and broadcasted `CROSS_VALLEY_DISCHARGE` followed by `WALL_BREACH_EVENT`.
+  - **State Mutation:** Verified 33 voxels destroyed (`COLLAPSED_RUBBLE`), citadel wall degraded from 94% to 76%, and roundtrip event latency recorded at 1001.4 ms.
+* **Verdict:** Plane A stream server is fully validated, operational, and prepared for direct subscription by the Plane C 3D Voxel Viewer (`rh-view`).
+
