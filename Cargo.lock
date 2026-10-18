@@ -844,10 +844,15 @@ dependencies = [
  "criterion",
  "iai-callgrind",
  "rh-core",
+ "rh-events",
  "rh-golden",
  "rh-ids",
+ "rh-manifest",
+ "rh-registry",
  "rh-snapshot",
+ "rh-sys-demography",
  "rh-sys-smoke",
+ "rh-worldgen",
 ]
 
 [[package]]
@@ -863,6 +868,13 @@ dependencies = [
 [[package]]
 name = "rh-contracts"
 version = "0.0.0"
+dependencies = [
+ "rh-core",
+ "rh-events",
+ "rh-ids",
+ "rh-registry",
+ "rh-sys-demography",
+]
 
 [[package]]
 name = "rh-core"

@@ -246,6 +246,18 @@ pub struct SpecEntry {
     /// Each `[[emits]]` kind's envelope declaration: roles, motives and snapshots (SPR-020 T-03;
     /// envelope v0 §1, §2, §4). `StepCtx::emit` checks every draft against it.
     pub envelope: BTreeMap<String, EmitDecl>,
+    /// Every `[[applies]]` entry: the command, its draining binding, its key rule, key field,
+    /// typed payload and whether it carries a sampled outcome (EVO-001; SPR-014 T-01).
+    pub applies: Vec<SpecApply>,
+    /// Every `[[reads]]` entry's `use` and typed `neutral` (EVO-001 R4, R12; SPR-014 T-04).
+    pub read_uses: Vec<SpecReadUse>,
+    /// `(command, timer, purpose)` for every outcome `[[commands]]` entry (EVO-001 R9).
+    pub outcome_timers: Vec<(String, String, String)>,
+    /// `(purpose, first key name)` for every `[[rng]]` entry (BCK-002 A-50; SPR-014 T-07).
+    pub rng_keys: Vec<(String, String)>,
+    /// `(column, value)` for every `[[owns]] default`, typed as the column (`05.1` §2 rule 2,
+    /// the ledger row insert; SPR-014 T-05).
+    pub defaults: Vec<(String, i64)>,
 }
 
 /// What one `[[emits]]` entry declares a kind's events fill (envelope v0 §2).
@@ -275,6 +287,48 @@ pub struct SnapshotDecl {
     pub ty: Option<String>,
 }
 
+/// One `[[applies]]` entry, as data (`05.1` §2 rule 2; EVO-001).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SpecApply {
+    /// The command.
+    pub command: String,
+    /// `drained_by` as `(pulse, phase)` names.
+    pub drained_by: (String, String),
+    /// `key`: `living` or `any` (`any` when absent: the lint refuses that on a frozen spec).
+    pub key: String,
+    /// `key_field`: a `PersonId` payload field, or `person` (`Command::person` itself).
+    pub key_field: String,
+    /// The typed payload, `(field, type)` in order; `None` for an untyped one (a draft spec).
+    pub payload: Option<Vec<(String, String)>>,
+    /// `outcome`: the command carries a sampled outcome (EVO-001 R9).
+    pub outcome: bool,
+    /// The payload as written when it does not parse as `"{ name: Type, ... }"`: registration
+    /// refuses it by name rather than treat the command as untyped (the review's K10).
+    pub payload_malformed: Option<String>,
+}
+
+/// How one `[[reads]]` entry uses its column (EVO-001 R4, R12): an identity read requires its
+/// owner; a rate or mode read carries a neutral, served when its owner is absent.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SpecReadUse {
+    /// The column.
+    pub column: String,
+    /// `identity`, `rate` or `mode`; anything else (or nothing) is treated as `identity`, which
+    /// is the strict reading: a world without the owner is refused.
+    pub usage: String,
+    /// The neutral, typed as the column (an enum's code, a fixed-point value's raw bits), when
+    /// the spec gives one the loader could type.
+    pub neutral: Option<i64>,
+}
+
+impl SpecReadUse {
+    /// Whether the read is a rate or mode read: dropped, not refused, when its owner is absent.
+    #[must_use]
+    pub fn droppable(&self) -> bool {
+        self.usage == "rate" || self.usage == "mode"
+    }
+}
+
 impl SpecEntry {
     /// The plane of the system ([`system_plane`] over its owned columns).
     #[must_use]
@@ -294,6 +348,9 @@ pub struct SpecTable {
     /// What registration and `emit` read from the Registry (envelope v0 §8). Empty when the host
     /// passes no Registry: then no role constant is compared and no attribute is known.
     pub registry: RegistryTable,
+    /// The number of codes of every enum column whose `[[owns]]` lists its `values` (EVO-001),
+    /// for `enum(<column>)` payload fields.
+    pub enum_codes: BTreeMap<String, usize>,
 }
 
 /// The Registry's envelope vocabulary as plane A compiles it (SPR-020 T-01; envelope v0 §8): the

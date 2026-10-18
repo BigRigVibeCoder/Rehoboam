@@ -512,7 +512,7 @@ wheels = [
 [[package]]
 name = "rehoboam-tools"
 version = "0.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "pydantic" },

@@ -129,7 +129,7 @@
 
 use core::fmt;
 
-use crate::entity::EntityRef;
+use crate::entity::{EntityKind, EntityRef};
 
 /// Declares an identifier newtype with explicit raw conversions only.
 macro_rules! typed_id {
@@ -226,6 +226,46 @@ pub trait EntityKey: Copy + sealed::Sealed {
     /// The entity whose epoch keys the draw, or `None` for an identifier no material input's scope
     /// can name (its draws are at epoch 0).
     fn entity(self) -> Option<EntityRef>;
+
+    /// The entity kind the key stands for, checked at the draw against the kind the purpose's
+    /// `[[rng]] key` declares (BCK-002 A-50): the kind of [`EntityKey::entity`], else `None` (an
+    /// event, which keys by no entity kind).
+    fn kind(self) -> Option<EntityKind> {
+        self.entity().map(EntityRef::kind)
+    }
+}
+
+/// The key of a world-level draw (`[[rng]] key = ["world", ...]`): kind [`EntityKind::World`]
+/// for the A-50 check at the draw, and no entity for the epoch (no material input's scope names
+/// the world as a whole, so its draws are at epoch 0). The wrapped value is the draw's
+/// `entity_id`: 0 by convention; the smoke world keeps the 65,535 it drew with as a region-id
+/// sentinel, so its recorded draws are unchanged (SPR-014 T-07).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct WorldKey(u64);
+
+impl WorldKey {
+    /// The conventional world key, `entity_id` 0.
+    pub const WORLD: Self = Self(0);
+
+    /// A world key whose draws use `entity_id` `raw`.
+    #[must_use]
+    pub const fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+}
+
+impl EntityKey for WorldKey {
+    fn entity_key(self) -> u64 {
+        self.0
+    }
+
+    fn entity(self) -> Option<EntityRef> {
+        None
+    }
+
+    fn kind(self) -> Option<EntityKind> {
+        Some(EntityKind::World)
+    }
 }
 
 /// Seals [`EntityKey`]: only the identifier types here can key a draw.
@@ -234,6 +274,7 @@ mod sealed {
     impl Sealed for super::PersonId {}
     impl Sealed for super::RegionId {}
     impl Sealed for super::EventId {}
+    impl Sealed for super::WorldKey {}
 }
 
 impl EntityKey for PersonId {

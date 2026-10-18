@@ -4,6 +4,8 @@ pub const SPEC_VERSION: &str = "0.1.0";
 pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Day, Phase::Activity),
 ];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+];
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {

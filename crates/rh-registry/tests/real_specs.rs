@@ -254,6 +254,7 @@ fn m2_system() -> OnSkeleton {
                 write("person.alive"),
                 write("person.death_tick"),
             ],
+            applies: rh_core::access::CommandApply::from_drains(m2::DRAINS),
             ..AccessSpec::default()
         },
         params: vec![
@@ -267,6 +268,25 @@ fn m2_system() -> OnSkeleton {
         ],
     }
 }
+
+/// The violations of `e`, as text, other than `absent-owner`: S5 (a P1a draft whose identity
+/// reads name S3 and M4) never registers in P1a (SPR-014 T-04; REV-EVO-001 R12), so the tests that
+/// use it for another rule look at that rule's violations only.
+fn besides_absent_owner(e: &rh_core::register::RegistrationError) -> Vec<String> {
+    e.violations
+        .iter()
+        .filter(|v| v.rule != "absent-owner")
+        .map(ToString::to_string)
+        .collect()
+}
+
+/// The `absent-owner` violations S5 alone gets (SPR-014 T-04): its identity reads of S3 and M4,
+/// and its mode read of M6 with no typed neutral; M2's columns are refused too when M2 is absent.
+const S5_ABSENT: [&str; 3] = [
+    "VIOLATION [absent-owner] S5.daily_life: reads person.residence as an identity read from S3.migration, which is not registered: a world that registers S5.daily_life registers S3.migration (05.1 §2 rule 2)",
+    "VIOLATION [absent-owner] S5.daily_life: reads person.occupation as an identity read from M4.economy, which is not registered: a world that registers S5.daily_life registers M4.economy (05.1 §2 rule 2)",
+    "VIOLATION [absent-owner] S5.daily_life: reads region.conditions as a mode read from M6.polity, which is not registered, and its spec gives no typed neutral (05.1 §2 rule 2: the type's zero is never a fallback)",
+];
 
 #[test]
 fn the_generated_params_are_q16_16() {
@@ -313,32 +333,34 @@ fn every_skeleton_matches_its_spec() {
     );
 }
 
+/// SPR-014 T-04 (REV-EVO-001 R12): M2 registers alone on its skeleton; S5 does not register
+/// beside it, refused under `absent-owner` by name for every identity read of an owner the world
+/// lacks (S3, M4) and for a mode read with no typed neutral (M6).
 #[test]
-fn s5_and_m2_register_on_their_skeletons() {
+fn m2_registers_on_its_skeleton_and_s5_is_refused_without_its_owners() {
     let t = real_ownership();
-    let r = register(
+    let r =
+        register(vec![Box::new(m2_system())], &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(r.ids(), ["M2.demography"]);
+    assert_eq!(r.order(Phase::Vital), ["M2.demography", "M2.demography"]);
+    assert_eq!(r.accesses().len(), 1);
+    let Err(e) = register(
         vec![
             Box::new(s5_system(s5::RngPurpose::names())),
             Box::new(m2_system()),
         ],
         &t.spec_table(),
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(r.ids(), ["M2.demography", "S5.daily_life"]);
-    assert_eq!(r.order(Phase::Vital), ["M2.demography"]);
-    assert_eq!(r.order(Phase::Activity), ["S5.daily_life"]);
-    // S5 reads columns whose owners have no code yet: reported, not refused.
-    assert!(
-        r.reports().iter().any(|n| n
-            == "S5.daily_life: reads person.residence from S3.migration, which is not registered")
-    );
-    // The code declarations are what `rh-cli ownership` will count "from code".
-    assert_eq!(r.accesses().len(), 2);
+    ) else {
+        panic!("S5 without S3, M4 and M6 must be refused");
+    };
+    let shown: Vec<String> = e.violations.iter().map(ToString::to_string).collect();
+    assert_eq!(shown, S5_ABSENT, "{e}");
 }
 
 /// SPR-006: the real specs' `[[commands]]` and `[[emits]]` reach registration. M2 declares the
-/// `DEATH` it emits; S5's spec sends `TieDelta` to S1. S5 declaring that submission is refused
-/// while S1 is not registered (G5); an undeclared kind or a wrong owner is refused too.
+/// `DEATH` it emits; S5's spec sends `TieDelta` to S1. Since SPR-014 (T-04) a submission to an
+/// owner the world does not register is reported, not refused; an undeclared kind or a wrong owner
+/// is still refused. (S5's own absent owners are refused too; `besides_absent_owner` sets them aside.)
 #[test]
 fn commands_and_event_kinds_are_checked_against_the_real_specs() {
     use rh_core::access::CommandSend;
@@ -356,23 +378,24 @@ fn commands_and_event_kinds_are_checked_against_the_real_specs() {
             m2.access.emits = emits;
             vec![Box::new(s5), Box::new(m2)]
         };
-    let r = register(with(vec!["DEATH"], None), &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
+    let Err(e) = register(with(vec!["DEATH"], None), &t.spec_table()) else {
+        panic!("S5 has absent owners");
+    };
+    assert!(besides_absent_owner(&e).is_empty(), "{e}");
     assert!(
-        r.reports()
+        e.reports
             .iter()
             .any(|n| n == "S5.daily_life: spec event kind ENCOUNTER has no use in code")
     );
     let Err(e) = register(with(vec!["DEATH"], Some("S1.culture")), &t.spec_table()) else {
-        panic!("a command to an unregistered owner must be refused (G5)");
+        panic!("S5 has absent owners");
     };
-    assert_eq!(
-        e.violations
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>(),
-        [
-            "VIOLATION [command] S5.daily_life: submits command TieDelta to S1.culture, which is not registered; a world that registers a sender registers the command's owner (ruling 5)"
-        ]
+    assert!(besides_absent_owner(&e).is_empty(), "{e}");
+    assert!(
+        e.reports.iter().any(|n| n
+            == "S5.daily_life: submits command TieDelta to S1.culture, which is not registered: each submission is discarded and counted under dropped{S5.daily_life, TieDelta, absent_owner} (05.1 §2 rule 2)"),
+        "{:?}",
+        e.reports
     );
     let Err(e) = register(with(vec!["BIRTH"], Some("M2.demography")), &t.spec_table()) else {
         panic!("an undeclared kind and a wrong owner must be refused");
@@ -380,6 +403,7 @@ fn commands_and_event_kinds_are_checked_against_the_real_specs() {
     let rules: Vec<(&str, &str)> = e
         .violations
         .iter()
+        .filter(|v| v.rule != "absent-owner")
         .map(|v| (v.rule, v.system.as_str()))
         .collect();
     assert_eq!(
@@ -440,13 +464,18 @@ fn an_undeclared_purpose_fails_registration() {
 #[test]
 fn a_spec_purpose_with_no_code_use_is_reported() {
     let t = real_ownership();
-    let r = register(
+    let Err(e) = register(
         vec![Box::new(s5_system(vec!["activity_block"]))],
         &t.spec_table(),
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
+    ) else {
+        panic!("S5 has absent owners");
+    };
     assert!(
-        r.reports()
+        besides_absent_owner(&e).is_empty(),
+        "only S5's absent owners: {e}"
+    );
+    assert!(
+        e.reports
             .iter()
             .any(|n| n == "S5.daily_life: spec RNG purpose encounter_outcome has no use in code")
     );
@@ -479,10 +508,16 @@ fn a_system_on_a_skeleton_reports_its_spec_data() {
     );
     assert_eq!(
         m2.schedule(),
-        [PulseBinding {
-            pulse: Pulse::Month,
-            phase: Phase::Vital
-        }]
+        [
+            PulseBinding {
+                pulse: Pulse::Month,
+                phase: Phase::Vital
+            },
+            PulseBinding {
+                pulse: Pulse::Day,
+                phase: Phase::Vital
+            }
+        ]
     );
     assert_eq!(s5.rng_purposes(), ["activity_block", "encounter_outcome"]);
     assert_eq!(m2.params_schema().names.len(), 7);
@@ -612,6 +647,7 @@ impl Declared {
                         plane: Plane::A,
                     })
                     .collect(),
+                applies: spec.map_or_else(Vec::new, spec_applies),
                 ..AccessSpec::default()
             },
             bindings: spec.map_or_else(Vec::new, |s| {
@@ -670,9 +706,16 @@ fn the_lint_and_registration_agree_on_one_fixture_set() {
         let declared = Declared::from_spec(&t, system, reads, writes);
         let registered = register(vec![Box::new(declared)], &t.spec_table());
         let mut lint_rules: Vec<&str> = lint.iter().map(|v| v.rule).collect();
+        // `absent-owner` is a rule of the world, not of one declaration: the lint, which judges a
+        // declaration alone, has no such rule (SPR-014 T-04), so it is set aside here.
         let mut reg_rules: Vec<&str> = match &registered {
             Ok(_) => Vec::new(),
-            Err(e) => e.violations.iter().map(|v| v.rule).collect(),
+            Err(e) => e
+                .violations
+                .iter()
+                .map(|v| v.rule)
+                .filter(|r| *r != "absent-owner")
+                .collect(),
         };
         lint_rules.sort_unstable();
         lint_rules.dedup();
@@ -680,7 +723,7 @@ fn the_lint_and_registration_agree_on_one_fixture_set() {
         reg_rules.dedup();
         assert_eq!(
             lint.is_empty(),
-            registered.is_ok(),
+            reg_rules.is_empty(),
             "{system} {reads:?} {writes:?}: lint {lint:?}"
         );
         assert_eq!(lint_rules, reg_rules, "{system} {reads:?} {writes:?}");
@@ -703,16 +746,13 @@ fn bindings_and_lags_must_match_the_spec() {
         panic!("a lag that differs from the spec must fail registration");
     };
     assert_eq!(
-        e.violations
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>(),
+        besides_absent_owner(&e),
         [
             "VIOLATION [spec] S5.daily_life: reads person.sex at lag lagged, but its spec's [[reads]] declares 'start_of_day'"
         ]
     );
     let mut wrong_schedule = m2_system();
-    wrong_schedule.schedule = &[(Pulse::Day, Phase::Vital)];
+    wrong_schedule.schedule = &[(Pulse::Day, Phase::Vital)]; // the Month binding left out
     let Err(e) = register(vec![Box::new(wrong_schedule)], &t.spec_table()) else {
         panic!("a binding that differs from the spec must fail registration");
     };
@@ -722,29 +762,43 @@ fn bindings_and_lags_must_match_the_spec() {
             .map(ToString::to_string)
             .collect::<Vec<_>>(),
         [
-            "VIOLATION [spec] M2.demography: binds Day/Vital but its spec's [[schedule]] declares Month/Vital"
+            "VIOLATION [spec] M2.demography: binds Day/Vital but its spec's [[schedule]] declares Day/Vital, Month/Vital"
         ]
     );
 }
 
+/// The commands a spec owns, each drained by the binding its `[[applies]] drained_by` names, as a
+/// skeleton's `DRAINS` declares them (SPR-014 T-01).
+fn spec_applies(spec: &SystemSpec) -> Vec<rh_core::access::CommandApply> {
+    spec.applies
+        .iter()
+        .map(|a| {
+            let (pulse, phase) = a
+                .drained_by
+                .as_deref()
+                .and_then(|d| d.split_once('/'))
+                .expect("a drained_by");
+            rh_core::access::CommandApply::new(
+                a.command.clone().leak(),
+                Pulse::from_name(pulse).expect("a pulse"),
+                Phase::from_name(phase).expect("a phase"),
+            )
+        })
+        .collect()
+}
+
 /// `system` declared exactly as its spec says, in a world that registers `world`: every read with its
-/// spec lag, declared unconditionally (REV-P1a round 4, NEW-4: registration reports a read of an
-/// absent owner; SPR-014 adds the rule that drops it and applies the coupling's neutral value),
-/// every owned column written, the event kinds it emits, the commands it submits to a
-/// registered owner (ruling 5: a P1a world enables no command whose owner it does not register), and
-/// the commands the other registered specs submit to it.
-fn as_specified(t: &Ownership, system: &'static str, world: &[&'static str]) -> Declared {
+/// spec lag, declared unconditionally (REV-P1a round 4, NEW-4; SPR-014 T-04: registration refuses
+/// an identity read of an absent owner and drops a rate or mode read, serving its neutral), every
+/// owned column written, the event kinds it emits, every command it submits, declared
+/// unconditionally too (a send to an absent owner is reported and its submissions discarded), and
+/// the commands it owns with the bindings that drain them.
+fn as_specified(t: &Ownership, system: &'static str, _world: &[&'static str]) -> Declared {
     let spec = &t.specs[system];
     let leak = |s: &String| -> &'static str { s.clone().leak() };
-    let mut applies: Vec<&'static str> = world
-        .iter()
-        .filter(|&&w| w != system)
-        .flat_map(|w| t.specs[*w].commands.iter())
-        .filter(|c| c.target == system)
-        .map(|c| leak(&c.command))
-        .collect();
-    applies.sort_unstable();
-    applies.dedup();
+    // The commands it owns, each drained by the binding its spec names (SPR-014 T-01): as a
+    // skeleton's DRAINS declares them, whatever the world registers.
+    let applies = spec_applies(spec);
     Declared {
         id: system,
         access: AccessSpec {
@@ -761,7 +815,6 @@ fn as_specified(t: &Ownership, system: &'static str, world: &[&'static str]) -> 
             sends: spec
                 .commands
                 .iter()
-                .filter(|c| world.contains(&c.target.as_str()))
                 .map(|c| rh_core::access::CommandSend {
                     command: leak(&c.command),
                     target: leak(&c.target),
@@ -769,6 +822,7 @@ fn as_specified(t: &Ownership, system: &'static str, world: &[&'static str]) -> 
                 .collect(),
             applies,
             emits: spec.emits.iter().map(leak).collect(),
+            drain_only: Vec::new(),
         },
         bindings: spec
             .schedule
@@ -798,11 +852,12 @@ fn m2_m7_and_t1_register_together_as_specified() {
     };
     let r = register(trio(), &t.spec_table()).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(r.ids(), world);
-    // M7 0.3.2 binds Day/Vital for its murder timer (EVO-001 R9): after M2 (it reads M2 at
-    // same_instant), before T1 (no edge either way; ties by id).
+    // M2 binds Vital at Month and, since 0.2.3, at Day (its drain, SPR-014); M7 0.3.2 binds
+    // Day/Vital for its murder timer (EVO-001 R9): after M2 (it reads M2 at same_instant), before
+    // T1 (no edge either way; ties by id).
     assert_eq!(
         r.order(Phase::Vital),
-        ["M2.demography", "M7.dynasty", "T1.minds"]
+        ["M2.demography", "M2.demography", "M7.dynasty", "T1.minds"]
     );
     // One entry per binding (Year, Month, Day), coarser pulse first within a level.
     assert_eq!(
@@ -814,14 +869,6 @@ fn m2_m7_and_t1_register_together_as_specified() {
         r.order(Phase::Agenda),
         ["T1.minds", "M7.dynasty", "T1.minds"]
     );
-    // Reads of owners the world does not register (S6, S7, M6) are declared and reported, not
-    // refused (NEW-4).
-    for note in [
-        "T1.minds: reads vow.conflict from S7.vows, which is not registered",
-        "M7.dynasty: reads polity.exec_constraint from M6.polity, which is not registered",
-    ] {
-        assert!(r.reports().iter().any(|n| n == note), "{:?}", r.reports());
-    }
     // Positive control: T1 reading title.holder at same_instant (M7 writes it at Polity, after
     // T1's Vital binding) is a phase-order violation.
     let mut planted = as_specified(&t, "T1.minds", &world);
@@ -930,4 +977,194 @@ fn a_skeleton_role_constant_is_checked_against_the_registry() {
         &real_ownership().spec_table(),
     )
     .unwrap_or_else(|e| panic!("{e}"));
+}
+
+/// Registers `world`, each system declared as its spec says (every read, every send).
+fn register_world(
+    t: &Ownership,
+    world: &[&'static str],
+) -> Result<rh_core::register::Registered, rh_core::register::RegistrationError> {
+    let systems: Vec<Box<dyn SystemModel>> = world
+        .iter()
+        .map(|&id| Box::new(as_specified(t, id, world)) as Box<dyn SystemModel>)
+        .collect();
+    register(systems, &t.spec_table())
+}
+
+/// SPR-014 T-04, V-INV-04's absent-owner rows on the real specs (`05.1` §2 rule 2; REV-P1a NEW-4,
+/// NEW-6; REV-EVO-001 R4, R12, R16):
+///
+/// | World | Outcome |
+/// |---|---|
+/// | {M2} | registers |
+/// | {M2, M7} | registers; M7's rate and mode reads of M6 and T1 are dropped and reported |
+/// | {M2, T1} | refused under `absent-owner`, naming T1, an M7 column and M7 |
+/// | {M2, M7, T1} | registers; M2 before M7 and T1 in Vital; every `life_course.*` read is `same_instant` and no `life_course.*` column is lag-snapshotted; T1's send to the absent M4 is reported |
+#[test]
+fn v_inv_04_absent_owners_on_the_real_specs() {
+    let t = real_ownership();
+    // {M2}: M2 reads nothing foreign.
+    let r = register_world(&t, &["M2.demography"]).unwrap_or_else(|e| panic!("{e}"));
+    assert!(r.dropped_reads("M2.demography").is_empty());
+    // {M2, M7}: M7's rate read of M6 (exec_constraint) and mode read of T1 (person.named) are
+    // dropped with their typed neutrals; nothing refused.
+    let r = register_world(&t, &["M2.demography", "M7.dynasty"]).unwrap_or_else(|e| panic!("{e}"));
+    let dropped = r.dropped_reads("M7.dynasty");
+    assert!(
+        dropped.contains(&("polity.exec_constraint", 0)),
+        "{dropped:?}"
+    );
+    assert!(dropped.contains(&("person.named", 0)), "{dropped:?}");
+    assert!(
+        r.reports().iter().any(|n| n
+            == "M7.dynasty: reads polity.exec_constraint from M6.polity, which is not registered: a rate read, dropped; its neutral is 0"),
+        "{:?}",
+        r.reports()
+    );
+    assert!(
+        r.reports().iter().any(|n| n
+            == "M7.dynasty: reads person.named from T1.minds, which is not registered: a mode read, dropped; its neutral is 0"),
+        "{:?}",
+        r.reports()
+    );
+    // {M2, T1}: T1 reads M7's columns as identity reads, so the world is refused, by name.
+    let Err(e) = register_world(&t, &["M2.demography", "T1.minds"]) else {
+        panic!("T1 without M7 must be refused");
+    };
+    assert!(!e.violations.is_empty());
+    assert!(
+        e.violations.iter().all(|v| v.rule == "absent-owner"
+            && v.system == "T1.minds"
+            && v.message
+                .contains("from M7.dynasty, which is not registered")),
+        "{e}"
+    );
+    assert!(
+        e.violations.iter().any(|v| v
+            .message
+            .starts_with("reads title.holder as an identity read from M7.dynasty")),
+        "{e}"
+    );
+    // {M2, M7, T1}: registers; NEW-6: life_course.* is read at same_instant and never snapshotted.
+    let world = ["M2.demography", "M7.dynasty", "T1.minds"];
+    let r = register_world(&t, &world).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        r.order(Phase::Vital),
+        ["M2.demography", "M2.demography", "M7.dynasty", "T1.minds"]
+    );
+    let life_course: Vec<(&str, Lag)> = r
+        .accesses()
+        .iter()
+        .flat_map(|(_, a)| a.reads.iter())
+        .filter(|rd| rd.column.starts_with("life_course."))
+        .map(|rd| (rd.column, rd.lag))
+        .collect();
+    assert!(!life_course.is_empty());
+    assert!(
+        life_course.iter().all(|(_, lag)| *lag == Lag::SameInstant),
+        "{life_course:?}"
+    );
+    assert!(
+        r.lagged_reads()
+            .iter()
+            .all(|c| !c.starts_with("life_course.")),
+        "{:?}",
+        r.lagged_reads()
+    );
+    assert!(
+        r.reports().iter().any(|n| n
+            == "T1.minds: submits command BurnHoldings to M4.economy, which is not registered: each submission is discarded and counted under dropped{T1.minds, BurnHoldings, absent_owner} (05.1 §2 rule 2)"),
+        "{:?}",
+        r.reports()
+    );
+    println!(
+        "V-INV-04 real specs: {{M2}} and {{M2, M7}} register, {{M2, T1}} is refused by name, {{M2, M7, T1}} registers with no life_course.* snapshot"
+    );
+}
+
+/// SPR-014 T-01 (REV-EVO-001 NIT-10): registration compares a skeleton's `DRAINS` with its spec's
+/// `[[applies]] drained_by` under rule `spec`, as it compares `SCHEDULE`, and refuses a mismatch by
+/// name: the command and both bindings. A spec drain the code does not declare is refused too.
+#[test]
+fn a_drain_that_differs_from_its_spec_is_refused_by_name() {
+    let t = real_ownership();
+    let mut moved = m2_system();
+    moved.access.applies[0].drained_by = PulseBinding {
+        pulse: Pulse::Month,
+        phase: Phase::Vital,
+    };
+    let Err(e) = register(vec![Box::new(moved)], &t.spec_table()) else {
+        panic!("a drain that differs from the spec must be refused");
+    };
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [spec] M2.demography: drains command ScheduleDeath at Month/Vital, but its spec's [[applies]] says drained_by = Day/Vital"
+        ]
+    );
+    let mut missing = m2_system();
+    missing.access.applies.retain(|a| a.command != "Marry");
+    let Err(e) = register(vec![Box::new(missing)], &t.spec_table()) else {
+        panic!("a spec drain the code leaves out must be refused");
+    };
+    assert_eq!(
+        e.violations
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        [
+            "VIOLATION [spec] M2.demography: its spec's [[applies]] declares command Marry drained_by = Day/Vital, but its code drains nothing for it"
+        ]
+    );
+    println!("DRAINS: a drain that differs from its spec, or is missing, is refused by name");
+}
+
+/// The review's K10: a payload that does not parse is kept as malformed (registration refuses it
+/// by name), never read as an untyped command; a well-formed one is typed.
+#[test]
+fn a_malformed_applies_payload_is_kept_as_malformed() {
+    let text = |payload: &str| {
+        format!(
+            "[system]\nid = \"M2.demography\"\n[[applies]]\ncommand = \"Kill\"\npayload = \"{payload}\"\ndrained_by = \"Day/Vital\"\nkey = \"living\"\nkey_field = \"victim\"\n"
+        )
+    };
+    let entry = |payload: &str| {
+        let spec = SystemSpec::from_toml(Path::new("M2.odd.toml"), &text(payload)).unwrap();
+        let ids = std::iter::once("M2.demography".to_owned()).collect();
+        let table = Ownership::build(&[spec], &ids).spec_table();
+        table.specs["M2.demography"].applies[0].clone()
+    };
+    let bad = entry("victim PersonId");
+    assert_eq!(bad.payload, None);
+    assert_eq!(bad.payload_malformed.as_deref(), Some("victim PersonId"));
+    let good = entry("{ victim: PersonId }");
+    assert_eq!(
+        good.payload,
+        Some(vec![("victim".to_owned(), "PersonId".to_owned())])
+    );
+    assert_eq!(good.payload_malformed, None);
+}
+
+/// The review's K11: a rate read of a column whose owner has no spec yet gets its neutral typed by
+/// the literal alone: a zero is zero in every type; a non-zero integer is left untyped (it might be
+/// a `q8_8` or `q16_16` value).
+#[test]
+fn a_non_zero_neutral_for_a_column_with_no_spec_is_left_untyped() {
+    let neutral = |value: &str| {
+        let text = format!(
+            "[system]\nid = \"M3.agriculture\"\n[[reads]]\ncolumn = \"era.level\"\nowner = \"M6.polity\"\nlag = \"lagged\"\nuse = \"rate\"\nneutral = {value}\n"
+        );
+        let spec = SystemSpec::from_toml(Path::new("M3.odd.toml"), &text).unwrap();
+        let ids = ["M3.agriculture", "M6.polity"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let table = Ownership::build(&[spec], &ids).spec_table();
+        table.specs["M3.agriculture"].read_uses[0].neutral
+    };
+    assert_eq!(neutral("0"), Some(0));
+    assert_eq!(neutral("5"), None);
 }

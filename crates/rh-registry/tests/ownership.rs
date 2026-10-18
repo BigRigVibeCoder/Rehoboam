@@ -80,6 +80,8 @@ fn two_owners_and_plane_leaks_are_found() {
             column: col.to_owned(),
             plane: plane.to_owned(),
             ty: "bool".to_owned(),
+            values: None,
+            default: None,
         }],
         reads: reads
             .iter()
@@ -87,11 +89,16 @@ fn two_owners_and_plane_leaks_are_found() {
                 column: (*c).to_owned(),
                 owner: "M1.regions".to_owned(),
                 lag: "lagged".to_owned(),
+                usage: "identity".to_owned(),
+                neutral: None,
             })
             .collect(),
         rng: vec![],
         schedule: vec![],
+        schedule_steps: vec![],
         commands: vec![],
+        applies: vec![],
+        rng_keys: vec![],
         emits: vec![],
         from_manifest: vec![],
         envelope: std::collections::BTreeMap::new(),

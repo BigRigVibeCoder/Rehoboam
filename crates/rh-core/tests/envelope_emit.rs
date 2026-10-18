@@ -215,7 +215,7 @@ fn minds_step(
         }
         Case::UndeclaredMotive => {
             c.emit(draft().snapshot("stress", person(a), pre).motivated_by(
-                EventRef::Draft(DraftRef(0)),
+                EventRef::Draft(DraftRef::from_index(0)),
                 "AMBITION_FOR",
                 5,
                 5,
@@ -285,6 +285,7 @@ fn minds(read_mood: bool) -> Stub {
         .stepping(minds_step);
     if read_mood {
         stub.reads(MOOD, "Z9.absent", Lag::SameInstant)
+            .uses(MOOD, "mode", Some(0))
     } else {
         stub
     }
@@ -343,7 +344,7 @@ fn run(case: Case, rows: usize, seed: u64) -> Ran {
         SimTime::EPOCH,
     );
     let result = e.advance_until(SimTime::from_minutes(DAY / 2), |_, _| {});
-    let dropped = e.dropped().clone();
+    let dropped = e.dropped_snapshots().clone();
     let stress_after = e.tables().get(STRESS).cloned().unwrap_or_default();
     Ran {
         result,

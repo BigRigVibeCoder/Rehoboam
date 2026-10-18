@@ -14,7 +14,7 @@
 
 [templates]
 format = "rehoboam/annals/templates/v0"
-version = "0.2.0"                        # bumped with any change to a text, a slot, a layout or a label
+version = "0.3.0"                        # bumped with any change to a text, a slot, a layout or a label
 # Every kind an annal tells. An admitted event of another kind is counted in the sidecar's trailer
 # and not rendered (§5), but it may be named as a cause through a [[label]] below (§3). Grouped as
 # the WP names them: births, marriages, deaths, successions, claims and feuds.

@@ -42,3 +42,29 @@ pub use phase::Phase;
 pub use rh_events::RoleId;
 pub use system::Fixed;
 pub use time::Pulse;
+
+/// The `mutant-*` Cargo features compiled into this build (BCK-002 A-52): empty in every build a
+/// world or a baseline may come from. `rh-cli run` and `bin/regen_baseline.sh` refuse a build where
+/// it is not; `python/tests/test_mutant_features.py` checks that every `mutant-*` feature of the
+/// crate is listed here.
+pub const MUTANTS: &[&str] = &[
+    #[cfg(feature = "mutant-deliver-every-job")]
+    "mutant-deliver-every-job",
+    #[cfg(feature = "mutant-compact-keeps-version")]
+    "mutant-compact-keeps-version",
+    #[cfg(feature = "mutant-late-pre-image")]
+    "mutant-late-pre-image",
+    #[cfg(feature = "mutant-stale-lagged-snapshot")]
+    "mutant-stale-lagged-snapshot",
+    #[cfg(feature = "mutant-unmarked-put-back")]
+    "mutant-unmarked-put-back",
+];
+
+/// The reference features compiled into this build (SPR-038 S12): `reference-gating-off`, which
+/// adds `Engine::set_gating`. Like a mutant, no world or baseline may come from such a build:
+/// `rh_golden::run::mutant_features` reads this list too, so `rh-cli run` and
+/// `bin/regen_baseline.sh` refuse it (BCK-002 A-52).
+pub const REFERENCE: &[&str] = &[
+    #[cfg(feature = "reference-gating-off")]
+    "reference-gating-off",
+];

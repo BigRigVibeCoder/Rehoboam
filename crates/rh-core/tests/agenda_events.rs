@@ -41,6 +41,39 @@
 
 mod support;
 
+/// SPR-014: lifecycle queues for P1a, on stub systems (`05.1` §2 rule 2, all six parts; rule 4's
+/// merge order; EVO-001 §7). A module of the `agenda_events` test binary, as the plan names it.
+///
+/// - **V-DET-21, delivery** (T-01): a property test over random small worlds (three sizes, eight
+///   seeds). A command reaches only its owner's `drained_by` binding, at that binding's first run
+///   after the merge of the sender's level: within the instant to a later phase, at the next day
+///   start when sent at or after the binding's run; in key order; equal at 1, 2, 4 and 8 threads.
+///   A probe counts the same-instant deliveries and the cross-instant waits, and both are non-zero.
+///   Every other job of the owner (another binding, its timer pass) refuses a non-empty inbox with
+///   "delivered to a non-draining job", which the planted engine of EVO-001 option D1
+///   (`--features mutant-deliver-every-job`) must trip.
+/// - **V-DET-21, slots** (T-02): every `EventRef` an owner sees, in a command's cause, an
+///   event-typed payload field and a timer's cause, is the id the sender's draft got at the merge,
+///   at every thread count; an integer in an event slot, a field outside its type and a key person
+///   that differs from the key field are refused at `submit` by name.
+/// - **V-INV-15** (T-03): the dead-person drop at take, the owner's drops, the death timer for the
+///   dead, `key = "any"`, the queue-age invariant and its control, the non-idempotent death.
+/// - **V-INV-04** (T-04): a rate or mode read of an absent owner, served empty with its typed
+///   neutral; a send to an absent owner, discarded and counted.
+/// - **The row insert** (T-05): random worlds with two or three owners of `person.*` columns.
+///
+/// Refs: `CODEX/05_PROJECT/SPR-014_LifecycleQueues.md` T-01–T-05; `docs/09` V-DET-21, V-INV-15,
+/// V-INV-04; REV-EVO-001 R1–R19.
+mod lifecycle_queues {
+    pub mod delivery;
+    pub mod guard;
+    pub mod insert;
+    pub mod owners;
+    pub mod probes;
+    pub mod slots;
+    pub mod stale;
+}
+
 use std::path::PathBuf;
 
 use rh_core::agenda::{AgendaState, TimerEntry};
@@ -132,6 +165,7 @@ fn vital_step(
                         entity: entity(row),
                         kind: 0,
                         payload: r64(row),
+                        cause: rh_events::EventRef::None,
                     },
                 )?;
                 pending[row] = 1;
@@ -178,8 +212,8 @@ fn vital_fire(
     c.submit(Command {
         kind: "Inherit",
         person: person(row),
-        args: vec![r64(row)],
-        cause: Some(death),
+        args: vec![rh_core::command::Arg::Int(r64(row))],
+        cause: rh_events::EventRef::Draft(death),
     })
 }
 
@@ -208,8 +242,8 @@ fn war_step(
             c.submit(Command {
                 kind: "Inherit",
                 person: person(row),
-                args: vec![r64(row)],
-                cause: None,
+                args: vec![rh_core::command::Arg::Int(r64(row))],
+                cause: rh_events::EventRef::None,
             })?;
         }
     }
@@ -230,7 +264,7 @@ fn estate_step(
         });
     }
     for q in queue {
-        let row = row_of(q.command.args[0]);
+        let row = row_of(q.command.int(0).unwrap());
         v.write("estate.heirs")?[row] += 1;
         let order = &mut v.write("estate.order")?[0];
         *order = order
@@ -297,9 +331,9 @@ fn life_stubs(observer: bool) -> Vec<Stub> {
         Stub::new("X2.estate")
             .writes("estate.heirs")
             .writes("estate.order")
-            .applies("Inherit")
             .emits("INHERITANCE")
             .at(Pulse::Day, Phase::Agenda)
+            .applies("Inherit")
             .stepping(estate_step),
         Stub::new("X3.rumor")
             .reads("vital.alive", "X1.vital", SameInstant)
@@ -646,6 +680,7 @@ fn spec_at(time: SimTime, phase: Phase) -> TimerSpec {
         entity: EntityRef::WORLD,
         kind: 0,
         payload: 0,
+        cause: rh_events::EventRef::None,
     }
 }
 
@@ -686,7 +721,7 @@ fn submit_undeclared(
         kind: "Smite",
         person: PersonId::from_raw(1),
         args: vec![],
-        cause: None,
+        cause: rh_events::EventRef::None,
     })
 }
 fn emit_undeclared(
@@ -812,8 +847,12 @@ fn messages(e: &RegistrationError, rule: &str) -> Vec<String> {
 #[test]
 fn t03_a_non_owner_is_refused_at_registration() {
     let sender = Stub::new("Z1.sender").sends("Inherit", "Z2.estate");
-    let owner = Stub::new("Z2.estate").applies("Inherit");
-    let rogue = Stub::new("Z3.rogue").applies("Inherit");
+    let owner = Stub::new("Z2.estate")
+        .at(Pulse::Day, Phase::Agenda)
+        .applies("Inherit");
+    let rogue = Stub::new("Z3.rogue")
+        .at(Pulse::Day, Phase::Agenda)
+        .applies("Inherit");
     // A rogue applier, with the sender's spec naming the estate as owner.
     let e = refused(
         vec![sender.clone(), rogue.clone()],
@@ -858,12 +897,17 @@ fn t03_a_non_owner_is_refused_at_registration() {
             "Z1.sender: submits command Inherit to Z2.estate, which its spec's [[commands]] table does not declare"
         ]
     );
-    // The owner unregistered: refused (G5), since nothing would ever apply the command.
-    let e = refused(vec![sender.clone()], std::slice::from_ref(&sender));
+    // The owner unregistered: reported, not refused (SPR-006 G5 withdrawn for sends; 05.1 §2
+    // rule 2, absent owners): each submission is discarded and counted (SPR-014 T-04).
+    let r = register(
+        vec![sender.clone().boxed()],
+        &agreeing_specs(std::slice::from_ref(&sender)),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
-        messages(&e, "command"),
+        r.reports(),
         [
-            "Z1.sender: submits command Inherit to Z2.estate, which is not registered; a world that registers a sender registers the command's owner (ruling 5)"
+            "Z1.sender: submits command Inherit to Z2.estate, which is not registered: each submission is discarded and counted under dropped{Z1.sender, Inherit, absent_owner} (05.1 §2 rule 2)"
         ]
     );
 }
@@ -1082,6 +1126,7 @@ fn schedule_twins(
                     entity: EntityRef::new(kind, 5),
                     kind: 0,
                     payload: 0,
+                    cause: rh_events::EventRef::None,
                 },
             )?;
         }
@@ -1186,6 +1231,7 @@ fn schedule_slot(
                     entity: EntityRef::new(rh_ids::EntityKind::Person, 7),
                     kind: k,
                     payload: 0,
+                    cause: rh_events::EventRef::None,
                 },
             )?;
         }

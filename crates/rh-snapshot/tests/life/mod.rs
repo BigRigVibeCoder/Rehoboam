@@ -100,6 +100,7 @@ fn vital_step(
                         entity: entity(row),
                         kind: 0,
                         payload: r64(row),
+                        cause: rh_events::EventRef::None,
                     },
                 )?;
                 pending[row] = 1;
@@ -146,8 +147,8 @@ fn vital_fire(
     c.submit(Command {
         kind: "Inherit",
         person: person(row),
-        args: vec![r64(row)],
-        cause: Some(death),
+        args: vec![rh_core::command::Arg::Int(r64(row))],
+        cause: rh_events::EventRef::Draft(death),
     })
 }
 
@@ -176,8 +177,8 @@ fn war_step(
             c.submit(Command {
                 kind: "Inherit",
                 person: person(row),
-                args: vec![r64(row)],
-                cause: None,
+                args: vec![rh_core::command::Arg::Int(r64(row))],
+                cause: rh_events::EventRef::None,
             })?;
         }
     }
@@ -198,7 +199,7 @@ fn estate_step(
         });
     }
     for q in queue {
-        let row = row_of(q.command.args[0]);
+        let row = row_of(q.command.int(0).unwrap());
         v.write("estate.heirs")?[row] += 1;
         let order = &mut v.write("estate.order")?[0];
         *order = order
@@ -265,9 +266,9 @@ pub fn life_stubs(observer: bool) -> Vec<Stub> {
         Stub::new("X2.estate")
             .writes("estate.heirs")
             .writes("estate.order")
-            .applies("Inherit")
             .emits("INHERITANCE")
             .at(Pulse::Day, Phase::Agenda)
+            .applies("Inherit")
             .stepping(estate_step),
         Stub::new("X3.rumor")
             .reads("vital.alive", "X1.vital", SameInstant)

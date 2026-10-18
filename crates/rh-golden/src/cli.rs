@@ -259,7 +259,7 @@ pub fn run_world(world: &str, words: &[String], repo: &Path) -> u8 {
                 }
             }
             if let (Some(v), Some(r)) = (&outcome.vitals, ladder.rungs.last()) {
-                print_vitals(v, r);
+                print_vitals(v, r, &outcome.dropped);
             }
             match &ladder.failed {
                 None => {
@@ -301,7 +301,7 @@ pub fn run_world(world: &str, words: &[String], repo: &Path) -> u8 {
 
 /// Prints the vitals line and the per-system job times (SPR-009 T-03; GOV-006 §1). Planes B and C
 /// have no tables yet, so their hashes are the empty planes'.
-fn print_vitals(v: &Vitals, last: &Rung) {
+fn print_vitals(v: &Vitals, last: &Rung, dropped: &[(String, String, &'static str, u64)]) {
     let hashes = [
         last.hash,
         empty_plane_hash(Plane::B),
@@ -313,6 +313,13 @@ fn print_vitals(v: &Vitals, last: &Rung) {
             "vitals: system {system} {} ms of job time",
             time.as_millis()
         );
+    }
+    // SPR-014 T-03: the one drop diagnostic, outside every hash (`05.1` §2 rule 2).
+    if dropped.is_empty() {
+        println!("vitals: dropped nothing (dropped{{system, kind, reason}} is empty)");
+    }
+    for (system, kind, reason, n) in dropped {
+        println!("vitals: dropped{{{system}, {kind}, {reason}}} = {n}");
     }
     let permille = v.serial_permille();
     println!(

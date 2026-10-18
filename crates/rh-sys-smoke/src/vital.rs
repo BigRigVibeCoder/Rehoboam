@@ -8,14 +8,14 @@
 
 use rh_core::access::{AccessSpec, ColumnRead, ColumnWrite, CommandSend, Lag, Plane};
 use rh_core::agenda::TimerEntry;
-use rh_core::command::Command;
+use rh_core::command::{Arg, Command};
 use rh_core::system::{
     InvariantResult, PulseBinding, ResampleCtx, SimError, StepCtx, SystemModel, TimerSpec,
 };
 use rh_core::time::SimTime;
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::EventDraft;
+use rh_events::{EventDraft, EventRef};
 
 use crate::common::{
     PERSONS, check, degrees, fail, from_skeleton, person, person_entity, purposes, r64, row,
@@ -64,6 +64,7 @@ impl Vital {
                             entity: person_entity(r),
                             kind: 0,
                             payload: r64(r),
+                            cause: EventRef::None,
                         },
                     )?;
                     pending[r] = 1;
@@ -146,8 +147,8 @@ impl SystemModel for Vital {
         ctx.submit(Command {
             kind: "Settle",
             person: person(r),
-            args: vec![r64(r)],
-            cause: Some(death),
+            args: vec![Arg::Int(r64(r))],
+            cause: EventRef::Draft(death),
         })
     }
 

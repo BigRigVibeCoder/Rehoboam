@@ -993,7 +993,9 @@ class Genesis:
 
         A conception at pulse m closes (m, m + 20]; the forced heir's conception pulse c_h forbids
         any other conception in [c_h - 20, c_h + 20]. A pregnancy whose birth would fall at or
-        after the epoch, or whose mother dies before the birth, bears no child.
+        after the epoch, or whose mother dies before the birth, bears no child. The table is F6's,
+        the elite read on the couple (D56 (e)): c_i^e when the wife or the husband has a
+        house_member row, so every back-filled wife, whose husband is of the house, draws c_i^e.
         """
         assert h.death is not None and w.death is not None
         m0 = self.cal.month_of(tick) + 1
@@ -1003,6 +1005,8 @@ class Genesis:
         last: int | None = None
         child_index = len(w.children)
         end = min(0, w.death, h.death, w.birth + FERTILE_END * self.cal.year)
+        elite = m2f1.draws_elite(w.house != 0, h.house != 0)  # B6 = F6; rows never change
+        table = self.fert.conception_elite if elite else self.fert.conception
         for m in itertools.count(m0):
             t_m = self.cal.month_start(m)
             if t_m >= end:
@@ -1012,7 +1016,6 @@ class Genesis:
             band = band_of(t_m - w.birth, self.cal.year)
             if band is None or not self.susceptible(m, last, c_h):
                 continue
-            table = self.fert.conception_elite if w.house else self.fert.conception
             if not hits(self.draw(PURPOSE_CONCEPTION, w.id, 2 * (m - m0)), table[band]):
                 continue
             last = m

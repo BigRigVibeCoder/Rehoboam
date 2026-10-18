@@ -40,8 +40,12 @@ use crate::ownership::{Source, SpecTable, Violation, check_access, plane_leak, s
 use rh_ids::SystemId;
 
 use crate::access::AccessSpec;
+use crate::command::{ArgType, CommandDecl, KeyRule};
+use crate::phase::Phase;
 use crate::schedule::{self, Schedule, SchedulerInput};
 use crate::system::{PulseBinding, SystemModel};
+use crate::time::Pulse;
+use rh_ids::EntityKind;
 
 /// Domain tag of [`system_id`].
 pub const TAG_SYSTEM_ID: u64 = rh_ids::rng::tag("rehoboam/rh-core/system/v1");
@@ -78,6 +82,12 @@ pub(crate) struct Entry {
     pub(crate) roles: &'static [(&'static str, rh_events::RoleId)],
     /// Its `[[emits]]` declarations, compiled against the Registry and the registered set (T-03).
     pub(crate) envelope: crate::envelope::Envelope,
+    /// The entity kind each purpose's `[[rng]] key` names, where it names one (BCK-002 A-50).
+    pub(crate) purpose_kinds: BTreeMap<&'static str, EntityKind>,
+    /// The rate and mode reads whose owner the world does not register, each with its neutral
+    /// (`05.1` §2 rule 2, absent owners): the column enumerates as empty and a keyed lookup
+    /// returns the neutral.
+    pub(crate) dropped_reads: BTreeMap<&'static str, i64>,
 }
 
 /// The registration entries of `systems`, sorted by id.
@@ -94,6 +104,8 @@ fn entries_of(systems: Vec<Box<dyn SystemModel>>) -> Vec<Entry> {
                 purposes: model.rng_purposes(),
                 roles: model.roles(),
                 envelope: crate::envelope::Envelope::new(),
+                purpose_kinds: BTreeMap::new(),
+                dropped_reads: BTreeMap::new(),
                 model,
             }
         })
@@ -149,6 +161,10 @@ pub struct Registered {
     pub(crate) motives: Vec<String>,
     schedule: Schedule,
     reports: Vec<String>,
+    /// Every registered command: its owner, draining binding and typing (`05.1` §2 rule 2).
+    pub(crate) commands: BTreeMap<&'static str, CommandDecl>,
+    /// The declared `[[owns]] default` of the registered systems' columns (the row insert).
+    pub(crate) defaults: BTreeMap<String, i64>,
 }
 
 impl Registered {
@@ -169,11 +185,45 @@ impl Registered {
         }
         self.entries.iter().find_map(|e| {
             std::iter::once(e.id)
-                .chain(e.access.applies.iter().copied())
+                .chain(e.access.applies.iter().map(|a| a.command))
                 .chain(e.access.sends.iter().map(|c| c.command))
                 .chain(e.access.emits.iter().copied())
                 .find(|n| *n == name)
         })
+    }
+
+    /// The registered command `kind`: its owner, draining binding and typing.
+    #[must_use]
+    pub fn command(&self, kind: &str) -> Option<&CommandDecl> {
+        self.commands.get(kind)
+    }
+
+    /// The rate and mode reads of `system` that registration dropped because their owner is
+    /// absent, each with the neutral a keyed lookup returns (`05.1` §2 rule 2).
+    #[must_use]
+    pub fn dropped_reads(&self, system: &str) -> Vec<(&'static str, i64)> {
+        self.entries
+            .iter()
+            .find(|e| e.id == system)
+            .map(|e| e.dropped_reads.iter().map(|(c, n)| (*c, *n)).collect())
+            .unwrap_or_default()
+    }
+
+    /// The columns some registered system reads with a lag, which the engine snapshots at the
+    /// start of each instant (`05.1` §2 rule 4): a dropped read (absent owner) is not among them,
+    /// since it creates no lag snapshot (rule 2; REV-P1a NEW-6).
+    #[must_use]
+    pub fn lagged_reads(&self) -> BTreeSet<&'static str> {
+        self.entries
+            .iter()
+            .flat_map(|e| {
+                e.access
+                    .reads
+                    .iter()
+                    .filter(|r| r.lag.is_lagged() && !e.dropped_reads.contains_key(r.column))
+                    .map(|r| r.column)
+            })
+            .collect()
     }
 
     /// The derived schedule.
@@ -305,27 +355,16 @@ pub fn register(
     let declarations: Vec<_> = entries.iter().map(|e| e.access.declaration(e.id)).collect();
     let (owners, conflicts) = single_writer(&declarations, Source::Code);
     violations.extend(conflicts);
-    let registered: BTreeSet<&str> = entries.iter().map(|e| e.id).collect();
-    for e in &entries {
-        for r in &e.access.reads {
-            match owners.get(r.column) {
-                Some(o) => violations.extend(plane_leak(e.id, e.access.plane(), r.column, o)),
-                None if !registered.contains(r.owner) => reports.push(format!(
-                    "{}: reads {} from {}, which is not registered",
-                    e.id, r.column, r.owner
-                )),
-                None => {}
-            }
-        }
-    }
+    check_reads(&mut entries, specs, &owners, &mut violations, &mut reports);
 
-    // RNG purposes against the spec's [[rng]] table (ruling 2).
+    // RNG purposes against the spec's [[rng]] table (ruling 2), and the kinds they key by (A-50).
     check_purposes(&entries, specs, &mut violations, &mut reports);
+    purpose_kinds(&mut entries, specs, &mut reports);
 
     // Bindings and lags against the spec's [[schedule]] and [[reads]].lag (G-a).
     check_schedule_and_lags(&entries, specs, &mut violations);
     // Lifecycle commands and event kinds (SPR-006 ruling 5).
-    check_commands(&entries, specs, &mut violations);
+    let commands = check_commands(&entries, specs, &mut violations, &mut reports);
     check_events(&entries, specs, &mut violations, &mut reports);
     check_envelopes(&mut entries, specs, &mut violations);
 
@@ -341,12 +380,21 @@ pub fn register(
     let derived = schedule::derive(&inputs);
     let violations = once_each(violations);
     match derived {
-        Ok(schedule) if violations.is_empty() => Ok(Registered {
-            entries,
-            motives: specs.registry.motives.clone(),
-            schedule,
-            reports,
-        }),
+        Ok(schedule) if violations.is_empty() => {
+            let defaults = entries
+                .iter()
+                .filter_map(|e| specs.specs.get(e.id))
+                .flat_map(|s| s.defaults.iter().cloned())
+                .collect();
+            Ok(Registered {
+                entries,
+                motives: specs.registry.motives.clone(),
+                schedule,
+                reports,
+                commands,
+                defaults,
+            })
+        }
         Ok(_) => Err(RegistrationError {
             violations,
             reports,
@@ -466,37 +514,134 @@ fn check_schedule_and_lags(entries: &[Entry], specs: &SpecTable, violations: &mu
     }
 }
 
-/// SPR-006 T-03, ruling 5: lifecycle commands have one owner, and only it applies them.
-fn check_commands(entries: &[Entry], specs: &SpecTable, violations: &mut Vec<Violation>) {
-    // The registered owner of each command: the first system, in id order, that applies it.
-    let mut owners: BTreeMap<&str, &str> = BTreeMap::new();
-    for e in entries {
-        for &c in &e.access.applies {
-            if let Some(first) = owners.get(c) {
-                violations.push(violation(
-                    e.id,
-                    "command",
-                    format!("applies command {c}, which {first} also applies (05.1 §2 rule 2)"),
-                ));
-                continue;
-            }
-            owners.insert(c, e.id);
-            // Every spec that submits c must name e as its owner.
-            for (sender, spec) in &specs.specs {
-                for (target, command) in &spec.commands {
-                    if command == c && target != e.id {
-                        violations.push(violation(
-                            e.id,
-                            "command",
-                            format!(
-                                "applies command {c}, but {sender}'s spec names {target} as its owner; a non-owner never applies a command"
-                            ),
-                        ));
-                    }
+/// Each read against the registered writers: a plane-A reader of a plane-B or C column is
+/// refused; a read whose owner is not registered goes to [`absent_owner_read`].
+fn check_reads(
+    entries: &mut [Entry],
+    specs: &SpecTable,
+    owners: &BTreeMap<String, crate::ownership::Owner>,
+    violations: &mut Vec<Violation>,
+    reports: &mut Vec<String>,
+) {
+    let registered: BTreeSet<&str> = entries.iter().map(|e| e.id).collect();
+    for e in entries.iter_mut() {
+        let spec = specs.specs.get(e.id);
+        let reads = e.access.reads.clone();
+        for r in &reads {
+            match owners.get(r.column) {
+                Some(o) => violations.extend(plane_leak(e.id, e.access.plane(), r.column, o)),
+                None if !registered.contains(r.owner) => {
+                    let Some(spec) = spec else {
+                        continue; // `registry` already reported by check_access.
+                    };
+                    absent_owner_read(e, spec, r.column, r.owner, violations, reports);
                 }
+                None => {}
             }
         }
     }
+}
+
+/// A read of `column` whose owner is not registered (`05.1` §2 rule 2, absent owners; REV-P1a
+/// NEW-4; REV-EVO-001 R4, R12): an identity read is refused under rule `absent-owner`; a rate or
+/// mode read is dropped and reported, its neutral served by keyed lookups.
+fn absent_owner_read(
+    e: &mut Entry,
+    spec: &crate::ownership::SpecEntry,
+    column: &'static str,
+    owner: &str,
+    violations: &mut Vec<Violation>,
+    reports: &mut Vec<String>,
+) {
+    let usage = spec.read_uses.iter().find(|u| u.column == column);
+    match usage {
+        Some(u) if u.droppable() => match u.neutral {
+            Some(neutral) => {
+                e.dropped_reads.insert(column, neutral);
+                reports.push(format!(
+                    "{}: reads {column} from {owner}, which is not registered: a {} read, dropped; its neutral is {neutral}",
+                    e.id, u.usage
+                ));
+            }
+            None => violations.push(violation(
+                e.id,
+                "absent-owner",
+                format!(
+                    "reads {column} as a {} read from {owner}, which is not registered, and its spec gives no typed neutral (05.1 §2 rule 2: the type's zero is never a fallback)",
+                    u.usage
+                ),
+            )),
+        },
+        _ => violations.push(violation(
+            e.id,
+            "absent-owner",
+            format!(
+                "reads {column} as an identity read from {owner}, which is not registered: a world that registers {} registers {owner} (05.1 §2 rule 2)",
+                e.id
+            ),
+        )),
+    }
+}
+
+/// BCK-002 A-50: the entity kind each purpose's `[[rng]] key` names. `person` and the person
+/// roles (`actor`, `target`, `ruler`, ...) key by a person, `region` by a region, `world` by the
+/// world; a key name with no `EntityKind` yet (`title`, `house`, ...) is reported, and its draws
+/// are not kind-checked until that kind exists (SPR-014's choice; M7, SPR-021).
+fn purpose_kinds(entries: &mut [Entry], specs: &SpecTable, reports: &mut Vec<String>) {
+    const PERSON_KEYS: [&str; 9] = [
+        "person", "actor", "target", "ruler", "seeker", "thief", "victim", "person_a", "holder",
+    ];
+    for e in entries {
+        let Some(spec) = specs.specs.get(e.id) else {
+            continue;
+        };
+        for &p in &e.purposes {
+            let Some((_, key)) = spec.rng_keys.iter().find(|(q, _)| q == p) else {
+                continue;
+            };
+            let kind = match key.as_str() {
+                k if PERSON_KEYS.contains(&k) => Some(EntityKind::Person),
+                "region" => Some(EntityKind::Region),
+                "world" => Some(EntityKind::World),
+                _ => None,
+            };
+            match kind {
+                Some(kind) => {
+                    e.purpose_kinds.insert(p, kind);
+                }
+                None => reports.push(format!(
+                    "{}: RNG purpose {p} keys by {key}, which has no EntityKind yet: its draws are not kind-checked (BCK-002 A-50)",
+                    e.id
+                )),
+            }
+        }
+    }
+}
+
+/// The binding a spec's `drained_by` names, if its names parse.
+fn spec_binding((pulse, phase): &(String, String)) -> Option<PulseBinding> {
+    Some(PulseBinding {
+        pulse: Pulse::from_name(pulse)?,
+        phase: Phase::from_name(phase)?,
+    })
+}
+
+fn show_binding(b: PulseBinding) -> String {
+    format!("{}/{}", b.pulse.name(), b.phase.name())
+}
+
+/// SPR-006 T-03, ruling 5, and EVO-001 (SPR-014 T-01, T-04): lifecycle commands have one owner,
+/// only it applies them, each is drained by the binding its owner's spec names (the code's
+/// `DRAINS` equals the spec's `[[applies]] drained_by`, rule `spec`), and a send to an owner the
+/// world does not register is reported (its submissions are discarded and counted), not refused.
+/// Returns the registered commands with their typing.
+fn check_commands(
+    entries: &[Entry],
+    specs: &SpecTable,
+    violations: &mut Vec<Violation>,
+    reports: &mut Vec<String>,
+) -> BTreeMap<&'static str, CommandDecl> {
+    let (owners, commands) = check_applies(entries, specs, violations);
     let registered: BTreeSet<&str> = entries.iter().map(|e| e.id).collect();
     for e in entries {
         let spec = specs.specs.get(e.id);
@@ -534,17 +679,198 @@ fn check_commands(entries: &[Entry], specs: &SpecTable, violations: &mut Vec<Vio
                         send.command, send.target
                     ),
                 )),
-                None => violations.push(violation(
-                    e.id,
-                    "command",
-                    format!(
-                        "submits command {} to {}, which is not registered; a world that registers a sender registers the command's owner (ruling 5)",
-                        send.command, send.target
-                    ),
+                None => reports.push(format!(
+                    "{}: submits command {} to {}, which is not registered: each submission is discarded and counted under dropped{{{}, {}, absent_owner}} (05.1 §2 rule 2)",
+                    e.id, send.command, send.target, e.id, send.command
                 )),
             }
         }
     }
+    commands
+}
+
+/// The `applies` half of [`check_commands`]: one owner per command, no non-owner, and each
+/// drain equal to its spec's `drained_by` (rule `spec`); the owners and the typed declarations.
+fn check_applies<'e>(
+    entries: &'e [Entry],
+    specs: &SpecTable,
+    violations: &mut Vec<Violation>,
+) -> (
+    BTreeMap<&'e str, &'static str>,
+    BTreeMap<&'static str, CommandDecl>,
+) {
+    // The registered owner of each command: the first system, in id order, that applies it.
+    let mut owners: BTreeMap<&'e str, &'static str> = BTreeMap::new();
+    let mut commands: BTreeMap<&'static str, CommandDecl> = BTreeMap::new();
+    for e in entries {
+        let spec = specs.specs.get(e.id);
+        for a in &e.access.applies {
+            let c = a.command;
+            if let Some(first) = owners.get(c) {
+                violations.push(violation(
+                    e.id,
+                    "command",
+                    format!("applies command {c}, which {first} also applies (05.1 §2 rule 2)"),
+                ));
+                continue;
+            }
+            owners.insert(c, e.id);
+            // Every spec that submits c must name e as its owner.
+            for (sender, spec) in &specs.specs {
+                for (target, command) in &spec.commands {
+                    if command == c && target != e.id {
+                        violations.push(violation(
+                            e.id,
+                            "command",
+                            format!(
+                                "applies command {c}, but {sender}'s spec names {target} as its owner; a non-owner never applies a command"
+                            ),
+                        ));
+                    }
+                }
+            }
+            let mut decl = CommandDecl::untyped(e.id, a.drained_by);
+            if let Some(spec) = spec {
+                match spec.applies.iter().find(|s| s.command == c) {
+                    None => violations.push(violation(
+                        e.id,
+                        "spec",
+                        format!(
+                            "drains command {c} at {}, but its spec's [[applies]] does not declare {c}",
+                            show_binding(a.drained_by)
+                        ),
+                    )),
+                    Some(s) => {
+                        let declared = spec_binding(&s.drained_by);
+                        if declared != Some(a.drained_by) {
+                            violations.push(violation(
+                                e.id,
+                                "spec",
+                                format!(
+                                    "drains command {c} at {}, but its spec's [[applies]] says drained_by = {}/{}",
+                                    show_binding(a.drained_by),
+                                    s.drained_by.0,
+                                    s.drained_by.1
+                                ),
+                            ));
+                        }
+                        if !e.bindings.contains(&a.drained_by) {
+                            violations.push(violation(
+                                e.id,
+                                "spec",
+                                format!(
+                                    "drains command {c} at {}, which is not one of its bindings",
+                                    show_binding(a.drained_by)
+                                ),
+                            ));
+                        }
+                        decl = typed(decl, s, &specs.enum_codes, e.id, violations);
+                    }
+                }
+            }
+            commands.insert(c, decl);
+        }
+        if let Some(spec) = spec {
+            for s in &spec.applies {
+                if e.access.apply_of(&s.command).is_none() {
+                    violations.push(violation(
+                        e.id,
+                        "spec",
+                        format!(
+                            "its spec's [[applies]] declares command {} drained_by = {}/{}, but its code drains nothing for it",
+                            s.command, s.drained_by.0, s.drained_by.1
+                        ),
+                    ));
+                }
+            }
+        }
+        // A drain-only binding is the drained_by of one of its own applies (A-60 part).
+        for b in &e.access.drain_only {
+            if !e.access.applies.iter().any(|a| a.drained_by == *b) {
+                violations.push(violation(
+                    e.id,
+                    "spec",
+                    format!(
+                        "declares {} drain-only, but no command it applies is drained there",
+                        show_binding(*b)
+                    ),
+                ));
+            }
+        }
+    }
+    (owners, commands)
+}
+
+/// The typing of one registered command from its owner's `[[applies]]` entry.
+fn typed(
+    mut decl: CommandDecl,
+    s: &crate::ownership::SpecApply,
+    enum_codes: &BTreeMap<String, usize>,
+    owner: &str,
+    violations: &mut Vec<Violation>,
+) -> CommandDecl {
+    // Fail closed, as lint_odd.py does (the review's K10): an unknown key rule or a payload that
+    // does not parse is refused by name, never read as `any` or as untyped.
+    decl.key = match s.key.as_str() {
+        "living" => KeyRule::Living,
+        "any" => KeyRule::Any,
+        other => {
+            violations.push(violation(
+                owner,
+                "spec",
+                format!(
+                    "command {}'s key is {other}, not living or any (EVO-001)",
+                    s.command
+                ),
+            ));
+            KeyRule::Any
+        }
+    };
+    if let Some(text) = &s.payload_malformed {
+        violations.push(violation(
+            owner,
+            "spec",
+            format!(
+                "command {}'s payload {text:?} does not parse as {{ name: Type, ... }} (EVO-001)",
+                s.command
+            ),
+        ));
+    }
+    decl.outcome = s.outcome;
+    if let Some(fields) = &s.payload {
+        let mut typed = Vec::with_capacity(fields.len());
+        for (name, ty) in fields {
+            match ArgType::parse(ty, enum_codes) {
+                Some(t) => typed.push((name.clone(), t)),
+                None => violations.push(violation(
+                    owner,
+                    "spec",
+                    format!(
+                        "command {}'s payload field {name} has type {ty}, outside the payload vocabulary",
+                        s.command
+                    ),
+                )),
+            }
+        }
+        if s.key_field != "person" {
+            match typed
+                .iter()
+                .position(|(n, t)| *n == s.key_field && *t == ArgType::Person)
+            {
+                Some(i) => decl.key_field = Some(i),
+                None => violations.push(violation(
+                    owner,
+                    "spec",
+                    format!(
+                        "command {}'s key_field {} is not a PersonId field of its payload",
+                        s.command, s.key_field
+                    ),
+                )),
+            }
+        }
+        decl.payload = Some(typed);
+    }
+    decl
 }
 
 /// SPR-006 T-04: every emitted kind is declared in the spec, and each kind has one emitter.

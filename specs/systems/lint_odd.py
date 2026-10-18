@@ -55,6 +55,14 @@ System specs are data (`specs/systems/*.odd.toml`). This tool checks every spec 
     `timer` kind and the [[rng]] `purpose` it is re-sampled under (05.1 §2 rule 2: the sender's timer submits it),
     and the sender binds the draining binding's pulse and phase, where its timer fires (a sender naming a timer
     for a command that carries no outcome is warned),
+  - observed event kinds (EVO-002; 05.1 §2 rule 2, the instant log's part (c)): each [[observes]] entry names a known
+    kind (a Registry verb: the instant log records known kinds only), its emitter (`owner`, the verb's `emitted_by`,
+    which declares it in [[emits]] and is not the declaring system) and `why`; the emitter is one of the declaring
+    system's reads (a `same_instant` [[reads]] entry of one of its columns, so the scheduling edge orders the
+    emitter's bindings before the observer's in every phase both bind, and the identity rule requires the emitter in
+    every world that registers the observer); the observer binds a phase at or after one the emitter binds (the log
+    is cleared at the instant's end, so an event merged in a later phase is never read); a kind is observed once and
+    no other field is allowed. Every rule is an error on every status (the schema is new: no draft predates it),
 and it generates what people and code need from the same source:
   --brief <id>   one-page summary for the director
   --rust  <id>   a Rust skeleton (system id, schedule, RNG purposes, parameter names) so code cannot drift
@@ -95,10 +103,20 @@ and prints every amendment (AMEND lines). In --next mode the superseding spec is
 step bumps that table's `version`, and every spec, in both modes, names each owned column, parameter, purpose,
 invariant, emitted kind, applied command, binding and step once (REV-SPR-015 R15, R17). With --next, an overlay may
 replace the Registry [systems] entry of a superseded system (never another), keeping fidelity_levels and every existing
-parameter's bounds and default.
+parameter's bounds and default. Deny by default (PR #79's review R3, 2026-10-17): every other field of the
+frozen slice is compared too, as a generic path, and changes only through a record: submodels.<name>.<field>,
+commands.<command>.<field>, couplings.<system>/<direction>.<field>, params.<name>.<field> (source and the rest),
+fidelity_ladder.<level>.<field>, purpose.<field> and purpose.patterns.<test>.<field>, isolation.<field> and
+isolation.forcing.<input>.<field>, design.<field>, scales.<field>, verification.prototype, system.name, system.adrs
+and system.requirements, and (N4) every other leaf: reads.<column>.<field>, applies.<command>.<field>, emits.<kind>.<field>,
+owns.<column>.<field>, initialization.<field>, input_data.<field>; a list-valued field is quoted as JSON. Entries may be
+added (a read, an emitted kind, a submodel, a command, a coupling, a pattern, a forcing input); a frozen entry's fields
+may not change; an enum column's values may only be appended. The exemptions (the versions, the status, the fidelity,
+the lists that may only grow) are listed in specs/systems/next/README.md.
 """
 import copy
 import hashlib
+import json
 import re
 import sys
 import tomllib
@@ -293,6 +311,135 @@ def text_at(spec, m):
     return spec.get("initialization", {}).get("state")
 
 
+GENERIC_PATH = re.compile(r"^(?P<sec>system|purpose|owns|emits|commands|applies|reads|observes|scales|fidelity_ladder|schedule|rng|design|initialization|input_data|params|submodels|invariants|couplings|isolation|verification)\.(?P<rest>.+)$")
+# keyed sections: the field that names an entry (a repeated key carries its ordinal: key, key[1], key[2], in file order)
+KEYED = {"owns": "column", "emits": "kind", "commands": "command", "applies": "command", "reads": "column", "observes": "kind",
+         "fidelity_ladder": "level",
+         "rng": "purpose", "params": "name", "submodels": "name", "invariants": "id"}
+PAIR_KEYED = {"couplings": ("system", "direction"), "schedule": ("pulse", "phase")}  # key = "<a>/<b>"
+SUBKEYED = {"patterns": "test", "forcing": "input"}  # purpose.patterns.<test>, isolation.forcing.<input>
+# Deny by default (PR #79's review R3, N4): every frozen leaf is compared unless it is listed here. The list is the
+# exemption list specs/systems/next/README.md states (the Architect rules on it).
+EXEMPT = {
+    ("system", "spec_version"), ("system", "status"), ("system", "fidelity"),   # a next version moves these by definition
+    ("verification", "tests"), ("emits", "roles"), ("emits", "motives"), ("applies", "from"),   # may only grow (own checks)
+    ("owns", "values"),   # an enum's codes may be appended, never renamed or moved (the prefix rule below)
+}
+# fields with a check of their own (a specialised diagnostic, or an amendable path of their own); the generic walk
+# skips them so that one change gives one diagnostic
+SPECIALISED = {
+    ("system", "id"), ("system", "crate"), ("owns", "meaning"), ("owns", "default"), ("owns", "cause_column"),
+    ("owns", "entity"), ("owns", "type"), ("owns", "plane"), ("owns", "fixed_point"), ("emits", "when"), ("emits", "snapshots"),
+    ("rng", "use"), ("rng", "key"), ("rng", "resample_on_fork"), ("rng", "draws"), ("invariants", "statement"),
+    ("invariants", "test"), ("schedule", "steps"), ("schedule", "when"), ("initialization", "state"), ("params", "meaning"),
+    ("params", "default"), ("applies", "payload"),
+}
+TABLES = ("system", "purpose", "scales", "design", "initialization", "input_data", "isolation", "verification")
+
+
+def leaf_text(value):
+    """A frozen field as the text an [[amends]] record quotes: a string as is, anything else as JSON."""
+    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+
+
+def generic_text_at(spec, path):
+    """The text a generic amendment path names in ``spec`` (deny by default, R3, N4), or None when there is none."""
+    m = GENERIC_PATH.match(path)
+    if m is None:
+        return None
+    sec, rest = m.group("sec"), m.group("rest")
+    if sec in KEYED or sec in PAIR_KEYED:
+        key, _, field = rest.rpartition(".")
+        entry = keyed_entry(spec.get(sec, []), sec, key)
+        return None if entry is None or field not in entry else leaf_text(entry[field])
+    for sub in SUBKEYED:
+        if rest.startswith(sub + "."):
+            key, _, field = rest[len(sub) + 1:].rpartition(".")
+            entry = keyed_entry(spec.get(sec, {}).get(sub, []), sub, key)
+            return None if entry is None or field not in entry else leaf_text(entry[field])
+    table = spec.get(sec, {})
+    return leaf_text(table[rest]) if rest in table else None
+
+
+def entry_key(x, sec):
+    """The key of a keyed entry: its naming field, or "<a>/<b>" for a coupling or a schedule binding."""
+    if sec in PAIR_KEYED:
+        a, b = PAIR_KEYED[sec]
+        return f"{x.get(a)}/{x.get(b)}"
+    return str(x.get(KEYED.get(sec) or SUBKEYED[sec]))
+
+
+def keyed_paths(entries, sec):
+    """(path key, entry) for each entry of a keyed section; a repeated key carries its ordinal: key, key[1], key[2]
+    (the entries after the first, in file order: an amendment names the n-th repeat by its ordinal)."""
+    seen = {}
+    out = []
+    for x in entries:
+        k = entry_key(x, sec)
+        n = seen.get(k, 0)
+        seen[k] = n + 1
+        out.append((k if n == 0 else f"{k}[{n}]", x))
+    return out
+
+
+def keyed_entry(entries, sec, key):
+    """The entry a path key names, or None."""
+    return next((x for k, x in keyed_paths(entries, sec) if k == key), None)
+
+
+def key_fields(sec):
+    """The fields that name an entry of ``sec`` (never leaves)."""
+    if sec in PAIR_KEYED:
+        return set(PAIR_KEYED[sec])
+    return {KEYED.get(sec) or SUBKEYED[sec]}
+
+
+def frozen_leaves(fs):
+    """Every generic path of a frozen spec with its text: every leaf the deny-by-default walk protects (R3, N4):
+    each field of each entry of each keyed section, each field of each table, the sub-keyed patterns and forcing
+    entries; minus EXEMPT (listed in next/README.md) and SPECIALISED (a check of their own)."""
+    out = {}
+    for sec in list(KEYED) + list(PAIR_KEYED):
+        for key, x in keyed_paths(fs.get(sec, []), sec):
+            for field, value in x.items():
+                if field in key_fields(sec) or (sec, field) in EXEMPT or (sec, field) in SPECIALISED:
+                    continue
+                out[f"{sec}.{key}.{field}"] = leaf_text(value)
+    for sec in TABLES:
+        for field, value in fs.get(sec, {}).items():
+            if (sec, field) in EXEMPT or (sec, field) in SPECIALISED:
+                continue
+            if field in SUBKEYED:
+                for key, x in keyed_paths(value, field):
+                    for f2, v2 in x.items():
+                        if f2 != SUBKEYED[field]:
+                            out[f"{sec}.{field}.{key}.{f2}"] = leaf_text(v2)
+            else:
+                out[f"{sec}.{field}"] = leaf_text(value)
+    return out
+
+
+def values_prefix_problems(fs, ns, p):
+    """An enum column's codes are its values' indexes: a next version may append a value, never rename or move one."""
+    out = []
+    nexts = {o.get("column"): o for o in ns.get("owns", [])}
+    for o in fs.get("owns", []):
+        was, now = o.get("values"), nexts.get(o.get("column"), {}).get("values")
+        if was is None:
+            continue
+        if now is None or list(now[:len(was)]) != list(was):
+            out.append(f"{p}: frozen owns.{o.get('column')}.values changed ({was} -> {now}): an enum's codes may be appended, never renamed or moved")
+    return out
+
+
+def resolve_text(spec, of):
+    """The text an [[amends]] path names: the named paths first, then the generic ones; None for neither."""
+    m = AMEND_PATH.match(of)
+    if m is not None:
+        return text_at(spec, m)
+    return generic_text_at(spec, of)
+
+
 def amendments(fs, ns, p, errs):
     """The next version's `[[amends]]` records (REV-SPR-015 R1): each names a path, quotes the frozen text byte for
     byte, gives the new text (which must be what the next version now says there) and a reason. Returns
@@ -300,16 +447,19 @@ def amendments(fs, ns, p, errs):
     out = {}
     for a in ns.get("amends", []):
         of = str(a.get("of", ""))
-        m = AMEND_PATH.match(of)
-        if m is None:
+        if AMEND_PATH.match(of) is None and GENERIC_PATH.match(of) is None:
             errs.append(f"{p}: [[amends]] of = {of!r} is not a path this lint knows (invariants.<id>.statement, "
                         "algorithm.<name>.steps.<Sn>, emits.<KIND>.when, initialization.state, schedule.<Pulse>/<Phase>.steps.<name>, "
                         "schedule.<Pulse>/<Phase>.when, owns.<entity.column>.meaning, rng.<purpose>.use, params.<name>.meaning, "
-                        "emits.<KIND>.snapshots, owns.<entity.column>.default, owns.<entity.column>.cause_column)")
+                        "emits.<KIND>.snapshots, owns.<entity.column>.default, owns.<entity.column>.cause_column, or a generic "
+                        "path of the frozen slice: submodels.<name>.<field>, commands.<command>.<field>, "
+                        "couplings.<system>/<direction>.<field>, params.<name>.<field>, fidelity_ladder.<level>.<field>, "
+                        "purpose.<field>, purpose.patterns.<test>.<field>, isolation.<field>, isolation.forcing.<input>.<field>, "
+                        "design.<field>, scales.<field>, verification.prototype, system.name|adrs|requirements)")
             continue
         if not a.get("reason"):
             errs.append(f"{p}: [[amends]] {of} needs a reason")
-        was, now = text_at(fs, m), text_at(ns, m)
+        was, now = resolve_text(fs, of), resolve_text(ns, of)
         if was is None:
             errs.append(f"{p}: [[amends]] {of}: the frozen spec has no text there")
         elif a.get("frozen") != was:
@@ -346,6 +496,7 @@ def lint_duplicate_keys(p, s, errs):
         ("invariant id", [i.get("id") for i in s.get("invariants", [])]),
         ("emitted kind", [e.get("kind") for e in s.get("emits", [])]),
         ("applied command", [a.get("command") for a in s.get("applies", [])]),
+        ("observed kind", [o.get("kind") for o in s.get("observes", []) if isinstance(o, dict)]),
         ("schedule binding", [(x.get("pulse"), x.get("phase")) for x in s.get("schedule", [])]),
     ]
     for x in s.get("schedule", []):
@@ -364,6 +515,21 @@ OVERRIDE = re.compile(r"\b(?:replac\w*|overrid\w*|supersed\w*)\b[^.;]{0,60}\b(S\
 def step_label(step):
     """The id of a step text: its first token (`S9`, `F4`, `apply_death:`)."""
     return str(step).split(None, 1)[0].rstrip(":") if str(step).split() else ""
+
+
+def frozen_default_probe(fs, ns):
+    """The self-check's planted change of a frozen default (REV-SPR-015 R6): a copy of the next version ``ns`` with the
+    default of the first parameter whose FROZEN entry in ``fs`` declares one moved by 1, or None when no frozen
+    parameter has a default. A default the next version adds (a draft's new Registry default, carried by the
+    --next overlay and mirrored in [[params]]: R3 of the P1a re-check, 2026-10-18) is not frozen, so the frozen-default
+    rule does not reach it and planting there would prove nothing."""
+    frozen = {x.get("name") for x in fs.get("params", []) if "default" in x}
+    bad = copy.deepcopy(ns)
+    for x in bad.get("params", []):
+        if x.get("name") in frozen and "default" in x:
+            x["default"] = x["default"] + 1
+            return bad
+    return None
 
 
 def amendment_digests(ns):
@@ -450,7 +616,7 @@ def lint_next(frozen, specs, errs):
             step_amended = False
             for of, (was, now) in amended.items():
                 m = AMEND_PATH.match(of)
-                if m.group("alg") == name:
+                if m is not None and m.group("alg") == name:
                     expect["steps"] = [now if st == was else st for st in expect.get("steps", [])]
                     step_amended = True
             if step_amended:
@@ -550,6 +716,14 @@ def lint_next(frozen, specs, errs):
                 errs.append(f"{p}: frozen default of {x.get('name')} changed: {x.get('default')} -> {n.get('default')}")
             if n is not None and n.get("meaning") != x.get("meaning") and f"params.{x.get('name')}.meaning" not in amended:
                 errs.append(f"{p}: frozen parameter {x.get('name')} changed its meaning without an [[amends]] record")
+        # deny by default (PR #79's review R3, N4): every other frozen leaf, equal or amended; enum codes append only
+        errs.extend(values_prefix_problems(fs, ns, p))
+        for of, was in frozen_leaves(fs).items():
+            now = generic_text_at(ns, of)
+            if now is None:
+                errs.append(f"{p}: frozen {of} is missing from the next version (a frozen entry keeps its fields)")
+            elif now != was and of not in amended:
+                errs.append(f"{p}: frozen {of} changed without an [[amends]] record (deny by default, R3 of PR #79's review)")
         # REV-SPR-015 round 3 NIT-5: the frozen verification tests and couplings are part of the slice
         next_tests = set(ns.get("verification", {}).get("tests", []))
         for t in fs.get("verification", {}).get("tests", []):
@@ -1041,6 +1215,7 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
         for k in sorted(v for v, d in verbs.items() if d.get("emitted_by") == sid and v not in emitted):
             strict_emits.append(f"{p}: the Registry gives verb {k} to {sid}, but [[emits]] does not declare it")
         lint_envelope(p, s, reg, enum_names, errs, warns, hdr.get("status") == "frozen")   # SPR-020: roles, motives, snapshots, cause_column
+        lint_observes(p, sid, s, reg, specs, errs)   # EVO-002: the instant log's observed kinds
         # submodels earn their place
         for sm in s.get("submodels", []):
             ep = sm.get("earns_its_place_by", [])
@@ -1069,6 +1244,55 @@ def lint(reg, specs, req_ids, test_ids, adr_ids, notes=None, next_ids=()):
 def default_problem(value, ct, enum_codes_of_column):
     """Why ``value`` is not a well-typed default for a column of type ``ct`` (envelope_v0.md §7), or None."""
     return neutral_problem(value, ct, enum_codes_of_column)
+
+
+OBSERVES_KEYS = ("kind", "owner", "why")
+
+
+def lint_observes(p, sid, s, reg, specs, errs):
+    """[[observes]] (EVO-002; 05.1 §2 rule 2, the instant log's part (c)): the event kinds a system reads in the instant
+    log, by (kind, target) or by kind, and cites in the merge-time form. Each entry names a known kind (a Registry verb),
+    its emitter (`owner`: the verb's `emitted_by`, another system, which declares the kind in [[emits]]) and why; the
+    emitter is one of the declaring system's reads at `same_instant` (the scheduling edge then orders the emitter's
+    bindings before the observer's in every phase both bind, 05.1 §2 rule 4, and the identity rule requires the
+    emitter in every world that registers the observer); the observer binds a phase at or after one the emitter binds
+    (the log is cleared at the instant's end); a kind is observed once; no other field. Errors on every status."""
+    verbs = reg.get("verbs", {})
+    near = {r.get("owner") for r in s.get("reads", []) if r.get("lag") == "same_instant"}
+    mine = [PHASES.index(x.get("phase")) for x in s.get("schedule", []) if x.get("phase") in PHASES]
+    for o in s.get("observes", []):
+        if not isinstance(o, dict):
+            errs.append(f"{p}: an [[observes]] entry must be a table with kind, owner and why (EVO-002)")
+            continue
+        kind, owner = o.get("kind"), o.get("owner")
+        where = f"{p}: [[observes]] {kind}"
+        extra = sorted(set(o) - set(OBSERVES_KEYS))
+        if extra:
+            errs.append(f"{where}: unknown field(s) {extra}; an entry has {', '.join(OBSERVES_KEYS)} (EVO-002)")
+        if not o.get("why"):
+            errs.append(f"{where} needs a why: what the system reads the kind for (EVO-002)")
+        if kind not in verbs:
+            errs.append(f"{where} is not a Registry verb ([verbs]): the instant log records known kinds only (EVO-002)")
+            continue
+        emitter = verbs[kind].get("emitted_by")
+        if owner != emitter:
+            errs.append(f"{where}: owner {owner} is not its emitter; the Registry gives {kind} to {emitter} (EVO-002)")
+            continue
+        if owner == sid:
+            errs.append(f"{where}: a system does not observe its own kind; a step names its own drafts by DraftRef "
+                        "(05.1 §2 rule 4; EVO-002)")
+            continue
+        if owner in specs and kind not in [e.get("kind") for e in specs[owner][1].get("emits", [])]:
+            errs.append(f"{where}: {owner}'s [[emits]] does not declare {kind} (EVO-002)")
+        if owner not in near:
+            errs.append(f"{where}: {sid} reads none of {owner}'s columns at same_instant; an observed kind's emitter is one "
+                        "of the declaring system's reads, so that the scheduling edge orders its bindings first in every phase "
+                        "both bind and registration requires it (05.1 §2 rule 4; EVO-002)")
+        if owner in specs:
+            theirs = [PHASES.index(x.get("phase")) for x in specs[owner][1].get("schedule", []) if x.get("phase") in PHASES]
+            if mine and theirs and max(mine) < min(theirs):
+                errs.append(f"{where}: {sid} binds no phase at or after one {owner} binds, so it could never read {kind} "
+                            "before the instant log is cleared at the instant's end (EVO-002)")
 
 
 def lint_envelope(p, s, reg, enum_names, errs, warns, frozen=False):
@@ -1235,6 +1459,12 @@ def rust(sid, specs, reg):
              f'pub const SPEC_VERSION: &str = "{s["system"]["spec_version"]}";',
              "pub const SCHEDULE: &[(Pulse, Phase)] = &["]
     lines += [f"    (Pulse::{x['pulse']}, Phase::{x['phase']})," for x in s["schedule"]]
+    # DECISION (SPR-014 T-01; REV-EVO-001 NIT-10): one (command, Pulse, Phase) per [[applies]] entry, its drained_by, so
+    # registration can compare the code's draining bindings with the spec as it compares SCHEDULE.
+    lines += ["];", "pub const DRAINS: &[(&str, Pulse, Phase)] = &["]
+    for a in s.get("applies", []):
+        pulse, _, phase = str(a.get("drained_by", "")).partition("/")
+        lines.append(f'    ("{a["command"]}", Pulse::{pulse}, Phase::{phase}),')
     # DECISION: the enum carries the spec's purpose names, so code never maps variants to names by
     # hand (registration checks the names against [[rng]], SPR-005 T-06). An empty enum takes no
     # #[repr]: Rust refuses a representation for a zero-variant enum. REF: SPR-005 ruling 2.
@@ -1444,12 +1674,9 @@ def main() -> int:
         bad = copy.deepcopy(ns)
         bad["rng"].insert(0, {"purpose": "planted_first", "key": ["person"]})
         probes.append((bad, "must stay at position 0"))
-        bad = copy.deepcopy(ns)
-        for x in bad.get("params", []):
-            if "default" in x:
-                x["default"] = x["default"] + 1
-                probes.append((bad, "frozen default of"))
-                break
+        bad = frozen_default_probe(fz, ns)
+        if bad is not None:
+            probes.append((bad, "frozen default of"))
         # REV-SPR-015 round 3 NIT-4 and NIT-5: a purpose's use text, an unknown amend path, a dropped frozen test or
         # coupling, a frozen parameter's meaning
         bad = copy.deepcopy(ns)
@@ -1482,6 +1709,53 @@ def main() -> int:
             bad = copy.deepcopy(ns)
             bad["algorithm"]["planted_table"] = {"version": "planted", "steps": ["Z1 Planted. This step replaces " + step_label(fsteps[-1]) + " entirely."]}
             probes.append((bad, "as replaced"))
+        # deny by default (R3): a planted change on each generic path class must be rejected
+        fzs = frozen[sid][1]
+        generic_plants = []
+        if fzs.get("submodels"):
+            generic_plants.append(("submodels", 0, "summary"))
+        if fzs.get("commands"):
+            generic_plants.append(("commands", 0, "why"))
+        if fzs.get("couplings"):
+            generic_plants.append(("couplings", 0, "via"))
+        if fzs.get("params"):
+            generic_plants.append(("params", 0, "source"))
+        if fzs.get("fidelity_ladder"):
+            generic_plants.append(("fidelity_ladder", 0, "representation"))
+        for sec, i, field in generic_plants:
+            bad = copy.deepcopy(ns)
+            target_key = keyed_paths(fzs[sec], sec)[i][0]
+            for k, x in keyed_paths(bad.get(sec, []), sec):
+                if k == target_key:
+                    x[field] = "planted " + str(x.get(field, ""))
+            probes.append((bad, f"frozen {sec}."))
+        for sec, field in (("purpose", "statement"), ("isolation", "expect"), ("design", "basic_principles"), ("scales", "extent"), ("verification", "prototype"), ("system", "requirements"), ("initialization", "from_manifest")):
+            if field in fzs.get(sec, {}):
+                bad = copy.deepcopy(ns)
+                bad[sec][field] = ["planted"] if isinstance(fzs[sec][field], list) else "planted " + str(bad[sec].get(field, ""))
+                probes.append((bad, f"frozen {sec}.{field}"))
+        # N4: an enum code renamed, an [[applies]] drained_by changed, a [[reads]] lag changed
+        enum_col = next((o.get("column") for o in fzs.get("owns", []) if o.get("values")), None)
+        if enum_col:
+            bad = copy.deepcopy(ns)
+            for o in bad["owns"]:
+                if o.get("column") == enum_col:
+                    o["values"] = ["planted", *o["values"][1:]]
+            probes.append((bad, f"frozen owns.{enum_col}.values changed"))
+        if fzs.get("applies"):
+            bad = copy.deepcopy(ns)
+            target = keyed_paths(fzs["applies"], "applies")[0][0]
+            for k, x in keyed_paths(bad.get("applies", []), "applies"):
+                if k == target:
+                    x["drained_by"] = "Year/Polity"
+            probes.append((bad, f"frozen applies.{target}.drained_by"))
+        if fzs.get("reads"):
+            bad = copy.deepcopy(ns)
+            target = keyed_paths(fzs["reads"], "reads")[0][0]
+            for k, x in keyed_paths(bad.get("reads", []), "reads"):
+                if k == target:
+                    x["lag"] = "planted"
+            probes.append((bad, f"frozen reads.{target}.lag"))
         for probe, needle in probes:
             pe = []
             lint_duplicate_keys(nf.name, probe, pe)
@@ -1578,7 +1852,7 @@ def main() -> int:
             ("draft", [], [ap(payload="{ a: PersonId, a: u64 }")], [], "field a is repeated", True),
             ("frozen", [], [dict(ap(), drained_by=None)], [], "needs drained_by", True),
             ("frozen", [], [ap(drained_by="Day/Agenda")], [], "is drained_by Day/Agenda, which [[schedule]] does not declare", True),
-            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-014")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-014", False),
+            ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-015")], [], "ESCAPE [[applies]] X is drained_by Day/Agenda, which [[schedule]] does not declare until SPR-015", False),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-999")], [], "sprint SPR-999 names no sprint: no document under CODEX/05_PROJECT and no PRJ row", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="SPR-006")], [], "(SPR-006 is CLOSED: declare the binding)", True),
             ("frozen", [], [ap(drained_by="Day/Agenda", sprint="P1.13 (SPR-014)")], [], "sprint must be \"SPR-NNN\"", True),
@@ -1593,7 +1867,7 @@ def main() -> int:
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }"}], "carries an outcome, so it needs timer", True),
             ("frozen", [], [ap(outcome=True)], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "nope"}], "needs purpose = one of its [[rng]] purposes", True),
             ("frozen", [], [ap(outcome=True, **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "", False),
-            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-014", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
+            ("frozen", [], [ap(outcome=True, drained_by="Day/Agenda", sprint="SPR-015", **{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "in the timer pass of Day/Agenda, which S5.daily_life does not bind", True),
             ("frozen", [], [ap(**{"from": ["S5.daily_life"]})], [{"target": "S5.daily_life", "command": "X", "payload": "{ a }", "timer": "X_DUE", "purpose": "fix"}], "names a timer, but the owner's [[applies]] says it carries no outcome", False),
             ("frozen", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
             ("draft", [rd("title.holder", "M7.dynasty", "identity")], [], [], "a substrate reads title.holder from M7.dynasty as identity", False),
@@ -1602,7 +1876,7 @@ def main() -> int:
         for status, reads, applies, commands, needle, want_err in probes:
             probe_spec = dict(base, system=dict(base["system"], status=status), reads=reads, applies=applies, commands=commands)
             CLOSED_SPRINTS.add("SPR-006")
-            KNOWN_SPRINTS.update({"SPR-006", "SPR-014"})
+            KNOWN_SPRINTS.update({"SPR-006", "SPR-014", "SPR-015"})
             pe, pw = lint(reg, {M2: specs[M2], "M7.dynasty": specs["M7.dynasty"], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids) if "M7.dynasty" in specs else lint(reg, {M2: specs[M2], "S5.daily_life": (Path("probe.odd.toml"), probe_spec)}, req_ids, test_ids, adr_ids)
             pe = [e for e in pe if e.startswith("probe.odd.toml")]
             pw = [e for e in pw if e.startswith("probe.odd.toml")]

@@ -14,16 +14,17 @@
 use core::fmt;
 
 use rh_core::Phase;
-use rh_core::access::{AccessSpec, ColumnWrite, Plane};
+use rh_core::access::{AccessSpec, ColumnWrite, CommandApply, Plane};
 use rh_core::agenda::TimerEntry;
+use rh_core::command::QueuedCommand;
 use rh_core::fixed::Q16_16;
 use rh_core::system::{
-    AggregateSpec, InvariantResult, ParamSchema, PulseBinding, ResampleCtx, SimError, SpecPurpose,
-    StepCtx, SystemDescriptor, SystemModel, TimerSpec,
+    AggregateSpec, DropReason, InvariantResult, ParamSchema, PulseBinding, ResampleCtx, SimError,
+    SpecPurpose, StepCtx, SystemDescriptor, SystemModel, TimerSpec,
 };
 use rh_core::time::{Calendar, Pulse, SimTime};
 use rh_core::world::{SystemView, WorldTables};
-use rh_events::EventDraft;
+use rh_events::{EdgeKind, EventDraft, EventRef};
 use rh_ids::{EntityKind, EntityRef, PersonId};
 
 use crate::schedule::{DAY, Schedule, ScheduleError, death_day, resample_day};
@@ -40,7 +41,7 @@ mod skeleton {
     include!("../../rh-core/tests/generated/M2_demography.rs");
 }
 
-use skeleton::{ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
+use skeleton::{DRAINS, ROLE_TARGET, ROLES, RngPurpose, SCHEDULE, SPEC_VERSION, SYSTEM_ID};
 
 impl SpecPurpose for RngPurpose {
     const ALL: &'static [Self] = &[Self::DeathTime];
@@ -59,6 +60,8 @@ pub const PERSON_BIRTH: &str = "person.birth_tick";
 pub const PERSON_DEATH_TICK: &str = "person.death_tick";
 /// See [`PERSON_ID`].
 pub const PERSON_DEATH_CAUSE: &str = "person.death_cause";
+/// See [`PERSON_ID`].
+pub const PERSON_SPOUSE: &str = "person.spouse";
 /// The life-course columns [`apply_death`] writes.
 pub const LC_PERSON: &str = "life_course.person_id";
 /// See [`LC_PERSON`].
@@ -113,6 +116,10 @@ pub const DEATH_TIMER: u32 = 1;
 pub const CAUSE_NATURAL: i64 = 1;
 /// `life_course.exit_kind` death (open 0, death 1, emigration 2).
 pub const EXIT_DEATH: i64 = 1;
+/// The commands M2 applies in its `Day`/`Vital` drain (`[[applies]]`; SPR-014 T-05).
+pub const SCHEDULE_DEATH: &str = "ScheduleDeath";
+/// See [`SCHEDULE_DEATH`].
+pub const MARRY: &str = "Marry";
 /// The event kinds M2 emits.
 pub const DEATH: &str = "DEATH";
 /// See [`DEATH`].
@@ -229,6 +236,7 @@ impl Demography {
                     entity,
                     kind: DEATH_TIMER,
                     payload: birth,
+                    cause: rh_events::EventRef::None,
                 },
             )?;
         }
@@ -251,29 +259,42 @@ fn ledger_row(view: &SystemView<'_>, person: u64) -> Result<Option<usize>, SimEr
         .ok())
 }
 
-/// The single death path (S12; SPR-011 ruling 6): the dead row (alive 0, death tick, cause), the
-/// person's open life-course exit (written once), `DEATH` with the deceased as `target` and the
-/// cause code as payload, then `EXTINCTION` caused by that `DEATH` if no ledger row is alive.
-/// The P1.13 command path (`ScheduleDeath`) will call it too.
+/// What [`apply_death`] did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Death {
+    /// The person died now.
+    Applied,
+    /// The person had no living ledger row (dead earlier, or absent): nothing was written. The
+    /// caller drops the timer or the command and counts it (`05.1` §2 rule 2; V-INV-01: the exit
+    /// fields are written at most once).
+    AlreadyDead,
+}
+
+/// The single death path (S12; SPR-011 ruling 6; `05.1` §2 rule 2): the dead row (alive 0, death
+/// tick, cause), the person's open life-course exit (written once), `DEATH` with the deceased as
+/// `target`, the cause code as payload and a causal edge from `cause_event` when there is one,
+/// then `EXTINCTION` caused by that `DEATH` if no ledger row is alive. A timer fire and M2's
+/// `Day`/`Vital` drain of `ScheduleDeath` both call it (SPR-014). Idempotent: a person with no
+/// living ledger row is left as is ([`Death::AlreadyDead`]). The culprit's `actor` role on `DEATH`
+/// is SPR-020's.
 ///
 /// # Errors
-/// [`SimError::System`] if the person has no living ledger row or no open life-course entry;
-/// any error of the view or the context.
+/// [`SimError::System`] if a living person has no open life-course entry; any error of the view
+/// or the context.
 pub fn apply_death(
     view: &mut SystemView<'_>,
     ctx: &mut StepCtx<'_>,
     person: PersonId,
     cause: i64,
-) -> Result<(), SimError> {
+    cause_event: EventRef,
+) -> Result<Death, SimError> {
     let now = ctx.now().minutes();
     let id = person.to_raw();
-    let row = ledger_row(view, id)?
-        .filter(|&r| view.read(PERSON_ALIVE).is_ok_and(|a| a[r] == 1))
-        .ok_or_else(|| {
-            fail(format!(
-                "a death for person {id}, who has no living ledger row"
-            ))
-        })?;
+    let Some(row) =
+        ledger_row(view, id)?.filter(|&r| view.read(PERSON_ALIVE).is_ok_and(|a| a[r] == 1))
+    else {
+        return Ok(Death::AlreadyDead);
+    };
     let open = {
         let persons = view.read(LC_PERSON)?;
         let kinds = view.read(LC_EXIT_KIND)?;
@@ -289,14 +310,101 @@ pub fn apply_death(
     view.write(LC_EXIT_KIND)?[open] = EXIT_DEATH;
     view.write(LC_EXIT_TICK)?[open] = now;
     view.write(LC_DEATH_CAUSE)?[open] = cause;
-    let death = ctx.emit(
-        EventDraft::new(DEATH)
-            .role(ROLE_TARGET, EntityRef::person(person))
-            .with_payload(vec![cause]),
-    )?;
+    // person.spouse is cleared on the spouse's death (0.2.3 [[owns]]; the Tester's DEF-2).
+    let spouse = view.read(PERSON_SPOUSE)?[row].cast_unsigned();
+    if let Some(survivor) = ledger_row(view, spouse)?.filter(|_| spouse != 0) {
+        let spouses = view.write(PERSON_SPOUSE)?;
+        if spouses[survivor].cast_unsigned() == id {
+            spouses[survivor] = 0;
+        }
+    }
+    let mut draft = EventDraft::new(DEATH)
+        .role(ROLE_TARGET, EntityRef::person(person))
+        .with_payload(vec![cause]);
+    if !cause_event.is_none() {
+        draft = draft.caused_by(cause_event, EdgeKind::Triggered);
+    }
+    let death = ctx.emit(draft)?;
     if view.read(PERSON_ALIVE)?.iter().all(|&a| a == 0) {
         ctx.emit(EventDraft::new(EXTINCTION).after(death))?;
     }
+    Ok(Death::Applied)
+}
+
+/// Whether `person` has a living ledger row.
+fn living(view: &SystemView<'_>, person: u64) -> Result<bool, SimError> {
+    Ok(ledger_row(view, person)?.is_some_and(|r| view.read(PERSON_ALIVE).is_ok_and(|a| a[r] == 1)))
+}
+
+/// The `Day`/`Vital` drain (M2 0.2.3; `05.1` §2 rule 2; SPR-014 T-05): every queued
+/// `ScheduleDeath` and `Marry`, in key order. `rh-core` has already dropped each one whose key
+/// person was dead when the level started (`key = "living"`); what this drain finds dead, it drops
+/// with reason `dead`.
+fn drain(view: &mut SystemView<'_>, ctx: &mut StepCtx<'_>) -> Result<(), SimError> {
+    for q in ctx.take_commands() {
+        match q.command.kind {
+            SCHEDULE_DEATH => schedule_death(view, ctx, &q)?,
+            MARRY => marry(view, ctx, &q)?,
+            other => return Err(fail(format!("M2 does not apply command {other}"))),
+        }
+    }
+    Ok(())
+}
+
+/// `ScheduleDeath { victim, cause, culprit, cause_event }` through [`apply_death`].
+fn schedule_death(
+    view: &mut SystemView<'_>,
+    ctx: &mut StepCtx<'_>,
+    q: &QueuedCommand,
+) -> Result<(), SimError> {
+    let victim = q
+        .command
+        .int(0)
+        .ok_or_else(|| fail("ScheduleDeath without a victim".to_owned()))?;
+    let cause = q
+        .command
+        .int(1)
+        .ok_or_else(|| fail("ScheduleDeath without a cause".to_owned()))?;
+    let cause_event = q
+        .command
+        .args
+        .get(3)
+        .and_then(|a| a.event())
+        .unwrap_or(EventRef::None);
+    let victim = PersonId::from_raw(victim.cast_unsigned());
+    if apply_death(view, ctx, victim, cause, cause_event)? == Death::AlreadyDead {
+        ctx.drop_command(q, DropReason::Dead);
+    }
+    Ok(())
+}
+
+/// `Marry { a, b }`, as frozen 0.2.x states it: `person.spouse` written both ways; a dead party
+/// drops it. Households and the marriage rows (N7) are SPR-015's.
+fn marry(
+    view: &mut SystemView<'_>,
+    ctx: &mut StepCtx<'_>,
+    q: &QueuedCommand,
+) -> Result<(), SimError> {
+    let a = q
+        .command
+        .int(0)
+        .ok_or_else(|| fail("Marry without a".to_owned()))?;
+    let b = q
+        .command
+        .int(1)
+        .ok_or_else(|| fail("Marry without b".to_owned()))?;
+    let (a, b) = (a.cast_unsigned(), b.cast_unsigned());
+    if !living(view, a)? || !living(view, b)? {
+        ctx.drop_command(q, DropReason::Dead);
+        return Ok(());
+    }
+    let (Some(ra), Some(rb)) = (ledger_row(view, a)?, ledger_row(view, b)?) else {
+        ctx.drop_command(q, DropReason::Dead);
+        return Ok(());
+    };
+    let spouse = view.write(PERSON_SPOUSE)?;
+    spouse[ra] = b.cast_signed();
+    spouse[rb] = a.cast_signed();
     Ok(())
 }
 
@@ -317,7 +425,13 @@ impl SystemModel for Demography {
                     plane: Plane::A,
                 })
                 .to_vec(),
+            applies: CommandApply::from_drains(DRAINS),
             emits: vec![DEATH, EXTINCTION],
+            // M2 0.2.3's Day/Vital entry has one step, the drain ([[schedule]]; A-60 part).
+            drain_only: vec![PulseBinding {
+                pulse: Pulse::Day,
+                phase: Phase::Vital,
+            }],
             ..AccessSpec::default()
         }
     }
@@ -350,11 +464,14 @@ impl SystemModel for Demography {
 
     fn step(
         &self,
-        _: PulseBinding,
+        binding: PulseBinding,
         view: &mut SystemView<'_>,
         ctx: &mut StepCtx<'_>,
     ) -> Result<(), SimError> {
-        self.mortality(view, ctx)
+        match binding.pulse {
+            Pulse::Day => drain(view, ctx),
+            _ => self.mortality(view, ctx),
+        }
     }
 
     fn fire(
@@ -374,7 +491,13 @@ impl SystemModel for Demography {
                 timer.id()
             )));
         }
-        apply_death(view, ctx, PersonId::from_raw(entity.raw()), CAUSE_NATURAL)
+        // A death timer for a person already dead (a natural death drawn before a commanded one
+        // applied earlier in the instant) is dropped and counted (05.1 §2 rule 2; R3 point 4).
+        let person = PersonId::from_raw(entity.raw());
+        if apply_death(view, ctx, person, CAUSE_NATURAL, EventRef::None)? == Death::AlreadyDead {
+            ctx.drop_timer(timer, DropReason::Dead);
+        }
+        Ok(())
     }
 
     fn resample_timer(
@@ -420,8 +543,85 @@ fn result(name: &'static str, problem: Option<String>) -> InvariantResult {
 /// life-course rows), INV-M2-02 (each ledger row has one open life-course row with its id and
 /// birth tick; no closed row's person is in the ledger) and INV-M2-04 (every row alive with
 /// `death_tick = i64::MAX`). INV-M2-03 needs the agenda and is checked by V-DET-12's tests.
+///
+/// O(N + L) when they hold (SPR-038 T-03): one pass over the log, the open and the closed persons
+/// sorted (linear on a log appended in id order, the common case) and merged with the ledger's
+/// ascending ids. When any does not hold, [`invariants_oracle`] computes the results, so the
+/// results, names and texts are always the oracle's.
 #[must_use]
 pub fn invariants(world: &WorldTables) -> Vec<InvariantResult> {
+    if all_hold(world) {
+        return vec![
+            result("INV-M2-01", None),
+            result("INV-M2-02", None),
+            result("INV-M2-04", None),
+        ];
+    }
+    invariants_oracle(world)
+}
+
+/// Whether INV-M2-01, 02 and 04 all hold, in O(N + L). It answers `true` only when
+/// [`invariants_oracle`] finds all three holding: it asks for a strictly ascending ledger, which the
+/// core's `ledger-sorted` invariant guarantees whenever M2's run, and otherwise defers to the
+/// oracle.
+fn all_hold(world: &WorldTables) -> bool {
+    let ids = col(world, PERSON_ID);
+    let births = col(world, PERSON_BIRTH);
+    if ids.len() != births.len()
+        || ids
+            .windows(2)
+            .any(|w| w[0].cast_unsigned() >= w[1].cast_unsigned())
+    {
+        return false;
+    }
+    let mut open: Vec<(u64, i64)> = Vec::with_capacity(ids.len());
+    let mut closed: Vec<u64> = Vec::new();
+    for ((&p, &k), &b) in col(world, LC_PERSON)
+        .iter()
+        .zip(col(world, LC_EXIT_KIND))
+        .zip(col(world, LC_BIRTH))
+    {
+        if k == 0 {
+            open.push((p.cast_unsigned(), b));
+        } else {
+            closed.push(p.cast_unsigned());
+        }
+    }
+    if open.len() != ids.len() {
+        return false;
+    }
+    open.sort_unstable();
+    // INV-M2-02: the ledger, in table order, equals the sorted open rows.
+    let equal = ids
+        .iter()
+        .zip(births)
+        .zip(&open)
+        .all(|((&i, &b), &o)| (i.cast_unsigned(), b) == o);
+    if !equal {
+        return false;
+    }
+    // INV-M2-02: no closed row's person is in the (strictly ascending) ledger: one merge.
+    closed.sort_unstable();
+    let mut j = 0;
+    for &p in &closed {
+        while j < ids.len() && ids[j].cast_unsigned() < p {
+            j += 1;
+        }
+        if ids.get(j).is_some_and(|&i| i.cast_unsigned() == p) {
+            return false;
+        }
+    }
+    // INV-M2-04.
+    col(world, PERSON_ALIVE)
+        .iter()
+        .zip(col(world, PERSON_DEATH_TICK))
+        .all(|(&a, &d)| a == 1 && d == i64::MAX)
+}
+
+/// M2's invariants as SPR-011 wrote them: the oracle [`invariants`] defers to whenever one does not
+/// hold, and the reference its O(N + L) path is tested against (SPR-038 T-03).
+#[must_use]
+pub fn invariants_oracle(world: &WorldTables) -> Vec<InvariantResult> {
     let ids = col(world, PERSON_ID);
     let births = col(world, PERSON_BIRTH);
     let mut open: Vec<(u64, i64)> = Vec::new();

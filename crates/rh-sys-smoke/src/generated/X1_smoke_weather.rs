@@ -5,6 +5,8 @@ pub const SCHEDULE: &[(Pulse, Phase)] = &[
     (Pulse::Year, Phase::Inputs),
     (Pulse::Hour, Phase::Environment),
 ];
+pub const DRAINS: &[(&str, Pulse, Phase)] = &[
+];
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RngPurpose {

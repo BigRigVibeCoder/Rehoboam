@@ -270,6 +270,7 @@ fn spec_table() -> SpecTable {
             .into_iter()
             .collect(),
         registry: rh_registry::ownership::parse_registry_table("registry_v0.toml", &text).unwrap(),
+        enum_codes: BTreeMap::new(),
     }
 }
 
