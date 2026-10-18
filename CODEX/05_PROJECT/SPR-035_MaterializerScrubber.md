@@ -2,7 +2,7 @@
 id: SPR-035
 title: "The materializer hookup and the timeline scrubber: unwatched jumps through SPR-027's materializer (the run's own rh-cli, locally or on adjutant over SSH), the watched-history cache (D62) keyed to the run's sealed history, rewind equal to forward play on two digests (V-R3D-13), a live-host probe, and the scrub latency reported (V-VIEW-05)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, observability, stream]

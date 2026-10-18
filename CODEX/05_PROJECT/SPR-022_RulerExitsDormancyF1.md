@@ -2,7 +2,7 @@
 id: SPR-022
 title: "M7 F1 (b), as SPR-022a and SPR-022b: ruler-exit hazards at the reference institutional state, the murder timer and the feud stock, deposition and claims, regencies, regrants, vocations and great-house dormancy (SIM-9) (P1.7, part b)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]

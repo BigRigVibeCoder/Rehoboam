@@ -2,7 +2,7 @@
 id: SPR-030
 title: "Determinism and performance at scale, in three stages: (A) A-32's machinery allocations, the serial numbers (A-45), benches 1–2, the per-draw overhead (A-46) and the A-68 probe; (B1) twin_vales as the fifth golden world, CRN pairing (V-DET-17) on the engine and the population bands; (B2) the G1a session on kingdom_10k with the pre-registered verdict, V-PERF-09, the live edge (A-67), the per-instant cost at scale (A-60, A-68) and bench 3 (P1.14)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, determinism, testing]

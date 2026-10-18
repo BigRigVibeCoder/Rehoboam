@@ -8,12 +8,12 @@
 >   - `GOV-011`: ownership, independence, records and handoffs.
 >
 >   §9 below applies them to this handoff. `CLAUDE.md` binds every agent whatever its vendor; `GEMINI.md` points here.
-> - **main:** `66ec301` (the merge of PR #101, 2026-10-18), then this handoff's own merge; check it with `git ls-remote origin main`. Every in-flight branch is pushed, and every remote session pushed its handoff branch except SPR-020's (§6).
+> - **main:** `3824601` (the merge of PR #90, 2026-10-18); check it with `git ls-remote origin main`.
 > - **Priority (the director's D62, binding):**
 >   - **P1:** the engine core (P1a "Bloodlines", gate G1a), which wins every contention for CI minutes, review time and merge slots.
 >   - **P2:** the voxel viewer lane.
 >   - **P3:** era packs, after G2.
-> - **Waiting on the director:** D58, D59, D61 and D63 (`docs/decisions_pending.md`), and one question: what is the repository's real GitHub Actions allowance (D61 item 8)?
+> - **Director Decisions:** D58, D59, D61, and D63 are **RATIFIED and APPROVED** (`docs/decisions_pending.md`, `docs/decisions-log.md`). Wave 7, Minds, Wave 8, and Viewer plans are APPROVED.
 
 ---
 
@@ -57,25 +57,21 @@
 | #99 | **T-00a** spec: EVO-002 (the instant log, the genealogy index), `next/M7` 0.6.0, the `[[observes]]` lint, `specs/engine/instant_log_model.py`; REV-T00a |
 | #100 | Viewer plans SPR-033a/b, SPR-034, SPR-035 (revision 2); PRJ-003 v1.4.2; REV-VIEWER CLOSED; D63 filed; BCK-002 1.22.1 (A-68..A-71). Merged `fc979ee` |
 | #101 | PY-PKG: the uv project packaged (`uv_build==0.11.32`, `rehoboam_tools`, layout tests); fixes P1–P7. Unblocks SPR-027 T-05, SPR-028 T-02, SPR-029 T-02. Merged `66ec301` |
-| this PR | `HANDOFF.md`, `docs/handoff/2026-10-18/`, GOV-009, GOV-010, GOV-011, GOV-005 2.0.0, `GEMINI.md` |
+| #83 | **SPR-014**: Lifecycle Queues (`sprint/SPR-014-lifecycle-queues`). Merged `d0e82c5` |
+| #104 | **SPR-038a**: Per-Instant Cost Reduction Stage A (`sprint/SPR-038a-per-instant-cost`). Merged `5e01601` |
+| #84 | **SPR-020**: Event Envelope in Engine (`sprint/SPR-020-envelope`). Merged `16a8559` |
+| #82 | **SPR-026**: World Stream v1 Live Edge (`sprint/SPR-026-stream-v1`). Merged `fbfa53b` |
+| #90 | **SPR-017**: Registry Effect Language v0 (`sprint/SPR-017-effect-language`). Merged `3824601` |
 
-## 3. Open PRs (on GitHub, `BigRigVibeCoder/Rehoboam`)
+## 3. Active Branches & Sprints
 
-| PR | Branch @ head | State | Next action |
+| Branch @ head | Role / Owner | State | Next action |
 |---|---|---|---|
-| #83 (draft) | `sprint/SPR-014-lifecycle-queues` @ `1a67ab9` | **P1 critical path.** Tester PASS on `d1e79e4`. The code-review fix batch (K1, K2, K3, K6, K7, K10, K11, K13; one commit each) plus a merge of `main` `3d26090` by gate name are on `backup/SPR-014-dev-handoff-20261018` @ `28ab29e`, a fast-forward of the sprint head. The developer reports `check_all` PASS on `28ab29e`, all three parts (core 11:43, golden 11:25, stream 7:59 locally) | §5 step 1 |
-| #82 (draft) | `sprint/SPR-026-stream-v1` @ `2de1841` | World Stream v1 live edge. Tester phase 4 done (GAP-8 met, merge faithful). Code review: 1 MAJ (C1 quadratic append) + MINs. The developer's C1 fix is a WIP commit, **gates not run**, on `backup/SPR-026-dev-handoff-20261018` @ `2323640` (a fast-forward) | §5 step 4 |
-| #84 (draft) | `sprint/SPR-020-envelope` @ `512432a` | The event envelope in the engine. Waits for SPR-014; then merge main, regenerate baselines `[C3] [perf-baseline]` | §5 step 3 |
-| #88 (draft) | `sprint/SPR-016-mortality-f1` @ `da6c74d` | Stage 1 (exp/ln Q32_32, the F1 schedule) Tester PASS; stage 2 held until SPR-015 merges | After SPR-015 |
-| #90 (draft) | `sprint/SPR-017-effect-language` @ `34a7f56` | The effect language v0: T-01..T-09 done, CI green (golden 14:37 > 12 target). `7d83b2e` (the fuzz control on seeds 1–4) is on `backup/SPR-017-dev-handoff-20261018`, a fast-forward. The Tester's pass-2 draft is on `review/SPR-017-tester-handoff-20261018` @ `0bc28fc`. The independent code review was cut off by the limit | §5 step 5 |
-
-**Branches with work but no PR:**
-- `sprint/SPR-038a-per-instant-cost` @ `2116418`: stage A done, built on SPR-014's `1a67ab9`. Opens its PR after SPR-014 merges. `backup/SPR-038a-dev-handoff-20261018` @ `789c138` (a fast-forward) adds `160be40`, the Architect's conditions (T-04), and a WIP draft of the PR body's evidence.
-- `arch/AN-0-annals-fold` @ `cfe5961`: the multi-segment annals fold; the reviewed fixes are a WIP commit.
-- `arch/AN-1-annals-m7-fixtures` @ `733960b`: annals fixtures for M7 F1. Committed, but not reviewed, and its gates were not fully run.
-- `arch/M7-0.6-T-00b` @ `8a5b1ea`: M7 amendments for SPR-022. WIP; its gates were not run.
-- `backup/SPR-014-pre-audit` @ `1d351f5`: SPR-014's review fix batch, contained in `28ab29e`.
-- `backup/*-handoff-20261018` and `review/*-handoff-20261018`: what the remote sessions pushed at the handoff (§6).
+| `sprint/SPR-015-births-f1` | Developer (Exuberant), `AGT-002-CORE` | Provisioned from `main` (`3824601`). Work order in `docs/handoff/2026-10-18/exuberant_work_order.md`. | T-01..T-03 (Stage A), then checkpoint |
+| `sprint/SPR-016-mortality-f1` @ `da6c74d` | Developer, `AGT-002-CORE` | Stage 1 (exp/ln Q32_32, F1 schedule) Tester PASS; stage 2 held until SPR-015 merges | After SPR-015 |
+| `arch/AN-0-annals-fold` @ `cfe5961` | Drafter / Architect | Multi-segment annals fold; review findings R1–R11 in `an0_rulings.md` | Apply rulings, verify, merge |
+| `arch/AN-1-annals-m7-fixtures` @ `733960b` | Drafter / Architect | Annals fixtures for M7 F1 | Merge after AN-0 |
+| `arch/M7-0.6-T-00b` @ `8a5b1ea` | Drafter / Architect | M7 amendments for SPR-022 | Finish draft before SPR-021a |
 
 ## 4. Records you will need (all in the repo)
 
