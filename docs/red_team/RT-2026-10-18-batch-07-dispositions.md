@@ -91,3 +91,13 @@ Batch 07 adds three more: RT-035 "resolved", RT-037 "probe mandated" and RT-038 
 1. **Now, on `adjutant`:** stop the bridge on port 8089, or restart it with `--host 127.0.0.1` (it needs that flag; it currently hard-codes `0.0.0.0`). View it through an SSH tunnel (`gcloud compute ssh adjutant -- -L 8089:127.0.0.1:8089`). Check that no GCP firewall rule opens 8089. The stream it serves is only `solo`'s, but the listener has no authentication.
 2. **D53's follow-up is still open on the red team's branch.** `docs/red_team/prototypes/asset_showcase.html` and `tools/asset_ripper/extract_{aoe2,caesar3,sc2k,stronghold}.py` are still there after the merge of `main` (`fcd34b8`). D53 asked for the showcase's deletion in a normal commit. The extractors may stay on that branch but never reach `main`.
 3. The red team should label its findings by what it measured, not by what it would like decided ("mandated", "ratified", "resolved"). The director and the Architect decide.
+
+## 4. Closure (2026-10-18)
+
+The red team closed batch 07 on its branch in `d6a52f8`, a normal commit, and the Architect checked it there:
+- `bin/stream_server.py` now defaults to `127.0.0.1`, with a `--host` flag;
+- `docs/red_team/prototypes/asset_showcase.html` is deleted, so **D53's follow-up is done**; the extractors stay on that branch, as D53 allows;
+- the branch's copies of "ADR-0036" and "ADR-0037" are removed;
+- the ledger rows RT-031 to RT-033 and RT-035 to RT-038 now match `main`.
+
+Not verifiable from the repository: that the listener on `adjutant` was stopped or rebound, and that no GCP firewall rule opens port 8089. Those are the director's checks (§3 item 1).
