@@ -27,8 +27,7 @@ def _mutant_features() -> dict[str, list[str]]:
 
 
 def test_there_are_mutant_features_to_guard() -> None:
-    """SPR-012's two planted switches and SPR-017's effect-language mutants exist; if they move,
-    this test is updated with them."""
+    """SPR-012's and SPR-017's planted switches exist; if they move, this test moves with them."""
     assert _mutant_features() == {
         "rh-manifest": ["mutant-effect"],
         "rh-registry": ["mutant-effect"],
