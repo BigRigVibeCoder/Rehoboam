@@ -1,10 +1,20 @@
 # Python tooling for Rehoboam (SPR-001 T-02; GOV-003 §3; GOV-008 §4).
 #
-# One uv project holds the interpreter's dependencies for every Python check in bin/check_all.sh.
-#   Set up or refresh:  uv sync --frozen --project python      (creates python/.venv)
+# One uv project holds the interpreter's dependencies for every Python check in bin/check_all.sh,
+# and the repository's Python packages: the python/rehoboam_*/ directories (PY-PKG; README.md).
+#   Set up or refresh:  uv sync --frozen --project python      (creates python/.venv and installs
+#                       the packages in editable mode)
 #   Change a dependency: edit this file, run `uv lock --project python`, commit both files.
+#   Add a package: one line in [tool.uv.build-backend] module-name below (README.md says how).
 # The [tool.*] sections below are written for the repository root as the working directory:
 # bin/check_all.sh runs ruff, mypy and pytest from there with --config/-c python/pyproject.toml.
+
+[build-system]
+# The exact pin is the uv release CI installs (.github/workflows/ci.yml, setup-uv `version`): uv
+# then builds with the copy of uv_build bundled in its own binary and downloads nothing; another uv
+# fetches this one wheel (no dependencies). Published to PyPI 2026-07-23. Move it with that pin.
+requires = ["uv_build==0.11.32"]
+build-backend = "uv_build"
 
 [project]
 name = "rehoboam-tools"
@@ -27,10 +37,27 @@ dev = [
 ]
 
 [tool.uv]
-# DECISION: a virtual project (dependencies only, nothing to build) until the first Python package
-# lands (rehoboam_compiler et al., 05.0 §6). ALTERNATIVES CONSIDERED: an empty package with a build
-# backend, which would add a build dependency for no code. REF: GOV-008 §2.
-package = false
+# DECISION: a packaged project, installed in editable mode by `uv sync`, so that `python -I -m
+# rehoboam_<name>` runs from the repository root with python/.venv's interpreter: the editable
+# install is a .pth file naming python/, which site processes under -I (not under -S). Its packages
+# are flat, top-level directories python/rehoboam_<name>/ (05.0 §6), declared one by one in
+# [tool.uv.build-backend] below; python/tests/test_packaging.py pins that list to the directories.
+# ALTERNATIVES CONSIDERED: hatchling with an explicit package list (its own dependencies, packaging,
+# pathspec, pluggy and trove-classifiers, are not in uv.lock and would float at every sync); a uv
+# workspace with one member per package (each package then has its own pyproject.toml, a nested
+# layout and its own lock entry); a src/ layout (the plans and 05.0 §6 name python/rehoboam_*/).
+# TRADEOFF: the editable install puts python/ itself on sys.path, so tests/ is importable as a
+# namespace package; test_packaging.py forbids top-level modules there. REF: PY-PKG (REV-WAVE8 S6);
+# uv's build-backend documentation, 0.11.32 (module-name as a list, module-root); GOV-008 §2.
+package = true
+
+[tool.uv.build-backend]
+# The repository's packages, one per line, alphabetical: adding one is a one-line change here, and
+# leaves uv.lock unchanged (uv.lock records the project as `editable = "."`, not its modules).
+module-root = ""
+module-name = [
+    "rehoboam_tools",
+]
 
 [tool.ruff]
 target-version = "py312"
