@@ -44,7 +44,7 @@ version: 1.0.0
 ## 3. Commits
 
 - **Subject:** `type(scope): description`, where `scope` is the `SPR-`, `BCK-` item, `T-` id or topic.
-  - Types in use: `feat`, `fix`, `test`, `perf`, `refactor`, `ci`, `docs`, `spec`, `plan`, `arch`, `wip`.
+  - Types in use: `feat`, `fix`, `test`, `perf`, `refactor`, `build`, `ci`, `docs`, `spec`, `plan`, `arch`, `verify`, `wip`.
   - A sprint task commit reads `type(SPR-NNN): T-NN description`.
   - End the subject with the change class tag group when it matters: `[C1]`, `[C2]`, `[C3]`, `[perf-baseline]`.
 - **Body:** `Why:`, `What:`, `Refs:` (CODEX and `docs` ids). A `[perf-baseline]` commit also needs a `Reason:` line (`bin/perf_gate.py`).
