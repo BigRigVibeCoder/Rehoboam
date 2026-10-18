@@ -415,8 +415,12 @@ pub enum Output {
     Effects(Vec<Action>),
 }
 
-/// The bound variables and options §7.1 gives a kind.
-fn kind_options(kind: ProgramKind, env: &Env) -> Result<CompileOptions, Rejection> {
+/// The bound variables and options §7.1 gives a kind (a host adds a verb's payload fields to an
+/// `Effects` program's scope before [`compile_with`]).
+///
+/// # Errors
+/// An environment without the `person`, `title` or `artifact` kind.
+pub fn kind_options(kind: ProgramKind, env: &Env) -> Result<CompileOptions, Rejection> {
     let k = |name: &str| {
         env.kind(name).ok_or_else(|| {
             Rejection::new(
@@ -597,6 +601,32 @@ impl Compiled {
     #[must_use]
     pub fn system(&self) -> &str {
         &self.system
+    }
+
+    /// Every action argument of an effects program that is a constant enum literal, as
+    /// `(command, parameter, value)`: what a Registry lint needs to refuse a constant the owner
+    /// would reject at its queue (Q13: `death_cause.none` sent to `ScheduleDeath`).
+    #[must_use]
+    pub fn constant_enum_args(&self) -> Vec<(CommandId, String, Value)> {
+        let Body::Effects(items) = &self.body else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for item in items {
+            let Some(command) = item.action.command else {
+                continue;
+            };
+            for (name, node) in &item.action.args {
+                if let ast::Kind::Dotted {
+                    res: ast::Dotted::Enum(v),
+                    ..
+                } = &node.kind
+                {
+                    out.push((command, name.clone(), v.clone()));
+                }
+            }
+        }
+        out
     }
 
     fn frame(&self, bindings: &[Value]) -> Result<Vec<Option<Value>>, EvalError> {

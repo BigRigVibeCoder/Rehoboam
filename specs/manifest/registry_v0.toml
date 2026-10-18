@@ -182,6 +182,115 @@ ids = ["feudal_monarchy", "oligarchic_council", "theocracy", "municipal_democrac
 
 [succession_laws]
 ids = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", "tanistry", "sortition"]
+# The laws as effect-language programs (specs/registry/effect_language_v0.md §7.3, §8; SPR-017 T-06): candidates, eligible
+# and order, text-identical to the golden file's [registry.programs.succession_laws.<law>] (the texts D37 approved, with
+# D14 (a) and D4). `ids` keeps its order: title.law stores ordinals (§11). The variants stay in the golden file.
+
+[succession_laws.primogeniture]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
+
+[succession_laws.ultimogeniture]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
+
+[succession_laws.seniority]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
+order      = '(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), life_course.birth_tick(x))'
+
+[succession_laws.partition]
+candidates = 'children(holder)'
+eligible   = 'person.alive(x) and x != holder'
+order      = '(life_course.sex(x) == sex.female, life_course.birth_tick(x))'
+
+[succession_laws.elective]
+candidates = 'court(title)'
+eligible   = 'person.alive(x) and x != holder'
+order      = '(min(t in titles(x): ordinal(title.tier(t)) else 3), life_course.birth_tick(x))'
+
+[succession_laws.tanistry]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h))) and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year)) * calendar.minutes_per_day'
+order      = 'life_course.birth_tick(x)'
+
+[succession_laws.sortition]
+candidates = 'court(title)'
+eligible   = 'person.alive(x) and x != holder'
+order      = 'draw(sortition, x, title)'
+
+# The effect language (specs/registry/effect_language_v0.md; SPR-017 T-06). Its version is the evaluator's (§11); the
+# Registry's registry_version covers it and is not bumped by SPR-017 (a C2 that moves no ladder header).
+[effect_language]
+version = "0.5.1"
+
+# Every enum a program can name, with its named default (§3.1): its values come from a Registry id list (`registry`) or
+# from the system specs' [[owns]] `values` of the named columns, which must all be equal. Defaults equal the golden slice's.
+[effect_language.enums]
+sex               = { columns = ["person.sex", "life_course.sex"], default = "male" }
+death_cause       = { columns = ["person.death_cause", "life_course.death_cause"], default = "none" }
+title_state       = { columns = ["title.state"], default = "held" }
+claim_status      = { columns = ["claim.status"], default = "void" }
+artifact_state    = { columns = ["artifact.state"], default = "lost" }
+vow_status        = { columns = ["vow.status"], default = "void" }
+title_tiers       = { registry = "title_tiers", default = "minor" }
+succession_laws   = { registry = "succession_laws", default = "primogeniture" }
+vocations         = { registry = "vocations", default = "none" }
+office_kinds      = { registry = "office_kinds", default = "chancellor" }
+vow_kinds         = { registry = "vow_kinds", default = "GRUDGE" }
+opinion_modifiers = { registry = "opinion_modifiers", default = "KIN_HARMED_BY" }
+overlays          = { registry = "overlays", default = "paranoia" }
+
+# The entity kind of each reference column a program reads (a u64 id column of the specs; §3.1, §7.4). An unlisted u64
+# column is an int. Proposed to the Architect (SPR-017 T-06, G1) in place of reading a kind from `meaning` text.
+[effect_language.refs]
+"person.mother"         = "person"
+"person.father"         = "person"
+"person.spouse"         = "person"
+"life_course.person_id" = "person"
+"life_course.mother"    = "person"
+"life_course.father"    = "person"
+"house_member.person"   = "person"
+"house_member.house"    = "house"
+"tenure.title"          = "title"
+"tenure.holder"         = "person"
+"title.liege"           = "title"
+"title.holder"          = "person"
+"title.regent"          = "person"
+"office.title"          = "title"
+"office.holder"         = "person"
+"claim.claimant"        = "person"
+"claim.title"           = "title"
+"artifact.bearer"       = "person"
+"vow.vower"             = "person"
+"relation.a"            = "person"
+"relation.b"            = "person"
+"opinion.holder"        = "person"
+"opinion.about"         = "person"
+"thought.holder"        = "person"
+"goal.holder"           = "person"
+"goal.vow"              = "vow"
+"feud.party_a"          = "person"
+"feud.party_b"          = "person"
+"knowledge.holder"      = "person"
+"petition.person"       = "person"
+"residence_interval.person_id" = "person"
+
+# A table whose rows are keyed by a column other than its id (§4.5, §5.3): the life-course log is read with a person.
+[effect_language.keys]
+life_course = "person_id"
+
+# Columns a system reads from an owner that has no spec yet, with their language type (proposed to the Architect, SPR-017
+# T-06 G4); an entry goes when the owner's spec lands. The neutral is the reader's [[reads]] entry's.
+[effect_language.foreign]
+"polity.exec_constraint" = { owner = "M6.polity", type = "q8_8" }
+
+# Event-id columns, which no program reads (§3.1: an event exists only as an event-typed command argument). Columns of
+# spec type event_ref are never readable; these are the u64 ones.
+[effect_language.opaque]
+columns = ["opinion.source_event", "thought.source_event", "feud.cause_event", "knowledge.event", "knowledge.via_event"]
 
 [title_tiers]      # M7.dynasty F1: landed titles (seats). Only sovereign titles carry the calibrated ruler-exit hazards (R12 §1–3)
 ids = ["sovereign", "major", "minor"]
@@ -623,3 +732,23 @@ SEAT_GRANTED       = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty", 
 HOUSE_EXTINCT      = { act_classes = ["lapse"], emitted_by = "M7.dynasty", tellability = 208 }
 DEATH              = { act_classes = ["death"], emitted_by = "M2.demography", tellability = 128 }      # target: the deceased; actor: the culprit of a caused death (P1.13), none for a natural one
 EXTINCTION         = { act_classes = ["death"], emitted_by = "M2.demography", tellability = 255 }      # the last living person died; caused by that DEATH (SPR-011 ruling 17)
+
+# Command signatures (§6, §7.3; SPR-017 T-06): one entry per command an owner's [[applies]] types, exactly its payload in
+# order (the key field is `person`), with language types: PersonId -> person, ClaimId/OfficeId/VowId -> their kinds,
+# u64 -> int, q8_8 -> q8_8, EventRef -> event, enum(<column>) -> that column's enum. No command carries a date (05.1 §2
+# rule 2; EVO-001 R9). Commands to owners without a spec (M4, S6, S7) get no entry until an [[applies]] types them (Q14).
+# Checked both ways against the owners' [[applies]] and the senders' [[commands]] by lint_odd.py.
+[commands]
+ScheduleDeath   = { owner = "M2.demography", person = "victim", outcome = true, params = [{ name = "cause", type = "enum:death_cause" }, { name = "culprit", type = "person" }, { name = "cause_event", type = "event" }] }
+Marry           = { owner = "M2.demography", person = "a", outcome = true, params = [{ name = "b", type = "person" }] }
+PressClaim      = { owner = "M7.dynasty", person = "claimant", outcome = false, params = [{ name = "claim", type = "claim" }] }
+PetitionSeat    = { owner = "M7.dynasty", person = "person", outcome = false, params = [{ name = "target", type = "int" }] }
+RenounceClaim   = { owner = "M7.dynasty", person = "claimant", outcome = false, params = [{ name = "claim", type = "claim" }] }
+Resign          = { owner = "M7.dynasty", person = "person", outcome = false, params = [{ name = "office", type = "office" }] }
+OpinionModifier = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "about", type = "person" }, { name = "kind", type = "enum:opinion_modifiers" }, { name = "magnitude", type = "q8_8" }, { name = "source_event", type = "event" }] }
+AgendaGoal      = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "vow", type = "vow" }, { name = "kind", type = "enum:vow_kinds" }, { name = "target", type = "int" }, { name = "priority", type = "q8_8" }] }
+ClearGoal       = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "vow", type = "vow" }] }
+ApplyThought    = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "overlay", type = "enum:overlays" }, { name = "delta", type = "q8_8" }, { name = "source_event", type = "event" }] }
+ApplyInfluence  = { owner = "T1.minds", person = "bearer", outcome = false, params = [{ name = "overlay", type = "enum:overlays" }, { name = "delta", type = "q8_8" }] }
+Promote         = { owner = "T1.minds", person = "person", outcome = false, params = [] }
+Demote          = { owner = "T1.minds", person = "person", outcome = false, params = [] }
