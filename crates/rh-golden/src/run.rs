@@ -1171,15 +1171,20 @@ fn stream_host(
 /// which no world or baseline may come from either.
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
-    [
+    let mut all = [
         rh_core::MUTANTS,
-        rh_snapshot::MUTANTS,
-        rh_sys_demography::MUTANTS,
-        rh_stream::MUTANTS,
+        rh_manifest::MUTANTS,
         rh_protocol::MUTANTS,
+        rh_registry::MUTANTS,
+        rh_snapshot::MUTANTS,
+        rh_stream::MUTANTS,
+        rh_sys_demography::MUTANTS,
         rh_core::REFERENCE,
     ]
-    .concat()
+    .concat();
+    all.sort_unstable();
+    all.dedup();
+    all
 }
 
 /// BCK-002 A-52: a build with a `mutant-*` feature compiled in never runs a world, so a mutant can

@@ -61,7 +61,8 @@ jobs:
     needs: freshness
     if: needs.freshness.outputs.run == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # 30 minutes for the ignored tests, and the effect-language fuzz's nightly tier (SPR-017 T-08).
+    timeout-minutes: 60
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
@@ -82,6 +83,13 @@ jobs:
 
       - name: Ignored tests (V-DET-20 full sweep; rh-sample statistics, nightly tier)
         run: cargo nextest run --workspace --locked --run-ignored ignored-only --no-fail-fast --no-capture
+
+      # SPR-017 T-08: 64 times the PR tier's 16 seeds, effect_ref.py against the release evaluator.
+      # Both sides are the standard library and rh-cli, so the runner's Python 3.12 runs it.
+      - name: V-WC-10 differential fuzz, nightly tier (1,024 seeds; SPR-017 T-08)
+        run: |
+          cargo build --release --locked -p rh-cli
+          python3 -I bin/effect_fuzz.py --seeds 1-1024 --rust-bin target/release/rh-cli --out target/fuzz-nightly --assert-coverage
 
   golden:
     name: Nightly golden tier (smoke, 1,000 years, monthly; SPR-008)

@@ -92,6 +92,16 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
+    "Effect emit parity positive control: one case's program altered on the Rust side must "
+    "FAIL (SPR-017 T-08)",
+    "Effect emit parity: effect_ref --emit and rh-cli effect eval print the same line for "
+    "every golden case (SPR-017 T-08)",
+    "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's "
+    "(check_key_order; SPR-017 T-06)",
+    "Effect programs positive control: a Registry whose seniority has no order must FAIL "
+    "(SPR-017 T-06)",
+    "Effect programs: every Registry program compiles against the real environment (rh-cli "
+    "effect check; SPR-017 T-06)",
     "Family annals v0: provenance re-derived by a whole-group re-render, template slots, no "
     "model, calendar, a possible history under M7's rules, determinism in two processes, "
     "coverage, injective designation, a canonical extract digest, golden annals and manifests "
@@ -438,6 +448,25 @@ REQUIRED_GATES = (
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
+    "V-WC-10 data-only extension positive control: the law's id without its programs must "
+    "FAIL by name (SPR-017 T-09)",
+    "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep "
+    "reproduce in the Rust evaluator (rh-manifest effect_golden; SPR-017 T-09)",
+    "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep "
+    "reproduce in the reference (effect_ref --check; SPR-017 T-09)",
+    "V-WC-10 data-only extension: the fixture Registry's 8 laws compile against the real "
+    "environment (rh-cli effect check, tests/registry_effect; SPR-017 T-09)",
+    "V-WC-10 differential fuzz: effect_ref.py and the Rust evaluator agree on 16 SplitMix64 "
+    "seeds, with every code, invariant, relation, builtin, aggregate and kind covered "
+    "(bin/effect_fuzz.py; SPR-017 T-08)",
+    "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug "
+    "(rh-manifest effect_golden; SPR-017 T-05)",
+    "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release "
+    "(SPR-017 T-05)",
+    "V-WC-10 effect language: twelve planted mutants each fail their sentinel cases with the "
+    "predicted wrong value, and Mutant::None passes (SPR-017 T-05)",
+    "V-WC-10 positive control: the golden file with one expected value altered must FAIL the "
+    "Rust test (SPR-017 T-05)",
     "Virtual telemetry (S5 prototype)",
     "Workspace tests positive control: a by-name entry that names no test binary must FAIL "
     "(SPR-009 review 2a)",
@@ -498,6 +527,7 @@ REQUIRED_GATES = (
     " the tier, so every part runs (BCK-002 A-63)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
+    "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 T-06)",
     "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL "
     "(SPR-013 T-09; R2)",
     "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)",
@@ -528,6 +558,8 @@ REQUIRED_GATES = (
     "method table (D47; SPR-027 T-01)",
     "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 "
     "§4.5; SPR-027 T-01)",
+    "effect_fuzz positive control: a reference copy whose fixed-point products round half up "
+    "must FAIL with MISMATCH (SPR-017 T-08)",
     "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
     "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start "
@@ -696,6 +728,11 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: the six ways round sockets-only-in-serve.rs (re-exports, "
     "#[path], include!) must FAIL (SPR-026 R19)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
+    "lint_odd [commands] positive control: a ScheduleDeath with a tick parameter must FAIL, "
+    "naming M2's [[applies]] (SPR-017 T-06)",
+    "lint_odd [commands] positive control: a cause_event typed int must FAIL (SPR-017 T-06)",
+    "lint_odd [commands] positive control: an [[applies]] with no Registry [commands] entry "
+    "must FAIL (SPR-017 T-06)",
     "lint_odd applies control: a sender's payload matching a typed [[applies]] field for field, "
     "with its drain binding, passes (REV-P1a section 7; EVO-001)",
     "lint_odd applies positive control: a sender's payload fields differ from [[applies]], "

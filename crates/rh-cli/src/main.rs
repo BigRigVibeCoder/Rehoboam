@@ -13,6 +13,10 @@
 //! - `rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]`: the
 //!   single-writer ownership lint (SPR-004 T-03). With no access files it checks the access each
 //!   spec implies; with files, the `[[access]]` declarations in them. Exit 1 on any violation.
+//! - `rh-cli effect check [--registry <registry.toml>] [--specs <dir>]` (SPR-017 T-06): every
+//!   Registry program compiled against the real environment, and `rh-cli effect keys`, the keyed
+//!   tables' ids in the loader's order, and `rh-cli effect eval FILE` (T-08), every case of a
+//!   golden-format file through the Rust evaluator (`effect.rs`).
 //! - `rh-cli run <world> …` (SPR-012 T-08: `smoke`, or a manifest world such as `solo`, with
 //!   `--strict` refusing a manifest that names a system this build lacks), `rh-cli ladder compare <a> <b>`, `rh-cli ladder cut-yearly <monthly> <out>` and `rh-cli bisect …`: the golden
 //!   runs, their hash ladders and the divergence bisect (SPR-008; `rh_golden::cli` documents the
@@ -29,6 +33,9 @@
 //! REF: `docs/05_architecture/05.0_overview.md` §6; `docs/05_architecture/05.10_world_stream.md`.
 #![forbid(unsafe_code)]
 
+mod effect;
+mod serve;
+
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -36,9 +43,7 @@ use rh_manifest::Registry;
 use rh_manifest::manifest;
 use rh_registry::ownership::{AccessSpec, Ownership};
 
-mod serve;
-
-const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]\n       rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]\n       rh-cli run <world> [--strict] [--seed S] --years N [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--vitals] [--run-dir D] [--inputs SCRIPT] [--expect-serial] [--socket] [--linger S] [--window year-end|sync] [--max-viewers N] [--seal-log]\n       rh-cli tail <run-dir> [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K ...] [--canonical] [--wait] [--live] [--channel A|C] [--timeout S]\n       rh-cli sift <run-dir> [--follow] [--socket] [--linger S] [--max-viewers N] [--timeout S]\n       rh-cli replay <run-dir> --into D [--from-keyframe TICK] [--threads T]   (D: absent, empty, or a previous replay's, holding .rh-replay)\n       rh-cli canonical parse < LINES | rh-cli canonical files F...\n       rh-cli ladder compare <a.ladder> <b.ladder>\n       rh-cli ladder cut-yearly <monthly.ladder> <out.ladder>\n       rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg A ...] [--seed S] [--years N] [--threads T] --work DIR [--out REPORT]";
+const USAGE: &str = "usage: rh-cli manifest validate <manifest.yaml> [--registry <registry.toml>]\n       rh-cli manifest schema [--diff <reference.schema.json>]\n       rh-cli ownership [--specs <dir>] [--registry <registry.toml>] [<access.toml> ...]\n       rh-cli effect check [--registry <registry.toml>] [--specs <dir>]\n       rh-cli effect keys [--registry <registry.toml>]\n       rh-cli effect eval <golden-format.toml> [--mutant <Name>]\n       rh-cli run smoke [--repo R] [--seed S] --years N [--until Y] [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--dump M:F] [--inject M:TABLE:ROW] [--leak-thread] [--require-parallel PERCENT] [--vitals]\n       rh-cli run <world> [--strict] [--seed S] --years N [--threads T] [--ladder yearly|monthly] --out F [--journal J] [--keyframes D] [--resume K [--extend]] [--vitals] [--run-dir D] [--inputs SCRIPT] [--expect-serial] [--socket] [--linger S] [--window year-end|sync] [--max-viewers N] [--seal-log]\n       rh-cli tail <run-dir> [--from-seq N] [--to-seq M] [--follow PERSON] [--kind K ...] [--canonical] [--wait] [--live] [--channel A|C] [--timeout S]\n       rh-cli sift <run-dir> [--follow] [--socket] [--linger S] [--max-viewers N] [--timeout S]\n       rh-cli replay <run-dir> --into D [--from-keyframe TICK] [--threads T]   (D: absent, empty, or a previous replay's, holding .rh-replay)\n       rh-cli canonical parse < LINES | rh-cli canonical files F...\n       rh-cli ladder compare <a.ladder> <b.ladder>\n       rh-cli ladder cut-yearly <monthly.ladder> <out.ladder>\n       rh-cli bisect --baseline BIN --candidate BIN [--candidate-arg A ...] [--seed S] [--years N] [--threads T] --work DIR [--out REPORT]";
 /// The repository the golden runs read `worlds/` from: this binary's own source tree, so a build
 /// of another revision runs that revision's world (SPR-008 T-03).
 const DEFAULT_REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
@@ -84,6 +89,9 @@ fn main() -> ExitCode {
         }
         ["manifest", "schema", "--diff", reference] => schema_diff(reference),
         ["ownership", rest @ ..] => ownership(rest),
+        ["effect", rest @ ..] => {
+            effect::run(rest, DEFAULT_REGISTRY, DEFAULT_SPECS).unwrap_or_else(usage)
+        }
         ["run", "smoke", rest @ ..] => golden(rh_golden::cli::run_smoke, rest),
         // SPR-026 T-03: the run serving channel A's live edge on its socket.
         ["run", world, rest @ ..] if !world.starts_with('-') && rest.contains(&"--socket") => {

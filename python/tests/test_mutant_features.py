@@ -27,7 +27,7 @@ def _mutant_features() -> dict[str, list[str]]:
 
 
 def test_there_are_mutant_features_to_guard() -> None:
-    """The planted switches of SPR-012, SPR-014, SPR-026 and SPR-038 exist.
+    """The planted switches of SPR-012, SPR-014, SPR-017, SPR-026 and SPR-038 exist.
 
     If they move, this follows.
     """
@@ -39,7 +39,9 @@ def test_there_are_mutant_features_to_guard() -> None:
             "mutant-stale-lagged-snapshot",
             "mutant-unmarked-put-back",
         ],
+        "rh-manifest": ["mutant-effect"],
         "rh-protocol": ["mutant-accept-flags", "mutant-pace-method"],
+        "rh-registry": ["mutant-effect"],
         "rh-snapshot": ["mutant-cause-u8-zero"],
         "rh-stream": [
             "mutant-bytes-queue-canonical",

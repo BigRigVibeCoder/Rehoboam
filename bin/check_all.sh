@@ -971,6 +971,74 @@ effect_golden_control() {
   sed '0,/^expect = "bool:true"$/s//expect = "bool:false"/' specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
   "$PY" -I specs/registry/effect_ref.py --check --golden "$planted"
 }
+# The same planted file must fail the Rust evaluator's golden test by the case's name (SPR-017 T-05).
+effect_golden_rust_control() {
+  local planted="$PWD/target/rendered-fixtures/altered_effect_language_golden_v0.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^expect = "bool:true"$/s//expect = "bool:false"/' specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
+  RH_EFFECT_GOLDEN="$planted" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture
+}
+
+# SPR-017 T-06: the Registry's programs against the real environment; the control drops seniority's order.
+effect_programs_control() {
+  local planted="$PWD/target/rendered-fixtures/registry_seniority_without_order.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed "/^order      = '(count(y in line_agnatic/d" specs/manifest/registry_v0.toml > "$planted" || return 1
+  if cmp -s "$planted" specs/manifest/registry_v0.toml; then echo "control not planted: seniority's order line not found"; return 1; fi
+  "$RH_CLI" effect check --registry "$planted"
+}
+
+# SPR-017 T-06: the keyed tables' order; the control feeds check_key_order the Rust lines with every table sorted.
+key_order_control() {
+  local planted="$PWD/target/rendered-fixtures/key_order_sorted.txt"
+  mkdir -p "$(dirname "$planted")" || return 1
+  "$RH_CLI" effect keys | while IFS=: read -r section ids; do
+    printf '%s: %s\n' "$section" "$(printf '%s\n' $ids | LC_ALL=C sort | tr '\n' ' ')"
+  done > "$planted" || return 1
+  "$PY" -I bin/check_key_order.py --rust-output "$planted"
+}
+
+# SPR-017 T-09 (V-WC-10, EVO-1): the data-only extension's control drops the law's programs from its
+# fixture Registry, keeping its id: the Registry must be refused by name.
+extension_control() {
+  local planted="$PWD/target/rendered-fixtures/registry_extension_without_programs.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '/^\[succession_laws.absolute_primogeniture\]$/,/^order /d' tests/registry_effect/registry_absolute_primogeniture.toml > "$planted" || return 1
+  if cmp -s "$planted" tests/registry_effect/registry_absolute_primogeniture.toml; then echo "control not planted: the law's table was not found"; return 1; fi
+  "$RH_CLI" effect check --registry "$planted"
+}
+
+# SPR-017 T-08: effect_ref.py --emit and rh-cli effect eval print the same line for every case of a
+# golden-format file (the reference reads the golden file; the Rust side reads $1, the file itself or
+# a planted copy).
+effect_emit_parity() {
+  local ref rs file="${1:-specs/registry/effect_language_golden_v0.toml}"
+  ref="$("$PY" -I specs/registry/effect_ref.py --emit)" || return 1
+  rs="$("$RH_CLI" effect eval "$file")" || return 1
+  if [ "$ref" != "$rs" ]; then
+    diff <(printf '%s\n' "$ref") <(printf '%s\n' "$rs") | head -20
+    echo "EMIT PARITY: FAIL"
+    return 1
+  fi
+  echo "EMIT PARITY: $(printf '%s\n' "$ref" | wc -l | tr -d ' ') cases"
+}
+effect_emit_parity_control() {
+  local planted="$PWD/target/rendered-fixtures/emit_parity_lit_true.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed "0,/^text = 'true'\$/s//text = 'false'/" specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
+  if cmp -s "$planted" specs/registry/effect_language_golden_v0.toml; then echo "control not planted: no text = 'true' case"; return 1; fi
+  effect_emit_parity "$planted"
+}
+# SPR-017 T-08: the fuzz's control runs it against a reference copy whose fixed-point products round
+# half up; it must report MISMATCH.
+effect_fuzz_control() {
+  local planted="$PWD/target/rendered-fixtures/effect_ref_half_up.py"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed 's/^        return fx_from_fraction(a.ty, fx_value(a) \* fx_value(b))$/        return Fx(a.ty, sat((fx_value(a) * fx_value(b) * (1 << FRAC_BITS[a.ty]) + Fraction(1, 2)).__floor__(), *q_range(a.ty)))/' \
+    specs/registry/effect_ref.py > "$planted" || return 1
+  if cmp -s "$planted" specs/registry/effect_ref.py; then echo "control not planted: the fixed-point product line was not found"; return 1; fi
+  "$PY" -I bin/effect_fuzz.py --seeds 1-4 --rust-bin "$RH_CLI_RELEASE" --out target/fuzz_control --ref "$planted"
+}
 
 # SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
 # and 8 under callgrind (bin/perf_gate.py) and compares them with the committed baseline; a second
@@ -1140,6 +1208,7 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-contracts::drift rh-contracts::consumer rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
   rh-cli::kill rh-golden::tail rh-cli::tail_live rh-golden::envelope_world rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs
+  rh-manifest::effect_golden
   rh-snapshot::per_instant_cache rh-sys-demography::invariants_oracle rh-core::per_instant
   rh-protocol::golden rh-protocol::method_table rh-protocol::round_trip rh-stream::live rh-cli::serve
   rh-cli::channel_c rh-cli::vstr rh-cli::run_dir rh-cli::memory"
@@ -1371,6 +1440,9 @@ run "lint_odd neutral positive control: an enum neutral outside the column's cod
 run "lint_odd neutral control: a frozen substrate reading a non-substrate's column as identity warns and passes; the rule is advisory, registration enforces it (REV-EVO-001 R12, R16)" "pass:WARN  M3.agriculture.odd.toml: a substrate reads title.holder from M7.dynasty as identity" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/substrate_identity &&
 run "lint_odd neutral positive control: an identity read carrying a neutral must FAIL (REV-EVO-001 R12)" "fail:ERROR M3.agriculture.odd.toml: read person.alive from M2.demography is an identity read, which requires its owner and declares no neutral" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/identity_neutral &&
 run "lint_odd neutral control: a draft spec's rate read of an absent owner with no neutral warns and passes (EVO-001)" "pass:WARN  M3.agriculture.odd.toml: read polity.exec_constraint from M6.polity needs a neutral value" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_neutral/draft_missing &&
+run "lint_odd [commands] positive control: a ScheduleDeath with a tick parameter must FAIL, naming M2's [[applies]] (SPR-017 T-06)" "fail:differ from M2.demography.odd.toml's [[applies]] ScheduleDeath payload" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/tick.toml &&
+run "lint_odd [commands] positive control: an [[applies]] with no Registry [commands] entry must FAIL (SPR-017 T-06)" "fail:ERROR M2.demography.odd.toml: [[applies]] Marry has no Registry [commands] entry" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/no_entry.toml &&
+run "lint_odd [commands] positive control: a cause_event typed int must FAIL (SPR-017 T-06)" "fail:parameter cause_event must be typed event, not int" "$PY" -I specs/systems/lint_odd.py --commands tests/lint_fixtures/registry_commands/cause_event_int.toml &&
 run "lint_odd observes control: an [[observes]] entry naming a Registry verb, its emitter and a same_instant read of the emitter passes (EVO-002)" "pass:PASS: 9 system specs linted" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/ok &&
 run "lint_odd observes positive control: an observed kind that is not a Registry verb must FAIL (EVO-002)" "fail:ERROR M3.agriculture.odd.toml: [[observes]] NOT_A_VERB is not a Registry verb" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/unknown_kind &&
 run "lint_odd observes positive control: an observed kind whose owner is not its emitter must FAIL (EVO-002)" "fail:[[observes]] DEATH: owner M7.dynasty is not its emitter; the Registry gives DEATH to M2.demography" "$PY" -I specs/systems/lint_odd.py --extra-specs tests/lint_fixtures/odd_observes/wrong_owner &&
@@ -1500,6 +1572,14 @@ run "Doctest count gate positive control: one typed-ID case missing must FAIL" "
 run "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)" "pass:PARITY: all" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" specs/manifest/examples/*.yaml tests/manifest_parity/*.yaml &&
 run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
+run "Effect programs: every Registry program compiles against the real environment (rh-cli effect check; SPR-017 T-06)" "pass:EFFECT PROGRAMS: PASS (7 laws, 21 programs)" "$RH_CLI" effect check &&
+run "Effect programs positive control: a Registry whose seniority has no order must FAIL (SPR-017 T-06)" "fail:succession_laws.seniority: no order program (§7.3)" effect_programs_control &&
+run "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's (check_key_order; SPR-017 T-06)" "pass:KEY ORDER: PASS" "$PY" -I bin/check_key_order.py --rust-bin "$RH_CLI" &&
+run "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 T-06)" "fail:MISMATCH [opinion_modifiers]" key_order_control &&
+run "V-WC-10 data-only extension: the fixture Registry's 8 laws compile against the real environment (rh-cli effect check, tests/registry_effect; SPR-017 T-09)" "pass:EFFECT PROGRAMS: PASS (8 laws, 24 programs)" "$RH_CLI" effect check --registry tests/registry_effect/registry_absolute_primogeniture.toml &&
+run "V-WC-10 data-only extension positive control: the law's id without its programs must FAIL by name (SPR-017 T-09)" "fail:succession_laws.absolute_primogeniture: no programs" extension_control &&
+run "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep reproduce in the reference (effect_ref --check; SPR-017 T-09)" "pass:EFFECT LANGUAGE v0.5.1: PASS (2 cases reproduce absolute_primogeniture_cases.toml)" "$PY" -I specs/registry/effect_ref.py --check --golden tests/registry_effect/absolute_primogeniture_cases.toml &&
+run "V-WC-10 data-only extension: absolute_primogeniture's lines on dynasty and deep reproduce in the Rust evaluator (rh-manifest effect_golden; SPR-017 T-09)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (2 cases)" env RH_EFFECT_GOLDEN="$PWD/tests/registry_effect/absolute_primogeniture_cases.toml" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
 run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
 run "Ownership lint positive control: unowned write must FAIL" "fail:VIOLATION [single-writer] S5.daily_life: writes person.alive, which M2.demography owns" "$RH_CLI" ownership tests/lint_fixtures/ownership/unowned_write.access.toml &&
 run "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)" "fail:VIOLATION [duplicate] M2.demography: declares a write to person.alive twice" "$RH_CLI" ownership tests/lint_fixtures/ownership/duplicate_write.access.toml &&
@@ -1539,8 +1619,12 @@ run "canonical_v0 positive control: a stale golden digest must FAIL" "fail:STALE
 run "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)" pass "$PY" -I bin/gen_sampler_reference.py --check &&
 run "gen_sampler_reference positive control: stale reference must FAIL" "fail:STALE:" "$PY" -I bin/gen_sampler_reference.py --check --output tests/lint_fixtures/golden/stale_sampler_reference.txt &&
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
-run "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml (effect_ref --check; SPR-017)" "pass:EFFECT LANGUAGE v0.5.0: PASS" "$PY" -I specs/registry/effect_ref.py --check &&
+run "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml (effect_ref --check; SPR-017)" "pass:EFFECT LANGUAGE v0.5.1: PASS" "$PY" -I specs/registry/effect_ref.py --check &&
 run "effect_ref positive control: one altered expected value must FAIL (SPR-017)" "fail:FAIL lit_true" effect_golden_control &&
+run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug (rh-manifest effect_golden; SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (610 cases)" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
+run "V-WC-10 positive control: the golden file with one expected value altered must FAIL the Rust test (SPR-017 T-05)" "fail:FAIL lit_true" effect_golden_rust_control &&
+run "Effect emit parity: effect_ref --emit and rh-cli effect eval print the same line for every golden case (SPR-017 T-08)" "pass:EMIT PARITY: 610 cases" effect_emit_parity &&
+run "Effect emit parity positive control: one case's program altered on the Rust side must FAIL (SPR-017 T-08)" "fail:EMIT PARITY: FAIL" effect_emit_parity_control &&
 run "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's (gen_decimal_vectors --check; SPR-011 T-04)" pass "$PY" -I bin/gen_decimal_vectors.py --check &&
 run "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)" "fail:STALE:" "$PY" -I bin/gen_decimal_vectors.py --check --output tests/lint_fixtures/golden/stale_decimal_vectors.txt &&
 run "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)" "pass:OK:" "$PY" -I specs/numerics/exp_ln_v0.py --check &&
@@ -1711,6 +1795,10 @@ run "V-PERF-11 toolchain control: an allocation baseline from another rustc must
 run "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must FAIL (SPR-009 T-05)" "fail:OVER BUDGET threads 1 allocations" "$PY" -I bin/perf_gate.py alloc-gate --control --out artifacts/perf/allocations_control.txt &&
 # Golden runs (SPR-008)
 run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
+run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release (SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.1 (rust): PASS (610 cases)" cargo nextest run -p rh-manifest --locked --release --test effect_golden --no-capture &&
+run "V-WC-10 effect language: twelve planted mutants each fail their sentinel cases with the predicted wrong value, and Mutant::None passes (SPR-017 T-05)" "pass:mutant PrefixLast: killed" cargo nextest run -p rh-manifest --locked --release --features mutant-effect --test effect_mutants --no-capture &&
+run "V-WC-10 differential fuzz: effect_ref.py and the Rust evaluator agree on 16 SplitMix64 seeds, with every code, invariant, relation, builtin, aggregate and kind covered (bin/effect_fuzz.py; SPR-017 T-08)" "pass:EFFECT FUZZ: PASS" "$PY" -I bin/effect_fuzz.py --seeds 1-16 --rust-bin "$RH_CLI_RELEASE" --out target/fuzz --assert-coverage &&
+run "effect_fuzz positive control: a reference copy whose fixed-point products round half up must FAIL with MISMATCH (SPR-017 T-08)" "fail:MISMATCH seed" effect_fuzz_control &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" golden_vitals_run &&
 run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&

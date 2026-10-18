@@ -13,6 +13,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use crate::effect_registry::{CommandSig, EffectLanguage, SuccessionLaws};
 use crate::exact::{Decimal, DecimalError};
 use std::path::Path;
 
@@ -291,6 +292,12 @@ pub struct Verb {
     /// The Registry's prior of how worth telling one event of the verb is, 0..=255, copied into
     /// the plane-A event row (SPR-011 ruling 11). Required: a verb without it does not load.
     pub tellability: u8,
+    /// The event payload fields its effects program binds, name to language type (§7.1; N4).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub payload: BTreeMap<String, String>,
+    /// Its effects program (`specs/registry/effect_language_v0.md` §6), if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effects: Option<String>,
 }
 
 /// The Mechanics Registry: every section of `registry_v0.toml`.
@@ -311,7 +318,7 @@ pub struct Registry {
     #[serde(default)]
     pub governments: IdList,
     #[serde(default)]
-    pub succession_laws: IdList,
+    pub succession_laws: SuccessionLaws,
     #[serde(default)]
     pub institutions: IdList,
     #[serde(default)]
@@ -354,6 +361,13 @@ pub struct Registry {
     pub attributes: BTreeMap<String, Attribute>,
     #[serde(default)]
     pub verbs: BTreeMap<String, Verb>,
+    /// `[effect_language]`: the language version, its enums, reference kinds, keys and opaque
+    /// columns (SPR-017 T-06; `crate::effect_registry`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_language: Option<EffectLanguage>,
+    /// `[commands]`: the command signatures the checker and the queues share (SPR-017 T-06).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub commands: BTreeMap<String, CommandSig>,
     /// The event-role vocabulary, in code order (envelope v0 §1): the first four are pinned.
     #[serde(default)]
     pub event_roles: IdList,
@@ -423,7 +437,8 @@ impl Registry {
         let mut reg: Registry =
             toml::from_str(text).map_err(|e| RegistryError::Parse(e.to_string()))?;
         reg.read_default_literals(text)?;
-        let problems = reg.problems();
+        let mut problems = reg.problems();
+        problems.extend(crate::effect_registry::registry_problems(&reg));
         if problems.is_empty() {
             Ok(reg)
         } else {
@@ -523,7 +538,7 @@ impl Registry {
             "verbs" => keys(&self.verbs),
             "eras" => self.eras.ids.iter().map(String::as_str).collect(),
             _ => match self.id_list(section) {
-                Some(l) => l.ids.iter().map(String::as_str).collect(),
+                Some(l) => l.iter().map(String::as_str).collect(),
                 None => self.generic_ids(section),
             },
         }
@@ -540,27 +555,27 @@ impl Registry {
         }
     }
 
-    fn id_list(&self, section: &str) -> Option<&IdList> {
+    pub(crate) fn id_list(&self, section: &str) -> Option<&Vec<String>> {
         Some(match section {
-            "governments" => &self.governments,
-            "succession_laws" => &self.succession_laws,
-            "institutions" => &self.institutions,
-            "goods" => &self.goods,
-            "off_map_kinds" => &self.off_map_kinds,
-            "inheritance_rules" => &self.inheritance_rules,
-            "technologies" => &self.technologies,
-            "act_classes" => &self.act_classes,
-            "roles" => &self.roles,
-            "channels" => &self.channels,
-            "overlays" => &self.overlays,
-            "pattern_packs" => &self.pattern_packs,
-            "style_cards" => &self.style_cards,
-            "values" => &self.values,
-            "doctrine_tags" => &self.doctrine_tags,
-            "heightmap_templates" => &self.heightmap_templates,
-            "climate_zones" => &self.climate_zones,
-            "event_roles" => &self.event_roles,
-            "motive_edges" => &self.motive_edges,
+            "governments" => &self.governments.ids,
+            "succession_laws" => &self.succession_laws.ids,
+            "institutions" => &self.institutions.ids,
+            "goods" => &self.goods.ids,
+            "off_map_kinds" => &self.off_map_kinds.ids,
+            "inheritance_rules" => &self.inheritance_rules.ids,
+            "technologies" => &self.technologies.ids,
+            "act_classes" => &self.act_classes.ids,
+            "roles" => &self.roles.ids,
+            "channels" => &self.channels.ids,
+            "overlays" => &self.overlays.ids,
+            "pattern_packs" => &self.pattern_packs.ids,
+            "style_cards" => &self.style_cards.ids,
+            "values" => &self.values.ids,
+            "doctrine_tags" => &self.doctrine_tags.ids,
+            "heightmap_templates" => &self.heightmap_templates.ids,
+            "climate_zones" => &self.climate_zones.ids,
+            "event_roles" => &self.event_roles.ids,
+            "motive_edges" => &self.motive_edges.ids,
             _ => return None,
         })
     }
@@ -685,7 +700,7 @@ impl Registry {
         }
         for name in Self::ID_LIST_SECTIONS {
             if let Some(l) = self.id_list(name) {
-                push_duplicates(&mut out, name, &l.ids);
+                push_duplicates(&mut out, name, l);
             }
         }
         push_duplicates(&mut out, "eras", &self.eras.ids);
@@ -1044,6 +1059,8 @@ mod tests {
                 "eras",
                 "attributes",
                 "verbs",
+                "effect_language",
+                "commands",
                 "role_domains",
             ],
         ]
