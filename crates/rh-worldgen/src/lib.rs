@@ -53,7 +53,7 @@ pub const SEX_FEMALE: i64 = 1;
 pub const ORIGIN_FOUNDER: i64 = 1;
 
 /// Every column genesis writes, with its value per founder (the M2 spec's `[initialization]`).
-const COLUMNS: [&str; 19] = [
+const COLUMNS: [&str; 24] = [
     "life_course.birth_tick",
     "life_course.death_cause",
     "life_course.entry_tick",
@@ -66,13 +66,18 @@ const COLUMNS: [&str; 19] = [
     "life_course.sex",
     "person.alive",
     "person.birth_tick",
+    "person.conceived_tick",
     "person.death_cause",
     "person.death_tick",
     "person.father",
+    "person.household",
     "person.id",
+    "person.last_birth_tick",
     "person.mother",
+    "person.parity",
     "person.sex",
     "person.spouse",
+    "person.unborn_father",
 ];
 
 /// Why genesis refused a world.
@@ -318,8 +323,10 @@ pub fn write_columns(
             "person.birth_tick" | "life_course.birth_tick" => births.clone(),
             "person.alive" => vec![1; n],
             "person.death_tick" | "life_course.exit_tick" => vec![i64::MAX; n],
+            "person.conceived_tick" | "person.last_birth_tick" => vec![i64::MIN; n],
             "life_course.origin" => vec![ORIGIN_FOUNDER; n],
-            // mother, father, spouse, death_cause none, entry_tick 0, exit_kind open.
+            // mother, father, spouse, death_cause none, entry_tick 0, exit_kind open,
+            // parity 0, unborn_father 0, household 0.
             _ => vec![0; n],
         };
         tables.insert(column, values);
