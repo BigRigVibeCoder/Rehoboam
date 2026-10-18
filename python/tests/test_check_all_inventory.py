@@ -822,6 +822,8 @@ REQUIRED_GATES = (
     "SPR-029)",
     "selftest_annals positive control: a text shorter than the render must FAIL provenance "
     "(REV-SPR-029 R34 P23)",
+    "selftest_annals positive control: a two-segment cut of solitary's chronicle with one "
+    "#segment digest altered must FAIL the fold (annals_v0.md §9.1; AN-0)",
     "selftest_annals positive control: an altered prologue text must FAIL provenance (REV-SPR-029 "
     "R19 P12, R37)",
     "selftest_annals positive control: two rows with their contents exchanged must FAIL "
