@@ -2,7 +2,7 @@
 id: SPR-014
 title: "Lifecycle queues for P1a: delivery, one draining binding, event-typed slots, the dead-person drop, absent owners (P1.13)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]

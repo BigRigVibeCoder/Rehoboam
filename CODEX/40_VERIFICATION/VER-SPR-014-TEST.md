@@ -2,7 +2,7 @@
 id: VER-SPR-014-TEST
 title: "Determinism and contracts tester evidence for SPR-014"
 type: reference
-status: OPEN
+status: CLOSED
 owner: tester
 agents: [tester]
 tags: [verification, testing, determinism]
