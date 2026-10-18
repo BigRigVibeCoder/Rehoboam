@@ -2,14 +2,14 @@
 id: SPR-038
 title: "Per-instant engine cost in two stages: (A) owned columns by index, exact gating of every check after a change, O(N+L) checks, positional compaction; (B) the check cadence as a run parameter, the release compile-out of the write guards' value checks, the incremental month-end digest, the instant log (`inserted()`, `exited()`), and the real-world benches (BCK-002 A-60)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, determinism]
 related: [BCK-002, PRJ-002, REV-WAVE5, REV-WAVE6, SPR-007, SPR-009, SPR-011, SPR-014, SPR-015, SPR-016, SPR-018, SPR-019, SPR-020, SPR-021, SPR-030, ADR-0006, ADR-0007, ADR-0024, ADR-0025]
 created: 2026-10-18
 updated: 2026-10-18
-version: 0.3.1
+version: 0.3.3
 ---
 
 > **BLUF:** Removes the fixed per-instant engine overhead that SPR-014 exposed when it bound M2's `Day`/`Vital` drain to every day start (BCK-002 A-60: about 360 instants a year where there were 12–14), and the costs that grow with the life-course log, **in two stages in one plan, as SPR-019 has. Each stage is its own PR, Tester pass and audit.**
@@ -54,7 +54,7 @@ version: 0.3.1
 > - **Developer:** AGT-002-CORE (`rh-core`, `rh-sys-demography`'s `invariants()`, `rh-snapshot`'s cache use), with AGT-002-TOOLS for `rh-bench`, `rh-golden`'s run loop and flag, `bin/perf_gate.py`, `bin/golden_nightly.sh` and the gates. One session may hold both.
 > - **Testers, per stage:** AGT-003-DET (byte identity, the gates' exactness, the cache, the cadence, the release compile-out) and AGT-003-IF (the C2 surfaces: the `05.1` sentences, `WorldTables`' consumers, the run parameter and its records, the instant log). One session may hold both, on a different model from the Developer's.
 > - **Size and class:** about 5.75–8.25 agent-days in all: stage A about 3 (T-01 0.75, T-02 1.0, T-03 1.0, T-04 0.25–0.5), as a range 3–4.5; stage B 2.75–3.75 (T-05 0.75, T-06 1.0–1.25, T-07 1.0, T-08 0.5). **Both stages are C2 with `[perf-baseline]`.** Each changes `rh-core`'s contract with systems or hosts and `05.1`'s text, no `state_hash` moves, and each records or re-records the perf baselines with the tool.
-> - **Status:** PLANNING, **revision 3.** The Architect's rulings S1–S16 on the review of revision 0 (`fb5d68b`), T1–T11 on the re-check of revision 1 (`88abc16`), and R14 of the wave-7 and minds re-check (the `DropReason` change) are applied. It needs the director's plan approval (D60; GOV-005 §2: C2 work).
+> - **Status:** APPROVED by the director (D60, 2026-10-18), **revision 3.** The Architect's rulings S1–S16 on the review of revision 0 (`fb5d68b`), T1–T11 on the re-check of revision 1 (`88abc16`), and R14 of the wave-7 and minds re-check (the `DropReason` change) are applied. The director approved it as D60 on 2026-10-18 (GOV-005 §2: C2 work).
 >
 > **Review record:** REV-SPR-038, which the Architect writes at close, holds the independent review of revision 0 (0 BLK, 7 MAJ, 7 MIN, 2 NIT; the diagnosis reproduced, the drafter's finding 3 verified as a G1a blocker) and the rulings S1–S16 applied here, and the re-check of revision 1 (0 BLK, 2 MAJ, 7 MIN, 2 NIT; AFTER SMALL FIXES) with its rulings T1–T11. Every `S` and `T`-numbered ruling id in this plan (as opposed to a task, `T-NN`) is that record's.
 
@@ -394,6 +394,7 @@ Each gate is in exactly one part. A time is a gate-time estimate on one runner, 
     - It is filled at the serial merges: (a) `PersonId`s by a sorted insert at each row insert; (b) `PersonId`s, ascending across the instant, by a sorted insert from a scan of `person.alive` at each merge where the write set shows it written. A newborn who dies in the same instant stays in (a) and enters (b).
     - It is cleared at the instant's end, and is in no `EngineState`.
     - It has the `05.1` §2 rule 2 sentences (the Architect's, to EVO-002's text if EVO-002 has merged): what the log holds, that it is filled at the merges, read-only to steps, cleared at the instant's end and outside every hash, keyframe and journal, and that EVO-002 adds (c).
+  - **The no-re-entry refusal** (EVO-002 §2; T-00a review MIN-4, Architect, 85%; +0.1 day): an insert of a person who exited this instant is refused by name at the merge. Its test is a stub that inserts at Bookkeeping after compaction. The `05.1` §2 rule-2 text is conformed to as T-00a amended it, not rewritten.
   - **Two consumer tests:**
     - for `inserted()`, a stub selector of S3's shape (a `Day`/`Vital` binding after the inserter by a `same_instant` edge, with a `debug_assert_eq!` against the zero-marked scan);
     - for `exited()`, a stub of T1's shape that reads the instant's exits in a later phase (`Agenda`) and records them in a column of its own;
@@ -550,7 +551,7 @@ flowchart LR
 | 1 | SPR-014 not merged (PR #83): blocks stage A | Open |
 | 2 | Stage A not merged: blocks stage B | Open |
 | 3 | The Architect's rulings on the "proposed" rows and the `05.1` sentences | Open: ruled with the plan's approval |
-| 4 | The director's plan approval, and S14's `docs/03` wording (D60; GOV-005 §2) | Open |
+| 4 | The director's plan approval, and S14's `docs/03` wording (D60; GOV-005 §2) | **Done** (D60 approved 2026-10-18; the wording is applied at stage B's T-05) |
 
 ## Completion
 

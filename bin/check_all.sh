@@ -2,12 +2,19 @@
 # The PR tier of GOV-002, fail-fast, with a forensic report (GOV-002 §4, §6: no report means no pass).
 # Every sprint adds its own checks here in the same sprint that creates them.
 # Usage: bin/check_all.sh            (uses $PYTHON; else python/.venv/bin/python; else python3)
-#        bin/check_all.sh --part core|golden   (one part only; no flag runs both)
+#        bin/check_all.sh --part core|golden|stream   (one part only; no flag runs all three)
 #        PYTHON=/path/to/python bin/check_all.sh
-# The chain has two parts (SPR-009 review 2; BCK-002 A-38): `core` (lints, builds, workspace and
-# by-name tests, Python, specs) and `golden` (release builds, golden runs with the vitals observer,
-# performance gates). CI runs them as two parallel jobs so the PR tier fits its 15 minutes
-# (V-PERF-04); every gate still runs on every PR, and a local run with no flag runs both.
+# The chain has three parts (SPR-009 review 2; BCK-002 A-38, A-63): `core` (lints, builds, workspace
+# and by-name tests, Python, specs), `golden` (the release build, the golden runs with the vitals
+# observer, the baselines, the ladders, the performance gates, the release-mode M2 and guard gates)
+# and `stream` (the stream, serve, tail, sift, replay, rungs and twin gates, on run directories of
+# its own). CI runs them as three parallel jobs so the PR tier fits its 15 minutes (V-PERF-04);
+# every gate still runs on every PR (or is reported SKIP by a path scope, BCK-002 A-64), and a local
+# run with no flag runs all three, in order.
+# Merging a branch that edits this chain (PR #89's review C6): take both sides of every hunk, put each new gate in the
+# part where its kind lives (PART_OF_PREFIX in python/tests/test_check_all_inventory.py pins the kinds), and keep every
+# REQUIRED_GATES entry of both sides, re-wrapped ones included; context lines a hunk carries are not new gates. Then
+# `python -I bin/check_all_selftest.py inventory` names any gate lost or unlisted on either side (BCK-002 A-65).
 # Needs the Rust toolchain from rust-toolchain.toml, cargo-nextest, cargo-deny, valgrind,
 # iai-callgrind-runner (SPR-009), uv, and the uv environment from `uv sync --frozen --project python` (RUN-001 §2-4). A missing tool fails the
 # first check by name; nothing is ever skipped silently.
@@ -19,10 +26,10 @@ case "${1:-}" in
   "") ;;
   --part)
     case "${2:-}" in
-      core|golden) PART="$2" ;;
-      *) echo "check_all.sh: --part takes core or golden" >&2; exit 2 ;;
+      core|golden|stream) PART="$2" ;;
+      *) echo "check_all.sh: --part takes core, golden or stream" >&2; exit 2 ;;
     esac ;;
-  *) echo "usage: bin/check_all.sh [--part core|golden]" >&2; exit 2 ;;
+  *) echo "usage: bin/check_all.sh [--part core|golden|stream]" >&2; exit 2 ;;
 esac
 REPORT="artifacts/check_report.md"
 # Built binaries live under $CARGO_TARGET_DIR when it is set (SPR-005 Tester OBS); never assume target/.
@@ -38,7 +45,7 @@ dirty="$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
   echo "- **Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "- **Commit:** ${commit} (${dirty} uncommitted files) · **Branch:** ${branch}"
   echo "- **Python:** $(${PY} --version 2>&1)"
-  echo "- **Part:** ${PART:-all (core and golden)}"
+  echo "- **Part:** ${PART:-all (core, golden and stream)}"
   # On GitHub Actions the checkout is detached; name the run so the report can be traced to it.
   if [ "${GITHUB_ACTIONS:-}" = true ]; then
     echo "- **CI run:** ${GITHUB_SERVER_URL:-}/${GITHUB_REPOSITORY:-}/actions/runs/${GITHUB_RUN_ID:-} (${GITHUB_EVENT_NAME:-} on ${GITHUB_REF:-}, head ${GITHUB_SHA:-})"
@@ -57,6 +64,12 @@ run() {
   # A gate of the part this run leaves out (--part) is neither run nor counted; `part` says so.
   if [ -n "${PART:-}" ] && [ "${current_part:-}" != "$PART" ]; then return 0; fi
   local name="$1" expect="$2"; shift 2
+  # BCK-002 A-64: a gate of a `scope` block that bin/ci_scope.py skipped is reported, never run.
+  if [ -n "${scope_skip:-}" ]; then
+    echo "SKIP  $name ($scope_skip)"
+    echo "| - | $name | SKIP ($scope_skip) | 0 |" >> "$REPORT"
+    return 0
+  fi
   n=$((n+1))
   # VER-SPR-012-TEST GAP-6: an expectation with empty text would match any output (a fail: with no
   # text accepts any failure). It is a harness error, refused before the gate runs.
@@ -82,24 +95,50 @@ run() {
     fail:*) if [ $rc -ne 0 ] && grep -qF -- "${expect#fail:}" <<<"$out"; then ok=1; fi ;;
     pass:*) if [ $rc -eq 0 ] && grep -qF -- "${expect#pass:}" <<<"$out"; then ok=1; fi ;;
   esac
+  # BCK-002 A-64 (PR #89's review C2): a traced gate that read an undeclared input says SCOPE INCOMPLETE. A control
+  # that fails for its own reason would hide that, so the line fails any gate whose expectation does not name it.
+  local why=""
+  if [ $ok -eq 1 ] && grep -qF "SCOPE INCOMPLETE" <<<"$out" && [[ "$expect" != *"SCOPE INCOMPLETE"* ]]; then
+    ok=0; why=" (SCOPE INCOMPLETE: an undeclared input of a path-scoped gate; bin/ci_scope.py)"
+  fi
   if [ $ok -eq 1 ]; then
     echo "| $n | $name | PASS | $dt |" >> "$REPORT"; echo "PASS  $name"
   else
-    echo "| $n | $name | **FAIL** | $dt |" >> "$REPORT"; echo "FAIL  $name"
+    echo "| $n | $name | **FAIL**$why | $dt |" >> "$REPORT"; echo "FAIL  $name$why"
     { echo; echo "## First failure: $name"; echo; echo '```'; echo "$out" | tail -40; echo '```'; } >> "$REPORT"
     failed="$name"
     return 1
   fi
 }
 
-# part <name>: the chain's gates from here to the next `part` belong to part <name> (core or golden).
-# Each gate belongs to exactly one part (test_check_all_inventory.py); --part runs one of them.
+# part <name>: the chain's gates from here to the next `part` belong to part <name> (core, golden or
+# stream). Each gate belongs to exactly one part (test_check_all_inventory.py); --part runs one.
 part() {
-  current_part="$1"
+  current_part="$1" scope_skip=""
+  # PR #89's review C5: the stream part builds and tests in release with overflow checks on, as the debug kill and
+  # tail_live gates it took over from part core had them on the host and stream path (its cost: BCK-002 A-63).
+  if [ "$1" = stream ]; then export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true; fi
   if [ -n "${PART:-}" ] && [ "$1" != "$PART" ]; then
     echo "SKIP  part $1: its gates run with --part $1 (in CI, a parallel job)"
     echo "| - | part $1: not run here (--part $PART); its gates run in their own job | SKIP | 0 |" >> "$REPORT"
   fi
+  return 0
+}
+
+# scope <key> (BCK-002 A-64): the gates from here to `scope -` are path-scoped. bin/ci_scope.py --gate
+# <key> says whether any of the key's declared inputs changed; when the changed files are known (CI,
+# a pull request or a push) and none of them is an input, each gate of the block is reported SKIP
+# with that reason. Anything else runs them (fail closed): a local run, an unknown scope, an error.
+# The scoped gates run through `ci_scope.py trace <key>`, which fails when one reads an undeclared input.
+scope() {
+  scope_skip=""
+  if [ "$1" = - ]; then return 0; fi
+  if [ -n "${PART:-}" ] && [ "${current_part:-}" != "$PART" ]; then return 0; fi
+  local out
+  out="$("$PY" -I bin/ci_scope.py --gate "$1" 2>&1)"
+  echo "$out"
+  case "$out" in "CI SCOPE: gate $1: skipped"*) scope_skip="${out#CI SCOPE: }" ;; esac
+  echo "| - | scope $1: ${out#CI SCOPE: } | SCOPE | 0 |" >> "$REPORT"
   return 0
 }
 
@@ -454,7 +493,8 @@ population_synthesis_gate() {
   grep -q '^leftover 1 orphans 0$' "$golden" || { echo "control not planted: no 'leftover 0 orphans 0' line in the population-synthesis golden file"; return 1; }
   sed 's/hamlet_42_married = 1,/hamlet_42_married = 2,/' specs/worldgen/population_synthesis.toml > "$spec" || return 1
   grep -q "hamlet_42_married = 2," "$spec" || { echo "control not planted: hamlet_42_married not found"; return 1; }
-  "$PY" -I specs/worldgen/selftest_population_synthesis.py --effect-ref specs/registry --altered-golden "$golden" --stale-spec "$spec"
+  "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/worldgen/selftest_population_synthesis.py \
+    --effect-ref specs/registry --altered-golden "$golden" --stale-spec "$spec"
 }
 
 # Fixture worlds gate (SPR-030; REV-SPR-030 R6, R10): the PR tier's cases (twin_vales at seeds 1 to 3, kingdom_10k at
@@ -466,7 +506,23 @@ fixture_worlds_gate() {
   mkdir -p "$(dirname "$planted")" || return 1
   sed '0,/^named_at_start narrow 23 /s//named_at_start narrow 24 /' specs/worldgen/golden/fixture_worlds_v0.txt > "$planted" || return 1
   grep -q '^named_at_start narrow 24 ' "$planted" || { echo "control not planted: no 'named_at_start narrow 23' line in the fixture-worlds golden file"; return 1; }
-  "$PY" -I specs/worldgen/selftest_fixture_worlds.py --tier pr --altered-golden "$planted"
+  "$PY" -I bin/ci_scope.py trace fixture-worlds -- specs/worldgen/selftest_fixture_worlds.py --tier pr --altered-golden "$planted"
+}
+
+# BCK-002 A-64: bin/check_all.sh counts as a changed input of a scoped gate only when the gate's own text in it changed
+# (ci_scope.py scoped_text). scope_chain_control <case> plants a base version of this script and asks for fixture
+# worlds' verdict on a change to it: outside (a line no scope uses) must skip the gate, inside (fixture_worlds_gate's
+# command line) must run it.
+scope_chain_control() {
+  local base="$TARGET_DIR/rendered-fixtures/check_all_base_$1.sh"
+  mkdir -p "$(dirname "$base")" || return 1
+  case "$1" in
+    outside) sed 's/^run "CI workflows parse (YAML)" pass /run "CI workflows parse (YAML)" pass  /' bin/check_all.sh > "$base" ;;
+    inside) sed 's/selftest_fixture_worlds.py --tier pr --altered-golden "\$planted"$/selftest_fixture_worlds.py --tier  pr --altered-golden "$planted"/' bin/check_all.sh > "$base" ;;
+    *) echo "scope_chain_control: unknown case $1"; return 1 ;;
+  esac || return 1
+  if cmp -s bin/check_all.sh "$base"; then echo "HARNESS ERROR: the $1 sed planted nothing"; return 1; fi
+  "$PY" -I bin/ci_scope.py --gate fixture-worlds --files bin/check_all.sh --script-base "$base"
 }
 
 # Wire-format golden control (SPR-026): the committed wire golden file with its first frame's hex changed; the
@@ -553,13 +609,29 @@ ladder_compare_control() {
     "$GOLDEN/smoke_yearly_t1.ladder" > "$edited" || return 1
   "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$edited"
 }
-# The hand-edited baseline control: the committed baseline with one hex digit of rung 1's hash typed over.
+# BCK-002 A-66: the C3-rule controls never read the committed baseline. Each feeds check_baseline.py a baseline
+# derived from this run's own 1-thread recomputation, so on a C3 head before its regeneration commit (the committed
+# baseline stale) every control still fails or passes for its own reason, not with BASELINE MISMATCH.
+# check_all_selftest.py baseline-controls runs them on a stale stand-in.
+# baseline_control_input <world>: a copy of the recomputation, standing in for a baseline that equals it; prints its path.
+baseline_control_input() {
+  local copy="$TARGET_DIR/rendered-fixtures/baseline_control_$1.ladder"
+  mkdir -p "$TARGET_DIR/rendered-fixtures" && cp "$GOLDEN/$1_yearly_t1.ladder" "$copy" && echo "$copy"
+}
+# baseline_control <world> <check_baseline.py options...>: the C3 rule on that copy and the recomputation.
+baseline_control() {
+  local world="$1" input; shift
+  input="$(baseline_control_input "$world")" || return 2
+  "$PY" -I bin/check_baseline.py --baseline "$input" --recomputed "$GOLDEN/${world}_yearly_t1.ladder" "$@"
+}
+# baseline_hand_edited_control <world>: the copy with one hex digit of rung 1's hash typed over, as a hand-edited baseline.
 baseline_hand_edited_control() {
-  local edited="$TARGET_DIR/rendered-fixtures/baseline_hand_edited.ladder"
-  mkdir -p "$TARGET_DIR/rendered-fixtures" || return 1
+  local input edited="$TARGET_DIR/rendered-fixtures/baseline_hand_edited_$1.ladder"
+  input="$(baseline_control_input "$1")" || return 2
   awk '/^rung 1 /{n=split($0, w, " "); h=w[5]; c=substr(h,16,1); w[5]=substr(h,1,15) (c=="0" ? "1" : "0"); $0=w[1]; for(i=2;i<=n;i++) $0=$0 " " w[i]} {print}' \
-    worlds/smoke/baselines/smoke_yearly_1000y.ladder > "$edited" || return 1
-  "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed no
+    "$input" > "$edited" || return 2
+  if cmp -s "$input" "$edited"; then echo "HARNESS ERROR: no rung 1 hash was typed over"; return 2; fi
+  "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/$1_yearly_t1.ladder" --changed no
 }
 
 # SPR-013 T-10: the run never waits on a reader (05.10 §7 item 3). A tail --wait is attached to the run
@@ -634,13 +706,15 @@ solo_stream_run() {
   "$RH_CLI_RELEASE" run solo --years 200 --threads 1 --ladder yearly --run-dir "$GOLDEN/solo_run" || return 1
   cp "$GOLDEN/solo_run/run.ladder" "$GOLDEN/solo_yearly_t1.ladder"
 }
-# SPR-012 T-08: solo's hand-edited baseline control, as smoke's: one hex digit of rung 1's hash typed over.
-solo_baseline_hand_edited_control() {
-  local edited="$TARGET_DIR/rendered-fixtures/solo_baseline_hand_edited.ladder"
-  mkdir -p "$TARGET_DIR/rendered-fixtures" || return 1
-  awk '/^rung 1 /{n=split($0, w, " "); h=w[5]; c=substr(h,16,1); w[5]=substr(h,1,15) (c=="0" ? "1" : "0"); $0=w[1]; for(i=2;i<=n;i++) $0=$0 " " w[i]} {print}' \
-    worlds/solo/baselines/solo_yearly_200y.ladder > "$edited" || return 1
-  "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/solo_yearly_t1.ladder" --changed no
+# BCK-002 A-63: the stream part's input, on its own runner: solo, household and hamlet's 200-year runs streamed into
+# their run directories exactly as the golden part's golden runs stream them (the same functions), so the stream,
+# sift, twin and replay gates read the golden part's history without depending on its job.
+stream_release_build() {
+  [ "${CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS:-}" = true ] || { echo "overflow checks are off in the stream part"; return 1; }
+  cargo build --release --locked --quiet -p rh-cli && echo "rh-cli release build with overflow checks"
+}
+stream_inputs() {
+  solo_stream_run && world_golden_run household && world_golden_run hamlet
 }
 # BCK-002 A-52: a debug rh-cli built with one of rh-sys-demography's planted mutant features (its own
 # target directory, so the release build of the golden runs is untouched) refuses to run a world.
@@ -662,14 +736,16 @@ solo_scale_run() {
 }
 
 # The push form of the C3 rule (VER-SPR-008 MAJ-1): a two-commit repository whose second commit, with
-# subject $1, adds the baseline; the gate runs over before..after there.
+# subject $1, adds the baseline (smoke's, as baseline_control_input gives it; A-66); the gate runs over
+# before..after there.
 baseline_push_control() {
-  local repo="$TARGET_DIR/rendered-fixtures/baseline_push" ladder="$GOLDEN/smoke_yearly_t1.ladder"
+  local repo="$TARGET_DIR/rendered-fixtures/baseline_push" ladder="$GOLDEN/smoke_yearly_t1.ladder" input
   local g=(git -C "$repo" -c user.name=check_all -c user.email=check_all@localhost -c commit.gpgsign=false)
+  input="$(baseline_control_input smoke)" || return 1
   rm -rf "$repo" && mkdir -p "$repo" || return 1
   "${g[@]}" init -q && echo x > "$repo/other.txt" && "${g[@]}" add . && "${g[@]}" commit -qm base || return 1
   local before; before=$("${g[@]}" rev-parse HEAD) || return 1
-  cp worlds/smoke/baselines/smoke_yearly_1000y.ladder "$repo/baseline.ladder" && "${g[@]}" add . && "${g[@]}" commit -qm "$1" || return 1
+  cp "$input" "$repo/baseline.ladder" && "${g[@]}" add . && "${g[@]}" commit -qm "$1" || return 1
   local after; after=$("${g[@]}" rev-parse HEAD) || return 1
   local py="$PY" script="$PWD/bin/check_baseline.py"
   [[ "$py" == /* || "$py" != */* ]] || py="$PWD/$py"
@@ -1303,8 +1379,6 @@ run "rh-stream by name: the canonical form reproduces the reference's golden lin
 run "rh-stream by name: byte-identical sealing over seeds and world sizes, contiguous seq, R4 order refused when broken, resume verification, tampered segments refused (SPR-013 T-09)" "pass:T-09 writer: 4 seeds x 3 world sizes seal byte-identical segments" cargo nextest run -p rh-stream --locked --test writer --no-capture &&
 run "V-DATA-10 subset on the envelope fixture: DuckDB reads its event_snapshot rows and typed causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; SPR-020 shape)" "pass:check_segments: 4 segments, 324 records" "$PY" -I specs/stream/check_segments.py "$TARGET_DIR/tmp/rh-stream/envelope_fixture" &&
 run "rh-stream by name: the pinned Parquet writer properties in every file, no float column, the golden segment's bytes pinned (SPR-013 T-09; the Architect's parquet review)" "pass:T-09 golden segment bytes: xxh3-128 8f0799bae0b2c24ded75efec76e95a82 over 16 files" cargo nextest run -p rh-stream --locked --test parquet_props --no-capture &&
-run "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 T-09; GOV-002 tier 15; wire_v1.md §11)" "pass:verified years 10-14, resealed 15-59 to the unbroken run's bytes; run.ladder whole; REPLAY EQUAL" cargo nextest run -p rh-cli --locked --test kill --no-capture &&
-run "tail by name: a tail started before a run's first seal and following it prints the after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 sealed)" "pass:printed a sealed segment before the run ended, prints the after-run tail's lines" cargo nextest run -p rh-cli --locked --test tail_live --no-capture &&
 run "rh-sifter by name: the golden channel-A segment sifts to the golden life_ends matches and MatchIds; several targets give several matches; what v0 cannot honour is refused (SPR-013 T-11)" "pass:T-11: the golden segment sifts to the golden life_ends matches" cargo nextest run -p rh-sifter --locked --test sift --no-capture &&
 run "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)" "pass:left to the by-name gates" workspace_tests &&
 run "Workspace tests positive control: a by-name entry that names no test binary must FAIL (SPR-009 review 2a)" "fail:no binary IDs matched" workspace_tests_typo_control &&
@@ -1312,7 +1386,6 @@ run "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes
 run "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 T-02)" "pass:V-DET-05: two keyframes loaded and advanced 10 years, 120 monthly hashes equal" cargo nextest run -p rh-snapshot --locked --test keyframe --no-capture v_det_05 &&
 run "DEF-3 forged keyframes: no bit flip in the Arrow body panics, aborts or loads another state (SPR-007 T-02)" "pass:accepted_other: 0, panicked: 0 }" cargo nextest run -p rh-snapshot --locked --test keyframe --no-capture def_3_no_forged &&
 run "V-DET-10 unsynced guard: read-only APIs fuzzed on the stub world (SPR-007 T-04)" "pass:v_det_10_read_only_apis_never_change_plane_a" cargo nextest run -p rh-snapshot --locked --test unsynced_guard --status-level pass &&
-run "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)" "pass:release_builds_compile_the_guard_out" cargo nextest run -p rh-snapshot --locked --release --test guard --status-level pass &&
 run "Observer invariance: an attached observer changes no monthly state hash at 1 and 4 threads (SPR-009 ruling 4; V-DET-07 style)" "pass:observer invariance: 73 monthly hashes equal at 4 threads" cargo nextest run -p rh-snapshot --locked --test observer --no-capture &&
 run "C dependencies built with -ffp-contract=off: cc build output of bundled SQLite and zstd (SPR-007 ruling 4)" "pass:CFLAGS = Some(-ffp-contract=off)" c_fp_contract_check "$TARGET_DIR" &&
 run "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)" "fail:did not get CFLAGS = -ffp-contract=off" c_fp_contract_control &&
@@ -1332,8 +1405,6 @@ run "M2 draws positive control: the re-sample's day taken from k = 0 must FAIL (
 run "T-06 rh-worldgen: V-DATA-05 founder ids and a forced collision, bit-equal genesis twice and across threads, Ada at 25, refused writes (SPR-012)" "pass:V-DATA-05: a forced collision resolves to the same rehash on every run" cargo nextest run -p rh-worldgen --locked --test genesis --no-capture &&
 run "T-06 V-INV-11: founders' negative birth ticks round-trip through a keyframe, and the loaded engine advances as the continuous one (SPR-012)" "pass:V-INV-11: negative birth ticks round-trip through a keyframe in 4 worlds" cargo nextest run -p rh-worldgen --locked --test keyframe --no-capture &&
 run "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)" "pass:V-DET-12, V-INV-01: 24 random worlds" cargo nextest run -p rh-worldgen --locked --test m2_system --no-capture &&
-run "T-07 M2.demography in release: q(15) of 10,000 founders aged 0 inside the binomial 99.9% band for each of 32 seeds and pooled (SPR-012; review MAJ-1, MIN-1)" "pass:inside +-3.29" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(q15)" &&
-run "T-07 M2.demography in release: V-DATA-04 over 1,000 years, one founder entry per person and a death record iff absent (SPR-012; review MIN-1)" "pass:V-DATA-04: 10000 persons emitted over 1,000 years" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(v_data_04)" &&
 run "V-INV-08: M2 draws deaths by Bernoulli only (no Poisson or binomial draw; SPR-012 T-07)" "pass:V-INV-08: crates/rh-sys-demography draws deaths by Bernoulli only" bernoulli_only crates/rh-sys-demography &&
 run "V-INV-08 positive control: a planted Poisson death draw must FAIL (SPR-012 T-07)" "fail:VIOLATION [V-INV-08] tests/lint_fixtures/bernoulli/poisson_death" bernoulli_only tests/lint_fixtures/bernoulli/poisson_death &&
 run "V-INV-08 positive control: a missing crate directory must FAIL, never pass as nothing found (SPR-012; review MIN-2)" "fail:VIOLATION [V-INV-08] crates/rh-sys-no-such-crate is not a crate directory" bernoulli_only crates/rh-sys-no-such-crate &&
@@ -1362,11 +1433,19 @@ run "check_all chain positive control: a run line mutated with || exit 0 must FA
 run "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL at \"planted failing gate\"" "$PY" -I bin/check_all_selftest.py verdict --or-exit &&
 run "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness error, not match any failure (VER-SPR-012-TEST GAP-6)" "fail:HARNESS ERROR" "$PY" -I bin/check_all_selftest.py verdict --empty-fail &&
 run "check_all harness positive control: a fail: expectation with whitespace-only text must FAIL as a harness error (VER-SPR-012-TEST GAP-9; BCK-002 A-53)" "fail:HARNESS ERROR" "$PY" -I bin/check_all_selftest.py verdict --blank-fail &&
+run "check_all harness positive control: a control that fails for its own reason but read an undeclared input (SCOPE INCOMPLETE) must FAIL (PR #89 review C2)" 'fail:Verdict: FAIL at "planted control whose output says SCOPE INCOMPLETE"' "$PY" -I bin/check_all_selftest.py verdict --scope-incomplete &&
 run "check_all verdict per part: --part core passes while only a golden-part gate fails (check_all_selftest; SPR-009 review 2b)" "pass:Verdict: PASS (1 checks, part core)" "$PY" -I bin/check_all_selftest.py verdict --part-core &&
 run "check_all verdict per part positive control: --part golden fails at its failing gate (SPR-009 review 2b)" 'fail:Verdict: FAIL at "planted failing golden gate"' "$PY" -I bin/check_all_selftest.py verdict --part-golden &&
+run "check_all verdict per part: --part stream passes while only a golden-part gate fails (check_all_selftest; BCK-002 A-63)" "pass:Verdict: PASS (1 checks, part stream)" "$PY" -I bin/check_all_selftest.py verdict --part-stream &&
+run "check_all verdict positive control: with no --part, a failing gate of the last part must FAIL the tier, so every part runs (BCK-002 A-63)" 'fail:Verdict: FAIL at "planted failing stream gate"' "$PY" -I bin/check_all_selftest.py verdict --all-parts &&
 run "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier (VER-SPR-008-TEST GAP-7)" "fail:Verdict: FAIL (the chain exited early" "$PY" -I bin/check_all_selftest.py verdict --early-exit &&
 run "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)" "pass:ABSOLUTE TARGET DIR: both baseline push controls fail and pass for the right reason" "$PY" -I bin/check_all_selftest.py abs-target &&
 run "check_all positive control: the old PWD-joined golden path under an absolute CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)" "fail:a baseline push control behaved wrongly" "$PY" -I bin/check_all_selftest.py abs-target --plant-pwd-join &&
+run "check_all baseline controls: on a stale baseline (a C3 head before its regeneration commit) every Golden baseline control fails or passes for its own reason (check_all_selftest; BCK-002 A-66)" "pass:BASELINE CONTROLS: all" "$PY" -I bin/check_all_selftest.py baseline-controls &&
+run "check_all baseline controls positive control: controls fed the committed baseline, as before A-66, must FAIL on a stale baseline (BCK-002 A-66)" "fail:BASELINE CONTROLS: WRONG" "$PY" -I bin/check_all_selftest.py baseline-controls --plant-committed &&
+run "check_all inventory: every chain gate is listed and every listed gate chained, every chain call a listed loop, and no run line outside the chain and its loops (check_all_selftest; BCK-002 A-65)" "pass:INVENTORY OK" "$PY" -I bin/check_all_selftest.py inventory &&
+run "check_all inventory positive control: a planted unlisted gate must FAIL (BCK-002 A-65)" "fail:UNLISTED: planted unlisted gate" "$PY" -I bin/check_all_selftest.py inventory --plant-unlisted &&
+run "check_all inventory positive control: the wrapped entry a three-way merge once dropped, deleted from the inventory, must FAIL (BCK-002 A-65)" "fail:UNLISTED: lint_odd next positive control: an amendment whose text changed" "$PY" -I bin/check_all_selftest.py inventory --plant-dropped &&
 # Tier 5 — golden vectors
 run "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; V-DET-09)" pass "$PY" -I bin/gen_rng_golden.py --check &&
 run "gen_rng_golden positive control: stale golden file must FAIL" "fail:STALE:" "$PY" -I bin/gen_rng_golden.py --check --golden tests/lint_fixtures/golden/stale_rh_ids_v2.txt &&
@@ -1402,11 +1481,23 @@ run "M2 F1 reference positive control: the elite read reverted to the woman's ow
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
+# BCK-002 A-64: the population-synthesis and fixture-worlds references run only when one of their declared inputs
+# changed (bin/ci_scope.py SCOPED_GATES); each runs through ci_scope.py trace, which fails on an undeclared input.
+run "ci_scope control: a planted change to one population-synthesis input, deep in what the reference loads, runs the gate (BCK-002 A-64)" "pass:CI SCOPE: gate population-synthesis: runs (1 of its inputs changed: specs/demography/infant_sub_schedule.toml)" "$PY" -I bin/ci_scope.py --gate population-synthesis --files crates/rh-core/src/lib.rs specs/demography/infant_sub_schedule.toml &&
+run "ci_scope control: a planted change to one fixture-worlds input runs the gate (BCK-002 A-64)" "pass:CI SCOPE: gate fixture-worlds: runs (1 of its inputs changed: specs/worldgen/selftest_population_synthesis.py)" "$PY" -I bin/ci_scope.py --gate fixture-worlds --files docs/x.md specs/worldgen/selftest_population_synthesis.py &&
+run "ci_scope control: a change to none of a scoped gate's inputs skips it, with its reason (BCK-002 A-64)" "pass:CI SCOPE: gate fixture-worlds: skipped, 2 changed file(s), none of its" "$PY" -I bin/ci_scope.py --gate fixture-worlds --files crates/rh-core/src/lib.rs specs/worldgen/golden/population_synthesis_v0.txt &&
+run "ci_scope control: a change to check_all.sh outside a scoped gate's own text in it skips the gate (BCK-002 A-64)" "pass:CI SCOPE: gate fixture-worlds: skipped, 1 changed file(s)" scope_chain_control outside &&
+run "ci_scope control: a change to a scoped gate's own text in check_all.sh runs the gate (BCK-002 A-64)" "pass:CI SCOPE: gate fixture-worlds: runs (1 of its inputs changed: bin/check_all.sh)" scope_chain_control inside &&
+run "ci_scope trace positive control: a scoped gate that reads a file outside its declared inputs must FAIL (BCK-002 A-64)" "fail:SCOPE INCOMPLETE: gate population-synthesis read specs/stream/canonical_v0.py" "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/stream/canonical_v0.py --check &&
+scope population-synthesis &&
 run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential, its reversed-line control, and the altered-golden and stale-spec controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)" "pass:EFFECT DIFFERENTIAL: 1481 successions of 5 laws over 2 configurations compared" population_synthesis_gate &&
-run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
-run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
+run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
+run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
+run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I bin/ci_scope.py trace population-synthesis -- specs/worldgen/selftest_population_synthesis.py --control spacing &&
+scope fixture-worlds &&
 run "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, R10)" "pass:FIXTURE WORLDS: PASS" fixture_worlds_gate &&
-run "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start lines (SPR-030; REV-SPR-030 R11)" "fail:STALE:" "$PY" -I specs/worldgen/selftest_fixture_worlds.py --control dormancy-one &&
+run "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start lines (SPR-030; REV-SPR-030 R11)" "fail:STALE:" "$PY" -I bin/ci_scope.py trace fixture-worlds -- specs/worldgen/selftest_fixture_worlds.py --control dormancy-one &&
+scope - &&
 run "Population projection: the fixture worlds' member share and population under the house-member mechanics, uncapped and capped (SPR-030; REV-SPR-030 R1)" "pass:POPULATION PROJECTION: PASS" "$PY" -I specs/worldgen/project_population.py --check &&
 run "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality --check; SPR-016)" "pass:M2 F1 MORTALITY: PASS" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --check &&
 run "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)" "fail:1. rung 0 = beta 1: FAIL" "$PY" -I specs/demography/selftest_m2_f1_mortality.py --control beta-one-power &&
@@ -1483,8 +1574,6 @@ run "Required tools present (golden part)" pass require_tools golden &&
 # SPR-030 CRN pairing in part golden: pure Python, about 28 s (REV-SPR-030 R27: part core passed 12 minutes on PR #79's CI, 12:13).
 # The PR tier takes the first VALID seed of 1 to 4 (seed 1 today); the nightly tier searches until two are VALID (BCK-002 A-62, the review's E4).
 run "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales, the PR tier (the first VALID seed of 1 to 4), with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10; BCK-002 A-62)" "pass:CRN PAIRING: PASS (tier pr," "$PY" -I specs/determinism/selftest_crn_pairing.py --tier pr --controls &&
-# SPR-019 population-synthesis control in part golden: pure Python, no build (part core's 12-minute target; SPR-013 Architect ruling)
-run "population synthesis positive control: conceptions inside the closed period must FAIL the spacing invariant (SPR-019 B6)" "fail:inside the closed period" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control spacing &&
 # Tier 10 — performance: instruction counts (SPR-009 T-02a; GOV-002 tier 10)
 run "V-PERF-04 instruction counts: benches 7 and 8 within 10% of the committed baseline (SPR-009 T-02a)" "pass:V-PERF-04 PASS" "$PY" -I bin/perf_gate.py gate --baseline "$PERF_BASELINE" --out "$PERF_RUN" &&
 run "V-PERF-04 repeatability: a second run on the same commit gives identical counts (SPR-009 T-02)" "pass:identical counts in two runs" sh -c '"$1" -I bin/perf_gate.py measure --out artifacts/perf/instructions_run2.txt && "$1" -I bin/perf_gate.py same "$2" artifacts/perf/instructions_run2.txt' sh "$PY" "$PERF_RUN" &&
@@ -1523,12 +1612,12 @@ run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel leve
 run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
 run "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)" "fail:LADDERS DIFFER: first differing rung: 500" ladder_compare_control &&
 run "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR (check_baseline; SPR-008 T-04)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&
-run "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)" "fail:BASELINE MISMATCH" baseline_hand_edited_control &&
-run "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL (SPR-008 T-04)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "SPR-008: Golden-run CI" &&
-run "Golden baseline control: a regenerated baseline in a [C3] PR passes (SPR-008 T-04)" "pass:regenerated in a [C3] PR" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "SPR-008: Golden-run CI [C3]" &&
-run "Golden baseline positive control: a pull_request run with no base must FAIL closed (VER-SPR-008 MAJ-1)" "fail:needs its base" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --event pull_request --base-ref "" &&
-run "Golden baseline control: a local run with no base says the C3 rule was not checked (VER-SPR-008 MAJ-1)" "pass:C3 rule not checked (no base ref)" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --event local --base-ref "" &&
-run "Golden baseline positive control: [C3] outside the title's trailing tag group must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/smoke/baselines/smoke_yearly_1000y.ladder --recomputed "$GOLDEN/smoke_yearly_t1.ladder" --changed yes --title "docs: explain the [C3] rule" &&
+run "Golden baseline positive control: a hand-edited baseline must FAIL (SPR-008 T-04)" "fail:BASELINE MISMATCH" baseline_hand_edited_control smoke &&
+run "Golden baseline positive control: a regenerated baseline in a PR not marked [C3] must FAIL (SPR-008 T-04)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_control smoke --changed yes --title "SPR-008: Golden-run CI" &&
+run "Golden baseline control: a regenerated baseline in a [C3] PR passes (SPR-008 T-04)" "pass:regenerated in a [C3] PR" baseline_control smoke --changed yes --title "SPR-008: Golden-run CI [C3]" &&
+run "Golden baseline positive control: a pull_request run with no base must FAIL closed (VER-SPR-008 MAJ-1)" "fail:needs its base" baseline_control smoke --event pull_request --base-ref "" &&
+run "Golden baseline control: a local run with no base says the C3 rule was not checked (VER-SPR-008 MAJ-1)" "pass:C3 rule not checked (no base ref)" baseline_control smoke --event local --base-ref "" &&
+run "Golden baseline positive control: [C3] outside the title's trailing tag group must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_control smoke --changed yes --title "docs: explain the [C3] rule" &&
 run "Golden baseline positive control: a push that changes the baseline with no [C3] commit must FAIL (VER-SPR-008 MAJ-1)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_push_control "feat(SPR-008): regenerate the smoke baseline" &&
 run "Golden baseline control: a push that changes the baseline in a [C3] commit passes (VER-SPR-008 MAJ-1)" "pass:regenerated in a [C3] PR (the commit subjects of" baseline_push_control "feat(SPR-008): regenerate the smoke baseline [C3]" &&
 run "Golden ladder positive control: an injected run never compares equal to a clean one (VER-SPR-008 MIN-2)" "fail:LADDERS DIFFER" injected_ladder_control &&
@@ -1543,27 +1632,50 @@ run "Golden resume positive control: a --years past the journal's last input mus
 run "Golden resume control: past the journal's last input with --extend passes, and the header names the journal (VER-SPR-008 DEF-1)" "pass:journal 24 " def1_resume 30 --extend &&
 run "Golden resume control: the journal's own horizon with --until passes (VER-SPR-008 DEF-1)" "pass:until 18" def1_resume 24 --until 18 &&
 run "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and not-built systems in its header, streaming into its run directory (SPR-012 T-08; rulings 3, 16; SPR-013 T-09)" "pass:solo: 200 yearly rungs to year 200 at 1 thread(s)" solo_stream_run &&
+run "Golden run: household, the six-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run household &&
+run "Golden run: household, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run household --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/household_yearly_tN.ladder" &&
+run "Golden ladders: household at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&
+run "Golden baseline: worlds/household = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-013 T-13)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/household/baselines/household_yearly_200y.ladder --recomputed "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&
+run "Golden run: hamlet, the 60-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:hamlet: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run hamlet &&
+run "Golden run: hamlet, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:hamlet: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run hamlet --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/hamlet_yearly_tN.ladder" &&
+run "Golden ladders: hamlet at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/hamlet_yearly_t1.ladder" "$GOLDEN/hamlet_yearly_tN.ladder" &&
+run "Golden baseline: worlds/hamlet = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-013 T-13)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/hamlet/baselines/hamlet_yearly_200y.ladder --recomputed "$GOLDEN/hamlet_yearly_t1.ladder" "$GOLDEN/hamlet_yearly_tN.ladder" &&
+run "--expect-serial positive control: the multi-system smoke world must FAIL it, naming the floor to set (SPR-013 T-13; the Architect's ruling)" "fail:NOT SERIAL: 1460 of 20648 levels held two or more jobs" "$RH_CLI_RELEASE" run smoke --years 2 --threads 1 --expect-serial --out "$TARGET_DIR/rendered-fixtures/expect_serial.ladder" &&
+run "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; reported)" "pass:keyframes: hamlet:" keyframe_sizes &&
+run "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)" "pass:solo: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-012 T-08)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
+run "Golden baseline positive control: a hand-edited solo baseline must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE MISMATCH" baseline_hand_edited_control solo &&
+run "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE CHANGED in a PR not marked [C3]" baseline_control solo --changed yes --title "SPR-012: walking skeleton B" &&
+run "Golden run positive control: --strict refuses solo, whose manifest names systems this build lacks (SPR-011 ruling 3; SPR-012 T-08)" "fail:--strict refuses solo: the manifest names systems this build lacks (M1.regions, M3.agriculture, M4.economy, S5.daily_life)" "$RH_CLI_RELEASE" run solo --strict --years 2 --out "$TARGET_DIR/rendered-fixtures/solo_strict.ladder" &&
+run "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)" "pass:mutants: none" "$RH_CLI_RELEASE" build-info &&
+run "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL" "fail:MUTANT BUILD: this build has the planted control feature(s) mutant-resample-hit-k1 compiled in" mutant_build_control &&
+run "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)" "pass:V-SCALE-03: solo, 1,000 sim-years at 1 thread in" solo_scale_run &&
+run "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread invariance, the manifest pin, Ada at genesis, the input's re-sample of her pending death (SPR-012 T-08)" "pass:T-08: solo's input re-samples Ada's pending death (a miss)" cargo nextest run -p rh-golden --release --locked --test solo --no-capture &&
+# BCK-002 A-63: the release-mode M2 and guard gates, moved from part core to the part that builds in release
+run "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)" "pass:release_builds_compile_the_guard_out" cargo nextest run -p rh-snapshot --locked --release --test guard --status-level pass &&
+run "T-07 M2.demography in release: q(15) of 10,000 founders aged 0 inside the binomial 99.9% band for each of 32 seeds and pooled (SPR-012; review MAJ-1, MIN-1)" "pass:inside +-3.29" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(q15)" &&
+run "T-07 M2.demography in release: V-DATA-04 over 1,000 years, one founder entry per person and a death record iff absent (SPR-012; review MIN-1)" "pass:V-DATA-04: 10000 persons emitted over 1,000 years" cargo nextest run -p rh-worldgen --locked --release --test m2_system --no-capture -E "test(v_data_04)" &&
+run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture &&
+part stream &&
+run "Required tools present (stream part)" pass require_tools stream &&
+# BCK-002 A-63: the third PR-tier job. Its own release build and its own run directories (stream_inputs), then the
+# stream, serve, tail, sift, replay, rungs and twin gates; kill -9 and the live tail run here in release.
+run "Rust: build rh-cli in release, with overflow checks, for the stream part (BCK-002 A-63; PR #89 review C5)" "pass:rh-cli release build with overflow checks" stream_release_build &&
+run "Stream part input: solo, household and hamlet's 200-year golden runs streamed into their run directories, as the golden part streams them (BCK-002 A-63)" "pass:hamlet: 200 yearly rungs to year 200 at 1 thread(s)" stream_inputs &&
 run "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, and the reference's canonical digests (SPR-013 T-09)" "pass:check_segments: 200 segments, 2425 records" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" &&
 run "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL (SPR-013 T-09; R2)" "fail:TYPE: y000000/step_digest: float columns ['living DOUBLE']" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" --plant float-column &&
 run "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)" "fail:DIGEST: y000000" "$PY" -I specs/stream/check_segments.py "$GOLDEN/solo_run" --plant digest &&
 run "rh-golden by name: V-STR-01 on solo and the 60-person hamlet (byte-identical segments twice and at 1, 2 and 4 threads), the streaming ladder = the headless one, resume verification (SPR-013 T-09)" "pass:T-09 V-STR-01: hamlet, 60 years" cargo nextest run -p rh-golden --release --locked --test stream --no-capture &&
 run "rh-golden by name: tail prints every record once in seq order from any cursor, its canonical output digests to each segment's canonical_digest, it never writes to the run directory, and the display form matches its snapshots (SPR-013 T-10)" "pass:T-10: the display form matches its 4 snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture &&
+run "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 T-09; GOV-002 tier 15; wire_v1.md §11)" "pass:verified years 10-14, resealed 15-59 to the unbroken run's bytes; run.ladder whole; REPLAY EQUAL" cargo nextest run -p rh-cli --locked --release --test kill --no-capture &&
+run "tail by name: a tail started before a run's first seal and following it prints the after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 sealed)" "pass:printed a sealed segment before the run ended, prints the after-run tail's lines" cargo nextest run -p rh-cli --locked --release --test tail_live --no-capture &&
 run "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment (SPR-013 T-11; ruling 14)" "pass:sift: 1 matches of solitary_life in 200 channel-C segments" "$RH_CLI_RELEASE" sift "$GOLDEN/solo_run" &&
 run "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 1 matches of solitary_life" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" &&
 run "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)" "fail:TWIN DIFFERS: 0 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control drop-last &&
 run "twin_check positive control: a twin expecting another status (a column the match id does not cover) must FAIL (REV-SPR-013 MIN-2)" "fail:TWIN DIFFERS: 1 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control other-status &&
-run "Golden run: household, the six-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run household &&
-run "Golden run: household, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:household: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run household --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/household_yearly_tN.ladder" &&
-run "Golden ladders: household at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&
-run "Golden baseline: worlds/household = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-013 T-13)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/household/baselines/household_yearly_200y.ladder --recomputed "$GOLDEN/household_yearly_t1.ladder" "$GOLDEN/household_yearly_tN.ladder" &&
 run "V-SIFT-01 on household: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)" "pass:twin_check: V-SIFT-01: 6 matches of solitary_life" sift_twin "$GOLDEN/household_run" &&
-run "Golden run: hamlet, the 60-person rung, 200 sim-years, yearly ladder, 1 thread, serial (--expect-serial), its committed input re-sampling founder 0's pending death, streaming into its run directory (SPR-013 T-13)" "pass:hamlet: 200 yearly rungs to year 200 at 1 thread(s)" world_golden_run hamlet &&
-run "Golden run: hamlet, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)" "pass:hamlet: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run hamlet --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --expect-serial --out "$GOLDEN/hamlet_yearly_tN.ladder" &&
-run "Golden ladders: hamlet at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/hamlet_yearly_t1.ladder" "$GOLDEN/hamlet_yearly_tN.ladder" &&
-run "Golden baseline: worlds/hamlet = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-013 T-13)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/hamlet/baselines/hamlet_yearly_200y.ladder --recomputed "$GOLDEN/hamlet_yearly_t1.ladder" "$GOLDEN/hamlet_yearly_tN.ladder" &&
 run "V-SIFT-01 on hamlet: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)" "pass:twin_check: V-SIFT-01: 60 matches of solitary_life" sift_twin "$GOLDEN/hamlet_run" &&
-run "--expect-serial positive control: the multi-system smoke world must FAIL it, naming the floor to set (SPR-013 T-13; the Architect's ruling)" "fail:NOT SERIAL: 1460 of 20648 levels held two or more jobs" "$RH_CLI_RELEASE" run smoke --years 2 --threads 1 --expect-serial --out "$TARGET_DIR/rendered-fixtures/expect_serial.ladder" &&
-run "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; reported)" "pass:keyframes: hamlet:" keyframe_sizes &&
 run "rh-golden by name: V-SCALE-04 PR subset: household and hamlet each reach zero population with one EXTINCTION, nothing but digests and keyframes after it, and their chronicle, tail, sift and replay stay consistent past it; one rh-cli build runs rungs 0, 1 and 2 (SPR-013 T-13)" "pass:T-13 V-SCALE-04: hamlet" cargo nextest run -p rh-golden --release --locked --test rungs --no-capture &&
 run "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 10000 matches of solitary_life" world_sift_twin fixture-founders_10k 120 &&
 run "rh-golden by name: V-PLN-04 subset: sifting twice is byte-identical and leaves channel A, keyframes, journal and ladder unchanged; one life_ends match per death, shown by tail (SPR-013 T-11)" "pass:T-11 V-PLN-04: hamlet: two sifts byte-identical" cargo nextest run -p rh-golden --release --locked --test sift --no-capture &&
@@ -1573,18 +1685,7 @@ run "Replay positive control: a journal with its row deleted must hard-FAIL the 
 run "rh-golden by name: V-DET-04/18 on solo and hamlet (run.toml and the journal alone rebuild the run byte for byte), V-DET-05 from keyframes at 1 and 4 threads, V-DET-14 (an input changes only its founder's records), and missing, extra, edited and re-chained journal rows hard-FAIL (SPR-013 T-12)" "pass:T-12 V-DET-14: hamlet, 120 years" cargo nextest run -p rh-golden --release --locked --test replay --no-capture &&
 run "tail snapshot positive control: a stale snapshot must FAIL with the first differing line (SPR-013 T-10)" "fail:SNAPSHOT hamlet_follow_job differs at line 2" env RH_TAIL_SNAPSHOTS="$PWD/tests/lint_fixtures/golden/stale_tail_snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture the_display_form_matches_its_snapshots &&
 run "tail snapshot positive control: a missing snapshot must FAIL, never be created silently (SPR-013 T-10; the file-snapshot ruling)" "fail:SNAPSHOT solo_story is missing" env RH_TAIL_SNAPSHOTS="$TARGET_DIR/rendered-fixtures/no_tail_snapshots" cargo nextest run -p rh-golden --release --locked --test tail --no-capture the_display_form_matches_its_snapshots &&
-run "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, streaming, and streaming with a tail stopped mid-run (after it printed a sealed segment), within twice streaming plus 1 s" "pass:T-10 wall: solo 200 years" tail_stopped_wall &&
-run "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)" "pass:solo: 200 yearly rungs to year 200 at $GOLDEN_THREADS thread(s)" "$RH_CLI_RELEASE" run solo --years 200 --threads "$GOLDEN_THREADS" --ladder yearly --out "$GOLDEN/solo_yearly_tN.ladder" &&
-run "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)" "pass:LADDERS EQUAL: 200 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
-run "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; SPR-012 T-08)" "pass:BASELINE OK" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" "$GOLDEN/solo_yearly_tN.ladder" &&
-run "Golden baseline positive control: a hand-edited solo baseline must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE MISMATCH" solo_baseline_hand_edited_control &&
-run "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must FAIL (SPR-012 T-08; SPR-008 ruling 6)" "fail:BASELINE CHANGED in a PR not marked [C3]" "$PY" -I bin/check_baseline.py --baseline worlds/solo/baselines/solo_yearly_200y.ladder --recomputed "$GOLDEN/solo_yearly_t1.ladder" --changed yes --title "SPR-012: walking skeleton B" &&
-run "Golden run positive control: --strict refuses solo, whose manifest names systems this build lacks (SPR-011 ruling 3; SPR-012 T-08)" "fail:--strict refuses solo: the manifest names systems this build lacks (M1.regions, M3.agriculture, M4.economy, S5.daily_life)" "$RH_CLI_RELEASE" run solo --strict --years 2 --out "$TARGET_DIR/rendered-fixtures/solo_strict.ladder" &&
-run "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)" "pass:mutants: none" "$RH_CLI_RELEASE" build-info &&
-run "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL" "fail:MUTANT BUILD: this build has the planted control feature(s) mutant-resample-hit-k1 compiled in" mutant_build_control &&
-run "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)" "pass:V-SCALE-03: solo, 1,000 sim-years at 1 thread in" solo_scale_run &&
-run "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread invariance, the manifest pin, Ada at genesis, the input's re-sample of her pending death (SPR-012 T-08)" "pass:T-08: solo's input re-samples Ada's pending death (a miss)" cargo nextest run -p rh-golden --release --locked --test solo --no-capture &&
-run "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected perturbations (SPR-008 T-02, T-03)" "pass:V-DET-11: 4 injected perturbations named exactly" cargo nextest run -p rh-golden --release --locked --test golden --no-capture
+run "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, streaming, and streaming with a tail stopped mid-run (after it printed a sealed segment), within twice streaming plus 1 s" "pass:T-10 wall: solo 200 years" tail_stopped_wall
 status=$?
 chain_done=1
 exit "$status"
