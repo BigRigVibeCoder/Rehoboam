@@ -1314,7 +1314,7 @@ run "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)" 
 run "V-WC-04 parity positive control: drifted Registry must FAIL" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)" "fail:PARITY MISMATCH specs/manifest/examples/invalid_draft_style.yaml" "$PY" -I bin/manifest_parity.py --rust-bin "$RH_CLI" --rust-registry tests/lint_fixtures/parity/registry_drift_message.toml specs/manifest/examples/invalid_draft_style.yaml &&
 run "Effect programs: every Registry program compiles against the real environment (rh-cli effect check; SPR-017 T-06)" "pass:EFFECT PROGRAMS: PASS (7 laws, 21 programs)" "$RH_CLI" effect check &&
-run "Effect programs positive control: a Registry whose seniority has no order must FAIL (SPR-017 T-06)" "fail:ERROR succession_laws.seniority: no order program" effect_programs_control &&
+run "Effect programs positive control: a Registry whose seniority has no order must FAIL (SPR-017 T-06)" "fail:succession_laws.seniority: no order program (§7.3)" effect_programs_control &&
 run "Effect enums: the Registry's keyed tables in the Rust loader's order equal tomllib's (check_key_order; SPR-017 T-06)" "pass:KEY ORDER: PASS" "$PY" -I bin/check_key_order.py --rust-bin "$RH_CLI" &&
 run "check_key_order positive control: every keyed table in sorted order must FAIL (SPR-017 T-06)" "fail:MISMATCH [opinion_modifiers]" key_order_control &&
 run "Ownership lint: single writer from specs/systems (SPR-004 T-03)" "pass:0 violations" "$RH_CLI" ownership &&
