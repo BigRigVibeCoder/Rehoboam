@@ -224,3 +224,20 @@ From the red team's batch-08 handoff on its branch (`68b0ee3`, `docs/red_team/ha
 | N19 | Pillar 2, "M2 uses static Coale–Demeny curves" | M2 uses Brass's relational logit system on a General Standard (R12; N14), and M2 F1 adds the time-varying terms. `M5.epidemics` is the planned owner of mortality pulses (P1b) | `specs/systems/M2*`; `docs/11` P1b |
 | N20 | Pillar 4, "the nobility thermostat demotes cadets at 35" | That is prototype 7 (N7). Rehoboam's rule is D56's: agnatic membership and vocations for later children (M7 0.5.0). Cadet claim factions are M7 and T1 work in P1b, read against D56 | D56; `specs/systems/next/M7_membership.md` |
 | N21 | Pillars 1, 3 and 5 | They map to `M8.war`, `M3`/`M4` and `M6`, which are P1b and P4 systems in `docs/11`. Each becomes a design question for its system's spec, weighed at the gate | `docs/11` P1b, P4 |
+
+---
+
+## Batch 07 (2026-10-18): Settlement-level medieval assets (for the P1b planning gate)
+
+An advisory ideation note relayed by the director on 2026-10-18. It is not a requirement or a sprint gate, and priorities stay on P1 and the SPR-033 viewer spike (D62).
+
+**The proposal, in the note's own terms.** When M3 (agriculture) and M4 (economy) arrive in P1b, the physical world should feel grounded in real medieval assets: iron veins and quarries, watermills, village smiths. They would not be abstract trade tokens. To keep the tick budget light, the assets live at the settlement level (manorial asset flags and resource slots), with no individual commoner agents or supply-chain arithmetic in the core. The viewer can then render a working waterwheel and a smoking forge.
+
+### Architect's intake notes on batch 07 (2026-10-18)
+
+| # | Item | Finding | Contract |
+|---|---|---|---|
+| N22 | Settlement-level grain | Sound, and it matches the existing plan. M4 F0 (P1.5a) already keeps household and lord stores and holdings, and M3 F0/F1 (P1.4) works at regional and household level. Settlement-level asset slots fit fidelity by zoom and add no per-instant cost beyond a few columns per settlement | `docs/11` P1.4, P1.5a; ADR-0031 |
+| N23 | Mechanical, or only visual? | The gate must decide each asset's side. If an asset changes an outcome (a mill raises the grain a harvest yields, a smith equips a levy, a quarry feeds a keep's repair), it is a plane-A column. It is owned by one system (M3 or M4), its kinds are Registry entries rather than free strings, and it is written only through that system's rules. If it only shows, it is plane-B hydration that the viewer derives deterministically from the settlement seed, the era and the state it already reads, with no engine change at all | ADR-0010; ADR-0024; ADR-0036 §2; `05.1` §2 (single-writer columns) |
+| N24 | Plane | The viewer's rendering of a waterwheel or forge is plane B, hydration under V-R3D-13; plane C is the narrative camera director (PRJ-003 §2). Visual-only assets can be prototyped in the viewer lane (V.2) without waiting for P1b; mechanical ones wait for their owning system's spec | PRJ-003 §2, §4; `docs/11` viewer lane V.2 |
+| N25 | Sources | "Real medieval assets" should be calibrated, not assumed. Where an asset carries a mechanical effect, the gate needs sources for its rates (mill yields, the density of smiths, the spacing of quarries) before it enters a band or a spec, as for batch 06 (N18) | `research/reading_list.md`; R12 |
