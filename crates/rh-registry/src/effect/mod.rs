@@ -38,7 +38,7 @@ pub use check::{BOUND_PRODUCT_MAX, CheckOptions, LINEAGE_BOUND, NESTING_MAX};
 pub use env::{ColumnId, CommandId, EnumId, Env, EnvError, KindId, Ty};
 pub use eval::{Action, Arg, DrawKey, DrawLedger};
 pub use host::{Draws, Host, Indexes, ReadOutcome, Reads};
-pub use parse::{EXPRESSION_DEPTH_MAX, TREE_HEIGHT_MAX, UNARY_CHAIN_MAX};
+pub use parse::EXPRESSION_DEPTH_MAX;
 pub use value::{EventArg, Value};
 
 use ast::{Effect, Node};
@@ -200,7 +200,7 @@ pub enum EvalError {
         /// The entity's id.
         id: u64,
         /// The index.
-        k: u64,
+        k: i64,
     },
     /// The host has no draw for a key.
     DrawUnavailable {
@@ -211,7 +211,7 @@ pub enum EvalError {
         /// The entity's id.
         id: u64,
         /// The index.
-        k: u64,
+        k: i64,
     },
     /// The host has no value for a parameter.
     MissingParam(String),

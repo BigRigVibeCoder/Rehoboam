@@ -64,6 +64,18 @@ impl BinOp {
         )
     }
 
+    /// The precedence level of a chainable operator (0 `or`, 1 `and`, 2 `+ -`, 3 `* / div mod`);
+    /// `None` for a comparison.
+    pub(crate) fn level(self) -> Option<u8> {
+        match self {
+            Self::Or => Some(0),
+            Self::And => Some(1),
+            Self::Add | Self::Sub => Some(2),
+            Self::Mul | Self::Div | Self::IntDiv | Self::Mod => Some(3),
+            _ => None,
+        }
+    }
+
     pub(crate) fn is_division(self) -> bool {
         matches!(self, Self::Div | Self::IntDiv | Self::Mod)
     }
@@ -179,8 +191,18 @@ pub(crate) enum Kind {
         a: Box<Node>,
         b: Box<Node>,
     },
-    Neg(Box<Node>),
-    Not(Box<Node>),
+    /// A run of `count` prefix minuses (§4.8: prefix operators do not nest).
+    Neg(u32, Box<Node>),
+    /// A run of `count` prefix `not`s.
+    Not(u32, Box<Node>),
+    /// A left-associative chain of one precedence level's operators (`or`, `and`, `+`/`-`, or
+    /// `*`/`/`/`div`/`mod`): `items[0] ops[0] items[1] ops[1] …`, folded left to right. One node,
+    /// so a chain of any length costs no recursion (GAP-A).
+    Chain {
+        ops: Vec<BinOp>,
+        items: Vec<Node>,
+    },
+    /// A comparison (non-associative).
     Bin {
         op: BinOp,
         a: Box<Node>,
@@ -195,19 +217,14 @@ pub(crate) struct Node {
     pub span: Span,
     /// The node's type, filled in by the checker.
     pub ty: Ty,
-    /// The height of the subtree (a leaf is 1), bounded by the parser so that every walk over
-    /// the tree, its drop included, has bounded recursion.
-    pub height: u32,
 }
 
 impl Node {
     pub(crate) fn new(kind: Kind, span: Span) -> Self {
-        let height = 1 + children(&kind).iter().map(|c| c.height).max().unwrap_or(0);
         Self {
             kind,
             span,
             ty: Ty::Int,
-            height,
         }
     }
 }
@@ -237,7 +254,8 @@ pub(crate) fn children(kind: &Kind) -> Vec<&Node> {
         }
         Kind::ListKey { body, rel, .. } => vec![body, rel],
         Kind::If { cond, a, b } => vec![cond, a, b],
-        Kind::Neg(e) | Kind::Not(e) => vec![e],
+        Kind::Neg(_, e) | Kind::Not(_, e) => vec![e],
+        Kind::Chain { items, .. } => items.iter().collect(),
         Kind::Bin { a, b, .. } => vec![a, b],
     }
 }
@@ -267,8 +285,9 @@ pub(crate) fn canon(node: &Node, out: &mut String) {
         Kind::Tuple(_) => write!(out, "Tuple("),
         Kind::ListKey { var, .. } => write!(out, "ListKey({var}"),
         Kind::If { .. } => write!(out, "If("),
-        Kind::Neg(_) => write!(out, "Neg("),
-        Kind::Not(_) => write!(out, "Not("),
+        Kind::Neg(n, _) => write!(out, "Neg({n}"),
+        Kind::Not(n, _) => write!(out, "Not({n}"),
+        Kind::Chain { ops, .. } => write!(out, "Chain({ops:?}"),
         Kind::Bin { op, .. } => write!(out, "Bin({op:?}"),
     };
     let kids = children(&node.kind);

@@ -1,14 +1,14 @@
 //! The recursive-descent parser of §2's EBNF, with §2's disambiguation rules.
 //!
-//! The grammar's expression nesting (`expr` inside parentheses, arguments, branches, aggregates)
-//! is bounded at [`EXPRESSION_DEPTH_MAX`] (`E_BOUND`, §4.2). Two further bounds keep every walk of
-//! the tree finite on a small stack, whatever the input: a chain of unary `not` and `-` is bounded
-//! at [`UNARY_CHAIN_MAX`], and a node's height at [`TREE_HEIGHT_MAX`] (a left-associative chain of
-//! 10⁵ `+` builds a tree that deep). Both are `E_BOUND`; the reference has neither and exceeds
-//! Python's recursion limit instead (a crash), so no program the reference evaluates is affected
-//! below roughly 900 levels.
+//! The grammar's expression nesting (the `expr` production: parentheses, arguments, bodies,
+//! conditions, branches) is bounded at [`EXPRESSION_DEPTH_MAX`] (`E_BOUND`, §4.2, §4.8). Operator
+//! chains and prefix operators do not nest (GAP-A): a left-associative chain of one precedence
+//! level is parsed by a loop into one [`Kind::Chain`] node, and a run of prefix `not` or `-` into
+//! one counted node, so a chain of any length costs no recursion in the parser, the checker or
+//! the evaluator. A chain whose first operand is itself a parenthesised chain of the same level
+//! extends it, as the reference's left-deep tree does (`(a + b) + c` is `a + b + c`).
 //!
-//! REF: `specs/registry/effect_language_v0.md` §2, §4.2, §10.
+//! REF: `specs/registry/effect_language_v0.md` §2, §4.2, §4.8, §10.
 
 use super::ast::{Action, AggOp, BinOp, Effect, ForEach, Kind, Node, Relation};
 use super::lex::{TokKind, Token, lex};
@@ -16,10 +16,6 @@ use super::{ErrorCode, Rejection, Span};
 
 /// §4.2: expression nesting above 64 is `E_BOUND`.
 pub const EXPRESSION_DEPTH_MAX: usize = 64;
-/// The longest chain of unary `not` or `-` (a stack bound; see the module docs).
-pub const UNARY_CHAIN_MAX: usize = 128;
-/// The tallest syntax tree (a stack bound; see the module docs).
-pub const TREE_HEIGHT_MAX: u32 = 192;
 
 /// Names that parse as calls rather than relations (the reference's `KNOWN_CALLS`).
 const KNOWN_CALLS: [&str; 18] = [
@@ -73,7 +69,6 @@ pub(crate) struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     depth: usize,
-    unary: usize,
 }
 
 type PResult<T> = Result<T, Rejection>;
@@ -84,7 +79,6 @@ impl Parser {
             tokens: lex(text)?,
             pos: 0,
             depth: 0,
-            unary: 0,
         })
     }
 
@@ -154,16 +148,12 @@ impl Parser {
         }
     }
 
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "INVARIANT: every constructor of the parser returns a PResult"
+    )]
     fn node(kind: Kind, span: Span) -> PResult<Node> {
-        let node = Node::new(kind, span);
-        if node.height > TREE_HEIGHT_MAX {
-            return Err(Rejection::new(
-                ErrorCode::Bound,
-                span,
-                format!("syntax tree taller than {TREE_HEIGHT_MAX}"),
-            ));
-        }
-        Ok(node)
+        Ok(Node::new(kind, span))
     }
 
     fn join(a: Span, b: Span) -> Span {
@@ -304,63 +294,84 @@ impl Parser {
                 format!("expression nesting above {EXPRESSION_DEPTH_MAX}"),
             ));
         }
-        let mut node = self.and_expr()?;
-        while self.accept("or") {
-            let b = self.and_expr()?;
-            let span = Self::join(node.span, b.span);
-            node = Self::node(
-                Kind::Bin {
-                    op: BinOp::Or,
-                    a: Box::new(node),
-                    b: Box::new(b),
-                },
-                span,
-            )?;
-        }
+        let first = self.and_expr()?;
+        let node = self.chain(first, 0, Self::and_expr)?;
         self.depth -= 1;
         Ok(node)
     }
 
-    fn and_expr(&mut self) -> PResult<Node> {
-        let mut node = self.not_expr()?;
-        while self.accept("and") {
-            let b = self.not_expr()?;
-            let span = Self::join(node.span, b.span);
-            node = Self::node(
-                Kind::Bin {
-                    op: BinOp::And,
-                    a: Box::new(node),
-                    b: Box::new(b),
-                },
-                span,
-            )?;
+    /// The operator at the next token, if it is one of precedence `level`.
+    fn chain_op(&self, level: u8) -> Option<BinOp> {
+        let t = self.peek(0);
+        if !matches!(t.kind, TokKind::Op | TokKind::Kw) {
+            return None;
         }
-        Ok(node)
+        BinOp::from_text(&t.text).filter(|op| op.level() == Some(level))
     }
 
-    fn enter_unary(&mut self) -> PResult<()> {
-        self.unary += 1;
-        if self.unary > UNARY_CHAIN_MAX {
-            let span = self.peek(0).span;
-            return Err(Rejection::new(
-                ErrorCode::Bound,
-                span,
-                format!("unary chain longer than {UNARY_CHAIN_MAX}"),
-            ));
+    /// A left-associative chain of `level` after its first operand, as one node.
+    fn chain(
+        &mut self,
+        first: Node,
+        level: u8,
+        operand: fn(&mut Self) -> PResult<Node>,
+    ) -> PResult<Node> {
+        if self.chain_op(level).is_none() {
+            return Ok(first);
         }
-        Ok(())
+        let start = first.span;
+        let (mut ops, mut items) = match first.kind {
+            Kind::Chain { ops, items } if ops.first().and_then(|o| o.level()) == Some(level) => {
+                (ops, items)
+            }
+            kind => (
+                Vec::new(),
+                vec![Node {
+                    kind,
+                    span: first.span,
+                    ty: first.ty,
+                }],
+            ),
+        };
+        while let Some(op) = self.chain_op(level) {
+            self.take();
+            ops.push(op);
+            items.push(operand(self)?);
+        }
+        let end = items.last().map_or(start, |n| n.span);
+        Self::node(Kind::Chain { ops, items }, Self::join(start, end))
+    }
+
+    fn and_expr(&mut self) -> PResult<Node> {
+        let first = self.not_expr()?;
+        self.chain(first, 1, Self::not_expr)
     }
 
     fn not_expr(&mut self) -> PResult<Node> {
         let start = self.peek(0).span;
-        if self.accept("not") {
-            self.enter_unary()?;
-            let e = self.not_expr()?;
-            self.unary -= 1;
-            let span = Self::join(start, e.span);
-            return Self::node(Kind::Not(Box::new(e)), span);
+        let mut count: u32 = 0;
+        while self.accept("not") {
+            count = count.saturating_add(1);
         }
-        self.cmp_expr()
+        let e = self.cmp_expr()?;
+        if count == 0 {
+            return Ok(e);
+        }
+        let span = Self::join(start, e.span);
+        match e.kind {
+            Kind::Not(n, inner) => Self::node(Kind::Not(count.saturating_add(n), inner), span),
+            kind => Self::node(
+                Kind::Not(
+                    count,
+                    Box::new(Node {
+                        kind,
+                        span: e.span,
+                        ty: e.ty,
+                    }),
+                ),
+                span,
+            ),
+        }
     }
 
     fn cmp_expr(&mut self) -> PResult<Node> {
@@ -391,58 +402,40 @@ impl Parser {
     }
 
     fn add_expr(&mut self) -> PResult<Node> {
-        let mut node = self.mul_expr()?;
-        while self.peek(0).kind == TokKind::Op
-            && (self.peek(0).text == "+" || self.peek(0).text == "-")
-        {
-            let op = if self.take().text == "+" {
-                BinOp::Add
-            } else {
-                BinOp::Sub
-            };
-            let b = self.mul_expr()?;
-            let span = Self::join(node.span, b.span);
-            node = Self::node(
-                Kind::Bin {
-                    op,
-                    a: Box::new(node),
-                    b: Box::new(b),
-                },
-                span,
-            )?;
-        }
-        Ok(node)
+        let first = self.mul_expr()?;
+        self.chain(first, 2, Self::mul_expr)
     }
 
     fn mul_expr(&mut self) -> PResult<Node> {
-        let mut node = self.unary()?;
-        while self.at("*") || self.at("/") || self.at("div") || self.at("mod") {
-            let text = self.take().text;
-            let op = BinOp::from_text(&text).unwrap_or(BinOp::Mul);
-            let b = self.unary()?;
-            let span = Self::join(node.span, b.span);
-            node = Self::node(
-                Kind::Bin {
-                    op,
-                    a: Box::new(node),
-                    b: Box::new(b),
-                },
-                span,
-            )?;
-        }
-        Ok(node)
+        let first = self.unary()?;
+        self.chain(first, 3, Self::unary)
     }
 
     fn unary(&mut self) -> PResult<Node> {
         let start = self.peek(0).span;
-        if self.accept("-") {
-            self.enter_unary()?;
-            let e = self.unary()?;
-            self.unary -= 1;
-            let span = Self::join(start, e.span);
-            return Self::node(Kind::Neg(Box::new(e)), span);
+        let mut count: u32 = 0;
+        while self.accept("-") {
+            count = count.saturating_add(1);
         }
-        self.primary()
+        let e = self.primary()?;
+        if count == 0 {
+            return Ok(e);
+        }
+        let span = Self::join(start, e.span);
+        match e.kind {
+            Kind::Neg(n, inner) => Self::node(Kind::Neg(count.saturating_add(n), inner), span),
+            kind => Self::node(
+                Kind::Neg(
+                    count,
+                    Box::new(Node {
+                        kind,
+                        span: e.span,
+                        ty: e.ty,
+                    }),
+                ),
+                span,
+            ),
+        }
     }
 
     fn primary(&mut self) -> PResult<Node> {

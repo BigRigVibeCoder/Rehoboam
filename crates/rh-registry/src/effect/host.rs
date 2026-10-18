@@ -61,10 +61,10 @@ pub trait Indexes: Reads {
 /// The keyed RNG (§4.6): `H(world_seed, branch_salt(t), system_id, epoch, purpose, entity_id, t, k)`
 /// with `t` the host's instant.
 pub trait Draws {
-    /// The 64-bit draw of `purpose` keyed on the entity `(kind, id)` and the index `k` (an `int`
-    /// index as its two's-complement bits, an entity index as its id); `None` if the host has no
-    /// draw for the key (a fixture world that lists its draws).
-    fn draw(&self, purpose: &str, kind: KindId, id: u64, k: u64) -> Option<u64>;
+    /// The 64-bit draw of `purpose` keyed on the entity `(kind, id)` and the index `k` as an
+    /// `i64` (an entity index gives its id, not its kind: GAP-C); `None` if the host has no draw
+    /// for the key (a fixture world that lists its draws).
+    fn draw(&self, purpose: &str, kind: KindId, id: u64, k: i64) -> Option<u64>;
 }
 
 /// Everything an evaluation reads.

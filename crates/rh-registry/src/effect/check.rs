@@ -391,8 +391,10 @@ impl<'e> Checker<'e> {
                 kids = [body.as_deref_mut(), orelse.as_deref_mut()];
             }
             Kind::If { a, b, .. } => kids = [Some(a), Some(b)],
-            Kind::Neg(e) => kids = [Some(e), None],
-            Kind::Bin { op, a, b } if op.is_arith() => kids = [Some(a), Some(b)],
+            Kind::Neg(_, e) => kids = [Some(e), None],
+            Kind::Chain { ops, items } if ops.first().is_some_and(|o| o.is_arith()) => {
+                return self.resolve_all(items, ty, &mut node.ty);
+            }
             _ => {}
         }
         for kid in kids.into_iter().flatten() {
@@ -421,7 +423,7 @@ impl<'e> Checker<'e> {
     }
 
     /// Types a node and returns its (possibly polymorphic) type. Each kind has its own small
-    /// function, so a level of the tree costs a small stack frame (`TREE_HEIGHT_MAX`).
+    /// function, so a level of the tree costs a small stack frame.
     pub(crate) fn check(&mut self, node: &mut Node) -> CResult<Ty> {
         let ty = match &node.kind {
             Kind::Num { text, .. } => Ok(if text.contains('.') {
@@ -441,6 +443,7 @@ impl<'e> Checker<'e> {
             Kind::ListKey { .. } => self.of_list_key(node),
             Kind::If { .. } => self.of_if(node),
             Kind::Neg(..) => self.of_neg(node),
+            Kind::Chain { .. } => self.of_chain(node),
             Kind::Not(..) => self.of_not(node),
             Kind::Bin { .. } => self.of_bin(node),
         }?;
@@ -617,30 +620,24 @@ impl<'e> Checker<'e> {
     #[inline(never)]
     fn of_neg(&mut self, node: &mut Node) -> CResult<Ty> {
         let span = node.span;
-        let _ = span;
-        let Kind::Neg(e) = &mut node.kind else {
+        let Kind::Neg(_, e) = &mut node.kind else {
             return err(ErrorCode::Syntax, span, "node");
         };
-        Ok({
-            let ty = self.check(e)?;
-            self.require_numeric(&ty, span)?;
-            ty
-        })
+        let ty = self.check(e)?;
+        self.require_numeric(&ty, span)?;
+        Ok(ty)
     }
 
     #[inline(never)]
     fn of_not(&mut self, node: &mut Node) -> CResult<Ty> {
         let span = node.span;
-        let _ = span;
-        let Kind::Not(e) = &mut node.kind else {
+        let Kind::Not(_, e) = &mut node.kind else {
             return err(ErrorCode::Syntax, span, "node");
         };
-        Ok({
-            let t = self.check(e)?;
-            let t = self.unify(&t, &Ty::Bool, e.span)?;
-            self.resolve(e, t)?;
-            Ty::Bool
-        })
+        let t = self.check(e)?;
+        let t = self.unify(&t, &Ty::Bool, e.span)?;
+        self.resolve(e, t)?;
+        Ok(Ty::Bool)
     }
 
     #[inline(never)]
@@ -649,24 +646,58 @@ impl<'e> Checker<'e> {
         let Kind::Bin { op, a, b } = &mut node.kind else {
             return err(ErrorCode::Syntax, span, "node");
         };
-        let op = *op;
-        if matches!(op, BinOp::And | BinOp::Or) {
-            self.bin_logic(a, b)
-        } else if op.is_cmp() {
-            self.bin_cmp(op, a, b, span)
-        } else {
-            self.bin_arith(op, a, b, span)
-        }
+        self.bin_cmp(*op, a, b, span)
     }
 
+    /// A chain, checked as the reference checks its left-deep tree: operand by operand, the
+    /// running type unified with each, resolved as soon as it is concrete (§4.1).
     #[inline(never)]
-    fn bin_logic(&mut self, a: &mut Node, b: &mut Node) -> CResult<Ty> {
-        for side in [a, b] {
-            let t = self.check(side)?;
-            let t = self.unify(&t, &Ty::Bool, side.span)?;
-            self.resolve(side, t)?;
+    fn of_chain(&mut self, node: &mut Node) -> CResult<Ty> {
+        let span = node.span;
+        let Kind::Chain { ops, items } = &mut node.kind else {
+            return err(ErrorCode::Syntax, span, "node");
+        };
+        if ops
+            .first()
+            .is_some_and(|o| matches!(o, BinOp::And | BinOp::Or))
+        {
+            for item in items.iter_mut() {
+                let t = self.check(item)?;
+                let t = self.unify(&t, &Ty::Bool, item.span)?;
+                self.resolve(item, t)?;
+            }
+            return Ok(Ty::Bool);
         }
-        Ok(Ty::Bool)
+        let mut ty = self.check(&mut items[0])?;
+        let first = items[0].span;
+        let mut resolved = false;
+        for i in 1..items.len() {
+            let op = ops[i - 1];
+            let level = Span {
+                start: first.start,
+                end: items[i].span.end,
+            };
+            let t = self.check(&mut items[i])?;
+            ty = self.unify(&ty, &t, level)?;
+            self.require_numeric(&ty, level)?;
+            if matches!(op, BinOp::IntDiv | BinOp::Mod) && !matches!(ty, Ty::Int | Ty::LitInt) {
+                return Err(self.bad_comparison(op, &ty, level));
+            }
+            if !ty.is_literal() {
+                // Once concrete the running type never changes, so the operands before this one
+                // are resolved once, when it first becomes concrete.
+                let from = if resolved { i } else { 0 };
+                for item in &mut items[from..=i] {
+                    self.resolve(item, ty.clone())?;
+                }
+                resolved = true;
+            }
+            if op.is_division() {
+                let c = self.concrete(&ty, level)?;
+                self.check_divisor(&items[i], &c)?;
+            }
+        }
+        Ok(ty)
     }
 
     #[inline(never)]
@@ -693,26 +724,6 @@ impl<'e> Checker<'e> {
             span,
             format!("{op:?} on {}", self.env.type_name(ty)),
         )
-    }
-
-    #[inline(never)]
-    fn bin_arith(&mut self, op: BinOp, a: &mut Node, b: &mut Node, span: Span) -> CResult<Ty> {
-        let ta = self.check(a)?;
-        let tb = self.check(b)?;
-        let ty = self.unify(&ta, &tb, span)?;
-        self.require_numeric(&ty, span)?;
-        if matches!(op, BinOp::IntDiv | BinOp::Mod) && !matches!(ty, Ty::Int | Ty::LitInt) {
-            return Err(self.bad_comparison(op, &ty, span));
-        }
-        if !ty.is_literal() {
-            self.resolve(a, ty.clone())?;
-            self.resolve(b, ty.clone())?;
-        }
-        if op.is_division() {
-            let c = self.concrete(&ty, span)?;
-            self.check_divisor(b, &c)?;
-        }
-        Ok(ty)
     }
 
     fn check_dotted(&self, head: &str, tail: &str, span: Span) -> CResult<(Ty, Dotted)> {
@@ -744,7 +755,8 @@ impl<'e> Checker<'e> {
 
     /// A divisor must be a constant whose bits, in the division's type, cannot be zero (§4.4).
     fn check_divisor(&self, b: &Node, ty: &Ty) -> CResult<()> {
-        let d = if let Kind::Neg(e) = &b.kind { e } else { b };
+        // The reference strips one minus only: `x / --2` is E_DIV.
+        let d = if let Kind::Neg(1, e) = &b.kind { e } else { b };
         match &d.kind {
             Kind::Num { text, .. } => {
                 let Some(bits) = literal_bits(ty, text) else {
@@ -1256,19 +1268,33 @@ pub(crate) fn fold_int(node: &Node) -> Option<i64> {
         Kind::Dotted { head, tail, .. } if head == "calendar" && tail == "minutes_per_day" => {
             Some(MINUTES_PER_DAY)
         }
-        Kind::Neg(e) => fold_int(e).map(i64::saturating_neg),
-        Kind::Bin { op, a, b } if op.is_arith() => {
-            let (a, b) = (fold_int(a)?, fold_int(b)?);
-            let op = match op {
-                BinOp::Add => ArithOp::Add,
-                BinOp::Sub => ArithOp::Sub,
-                BinOp::Mul => ArithOp::Mul,
-                BinOp::Div => ArithOp::Div,
-                BinOp::IntDiv => ArithOp::IntDiv,
-                _ => ArithOp::Mod,
-            };
-            arith_int(op, a, b)
+        Kind::Neg(n, e) => {
+            let mut v = fold_int(e)?;
+            for _ in 0..*n {
+                v = v.saturating_neg();
+            }
+            Some(v)
+        }
+        Kind::Chain { ops, items } if ops.first().is_some_and(|o| o.is_arith()) => {
+            let mut acc = fold_int(&items[0])?;
+            for (op, item) in ops.iter().zip(&items[1..]) {
+                let b = fold_int(item)?;
+                acc = arith_int(arith_op(*op), acc, b)?;
+            }
+            Some(acc)
         }
         _ => None,
+    }
+}
+
+/// The arithmetic operator of a chainable arithmetic `BinOp`.
+pub(crate) fn arith_op(op: BinOp) -> ArithOp {
+    match op {
+        BinOp::Add => ArithOp::Add,
+        BinOp::Sub => ArithOp::Sub,
+        BinOp::Mul => ArithOp::Mul,
+        BinOp::Div => ArithOp::Div,
+        BinOp::IntDiv => ArithOp::IntDiv,
+        _ => ArithOp::Mod,
     }
 }

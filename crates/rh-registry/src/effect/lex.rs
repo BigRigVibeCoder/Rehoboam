@@ -3,8 +3,9 @@
 //! The token classes are tried in a fixed order at each position (whitespace or a comment, a
 //! number, an identifier, an operator), as the reference's regular expression does. A numeric token
 //! runs over every following letter, digit, `_` and `.`, and is `E_FLOAT_LITERAL` unless it is an
-//! `Int` or a `Decimal` (`1e3`, `1.`, `.5`, `0x10`, `1_000`). Whitespace is Unicode whitespace as
-//! Python's `str.isspace` defines it; only ASCII is otherwise meaningful (§2).
+//! `Int` or a `Decimal` (`1e3`, `1.`, `.5`, `0x10`, `1_000`). Whitespace is the four ASCII
+//! characters space, tab, LF and CR; any other character outside a comment is `E_SYNTAX` (§2,
+//! F-1). A comment runs to the next LF whatever it holds.
 //!
 //! REF: `specs/registry/effect_language_v0.md` §2, §3.2, §10.
 
@@ -34,14 +35,10 @@ pub(crate) struct Token {
     pub span: Span,
 }
 
-/// Python's `str.isspace`, which the reference's `\s` matches.
-fn is_py_space(c: char) -> bool {
-    matches!(
-        c,
-        '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | '\u{1c}'..='\u{1f}' | ' ' | '\u{85}' | '\u{a0}'
-            | '\u{1680}' | '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}'
-            | '\u{3000}'
-    )
+/// Whitespace: exactly space, tab, line feed and carriage return (§2; F-1, 2026-10-18). Every
+/// other character outside a comment is `E_SYNTAX`.
+fn is_space(c: char) -> bool {
+    matches!(c, ' ' | '\t' | '\n' | '\r')
 }
 
 fn is_num_tail(c: char) -> bool {
@@ -69,8 +66,8 @@ pub(crate) fn lex(text: &str) -> Result<Vec<Token>, Rejection> {
     let mut i = 0;
     while i < chars.len() {
         let (start, c) = chars[i];
-        if is_py_space(c) {
-            while i < chars.len() && is_py_space(chars[i].1) {
+        if is_space(c) {
+            while i < chars.len() && is_space(chars[i].1) {
                 i += 1;
             }
             continue;
@@ -194,8 +191,16 @@ mod tests {
     }
 
     #[test]
-    fn unicode_whitespace_separates_and_other_non_ascii_is_a_syntax_error() {
-        assert!(lex("a\u{a0}and\u{3000}b").is_ok());
+    fn only_ascii_whitespace_separates_and_other_characters_are_syntax_errors() {
+        assert!(lex("a \tand\r\nb").is_ok());
+        for c in ['\u{a0}', '\u{85}', '\u{2003}', '\u{3000}', '\u{b}', '\u{c}'] {
+            assert_eq!(
+                code(&format!("a{c}and b")),
+                Some(ErrorCode::Syntax),
+                "{c:?}"
+            );
+        }
+        assert!(lex("a # \u{a0}\u{3000}\u{b} anything\nand b").is_ok());
         assert_eq!(code("a \u{e9} b"), Some(ErrorCode::Syntax));
         assert_eq!(code("a = b"), Some(ErrorCode::Syntax));
         assert_eq!(code("!a"), Some(ErrorCode::Syntax));

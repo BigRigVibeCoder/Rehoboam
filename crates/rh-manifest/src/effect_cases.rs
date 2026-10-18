@@ -412,7 +412,7 @@ pub struct FixtureWorld {
     days_per_year: i64,
     tables: BTreeMap<KindId, BTreeMap<u64, BTreeMap<ColumnId, Value>>>,
     params: BTreeMap<String, BTreeMap<String, Value>>,
-    draws: BTreeMap<(String, KindId, u64, u64), u64>,
+    draws: BTreeMap<(String, KindId, u64, i64), u64>,
     children: BTreeMap<u64, Vec<u64>>,
     /// A test-only draw source for keys a generated world does not list (T-08).
     draw_seed: Option<u64>,
@@ -481,7 +481,7 @@ fn fan_rows(fan: &toml::Table) -> Result<Vec<(String, toml::Table)>, String> {
 }
 
 /// Splits a draw key `purpose/kind:id/k`.
-fn draw_key(env: &Env, key: &str) -> Result<(String, KindId, u64, u64), String> {
+fn draw_key(env: &Env, key: &str) -> Result<(String, KindId, u64, i64), String> {
     let bad = || format!("draw key {key}");
     let mut parts = key.split('/');
     let (Some(purpose), Some(entity), Some(k), None) =
@@ -493,7 +493,7 @@ fn draw_key(env: &Env, key: &str) -> Result<(String, KindId, u64, u64), String> 
     let kind = env.kind(kind).ok_or_else(bad)?;
     let id: u64 = id.parse().map_err(|_| bad())?;
     let k: i64 = k.parse().map_err(|_| bad())?;
-    Ok((purpose.to_owned(), kind, id, k.cast_unsigned()))
+    Ok((purpose.to_owned(), kind, id, k))
 }
 
 impl FixtureWorld {
@@ -706,7 +706,7 @@ pub fn splitmix64(mut z: u64) -> u64 {
 /// The `draw_seed` fold of a draw key (T-08; the same fold as `effect_ref.py`'s): `SplitMix64` over
 /// the seed, then each of the purpose's bytes, the kind's bytes, the id and `k`, in that order.
 #[must_use]
-pub fn seeded_draw(seed: u64, purpose: &str, kind: &str, id: u64, k: u64) -> u64 {
+pub fn seeded_draw(seed: u64, purpose: &str, kind: &str, id: u64, k: i64) -> u64 {
     let mut h = splitmix64(seed);
     for b in purpose
         .bytes()
@@ -717,11 +717,11 @@ pub fn seeded_draw(seed: u64, purpose: &str, kind: &str, id: u64, k: u64) -> u64
         h = splitmix64(h ^ u64::from(b));
     }
     h = splitmix64(h ^ id);
-    splitmix64(h ^ k)
+    splitmix64(h ^ k.cast_unsigned())
 }
 
 impl Draws for FixtureHost<'_> {
-    fn draw(&self, purpose: &str, kind: KindId, id: u64, k: u64) -> Option<u64> {
+    fn draw(&self, purpose: &str, kind: KindId, id: u64, k: i64) -> Option<u64> {
         if let Some(&u) = self.world.draws.get(&(purpose.to_owned(), kind, id, k)) {
             return Some(u);
         }

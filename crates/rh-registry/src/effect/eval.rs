@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use rh_core::fixed::{Q16_16, draw_hits};
 
 use super::ast::{AggOp, BinOp, Dotted, Effect, Kind, Node};
-use super::check::MINUTES_PER_DAY;
+use super::check::{MINUTES_PER_DAY, arith_op};
 use super::env::{CommandId, Env, KindId, Ty};
 use super::host::{Host, ReadOutcome};
 use super::prelude::Prelude;
@@ -20,8 +20,9 @@ use super::value::{
 };
 use super::{Diagnostics, EvalError, EvalOptions, Mutant};
 
-/// One draw key of the run-time ledger: `(purpose, entity kind, entity id, k)`.
-pub type DrawKey = (String, KindId, u64, u64);
+/// One draw key of the run-time ledger: exactly `H`'s varying inputs, `(purpose, entity kind,
+/// entity id, k as an i64)` (§4.6, GAP-C): an entity `k` and an `int` `k` of one value collide.
+pub type DrawKey = (String, KindId, u64, i64);
 
 /// The run-time draw ledger (§4.6, N6, r4-2): a key drawn twice within it is the invariant
 /// `E_RNG_REUSE`. A law's evaluation starts a fresh one per program and binding; a system's verb
@@ -181,7 +182,7 @@ impl Ev<'_> {
     }
 
     /// Evaluates a node. Each kind has its own small function, so a level of the tree costs a
-    /// small stack frame (`TREE_HEIGHT_MAX`).
+    /// small stack frame.
     pub(crate) fn eval(&mut self, node: &Node) -> EResult<Value> {
         match &node.kind {
             Kind::Num { bits, .. } => Ok(literal_value(&node.ty, *bits)),
@@ -203,6 +204,7 @@ impl Ev<'_> {
             Kind::Neg(..) => self.ev_neg(node),
             Kind::Not(..) => self.ev_not(node),
             Kind::Bin { .. } => self.ev_bin(node),
+            Kind::Chain { .. } => self.ev_chain(node),
         }
     }
 
@@ -388,21 +390,23 @@ impl Ev<'_> {
 
     #[inline(never)]
     fn ev_neg(&mut self, node: &Node) -> EResult<Value> {
-        let Kind::Neg(e) = &node.kind else {
+        let Kind::Neg(n, e) = &node.kind else {
             return internal("node");
         };
-        {
-            let v = self.eval(e)?;
-            negate(&v).ok_or_else(|| EvalError::Internal("negation of a non-number".into()))
+        let mut v = self.eval(e)?;
+        for _ in 0..*n {
+            v = negate(&v).ok_or_else(|| EvalError::Internal("negation of a non-number".into()))?;
         }
+        Ok(v)
     }
 
     #[inline(never)]
     fn ev_not(&mut self, node: &Node) -> EResult<Value> {
-        let Kind::Not(e) = &node.kind else {
+        let Kind::Not(n, e) = &node.kind else {
             return internal("node");
         };
-        Ok(Value::Bool(!self.bool(e)?))
+        let v = self.bool(e)?;
+        Ok(Value::Bool(v ^ (n % 2 == 1)))
     }
 
     #[inline(never)]
@@ -410,42 +414,47 @@ impl Ev<'_> {
         let Kind::Bin { op, a, b } = &node.kind else {
             return internal("node");
         };
-        self.binary(*op, a, b)
+        let va = self.eval(a)?;
+        let vb = self.eval(b)?;
+        Ok(Value::Bool(match op {
+            BinOp::Eq => va == vb,
+            BinOp::Ne => va != vb,
+            BinOp::Lt => numeric_key(&va) < numeric_key(&vb),
+            BinOp::Le => numeric_key(&va) <= numeric_key(&vb),
+            BinOp::Gt => numeric_key(&va) > numeric_key(&vb),
+            _ => numeric_key(&va) >= numeric_key(&vb),
+        }))
     }
 
-    fn binary(&mut self, op: BinOp, a: &Node, b: &Node) -> EResult<Value> {
-        let va = self.eval(a)?;
-        if self.on(Mutant::ShortCircuit) {
-            match (op, &va) {
-                (BinOp::And, Value::Bool(false)) => return Ok(Value::Bool(false)),
-                (BinOp::Or, Value::Bool(true)) => return Ok(Value::Bool(true)),
-                _ => {}
+    /// A chain folded left to right (§4.8). `and` and `or` evaluate every operand (§4.5); the
+    /// short-circuit mutant stops at the first operand that decides.
+    #[inline(never)]
+    fn ev_chain(&mut self, node: &Node) -> EResult<Value> {
+        let Kind::Chain { ops, items } = &node.kind else {
+            return internal("node");
+        };
+        let logic = ops
+            .first()
+            .copied()
+            .filter(|o| matches!(o, BinOp::And | BinOp::Or));
+        if let Some(op) = logic {
+            let mut acc = op == BinOp::And;
+            for item in items {
+                let v = self.bool(item)?;
+                acc = if op == BinOp::And { acc && v } else { acc || v };
+                if self.on(Mutant::ShortCircuit) && acc != (op == BinOp::And) {
+                    break;
+                }
             }
+            return Ok(Value::Bool(acc));
         }
-        let vb = self.eval(b)?;
-        let truth = |v: &Value| matches!(v, Value::Bool(true));
-        Ok(match op {
-            BinOp::And => Value::Bool(truth(&va) && truth(&vb)),
-            BinOp::Or => Value::Bool(truth(&va) || truth(&vb)),
-            BinOp::Eq => Value::Bool(va == vb),
-            BinOp::Ne => Value::Bool(va != vb),
-            BinOp::Lt => Value::Bool(numeric_key(&va) < numeric_key(&vb)),
-            BinOp::Le => Value::Bool(numeric_key(&va) <= numeric_key(&vb)),
-            BinOp::Gt => Value::Bool(numeric_key(&va) > numeric_key(&vb)),
-            BinOp::Ge => Value::Bool(numeric_key(&va) >= numeric_key(&vb)),
-            _ => {
-                let aop = match op {
-                    BinOp::Add => ArithOp::Add,
-                    BinOp::Sub => ArithOp::Sub,
-                    BinOp::Mul => ArithOp::Mul,
-                    BinOp::Div => ArithOp::Div,
-                    BinOp::IntDiv => ArithOp::IntDiv,
-                    _ => ArithOp::Mod,
-                };
-                arith(aop, &va, &vb, self.arith_mode())
-                    .ok_or_else(|| EvalError::Internal("a division by zero at run time".into()))?
-            }
-        })
+        let mut acc = self.eval(&items[0])?;
+        for (op, item) in ops.iter().zip(&items[1..]) {
+            let v = self.eval(item)?;
+            acc = arith(arith_op(*op), &acc, &v, self.arith_mode())
+                .ok_or_else(|| EvalError::Internal("a division by zero at run time".into()))?;
+        }
+        Ok(acc)
     }
 
     fn fold(
@@ -622,8 +631,8 @@ impl Ev<'_> {
         };
         let (kind, id) = self.ent(&args[1])?;
         let k = match self.eval(&args[2])? {
-            Value::Ent(_, id) => id,
-            Value::Int(n) => n.cast_unsigned(),
+            Value::Ent(_, id) => id.cast_signed(),
+            Value::Int(n) => n,
             _ => return internal("a draw index"),
         };
         let key = (purpose.clone(), kind, id, k);

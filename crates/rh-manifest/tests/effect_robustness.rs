@@ -11,9 +11,10 @@
 )]
 
 use rh_manifest::effect_cases::{Golden, splitmix64};
+use rh_registry::effect::value::{render_key, render_scalar};
 use rh_registry::effect::{
     CompileOptions, Diagnostics, EXPRESSION_DEPTH_MAX, ErrorCode, EvalOptions, Form, ProgramKind,
-    TREE_HEIGHT_MAX, Ty, UNARY_CHAIN_MAX, compile, compile_with,
+    Ty, compile, compile_with,
 };
 
 fn golden() -> Golden {
@@ -34,39 +35,123 @@ fn code(g: &Golden, form: Form, text: &str) -> Option<ErrorCode> {
         .map(|r| r.code)
 }
 
+/// Parentheses nest: 10^5 of them are `E_BOUND` (expression nesting above 64, §4.2).
 #[test]
-fn deep_nesting_is_e_bound_without_overflowing_the_stack() {
+fn deep_parentheses_are_e_bound() {
     let g = golden();
     let n = 100_000;
     let parens = format!("{}1{}", "(".repeat(n), ")".repeat(n));
     assert_eq!(code(&g, Form::Expr, &parens), Some(ErrorCode::Bound));
-    assert_eq!(
-        code(&g, Form::Expr, &format!("{}true", "not ".repeat(n))),
-        Some(ErrorCode::Bound)
+    let calls = format!("{}1{}", "abs(".repeat(n), ")".repeat(n));
+    assert_eq!(code(&g, Form::Expr, &calls), Some(ErrorCode::Bound));
+    let at_limit = format!(
+        "{}1{}",
+        "(".repeat(EXPRESSION_DEPTH_MAX - 1),
+        ")".repeat(EXPRESSION_DEPTH_MAX - 1)
     );
-    assert_eq!(
-        code(&g, Form::Expr, &format!("{}1", "- ".repeat(n))),
-        Some(ErrorCode::Bound)
+    assert_eq!(code(&g, Form::Expr, &at_limit), None);
+    let above = format!(
+        "{}1{}",
+        "(".repeat(EXPRESSION_DEPTH_MAX),
+        ")".repeat(EXPRESSION_DEPTH_MAX)
     );
-    let chain = vec!["1"; n].join(" + ");
-    assert_eq!(code(&g, Form::Expr, &chain), Some(ErrorCode::Bound));
-    let logic = vec!["true"; n].join(" and ");
-    assert_eq!(code(&g, Form::Expr, &logic), Some(ErrorCode::Bound));
-    let effects = vec!["Promote(person: now)"; n].join("; ");
-    assert!(code(&g, Form::Effects, &effects).is_some());
+    assert_eq!(code(&g, Form::Expr, &above), Some(ErrorCode::Bound));
 }
 
-/// The deepest programs the parser accepts compile on a 2 MiB stack (a default thread's) and
-/// evaluate on 1 MiB in a debug build: compilation runs at Registry load, evaluation on the
-/// engine's workers, which keep room for their own frames.
+fn eval_text(g: &Golden, text: &str, kind: &str) -> String {
+    let world = g
+        .world(&g.env, "dynasty", rh_registry::effect::Mutant::None)
+        .unwrap();
+    let host = world.host(&g.env);
+    let person = g.env.kind("person").unwrap();
+    let opts = CompileOptions {
+        scope: vec![("now".into(), Ty::Int), ("x".into(), Ty::Ent(person))],
+        check: rh_registry::effect::CheckOptions {
+            allow_key: kind == "order",
+            ..Default::default()
+        },
+        ..CompileOptions::default()
+    };
+    let program = match compile_with(Form::Expr, text, &g.env, "M7.dynasty", &opts) {
+        Ok(p) => p,
+        Err(r) => return format!("error:{}", r.code),
+    };
+    let values = [
+        rh_registry::effect::Value::Int(0),
+        rh_registry::effect::Value::Ent(person, 5),
+    ];
+    match program
+        .eval(
+            &g.env,
+            &host,
+            &values,
+            &mut Diagnostics::default(),
+            EvalOptions::default(),
+        )
+        .unwrap()
+    {
+        rh_registry::effect::Output::Value(v) if kind == "order" => {
+            format!("key:{}", render_key(&g.env, &v))
+        }
+        rh_registry::effect::Output::Value(v) => render_scalar(&g.env, &v),
+        other => format!("{other:?}"),
+    }
+}
+
+/// GAP-A: operator chains and prefix operators do not nest. A 10^5-term chain is a valid program
+/// and yields the reference's value (`effect_ref.py`, the same texts), in debug, on a thread with
+/// a 2 MiB stack.
+#[test]
+fn long_chains_yield_the_references_values_on_two_mebibytes() {
+    let n = 100_000;
+    let cases: Vec<(String, &str, &str)> = vec![
+        (vec!["1"; n].join(" + "), "expr", "int:100000"),
+        (vec!["true"; n].join(" and "), "expr", "bool:true"),
+        (format!("{}1", "- ".repeat(n)), "expr", "int:1"),
+        (format!("{}1", "-".repeat(n - 1)), "expr", "int:-1"),
+        (format!("{}true", "not ".repeat(n)), "expr", "bool:true"),
+        (vec!["now"; n].join(" + "), "expr", "int:0"),
+        (vec!["q16(1)"; n].join(" * "), "expr", "q16_16:65536"),
+        (vec!["false"; n].join(" or "), "expr", "bool:false"),
+        (
+            format!("draw(sortition, x, {})", vec!["now"; n].join(" + ")),
+            "expr",
+            "int:4500000000000000000",
+        ),
+        (
+            format!("({}, 2)", vec!["1"; n].join(" * ")),
+            "order",
+            "key:(int:1, int:2)",
+        ),
+        (
+            format!("(1 + 2) + {}", vec!["1"; n].join(" + ")),
+            "expr",
+            "int:100003",
+        ),
+    ];
+    let run = std::thread::Builder::new()
+        .stack_size(2 << 20)
+        .spawn(move || {
+            let g = golden();
+            cases
+                .iter()
+                .map(|(text, kind, want)| (eval_text(&g, text, kind), (*want).to_owned()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap()
+        .join()
+        .expect("a long chain overflowed a 2 MiB stack");
+    for (i, (got, want)) in run.iter().enumerate() {
+        assert_eq!(got, want, "chain case {i}");
+    }
+}
+
+/// The deepest nesting the parser accepts (63 levels of the `expr` production) compiles on a
+/// 2 MiB stack (a default thread's) and evaluates on 1 MiB in a debug build.
 #[test]
 fn the_deepest_accepted_programs_fit_the_stack() {
-    let terms = usize::try_from(TREE_HEIGHT_MAX).unwrap() - 1;
     let deep = EXPRESSION_DEPTH_MAX - 1;
     let texts = [
-        vec!["1"; terms].join(" + "),
-        vec!["true"; terms].join(" and "),
-        format!("{}true", "not ".repeat(UNARY_CHAIN_MAX)),
         format!("{}1{}", "abs(".repeat(deep), ")".repeat(deep)),
         format!("{}1{}", "(".repeat(deep), ")".repeat(deep)),
         format!(
@@ -74,6 +159,7 @@ fn the_deepest_accepted_programs_fit_the_stack() {
             "if true then ".repeat(deep / 2),
             " else 2".repeat(deep / 2)
         ),
+        format!("{}1{}", "(- 1 + ".repeat(deep), ")".repeat(deep)),
     ];
     let compiled = std::thread::Builder::new()
         .stack_size(2 << 20)
@@ -83,20 +169,15 @@ fn the_deepest_accepted_programs_fit_the_stack() {
                 scope: vec![("now".into(), Ty::Int)],
                 ..CompileOptions::default()
             };
-            let programs: Vec<_> = texts
+            texts
                 .iter()
                 .map(|t| compile_with(Form::Expr, t, &g.env, "M7.dynasty", &opts).unwrap())
-                .collect();
-            let taller = vec!["1"; terms + 2].join(" + ");
-            assert_eq!(code(&g, Form::Expr, &taller), Some(ErrorCode::Bound));
-            let too_many = format!("{}true", "not ".repeat(UNARY_CHAIN_MAX + 1));
-            assert_eq!(code(&g, Form::Expr, &too_many), Some(ErrorCode::Bound));
-            programs
+                .collect::<Vec<_>>()
         })
         .unwrap()
         .join()
         .expect("compiling the deepest programs overflowed a 2 MiB stack");
-    let evaluated = std::thread::Builder::new()
+    std::thread::Builder::new()
         .stack_size(1 << 20)
         .spawn(move || {
             let g = golden();
@@ -105,27 +186,20 @@ fn the_deepest_accepted_programs_fit_the_stack() {
                 .unwrap();
             let host = world.host(&g.env);
             let zero = [rh_registry::effect::Value::Int(0)];
-            let outs: Vec<_> = compiled
-                .iter()
-                .map(|p| {
-                    p.eval(
-                        &g.env,
-                        &host,
-                        &zero,
-                        &mut Diagnostics::default(),
-                        EvalOptions::default(),
-                    )
-                    .unwrap()
-                })
-                .collect();
-            drop(compiled);
-            outs
+            for p in &compiled {
+                p.eval(
+                    &g.env,
+                    &host,
+                    &zero,
+                    &mut Diagnostics::default(),
+                    EvalOptions::default(),
+                )
+                .unwrap();
+            }
         })
         .unwrap()
         .join()
         .expect("evaluating the deepest programs overflowed a 1 MiB stack");
-    let want = rh_registry::effect::Value::Int(i64::try_from(terms).unwrap());
-    assert_eq!(evaluated[0], rh_registry::effect::Output::Value(want));
 }
 
 #[test]
@@ -348,4 +422,53 @@ fn derive_is_reserved_with_its_signature() {
             .map(|r| r.code),
         Some(ErrorCode::Type)
     );
+}
+
+/// GAP-B: `truncated_relations` counts once per relation evaluation that drops an element, so a
+/// nested aggregate counts once per truncating inner evaluation. GAP-C: an entity `k` and an `int`
+/// `k` of one value are one draw. Both pinned to the reference's values, run as golden-format cases.
+#[test]
+fn rulings_gap_b_and_gap_c_match_the_reference() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../specs/registry/effect_language_golden_v0.toml"
+    );
+    let mut text = std::fs::read_to_string(path).unwrap();
+    text.push_str(
+        r#"
+[[case]]
+id = "gap_b_truncated_once_per_inner_evaluation"
+kind = "expr"
+system = "M7.dynasty"
+world = "fan3"
+bind = { p = "person:1" }
+text = 'count(a in children(p) where any(b in kin(a, 6): true))'
+expect = "int:8"
+truncated = 8
+[[case]]
+id = "gap_b_truncated_once_however_many_dropped"
+kind = "expr"
+system = "M7.dynasty"
+world = "fan3"
+bind = { p = "person:1" }
+text = 'count(b in kin(p, 6))'
+expect = "int:256"
+truncated = 1
+[[case]]
+id = "gap_c_entity_and_int_index_of_one_value_collide"
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:7", holder = "person:10" }
+text = 'draw(sortition, x, holder) + draw(sortition, x, 10)'
+expect = "invariant:E_RNG_REUSE"
+"#,
+    );
+    let g = Golden::parse(&text).unwrap();
+    for case in g
+        .cases
+        .iter()
+        .filter(|c| c["id"].as_str().is_some_and(|id| id.starts_with("gap_")))
+    {
+        rh_manifest::effect_cases::check_case(&g, case, EvalOptions::default()).unwrap();
+    }
 }
