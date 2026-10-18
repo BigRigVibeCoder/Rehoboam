@@ -147,6 +147,17 @@ The following 5 pillars represent core historical design proposals. Per the Arch
 | **Pillar 4: Cadet Feuds & Ambition** | Primogeniture leaves younger brothers landless. Unlanded cadet sons become mercenaries, pretenders, and assassins, driving dynastic wars. | Nobility Thermostat demotes cadets at age 35. `T1.minds` models stress & breaks. | **P1b Task:** Ensure demoted cadet lines generate rival claim factions in `M7`/`T1`. |
 | **Pillar 5: Battle Panic & The Rout** | Armies rarely fight to the death. 5% casualties in the clash; 40% die during panic and rout. Levies break when their lord falls. | `M8` uses Helmbold/Lanchester combat attrition. | **P1b Task:** Enforce morale shock thresholds causing rapid formation routs. |
 
+### 5.1 Advisory Design Note for P1b: Physical Manorial Assets vs. Agent-Level Bloat
+* **The Complexity Trap (Dwarf Fortress / SimCity Overkill):** Attempting to simulate every individual peasant with personal trade state machines, inventory slots, forge heat physics, and commute pathfinding would destroy the simulation instruction budget (violating V-PERF-04) and stall engine development.
+* **The Lean, High-Yield Alternative (Settlement-Level Physical Assets):**
+  - **In the Engine (Plane A):** Keep commoners in statistical demographic cohorts (M2). Define physical assets at the settlement/manor level in `M3/M4`:
+    - `mineral_nodes`: Optional geological features (`iron_vein`, `stone_quarry`, `salt_flat`, `river_port`).
+    - `manorial_assets`: Feudal infrastructure flags (`watermill`, `village_forge`, `tithe_barn`, `granary`).
+    - `labor_distribution`: Aggregate allocations (e.g., 80% arable farming, 10% crafts/extraction, 10% pastoral).
+    - Lightweight consequence: If a manor has no forge or iron vein, tool degradation increases; a broken watermill triggers local flour shortages.
+  - **In the 3D Voxel Viewer (Plane C):** The Bevy viewer reads these settlement flags and proceduralizes the visual scene: a turning waterwheel in the creek, smoke rising from a blacksmith's forge, and miners working the hillside.
+* **Status:** Remanded strictly as an **advisory ideation note** for the Architect's consideration at the P1b planning gate. Priority 1 core engine and the SPR-033 viewer spike remain entirely protected from scope creep.
+
 ---
 
 ## 6. PERSONAL 3D VOXEL VIEWER ARCHITECTURE (`rh-view`)
