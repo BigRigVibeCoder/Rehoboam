@@ -2,7 +2,7 @@
 id: SPR-018
 title: "Worldgen-lite: the elevation raster, regions, seats and routes (M1.regions F0), residence at genesis and at birth (S3.migration F0), the validator's two household refusals, bench 4 (P1.1a; PRJ-002 ruling M-6)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, simulation]
