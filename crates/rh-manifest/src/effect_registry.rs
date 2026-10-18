@@ -221,6 +221,17 @@ pub fn registry_problems(reg: &Registry) -> Vec<String> {
         }
     }
     for (cid, c) in &reg.commands {
+        // GAP-5: one name per field, the key field (`person`'s name) included.
+        let names: Vec<&str> = std::iter::once(c.person.as_str())
+            .chain(c.params.iter().map(|p| p.name.as_str()))
+            .collect();
+        for (j, name) in names.iter().enumerate() {
+            if let Some(i) = names[..j].iter().position(|n| n == name) {
+                out.push(format!(
+                    "commands.{cid}: parameter '{name}' is declared twice, at positions {i} and {j} (0 is the key field)"
+                ));
+            }
+        }
         if !reg.systems.contains_key(&c.owner) {
             out.push(format!(
                 "commands.{cid}: owner '{}' is not a Registry system",
@@ -322,7 +333,7 @@ const INT_TYPES: [&str; 8] = ["u8", "u16", "u32", "u64", "i8", "i16", "i32", "i6
 
 /// A Registry type name (`[commands]`, a verb payload) as a
 /// language type: `int`, `bool`, `q8_8`, `q16_16`, `event`, `enum:<name>`, or an entity kind.
-fn language_type(env: &mut Env, name: &str) -> Result<Ty, String> {
+fn language_type(env: &Env, name: &str) -> Result<Ty, String> {
     Ok(match name {
         "int" => Ty::Int,
         "bool" => Ty::Bool,
@@ -334,12 +345,11 @@ fn language_type(env: &mut Env, name: &str) -> Result<Ty, String> {
                 env.enum_id(e)
                     .ok_or_else(|| format!("unknown enum '{e}'"))?,
             ),
-            None if !name.is_empty()
-                && name.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') =>
-            {
-                Ty::Ent(env.intern_kind(name).map_err(|e| e.0)?)
-            }
-            None => return Err(format!("unknown type '{name}'")),
+            // An entity kind must already be one: a spec's entity, a prelude kind or a refs kind
+            // (the Tester's GAP-5: a misspelt kind is refused, never a new kind).
+            None => Ty::Ent(env.kind(name).ok_or_else(|| {
+                format!("E_UNKNOWN_NAME: '{name}' is not a language type or a known entity kind")
+            })?),
         },
     })
 }
@@ -544,7 +554,7 @@ pub fn effect_env(
     for (name, c) in &reg.commands {
         let mut params = Vec::new();
         for p in &c.params {
-            match language_type(&mut env, &p.ty) {
+            match language_type(&env, &p.ty) {
                 Ok(ty) => params.push((p.name.clone(), ty)),
                 Err(e) => errors.push(format!("commands.{name}.{}: {e}", p.name)),
             }
@@ -764,13 +774,8 @@ fn compile_verb(
     payload: &BTreeMap<String, String>,
 ) -> Result<Compiled, String> {
     let mut opts = kind_options(ProgramKind::Effects, env).map_err(|r| r.to_string())?;
-    let mut env_types = env.clone();
     for (name, ty) in payload {
-        opts.scope
-            .push((name.clone(), language_type(&mut env_types, ty)?));
-    }
-    if env_types.kinds().len() != env.kinds().len() {
-        return Err("a payload names an entity kind no column has".to_owned());
+        opts.scope.push((name.clone(), language_type(env, ty)?));
     }
     opts.check.outcome_payload = !payload.is_empty();
     compile_with(Form::Effects, text, env, system, &opts)
