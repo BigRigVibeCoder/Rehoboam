@@ -43,29 +43,40 @@ pub const ORIGIN: &[&str] = &["born", "founder", "immigrant"];
 /// `life_course.exit_kind` codes.
 pub const EXIT_KIND: &[&str] = &["open", "death", "emigration"];
 
-/// Every column this module reads, in the spec's `[[owns]]` order, with its type: what
-/// `tests/drift.rs` compares with the spec.
-pub const COLUMNS: [(&str, ColumnType); 19] = [
-    ("person.id", ColumnType::Person),
-    ("person.birth_tick", ColumnType::Time),
-    ("person.sex", ColumnType::Enum(SEX)),
-    ("person.alive", ColumnType::Bool),
-    ("person.death_tick", ColumnType::Time),
-    ("person.mother", ColumnType::Person),
-    ("person.father", ColumnType::Person),
-    ("person.spouse", ColumnType::Person),
-    ("person.death_cause", ColumnType::Enum(DEATH_CAUSE)),
-    ("life_course.person_id", ColumnType::Person),
-    ("life_course.origin", ColumnType::Enum(ORIGIN)),
-    ("life_course.mother", ColumnType::Person),
-    ("life_course.father", ColumnType::Person),
-    ("life_course.sex", ColumnType::Enum(SEX)),
-    ("life_course.birth_tick", ColumnType::Time),
-    ("life_course.entry_tick", ColumnType::Time),
-    ("life_course.exit_kind", ColumnType::Enum(EXIT_KIND)),
-    ("life_course.exit_tick", ColumnType::Time),
-    ("life_course.death_cause", ColumnType::Enum(DEATH_CAUSE)),
-];
+/// A decoded value of any accessor, for code that walks [`ACCESSORS`] (the consumer contract
+/// test): an enum is its code name, as the spec writes it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Value {
+    /// A `PersonId`.
+    Person(PersonId),
+    /// A `SimTime`.
+    Time(SimTime),
+    /// A `bool`.
+    Bool(bool),
+    /// An enum code, by its name in the spec's `values`.
+    Code(&'static str),
+}
+
+impl From<PersonId> for Value {
+    fn from(p: PersonId) -> Self {
+        Self::Person(p)
+    }
+}
+
+impl From<SimTime> for Value {
+    fn from(t: SimTime) -> Self {
+        Self::Time(t)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(b: bool) -> Self {
+        Self::Bool(b)
+    }
+}
+
+/// An accessor seen through [`Value`]: each entry of [`ACCESSORS`] calls the named accessor.
+pub type Accessor = fn(&SystemView<'_>, usize) -> Result<Option<Value>, SimError>;
 
 /// A person's sex (`values = ["male", "female"]`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -115,6 +126,42 @@ pub enum ExitKind {
     Emigration,
 }
 
+macro_rules! code_names {
+    ($($ty:ident { $($variant:ident => $name:literal),* $(,)? })*) => {
+        $(
+            impl $ty {
+                /// The code's name in the spec's `values`.
+                #[must_use]
+                pub const fn name(self) -> &'static str {
+                    match self {
+                        $(Self::$variant => $name,)*
+                    }
+                }
+            }
+
+            impl From<$ty> for Value {
+                fn from(c: $ty) -> Self {
+                    Self::Code(c.name())
+                }
+            }
+        )*
+    };
+}
+
+code_names! {
+    Sex { Male => "male", Female => "female" }
+    DeathCause {
+        None => "none",
+        Natural => "natural",
+        Murder => "murder",
+        Battle => "battle",
+        Execution => "execution",
+        Accident => "accident",
+    }
+    Origin { Born => "born", Founder => "founder", Immigrant => "immigrant" }
+    ExitKind { Open => "open", Death => "death", Emigration => "emigration" }
+}
+
 fn outside(column: &str, code: i64) -> SimError {
     SimError::System {
         system: "rh-contracts",
@@ -162,60 +209,113 @@ const CAUSES: [DeathCause; 6] = [
 const ORIGINS: [Origin; 3] = [Origin::Born, Origin::Founder, Origin::Immigrant];
 const EXITS: [ExitKind; 3] = [ExitKind::Open, ExitKind::Death, ExitKind::Emigration];
 
+fn boolean(view: &SystemView<'_>, column: &str, row: usize) -> Result<Option<bool>, SimError> {
+    Ok(raw(view, column, row)?.map(|a| a != 0))
+}
+
+// One list makes the accessors, `COLUMNS` and `ACCESSORS`, so the table the drift test reads
+// cannot name a column, a type or a decode the accessor does not use (the Tester's DEF-1).
+macro_rules! decode {
+    (fn person) => {
+        PersonId
+    };
+    (fn time) => {
+        SimTime
+    };
+    (fn boolean) => {
+        bool
+    };
+    (fn enum $ty:ident) => {
+        $ty
+    };
+    (call person $v:ident $c:ident $r:ident) => {
+        person($v, $c, $r)
+    };
+    (call time $v:ident $c:ident $r:ident) => {
+        time($v, $c, $r)
+    };
+    (call boolean $v:ident $c:ident $r:ident) => {
+        boolean($v, $c, $r)
+    };
+    (call enum $ty:ident $codes:ident $v:ident $c:ident $r:ident) => {
+        code($v, $c, $r, &$codes)
+    };
+    (type person) => {
+        ColumnType::Person
+    };
+    (type time) => {
+        ColumnType::Time
+    };
+    (type boolean) => {
+        ColumnType::Bool
+    };
+    (type enum $ty:ident $codes:ident $names:ident) => {
+        ColumnType::Enum($names)
+    };
+}
+
 macro_rules! accessors {
-    ($($(#[$doc:meta])* $name:ident: $column:literal => $ty:ty, |$v:ident, $c:ident, $r:ident| $body:expr;)*) => {
+    ($($(#[$doc:meta])* $name:ident: $column:literal => $kind:ident $(($ty:ident, $codes:ident, $names:ident))?;)*) => {
         $(
             $(#[$doc])*
             ///
             /// # Errors
             /// As [`SystemView::value`]; an enum code outside the spec's values.
-            pub fn $name($v: &SystemView<'_>, $r: usize) -> Result<Option<$ty>, SimError> {
-                let $c = $column;
-                $body
+            pub fn $name(view: &SystemView<'_>, row: usize) -> Result<Option<decode!(fn $kind $($ty)?)>, SimError> {
+                let column = $column;
+                decode!(call $kind $($ty $codes)? view column row)
             }
         )*
+
+        /// Every column this module reads, in the spec's `[[owns]]` order, with its type: what
+        /// `tests/drift.rs` compares with the spec. Made from the accessors' own list.
+        pub const COLUMNS: &[(&str, ColumnType)] = &[$(($column, decode!(type $kind $($ty $codes $names)?)),)*];
+
+        /// Every accessor with its column, in [`COLUMNS`]' order, seen through [`Value`]: what
+        /// `tests/consumer.rs` calls on seeded rows.
+        pub const ACCESSORS: &[(&str, Accessor)] = &[$(($column, |v, r| $name(v, r).map(|o| o.map(Value::from))),)*];
     };
 }
 
 accessors! {
     /// `person.id`: the ledger key.
-    person_id: "person.id" => PersonId, |v, c, r| person(v, c, r);
+    person_id: "person.id" => person;
     /// `person.birth_tick`.
-    birth_tick: "person.birth_tick" => SimTime, |v, c, r| time(v, c, r);
+    birth_tick: "person.birth_tick" => time;
     /// `person.sex`.
-    sex: "person.sex" => Sex, |v, c, r| code(v, c, r, &SEXES);
+    sex: "person.sex" => enum(Sex, SEXES, SEX);
     /// `person.alive`: true on every row but the dead of the current instant.
-    alive: "person.alive" => bool, |v, c, r| Ok(raw(v, c, r)?.map(|a| a != 0));
+    alive: "person.alive" => boolean;
     /// `person.death_tick`: `i64::MAX` while alive.
-    death_tick: "person.death_tick" => SimTime, |v, c, r| time(v, c, r);
+    death_tick: "person.death_tick" => time;
     /// `person.mother`, 0 for none.
-    mother: "person.mother" => PersonId, |v, c, r| person(v, c, r);
+    mother: "person.mother" => person;
     /// `person.father`, 0 for none.
-    father: "person.father" => PersonId, |v, c, r| person(v, c, r);
+    father: "person.father" => person;
     /// `person.spouse`, 0 for none.
-    spouse: "person.spouse" => PersonId, |v, c, r| person(v, c, r);
+    spouse: "person.spouse" => person;
     /// `person.death_cause`: none while alive.
-    death_cause: "person.death_cause" => DeathCause, |v, c, r| code(v, c, r, &CAUSES);
+    death_cause: "person.death_cause" => enum(DeathCause, CAUSES, DEATH_CAUSE);
     /// `life_course.person_id`.
-    lc_person_id: "life_course.person_id" => PersonId, |v, c, r| person(v, c, r);
+    lc_person_id: "life_course.person_id" => person;
     /// `life_course.origin`.
-    lc_origin: "life_course.origin" => Origin, |v, c, r| code(v, c, r, &ORIGINS);
+    lc_origin: "life_course.origin" => enum(Origin, ORIGINS, ORIGIN);
     /// `life_course.mother`.
-    lc_mother: "life_course.mother" => PersonId, |v, c, r| person(v, c, r);
+    lc_mother: "life_course.mother" => person;
     /// `life_course.father`.
-    lc_father: "life_course.father" => PersonId, |v, c, r| person(v, c, r);
+    lc_father: "life_course.father" => person;
     /// `life_course.sex` (REV-P1a NEW-7).
-    lc_sex: "life_course.sex" => Sex, |v, c, r| code(v, c, r, &SEXES);
+    lc_sex: "life_course.sex" => enum(Sex, SEXES, SEX);
     /// `life_course.birth_tick` (REV-P1a NEW-7).
-    lc_birth_tick: "life_course.birth_tick" => SimTime, |v, c, r| time(v, c, r);
+    lc_birth_tick: "life_course.birth_tick" => time;
     /// `life_course.entry_tick`.
-    lc_entry_tick: "life_course.entry_tick" => SimTime, |v, c, r| time(v, c, r);
+    lc_entry_tick: "life_course.entry_tick" => time;
     /// `life_course.exit_kind`.
-    lc_exit_kind: "life_course.exit_kind" => ExitKind, |v, c, r| code(v, c, r, &EXITS);
+    lc_exit_kind: "life_course.exit_kind" => enum(ExitKind, EXITS, EXIT_KIND);
     /// `life_course.exit_tick`: `i64::MAX` while open.
-    lc_exit_tick: "life_course.exit_tick" => SimTime, |v, c, r| time(v, c, r);
+    lc_exit_tick: "life_course.exit_tick" => time;
     /// `life_course.death_cause`.
-    lc_death_cause: "life_course.death_cause" => DeathCause, |v, c, r| code(v, c, r, &CAUSES);
+    lc_death_cause: "life_course.death_cause" => enum(DeathCause, CAUSES, DEATH_CAUSE);
 }
 
 #[cfg(test)]
