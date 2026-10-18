@@ -52,6 +52,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mix-q32-q16"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+]
+
+[[package]]
 name = "mix-q8-q16"
 version = "0.0.0"
 dependencies = [
@@ -95,6 +102,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "q32-float-cast"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+]
+
+[[package]]
+name = "q32-float-from"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
+]
+
+[[package]]
+name = "q32-into-prob"
+version = "0.0.0"
+dependencies = [
+ "rh-core",
 ]
 
 [[package]]

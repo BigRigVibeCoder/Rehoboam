@@ -1,0 +1,12 @@
+[package]
+name = "q32-into-prob"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata.rehoboam]
+plane = "A"
+kind = "core"
+
+[dependencies]
+rh-core = { path = "../../../../../crates/rh-core" }

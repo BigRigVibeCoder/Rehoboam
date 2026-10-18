@@ -5,6 +5,8 @@
 //! - `Money`: i64 minor units.
 //! - `Prob32` (u64 storage, 32 fraction bits): a probability in `[0, 1]` for draws that need finer
 //!   steps than `Q16_16` (SPR-011 ruling 4; `prob.rs`).
+//! - `Q32_32` (i64 storage, 32 fraction bits): the wide intermediate of the transcendentals `exp`,
+//!   `ln_ratio` and `prob_from_hazard` (SPR-016; `05.1` §6 item 4; `q32.rs`, `translog.rs`).
 //! - `draw_hits` and `chance`: a uniform `u64` draw against a `Q16_16` or `Prob32` probability,
 //!   with an exact mapping (`draw.rs`); `rh_ids::RngStream` is a draw source (BCK-002 A-21).
 //!
@@ -12,8 +14,10 @@
 //! plane-A crate cannot reach one (`05.1` §6 item 4). A tool that wants to plot a value divides
 //! `to_bits()` by `2^FRAC_BITS` itself, outside plane A. The four types never mix implicitly; the
 //! compile-fail controls in `tests/lint_fixtures/compile_fail/fixed_point/` prove both rules.
+//! The five types never mix implicitly either; `Q32_32` reaches the others through the named
+//! `Q16_16::widen`, `Q32_32::narrow_saturating` and `Prob32::from_q32`.
 //!
-//! REF: `CODEX/05_PROJECT/SPR-010_FixedPoint.md`; `05.1` §6 item 4; `05.5` §2.1; ADR-0006;
+//! REF: `CODEX/05_PROJECT/SPR-010_FixedPoint.md`; `CODEX/05_PROJECT/SPR-016_MortalityF1.md` T-01; `05.1` §6 item 4; `05.5` §2.1; ADR-0006;
 //! GOV-003 §2.
 
 mod arith;
@@ -21,9 +25,15 @@ mod draw;
 mod money;
 mod prob;
 mod q;
+mod q32;
 mod round;
+mod translog;
 
 pub use draw::{Probability, UniformDraw, chance, draw_hits};
 pub use money::Money;
 pub use prob::Prob32;
 pub use q::{Q8_8, Q16_16};
+pub use q32::Q32_32;
+pub use translog::{
+    C as EXP_LN_C, EXP_LN_VERSION, FixedError, INV_LN2_62, LN2_64, exp, ln_ratio, prob_from_hazard,
+};

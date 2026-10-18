@@ -123,6 +123,14 @@ RH_GOLDEN_V_DET_11_CASES=64 cargo nextest run -p rh-golden --release --locked --
 # SPR-013 T-13, is for the DuckDB checks above.
 "${PYTHON:-python3}" -I specs/numerics/exp_ln_v0.py --check --exhaustive
 echo "exp/ln v0: the exhaustive sweep is faithful and the golden file is current"
+# SPR-016 T-01 (V-DET-09's opt-level-3 clause): rh-core's exp, ln_ratio and prob_from_hazard in a release build,
+# bit-equal to the golden file and to 2^20 emitted vectors of each of exp and ln (the debug build replays the same
+# count in nightly.yml's ignored-tests job; the PR tier, 2^14 in debug).
+emitted="$(cd "$work" && pwd)/exp_ln_emit.txt"
+"${PYTHON:-python3}" -I specs/numerics/exp_ln_v0.py --emit 1048576 --golden "$emitted"
+RH_EXP_LN_EMIT="$emitted" cargo nextest run -p rh-core --release --locked --test exp_ln_golden \
+  --run-ignored all --no-capture
+echo "exp/ln v0: rh-core in release is bit-equal to the golden file and to 2^20 emitted vectors of each"
 # SPR-030 (REV-SPR-030 R10): the fixture worlds' every case (the PR tier renders kingdom_10k at seed 1 only) and
 # the CRN pairing protocol at seeds 1 to 3 with its controls (the PR tier runs seed 1; a seed whose sovereigns leave
 # no 5-year window after the input is pinned as skipped, REV-SPR-030 R14). Standard-library references.

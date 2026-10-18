@@ -97,6 +97,9 @@ macro_rules! fixed_point_arithmetic {
     };
 }
 
+// SPR-016: `Q32_32` (`q32.rs`) has the same arithmetic, from the same macro.
+pub(super) use fixed_point_arithmetic;
+
 fixed_point_arithmetic!(Q8_8, frac_bits = 8, saturate = saturate_i16);
 fixed_point_arithmetic!(Q16_16, frac_bits = 16, saturate = saturate_i32);
 

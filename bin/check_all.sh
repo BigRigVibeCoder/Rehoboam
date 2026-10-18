@@ -776,7 +776,7 @@ doctest_count_control() {
   doctest_count_gate "$planted"
 }
 
-# T-01 compile-fail controls for rh-core::fixed (SPR-010): plane-A code that mixes Q8_8, Q16_16 and Money,
+# T-01 compile-fail controls for rh-core::fixed (SPR-010; SPR-016 T-01 for Q32_32): plane-A code that mixes Q8_8, Q16_16, Q32_32,
 # or converts one from or to a float, must not compile, each with its own error; fixed-ok must compile.
 # Each entry is crate|expected text.
 FIXED_POINT_COMPILE_FAIL='mix-q8-q16|expected `Q8_8`, found `Q16_16`
@@ -788,7 +788,11 @@ mix-prob-q16|expected `Prob32`, found `Q16_16`
 mix-prob-arith|expected `Q16_16`, found `Prob32`
 prob-into-q16|the trait bound `Q16_16: From<Prob32>` is not satisfied
 prob-float-from|expected `Prob32`, found `f64`
-prob-float-cast|non-primitive cast: `Prob32` as `f64`'
+prob-float-cast|non-primitive cast: `Prob32` as `f64`
+mix-q32-q16|expected `Q32_32`, found `Q16_16`
+q32-float-cast|non-primitive cast: `Q32_32` as `f64`
+q32-float-from|expected `Q32_32`, found `f64`
+q32-into-prob|the trait bound `Prob32: From<Q32_32>` is not satisfied'
 fixed_point_compile_controls() {
   local fixture=tests/lint_fixtures/compile_fail/fixed_point/Cargo.toml crate text
   run "rh-core::fixed compile control: well-typed plane-A use compiles" pass \
@@ -797,6 +801,15 @@ fixed_point_compile_controls() {
     run "rh-core::fixed compile-fail control: $crate must FAIL" "fail:$text" \
       cargo check --offline --locked --quiet --manifest-path "$fixture" -p "$crate" --target-dir target/lint-fixtures || return 1
   done <<<"$FIXED_POINT_COMPILE_FAIL"
+}
+
+# SPR-016 T-01: N pseudo-random vectors of each of exp and ln from the exact reference (exp_ln_v0.py --emit),
+# replayed by rh-core's ignored test; the PR tier runs 2^14, the nightly tier 2^20 (nightly.yml, golden_nightly.sh).
+exp_ln_emitted() {
+  local file="$TARGET_DIR/exp_ln_emit/pr.txt"
+  "$PY" -I specs/numerics/exp_ln_v0.py --emit "$1" --golden "$file" || return 1
+  RH_EXP_LN_EMIT="$(cd "$(dirname "$file")" && pwd)/pr.txt" \
+    cargo nextest run -p rh-core --locked --test exp_ln_golden --run-ignored only --no-capture
 }
 
 # Effect-language golden control (SPR-017 spec): the committed golden file with one expected value
@@ -955,7 +968,7 @@ golden_vitals_run() {
 BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-snapshot::keyframe
   rh-snapshot::guard rh-snapshot::stub_world rh-snapshot::unsynced_guard rh-snapshot::observer
   rh-ids::fork_trees rh-ids::stream_independence rh-sample::golden rh-sample::stats
-  rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
+  rh-core::exp_ln_golden rh-core::determinism rh-core::registration rh-registry::real_specs rh-core::phase_table
   rh-core::time_properties rh-core::system_id_golden rh-core::engine_contract
   rh-core::agenda rh-core::agenda_events rh-core::invariants rh-core rh-events
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
@@ -1258,6 +1271,9 @@ run "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR
 run "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the exact distributions (SPR-003)" "pass:V-DET-09: 136 golden vectors" cargo nextest run -p rh-sample --locked --test golden --test stats --no-capture &&
 run "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)" "pass:V-DET-09: 136 golden vectors" cargo nextest run -p rh-sample --locked --release --test golden --no-capture &&
 run "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)" "fail:golden vector differs" env RH_SAMPLE_GOLDEN="$PWD/tests/lint_fixtures/golden/altered_samplers_v1.txt" cargo nextest run -p rh-sample --locked --test golden --no-capture &&
+run "T-01 rh-core exp, ln_ratio and prob_from_hazard: every constant and vector of specs/numerics/golden/exp_ln_v0.txt bit for bit, read directly; monotone, exact anchors, refusals by name (exp_ln_golden; SPR-016 T-01)" "pass:T-01: every constant and vector reproduced bit for bit" cargo nextest run -p rh-core --locked --test exp_ln_golden --no-capture &&
+run "T-01 positive control: one altered exp/ln golden vector must FAIL (SPR-016 T-01)" "fail:golden vector differs" env RH_EXP_LN_GOLDEN="$PWD/tests/lint_fixtures/golden/stale_exp_ln_v0.txt" cargo nextest run -p rh-core --locked --test exp_ln_golden --no-capture &&
+run "T-01 exp and ln beyond the golden file: 2^14 vectors of each from exp_ln_v0 --emit, bit-equal in debug (SPR-016 T-01; 2^20 nightly)" "pass:T-01: emitted vectors bit-equal" exp_ln_emitted 16384 &&
 run "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes (SPR-005)" "pass:V-DET-01: 600 monthly states equal at 1, 2, 4 and 8 threads" cargo nextest run -p rh-core -p rh-registry --locked --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract --no-capture &&
 run "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and crash replay (SPR-006)" "pass:V-DET-12: golden event log of 196 events checked" cargo nextest run -p rh-core -p rh-events --locked --test agenda --test agenda_events --test invariants --lib --no-capture &&
 run "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, small-scale V-DET-01/02 (SPR-008 T-01)" "pass:SMOKE: 6 yearly states" cargo nextest run -p rh-sys-smoke --locked --test smoke --no-capture &&

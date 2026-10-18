@@ -262,6 +262,12 @@ REQUIRED_GATES = (
     "System specs (lint_odd)",
     "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and "
     "preserves it (lint_odd --next; SPR-015)",
+    "T-01 exp and ln beyond the golden file: 2^14 vectors of each from exp_ln_v0 --emit, "
+    "bit-equal in debug (SPR-016 T-01; 2^20 nightly)",
+    "T-01 positive control: one altered exp/ln golden vector must FAIL (SPR-016 T-01)",
+    "T-01 rh-core exp, ln_ratio and prob_from_hazard: every constant and vector of "
+    "specs/numerics/golden/exp_ln_v0.txt bit for bit, read directly; monotone, exact anchors, "
+    "refusals by name (exp_ln_golden; SPR-016 T-01)",
     "T-02b wall-clock control: a median 25% above the trend is an ALERT that --gate fails "
     "(SPR-009)",
     "T-02b wall-clock control: another CPU model must report machine changed, never compare "

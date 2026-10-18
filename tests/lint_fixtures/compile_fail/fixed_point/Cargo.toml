@@ -7,5 +7,7 @@ members = [
     "fixed-ok", "mix-q8-q16", "mix-money-q16", "float-from", "float-into", "float-cast",
     # SPR-011 T-01: Prob32 never mixes with Q16_16 and never converts to or from a float.
     "mix-prob-q16", "mix-prob-arith", "prob-into-q16", "prob-float-from", "prob-float-cast",
+    # SPR-016 T-01: Q32_32 never mixes with Q16_16 or Prob32 and never converts to or from a float.
+    "mix-q32-q16", "q32-float-cast", "q32-float-from", "q32-into-prob",
 ]
 resolver = "3"

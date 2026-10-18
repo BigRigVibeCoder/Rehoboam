@@ -1,7 +1,7 @@
 """Exact reference of the fixed-point `exp` and `ln` of plane A (SPR-016; `05.1` §6 item 4, v1.10).
 
 Plane A has no transcendental except through this procedure. `rh_core::fixed` (SPR-016) must
-reproduce it bit for bit, and `bin/gen_fixed_vectors.py` turns the golden file into Rust vectors.
+reproduce it bit for bit; its golden test reads the golden file directly (D-6).
 Every quantity is an integer; the only non-integer arithmetic in this file is the
 ``decimal`` oracle at 60 digits, which generates the constants once and measures the error of
 the integer procedure. It never enters a result.
@@ -34,6 +34,11 @@ Checks (``python -I specs/numerics/exp_ln_v0.py``):
   6. the golden file ``specs/numerics/golden/exp_ln_v0.txt`` (constants and vectors) is current
      (``--check``; ``--check --golden PATH`` checks another file: the positive control plants a
      stale one).
+
+``--emit N [--seed S] --golden PATH`` (SPR-016 T-01) writes N pseudo-random vectors of each of exp
+and ln to PATH in the golden file's line format, under a header naming the format, N and S, and
+runs no check; ``rh-core``'s ignored test ``exp_ln_golden::emitted_vectors_are_bit_equal``
+replays the file (2^14 of each in the PR tier, 2^20 nightly). The file is never committed.
 
 ``--exhaustive`` (nightly tier, ``bin/golden_nightly.sh``): check 3 over every ``Q16_16``-granular
 ``y`` from -23 to 16 (2,555,905 inputs: the whole computed range of exp), every ``ln(n / 2^16)`` for
@@ -447,6 +452,39 @@ def check_hazard() -> bool:
 
 
 # ----------------------------------------------------------------------------- the golden file
+def emit_exp_inputs(rng: SplitMix64) -> Iterator[int]:
+    """Yield exp's emitted inputs: around the computed range, with every eighth over all of i64."""
+    span = EXP_MAX - EXP_ZERO_BELOW + 2 * ONE
+    while True:
+        yield rng.next_u64() - (1 << 63)
+        for _ in range(7):
+            yield EXP_ZERO_BELOW - ONE + rng.below(span + 1)
+
+
+def emit_ln_inputs(rng: SplitMix64) -> Iterator[tuple[int, int]]:
+    """Yield ln's emitted operands: full-width pairs, Q16_16 and Q32_32 values, small rationals."""
+    top = (1 << LN_OPERAND_BITS) - 1
+    while True:
+        yield rng.below(top) + 1, rng.below(top) + 1
+        yield rng.below(1 << 31) + 1, Q16_ONE
+        yield rng.below(1 << 48) + 1, ONE
+        yield rng.below(10_000) + 1, rng.below(10_000) + 1
+        yield rng.next_u64(), rng.next_u64()  # a quarter of these are outside the domain
+        yield rng.below(1 << 20), rng.below(1 << 20) + 1  # n = 0 is refused
+        yield rng.below(top) + 1, rng.below(1 << 16) + 1
+        yield rng.below(1 << 16) + 1, rng.below(top) + 1
+
+
+def emit(count: int, seed: int) -> str:
+    """Return ``count`` pseudo-random vectors of each of exp and ln from ``seed`` (SPR-016 T-01)."""
+    rng = SplitMix64(seed)
+    lines = [f"# Emitted vectors of {VERSION}: count {count} seed {seed}. GENERATED; never commit."]
+    lines += [f"exp {y} {fmt(exp_q32, y)}" for y in itertools.islice(emit_exp_inputs(rng), count)]
+    pairs = itertools.islice(emit_ln_inputs(rng), count)
+    lines += [f"ln {n} {d} {fmt(ln_ratio, n, d)}" for n, d in pairs]
+    return "\n".join(lines) + "\n"
+
+
 def fmt(fn: Callable[..., int], *args: int) -> str:
     """Return ``fn(*args)`` as text: the bits, or ``refused``."""
     try:
@@ -517,7 +555,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="fail if the golden file is stale")
     parser.add_argument("--golden", type=Path, default=GOLDEN, help="the file to write or check")
     parser.add_argument("--exhaustive", action="store_true", help="the nightly sweep of check 3")
+    parser.add_argument("--emit", type=int, metavar="N", help="write N vectors of each to --golden")
+    parser.add_argument("--seed", type=int, default=SEED, help="the SplitMix64 seed of --emit")
     args = parser.parse_args(argv)
+    if args.emit is not None:
+        if args.golden == GOLDEN or args.emit < 1:
+            print("--emit needs a positive N and a --golden PATH other than the golden file")
+            return EXIT_FAILED
+        args.golden.parent.mkdir(parents=True, exist_ok=True)
+        args.golden.write_text(emit(args.emit, args.seed), encoding="utf-8")
+        print(f"emitted {args.emit} exp and ln vectors each (seed {args.seed}) to {args.golden}")
+        return EXIT_OK
     if not selftest(args.exhaustive):
         return EXIT_FAILED
     if args.check:
