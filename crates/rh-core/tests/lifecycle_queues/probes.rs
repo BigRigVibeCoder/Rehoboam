@@ -482,3 +482,57 @@ fn a_skipped_month_drain_in_a_365_day_year_trips_the_queue_age() {
         "{text}"
     );
 }
+
+fn untyped_send(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    c.submit(Command {
+        kind: "Note",
+        person: person(1),
+        args: vec![Arg::Int(1), Arg::Event(EventRef::None)],
+        cause: EventRef::None,
+    })
+}
+
+/// The review's K1: an untyped command (its owner's `[[applies]]` declares no payload) with an
+/// event field is refused at `submit`, naming the sender, the kind and the field position, never
+/// queued to fail at the next keyframe.
+#[test]
+fn an_event_field_in_an_untyped_command_is_refused_at_submit() {
+    let stubs = vec![
+        Stub::new("A1.send")
+            .sends("Note", "B1.own")
+            .at(Pulse::Day, Phase::Agenda)
+            .stepping(untyped_send),
+        Stub::new("B1.own")
+            .writes("own.n")
+            .at(Pulse::Day, Phase::Vital)
+            .applies("Note")
+            .stepping(own_step),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut tables = WorldTables::new();
+    tables.insert("own.n", vec![0]);
+    let mut e = Engine::new(
+        CALENDAR,
+        3,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    );
+    let err = e
+        .advance_until(SimTime::from_minutes(DAY - 1), |_, _| {})
+        .expect_err("an event slot in an untyped command must be refused");
+    assert_eq!(
+        err.to_string(),
+        "A1.send submitted command Note: field 1 is an event slot, but B1.own's [[applies]] \
+         declares no payload: an untyped command carries integers only"
+    );
+    assert_eq!(e.commands().len(), 0, "nothing queued");
+}

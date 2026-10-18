@@ -945,6 +945,14 @@ impl<'a> StepCtx<'a> {
                     )));
                 }
             }
+        } else if let Some(i) = command.args.iter().position(|a| matches!(a, Arg::Event(_))) {
+            // An untyped command's row stores integers only: an event slot would hash as an id
+            // and not decode back from a keyframe (the review's K1).
+            return Err(payload_error(format!(
+                "field {i} is an event slot, but {}'s [[applies]] declares no payload: an untyped \
+                 command carries integers only",
+                decl.owner
+            )));
         }
         self.out.commands.push(command);
         Ok(())
