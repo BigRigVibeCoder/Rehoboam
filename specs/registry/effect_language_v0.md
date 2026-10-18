@@ -1,6 +1,6 @@
 # Registry effect language v0
 
-*Status: Draft for the director's approval at the SPR-017 plan gate (C2). Version `0.5.1` of the language: `0.5.0` (round 5 of PR #41, the closing nits r4-1 to r4-5, on top of rounds 2–4, approved as D37) with the Architect's erratum of 2026-10-18 (a relation is not a value; a bodyless `all` takes `where` as its predicate; rows added, none moved). Checked against the frozen system specs on `main`: `M7.dynasty` 0.3.4, `T1.minds` 0.3.3, `M2.demography` 0.2.2. Contract for WP P1.15 (`docs/11`), SPR-017 (`CODEX/05_PROJECT/PRJ-002_P1aPlan.md`) and its dependants SPR-021 (M7 succession) and SPR-024 (minds' verbs). Sources: `05.5` §2.1 and §3.2, `05.1` §2, §4.3 and §6, ADR-0006, ADR-0010 (amendment v1.1 item 4), ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035, `docs/01` §5 principles 8 and 9, `crates/rh-core/src/fixed/`. Golden cases: `specs/registry/effect_language_golden_v0.toml`. Reference implementation: `specs/registry/effect_ref.py` (standard-library Python; `--check` reproduces every golden case).*
+*Status: Draft for the director's approval at the SPR-017 plan gate (C2). Version `0.5.1` of the language: `0.5.0` (round 5 of PR #41, the closing nits r4-1 to r4-5, on top of rounds 2–4, approved as D37) with the Architect's erratum of 2026-10-18 (a relation is not a value; a bodyless `all` takes `where` as its predicate; `div` and `mod` fix their literals to `int`; rows added, none moved). Checked against the frozen system specs on `main`: `M7.dynasty` 0.3.4, `T1.minds` 0.3.3, `M2.demography` 0.2.2. Contract for WP P1.15 (`docs/11`), SPR-017 (`CODEX/05_PROJECT/PRJ-002_P1aPlan.md`) and its dependants SPR-021 (M7 succession) and SPR-024 (minds' verbs). Sources: `05.5` §2.1 and §3.2, `05.1` §2, §4.3 and §6, ADR-0006, ADR-0010 (amendment v1.1 item 4), ADR-0024, ADR-0025, ADR-0033, ADR-0034, ADR-0035, `docs/01` §5 principles 8 and 9, `crates/rh-core/src/fixed/`. Golden cases: `specs/registry/effect_language_golden_v0.toml`. Reference implementation: `specs/registry/effect_ref.py` (standard-library Python; `--check` reproduces every golden case).*
 
 > **BLUF.** The effect language is the small, typed, total expression language in which the Registry states succession laws (who may inherit a title and in what order), verb effects (which lifecycle commands an act queues), and the vows' completion and conflict predicates. A program reads only the columns its declaring system has declared, iterates only over Registry relations with declared bounds, draws randomness only from the keyed RNG with a declared purpose, and changes the world only by queuing typed commands to the column's owner. Every well-typed program terminates and yields a value: there is no recursion, every loop is bounded, and division by zero, overflow and reads of missing entities have defined results (the saturating, round-half-to-even rules of `rh-core::fixed`). Floats do not exist in the language. This document is the grammar, the type system, the evaluation rules, the v0 prelude of relations and accessors, the seven succession laws of the Registry as programs, the error classes a program can be rejected with, and the versioning rule. The Rust evaluator of SPR-017 (`rh-registry`) must reproduce every golden case bit for bit; the Python reference is the independent oracle, as `bin/gen_fixed_vectors.py` is for `rh-core::fixed`.
 
@@ -131,7 +131,7 @@ Every operator and builtin is total on well-typed arguments. `num` stands for `i
 | `a + b`, `a - b` | `num × num → num` | saturating add, subtract (§4.3) |
 | `a * b` | `num × num → num` | saturating multiply; fixed point rounds half to even |
 | `a / b` | `num × num → num` | quotient rounded half to even, saturating; `b` must be a non-zero constant (§4.4) |
-| `a div b`, `a mod b` | `int × int → int` | Euclidean quotient and remainder (`mod` ≥ 0); `b` a non-zero constant |
+| `a div b`, `a mod b` | `int × int → int` | Euclidean quotient and remainder (`mod` ≥ 0); `b` a non-zero constant; a literal operand is `int` and the result a concrete `int` (§4.1 rule 7) |
 | `-a` | `num → num` | saturating negation (`-MIN = MAX`) |
 | `a == b`, `a != b` | same scalar type | equality; fixed point compares bits; entities compare ids (a `none` literal needs a kind from the other side) |
 | `a < b`, `<=`, `>`, `>=` | `num × num → bool` | numeric order (fixed point: order of bits) |
@@ -181,6 +181,7 @@ Relations, programs and command names are not values: a relation appears only af
 4. A literal with no context (a key element, the body of `sum` over nothing concrete) takes its default.
 5. A degree argument (`kin`, `related`, `ancestors`, `descendants`, `lineage`, `holders_of`) is an `Int` literal or an `int` parameter whose declared bounds lie inside the relation's range (§4.4); `draw`'s index is an `int` expression or an entity.
 6. `none` adopts an entity kind or `event` from its context; an event-typed parameter accepts `event` or `none` and nothing else (`0` is `E_TYPE`).
+7. `div` and `mod` demand `int` operands. A polymorphic literal under them resolves to `int` whatever the outer context, and their result is a concrete `int`: `q16(1) + 7 mod 2` and `q8(1) + 7 div 2` are `E_TYPE`, and `7 mod 2` alone is `1` (0.5.1, DEF-1).
 
 ### 4.2 Evaluation order
 
@@ -548,6 +549,6 @@ Each decision is the Architect's recommendation with a confidence; the director 
 ## 13. Conformance
 
 - The golden file is the contract's test: every grammar rule, every row of §4.3, every relation and accessor of §5.3, every aggregate, every program kind, the seven laws and the four extensions on the fixture, the deep world, the rota world and the uncle–niece world, the lineage bound on generated fan trees, both invariants, and every error class, each with an expected value or code.
-- `python -I specs/registry/effect_ref.py --check` exits 0 iff every golden case reproduces (564 cases at v0.5.1); `bin/check_all.sh` runs it, with a positive control (an altered expected value must fail).
+- `python -I specs/registry/effect_ref.py --check` exits 0 iff every golden case reproduces (575 cases at v0.5.1); `bin/check_all.sh` runs it, with a positive control (an altered expected value must fail).
 - SPR-017's Rust evaluator (`rh-registry`, V-WC-10) reads the same file and must reproduce every case bit for bit, in debug and release builds, as `rh-sample`'s golden vectors do at both optimisation levels.
 - The Python reference is standard-library only, exact (`fractions.Fraction`), and shares no code with the engine.

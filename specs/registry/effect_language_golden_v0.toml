@@ -5747,3 +5747,79 @@ system = "M7.dynasty"
 bind = { holder = "person:7" }
 text = 'all(y in children(holder) where y != none)'
 expect = "bool:true"
+# DEF-1 and DEF-2 (Tester, VER-SPR-017-TEST; Architect, 2026-10-18): div and mod demand int operands; a literal under
+# them is int whatever the outer context, and their result is a concrete int, so it cannot meet a fixed-point operand.
+[[case]]
+id = "mod_of_literals_beside_q16_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+text = 'q16(1) + 7 mod 2'
+expect = "error:E_TYPE"
+[[case]]
+id = "div_of_literals_beside_q16_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+text = 'q16(1) + 7 div 2'
+expect = "error:E_TYPE"
+[[case]]
+id = "mod_of_literals_beside_q8_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+text = 'q8(1) + 7 mod 2'
+expect = "error:E_TYPE"
+[[case]]
+id = "div_of_literals_beside_q8_is_e_type"
+kind = "expr"
+system = "M7.dynasty"
+text = 'q8(1) + 7 div 2'
+expect = "error:E_TYPE"
+[[case]]
+id = "mod_of_literals_alone_is_int"
+kind = "expr"
+system = "M7.dynasty"
+text = '7 mod 2'
+expect = "int:1"
+# GAP-1 to GAP-3 (Tester, VER-SPR-017-TEST): rows that kill mutants the file above lets live.
+[[case]]
+id = "truncated_counts_once_per_inner_evaluation"   # GAP-B: each of the root's 8 sons has 584 kin within 6 (bound 256)
+kind = "expr"
+system = "M7.dynasty"
+world = "fan3"
+bind = { p = "person:1" }
+text = 'count(a in children(p) where any(b in kin(a, 6): true))'
+expect = "int:8"
+truncated = 8
+[[case]]
+id = "truncated_counts_once_however_many_are_dropped"
+kind = "expr"
+system = "M7.dynasty"
+world = "fan3"
+bind = { p = "person:1" }
+text = 'count(b in kin(p, 6))'
+expect = "int:256"
+truncated = 1
+[[case]]
+id = "no_break_space_is_not_whitespace"   # F-1: only space, tab, LF and CR separate tokens
+kind = "expr"
+system = "M7.dynasty"
+text = "true\u00A0and true"
+expect = "error:E_SYNTAX"
+[[case]]
+id = "expression_nesting_63_parentheses_is_accepted"   # the top level is the first expr: 63 parentheses nest 64 deep
+kind = "expr"
+system = "M7.dynasty"
+text = '(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))'
+expect = "int:1"
+[[case]]
+id = "expression_nesting_64_parentheses_is_e_bound"
+kind = "expr"
+system = "M7.dynasty"
+text = '((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))'
+expect = "error:E_BOUND"
+[[case]]
+id = "draw_entity_k_and_int_k_of_one_value_collide"   # GAP-C: k = holder (person 10) and k = 10 are one draw
+kind = "expr"
+system = "M7.dynasty"
+bind = { x = "person:7", holder = "person:10" }
+text = 'draw(sortition, x, holder) + draw(sortition, x, 10)'
+expect = "invariant:E_RNG_REUSE"

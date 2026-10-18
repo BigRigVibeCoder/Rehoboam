@@ -689,8 +689,13 @@ impl<'e> Checker<'e> {
             let t = self.check(&mut items[i])?;
             ty = self.unify(&ty, &t, level)?;
             self.require_numeric(&ty, level)?;
-            if matches!(op, BinOp::IntDiv | BinOp::Mod) && !matches!(ty, Ty::Int | Ty::LitInt) {
-                return Err(self.bad_comparison(op, &ty, level));
+            if matches!(op, BinOp::IntDiv | BinOp::Mod) {
+                if !matches!(ty, Ty::Int | Ty::LitInt) {
+                    return Err(self.bad_comparison(op, &ty, level));
+                }
+                // DEF-1 (0.5.1): `div` and `mod` demand `int` operands; a literal under them is
+                // `int` whatever the outer context, and their result is a concrete `int`.
+                ty = Ty::Int;
             }
             if !ty.is_literal() {
                 // Once concrete the running type never changes, so the operands before this one

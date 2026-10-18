@@ -1569,8 +1569,12 @@ class Bin(Node):
         """Arithmetic: same numeric type; ``div``/``mod`` on ``int``; guarded division."""
         ty = unify(self.a.check(cx), self.b.check(cx))
         require_numeric(ty)
-        if self.op in ("div", "mod") and ty not in ("int", "lit_int"):
-            raise CompileError("E_TYPE", f"{self.op} on {ty}")
+        if self.op in ("div", "mod"):
+            if ty not in ("int", "lit_int"):
+                raise CompileError("E_TYPE", f"{self.op} on {ty}")
+            # DEF-2 (0.5.1): div and mod demand int operands; a literal under them is int whatever
+            # the outer context, and their result is a concrete int.
+            ty = "int"
         if ty not in LITERALS:
             self.resolve(ty)
         if self.op in DIVISION_OPS:
