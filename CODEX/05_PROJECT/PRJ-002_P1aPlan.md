@@ -33,7 +33,7 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-012 | P1.0 (B) | Walking skeleton B: `solo` lives and dies. M2 schedule in fixed point, `rh-worldgen` stub, `rh-sys-demography` rung-0 slice, `rh-cli run`, the `solo` golden ladder | SPR-011 | C3 (first real system crate; first real golden world) | M2 rung-0 slice (frozen 0.2.0, PR #37); Registry `DEATH`, `EXTINCTION`, verb `tellability`, system `defaults` (exist, PR #37); `solo.yaml` (exists); `SPR-012_WalkingSkeletonB.md` (issued) | P1 |
 | SPR-013 | P1.0 (C) | Walking skeleton C: World Stream v0 and the Parquet chronicle (`rh-stream`), `rh-cli tail`, the `life_ends` pattern and its twin (`rh-sifter` v0), journal replay, rungs 1–2 on the same binary | SPR-012; A-06 | C3 (stream format; two new golden worlds) | `schema.sql` (exists; EventId fixed, roles to P1.9); channel-A segment DDL (exists, PR #37); channel-C DDL (missing); `life_ends` (exists, PR #37); `household.yaml`, `hamlet.yaml` (exist, PR #37); `SPR-013_WalkingSkeletonC.md` (issued) | P1 |
 | SPR-014 | P1.13 | Lifecycle queues for P1a: same-instant delivery of a command to its owner at a later phase; M2's Day/`Vital` drain of `ScheduleDeath` and `Marry` (REV-P1a MAJ-4); ledger row inserts for births; dead-person drop (A-30); queue-age invariant (A-31); the absent-owner registration rule: `rh-core` drops a declared read or send whose owner is not registered, reports it, and gives the step view the coupling's neutral value, so specs declare every read unconditionally (REV-P1a NEW-4); the value comes from the `neutral` on the spec's `[[reads]]` entry, a spec prerequisite of SPR-017 (§6); readers of `life_course.*` read it `same_instant`, not `lagged` (in `Vital` the scheduler orders M2 before T1; M7 reads in `Polity`), and SPR-015's births write `life_course.birth_tick` and `life_course.sex` at entry (REV-P1a NEW-6, NEW-7; D36); the `rh-core` merge rewrites event-typed command payload fields (`cause_event`, `source_event`) as it rewrites `Command::cause` (REV-SPR-017 N3), and a timer gains one `EventRef` slot (`cause`), rewritten at the merge and hash-neutral when empty, with events merged before timers (EVO-001 R9, R15); the drain bindings emitted into the skeletons and compared at registration (REV-EVO-001 NIT-10); the smoke ladder unchanged as an acceptance criterion (R1); `rh-contracts` v0 for M2's columns | SPR-013 | C3 (scheduler semantics) with C2 (contract crate) | `05.1` §2 rule 2 (exists; same-instant delivery, the absent-owner rule and the payload rewrite unstated: one EVO for all three) | P1 |
-| SPR-015 | P1.3 (a) | M2 F1 births: age-specific fertility, partnering (fathers), households and kinship (each birth appends its life-course row with `mother` and `father`, the genealogy every kinship relation walks), `H64(mother, parity)` ids at runtime, marriage intervals; the derived per-system index in `rh-core` (W4) | SPR-014 (SPR-020 first is recommended, not required: D-11) | C3; about 5 agent-days, one sprint with a stage-A checkpoint (D54) | M2 F1 births, partnering, households: the 0.3.0 draft (PR #50), promoted in SPR-015's own PR (D-1, 2026-10-17); ADR-0026 (exists). Plan: `SPR-015_BirthsF1.md` | P1 |
+| SPR-015 | P1.3 (a) | M2 F1 births: age-specific fertility, partnering (fathers), households and kinship (each birth appends its life-course row with `mother` and `father`, the genealogy every kinship relation walks), `H64(mother, parity)` ids at runtime, marriage intervals; the derived per-system index in `rh-core` (W4) | SPR-014; SPR-038a (merge order: SPR-015 rebases onto stage A and builds `MergedWrites` from its write set) (SPR-020 first is recommended, not required: D-11) | C3; about 5 agent-days, one sprint with a stage-A checkpoint (D54) | M2 F1 births, partnering, households: the 0.3.0 draft (PR #50), promoted in SPR-015's own PR (D-1, 2026-10-17); ADR-0026 (exists). Plan: `SPR-015_BirthsF1.md` | P1 |
 | SPR-016 | P1.3 (b) | M2 F1 mortality: fixed-point `exp` and `ln`, Brass at any (α, β), infant sub-schedule and old-age tail, density modifier (entitlement hook stubbed) | SPR-012 (code); merges after SPR-015 | C3 (machinery and model); about 3.5 agent-days | M2 F1 mortality: `[algorithm.mortality_f1]` in the 0.3.0 draft (PR #51, folded by PR #59); `exp`/`ln`: `05.1` §6 item 4 v1.10 and `specs/numerics/` (exist); bumps M2 to 0.3.1; BCK-002 A-48 not built (D54). Plan: `SPR-016_MortalityF1.md` | P1 |
 | SPR-017 | P1.15 | Registry effect language v0: the typed, total evaluator in `rh-registry`; succession-law eligibility and ordering; the kinship relations `kin(a, b, n)`, ancestors, descendants and the agnatic and cognatic lines, walked over M2's life-course log so they reach through the dead (REV-P1a NEW-1, NEW-3); verb effects as queued commands; golden test | G0 | C2 (Registry schema); no hash change until a system uses it | `05.5` §2.1 (exists, prose); grammar and golden cases (missing); `neutral` on `[[reads]]` (missing; §6) | P1 |
 | SPR-018 | P1.1a + S3 F0 | Worldgen-lite: regions, a few settlements, routes and the region graph from a heightmap template; `S3.migration` F0 (residence at genesis and birth, no moves); bench 4 baseline. Also (REV-SPR-018): the manifest validator refuses, by name, a cast member who heads two households and a head whose `household` names another household, in `manifest_v0.py` and the Rust loader (V-WC-04 parity; R9); `S3.migration` joins every template's `default_systems` with the `registry_version` bump (R3); M2's events gain their `place` (with SPR-020's `Event.place`); S3's `from_manifest` names `dynasties` at its freeze, for SPR-019's back-fill. Nothing of M1 or S3 runs O(cells) or O(rows) per instant: M1's invariants at genesis, at restore and as the ladder's roots, S3's in its step and in test observers (REV-WAVE6 X1). **Deferred to S3 F1 in P1b** (D57 item 2; BCK-002 A-61): the kind-7 `RESIDENCE_INTERVAL` channel-A record (channel A's first real format bump) and the regional digest of `rh-cli tail` (`--digest region`, which D-4 had moved here from SPR-027) | SPR-013; SPR-014 (the row insert's zero, S3's newborn selector; its A-60 slice); SPR-015 for residence at birth and the `person.residence` read; SPR-020 for `place` (T-03's precondition, with a stated fallback); merges after SPR-016 (its baselines) | C3 (genesis changes every rung's golden: `solo`, `household`, `hamlet`; `smoke` unchanged; the rung allocation budgets move: `[perf-baseline] [C3]`); about 4.25–4.5 agent-days as one sprint with a hard checkpoint after T-02 (D57 item 1) | `M1.regions` 0.1.0 and `S3.migration` 0.1.0 (drafts on `main`, PR #52, `REV-SPR-018` closed; frozen in the sprint's PR); worldgen-lite (`specs/worldgen/`, with its exact reference and golden: exist); Registry heightmap templates (exist). Plan: `SPR-018_WorldgenLite.md` | P1 |
@@ -51,6 +51,8 @@ Goal (ADR-0035): a dynasty lives, dies and inherits deterministically, and the t
 | SPR-030 | P1.14 | Determinism and performance at scale: allocations to budget (A-32), benches 1–3, the dynastic fixture world's goldens, CRN pairing (V-DET-17), the G1a performance run | SPR-019, SPR-022, SPR-025 | C1 with C3 (new golden worlds) | dynastic fixture and 10k dynastic manifests (drafting: `twin_vales.yaml`, `kingdom_10k.yaml`, `specs/worldgen/fixture_worlds.md`, `specs/determinism/crn_pairing_v0.md`); `08` §9 (exists) | P1 |
 | SPR-031 | P1.18 | **Moved to P1b (D33).** `S5.daily_life` F1: virtual telemetry, `rh-cli where` / `who`, `DECISION_TRACE`; exact lags (A-28) | SPR-018, SPR-024 | C3 (lags) with C2 | `S5.daily_life` (draft); its reads of `person.residence` (S3), `person.occupation` (M4), `region.conditions` (M6) have no owner in P1a | P3: in P1b (D33; ruling M-4) |
 | SPR-032 | P1.8 | **Moved to P1b (D33).** M1 Regions F1: route modes and costs, settlement growth | SPR-018 | C3 | `M1.regions` F1 (missing) | P3: in P1b (D33; ruling M-5) |
+| SPR-038a | P1.14 (prep; BCK-002 A-60), stage A | Per-instant engine cost, stage A (exact): owned columns moved by `ColumnId` slots; compaction, `Ledger::check`, the invariants and the lagged snapshot only after a change, with `every-change` semantics in every build; the write guards' pre-image at a column's first `write()` (SPR-014's known narrowing removed); `Ledger::check` and M2's invariants in O(N + L); positional compaction; no `format!` or allocation on a quiet instant; the cached plane hash equal to the full one after every instant; the `instant` bench. Behaviour-neutral: no baseline moves | SPR-014 merged; SPR-020 in either order; **before SPR-015** (REV-SPR-038 S6: CI's core part at the hard limit) | C2 with `[perf-baseline]`; about 3–4.5 agent-days; outside the one-C3 slot | No system spec; a `05.1` §9 sentence by the Architect; `docs/08` §9 line. Plan: `SPR-038_PerInstantCost.md` stage A (PLANNING revision 1; D60) | P1 |
+| SPR-038b | P1.14 (prep; BCK-002 A-60), stage B | Per-instant engine cost, stage B: the check cadence as a run parameter (`--check-cadence`, default `every-change` in every build, `yearly` opt-in for production and G1a), `Engine::check_now()` at run end and before each keyframe, cross-cadence replay refused; the write guards' value checks compiled out of release; a debug soak of every ledger-writing world with an inventory gate (`twin_vales` joins when its genesis runs); the month-end digest incremental and hash-identical, with append marks and one digest per stop (A-68 filed unconditionally: an incremental agenda digest and the release digest cadence, C3); the instant log (P1a shared ruling X1: `inserted()` for SPR-018 and `exited()` for SPR-023, which SPR-021's EVO-002 extends with merged events); real `solo` and `hamlet` year benches; **the one `DropReason` change** (`Ended` with a generic meaning, `Deferred`, a `cancelled{system, timer kind, reason}` counter, one `05.1` sentence; ruling R14), which SPR-021a and SPR-023 consume without adding variants. Behaviour-neutral: no baseline moves | SPR-038a merged; before SPR-018 if possible; before SPR-021a and SPR-023 (they consume the instant log and the `DropReason` change); before SPR-030's G1a run | C2 with `[perf-baseline]`; about 2.75–3.75 agent-days; outside the one-C3 slot | No system spec; `05.1` §2 rule 2, §4.2 and §9 sentences by the Architect; `docs/03` SIM-8 and `docs/09` V-INV-01 wording (D60). Plan: `SPR-038_PerInstantCost.md` stage B | P1 |
 
 **Out of P1a:** P1.4 and P1.5a (M3, M4: P1b in `docs/11`, although the old §2 listed "household food for `solo`" here; SPR-011 ruling 2, D31); P1.8 and P1.18 (P1b, D33: SPR-032 and SPR-031 keep their rows above); P1.11 (P1b); P1.16 (P1b); channel A's kind-7 `RESIDENCE_INTERVAL` record and `rh-cli tail --digest region` (S3 F1, P1b: D57 item 2; BCK-002 A-61).
 
@@ -76,7 +78,10 @@ flowchart LR
   S013 --> S020[SPR-020<br/>P1.9 event envelope]
   S020 -.T-03's place.-> S018
   S014 --> S038a[SPR-038a<br/>A-60 stage A, C2]
+  S038a -.either order.- S020
+  S038a -.merge order.-> S015
   S038a --> S038b[SPR-038b<br/>A-60 stage B, C2]
+  S038b -.recommended before.-> S018
   T00a([T-00a spec PR<br/>M7 0.6.0, EVO-002, C2]) --> S021a[SPR-021a<br/>P1.7a promotion, instant log, index, C2]
   T00a --> T00b([T-00b spec PR<br/>M7 0.6.0: SPR-022's amendments])
   T00b -.before T-01.-> S021a
@@ -85,7 +90,7 @@ flowchart LR
   S017 --> S021a
   S020 --> S021a
   S019 -.stage A.-> S021a
-  S038b -.before T-02: instant log, DropReason.-> S021a
+  S038b -->|021a T-02: instant log, DropReason| S021a
   S021a --> S021b[SPR-021b<br/>P1.7a succession, C2]
   S021b --> S022a[SPR-022a<br/>P1.7b exits, regency, dormancy]
   T00b --> S022a
@@ -93,7 +98,7 @@ flowchart LR
   S019b --> S022b
   S015 --> S023[SPR-023<br/>P3.2a-a traits, opinions, C2]
   T1A([T1-A spec PR<br/>T1 0.4.0]) --> S023
-  S038b -.stage B: exited, DropReason.-> S023
+  S038b -->|exited, DropReason| S023
   S023 -.T-01 promotes T1 0.4.0.-> T1IS([T1-I/S spec PR<br/>next/T1 0.5.0])
   T00a --> T1IS
   T1IS --> S024a
@@ -109,6 +114,7 @@ flowchart LR
   S016 --> S028[SPR-028<br/>P1.10 M9 harness]
   S022b --> S028
   S025 --> S028
+  S038b --> S028
   S015 --> S029[SPR-029<br/>P2.8a family annals]
   S020 --> S029
   S021b --> S029
@@ -116,6 +122,7 @@ flowchart LR
   S019b --> S030
   S022b --> S030
   S025 --> S030
+  S038b --> S030
   S018 --> S031[SPR-031<br/>P1.18 S5 F1: P1b, D33]
   S024b --> S031
   S018 --> S032[SPR-032<br/>P1.8 M1 F1: P1b, D33]
@@ -146,6 +153,8 @@ Three development lanes. The director set 3–4 active agent sessions as the nor
 | 8 | SPR-030 (prep: A-32, benches) | SPR-025 | SPR-029 | Annals need successions and the envelope; A-32 is hash-neutral (C1) and can start before the goldens |
 | 9 | SPR-030 (goldens, G1a runs) | SPR-028 | — | The harness and the scale run read everything the systems produce, so they come last |
 | P1b | SPR-031, SPR-032 (D33) | — | — | Not on the G1a path (rulings M-4, M-5) |
+
+**SPR-038** (BCK-002 A-60) runs as two C2 stages with no baseline move, outside the one-C3 slot (REV-SPR-038; D60): **stage A (`SPR-038a`)** right after SPR-014, in either order with SPR-020 and **before SPR-015**, which rebases onto it and hooks its derived index onto stage A's write set; **stage B (`SPR-038b`)** in any gap after stage A, before SPR-018 if possible, before SPR-023 (which consumes its instant log), and before SPR-030's G1a performance run in any case (shared ruling X9). SPR-038 is necessary for G1a; SPR-030 measures whether it is sufficient. Its number follows SPR-033 to SPR-037, which PRJ-003's viewer lane holds.
 
 **The minds lane (D59, pending; the cross-plan rulings X7–X9 and the round-2 rulings R5 and R7 of 2026-10-18)** replaces lane 2's SPR-023 to SPR-025 entries of waves 6 to 8: the T1-A spec PR now, in parallel with T-00a; SPR-023 after SPR-015, T1-A and SPR-038 stage B, in any gap of the C3 slot (C2); the T1-I/S spec PR after T-00a and SPR-023 T-01 (a new `next/T1` 0.5.0 draft over the promoted 0.4.0, on SPR-024a's critical path: R7); SPR-024a (C2) after SPR-021b, SPR-023 and T1-I/S; SPR-024b (C3, the one `BUILT` move for M7 and T1) after SPR-022a and SPR-019b (R5); SPR-025 (C2) after SPR-024b; all before SPR-028 and SPR-030.
 
@@ -226,6 +235,7 @@ Approved with the plan at G0 (D30, 2026-10-16) and binding. The director decided
 | A-04 sealed held-out bands | Before P1b tuning; not P1a |
 | A-19, A-23, A-25, A-26 | Not P1a (A-23 only if a hand-written manifest hits it) |
 | Bench 4 baseline (G0 ruling) | SPR-018, the first sprint that builds a raster |
+| A-60 per-instant engine cost | SPR-014 (part, `1bd05a6`); SPR-038a (exact gating, O(N + L) checks, positional compaction, A-32's single-thread quiet-instant allocations) and SPR-038b (the cadence, the compile-out, the incremental digest). A-32 keeps the worker pool and multi-thread buffers (SPR-030); A-68 only if SPR-038b's digest fallback is used |
 
 ## 9. Load on the director
 
