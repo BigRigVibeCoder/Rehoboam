@@ -1,6 +1,7 @@
 # 11 — Roadmap: Phases, Gates and Work Packages
 
-*Status: Draft v1.7 (2026-10-17). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*Status: Draft v1.8 (2026-10-17). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*v1.8 (2026-10-17): D55, approved by the director: V.1b (style cards written offline by an LLM) joins the viewer lane after V.1; the red team's other voxel proposals are recorded as notes on V.1, P2.6, P2.7 and P5 (`docs/red_team/RT-2026-10-16-*`).*
 *v1.7 (2026-10-17): D51 (ADR-0036): a viewer lane (V.1–V.3) for `rh-view`, the voxel observation harness, after P1.17 and off every gate's critical path; the cut "street-level 3D view" becomes V.3.*
 *v1.6 (2026-10-16): rung 0 drops forks, which come with branching (P2.9); V-SAGA-15's P1a variant measures on the 10k dynastic world (D34).*
 *v1.5 (2026-10-16): G0 rulings by the director. Rung 0 is ageing and death on day boundaries: a household's food comes with M3 and M4 in P1b, and daily life at `minutes` is Later (D31). P1.18 (`S5.daily_life` F1) and P1.8 (M1 F1) move to P1b, where the columns they read have owners (D33). P1.7 inherits titles and claims only; property inheritance moves to P1.5a (D35). G1a has one test list, the same as `09` §5, with P1a variants for tests that need systems or worlds P1a does not build; V-SAGA-16's stress-accounting identity gates G1a and its break band gates G1b (D34).*
@@ -257,7 +258,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 | P2.3 | SQL twins + twin CI | DuckDB equivalents for every pattern; clustered recorded-chronicle fixtures |
 | P2.4 | Pattern packs v1: **saga packs** | Vow arcs (sworn → pursued → fulfilled or broken or lapsed), relic chains, revenge, betrayal, succession war, the corrupted bearer; plus famine, reversal and irony. About 25–30 patterns, each with a firing-rate budget. Bad-run metric (MOE-6) wired into the liveness gate. Gate: V-SAGA-05 |
 | P2.5 | Significance v1 | Components, per-era recompute, bounded hindsight retention, per-timeline visibility sidecar (plane C), rarity base rates |
-| P2.6 | `rh-server` v1 | Timelines (run, pause, read-only seek, fork); keyframe service (10-year permanent keyframes, yearly LRU with a RAM tier, capture at auto-pause); the IF-0 control and stream endpoint; Arrow data endpoints. No presentation serving (ADR-0035 §6) |
+| P2.6 | `rh-server` v1 | Timelines (run, pause, read-only seek, fork); keyframe service (10-year permanent keyframes, yearly LRU with a RAM tier, capture at auto-pause); the IF-0 control and stream endpoint; Arrow data endpoints. No presentation serving (ADR-0035 §6). Note (D55): a browser WebSocket feed of the World Stream belongs here; an interim read-only localhost bridge is allowed after SPR-026 |
 | P2.7 | Time-Machine harness v1 (text; ADR-0030) | Tip and scheduled inputs over `control.sock` (STR-4; moved from P1.17 by D47, 2026-10-17). `rh-tui` over the World Stream: status line (tip, pace, cursor, lag), Watch and Play styles, Time-Machine (speed bands, run-until, overview and detail lanes as text), ASCII map, causal inspector as an ancestor tree, person/place views, Annals, rating form. Cultivator mode only |
 | P2.8 | Annals and Chronicle (templated) | Extends P2.8a: grouped saga arcs (by vow, relic and house) with causal "because" clauses; episode and season texts for the audio chronicle; provenance links |
 | P2.9 | Branching | What-if forks with override inputs; material-input dependency scopes with timer cancel and re-sample; acting in the past forks (ADR-0025); timeline diff view |
@@ -367,7 +368,7 @@ The saga mechanics have their own "possible, not forced" test, V-SAGA-10, gated 
 
 ## P5 — 2D diorama (≈ 8–10 weeks; ADR-0029, ADR-0035)
 
-**Goal.** An ambient 2D view of the world to glance at: glyphs and CC0 tiles, a map, and settlements growing over centuries. It lives in `console/` and reads the stream; it never calls back into the engine.
+**Goal.** An ambient 2D view of the world to glance at: glyphs and CC0 tiles, a map, and settlements growing over centuries. It lives in `console/` and reads the stream; it never calls back into the engine. Note (D55): the red team's isometric diorama is an input to this phase, and its realm map to P2.7 and here (`docs/red_team/RT-2026-10-16-*`); world-changing commands only as journaled inputs from P2.7.
 
 | WP | Work package | Output |
 |---|---|---|
@@ -414,7 +415,8 @@ These keep their WP IDs. Each needs your decision to enter a phase.
 
 | WP | Work package | Output |
 |---|---|---|
-| V.1 | Read-only spike (after P1.17's materializer, SPR-027; SPR-033 onward, each sprint ≤ 3 agent-days) | `viewer/` workspace; terrain, regions, settlements and the route graph from worldgen-lite; households and houses from the materializer; births, deaths, marriages and successions as visual moments; a timeline scrubber (seek through keyframes plus replay); the camera director over channel C (R3D-7); fidelity by zoom. Gate: V-R3D-13, V-R3D-14 |
+| V.1 | Read-only spike (after P1.17's materializer, SPR-027; SPR-033 onward, each sprint ≤ 3 agent-days) | `viewer/` workspace; terrain, regions, settlements and the route graph from worldgen-lite; households and houses from the materializer; births, deaths, marriages and successions as visual moments; a timeline scrubber (seek through keyframes plus replay); the camera director over channel C (R3D-7); fidelity by zoom. Gate: V-R3D-13, V-R3D-14. Notes (D55): the red team's shape grammar and voxel tiers, and the first-person camera, land here; pause and speed are SPR-027's pace command (`specs/stream/control_v1.md`) |
+| V.1b | Style cards (D55; after V.1) | An LLM writes a regional architectural style card (materials, roof types, amenities; never coordinates) once, offline, keyed by era and biome until `S1.culture` exists. The card is reviewed and committed with the world's assets as a versioned, hashed file, and the viewer's generators read it. No LLM call at view time and no browser cache; a few cards per era, under D29's budget rule. It keeps ADR-0034 (the LLM describes, never decides) and V-R3D-13 (hashed, reproducible voxels). Default: hand-written cards |
 | V.2 | P1b's world (with P1.4, P1.5a, P1.8, P1.18) | People moving through the day (`S5.daily_life`), fields and harvests, stores and famine, settlement growth and routes in use |
 | V.3 | The street-level inhabitant (with P2.7) | Spectator roaming is V.1's free camera. Acting in the world: `PlayerAction` and `SpeechAct` journaled over `control.sock`, landing at the tip; an act in the past only as a fork (ADR-0025); reactions decided by `T1.minds`; words translated to speech acts under ADR-0034 |
 

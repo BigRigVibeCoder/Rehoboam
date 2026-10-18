@@ -479,6 +479,16 @@ wire_golden_control() {
   "$PY" -I specs/stream/selftest_wire_v1.py --check --golden "$planted"
 }
 
+# Control-channel golden control (SPR-027 T-01): the committed control golden file with its first frame's hex
+# changed; the reference must FAIL with STALE: (selftest_control_v1.py --check --golden).
+control_golden_control() {
+  local planted=target/rendered-fixtures/stale_control_v1.txt
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^frame status_request 52485753/s//frame status_request 52485754/' specs/stream/golden/control_v1.txt > "$planted" || return 1
+  grep -q '^frame status_request 52485754' "$planted" || { echo "control not planted: no status_request frame in control_v1.txt"; return 1; }
+  "$PY" -I specs/stream/selftest_control_v1.py --check --golden "$planted"
+}
+
 # Channel-C float control (SPR-013 T-11): the channel-C DDL with closed_by_seq made a DOUBLE; the self-test must FAIL.
 channel_c_float_control() {
   local planted=target/rendered-fixtures/channel_c_float_column.sql
@@ -1358,6 +1368,16 @@ run "channel-C self-test positive control: a float column in the DDL must FAIL" 
 run "World Stream wire format v1: framing, control messages, refusals, the live-edge rule with slow, stalled and reconnecting viewers, golden frames (selftest_wire_v1 --check; SPR-026)" "pass:OK:" "$PY" -I specs/stream/selftest_wire_v1.py --check &&
 run "wire_v1 positive control: a stale golden frame must FAIL (SPR-026)" "fail:STALE:" wire_golden_control &&
 run "wire_v1 positive control: a host whose window moves before the dropped year is on disk must FAIL the live-edge rule (SPR-026)" "fail:I1 broken" "$PY" -I specs/stream/selftest_wire_v1.py --control window-gap &&
+run "World Stream control channel v1: the method table, every request and response, refusals, the governor's rule, pace invariance on a simulated engine with commands landing mid-instant and floods of no-change commands, the run log, golden frames (selftest_control_v1 --check; SPR-027 T-01)" "pass:OK:" "$PY" -I specs/stream/selftest_control_v1.py --check &&
+run "control_v1 positive control: a stale golden frame must FAIL (SPR-027 T-01)" "fail:STALE:" control_golden_control &&
+run "control_v1 positive control: a pause that writes a record must FAIL pace invariance (W35; SPR-027 T-01)" "fail:a pause wrote a record" "$PY" -I specs/stream/selftest_control_v1.py --control pause-writes-record &&
+run "control_v1 positive control: a pace command journaled as an input must FAIL (STR-5; REV-SPR-026 R12; SPR-027 T-01)" "fail:the journal changed under a pace command" "$PY" -I specs/stream/selftest_control_v1.py --control pace-in-journal &&
+run "control_v1 positive control: a band mixed into the state hash must FAIL pace invariance (SPR-027 T-01)" "fail:the state hash differs from the headless run" "$PY" -I specs/stream/selftest_control_v1.py --control band-in-hash &&
+run "control_v1 positive control: an input (player.act) accepted on control.sock must FAIL the method table (D47; SPR-027 T-01)" "fail:an input was accepted on control.sock" "$PY" -I specs/stream/selftest_control_v1.py --control input-accepted &&
+run "control_v1 positive control: a step that pauses one instant past its target must FAIL (W37; SPR-027 T-01)" "fail:the step overshot its target" "$PY" -I specs/stream/selftest_control_v1.py --control step-overshoot &&
+run "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 §4.5; SPR-027 T-01)" "fail:the stream method table carries control.pace" "$PY" -I specs/stream/selftest_control_v1.py --control pace-on-stream &&
+run "control_v1 positive control: a resume that owes the paused wall time must FAIL (SPR-027 T-01)" "fail:paused time was owed" "$PY" -I specs/stream/selftest_control_v1.py --control paused-time-owed &&
+run "control_v1 positive control: a sixth method on the control table must FAIL the method-table check (REV-SPR-027-control C4; SPR-027 T-01)" "fail:the control method table is not exactly the five methods of" "$PY" -I specs/stream/selftest_control_v1.py --control extra-method &&
 run "Chronicle SQL-twin equivalence" pass "$PY" -I specs/chronicle/selftest.py &&
 run "Chronicle envelope v0: anchored snapshots, typed edges, cause_told, provenance index, byte budget (selftest_envelope; SPR-020)" "pass:ENVELOPE v0: PASS" "$PY" -I specs/chronicle/selftest_envelope.py &&
 run "selftest_envelope positive control: a snapshot that is not the emitter's value at emission must FAIL (V-DATA-08; SPR-020)" "fail:1. anchored snapshots: FAIL" "$PY" -I specs/chronicle/selftest_envelope.py --control snapshot-drift &&
