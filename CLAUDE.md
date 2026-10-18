@@ -67,6 +67,8 @@ python -I specs/annals/selftest_annals_v0.py --check   # family annals v0 (SPR-0
 python -I specs/annals/lint_templates.py   # every annals slot resolves to a role, snapshot, payload slot, motive or edge the emitting [[emits]] declares; every in-scope kind has a template whose last variant alone is unconditional; every out-of-scope kind a label; enum ids equal the emitter's codes; each prologue template keeps to its own vocabulary and known id; no control characters; seventeen controls rendered by check_all from the real set, one diagnostic each (SPR-029)
 python -I bin/gen_fixed_vectors.py --check   # rh-core::fixed golden vectors match the exact rational reference (SPR-010)
 python -I specs/registry/effect_ref.py --check   # effect language v0: the reference reproduces every golden case (SPR-017 contract)
+cargo nextest run -p rh-manifest --locked --test effect_golden   # V-WC-10: the Rust evaluator (rh-registry::effect) reproduces all 558 golden cases, in debug here and with --release in part golden (SPR-017 T-05); RH_EFFECT_GOLDEN=<absolute path> runs another golden-format file, and check_all's altered copy must FAIL with `FAIL lit_true`
+cargo nextest run -p rh-manifest --locked --release --features mutant-effect --test effect_mutants   # V-WC-10: each of the twelve planted mutants fails its sentinel cases with the wrong value it predicts; Mutant::None passes all 558 (SPR-017 T-05)
 python -I bin/gen_decimal_vectors.py --check   # authored numbers: rh-manifest exact decimals -> fixed point match Python decimal (SPR-011 T-04)
 python -I specs/numerics/exp_ln_v0.py --check   # fixed-point exp and ln v0 (Q32_32): constants, convergence, faithful rounding, golden vectors (05.1 §6 item 4 v1.10; SPR-016); --exhaustive nightly
 python -I bin/gen_sampler_reference.py --check   # rh-sample's exact reference distributions are current (SPR-003)
@@ -148,7 +150,7 @@ python -I bin/check_baseline.py --baseline worlds/household/baselines/household_
 cargo nextest run -p rh-golden --release --test rungs   # V-SCALE-04 PR subset: household and hamlet past their extinction, one EXTINCTION, tail, sift and replay consistent; one build runs rungs 0-2 (SPR-013 T-13)
 ```
 
-Not a check: `bin/regen_baseline.sh [smoke|solo|household|hamlet]` regenerates the golden baselines (all four without an argument), only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`). Nor is `lint_odd.py --next … --write-amendments-lock`, which rewrites `specs/systems/next/amendments.lock.toml` (every amendment of a next-version spec, by path and text digest) after the Architect has read the new `AMEND` lines; the lock is never typed (SPR-015, REV-SPR-015 round 3 MIN-1).
+Not a check: `bin/regen_baseline.sh [smoke|solo|household|hamlet]` regenerates the golden baselines (all four without an argument), only in a C3 PR's final commit, whose subject ends with `[C3]` (never type a baseline; SPR-008 T-04, `worlds/smoke/README.md`). Nor is `lint_odd.py --next … --write-amendments-lock`, which rewrites `specs/systems/next/amendments.lock.toml` (every amendment of a next-version spec, by path and text digest) after the Architect has read the new `AMEND` lines; the lock is never typed (SPR-015, REV-SPR-015 round 3 MIN-1). Nor is `cargo test -p rh-manifest --release --test effect_timing -- --ignored --nocapture`, which prints SPR-017 T-04's law timings (reported, never gated).
 
 ## Conventions
 - Docs are Markdown, and diagrams are Mermaid.

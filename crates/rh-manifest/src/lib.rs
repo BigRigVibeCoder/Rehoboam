@@ -7,6 +7,7 @@
 //!
 //! - [`compile`]: a validated manifest compiled into the plane-A `rh_registry::WorldSpec`
 //!   (SPR-011 T-04): exact decimals to fixed point, Registry defaults, founders in genesis order.
+//! - [`effect_cases`]: the golden-format case runner of the effect language (SPR-017 T-05).
 //! - [`exact`]: authored numbers as exact decimals, compiled into fixed point (`05.5` §3.2).
 //! - [`registry`]: the Registry v0 as typed sections with bounds (SPR-004 T-01).
 //! - [`manifest`]: typed manifest loading with the same verdicts, error counts and lines as the
@@ -23,12 +24,20 @@
 )]
 
 pub mod compile;
+pub mod effect_cases;
 pub mod exact;
 pub mod manifest;
 pub mod pyfmt;
 pub mod registry;
 pub mod specs;
 pub mod yaml;
+
+/// The `mutant-*` features compiled into this build (BCK-002 A-52; the feature forwards to
+/// `rh-registry`'s).
+pub const MUTANTS: &[&str] = &[
+    #[cfg(feature = "mutant-effect")]
+    "mutant-effect",
+];
 
 pub use compile::{CompileError, CompileErrors, compile, compile_file};
 pub use registry::{Bounds, Number, Registry, RegistryError};

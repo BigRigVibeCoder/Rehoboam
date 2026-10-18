@@ -16,6 +16,10 @@ kind = "tool"
 [lints]
 workspace = true
 
+[features]
+# SPR-017 T-05: forwards rh-registry's planted effect-language mutants to the golden runner.
+mutant-effect = ["rh-registry/mutant-effect"]
+
 [dependencies]
 # SPR-011 T-04 (ruling 9): rh_manifest::compile builds the plane-A WorldSpec. The edge points from the
 # tool plane into plane A only; no plane-A crate depends on this one (bin/lint_arch.py).

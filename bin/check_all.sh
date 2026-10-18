@@ -807,6 +807,13 @@ effect_golden_control() {
   sed '0,/^expect = "bool:true"$/s//expect = "bool:false"/' specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
   "$PY" -I specs/registry/effect_ref.py --check --golden "$planted"
 }
+# The same planted file must fail the Rust evaluator's golden test by the case's name (SPR-017 T-05).
+effect_golden_rust_control() {
+  local planted="$PWD/target/rendered-fixtures/altered_effect_language_golden_v0.toml"
+  mkdir -p "$(dirname "$planted")" || return 1
+  sed '0,/^expect = "bool:true"$/s//expect = "bool:false"/' specs/registry/effect_language_golden_v0.toml > "$planted" || return 1
+  RH_EFFECT_GOLDEN="$planted" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture
+}
 
 # SPR-009 T-02a: the instruction-count gate (V-PERF-04) and its controls. The gate measures benches 7
 # and 8 under callgrind (bin/perf_gate.py) and compares them with the committed baseline; a second
@@ -961,7 +968,8 @@ BY_NAME_TESTS="rh-snapshot::hash rh-snapshot::golden rh-snapshot::journal rh-sna
   rh-sys-smoke::smoke rh-sys-demography::schedule_golden rh-sys-demography::draws_golden rh-worldgen::genesis
   rh-worldgen::keyframe rh-worldgen::m2_system rh-golden::golden
   rh-golden::solo rh-golden::stream rh-stream::canonical rh-stream::writer rh-stream::parquet_props
-  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs"
+  rh-cli::kill rh-golden::tail rh-cli::tail_live rh-sifter::sift rh-golden::sift rh-golden::replay rh-golden::rungs
+  rh-manifest::effect_golden"
 workspace_tests() {
   local id filter=""
   for id in $BY_NAME_TESTS; do filter="${filter:+$filter | }binary_id($id)"; done
@@ -1315,6 +1323,8 @@ run "gen_sampler_reference positive control: stale reference must FAIL" "fail:ST
 run "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)" pass "$PY" -I bin/gen_fixed_vectors.py --check &&
 run "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml (effect_ref --check; SPR-017)" "pass:EFFECT LANGUAGE v0.5.0: PASS" "$PY" -I specs/registry/effect_ref.py --check &&
 run "effect_ref positive control: one altered expected value must FAIL (SPR-017)" "fail:FAIL lit_true" effect_golden_control &&
+run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug (rh-manifest effect_golden; SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.0 (rust): PASS (558 cases)" cargo nextest run -p rh-manifest --locked --test effect_golden --no-capture &&
+run "V-WC-10 positive control: the golden file with one expected value altered must FAIL the Rust test (SPR-017 T-05)" "fail:FAIL lit_true" effect_golden_rust_control &&
 run "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's (gen_decimal_vectors --check; SPR-011 T-04)" pass "$PY" -I bin/gen_decimal_vectors.py --check &&
 run "gen_decimal_vectors positive control: one altered vector must FAIL (SPR-011 T-04)" "fail:STALE:" "$PY" -I bin/gen_decimal_vectors.py --check --output tests/lint_fixtures/golden/stale_decimal_vectors.txt &&
 run "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)" "pass:OK:" "$PY" -I specs/numerics/exp_ln_v0.py --check &&
@@ -1442,6 +1452,8 @@ run "V-PERF-11 toolchain control: an allocation baseline from another rustc must
 run "V-PERF-11 positive control: a system that zero-fills a buffer in its tick (vec![0; n]) must FAIL (SPR-009 T-05)" "fail:OVER BUDGET threads 1 allocations" "$PY" -I bin/perf_gate.py alloc-gate --control --out artifacts/perf/allocations_control.txt &&
 # Golden runs (SPR-008)
 run "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)" pass cargo build --release --locked --quiet -p rh-cli &&
+run "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release (SPR-017 T-05)" "pass:EFFECT LANGUAGE v0.5.0 (rust): PASS (558 cases)" cargo nextest run -p rh-manifest --locked --release --test effect_golden --no-capture &&
+run "V-WC-10 effect language: twelve planted mutants each fail their sentinel cases with the predicted wrong value, and Mutant::None passes (SPR-017 T-05)" "pass:mutant PrefixLast: killed" cargo nextest run -p rh-manifest --locked --release --features mutant-effect --test effect_mutants --no-capture &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% (SPR-008 T-02, DEF-2)" "pass:smoke: 1000 yearly rungs to year 1000 at 1 thread(s)" "$RH_CLI_RELEASE" run smoke --years 1000 --threads 1 --ladder yearly --require-parallel "$PARALLEL_FLOOR" --out "$GOLDEN/smoke_yearly_t1.ladder" &&
 run "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)" "pass:smoke: 1000 yearly rungs to year 1000 at $GOLDEN_THREADS thread(s)" golden_vitals_run &&
 run "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)" "pass:LADDERS EQUAL: 1000 rungs" "$RH_CLI_RELEASE" ladder compare "$GOLDEN/smoke_yearly_t1.ladder" "$GOLDEN/smoke_yearly_tN.ladder" &&

@@ -345,6 +345,14 @@ REQUIRED_GATES = (
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
+    "V-WC-10 effect language: the Rust evaluator reproduces every golden case in debug "
+    "(rh-manifest effect_golden; SPR-017 T-05)",
+    "V-WC-10 effect language: the Rust evaluator reproduces every golden case in release "
+    "(SPR-017 T-05)",
+    "V-WC-10 effect language: twelve planted mutants each fail their sentinel cases with the "
+    "predicted wrong value, and Mutant::None passes (SPR-017 T-05)",
+    "V-WC-10 positive control: the golden file with one expected value altered must FAIL the "
+    "Rust test (SPR-017 T-05)",
     "Virtual telemetry (S5 prototype)",
     "Workspace tests positive control: a by-name entry that names no test binary must FAIL "
     "(SPR-009 review 2a)",
