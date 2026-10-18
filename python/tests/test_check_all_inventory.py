@@ -9,7 +9,14 @@ EVERY SPRINT ADDS ITS GATES HERE, in the same commit that adds them to bin/check
 list alphabetical. Renaming a gate means renaming it here too, which is the point: a reviewer sees
 the change.
 
-Refs: SPR-010 GAP-4 (VER-SPR-010-TEST); GOV-002 §1 laws 4 and 9, §4.
+The check runs both ways (BCK-002 A-65): every chained gate is listed and every listed gate is
+chained, once each; every other chain call is a listed control loop and every listed loop is
+called; and no `run` line sits outside the chain and those loops. bin/check_all_selftest.py
+inventory does the same from the tier itself, reading these lists with `ast`, with two planted
+controls: a gate added to the chain only, and the wrapped entry a three-way text merge once dropped
+from this list (SPR-026's merge of PR #79).
+
+Refs: SPR-010 GAP-4 (VER-SPR-010-TEST); GOV-002 §1 laws 4 and 9, §4; BCK-002 A-63 to A-66.
 """
 
 import re
@@ -17,6 +24,8 @@ import shlex
 from pathlib import Path
 
 import check_all_selftest
+import ci_scope
+import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "bin" / "check_all.sh"
@@ -168,8 +177,9 @@ REQUIRED_GATES = (
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
-    "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, "
-    "with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)",
+    "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales, the PR tier "
+    "(the first VALID seed of 1 to 4), with its five controls on the same run A (SPR-030; "
+    "REV-SPR-030 R3, R4, R10; BCK-002 A-62)",
     "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)",
     "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality "
     "--check; SPR-016)",
@@ -180,6 +190,8 @@ REQUIRED_GATES = (
     "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, "
     "exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, "
     "R10)",
+    "Golden vectors: minds v0 part A, the A-steps of T1 0.4.0, exact reference and golden file "
+    "(selftest_minds_v0 --check; T1-A)",
     "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the "
     "effect_ref differential, its reversed-line control, and the altered-golden and stale-spec "
     "controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)",
@@ -189,6 +201,10 @@ REQUIRED_GATES = (
     "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
     "--check; SPR-007 T-01)",
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
+    "Instant log model v0: phases, levels, bindings and serial merges on eleven scripted "
+    "scenarios; what each step sees in inserted(), exited() and the observed events, the "
+    "merge-time form and its refusals, the genealogy index, thread invariance, the hash, resume; "
+    "the transcript and the vectors current (instant_log_model --check; EVO-002)",
     "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; "
     "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
@@ -202,6 +218,8 @@ REQUIRED_GATES = (
     "(SPR-016 MR7)",
     "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)",
     "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)",
+    "M2 F1 reference positive control: the elite read reverted to the woman's own row must FAIL "
+    "F6's couple read (D56 (e); BCK-002 A-62)",
     "M2 draws differential golden: the engine's death instants equal the independent model's, "
     "re-samples included (SPR-012, Tester's interim report)",
     "M2 draws positive control: one altered death line in the golden must FAIL (SPR-012)",
@@ -240,8 +258,11 @@ REQUIRED_GATES = (
     "T-12)",
     "Required tools present (core part)",
     "Required tools present (golden part)",
+    "Required tools present (stream part)",
     "Rust: bans and sources (cargo deny: crates.io only, no wildcards)",
     "Rust: build rh-cli in release for the golden runs (SPR-008 T-02)",
+    "Rust: build rh-cli in release, with overflow checks, for the stream part (BCK-002 A-63; PR "
+    "#89 review C5)",
     "Rust: build the workspace (cargo build)",
     "Rust: doctests (cargo test --doc)",
     "Rust: format (cargo fmt --check)",
@@ -286,6 +307,8 @@ REQUIRED_GATES = (
     "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; "
     "SPR-008 ruling 2)",
     "Smoke-world specs (lint_odd --specs worlds/smoke/systems --overlay; SPR-008 ruling 2)",
+    "Stream part input: solo, household and hamlet's 200-year golden runs streamed into their run "
+    "directories, as the golden part streams them (BCK-002 A-63)",
     "System specs (lint_odd)",
     "System specs, next version: the M2 F1 draft supersedes the frozen rung-0 slice and "
     "preserves it (lint_odd --next; SPR-015)",
@@ -389,6 +412,11 @@ REQUIRED_GATES = (
     "cargo deny positive control: git source must FAIL",
     "cargo deny positive control: wildcard version must FAIL",
     "channel-C self-test positive control: a float column in the DDL must FAIL",
+    "check_all baseline controls positive control: controls fed the committed baseline, as before "
+    "A-66, must FAIL on a stale baseline (BCK-002 A-66)",
+    "check_all baseline controls: on a stale baseline (a C3 head before its regeneration commit) "
+    "every Golden baseline control fails or passes for its own reason (check_all_selftest; BCK-002"
+    " A-66)",
     "check_all baseline push controls with an absolute CARGO_TARGET_DIR fail and pass for the "
     "right reason (check_all_selftest; VER-SPR-008-TEST DEF-3)",
     "check_all chain positive control: a run line mutated with || exit 0 must FAIL the lint "
@@ -397,27 +425,50 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-3)",
     "check_all chain: no run line ends in || true, || : or || exit (check_all_selftest lint; "
     "VER-SPR-008-TEST GAP-3, GAP-7)",
+    "check_all harness positive control: a control that fails for its own reason but read an "
+    "undeclared input (SCOPE INCOMPLETE) must FAIL (PR #89 review C2)",
     "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness"
     " error, not match any failure (VER-SPR-012-TEST GAP-6)",
     "check_all harness positive control: a fail: expectation with whitespace-only text must "
     "FAIL as a harness error (VER-SPR-012-TEST GAP-9; BCK-002 A-53)",
+    "check_all inventory positive control: a planted unlisted gate must FAIL (BCK-002 A-65)",
+    "check_all inventory positive control: the wrapped entry a three-way merge once dropped, "
+    "deleted from the inventory, must FAIL (BCK-002 A-65)",
+    "check_all inventory: every chain gate is listed and every listed gate chained, every chain "
+    "call a listed loop, and no run line outside the chain and its loops (check_all_selftest; "
+    "BCK-002 A-65)",
     "check_all positive control: the old PWD-joined golden path under an absolute "
     "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
     "check_all verdict per part positive control: --part golden fails at its failing gate "
     "(SPR-009 review 2b)",
     "check_all verdict per part: --part core passes while only a golden-part gate fails "
     "(check_all_selftest; SPR-009 review 2b)",
+    "check_all verdict per part: --part stream passes while only a golden-part gate fails "
+    "(check_all_selftest; BCK-002 A-63)",
     "check_all verdict positive control: a failed gate followed by || exit 0 must still FAIL "
     "the tier (VER-SPR-008-TEST GAP-7)",
     "check_all verdict positive control: a failed gate hidden by || true must still FAIL the "
     "tier (VER-SPR-008-TEST GAP-3)",
     "check_all verdict positive control: an exit 0 before the chain's end must FAIL the tier "
     "(VER-SPR-008-TEST GAP-7)",
+    "check_all verdict positive control: with no --part, a failing gate of the last part must FAIL"
+    " the tier, so every part runs (BCK-002 A-63)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
     "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL "
     "(SPR-013 T-09; R2)",
     "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)",
+    "ci_scope control: a change to a scoped gate's own text in check_all.sh runs the gate (BCK-002"
+    " A-64)",
+    "ci_scope control: a change to check_all.sh outside a scoped gate's own text in it skips the "
+    "gate (BCK-002 A-64)",
+    "ci_scope control: a change to none of a scoped gate's inputs skips it, with its reason "
+    "(BCK-002 A-64)",
+    "ci_scope control: a planted change to one fixture-worlds input runs the gate (BCK-002 A-64)",
+    "ci_scope control: a planted change to one population-synthesis input, deep in what the "
+    "reference loads, runs the gate (BCK-002 A-64)",
+    "ci_scope trace positive control: a scoped gate that reads a file outside its declared inputs "
+    "must FAIL (BCK-002 A-64)",
     "control_v1 positive control: a band mixed into the state hash must FAIL pace invariance "
     "(SPR-027 T-01)",
     "control_v1 positive control: a pace command journaled as an input must FAIL (STR-5; "
@@ -462,6 +513,23 @@ REQUIRED_GATES = (
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "instant_log_model positive control: M7's naming criteria without the manifest's cast, so that "
+    "tick 0's pass demotes a cast member, must FAIL (EVO-002; X4)",
+    "instant_log_model positive control: a genealogy index kept only at the instant's end must "
+    "FAIL (EVO-002)",
+    "instant_log_model positive control: a log not cleared at the instant's end must FAIL "
+    "(EVO-002)",
+    "instant_log_model positive control: a state hash that covers the log must FAIL (EVO-002)",
+    "instant_log_model positive control: an append in place of exited()'s sorted insert must FAIL "
+    "the order check, a later merge's death having the lower id (EVO-002; R9; T-00a MAJ-1)",
+    "instant_log_model positive control: an append in place of inserted()'s sorted insert must "
+    "FAIL the order check (EVO-002)",
+    "instant_log_model positive control: jobs that merge as they finish, so a later job sees its "
+    "level's peers, must FAIL thread invariance (EVO-002)",
+    "instant_log_model positive control: the merge-time form resolved against the log at the job's "
+    "own merge must FAIL visibility (EVO-002)",
+    "instant_log_model positive control: vectors with one state hash altered must FAIL as stale "
+    "(EVO-002; T-00a MIN-5)",
     "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals "
     "the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 "
     "T-09; GOV-002 tier 15; wire_v1.md §11)",
@@ -479,6 +547,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: a clippy.toml reached through a symlinked member must FAIL "
     "(SPR-003 GAP-13)",
     "lint_arch positive control: a crate enabling rh-bench/count-alloc must FAIL (SPR-009 T-05)",
+    "lint_arch positive control: a crate neither named rh-sys-* nor pinned declaring kind system "
+    "must FAIL, beside rh-minds passing by its pin (T1-A; REV-MINDS finding 3)",
     "lint_arch positive control: a crate-local clippy.toml must FAIL (SPR-003 GAP-12)",
     "lint_arch positive control: a non-bench target requiring count-alloc must FAIL (SPR-009 T-05)",
     "lint_arch positive control: a plane-A crate enabling rh-bench/arena-alloc must FAIL "
@@ -509,6 +579,8 @@ REQUIRED_GATES = (
     "lint_arch positive control: rand_chacha outside rh-ids must FAIL",
     "lint_arch positive control: relabelled rh-snapshot must FAIL",
     "lint_arch positive control: rh-manifest relabelled as plane A must FAIL (SPR-004)",
+    "lint_arch positive control: rh-minds relabelled out of kind system must FAIL (T1-A; "
+    "REV-MINDS finding 3)",
     "lint_arch positive control: rh-protocol depending on a workspace crate must FAIL "
     "(protocol-leaf; SPR-026)",
     "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf "
@@ -684,6 +756,24 @@ REQUIRED_GATES = (
     "cognatic again in the summary, must FAIL (R3)",
     "lint_odd next positive control: the reviewer's q5_why case, Demote's why applied "
     "to minors, must FAIL (R3)",
+    "lint_odd observes control: an [[observes]] entry naming a Registry verb, its emitter and a "
+    "same_instant read of the emitter passes (EVO-002)",
+    "lint_odd observes positive control: a kind observed twice must FAIL (EVO-002; T-00a MIN-8)",
+    "lint_odd observes positive control: a system observing its own kind must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry that is not a table must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry with an unknown field must FAIL (EVO-002; T-00a "
+    "MIN-8)",
+    "lint_odd observes positive control: an entry without its why must FAIL (EVO-002; T-00a MIN-8)",
+    "lint_odd observes positive control: an observed kind that is not a Registry verb must FAIL "
+    "(EVO-002)",
+    "lint_odd observes positive control: an observed kind whose emitter is none of the system's "
+    "same_instant reads must FAIL (EVO-002)",
+    "lint_odd observes positive control: an observed kind whose owner is not its emitter must FAIL "
+    "(EVO-002)",
+    "lint_odd observes positive control: an observer bound only before its emitter's phase must "
+    "FAIL (EVO-002; T-00a MIN-8)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
@@ -722,6 +812,26 @@ REQUIRED_GATES = (
     "(REV-SPR-029 F14)",
     "lint_templates positive control: enum ids that differ from the emitter's column codes must "
     "FAIL (REV-SPR-029 F13)",
+    "minds v0 mutant: opinion-no-expiry changes the probe at the modifier's expiry (SPR-023 T-04; "
+    "T1-A)",
+    "minds v0 mutant: relation-not-ended changes the first monthly refresh's end line (SPR-023 "
+    "T-04; T1-A)",
+    "minds v0 mutant: repromote-redraw changes the re-promoted mind's golden line (SPR-023 T-03; "
+    "T1-A)",
+    "minds v0 mutant: trait-k-swap changes the first created mind's golden line (SPR-023 T-03; "
+    "T1-A)",
+    "minds v0 positive control: a Demote that cancels an owed DEATH_DUE or MARRY_DUE must FAIL A7 "
+    "(REV-MINDS M6; T1-A)",
+    "minds v0 positive control: a re-promotion that redraws the traits must FAIL INV-T1-05 "
+    "(REV-P1a MAJ-9; T1-A)",
+    "minds v0 positive control: a stale check value in the next T1 spec must FAIL (T1-A)",
+    "minds v0 positive control: a trait draw keyed at the wrong instant must FAIL INV-T1-05 (A3; "
+    "T1-A)",
+    "minds v0 positive control: an altered golden line must FAIL (T1-A)",
+    "minds v0 positive control: an index lookup that misses rows its own binding appended must "
+    "FAIL A2 (REV-MINDS M7; T1-A)",
+    "minds v0 positive control: genesis naming more than the manifest's cast must FAIL INV-T1-11 "
+    "(Architect ruling X4; T1-A)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
     "population synthesis positive control: floors in place of the age-sex allocation must FAIL "
@@ -871,6 +981,47 @@ def test_every_chained_gate_is_in_the_inventory() -> None:
     assert sorted(chained - set(REQUIRED_GATES)) == []
 
 
+def test_the_inventory_and_the_chain_agree_both_ways() -> None:
+    """BCK-002 A-65: the selftest's check, over this module's lists, finds nothing."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert check_all_selftest.inventory(text, REQUIRED_GATES, REQUIRED_CHAIN_FUNCTIONS) == []
+    assert check_all_selftest.listed(Path(__file__).read_text(encoding="utf-8")) == (
+        REQUIRED_GATES,
+        REQUIRED_CHAIN_FUNCTIONS,
+    )
+
+
+def test_a_gate_missing_from_either_side_fails() -> None:
+    """A-65 controls: a planted unlisted gate, and the wrapped entry a merge once dropped."""
+    assert check_all_selftest.main(["inventory", "--plant-unlisted"]) == 1
+    assert check_all_selftest.main(["inventory", "--plant-dropped"]) == 1
+    text = SCRIPT.read_text(encoding="utf-8")
+    dropped = tuple(g for g in REQUIRED_GATES if g != check_all_selftest.DROPPED)
+    assert len(dropped) == len(REQUIRED_GATES) - 1
+    found = check_all_selftest.inventory(text, dropped, REQUIRED_CHAIN_FUNCTIONS)
+    assert found == [f"UNLISTED: {check_all_selftest.DROPPED}"]
+    extra = (*REQUIRED_GATES, "a listed gate no chain line runs")
+    found = check_all_selftest.inventory(text, extra, REQUIRED_CHAIN_FUNCTIONS)
+    assert found == ["NOT IN THE CHAIN: a listed gate no chain line runs"]
+
+
+def test_a_stray_call_or_run_line_fails() -> None:
+    """A-65: a gate run from an unlisted function, or after the chain's end, is unguarded."""
+    text = SCRIPT.read_text(encoding="utf-8")
+    stray = text.replace("part core &&\n", "part core &&\nmy_new_controls &&\n", 1)
+    assert check_all_selftest.inventory(stray, REQUIRED_GATES, REQUIRED_CHAIN_FUNCTIONS) == [
+        "UNLISTED CALL: my_new_controls"
+    ]
+    after = text.replace("chain_done=1\n", 'chain_done=1\nrun "late gate" pass true\n', 1)
+    found = check_all_selftest.inventory(after, REQUIRED_GATES, REQUIRED_CHAIN_FUNCTIONS)
+    assert len(found) == 1
+    assert found[0].startswith("RUN OUTSIDE THE CHAIN")
+    single = text.replace("part core &&\n", "part core &&\nrun 'quoted gate' pass true &&\n", 1)
+    found = check_all_selftest.inventory(single, REQUIRED_GATES, REQUIRED_CHAIN_FUNCTIONS)
+    assert len(found) == 1
+    assert found[0].startswith("UNPARSED RUN LINE")
+
+
 def _first_word(rest: str) -> str:
     """Return the first shell word of ``rest``: bare, single-quoted, or double-quoted."""
     if rest.startswith("'"):
@@ -948,33 +1099,174 @@ def test_the_verdict_fails_when_any_gate_failed_or_the_chain_exits_early() -> No
         assert check_all_selftest.verdict(mode) == 1, mode
 
 
+def test_a_control_that_read_an_undeclared_input_fails(capsys: pytest.CaptureFixture[str]) -> None:
+    """PR #89's review C2: SCOPE INCOMPLETE fails a gate whose expectation does not name it.
+
+    The planted control fails with its own expected text, so only that rule fails it; the chain's
+    verdict control expects that failure by the planted name. The trace's own positive control
+    names SCOPE INCOMPLETE in its expectation, and still passes.
+    """
+    assert check_all_selftest.verdict("--scope-incomplete") == 1
+    out = capsys.readouterr().out
+    planted = "planted control whose output says SCOPE INCOMPLETE"
+    assert f"FAIL  {planted} (SCOPE INCOMPLETE: an undeclared input" in out
+    assert f'Verdict: FAIL at "{planted}"' in out
+    control = [line for line in _chain_lines() if "verdict --scope-incomplete" in line]
+    assert len(control) == 1
+    assert f"'fail:Verdict: FAIL at \"{planted}\"'" in control[0]
+    # Without the rule, the planted control would pass: it fails with its own text.
+    assert check_all_selftest.verdict() == 0
+    named = [
+        line
+        for line in _chain_lines()
+        if "SCOPE INCOMPLETE" in line and line.startswith('run "ci_scope trace positive control')
+    ]
+    assert len(named) == 1
+    assert '"fail:SCOPE INCOMPLETE: ' in named[0]
+
+
+def test_the_stream_part_builds_with_overflow_checks() -> None:
+    """PR #89's review C5: part stream turns release overflow checks on; its build gate checks."""
+    script = SCRIPT.read_text(encoding="utf-8")
+    part = script.split("\npart() {\n", 1)[1].split("\n}\n", 1)[0]
+    assert (
+        'if [ "$1" = stream ]; then export CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true; fi' in part
+    )
+    stream = script.split("\npart stream &&\n", 1)[1]
+    assert 'pass:rh-cli release build with overflow checks" stream_release_build &&' in stream
+
+
 def test_the_baseline_push_controls_hold_with_an_absolute_target_dir() -> None:
     """VER-SPR-008-TEST DEF-3: no `$PWD/$GOLDEN` join; an absolute CARGO_TARGET_DIR works."""
     assert check_all_selftest.abs_target(plant=False) == 0
     assert check_all_selftest.abs_target(plant=True) == 1
 
 
-def test_the_chain_has_two_parts_and_every_gate_belongs_to_exactly_one() -> None:
-    """SPR-009 review 2b: `part core` opens the chain and `part golden` follows it, once each.
+def _parts() -> dict[str, set[str]]:
+    """Each part's gate names, by the `part` marker above them."""
+    parts: dict[str, set[str]] = {}
+    current = ""
+    for line in _chain_lines():
+        if line.startswith("part "):
+            current = line.split()[1]
+            parts.setdefault(current, set())
+        elif m := RUN_NAME.match(line):
+            parts[current].add(m.group("name"))
+    return parts
+
+
+# Gate-name prefixes pinned to their part (BCK-002 A-63): moving one of these gates to another part
+# is a reviewed change here. The stream part takes the stream, serve, tail, sift, replay, rungs and
+# twin gates; the golden part the golden runs, baselines, ladders and perf gates.
+PART_OF_PREFIX = {
+    "golden": (
+        "Golden run:",
+        "Golden ladders:",
+        "Golden baseline",
+        "Golden ladder ",
+        "V-PERF-04",
+        "V-PERF-11",
+        "Baseline integrity",
+        "T-07 M2.demography in release",
+        "V-DET-10 release build",
+    ),
+    "stream": (
+        "Stream part input",
+        "V-DATA-10 subset: DuckDB reads every sealed table of solo's run",
+        "check_segments positive control",
+        "kill -9 by name",
+        "tail by name",
+        "tail snapshot positive control",
+        "Sift:",
+        "V-SIFT-01",
+        "twin_check positive control",
+        "rh-golden by name:",
+        "V-DET-04:",
+        "V-DET-05:",
+        "Replay positive control",
+        "T-10: a stopped tail",
+    ),
+    "core": ("Rust: unit tests", "Python: unit tests", "Rust: build the workspace"),
+}
+
+
+def test_the_chain_has_three_parts_and_every_gate_belongs_to_exactly_one() -> None:
+    """SPR-009 review 2b, BCK-002 A-63: `part core`, `part golden`, `part stream`, once each.
 
     Every `run` line comes after `part core`, so it belongs to the part whose marker is the last
-    one above it: exactly one part. `--part` runs one, no flag both.
+    one above it: exactly one part. `--part` runs one, no flag all three in this order.
     """
     lines = [line.strip() for line in _chain_lines() if line.strip()]
     assert lines[0] == "part core &&"
     assert [line for line in lines if line.startswith("part ")] == [
         "part core &&",
         "part golden &&",
+        "part stream &&",
     ]
-    golden = lines.index("part golden &&")
     names = [m.group("name") for line in lines if (m := RUN_NAME.match(line))]
-    in_golden = {m.group("name") for line in lines[golden:] if (m := RUN_NAME.match(line))}
     assert len(names) == len(set(names)), "a gate name appears twice"
-    # The golden runs and the perf gates are the golden part; the debug tests and Python the core.
-    assert {n for n in names if n.startswith(("Golden run:", "V-PERF-04 instruction"))} <= in_golden
-    assert {
-        n for n in names if n.startswith(("Rust: unit tests", "Python: unit tests"))
-    }.isdisjoint(in_golden)
+    parts = _parts()
+    assert sum(len(gates) for gates in parts.values()) == len(names)
+    for part, prefixes in PART_OF_PREFIX.items():
+        pinned = {n for n in names if n.startswith(prefixes)}
+        assert pinned, part
+        assert sorted(pinned - parts[part]) == [], part
+    assert {f"Required tools present ({part} part)" for part in parts} <= set(names)
+
+
+# BCK-002 A-64: each path scope of the chain and the gates it holds, by name prefix. The scope keys
+# are bin/ci_scope.py's SCOPED_GATES; every gate of a block runs through `ci_scope.py trace`.
+SCOPED = {
+    "population-synthesis": (
+        "Golden vectors: population synthesis v0",
+        "population synthesis positive control: floors in place of the age-sex allocation",
+        "population synthesis positive control: floors in place of the couple-table rounding",
+        "population synthesis positive control: conceptions inside the closed period",
+    ),
+    "fixture-worlds": (
+        "Golden vectors: fixture worlds twin_vales",
+        "fixture worlds positive control: dormancy_degrees read as 1",
+    ),
+}
+
+
+def _scope_blocks() -> dict[str, list[str]]:
+    """Each `scope <key>` block's run lines, from its marker to the next scope or part marker."""
+    blocks: dict[str, list[str]] = {}
+    key = ""
+    for line in _chain_lines():
+        if line.startswith(("scope ", "part ")):
+            key = line.split()[1] if line.startswith("scope ") and line.split()[1] != "-" else ""
+            if key:
+                assert key not in blocks, f"scope {key} opens twice"
+                blocks[key] = []
+        elif key and RUN_NAME.match(line):
+            blocks[key].append(line)
+    return blocks
+
+
+def test_each_path_scope_holds_its_gates_and_traces_them() -> None:
+    """A-64: the chain's scopes are ci_scope's, each holds its gates, each gate is traced."""
+    blocks = _scope_blocks()
+    assert sorted(blocks) == sorted(ci_scope.SCOPED_GATES) == sorted(SCOPED)
+    for key, prefixes in SCOPED.items():
+        names = [m.group("name") for line in blocks[key] if (m := RUN_NAME.match(line))]
+        assert len(names) == len(prefixes), key
+        assert all(n.startswith(prefixes) for n in names), key
+        assert all(any(n.startswith(p) for n in names) for p in prefixes), key
+    script = SCRIPT.read_text(encoding="utf-8")
+    for key, lines in blocks.items():
+        for line in lines:
+            call = shlex.split(line.strip().removesuffix("&&"))[3:]
+            traced = call[:5] == ["$PY", "-I", "bin/ci_scope.py", "trace", key]
+            body = script.split(f"\n{call[0]}() {{\n", 1)[-1].split("\n}\n", 1)[0]
+            assert traced or f"bin/ci_scope.py trace {key} --" in body, line[:80]
+
+
+def test_the_baseline_controls_hold_on_a_stale_baseline() -> None:
+    """BCK-002 A-66: on a C3 head before its regeneration commit, each control keeps its reason."""
+    assert check_all_selftest.baseline_controls(plant=False) == 0
+    assert check_all_selftest.baseline_controls(plant=True) == 1
 
 
 # nextest options that take a value; any other bare word after `nextest run` is a test filter.
