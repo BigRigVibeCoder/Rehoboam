@@ -33,6 +33,7 @@ use rh_ids::rng::{h64_words, tag};
 use rh_ids::{BranchSalt, EntityRef, PersonId};
 use rh_snapshot::journal::{JournalPosition, chain_genesis};
 use rh_snapshot::keyframe::{History, load_engine, write_keyframe};
+use rh_snapshot::state::{AGENDA_TIMERS, ENGINE_COMMANDS, engine_tables};
 use rh_snapshot::state_hash;
 use support::{Stub, agreeing_specs};
 
@@ -426,4 +427,193 @@ fn inserted_ledger_rows_survive_a_keyframe() {
         }
     }
     println!("T-05 keyframes: inserted ledger rows round-trip in 9 worlds");
+}
+
+/// A little-endian reader over one hashed row, for the encoding check below: it knows only the
+/// layout text (`state.rs`'s table and `05.1` §2), never the encoder.
+struct Row<'b> {
+    bytes: &'b [u8],
+    at: usize,
+}
+
+impl Row<'_> {
+    fn take<const N: usize>(&mut self) -> [u8; N] {
+        let out: [u8; N] = self.bytes[self.at..self.at + N].try_into().unwrap();
+        self.at += N;
+        out
+    }
+    fn u8(&mut self) -> u8 {
+        self.take::<1>()[0]
+    }
+    fn u32(&mut self) -> u32 {
+        u32::from_le_bytes(self.take())
+    }
+    fn u64(&mut self) -> u64 {
+        u64::from_le_bytes(self.take())
+    }
+    fn i64(&mut self) -> i64 {
+        i64::from_le_bytes(self.take())
+    }
+    fn str(&mut self) -> String {
+        let n = usize::try_from(self.u32()).unwrap();
+        let s = String::from_utf8(self.bytes[self.at..self.at + n].to_vec()).unwrap();
+        self.at += n;
+        s
+    }
+    fn opt_u64(&mut self) -> Option<u64> {
+        (self.u8() == 1).then(|| self.u64())
+    }
+    fn done(&self) -> bool {
+        self.at == self.bytes.len()
+    }
+}
+
+/// One `engine.commands` row: `str owner, i64 tick, u8 phase, u64 person, u64 seq, str sender,
+/// opt(u64 cause), str kind, u32 n ‖ n × i64 args, opt(u64 draft)`; returns (args, cause, draft).
+fn command_row(bytes: &[u8]) -> (Vec<i64>, Option<u64>, Option<u64>) {
+    let mut r = Row { bytes, at: 0 };
+    let _owner = r.str();
+    let (_tick, _phase, _person, _seq) = (r.i64(), r.u8(), r.u64(), r.u64());
+    let _sender = r.str();
+    let cause = r.opt_u64();
+    let _kind = r.str();
+    let n = r.u32();
+    let args = (0..n).map(|_| r.i64()).collect();
+    let draft = r.opt_u64();
+    assert!(r.done(), "trailing bytes in a command row");
+    (args, cause, draft)
+}
+
+/// The fixed part of an `agenda.timers` row: `i64 time, u8 phase, u8 tag ‖ u64 entity, u64 seq,
+/// u32 owner, u64 purpose, u32 kind, i64 payload, u8 tombstoned`.
+const TIMER_ROW: usize = 8 + 1 + 9 + 8 + 4 + 8 + 4 + 8 + 1;
+
+/// One timer row: (payload, cause, length); the cause tail `u8 1 ‖ u64` follows the tombstone
+/// byte, and only when there is a cause (R15).
+fn timer_row(bytes: &[u8]) -> (i64, Option<u64>, usize) {
+    let mut r = Row {
+        bytes,
+        at: TIMER_ROW - 9,
+    };
+    let payload = r.i64();
+    assert_eq!(r.u8(), 0, "not tombstoned");
+    let cause = if r.done() {
+        None
+    } else {
+        assert_eq!(r.u8(), 1, "the cause tail's tag");
+        Some(r.u64())
+    };
+    assert!(r.done(), "trailing bytes in a timer row");
+    (payload, cause, bytes.len())
+}
+
+fn encoding_send(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now().minutes() != 0 {
+        return Ok(());
+    }
+    // The first event of the run: its id is 0, which must stay 0 (never -1, never "none").
+    let sent = c.emit(EventDraft::new("SENT").with_payload(vec![1]))?;
+    let (p1, p2) = (PersonId::from_raw(11), PersonId::from_raw(12));
+    for (who, marker, source) in [(p1, 7, EventRef::Draft(sent)), (p2, 8, EventRef::None)] {
+        c.submit(Command {
+            kind: "Note",
+            person: who,
+            args: vec![Arg::Int(marker), Arg::Event(source)],
+            cause: source,
+        })?;
+        c.schedule(
+            &Cp::Pick,
+            TimerSpec {
+                time: SimTime::from_minutes(3 * DAY),
+                phase: Phase::Agenda,
+                entity: EntityRef::person(who),
+                kind: 1,
+                payload: marker * 10,
+                cause: source,
+            },
+        )?;
+    }
+    Ok(())
+}
+
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "it must have the StepFn signature"
+)]
+fn encoding_keep(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    drop(c.take_commands());
+    Ok(())
+}
+
+/// The Tester's encoding probe (R15; `enc_check.py` ported): the hashed rows, decoded from the
+/// layout alone. Event id 0 is stored as 0 in an args field, a command cause and a timer cause; an
+/// empty event field is -1 and an absent cause adds no byte (a timer row of 51 bytes, 60 with a
+/// cause).
+#[test]
+fn hashed_rows_encode_event_zero_none_and_the_cause_tail_as_the_layout_says() {
+    let stubs = vec![
+        Stub::new("C1.cause")
+            .writes("cause.n")
+            .purposes_of::<Cp>()
+            .emits("SENT")
+            .sends("Note", "D1.keep")
+            .at(Pulse::Day, Phase::Agenda)
+            .stepping(encoding_send),
+        Stub::new("D1.keep")
+            .writes("keep.n")
+            .at(Pulse::Day, Phase::Agenda)
+            .applies("Note")
+            .typed(
+                "Note",
+                &[("marker", "i64"), ("source_event", "EventRef")],
+                "person",
+                "any",
+            )
+            .stepping(encoding_keep),
+    ];
+    let mut tables = WorldTables::new();
+    tables.insert("cause.n", vec![0]);
+    tables.insert("keep.n", vec![0]);
+    let mut e = Engine::new(
+        CALENDAR,
+        1,
+        BranchSalt::from_raw(0),
+        registered_of(stubs),
+        tables,
+        SimTime::EPOCH,
+    );
+    e.advance_until(SimTime::from_minutes(DAY - 1), |_, _| {})
+        .unwrap_or_else(|err| panic!("{err}"));
+    assert_eq!(
+        e.commands().len(),
+        2,
+        "both commands queued to the next day"
+    );
+    let rows = engine_tables(&e.snapshot());
+    let of = |name: &str| rows.iter().find(|(n, _)| *n == name).unwrap().1.clone();
+    let mut commands: Vec<_> = of(ENGINE_COMMANDS).iter().map(|b| command_row(b)).collect();
+    commands.sort_unstable();
+    assert_eq!(
+        commands,
+        [(vec![7, 0], Some(0), Some(0)), (vec![8, -1], None, None)],
+        "Known(0) is 0, None is -1, an absent cause and draft are absent"
+    );
+    let mut timers: Vec<_> = of(AGENDA_TIMERS).iter().map(|b| timer_row(b)).collect();
+    timers.sort_unstable();
+    assert_eq!(
+        timers,
+        [(70, Some(0), TIMER_ROW + 9), (80, None, TIMER_ROW)],
+        "the cause tail u8 1 ‖ u64 only with a cause"
+    );
+    println!("encoding: event id 0, None as -1 and the cause tail decode from the layout alone");
 }

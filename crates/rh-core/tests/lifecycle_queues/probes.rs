@@ -255,3 +255,230 @@ fn the_resample_checks_the_draw_kind() {
     );
     println!("probes: the re-sample's draw kind is checked");
 }
+
+/// `A1.send`'s Day/Vital step: with `send.bad`, seven malformed submissions first, each refused
+/// with its own error (the step goes on); then, in both worlds, one good `Req` and one good `Key`.
+fn send_step(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let p = person(1);
+    let req = |args: Vec<Arg>, cause: EventRef| Command {
+        kind: "Req",
+        person: p,
+        args,
+        cause,
+    };
+    if v.read("send.bad")?[0] == 1 {
+        let none = || Arg::Event(EventRef::None);
+        let draft = EventRef::Draft(rh_events::DraftRef(9));
+        let refused = [
+            ("arity", c.submit(req(vec![Arg::Int(1)], EventRef::None))),
+            (
+                "u8 range",
+                c.submit(req(vec![Arg::Int(300), none()], EventRef::None)),
+            ),
+            (
+                "int in event",
+                c.submit(req(vec![Arg::Int(1), Arg::Int(5)], EventRef::None)),
+            ),
+            (
+                "event in int",
+                c.submit(req(vec![none(), none()], EventRef::None)),
+            ),
+            (
+                "unknown draft field",
+                c.submit(req(vec![Arg::Int(1), Arg::Event(draft)], EventRef::None)),
+            ),
+            (
+                "unknown draft cause",
+                c.submit(req(vec![Arg::Int(1), none()], draft)),
+            ),
+            (
+                "key mismatch",
+                c.submit(Command {
+                    kind: "Key",
+                    person: p,
+                    args: vec![Arg::Int(person(2).to_raw().cast_signed())],
+                    cause: EventRef::None,
+                }),
+            ),
+        ];
+        for (what, result) in refused {
+            let right = match (what, &result) {
+                ("arity" | "u8 range" | "key mismatch", Err(SimError::Payload { .. }))
+                | ("unknown draft field" | "unknown draft cause", Err(SimError::Event { .. })) => {
+                    true
+                }
+                ("int in event", Err(SimError::EventSlot { field, .. })) => field == "ev",
+                ("event in int", Err(SimError::EventSlot { field, .. })) => field == "n",
+                _ => false,
+            };
+            assert!(right, "{what}: {result:?}");
+        }
+        assert!(matches!(
+            c.submit(Command {
+                kind: "Nope",
+                person: p,
+                args: Vec::new(),
+                cause: EventRef::None,
+            }),
+            Err(SimError::UndeclaredCommand { .. })
+        ));
+    }
+    c.submit(req(
+        vec![Arg::Int(1), Arg::Event(EventRef::None)],
+        EventRef::None,
+    ))?;
+    c.submit(Command {
+        kind: "Key",
+        person: p,
+        args: vec![Arg::Int(p.to_raw().cast_signed())],
+        cause: EventRef::None,
+    })
+}
+
+fn own_step(
+    _: &Stub,
+    _: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    let taken = c.take_commands().len();
+    v.write("own.n")?[0] += i64::try_from(taken).unwrap_or(i64::MAX);
+    Ok(())
+}
+
+fn refusal_world(bad: bool) -> Engine {
+    let stubs = vec![
+        Stub::new("A1.send")
+            .writes("send.bad")
+            .sends("Req", "B1.own")
+            .sends("Key", "B1.own")
+            .at(Pulse::Day, Phase::Vital)
+            .stepping(send_step),
+        Stub::new("B1.own")
+            .writes("own.n")
+            .at(Pulse::Day, Phase::Agenda)
+            .applies("Req")
+            .typed("Req", &[("n", "u8"), ("ev", "EventRef")], "person", "any")
+            .applies("Key")
+            .typed("Key", &[("who", "PersonId")], "who", "any")
+            .stepping(own_step),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut tables = WorldTables::new();
+    tables.insert("send.bad", vec![i64::from(bad)]);
+    tables.insert("own.n", vec![0]);
+    Engine::new(
+        CALENDAR,
+        11,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    )
+}
+
+/// The Tester's P-B3: refused submissions touch nothing. A world whose sender tries seven
+/// malformed commands and an undeclared kind each day ends with the same tables (but its flag),
+/// queues, event counter and drop counters as one that never tried.
+#[test]
+fn refused_submissions_touch_nothing() {
+    let (mut bad, mut good) = (refusal_world(true), refusal_world(false));
+    through_day(&mut bad, 3);
+    through_day(&mut good, 3);
+    let (mut tb, mut tg) = (bad.tables().clone(), good.tables().clone());
+    tb.insert("send.bad", vec![0]);
+    tg.insert("send.bad", vec![0]);
+    assert_eq!(tb, tg, "tables");
+    assert_eq!(bad.commands().state(), good.commands().state(), "queues");
+    assert_eq!(bad.events().next_id(), good.events().next_id(), "event ids");
+    assert_eq!(bad.dropped(), good.dropped(), "drop counters");
+    assert_eq!(
+        good.tables().get("own.n").map(|t| t[0]),
+        Some(8),
+        "two good commands a day, drained in the same day's Agenda (after Vital), days 0-3"
+    );
+    println!("probes: refused submissions touch nothing");
+}
+
+/// `A1.send` submits one `Req` on 1 February (day 31 of a 365-day year).
+fn february_send(
+    _: &Stub,
+    _: PulseBinding,
+    _: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now().minutes() != 31 * DAY {
+        return Ok(());
+    }
+    c.submit(Command {
+        kind: "Req",
+        person: person(1),
+        args: Vec::new(),
+        cause: EventRef::None,
+    })
+}
+
+/// `B1.own` drains at Month/Vital, but skips 1 March (day 59).
+fn skip_march(
+    s: &Stub,
+    b: PulseBinding,
+    v: &mut SystemView<'_>,
+    c: &mut StepCtx<'_>,
+) -> Result<(), SimError> {
+    if c.now().minutes() == 59 * DAY {
+        return Ok(());
+    }
+    own_step(s, b, v, c)
+}
+
+/// The Tester's P-C8: queue age at a `Month` drain in a 365-day calendar. A `Req` sent on 1
+/// February and not drained on 1 March has waited the month it was queued in (28 days), so the
+/// skipped drain trips `queue-no-stale-command` at that instant.
+#[test]
+fn a_skipped_month_drain_in_a_365_day_year_trips_the_queue_age() {
+    let stubs = vec![
+        Stub::new("A1.send")
+            .writes("send.n")
+            .sends("Req", "B1.own")
+            .at(Pulse::Day, Phase::Agenda)
+            .stepping(february_send),
+        Stub::new("B1.own")
+            .writes("own.n")
+            .at(Pulse::Month, Phase::Vital)
+            .applies("Req")
+            .stepping(skip_march),
+    ];
+    let specs = agreeing_specs(&stubs);
+    let registered = register(stubs.into_iter().map(Stub::boxed).collect(), &specs)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let mut tables = WorldTables::new();
+    tables.insert("send.n", vec![0]);
+    tables.insert("own.n", vec![0]);
+    let calendar = Calendar::new(DaysPerYear::D365, SeasonsPerYear::Four);
+    let mut e = Engine::new(
+        calendar,
+        5,
+        BranchSalt::from_raw(0),
+        registered,
+        tables,
+        SimTime::EPOCH,
+    );
+    let err = e
+        .advance_until(SimTime::from_minutes(100 * DAY), |_, _| {})
+        .expect_err("a skipped Month drain must trip the queue age");
+    let text = err.to_string();
+    println!("probes: {text}");
+    assert!(
+        text.starts_with(
+            "invariant queue-no-stale-command of rh-core violated: B1.own's Req command"
+        ) && text.contains(&format!("has waited {} minutes", 28 * DAY)),
+        "{text}"
+    );
+}
