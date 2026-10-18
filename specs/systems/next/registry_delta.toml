@@ -1,4 +1,5 @@
-# Registry delta for the next-version M2 spec (specs/systems/next/M2.demography.odd.toml, 0.3.0 draft; SPR-015).
+# Registry delta for the next-version M2 spec (specs/systems/next/M2.demography.odd.toml, 0.3.0 draft; SPR-015). The next M7
+# (0.5.0 draft) adds no verb.
 # Linted with: python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml
 # In --next mode (specs/systems/next/README.md) an overlay may REPLACE the Registry's [systems] entry of a system that
 # has a next-version spec, keeping its fidelity_levels and every existing parameter's bounds and default (the lint

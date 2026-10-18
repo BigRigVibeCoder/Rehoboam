@@ -1082,3 +1082,136 @@ of = "params.elite_fertility_mult.meaning"
 frozen = "Elite fertility multiplier (M6 coupling; P1.3). Not read at rung 0"
 to = "Multiplier on the fertility level M for a woman with an M7 house_member row ([algorithm.fertility_f1] F3, F4). 1.0 makes the read inert"
 reason = "F1 reads it through M7's house_member.person ([algorithm.fertility_f1] F3, F4) with default 1.0; the frozen text said it was not read"
+# ----------------------------------------------------------------------------- amendments recorded under the deny-by-default lint
+# (PR #79's review R3, 2026-10-17): every field of the frozen slice outside the paths the lint pinned before, generated from the
+# frozen and the next text by the lint's own path functions, reasons by the drafter; the Architect reads the AMEND lines.
+[[amends]]
+of = "submodels.mortality.summary"
+frozen = "[algorithm.mortality_rung0] S1-S10: K from e0 by fixed-point bisection (40 steps) on the trapezoid e0 of the standard grid; l linear between grid ages in minutes of age; monthly q = 1 - l(x + D) / l(x) as Prob32; one keyed Bernoulli per living person per month (k = 0); on a hit a death timer at the start of a keyed day inside the month (k = 1), never at the Month-pulse instant"
+to = "[algorithm.mortality_f1] MR1-MR12: the odds grid O(x)^beta by fixed-point exp and ln (MR3); K from e0 by the rung-0 bisection on that grid (MR5); the infant sub-schedule (MR7) and the logistic tail to 120 (MR8) as knots in minutes of age; monthly q = 1 - l(x + D) / l(x) as Prob32 (MR10), a newborn's first draw from its birth; the density modifier and the stubbed entitlement term (MR11); one keyed Bernoulli per living person per month (k = 0) and a death timer at a keyed day start (k = 1). At beta = 1, under the capacity, ages 1 to 90, this is [algorithm.mortality_rung0] S1-S10 bit for bit"
+reason = "0.3.0 (SPR-016): the summary states F1 mortality ([algorithm.mortality_f1]) over the rung-0 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "submodels.apply_death.summary"
+frozen = "[algorithm.mortality_rung0] S12: the single death path. Writes the dead row and the life-course exit once, emits DEATH and, when the last living person dies, EXTINCTION. The function that will also drain ScheduleDeath commands (P1.13)"
+to = "[algorithm.mortality_rung0] S12 as amended, then [algorithm.households_f1] H4: the single death path for M2's timers and ScheduleDeath commands alike. Drops a death of an absent or already dead row (counted), writes the dead row and the life-course exit once, cancels the victim's own later death timer after a commanded death, emits DEATH (the culprit as actor and cause_event as cause for a commanded death) and, when the last living person dies and no child of the slot enters, EXTINCTION; then widows the spouse, closes the marriage row and moves the household's headship on"
+reason = "0.3.0 (SPR-015, EVO-001): apply_death takes the F1 columns and the typed death path, and its tests grow. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "submodels.apply_death.earns_its_place_by"
+frozen = "[\"V-INV-01\", \"V-DATA-04\", \"V-SCALE-04\"]"
+to = "[\"V-INV-01\", \"V-DATA-04\", \"V-SCALE-04\", \"V-INV-03\"]"
+reason = "0.3.0 (SPR-015, EVO-001): apply_death takes the F1 columns and the typed death path, and its tests grow. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "params.tfr.source"
+frozen = "design range"
+to = "Design value 4.9: with widowhood (the reference's check 5, the 42-state chain at e0 = 30, husband 3 years older) NRR = 1 at tfr = 4.74 and 4.9 sits at r = +0.11% a year, near the middle of V-SF-01's band [-0.1, +0.3] (REV-SPR-015 MIN-1). R09 §2 gives the manifest range [1.2, 7.5] and the hard guard on r; SPR-015 confirms the default on the hamlet and the 10,000-founder fixture (a default change is C3). The director's Q5 carries this number and the birth-interval trade-off (MIN-10)"
+reason = "0.3.0 (SPR-015): the F1 source of a parameter the slice reads. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "params.elite_fertility_mult.source"
+frozen = "Turchin & Nefedov 2009; R12 §12"
+to = "Turchin & Nefedov 2009 (elite numbers outgrow commoners'; R12 §12); default 1.0: a design value, neutral until a band exists (V-SF-04 is gated from G4); the dynastic fixture world (SPR-030) may set it inside [1.0, 1.6]"
+reason = "0.3.0 (SPR-015): the F1 source of a parameter the slice reads. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "fidelity_ladder.F1.representation"
+frozen = "Per-person Brass relational-logit hazards on the General Standard (specs/demography); rung 0: beta = 1 in odds form, monthly Bernoulli draws ([algorithm.mortality_rung0])"
+to = "Per-person Brass relational-logit hazards on the General Standard at any (alpha, beta) in fixed point (specs/demography; 05.1 §6 item 4 exp and ln), with an infant sub-schedule below 1, a logistic old-age tail above 90, a density modifier and a stubbed entitlement hook, monthly Bernoulli draws ([algorithm.mortality_f1]; rung 0, [algorithm.mortality_rung0], is its beta = 1 case in odds form). F1 births: Coale-Trussell natural fertility at level M from tfr, a 9 + 11 month closed period, conceptions drawn monthly for married women and born as timers ([algorithm.fertility_f1]); partnering by a monthly nuptiality hazard and a keyed choice of husband ([algorithm.partnering_f1]); minimal households ([algorithm.households_f1])"
+reason = "0.3.0: the F1 rung's representation, now specified. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "couplings.T1.minds/out.via"
+frozen = "The death path: a death in the Vital slot starts grief; T1 reads the dead row (alive = 0, death_tick = now) until Bookkeeping of the instant (PR #32)"
+to = "The death path: a death in the Vital slot starts grief; T1 reads the dead row (alive = 0, death_tick = now) until Bookkeeping of the instant (PR #32). Births: a newborn's row and life-course row are readable at Agenda of the birth instant; kinship through life_course.* (same_instant); the living spouse through person.spouse"
+reason = "0.3.0 (SPR-015): the coupling's text names the F1 reads (the named out of partnering; on_birth's house_member row). Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "couplings.M7.dynasty/out.via"
+frozen = "Succession on a titleholder's death: M7 reads the dead row at Polity of the death instant (PR #32)"
+to = "Succession on a titleholder's death: M7 reads the dead row at Polity of the death instant (PR #32). Births: on_birth reads the newborn's person.mother and person.father at Polity of the birth instant (MAJ-5) and writes its house_member row"
+reason = "0.3.0 (SPR-015): the coupling's text names the F1 reads (the named out of partnering; on_birth's house_member row). Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "purpose.statement"
+frozen = "Age every person, schedule deaths (and later births and marriages) as timers, and keep the life-course log of everyone who ever lived."
+to = "Age every person, schedule deaths, births and marriages as timers, keep households, and keep the life-course log and the marriage log of everyone who ever lived: the genealogy every kinship relation walks."
+reason = "0.3.0 (SPR-015, SPR-016): F1 births, partnering, households and mortality enter the purpose; not_yet keeps what F1 leaves. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "purpose.not_yet"
+frozen = "[\"Births, marriage and fertility (rung 1; P1.3)\", \"Brass at any (alpha, beta): needs fixed-point exp and ln (P1.3); rung 0 runs at beta = 1 only\", \"An infant sub-schedule below age 1 and an old-age tail above 90 (P1.3): rung 0 interpolates linearly from l(0) = 1 to l(1), and l(100) = 0 makes death certain in the month a person reaches 100\", \"Famine mortality coupling (M4 entitlement; V-SF-20b)\", \"Deaths caused by other systems (ScheduleDeath from M7 and T1.minds): the command path and same-instant delivery come with P1.13 (SPR-011 ruling 6; BCK-002 A-30)\"]"
+to = "[\"Density and entitlement modifiers of fertility and mortality (R09 §2; V-SF-20b). Mortality's density term is live in [algorithm.mortality_f1] MR11, on the world's density_capacity until M1 F0 / M3 give a settlement capacity (SPR-018, P1b); fertility's density term, R09 §2's b (1 - x), has no step at F1. The entitlement term of both is stated in form (MR11 for mortality; one Q16_16 factor on [algorithm.fertility_f1]'s level M for fertility, its step in P1.5a), but the read of M4's household entitlement ratio that feeds them is deferred to M4's first spec (P1.5a): its neutral cannot be typed before M4 declares the column (REV-SPR-016-FOLD R2), so both factors are exactly 1 in P1a; eps_f and eps_m get their defaults then\", \"Mortality in the month of birth, interim: until SPR-016's code lands, F1 runs [algorithm.mortality_rung0] for everyone, newborns included ([algorithm.parameters_f1] P1), so a newborn is first drawn at its first Month pulse and the days from its birth to that pulse are not exposed (at rung 0 and e0 = 30 about 1.2 points of q0 = 0.283; REV-SPR-015 MIN-7). [algorithm.mortality_f1] MR10 and MR12 close the gap when SPR-016 merges\", \"Era-state level shifts (05.1 §3.1; ADR-0027): medical_level and sanitation_level (S2.technology, P1b) move alpha; F1 applies them as K_eff = K exp(2 delta_alpha) through 05.1 §6 item 4's exp, recomputing [algorithm.mortality_f1] MR6-MR8 when the era state changes. Not read in P1a: S2 has no owner\", \"Maternal mortality, stillbirth and twins: not modelled (a birth is always one live child; the mother's death is the ordinary schedule). When maternal mortality comes (F2) it is mortality's: a new purpose keyed by (the mother, the birth instant), applied through apply_death after the birth timer (F10's order), so the child is born first; death_time's CRN rule is untouched\", \"Sex-specific mortality schedules: Brass's Table 8 differentials (p. 86) are not applied; both sexes run the same (alpha, beta). A P1b item if V-SF-02b or the harness (SPR-028) needs it\", \"Minute-level death times (BCK-002 A-35): [algorithm.mortality_f1] MR12 keeps rung 0's day starts\", \"The sawtooth of linear-l interpolation between grid points (rung 0's S7, kept by F1 on ages 1 to 90): monthly q steps at every grid boundary (at e0 30, beta 1: under 7 percent from 50 to 72.5, -11.5 at 75, -22 at 77.5, -20 at 80, -27 to -36 from 82.5 to 87.5, -31 at the tail's join at 90; in childhood -57 at age 2 and -43 at 3; at e0 85 the teeth run the other way, +17 to +56 from 50 to 87.5; the mortality reference prints the old-age ones; BCK-002 A-48's figures). BCK-002 A-48, a smooth C1 logit interpolant into monthly knots from age 1, is a decision at SPR-016's planning: it trades the beta = 1 equality with rung 0 for a schedule without teeth\", \"Parity-specific fertility control (Coale-Trussell m > 0), the Hajnal marriage market (age-at-marriage as a manifest culture setting), divorce, polygyny, adoption and legitimacy: F2 (05.1 §3)\", \"Remarriage at its own rate: F1 draws a widow at the first-marriage rate of her age (design simplification, decision F1-D7)\", \"Immigration and off-map materialisation (H64(seed, immigrant, origin, t, k)): P4 with S3 F1\"]"
+reason = "0.3.0 (SPR-015, SPR-016): F1 births, partnering, households and mortality enter the purpose; not_yet keeps what F1 leaves. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "isolation.expect"
+frozen = "Rung 0 in isolation is the whole rung-0 world: every founder population dies out (V-SCALE-04), q(15) of a 10,000-founder cohort aged 0 sits inside the schedule's binomial 99.9% band (SPR-011 T-07). From P1.5: a constant, a sine and a step food-entitlement series, with survival over 1,000 years and mortality inside the V-SF-03 bands"
+to = "F1 in isolation is the whole P1a demography. (1) A 1,000-founder population (ages uniform in [0, 60), e0 = 30, tfr = 4.9, 32 seeds) neither dies out nor exceeds 5 x its start over 1,000 years, with the seed-mean r inside V-SF-01's band (the reference's widowhood chain puts it near +0.11% a year); (2) REPORTED, not gated, until the director's Q6 (REV-SPR-015 R17.3): conceptions per susceptible woman-month, by band at conception, measured by a plane-A observer of the fertility step (the declared aggregates: conceptions and susceptible woman-months per band, split by the level table used, since a woman under the elite forcing draws at c_i^e), sit inside the binomial 99.9% interval of c_i; and births per married woman-year, banded by the mother's age at the birth instant (married woman-days by her age each day), over M n(a), lie within 5% (15% at 45-49) of the chain's per-band values with mortality and widowhood (the spec's report_ratios; REV-SPR-015 MIN-2, round 3 MIN-2) (V-SF-24; INSUFFICIENT below 400 conceptions); (3) GATED in every run by INV-M2-13 (round 3 MIN-3): under the two-settlement forcing no marriage row with source = partnering pairs two non-zero settlements, in any generation, so a broken filter fails G1a; and REPORTED, not gated, until Q6: women's mean age at first marriage in [18, 22], at least 90% ever married by 50, every born row has a father (V-SF-25); (4) q(15) of the birth cohorts stays in V-SF-02's band (the rung-0 schedule, unchanged); (5) the three rung worlds: solo dies out (one woman, no husband); household dies out in every replica over the horizon (the reviewer's 5,000-replica model at e0 = 30, tfr 4.9: alive at 50 years 96%, at 100 years 39%, at 200 years 3%, at 1,000 years none, median extinction year 88, a non-genesis marriage in 81%: REV-SPR-015 MIN-5), so rung 1's expectation is extinction and the test is the distribution of extinction times, not persistence (R17.5); hamlet persists or dies out by chance (V-SCALE-04 still holds when they do)"
+reason = "0.3.0 (SPR-015, SPR-016): the isolation run's expectation covers the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.basic_principles"
+frozen = "Brass relational logit on the General Standard (Brass 1971; R12 §9). At beta = 1 it is l(x) = 1 / (1 + K O(x)) with O(x) = (1 - ls(x)) / ls(x) and K = exp(2 alpha), so K can be solved from e0 without exp or ln"
+to = "Mortality: Brass relational logit on the General Standard (Brass 1971; R12 §9), l(x) = 1 / (1 + K O(x)^beta) with O(x)^beta by the fixed-point exp and ln of 05.1 §6 item 4 and K solved from e0 by bisection (at beta = 1 the exact rational odds, rung 0's form, without exp or ln); below 1 Bourgeois-Pichat's biometric law spreads the year's deaths, above 90 Beard's Perks logistic (R12 §9 p. 59) replaces Brass's weak tail; above a carrying capacity R09 §2's density term raises q ([algorithm.mortality_f1]). Fertility: Coale and Trussell (1974) natural fertility, f(a) = M n(a) with the control parameter m = 0 (no parity-specific stopping; R12 §9 notes the volume has no Brass fertility model, Barrett's Monte Carlo gives the micro mechanics the closed period copies), realised as a monthly conception hazard whose long-run birth rate is M n(a) exactly (F4). Partnering: a monthly first-marriage hazard by age band (the early, near-universal pattern Hajnal 1965 contrasts with the European one; R09 §2 B), husband chosen among the eligible by a keyed draw: minimal partnering so that fathers exist (ADR-0026 item 4). Households: membership only, formed by marriage, inherited by the survivor"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.emergence"
+frozen = "Age structure, life expectancy and the time to extinction of a closed population emerge from per-person monthly hazards"
+to = "Age structure, life expectancy, the growth rate (V-SF-01), the realised TFR (below tfr by widowhood and death before 50), birth intervals, the age shape of births (reported in V-SF-24: it differs from M n(a) by the nine-month lag after marriage and by banding at birth rather than at conception), orphanhood, household size and the time to extinction of a small population emerge from the per-person draws. Imposed: the schedules themselves (the identity tests V-SF-02, V-SF-24's conception rate, V-SF-25)"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.adaptation"
+frozen = "n/a: demography has no agents that choose"
+to = "n/a: demography has no agents that choose. T1.minds' marry decision for named actors is T1's adaptation, applied here"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.sensing"
+frozen = "n/a at rung 0: reads no other system and no era state. Era-state medical level shifts alpha from P1.3 (05.1 §3.1)"
+to = "Four lagged reads at the start of the instant: person.named (T1), person.vocation and house_member.person (M7), person.residence (S3; the bride's settlement bounds the husband draw), each with a neutral value when its owner is absent. The entitlement hook of mortality (MR11) and, from P1.5a, of fertility reads M4's household entitlement ratio once M4's first spec declares the column (P1.5a; REV-SPR-016-FOLD R2); until then the factor is exactly 1. Era-state medical level shifts alpha in P1b (05.1 §3.1; not_yet)"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.interaction"
+frozen = "None at rung 0: deaths are independent across persons. From P1.3: ScheduleDeath and Marry commands applied through apply_death and the marriage path"
+to = "Lifecycle commands only (05.1 §2 rule 2): ScheduleDeath and Marry, submitted by their senders' timers in the outcome's instant and applied in M2's Day/Vital drain of that instant through apply_death and apply_marry (shape (b)); births enter the ledger through SPR-014's row insert; M7 on_birth and T1 read the newborn and the spouse column at the same instant. Within M2, a marriage this month, a conception this month and a death this month are drawn independently from the state at the Month pulse and reconciled when their timers fire (a dead party drops a marriage or a birth; a dead mother's unborn child is lost). Deaths are independent across persons given the month's density term (MR11, one Q16_16 per Month pulse from the living count) and, from P1.5a, the household's entitlement term"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.stochasticity"
+frozen = "Keyed counter-based RNG only (ADR-0006): one Bernoulli draw per person-month (k = 0) and one day draw per death (k = 1); no Poisson or batched draws (V-INV-08)"
+to = "Keyed counter-based RNG only (ADR-0006): per person-month one Bernoulli for death (k = 0) and, for a married susceptible woman, one for conception, for an eligible unmarried woman one for marriage; on a hit one day draw and, for a marriage, one keyed draw per candidate husband (husband_pick, k = the candidate's id); one sex draw per birth keyed by the child. No Poisson or batched draws (V-INV-08). Exactly one k = 0 draw per eligible person per purpose per month whatever the probability (CRN, V-DET-17). Commanded outcomes are drawn by their senders, never by M2"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.collectives"
+frozen = "n/a at rung 0: households have no owner yet (P1.1a, P1.3); the manifest's households only shape who the founders are"
+to = "Households: imposed (formed by a marriage or at genesis, dissolved when empty), owned here (household.*, person.household). Great houses are M7's; M2 reads membership for the fertility multiplier only"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.observation"
+frozen = "The life-course log (LIFE_ENTRY, LIFE_EXIT records) and DEATH and EXTINCTION events in channel A; monthly living count and deaths in STEP_DIGEST"
+to = "The life-course log (LIFE_ENTRY, LIFE_EXIT), the marriage log, and DEATH, EXTINCTION, BIRTH and MARRIAGE events in channel A; monthly living count, births and deaths in STEP_DIGEST (its births field, 0 in P1.0, is live from SPR-015). Declared aggregates (SPR-028): crude birth and death rates, age-specific marital fertility by band, age at first marriage, mean household size; INSUFFICIENT below 400 births (fertility bands) and 100 households"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "design.scale_behaviour"
+frozen = "Identical at every N: the per-person draw does not depend on N or on visiting order. Statistical bands report INSUFFICIENT below their sample minimums"
+to = "Identical at every N while the living count is at or under density_capacity (every P1a world): every per-person draw depends only on that person's state and the Month pulse, not on N or on visiting order. Above the capacity the month's probability carries the world's density term m_d (MR11), one Q16_16 per Month pulse computed before any draw, so the result still depends on neither visiting order nor thread count. The husband draw depends on the candidate list, which is the same list in the same order whatever the thread count (N4). Cost: the partnering step scans the eligible men once per hit; at 10k persons (SPR-030) that is about 100 hits x 2,000 men a month, trivial; from SPR-018 the pool is the bride's settlement (REV-SPR-018 R8), which bounds it at every scale. Statistical bands report INSUFFICIENT below their sample minimums"
+reason = "0.3.0 (SPR-015, SPR-016): the design concept restated over the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "scales.spatial"
+frozen = "person"
+to = "person; households as collectives (membership only, no place: residence is S3.migration's from SPR-018)"
+reason = "0.3.0 (SPR-015, SPR-016): the scales restated for F1 (households, the marriage log, the life-course log, the F1 restart). Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "scales.temporal"
+frozen = "Month pulse; each death a timer at a day start (a Day-pulse instant) inside the month, never the Month-pulse instant (amended ruling 7)"
+to = "Month pulse for every draw (mortality, fertility, partnering); each death, birth and marriage a timer at a day start (a Day-pulse instant): deaths and marriages inside their month, births in the ninth month after conception (or the day after it, after a late re-sample), never a Month-pulse instant (amended ruling 7; INV-M2-03 as amended, INV-M2-10, INV-M2-11); commanded outcomes are their senders' timers and reach M2's Day/Vital drain in their own instant (EVO-001, shape (b))"
+reason = "0.3.0 (SPR-015, SPR-016): the scales restated for F1 (households, the marriage log, the life-course log, the F1 restart). Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "scales.extent"
+frozen = "every living person in the ledger (on the map; there is no off-map ledger at rung 0)"
+to = "every living person in the ledger; the marriage pool is the bride's settlement once S3.migration is registered (SPR-018; REV-SPR-018 R8), the whole ledger before"
+reason = "0.3.0 (SPR-015, SPR-016): the scales restated for F1 (households, the marriage log, the life-course log, the F1 restart). Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "scales.restart"
+frozen = "Owned columns (ledger and life-course log) plus the pending death timers in the agenda restore the system exactly. K is a pure function of the compiled e0 and is recomputed at construction, never stored"
+to = "Owned columns (ledger, households, marriage log, life-course log) plus the pending death, birth and marriage timers in the agenda restore the system exactly. K, the fertility tables (F3, F4) and the nuptiality bits (N1) are pure functions of the compiled e0, tfr and elite_fertility_mult and are recomputed at construction, never stored. M2 keeps no index: the children-by-parent and spouse lookups it needs are rebuilt from the log at construction (a cache with a rebuild rule); person.unborn_father is likewise a stated cache of the marriage row open at conceived_tick (NIT-3)"
+reason = "0.3.0 (SPR-015, SPR-016): the scales restated for F1 (households, the marriage log, the life-course log, the F1 restart). Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "verification.prototype"
+frozen = "specs/demography/selftest_m2_rung0.py"
+to = "specs/demography/selftest_m2_f1.py"
+reason = "0.3.0: the prototype reference of the F1 slice. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"
+[[amends]]
+of = "system.requirements"
+frozen = "[\"DATA-8\", \"SIM-5\", \"SIM-6\", \"DET-13\"]"
+to = "[\"DATA-8\", \"SIM-5\", \"SIM-6\", \"SIM-8\", \"SIM-9\", \"DET-13\"]"
+reason = "0.3.0: the requirement ids the F1 slice binds. Recorded under the deny-by-default next lint (PR #79's review R3): the text was changed by the draft without a record"

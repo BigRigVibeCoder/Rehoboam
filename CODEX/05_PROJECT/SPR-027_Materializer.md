@@ -2,19 +2,19 @@
 id: SPR-027
 title: "World Stream v1, part b: the materializer, the control endpoint and the pace command, tail filters and the digest, the Textual TUI stub (P1.17, part b)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, stream]
 related: [BCK-002, PRJ-002, PRJ-003, REV-SPR-026, SPR-013, SPR-015, SPR-018, SPR-020, SPR-026, SPR-030, SPR-033, SPR-035, ADR-0024, ADR-0025, ADR-0030, ADR-0031, ADR-0035, ADR-0036]
 created: 2026-10-17
 updated: 2026-10-17
-version: 0.2.0
+version: 0.2.1
 ---
 
 > **BLUF:** Finishes World Stream v1 (`05.10`; `docs/11` P1.17) on top of SPR-026's live edge and SPR-013's replay:
 > - **the materializer** (V-STR-02): `rh_golden::materialize(run_dir, tick)`, built on `replay.rs`'s keyframe-resume path with no writer attached, giving the exact `state_hash` and a readable dump after Bookkeeping of any published tick, exposed as `rh-cli materialize`;
-> - **the control endpoint:** `<run-dir>/stream/t<id>/control.sock` with `rehoboam/stream/control/v1` (`control.status`, `control.pace`, `control.pause`, `control.resume`), specified first in `specs/stream/control_v1.md` as a reviewed spec PR, the pace governor in the host's run loop, the run log; the stream sockets stay read-only;
+> - **the control endpoint:** `<run-dir>/stream/t<id>/control.sock` with `rehoboam/stream/control/v1` (`control.status`, `control.pace`, `control.pause`, `control.resume`, `control.step`), specified in `specs/stream/control_v1.md` (reviewed in four rounds and merged in PR #80: `REV-SPR-027-control`), the pace governor in the host's run loop, the run log; the stream sockets stay read-only;
 > - **`rh-cli tail` filters:** `--place`, `--pattern`, `--min-tellability`, and `--digest` (the world digest from `STEP_DIGEST`); the regional digest moves to SPR-018 (D-4);
 > - **the Textual TUI stub:** a read-only status view over the stream, the first Python package of the uv project, V-PERF-09's third viewer.
 >
@@ -23,7 +23,10 @@ version: 0.2.0
 > - **Developer:** AGT-002-TOOLS (`rh-golden`, `rh-cli`, the Python package, the spec text); AGT-002-CORE is consulted for `rh-snapshot::resume` if the materializer needs a new entry point.
 > - **Testers:** AGT-003-IF (the control plane, the filters, the TUI, the hidden-state lint) and AGT-003-DET (V-STR-02's equality, pace invariance, observer invariance). One session may hold both, on a different model from the Developer's.
 > - **Size and class:** **about 3.5 agent-days** (W38). **C2** (IF-0 gains a socket and a versioned method set; `05.9` IF-0 v1.5) containing C1 (the materializer, the filters, the TUI, the `hidden-state` lint).
-> - **Status:** PLANNING, revision 1: the Architect's rulings on the independent review are applied (W29–W42, D-4, D-5, D-7). It needs the director's plan approval (D54; GOV-005 §2), and `control_v1.md`'s review before T-03. **ADR-0036 and SPR-033 start when this sprint lands** (D51); "What SPR-033 consumes" says what they take from it.
+> - **Status:** PLANNING, revision 2:
+>   - Revision 1 applied the Architect's rulings on the independent review (W29–W42, D-4, D-5, D-7).
+>   - Revision 2 is the Architect's amendment at the close of `control_v1.md` (PR #80; REV-SPR-027-control C5, K7, K14, C25, C28). **T-01 is done.**
+>   - It needs the director's plan approval (D54; GOV-005 §2). **ADR-0036 and SPR-033 start when this sprint lands** (D51); "What SPR-033 consumes" says what they take from it.
 
 # SPR-027 — World Stream v1, part b (WP P1.17, part b)
 
@@ -48,11 +51,11 @@ version: 0.2.0
 
 | Spec | Exists? | Gap | Architect ruling | Needed by |
 |---|---|---|---|---|
-| **`control_v1.md`: the control endpoint's method set** | `wire_v1.md` §8 reserves the socket, its version string, and says "its methods are SPR-027's and P2's to specify" | Missing: the method table, the band tokens, the state machine, the errors, the run-log line, golden lines. A C2 IF-0 contract approved by the Architect alone inside the sprint would skip the independent review `docs/13` §4.2 and GOV-005 §2 require (W30) | **Ruled (Architect, 2026-10-17; 7.5/10; W30): a reviewed spec PR before T-03.** AGT-002-TOOLS drafts it in T-01 (or a spec drafter beforehand), reusing wire v1's framing, canonical JSON, error model and version rule: `control.status` → `{version, pace: {band, state}, tip: {tick, seq}}`; `control.pace {band}` with `band` one of `live`, `1h`, `1d`, `1w`, `1mo`, `1y`, `10y`, `max`; `control.pause`; `control.resume`; every other method `method_not_found`; a float, an unknown band or an extra member `invalid_params`; each accepted command appends one run-log line `pace <wall_ns> <band> <state>`; nothing is journaled. A reviewer on a different model reviews it; the Architect rules; its scope (the pace command that `wire_v1.md` §8 reserves) is named in D54 | T-01, T-03 |
+| **`control_v1.md`: the control endpoint's method set** | `wire_v1.md` §8 reserves the socket, its version string, and says "its methods are SPR-027's and P2's to specify" | Missing: the method table, the band tokens, the state machine, the errors, the run-log line, golden lines. A C2 IF-0 contract approved by the Architect alone inside the sprint would skip the independent review `docs/13` §4.2 and GOV-005 §2 require (W30) | **Done: `control_v1.md` merged in PR #80 after four review rounds (REV-SPR-027-control). It is binding on T-03 and supersedes the sketch that follows: five methods, `control.step` included (Q1); `control.status` returns `tip {tick, seq}` and `next_seq`; the run-log line is §8.1's; the codes are −32120 to −32129.** Original ruling (Architect, 2026-10-17; 7.5/10; W30): a reviewed spec PR before T-03. AGT-002-TOOLS drafts it in T-01 (or a spec drafter beforehand), reusing wire v1's framing, canonical JSON, error model and version rule: `control.status` → `{version, pace: {band, state}, tip: {tick, seq}}`; `control.pace {band}` with `band` one of `live`, `1h`, `1d`, `1w`, `1mo`, `1y`, `10y`, `max`; `control.pause`; `control.resume`; every other method `method_not_found`; a float, an unknown band or an extra member `invalid_params`; each accepted command appends one run-log line `pace <wall_ns> <band> <state>`; nothing is journaled. A reviewer on a different model reviews it; the Architect rules; its scope (the pace command that `wire_v1.md` §8 reserves) is named in D54 | T-01, T-03 |
 | **Where the materializer lives, and on what** | `05.10` §1: "Materializer: keyframe + deterministic replay"; SPR-013's `replay.rs` already resumes from a keyframe through the journal (`rh-cli replay --from-keyframe`), and `run.toml` already names the world, seed, horizon and journal position (W29); PRJ-003 §2 lets `rh-view` depend by path on `rh-protocol`, `rh-stream`, `rh-worldgen`, `rh-snapshot` | My draft re-invented `run.toml` and a resume path; the viewer's path list omits the crate that can build a world | **Ruled (Architect, 2026-10-17; 8.5/10 and 7/10; W29, D-7): `materialize` is built on `replay.rs`'s resume path with no writer attached; `RunToml` is extended additively (no `threads` field); T-02 shrinks accordingly. PRJ-003 §2 invariant 3 adds `rh-golden` and notes that this widens the viewer's CI trigger (W40)** (done at this plan) | T-02 |
 | **V-STR-02's "random ticks"** | `docs/09` V-STR-02: "at 50 random ticks per run, rebuild the state and compare `state_hash`" | The engine publishes a `state_hash` only at Month-pulse instants (`STEP_DIGEST`, after Bookkeeping) and keyframes | Proposed (8/10), found sound by the reviewer: the ticks are drawn by fixed-seed SplitMix64 from the run's `STEP_DIGEST` records, plus every `KEYFRAME` marker; the reference hash is the record's; **"advance to tick T" means the state after Bookkeeping of T** (W37) | T-02 |
 | **V-STR-02's lint clause** | "a lint that every plane-A write goes through the event API or the replayed step functions"; `05.10` §7 item 2 | No such lint is named; `rh-core` confines writes to `SystemView::write` under the `AccessSpec`, the core insert and compaction, and `apply_inputs`. My draft's rule missed interior mutability, and `crates/rh-core/src/world.rs:55`'s `static NEXT_IDENTITY: AtomicU64` is already red under it (W31) | **Ruled (Architect, 2026-10-17; 8.5/10; W31): the `hidden-state` rule of `bin/lint_forbidden.py` covers `static mut`, `thread_local!`, `OnceLock`, `LazyLock`, `Atomic*`, `Mutex`, `RwLock`, `Cell`, `RefCell`, `UnsafeCell`, `once_cell` and `lazy_static` in plane-A `src/`; the escapes are enumerated, starting with `NEXT_IDENTITY`, each with a `LINT-ALLOW(hidden-state): <reason>`; a planted control puts a `Mutex<u64>` field in a system. W4's derived per-system index (SPR-015 T-02) is the sanctioned route for indexes.** The materializer equality is the evidence; the rule closes the route a write could take around it | T-02 |
-| **The pace governor's placement** | `05.1` §4.4: "speed bands change only the publish cadence and how far `advance_until` goes per wall interval"; `05.10` §7 item 4 | Where the sleeping happens | Proposed (8/10): in `rh-golden`'s run loop (tool plane): after each instant the host sleeps until the sim-time elapsed since the band was set, at the band's rate, is at or under the wall time elapsed; `max` never sleeps; `paused` holds the loop between instants **and writes no record and no keyframe** (W35: `05.10` §4's "keyframe markers at auto-pauses" is P2's Time-Machine, not this pause); `live` is one sim-minute per wall-second. Plane A sees nothing | T-03 |
+| **The pace governor's placement** | `05.1` §4.4: "speed bands change only the publish cadence and how far `advance_until` goes per wall interval"; `05.10` §7 item 4 | Where the sleeping happens | **Superseded by `control_v1.md` §3.3 (REV-SPR-027-control C1, C2, C10, K2, K4, L1, L2, C28):**<ul><li>one atomic decision point **before** each instant: apply the queue, re-check a pending step, publish;</li><li>an interruptible wait on a monotonic clock, with deadlines in `i128` nanoseconds;</li><li>re-anchor only when the effective rate changes;</li><li>a step runs at `max`;</li><li>a reply slot per request.</li></ul>The governor stays in `rh-golden`'s run loop (tool plane). Original proposal (8/10): after each instant the host sleeps until the sim-time elapsed since the band was set, at the band's rate, is at or under the wall time elapsed; `max` never sleeps; `paused` holds the loop between instants **and writes no record and no keyframe** (W35: `05.10` §4's "keyframe markers at auto-pauses" is P2's Time-Machine, not this pause); `live` is one sim-minute per wall-second. Plane A sees nothing | T-03 |
 | **`--digest region`** | `05.10` §6: "the world digest (`--digest region`), which prints the per-step population, prices and Ψ per region" | **Gap.** Channel A v0 has one world-level `STEP_DIGEST`; regions arrive with SPR-018 (wave 6), prices with M4 and Ψ with M6 (P1b); the item was unassigned (W34) | **Ruled (Architect, 2026-10-17; 7/10; D-4, W34): `--digest` prints the world digest in P1a; `--digest region` is refused with its reason; the regional digest itself goes to SPR-018, which builds regions; D54 names the scope change; `05.10` §6 carries the note** (done at this plan) | T-04 |
 | **`--sig θ`** | `05.10` §6: "filter: sig ≥ 0.6" | **Gap.** Channel C v0's `MATCH` carries no significance (P2.1, `05.4`) | **Ruled (Architect, 2026-10-17; 7/10; D-4): `--min-tellability N` on `EVENT.tellability` is the P1a filter; `--sig` is refused with its reason and waits for channel C's significance** | T-04 |
 | **`--place <id>`** | `EVENT.place_id` exists and is NULL in every P1a world until SPR-018 | Testable on real worlds only after wave 6 | Proposed (8/10): built and tested on a stub world that emits places (SPR-020's full-envelope stub, or a fixture); on the rungs it filters everything out until SPR-018 | T-04 |
@@ -98,9 +101,10 @@ version: 0.2.0
 T-01 comes first (no code before its spec), as a spec PR of its own (W30). T-02 and T-04 depend only on SPR-013 and SPR-026 and may start while T-01 is in review. T-03 follows `control_v1.md`'s merge. T-05 follows T-03 (it displays the pace). T-06 comes last.
 
 #### T-01: `specs/stream/control_v1.md`, a reviewed spec PR (W30; the specs table's first row; `wire_v1.md` §8; STR-5)
-- **Deliverable:** the contract: the socket and its mode, the version string, the four methods with their parameters and results, the band tokens of `05.1` §4.4 (`live` as one sim-minute per wall-second), the state machine (`running` ⇄ `paused` → `finished`), the errors (wire §4.4's codes), the run-log line, that a pause writes no record and no keyframe (W35), the read-only restatement ("nothing here is journaled; a stream socket never gains a method that changes anything"), and what P2 adds (tip and scheduled inputs, forks; D47). `selftest_wire_v1.py` gains a `control` section: the dispatcher's method table, canonical `dispatch` lines in `golden/wire_v1.txt` (or a sibling `golden/control_v1.txt`), the refusals.
-- **Acceptance:** `selftest_wire_v1.py --check` passes with the new lines; a planted fifth method on the control table and a planted `control.pace` on the stream table each fail the method-table checks by name; **the PR is reviewed independently on a different model from the drafter's, the Architect rules on the review, and it merges before T-03 starts** (the review is `REV-SPR-027-control`).
-- **Status:** [ ] not started
+- **Done (PR #80; REV-SPR-027-control).** Delivered as `specs/stream/control_v1.md` with its own reference and self-test, `specs/stream/selftest_control_v1.py` and `golden/control_v1.txt`. They are not a section of `selftest_wire_v1.py` (C5). There are five methods, `control.step` included (Q1, W37).
+- **Deliverable (as planned):** the contract: the socket and its mode, the version string, the methods with their parameters and results, the band tokens of `05.1` §4.4 (`live` as one sim-minute per wall-second), the state machine (`running` ⇄ `paused` → `finished`), the errors (wire §4.4's codes), the run-log line, that a pause writes no record and no keyframe (W35), the read-only restatement ("nothing here is journaled; a stream socket never gains a method that changes anything"), and what P2 adds (tip and scheduled inputs, forks; D47). `selftest_wire_v1.py` gains a `control` section: the dispatcher's method table, canonical `dispatch` lines in `golden/wire_v1.txt` (or a sibling `golden/control_v1.txt`), the refusals.
+- **Acceptance:** `selftest_control_v1.py --check` passes. A planted sixth method on the control table (`--control extra-method`, `control.seek`) and a planted `control.pace` on the stream table each fail the method-table checks by name (C4, C5). **the PR is reviewed independently on a different model from the drafter's, the Architect rules on the review, and it merges before T-03 starts** (the review is `REV-SPR-027-control`).
+- **Status:** [x] done (PR #80)
 
 #### T-02: The materializer on the replay path (V-STR-02; `05.10` §4; ADR-0030 item 3; W29, W31, W37)
 - **Deliverable:**
@@ -119,10 +123,31 @@ T-01 comes first (no code before its spec), as a spec PR of its own (W30). T-02 
 
 #### T-03: `control.sock`, the pace governor and the run log (`control_v1.md`; `05.1` §4.4; `05.10` §3, §7 item 4; REV-SPR-026 R12, R13; W35)
 - **Deliverable:**
-  - **`serve.rs` serves `control.sock`** (mode `0600`, `control.lock`, the 107-byte refusal, the connection rule `control_v1.md` states) through a second `rh-protocol` dispatcher whose method table is exactly the four control methods; a stream method on it, or a control method on `A.sock` or `C.sock`, is `method_not_found` with each socket's message.
-  - **The governor** in `rh-golden`'s run loop (the specs table): band and state as a shared cell the serving thread writes and the loop reads between instants; `max` by default; `paused` holds the tip between instants and **writes no record and no keyframe** (W35); `stream.status.pace` reports the band and state from the same cell.
-  - **The run log** `<run-dir>/run.log`: one line per accepted command with the wall-clock nanoseconds and the resulting band and state; the journal is never touched (a test counts its rows and checks its chain head).
-- **Acceptance:**
+  - **`serve.rs` serves `control.sock`** (mode `0600`, `control.lock`, the 107-byte refusal, the connection rule `control_v1.md` states) through a second `rh-protocol` dispatcher whose method table is exactly the **five** control methods. A stream method on it, or a control method on `A.sock` or `C.sock`, is `method_not_found` with each socket's message; this socket's carries `data.socket: "control"`. IF-3's reserved names are refused by name (`control_v1.md` §5.1).
+  - **`rh-protocol` extensions (K7).** SPR-026's `control.rs` closes three things that this task opens per socket:
+    - the `REASONS: [Reason; 11]` table;
+    - `classify`'s code set, so that −32120 to −32129 frames decode;
+    - `MethodNotFound`'s fixed `READ_ONLY_MESSAGE`.
+
+    The dispatcher's shape is `dispatch_control(&mut ControlConn, &dyn ControlHost, &[u8]) -> Reply { frames, close, used }`, as §2 states. The close rule is the wire's C16: close after every null-`id` answer.
+  - **The governor** in `rh-golden`'s run loop, exactly as `control_v1.md` §3.3 states:
+    - one atomic decision point before each instant;
+    - a reply slot per request;
+    - the queue fold;
+    - `max` by default;
+    - `paused` holds the tip and **writes no record and no keyframe** (W35);
+    - the end is finished in one critical section (§8.2);
+    - `stream.status.pace` and `control.status` read the snapshot published at the decision point.
+  - **`--start paused`** (C8): refused without `--socket`, before the run directory is touched. `--pace <band>` without `--socket` is allowed (Q6).
+  - **`rh-cli`'s `to_argv` never forwards `--socket`, `--pace` or `--start` to spawned builds** (C25).
+  - **The run log** `<run-dir>/run.log` in `control_v1.md` §8.1's format: one `pace` line per change, with the tip, the method, the run nonce and `conn=`/`pid=`, plus the `host` lines. The journal is never touched: a test counts its rows and checks its chain head.
+- **Acceptance: `control_v1.md` §11 is binding** (REV-SPR-027-control). The bullets below are the plan's first statement; where they differ, §11 wins.
+  - §11 adds a step issued from a pause, with the `materialize` check at the paused tick (after T-02), and the pause probe's four assertions (C7):
+    - no record;
+    - no keyframe;
+    - no journal row;
+    - `next_seq` unchanged, with seals only for years completed before the pause.
+  - §11 also adds the flood probe (C2), the `--start paused` CLI probe (K14) and the conformance test against `golden/control_v1.txt`.
   - **Pace invariance (V-STR-01, "at any pace"):** `solo` for 50 years at `max`, then at `10y` (about 5 wall-seconds), then with a `pause` of two wall-seconds at year 20 and a `resume`: the three ladders are byte-identical, every sealed segment's `canonical_digest` is equal, the keyframe set is the same, and the journal is unchanged. The probe asserts that the `10y` run took at least 4 wall-seconds, that the pause held the tip (the `stream.status` tick did not move during it) and that no record or keyframe was written while paused.
   - **The V-IF-02-style fuzz** of the control endpoint, seeded from the reference's refusal lines: wrong magic and version, a RECORDS frame, a float band, an unknown band, an extra member, depth 5, 100,000 nested arrays, a 5 KiB control frame: each gets its named error, the connection closes, the host does not panic, the run continues and the ladder is unchanged.
   - **Read-only, both ways:** `control.pace` on `A.sock` and `stream.subscribe` on `control.sock` are `method_not_found`; `player.act` on `control.sock` is `method_not_found` ("P2"); the journal is unchanged after every test.
@@ -210,7 +235,7 @@ The director's D51 starts the voxel viewer lane when this sprint lands. SPR-033 
 | 1 | SPR-026 not merged | Open |
 | 2 | SPR-013 not merged (`run.toml`, `replay.rs`, keyframes, `tail` and its snapshots) | Open |
 | 3 | The Architect's rulings of the specs table | **Closed:** ruled 2026-10-17 (W29–W41, D-4, D-5, D-7); the V-STR-02 ticks, the governor, `--place`, the TUI's home, the pace probe and the seek-latency rows stay as proposed |
-| 4 | `control_v1.md` reviewed and merged (before T-03) | Open (T-01) |
+| 4 | `control_v1.md` reviewed and merged (before T-03) | Done (PR #80, REV-SPR-027-control) |
 | 5 | The director's plan approval (D54; GOV-005 §2) | Open |
 
 ## Completion

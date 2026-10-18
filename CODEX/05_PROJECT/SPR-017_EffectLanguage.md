@@ -2,7 +2,7 @@
 id: SPR-017
 title: "The Registry effect language v0 in rh-registry: the evaluator, succession laws, the kinship prelude and verb effects (P1.15)"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
