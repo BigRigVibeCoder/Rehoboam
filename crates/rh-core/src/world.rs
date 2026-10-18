@@ -57,6 +57,15 @@ pub type Column = Vec<i64>;
 /// says whether it wrote them, so no write goes unmarked. The engine runs a check, the compaction or
 /// a lagged copy only when a column it covers carries a mark newer than its last run. Marks are
 /// bookkeeping like versions: never in a hash, an equality or any output.
+///
+/// DECISION (SPR-038 T-03; deviation 4, accepted by the Architect): the plan names "one engine
+/// bitset per since-consumer". A write stamp per slot is the same relation: a consumer that last
+/// ran at stamp `s` covers columns `C`, and its bitset would hold `{c in C : c written since s}`,
+/// which is non-empty exactly when `max(mark(c) for c in C) > s`, because marks only grow and every
+/// write takes a fresh one. One counter serves every consumer, so a consumer added later (SPR-015's
+/// derived index) needs only its own `s`, and nothing is cleared or copied per instant. A skipped
+/// binding writes nothing, so it moves no mark; a restored engine starts every consumer at 0 and
+/// every column at a mark of at least 1 (each `insert`), so each runs at its first chance.
 #[derive(Debug)]
 pub struct WorldTables {
     slots: Vec<Slot>,

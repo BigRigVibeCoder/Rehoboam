@@ -847,9 +847,12 @@ dependencies = [
  "rh-events",
  "rh-golden",
  "rh-ids",
+ "rh-manifest",
+ "rh-registry",
  "rh-snapshot",
  "rh-sys-demography",
  "rh-sys-smoke",
+ "rh-worldgen",
 ]
 
 [[package]]

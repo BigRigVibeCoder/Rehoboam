@@ -9,13 +9,20 @@
 //! The world: `M2.mortal` owns `person.id`, `person.alive` and the life-course log, and at each day
 //! start kills some persons by a keyed draw and inserts one now and then; `T1.namer` owns
 //! `person.named` and writes it only at month starts, so on every other day compaction and the
-//! insert change a column whose owner did not run (the case a missing version bump hides in); `S1.weather` writes a column of its
-//! own every few days. Four sizes (1, 60, 600 and 2,500 founders: the last spans three hash
-//! chunks, so a removed row in an early chunk is not re-hashed by the cache's resize rule alone)
-//! and eight seeds from a fixed `SplitMix64`.
+//! insert change a column whose owner did not run (the case a missing version bump hides in);
+//! `S1.weather` writes a column of its own every few days. Eight seeds from a fixed `SplitMix64`.
+//!
+//! **Why two sizes.** `MerkleCache` re-hashes a resized column from chunk `min(old, new) / 1024`
+//! (`CHUNK_ROWS`), so in a world of at most 600 rows (one chunk) a compaction that kept its
+//! column's version is still re-hashed in full, and a column whose owner ran at the death instant
+//! is re-versioned by its put-back anyway. A kept version is visible only at three chunks or more
+//! (about 3,000 founders), with a death in an early chunk on a day the column's owner does not
+//! run, and with non-constant values (ids, and `person.named` derived from them): the large test
+//! asserts that those cases occur.
 //!
 //! Positive control: `--features rh-core/mutant-compact-keeps-version` (compaction puts columns
-//! back with their old versions) must FAIL with "the cached plane hash differs from the full hash".
+//! back with their old versions) must FAIL the three-chunk test with "the cached plane hash
+//! differs from the full hash", and passes the one-chunk test.
 //!
 //! REF: `CODEX/05_PROJECT/SPR-038_PerInstantCost.md` T-02 (S11, T4); VER-SPR-007 DEF-1.
 #![allow(
@@ -35,14 +42,17 @@ use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
 use rh_ids::{BranchSalt, PersonId};
-use rh_snapshot::hash::{MerkleCache, Plane, PlaneDigest};
+use rh_snapshot::hash::{CHUNK_ROWS, MerkleCache, Plane, PlaneDigest};
 use support::{Stub, agreeing_specs};
 
 const CALENDAR: Calendar = Calendar::new(DaysPerYear::D360, SeasonsPerYear::Four);
 const DAY: i64 = 1_440;
 /// The days each world runs.
 const DAYS: i64 = 75;
-const SIZES: [usize; 4] = [1, 60, 600, 2_500];
+/// Sizes inside one hash chunk (`CHUNK_ROWS` = 1,024).
+const SMALL: [usize; 3] = [1, 60, 600];
+/// Three hash chunks.
+const LARGE: usize = 3_000;
 
 enum Draw {
     Death,
@@ -199,20 +209,38 @@ fn engine(n: usize, seed: u64, rng: &mut SplitMix64) -> Engine {
     )
 }
 
-#[test]
-fn the_cached_plane_hash_equals_the_full_hash_after_every_instant() {
-    let mut rng = SplitMix64(0x0038_C0DE);
-    let mut instants = 0_u64;
-    let mut compacted = 0_usize;
-    for &n in &SIZES {
+/// What one size's runs showed.
+#[derive(Default)]
+struct Ran {
+    instants: u64,
+    compacted: usize,
+    /// Compactions that removed a row before the last hash chunk on a day `T1.namer` (the owner
+    /// of `person.named`) did not run: the case a kept version hides in.
+    hidden_cases: usize,
+}
+
+/// Eight seeds at each size: the cache kept across every instant equals the full hash, else a
+/// panic naming the instant.
+fn run(sizes: &[usize], rng: &mut SplitMix64) -> Ran {
+    let mut ran = Ran::default();
+    for &n in sizes {
         for _ in 0..8 {
             let seed = rng.next();
-            let mut e = engine(n, seed, &mut rng);
+            let mut e = engine(n, seed, rng);
             let start = e.tables().get("person.id").unwrap().len();
             let mut cache = MerkleCache::new(Plane::A);
             let mut mismatch = None;
+            let mut before: Vec<i64> = e.tables().get("person.id").unwrap().clone();
             e.advance_until(SimTime::from_minutes(DAYS * DAY - 1), |t, tables| {
-                instants += 1;
+                ran.instants += 1;
+                let ids = tables.get("person.id").unwrap();
+                let month_start = (t.minutes() / DAY) % 30 == 0;
+                let first_removed = before.iter().zip(ids).position(|(a, b)| a != b);
+                let last_chunk = before.len().saturating_sub(1) / CHUNK_ROWS * CHUNK_ROWS;
+                if first_removed.is_some_and(|r| r < last_chunk) && !month_start {
+                    ran.hidden_cases += 1;
+                }
+                before.clone_from(ids);
                 let cached = cache.update_world(tables);
                 let full = PlaneDigest::of_world(tables).hash;
                 if cached != full && mismatch.is_none() {
@@ -229,13 +257,49 @@ fn the_cached_plane_hash_equals_the_full_hash_after_every_instant() {
             let persons = e.tables().get("life_course.person_id").unwrap().len();
             let living = e.tables().get("person.id").unwrap().len();
             // Every entry beyond the living is a death: the path ran compaction.
-            compacted += persons - living;
+            ran.compacted += persons - living;
             assert!(persons >= start, "the log is append-only");
         }
     }
-    assert_eq!(instants, 4 * 8 * u64::try_from(DAYS).unwrap());
-    assert!(compacted > 1_000, "deaths compacted: {compacted}");
+    assert_eq!(
+        ran.instants,
+        u64::try_from(sizes.len() * 8).unwrap() * u64::try_from(DAYS).unwrap()
+    );
+    ran
+}
+
+/// Sizes inside one hash chunk (1, 60 and 600 founders). Here a resized column re-hashes from
+/// chunk 0, so a compaction that kept its version is still seen: `mutant-compact-keeps-version`
+/// passes this test (shown in the PR), which is why the three-chunk test below exists.
+#[test]
+fn the_cached_plane_hash_equals_the_full_hash_inside_one_hash_chunk() {
+    let mut rng = SplitMix64(0x0038_C0DE);
+    let ran = run(&SMALL, &mut rng);
+    assert!(ran.compacted > 50, "deaths compacted: {}", ran.compacted);
     println!(
-        "S11: cached = full after each of {instants} instants, with {compacted} rows compacted"
+        "S11 (one chunk): cached = full after each of {} instants, with {} rows compacted",
+        ran.instants, ran.compacted
+    );
+}
+
+/// About 3,000 founders, three hash chunks: deaths in an early chunk on days the owner of
+/// `person.named` does not run (asserted), with id-derived, non-constant values, so a kept
+/// version leaves the cache stale and `mutant-compact-keeps-version` FAILS here (REV-SPR-038's
+/// refinement of S11).
+#[test]
+fn the_cached_plane_hash_equals_the_full_hash_after_every_instant() {
+    let mut rng = SplitMix64(0x0038_C0DF);
+    let ran = run(&[LARGE], &mut rng);
+    assert!(ran.compacted > 1_000, "deaths compacted: {}", ran.compacted);
+    assert!(
+        ran.hidden_cases > 100,
+        "early-chunk deaths on days the owner did not run: {}",
+        ran.hidden_cases
+    );
+    println!(
+        "S11: cached = full after each of {} instants at {LARGE} founders (three hash chunks), \
+         with {} rows compacted, {} of the compactions in an early chunk on a day the column's \
+         owner did not run",
+        ran.instants, ran.compacted, ran.hidden_cases
     );
 }
