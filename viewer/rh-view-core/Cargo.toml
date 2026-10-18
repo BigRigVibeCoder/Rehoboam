@@ -1,0 +1,23 @@
+[package]
+name = "rh-view-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[package.metadata.rehoboam]
+plane = "tool"
+kind = "tool"
+
+[lints]
+workspace = true
+
+[dependencies]
+binary-greedy-meshing = "=0.5.2"
+twox-hash = { version = "=2.1.5", default-features = false, features = ["xxhash3_128"] }
+
+[dev-dependencies]
+sha2 = "=0.11.0"
+
+[[bin]]
+name = "terrain_golden"
+path = "src/bin/terrain_golden.rs"
