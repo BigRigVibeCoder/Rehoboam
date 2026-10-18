@@ -298,6 +298,23 @@ REQUIRED_GATES = (
     "reads through the crate (T-06)",
     "SPR-014 the ledger row insert: sorted, aligned, defaults, read the same instant, duplicates "
     "refused, over 48 random worlds (T-05)",
+    "SPR-038 M2's O(N + L) invariants give the oracle's results, names and texts on random and "
+    "planted tables (invariants_oracle; T-03)",
+    "SPR-038 exactness: the gated engine equals Gating::Off after every instant on random "
+    "worlds (3 sizes x 8 seeds), and every planted violation fails by name at the same instant "
+    "gated and off (per_instant; T-03, S12)",
+    "SPR-038 positive control: a guard pre-image taken after the step must FAIL the entry-field "
+    "refusal (mutant-late-pre-image; T-03)",
+    "SPR-038 positive control: a lagged column never copied again must FAIL the differential "
+    "test's lagged reader (mutant-stale-lagged-snapshot; T-03)",
+    "SPR-038 positive control: a put-back that ignores person.alive's written flag must FAIL: a "
+    "dead row survives (mutant-unmarked-put-back; T-03)",
+    "SPR-038 positive control: one allocation planted in the quiet drain must FAIL the instant "
+    "bench's zero-allocation assertion (instant-alloc-control; S16)",
+    "SPR-038 positive control: positional compaction that keeps the old versions must FAIL the "
+    "per-instant cache test (mutant-compact-keeps-version; S11)",
+    "SPR-038 the cached plane hash equals the full hash after every instant of random ledger "
+    "worlds (per_instant_cache; S11, T4)",
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
     "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment "

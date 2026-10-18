@@ -27,9 +27,15 @@ def _mutant_features() -> dict[str, list[str]]:
 
 
 def test_there_are_mutant_features_to_guard() -> None:
-    """SPR-012's two planted switches and SPR-014's two exist; if they move, this test follows."""
+    """The planted switches of SPR-012, SPR-014 and SPR-038 exist; if they move, this follows."""
     assert _mutant_features() == {
-        "rh-core": ["mutant-deliver-every-job"],
+        "rh-core": [
+            "mutant-compact-keeps-version",
+            "mutant-deliver-every-job",
+            "mutant-late-pre-image",
+            "mutant-stale-lagged-snapshot",
+            "mutant-unmarked-put-back",
+        ],
         "rh-snapshot": ["mutant-cause-u8-zero"],
         "rh-sys-demography": ["mutant-resample-day-k0", "mutant-resample-hit-k1"],
     }
@@ -55,3 +61,12 @@ def test_the_guard_reads_every_crate_with_mutants() -> None:
     body = guard[guard.index("pub fn mutant_features()") :].split("\n}\n", 1)[0]
     for crate in _mutant_features():
         assert f"{crate.replace('-', '_')}::MUTANTS" in body, crate
+
+
+def test_the_guard_reads_the_reference_features() -> None:
+    """SPR-038 S12: `rh-core`'s `REFERENCE` (`reference-gating-off`) is refused like a mutant."""
+    guard = GUARD.read_text(encoding="utf-8")
+    body = guard[guard.index("pub fn mutant_features()") :].split("\n}\n", 1)[0]
+    assert "rh_core::REFERENCE" in body
+    lib = (CRATES / "rh-core" / "src" / "lib.rs").read_text(encoding="utf-8")
+    assert '#[cfg(feature = "reference-gating-off")]\n    "reference-gating-off",' in lib

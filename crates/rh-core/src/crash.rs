@@ -447,6 +447,64 @@ impl Parser<'_> {
     }
 }
 
+/// One diagnostic record, kept fixed-size so a quiet instant allocates nothing (SPR-038 T-02):
+/// rendered as text only when [`crate::engine::Engine::diagnostics`] is read, byte-identical to the
+/// line the engine used to format at every instant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Record {
+    /// One instant's line: `{t} pulses=[..] inputs=.. timers_fired=.. commands=.. events=..
+    /// agenda=..`.
+    Instant {
+        /// The instant.
+        t: crate::time::SimTime,
+        /// The pulses that fired and are bound, as flags over [`crate::Pulse::ALL`].
+        pulses: [bool; 5],
+        /// The material inputs applied.
+        inputs: usize,
+        /// The timers fired.
+        timers: usize,
+        /// The lifecycle commands queued.
+        commands: usize,
+        /// The events logged.
+        events: usize,
+        /// The pending timers after the instant.
+        agenda: usize,
+    },
+    /// A line kept as text: the `FATAL` line of a failed instant.
+    Text(String),
+}
+
+impl fmt::Display for Record {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Instant {
+                t,
+                pulses,
+                inputs,
+                timers,
+                commands,
+                events,
+                agenda,
+            } => {
+                write!(f, "{t} pulses=[")?;
+                let mut first = true;
+                for (p, _) in crate::Pulse::ALL.iter().zip(pulses).filter(|(_, on)| **on) {
+                    if !first {
+                        f.write_str(",")?;
+                    }
+                    first = false;
+                    f.write_str(p.name())?;
+                }
+                write!(
+                    f,
+                    "] inputs={inputs} timers_fired={timers} commands={commands} events={events} agenda={agenda}"
+                )
+            }
+            Self::Text(line) => f.write_str(line),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CrashArtifact, ParseError};
@@ -531,5 +589,61 @@ mod tests {
                 "accepted: {text}"
             );
         }
+    }
+
+    /// SPR-038 T-02: the fixed-size record renders exactly the line the engine formatted at every
+    /// instant before (`engine.rs`'s `format!` of SPR-006), over random records.
+    #[test]
+    fn instant_records_render_as_the_old_format() {
+        use crate::Pulse;
+        use crate::time::SimTime;
+        let mut x = 0x0038_0002_u64;
+        let mut next = || {
+            x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = x;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        };
+        for _ in 0..2_000 {
+            let bits = next();
+            let pulses: [bool; 5] = core::array::from_fn(|i| bits >> i & 1 == 1);
+            let small = |v: u64| usize::try_from(v % 100_000).unwrap_or(0);
+            let t = SimTime::from_minutes(i64::try_from(next() % (1 << 40)).unwrap_or(0));
+            let (inputs, timers, commands, events, agenda) = (
+                small(next()),
+                small(next()),
+                small(next()),
+                small(next()),
+                small(next()),
+            );
+            let fired: Vec<&str> = Pulse::ALL
+                .iter()
+                .zip(pulses)
+                .filter(|(_, on)| *on)
+                .map(|(p, _)| p.name())
+                .collect();
+            let old = format!(
+                "{t} pulses=[{}] inputs={} timers_fired={} commands={} events={} agenda={}",
+                fired.join(","),
+                inputs,
+                timers,
+                commands,
+                events,
+                agenda
+            );
+            let new = super::Record::Instant {
+                t,
+                pulses,
+                inputs,
+                timers,
+                commands,
+                events,
+                agenda,
+            };
+            assert_eq!(new.to_string(), old);
+        }
+        let fatal = "t=5min FATAL in Vital: boom".to_owned();
+        assert_eq!(super::Record::Text(fatal.clone()).to_string(), fatal);
     }
 }

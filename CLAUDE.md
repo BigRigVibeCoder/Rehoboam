@@ -146,6 +146,10 @@ bin/golden_nightly.sh            # nightly: monthly ladders at 1/2/4/N threads x
 cargo nextest run -p rh-core -p rh-registry --test determinism --test registration --test real_specs --test phase_table --test time_properties --test system_id_golden --test engine_contract   # V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes, phase table, calendar, system_id golden, engine contract (SPR-005)
 cargo nextest run -p rh-core -p rh-events --test agenda --test agenda_events --test invariants --lib   # agenda, timers, lifecycle queues, event bus, V-DET-12, invariants, crash replay (SPR-006)
 cargo nextest run -p rh-core --locked --test agenda_events lifecycle_queues   # SPR-014: V-DET-21 delivery and slots, V-INV-15 with its controls, V-INV-04 on stubs, the ledger row insert; --features mutant-deliver-every-job must FAIL ("delivered to a non-draining job")
+cargo nextest run -p rh-core --locked --features reference-gating-off --test per_instant   # SPR-038 stage A: the gated engine = Gating::Off after every instant on random worlds; eleven planted violations fail alike; --features reference-gating-off,mutant-unmarked-put-back or ...,mutant-stale-lagged-snapshot must FAIL, and --features mutant-late-pre-image --test agenda_events lifecycle_queues::guard must FAIL
+cargo nextest run -p rh-snapshot --locked --test per_instant_cache   # SPR-038 S11: a plane-A MerkleCache kept across instants = the full hash after every instant; --features rh-core/mutant-compact-keeps-version must FAIL
+cargo nextest run -p rh-sys-demography --locked --test invariants_oracle   # SPR-038 T-03: M2's O(N + L) invariants = the oracle on random and planted tables
+cargo bench -p rh-bench --features arena-alloc --bench instant   # SPR-038: the per-instant cost (gated in V-PERF-04 through perf_gate.py); a quiet instant allocates nothing; --features arena-alloc,instant-alloc-control must FAIL ("allocated on a quiet instant"); --bench instant_sweep gives the plan's ungated figures
 cargo nextest run -p rh-registry --locked --test real_specs v_inv_04 a_drain   # SPR-014: V-INV-04 on the real specs ({M2}, {M2, M7}, {M2, T1} refused, {M2, M7, T1}); a DRAINS that differs from [[applies]] drained_by refused by name
 cargo nextest run -p rh-snapshot --locked --test lifecycle   # SPR-014: queued event slots, timer causes and inserted rows through keyframes; the dropped{} counter changes no hash; --features mutant-cause-u8-zero --test golden must FAIL at agenda.timers (R15)
 cargo nextest run -p rh-worldgen --locked --test death_path   # SPR-014: V-INV-03 subset, the single death path with the real M2 0.2.3 and two test-only senders; same-slot deaths; the sender's re-sample
@@ -158,7 +162,7 @@ target/debug/rh-cli ownership    # single-writer column ownership from specs/sys
 target/debug/rh-cli manifest schema --diff specs/manifest/manifest_v0.schema.json  # Rust types = reference schema (SPR-004)
 python -I specs/sifting/lint_patterns.py specs/sifting/patterns.example.toml specs/manifest/registry_v0.toml
 # Performance (SPR-009): instruction counts under valgrind (needs valgrind and iai-callgrind-runner 0.16.1)
-python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8, and the draw-cost bench (SPR-011 A-37), within 10% of the baseline
+python -I bin/perf_gate.py gate --out artifacts/perf/instructions.txt   # V-PERF-04: benches 7 and 8, the draw-cost bench (SPR-011 A-37) and the per-instant bench (SPR-038), within 10% of the baseline
 python -I bin/perf_gate.py integrity --measured artifacts/perf/instructions.txt   # ruling 3: a changed baseline = the tool's output, [perf-baseline] PR
 python -I bin/perf_gate.py record   # regenerate the baseline (never by hand); only in a [perf-baseline] PR with a perf-baseline-reason: line
 cargo nextest run -p rh-snapshot --locked --test observer   # observer invariance: a host observer changes no hash (SPR-009 ruling 4)

@@ -961,13 +961,15 @@ fn stream_host(
 }
 
 /// The `mutant-*` Cargo features compiled into this build, from every crate that has any
-/// (BCK-002 A-52).
+/// (BCK-002 A-52), and `rh-core`'s reference features (`reference-gating-off`, SPR-038 S12),
+/// which no world or baseline may come from either.
 #[must_use]
 pub fn mutant_features() -> Vec<&'static str> {
     [
         rh_core::MUTANTS,
         rh_snapshot::MUTANTS,
         rh_sys_demography::MUTANTS,
+        rh_core::REFERENCE,
     ]
     .concat()
 }
