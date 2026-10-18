@@ -1,0 +1,5 @@
+#rehoboam/stream/canonical/v0 timeline=0 channel=A registry_version=0.2.0+next format=rehoboam/stream/channel-a/v0
+LIFE_ENTRY 0 0 0 1328186490420642308 1 1 0 0 -12875040
+EVENT 0 1 1634400 0 4 15 DEATH 32768 ~ 0 128 0 0 [1] [1/1328186490420642308/1] [] []
+EVENT 0 2 1634400 1 4 18 EXTINCTION 32768 ~ 0 255 0 0 [] [] [] [0/1/~/0/256/1]
+LIFE_EXIT 0 3 1634400 1328186490420642308 0 1 0

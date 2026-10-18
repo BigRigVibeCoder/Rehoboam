@@ -101,3 +101,57 @@ def test_a_hard_coded_part_fails() -> None:
 def test_the_pr_tier_times_out_at_20_minutes() -> None:
     """BCK-002 A-38: each PR-tier job's timeout guards the 15-minute budget (V-PERF-04)."""
     assert workflow()["jobs"]["check-all"]["timeout-minutes"] == 20
+
+
+# The director's ruling of 2026-10-17: documentation-only changes skip the golden part's work, and a
+# scheduled nightly skips when main has not moved. These pin the wiring; test_ci_scope.py pins the
+# classification.
+NIGHTLY = REPO / ".github" / "workflows" / "nightly.yml"
+SCOPED = "steps.scope.outputs.run == 'true'"
+
+
+def scope_problems(flow: dict[str, Any]) -> list[str]:
+    """Why the check-all job's steps do not all follow the scope verdict; empty if they do."""
+    steps = flow["jobs"]["check-all"]["steps"]
+    ids = [s.get("id") for s in steps]
+    if "scope" not in ids:
+        return ["no scope step"]
+    at = ids.index("scope")
+    found = []
+    if "bin/ci_scope.py" not in str(steps[at].get("run", "")):
+        found.append("the scope step does not run bin/ci_scope.py")
+    for step in steps[at + 1 :]:
+        if SCOPED not in str(step.get("if", "")):
+            found.append(f"step {step.get('name') or step.get('uses')!r} ignores the scope")
+    for step in steps[:at]:
+        if "bin/check_all.sh" in str(step.get("run", "")):
+            found.append("bin/check_all.sh runs before the scope is known")
+    return found
+
+
+def test_every_step_after_the_scope_follows_it() -> None:
+    """Each later step of the PR tier is conditional on the scope verdict."""
+    assert scope_problems(workflow()) == []
+
+
+def test_a_step_that_ignores_the_scope_fails() -> None:
+    """Control: dropping the condition from the check_all step is caught."""
+    flow = copy.deepcopy(workflow())
+    step = next(
+        s for s in flow["jobs"]["check-all"]["steps"] if "bin/check_all.sh" in str(s.get("run", ""))
+    )
+    del step["if"]
+    assert scope_problems(flow) == ["step 'bin/check_all.sh' ignores the scope"]
+
+
+def test_the_nightly_tiers_wait_for_the_freshness_gate() -> None:
+    """Both nightly jobs need the freshness gate and run only on its verdict; a manual run runs."""
+    flow = yaml.safe_load(NIGHTLY.read_text(encoding="utf-8"))
+    jobs = flow["jobs"]
+    assert set(jobs) == {"freshness", "ignored-tests", "golden"}
+    for name in ("ignored-tests", "golden"):
+        assert jobs[name]["needs"] == "freshness"
+        assert jobs[name]["if"] == "needs.freshness.outputs.run == 'true'"
+    script = jobs["freshness"]["steps"][0]["run"]
+    assert '[ "$EVENT" != "schedule" ]' in script
+    assert "--status success" in script

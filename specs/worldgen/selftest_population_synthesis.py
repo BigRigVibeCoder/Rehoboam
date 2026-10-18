@@ -34,6 +34,9 @@ Run: python -I specs/worldgen/selftest_population_synthesis.py           (check;
      python -I specs/worldgen/selftest_population_synthesis.py --write   (regenerate the golden)
      python -I specs/worldgen/selftest_population_synthesis.py --golden PATH  (check another file)
      python -I specs/worldgen/selftest_population_synthesis.py --spec PATH   (another spec copy)
+     python -I specs/worldgen/selftest_population_synthesis.py --altered-golden PATH
+         --stale-spec PATH (the two controls that need no second build run on the same reference
+         run; both must be reported as required, else the run FAILS: REV-SPR-030 R10)
      python -I specs/worldgen/selftest_population_synthesis.py --control NAME (a planted violation;
          NAME is ``spacing`` (B6's closed period skipped), ``rounding-cells`` (P3's age-sex
          allocation replaced by floors) or ``rounding-table`` (P7's rounding replaced by floors):
@@ -2107,18 +2110,20 @@ def effect_world(g: Genesis, title: Title, s: Succession) -> dict[str, Any]:
 
 
 def effect_differential(ref_dir: Path, seeds: int) -> list[str]:
-    """Run every genealogical-law succession of both sweep configurations through effect_ref.py."""
+    """Run every genealogical-law succession of both sweep configurations through effect_ref.py.
+
+    Then (REV-SPR-030 R27) the control on the same genesis and the same successions: with
+    effect_ref.py's ``succession_line`` reversed, the differential must report differences (the
+    lines of two or more candidates), else the control itself failed.
+    """
     ref = _load("effect_ref", ref_dir / "effect_ref.py")
     golden = ref.load_golden(ref_dir / "effect_language_golden_v0.toml")
-    failures: list[str] = []
-    compared = 0
+    cases: list[tuple[str, int, int, int, list[int], Any, dict[str, Any]]] = []
     for m, law in itertools.product(SWEEP_CONFIGS, GENEALOGICAL_LAWS):
-        programs = golden.reg.programs["succession_laws"][law]
         for seed in range(1, seeds + 1):
             g = build(with_law(m, law, seed), synthesise=False)
             for title in g.titles:
                 for s in title.successions:
-                    golden.worlds["backfill"] = effect_world(g, title, s)
                     case = {
                         "kind": "succession",
                         "system": "M7.dynasty",
@@ -2126,22 +2131,58 @@ def effect_differential(ref_dir: Path, seeds: int) -> list[str]:
                         "world": "backfill",
                         "bind": {"holder": f"person:{s.holder}", "title": f"title:{title.id}"},
                     }
-                    line = ref.succession_line(ref.prepare(golden, case), programs)
-                    compared += 1
-                    if line != s.line:
-                        failures.append(
-                            f"{m.id} law {law} seed {seed} title {title.k} at {s.tick}: the "
-                            f"reference's line {s.line} differs from effect_ref.py's {line}"
-                        )
+                    cases.append(
+                        (law, seed, title.k, s.tick, s.line, effect_world(g, title, s), case)
+                    )
+    patched: Any = ref  # the module's attribute is swapped for the control, then restored
+    original = ref.succession_line
+
+    def compare(label: str) -> list[str]:
+        out = []
+        for law, seed, k, tick, expected, world, case in cases:
+            golden.worlds["backfill"] = world
+            programs = golden.reg.programs["succession_laws"][law]
+            line = ref.succession_line(ref.prepare(golden, case), programs)
+            if line != expected:
+                out.append(
+                    f"{label} law {law} seed {seed} title {k} at {tick}: the reference's line "
+                    f"{expected} differs from effect_ref.py's {line}"
+                )
+        return out
+
+    failures = compare("")
     print(
-        f"EFFECT DIFFERENTIAL: {compared} successions of {len(GENEALOGICAL_LAWS)} laws over "
+        f"EFFECT DIFFERENTIAL: {len(cases)} successions of {len(GENEALOGICAL_LAWS)} laws over "
         f"{len(SWEEP_CONFIGS)} configurations compared"
     )
+    patched.succession_line = lambda run, programs: list(reversed(original(run, programs)))
+    reversed_failures = compare("reversed")
+    patched.succession_line = original
+    if not reversed_failures:
+        failures.append("REVERSED LINE CONTROL FAILED: a reversed succession_line differs nowhere")
+    else:
+        print(
+            f"effect differential reversed-line control: {len(reversed_failures)} of "
+            f"{len(cases)} successions differ (as required)"
+        )
     return failures
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Check or regenerate the golden file; run the reference's own checks."""
+def render_control(control: str) -> list[str]:
+    """A planted violation: build the cases until one fails its checks (no sweep, no spec).
+
+    REV-SPR-030 R10: a control needs the first case that exhibits it, not the whole reference run.
+    """
+    for m in CASES:
+        g = build(m, control)
+        failures = Checker(g).run() + check_widths(g)
+        if failures:
+            return failures
+    return []
+
+
+def parse(argv: list[str] | None) -> argparse.Namespace:
+    """The command line."""
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--write", action="store_true", help="regenerate the golden file")
     parser.add_argument("--golden", type=Path, default=GOLDEN, help="the golden file to check")
@@ -2153,18 +2194,55 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--effect-ref", type=Path, help="run the differential gate on this dir")
     parser.add_argument("--sweep-seeds", type=int, default=SWEEP_SEEDS, help="law sweep seeds")
-    args = parser.parse_args(argv)
+    parser.add_argument("--altered-golden", type=Path, help="an altered golden that must be STALE")
+    parser.add_argument("--stale-spec", type=Path, help="a spec copy that must SPEC MISMATCH")
+    return parser.parse_args(argv)
+
+
+def controls_in_run(args: argparse.Namespace, text: str, values: dict[str, Any]) -> list[str]:
+    """The altered-golden and stale-spec controls, on the one reference run (REV-SPR-030 R10)."""
+    f = []
+    if args.altered_golden is not None:
+        altered = args.altered_golden.read_text(encoding="utf-8")
+        if altered == text:
+            f.append(f"ALTERED GOLDEN CONTROL FAILED: {args.altered_golden} equals the reference")
+        else:
+            line = first_difference(altered, text)
+            print(f"altered golden control: STALE at line {line} (as required)")
+    if args.stale_spec is not None:
+        with args.stale_spec.open("rb") as fh:
+            mismatches = check_spec(tomllib.load(fh), values)
+        if not any("SPEC MISMATCH" in x for x in mismatches):
+            f.append(f"STALE SPEC CONTROL FAILED: {args.stale_spec} passes the spec check")
+        else:
+            print(f"stale spec control: {len(mismatches)} SPEC MISMATCH line(s) (as required)")
+    return f
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Check or regenerate the golden file; run the reference's own checks and the controls."""
+    args = parse(argv)
+    if args.control:
+        failures = render_control(args.control)
+        if not failures:
+            print(f"CONTROL INERT: {args.control} failed no check")
+            return EXIT_OK
+        for x in failures[:20]:
+            print(f"REFERENCE FAILED: {x}")
+        print(f"POPULATION SYNTHESIS: FAIL (the reference's own checks: {len(failures)} failures)")
+        return EXIT_REFERENCE
     try:
-        text, failures, values = render(args.control)
-        sweep_lines, sweep_failures, sweep_values = law_sweep(args.control, args.sweep_seeds)
+        text, failures, values = render(None)
+        sweep_lines, sweep_failures, sweep_values = law_sweep(None, args.sweep_seeds)
         text += "\n".join(sweep_lines) + "\n"
         failures += sweep_failures
+        values = {**values, **sweep_values}
         with args.spec.open("rb") as f:
-            failures += check_spec(tomllib.load(f), {**values, **sweep_values})
+            failures += check_spec(tomllib.load(f), values)
         if args.effect_ref is not None:
             failures += effect_differential(args.effect_ref, args.sweep_seeds)
     except AssertionError as e:
-        failures, text = [f"construction error: {e}"], ""
+        failures, text, values = [f"construction error: {e}"], "", {}
     if failures:
         for x in failures[:20]:
             print(f"REFERENCE FAILED: {x}")
@@ -2175,10 +2253,21 @@ def main(argv: list[str] | None = None) -> int:
         args.golden.write_text(text, encoding="utf-8")
         print(f"wrote {args.golden}")
         return EXIT_OK
+    return compare_and_control(args, text, values)
+
+
+def compare_and_control(args: argparse.Namespace, text: str, values: dict[str, Any]) -> int:
+    """The golden comparison, then the in-run controls; the verdict line."""
     current = args.golden.read_text(encoding="utf-8") if args.golden.exists() else ""
     if current != text:
         line = first_difference(current, text)
         print(f"STALE: {args.golden} differs from the reference at line {line}")
+        print("POPULATION SYNTHESIS: FAIL")
+        return EXIT_FAIL
+    control_failures = controls_in_run(args, text, values)
+    if control_failures:
+        for x in control_failures:
+            print(x)
         print("POPULATION SYNTHESIS: FAIL")
         return EXIT_FAIL
     print(f"POPULATION SYNTHESIS: PASS ({len(CASES)} cases, {text.count(chr(10))} lines)")

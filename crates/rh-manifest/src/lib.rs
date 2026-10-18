@@ -27,6 +27,7 @@ pub mod exact;
 pub mod manifest;
 pub mod pyfmt;
 pub mod registry;
+pub mod specs;
 pub mod yaml;
 
 pub use compile::{CompileError, CompileErrors, compile, compile_file};

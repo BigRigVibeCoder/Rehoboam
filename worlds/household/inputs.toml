@@ -1,0 +1,16 @@
+# household's committed input script (SPR-013 T-13; SPR-011 ruling 15), placed as solo's is: one
+# scope-only material input on Oswin (founder 0), inside the month of his pending death, so the golden run
+# takes the whole path of ADR-0025 item 3 (the epoch bump and the cancel-and-re-sample of a pending
+# death) on the six-person world. Found by a probe run (SPR-013 lesson: a golden input must exercise
+# the path it claims).
+#   Without the input, Oswin's death is drawn at the Month pulse of tick 2,376,000 (year 4,
+#   day 210) for tick 2,378,880 (day 212).
+#   tick:    2,377,807 = year 4, day 211, 06:07 (4 x 518400 + 211 x 1440 + 6 x 60 + 7): strictly
+#            between that pulse and his death instant, and between pulse boundaries.
+#   Outcome: the re-sample misses, so the death is dropped; Oswin dies at tick 8,550,720 (year 16,
+#            day 178). No other person's records change (V-DET-14), and the world still ends in
+#            year 61 (date 0061-05-03) with one EXTINCTION.
+#   founder: the founder's index in genesis order; its PersonId is founder(seed, 0).
+[[input]]
+tick = 2377807
+founder = 0

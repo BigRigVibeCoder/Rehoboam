@@ -1,4 +1,11 @@
-# Planted positive control for lint_patterns.py (V-SIFT-05; SPR-011 T-11): life_ends with an UNANCHORED state read. Never a contract.
+# PLANTED (SPR-013 T-11, V-SIFT-05): life_ends with an UNANCHORED state read, which lint_patterns.py must refuse.
+# A copy of specs/sifting/patterns.solitary_life.toml plus one `where`; never a real pack.
+# Pattern pack `solitary_life` (Registry [pattern_packs]; solo.yaml's narrative.pattern_packs), DSL v0 (05.4 §2, ADR-0008).
+# P1.0 holds one pattern, the walking skeleton's trivial sifter case (SPR-011 ruling 14, T-11): `rh-sifter` v0 matches it
+# downstream of the engine, from sealed channel-A segments, and its SQL twin (specs/sifting/twins/solitary_life.sql, T-11)
+# must give the same matches (V-SIFT-01). The pack's other rung-0 patterns (hard season, hunger, recovery, injury) wait
+# for M3, M4 and S5 (P1b and later).
+# Lint: python -I specs/sifting/lint_patterns.py specs/sifting/patterns.solitary_life.toml specs/manifest/registry_v0.toml
 
 [[pattern]]
 id = "life_ends"
@@ -8,9 +15,13 @@ description = "A person dies. One clause: every DEATH completes one match, bindi
 roles = { A = "any" }
 selection = "latest"        # declared, never implicit (05.4 §2.3); with one clause no partial is ever open
 on_complete = "clear_binding"
+# Expected completed matches per simulated century per 100k persons: the crude death rate at e0 = 30 (M2's default),
+# 1 / e0 = 1/30 per person-year in a stationary population, i.e. 100 x 100,000 / 30 = 333,333.3, rounded down. P1.0's
+# founder worlds are not stationary (no births): each person dies once within about a century, at most 100,000 matches
+# per century per 100k persons, inside the budget (CI fails a pattern above 3x its budget, 05.4 §2.3).
 firing_budget = { per_century_per_100k = 333333 }
   [[pattern.clause]]
   bind = "e1"
-  verb = "DEATH"
-  where = ["grief(A) >= 0.5"]           # M2.demography; the deceased is the event's target (SPR-011 ruling 11)
+  verb = "DEATH"            # M2.demography; the deceased is the event's target (SPR-011 ruling 11)
   target = "A"
+  where = ["notable(A) == 1"]   # planted: no @e1 anchor

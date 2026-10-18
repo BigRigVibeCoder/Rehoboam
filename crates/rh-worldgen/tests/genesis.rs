@@ -22,9 +22,12 @@ use rh_core::ownership::SpecTable;
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear};
 use rh_core::world::WorldTables;
 use rh_ids::person::{PersonIdTable, founder_base, rehash};
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_registry::{Founder, FounderRole, Sex, WorldSpec};
 use rh_worldgen::{GenesisError, SEX_FEMALE, founder_ids, genesis, genesis_with};
+use spec_files::{load_specs, registry_system_ids};
+
+mod spec_files;
 
 const D360: Calendar = Calendar::new(DaysPerYear::D360, SeasonsPerYear::Four);
 const D365: Calendar = Calendar::new(DaysPerYear::D365, SeasonsPerYear::Four);

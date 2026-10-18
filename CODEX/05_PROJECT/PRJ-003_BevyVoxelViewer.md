@@ -2,19 +2,25 @@
 id: PRJ-003
 title: "Bevy Native Voxel Viewer (rh-view): project plan"
 type: reference
-status: PROPOSED
+status: APPROVED
 owner: architect
 agents: [coder, tester, architect]
 tags: [roadmap, project-management, stream, observability]
-related: [PRJ-001, PRJ-002, ADR-0030, ADR-0031, ADR-0035, ADR-0036, ADR-0037, SPR-027]
+related: [PRJ-001, PRJ-002, ADR-0030, ADR-0031, ADR-0035, ADR-0036, SPR-026, SPR-027, SPR-033]
 created: 2026-10-17
 updated: 2026-10-17
-version: 1.1.0
+version: 1.2.1
 ---
 
 # PRJ-003 — Bevy Native Voxel Viewer (`rh-view`): Project Plan
 
-> **BLUF:** Authored by the Red Team under Director mandate (2026-10-17) as the formal specification and execution plan for the Developer (`AGT-002-TOOLS`). Specifies the architecture, scope, and phased implementation for `crates/rh-view`, a native Rust 3D voxel spectator and timeline scrubber built on Bevy 0.20. Serves as a **vital visual testing & observability harness for the Red Team and Director**: text logs alone blind external auditors when evaluating spatial layouts, demographic emergence, and dynastic drama. **We need to SEE the simulation to test it.** Connects directly to `rh-protocol`, `rh-stream`, and the SPR-027 materializer via local sockets/pipes. Lives strictly in the Tool plane (`Tool` crate classification); no Plane A simulation crate may ever depend on it. Text-first simulation contracts and G2 thesis gates remain completely unaffected. Submitted for Architect review and D51 / ADR-0036 ratification.
+> **BLUF:**
+> - **What it is.** The Red Team wrote this plan under the director's mandate (D51, 2026-10-17). It is the execution plan for `rh-view`, a native Rust 3D voxel spectator and timeline scrubber built on Bevy 0.20. AGT-002-TOOLS implements it.
+> - **Why.** It is the Red Team's and the director's **visual testing and observability harness**. Text logs alone leave external auditors blind to spatial layouts, demographic emergence and dynastic drama. We need to see the simulation to test it.
+> - **How it connects.** `rh-view` reads the World Stream (IF-0, `specs/stream/wire_v1.md`, through `rh-protocol`), sealed segments (through `rh-stream`'s reader) and SPR-027's materializer.
+> - **Where it lives.** In the tool plane, in its own Cargo workspace (`viewer/`). No engine crate may depend on it.
+> - **What it does not touch.** The text-first simulation contracts and the G2 thesis gate.
+> - **Decision.** ADR-0036 (D51, approved 2026-10-17) governs this plan. v1.2.0 aligns v1.1.0 with ADR-0036; the Architect's changes are listed in §8.
 
 ---
 
@@ -24,10 +30,11 @@ To ensure that core simulation velocity and determinism are never compromised:
 
 | Role | Responsibility |
 |---|---|
-| **Developer (`AGT-002-TOOLS`)** | **Primary Implementer.** Writes the Rust code for `crates/rh-view`, implements the binary greedy chunk mesher, configures Bevy 0.20 render pipelines, and connects the stream reader to `rh-stream`. |
-| **Architect (`AGT-001`)** | **System Integrator & Gatekeeper.** Reviews interface boundaries (`rh-protocol`, socket wire formats). Formally files Decision D51 and drafts ADR-0036. Issues sprints into the merge pipeline and enforces that no Plane A crate ever imports `rh-view`. |
-| **Red Team** | **Requirements Author & Quality Auditor.** Defined `PRJ-003` and `SPR-033`. Audits visual fidelity, tests non-interference (`V-VIEW-01`), verifies timeline scrub latency (`V-VIEW-05`), and utilizes the diorama viewer as the primary visual inspection harness to test demographic and spatial emergence. |
-| **Director** | **Executive Authority.** Ratifys Decision D51, approves visual fidelity milestones, and exercises the timeline scrubber / Gandalf avatar controls. |
+| **Developer (`AGT-002-TOOLS`)** | **Primary implementer.** Writes the Rust code for `viewer/rh-view`: the binary greedy chunk mesher, the Bevy 0.20 render pipelines, and the stream reader over `rh-protocol` and `rh-stream` |
+| **Architect (`AGT-001`)** | **System integrator and gatekeeper.** Reviews the interface boundaries (`rh-protocol`, the socket wire formats), issues the sprints into the merge pipeline, and enforces that no engine crate imports `rh-view`. D51 and ADR-0036 are filed |
+| **Tester (AGT-003, a session on a different model from the Developer's)** | **Independent verification** of each sprint (`VER-SPR-0NN-TEST`), as for every sprint |
+| **Red Team** | **Requirements author and quality auditor.** Defined `PRJ-003` and `SPR-033`. Audits visual fidelity, tests non-interference and timeline scrub latency, and uses the diorama viewer as the primary visual inspection harness for demographic and spatial emergence. Under ADR-0036 §4, a visual finding is closed only by an automated check that reproduces it |
+| **Director** | **Executive authority.** Ratified D51. Approves visual fidelity milestones, and uses the timeline scrubber and, from P2, the Gandalf avatar controls |
 
 ---
 
@@ -38,31 +45,32 @@ To ensure that core simulation velocity and determinism are never compromised:
 | PLANE A: AUTHORITATIVE SIMULATION KERNEL (Headless Rust)                                |
 | Simulates demographic life-courses, harvest yields, dynastic claims, and wars.          |
 | Bitwise deterministic fixed-point math (Q8_8, Q16_16, Q32_32). Zero floats.             |
-| Emits binary event stream & Arrow keyframes. ZERO awareness of 3D or rendering.         |
+| Emits the World Stream (channel A) and Arrow keyframes. ZERO awareness of rendering.    |
 +-----------------------------------------------------------------------------------------+
                                              │
-                                             ▼ Read-Only Unix Socket / Arrow IPC
+                                             ▼ Read-only: IF-0 live edge (wire_v1), sealed segments, materializer
 +-----------------------------------------------------------------------------------------+
-| PLANE B: PROCEDURAL VOXEL HYDRATION (`crates/rh-view::hydrate`)                         |
-| Computes 3D geometry deterministically: Voxel(x,y,z) = G(Seed, State, Era).             |
+| PLANE B: PROCEDURAL VOXEL HYDRATION (`viewer/rh-view::hydrate`)                         |
+| Computes 3D geometry deterministically: Voxel(x,y,z) = G(Seed, State, Era, version).    |
 | Hydrates bare simulation records (settlement_id, seed, era, pop) into timber, thatch,   |
 | stone keeps, roads, chimney smoke particles, and villager visual walk-paths.            |
-| Rewinding to Year 1342 deterministically reproduces the exact same village diorama.      |
+| Rewinding to Year 1342 deterministically reproduces the exact same village diorama.     |
 +-----------------------------------------------------------------------------------------+
                                              ▲
                                              │ Camera Steering
 +-----------------------------------------------------------------------------------------+
-| PLANE C: NARRATIVE CAMERA DIRECTOR (`crates/rh-view::director`)                         |
-| Reads causal sifter events from `rh-sifter`. Directs viewport orbit and zoom to focus   |
-| automatically on climax moments (assassinations, sieges, coronations, riots).          |
+| PLANE C: NARRATIVE CAMERA DIRECTOR (`viewer/rh-view::director`)                         |
+| Reads channel C sift matches (`rh-sifter`). Directs viewport orbit and zoom to focus    |
+| automatically on climax moments (assassinations, sieges, coronations, riots).           |
 +-----------------------------------------------------------------------------------------+
 ```
 
-### The Invariants:
-1. **Zero Impact on Plane A Tick Rate (V-PERF-09):** `rh-view` runs in a separate native OS process. If `rh-view` crashes, drops frames, or encounters a GPU driver timeout, Plane A does not stall for even a single nanosecond.
-2. **Deterministic Geometry:** Given the same `world_seed`, `settlement_id`, and `simulation_tick`, Plane B hydration generates bitwise identical voxel meshes across different machines and runs.
-3. **Strict One-Way Dependency:** `crates/rh-view` may depend on `rh-protocol`, `rh-stream`, `rh-worldgen`, and `rh-snapshot`. **No crate in `crates/rh-*` may ever depend on `rh-view`.** The architectural lint in `bin/check_all.sh` enforces this.
-4. **Text-First Primary Gate Preserved:** G1a, G1b, and G2 gates remain text-verified. `rh-view` is an external inspection and presentation harness, not a gate blocker for the simulation core.
+### The Invariants (ADR-0036 §2)
+1. **Zero impact on plane A (V-PERF-09, V-R3D-14).** `rh-view` runs in a separate native OS process. If it crashes, drops frames or hits a GPU driver timeout, plane A does not stall. With `rh-view` attached as one harness, throughput stays ≥ 95% of headless and the `state_hash` ladder is identical.
+2. **Deterministic geometry (V-R3D-13).** Given the same `world_seed`, the same state at the tick, the Registry and the generator version, plane-B hydration gives byte-identical **voxel content** across machines, runs, thread counts and builds, and whether the tick is reached by rewind or by forward play. Rendering (lighting, frame timing) is not hashed.
+3. **Strict one-way dependency.** `viewer/rh-view` lives in its **own Cargo workspace** with its own `Cargo.lock`. It may depend by path on `rh-protocol`, `rh-stream`, `rh-worldgen`, `rh-snapshot` and `rh-golden` (SPR-027's materializer, `rh_golden::materialize`; Architect ruling D-7 at the wave-5 plans, 2026-10-17), for reading. **No crate under `crates/` may depend on it**, and Bevy's dependency graph never enters the engine's lock or its `cargo deny` run. `bin/lint_arch.py` enforces this.
+4. **Text-first primary gate preserved.** G1a, G1b and G2 stay text-verified. `rh-view` is an inspection and presentation harness, not a gate on the simulation core.
+5. **Procedural assets only** (ADR-0035 directive 5 as amended by ADR-0036). Every block, texture and particle is generated by `rh-view`'s own versioned plane-B generators, or comes from a CC0 source. No art extracted from third-party games enters `rh-view` or the repository's main line.
 
 ---
 
@@ -70,39 +78,45 @@ To ensure that core simulation velocity and determinism are never compromised:
 
 | Component | Technical Choice | Rationale |
 |---|---|---|
-| **Engine Framework** | **Bevy 0.20 (Rust)** | Native Rust ecosystem compatibility; pins same `bevy_ecs 0.20` already in repo; zero FFI overhead; GPU-driven mesh rendering and atmospheric scattering. |
-| **Graphics API** | **WGPU (Vulkan / Metal / DX12 / WebGPU)** | Universal cross-platform native rendering with built-in path to browser WebAssembly/WebGPU deployment. |
-| **Meshing Algorithm** | **Binary Greedy Meshing** | Merges co-planar adjacent voxel faces into single quads via bitwise integer math. Drops quad count by 85–92% compared to naive voxels, guaranteeing >60 FPS on integrated GPUs. |
-| **Chunk Architecture** | **64×64×32 Diorama Bubbles** | Focuses high-density voxel detail within the camera's local observation bubble. Outer terrain rendered as low-poly heightfield meshes under ADR-0031 (Fidelity by Zoom). |
-| **Stream Ingestion** | **Direct Unix Domain Socket (`rh-stream`)** | Reads length-delimited binary event records and keyframe chunks directly from the local filesystem with sub-millisecond latency. |
-| **Timeline Replay** | **`materializer` (SPR-027)** | Queries nearest Arrow IPC keyframe (every 10 sim-years) and replays forward journal entries to scrub instantly to any requested tick. |
-| **Gandalf Avatar Hook** | **`control.sock` (P2 Integration)** | Encodes user keyboard/mouse movement into `PlayerAction` envelopes sent to the simulation live edge. Minds system (`T1.minds`) handles NPC reactions. |
+| **Engine framework** | **Bevy 0.20 (Rust)**, an exact pin in `viewer/Cargo.lock` | Native Rust compatibility (the same `bevy_ecs` line as the engine); zero FFI overhead; GPU-driven mesh rendering and atmospheric scattering |
+| **Graphics API** | **WGPU (Vulkan / Metal / DX12 / WebGPU)**, through Bevy | Cross-platform native rendering, with a later path to WebAssembly and WebGPU |
+| **Meshing algorithm** | **Binary greedy meshing** | Merges coplanar adjacent voxel faces into single quads with bitwise integer math. Drops the quad count by 85–92% against naive voxels, aiming at ≥ 60 FPS on integrated GPUs |
+| **Chunk architecture** | **64×64×32 diorama bubbles** | Block detail only in the camera's observation bubble; outer terrain as low-poly heightfield meshes (ADR-0031, fidelity by zoom) |
+| **Stream ingestion** | **IF-0's live edge** (`wire_v1.md`; canonical lines, D43) over a Unix socket through `rh-protocol` (SPR-026), and sealed segments through `rh-stream`'s reader | The engine's own stream code, in the same language. The viewer never parses Parquet or frames by hand |
+| **Timeline replay** | **The materializer (SPR-027)** | The nearest keyframe (every 10 sim-years) plus deterministic replay gives the exact state at any tick |
+| **Gandalf avatar hook** | **`control.sock` (P2.7)** | Keyboard and mouse actions become journaled `PlayerAction` and `SpeechAct` inputs at the tip. An act in the past is a fork (ADR-0025). `T1.minds` decides the NPCs' reactions |
 
 ---
 
-## 4. Phased Sprint Roadmap (Off-Critical-Path)
+## 4. Phased Sprint Roadmap (off the critical path; `docs/11` viewer lane V.1–V.3)
 
-Work runs in a dedicated Tool lane that does not contend with the core simulation merge queue (PRJ-002):
+The work runs in a dedicated tool lane that does not contend with the core simulation merge queue (PRJ-002). Each sprint is at most about 3 agent-days (GOV-005 §3). The Red Team's estimate of about 2 agent-weeks is the total of SPR-033 to SPR-035.
 
 | Sprint | Phase | Title | Scope & Deliverables | Class | Prerequisite |
 |---|---|---|---|---|---|
-| **SPR-033** | P1a-Tool | **Bevy 0.20 Scaffold & Binary Greedy Mesher** | Create `crates/rh-view`; initialize Bevy 0.20 app; implement binary greedy chunk mesher; bench 60 FPS on 64×64×32 chunk; orbital camera controller. | C1 (Tool) | Ratification of D51 |
-| **SPR-034** | P1a-Tool | **Stream Ingestion & Plane-B Procedural Hydration** | Wire Unix socket reader to `rh-stream`; implement deterministic building grammar (Tudor houses, stone towers, church, roads); hydrate from settlement seed. | C1 (Tool) | SPR-033, SPR-013 (`rh-stream`) |
-| **SPR-035** | P1a-Tool | **Materializer Hookup & 60 FPS Timeline Scrubber** | Integrate with SPR-027 `materializer`; implement GUI timeline scrubber; jump to keyframes and replay forward; instant visual reconstruction. | C1 (Tool) | SPR-034, SPR-027 (`materializer`) |
-| **SPR-036** | P2-Tool | **Narrative Camera Director & Sifter Binding** | Ingest Plane C causal sifter events; automated camera cinematic framing on drama nodes (coronations, deaths, battles); particle effects (smoke, fire). | C1 (Tool) | SPR-035, SPR-020 (Event Envelope) |
-| **SPR-037** | P2-Tool | **Avatar Embodiment ("Being Gandalf") & WebGPU** | Ingest WASD/mouse inputs as `PlayerAction` over `control.sock`; first-person street-level walk; compile `rh-view` to WebGPU target. | C1 (Tool) | SPR-036, P2.7 (`control.sock`) |
+| **SPR-033** | V.1 | **Bevy 0.20 scaffold & binary greedy mesher** | The `viewer/` workspace and `rh-view`; a Bevy 0.20 app; the binary greedy chunk mesher; a procedural demo diorama; an orbital camera; the isolation gate (V-R3D-14) | C1 (tool) | D51 (ratified); started after SPR-027 lands, per the director |
+| **SPR-034** | V.1 | **Stream ingestion & plane-B procedural hydration** | The IF-0 reader through `rh-protocol` and the sealed-segment reader; a deterministic building grammar (Tudor houses, stone towers, church, roads) hydrated from the settlement seed; the hydration determinism gate (V-R3D-13) | C1 (tool) | SPR-033, SPR-026 (`rh-protocol`) |
+| **SPR-035** | V.1 | **Materializer hookup & timeline scrubber** | SPR-027's materializer; a timeline scrubber that jumps to keyframes and replays forward; rewind equal to forward play (V-R3D-13) | C1 (tool) | SPR-034, SPR-027 |
+| **SPR-036** | V.1–V.2 | **Narrative camera director & sifter binding** | Channel C sift matches drive the camera (R3D-7); cinematic framing on drama nodes (coronations, deaths, battles); smoke and fire particles | C1 (tool) | SPR-035, SPR-020 (the event envelope) |
+| **SPR-037** | V.3 | **Avatar embodiment ("Being Gandalf") & WebGPU** | WASD and mouse inputs become `PlayerAction` over `control.sock`; a first-person street-level walk; a WebGPU build of `rh-view` | C1 (tool) | SPR-036, P2.7 (`control.sock`) |
+
+V.2 (people moving, fields, mills, famine) follows P1b's systems and is planned when they land.
 
 ---
 
 ## 5. Verification & Acceptance Criteria
 
-Every sprint in PRJ-003 must pass strict acceptance testing prior to merging:
+Each sprint passes these before merging. The `docs/09` IDs are the gates; the Red Team's V-VIEW names are kept as labels.
 
-1. **V-VIEW-01 (Engine Non-Interference):** Running `rh-view` connected to `rh-stream` must result in $\le 0.5\%$ delta in Plane A simulation tick rate compared to headless execution.
-2. **V-VIEW-02 (Bitwise Visual Parity):** Given identical `(world_seed, tick, camera_coord)`, the generated vertex and index buffers must produce an identical SHA-256 hash across repeated runs.
-3. **V-VIEW-03 (Performance Floor):** Render loop must maintain $\ge 60\text{ FPS}$ on a standard 4-core developer machine (ThinkPad P51 baseline) for a 64×64 diorama with 50 active animated actors.
-4. **V-VIEW-04 (Zero Reverse Dependencies):** `cargo check --workspace` must pass with `#![deny(unsafe_code)]` and zero references to `bevy` or `rh-view` in any Plane A crate.
-5. **V-VIEW-05 (Timeline Scrub Latency):** Scrubbing backward 20 simulation years and reconstructing the diorama via the materializer must complete in $\le 250\text{ ms}$.
+| Check | Gate (`docs/09`) | Criterion |
+|---|---|---|
+| **V-VIEW-01, engine non-interference** | V-R3D-14 with V-PERF-09 | With `rh-view` attached as one harness, throughput is at least 95% of headless and the `state_hash` ladder is identical. The measured delta is reported; the Red Team's target of ≤ 0.5% is a report, not a gate, because a shared CI runner cannot resolve it |
+| **V-VIEW-02, deterministic content** | V-R3D-13 | The voxel content digest of a fixed bubble at a fixed tick is equal across runs, thread counts, builds, and rewind against forward play. The mesh's vertex and index buffers are hashed too, as a second check bound to the mesher's version |
+| **V-VIEW-03, performance floor** | Reported | ≥ 60 FPS on a 4-core developer machine (the ThinkPad P51 baseline) for a 64×64 diorama with 50 animated actors. Measured on the director's machine; CI has no GPU |
+| **V-VIEW-04, zero reverse dependencies** | V-R3D-14 | No crate under `crates/` depends on `viewer/`, and the engine's `Cargo.lock` is unchanged. `rh-view`'s own code carries `#![deny(unsafe_code)]` |
+| **V-VIEW-05, timeline scrub latency** | Reported (depends on V-STR-02) | Scrubbing back 20 sim-years and rebuilding the diorama through the materializer takes ≤ 250 ms |
+
+**CI:** the viewer's job builds `viewer/` and runs headless: the hydration data path, the mesher, and the determinism and isolation gates, with no window and no GPU. It runs only when `viewer/` or a crate it reads changes, because compiling Bevy is expensive and CI minutes are billed. `rh-golden` on the path list widens that trigger to the crates `rh-golden` itself reads (the engine crates, `rh-sys-*`, `rh-worldgen`, `rh-snapshot`), so the job fires on more engine changes than before (W40 of the wave-5 review). If its cost exceeds its budget, it moves to the nightly (ADR-0036).
 
 ---
 
@@ -110,22 +124,35 @@ Every sprint in PRJ-003 must pass strict acceptance testing prior to merging:
 
 ```mermaid
 flowchart TD
-  D51([Director Ratifies D51 / ADR-0036]) --> S033[SPR-033: Bevy 0.20 Scaffold & Greedy Mesher]
-  S033 --> S034[SPR-034: Stream Ingestion & Plane-B Procedural Hydration]
-  S013[SPR-013: rh-stream] -.-> S034
-  S027[SPR-027: materializer] -.-> S035[SPR-035: Materializer Hookup & Timeline Scrubber]
-  S034 --> S035
-  S020[SPR-020: Event Envelope] -.-> S036[SPR-036: Narrative Camera Director]
+  D51([D51 / ADR-0036, approved 2026-10-17]) --> S033[SPR-033: Bevy 0.20 scaffold & greedy mesher]
+  S027[SPR-027: materializer] -.->|director: start after it lands| S033
+  S033 --> S034[SPR-034: stream ingestion & plane-B hydration]
+  S026[SPR-026: rh-protocol, IF-0] -.-> S034
+  S034 --> S035[SPR-035: materializer hookup & timeline scrubber]
+  S027 -.-> S035
+  S020[SPR-020: event envelope] -.-> S036[SPR-036: narrative camera director]
   S035 --> S036
-  P27[P2.7: control.sock] -.-> S037[SPR-037: Gandalf Avatar & WebGPU]
+  P27[P2.7: control.sock] -.-> S037[SPR-037: Gandalf avatar & WebGPU]
   S036 --> S037
 ```
 
 ---
 
-## 7. Submission for Architect Review
+## 7. Submission for Architect Review (Red Team, v1.1.0)
 
-This plan is formally submitted to the Architect with the following affirmations:
-1. **Zero Critical-Path Blockers:** This project operates entirely in the Tool plane and does not gate Gate G1a or G2.
-2. **Zero Core Contamination:** No changes are requested to Plane A contracts, fixed-point math, or state hashing.
-3. **Ready for ADR-0036:** The Red Team requests the Architect file Decision D51 with the drafted ADR-0036 based on this specification.
+This plan was submitted to the Architect with the following affirmations:
+1. **Zero critical-path blockers:** the project operates in the tool plane and does not gate G1a or G2.
+2. **Zero core contamination:** no change is requested to plane-A contracts, fixed-point math or state hashing.
+3. **Ready for ADR-0036:** the Red Team asked the Architect to file D51 with ADR-0036 based on this specification. **Done:** PR #71, merged 2026-10-17.
+
+## 8. Architect's changes at v1.2.0 (2026-10-17), aligning v1.1.0 with ADR-0036
+
+1. `crates/rh-view` in the root workspace becomes `viewer/rh-view`, its own Cargo workspace (ADR-0036 §2.2). Bevy then never enters the engine's lock, `cargo deny`, the engine-purity deny-list, or every PR's compile.
+2. The reference to ADR-0037 (a "view protocol") is replaced by IF-0's wire, `specs/stream/wire_v1.md` through `rh-protocol` (SPR-026). The viewer needs no protocol of its own, so there is no ADR-0037.
+3. Stream ingestion is IF-0's canonical lines on the live edge, sealed segments through `rh-stream`, and the materializer. It does not read "binary records from the filesystem".
+4. The V-VIEW checks map to `docs/09` gates (V-R3D-13, V-R3D-14, V-PERF-09). FPS and the ≤ 0.5% delta are reported, not gated.
+5. Sprints are at most about 3 agent-days (GOV-005 §3); SPR-033's own estimate is corrected.
+6. A Tester on a different model verifies each sprint. The Red Team audits, and its findings close only with automated checks (ADR-0036 §4).
+7. **Procedural assets only** (Invariant 5). No art extracted from third-party games enters `rh-view` or `main`.
+8. The schedule follows the director: SPR-033 starts after SPR-027 lands.
+9. (v1.2.1, 2026-10-17; the Architect's rulings at the wave-5 plans, D-7 and W40.) The path list of §2 invariant 3 gains `rh-golden`, where SPR-027's materializer lives on SPR-013's replay path; §5 notes that this widens the viewer's CI trigger.

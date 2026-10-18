@@ -1,0 +1,199 @@
+# The keyframe extract of the ashcombe fixture (annals_v0.md §1, §6): the rows of the
+# genesis
+# keyframe a house prologue reads, because the back-filled dead have no channel-A record
+# (REV-SPR-019 R1). `founder` is the founder index k of founder(seed, k) (SPR-019 D-02;
+# the cast first), shown as `Founder #k+1` (annals_v0.md §4). GENERATED; do not edit.
+[extract]
+format = "rehoboam/annals/keyframe-extract/v0"
+keyframe = "kf/y000000/t000000000.arrow"   # the genesis keyframe the rows came from
+state_hash = "0a5c3e1d9b7f2468"                 # its plane-A state_hash (illustrative)
+
+[[house]]
+id = 3172275184034551431   # ashcombe
+[[house]]
+id = 7252932463130708544   # thorne
+[[title]]
+id = 1
+[[title]]
+id = 2
+[[life_course]]
+person_id = 52998799569557452   # ash_root
+founder = 5
+sex = 0
+mother_id = 0
+father_id = 0
+birth_tick = -31104000
+exit_tick = -6220800
+[[life_course]]
+person_id = 626540833280463727   # thorne_root
+founder = 11
+sex = 0
+mother_id = 0
+father_id = 0
+birth_tick = -33696000
+exit_tick = -4147200
+[[life_course]]
+person_id = 1179341239027200263   # ysolde
+founder = 14
+sex = 1
+mother_id = 13404045530391465978
+father_id = 6759579853571863877
+birth_tick = -8187840
+[[life_course]]
+person_id = 2008906306131934606   # orm
+founder = 4
+sex = 0
+mother_id = 0
+father_id = 0
+birth_tick = -11270880
+[[life_course]]
+person_id = 2852707390447582764   # osric
+founder = 7
+sex = 0
+mother_id = 9020488354894702845
+father_id = 6740622430173101898
+birth_tick = -8706240
+[[life_course]]
+person_id = 5962764098100875085   # ash_root_wife
+founder = 6
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -30067200
+exit_tick = -7776000
+[[life_course]]
+person_id = 6740622430173101898   # edric
+founder = 0
+sex = 0
+mother_id = 5962764098100875085
+father_id = 52998799569557452
+birth_tick = -19592640
+[[life_course]]
+person_id = 6759579853571863877   # hugh
+founder = 2
+sex = 0
+mother_id = 18424168790829042974
+father_id = 626540833280463727
+birth_tick = -20629440
+[[life_course]]
+person_id = 9020488354894702845   # maud
+founder = 1
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -18555840
+[[life_course]]
+person_id = 9074827264899753041   # wynn
+founder = 9
+sex = 1
+mother_id = 9020488354894702845
+father_id = 6740622430173101898
+birth_tick = -9804960
+[[life_course]]
+person_id = 12076042259415950935   # nell
+founder = 16
+sex = 1
+mother_id = 13404045530391465978
+father_id = 6759579853571863877
+birth_tick = -4102560
+[[life_course]]
+person_id = 13404045530391465978   # alys
+founder = 3
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -19074240
+[[life_course]]
+person_id = 14639768203977341493   # giles
+founder = 13
+sex = 0
+mother_id = 13404045530391465978
+father_id = 6759579853571863877
+birth_tick = -10100160
+[[life_course]]
+person_id = 15419581476900804778   # tilda
+founder = 15
+sex = 1
+mother_id = 13404045530391465978
+father_id = 6759579853571863877
+birth_tick = -2234880
+[[life_course]]
+person_id = 16429658235990008947   # xan
+founder = 10
+sex = 0
+mother_id = 9074827264899753041
+father_id = 2008906306131934606
+birth_tick = -295200
+[[life_course]]
+person_id = 17599797159864274579   # sibby
+founder = 17
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -3021120
+[[life_course]]
+person_id = 18145486546762629703   # aldwin
+founder = 8
+sex = 0
+mother_id = 9020488354894702845
+father_id = 6740622430173101898
+birth_tick = -7083360
+[[life_course]]
+person_id = 18424168790829042974   # thorne_root_wife
+founder = 12
+sex = 1
+mother_id = 0
+father_id = 0
+birth_tick = -32140800
+exit_tick = -1555200
+[[house_member]]
+person = 52998799569557452   # ash_root
+house = 3172275184034551431
+[[house_member]]
+person = 626540833280463727   # thorne_root
+house = 7252932463130708544
+[[house_member]]
+person = 1179341239027200263   # ysolde
+house = 7252932463130708544
+[[house_member]]
+person = 2852707390447582764   # osric
+house = 3172275184034551431
+[[house_member]]
+person = 6740622430173101898   # edric
+house = 3172275184034551431
+[[house_member]]
+person = 6759579853571863877   # hugh
+house = 7252932463130708544
+[[house_member]]
+person = 9074827264899753041   # wynn
+house = 3172275184034551431
+[[house_member]]
+person = 12076042259415950935   # nell
+house = 7252932463130708544
+[[house_member]]
+person = 14639768203977341493   # giles
+house = 7252932463130708544
+[[house_member]]
+person = 15419581476900804778   # tilda
+house = 7252932463130708544
+[[house_member]]
+person = 18145486546762629703   # aldwin
+house = 3172275184034551431
+[[tenure]]
+title = 1
+holder = 52998799569557452   # ash_root
+start = -20736000
+end = -6220800
+[[tenure]]
+title = 1
+holder = 6740622430173101898   # edric
+start = -6220800
+[[tenure]]
+title = 2
+holder = 626540833280463727   # thorne_root
+start = -19699200
+end = -4147200
+[[tenure]]
+title = 2
+holder = 6759579853571863877   # hugh
+start = -4147200

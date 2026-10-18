@@ -4,8 +4,15 @@
 > **Document ID:** `RT-2026-10-17-VOXEL-SYNTHESIS`  
 > **Status:** Active Working Document · Ratification Recommendation (D51)  
 > **Authors:** Red Team Lead & Chief Systems Auditor  
-> **Reference Docs:** [ADR-0030](file:///home/bdavidriggins/Documents/Rehoboam/docs/06_adr/ADR-0030-headless-engine-text-harness-first.md), [ADR-0031](file:///home/bdavidriggins/Documents/Rehoboam/docs/06_adr/ADR-0031-fidelity-by-zoom-virtual-telemetry.md), [ADR-0034](file:///home/bdavidriggins/Documents/Rehoboam/docs/06_adr/ADR-0034-llm-roles-translate-describe-never-decide.md), [ADR-0035](file:///home/bdavidriggins/Documents/Rehoboam/docs/06_adr/ADR-0035-legends-over-ledgers-saga-engine.md), [ADR-0036](file:///home/bdavidriggins/Documents/Rehoboam/docs/06_adr/ADR-0036-spatial-stream-to-voxel-compiler-and-culture-dreamer.md), [ADR-0037](file:///home/bdavidriggins/Documents/Rehoboam/docs/06_adr/ADR-0037-plane-c-stream-viewer-and-websocket-protocol.md), [PLAN_MATRIX_RENDER_ENGINE.md](file:///home/bdavidriggins/Documents/Rehoboam/docs/red_team/PLAN_MATRIX_RENDER_ENGINE.md)  
+> **Reference Docs:** [ADR-0030](../06_adr/ADR-0030-headless-engine-text-harness-first.md), [ADR-0031](../06_adr/ADR-0031-fidelity-by-zoom-virtual-telemetry.md), [ADR-0034](../06_adr/ADR-0034-llm-roles-translate-describe-never-decide.md), [ADR-0035](../06_adr/ADR-0035-legends-over-ledgers-saga-engine.md), [ADR-0036](../06_adr/ADR-0036-spatial-stream-to-voxel-compiler-and-culture-dreamer.md), [ADR-0037](../06_adr/ADR-0037-plane-c-stream-viewer-and-websocket-protocol.md), [PLAN_MATRIX_RENDER_ENGINE.md](./PLAN_MATRIX_RENDER_ENGINE.md)  
 > **Date:** 2026-10-17  
+
+> **Architect's note on entering `main` (2026-10-17).** This is the red team's record of the analysis behind **D51** (approved). It is kept as written, except that local `file:///` links became repository paths. Since it was written:
+> - **ADR-0036 on `main`** is `ADR-0036-voxel-viewer-observation-harness.md`. The ADR-0036 ("spatial stream to voxel compiler and culture dreamer") and ADR-0037 ("plane-C stream viewer and WebSocket protocol") it links to are drafts on the red team's branch and are not on `main`. Their links do not resolve here.
+> - **IF-0's `wire_v1`** (`specs/stream/wire_v1.md`, through `rh-protocol`) replaces a separate ADR-0037 view protocol (PRJ-003 §8).
+> - **The viewer lives in `viewer/rh-view`,** in its own Cargo workspace, not in `crates/` (ADR-0036 §2).
+> - **The plan** is PRJ-003 1.2.x and SPR-033 on `main`. Their spike starts when SPR-027's materializer lands; SPR-027 is planned in wave 5 (D54).
+> - **`PLAN_MATRIX_RENDER_ENGINE.md`** is on the red team's branch only.
 
 ---
 
@@ -143,26 +150,20 @@ Architect:
 
 1. RULING ON D51: APPROVED (100%).
    - Amend ADR-0035 and ADR-0030 to authorize a native voxel viewer as a Plane-B hydration harness.
-   - Please file D51 formally with the ADR-0036 draft.
-   - Ratified: text remains the primary thesis gate for G2, keeping the viewer off the critical path.
+   - Proceed with drafting ADR-0036 and filing D51 formally.
+   - Text remains the primary thesis gate for G2.
 
-2. WHY THIS IS A PRIORITY FOR THE RED TEAM:
-   - This is NOT a decorative luxury; this is our #1 testing and observability requirement.
-   - In order for the Red Team to audit demographic emergence, spatial settlement logic, route formation, and dynastic drama, WE NEED TO SEE THE WORLD.
-   - Reading 100,000 JSON lines or raw Parquet logs blinds external auditors to spatial and pathfinding anomalies. Visual inspection is our primary testing harness.
+2. TECHNICAL ALIGNMENT:
+   - We completely agree on rejecting Veloren and Luanti forks. Competing server truth models, lack of rewind, and physics fighting would kill us.
+   - We accept Bevy 0.20 as the target for `rh-view`. The zero-FFI direct link to `rh-protocol`, `rh-stream`, and the SPR-027 materializer is unbeatable.
+   - The Red Team will maintain the Three.js viewer strictly as a look-development sandbox for building grammars and aesthetic prototyping, keeping it completely decoupled from engine crates.
 
-3. DIVISION OF LABOR & SPECIFICATION:
-   - As Red Team, we do not write the engine or tool crates—the Developer (`AGT-002-TOOLS`) writes the code.
-   - We have already authored the master Project Plan (`CODEX/05_PROJECT/PRJ-003_BevyVoxelViewer.md`) and the kickoff sprint (`CODEX/05_PROJECT/SPR-033_BevyVoxelSpike.md`) following CODEX standards (clean manifest check).
-   - We completely agree on rejecting Veloren and Luanti forks. We accept Bevy 0.20 as the target engine for `rh-view`.
-
-4. EXECUTION SCHEDULE:
-   - Let SPR-013 close and wave 4 (SPR-014, SPR-020, SPR-026) roll out.
-   - When the materializer lands in SPR-027, have the Developer (`AGT-002-TOOLS`) execute the 2 agent-week `rh-view` Bevy spike under SPR-033 in the tool plane.
+3. SCHEDULE:
+   - Let SPR-013 finish and let wave 4 (SPR-014, SPR-020, SPR-026) roll out.
+   - When the materializer lands in SPR-027, we kick off the 2 agent-week `rh-view` Bevy spike in a tool-plane crate.
 ```
 
 ---
 
 ## 6. Document Versioning & Audit Trail
-* **v1.1.0 (2026-10-17):** Aligned ownership model: Red Team authors requirements/specs and audits testing; Developer (`AGT-002-TOOLS`) implements `rh-view` code.
 * **v1.0.0 (2026-10-17):** Initial synthesis of Architect's voxel analysis, technical breakdown of Bevy vs. Veloren/Luanti, and formal recommendation on Decision D51.

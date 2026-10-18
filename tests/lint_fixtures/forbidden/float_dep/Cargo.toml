@@ -2,6 +2,7 @@
 # 2026-10-16; tests/lint_fixtures/README.md); not in the Rehoboam workspace. A crate named like the real
 # rh-snapshot, the one crate PLANE_A_EXTERNAL_DEPS allows rusqlite, takes a float from rusqlite in three
 # ways that name no float type; bin/lint_forbidden.py must report each through FLOAT_YIELDING_APIS.
+# SPR-013: rh-stream, the one crate allowed parquet, takes one from its record API in two ways.
 [workspace]
-members = ["rh-snapshot"]
+members = ["rh-snapshot", "rh-stream"]
 resolver = "3"

@@ -12,9 +12,9 @@
 //! (the monthly Bernoulli k = 0, the day k = 1, the re-sample's k = 0 and k = 1, the epochs) is
 //! pinned.
 //!
-//! Controls (`bin/check_all.sh`): the feature `mutant-resample-k-swap` swaps k in `resample_timer`
-//! and must FAIL here; `RH_M2_DRAWS_GOLDEN` names another golden file (one altered death line must
-//! FAIL).
+//! Controls (`bin/check_all.sh`): the features `mutant-resample-hit-k1` and `mutant-resample-day-k0`
+//! each move one of `resample_timer`'s draws to the other k, and each must FAIL here;
+//! `RH_M2_DRAWS_GOLDEN` names another golden file (one altered death line must FAIL).
 #![allow(
     clippy::expect_used,
     clippy::unwrap_used,
@@ -33,9 +33,12 @@ use rh_core::system::SystemModel;
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_core::world::WorldTables;
 use rh_ids::{BranchSalt, EntityRef, PersonId};
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_sys_demography::Demography;
 use rh_sys_demography::demography::DEATH;
+use spec_files::{load_specs, registry_system_ids};
+
+mod spec_files;
 
 /// The committed golden file, or the one `RH_M2_DRAWS_GOLDEN` names (the altered-line control).
 static GOLDEN: LazyLock<String> = LazyLock::new(load);

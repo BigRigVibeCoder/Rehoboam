@@ -1,0 +1,8 @@
+# The golden world household (SPR-011 rulings 16, 18; SPR-013 T-13). One copy of the manifest, no drift: the
+# runner refuses to run if the manifest's bytes do not hash to manifest_sha256. Re-pin only with the
+# baseline, in a [C3] PR. The SHA-256 is the run's manifest_hash (the history tuple, DET-1).
+world = "household"
+manifest = "specs/manifest/examples/household.yaml"
+manifest_sha256 = "321a394148e62db94373a093f9e2a70c2bd24570a24a4b11af7b555e54b708bd"
+registry = "specs/manifest/registry_v0.toml"
+inputs = "worlds/household/inputs.toml"

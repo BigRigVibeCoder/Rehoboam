@@ -1,6 +1,7 @@
 # 11 — Roadmap: Phases, Gates and Work Packages
 
-*Status: Draft v1.6 (2026-10-16). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*Status: Draft v1.7 (2026-10-17). Durations are **agent-assisted estimates for one director working with AI coding agents**. Treat them as planning ranges, not commitments. Every phase ends with a **gate** of verification, validation and a go / iterate / pivot decision (`09`, phase gates). Phases run in order; work inside a phase runs in parallel across agents, up to the limit the review-hours budget allows.*
+*v1.7 (2026-10-17): D51 (ADR-0036): a viewer lane (V.1–V.3) for `rh-view`, the voxel observation harness, after P1.17 and off every gate's critical path; the cut "street-level 3D view" becomes V.3.*
 *v1.6 (2026-10-16): rung 0 drops forks, which come with branching (P2.9); V-SAGA-15's P1a variant measures on the 10k dynastic world (D34).*
 *v1.5 (2026-10-16): G0 rulings by the director. Rung 0 is ageing and death on day boundaries: a household's food comes with M3 and M4 in P1b, and daily life at `minutes` is Later (D31). P1.18 (`S5.daily_life` F1) and P1.8 (M1 F1) move to P1b, where the columns they read have owners (D33). P1.7 inherits titles and claims only; property inheritance moves to P1.5a (D35). G1a has one test list, the same as `09` §5, with P1a variants for tests that need systems or worlds P1a does not build; V-SAGA-16's stress-accounting identity gates G1a and its break band gates G1b (D34).*
 *v1.4 (2026-10-16): G0 rulings by the director. P0.7 loses the Rerun logging hooks (a Rerun view, if wanted, is a downstream consumer of the World Stream) and the Textual TUI stub, which moves to P1.17. The G0 CI criterion records baselines for benches 7 and 8; bench 4's baseline moves to the first P1a sprint that builds a spatial field (M1 or M3).*
@@ -407,6 +408,16 @@ These keep their WP IDs. Each needs your decision to enter a phase.
 | P7.2 | Oracle verbs in glyph scenes, the prophecy loop, accessibility polish (rest of old P7) | Follows P6 if taken up; G7 (V-HUM-08) applies then |
 | E2–E5 | Era packs | Below |
 
+## Viewer lane (ADR-0036, D51; off the critical path)
+
+**Goal.** Let the red team and the director *see* the world they audit: a native Bevy voxel viewer, `rh-view`, that reads the World Stream and the materializer and stages what the simulation decided. It is an observation harness (ADR-0030), not a gate surface: text stays the G2 thesis surface. Plans: `CODEX/05_PROJECT/PRJ-003_BevyVoxelViewer.md` (the red team's), run by AGT-002-TOOLS.
+
+| WP | Work package | Output |
+|---|---|---|
+| V.1 | Read-only spike (after P1.17's materializer, SPR-027; SPR-033 onward, each sprint ≤ 3 agent-days) | `viewer/` workspace; terrain, regions, settlements and the route graph from worldgen-lite; households and houses from the materializer; births, deaths, marriages and successions as visual moments; a timeline scrubber (seek through keyframes plus replay); the camera director over channel C (R3D-7); fidelity by zoom. Gate: V-R3D-13, V-R3D-14 |
+| V.2 | P1b's world (with P1.4, P1.5a, P1.8, P1.18) | People moving through the day (`S5.daily_life`), fields and harvests, stores and famine, settlement growth and routes in use |
+| V.3 | The street-level inhabitant (with P2.7) | Spectator roaming is V.1's free camera. Acting in the world: `PlayerAction` and `SpeechAct` journaled over `control.sock`, landing at the tip; an act in the past only as a fork (ADR-0025); reactions decided by `T1.minds`; words translated to speech acts under ADR-0034 |
+
 ## Cut (ADR-0035)
 
 Kept here so the IDs are not reused.
@@ -417,7 +428,8 @@ Kept here so the IDs are not reused.
 | SPK-1 | Crowds spike (3D) | **Cut (ADR-0035)** |
 | SPK-3 | Application-wallpaper power spike (3D) | **Cut (ADR-0035)** |
 | Per-era 3D art packs | Architecture kits, clothing, vehicles | **Cut (ADR-0035)** |
-| Any VR or street-level 3D view | Never planned as a WP; excluded permanently | **Cut (ADR-0035)** |
+| Any VR view | Never planned as a WP; excluded permanently | **Cut (ADR-0035)** |
+| Street-level 3D view | Never planned as a WP | **Moved to the viewer lane, V.3 (ADR-0036, D51)** |
 
 ---
 

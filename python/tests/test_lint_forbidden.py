@@ -11,6 +11,7 @@ from lint_forbidden import (
     EXIT_UNREADABLE,
     EXIT_VIOLATIONS,
     FILE_IO_CRATES,
+    FILE_IO_FILES,
     FLOAT_EXEMPT_CRATES,
     FloatScan,
     FloatScope,
@@ -874,6 +875,10 @@ def test_the_float_dep_fixture_reports_each_plant_and_not_tests(
     out = capsys.readouterr().out
     for name in ("accessor.rs", "arrow_float.rs", "real_bits.rs", "real_cmp.rs", "real_floor.rs"):
         assert "float-dep] `" in out and f"rh-snapshot/src/{name}" in out, name
+    # SPR-013: parquet's float names in rh-stream, the one crate allowed parquet.
+    stream = "tests/lint_fixtures/forbidden/float_dep/rh-stream/src"
+    assert f"float-dep] `get_double` at {stream}/lib.rs" in out
+    assert f"float-dep] `Float` at {stream}/field_float.rs" in out
     assert "tests/allowed.rs" not in out
 
 
@@ -1158,7 +1163,10 @@ def test_a_44_rules_leave_allowed_forms_alone(code: str) -> None:
 
 def test_file_io_is_allowed_only_where_the_list_says() -> None:
     """The reviewed list of plane-A crates allowed file I/O (A-44): widening it is a review."""
-    assert set(FILE_IO_CRATES) == {"rh-registry", "rh-snapshot"}
+    assert set(FILE_IO_CRATES) == {"rh-snapshot"}
+    assert {name: path for name, (path, _) in FILE_IO_FILES.items()} == {
+        "rh-stream": ("src", "seal.rs")
+    }
 
 
 def test_file_io_is_exempt_in_tests_and_in_listed_crates() -> None:
@@ -1174,13 +1182,21 @@ def test_file_io_is_exempt_in_tests_and_in_listed_crates() -> None:
 
 
 def test_the_file_io_workspace_reports_src_only(capsys: pytest.CaptureFixture[str]) -> None:
-    """rh-core's src/ is reported; its tests/ and rh-snapshot's src/ are not."""
+    """Three lib.rs files are reported; tests/, rh-snapshot and rh-stream's seal.rs are not.
+
+    rh-core, rh-registry (off FILE_IO_CRATES since A-51) and rh-stream outside its one allowed
+    file (FILE_IO_FILES, SPR-013).
+    """
     assert main(["--manifest-path", str(FIXTURES / "file_io_workspace" / "Cargo.toml")]) == 1
     out = capsys.readouterr().out
     violations = [line for line in out.splitlines() if line.startswith("VIOLATION")]
-    assert len(violations) == 1
+    assert len(violations) == 3
     assert "file_io_workspace/rh-core/src/lib.rs:4:5" in violations[0]
-    assert "file I/O allowed in rh-registry, rh-snapshot only (A-44)" in out
+    assert "file_io_workspace/rh-registry/src/lib.rs:4:5" in violations[1]
+    assert "file_io_workspace/rh-stream/src/lib.rs:5:5" in violations[2]
+    assert "seal.rs" not in "".join(violations)
+    assert "file I/O allowed in rh-snapshot only (A-44)" in out
+    assert "in the file rh-stream/src/seal.rs (FILE_IO_FILES)" in out
 
 
 def test_def_1_a_path_after_a_grouped_import_is_reported_on_its_own_line(
@@ -1290,57 +1306,3 @@ def test_maj_1_min_2_renamed_std_raw_identifiers_and_nested_fs_are_refused(
 def test_min_2_other_renames_and_raw_identifiers_pass(source: str) -> None:
     """Only std itself may not be renamed; a raw identifier or raw string is not a path (MIN-2)."""
     assert rules_hit(source) == []
-
-
-def test_spec_loaders_are_refused_in_plane_a_outside_their_home() -> None:
-    """A-47 (review MAJ-2): the loaders named in plane-A src/, in every form, but ownership.rs."""
-    forms = (
-        "use rh_registry::ownership::load_specs;\n",
-        "use rh_registry::ownership::{registry_system_ids as ids};\n",
-        "let _ = rh_registry::ownership::load_specs(p);\n",
-        "let f = registry_system_ids;\n",
-        "let _ = ownership :: load_specs (p);\n",
-        "pub use ownership::load_specs as read_dir;\n",
-        "macro_rules! ids { () => { $crate::ownership::registry_system_ids() }; }\n",
-    )
-    for code in forms:
-        report = Report(violations=[], escaped=[])
-        scan = FloatScan(spec_loader=True, crate="rh-worldgen")
-        scan_source(code, "src/lib.rs", report, floats=scan)
-        assert len(report.violations) == 1, code
-        assert "[V-DET-19/spec-loader]" in report.violations[0], code
-        home = FloatScan(spec_loader=True, crate="rh-registry")
-        report = Report(violations=[], escaped=[])
-        scan_source(code, "crates/rh-registry/src/lib.rs", report, floats=home)
-        assert len(report.violations) == 1, ("rh-registry outside ownership.rs", code)
-        quiet = (
-            (FloatScan(), "src/lib.rs"),
-            (FloatScan("none", spec_loader=True, crate="rh-worldgen"), "tests/t.rs"),
-            (home, "crates/rh-registry/src/ownership.rs"),
-        )
-        for floats, path in quiet:
-            report = Report(violations=[], escaped=[])
-            scan_source(code, path, report, floats=floats)
-            assert report.violations == [], (code, path)
-    # Names that merely contain the loaders' names are not them.
-    report = Report(violations=[], escaped=[])
-    scan_source(
-        "let load_specs_count = 1;\nfn my_registry_system_ids() {}\n",
-        "x.rs",
-        report,
-        floats=FloatScan(spec_loader=True, crate="rh-worldgen"),
-    )
-    assert report.violations == []
-
-
-def test_the_spec_loader_workspace_reports_plane_a_src_outside_the_home(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Seven forms: rh-sys-x's src/ five, rh-registry's lib.rs two; tests/ and ownership.rs none."""
-    manifest = FIXTURES / "spec_loader_workspace" / "Cargo.toml"
-    assert main(["--manifest-path", str(manifest)]) == 1
-    out = capsys.readouterr().out
-    assert out.count("[V-DET-19/spec-loader]") == 7
-    assert out.count("rh-registry/src/lib.rs") == 2
-    assert "rh-sys-x/tests" not in out
-    assert "spec_loader_workspace/rh-registry/src/ownership.rs" not in out

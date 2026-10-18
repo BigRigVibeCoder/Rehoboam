@@ -76,30 +76,45 @@ jobs:
         # Full depth, like the checkout: a --depth=1 fetch would make the clone shallow again.
         run: git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
 
+      # The director's ruling of 2026-10-17: a change whose every file is documentation (docs/,
+      # CODEX/, *.md) skips the golden part's work, which cannot move for it, and reports green;
+      # the core part always runs in full. bin/ci_scope.py fails closed (an unknown scope runs
+      # everything). Every later step of this job carries the verdict in its `if`, which
+      # python/tests/test_ci_workflow.py pins.
+      - name: Scope (documentation-only changes skip the golden part)
+        id: scope
+        env:
+          CHECK_PART: ${{ matrix.part }}
+        run: python3 -I bin/ci_scope.py --part "$CHECK_PART"
+
       - name: Rust toolchain (pinned by rust-toolchain.toml)
+        if: steps.scope.outputs.run == 'true'
         run: |
           rustup toolchain install
           rustup show active-toolchain
 
       - uses: Swatinem/rust-cache@v2
+        if: steps.scope.outputs.run == 'true'
         with:
           # One cache per part: they build different profiles and targets.
           key: ${{ matrix.part }}
 
       - name: cargo-nextest, cargo-deny and iai-callgrind-runner (prebuilt binaries)
+        if: steps.scope.outputs.run == 'true'
         uses: taiki-e/install-action@v2
         with:
           # iai-callgrind-runner must be the version of the iai-callgrind crate in Cargo.lock (SPR-009).
           tool: cargo-nextest@0.9,cargo-deny@0.20,iai-callgrind-runner@0.16.1
 
       - name: valgrind from the runner's package manager (SPR-009 ruling 2)
-        if: matrix.part == 'golden'
+        if: matrix.part == 'golden' && steps.scope.outputs.run == 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq valgrind
           valgrind --version
 
       - name: uv and Python 3.12
+        if: steps.scope.outputs.run == 'true'
         uses: astral-sh/setup-uv@v6
         with:
           version: "0.11.32"
@@ -108,9 +123,11 @@ jobs:
           cache-dependency-glob: python/uv.lock
 
       - name: Python environment from the lock (RUN-001 §4)
+        if: steps.scope.outputs.run == 'true'
         run: uv sync --frozen --project python
 
       - name: bin/check_all.sh
+        if: steps.scope.outputs.run == 'true'
         # A changed perf baseline needs [perf-baseline] in the PR title (RH_PR_TITLE, job env) and a
         # reason in its body (SPR-009 ruling 3). Passed through the environment, never interpolated.
         env:
@@ -119,7 +136,7 @@ jobs:
         run: bin/check_all.sh --part "$CHECK_PART"
 
       - name: Instruction counts of this run and their difference from the baseline (SPR-009 R-8)
-        if: always() && matrix.part == 'golden'
+        if: always() && matrix.part == 'golden' && steps.scope.outputs.run == 'true'
         run: |
           cat artifacts/perf/instructions.txt || echo "no instruction counts: the tier stopped before the gate"
           diff crates/rh-bench/baselines/instructions_v1.txt artifacts/perf/instructions.txt && echo "identical to the baseline" || true
@@ -127,11 +144,11 @@ jobs:
       # docs/13 §4.5: on a golden-run mismatch, the bisect runs automatically (base revision
       # against this head) and its report is attached below (SPR-008 ruling 7).
       - name: Divergence bisect on a golden mismatch (SPR-008 T-03)
-        if: failure() && matrix.part == 'golden'
+        if: failure() && matrix.part == 'golden' && steps.scope.outputs.run == 'true'
         run: bin/golden_bisect_ci.sh
 
       - name: Upload the check report, the licence ledger, the golden ladders, any bisect report and the perf counts
-        if: always()
+        if: always() && steps.scope.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: check-report-${{ matrix.part }}

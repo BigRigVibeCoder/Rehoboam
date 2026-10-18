@@ -355,6 +355,8 @@ pub enum JournalError {
     Sqlite(rusqlite::Error),
     /// The file is not a journal of this schema.
     Schema(String),
+    /// The write-ahead log could not be checkpointed: another connection holds the journal.
+    Busy(String),
     /// The journal belongs to another history key.
     HistoryMismatch {
         /// The key in the file.
@@ -398,6 +400,7 @@ impl fmt::Display for JournalError {
         match self {
             Self::Sqlite(e) => write!(f, "journal: SQLite: {e}"),
             Self::Schema(m) => write!(f, "journal: not a {SCHEMA} journal: {m}"),
+            Self::Busy(m) => write!(f, "journal: busy: {m}"),
             Self::HistoryMismatch { journal, expected } => write!(
                 f,
                 "replay: the journal belongs to {journal:?}, not to {expected:?}"
@@ -505,6 +508,28 @@ impl Journal {
     #[must_use]
     pub fn key(&self) -> &HistoryKey {
         &self.key
+    }
+
+    /// Moves every committed row from the write-ahead log into the database file and truncates
+    /// the log (`PRAGMA wal_checkpoint(TRUNCATE)`), so a reader that opens the file alone, read-only
+    /// and immutable, sees every input. A writer killed mid-run leaves its rows in the log; the
+    /// host checkpoints on resume (REV-SPR-013 MAJ-3).
+    ///
+    /// # Errors
+    /// [`JournalError::Sqlite`] if `SQLite` cannot checkpoint, or reports the log busy.
+    pub fn checkpoint(&self) -> Result<(), JournalError> {
+        let (busy, _, _): (i64, i64, i64) =
+            self.conn
+                .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })?;
+        if busy != 0 {
+            return Err(JournalError::Busy(
+                "the write-ahead log cannot be checkpointed: another connection holds it"
+                    .to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     /// The writer connection's `journal_mode` and `synchronous` (`"wal"` and 2, FULL, on every
@@ -671,6 +696,21 @@ fn encode(r: &JournaledInput) -> Encoded<'_> {
         ),
     };
     (r.kind.encode(), r.scope.encode(), producer)
+}
+
+/// How the World Stream's `INPUT` record spells a journal row (`specs/stream/channel_a_v0.sql`
+/// `input`; SPR-013 T-09): the kind as the journal stores it, with its argument after a `:`
+/// (`player_action:<verb>`), the scope name and id, and the producer name (with the job id after a
+/// `:` for an LLM job). The digest that ties the record to the row is [`row_digest`].
+#[must_use]
+pub fn stream_fields(r: &JournaledInput) -> (String, String, Option<u64>, String) {
+    let ((kind, arg), (scope, id), producer) = encode(r);
+    let kind = arg.map_or_else(|| kind.to_owned(), |a| format!("{kind}:{a}"));
+    let producer = match producer {
+        (name, Some(job), ..) => format!("{name}:{job}"),
+        (name, ..) => name.to_owned(),
+    };
+    (kind, scope.to_owned(), id.map(i64::cast_unsigned), producer)
 }
 
 fn put_bytes(out: &mut Vec<u8>, b: &[u8]) {
@@ -1014,8 +1054,34 @@ impl Replay {
             path,
             OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        check_key(&conn, key)?;
-        let position = position_of(&conn, timeline_id)?;
+        Self::load(&conn, key, timeline_id)
+    }
+
+    /// [`Replay::open`] as an immutable reader (`mode=ro&immutable=1`): `SQLite` neither writes nor
+    /// creates any file beside the journal (no `-shm`, no `-wal`), so a replay leaves the run's
+    /// directory untouched (REV-SPR-013 MIN-8). An immutable reader ignores a write-ahead log, so
+    /// the caller refuses a journal that still has one.
+    ///
+    /// # Errors
+    /// As [`Replay::open`].
+    pub fn open_immutable(
+        path: &Path,
+        key: &HistoryKey,
+        timeline_id: u32,
+    ) -> Result<Self, JournalError> {
+        let uri = format!("file:{}?mode=ro&immutable=1", path.display());
+        let conn = Connection::open_with_flags(
+            uri,
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX
+                | OpenFlags::SQLITE_OPEN_URI,
+        )?;
+        Self::load(&conn, key, timeline_id)
+    }
+
+    fn load(conn: &Connection, key: &HistoryKey, timeline_id: u32) -> Result<Self, JournalError> {
+        check_key(conn, key)?;
+        let position = position_of(conn, timeline_id)?;
         let count = i64::from(position.inputs);
         let mut stmt = conn.prepare(
             "SELECT seq, tick, class, kind, kind_arg, scope, scope_id, producer, job_id, \
@@ -1065,7 +1131,7 @@ impl Replay {
                 reason: "fewer rows than the timeline's input count",
             });
         }
-        let chains = verify_chain(&conn, timeline_id, &inputs, &position)?;
+        let chains = verify_chain(conn, timeline_id, &inputs, &position)?;
         inputs.sort_by_key(|i| (i.tick, i.seq));
         Ok(Self {
             timeline_id,

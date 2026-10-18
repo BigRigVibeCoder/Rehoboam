@@ -15,6 +15,10 @@ This keeps in-flight sprints from building on specs that change underneath them.
 
 ## Contents
 
+| `RT-2026-10-17-voxel-engine-synthesis-and-architect-analysis.md` | The red team's synthesis of the Architect's voxel-viewer analysis (Bevy against Veloren and Luanti) and its D51 recommendation; D51 was approved, and the decision is ADR-0036 and PRJ-003 |
+| `RT-2026-10-16-proposal-voxel-compiler-and-culture-dreamer.md` | The red team's proposal (drafted as "ADR-0036" on its branch): a stream-to-voxel shape grammar and an LLM "culture dreamer" for style cards; with the Architect's intake note placing it in the viewer lane (V.1, proposed V.1b) |
+| `RT-2026-10-16-proposal-stream-viewer-and-websocket.md` | The red team's proposal (drafted as "ADR-0037" on its branch): a browser stream viewer over WebSocket; with the Architect's intake note mapping it to `wire_v1` (SPR-026), the pace command (SPR-027), `rh-server` (P2.6) and P2.7 |
+| `RT-2026-10-16-plan-matrix-render-engine.md` | The red team's multi-scale viewport and asset-extraction plan; Pillar 2 (asset extraction) is held under D53; the intake note places Pillar 1's tiers in P2.7, P5 and the viewer lane |
 | `inbox.md` | Batched design proposals: batches 01 to 04 were disposed of at G0; batch 05 awaits G1a; batch 06 (stream viewer and compiler). Each batch has the Architect's intake notes |
 | `RT-2026-10-16-demography-inequality-science.md` | A science dossier on pre-industrial demography, inequality and empire lifespans (batch 05): calibrated against primary sources |
 | `RT-2026-10-16-primary-source-calibration-report.md` | Formal calibration report grounding demography and inequality in published historical papers |

@@ -26,8 +26,11 @@ use rh_core::state::EngineState;
 use rh_core::time::SimTime;
 use rh_core::{Phase, Pulse};
 use rh_events::Event;
-use rh_registry::ownership::{Ownership, load_specs, registry_system_ids};
+use rh_registry::ownership::Ownership;
 use rh_sys_smoke::{CALENDAR, OVERLAY, SPECS_DIR, material, synthetic_inputs};
+use spec_files::{load_specs, registry_system_ids};
+
+mod spec_files;
 
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

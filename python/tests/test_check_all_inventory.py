@@ -29,6 +29,14 @@ NEXTEST_TARGET = re.compile(r"--test (\S+)")
 
 # Every gate run directly by the chain, by its exact `run` name. Alphabetical (Python's str order).
 REQUIRED_GATES = (
+    "--expect-serial positive control: the multi-system smoke world must FAIL it, naming the "
+    "floor to set (SPR-013 T-13; the Architect's ruling)",
+    "A-52 positive control: rh-cli run in a build with a mutant-* feature compiled in must FAIL",
+    "Annals fixtures: the committed fixture chronicles equal the scripted history (gen_fixtures "
+    "--check; SPR-029, REV-SPR-029 R10)",
+    "Annals template lint: every slot resolves to a declared role, snapshot, payload slot, motive "
+    "or edge; every in-scope kind has a template and every out-of-scope kind a label "
+    "(lint_templates; SPR-029)",
     "Architecture: crate boundaries, planes and engine purity (lint_arch; V-INSP-03, V-PLN-01, "
     "V-INSP-05)",
     "Authored numbers: rh-manifest's exact-decimal vectors are the decimal reference's "
@@ -56,6 +64,11 @@ REQUIRED_GATES = (
     "(SPR-007 ruling 4)",
     "C fp-contract check positive control: a C build without the flag must FAIL (SPR-007 ruling 4)",
     "CI workflows parse (YAML)",
+    "Canonical differential positive control: a reference with its header domain check relaxed "
+    "must FAIL (REV-SPR-013 MAJ-1)",
+    "Canonical differential: rh-stream's parser and canonical_v0.py give every generated, "
+    "golden, planted and mutated line, and every planted and header-mutated file, the same "
+    "verdict (canonical_v0.md §3; REV-SPR-013 MAJ-1)",
     "Canonical text form v0: round trip, refusals and golden lines with digests (canonical_v0 "
     "--check; SPR-013 T-09)",
     "Chronicle SQL-twin equivalence",
@@ -70,6 +83,10 @@ REQUIRED_GATES = (
     "Doctest count gate positive control: one typed-ID case missing must FAIL",
     "Doctest count gate: every expected compile-fail case and twin ran (SPR-002 T-01; DEF-2)",
     "Document index builds (gen_manifest --check)",
+    "Family annals v0: provenance re-derived by a whole-group re-render, template slots, no "
+    "model, calendar, a possible history under M7's rules, determinism in two processes, "
+    "coverage, injective designation, a canonical extract digest, golden annals and manifests "
+    "(selftest_annals_v0 --check; SPR-029)",
     "Fixed-point exp and ln v0: constants, convergence, faithful rounding, refusals, golden "
     "vectors (exp_ln_v0 --check; 05.1 §6 item 4 v1.10; SPR-016)",
     "Forbidden APIs in plane A (lint_forbidden; V-DET-19)",
@@ -93,10 +110,19 @@ REQUIRED_GATES = (
     "(SPR-008 T-04)",
     "Golden baseline positive control: a regenerated solo baseline in a PR not marked [C3] must "
     "FAIL (SPR-012 T-08; SPR-008 ruling 6)",
+    "Golden baseline: worlds/hamlet = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
+    "SPR-013 T-13)",
+    "Golden baseline: worlds/household = the recomputation, changed only in a [C3] PR "
+    "(V-GOLD-01; SPR-013 T-13)",
     "Golden baseline: worlds/smoke = the recomputation, changed only in a [C3] PR "
     "(check_baseline; SPR-008 T-04)",
     "Golden baseline: worlds/solo = the recomputation, changed only in a [C3] PR (V-GOLD-01; "
     "SPR-012 T-08)",
+    "Golden cases: effect language v0 reference reproduces effect_language_golden_v0.toml "
+    "(effect_ref --check; SPR-017)",
+    "Golden draws power: a one-day error in q' either way changes re-sample outcomes of the "
+    "larger fixture world (gen_m2_draws_reference --power; BCK-002 A-53, VER-SPR-012-TEST "
+    "GAP-8)",
     "Golden draws: M2's death instants on fixture worlds are the independent model's, every S11 "
     "re-sample case covered (gen_m2_draws_reference --check; SPR-012, Tester's interim report)",
     "Golden ladder cut: the yearly cut of a 3-year monthly run = the 3-year yearly run, byte for "
@@ -108,6 +134,8 @@ REQUIRED_GATES = (
     "Golden ladder positive control: an injected run never compares equal to a clean one "
     "(VER-SPR-008 MIN-2)",
     "Golden ladders: 1 thread = N threads, byte for byte (rh-cli ladder compare; V-DET-01)",
+    "Golden ladders: hamlet at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)",
+    "Golden ladders: household at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-013 T-13)",
     "Golden ladders: solo at 1 thread = N threads, byte for byte (V-DET-01/02; SPR-012 T-08)",
     "Golden parallel-level positive control: a floor above the run's share of parallel levels "
     "must FAIL (VER-SPR-008 DEF-2)",
@@ -120,17 +148,28 @@ REQUIRED_GATES = (
     "(VER-SPR-008 DEF-1)",
     "Golden run positive control: --strict refuses solo, whose manifest names systems this build "
     "lacks (SPR-011 ruling 3; SPR-012 T-08)",
+    "Golden run: hamlet, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)",
+    "Golden run: hamlet, the 60-person rung, 200 sim-years, yearly ladder, 1 thread, serial "
+    "(--expect-serial), its committed input re-sampling founder 0's pending death, streaming "
+    "into its run directory (SPR-013 T-13)",
+    "Golden run: household, 200 sim-years, yearly ladder, N threads, serial (SPR-013 T-13)",
+    "Golden run: household, the six-person rung, 200 sim-years, yearly ladder, 1 thread, serial "
+    "(--expect-serial), its committed input re-sampling founder 0's pending death, streaming "
+    "into its run directory (SPR-013 T-13)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, 1 thread, parallel levels at least 5% "
     "(SPR-008 T-02, DEF-2)",
     "Golden run: smoke, 1,000 sim-years, yearly ladder, N threads, parallel levels at least 5%, "
     "with the T-03 vitals observer attached (SPR-008 T-02, DEF-2; SPR-009 T-03)",
-    "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built and "
-    "not-built systems in its header (SPR-012 T-08; rulings 3, 16)",
+    "Golden run: solo, 200 sim-years, yearly ladder, 1 thread, the history tuple and the built "
+    "and not-built systems in its header, streaming into its run directory (SPR-012 T-08; "
+    "rulings 3, 16; SPR-013 T-09)",
     "Golden run: solo, 200 sim-years, yearly ladder, N threads (SPR-012 T-08)",
     "Golden thread-leak control: the same runs without the leak compare equal (VER-SPR-008 DEF-2)",
     "Golden thread-leak positive control: the planted thread-identity leak must FAIL the "
     "1-versus-N comparison (VER-SPR-008 DEF-2)",
     "Golden vectors: Brass (M2)",
+    "Golden vectors: CRN pairing v0, the V-DET-17 worked computation on twin_vales at seed 1, "
+    "with its five controls on the same run A (SPR-030; REV-SPR-030 R3, R4, R10)",
     "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)",
     "Golden vectors: M2 F1 mortality, exact reference and golden file (selftest_m2_f1_mortality "
     "--check; SPR-016)",
@@ -138,13 +177,20 @@ REQUIRED_GATES = (
     "Golden vectors: M2 rung-0 schedule vectors are the exact reference's (gen_m2_reference "
     "--check; SPR-012 T-05)",
     "Golden vectors: M4 basket and price rule",
-    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference (SPR-019)",
+    "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, "
+    "exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, "
+    "R10)",
+    "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the "
+    "effect_ref differential, its reversed-line control, and the altered-golden and stale-spec "
+    "controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)",
     "Golden vectors: rh-core::fixed are the exact reference's (gen_fixed_vectors --check)",
     "Golden vectors: rh-ids reference matches the committed file (gen_rng_golden --check; "
     "V-DET-09)",
     "Golden vectors: rh-snapshot plane hashes match the independent reference (gen_hash_golden "
     "--check; SPR-007 T-01)",
     "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)",
+    "Keyframe sizes per rung: solo, household and hamlet's 200-year golden runs (SPR-013 T-13; "
+    "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
     "M2 F1 mortality reference positive control: a stale check value in the next M2 spec must FAIL "
@@ -168,8 +214,10 @@ REQUIRED_GATES = (
     "Manifest: hamlet (rung 2; SPR-011 ruling 18)",
     "Manifest: household (rung 1; SPR-011 ruling 18)",
     "Manifest: invalid_draft_style must FAIL",
+    "Manifest: kingdom_10k (the SPR-030 G1a performance world)",
     "Manifest: manor (the SPR-019 fixture: a dynastic manor)",
     "Manifest: solo",
+    "Manifest: twin_vales (the SPR-030 dynastic fixture world)",
     "Manifest: uz_job",
     "Manifest: val_khor",
     "No FMA contraction: no fp-contract in RUSTFLAGS; C builds take exactly -ffp-contract=off "
@@ -179,6 +227,8 @@ REQUIRED_GATES = (
     "Ownership lint positive control: a write declared twice must FAIL (SPR-005 DEF-3)",
     "Ownership lint positive control: unowned write must FAIL",
     "Ownership lint: single writer from specs/systems (SPR-004 T-03)",
+    "Population projection: the fixture worlds' member share and population under the "
+    "house-member mechanics, uncapped and capped (SPR-030; REV-SPR-030 R1)",
     "Python: format (ruff format --check)",
     "Python: lint (ruff check)",
     "Python: types (mypy --strict)",
@@ -186,6 +236,8 @@ REQUIRED_GATES = (
     "Python: unit tests with hostile CI variables set (RH_EVENT, RH_PR_TITLE, "
     "GITHUB_EVENT_NAME, RH_PUSH_*) pass: conftest.py isolates them (SPR-009 review 1)",
     "Python: uv.lock matches pyproject.toml (uv lock --check)",
+    "Replay positive control: a journal with its row deleted must hard-FAIL the replay (SPR-013 "
+    "T-12)",
     "Required tools present (core part)",
     "Required tools present (golden part)",
     "Rust: bans and sources (cargo deny: crates.io only, no wildcards)",
@@ -200,6 +252,8 @@ REQUIRED_GATES = (
     "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)",
     "Sampler reference: exact distributions are current (gen_sampler_reference --check; SPR-003)",
     "Schema diff positive control: drifted bound must FAIL",
+    "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment "
+    "(SPR-013 T-11; ruling 14)",
     "Sifting patterns (lint_patterns)",
     "Sifting patterns: solitary_life pack, life_ends (lint_patterns; SPR-011 ruling 14)",
     "Smoke-world skeletons: committed files = lint_odd.py --rust (gen_skeletons --check; "
@@ -230,8 +284,22 @@ REQUIRED_GATES = (
     "for each of 32 seeds and pooled (SPR-012; review MAJ-1, MIN-1)",
     "T-07 M2.demography: registration against the frozen spec, alpha and beta refused, V-DET-12 and"
     " V-INV-01 on random worlds, EXTINCTION once, re-sampling (SPR-012)",
+    "T-10: a stopped tail does not slow rh-cli run: solo's 200-year wall time headless, "
+    "streaming, and streaming with a tail stopped mid-run (after it printed a sealed segment), "
+    "within twice streaming plus 1 s",
+    "V-DATA-10 subset on the envelope fixture: DuckDB reads its event_snapshot rows and typed "
+    "causal_edge rows (motive, weight, evidence, cause_told) with the DDL's types and "
+    "constraints, and the reference recomputes every canonical_digest from them (SPR-013 T-09; "
+    "SPR-020 shape)",
+    "V-DATA-10 subset: DuckDB reads every sealed table of solo's run with channel_a_v0.sql's "
+    "and schema.sql's types, no float column, the DDL's constraints, contiguous seq, R4 order, "
+    "and the reference's canonical digests (SPR-013 T-09)",
+    "V-DET-04: rh-cli replay rebuilds solo's 200-year run from its run.toml and journal (Ada's "
+    "input) at N threads: ladder, every channel-A segment and keyframe byte-identical (SPR-013 "
+    "T-12)",
     "V-DET-05 keyframes: a loaded keyframe advances 10 years like the continuous run (SPR-007 "
     "T-02)",
+    "V-DET-05: rh-cli replay from solo's year-100 keyframe = the run (SPR-013 T-12)",
     "V-DET-09 at opt-level 3: rh-sample golden vectors under --release (SPR-003 T-05)",
     "V-DET-09 positive control: one altered sampler golden vector must FAIL (SPR-003)",
     "V-DET-10 release build: the unsynced guard is compiled out (SPR-007 ruling 5)",
@@ -268,12 +336,22 @@ REQUIRED_GATES = (
     "V-PLN-01 compile-fail fixture (plane C) has a clean dependency graph",
     "V-PLN-01 compile-fail fixture has a clean dependency graph",
     "V-SCALE-03: solo's 1,000-year wall time, reported (SPR-012 T-08)",
+    "V-SIFT-01 on hamlet: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)",
+    "V-SIFT-01 on household: sift its golden run, the twin = rh-sifter (SPR-013 T-11, T-13)",
+    "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, "
+    "event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)",
+    "V-SIFT-01 on the 10,000-founder fixture: stream 120 years, sift, the twin = rh-sifter "
+    "(SPR-013 T-11)",
     "V-WC-04 manifest parity: Rust loader agrees with manifest_v0.py (SPR-004)",
     "V-WC-04 parity positive control: drifted Registry must FAIL",
     "V-WC-04 parity positive control: message-only drift must FAIL (GAP-3)",
     "Virtual telemetry (S5 prototype)",
     "Workspace tests positive control: a by-name entry that names no test binary must FAIL "
     "(SPR-009 review 2a)",
+    "World Stream control channel v1: the method table, every request and response, refusals, "
+    "the governor's rule, pace invariance on a simulated engine with commands landing mid-instant "
+    "and floods of no-change commands, the run log, golden frames (selftest_control_v1 --check; "
+    "SPR-027 T-01)",
     "World Stream v0 channel-A segment schema: no floats, headers, order, sealed round trip "
     "(SPR-011 ruling 13)",
     "World Stream v0 channel-C segment schema: no floats, header, order, sealed round trip, "
@@ -294,6 +372,8 @@ REQUIRED_GATES = (
     "VER-SPR-008-TEST GAP-3, GAP-7)",
     "check_all harness positive control: a fail: expectation with empty text must FAIL as a harness"
     " error, not match any failure (VER-SPR-012-TEST GAP-6)",
+    "check_all harness positive control: a fail: expectation with whitespace-only text must "
+    "FAIL as a harness error (VER-SPR-012-TEST GAP-9; BCK-002 A-53)",
     "check_all positive control: the old PWD-joined golden path under an absolute "
     "CARGO_TARGET_DIR must FAIL (VER-SPR-008-TEST DEF-3)",
     "check_all verdict per part positive control: --part golden fails at its failing gate "
@@ -308,7 +388,29 @@ REQUIRED_GATES = (
     "(VER-SPR-008-TEST GAP-7)",
     "check_all verdict: a chain of passing gates exits 0 (check_all_selftest; VER-SPR-008-TEST "
     "GAP-3)",
+    "check_segments positive control: a DOUBLE column planted in a sealed table must FAIL "
+    "(SPR-013 T-09; R2)",
+    "check_segments positive control: an altered canonical_digest must FAIL (SPR-013 T-09; R7)",
+    "control_v1 positive control: a band mixed into the state hash must FAIL pace invariance "
+    "(SPR-027 T-01)",
+    "control_v1 positive control: a pace command journaled as an input must FAIL (STR-5; "
+    "REV-SPR-026 R12; SPR-027 T-01)",
+    "control_v1 positive control: a pause that writes a record must FAIL pace invariance (W35; "
+    "SPR-027 T-01)",
+    "control_v1 positive control: a resume that owes the paused wall time must FAIL (SPR-027 T-01)",
+    "control_v1 positive control: a sixth method on the control table must FAIL the method-table "
+    "check (REV-SPR-027-control C4; SPR-027 T-01)",
+    "control_v1 positive control: a stale golden frame must FAIL (SPR-027 T-01)",
+    "control_v1 positive control: a step that pauses one instant past its target must FAIL (W37; "
+    "SPR-027 T-01)",
+    "control_v1 positive control: an input (player.act) accepted on control.sock must FAIL the "
+    "method table (D47; SPR-027 T-01)",
+    "control_v1 positive control: control.pace on the stream method table must FAIL (wire_v1 "
+    "§4.5; SPR-027 T-01)",
+    "effect_ref positive control: one altered expected value must FAIL (SPR-017)",
     "exp_ln_v0 positive control: a stale golden file must FAIL (SPR-016)",
+    "fixture worlds positive control: dormancy_degrees read as 1 must FAIL the named-at-start "
+    "lines (SPR-030; REV-SPR-030 R11)",
     "fp-contract guard control: CC, CXX and CXXFLAGS with exactly -ffp-contract=off pass "
     "(SPR-007 GAP-2)",
     "fp-contract guard control: a .cargo/config.toml with exactly CFLAGS = -ffp-contract=off "
@@ -333,6 +435,9 @@ REQUIRED_GATES = (
     "gen_sampler_reference positive control: stale reference must FAIL",
     "gen_skeletons positive control: a hand-edited smoke skeleton must FAIL (SPR-008 ruling 2)",
     "gen_skeletons positive control: hand-edited skeleton must FAIL",
+    "kill -9 by name: a kill during sealing leaves no partial segment and the resume reseals "
+    "the same bytes; a mid-year kill re-emits no seq below the first unsealed year (SPR-013 "
+    "T-09; GOV-002 tier 15; wire_v1.md §11)",
     "ladder compare positive control: one changed table root must FAIL (SPR-008 T-02)",
     "lint_arch control: a bench target requiring arena-alloc, with its allocator in benches/, "
     "passes (SPR-009 R-7)",
@@ -411,6 +516,10 @@ REQUIRED_GATES = (
     "lint_forbidden float-dep positive control: accessor in rh-snapshot must FAIL (SPR-007 GAP-1)",
     "lint_forbidden float-dep positive control: arrow_float in rh-snapshot must FAIL (SPR-007 "
     "T-02)",
+    "lint_forbidden float-dep positive control: parquet's Field::Float in rh-stream must FAIL "
+    "(SPR-013; the Architect's parquet review)",
+    "lint_forbidden float-dep positive control: parquet's get_double in rh-stream must FAIL "
+    "(SPR-013; the Architect's parquet review)",
     "lint_forbidden float-dep positive control: real_bits in rh-snapshot must FAIL (SPR-007 GAP-1)",
     "lint_forbidden float-dep positive control: real_cmp in rh-snapshot must FAIL (SPR-007 GAP-1)",
     "lint_forbidden float-dep positive control: real_floor in rh-snapshot must FAIL (SPR-007 "
@@ -432,7 +541,8 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: env::current_dir after a grouped import is reported on "
     "its own line (DEF-5)",
     "lint_forbidden positive control: file I/O in a plane-A crate's src/ off FILE_IO_CRATES "
-    "must FAIL, its tests/ and rh-snapshot pass (BCK-002 A-44)",
+    "must FAIL, rh-registry included since A-51, and in an rh-stream file other than seal.rs; "
+    "tests/, rh-snapshot and rh-stream/src/seal.rs pass (BCK-002 A-44, A-51; SPR-013)",
     "lint_forbidden positive control: float threshold in a plane-A crate must FAIL (SPR-010 T-04)",
     "lint_forbidden positive control: fs::read after a grouped import is reported on its own "
     "line (DEF-1)",
@@ -440,9 +550,6 @@ REQUIRED_GATES = (
     "lint_forbidden positive control: include_str! of a file outside the repository must FAIL "
     "(VER-SPR-008)",
     "lint_forbidden positive control: mul_add in rh-sample must FAIL (SPR-003 T-00)",
-    "lint_forbidden positive control: rh-registry's spec loaders named in plane-A src/ outside "
-    "their home must FAIL in all seven forms, alias and macro included; tests/ and ownership.rs "
-    "pass (BCK-002 A-47; review MAJ-2)",
     "lint_forbidden positive control: the six ways round sockets-only-in-serve.rs (re-exports, "
     "#[path], include!) must FAIL (SPR-026 R19)",
     "lint_forbidden positive control: workspace plane-A crate must FAIL",
@@ -515,20 +622,79 @@ REQUIRED_GATES = (
     "(REV-SPR-020 R26)",
     "lint_odd next positive control: a Registry overlay that moves a frozen parameter bound "
     "must FAIL (SPR-015)",
+    "lint_odd next positive control: a frozen command why changed without a record must FAIL (R3)",
+    "lint_odd next positive control: a frozen coupling via changed without a record must FAIL (R3)",
+    "lint_odd next positive control: a frozen design concept changed without a record "
+    "must FAIL (R3)",
+    "lint_odd next positive control: a frozen fidelity-ladder representation changed "
+    "without a record must FAIL (R3)",
+    "lint_odd next positive control: a frozen isolation expectation changed without a "
+    "record must FAIL (R3)",
+    "lint_odd next positive control: a frozen parameter source changed without a record "
+    "must FAIL (R3)",
+    "lint_odd next positive control: a frozen purpose statement changed without a record "
+    "must FAIL (R3)",
+    "lint_odd next positive control: a frozen scales field changed without a record must FAIL (R3)",
+    "lint_odd next positive control: a frozen submodel summary changed without a record "
+    "must FAIL (deny by default; PR #79 review R3)",
     "lint_odd next positive control: a new RNG purpose before a frozen one must FAIL (SPR-015)",
     "lint_odd next positive control: a next version that changes a frozen algorithm step must "
     "FAIL (SPR-015)",
     "lint_odd next positive control: an amendment whose text changed since the committed lock "
     "must FAIL (SPR-015)",
+    "lint_odd next positive control: an applied command's drained_by moved to Year/Polity "
+    "must FAIL (N4)",
+    "lint_odd next positive control: an enum code renamed must FAIL (deny by default; PR "
+    "#79 review N4)",
+    "lint_odd next positive control: the frozen from_manifest list edited must FAIL (N4)",
+    "lint_odd next positive control: the frozen requirement ids changed without a record "
+    "must FAIL (R3)",
+    "lint_odd next positive control: the person.sex read moved from same_instant to "
+    "lagged must FAIL (N4)",
+    "lint_odd next positive control: the reviewer's q5_frozen_onbirth case, a far adult "
+    "heir made dormant-eligible, must FAIL (R3)",
+    "lint_odd next positive control: the reviewer's q5_summary case, on_birth's rule made "
+    "cognatic again in the summary, must FAIL (R3)",
+    "lint_odd next positive control: the reviewer's q5_why case, Demote's why applied "
+    "to minors, must FAIL (R3)",
     "lint_odd positive control: a smoke overlay id that is not X-prefixed must FAIL (SPR-008 "
     "ruling 2)",
     "lint_odd positive control: a smoke spec missing from the overlay must FAIL (SPR-008 ruling 2)",
     "lint_patterns positive control: a [role_domains] entry of the wrong shape refuses the "
     "Registry by name (REV-SPR-020 R22, R26)",
+    "lint_patterns positive control: life_ends with a declared role that no clause binds must "
+    "FAIL (VER-SPR-013-TEST GAP-4; parity with rh-sifter)",
     "lint_patterns positive control: life_ends with an unanchored read must FAIL (V-SIFT-05)",
-    "population synthesis positive control: a spec check value off by one must FAIL the "
-    "reference's spec check (SPR-019; REV-SPR-019 R5)",
-    "population synthesis positive control: an altered golden output must FAIL (SPR-019)",
+    "lint_templates positive control: a cause slot in a label must FAIL (SPR-029)",
+    "lint_templates positive control: a control character in a template text must FAIL "
+    "(REV-SPR-029 R27)",
+    "lint_templates positive control: a father slot on a kind other than BIRTH must FAIL "
+    "(REV-SPR-029 R6)",
+    "lint_templates positive control: a kind whose last variant is conditional must FAIL (SPR-029)",
+    "lint_templates positive control: a motive slot on a kind that declares no motives must FAIL "
+    "(SPR-029)",
+    "lint_templates positive control: a payload citation that is not the whole clause of the "
+    "emitting [[emits]] must FAIL (REV-SPR-029 F12)",
+    "lint_templates positive control: a payload slot the layout does not declare must FAIL "
+    "(SPR-029)",
+    "lint_templates positive control: a prologue slot outside its own template's vocabulary must "
+    "FAIL (REV-SPR-029 R27)",
+    "lint_templates positive control: a prologue template with an unknown id must FAIL "
+    "(REV-SPR-029 R27)",
+    "lint_templates positive control: a slot naming a role the kind does not declare must FAIL "
+    "(SPR-029)",
+    "lint_templates positive control: a slot that reads world state must FAIL (ADR-0024; SPR-029)",
+    "lint_templates positive control: a slot with a conversion or format spec must FAIL "
+    "(REV-SPR-029 F14)",
+    "lint_templates positive control: a snapshot slot the kind does not declare must FAIL "
+    "(SPR-029)",
+    "lint_templates positive control: an in-scope kind without a template must FAIL (SPR-029)",
+    "lint_templates positive control: an out-of-scope kind an emitter declares without a "
+    "[[label]] must FAIL (REV-SPR-029 R3)",
+    "lint_templates positive control: an unconditional variant that is not last must FAIL "
+    "(REV-SPR-029 F14)",
+    "lint_templates positive control: enum ids that differ from the emitter's column codes must "
+    "FAIL (REV-SPR-029 F13)",
     "population synthesis positive control: conceptions inside the closed period must FAIL the "
     "spacing invariant (SPR-019 B6)",
     "population synthesis positive control: floors in place of the age-sex allocation must FAIL "
@@ -537,10 +703,28 @@ REQUIRED_GATES = (
     "FAIL INV-PS-03 (SPR-019 P7)",
     "rh-bench positive control: count-alloc and arena-alloc together must not compile (SPR-009 "
     "R-7)",
+    "rh-cli build-info: this build compiles in no mutant-* feature (BCK-002 A-52)",
     "rh-core gates by name: V-DET-01/02 stub world, AccessSpec conflicts, skeletons, RNG purposes "
     "(SPR-005)",
     "rh-core gates by name: agenda, timers, lifecycle queues, event bus, V-DET-12, invariants and "
     "crash replay (SPR-006)",
+    "rh-golden by name: V-DET-04/18 on solo and hamlet (run.toml and the journal alone rebuild "
+    "the run byte for byte), V-DET-05 from keyframes at 1 and 4 threads, V-DET-14 (an input "
+    "changes only its founder's records), and missing, extra, edited and re-chained journal "
+    "rows hard-FAIL (SPR-013 T-12)",
+    "rh-golden by name: V-PLN-04 subset: sifting twice is byte-identical and leaves channel A, "
+    "keyframes, journal and ladder unchanged; one life_ends match per death, shown by tail "
+    "(SPR-013 T-11)",
+    "rh-golden by name: V-SCALE-04 PR subset: household and hamlet each reach zero population "
+    "with one EXTINCTION, nothing but digests and keyframes after it, and their chronicle, "
+    "tail, sift and replay stay consistent past it; one rh-cli build runs rungs 0, 1 and 2 "
+    "(SPR-013 T-13)",
+    "rh-golden by name: V-STR-01 on solo and the 60-person hamlet (byte-identical segments "
+    "twice and at 1, 2 and 4 threads), the streaming ladder = the headless one, resume "
+    "verification (SPR-013 T-09)",
+    "rh-golden by name: tail prints every record once in seq order from any cursor, its "
+    "canonical output digests to each segment's canonical_digest, it never writes to the run "
+    "directory, and the display form matches its snapshots (SPR-013 T-10)",
     "rh-golden gates by name: resume = continuous, thread invariance, V-DET-11 bisect on injected "
     "perturbations (SPR-008 T-02, T-03)",
     "rh-golden gates by name: solo resume = continuous through 10-year keyframes, thread "
@@ -549,10 +733,54 @@ REQUIRED_GATES = (
     "rh-ids gates by name: V-DET-16 fork trees, V-DET-20 stream independence, PR tier (SPR-002)",
     "rh-sample gates by name: V-DET-09 golden vectors at opt-level 0, statistics against the "
     "exact distributions (SPR-003)",
+    "rh-sifter by name: the golden channel-A segment sifts to the golden life_ends matches and "
+    "MatchIds; several targets give several matches; what v0 cannot honour is refused (SPR-013 "
+    "T-11)",
     "rh-snapshot gates by name: plane hashes, golden vectors, journal, keyframes, unsynced "
     "guard (SPR-007 T-01..T-04)",
+    "rh-stream by name: byte-identical sealing over seeds and world sizes, contiguous seq, R4 "
+    "order refused when broken, resume verification, tampered segments refused (SPR-013 T-09)",
+    "rh-stream by name: the canonical form reproduces the reference's golden lines, digests and "
+    "match_id vectors; property round trip over seeds and sizes; planted refusals; the PR fuzz "
+    "tier (SPR-013 T-09)",
+    "rh-stream by name: the pinned Parquet writer properties in every file, no float column, "
+    "the golden segment's bytes pinned (SPR-013 T-09; the Architect's parquet review)",
     "rh-sys-smoke gates by name: registration against the smoke specs, coverage, re-sampling, "
     "small-scale V-DET-01/02 (SPR-008 T-01)",
+    "selftest_annals positive control: a body sentence retagged as a prologue row must FAIL "
+    "provenance (REV-SPR-029 R2 P3)",
+    "selftest_annals positive control: a fixture claim with no triggered edge to a succession or "
+    "deposition must FAIL the possible-history check (REV-SPR-029 R26)",
+    "selftest_annals positive control: a fixture deposition moved to a month's first day, its "
+    "claims with it, must FAIL the possible-history check (REV-SPR-029 R26, R37)",
+    "selftest_annals positive control: a forged source row on a sidecar row must FAIL provenance "
+    "(REV-SPR-029 R19 P7b, R37)",
+    "selftest_annals positive control: a golden file no rendered group owns must FAIL as an "
+    "orphan (REV-SPR-029 R39)",
+    "selftest_annals positive control: a network module imported during the render must FAIL "
+    "(V-NAR-07; REV-SPR-029 F16)",
+    "selftest_annals positive control: a prologue row citing a keyframe row that does not exist "
+    "must FAIL provenance (REV-SPR-029 R2 P4)",
+    "selftest_annals positive control: a prologue row citing another house's root must FAIL "
+    "provenance (REV-SPR-029 R19 P13, R37)",
+    "selftest_annals positive control: a row citing an unrelated event must FAIL provenance "
+    "(REV-SPR-029 R2 P5)",
+    "selftest_annals positive control: a row that drops its own event must FAIL provenance "
+    "(REV-SPR-029 R2 P1)",
+    "selftest_annals positive control: a sentence with no sidecar row must FAIL provenance "
+    "(V-NAR-05; SPR-029)",
+    "selftest_annals positive control: a shared name left undisambiguated must FAIL injective "
+    "designation (REV-SPR-029 R24, R33)",
+    "selftest_annals positive control: a slot outside DEATH's declared roles must FAIL (SPR-029)",
+    "selftest_annals positive control: a stale golden annal must FAIL (SPR-029)",
+    "selftest_annals positive control: a template that reads world state must FAIL (ADR-0024; "
+    "SPR-029)",
+    "selftest_annals positive control: a text shorter than the render must FAIL provenance "
+    "(REV-SPR-029 R34 P23)",
+    "selftest_annals positive control: an altered prologue text must FAIL provenance (REV-SPR-029 "
+    "R19 P12, R37)",
+    "selftest_annals positive control: two rows with their contents exchanged must FAIL "
+    "provenance (REV-SPR-029 R2 P6)",
     "selftest_envelope positive control: a motive on a triggered edge must FAIL (V-DATA-09; "
     "SPR-020)",
     "selftest_envelope positive control: a snapshot that is not the emitter's value at emission "
@@ -563,6 +791,16 @@ REQUIRED_GATES = (
     "hop must FAIL (05.2 §4.0 criterion 4; REV-SPR-020 R14)",
     "selftest_envelope positive control: fifty witnesses on every event must FAIL the byte "
     "budget (V-SAGA-15; REV-SPR-020 R11)",
+    "tail by name: a tail started before a run's first seal and following it prints the "
+    "after-run tail's lines, display and canonical, solo and hamlet (SPR-013 T-10; V-STR-05 "
+    "sealed)",
+    "tail snapshot positive control: a missing snapshot must FAIL, never be created silently "
+    "(SPR-013 T-10; the file-snapshot ruling)",
+    "tail snapshot positive control: a stale snapshot must FAIL with the first differing line "
+    "(SPR-013 T-10)",
+    "twin_check positive control: a twin expecting another status (a column the match id does "
+    "not cover) must FAIL (REV-SPR-013 MIN-2)",
+    "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)",
     "uv lock --check positive control: drifted lock must FAIL",
     "wire_v1 positive control: a host whose window moves before the dropped year is on disk must "
     "FAIL the live-edge rule (SPR-026)",
@@ -636,7 +874,7 @@ def test_every_gate_states_a_non_empty_expectation() -> None:
         assert match is not None
         expect = _first_word(line[match.end() :].strip())
         assert expect in {"pass", "fail"} or (
-            expect.startswith(("pass:", "fail:")) and len(expect) > len("pass:")
+            expect.startswith(("pass:", "fail:")) and expect[len("pass:") :].strip()
         ), f"{line.strip()[:80]}: expectation {expect!r}"
         seen += 1
     assert seen > 300, f"only {seen} run lines read"

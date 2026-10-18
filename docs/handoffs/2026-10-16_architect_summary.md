@@ -57,7 +57,7 @@ All are recorded in `docs/decisions-log.md`:
 | Item | Recommendation | Confidence |
 |---|---|---|
 | **The laptop:** RUN-001 (BCK-002 A-16) and one `adjutant` session of about 2 hours, for SPR-008 T-02 and SPR-009 T-04 | I will ping you when SPR-008 is ready | — |
-| **Two decisions** in `docs/decisions_pending.md`: D46 (population synthesis v0 takes only the `population` marginal; class, culture and faith wait for their owners in P1b) and D29 (the image provider, needed at P3). You ruled D37, D38, D40–D44 and D47–D50 on 2026-10-17 | D46: approve (75%). D29: the default stands | — |
+| **Nothing is waiting on you** in `docs/decisions_pending.md`. You ruled D37, D38, D40–D44 and D46–D50, confirmed D29 and approved the CI minute savings on 2026-10-17 | — | — |
 
 Resolved since the first version of this summary:
 - you approved the P1a plan, D30 to D36 (PRJ-002 and SPR-011 approved; PR #32 and PR #37 merged in that order);
