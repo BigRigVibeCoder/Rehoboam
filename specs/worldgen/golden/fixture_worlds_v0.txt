@@ -11,362 +11,374 @@
 # house_member rows.
 constants fixture-worlds-v0
 world twin_vales 1
-population 1500 living 1500 persons 1653 dynasts 70 synthesised 1430 married 296 households 744 orphans 0
-living_by_sex males 768 females 732 by_age 0-14 454 15-49 768 50+ 278
-named_at_start narrow 31 full 33 dormant_adults 16 minors_beyond 7 empty_lines 0 dormancy_degrees 2 majority_age 16
-house 0 generations 5 rows 96 members 78 living 16 named_narrow 1 named_full 3 dormant_adults 9 minors_beyond 4 title 0 law primogeniture holder_k 55 tenures 6 fallbacks 0 minors_seated 0 line 15 outside_house 0 heir 8/5 second 10/6
-members_k 0: 0 2 4 6 8 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 30 31 32 33 35 36 37 38 39 40 41 43 44 45 46 47 48 50 51 52 53 54 55 56 58 59 60 63 64 65 66 67 68 70 71 72 73 74 75 77 78 79 80 82 83 84 86 87 89 90 92 93 94 95
-house 0 7259298186381442857 generations 5 rows 96 members 78 living 16 root 5423802501992540580
-title 0 17879453068217379416 tier 0 law 0 liege 0 polity 1 holder 12986294489347882843 held_since -4831200 predecessor_exit 1 successions 5 fallbacks 0 minors 0
+population 1500 living 1500 persons 1676 dynasts 71 synthesised 1429 married 297 households 748 orphans 0
+living_by_sex males 763 females 737 by_age 0-14 455 15-49 772 50+ 273
+named_at_start narrow 23 full 24 dormant_adults 19 minors_beyond 10 empty_lines 0 dormancy_degrees 2 majority_age 16
+house 0 generations 5 rows 112 members 89 living 21 named_narrow 1 named_full 2 dormant_adults 14 minors_beyond 5 title 0 law primogeniture holder_k 106 tenures 7 fallbacks 0 minors_seated 0 line 1 outside_house 0 heir 88/3 second none
+members_k 0: 0 2 4 6 8 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 32 33 34 36 37 38 39 41 42 43 44 45 46 47 49 50 51 52 53 55 56 57 58 59 61 62 63 65 66 67 68 71 72 73 74 75 76 77 78 80 81 82 83 85 87 88 89 90 91 93 94 96 97 98 99 100 101 102 104 106 107 110 111
+house 0 7259298186381442857 generations 5 rows 112 members 89 living 21 root 5423802501992540580
+title 0 17879453068217379416 tier 0 law 0 liege 0 polity 1 holder 8713044459742998483 held_since -233280 predecessor_exit 1 successions 6 fallbacks 0 minors 0
 tenure 0 5423802501992540580 -76472640 -49046400
 tenure 0 7299432944421516019 -49046400 -44984160
-tenure 0 17273540922844974532 -44984160 -22321440
-tenure 0 4761962997413864267 -22321440 -18313920
-tenure 0 1911761232156502596 -18313920 -4831200
-tenure 0 12986294489347882843 -4831200 9223372036854775807
-house 1 generations 4 rows 43 members 35 living 13 named_narrow 12 named_full 12 dormant_adults 1 minors_beyond 0 title 1 law primogeniture holder_k 100 tenures 3 fallbacks 0 minors_seated 0 line 12 outside_house 0 heir 102/1 second 104/2
-members_k 1: 96 98 100 102 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 126 128 129 130 131 132 133 136 137 138
-house 1 8785916280820306117 generations 4 rows 43 members 35 living 13 root 14914839909886106116
-title 1 6368660086272757895 tier 1 law 0 liege 17879453068217379416 polity 0 holder 8887751445551436754 held_since -18358560 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 1 14914839909886106116 -53913600 -40953600
-tenure 1 6090618821224909305 -40953600 -18358560
-tenure 1 8887751445551436754 -18358560 9223372036854775807
-house 2 generations 3 rows 25 members 20 living 10 named_narrow 6 named_full 6 dormant_adults 1 minors_beyond 3 title 2 law primogeniture holder_k 153 tenures 2 fallbacks 0 minors_seated 0 line 9 outside_house 0 heir 161/1 second 162/1
-members_k 2: 139 141 143 145 146 147 148 149 150 151 153 154 155 156 157 159 160 161 162 163
-house 2 17265633337847527728 generations 3 rows 25 members 20 living 10 root 17000111469296979360
-title 2 7239548165033229501 tier 1 law 0 liege 17879453068217379416 polity 0 holder 9195525960714401262 held_since -20642400 predecessor_exit 1 successions 1 fallbacks 0 minors 0
-tenure 2 17000111469296979360 -46084320 -20642400
-tenure 2 9195525960714401262 -20642400 9223372036854775807
-house 3 generations 6 rows 41 members 30 living 12 named_narrow 7 named_full 7 dormant_adults 5 minors_beyond 0 title 3 law tanistry holder_k 172 tenures 5 fallbacks 3 minors_seated 3 line 5 outside_house 0 heir 185/2 second 174/1
-members_k 3: 164 166 168 170 172 174 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 192 193 195 197 199 200 201 202 203
-house 3 13243383502482106854 generations 6 rows 41 members 30 living 12 root 8565809417001645436
-title 3 8029424953766362512 tier 0 law 5 liege 0 polity 2 holder 785502479145284945 held_since -29128320 predecessor_exit 1 successions 4 fallbacks 3 minors 3
-tenure 3 8565809417001645436 -79970400 -67829760
-tenure 3 5093750756200805736 -67829760 -57695040
-tenure 3 3478238595126369600 -57695040 -48309120
-tenure 3 7665437600921262390 -48309120 -29128320
-tenure 3 785502479145284945 -29128320 9223372036854775807
-house 4 generations 3 rows 18 members 14 living 5 named_narrow 5 named_full 5 dormant_adults 0 minors_beyond 0 title 4 law tanistry holder_k 207 tenures 2 fallbacks 0 minors_seated 0 line 2 outside_house 0 heir 209/1 second 217/1
-members_k 4: 205 207 209 211 212 213 214 215 216 217 218 219 220 222
-house 4 16051532665752201371 generations 3 rows 18 members 14 living 5 root 7386988848024754726
-title 4 1133465868582074775 tier 1 law 5 liege 8029424953766362512 polity 0 holder 11191752133469081345 held_since -5150880 predecessor_exit 1 successions 1 fallbacks 0 minors 0
-tenure 4 7386988848024754726 -38875680 -5150880
-tenure 4 11191752133469081345 -5150880 9223372036854775807
-persons_sha256 e355589311440b854c1a89e4815179704fab88cc3236ba120bbbbd90be704105
-marriages_sha256 138a303a6c674437982354b13a53bba358133f33d8bbd75f4d392be5e188c44e
-households_sha256 16ce13c7170d26c16f97449bacf565b109f1a7145187951ac275072be6c9faab
-house_members_sha256 e3de379333c1c19fb726f59d71f584ffa9362aca0e44680f306f927dc3faa21a
+tenure 0 17273540922844974532 -44984160 -23266080
+tenure 0 4761962997413864267 -23266080 -17173440
+tenure 0 7825942250195539844 -17173440 -9357120
+tenure 0 15089564542174552677 -9357120 -233280
+tenure 0 8713044459742998483 -233280 9223372036854775807
+house 1 generations 4 rows 29 members 23 living 4 named_narrow 3 named_full 3 dormant_adults 1 minors_beyond 0 title 1 law primogeniture holder_k 116 tenures 2 fallbacks 0 minors_seated 0 line 3 outside_house 0 heir 120/2 second 135/1
+members_k 1: 112 114 116 118 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 138 139 140
+house 1 8785916280820306117 generations 4 rows 29 members 23 living 4 root 17293586964832100946
+title 1 6368660086272757895 tier 1 law 0 liege 17879453068217379416 polity 0 holder 10103285894376512267 held_since -17022240 predecessor_exit 1 successions 1 fallbacks 0 minors 0
+tenure 1 17293586964832100946 -53913600 -17022240
+tenure 1 10103285894376512267 -17022240 9223372036854775807
+house 2 generations 3 rows 22 members 17 living 8 named_narrow 5 named_full 5 dormant_adults 0 minors_beyond 3 title 2 law primogeniture holder_k 145 tenures 3 fallbacks 0 minors_seated 0 line 7 outside_house 0 heir 153/1 second 147/1
+members_k 2: 141 143 145 147 148 149 150 151 152 153 154 156 157 158 159 161 162
+house 2 17265633337847527728 generations 3 rows 22 members 17 living 8 root 16821373222460025730
+title 2 7239548165033229501 tier 1 law 0 liege 17879453068217379416 polity 0 holder 4845921241810774362 held_since -7666560 predecessor_exit 1 successions 2 fallbacks 0 minors 0
+tenure 2 16821373222460025730 -46084320 -41389920
+tenure 2 8846675100410389993 -41389920 -7666560
+tenure 2 4845921241810774362 -7666560 9223372036854775807
+house 3 generations 6 rows 66 members 52 living 14 named_narrow 9 named_full 9 dormant_adults 4 minors_beyond 1 title 3 law tanistry holder_k 171 tenures 6 fallbacks 1 minors_seated 1 line 4 outside_house 0 heir 185/2 second 173/1
+members_k 3: 163 165 167 169 171 173 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191 192 193 194 195 196 198 199 200 201 203 204 206 207 208 209 210 213 214 215 217 218 220 221 222 223 224 225 226 228
+house 3 13243383502482106854 generations 6 rows 66 members 52 living 14 root 15846105346390419496
+title 3 8029424953766362512 tier 0 law 5 liege 0 polity 2 holder 7992664891614714942 held_since -6553440 predecessor_exit 1 successions 5 fallbacks 1 minors 1
+tenure 3 15846105346390419496 -79970400 -66899520
+tenure 3 1991709091585166738 -66899520 -59705280
+tenure 3 3148818567353615067 -59705280 -30342240
+tenure 3 14902911298508928758 -30342240 -17316000
+tenure 3 9871409459840208537 -17316000 -6553440
+tenure 3 7992664891614714942 -6553440 9223372036854775807
+house 4 generations 3 rows 18 members 14 living 6 named_narrow 5 named_full 5 dormant_adults 0 minors_beyond 1 title 4 law tanistry holder_k 233 tenures 3 fallbacks 0 minors_seated 0 line 1 outside_house 0 heir 241/2 second none
+members_k 4: 229 231 233 235 236 237 238 239 240 241 242 243 244 246
+house 4 16051532665752201371 generations 3 rows 18 members 14 living 6 root 2085847537186397309
+title 4 1133465868582074775 tier 1 law 5 liege 8029424953766362512 polity 0 holder 7757400612142864899 held_since -1553760 predecessor_exit 1 successions 2 fallbacks 0 minors 0
+tenure 4 2085847537186397309 -38875680 -16017120
+tenure 4 2548089306399018961 -16017120 -1553760
+tenure 4 7757400612142864899 -1553760 9223372036854775807
+persons_sha256 2bd82b8623709e36b7b055a3abb94ae946ef0144ff679760efdc9ed985849d84
+marriages_sha256 b8f228382f1f3c292e3eb2a4da9c619f3a007b39033584a802c7fc3fed61ff00
+households_sha256 0e38cd320b6134327cbd3d5ce6b37d170eb15f8f3e70c670902819909f3dae6c
+house_members_sha256 0373995ffb5f40a6b8ea64461385b917ae90eabee400aa8d42bdedf339490e7e
 world twin_vales 2
-population 1500 living 1500 persons 1628 dynasts 106 synthesised 1394 married 290 households 727 orphans 0
-living_by_sex males 758 females 742 by_age 0-14 458 15-49 774 50+ 268
-named_at_start narrow 33 full 35 dormant_adults 29 minors_beyond 20 empty_lines 0 dormancy_degrees 2 majority_age 16
-house 0 generations 5 rows 48 members 36 living 12 named_narrow 6 named_full 6 dormant_adults 5 minors_beyond 1 title 0 law primogeniture holder_k 6 tenures 3 fallbacks 0 minors_seated 0 line 11 outside_house 0 heir 8/1 second 10/2
-members_k 0: 0 2 4 6 8 10 11 12 13 14 15 16 17 18 19 20 21 22 24 26 28 29 30 31 33 35 36 37 38 39 40 42 43 45 46 47
-house 0 12341584286840210898 generations 5 rows 48 members 36 living 12 root 8465654067468980089
+population 1500 living 1500 persons 1675 dynasts 126 synthesised 1374 married 286 households 730 orphans 0
+living_by_sex males 763 females 737 by_age 0-14 462 15-49 775 50+ 263
+named_at_start narrow 26 full 29 dormant_adults 32 minors_beyond 36 empty_lines 0 dormancy_degrees 2 majority_age 16
+house 0 generations 5 rows 68 members 55 living 21 named_narrow 7 named_full 7 dormant_adults 8 minors_beyond 6 title 0 law primogeniture holder_k 6 tenures 3 fallbacks 0 minors_seated 0 line 20 outside_house 0 heir 8/1 second 10/2
+members_k 0: 0 2 4 6 8 10 11 12 13 14 15 16 17 18 19 20 21 22 23 25 26 27 28 29 31 32 33 35 36 37 38 39 41 42 44 45 46 47 48 49 50 51 52 54 55 56 58 59 60 61 62 63 65 66 67
+house 0 12341584286840210898 generations 5 rows 68 members 55 living 21 root 8465654067468980089
 title 0 16448868221605753347 tier 0 law 0 liege 0 polity 1 holder 11322230971098805332 held_since -19800000 predecessor_exit 1 successions 2 fallbacks 0 minors 0
 tenure 0 8465654067468980089 -65295360 -44428320
 tenure 0 6357620480500802408 -44428320 -19800000
 tenure 0 11322230971098805332 -19800000 9223372036854775807
-house 1 generations 4 rows 49 members 38 living 23 named_narrow 9 named_full 9 dormant_adults 7 minors_beyond 7 title 1 law primogeniture holder_k 52 tenures 2 fallbacks 0 minors_seated 0 line 22 outside_house 0 heir 54/1 second 56/2
-members_k 1: 48 50 52 54 56 57 58 59 60 61 62 63 64 65 67 68 69 70 71 74 75 76 78 79 80 81 83 84 85 86 87 88 90 91 92 93 94 96
-house 1 16764014492243680602 generations 4 rows 49 members 38 living 23 root 14137296634048519342
-title 1 3717431802994808251 tier 1 law 0 liege 16448868221605753347 polity 0 holder 8249923542097284512 held_since -24979680 predecessor_exit 1 successions 1 fallbacks 0 minors 0
-tenure 1 14137296634048519342 -55190880 -24979680
-tenure 1 8249923542097284512 -24979680 9223372036854775807
-house 2 generations 3 rows 43 members 35 living 18 named_narrow 6 named_full 6 dormant_adults 7 minors_beyond 5 title 2 law primogeniture holder_k 108 tenures 3 fallbacks 0 minors_seated 0 line 17 outside_house 0 heir 132/1 second 130/1
-members_k 2: 97 99 101 103 104 105 106 107 108 109 110 111 113 114 115 116 117 118 119 120 122 123 124 125 126 127 128 130 131 132 134 136 137 138 139
-house 2 7271446999409778684 generations 3 rows 43 members 35 living 18 root 1724220661513381118
-title 2 12933461204880563867 tier 1 law 0 liege 16448868221605753347 polity 0 holder 17678682283943237203 held_since -4380480 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 2 1724220661513381118 -45436320 -19883520
-tenure 2 12359655510023725962 -19883520 -4380480
-tenure 2 17678682283943237203 -4380480 9223372036854775807
-house 3 generations 6 rows 75 members 61 living 22 named_narrow 3 named_full 5 dormant_adults 10 minors_beyond 7 title 3 law tanistry holder_k 166 tenures 5 fallbacks 0 minors_seated 0 line 5 outside_house 0 heir 173/3 second 175/4
-members_k 3: 140 142 144 146 148 150 152 153 154 155 156 157 158 159 160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179 180 181 183 184 186 187 188 189 190 192 193 195 196 197 198 199 200 202 203 204 206 207 208 211 212 213 214
-house 3 3449570763961755634 generations 6 rows 75 members 61 living 22 root 12849471181262987176
-title 3 2248794201114700382 tier 0 law 5 liege 0 polity 2 holder 11436840572448763549 held_since -14431680 predecessor_exit 1 successions 4 fallbacks 0 minors 0
-tenure 3 12849471181262987176 -98284320 -75257280
-tenure 3 12288920334060571583 -75257280 -53180640
-tenure 3 9045559714915695066 -53180640 -31557600
-tenure 3 11779959685272930020 -31557600 -14431680
-tenure 3 11436840572448763549 -14431680 9223372036854775807
-house 4 generations 3 rows 19 members 16 living 9 named_narrow 9 named_full 9 dormant_adults 0 minors_beyond 0 title 4 law tanistry holder_k 219 tenures 3 fallbacks 0 minors_seated 0 line 1 outside_house 0 heir 228/2 second none
-members_k 4: 215 217 219 221 222 223 224 225 226 227 228 229 230 231 232 233
-house 4 15978344417020496869 generations 3 rows 19 members 16 living 9 root 5387198374880603810
-title 4 534370455158044310 tier 1 law 5 liege 2248794201114700382 polity 0 holder 12146824657758774092 held_since -7531200 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 4 5387198374880603810 -53820000 -29796480
-tenure 4 18133364036563234348 -29796480 -7531200
-tenure 4 12146824657758774092 -7531200 9223372036854775807
-persons_sha256 30712ab0ee93995198e85669118c8f1dbad1a24820b0ce3e959cc24fa33943dc
-marriages_sha256 8583f708438c44595544991fe7f73fd16e48b9ca0a512e17a34bfb3fbe21fcfe
-households_sha256 ff8611f49e1197da772b110899c6fe4195917bd0066bc4f43dafd4d0b402c0d1
-house_members_sha256 ce9cbbc1d15fdcafe48ba62752af2e18996b89f81dddb91357bc71cf897148d8
+house 1 generations 4 rows 49 members 38 living 20 named_narrow 2 named_full 3 dormant_adults 9 minors_beyond 8 title 1 law primogeniture holder_k 91 tenures 3 fallbacks 0 minors_seated 0 line 19 outside_house 0 heir 92/2 second 72/3
+members_k 1: 68 70 72 74 76 77 78 79 80 81 82 83 84 85 87 88 90 91 92 93 94 96 97 98 99 100 102 103 104 105 106 108 110 111 112 113 115 116
+house 1 16764014492243680602 generations 4 rows 49 members 38 living 20 root 12225426385957210557
+title 1 3717431802994808251 tier 1 law 0 liege 16448868221605753347 polity 0 holder 7398270213468925291 held_since -10905120 predecessor_exit 1 successions 2 fallbacks 0 minors 0
+tenure 1 12225426385957210557 -55190880 -26333280
+tenure 1 10920737139537494438 -26333280 -10905120
+tenure 1 7398270213468925291 -10905120 9223372036854775807
+house 2 generations 3 rows 45 members 36 living 16 named_narrow 7 named_full 7 dormant_adults 5 minors_beyond 4 title 2 law primogeniture holder_k 131 tenures 3 fallbacks 0 minors_seated 0 line 15 outside_house 0 heir 147/1 second 150/1
+members_k 2: 117 119 121 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 141 142 143 144 145 147 148 149 150 152 153 154 156 158 160 161
+house 2 7271446999409778684 generations 3 rows 45 members 36 living 16 root 4843242452570004728
+title 2 12933461204880563867 tier 1 law 0 liege 16448868221605753347 polity 0 holder 7906444725394576193 held_since -3247200 predecessor_exit 1 successions 2 fallbacks 0 minors 0
+tenure 2 4843242452570004728 -45436320 -28431360
+tenure 2 10070830298375711245 -28431360 -3247200
+tenure 2 7906444725394576193 -3247200 9223372036854775807
+house 3 generations 6 rows 106 members 84 living 29 named_narrow 5 named_full 6 dormant_adults 9 minors_beyond 14 title 3 law tanistry holder_k 191 tenures 8 fallbacks 0 minors_seated 0 line 9 outside_house 0 heir 192/2 second 234/5
+members_k 3: 162 164 166 168 170 172 174 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191 192 193 194 195 196 197 198 199 200 201 203 205 207 208 209 210 211 213 214 216 217 218 219 220 221 222 224 226 227 229 230 231 233 234 235 236 237 238 240 241 242 243 245 248 249 250 251 253 254 255 256 257 258 259 260 262 263 265 266 267
+house 3 3449570763961755634 generations 6 rows 106 members 84 living 29 root 395181260741919912
+title 3 2248794201114700382 tier 0 law 5 liege 0 polity 2 holder 2082412276953033523 held_since -4652640 predecessor_exit 1 successions 7 fallbacks 0 minors 0
+tenure 3 395181260741919912 -98284320 -64840320
+tenure 3 10150723352420628440 -64840320 -57516480
+tenure 3 5276371168813575958 -57516480 -56096640
+tenure 3 14494307947727104512 -56096640 -53814240
+tenure 3 11436840572448763549 -53814240 -13577760
+tenure 3 16220872398565407888 -13577760 -10316160
+tenure 3 10657322646190373267 -10316160 -4652640
+tenure 3 2082412276953033523 -4652640 9223372036854775807
+house 4 generations 3 rows 33 members 27 living 11 named_narrow 5 named_full 6 dormant_adults 1 minors_beyond 4 title 4 law tanistry holder_k 270 tenures 2 fallbacks 0 minors_seated 0 line 2 outside_house 0 heir 288/3 second 284/1
+members_k 4: 268 270 272 274 275 276 277 278 279 280 281 282 283 284 285 286 288 289 290 291 292 293 294 296 298 299 300
+house 4 15978344417020496869 generations 3 rows 33 members 27 living 11 root 8948500994256148549
+title 4 534370455158044310 tier 1 law 5 liege 2248794201114700382 polity 0 holder 16021978929563262528 held_since -23531040 predecessor_exit 1 successions 1 fallbacks 0 minors 0
+tenure 4 8948500994256148549 -53820000 -23531040
+tenure 4 16021978929563262528 -23531040 9223372036854775807
+persons_sha256 630bc3c3ef39204b58b2ff1a925dc368f3307a55a8f846df1147a5f95afddccb
+marriages_sha256 5247d49606ee9d07f160216d11ed5b95fbe0ee58bf448cc380a9b37d239e434d
+households_sha256 a6a555d0f6a3c8c0e9c24f09a2bfc49de58a39ca7cc9e2f7c75e774f533ffe43
+house_members_sha256 29ff93da30c31626899502afffada475524029db3c66ffa49bc4bcb9437f535c
 world twin_vales 3
-population 1500 living 1500 persons 1634 dynasts 87 synthesised 1413 married 293 households 743 orphans 0
-living_by_sex males 757 females 743 by_age 0-14 456 15-49 776 50+ 268
-named_at_start narrow 22 full 26 dormant_adults 21 minors_beyond 18 empty_lines 0 dormancy_degrees 2 majority_age 16
-house 0 generations 5 rows 23 members 18 living 8 named_narrow 7 named_full 7 dormant_adults 1 minors_beyond 0 title 0 law primogeniture holder_k 8 tenures 5 fallbacks 0 minors_seated 0 line 7 outside_house 0 heir 10/1 second 22/1
-members_k 0: 0 2 4 6 8 10 11 12 13 14 15 16 17 18 19 20 21 22
-house 0 3126383565564028520 generations 5 rows 23 members 18 living 8 root 7482059719391658912
+population 1500 living 1500 persons 1638 dynasts 93 synthesised 1407 married 289 households 734 orphans 0
+living_by_sex males 761 females 739 by_age 0-14 456 15-49 777 50+ 267
+named_at_start narrow 23 full 25 dormant_adults 29 minors_beyond 20 empty_lines 0 dormancy_degrees 2 majority_age 16
+house 0 generations 5 rows 34 members 27 living 9 named_narrow 7 named_full 7 dormant_adults 1 minors_beyond 1 title 0 law primogeniture holder_k 8 tenures 5 fallbacks 0 minors_seated 0 line 8 outside_house 0 heir 10/1 second 26/1
+members_k 0: 0 2 4 6 8 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 28 29 31 32 33
+house 0 3126383565564028520 generations 5 rows 34 members 27 living 9 root 7482059719391658912
 title 0 13505032875227094253 tier 0 law 0 liege 0 polity 1 holder 10839981498538200683 held_since -1661760 predecessor_exit 1 successions 4 fallbacks 0 minors 0
 tenure 0 7482059719391658912 -79558560 -57690720
 tenure 0 17433243377800290170 -57690720 -50137920
 tenure 0 12916908679921501278 -50137920 -7930080
 tenure 0 13546143475659281792 -7930080 -1661760
 tenure 0 10839981498538200683 -1661760 9223372036854775807
-house 1 generations 4 rows 26 members 19 living 5 named_narrow 2 named_full 3 dormant_adults 1 minors_beyond 1 title 1 law primogeniture holder_k 36 tenures 4 fallbacks 0 minors_seated 0 line 4 outside_house 0 heir 31/3 second 37/2
-members_k 1: 23 25 27 29 31 32 33 34 35 36 37 38 40 41 42 43 44 47 48
-house 1 9361002356644596866 generations 4 rows 26 members 19 living 5 root 1268150854109150044
-title 1 9371967693464287163 tier 1 law 0 liege 13505032875227094253 polity 0 holder 6731195898225229345 held_since -17020800 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 1 1268150854109150044 -71619840 -57634560
-tenure 1 11125135691006877347 -57634560 -21813120
-tenure 1 4384864128006340937 -21813120 -17020800
-tenure 1 6731195898225229345 -17020800 9223372036854775807
-house 2 generations 3 rows 33 members 27 living 11 named_narrow 3 named_full 3 dormant_adults 5 minors_beyond 3 title 2 law primogeniture holder_k 67 tenures 3 fallbacks 0 minors_seated 0 line 10 outside_house 0 heir 81/1 second 76/1
-members_k 2: 49 51 53 55 56 57 58 59 60 61 62 63 64 66 67 69 70 71 72 74 75 76 77 78 79 80 81
-house 2 5925385800008980788 generations 3 rows 33 members 27 living 11 root 4286241064420359380
-title 2 17839233185982630467 tier 1 law 0 liege 13505032875227094253 polity 0 holder 7803633807479763682 held_since -14631840 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 2 4286241064420359380 -57552480 -28563840
-tenure 2 9032822343807727120 -28563840 -14631840
-tenure 2 7803633807479763682 -14631840 9223372036854775807
-house 3 generations 6 rows 113 members 84 living 32 named_narrow 7 named_full 9 dormant_adults 12 minors_beyond 11 title 3 law tanistry holder_k 160 tenures 8 fallbacks 0 minors_seated 0 line 4 outside_house 0 heir 136/6 second 181/5
-members_k 3: 82 84 86 88 90 92 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 118 119 120 121 122 123 124 125 128 129 130 132 133 134 136 137 140 141 143 145 146 147 148 150 152 153 154 156 158 159 160 161 163 164 165 168 169 170 171 173 174 175 177 178 179 181 182 183 184 186 187 189 191 193 194
-house 3 15287640613767292251 generations 6 rows 113 members 84 living 32 root 15626176316703158477
-title 3 10791625702382036380 tier 0 law 5 liege 0 polity 2 holder 12041963049600818946 held_since -3661920 predecessor_exit 1 successions 7 fallbacks 0 minors 0
-tenure 3 15626176316703158477 -99915840 -76875840
-tenure 3 7057207822941302742 -76875840 -68374080
-tenure 3 14353886315194517759 -68374080 -44375040
-tenure 3 11445033086029920060 -44375040 -34032960
-tenure 3 8963523370221862253 -34032960 -32310720
-tenure 3 8323343481719799905 -32310720 -17225280
-tenure 3 15994545988127388108 -17225280 -3661920
-tenure 3 12041963049600818946 -3661920 9223372036854775807
-house 4 generations 3 rows 26 members 19 living 9 named_narrow 3 named_full 4 dormant_adults 2 minors_beyond 3 title 4 law tanistry holder_k 199 tenures 5 fallbacks 0 minors_seated 0 line 4 outside_house 0 heir 208/2 second 212/3
-members_k 4: 195 197 199 201 202 203 204 205 206 207 208 209 212 214 215 216 217 219 220
-house 4 7245842711424975743 generations 3 rows 26 members 19 living 9 root 13641000662053086872
-title 4 2823408423390285668 tier 1 law 5 liege 10791625702382036380 polity 0 holder 13715998381478305881 held_since -1584000 predecessor_exit 1 successions 4 fallbacks 0 minors 0
+house 1 generations 4 rows 32 members 25 living 8 named_narrow 2 named_full 3 dormant_adults 3 minors_beyond 2 title 1 law primogeniture holder_k 40 tenures 4 fallbacks 0 minors_seated 0 line 7 outside_house 0 heir 42/1 second 56/4
+members_k 1: 34 36 38 40 42 43 44 45 46 47 48 49 50 51 52 54 55 56 57 58 60 61 62 63 65
+house 1 9361002356644596866 generations 4 rows 32 members 25 living 8 root 4815443519527883457
+title 1 9371967693464287163 tier 1 law 0 liege 13505032875227094253 polity 0 holder 13726082114365321690 held_since -21049920 predecessor_exit 1 successions 3 fallbacks 0 minors 0
+tenure 1 4815443519527883457 -71619840 -48673440
+tenure 1 6731195898225229345 -48673440 -23434560
+tenure 1 1864384490179522039 -23434560 -21049920
+tenure 1 13726082114365321690 -21049920 9223372036854775807
+house 2 generations 3 rows 51 members 43 living 16 named_narrow 2 named_full 3 dormant_adults 10 minors_beyond 3 title 2 law primogeniture holder_k 100 tenures 3 fallbacks 0 minors_seated 0 line 15 outside_house 0 heir 99/2 second 105/4
+members_k 2: 66 68 70 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 88 89 90 91 93 94 95 96 98 99 100 101 102 103 105 106 107 108 109 110 111 113 114 115 116
+house 2 5925385800008980788 generations 3 rows 51 members 43 living 16 root 8813471633502546640
+title 2 17839233185982630467 tier 1 law 0 liege 13505032875227094253 polity 0 holder 11445033086029920060 held_since -7535520 predecessor_exit 1 successions 2 fallbacks 0 minors 0
+tenure 2 8813471633502546640 -57552480 -30699360
+tenure 2 8323343481719799905 -30699360 -7535520
+tenure 2 11445033086029920060 -7535520 9223372036854775807
+house 3 generations 6 rows 78 members 62 living 27 named_narrow 7 named_full 7 dormant_adults 11 minors_beyond 9 title 3 law tanistry holder_k 125 tenures 7 fallbacks 0 minors_seated 0 line 9 outside_house 0 heir 142/2 second 144/2
+members_k 3: 117 119 121 123 125 127 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143 144 145 146 147 148 149 151 152 153 154 155 156 157 158 160 161 162 163 165 166 167 168 169 170 171 173 174 176 177 178 179 180 182 184 186 187 189 190 191 193 194
+house 3 15287640613767292251 generations 6 rows 78 members 62 living 27 root 12615241927523277531
+title 3 10791625702382036380 tier 0 law 5 liege 0 polity 2 holder 29117911307828653 held_since -5356800 predecessor_exit 1 successions 6 fallbacks 0 minors 0
+tenure 3 12615241927523277531 -99915840 -73104480
+tenure 3 15630637211857034161 -73104480 -68194080
+tenure 3 12981686150695411965 -68194080 -45810720
+tenure 3 17419357855829453948 -45810720 -22451040
+tenure 3 15458822022317747405 -22451040 -5925600
+tenure 3 11134219861980968993 -5925600 -5356800
+tenure 3 29117911307828653 -5356800 9223372036854775807
+house 4 generations 3 rows 36 members 29 living 14 named_narrow 5 named_full 5 dormant_adults 4 minors_beyond 5 title 4 law tanistry holder_k 208 tenures 4 fallbacks 0 minors_seated 0 line 5 outside_house 0 heir 199/2 second 211/2
+members_k 4: 195 197 199 201 202 203 204 205 206 207 208 209 210 211 212 215 216 217 218 219 220 221 223 224 225 226 227 229 230
+house 4 7245842711424975743 generations 3 rows 36 members 29 living 14 root 13641000662053086872
+title 4 2823408423390285668 tier 1 law 5 liege 10791625702382036380 polity 0 holder 1130284060728097550 held_since -3195360 predecessor_exit 1 successions 3 fallbacks 0 minors 0
 tenure 4 13641000662053086872 -47564640 -21715200
 tenure 4 17537988286468294186 -21715200 -14598720
-tenure 4 9028339690646756140 -14598720 -12028320
-tenure 4 13918247879351128712 -12028320 -1584000
-tenure 4 13715998381478305881 -1584000 9223372036854775807
-persons_sha256 6fbeede77172bfe9d54f44830497f1a54ca0e2d9db5ac432bbe80ad70722a827
-marriages_sha256 c08d10b5813f2936f5e68add35a30da88e8a6c8b885709ede89cd848d68db724
-households_sha256 e8b55fbc42ebffa0660a4354a04a5e89ed354a2a8b3cbe2bedfb3e0df4e2ef6d
-house_members_sha256 852bd0014b73f099509ba7b874e4f4ee7edfc9416dc1b4ef0156de122e77f89e
+tenure 4 13918247879351128712 -14598720 -3195360
+tenure 4 1130284060728097550 -3195360 9223372036854775807
+persons_sha256 d50d27416e0884f5b60c587e1257f659c9cd22c66f00318ef93fdc69ddb5a249
+marriages_sha256 4c0a80a91ff9384d7d9dadc7c648444634b8f7276a4656c1d2c2aa99ac81b187
+households_sha256 c39216a461674b8aa5303795b43fe719cb4ae49f70516e7c46b9cae4adfc54e8
+house_members_sha256 5d3e57908cfe2cb0417d8d6d7eb9268f468c81042cfe46a5e3a564dec507cf65
 world kingdom_10k 1
-population 10000 living 10000 persons 10352 dynasts 161 synthesised 9839 married 2041 households 4914 orphans 0
-living_by_sex males 5112 females 4888 by_age 0-14 3045 15-49 5148 50+ 1807
-named_at_start narrow 58 full 65 dormant_adults 27 minors_beyond 25 empty_lines 0 dormancy_degrees 2 majority_age 16
-house 0 generations 6 rows 90 members 70 living 12 named_narrow 3 named_full 3 dormant_adults 5 minors_beyond 4 title 0 law primogeniture holder_k 78 tenures 6 fallbacks 0 minors_seated 0 line 11 outside_house 0 heir 86/1 second 74/2
-members_k 0: 0 2 4 6 8 10 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 37 38 39 41 42 43 44 46 48 49 50 51 52 53 54 56 58 59 60 62 63 64 66 67 68 69 70 72 73 74 75 76 77 78 79 81 82 83 86 87
-house 0 7259298186381442857 generations 6 rows 90 members 70 living 12 root 5423802501992540580
-title 0 17879453068217379416 tier 0 law 0 liege 0 polity 1 holder 869863345332042678 held_since -3811680 predecessor_exit 1 successions 5 fallbacks 0 minors 0
+population 10000 living 10000 persons 10472 dynasts 237 synthesised 9763 married 2025 households 4900 orphans 0
+living_by_sex males 5112 females 4888 by_age 0-14 3038 15-49 5160 50+ 1802
+named_at_start narrow 64 full 68 dormant_adults 76 minors_beyond 41 empty_lines 1 dormancy_degrees 2 majority_age 16
+house 0 generations 6 rows 182 members 147 living 45 named_narrow 5 named_full 5 dormant_adults 26 minors_beyond 14 title 0 law primogeniture holder_k 34 tenures 5 fallbacks 0 minors_seated 0 line 16 outside_house 0 heir 64/1 second 62/1
+members_k 0: 0 2 4 6 8 10 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 39 40 41 43 44 45 46 47 48 50 51 52 54 55 56 57 58 59 60 62 63 64 66 67 68 69 70 72 73 74 75 76 77 78 79 81 82 83 84 85 86 88 89 90 91 92 93 95 96 97 98 99 101 102 103 104 105 107 110 111 112 113 115 116 117 118 119 120 122 123 124 125 126 128 129 130 131 132 133 134 136 137 138 139 140 142 144 145 146 147 148 149 151 152 153 155 156 157 158 160 161 162 163 164 165 166 168 169 171 172 173 176 178 180 181
+house 0 7259298186381442857 generations 6 rows 182 members 147 living 45 root 5423802501992540580
+title 0 17879453068217379416 tier 0 law 0 liege 0 polity 1 holder 6236555625046879450 held_since -11967840 predecessor_exit 1 successions 4 fallbacks 0 minors 0
 tenure 0 5423802501992540580 -93065760 -64697760
 tenure 0 7299432944421516019 -64697760 -63390240
 tenure 0 623082230840141381 -63390240 -31930560
-tenure 0 90552373105500099 -31930560 -12484800
-tenure 0 6713181017932975508 -12484800 -3811680
-tenure 0 869863345332042678 -3811680 9223372036854775807
-house 1 generations 5 rows 66 members 53 living 21 named_narrow 5 named_full 5 dormant_adults 11 minors_beyond 5 title 1 law primogeniture holder_k 98 tenures 4 fallbacks 0 minors_seated 0 line 20 outside_house 0 heir 100/1 second 119/1
-members_k 1: 90 92 94 96 98 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 121 122 123 124 125 126 128 129 130 131 132 133 136 137 138 139 141 142 143 145 146 147 149 150 151 152 153 155
-house 1 8785916280820306117 generations 5 rows 66 members 53 living 21 root 7825942250195539844
-title 1 6368660086272757895 tier 1 law 0 liege 17879453068217379416 polity 0 holder 6090618821224909305 held_since -15251040 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 1 7825942250195539844 -64238400 -43878240
-tenure 1 17662256528325132549 -43878240 -23757120
-tenure 1 14914839909886106116 -23757120 -15251040
-tenure 1 6090618821224909305 -15251040 9223372036854775807
-house 2 generations 4 rows 38 members 29 living 10 named_narrow 5 named_full 5 dormant_adults 2 minors_beyond 3 title 2 law primogeniture holder_k 172 tenures 4 fallbacks 0 minors_seated 0 line 9 outside_house 0 heir 185/1 second 162/2
-members_k 2: 156 158 160 162 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 180 181 182 183 185 186 188 189 192 193
-house 2 17265633337847527728 generations 4 rows 38 members 29 living 10 root 2374618357624741652
-title 2 7239548165033229501 tier 1 law 0 liege 17879453068217379416 polity 0 holder 785502479145284945 held_since -2016000 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 2 2374618357624741652 -65884320 -51891840
-tenure 2 7655656369559788115 -51891840 -29046240
-tenure 2 9098309387326925020 -29046240 -2016000
-tenure 2 785502479145284945 -2016000 9223372036854775807
-house 3 generations 4 rows 24 members 18 living 8 named_narrow 8 named_full 8 dormant_adults 0 minors_beyond 0 title 3 law primogeniture holder_k 198 tenures 3 fallbacks 0 minors_seated 0 line 7 outside_house 0 heir 200/1 second 202/2
-members_k 3: 194 196 198 200 202 203 204 205 206 207 208 209 210 211 212 213 215 217
-house 3 13243383502482106854 generations 4 rows 24 members 18 living 8 root 1815260564793165721
-title 3 8029424953766362512 tier 1 law 0 liege 17879453068217379416 polity 0 holder 16728774616454684081 held_since -19882080 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 3 1815260564793165721 -57363840 -50551200
-tenure 3 8190648122766372090 -50551200 -19882080
-tenure 3 16728774616454684081 -19882080 9223372036854775807
-house 4 generations 3 rows 21 members 17 living 3 named_narrow 3 named_full 3 dormant_adults 0 minors_beyond 0 title 4 law primogeniture holder_k 220 tenures 4 fallbacks 0 minors_seated 0 line 2 outside_house 0 heir 224/2 second 231/2
-members_k 4: 218 220 222 224 225 226 227 228 229 230 231 232 234 235 236 237 238
-house 4 16051532665752201371 generations 3 rows 21 members 17 living 3 root 15118635931771424851
-title 4 1133465868582074775 tier 1 law 0 liege 17879453068217379416 polity 0 holder 14714411755917776913 held_since -4295520 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 4 15118635931771424851 -38875680 -26611200
-tenure 4 16062956771236269933 -26611200 -7463520
-tenure 4 13419305425850811221 -7463520 -4295520
-tenure 4 14714411755917776913 -4295520 9223372036854775807
-house 5 generations 5 rows 52 members 41 living 8 named_narrow 5 named_full 5 dormant_adults 0 minors_beyond 3 title 5 law seniority holder_k 247 tenures 6 fallbacks 0 minors_seated 0 line 3 outside_house 0 heir 257/2 second 260/2
-members_k 5: 239 241 243 245 247 249 250 251 252 253 254 255 256 257 258 259 260 261 262 263 264 265 267 268 269 270 271 272 273 275 276 277 278 280 281 282 284 285 286 287 289
-house 5 6744245733829365645 generations 5 rows 52 members 41 living 8 root 5552751917724290689
-title 5 6211077641016067734 tier 0 law 2 liege 0 polity 2 holder 14103254033540071350 held_since -12127680 predecessor_exit 1 successions 5 fallbacks 0 minors 0
-tenure 5 5552751917724290689 -87730560 -78438240
-tenure 5 9571073053281864672 -78438240 -44467200
-tenure 5 51004753484080569 -44467200 -41464800
-tenure 5 1644584625067495992 -41464800 -23225760
-tenure 5 9197600137250315229 -23225760 -12127680
-tenure 5 14103254033540071350 -12127680 9223372036854775807
-house 6 generations 4 rows 29 members 23 living 11 named_narrow 7 named_full 8 dormant_adults 3 minors_beyond 0 title 6 law seniority holder_k 297 tenures 5 fallbacks 0 minors_seated 0 line 7 outside_house 0 heir 305/2 second 317/3
-members_k 6: 291 293 295 297 299 300 301 302 303 304 305 306 307 308 309 310 311 313 314 315 316 317 319
-house 6 12990319932539904415 generations 4 rows 29 members 23 living 11 root 16269106446258672824
-title 6 16574302932048325307 tier 1 law 2 liege 6211077641016067734 polity 0 holder 12740631761173212996 held_since -2498400 predecessor_exit 1 successions 4 fallbacks 0 minors 0
-tenure 6 16269106446258672824 -74105280 -61505280
-tenure 6 12976495006914761195 -61505280 -38554560
-tenure 6 16056567007196954842 -38554560 -17326080
-tenure 6 6496004373743479396 -17326080 -2498400
-tenure 6 12740631761173212996 -2498400 9223372036854775807
-house 7 generations 3 rows 46 members 36 living 12 named_narrow 6 named_full 7 dormant_adults 1 minors_beyond 4 title 7 law seniority holder_k 335 tenures 3 fallbacks 0 minors_seated 0 line 8 outside_house 0 heir 336/2 second 332/4
-members_k 7: 320 322 324 326 327 328 329 330 331 332 333 335 336 337 338 339 341 342 343 345 346 347 348 349 350 352 353 354 355 356 358 359 360 361 363 365
-house 7 71048589537655190 generations 3 rows 46 members 36 living 12 root 164312347091602997
-title 7 10858195981549350167 tier 1 law 2 liege 6211077641016067734 polity 0 holder 18439894991093128261 held_since -8627040 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 7 164312347091602997 -54550080 -19321920
-tenure 7 2483139698029494524 -19321920 -8627040
-tenure 7 18439894991093128261 -8627040 9223372036854775807
-house 8 generations 3 rows 18 members 14 living 6 named_narrow 5 named_full 5 dormant_adults 1 minors_beyond 0 title 8 law seniority holder_k 370 tenures 3 fallbacks 0 minors_seated 0 line 3 outside_house 0 heir 380/1 second 381/1
-members_k 8: 366 368 370 372 373 374 375 376 377 378 379 380 381 383
-house 8 9458808580625526741 generations 3 rows 18 members 14 living 6 root 17761705242955930789
-title 8 6411450806329027298 tier 1 law 2 liege 6211077641016067734 polity 0 holder 13084775913840859059 held_since -16544160 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 8 17761705242955930789 -61734240 -35697600
-tenure 8 6983091884473149537 -35697600 -16544160
-tenure 8 13084775913840859059 -16544160 9223372036854775807
-house 9 generations 6 rows 67 members 49 living 7 named_narrow 2 named_full 4 dormant_adults 2 minors_beyond 1 title 9 law tanistry holder_k 447 tenures 8 fallbacks 2 minors_seated 1 line 4 outside_house 0 heir 394/6 second 418/6
-members_k 9: 384 386 388 390 392 394 396 397 398 399 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 418 419 421 422 423 426 427 429 431 432 435 438 439 440 441 444 445 446 447 449 450
-house 9 12330033093208721708 generations 6 rows 67 members 49 living 7 root 9614675024635367631
-title 9 354350062721585197 tier 0 law 5 liege 0 polity 3 holder 5913527213718578886 held_since -7564320 predecessor_exit 1 successions 7 fallbacks 2 minors 1
-tenure 9 9614675024635367631 -100015200 -89949600
-tenure 9 7288375781040297729 -89949600 -57942720
-tenure 9 15804698246305046424 -57942720 -55483200
-tenure 9 7974206241659064640 -55483200 -30061440
-tenure 9 13585269095038932455 -30061440 -29511360
-tenure 9 14856914146432746747 -29511360 -8784000
-tenure 9 4744142095938547943 -8784000 -7564320
-tenure 9 5913527213718578886 -7564320 9223372036854775807
-house 10 generations 4 rows 30 members 22 living 8 named_narrow 2 named_full 4 dormant_adults 2 minors_beyond 2 title 10 law tanistry holder_k 463 tenures 4 fallbacks 0 minors_seated 0 line 2 outside_house 0 heir 466/3 second 457/4
-members_k 10: 451 453 455 457 459 460 461 462 463 464 465 466 467 468 470 471 472 473 474 476 477 478
-house 10 1790821449378357467 generations 4 rows 30 members 22 living 8 root 14301989287429019536
-title 10 5245583461070241549 tier 1 law 5 liege 354350062721585197 polity 0 holder 3654363827527696194 held_since -8549280 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 10 14301989287429019536 -59364000 -30955680
-tenure 10 14204229039929298820 -30955680 -27833760
-tenure 10 15977277326762755299 -27833760 -8549280
-tenure 10 3654363827527696194 -8549280 9223372036854775807
-house 11 generations 3 rows 32 members 24 living 11 named_narrow 7 named_full 8 dormant_adults 0 minors_beyond 3 title 11 law tanistry holder_k 493 tenures 4 fallbacks 0 minors_seated 0 line 1 outside_house 0 heir 498/4 second none
-members_k 11: 481 483 485 487 488 489 490 491 492 493 494 495 496 498 499 503 504 505 506 507 508 509 511 512
-house 11 11075431494485512872 generations 3 rows 32 members 24 living 11 root 14348404889308226230
-title 11 16747764260608634506 tier 1 law 5 liege 354350062721585197 polity 0 holder 9554039483963397667 held_since -3268800 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 11 14348404889308226230 -40855680 -8570880
-tenure 11 7015990531721617894 -8570880 -8552160
-tenure 11 7573523465874572476 -8552160 -3268800
-tenure 11 9554039483963397667 -3268800 9223372036854775807
-persons_sha256 cdbf746eec27418e7967760aef82982fc2610dd95584d10f9adae8e98b67e04f
-marriages_sha256 4653457603c9903b05cb098b24a56ab2182626b86ba6e363ec25ad796b2b4f13
-households_sha256 680b44b346ef653210b08bad9e9013cd96b291391fc3d43d0db3f4ed3b1532ed
-house_members_sha256 892dc2d3de3279ea61a944d2d22b7e682ca422819b5536d26ceac06f024867a1
+tenure 0 1230245536091875511 -31930560 -11967840
+tenure 0 6236555625046879450 -11967840 9223372036854775807
+house 1 generations 5 rows 42 members 31 living 6 named_narrow 3 named_full 3 dormant_adults 3 minors_beyond 0 title 1 law primogeniture holder_k 190 tenures 5 fallbacks 0 minors_seated 0 line 5 outside_house 0 heir 192/1 second 203/1
+members_k 1: 182 184 186 188 190 192 193 194 195 196 197 198 199 200 201 202 203 204 206 207 208 209 211 212 213 214 216 217 219 220 221
+house 1 8785916280820306117 generations 5 rows 42 members 31 living 6 root 5464564953538123474
+title 1 6368660086272757895 tier 1 law 0 liege 17879453068217379416 polity 0 holder 8040749861772042884 held_since -17559360 predecessor_exit 1 successions 4 fallbacks 0 minors 0
+tenure 1 5464564953538123474 -64238400 -41412960
+tenure 1 2777093622918293848 -41412960 -31603680
+tenure 1 4081358784120562208 -31603680 -24720480
+tenure 1 11482736811389710412 -24720480 -17559360
+tenure 1 8040749861772042884 -17559360 9223372036854775807
+house 2 generations 4 rows 40 members 31 living 11 named_narrow 6 named_full 6 dormant_adults 5 minors_beyond 0 title 2 law primogeniture holder_k 230 tenures 4 fallbacks 0 minors_seated 0 line 10 outside_house 0 heir 244/1 second 232/1
+members_k 2: 224 226 228 230 232 233 234 235 236 237 238 239 240 241 242 243 244 245 247 248 249 250 251 253 254 255 256 257 259 262 263
+house 2 17265633337847527728 generations 4 rows 40 members 31 living 11 root 9329230414941936975
+title 2 7239548165033229501 tier 1 law 0 liege 17879453068217379416 polity 0 holder 11628205127649881158 held_since -6943680 predecessor_exit 1 successions 3 fallbacks 0 minors 0
+tenure 2 9329230414941936975 -65884320 -39163680
+tenure 2 16062956771236269933 -39163680 -19323360
+tenure 2 15740109389719781577 -19323360 -6943680
+tenure 2 11628205127649881158 -6943680 9223372036854775807
+house 3 generations 4 rows 37 members 29 living 8 named_narrow 4 named_full 4 dormant_adults 3 minors_beyond 1 title 3 law primogeniture holder_k 284 tenures 5 fallbacks 0 minors_seated 0 line 7 outside_house 0 heir 285/2 second 272/2
+members_k 3: 264 266 268 270 272 273 274 275 276 277 278 279 280 281 282 283 284 285 286 287 288 290 293 294 295 297 298 299 300
+house 3 13243383502482106854 generations 4 rows 37 members 29 living 8 root 10124130698837940110
+title 3 8029424953766362512 tier 1 law 0 liege 17879453068217379416 polity 0 holder 7794217941656532943 held_since -59040 predecessor_exit 1 successions 4 fallbacks 0 minors 0
+tenure 3 10124130698837940110 -57363840 -52266240
+tenure 3 6613375237533300391 -52266240 -22299840
+tenure 3 6127869585757229186 -22299840 -8259840
+tenure 3 8996894732063533314 -8259840 -59040
+tenure 3 7794217941656532943 -59040 9223372036854775807
+house 4 generations 3 rows 26 members 20 living 9 named_narrow 6 named_full 6 dormant_adults 1 minors_beyond 2 title 4 law primogeniture holder_k 309 tenures 2 fallbacks 0 minors_seated 0 line 8 outside_house 0 heir 323/1 second 326/2
+members_k 4: 301 303 305 307 308 309 310 311 312 313 314 315 316 318 319 320 321 322 323 326
+house 4 16051532665752201371 generations 3 rows 26 members 20 living 9 root 14118909207354325272
+title 4 1133465868582074775 tier 1 law 0 liege 17879453068217379416 polity 0 holder 11559902419580257361 held_since -11970720 predecessor_exit 1 successions 1 fallbacks 0 minors 0
+tenure 4 14118909207354325272 -38875680 -11970720
+tenure 4 11559902419580257361 -11970720 9223372036854775807
+house 5 generations 5 rows 57 members 44 living 8 named_narrow 2 named_full 2 dormant_adults 2 minors_beyond 4 title 5 law seniority holder_k 380 tenures 9 fallbacks 0 minors_seated 0 line 1 outside_house 0 heir 383/2 second none
+members_k 5: 327 329 331 333 335 337 338 339 340 341 342 343 344 345 346 347 348 349 350 351 352 353 354 355 357 358 359 362 363 364 366 368 369 370 373 374 375 376 377 379 380 381 382 383
+house 5 6744245733829365645 generations 5 rows 57 members 44 living 8 root 17485655315262674562
+title 5 6211077641016067734 tier 0 law 2 liege 0 polity 2 holder 3482542853425947927 held_since -10146240 predecessor_exit 1 successions 8 fallbacks 0 minors 0
+tenure 5 17485655315262674562 -87730560 -64661760
+tenure 5 7781904754563872166 -64661760 -46085760
+tenure 5 5675164200032270181 -46085760 -43575840
+tenure 5 2882556478308825938 -43575840 -33665760
+tenure 5 15075150030374780346 -33665760 -31203360
+tenure 5 6983091884473149537 -31203360 -21817440
+tenure 5 12181156518294508381 -21817440 -19113120
+tenure 5 1442445267962166941 -19113120 -10146240
+tenure 5 3482542853425947927 -10146240 9223372036854775807
+house 6 generations 4 rows 67 members 55 living 21 named_narrow 10 named_full 10 dormant_adults 3 minors_beyond 8 title 6 law seniority holder_k 418 tenures 7 fallbacks 0 minors_seated 0 line 11 outside_house 0 heir 419/2 second 421/2
+members_k 6: 384 386 388 390 392 393 394 395 396 397 398 399 400 401 402 403 404 405 406 407 408 410 411 412 413 414 415 416 418 419 420 421 422 423 424 426 427 430 432 433 434 435 436 437 438 439 440 442 443 444 445 447 448 449 450
+house 6 12990319932539904415 generations 4 rows 67 members 55 living 21 root 9614675024635367631
+title 6 16574302932048325307 tier 1 law 2 liege 6211077641016067734 polity 0 holder 3452049639029216027 held_since -708480 predecessor_exit 1 successions 6 fallbacks 0 minors 0
+tenure 6 9614675024635367631 -74105280 -62611200
+tenure 6 15804698246305046424 -62611200 -27244800
+tenure 6 12594753671076710904 -27244800 -16388640
+tenure 6 1939061002423231156 -16388640 -12373920
+tenure 6 6139563525651002702 -12373920 -9360000
+tenure 6 13386815445535022252 -9360000 -708480
+tenure 6 3452049639029216027 -708480 9223372036854775807
+house 7 generations 3 rows 30 members 24 living 9 named_narrow 4 named_full 5 dormant_adults 2 minors_beyond 2 title 7 law seniority holder_k 463 tenures 4 fallbacks 0 minors_seated 0 line 4 outside_house 0 heir 474/1 second 464/3
+members_k 7: 451 453 455 457 458 459 460 461 462 463 464 465 467 468 469 470 471 472 474 476 477 478 479 480
+house 7 71048589537655190 generations 3 rows 30 members 24 living 9 root 14301989287429019536
+title 7 10858195981549350167 tier 1 law 2 liege 6211077641016067734 polity 0 holder 3654363827527696194 held_since -1800000 predecessor_exit 1 successions 3 fallbacks 0 minors 0
+tenure 7 14301989287429019536 -54550080 -26235360
+tenure 7 14204229039929298820 -26235360 -19936800
+tenure 7 17655329443722162784 -19936800 -1800000
+tenure 7 3654363827527696194 -1800000 9223372036854775807
+house 8 generations 3 rows 38 members 30 living 11 named_narrow 4 named_full 5 dormant_adults 6 minors_beyond 0 title 8 law seniority holder_k 493 tenures 5 fallbacks 0 minors_seated 0 line 5 outside_house 0 heir 516/5 second 510/1
+members_k 8: 481 483 485 487 488 489 490 491 492 493 494 495 496 497 499 500 501 502 505 506 508 509 510 511 512 513 515 516 517 518
+house 8 9458808580625526741 generations 3 rows 38 members 30 living 11 root 14348404889308226230
+title 8 6411450806329027298 tier 1 law 2 liege 6211077641016067734 polity 0 holder 9554039483963397667 held_since -1579680 predecessor_exit 1 successions 4 fallbacks 0 minors 0
+tenure 8 14348404889308226230 -61734240 -28990080
+tenure 8 7015990531721617894 -28990080 -22295520
+tenure 8 7573523465874572476 -22295520 -21024000
+tenure 8 6534660850836423489 -21024000 -1579680
+tenure 8 9554039483963397667 -1579680 9223372036854775807
+house 9 generations 6 rows 134 members 112 living 41 named_narrow 6 named_full 8 dormant_adults 24 minors_beyond 9 title 9 law tanistry holder_k 553 tenures 8 fallbacks 0 minors_seated 0 line 12 outside_house 0 heir 604/5 second 581/3
+members_k 9: 519 521 523 525 527 529 531 532 533 534 535 536 537 538 539 540 541 542 543 544 545 546 547 548 549 550 551 552 553 554 555 556 557 558 559 560 562 563 564 565 566 567 568 570 571 572 573 574 576 577 578 579 581 582 583 584 585 586 588 589 590 591 592 593 594 596 597 598 600 601 602 603 604 605 606 608 609 610 611 612 614 615 616 617 618 620 621 622 623 625 626 627 628 629 630 632 633 634 636 638 639 641 642 643 645 646 647 648 649 650 651 652
+house 9 12330033093208721708 generations 6 rows 134 members 112 living 41 root 6360950643931880999
+title 9 354350062721585197 tier 0 law 5 liege 0 polity 3 holder 8793624084025489255 held_since -4106880 predecessor_exit 1 successions 7 fallbacks 0 minors 0
+tenure 9 6360950643931880999 -100015200 -73176480
+tenure 9 15797281945541155912 -73176480 -55198080
+tenure 9 5845325065959855167 -55198080 -37162080
+tenure 9 3795444416367332891 -37162080 -29921760
+tenure 9 5636089151444655058 -29921760 -20820960
+tenure 9 4485867742267718029 -20820960 -13665600
+tenure 9 18391975133914020105 -13665600 -4106880
+tenure 9 8793624084025489255 -4106880 9223372036854775807
+house 10 generations 4 rows 33 members 27 living 9 named_narrow 9 named_full 9 dormant_adults 0 minors_beyond 0 title 10 law tanistry holder_k 657 tenures 4 fallbacks 0 minors_seated 0 line 2 outside_house 0 heir 659/1 second 671/1
+members_k 10: 653 655 657 659 661 662 663 664 665 666 667 668 669 670 671 672 673 674 675 676 678 680 681 682 683 684 685
+house 10 1790821449378357467 generations 4 rows 33 members 27 living 9 root 6714224663497878196
+title 10 5245583461070241549 tier 1 law 5 liege 354350062721585197 polity 0 holder 4280300955728227864 held_since -2606400 predecessor_exit 1 successions 3 fallbacks 0 minors 0
+tenure 10 6714224663497878196 -59364000 -29904480
+tenure 10 14321238754568744529 -29904480 -25054560
+tenure 10 8224280128425064357 -25054560 -2606400
+tenure 10 4280300955728227864 -2606400 9223372036854775807
+house 11 generations 3 rows 23 members 19 living 7 named_narrow 5 named_full 5 dormant_adults 1 minors_beyond 1 title 11 law tanistry holder_k 690 tenures 2 fallbacks 0 minors_seated 0 line 0 outside_house 0 heir none second none
+members_k 11: 686 688 690 692 693 694 695 696 697 698 699 700 701 702 703 704 705 707 708
+house 11 11075431494485512872 generations 3 rows 23 members 19 living 7 root 6634516884075463319
+title 11 16747764260608634506 tier 1 law 5 liege 354350062721585197 polity 0 holder 4262900858166577175 held_since -11720160 predecessor_exit 1 successions 1 fallbacks 0 minors 0
+tenure 11 6634516884075463319 -40855680 -11720160
+tenure 11 4262900858166577175 -11720160 9223372036854775807
+persons_sha256 278c2b8c93b95bf8453065e1bf73991efd9239b36d2a3fe9d769ff57b51bbfae
+marriages_sha256 3843915289fc7a81ea63047430e56c121273abd25a70f745ed729cf699ff6aac
+households_sha256 6924787b23cab21f880b12e87da141a4af791ada22177d59fb2f4146403fc686
+house_members_sha256 35653ecda8bae0c61482c08cd9df4a7332162059221d4ff7a8efc620ce64fbfa
 world kingdom_10k 2
-population 10000 living 10000 persons 10355 dynasts 217 synthesised 9783 married 2030 households 4888 orphans 0
-living_by_sex males 5111 females 4889 by_age 0-14 3046 15-49 5149 50+ 1805
-named_at_start narrow 67 full 71 dormant_adults 54 minors_beyond 41 empty_lines 1 dormancy_degrees 2 majority_age 16
-house 0 generations 6 rows 91 members 71 living 22 named_narrow 6 named_full 6 dormant_adults 10 minors_beyond 6 title 0 law primogeniture holder_k 8 tenures 5 fallbacks 0 minors_seated 0 line 5 outside_house 0 heir 10/1 second 12/2
-members_k 0: 0 2 4 6 8 10 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 36 37 39 40 41 42 45 46 47 49 50 51 52 53 54 56 57 58 60 61 63 64 65 67 68 69 70 71 73 74 75 76 77 78 79 81 83 84 86 87 89 90
-house 0 12341584286840210898 generations 6 rows 91 members 71 living 22 root 8465654067468980089
-title 0 16448868221605753347 tier 0 law 0 liege 0 polity 1 holder 2694375209411240349 held_since -9360000 predecessor_exit 1 successions 4 fallbacks 0 minors 0
+population 10000 living 10000 persons 10437 dynasts 232 synthesised 9768 married 2027 households 4895 orphans 0
+living_by_sex males 5106 females 4894 by_age 0-14 3047 15-49 5149 50+ 1804
+named_at_start narrow 66 full 71 dormant_adults 59 minors_beyond 47 empty_lines 0 dormancy_degrees 2 majority_age 16
+house 0 generations 6 rows 75 members 62 living 18 named_narrow 3 named_full 3 dormant_adults 9 minors_beyond 6 title 0 law primogeniture holder_k 61 tenures 6 fallbacks 0 minors_seated 0 line 10 outside_house 0 heir 63/2 second 62/2
+members_k 0: 0 2 4 6 8 10 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 40 41 42 43 44 46 47 48 49 51 53 54 55 56 57 59 60 61 62 63 65 66 67 68 69 71 72 73 74
+house 0 12341584286840210898 generations 6 rows 75 members 62 living 18 root 8465654067468980089
+title 0 16448868221605753347 tier 0 law 0 liege 0 polity 1 holder 18297651170046835299 held_since -4122720 predecessor_exit 1 successions 5 fallbacks 0 minors 0
 tenure 0 8465654067468980089 -86116320 -62159040
-tenure 0 9554445953773049204 -62159040 -40121280
-tenure 0 6357620480500802408 -40121280 -32908320
-tenure 0 11322230971098805332 -32908320 -9360000
-tenure 0 2694375209411240349 -9360000 9223372036854775807
-house 1 generations 5 rows 71 members 56 living 20 named_narrow 5 named_full 5 dormant_adults 8 minors_beyond 7 title 1 law primogeniture holder_k 99 tenures 5 fallbacks 0 minors_seated 0 line 19 outside_house 0 heir 101/1 second 118/1
-members_k 1: 91 93 95 97 99 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 120 121 122 123 124 125 127 128 129 130 132 133 134 135 137 139 140 141 142 143 144 145 147 148 149 151 152 154 155 157 158 159 161
-house 1 16764014492243680602 generations 5 rows 71 members 56 living 20 root 7398270213468925291
-title 1 3717431802994808251 tier 1 law 0 liege 16448868221605753347 polity 0 holder 12359655510023725962 held_since -936000 predecessor_exit 1 successions 4 fallbacks 0 minors 0
-tenure 1 7398270213468925291 -68798880 -40119840
-tenure 1 16066758126003932959 -40119840 -32253120
-tenure 1 2589311062126262086 -32253120 -26215200
-tenure 1 1724220661513381118 -26215200 -936000
-tenure 1 12359655510023725962 -936000 9223372036854775807
-house 2 generations 4 rows 37 members 31 living 7 named_narrow 2 named_full 3 dormant_adults 2 minors_beyond 2 title 2 law primogeniture holder_k 193 tenures 3 fallbacks 0 minors_seated 0 line 6 outside_house 0 heir 196/2 second 166/3
-members_k 2: 162 164 166 168 170 171 172 173 174 175 176 177 178 179 180 181 182 183 184 186 187 188 189 190 191 193 194 195 196 197 198
-house 2 7271446999409778684 generations 4 rows 37 members 31 living 7 root 395181260741919912
-title 2 12933461204880563867 tier 1 law 0 liege 16448868221605753347 polity 0 holder 11768731162884554742 held_since -11399040 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 2 395181260741919912 -58370400 -25702560
-tenure 2 4604290355941753678 -25702560 -11399040
-tenure 2 11768731162884554742 -11399040 9223372036854775807
-house 3 generations 4 rows 31 members 24 living 10 named_narrow 5 named_full 5 dormant_adults 2 minors_beyond 3 title 3 law primogeniture holder_k 213 tenures 4 fallbacks 0 minors_seated 0 line 9 outside_house 0 heir 226/1 second 227/1
-members_k 3: 199 201 203 205 207 208 209 210 211 212 213 214 215 216 217 219 220 221 222 223 224 226 227 228
-house 3 3449570763961755634 generations 4 rows 31 members 24 living 10 root 14468584285829309008
-title 3 2248794201114700382 tier 1 law 0 liege 16448868221605753347 polity 0 holder 17013113086264299527 held_since -272160 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 3 14468584285829309008 -55720800 -31082400
-tenure 3 11151859457726569208 -31082400 -12052800
-tenure 3 14494307947727104512 -12052800 -272160
-tenure 3 17013113086264299527 -272160 9223372036854775807
-house 4 generations 3 rows 41 members 34 living 15 named_narrow 7 named_full 7 dormant_adults 5 minors_beyond 3 title 4 law primogeniture holder_k 255 tenures 3 fallbacks 0 minors_seated 0 line 14 outside_house 0 heir 263/1 second 264/1
-members_k 4: 230 232 234 236 237 238 239 240 241 242 243 244 245 246 247 248 249 251 252 253 255 256 257 258 259 260 261 263 264 265 266 268 269 270
-house 4 15978344417020496869 generations 3 rows 41 members 34 living 15 root 15878715554788259862
-title 4 534370455158044310 tier 1 law 0 liege 16448868221605753347 polity 0 holder 15595177660433601569 held_since -6337440 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 4 15878715554788259862 -53820000 -18171360
-tenure 4 406032624535949876 -18171360 -6337440
-tenure 4 15595177660433601569 -6337440 9223372036854775807
-house 5 generations 5 rows 37 members 29 living 10 named_narrow 5 named_full 5 dormant_adults 1 minors_beyond 4 title 5 law seniority holder_k 290 tenures 4 fallbacks 0 minors_seated 0 line 9 outside_house 0 heir 301/1 second 302/1
-members_k 5: 271 273 275 277 279 281 282 283 284 285 286 287 288 289 290 291 292 293 294 295 296 297 298 300 301 302 305 306 307
-house 5 7882284696432921008 generations 5 rows 37 members 29 living 10 root 2093138482482262256
-title 5 17485286251680490408 tier 0 law 2 liege 0 polity 2 holder 13654249511696657243 held_since -8596800 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 5 2093138482482262256 -66903840 -49259520
-tenure 5 16671293163929572950 -49259520 -27715680
-tenure 5 6374176422620655652 -27715680 -8596800
-tenure 5 13654249511696657243 -8596800 9223372036854775807
-house 6 generations 4 rows 93 members 74 living 27 named_narrow 7 named_full 8 dormant_adults 14 minors_beyond 5 title 6 law seniority holder_k 360 tenures 7 fallbacks 0 minors_seated 0 line 11 outside_house 0 heir 329/6 second 362/2
-members_k 6: 308 310 312 314 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 331 332 334 336 337 338 339 340 341 343 344 345 347 348 349 350 352 353 354 356 357 359 360 361 362 363 365 366 367 370 371 372 374 375 376 377 378 380 381 382 383 384 385 386 388 389 390 392 393 394 395 396 398 399 400
-house 6 15987755071838904573 generations 4 rows 93 members 74 living 27 root 13693726652340501556
-title 6 11898219628531958595 tier 1 law 2 liege 17485286251680490408 polity 0 holder 9307721260853874731 held_since -3316320 predecessor_exit 1 successions 6 fallbacks 0 minors 0
-tenure 6 13693726652340501556 -76776480 -51040800
-tenure 6 14466268051211121797 -51040800 -41770080
-tenure 6 11661827020303757634 -41770080 -37258560
-tenure 6 6975374799898090823 -37258560 -24724800
-tenure 6 4407114204988255025 -24724800 -9217440
-tenure 6 8755508453927818907 -9217440 -3316320
-tenure 6 9307721260853874731 -3316320 9223372036854775807
-house 7 generations 3 rows 36 members 28 living 13 named_narrow 7 named_full 8 dormant_adults 1 minors_beyond 4 title 7 law seniority holder_k 405 tenures 5 fallbacks 0 minors_seated 0 line 7 outside_house 0 heir 413/2 second 428/3
-members_k 7: 401 403 405 407 408 409 410 411 412 413 414 415 416 417 419 420 421 423 424 425 426 428 429 430 432 433 434 436
-house 7 14297236729793115466 generations 3 rows 36 members 28 living 13 root 2741164764564915296
-title 7 14560157584121030670 tier 1 law 2 liege 17485286251680490408 polity 0 holder 12477791025065382122 held_since -1686240 predecessor_exit 1 successions 4 fallbacks 0 minors 0
-tenure 7 2741164764564915296 -51292800 -34817760
-tenure 7 1110476689364314005 -34817760 -6420960
-tenure 7 2721132536424093241 -6420960 -3653280
-tenure 7 13837268972601299956 -3653280 -1686240
-tenure 7 12477791025065382122 -1686240 9223372036854775807
-house 8 generations 3 rows 17 members 14 living 6 named_narrow 6 named_full 6 dormant_adults 0 minors_beyond 0 title 8 law seniority holder_k 439 tenures 2 fallbacks 0 minors_seated 0 line 3 outside_house 0 heir 441/1 second 450/1
-members_k 8: 437 439 441 443 444 445 446 447 448 449 450 451 452 453
-house 8 18279878477242682213 generations 3 rows 17 members 14 living 6 root 9016103544470106789
-title 8 14889231782570654808 tier 1 law 2 liege 17485286251680490408 polity 0 holder 5172112788998587134 held_since -17835840 predecessor_exit 1 successions 1 fallbacks 0 minors 0
-tenure 8 9016103544470106789 -38544480 -17835840
-tenure 8 5172112788998587134 -17835840 9223372036854775807
-house 9 generations 6 rows 49 members 38 living 16 named_narrow 4 named_full 4 dormant_adults 9 minors_beyond 3 title 9 law tanistry holder_k 496 tenures 6 fallbacks 0 minors_seated 0 line 0 outside_house 0 heir none second none
-members_k 9: 454 456 458 460 462 464 466 467 468 469 470 471 472 473 474 475 476 477 478 479 480 481 483 484 485 487 488 489 490 491 493 494 496 497 498 499 501 502
-house 9 366790584824162997 generations 6 rows 49 members 38 living 16 root 11726815078003826975
-title 9 17028786022758851561 tier 0 law 5 liege 0 polity 3 holder 18036520309890120912 held_since -9776160 predecessor_exit 1 successions 5 fallbacks 0 minors 0
-tenure 9 11726815078003826975 -73190880 -44807040
-tenure 9 14532211688047997663 -44807040 -36403200
-tenure 9 12585503834219596404 -36403200 -22023360
-tenure 9 17132800043600484600 -22023360 -11950560
-tenure 9 4807197928891855421 -11950560 -9776160
-tenure 9 18036520309890120912 -9776160 9223372036854775807
-house 10 generations 4 rows 39 members 31 living 12 named_narrow 8 named_full 9 dormant_adults 1 minors_beyond 2 title 10 law tanistry holder_k 524 tenures 4 fallbacks 0 minors_seated 0 line 4 outside_house 0 heir 530/1 second 509/5
-members_k 10: 503 505 507 509 511 512 513 514 515 516 517 518 519 520 521 522 524 525 526 528 529 530 531 532 534 535 536 537 539 540 541
-house 10 4803881630374357167 generations 4 rows 39 members 31 living 12 root 14129269065900551399
-title 10 13130643976620720345 tier 1 law 5 liege 17028786022758851561 polity 0 holder 3341489972571807350 held_since -14541120 predecessor_exit 1 successions 3 fallbacks 0 minors 0
-tenure 10 14129269065900551399 -64987200 -35028000
-tenure 10 17863379409537054862 -35028000 -21218400
-tenure 10 598602877320454654 -21218400 -14541120
-tenure 10 3341489972571807350 -14541120 9223372036854775807
-house 11 generations 3 rows 30 members 22 living 8 named_narrow 5 named_full 5 dormant_adults 1 minors_beyond 2 title 11 law tanistry holder_k 546 tenures 3 fallbacks 0 minors_seated 0 line 2 outside_house 0 heir 555/2 second 557/2
-members_k 11: 542 544 546 548 549 550 551 552 553 554 555 556 557 558 559 561 564 566 567 568 570 571
-house 11 6725452676940241323 generations 3 rows 30 members 22 living 8 root 6897510930369472323
-title 11 36607574635611099 tier 1 law 5 liege 17028786022758851561 polity 0 holder 16270475043169881828 held_since -9953280 predecessor_exit 1 successions 2 fallbacks 0 minors 0
-tenure 11 6897510930369472323 -57889440 -28638720
-tenure 11 11594824555685686817 -28638720 -9953280
-tenure 11 16270475043169881828 -9953280 9223372036854775807
-persons_sha256 0e7676195423f68189db0f02d657a7c9f02b37ede3e6623a98ea692540829789
-marriages_sha256 a3f74f9ce38cca831f576bccbc8b9eae827899e1259fc48787c2029cf7229df3
-households_sha256 0e32701f047dc0c8003019439919cdd461c2e14f31e9817c012384f52998950f
-house_members_sha256 6114dc704444d62921f5cc21c5f68296a0c4db00a3281abeeccd67e67afdc573
+tenure 0 9554445953773049204 -62159040 -40605120
+tenure 0 3422729209839208250 -40605120 -30293280
+tenure 0 16640984048920610813 -30293280 -27446400
+tenure 0 10948656519220549420 -27446400 -4122720
+tenure 0 18297651170046835299 -4122720 9223372036854775807
+house 1 generations 5 rows 107 members 83 living 22 named_narrow 2 named_full 2 dormant_adults 13 minors_beyond 7 title 1 law primogeniture holder_k 176 tenures 5 fallbacks 0 minors_seated 0 line 1 outside_house 0 heir 175/2 second none
+members_k 1: 75 77 79 81 83 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 107 108 109 111 112 113 115 116 117 118 119 120 121 123 124 126 127 128 129 130 132 133 134 135 137 139 140 141 142 143 145 146 147 150 151 152 153 154 156 157 160 161 162 163 164 165 167 168 169 170 172 173 175 176 178 179 180
+house 1 16764014492243680602 generations 5 rows 107 members 83 living 22 root 2823474464337654550
+title 1 3717431802994808251 tier 1 law 0 liege 16448868221605753347 polity 0 holder 10150723352420628440 held_since -2161440 predecessor_exit 1 successions 4 fallbacks 0 minors 0
+tenure 1 2823474464337654550 -68798880 -48657600
+tenure 1 14343317105778677556 -48657600 -45960480
+tenure 1 6530037169226114318 -45960480 -20880000
+tenure 1 6368577311215133726 -20880000 -2161440
+tenure 1 10150723352420628440 -2161440 9223372036854775807
+house 2 generations 4 rows 44 members 36 living 11 named_narrow 5 named_full 5 dormant_adults 5 minors_beyond 1 title 2 law primogeniture holder_k 188 tenures 4 fallbacks 0 minors_seated 0 line 10 outside_house 0 heir 190/1 second 201/1
+members_k 2: 182 184 186 188 190 191 192 193 194 195 196 197 198 199 200 201 202 204 205 206 207 208 210 211 212 213 215 216 217 218 219 221 222 223 224 225
+house 2 7271446999409778684 generations 4 rows 44 members 36 living 11 root 14733516760247604208
+title 2 12933461204880563867 tier 1 law 0 liege 16448868221605753347 polity 0 holder 12873122499359790946 held_since -7518240 predecessor_exit 1 successions 3 fallbacks 0 minors 0
+tenure 2 14733516760247604208 -58370400 -42010560
+tenure 2 879892240128219664 -42010560 -36393120
+tenure 2 1998780319448387939 -36393120 -7518240
+tenure 2 12873122499359790946 -7518240 9223372036854775807
+house 3 generations 4 rows 28 members 21 living 8 named_narrow 8 named_full 8 dormant_adults 0 minors_beyond 0 title 3 law primogeniture holder_k 230 tenures 3 fallbacks 0 minors_seated 0 line 7 outside_house 0 heir 240/1 second 250/2
+members_k 3: 226 228 230 232 234 235 236 237 238 239 240 241 242 243 244 245 246 248 249 250 253
+house 3 3449570763961755634 generations 4 rows 28 members 21 living 8 root 9503932807541871845
+title 3 2248794201114700382 tier 1 law 0 liege 16448868221605753347 polity 0 holder 15878715554788259862 held_since -14150880 predecessor_exit 1 successions 2 fallbacks 0 minors 0
+tenure 3 9503932807541871845 -55720800 -26945280
+tenure 3 12678463214130662091 -26945280 -14150880
+tenure 3 15878715554788259862 -14150880 9223372036854775807
+house 4 generations 3 rows 63 members 52 living 24 named_narrow 8 named_full 8 dormant_adults 5 minors_beyond 11 title 4 law primogeniture holder_k 274 tenures 4 fallbacks 0 minors_seated 0 line 23 outside_house 0 heir 287/1 second 288/1
+members_k 4: 254 256 258 260 261 262 263 264 265 266 267 268 269 271 272 274 275 276 277 278 279 281 282 283 284 285 287 288 289 290 291 292 294 295 297 298 299 300 301 302 303 305 306 307 309 310 311 312 313 314 315 316
+house 4 15978344417020496869 generations 3 rows 63 members 52 living 24 root 14888225122408289787
+title 4 534370455158044310 tier 1 law 0 liege 16448868221605753347 polity 0 holder 9151541196158048795 held_since -1872000 predecessor_exit 1 successions 3 fallbacks 0 minors 0
+tenure 4 14888225122408289787 -53820000 -27885600
+tenure 4 18320126477394199166 -27885600 -26308800
+tenure 4 12603663310220860809 -26308800 -1872000
+tenure 4 9151541196158048795 -1872000 9223372036854775807
+house 5 generations 5 rows 87 members 69 living 27 named_narrow 8 named_full 9 dormant_adults 11 minors_beyond 7 title 5 law seniority holder_k 323 tenures 6 fallbacks 0 minors_seated 0 line 14 outside_house 0 heir 340/2 second 354/4
+members_k 5: 317 319 321 323 325 327 328 329 330 331 332 333 334 335 336 337 338 339 340 341 342 343 344 345 346 347 349 350 351 352 354 355 356 357 359 361 362 363 364 365 366 367 368 370 372 373 374 375 376 378 379 380 381 382 385 386 387 388 389 392 393 394 396 397 398 400 401 402 403
+house 5 7882284696432921008 generations 5 rows 87 members 69 living 27 root 18102317003622382742
+title 5 17485286251680490408 tier 0 law 2 liege 0 polity 2 holder 3884690379949026897 held_since -4213440 predecessor_exit 1 successions 5 fallbacks 0 minors 0
+tenure 5 18102317003622382742 -66903840 -42276960
+tenure 5 1606869772450131873 -42276960 -19630080
+tenure 5 3246274859396751314 -19630080 -17115840
+tenure 5 6944095685657566522 -17115840 -7964640
+tenure 5 6975374799898090823 -7964640 -4213440
+tenure 5 3884690379949026897 -4213440 9223372036854775807
+house 6 generations 4 rows 72 members 57 living 12 named_narrow 4 named_full 5 dormant_adults 3 minors_beyond 4 title 6 law seniority holder_k 410 tenures 6 fallbacks 0 minors_seated 0 line 5 outside_house 0 heir 464/6 second 421/2
+members_k 6: 404 406 408 410 412 413 414 415 416 417 418 419 420 421 422 423 424 425 426 428 429 430 431 432 434 435 436 437 438 439 441 443 444 445 446 448 449 450 451 453 454 455 456 457 459 460 461 462 464 466 467 468 470 472 473 474 475
+house 6 15987755071838904573 generations 4 rows 72 members 57 living 12 root 8606979417752450594
+title 6 11898219628531958595 tier 1 law 2 liege 17485286251680490408 polity 0 holder 13373413577971261980 held_since -7439040 predecessor_exit 1 successions 5 fallbacks 0 minors 0
+tenure 6 8606979417752450594 -76776480 -48028320
+tenure 6 1689317165887318993 -48028320 -42554880
+tenure 6 9513268381159353251 -42554880 -35284320
+tenure 6 11173268321141102483 -35284320 -17500320
+tenure 6 2721132536424093241 -17500320 -7439040
+tenure 6 13373413577971261980 -7439040 9223372036854775807
+house 7 generations 3 rows 23 members 19 living 10 named_narrow 5 named_full 6 dormant_adults 0 minors_beyond 4 title 7 law seniority holder_k 480 tenures 2 fallbacks 0 minors_seated 0 line 5 outside_house 0 heir 488/2 second 492/3
+members_k 7: 476 478 480 482 483 484 485 486 487 488 489 490 492 493 494 495 496 497 498
+house 7 14297236729793115466 generations 3 rows 23 members 19 living 10 root 10629681652673227506
+title 7 14560157584121030670 tier 1 law 2 liege 17485286251680490408 polity 0 holder 4011861583680156218 held_since -14169600 predecessor_exit 1 successions 1 fallbacks 0 minors 0
+tenure 7 10629681652673227506 -51292800 -14169600
+tenure 7 4011861583680156218 -14169600 9223372036854775807
+house 8 generations 3 rows 19 members 15 living 8 named_narrow 7 named_full 7 dormant_adults 1 minors_beyond 0 title 8 law seniority holder_k 501 tenures 2 fallbacks 0 minors_seated 0 line 3 outside_house 0 heir 503/1 second 509/1
+members_k 8: 499 501 503 505 506 507 508 509 510 511 512 514 515 516 517
+house 8 18279878477242682213 generations 3 rows 19 members 15 living 8 root 14025358662062142557
+title 8 14889231782570654808 tier 1 law 2 liege 17485286251680490408 polity 0 holder 13876043929508713509 held_since -16470720 predecessor_exit 1 successions 1 fallbacks 0 minors 0
+tenure 8 14025358662062142557 -38544480 -16470720
+tenure 8 13876043929508713509 -16470720 9223372036854775807
+house 9 generations 6 rows 39 members 30 living 13 named_narrow 10 named_full 10 dormant_adults 1 minors_beyond 2 title 9 law tanistry holder_k 524 tenures 4 fallbacks 0 minors_seated 0 line 4 outside_house 0 heir 541/1 second 528/2
+members_k 9: 518 520 522 524 526 528 530 531 532 533 534 535 536 537 538 539 540 541 542 543 544 545 546 547 550 551 552 553 555 556
+house 9 366790584824162997 generations 6 rows 39 members 30 living 13 root 9126179442265111966
+title 9 17028786022758851561 tier 0 law 5 liege 0 polity 3 holder 3341489972571807350 held_since -22439520 predecessor_exit 1 successions 3 fallbacks 0 minors 0
+tenure 9 9126179442265111966 -73190880 -51521760
+tenure 9 707514921755824478 -51521760 -43299360
+tenure 9 2332137719704970021 -43299360 -22439520
+tenure 9 3341489972571807350 -22439520 9223372036854775807
+house 10 generations 4 rows 47 members 37 living 8 named_narrow 3 named_full 4 dormant_adults 1 minors_beyond 3 title 10 law tanistry holder_k 563 tenures 6 fallbacks 0 minors_seated 0 line 3 outside_house 0 heir 571/2 second 581/4
+members_k 10: 557 559 561 563 565 566 567 568 569 570 571 572 573 574 575 576 578 579 580 581 582 583 585 586 589 590 592 593 594 595 596 597 598 599 601 602 603
+house 10 4803881630374357167 generations 4 rows 47 members 37 living 8 root 13015125164237646079
+title 10 13130643976620720345 tier 1 law 5 liege 17028786022758851561 polity 0 holder 17286155155399927206 held_since -1596960 predecessor_exit 1 successions 5 fallbacks 0 minors 0
+tenure 10 13015125164237646079 -64987200 -32703840
+tenure 10 16934823361485260805 -32703840 -19981440
+tenure 10 8226600561096450947 -19981440 -5821920
+tenure 10 15175382364742778474 -5821920 -4330080
+tenure 10 15260477175944601023 -4330080 -1596960
+tenure 10 17286155155399927206 -1596960 9223372036854775807
+house 11 generations 3 rows 65 members 54 living 16 named_narrow 3 named_full 4 dormant_adults 10 minors_beyond 2 title 11 law tanistry holder_k 625 tenures 5 fallbacks 0 minors_seated 0 line 4 outside_house 0 heir 626/2 second 608/4
+members_k 11: 604 606 608 610 611 612 613 614 615 616 617 618 619 620 621 622 623 625 626 627 628 630 632 633 634 635 636 637 639 640 641 642 643 644 645 646 648 649 650 651 652 653 655 656 657 658 659 661 662 664 665 666 667 668
+house 11 6725452676940241323 generations 3 rows 65 members 54 living 16 root 3609394328424549024
+title 11 36607574635611099 tier 1 law 5 liege 17028786022758851561 polity 0 holder 6567362545883702711 held_since -2139840 predecessor_exit 1 successions 4 fallbacks 0 minors 0
+tenure 11 3609394328424549024 -57889440 -27479520
+tenure 11 866273643269964307 -27479520 -18596160
+tenure 11 16188746020419632279 -18596160 -13237920
+tenure 11 3782817224966322895 -13237920 -2139840
+tenure 11 6567362545883702711 -2139840 9223372036854775807
+persons_sha256 f5fc65fa7950a487a305f7f87416a0867bc46ad0ba4c8af11feab80f03cc6cde
+marriages_sha256 7e258ad7159563bedf92fe40b29f39219848ec30d8468cd4def140f628258c89
+households_sha256 3ba8e6f879c7c8e1e1033c246005a254abfb753b617621680d056123388f0807
+house_members_sha256 199a57e7bb6665816adb1376b14401fd4e680d55b175f8700a054312269d4c75

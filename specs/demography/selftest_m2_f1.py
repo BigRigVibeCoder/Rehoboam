@@ -33,14 +33,25 @@ thousandths, the gestation and postpartum months, the sex ratio) are READ FROM T
      ``report_ratios``, and conceptions per susceptible woman-month equal c_i exactly (the identity
      V-SF-24 tests);
   8. the prose of the step texts F1, F2, N1 and N2 states the same numbers as ``constants`` (a
-     reviewer reads the steps, the engine compiles the constants: they must not drift apart).
+     reviewer reads the steps, the engine compiles the constants: they must not drift apart);
+  9. F6's table choice, the elite read on the couple (D56 (e); BCK-002 A-62): ``draws_elite`` is
+     the rule (a woman draws the elite table c_i^e iff a house_member row names her or her
+     husband), run over the cases F6 states (a commoner couple, a daughter of a house married to a
+     commoner, a wife married into a house, two member spouses drawing one multiplier and never
+     E^2, a woman with no husband drawing nothing), at the fixture worlds' elite_fertility_mult
+     1.2; the NRR of a wife married into a house is the elite chain's; and the F6, F5, F3 and
+     elite_fertility_mult texts state the rule.
 
 Run: python -I specs/demography/selftest_m2_f1.py
      python -I specs/demography/selftest_m2_f1.py --spec <path>   (a planted control: must FAIL)
+     python -I specs/demography/selftest_m2_f1.py --control woman-row   (the planted mutant of
+         check 9: the elite read reverted to the woman's own row, the reading before D56 (e); it
+         must FAIL check 9)
 """
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import math
 import sys
@@ -95,6 +106,31 @@ NUM_BITS_MAX = 60  # F4 numerator width the spec states
 DEN_BITS_MAX = 30  # F4 denominator width the spec states
 REPORT_TOL = Fraction(1, 1000)  # check 7: the spec's three-digit ratios, within a unit (floats)
 SECANT_STEPS = 3  # check 5: NRR is almost linear in tfr, so few steps find NRR = 1
+# Check 9 (D56 (e)): the elite read. "couple" is F6's rule; "woman" is the reading before D56 (e),
+# planted by --control woman-row and never the reference's own.
+ELITE_READS = ("couple", "woman")
+FIXTURE_MULT = "1.2"  # elite_fertility_mult of manor, twin_vales and kingdom_10k
+# F6's cases, restated from its text: (case, the woman has a house_member row, her husband has one,
+# or None when she has no husband, and the table F6 gives her: "c_i", "c_i^e", or None for no draw)
+F6_CASES: tuple[tuple[str, bool, bool | None, str | None], ...] = (
+    ("a commoner couple", False, False, "c_i"),
+    ("a daughter of a house married to a commoner", True, False, "c_i^e"),
+    ("a wife married into a house", False, True, "c_i^e"),
+    ("two member spouses (one multiplier, never E^2)", True, True, "c_i^e"),
+    ("an unmarried daughter of a house (F5: not susceptible)", True, None, None),
+    ("a widow of a member man (F5: not susceptible)", False, None, None),
+)
+# the step texts that must state the rule (check 9), by table step or parameter
+F6_PROSE = {
+    ("fertility_f1", "F3"): ["a house_member row of her own or a husband with one", "never E^2"],
+    ("fertility_f1", "F5"): ["his house_member row does (F6)"],
+    ("fertility_f1", "F6"): [
+        "names her or her husband, the man person.spouse names at this step",
+        "nothing after the k = 0 draw reads it",
+        "two member spouses draw the same elite table",
+    ],
+}
+MULT_MEANING = "a woman who has an M7 house_member row or whose husband has one"
 
 
 class Standards:
@@ -194,6 +230,32 @@ def elite_level_bits(m_bits: int, mult_bits: int) -> int:
     return rhe(m_bits * mult_bits, Q16)
 
 
+def draws_elite(woman_member: bool, husband_member: bool, read: str = "couple") -> bool:
+    """Return F6's table choice: whether a susceptible woman draws the elite table c_i^e.
+
+    D56 (e), the read on the couple: she does iff a house_member row names her or her husband
+    (person.spouse at the fertility step, the man F7 records as unborn_father). One multiplier,
+    whether one spouse or both are members. ``read = "woman"`` is the reading before D56 (e), her
+    own row only, which only the planted control uses. The back-fill's B6 calls this too.
+    """
+    if read not in ELITE_READS:
+        raise SystemExit(f"unknown elite read {read!r}")
+    if read == "woman":
+        return woman_member
+    return woman_member or husband_member
+
+
+def f6_level(
+    m_bits: int, mult_bits: int, woman_member: bool, husband_member: bool | None, read: str
+) -> int | None:
+    """Return the level a woman draws at under F5 and F6: None with no husband (no draw)."""
+    if husband_member is None:
+        return None  # F5: a woman with no husband, unmarried or widowed, is not susceptible
+    if draws_elite(woman_member, husband_member, read):
+        return elite_level_bits(m_bits, mult_bits)
+    return m_bits
+
+
 def conception_bits(st: Standards, m_bits: int, band: int) -> int:
     """Return F4's monthly conception probability c_i as Prob32 bits for level ``m_bits``."""
     b = m_bits * st.natural[band]  # births per woman-year in units of 2^-16 / 1000
@@ -238,15 +300,6 @@ def resample_birth_day(t_in: int, t_due: int, t_due_end: int, draw: int) -> int:
 def load_spec(path: Path) -> dict[str, Any]:
     """Return the parsed spec at ``path``."""
     return tomllib.loads(path.read_text(encoding="utf-8"))
-
-
-def spec_path(argv: list[str]) -> Path:
-    """Return the spec to check: --spec PATH, else the next-version draft, else the main spec."""
-    if len(argv) == 3 and argv[1] == "--spec":  # noqa: PLR2004
-        return Path(argv[2])
-    if len(argv) != 1:
-        raise SystemExit("usage: selftest_m2_f1.py [--spec PATH]")
-    return NEXT_SPEC if NEXT_SPEC.exists() else MAIN_SPEC
 
 
 def default_tfr_bits(spec: dict[str, Any]) -> int:
@@ -583,10 +636,80 @@ def check_prose(st: Standards, spec: dict[str, Any]) -> bool:
     return ok
 
 
+def check_couple_read(st: Standards, spec: dict[str, Any], read: str) -> bool:
+    """Check 9: F6's table choice is the read on the couple (D56 (e)), on F6's own cases."""
+    m = level_bits(st, default_tfr_bits(spec))
+    mult = q16(FIXTURE_MULT)
+    tables = {
+        "c_i": [conception_bits(st, m, i) for i in range(BANDS)],
+        "c_i^e": [conception_bits(st, elite_level_bits(m, mult), i) for i in range(BANDS)],
+        "E^2": [
+            conception_bits(st, elite_level_bits(elite_level_bits(m, mult), mult), i)
+            for i in range(BANDS)
+        ],
+    }
+    ok = len({tuple(t) for t in tables.values()}) == len(tables)  # the cases discriminate
+    got_cases = []
+    for case, woman, husband, want in F6_CASES:
+        level = f6_level(m, mult, woman, husband, read)
+        got: str | None = None
+        if level is not None:
+            table = [conception_bits(st, level, i) for i in range(BANDS)]
+            got = next((name for name, t in tables.items() if t == table), "another table")
+        if got != want:
+            ok = False
+            print(f"   {case}: draws {got}, F6 gives {want}")
+        got_cases.append(f"{case} {got or 'no draw'}")
+    nrr: dict[str, float] = {}
+    for case, woman, husband, _ in F6_CASES[:3]:
+        level = f6_level(m, mult, woman, bool(husband), read)
+        assert level is not None
+        chain = Chain(st, level, "30", mortality=True, gap=HUSBAND_OLDER_YEARS)
+        nrr[case] = nrr_and_mean_age(chain.run()[0], st)[0]
+    wife, daughter, commoner = (nrr[c[0]] for c in (F6_CASES[2], F6_CASES[1], F6_CASES[0]))
+    if wife != daughter:
+        ok = False
+        print(f"   a wife married into a house: NRR {wife:.4f}, a daughter of one {daughter:.4f}")
+    fert = spec["algorithm"]["fertility_f1"]
+    for (step_table, label), needles in F6_PROSE.items():
+        text = step_text(spec, step_table, label)
+        for needle in needles:
+            if needle not in text:
+                ok = False
+                print(f"   {label} does not state {needle!r} (the couple read, D56 (e))")
+    meaning = next(p["meaning"] for p in spec["params"] if p["name"] == "elite_fertility_mult")
+    if MULT_MEANING not in meaning:
+        ok = False
+        print(f"   elite_fertility_mult's meaning does not state {MULT_MEANING!r}")
+    print(
+        f"   F6 ({fert['version']}), read {read}, elite_fertility_mult {FIXTURE_MULT}: "
+        + "; ".join(got_cases)
+        + f". NRR at e0 = 30 with widowhood: a wife married into a house {wife:.4f}, a daughter "
+        f"of a house {daughter:.4f}, a commoner couple's wife {commoner:.4f}; c_i^e at 20-24 = "
+        f"{tables['c_i^e'][1]} against c_i = {tables['c_i'][1]}"
+    )
+    return ok
+
+
+def parse(argv: list[str]) -> argparse.Namespace:
+    """Parse --spec PATH and --control NAME."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--spec", type=Path, help="the spec to check (default: the next version)")
+    parser.add_argument(
+        "--control",
+        choices=("woman-row",),
+        help="plant the elite read on the woman's own row (check 9 must FAIL)",
+    )
+    return parser.parse_args(argv[1:])
+
+
 def main() -> int:
     """Run every check and print PASS or FAIL."""
-    spec = load_spec(spec_path(sys.argv))
+    args = parse(sys.argv)
+    path = args.spec if args.spec is not None else (NEXT_SPEC if NEXT_SPEC.exists() else MAIN_SPEC)
+    spec = load_spec(path)
     st = Standards(spec)
+    read = "woman" if args.control == "woman-row" else "couple"
     checks: list[tuple[str, Callable[[], bool]]] = [
         ("1. spec check values", lambda: check_values(st, spec)),
         ("2. widths, monotonicity and bands", lambda: check_widths(st)),
@@ -596,6 +719,7 @@ def main() -> int:
         ("6. timers", lambda: check_timers(st)),
         ("7. V-SF-24 report values", lambda: check_report(st, spec)),
         ("8. step prose = constants", lambda: check_prose(st, spec)),
+        ("9. F6 table choice, the couple read", lambda: check_couple_read(st, spec, read)),
     ]
     ok = True
     for name, fn in checks:

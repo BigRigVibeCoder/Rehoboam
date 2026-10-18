@@ -8,8 +8,8 @@ agents: [coder, tester]
 tags: [sprint]
 related: [BCK-002, PRJ-002, REV-SPR-015, REV-SPR-016-FOLD, REV-EVO-001, EVO-001, REV-SPR-018, REV-SPR-019, REV-SPR-029, SPR-013, SPR-014, SPR-016, SPR-018, SPR-019, SPR-020, SPR-021, SPR-023, SPR-027, SPR-028, SPR-029, SPR-030, ADR-0006, ADR-0024, ADR-0025, ADR-0026, ADR-0033]
 created: 2026-10-17
-updated: 2026-10-17
-version: 0.2.0
+updated: 2026-10-18
+version: 0.2.1
 ---
 
 > **BLUF:** Builds the F1 births slice of the next-version M2 spec (`specs/systems/next/M2.demography.odd.toml` 0.3.0, PR #50, REV-SPR-015 closed) in `rh-core`, `rh-sys-demography`, `rh-worldgen`, `rh-ids` and `rh-contracts`:
@@ -70,6 +70,8 @@ version: 0.2.0
 | **Planted skeleton refusals** | T-01's draft said a planted `HusbandPick = 2` is "refused by name" | Registration checks purpose names (rule `rng-purpose`), not discriminants (W11) | **Ruled (Architect, 2026-10-17; 8.5/10; W11): a planted purpose name is refused under rule `rng-purpose`; a planted discriminant is STALE in `gen_skeletons --check`** | T-01, T-03 |
 | **What else moves with the baselines** | SPR-013's tail snapshots (`crates/rh-golden/tests/snapshots/hamlet_deaths.txt`, `hamlet_follow_job.txt`, `solo_digests_year_57.txt`, `solo_story.txt`) and the `rung solo|household|hamlet` budgets of `crates/rh-bench/baselines/allocations_v1.txt` | Births change both (W12) | **Ruled (Architect, 2026-10-17; 8.5/10; W12): T-07 lists them; the snapshots are rewritten locally under `RH_UPDATE_SNAPSHOTS` and reviewed in the diff; the budgets are re-recorded by `perf_gate.py alloc-record`; the PR title ends `[perf-baseline] [C3]` with a `perf-baseline-reason:` line** | T-07 |
 | **The divergence record's form** | My draft's channel-A criterion was false for a correct build, and the `household`/`hamlet` robust form was vacuous (W2, W3) | — | **Ruled (Architect, 2026-10-17; 9/10 and 8.5/10; W2, W3):** the channel-A criterion in SPR-020 T-07's form, and the robust form in two parts: (a) the frozen roots are equal before the first conception or marriage timer; (b) a model reproduces every `BIRTH`, `MARRIAGE` and `DEATH` instant, child id and sex on `household` and `hamlet` over 200 years. T-07 states both | T-07 |
+
+**D56 (e) is adopted (the director, 2026-10-17; BCK-002 A-62, PR `arch/M2-elite-couple`), and the amended F3–F6 are in this sprint's slice.** The draft's `[algorithm.fertility_f1]`, now `m2-f1-fertility-v2`, reads the elite table on the couple: F6 gives a susceptible woman `c_i^e` when a `house_member` row names her or her husband (`person.spouse` at the fertility step, the man F7 records as `unborn_father`), once, at the k = 0 draw, one multiplier whether one spouse or both are members; nothing after the draw re-reads it. Two existing `[[amends]]` texts change (`params.elite_fertility_mult.meaning`, `design.sensing`; the lock regenerated, still 45 records); no read, column, purpose, bound or check value changes. **T-02** (the derived index) builds nothing new for it. **T-03's** Month/Vital fertility step reads `house_member.person` for the woman and for her spouse through the same keyed lookup (neutral `0`), `bin/gen_m2_f1_reference.py` takes the rule from `selftest_m2_f1.py`'s `draws_elite` (check 9; the `--control woman-row` mutant must fail it), and `bin/gen_m2_f1_draws_reference.py`'s model applies it. The rung worlds register no M7, so the read takes its neutral and no baseline moves for (e).
 
 ## Compliance (every task)
 

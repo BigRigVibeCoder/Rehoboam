@@ -464,8 +464,8 @@ population_synthesis_gate() {
 fixture_worlds_gate() {
   local planted=target/rendered-fixtures/fixture_worlds_altered_golden.txt
   mkdir -p "$(dirname "$planted")" || return 1
-  sed '0,/^named_at_start narrow 31 /s//named_at_start narrow 32 /' specs/worldgen/golden/fixture_worlds_v0.txt > "$planted" || return 1
-  grep -q '^named_at_start narrow 32 ' "$planted" || { echo "control not planted: no 'named_at_start narrow 31' line in the fixture-worlds golden file"; return 1; }
+  sed '0,/^named_at_start narrow 23 /s//named_at_start narrow 24 /' specs/worldgen/golden/fixture_worlds_v0.txt > "$planted" || return 1
+  grep -q '^named_at_start narrow 24 ' "$planted" || { echo "control not planted: no 'named_at_start narrow 23' line in the fixture-worlds golden file"; return 1; }
   "$PY" -I specs/worldgen/selftest_fixture_worlds.py --tier pr --altered-golden "$planted"
 }
 
@@ -1328,10 +1328,11 @@ run "Golden draws power: a one-day error in q' either way changes re-sample outc
 run "gen_m2_draws_reference positive control: one altered death line must FAIL (SPR-012)" "fail:STALE:" "$PY" -I bin/gen_m2_draws_reference.py --check --output tests/lint_fixtures/golden/altered_m2_draws_v1.txt &&
 run "Golden vectors: M2 F1 fertility and partnering, exact reference (SPR-015)" "pass:M2 F1 FERTILITY AND PARTNERING: PASS" "$PY" -I specs/demography/selftest_m2_f1.py &&
 run "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)" "fail:M2 F1 FERTILITY AND PARTNERING: FAIL" m2_f1_stale_control &&
+run "M2 F1 reference positive control: the elite read reverted to the woman's own row must FAIL F6's couple read (D56 (e); BCK-002 A-62)" "fail:9. F6 table choice, the couple read: FAIL" "$PY" -I specs/demography/selftest_m2_f1.py --control woman-row &&
 run "Golden vectors: worldgen-lite v0 and residence at genesis, exact reference (SPR-018)" "pass:WORLDGEN-LITE: PASS" "$PY" -I specs/worldgen/selftest_worldgen_lite.py &&
 run "worldgen-lite positive control: an altered golden output must FAIL (SPR-018)" "fail:STALE:" worldgen_lite_golden_control &&
 run "worldgen-lite positive control: an altered template number must FAIL against the golden outputs (SPR-018)" "fail:STALE:" worldgen_lite_template_control &&
-run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential, its reversed-line control, and the altered-golden and stale-spec controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)" "pass:EFFECT DIFFERENTIAL: 1389 successions of 5 laws over 2 configurations compared" population_synthesis_gate &&
+run "Golden vectors: population synthesis v0 and the dynastic back-fill, exact reference, with the effect_ref differential, its reversed-line control, and the altered-golden and stale-spec controls in the same run (SPR-019; REV-SPR-019 R3, R5; REV-SPR-030 R10, R27)" "pass:EFFECT DIFFERENTIAL: 1481 successions of 5 laws over 2 configurations compared" population_synthesis_gate &&
 run "population synthesis positive control: floors in place of the age-sex allocation must FAIL INV-PS-01 (SPR-019 P3)" "fail:the age-sex cells do not sum to the synthesised count" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-cells &&
 run "population synthesis positive control: floors in place of the couple-table rounding must FAIL INV-PS-03 (SPR-019 P7)" "fail:the couple table's row sums are not the married women per band" "$PY" -I specs/worldgen/selftest_population_synthesis.py --control rounding-table &&
 run "Golden vectors: fixture worlds twin_vales (seeds 1-3) and kingdom_10k (seed 1) at genesis, exact reference, with the altered-golden control in the same run (SPR-030; REV-SPR-030 R6, R10)" "pass:FIXTURE WORLDS: PASS" fixture_worlds_gate &&

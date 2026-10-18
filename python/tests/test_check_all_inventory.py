@@ -202,6 +202,8 @@ REQUIRED_GATES = (
     "(SPR-016 MR7)",
     "M2 F1 positive control: the power form at beta = 1 must FAIL rung-0 equality (SPR-016 MR3)",
     "M2 F1 reference positive control: a stale check value in the next M2 spec must FAIL (SPR-015)",
+    "M2 F1 reference positive control: the elite read reverted to the woman's own row must FAIL "
+    "F6's couple read (D56 (e); BCK-002 A-62)",
     "M2 draws differential golden: the engine's death instants equal the independent model's, "
     "re-samples included (SPR-012, Tester's interim report)",
     "M2 draws positive control: one altered death line in the golden must FAIL (SPR-012)",
