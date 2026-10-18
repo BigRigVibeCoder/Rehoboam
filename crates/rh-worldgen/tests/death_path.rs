@@ -357,6 +357,17 @@ fn founder_ids(seed: u64, founders: usize, age: u8, e0: i16) -> Vec<u64> {
 
 /// The world: `founders` founders aged `age`; the senders' plans.
 fn engine(seed: u64, founders: usize, age: u8, e0: i16, x7: [i64; 4], x1: [i64; 4]) -> Engine {
+    engine_with(seed, (founders, age, e0), x7, x1, |_| {})
+}
+
+/// [`engine`], with `edit` applied to the genesis tables.
+fn engine_with(
+    seed: u64,
+    (founders, age, e0): (usize, u8, i16),
+    x7: [i64; 4],
+    x1: [i64; 4],
+    edit: impl FnOnce(&mut WorldTables),
+) -> Engine {
     let spec = WorldSpec {
         seed,
         calendar: D360,
@@ -378,6 +389,7 @@ fn engine(seed: u64, founders: usize, age: u8, e0: i16, x7: [i64; 4], x1: [i64; 
     let mut tables = rh_worldgen::genesis(&spec, &table).unwrap();
     tables.insert("x7.plan", x7.to_vec());
     tables.insert("x1.plan", x1.to_vec());
+    edit(&mut tables);
     let mut systems: Vec<Box<dyn SystemModel>> =
         vec![Box::new(Demography::from_world(&spec).unwrap().unwrap())];
     systems.extend(senders());
@@ -565,4 +577,66 @@ fn an_input_on_the_victim_resamples_the_senders_timer() {
     assert_eq!(after[0].1.purpose, before[0].1.purpose);
     let events = run(&mut e, 2 * MONTH);
     assert_eq!(deaths_of(&events, victim.raw()).len(), 1);
+}
+
+/// Seeds `a` and `b` married to each other (`person.spouse` both ways).
+fn marry(t: &mut WorldTables, a: u64, b: u64) {
+    let ids: Vec<u64> = t
+        .get("person.id")
+        .unwrap()
+        .iter()
+        .map(|v| v.cast_unsigned())
+        .collect();
+    let row = |p: u64| ids.iter().position(|&q| q == p).unwrap();
+    let (ra, rb) = (row(a), row(b));
+    let mut spouse = t.get("person.spouse").unwrap().clone();
+    spouse[ra] = b.cast_signed();
+    spouse[rb] = a.cast_signed();
+    t.insert("person.spouse", spouse);
+}
+
+/// `who`'s `person.spouse`, if `who` has a ledger row.
+fn spouse_of(e: &Engine, who: u64) -> Option<u64> {
+    let row = ids(e).iter().position(|&q| q == who)?;
+    Some(e.tables().get("person.spouse").unwrap()[row].cast_unsigned())
+}
+
+/// The Tester's DEF-2: `person.spouse` is cleared on the spouse's death (0.2.3 `[[owns]]`), when
+/// the spouse dies by a command and when by M2's own timer; the survivor's row keeps 0 after the
+/// dead row is compacted.
+#[test]
+fn a_death_clears_the_survivors_spouse_by_command_and_by_timer() {
+    // By command: X1 kills B; A was married to B.
+    let before = founder_ids(3, 8, 20, 85);
+    let (a, b) = (before[0], before[1]);
+    let x1_due = MONTH + 15 * DAY;
+    let mut e = engine_with(3, (8, 20, 85), IDLE, plan(b, x1_due - DAY, x1_due), |t| {
+        marry(t, a, b);
+    });
+    assert_eq!(spouse_of(&e, a), Some(b), "seeded married");
+    let events = run(&mut e, 2 * MONTH);
+    assert_eq!(deaths_of(&events, b).len(), 1, "B died by the command");
+    assert_eq!(spouse_of(&e, b), None, "B's row compacted");
+    assert_eq!(spouse_of(&e, a), Some(0), "A's spouse cleared");
+    // By timer: B draws a natural death in month 0; A has no timer that month.
+    let mut probe = engine(5, 30, 99, 20, IDLE, IDLE);
+    probe.advance_until(SimTime::EPOCH, |_, _| {}).unwrap();
+    let pending: Vec<u64> = probe
+        .agenda()
+        .pending()
+        .into_iter()
+        .filter(|(_, t)| t.owner == system_id("M2.demography"))
+        .map(|(k, _)| k.entity.raw())
+        .collect();
+    let b = pending[0];
+    let a = ids(&probe)
+        .into_iter()
+        .find(|p| !pending.contains(p))
+        .expect("a founder with no death in month 0");
+    let mut e = engine_with(5, (30, 99, 20), IDLE, IDLE, |t| marry(t, a, b));
+    let events = run(&mut e, MONTH - 1);
+    assert_eq!(deaths_of(&events, b).len(), 1, "B died by M2's timer");
+    assert_eq!(spouse_of(&e, b), None, "B's row compacted");
+    assert_eq!(spouse_of(&e, a), Some(0), "A's spouse cleared");
+    println!("DEF-2: a death clears the survivor's spouse, by command and by timer");
 }

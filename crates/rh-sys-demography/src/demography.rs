@@ -310,6 +310,14 @@ pub fn apply_death(
     view.write(LC_EXIT_KIND)?[open] = EXIT_DEATH;
     view.write(LC_EXIT_TICK)?[open] = now;
     view.write(LC_DEATH_CAUSE)?[open] = cause;
+    // person.spouse is cleared on the spouse's death (0.2.3 [[owns]]; the Tester's DEF-2).
+    let spouse = view.read(PERSON_SPOUSE)?[row].cast_unsigned();
+    if let Some(survivor) = ledger_row(view, spouse)?.filter(|_| spouse != 0) {
+        let spouses = view.write(PERSON_SPOUSE)?;
+        if spouses[survivor].cast_unsigned() == id {
+            spouses[survivor] = 0;
+        }
+    }
     let mut draft = EventDraft::new(DEATH)
         .subject(EntityRef::person(person))
         .with_payload(vec![cause]);
