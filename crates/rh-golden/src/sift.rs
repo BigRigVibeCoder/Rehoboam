@@ -103,8 +103,13 @@ pub fn sift_follow(
         }
         // The horizon may have been extended by a resumed run: read it again.
         let years = RunToml::read(run_dir).map_or(run.years, |r| r.years);
-        if next_year >= years || (last_look && !progressed) {
+        if next_year >= years {
             break;
+        }
+        if last_look && !progressed {
+            return Err(Error(format!(
+                "writer stopped at year {next_year} before horizon {years}"
+            )));
         }
         last_look = !progressed && crate::stream::writer_gone(run_dir);
         if !progressed && !last_look {

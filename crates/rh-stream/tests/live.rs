@@ -309,17 +309,30 @@ fn an_append_copies_a_bounded_tail_whatever_the_unsealed_backlog() {
         if year < years {
             edge.year_completes(year);
             // The completed year is one chunk: the open year starts with none.
-            assert_eq!(edge.snapshot().chunk_count(), usize::try_from(year + 1).unwrap());
+            assert_eq!(
+                edge.snapshot().chunk_count(),
+                usize::try_from(year + 1).unwrap()
+            );
         }
     }
     let snap = edge.snapshot();
-    assert_eq!(snap.w0, 0, "no seal landed: the whole backlog is in the window");
+    assert_eq!(
+        snap.w0, 0,
+        "no seal landed: the whole backlog is in the window"
+    );
     for s in (0..seq).step_by(7).chain([seq - 1]) {
         let got = String::from_utf8(snap.window_line(s).unwrap().to_vec()).unwrap();
-        assert_eq!(got.split(' ').nth(2), Some(s.to_string().as_str()), "seq {s}");
+        assert_eq!(
+            got.split(' ').nth(2),
+            Some(s.to_string().as_str()),
+            "seq {s}"
+        );
     }
     let all = edge.read(0, usize::MAX).unwrap();
-    assert_eq!(all.count, seq, "one read crosses every chunk, block and the tail");
+    assert_eq!(
+        all.count, seq,
+        "one read crosses every chunk, block and the tail"
+    );
     println!(
         "C1: {seq} appends over {} years unsealed, {} chunks in the window, each append copying at most {TAIL} pointers",
         years + 1,
@@ -642,5 +655,78 @@ fn work_queued_after_a_seal_runs_once_the_segment_is_on_disk() {
     assert!(
         log.iter().all(|(_, c, l)| l > c),
         "each seal timed from hand-over to landing"
+    );
+}
+
+/// DEF-2: `LiveEdge` accounts for window bytes and seal queue bytes deterministically.
+/// Window bytes reflect line storage + index capacity, while queued bytes reflect
+/// in-memory Record allocation (`record::allocated`), not canonical text.
+#[test]
+fn deterministic_accounting_recounts_window_and_seal_queue_by_allocated() {
+    struct TestHook {
+        edge: Arc<std::sync::Mutex<Option<LiveEdge>>>,
+        calls: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl rh_stream::seal::SealHook for TestHook {
+        fn sealing(
+            &mut self,
+            _channel: rh_stream::record::Channel,
+            _year: i64,
+            records: &Vec<rh_stream::record::Record>,
+        ) {
+            let edge = self
+                .edge
+                .lock()
+                .unwrap()
+                .as_ref()
+                .expect("edge must be attached")
+                .clone();
+            let allocated = rh_stream::record::allocated(records);
+            assert!(
+                allocated > 0,
+                "test records must have non-zero allocated size"
+            );
+            let queued = edge.queued_bytes();
+            assert_eq!(
+                queued, allocated,
+                "ACCOUNTING MISMATCH: queued_bytes does not match record::allocated: queued_bytes={queued}, allocated={allocated}"
+            );
+            let window = edge.window_bytes();
+            let total = edge.bytes();
+            assert_eq!(
+                total,
+                window + queued,
+                "ACCOUNTING MISMATCH: bytes does not include queued bytes: bytes={total}, window={window}, queued={queued}"
+            );
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    let root = scratch("live_deterministic_accounting");
+    let records = history(1, 10, 2);
+    let edge_slot = Arc::new(std::sync::Mutex::new(None));
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let hook = TestHook {
+        edge: edge_slot.clone(),
+        calls: calls.clone(),
+    };
+    let mut w = StreamWriter::create(config(&root)).unwrap();
+    let edge = w
+        .attach_live(LiveConfig {
+            policy: Policy::YearEnd,
+            clock: None,
+            hook: Box::new(hook),
+        })
+        .unwrap();
+    *edge_slot.lock().unwrap() = Some(edge);
+
+    let zero: Vec<(i64, Body)> = records.iter().filter(|(t, _)| *t == 0).cloned().collect();
+    w.push(0, zero, &mut NoHook).unwrap();
+    feed(&mut w, &records, 0, MPY - 1);
+    w.finish(&mut NoHook).unwrap();
+    assert!(
+        calls.load(std::sync::atomic::Ordering::SeqCst) > 0,
+        "sealing hook must have run at least once"
     );
 }

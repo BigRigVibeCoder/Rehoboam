@@ -559,6 +559,12 @@ impl HostView {
 pub trait Source {
     /// The stream's state now.
     fn view(&self) -> HostView;
+
+    /// The index in the seal log for a subscription starting at `from_seq` (`None` for live).
+    fn seal_index(&self, from_seq: Option<u64>) -> usize {
+        let _ = from_seq;
+        self.view().seal_log_len
+    }
 }
 
 /// One viewer's connection as the host sees it: a cursor and its place in the seal log.
@@ -694,7 +700,10 @@ fn subscribe(conn: &mut Connection, source: &dyn Source, id: &Id, from: Subscrib
         return error(id, Reason::FutureSeq, d);
     }
     conn.cursor = Some(n);
-    conn.seal_index = view.seal_log_len;
+    conn.seal_index = match from {
+        SubscribeFrom::Seq(n) => source.seal_index(Some(n)),
+        SubscribeFrom::Live => source.seal_index(None),
+    };
     response(id, json!({"first_seq": n}))
 }
 
@@ -881,8 +890,14 @@ pub fn check_status(result: &Value) -> Result<Status, WireError> {
                 "live.first_seq is 0 before the first non-empty seal (I1)",
             ));
         }
-        Some(s) if s + 1 < w0 => return Err(bad("sealed.last_seq + 1 >= live.first_seq (I1)")),
-        _ => {}
+        None => {}
+        Some(s) => match s.checked_add(1) {
+            Some(next) if next < w0 => {
+                return Err(bad("sealed.last_seq + 1 >= live.first_seq (I1)"));
+            }
+            Some(_) => {}
+            None => return Err(bad("sealed.last_seq overflows u64")),
+        },
     }
     Ok(Status {
         value: result.clone(),

@@ -323,12 +323,30 @@ def _check_json(value: object, where: str, depth: int = 1) -> None:
         for k, v in value.items():
             if not isinstance(k, str):
                 raise WireError(f"{where}: a non-string key")
+            if any(ord(ch) not in ASCII_PRINTABLE for ch in k):
+                raise WireError(f"{where}: a key outside printable ASCII ({k!r})")
             _check_json(v, f"{where}.{k}", depth + 1)
     elif isinstance(value, (list, tuple)):
         for i, v in enumerate(value):
             _check_json(v, f"{where}[{i}]", depth + 1)
     else:
         raise WireError(f"{where}: {type(value).__name__} is not a JSON value")
+
+
+_ASCII_PRINTABLE_MIN = 0x20
+_ASCII_PRINTABLE_MAX = 0x7E
+
+
+def printable_detail(text: str) -> str:
+    r"""Escape non-printable ASCII as Rust does (\u{..}) (C8)."""
+    out: list[str] = []
+    for ch in text:
+        code = ord(ch)
+        if _ASCII_PRINTABLE_MIN <= code <= _ASCII_PRINTABLE_MAX:
+            out.append(ch)
+        else:
+            out.append(f"\\u{{{code:x}}}")
+    return "".join(out)
 
 
 def cjson(value: object) -> bytes:
@@ -376,8 +394,11 @@ def response(rid: int | str | None, result: Json) -> Json:
 def error(rid: int | str | None, reason: str, **data: object) -> Json:
     """A JSON-RPC error response for ``reason`` (wire_v1.md §4.4) with extra ``data`` fields."""
     code, message = ERRORS[reason]
+    cleaned = dict(data)
+    if "detail" in cleaned and isinstance(cleaned["detail"], str):
+        cleaned["detail"] = printable_detail(cleaned["detail"])
     return {
-        "error": {"code": code, "data": {"reason": reason, **data}, "message": message},
+        "error": {"code": code, "data": {"reason": reason, **cleaned}, "message": message},
         "id": rid,
         "jsonrpc": JSONRPC,
     }
@@ -973,7 +994,18 @@ class Host:
             return error(rid, "behind_live_edge", **_behind_data(snap))
         if n > snap.next_seq:
             return error(rid, "future_seq", finished=self.writer.finished, next_seq=snap.next_seq)
-        conn.cursor, conn.seal_index = n, len(self.writer.seal_log)
+        if frm is None:
+            conn.seal_index = len(self.writer.seal_log)
+        else:
+            conn.seal_index = next(
+                (
+                    i
+                    for i, seg in enumerate(self.writer.seal_log)
+                    if (seg.last_seq >= n if seg.last_seq is not None else seg.first_seq >= n)
+                ),
+                len(self.writer.seal_log),
+            )
+        conn.cursor = n
         return response(rid, {"first_seq": n})
 
     def unsubscribe(self, conn: Connection, rid: int | str) -> Json:
@@ -994,6 +1026,8 @@ class Host:
         while conn.seal_index < len(log):
             seg = log[conn.seal_index]
             if seg.last_seq is not None and seg.last_seq >= c:
+                break
+            if seg.last_seq is None and seg.first_seq > c:
                 break
             frames.append(self._notify("stream.sealed", _sealed_params(seg)))
             conn.seal_index += 1

@@ -58,6 +58,8 @@ pub struct TailArgs {
     pub canonical: bool,
     /// Follow new segments until the run's last sim-year is sealed.
     pub wait: bool,
+    /// Bounded wait for run.toml in seconds (default 60 s; C9).
+    pub timeout: Option<u64>,
     /// Read channel C (sift matches) instead of channel A (`--channel C`; SPR-026 T-04).
     pub channel_c: bool,
 }
@@ -296,9 +298,25 @@ pub fn tail(
     if args.channel_c {
         return tail_c(args, out);
     }
-    // With --wait a tail may start before the run has written its run.toml.
-    while args.wait && !args.run_dir.join(crate::stream::RUN_TOML).is_file() {
-        std::thread::sleep(Duration::from_millis(50));
+    // With --wait a tail may start before the run has written its run.toml (C9: bounded wait).
+    if args.wait {
+        let path = args.run_dir.join(crate::stream::RUN_TOML);
+        if !path.is_file() {
+            let timeout = args.timeout.unwrap_or(60);
+            eprintln!("waiting for {} (timeout {timeout} s)...", path.display());
+            let max_iters = timeout.saturating_mul(20);
+            let mut iters = 0u64;
+            while !path.is_file() {
+                if iters >= max_iters {
+                    return Err(Error(format!(
+                        "timed out after {timeout} s waiting for {}",
+                        path.display()
+                    )));
+                }
+                std::thread::sleep(Duration::from_millis(50));
+                iters += 1;
+            }
+        }
     }
     let run = RunToml::read(&args.run_dir)?;
     let display = display_of(&args.repo, &run)?;

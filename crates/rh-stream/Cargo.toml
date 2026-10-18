@@ -35,3 +35,7 @@ arc-swap = { version = "=1.7.1", default-features = false }
 # The planted control of SPR-026 T-02: the window moves at a year end before the dropped year is on
 # disk (I4 broken); a viewer must detect `I1 broken`. Never in a release build (BCK-002 A-52).
 mutant-window-gap = []
+# DEF-2: LiveEdge::bytes() counts the window alone, understating live bytes while completed years wait in the seal queue.
+mutant-bytes-window-only = []
+# DEF-2: the seal queue counts canonical text bytes instead of allocated records, understating the queue by ~2.5x.
+mutant-bytes-queue-canonical = []

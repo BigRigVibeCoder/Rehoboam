@@ -538,6 +538,9 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
         match w.as_str() {
             "--canonical" => args.canonical = true,
             "--wait" => args.wait = true,
+            "--timeout" => {
+                args.timeout = Some(value()?.parse().map_err(|_| bad("--timeout is a number"))?);
+            }
             "--from-seq" => {
                 args.from_seq = value()?
                     .parse()

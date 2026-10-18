@@ -226,7 +226,8 @@ impl Catchup {
         }
     }
 
-    fn fail(&mut self, detail: String) -> Action {
+    /// Enters Failed state and returns `Action::Close` (C13).
+    pub fn fail(&mut self, detail: String) -> Action {
         self.state = State::Failed;
         Action::Close(detail)
     }
@@ -297,7 +298,9 @@ impl Catchup {
                 "stream.behind.next_seq {next_seq} is not the cursor"
             ));
         }
-        let s_plus_1 = s.map_or(0, |s| s + 1);
+        let Some(s_plus_1) = s.map_or(Some(0), |s| s.checked_add(1)) else {
+            return self.fail("sealed_last_seq overflows u64".to_owned());
+        };
         if s_plus_1 < w0 {
             let shown = s.map_or_else(|| "-1".to_owned(), |s| s.to_string());
             return self.fail(format!(

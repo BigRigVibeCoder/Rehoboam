@@ -212,8 +212,13 @@ REQUIRED_GATES = (
     "reported)",
     "Licence ledger control: the GPL fixture is listed as GPL-3.0-only",
     "Licence ledger, not a gate (artifacts/licence_ledger.txt; ADR-0021)",
+    "Live edge overhead (C1; reported): solo 3,000 years monthly headless vs --socket",
     "LiveEdge positive control: a window that moves before the dropped year is on disk must "
     "FAIL with I1 broken (SPR-026 T-02)",
+    "LiveEdge positive control: bytes() counting only the window must FAIL the accounting test "
+    "(DEF-2)",
+    "LiveEdge positive control: queue counted as canonical text must FAIL the accounting test "
+    "(DEF-2)",
     "M2 F1 mortality reference positive control: a stale check value in the next M2 spec must FAIL "
     "(SPR-016)",
     "M2 F1 positive control: a newborn drawn on rung 0's S8 must FAIL the first-draw rule (SPR-016 "

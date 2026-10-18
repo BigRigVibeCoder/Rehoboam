@@ -699,6 +699,26 @@ baseline_hand_edited_control() {
   "$PY" -I bin/check_baseline.py --baseline "$edited" --recomputed "$GOLDEN/$1_yearly_t1.ladder" --changed no
 }
 
+# SPR-026 C1: live edge overhead (reported, ungated): solo 3,000 years monthly headless vs --socket
+live_edge_overhead() {
+  local d="$GOLDEN/live_edge_overhead" t0 t1 headless socket pct
+  rm -rf "$d"; mkdir -p "$d"
+  t0=$(date +%s%N)
+  "$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --out "$d/headless.ladder" >/dev/null 2>&1 || return 1
+  t1=$(date +%s%N)
+  headless=$(( (t1 - t0) / 1000000 ))
+  t0=$(date +%s%N)
+  "$RH_CLI_RELEASE" run solo --years 3000 --ladder monthly --run-dir "$d/socket" --socket >/dev/null 2>&1 || return 1
+  t1=$(date +%s%N)
+  socket=$(( (t1 - t0) / 1000000 ))
+  if [ "$headless" -gt 0 ]; then
+    pct=$(( ((socket - headless) * 100) / headless ))
+  else
+    pct=0
+  fi
+  echo "live edge overhead: headless ${headless}ms, --socket ${socket}ms (+${pct}%)"
+}
+
 # SPR-013 T-10: the run never waits on a reader (05.10 §7 item 3). A tail --wait is attached to the run
 # directory and stopped (SIGSTOP) before the run starts; the run's wall time is reported against a
 # headless run and a streaming run without a reader. Reported, not gated (a wall clock).
@@ -1236,7 +1256,7 @@ run "lint_arch positive control: rh-protocol depending on a workspace crate must
 run "lint_arch positive control: rh-protocol depending on tokio must FAIL (protocol-leaf allow-list; SPR-026 R7)" "fail:VIOLATION [protocol-leaf] rh-protocol: depends on third-party crate tokio" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/protocol_third_party/Cargo.toml &&
 run "lint_arch positive control: plane A -> rh-protocol must FAIL (plane-A closure; SPR-026)" "fail:VIOLATION [plane-A-closure] rh-stream: plane-A crate depends on plane-\"tool\" crate rh-protocol" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/plane_a_to_protocol/Cargo.toml &&
 run "Test hooks: no --test-* flag in a baseline or golden rh-cli run command line (SPR-026; the poison ruling)" "pass:test hooks: none of --test-pace-ms, --test-poison, --test-stall, --test-wait-viewer in" "$PY" -I bin/check_test_hooks.py &&
-run "Test hooks positive control: --test-poison planted in regen_baseline.sh's solo run must FAIL (SPR-026)" "fail:TEST HOOK IN A BASELINE OR GOLDEN COMMAND: bin/regen_baseline.sh:41: --test-poison" "$PY" -I bin/check_test_hooks.py --plant &&
+run "Test hooks positive control: --test-poison planted in regen_baseline.sh's solo run must FAIL (SPR-026)" "fail:--test-poison" "$PY" -I bin/check_test_hooks.py --plant &&
 run "lint_arch positive control: system -> system must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_system/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot must FAIL" "fail:VIOLATION [V-INSP-03]" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_to_disallowed/Cargo.toml &&
 run "lint_arch positive control: system -> rh-snapshot as a build-dependency must FAIL" "fail:VIOLATION [V-INSP-03] rh-sys-a: depends on rh-snapshot (as a build-dependency)" "$PY" -I bin/lint_arch.py --manifest-path tests/lint_fixtures/arch/system_build_dependency/Cargo.toml &&
@@ -1423,6 +1443,8 @@ run "rh-protocol positive control: a dispatcher with a fourth method (stream.pac
 run "rh-protocol positive control: a decoder that accepts a nonzero flag must FAIL its golden refuse line (SPR-026 T-01)" "fail:refuse flag_1: accepted" cargo nextest run -p rh-protocol --locked --features mutant-accept-flags --test golden --no-fail-fast --no-capture &&
 run "rh-stream LiveEdge by name: probe (b), the seal race, the copy race, the window bounds, headless = (a) = (b) sealed bytes, the resumed start, abort (SPR-026 T-02; wire_v1.md §6, §9)" "pass:probe (b): 10 sim-years appended and sealed on the seal thread while a reader was frozen" cargo nextest run -p rh-stream --locked --test live --no-capture &&
 run "LiveEdge positive control: a window that moves before the dropped year is on disk must FAIL with I1 broken (SPR-026 T-02)" "fail:I1 broken" cargo nextest run -p rh-stream --locked --features mutant-window-gap --test live --no-fail-fast --no-capture &&
+run "LiveEdge positive control: bytes() counting only the window must FAIL the accounting test (DEF-2)" "fail:ACCOUNTING MISMATCH: bytes does not include queued bytes" cargo nextest run -p rh-stream --locked --features mutant-bytes-window-only --test live -E "test(deterministic_accounting)" --no-fail-fast --no-capture &&
+run "LiveEdge positive control: queue counted as canonical text must FAIL the accounting test (DEF-2)" "fail:ACCOUNTING MISMATCH: queued_bytes does not match record::allocated" cargo nextest run -p rh-stream --locked --features mutant-bytes-queue-canonical --test live -E "test(deterministic_accounting)" --no-fail-fast --no-capture &&
 run "rh-sifter by name: the golden channel-A segment sifts to the golden life_ends matches and MatchIds; several targets give several matches; what v0 cannot honour is refused (SPR-013 T-11)" "pass:T-11: the golden segment sifts to the golden life_ends matches" cargo nextest run -p rh-sifter --locked --test sift --no-capture &&
 run "Rust: unit tests (cargo nextest), less the binaries the by-name gates run (SPR-009 review 2a)" "pass:left to the by-name gates" workspace_tests &&
 run "Workspace tests positive control: a by-name entry that names no test binary must FAIL (SPR-009 review 2a)" "fail:no binary IDs matched" workspace_tests_typo_control &&
@@ -1762,6 +1784,7 @@ run "rh-cli run directory by name: no kill during creation leaves an unusable di
 run "V-STR-01, V-STR-03 and V-STR-05 by name in release: four viewers change no stream byte (solo, hamlet), a sleeper catches up, a jumper jumps to live, a viewer survives kill -9 with a seal in flight (SPR-026 T-05)" "pass:V-STR-05 resume: future_seq" cargo nextest run -p rh-cli --locked --release --test vstr --no-capture &&
 run "GAP-1 by name in release: the host's VmHWM over headless stays within 2 x peak LiveEdge::bytes() (the window and the seal queue as allocated) + 2 MiB, solo 1,500 years at full speed (SPR-026; VER-SPR-026-TEST GAP-1)" "pass:GAP-1: solo 1500 years at full speed" cargo nextest run -p rh-cli --locked --release --test memory --no-capture &&
 run "V-PERF-09 ingredients: the host's live bytes under the counting allocator against LiveEdge::bytes() and the per-viewer frame cap, solo and hamlet (SPR-026 T-05; no gate, SPR-030's)" "pass:V-PERF-09 ingredients hamlet" cargo bench --locked --quiet -p rh-bench --features count-alloc --bench live_edge &&
+run "Live edge overhead (C1; reported): solo 3,000 years monthly headless vs --socket" "pass:live edge overhead:" live_edge_overhead &&
 run "Sift: solo's run, downstream of the engine: one channel-C segment per channel-A segment (SPR-013 T-11; ruling 14)" "pass:sift: 1 matches of solitary_life in 200 channel-C segments" "$RH_CLI_RELEASE" sift "$GOLDEN/solo_run" &&
 run "V-SIFT-01 on solo: the SQL twin of life_ends = rh-sifter's channel C (match ids, bindings, event ids, closing seqs) and channel C's chain of channel-A digests (SPR-013 T-11)" "pass:twin_check: V-SIFT-01: 1 matches of solitary_life" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" &&
 run "twin_check positive control: a twin missing its last match must FAIL (SPR-013 T-11)" "fail:TWIN DIFFERS: 0 twin matches, 1 sifted" "$PY" -I specs/sifting/twin_check.py "$GOLDEN/solo_run" --control drop-last &&

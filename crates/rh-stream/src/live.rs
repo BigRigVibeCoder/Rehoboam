@@ -149,6 +149,8 @@ pub struct Start {
     pub s: Option<u64>,
     /// `sealed.last_year` on disk.
     pub last_year: Option<i64>,
+    /// The last record's tick from disk, if resumed (C20).
+    pub tip_tick: Option<i64>,
 }
 
 /// The published state (module docs). Every field a reader sees comes from one snapshot.
@@ -405,7 +407,7 @@ impl LiveEdge {
             next_seq: start.next_seq,
             s: start.s,
             last_year: start.last_year,
-            tip_tick: None,
+            tip_tick: start.tip_tick,
             seal_log: Arc::new(Vec::new()),
             end: None,
             upstream: None,
@@ -455,7 +457,14 @@ impl LiveEdge {
     /// the run, and a window-only count understated the host by about five times).
     #[must_use]
     pub fn bytes(&self) -> usize {
-        self.window_bytes() + self.queued_bytes()
+        #[cfg(feature = "mutant-bytes-window-only")]
+        {
+            self.window_bytes()
+        }
+        #[cfg(not(feature = "mutant-bytes-window-only"))]
+        {
+            self.window_bytes() + self.queued_bytes()
+        }
     }
 
     /// The window's bytes as allocated (lines and their offsets), now.
@@ -519,13 +528,13 @@ impl LiveEdge {
             let mut tail = Vec::with_capacity(TAIL);
             tail.extend(cur.tail.iter().cloned());
             tail.push(Arc::clone(&chunk));
-            if tail.len() >= TAIL {
-                if let Some(block) = Chunk::merged(&tail) {
-                    let mut open = (*cur.open).clone();
-                    open.push(Arc::new(block));
-                    next.open = Arc::new(open);
-                    tail.clear();
-                }
+            if tail.len() >= TAIL
+                && let Some(block) = Chunk::merged(&tail)
+            {
+                let mut open = (*cur.open).clone();
+                open.push(Arc::new(block));
+                next.open = Arc::new(open);
+                tail.clear();
             }
             next.tail = Arc::new(tail);
             next.next_seq = first_seq + chunk.count();

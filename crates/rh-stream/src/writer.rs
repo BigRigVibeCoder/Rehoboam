@@ -225,9 +225,10 @@ fn seal_year(
     dir: &Path,
     cfg: &WriterConfig,
     year: i64,
-    records: &[Record],
+    records: &Vec<Record>,
     hook: &mut dyn SealHook,
 ) -> Result<SealEntry, StreamError> {
+    hook.sealing(Channel::A, year, records);
     let files = segment::encode(
         records,
         year,
@@ -583,12 +584,14 @@ impl StreamWriter {
             next_seq: self.next_seq,
             s: self.next_seq.checked_sub(1),
             last_year: (self.year > 0).then(|| self.year - 1),
+            tip_tick: None,
         };
         while let Some(path) = self.existing.get(&start.year) {
             let row = read_segment_row(path)?;
             start.next_seq = row.last_seq + 1;
             start.s = Some(row.last_seq);
             start.last_year = Some(start.year);
+            start.tip_tick = Some(row.last_tick);
             start.year += 1;
         }
         let edge = LiveEdge::new(cfg.policy, start);
@@ -665,6 +668,12 @@ impl StreamWriter {
         self.summary.records += u64::try_from(records.len()).unwrap_or(u64::MAX);
         // The year's records as allocated, counted in `LiveEdge::queued_bytes` while they wait
         // for the seal thread (GAP-1).
+        #[cfg(feature = "mutant-bytes-queue-canonical")]
+        let queued = records
+            .iter()
+            .map(|r| crate::canonical::render(r).map_or(0, |s| s.len() + 1))
+            .sum::<usize>();
+        #[cfg(not(feature = "mutant-bytes-queue-canonical"))]
         let queued = crate::record::allocated(&records);
         let sealer = self.live.as_ref().and_then(|l| l.sealer.as_ref());
         // Counted before the job is sent, so the seal thread never subtracts first.

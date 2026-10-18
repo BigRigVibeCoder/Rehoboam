@@ -30,7 +30,7 @@
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write};
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -163,6 +163,20 @@ impl Source for Shared {
     fn view(&self) -> HostView {
         self.view_of(&self.edge.snapshot())
     }
+
+    fn seal_index(&self, from_seq: Option<u64>) -> usize {
+        let Some(n) = from_seq else {
+            return self.edge.snapshot().seal_log.len();
+        };
+        let snap = self.edge.snapshot();
+        snap.seal_log
+            .iter()
+            .position(|e| match e.last_seq {
+                Some(l) => l >= n,
+                None => e.first_seq >= n,
+            })
+            .unwrap_or(snap.seal_log.len())
+    }
 }
 
 fn send(stream: &mut UnixStream, shared: &Shared, frame: &[u8]) -> std::io::Result<()> {
@@ -198,12 +212,16 @@ fn serve_step(
     if c < snap.w0 {
         conn.cursor = None;
         let v = control::notify_behind(&shared.view_of(&snap), c);
+        drop(snap);
         send_value(stream, shared, &v)?;
         return Ok(true);
     }
-    let mut sent = false;
+    let mut sealed_notifs = Vec::new();
     while let Some(e) = snap.seal_log.get(conn.seal_index) {
         if e.last_seq.is_some_and(|l| l >= c) {
+            break;
+        }
+        if e.last_seq.is_none() && e.first_seq > c {
             break;
         }
         let sealed = control::Sealed {
@@ -212,13 +230,19 @@ fn serve_step(
             last_seq: e.last_seq,
             canonical_digest: hex16(&e.canonical_digest),
         };
-        send_value(
-            stream,
-            shared,
-            &control::notify_sealed(shared.info.channel, TIMELINE, &sealed),
-        )?;
+        sealed_notifs.push(control::notify_sealed(
+            shared.info.channel,
+            TIMELINE,
+            &sealed,
+        ));
         conn.seal_index += 1;
-        sent = true;
+    }
+    if !sealed_notifs.is_empty() {
+        drop(snap);
+        for notif in sealed_notifs {
+            send_value(stream, shared, &notif)?;
+        }
+        return Ok(true);
     }
     let lines = snap
         .read(c, MAX_PAYLOAD - SUBHEADER_LEN)
@@ -233,9 +257,11 @@ fn serve_step(
                 })
             })
             .map_err(|e| std::io::Error::other(e.message))?;
+        let next_c = c + lines.count;
+        drop(lines);
         drop(snap);
         send(stream, shared, &frame)?;
-        conn.cursor = Some(c + lines.count);
+        conn.cursor = Some(next_c);
         return Ok(true);
     }
     if let Some(end) = snap.end
@@ -246,14 +272,12 @@ fn serve_step(
             End::Finished => EndReason::Finished,
             End::Aborted => EndReason::Aborted,
         };
-        send_value(
-            stream,
-            shared,
-            &control::notify_end(shared.info.channel, TIMELINE, c, reason),
-        )?;
+        let notif = control::notify_end(shared.info.channel, TIMELINE, c, reason);
+        drop(snap);
+        send_value(stream, shared, &notif)?;
         return Ok(true);
     }
-    Ok(sent)
+    Ok(false)
 }
 
 fn hex16(b: &[u8; 16]) -> String {
@@ -264,9 +288,18 @@ fn hex16(b: &[u8; 16]) -> String {
     })
 }
 
+struct ActiveGuard<'a>(&'a AtomicUsize);
+
+impl Drop for ActiveGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
 /// A serving thread: the viewer's frames dispatched, its subscription served, until it closes,
 /// the host closes it after a refusal, or the host shuts down.
 fn serve_connection(mut stream: UnixStream, shared: &Shared) {
+    let _active = ActiveGuard(&shared.active);
     let mut conn = Connection::default();
     let mut buf: Vec<u8> = Vec::new();
     let mut tmp = vec![0u8; 8192];
@@ -314,7 +347,6 @@ fn serve_connection(mut stream: UnixStream, shared: &Shared) {
             std::thread::sleep(POLL);
         }
     }
-    shared.active.fetch_sub(1, Ordering::Relaxed);
 }
 
 fn accept_loop(listener: &UnixListener, shared: &Arc<Shared>) {
@@ -418,10 +450,27 @@ impl Server {
     fn finish(mut self, linger: Duration, name: &str) {
         let step = Duration::from_millis(10);
         let mut waited = Duration::ZERO;
-        while self.shared.active.load(Ordering::Relaxed) > 0 && waited < linger {
-            self.shared.sample();
-            std::thread::sleep(step);
-            waited += step;
+        let mut quiet = Duration::ZERO;
+        let grace = if linger < Duration::from_millis(500) {
+            linger
+        } else {
+            Duration::from_millis(500)
+        };
+        // An unattended run (no connection ever accepted) exits without lingering.
+        if self.shared.connections.load(Ordering::Relaxed) > 0 {
+            while waited < linger {
+                self.shared.sample();
+                if self.shared.active.load(Ordering::Relaxed) > 0 {
+                    quiet = Duration::ZERO;
+                } else {
+                    quiet += step;
+                    if quiet >= grace {
+                        break;
+                    }
+                }
+                std::thread::sleep(step);
+                waited += step;
+            }
         }
         self.shared.sample();
         self.shared.shutdown.store(true, Ordering::Relaxed);
@@ -532,17 +581,24 @@ fn run_nonce() -> u64 {
         .map_or(1, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX))
 }
 
-/// The run directory, mode `0700`: created so, or set so (§1).
-fn private_dir(dir: &Path) -> Result<(), String> {
-    if dir.exists() {
-        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+/// The run directory: set mode 0700 if created by this host; an existing directory keeps its mode
+/// with a warning if it is group- or world-accessible (C4).
+fn private_dir(dir: &Path, existed: bool) -> Result<(), String> {
+    let meta = std::fs::metadata(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mode = meta.permissions().mode();
+    if existed {
+        if mode & 0o077 != 0 {
+            eprintln!(
+                "warning: run directory {} is accessible to other users ({:#05o})",
+                dir.display(),
+                mode & 0o777
+            );
+        }
     } else {
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(dir)
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    .map_err(|e| format!("{}: {e}", dir.display()))
+    Ok(())
 }
 
 fn info_of(run: &RunToml, channel: Channel, record_format: &str, nonce: u64) -> Info {
@@ -566,20 +622,23 @@ struct Opts {
     policy: Policy,
     cap: usize,
     seal_log: bool,
+    /// Bounded wait for run.toml (default 60 s; C9).
+    timeout: u64,
     /// A test hook (`--test-wait-viewer`; SPR-026 DEF-1): the run starts only once a viewer's
     /// first request has been answered, so a test's viewer is attached before anything is
     /// emitted, however loaded the machine.
     wait_viewer: bool,
 }
 
-/// Takes `--socket`, `--linger S`, `--window year-end|sync`, `--max-viewers N`, `--seal-log` and
-/// the test hook `--test-wait-viewer` out of `words`; the rest is the run's.
+/// Takes `--socket`, `--linger S`, `--window year-end|sync`, `--max-viewers N`, `--seal-log`,
+/// `--timeout S` and the test hook `--test-wait-viewer` out of `words`; the rest is the run's.
 fn take_opts(words: &[&str]) -> Result<(Opts, Vec<String>), String> {
     let mut opts = Opts {
         linger: Duration::from_secs(10),
         policy: Policy::YearEnd,
         cap: control::DEFAULT_CAP,
         seal_log: false,
+        timeout: 60,
         wait_viewer: false,
     };
     let mut rest = Vec::new();
@@ -594,6 +653,12 @@ fn take_opts(words: &[&str]) -> Result<(Opts, Vec<String>), String> {
             "--socket" => {}
             "--seal-log" => opts.seal_log = true,
             "--test-wait-viewer" => opts.wait_viewer = true,
+            "--timeout" => {
+                let v = value()?;
+                opts.timeout = v
+                    .parse()
+                    .map_err(|_| format!("--timeout {v} is not a number of seconds"))?;
+            }
             "--linger" => {
                 let v = value()?;
                 opts.linger = Duration::from_secs(
@@ -622,6 +687,32 @@ fn take_opts(words: &[&str]) -> Result<(Opts, Vec<String>), String> {
     Ok((opts, rest))
 }
 
+/// Waits up to `timeout_secs` (default 60 s) for `run.toml` to appear in `dir`.
+/// Prints the file it waits for if not immediately present (C9).
+fn wait_run_toml(dir: &Path, timeout_secs: u64) -> Result<(), String> {
+    let path = dir.join(rh_golden::stream::RUN_TOML);
+    if path.is_file() {
+        return Ok(());
+    }
+    eprintln!(
+        "waiting for {} (timeout {timeout_secs} s)...",
+        path.display()
+    );
+    let max_iters = timeout_secs.saturating_mul(20);
+    let mut iters = 0u64;
+    while !path.is_file() {
+        if iters >= max_iters {
+            return Err(format!(
+                "timed out after {timeout_secs} s waiting for {}",
+                path.display()
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+        iters += 1;
+    }
+    Ok(())
+}
+
 fn flag_value(words: &[String], flag: &str) -> Option<String> {
     words
         .iter()
@@ -647,6 +738,7 @@ fn run_inner(world: &str, words: &[&str], repo: &Path) -> Result<u8, String> {
     let run_dir = flag_value(&rest, "--run-dir")
         .map(PathBuf::from)
         .ok_or("--socket serves a run directory's stream: it needs --run-dir")?;
+    let existed = run_dir.exists();
     let (sock, lock_path) = socket_paths(&run_dir, Channel::A);
     // Refused before anything is written (§1).
     check_path(&sock)?;
@@ -666,7 +758,7 @@ fn run_inner(world: &str, words: &[&str], repo: &Path) -> Result<u8, String> {
     let name = world.to_owned();
     let on_edge = move |edge: LiveEdge, dir: &Path| -> Result<(), Error> {
         let run = RunToml::read(dir)?;
-        private_dir(dir).map_err(Error)?;
+        private_dir(dir, existed).map_err(Error)?;
         let lock = if let Some(l) = early {
             l
         } else {
@@ -740,10 +832,8 @@ fn sift_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
         check_path(&sock)?;
     }
     // The run must have started (its run.toml written after its own checks), so that nothing
-    // the sifter creates can make the run refuse its directory.
-    while !run_dir.join(rh_golden::stream::RUN_TOML).is_file() {
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    // the sifter creates can make the run refuse its directory (C9: bounded wait).
+    wait_run_toml(&run_dir, opts.timeout)?;
     let edge = LiveEdge::new(Policy::YearEnd, rh_stream::live::Start::default());
     let server = if socket {
         let run = RunToml::read(&run_dir).map_err(|e| e.0)?;
@@ -849,9 +939,13 @@ impl ViewerConn {
             match self.s.read(&mut tmp) {
                 Ok(0) => return Ok(Got::Closed),
                 Ok(n) => self.buf.extend_from_slice(&tmp[..n]),
-                Err(e) if e.kind() == ErrorKind::Interrupted => {}
-                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-                    return Err("the host sent nothing for 30 s".to_owned());
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        ErrorKind::Interrupted | ErrorKind::WouldBlock | ErrorKind::TimedOut
+                    ) =>
+                {
+                    // C3: treat a read timeout as idle and keep waiting; a paused or slow host is not fatal.
                 }
                 Err(_) => return Ok(Got::Closed),
             }
@@ -1057,10 +1151,9 @@ trait FailNext {
 }
 
 impl FailNext for Catchup {
-    /// A frame that does not decode is a protocol error: the loop closes, as for any.
+    /// A frame that does not decode is a protocol error: the loop closes, as for any (C13).
     fn next_failed(&mut self, detail: &str) -> Action {
-        self.state = rh_protocol::cursor::State::Failed;
-        Action::Close(detail.to_owned())
+        self.fail(detail.to_owned())
     }
 }
 
@@ -1087,6 +1180,7 @@ pub fn tail_live(words: &[&str], repo: &Path) -> u8 {
 )]
 fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
     let (mut run_dir, mut channel_c, mut canonical, mut from) = (None, false, false, 0u64);
+    let mut timeout = 60u64;
     let mut repo = repo.to_path_buf();
     let mut it = words.iter();
     while let Some(&w) = it.next() {
@@ -1111,19 +1205,23 @@ fn tail_live_inner(words: &[&str], repo: &Path) -> Result<u8, String> {
                     .parse()
                     .map_err(|_| format!("--from-seq {v} is not a number"))?;
             }
+            "--timeout" => {
+                let v = value()?;
+                timeout = v
+                    .parse()
+                    .map_err(|_| format!("--timeout {v} is not a number"))?;
+            }
             "--repo" => repo = PathBuf::from(value()?),
             flag if flag.starts_with("--") => {
                 return Err(format!(
-                    "tail --live: {flag} is not a live flag (--channel, --from-seq, --canonical)"
+                    "tail --live: {flag} is not a live flag (--channel, --from-seq, --canonical, --timeout)"
                 ));
             }
             dir => run_dir = Some(PathBuf::from(dir)),
         }
     }
     let run_dir = run_dir.ok_or("tail --live needs a run directory")?;
-    while !run_dir.join(rh_golden::stream::RUN_TOML).is_file() {
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    wait_run_toml(&run_dir, timeout)?;
     let run = RunToml::read(&run_dir).map_err(|e| e.0)?;
     let display = if canonical {
         None

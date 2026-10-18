@@ -8,8 +8,9 @@
 //! most 2 × the peak `LiveEdge::bytes()` the host reports, plus a stated allowance of 2 MiB for
 //! the allocator's residency. The maximum of three takes out the run-to-run noise of headless
 //! `VmHWM` (about 1.9 to 2.9 MB between identical runs: VER-SPR-026-TEST GAP-8, the Architect's
-//! ruling). A count of the window alone, or of the queue as canonical text, fails this bound (it
-//! understated the host by 5 and by about 2.8 times).
+//! ruling). The RSS bound is 2 × peak `bytes()` + 2 MiB, and exact accounting of window and queue
+//! is guaranteed deterministically by `rh-stream`'s accounting test
+//! (`deterministic_accounting_recounts_window_and_seal_queue_by_allocated`).
 #![allow(
     clippy::disallowed_types,
     clippy::disallowed_methods,

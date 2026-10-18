@@ -80,6 +80,10 @@ impl From<canonical::CanonicalError> for StreamError {
 
 /// The planted-control features compiled into this build (none in a real one; BCK-002 A-52).
 pub const MUTANTS: &[&str] = &[
+    #[cfg(feature = "mutant-bytes-queue-canonical")]
+    "mutant-bytes-queue-canonical",
+    #[cfg(feature = "mutant-bytes-window-only")]
+    "mutant-bytes-window-only",
     #[cfg(feature = "mutant-window-gap")]
     "mutant-window-gap",
 ];
