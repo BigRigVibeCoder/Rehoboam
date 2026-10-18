@@ -1,13 +1,15 @@
 //! GAP-1 (SPR-026; the Architect's ruling on VER-SPR-026-TEST): `LiveEdge::bytes()` counts the
 //! seal queue as well as the window, so it accounts for what the live edge holds.
 //!
-//! `solo` runs 1,500 sim-years at full speed twice: headless, then with `--socket` under (b),
-//! where the seal thread falls behind and its queue holds most of the run. The host's peak
-//! resident memory (`VmHWM`, polled from `/proc/<pid>/status` while it runs) rises over the
-//! headless run's by at most 2 × the peak `LiveEdge::bytes()` the host reports, plus a stated
-//! allowance of 2 MiB for the allocator's residency (headless `VmHWM` alone varies by about that
-//! much between identical runs). A count of the window alone, or of the queue as canonical text,
-//! fails this bound (it understated the host by 5 and by about 2.8 times).
+//! `solo` runs 1,500 sim-years at full speed: three times headless (in parallel; each process's
+//! `VmHWM` is its own), then with `--socket` under (b), where the seal thread falls behind and its
+//! queue holds most of the run. The host's peak resident memory (`VmHWM`, polled from
+//! `/proc/<pid>/status` while it runs) rises over the **highest of the three headless** runs by at
+//! most 2 × the peak `LiveEdge::bytes()` the host reports, plus a stated allowance of 2 MiB for
+//! the allocator's residency. The maximum of three takes out the run-to-run noise of headless
+//! `VmHWM` (about 1.9 to 2.9 MB between identical runs: VER-SPR-026-TEST GAP-8, the Architect's
+//! ruling). A count of the window alone, or of the queue as canonical text, fails this bound (it
+//! understated the host by 5 and by about 2.8 times).
 #![allow(
     clippy::disallowed_types,
     clippy::disallowed_methods,
@@ -71,7 +73,11 @@ fn measured(name: &str, extra: &[&str]) -> (u64, Vec<String>) {
 
 #[test]
 fn the_hosts_memory_over_headless_is_within_twice_the_live_edge_bytes() {
-    let (headless, _) = measured("hwm-headless", &[]);
+    let runs: Vec<_> = (0..3)
+        .map(|i| std::thread::spawn(move || measured(&format!("hwm-headless-{i}"), &[]).0))
+        .collect();
+    let all: Vec<u64> = runs.into_iter().map(|h| h.join().unwrap()).collect();
+    let headless = all.iter().copied().max().unwrap();
     // A linger of one second: the host is still alive, its high-water mark final, after the run.
     let (live, lines) = measured("hwm-live", &["--socket", "--linger", "1"]);
     let bytes: u64 = lines
@@ -85,7 +91,8 @@ fn the_hosts_memory_over_headless_is_within_twice_the_live_edge_bytes() {
     #[allow(clippy::cast_precision_loss, reason = "a printed ratio")]
     let ratio = rise as f64 / bytes as f64;
     println!(
-        "GAP-1: solo {YEARS} years at full speed: VmHWM headless {headless} B, with --socket \
+        "GAP-1: solo {YEARS} years at full speed: VmHWM headless {headless} B (the highest of \
+         {all:?}), with --socket \
          {live} B, rise {rise} B = {ratio:.2} x peak LiveEdge::bytes() {bytes} B; bound 2 x bytes \
          + {ALLOWANCE} B = {bound} B"
     );
