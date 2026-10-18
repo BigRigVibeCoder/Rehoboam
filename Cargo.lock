@@ -911,6 +911,7 @@ name = "rh-manifest"
 version = "0.0.0"
 dependencies = [
  "rh-core",
+ "rh-events",
  "rh-ids",
  "rh-registry",
  "saphyr-parser",
@@ -925,6 +926,7 @@ name = "rh-registry"
 version = "0.0.0"
 dependencies = [
  "rh-core",
+ "rh-events",
  "rh-ids",
  "serde",
  "toml",

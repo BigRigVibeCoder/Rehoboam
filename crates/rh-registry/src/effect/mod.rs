@@ -13,7 +13,8 @@
 //! - [`compile`] and [`compile_with`]: the front end (lexer, parser, checker, §2–§4, §10);
 //! - [`Compiled`]: one program, evaluated per binding; [`VerbStep`]: a step's verb evaluations;
 //! - [`succession`]: the protocol of §7.2 over a law's three programs;
-//! - [`host`]: the seam to the engine (Q9).
+//! - [`host`]: the seam to the engine (Q9); [`seam`]: the host over a system's `SystemView` and
+//!   `StepCtx`, and an action's `Command` (T-07).
 //!
 //! Plane A, float-free, no I/O, `BTreeMap`/`BTreeSet`/`Vec` only. The reference implementation is
 //! `specs/registry/effect_ref.py`; the golden cases (`effect_language_golden_v0.toml`) are the
@@ -29,6 +30,7 @@ pub mod host;
 mod lex;
 mod parse;
 mod prelude;
+pub mod seam;
 pub mod succession;
 pub mod value;
 

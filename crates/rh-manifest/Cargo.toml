@@ -31,3 +31,7 @@ schemars = "=1.2.3"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 toml = "=1.1.8"
+
+[dev-dependencies]
+# SPR-017 T-07: tests/effect_host.rs drafts the verb's event on an rh-core stub world.
+rh-events = { version = "0.0.0", path = "../rh-events" }

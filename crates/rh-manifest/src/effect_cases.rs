@@ -638,6 +638,29 @@ impl FixtureWorld {
         Ok(world)
     }
 
+    /// The rows of `kind`, by id: each row's cells by column (a missing cell is a missing read).
+    #[must_use]
+    pub fn rows(&self, kind: KindId) -> Option<&BTreeMap<u64, BTreeMap<ColumnId, Value>>> {
+        self.tables.get(&kind)
+    }
+
+    /// The kinds the world has rows of, in id order.
+    pub fn kinds(&self) -> impl Iterator<Item = KindId> + '_ {
+        self.tables.keys().copied()
+    }
+
+    /// `days_per_year`.
+    #[must_use]
+    pub fn days_per_year(&self) -> i64 {
+        self.days_per_year
+    }
+
+    /// The parameter values the world sets for `system`.
+    #[must_use]
+    pub fn params_of(&self, system: &str) -> BTreeMap<String, Value> {
+        self.params.get(system).cloned().unwrap_or_default()
+    }
+
     /// The world as a [`Host`] over `env`.
     #[must_use]
     pub fn host<'a>(&'a self, env: &'a Env) -> FixtureHost<'a> {

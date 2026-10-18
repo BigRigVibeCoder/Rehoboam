@@ -24,5 +24,7 @@ mutant-effect = []
 rh-core = { version = "0.0.0", path = "../rh-core" }
 # SPR-011 T-04: WorldSpec names its systems by SystemId.
 rh-ids = { version = "0.0.0", path = "../rh-ids" }
+# SPR-017 T-07: effect::seam gives a converted command the verb's DraftRef as its cause.
+rh-events = { version = "0.0.0", path = "../rh-events" }
 serde = { version = "=1.0.229", features = ["derive"] }
 toml = "=1.1.8"
