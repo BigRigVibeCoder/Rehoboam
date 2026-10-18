@@ -37,8 +37,27 @@ const TAG_EVENT_HASH: u64 = rh_ids::rng::tag("rehoboam/rh-events/log-hash/v1");
 /// An earlier draft of the same step: the `n`-th event the step emitted, counting from 0. A step
 /// cannot know the `EventId` of an event it emits (ids are assigned at the merge), so it names it
 /// by this reference; the merge replaces it with the id (`rh-core`).
+///
+/// Opaque (the Tester's GAP-1, SPR-014): a system gets one only from `StepCtx::emit`, never from
+/// an integer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DraftRef(pub usize);
+pub struct DraftRef(usize);
+
+impl DraftRef {
+    /// The engine's constructor: `rh-core` numbers a step's drafts at `emit`, and `rh-snapshot`
+    /// restores a queued command's draft from a keyframe. Not for systems.
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn from_index(index: usize) -> Self {
+        Self(index)
+    }
+
+    /// The draft's position among its step's emitted events, counting from 0.
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self.0
+    }
+}
 
 // `EventRef`'s text is shared with SPR-020 and kept identical (Architect, SPR-014): its methods
 // live here, and the slot's opacity is documented on the type.
@@ -494,7 +513,7 @@ mod tests {
             0,
             9,
             "S7.vows",
-            EventDraft::new("VOW_VOIDED").after(super::DraftRef(0)),
+            EventDraft::new("VOW_VOIDED").after(super::DraftRef::from_index(0)),
         );
         assert!(matches!(local, Err(EventError::Unresolved { .. })));
     }

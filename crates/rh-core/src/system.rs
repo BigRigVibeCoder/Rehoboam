@@ -783,7 +783,7 @@ impl<'a> StepCtx<'a> {
         if spec
             .cause
             .draft()
-            .is_some_and(|d| d.0 >= self.out.events.len())
+            .is_some_and(|d| d.index() >= self.out.events.len())
         {
             return Err(self.event_error(
                 "a timer names a draft as its cause which this step has not emitted".to_owned(),
@@ -884,7 +884,7 @@ impl<'a> StepCtx<'a> {
             });
         }
         let emitted = self.out.events.len();
-        let unknown_draft = |r: EventRef| r.draft().is_some_and(|d| d.0 >= emitted);
+        let unknown_draft = |r: EventRef| r.draft().is_some_and(|d| d.index() >= emitted);
         if unknown_draft(command.cause) {
             return Err(self.event_error(format!(
                 "command {} names a draft as its cause which this step has not emitted",
@@ -971,14 +971,15 @@ impl<'a> StepCtx<'a> {
             });
         }
         let index = self.out.events.len();
-        if let Some(r) = draft.local_causes.iter().find(|r| r.0 >= index) {
+        if let Some(r) = draft.local_causes.iter().find(|r| r.index() >= index) {
             return Err(self.event_error(format!(
                 "event {} names draft {} as its cause, which is not an earlier draft of this step",
-                draft.kind, r.0
+                draft.kind,
+                r.index()
             )));
         }
         self.out.events.push(draft);
-        Ok(DraftRef(index))
+        Ok(DraftRef::from_index(index))
     }
 }
 

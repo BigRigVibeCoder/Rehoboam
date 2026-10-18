@@ -246,7 +246,7 @@ fn synthetic_state() -> rh_core::state::EngineState {
                         "X1.vital",
                         Some(EventId::from_raw(12)),
                         vec![1, -2],
-                        Some(DraftRef(0)),
+                        Some(DraftRef::from_index(0)),
                     ),
                     command(8, 8, "X5.war", None, vec![], None),
                 ],

@@ -273,7 +273,7 @@ fn send_step(
     };
     if v.read("send.bad")?[0] == 1 {
         let none = || Arg::Event(EventRef::None);
-        let draft = EventRef::Draft(rh_events::DraftRef(9));
+        let draft = EventRef::Draft(rh_events::DraftRef::from_index(9));
         let refused = [
             ("arity", c.submit(req(vec![Arg::Int(1)], EventRef::None))),
             (

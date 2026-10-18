@@ -1387,7 +1387,7 @@ impl Engine {
             // INVARIANT: `StepCtx::emit` admits only references to earlier drafts.
             draft
                 .causes
-                .extend(local.iter().filter_map(|r| ids.get(r.0).copied()));
+                .extend(local.iter().filter_map(|r| ids.get(r.index()).copied()));
             let id = self
                 .events
                 .append(t.minutes(), phase.index(), e.id, draft)
@@ -1399,7 +1399,7 @@ impl Engine {
             tally.events += 1;
         }
         // INVARIANT: `StepCtx` admits only references to drafts this step already emitted.
-        let resolve = |r: rh_events::EventRef| r.resolved(|d| ids.get(d.0).copied());
+        let resolve = |r: rh_events::EventRef| r.resolved(|d| ids.get(d.index()).copied());
         for (spec, purpose) in out.timers {
             self.agenda.insert(
                 spec.time,

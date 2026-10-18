@@ -199,7 +199,7 @@ fn command_rows(commands: &CommandQueuesState) -> Vec<Vec<u8>> {
                         .map(|a| a.encoded())
                         .collect::<Vec<_>>(),
                 )
-                .opt_u64(queued.cause_draft.map(|d| d.0 as u64));
+                .opt_u64(queued.cause_draft.map(|d| d.index() as u64));
             w.0
         })
         .collect()
@@ -588,7 +588,9 @@ impl Decoder<'_> {
                 })
                 .collect();
             let draft = if r.flag()? {
-                Some(DraftRef(usize::try_from(r.u64()?).unwrap_or(usize::MAX)))
+                Some(DraftRef::from_index(
+                    usize::try_from(r.u64()?).unwrap_or(usize::MAX),
+                ))
             } else {
                 None
             };

@@ -877,6 +877,10 @@ fn draws(
     if v.read("kind.case")?[0] == 2 {
         let _ = c.stream(&Kp::World, person)?;
     }
+    if v.read("kind.case")?[0] == 3 {
+        // The Tester's K4: an event id has no EntityKind, so a kind-declared purpose refuses it.
+        let _ = c.rng(&Kp::Person, rh_ids::EventId::from_raw(0), 0)?;
+    }
     Ok(())
 }
 
@@ -924,6 +928,10 @@ fn a_draw_of_the_wrong_entity_kind_is_refused_by_name() {
     assert_eq!(
         kind_run(2).0.unwrap_err().to_string(),
         "X1.kinds drew under purpose by_world, whose [[rng]] key is a world, with a person (BCK-002 A-50)"
+    );
+    assert_eq!(
+        kind_run(3).0.unwrap_err().to_string(),
+        "X1.kinds drew under purpose by_person, whose [[rng]] key is a person, with a event (BCK-002 A-50)"
     );
     println!("A-50: a draw of the wrong entity kind is refused by name");
 }
