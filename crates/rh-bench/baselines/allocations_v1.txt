@@ -6,29 +6,29 @@ toolchain llvm 22.1.6
 toolchain host x86_64-unknown-linux-gnu
 toolchain libc glibc 2.39
 window smoke seed 1 warm-up 2 years, measured 1 year(s), no inputs
-budget threads 1 ticks 8801 allocations 78784 growths 855 shrinks 0 max_per_tick 90
-budget threads 4 ticks 8801 allocations 88274 growths 855 shrinks 0 max_per_tick 116
+budget threads 1 ticks 8801 allocations 78826 growths 11 shrinks 0 max_per_tick 90
+budget threads 4 ticks 8801 allocations 88316 growths 11 shrinks 0 max_per_tick 116
 window-rungs solo,household,hamlet warm-up 2 years, measured 1 year(s), no inputs, manifest seeds
 rung solo seed 1 threads 1 ticks 360 allocations 12 growths 0 shrinks 0 max_per_tick 1
-rung household seed 7 threads 1 ticks 360 allocations 34 growths 2 shrinks 0 max_per_tick 17
-rung hamlet seed 42 threads 1 ticks 360 allocations 142 growths 10 shrinks 0 max_per_tick 15
+rung household seed 7 threads 1 ticks 360 allocations 34 growths 1 shrinks 0 max_per_tick 17
+rung hamlet seed 42 threads 1 ticks 360 allocations 142 growths 8 shrinks 0 max_per_tick 15
 site Activity | level dispatch | allocations 138 growths 0
-site Activity | merge | allocations 1058 growths 489
+site Activity | merge | allocations 1100 growths 0
 site Activity | step X4.smoke_estate | allocations 444 growths 0
 site Activity | step X7.smoke_market | allocations 3846 growths 0
-site Agenda | merge | allocations 48 growths 24
+site Agenda | merge | allocations 48 growths 0
 site Agenda | step X6.smoke_chronicle | allocations 60 growths 0
 site Bookkeeping | between levels | allocations 2555 growths 0
 site Bookkeeping | phase start (timers due) | allocations 59052 growths 0
 site Contagion | step X4.smoke_estate | allocations 261 growths 0
-site Environment | merge | allocations 455 growths 242
+site Environment | merge | allocations 455 growths 0
 site Environment | step X1.smoke_weather | allocations 8976 growths 0
 site Environment | step X7.smoke_market | allocations 1059 growths 0
 site Military | merge | allocations 4 growths 0
 site Military | step X5.smoke_polity | allocations 48 growths 0
-site Polity | merge | allocations 2 growths 1
+site Polity | merge | allocations 2 growths 0
 site Polity | step X5.smoke_polity | allocations 2 growths 0
 site Production | step X2.smoke_harvest | allocations 12 growths 0
-site Vital | merge | allocations 224 growths 89
+site Vital | merge | allocations 224 growths 1
 site Vital | phase start (timers due) | allocations 126 growths 0
 site Vital | step X3.smoke_vital | allocations 414 growths 10

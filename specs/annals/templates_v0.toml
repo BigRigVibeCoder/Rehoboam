@@ -14,7 +14,7 @@
 
 [templates]
 format = "rehoboam/annals/templates/v0"
-version = "0.3.0"                        # bumped with any change to a text, a slot, a layout or a label
+version = "0.4.0"                        # bumped with any change to a text, a slot, a layout or a label
 # Every kind an annal tells. An admitted event of another kind is counted in the sidecar's trailer
 # and not rendered (§5), but it may be named as a cause through a [[label]] below (§3). Grouped as
 # the WP names them: births, marriages, deaths, successions, claims and feuds.
@@ -243,19 +243,21 @@ kind = "SUCCEED"
 text = "On {date}, {actor} succeeded {target}."
 label = "the succession of {actor}"
 
+# No tier word: M7 0.6.0 emits the crisis for a sovereign title and for a vassal joining its liege's
+# interregnum (REV-WAVE7 K2), and the event carries no tier (AN-1; annals_v0.md §3 rule 2).
 [[template]]
 id = "interregnum.after"
-version = 1
+version = 2
 kind = "INTERREGNUM_CRISIS"
 when = { edge = "triggered" }
-text = "On {date}, after {cause.triggered}, the succession to a sovereign title found no clear heir, and an interregnum began."
+text = "On {date}, after {cause.triggered}, the succession to a title found no clear heir, and an interregnum began."
 label = "the interregnum"
 
 [[template]]
 id = "interregnum"
-version = 1
+version = 2
 kind = "INTERREGNUM_CRISIS"
-text = "On {date}, the succession to a sovereign title found no clear heir, and an interregnum began."
+text = "On {date}, the succession to a title found no clear heir, and an interregnum began."
 label = "the interregnum"
 
 [[template]]

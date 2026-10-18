@@ -25,7 +25,7 @@ use crate::bisect::{BisectArgs, Process, bisect};
 use rh_snapshot::hash::{Plane, empty_plane_hash};
 
 use crate::ladder::{Ladder, Rung, RungKind, compare};
-use crate::run::{Error, Inject, Outcome, RunArgs, run_reporting};
+use crate::run::{Error, Inject, Outcome, RunArgs};
 use crate::vitals::Vitals;
 
 /// Exit code: success, no divergence.
@@ -151,6 +151,7 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--ladder" => {
                 args.rung = RungKind::from_name(value)
                     .ok_or_else(|| bad("--ladder is yearly or monthly"))?;
+                args.rung_set = true;
             }
             "--out" => out = Some(PathBuf::from(value)),
             "--journal" => journal = Some(PathBuf::from(value)),
@@ -158,10 +159,17 @@ pub fn parse_run(words: &[String], repo: &Path) -> Result<RunArgs, Error> {
             "--resume" => args.resume = Some(PathBuf::from(value)),
             "--run-dir" => args.run_dir = Some(PathBuf::from(value)),
             "--inputs" => args.inputs = Some(PathBuf::from(value)),
+            "--test-pace-ms" => args.pace_ms = Some(number("--test-pace-ms")?),
+            "--test-poison" => {
+                args.poison = Some(
+                    i64::try_from(number("--test-poison")?)
+                        .map_err(|_| bad("--test-poison is too large"))?,
+                );
+            }
             "--test-stall" => {
                 args.stall = Some(
                     crate::stream::Stall::parse(value)
-                        .ok_or_else(|| bad("--test-stall is seal:YEAR:FILE or sealed:YEAR"))?,
+                        .ok_or_else(|| bad("--test-stall is seal:YEAR:FILE, sealed:YEAR, mid:TICK or seal:YEAR:FILE+mid:TICK"))?,
                 );
             }
             "--dump" => {
@@ -218,9 +226,21 @@ pub fn run_smoke(words: &[String], repo: &Path) -> u8 {
 /// and reports. Returns the exit code.
 #[must_use]
 pub fn run_world(world: &str, words: &[String], repo: &Path) -> u8 {
+    run_world_live(world, words, repo, None)
+}
+
+/// [`run_world`] serving a live edge (`rh-cli run … --socket`; SPR-026): `live` is built by the
+/// host from the run's arguments.
+#[must_use]
+pub fn run_world_live(
+    world: &str,
+    words: &[String],
+    repo: &Path,
+    live: Option<crate::run::LiveHost>,
+) -> u8 {
     let result = parse_run(words, repo).and_then(|mut args| {
         world.clone_into(&mut args.world);
-        run_reporting(&args).map(|o| (args, o))
+        crate::run::run_live(&args, live).map(|o| (args, o))
     });
     match result {
         Ok((args, outcome)) => {
@@ -279,7 +299,7 @@ pub fn run_world(world: &str, words: &[String], repo: &Path) -> u8 {
                     println!(
                         "{world}: {} {} rungs to year {} at {} thread(s){last}; ladder {}",
                         ladder.rungs.len(),
-                        args.rung.name(),
+                        ladder.header.rung.name(),
                         args.years,
                         args.threads,
                         args.out.display()
@@ -518,6 +538,9 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
         match w.as_str() {
             "--canonical" => args.canonical = true,
             "--wait" => args.wait = true,
+            "--timeout" => {
+                args.timeout = Some(value()?.parse().map_err(|_| bad("--timeout is a number"))?);
+            }
             "--from-seq" => {
                 args.from_seq = value()?
                     .parse()
@@ -528,6 +551,12 @@ fn parse_tail(words: &[String], repo: &Path) -> Result<crate::tail::TailArgs, Er
             }
             "--follow" => args.follow = Some(value()?.clone()),
             "--kind" => args.kinds.push(value()?.clone()),
+            // SPR-026 T-04: the sealed channel C.
+            "--channel" => match value()?.as_str() {
+                "A" => args.channel_c = false,
+                "C" => args.channel_c = true,
+                other => return Err(bad(&format!("--channel {other}: A or C"))),
+            },
             "--repo" => args.repo = PathBuf::from(value()?),
             flag if flag.starts_with("--") => return Err(bad(&format!("unknown flag {flag}"))),
             dir if run_dir.is_none() => run_dir = Some(PathBuf::from(dir)),

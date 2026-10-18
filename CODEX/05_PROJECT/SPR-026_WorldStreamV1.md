@@ -2,14 +2,14 @@
 id: SPR-026
 title: "World Stream v1: the live edge over a local socket, viewer cursors and rh-protocol (P1.17, part a)"
 type: how-to
-status: APPROVED
+status: CLOSED
 owner: architect
 agents: [coder, tester]
 tags: [sprint]
-related: [BCK-002, PRJ-002, REV-SPR-026, SPR-013, SPR-014, SPR-020, SPR-027, SPR-030, ADR-0024, ADR-0030, ADR-0031, ADR-0035]
+related: [BCK-002, PRJ-002, REV-SPR-026, SPR-013, SPR-014, SPR-020, SPR-027, SPR-030, ADR-0024, ADR-0030, ADR-0031, ADR-0035, VER-SPR-026]
 created: 2026-10-17
-updated: 2026-10-17
-version: 0.1.0
+updated: 2026-10-18
+version: 1.0.0
 ---
 
 > **BLUF:** Builds the live edge of IF-0 (`specs/stream/wire_v1.md`, PR #60). This document calls it World Stream v1. The sprint delivers:
@@ -127,7 +127,7 @@ version: 0.1.0
   - **The existing lint gates hold over the real crate:**
     - `protocol-leaf` and the plane-A closure are green on the workspace;
     - their three fixtures stay red.
-- **Status:** [ ] not started
+- **Status:** [x] done (branch `sprint/SPR-026-stream-v1`; awaiting the Tester)
 
 #### T-02: `rh-stream`'s `LiveEdge`: the writer never waits (§6.1, §6.2; R2, R3, R4, R16, R17, R18, R22; A-42)
 - **Deliverable:** `LiveEdge` in `rh-stream`.
@@ -163,7 +163,7 @@ version: 0.1.0
   - **The `window-gap` control:** a writer that moves `w0` before the dropped year is on disk fails the I1 check with `I1 broken`.
   - **Headless runs are unchanged:** V-PERF-04 and V-PERF-11 stay green on every rung, and no `LiveEdge` is built.
   - **`loom`** is recommended, not required (R3, R22), and needs the Architect's crate review before it is added.
-- **Status:** [ ] not started
+- **Status:** [x] done (branch `sprint/SPR-026-stream-v1`; awaiting the Tester)
 
 #### T-03: The host: `serve.rs` and `A.sock` (§1, §4, §6.2; R11, R12, R13, R14, R20, R21, R24)
 - **Deliverable:** `rh-cli run <world> --socket`, with every socket in `crates/rh-cli/src/serve.rs`:
@@ -204,7 +204,7 @@ version: 0.1.0
   - **Locking:** a second host on the same run directory is refused by the lock, and a stale socket left by a killed host is removed by the next one.
   - **Abort:** a planted poisoned engine ends every subscription with `stream.end{aborted}`, and the unsealed year stays unsealed.
   - **Lints:** `network` and `network-reexport` are green on the workspace and red on their existing fixtures.
-- **Status:** [ ] not started
+- **Status:** [x] done (branch `sprint/SPR-026-stream-v1`; awaiting the Tester)
 
 #### T-04: Channel C live (§6.4; R5, R13, R20)
 - **Deliverable:** `rh-cli sift <run-dir> --follow --socket`.
@@ -221,7 +221,7 @@ version: 0.1.0
   - **Isolation:**
     - the state ladder is unchanged (V-PLN-04);
     - while only `run --socket` serves, no `C.sock` exists: the engine process never serves channel C.
-- **Status:** [ ] not started
+- **Status:** [x] done (branch `sprint/SPR-026-stream-v1`; awaiting the Tester)
 
 #### T-05: Viewers: `rh-cli tail --live` and `--to-seq`, and the V-STR probes (§6.3, §9; R8, R15, R21, R23)
 - **Deliverable:**
@@ -262,7 +262,7 @@ version: 0.1.0
     - the host's live bytes, counted with SPR-009's counting allocator.
 
     No gate is applied here (R23).
-- **Status:** [ ] not started
+- **Status:** [x] done (branch `sprint/SPR-026-stream-v1`; awaiting the Tester)
 
 #### T-06: Gates, docs and CI time
 - **Deliverable:**
@@ -277,7 +277,7 @@ version: 0.1.0
   - Every gate is green, and each new gate is in exactly one part.
   - The `check_report.md` of both parts and the CI times are in the PR: each part at 12 minutes or less, 15 at most.
   - If `hamlet` moved to the nightly tier, the nightly runs it on the PR head before the audit.
-- **Status:** [ ] not started
+- **Status:** [x] done (branch `sprint/SPR-026-stream-v1`; awaiting the Tester)
 
 ## Director items, and what changes under each alternative
 

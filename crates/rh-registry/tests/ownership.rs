@@ -101,6 +101,7 @@ fn two_owners_and_plane_leaks_are_found() {
         rng_keys: vec![],
         emits: vec![],
         from_manifest: vec![],
+        envelope: std::collections::BTreeMap::new(),
     };
     let t = Ownership::build(
         &[

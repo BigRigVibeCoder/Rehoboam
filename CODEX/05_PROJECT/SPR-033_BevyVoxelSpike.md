@@ -2,7 +2,7 @@
 id: SPR-033
 title: "The voxel viewer's first sprint, in two stages: (a) the Bevy-free core: the workspace, the binary greedy mesher, hamlet's terrain from a written spec with a Python reference, the isolation lint and the viewer's CI job; (b) the Bevy app: the pin and toolchain, the cameras, the render-work level-of-detail controller, the HUD, the bench and the live panel over IF-0"
 type: how-to
-status: PLANNING
+status: APPROVED
 owner: architect
 agents: [coder, tester]
 tags: [sprint, observability, stream]

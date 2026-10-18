@@ -213,10 +213,29 @@ pub struct DeclaredCommand {
     pub purpose: Option<String>,
 }
 
-/// One emitted event kind, from `[[emits]]` (SPR-006).
+/// One emitted event kind, from `[[emits]]` (SPR-006), with its envelope declaration (SPR-020
+/// T-03; envelope v0 §2): `lint_odd.py` checks the declaration's values against the Registry.
 #[derive(Debug, Deserialize)]
 struct DeclaredEmit {
     kind: String,
+    #[serde(default)]
+    roles: Vec<String>,
+    #[serde(default)]
+    motives: Vec<String>,
+    #[serde(default)]
+    snapshots: Vec<DeclaredSnapshot>,
+}
+
+/// One `[[emits]] snapshots` entry (envelope v0 §4).
+#[derive(Debug, Deserialize)]
+struct DeclaredSnapshot {
+    attr: String,
+    of: String,
+    #[serde(default)]
+    partner: Option<String>,
+    from: String,
+    #[serde(default, rename = "type")]
+    ty: Option<String>,
 }
 
 /// `[initialization]`: only the manifest sections genesis initialises from (SPR-012 T-06).
@@ -275,6 +294,8 @@ pub struct SystemSpec {
     pub rng_keys: Vec<(String, String)>,
     /// The event kinds it emits (`[[emits]] kind`), in spec order (SPR-006).
     pub emits: Vec<String>,
+    /// Each kind's envelope declaration (SPR-020 T-03).
+    pub envelope: BTreeMap<String, rh_core::ownership::EmitDecl>,
     /// The manifest sections `[initialization] from_manifest` names, in spec order: genesis
     /// writes the system's columns from those sections only (SPR-011 ruling 10; SPR-012 T-06).
     pub from_manifest: Vec<String>,
@@ -308,7 +329,29 @@ impl SystemSpec {
             schedule: f.schedule.into_iter().map(|b| (b.pulse, b.phase)).collect(),
             commands: f.commands,
             applies: f.applies,
-            emits: f.emits.into_iter().map(|e| e.kind).collect(),
+            emits: f.emits.iter().map(|e| e.kind.clone()).collect(),
+            envelope: f
+                .emits
+                .into_iter()
+                .map(|e| {
+                    let decl = rh_core::ownership::EmitDecl {
+                        roles: e.roles,
+                        motives: e.motives,
+                        snapshots: e
+                            .snapshots
+                            .into_iter()
+                            .map(|x| rh_core::ownership::SnapshotDecl {
+                                attr: x.attr,
+                                of: x.of,
+                                partner: x.partner,
+                                from: x.from,
+                                ty: x.ty,
+                            })
+                            .collect(),
+                    };
+                    (e.kind, decl)
+                })
+                .collect(),
             from_manifest: f.initialization.from_manifest,
         })
     }
@@ -363,6 +406,7 @@ impl SystemSpec {
                 .collect(),
             emits: self.emits.clone(),
             from_manifest: self.from_manifest.clone(),
+            envelope: self.envelope.clone(),
             applies: self.applies.iter().map(spec_apply).collect(),
             read_uses: Vec::new(),
             outcome_timers: self
@@ -497,6 +541,62 @@ pub fn parse_registry_system_ids(name: &str, text: &str) -> Result<BTreeSet<Stri
     }
 }
 
+/// The Registry's envelope vocabulary (`[event_roles]`, `[motive_edges]`, `[attributes]`) as
+/// registration and `emit` read it (SPR-020 T-01; envelope v0 §8): the compiled table the host
+/// hands to [`Ownership::spec_table_with`]. The typed loader (`rh-manifest`'s `Registry`) refuses
+/// a malformed section first; this parser reads only what plane A needs.
+///
+/// # Errors
+/// The text is not TOML, a section is missing or not a list of strings, or an attribute has no
+/// known `type` (or an enum no `values`).
+pub fn parse_registry_table(
+    name: &str,
+    text: &str,
+) -> Result<rh_core::ownership::RegistryTable, String> {
+    use rh_core::ownership::{AttributeDomain, RegistryTable};
+    let table: toml::Table = toml::from_str(text).map_err(|e| format!("{name}: {e}"))?;
+    let ids = |section: &str| -> Result<Vec<String>, String> {
+        table
+            .get(section)
+            .and_then(|v| v.get("ids"))
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| format!("{name}: no [{section}] ids"))?
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| format!("{name}: [{section}] holds a non-string id"))
+            })
+            .collect()
+    };
+    let mut attributes = BTreeMap::new();
+    if let Some(toml::Value::Table(attrs)) = table.get("attributes") {
+        for (attr, def) in attrs {
+            let ty = def.get("type").and_then(toml::Value::as_str);
+            let domain = match ty {
+                Some("q8_8") => AttributeDomain::Q8_8,
+                Some("bool") => AttributeDomain::Bool,
+                Some("int") => AttributeDomain::Int,
+                Some("enum") => AttributeDomain::Enum(
+                    def.get("values")
+                        .and_then(toml::Value::as_array)
+                        .map(Vec::len)
+                        .ok_or_else(|| {
+                            format!("{name}: attributes.{attr}: an enum without values")
+                        })?,
+                ),
+                other => return Err(format!("{name}: attributes.{attr}: type {other:?}")),
+            };
+            attributes.insert(attr.clone(), domain);
+        }
+    }
+    Ok(RegistryTable {
+        event_roles: ids("event_roles")?,
+        motives: ids("motive_edges")?,
+        attributes,
+    })
+}
+
 /// The access a system declares: what it reads and what it writes. A stub of `rh-core`'s
 /// `AccessSpec` (SPR-005 adds lifecycle commands, events and lags).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -628,6 +728,17 @@ impl Ownership {
     /// The table as data for `rh-core`'s registration (`rh_core::register::register`).
     #[must_use]
     pub fn spec_table(&self) -> rh_core::ownership::SpecTable {
+        self.spec_table_with(rh_core::ownership::RegistryTable::default())
+    }
+
+    /// The spec table with the Registry's envelope vocabulary ([`parse_registry_table`]), which
+    /// registration compares the skeletons' role constants with and `emit` checks drafts against
+    /// (SPR-020 T-01, T-03).
+    #[must_use]
+    pub fn spec_table_with(
+        &self,
+        registry: rh_core::ownership::RegistryTable,
+    ) -> rh_core::ownership::SpecTable {
         let columns: BTreeMap<String, OwnedColumn> = self
             .specs
             .values()
@@ -644,6 +755,7 @@ impl Ownership {
                 .iter()
                 .filter_map(|(c, o)| Some((c.clone(), o.values.as_ref()?.len())))
                 .collect(),
+            registry,
         }
     }
 

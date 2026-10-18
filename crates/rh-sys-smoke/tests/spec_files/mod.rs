@@ -32,3 +32,12 @@ pub fn registry_system_ids(path: &Path) -> Result<BTreeSet<String>, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     parse_registry_system_ids(&path.display().to_string(), &text)
 }
+
+/// The Registry's envelope vocabulary at `path`, compiled for plane A (SPR-020 T-01).
+///
+/// # Errors
+/// The file cannot be read or does not hold the sections.
+pub fn registry_table(path: &Path) -> Result<rh_core::ownership::RegistryTable, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    rh_registry::ownership::parse_registry_table(&path.display().to_string(), &text)
+}

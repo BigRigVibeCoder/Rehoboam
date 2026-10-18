@@ -24,23 +24,49 @@ Plane hash
 ``D_CHUNK``, ``D_TABLE``, ``D_PLANE`` are ``b"rehoboam/rh-snapshot/hash/v1/"`` followed by
 ``chunk``, ``table`` and ``plane``.
 
-Usage:  python -I bin/gen_hash_golden.py           (rewrite the golden file)
+Event digest v2 (``rehoboam/rh-events/log-hash/v2``; ``specs/chronicle/envelope_v0.md`` §6; SPR-020
+T-02). ``crates/rh-events/tests/golden/event_digest_v2.txt``: every event's ``Event::digest`` and
+the ``EventLog::hash`` of the events appended in order, from the SplitMix64 scalar hash
+(``h64_words``, ``h64_bytes``, ``tag``; layout in ``crates/rh-ids/src/rng.rs``), re-implemented
+here. The digest's words, little-endian ``u64`` through ``h64_words(T, words)`` with
+``T = tag("rehoboam/rh-events/log-hash/v2")`` and ``h(name) = h64_bytes(T, name)``::
+
+    id, tick, phase, h(emitter), h(kind),
+    has_place, place (0 when absent), magnitude (i32 sign-extended), secrecy, origin,
+    n_roles,     then per role row:  role, entity_kind_tag, entity_raw
+    n_snapshots, then per snapshot:  h(attr), kind_tag, raw, has_partner, partner_kind_tag,
+                                     partner_raw (0, 0 when absent), value (i32 sign-extended)
+    n_causes,    then per edge:      cause_id, kind, has_motive, h(motive) (0 when absent),
+                                     weight (i16 sign-extended), evidence
+    n_payload,   then the payload words
+
+The log: ``running = h64_words(T, [running, digest])`` per event from 0, and
+``hash = h64_words(T, [n, running])``.
+
+Usage:  python -I bin/gen_hash_golden.py           (rewrite the golden files)
         python -I bin/gen_hash_golden.py --check   (exit 1 if the committed file differs)
         python -I bin/gen_hash_golden.py --check --golden PATH   (check another file; the positive
                                                                   control uses a stale fixture)
+        python -I bin/gen_hash_golden.py --check --events-golden PATH   (likewise, the event
+                                                                  digest file)
 Exit:   0 ok, 1 stale golden file, 2 the reference failed its own known-answer self-test.
 Standard library only (GOV-003 §3).
 """
 
 import argparse
+import copy
 import itertools
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 GOLDEN = (
     Path(__file__).resolve().parent.parent
     / "crates/rh-snapshot/tests/golden/rh_snapshot_hash_v1.txt"
+)
+EVENTS_GOLDEN = (
+    Path(__file__).resolve().parent.parent / "crates/rh-events/tests/golden/event_digest_v2.txt"
 )
 EXIT_OK = 0
 EXIT_STALE = 1
@@ -452,6 +478,14 @@ def _i64(x: int) -> bytes:
     return (x & MASK64).to_bytes(8, "little")
 
 
+def _i32(x: int) -> bytes:
+    return (x & MASK32).to_bytes(4, "little")
+
+
+def _i16(x: int) -> bytes:
+    return (x & 0xFFFF).to_bytes(2, "little")
+
+
 def _str(text: str) -> bytes:
     b = text.encode()
     return _u32(len(b)) + b
@@ -523,10 +557,23 @@ def engine_rows(st: State) -> TableRows:
         + _u8(e["phase"])
         + _str(e["emitter"])
         + _str(e["kind"])
-        + _u32(len(e["subjects"]))
-        + b"".join(_entity(x) for x in e["subjects"])
+        + (_u8(0) if e["place"] is None else _u8(1) + _u32(e["place"]))
+        + _i32(e["magnitude"])
+        + _u8(e["secrecy"])
+        + _u8(e["origin"])
+        + _u8(e["admitted"])
+        + _u32(len(e["roles"]))
+        + b"".join(_u8(r) + _entity(x) for r, x in e["roles"])
+        + _u32(len(e["snapshots"]))
+        + b"".join(
+            _str(a) + _entity(x) + (_u8(0) if p is None else _u8(1) + _entity(p)) + _i32(v)
+            for a, x, p, v in e["snapshots"]
+        )
         + _u32(len(e["causes"]))
-        + b"".join(_u64(c) for c in e["causes"])
+        + b"".join(
+            _u64(c) + _u8(k) + (_u8(0) if m is None else _u8(1) + _str(m)) + _i16(w) + _i16(ev)
+            for c, k, m, w, ev in e["causes"]
+        )
         + _list_i64(e["payload"])
         for e in ev["events"]
     ]
@@ -653,8 +700,14 @@ SYNTHETIC_STATE: State = {
                 "phase": 4,
                 "emitter": "X1.vital",
                 "kind": "DEATH",
-                "subjects": [("person", 7)],
-                "causes": [3],
+                "place": None,
+                "magnitude": 0,
+                "secrecy": 0,
+                "origin": 0,
+                "admitted": 1,
+                "roles": [(1, ("person", 7))],
+                "snapshots": [],
+                "causes": [(3, 1, None, 0, 256)],
                 "payload": [1],
             },
             {
@@ -663,8 +716,17 @@ SYNTHETIC_STATE: State = {
                 "phase": 9,
                 "emitter": "X4.census",
                 "kind": "CENSUS",
-                "subjects": [],
-                "causes": [],
+                "place": 12,
+                "magnitude": -7,
+                "secrecy": 2,
+                "origin": 3,
+                "admitted": 0,
+                "roles": [(0, ("person", 9)), (2, ("household", 3))],
+                "snapshots": [
+                    ("stress", ("person", 9), None, 18_000),
+                    ("trust", ("person", 9), ("person", 7), -300),
+                ],
+                "causes": [(3, 3, "GRIEF_FOR", -120, 40), (18, 1, None, 0, 256)],
                 "payload": [-1, 40],
             },
         ],
@@ -812,6 +874,297 @@ def lines_planes() -> list[str]:
     return out
 
 
+# --- Event digest v2 (SPR-020 T-02) ------------------------------------------------------------
+
+SM_GAMMA = 0x9E37_79B9_7F4A_7C15
+SM_MUL_1 = 0xBF58_476D_1CE4_E5B9
+SM_MUL_2 = 0x94D0_49BB_1331_11EB
+# The first output of SplitMix64 from state 0 (Vigna, splitmix64.c): mix(GAMMA).
+KAT_SPLITMIX64_SEED0 = 0xE220_A839_7B1D_CDAF
+
+
+def sm_mix(z: int) -> int:
+    """The SplitMix64 output function (Steele, Lea and Flood 2014)."""
+    z = ((z ^ (z >> 30)) * SM_MUL_1) & MASK64
+    z = ((z ^ (z >> 27)) * SM_MUL_2) & MASK64
+    return z ^ (z >> 31)
+
+
+def h64_words(domain: int, words: list[int]) -> int:
+    """``h = mix(domain ^ n)``, then ``h = mix((h + GAMMA) ^ w)`` per word."""
+    h = sm_mix(domain ^ len(words))
+    for w in words:
+        h = sm_mix(((h + SM_GAMMA) & MASK64) ^ (w & MASK64))
+    return h
+
+
+def h64_bytes(domain: int, data: bytes) -> int:
+    """:func:`h64_words` over 8-byte little-endian chunks (the last zero-padded), ``n`` bytes."""
+    h = sm_mix(domain ^ len(data))
+    for i in range(0, len(data), 8):
+        w = int.from_bytes(data[i : i + 8].ljust(8, b"\0"), "little")
+        h = sm_mix(((h + SM_GAMMA) & MASK64) ^ w)
+    return h
+
+
+def sm_tag(name: str) -> int:
+    """``tag(name) = h64_bytes(0, name)``."""
+    return h64_bytes(0, name.encode("ascii"))
+
+
+T_EVENT = sm_tag("rehoboam/rh-events/log-hash/v2")
+EVENT_ENTITY_TAGS = {"world": 0, "person": 1, "household": 2, "settlement": 3, "region": 4}
+
+Event = dict[str, Any]
+
+
+def event_digest(e: Event) -> int:
+    """``Event::digest`` v2 of an event given as plain data (see EVENT_CASES)."""
+
+    def h(name: str) -> int:
+        return h64_bytes(T_EVENT, name.encode())
+
+    place = e["place"]
+    words = [
+        e["id"],
+        e["tick"],
+        e["phase"],
+        h(e["emitter"]),
+        h(e["kind"]),
+        0 if place is None else 1,
+        0 if place is None else place,
+        e["magnitude"],
+        e["secrecy"],
+        e["origin"],
+        len(e["roles"]),
+    ]
+    for role, (kind, raw) in e["roles"]:
+        words += [role, EVENT_ENTITY_TAGS[kind], raw]
+    words.append(len(e["snapshots"]))
+    for attr, (kind, raw), partner, value in e["snapshots"]:
+        pk, praw = (0, 0) if partner is None else (EVENT_ENTITY_TAGS[partner[0]], partner[1])
+        words += [h(attr), EVENT_ENTITY_TAGS[kind], raw, int(partner is not None), pk, praw, value]
+    words.append(len(e["causes"]))
+    for cause, kind, motive, weight, evidence in e["causes"]:
+        words += [cause, kind, int(motive is not None), 0 if motive is None else h(motive)]
+        words += [weight, evidence]
+    words.append(len(e["payload"]))
+    words += e["payload"]
+    return h64_words(T_EVENT, [w & MASK64 for w in words])
+
+
+def _event(**fields: object) -> Event:
+    base: Event = {
+        "place": None,
+        "magnitude": 0,
+        "secrecy": 0,
+        "origin": 0,
+        "roles": [],
+        "snapshots": [],
+        "causes": [],
+        "payload": [],
+    }
+    base.update(fields)
+    return base
+
+
+# Events in a valid emission order (ids 0.., (tick, phase) non-decreasing, causes earlier), so the
+# Rust test appends them to an EventLog too. They cover a place present and absent (and u32::MAX), a
+# negative magnitude and both i32 extremes, each secrecy (0-3), each origin (0, 1, 3, 4), all four
+# role codes with a repeated witness, snapshots with and without a partner and of the event, edge
+# kinds 0-5 with and without a motive, a negative weight, and i64 payload extremes.
+EVENT_CASES: list[Event] = [
+    _event(
+        id=0,
+        tick=0,
+        phase=0,
+        emitter="M2.demography",
+        kind="DEATH",
+        roles=[(1, ("person", 7))],
+        payload=[1],
+    ),
+    _event(
+        id=1,
+        tick=1_440,
+        phase=4,
+        emitter="M2.demography",
+        kind="EXTINCTION",
+        origin=3,
+        causes=[(0, 1, None, 0, 256)],
+    ),
+    _event(
+        id=2,
+        tick=1_440,
+        phase=5,
+        emitter="T1.minds",
+        kind="MENTAL_BREAK",
+        place=17,
+        magnitude=-42,
+        secrecy=1,
+        origin=1,
+        roles=[(0, ("person", 9)), (2, ("person", 3)), (2, ("person", 4))],
+        snapshots=[("stress", ("person", 9), None, 18_000)],
+        causes=[(0, 3, "GRIEF_FOR", 300, 120), (1, 0, None, 0, 256)],
+        payload=[-5, 7],
+    ),
+    _event(
+        id=3,
+        tick=2_000,
+        phase=5,
+        emitter="T1.minds",
+        kind="MURDER_ATTEMPT",
+        place=0,
+        secrecy=2,
+        origin=4,
+        roles=[(0, ("person", 9)), (1, ("person", 7)), (3, ("household", 2))],
+        snapshots=[
+            ("stress", ("person", 9), None, -1),
+            ("trust", ("person", 9), ("person", 7), -300),
+        ],
+        causes=[(1, 3, None, -77, 64), (2, 1, None, 0, 256)],
+    ),
+    _event(
+        id=4,
+        tick=2_000,
+        phase=11,
+        emitter="X1.weather",
+        kind="FROST",
+        magnitude=-(2**31),
+        secrecy=3,
+        roles=[(1, ("region", 2))],
+        snapshots=[("weather", ("world", 0), None, 2)],
+        causes=[(1, 2, None, 0, 200), (2, 5, None, 0, 0), (3, 4, None, 0, 100)],
+    ),
+    _event(
+        id=5,
+        tick=2**40,
+        phase=0,
+        emitter="X4.census",
+        kind="CENSUS",
+        place=2**32 - 1,
+        magnitude=2**31 - 1,
+        roles=[(1, ("settlement", 2**64 - 1))],
+        causes=[(4, 3, "RETALIATION_FOR", -(2**15), 256), (0, 3, "CORRUPTION_BY", 2**15 - 1, 0)],
+        payload=[-(2**63), 2**63 - 1, 0],
+    ),
+]
+for _e in EVENT_CASES:
+    _e["causes"].sort(key=lambda c: c[0])
+
+
+def _event_line(e: Event) -> str:
+    """One ``event`` line: the fields as tokens (``-`` for none), then the digest."""
+
+    def ent(x: tuple[str, int]) -> str:
+        return f"{x[0]}:{x[1]}"
+
+    roles = ",".join(f"{r}/{ent(x)}" for r, x in e["roles"]) or "-"
+    snaps = (
+        ",".join(
+            f"{a}/{ent(x)}/{'-' if p is None else ent(p)}/{v}" for a, x, p, v in e["snapshots"]
+        )
+        or "-"
+    )
+    causes = (
+        ",".join(f"{c}/{k}/{'-' if m is None else m}/{w}/{ev}" for c, k, m, w, ev in e["causes"])
+        or "-"
+    )
+    payload = ",".join(str(v) for v in e["payload"]) or "-"
+    place = "-" if e["place"] is None else str(e["place"])
+    fields = [
+        "event",
+        str(e["id"]),
+        str(e["tick"]),
+        str(e["phase"]),
+        e["emitter"],
+        e["kind"],
+        place,
+        str(e["magnitude"]),
+        str(e["secrecy"]),
+        str(e["origin"]),
+        roles,
+        snaps,
+        causes,
+        payload,
+        f"{event_digest(e):016x}",
+    ]
+    return " ".join(fields)
+
+
+# One-field mutations of each field kind: each must change the digest (checked here, and by the
+# Rust test on the same mutations).
+def _mutations(e: Event) -> list[tuple[str, Event]]:
+    out = []
+
+    def mut(name: str, f: Callable[[Event], object]) -> None:
+        m = copy.deepcopy(e)
+        f(m)
+        out.append((name, m))
+
+    mut("id", lambda m: m.update(id=m["id"] + 1))
+    mut("tick", lambda m: m.update(tick=m["tick"] + 1))
+    mut("phase", lambda m: m.update(phase=m["phase"] ^ 1))
+    mut("emitter", lambda m: m.update(emitter=m["emitter"] + "x"))
+    mut("kind", lambda m: m.update(kind=m["kind"] + "X"))
+    mut("place", lambda m: m.update(place=None if m["place"] is not None else 0))
+    mut("magnitude", lambda m: m.update(magnitude=m["magnitude"] ^ 1))
+    mut("secrecy", lambda m: m.update(secrecy=(m["secrecy"] + 1) % 4))
+    mut("origin", lambda m: m.update(origin=1 if m["origin"] == 0 else 0))
+    mut("payload", lambda m: m.update(payload=[*m["payload"], 0]))
+    if e["roles"]:
+        r, x = e["roles"][0]
+        mut("role", lambda m: m["roles"].__setitem__(0, ((r + 1) % 4, x)))
+    if e["snapshots"]:
+        a, x, p, v = e["snapshots"][0]
+        mut("snapshot value", lambda m: m["snapshots"].__setitem__(0, (a, x, p, v ^ 1)))
+        mut("snapshot attr", lambda m: m["snapshots"].__setitem__(0, (a + "x", x, p, v)))
+        mut(
+            "snapshot partner",
+            lambda m: m["snapshots"].__setitem__(0, (a, x, None if p else ("world", 0), v)),
+        )
+    if e["causes"]:
+        c, k, mo, w, ev = e["causes"][0]
+        mut("edge kind", lambda m: m["causes"].__setitem__(0, (c, (k + 1) % 6, mo, w, ev)))
+        mut("edge weight", lambda m: m["causes"].__setitem__(0, (c, k, mo, w ^ 1, ev)))
+        mut("edge evidence", lambda m: m["causes"].__setitem__(0, (c, k, mo, w, ev ^ 1)))
+        mut(
+            "edge motive",
+            lambda m: m["causes"].__setitem__(0, (c, k, None if mo else "FEAR_OF", w, ev)),
+        )
+    return out
+
+
+def event_self_test() -> list[str]:
+    """The SplitMix64 known answer and the one-field mutation rule (empty when both hold)."""
+    failures = []
+    if sm_mix(SM_GAMMA) != KAT_SPLITMIX64_SEED0:
+        failures.append(f"SplitMix64(0) first output = {sm_mix(SM_GAMMA):016x}")
+    for e in EVENT_CASES:
+        d = event_digest(e)
+        for name, m in _mutations(e):
+            if event_digest(m) == d:
+                failures.append(f"event {e['id']}: a mutated {name} keeps the digest")
+    return failures
+
+
+def render_events() -> str:
+    """The event digest golden file's full text."""
+    running = 0
+    for e in EVENT_CASES:
+        running = h64_words(T_EVENT, [running, event_digest(e)])
+    header = [
+        "# rh-events golden vectors: Event::digest v2 and EventLog::hash (envelope_v0.md §6).",
+        "# GENERATED by bin/gen_hash_golden.py; do not edit.",
+        "#   event <id> <tick> <phase> <emitter> <kind> <place|-> <magnitude> <secrecy> <origin>",
+        "#         <roles: role/kind:raw,..|-> <snapshots: attr/kind:raw/partner|-/value,..|->",
+        "#         <causes: cause/kind/motive|-/weight/evidence,..|-> <payload: v,..|-> <digest>",
+        "#   log <n> <EventLog::hash of the events appended in order>",
+    ]
+    lines = [_event_line(e) for e in EVENT_CASES]
+    log = h64_words(T_EVENT, [len(EVENT_CASES), running])
+    return "\n".join([*header, *lines, f"log {len(EVENT_CASES)} {log:016x}"]) + "\n"
+
+
 def render() -> str:
     """The golden file's full text."""
     header = [
@@ -844,32 +1197,46 @@ def render() -> str:
     )
 
 
+def _check(path: Path, text: str) -> bool:
+    try:
+        current = path.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"STALE: cannot read {path}: {e}", file=sys.stderr)
+        return False
+    if current != text:
+        print(f"STALE: {path} differs from the reference", file=sys.stderr)
+        return False
+    print(f"OK: {path} matches the reference ({text.count(chr(10))} lines)")
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Write or check the golden file."""
+    """Write or check the golden files."""
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
-    parser.add_argument("--check", action="store_true", help="fail if the committed file is stale")
-    parser.add_argument("--golden", type=Path, default=GOLDEN, help="the file to write or check")
+    parser.add_argument("--check", action="store_true", help="fail if a committed file is stale")
+    parser.add_argument(
+        "--golden", type=Path, default=GOLDEN, help="the hash file to write or check"
+    )
+    parser.add_argument(
+        "--events-golden",
+        type=Path,
+        default=EVENTS_GOLDEN,
+        help="the event digest file to write or check",
+    )
     args = parser.parse_args(argv)
-    failures = self_test()
+    failures = self_test() + event_self_test()
     if failures:
         for f in failures:
             print(f"SELF-TEST FAIL: {f}", file=sys.stderr)
         return EXIT_SELFTEST
-    text = render()
+    files = [(args.golden, render()), (args.events_golden, render_events())]
     if args.check:
-        try:
-            current = args.golden.read_text(encoding="utf-8")
-        except OSError as e:
-            print(f"STALE: cannot read {args.golden}: {e}", file=sys.stderr)
-            return EXIT_STALE
-        if current != text:
-            print(f"STALE: {args.golden} differs from the reference", file=sys.stderr)
-            return EXIT_STALE
-        print(f"OK: {args.golden} matches the reference ({text.count(chr(10))} lines)")
-        return EXIT_OK
-    args.golden.parent.mkdir(parents=True, exist_ok=True)
-    args.golden.write_text(text, encoding="utf-8")
-    print(f"wrote {args.golden}")
+        ok = [_check(path, text) for path, text in files]
+        return EXIT_OK if all(ok) else EXIT_STALE
+    for path, text in files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        print(f"wrote {path}")
     return EXIT_OK
 
 

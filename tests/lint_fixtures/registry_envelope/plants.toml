@@ -1,0 +1,109 @@
+# Planted Registries for envelope_v0.md §8 (SPR-020 T-01; R12 NIT-4, R22 NIT-3): each plant is one
+# text edit of specs/manifest/registry_v0.toml. `rust` is the message rh_manifest::Registry refuses it
+# with (a test in crates/rh-manifest/tests/registry_envelope.rs); `python`, when set, is the message
+# specs/sifting/lint_patterns.py refuses it with, since it reads the same section
+# (specs/manifest/registry_envelope_plants.py, a check_all gate). `find` must occur exactly once.
+
+[[plant]]
+name = "event-roles-empty"
+find = 'ids = ["actor", "target", "witness", "instrument"]'
+replace = 'ids = []'
+rust = "event_roles: the list is empty or missing"
+python = "Registry [event_roles]: the list is empty"
+
+[[plant]]
+name = "event-roles-reordered"
+find = 'ids = ["actor", "target", "witness", "instrument"]'
+replace = 'ids = ["target", "actor", "witness", "instrument"]'
+rust = "event_roles: the first four ids are"
+python = "Registry [event_roles]: the first four ids are not actor, target, witness, instrument"
+
+[[plant]]
+name = "event-roles-id-form"
+find = 'ids = ["actor", "target", "witness", "instrument"]'
+replace = 'ids = ["actor", "target", "witness", "instrument", "Bystander"]'
+rust = "event_roles: id 'Bystander' is not [a-z][a-z0-9_]*"
+python = "Registry [event_roles]: id 'Bystander' is not [a-z][a-z0-9_]*"
+
+[[plant]]
+name = "motive-edges-empty"
+find = 'ids = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]'
+replace = 'ids = []'
+rust = "motive_edges: the list is empty or missing"
+
+[[plant]]
+name = "motive-edges-id-form"
+find = '"GREED_FOR", "CORRUPTION_BY"]'
+replace = '"GREED_FOR", "CORRUPTION_BY", "Spite_of"]'
+rust = "motive_edges: id 'Spite_of' is not [A-Z][A-Z0-9_]*"
+
+[[plant]]
+name = "motive-is-a-verb"
+find = '"GREED_FOR", "CORRUPTION_BY"]'
+replace = '"GREED_FOR", "CORRUPTION_BY", "DEATH"]'
+rust = "motive_edges: id 'DEATH' is also a [verbs] key"
+
+[[plant]]
+name = "domain-not-a-role"
+find = 'suspect      = { attribute = "is_suspect",     relational = false, owner = "none", column = "none" }'
+replace = '''suspect      = { attribute = "is_suspect",     relational = false, owner = "none", column = "none" }
+wizard       = { attribute = "is_suspect",     relational = false, owner = "none", column = "none" }'''
+rust = "role_domains: 'wizard' is not a [roles] id"
+python = "'wizard' is not a [roles] id"
+
+[[plant]]
+name = "domain-missing"
+find = '''kin          = { attribute = "is_self_or_kin", relational = true,  owner = "life_course", column = "life_course" }
+'''
+replace = ''
+rust = "role_domains: no entry for the [roles] id 'kin'"
+python = "no entry for the [roles] id 'kin'"
+
+[[plant]]
+name = "domain-attribute-not-bool"
+find = 'authority    = { attribute = "holds_title",'
+replace = 'authority    = { attribute = "stress",'
+rust = "role_domains.authority: attribute 'stress' is not a bool [attributes] entry"
+python = "attribute 'stress' is not a bool [attributes] entry"
+
+[[plant]]
+name = "domain-arity"
+find = 'authority    = { attribute = "holds_title",    relational = false,'
+replace = 'authority    = { attribute = "holds_title",    relational = true,'
+rust = "role_domains.authority: attribute 'holds_title' takes"
+python = "relational = true needs 2"
+
+[[plant]]
+name = "domain-unknown-owner"
+find = 'relational = false, owner = "M7.dynasty",  column = "title.holder" }'
+replace = 'relational = false, owner = "M9.nobody",  column = "title.holder" }'
+rust = "role_domains.authority: owner 'M9.nobody' is not a [systems] id"
+python = "owner 'M9.nobody' is not a [systems] id"
+
+[[plant]]
+name = "domain-column-shape"
+find = 'column = "title.holder" }'
+replace = 'column = "titleholder" }'
+rust = "role_domains.authority: column 'titleholder' is not entity.column, algorithm.<name> or life_course"
+python = "column 'titleholder' is not entity.column, algorithm.<name> or life_course"
+
+[[plant]]
+name = "domain-none-with-a-column"
+find = 'ally         = { attribute = "is_ally",        relational = true,  owner = "none", column = "none" }'
+replace = 'ally         = { attribute = "is_ally",        relational = true,  owner = "none", column = "ally.since" }'
+rust = "role_domains.ally: column 'ally.since' must be \"none\" exactly when the owner is none"
+python = "owner none has no column"
+
+[[plant]]
+name = "domain-column-none-with-an-owner"
+find = 'column = "title.holder" }'
+replace = 'column = "none" }'
+rust = "role_domains.authority: column 'none' must be \"none\" exactly when the owner is none"
+python = "column 'none' is not entity.column, algorithm.<name> or life_course"
+
+[[plant]]
+name = "domain-unknown-field"
+find = 'column = "title.holder" }'
+replace = 'column = "title.holder", source = "M7.dynasty" }'
+rust = "unknown field `source`"
+python = "the keys are exactly"

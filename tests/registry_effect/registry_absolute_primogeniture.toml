@@ -1,0 +1,757 @@
+# Mechanics Registry v0, a minimal illustrative subset.
+# The Registry is the closed vocabulary that manifests may reference (ADR-0010, docs/05_architecture/05.5).
+# Every parameter declares bounds. Validators reject any value outside them.
+
+# 0.2.0 (SPR-011; Architect ruling on PR #37): verbs carry a required tellability, systems may carry defaults, and DEATH and
+# EXTINCTION are new verbs, which shifts verb_id (the index in [verbs] sorted by name). The version is in the history tuple.
+registry_version = "0.2.0"
+
+# ----------------------------------------------------------------------------- systems
+[systems."M1.regions"]
+fidelity_levels = ["F0", "F1"]
+params = { route_cost_sea = [1.0, 1.0], route_cost_river = [3.0, 8.0], route_cost_land = [10.0, 60.0] }
+
+# S3.migration (SPR-018; specs/systems/S3.migration.odd.toml): residence at F0 (no parameter), moves and fugitives at F1 (P1b),
+# individual migration choice at F2 (P4). Added with the draft spec so lint_odd.py and rh-cli ownership resolve the system; the
+# registry_version bumps when the spec freezes in SPR-018's PR, as the M2 F1 delta does (specs/systems/next/README.md step 4).
+[systems."S3.migration"]
+fidelity_levels = ["F0", "F1", "F2"]
+params = {}
+
+[systems."M2.demography"]
+fidelity_levels = ["F0", "F1", "F2"]
+# Mortality is a Brass relational logit (specs/demography/). e0 is a convenience input converted to alpha at beta = 1;
+# observed fits span alpha [-1.36, 0.55], beta [0.64, 1.64] (Brass 1971). e0 below ~24.7 or above ~78 is extrapolation.
+params = { e0 = [20.0, 85.0], brass_alpha = [-2.1, 0.75], brass_beta = [0.6, 1.65], tfr = [1.2, 7.5], eps_f = [0.1, 1.0], eps_m = [0.5, 3.0], elite_fertility_mult = [1.0, 1.6] }
+# defaults (SPR-011 ruling 8): the value a world gets when its manifest sets none. rh_manifest::compile fills each parameter the
+# built system reads from the manifest, else from this default; a parameter a built system needs with neither is a load error
+# naming it (the compiled WorldSpec holds no optional parameter). Design values, mirrored as `default` in the spec's
+# [[params]] and checked by lint_odd.py: e0 = 30 lies inside V-SF-02's band (q15 in [0.35, 0.55] <=> e0 in
+# [23.441086, 36.569855], about [23.4, 36.6], at beta = 1; specs/demography/selftest_m2_rung0.py) and is uz_job's value; beta = 1 is the General Standard's
+# own shape, the only slope rung 0 accepts. brass_alpha, tfr, eps_f, eps_m and elite_fertility_mult have no default: rung 0
+# reads none of them (brass_alpha is refused until P1.3), and each gets one with the sprint that first reads it.
+defaults = { e0 = 30.0, brass_beta = 1.0 }
+
+[systems."M3.agriculture"]
+fidelity_levels = ["F0", "F1"]
+# Campbell & O Grada 2011 (R12 §17): detrended gross yield CV, single winter staple 0.145-0.165 (1268-1467), 0.125-0.131
+#   (1750-1850), composite 0.111 -> 0.097 -> 0.050 (industrial). Temperate worlds should stay inside those; the upper bound
+#   0.35 is a design allowance for arid and monsoon zones (no verified source yet). Lower CV comes from technology (seed
+#   selection, specialisation): sigma_eff = harvest_sigma x f_tech, falling toward yield_cv_tech_floor as adoption rises.
+# autocorr: yield autocorrelation was "small and never statistically significant" (p. 867). Deep shortfalls nonetheless
+#   cluster (1315-21, 1349-51), which one AR(1) cannot produce: use rare multi-year anomaly regimes for that (anomaly_regime_*).
+#   A bad year carries into the next through sown area, not through the yield ratio.
+# crop_corr_*: winter-spring 0.15-0.41, spring-spring 0.38-0.56 (Table 1); the two-season portfolio is the main insurance.
+params = { harvest_sigma = [0.04, 0.35], autocorr = [0.0, 0.2], spatial_share = [0.2, 0.9], volcanic_rate = [0.0, 0.03], seed_yield_ratio = [2.5, 12.0], crop_corr_winter_spring = [0.1, 0.45], crop_corr_spring_spring = [0.3, 0.6], anomaly_regime_rate = [0.0, 0.02], anomaly_regime_years = [2, 7], anomaly_regime_corr = [0.3, 0.6], yield_cv_tech_floor = [0.4, 1.0] }
+
+[systems."M4.economy"]
+fidelity_levels = ["F0", "F1"]
+# subsistence_kg_grain: the calorie floor per PERSON-year, as grain eaten as bread (about 2,600 kcal/kg). Allen 2001 implies
+#   193 (bread-only diet), 195 (Sukhatme norms), 204 (3 baskets for 4 persons) and 278 (ICMR norms) kg per person (R12 §18).
+#   Valued at grain prices it is the bare-subsistence line used for the IPF's alpha (09 V-SF-16). It is NOT Allen's
+#   welfare-ratio line (baskets.allen2001), which costs about 2.3x as much in silver. An adult male needs about 272.
+# tax_regressivity: 0 = proportional, 1 = fully regressive incidence (drives inequality with fiscal_capacity; R12 §13).
+# days_worked: realised working days per earner-year. Allen assumes 250; about 300 in 17th-c England and Holland, 275-285 in
+#   France; the medieval calendar had about 45 more holy days, so it is a function of doctrine and institutions (p. 425).
+# rent_share: under 0.10 of spending; 0.04-0.05 for English workers; towns pay 2-2.5x rural rents (pp. 413-414, 422).
+# ae_*: adult-male equivalents for household welfare ratios, derived from the ICMR norms Allen cites (p. 426).
+# skill_premium: craftsman / labourer day wage; Allen's 10th-90th percentiles 1.31-2.06, median 1.57 (Tables 1-2).
+# food_price_elasticity is STRUCTURAL (no storage, no trade): observed 0.18-0.87 (Campbell & O Grada 2011, pp. 875-877; R12 §17).
+#   Davenant's 17th-c schedule (shortfall 10..50% -> price x1.3..x5.5) needs about 0.40. Never lower it for market integration:
+#   integration acts through trade_kappa, imports and carry-over, or it is counted twice.
+# grain_carryover_cost: interest + spoilage per year (design value); cheaper storage raises carry-over (pp. 879-880).
+# poor_relief_share: share of regional income spent on relief; England about 1% (late 17th c.) to 2% (late 18th c.) (fn. 69).
+params = { alpha = [0.4, 0.8], food_price_elasticity = [0.18, 0.9], base_tax = [0.05, 0.4], trade_kappa = [0.01, 0.2], subsistence_kg_grain = [180.0, 320.0], tax_regressivity = [0.0, 1.0], days_worked = [200.0, 300.0], rent_share = [0.04, 0.10], ae_adult_female = [0.70, 0.75], ae_child_4_6 = [0.55, 0.65], ae_child_1_3 = [0.40, 0.50], skill_premium = [1.2, 2.1], grain_carryover_cost = [0.05, 0.35], poor_relief_share = [0.0, 0.03] }
+
+[systems."M5.contagion"]
+fidelity_levels = ["F0", "F1"]
+hazards = ["infection", "detection", "purge_after_positive"]       # readable by pattern completion_hazard (05.4 §2.3)
+params = { r0 = [1.0, 8.0], latent_days = [1.0, 365.0], infectious_days = [2.0, 1.0e9], ifr = [0.0, 0.8], waning_per_year = [0.0, 1.0], fear_kappa = [0.0, 0.8], covert_evasion = [0.0, 0.9], test_sensitivity = [0.5, 0.999], test_specificity = [0.9, 0.9999] }
+
+[systems."M6.polity"]
+fidelity_levels = ["F0", "F1"]
+hazards = ["revolt", "coup", "civil_war"]
+# Ψ follows Turchin (2013): Ψ = MMP × EMP × SFD, each a ratio to a reference value (R12 §Turchin).
+#   psi_threshold applies to the GEOMETRIC MEAN Ψ̄ = Ψ^(1/k) over the k active components, not the raw product.
+#   elite_mobility_u is μ0 in dE/dt = r_e·E + μ0·(w0/w − 1)·N (per year); 0.002 in Turchin's antebellum case.
+#   wage_stickiness_years is τ in W(t+τ) = f(GDP/N, labour demand/supply, institutions).
+params = { tax_rate = [0.05, 0.4], elite_mobility_u = [0.0005, 0.01], elite_growth_excess = [0.0, 0.01], psi_threshold = [1.0, 3.0], instability_mortality = [0.005, 0.05], wage_stickiness_years = [3.0, 10.0] }
+
+[systems."M7.dynasty"]
+fidelity_levels = ["F0", "F1"]
+hazards = ["regicide", "deposition", "successor_purge", "succession_crisis", "extinction"]
+# Ruler-exit hazards are per ruler-year AT THE REFERENCE INSTITUTIONAL STATE (elective succession, no assembly,
+# no recent regicide). Realised rates come from multipliers driven by institutional state (ADR-0027, R12):
+#   murder: Eisner 2011 century rates span 0.0019–0.025/yr (all cases), pooled 0.010/yr.
+#   deposition: Kokkonen & Sundell 2014 elective baseline ≈ 0.015–0.04/yr; Blaydes & Chaney 2013 unconstrained 0.013–0.05/yr.
+#   law multipliers vs elective (Cox HR): primogeniture 0.25–0.37 (CI 0.17–0.63); agnatic seniority ≈ 2 (CI 1.17–5.6).
+#   feud stock: a murdered predecessor multiplies the murder odds by ≈ 2.6–3.0 (Eisner) and deposition by ≈ 1.56–1.8 (K&S).
+# M7 F1 (specs/systems/M7.dynasty.odd.toml, draft):
+#   deposition_hazard_ref is the NON-LETHAL part of K&S's deposition (theirs includes domestic murder, which M7 draws
+#     from murder_hazard_base): about 0.040 - 0.010 = 0.03 per ruler-year at election, inside the bounds.
+#   predecessor_deposed_hr: K&S "predecessor deposed" HR 1.56–1.80 (p. 447; R12 §2), on the deposition hazard.
+#   exec_constraint_hr: K&S parliament HR 0.50 between countries, not significant within them (R12 §2); the multiplier is
+#     1 + (exec_constraint_hr - 1) x exec_constraint. Deliberately NOT derived from Blaydes & Chaney 2013, the source of
+#     the held-out band V-SF-06c, so that band stays an independent prediction.
+#   majority_age (years): design value; no source read (medieval royal majorities varied, roughly 12–21).
+#   arb_*_weight, contest_margin, interregnum_max_days: immediate-succession arbitration (SAGA-13), design values.
+#   dormancy_degrees: SIM-9's N, design value. vocation_*: shares of later children who enter holy orders or a mercenary
+#     company at majority (RT-2026-10-16 item 12); design values: prototype 7's 0.40 / 0.35 are illustrative, not sourced.
+params = { murder_hazard_base = [0.001, 0.03], deposition_hazard_ref = [0.01, 0.05], primogeniture_hr = [0.2, 0.55], seniority_hr = [1.3, 2.6], predecessor_killed_or = [1.5, 3.5], predecessor_deposed_hr = [1.3, 2.0], exec_constraint_hr = [0.3, 1.0], majority_age = [12.0, 21.0], arb_legal_weight = [0.0, 1.0], arb_claim_weight = [0.0, 1.0], arb_military_weight = [0.0, 1.0], arb_treasury_weight = [0.0, 1.0], contest_margin = [0.0, 1.0], interregnum_max_days = [7, 730], dormancy_degrees = [1, 6], vocation_holy_orders = [0.0, 0.6], vocation_mercenary = [0.0, 0.6] }
+
+[systems."M8.war"]
+fidelity_levels = ["F0", "F1"]
+# helmbold_w: W in dA/dt = −β·B^W·A^(1−W); 1 = square law, 0.5 ≈ linear, 0 = logarithmic. WWII fits cannot tell the laws apart
+# (Bracken 1995; Fricker 1998; Lucas & Turkes 2004; R12 §11), so the domain is [0, 1]; derive W from force composition (state).
+# breakpoint and fort_multiplier are design values with no verified source yet (Helmbold 1969/1987 pending); apply per engagement.
+params = { helmbold_w = [0.0, 1.0], breakpoint = [0.1, 0.35], campaign_months = [3, 12], fort_multiplier = [2.0, 10.0] }
+
+[systems."S5.daily_life"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0031: activity(person, day) is a pure function of start-of-day life-course state, regional conditions and the keyed RNG.
+#   F1 = virtual telemetry only (plane B: shown, not consequential); F2 = authoritative at the world's or a focus region's
+#   activity_resolution ("blocks" or "minutes"), with encounters resolved in a second phase as plane-A events.
+# Schedule templates follow ActivitySim's day pattern -> tour -> trip hierarchy (BSD-3, reference only).
+params = { blocks_per_day = [12, 24], encounter_tie_rate = [0.0, 0.05] }
+
+[systems."S4.ecology"]
+fidelity_levels = ["F1"]
+params = { metabolism_multiplier = [0.1, 10.0] }
+
+[systems."T1.minds"]
+fidelity_levels = ["F1", "F2"]
+# The minds of named actors (T1), crate rh-minds (05.3). Registry id added by ADR-0035; spec
+#   specs/systems/T1.minds.odd.toml (draft).
+#   F1 = minds v0 (P1a): HEXACO traits, ambition, relationships and opinion modifiers, IAUS for a few decision types,
+#        and secrets v0 knowledge rows (P1b). F2 = the full psychological core, HTN, beliefs, channels and memory (P4).
+#   It owns traits, overlays, opinions, the agenda's goals and knowledge rows; S6 and S7 change them only through
+#   lifecycle commands (ApplyInfluence, AgendaGoal, ClearGoal, OpinionModifier, ApplyThought).
+# Stress and mental breaks (ADR-0035; minds v0, P1a; design inspired by Crusader Kings 3, no code): stress is a q8_8
+#   column on a 0-100 scale that rises with vow.conflict (S7), kin-loyalty and value conflicts and decays at
+#   stress_decay points per month. Crossing stress_threshold is a deterministic state transition that schedules the
+#   break outcome as a timer, at a keyed delay of at most break_delay_max_days; the act comes from [mental_breaks] and
+#   stress drops by its relief (points). All values are design values (V-SAGA-16).
+# Damping (RT-2026-10-16 item 1; mechanics, no lock, no fiat cap): grief stress per death is grief_gain x the
+#   relationship's closeness ([relation_kinds]); the grief one actor takes in one instant saturates at
+#   grief_instant_cap; after a break the actor is refractory for break_refractory_days (no new break is scheduled).
+#   grief_instant_cap's upper bound (45) stays below stress_threshold's lower bound (50) (REV-P1a MIN-5).
+# Units: stress, gains and caps in points on the 0-100 scale; thought_cap and thought_decay in trait points (-100..100)
+#   (per month for the decay); *_days in days; marriage_min_age in years; attempt_success a probability per attempt;
+#   trait_sd in trait points. Every value is a design value with no empirical band (the spec says what settles each).
+params = { stress_threshold = [50.0, 95.0], stress_decay = [0.0, 10.0], vow_conflict_gain = [0.0, 20.0], break_delay_max_days = [1, 90], grief_gain = [0.0, 60.0], grief_instant_cap = [5.0, 45.0], loyalty_conflict_gain = [0.0, 20.0], dissonance_gain = [0.0, 30.0], break_refractory_days = [30, 1825], attempt_success = [0.05, 0.6], trait_sd = [15.0, 50.0], iaus_top_k = [1, 5], interrupt_daily_cap = [1, 4], thought_cap = [0.0, 50.0], thought_decay = [0.0, 10.0], marriage_min_age = [12.0, 20.0] }
+
+[systems."S6.artifacts"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0035; spec specs/systems/S6.artifacts.odd.toml (draft). Every value is a design value: there is no historical
+# band for relics. influence_base is the per-month overlay delta at Honesty-Humility 0; the delivered delta is
+#   influence_base x kind_strength x (1 - resist_slope x H/100), so it lies in [0, 2 x influence_base].
+# rumour reach is in route-graph hops (M1). find_chance, theft_success and loss_on_death are per attempt or per death.
+params = { influence_base = [0.0, 0.05], resist_slope = [0.0, 1.0], corruption_threshold = [0.2, 0.9], rumour_max_hops = [1, 20], rumour_decay_years = [5, 200], find_chance = [0.0, 0.2], theft_success = [0.05, 0.6], loss_on_death = [0.0, 0.5] }
+
+[systems."S7.vows"]
+fidelity_levels = ["F1", "F2"]
+# ADR-0035; spec specs/systems/S7.vows.odd.toml (draft). Every value is a design value: there is no historical band
+# for oath-keeping. A vow's agenda weight is min(vow_priority_base x kind_weight, vow_priority_cap) and never enters
+# a survival decision. resolve = resolve_base x (1 + resolve_slope x C/100) for conscientiousness C; a vow breaks when
+# its strain exceeds resolve. broken_vow_opinion is the opinion modifier (on the -100..100 opinion scale) applied by
+# witnesses and kin to an oath-breaker.
+params = { vow_priority_base = [0.05, 0.5], vow_priority_cap = [0.1, 0.8], max_active_vows = [1, 8], strain_rate = [0.0, 0.1], strain_decay = [0.0, 0.1], resolve_base = [0.2, 1.0], resolve_slope = [0.0, 0.9], grudge_on_harm = [0.0, 1.0], broken_vow_opinion = [-60.0, 0.0] }
+
+# ----------------------------------------------------------------------------- archetypes
+[archetypes.human]
+ledger = "persons"
+capabilities = []
+
+[archetypes.apex_predator]
+ledger = "creatures"
+variants = ["dragon", "great_wolf", "sea_serpent"]
+capabilities = ["flying", "bondable"]
+params = { mass_kg = [50.0, 20000.0] }
+
+[archetypes.supernatural_agent]   # an in-world intervening agent with a permission scope (ADR-0028 §3); plane A, own beliefs
+ledger = "agents"
+capabilities = ["intervene"]
+
+[archetypes.hive_node]
+ledger = "persons"            # overlay on human persons: capability set by M5 covert compartment
+capabilities = ["covert_capable"]
+
+# ----------------------------------------------------------------------------- polity
+[governments]
+ids = ["feudal_monarchy", "oligarchic_council", "theocracy", "municipal_democracy", "tribal_confederation"]
+
+[succession_laws]
+ids = ["primogeniture", "ultimogeniture", "seniority", "partition", "elective", "tanistry", "sortition", "absolute_primogeniture"]
+# The laws as effect-language programs (specs/registry/effect_language_v0.md §7.3, §8; SPR-017 T-06): candidates, eligible
+# and order, text-identical to the golden file's [registry.programs.succession_laws.<law>] (the texts D37 approved, with
+# D14 (a) and D4). `ids` keeps its order: title.law stores ordinals (§11). The variants stay in the golden file.
+
+[succession_laws.primogeniture]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
+
+[succession_laws.ultimogeniture]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
+order      = '(up(x, holder), [(life_course.sex(y) == sex.female, -life_course.birth_tick(y)) for y in line(common(x, holder), x)])'
+
+[succession_laws.seniority]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
+order      = '(count(y in line_agnatic(common_agnatic(x, holder), x)) - up_agnatic(x, holder), life_course.birth_tick(x))'
+
+[succession_laws.partition]
+candidates = 'children(holder)'
+eligible   = 'person.alive(x) and x != holder'
+order      = '(life_course.sex(x) == sex.female, life_course.birth_tick(x))'
+
+[succession_laws.elective]
+candidates = 'court(title)'
+eligible   = 'person.alive(x) and x != holder'
+order      = '(min(t in titles(x): ordinal(title.tier(t)) else 3), life_course.birth_tick(x))'
+
+[succession_laws.tanistry]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and life_course.sex(x) == sex.male and up_agnatic(x, holder) <= 3 and count(y in line_agnatic(common_agnatic(x, holder), x)) <= 3 and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h))) and now - life_course.birth_tick(x) >= floor(params.majority_age * q16(calendar.days_per_year)) * calendar.minutes_per_day'
+order      = 'life_course.birth_tick(x)'
+
+[succession_laws.sortition]
+candidates = 'court(title)'
+eligible   = 'person.alive(x) and x != holder'
+order      = 'draw(sortition, x, title)'
+
+# SPR-017 T-09 (V-WC-10, EVO-1): a law added as data alone, the golden file's absolute_primogeniture: eldest first
+# regardless of sex, each represented by their line. This file is specs/manifest/registry_v0.toml with these two edits only.
+[succession_laws.absolute_primogeniture]
+candidates = 'lineage(holder, 3)'
+eligible   = 'person.alive(x) and x != holder and not descends(holder, x) and (descends(x, holder) or any(h in holders_of(title, 16): descends(x, h)))'
+order      = '(up(x, holder), [life_course.birth_tick(y) for y in line(common(x, holder), x)])'
+
+# The effect language (specs/registry/effect_language_v0.md; SPR-017 T-06). Its version is the evaluator's (§11); the
+# Registry's registry_version covers it and is not bumped by SPR-017 (a C2 that moves no ladder header).
+[effect_language]
+version = "0.5.1"
+
+# Every enum a program can name, with its named default (§3.1): its values come from a Registry id list (`registry`) or
+# from the system specs' [[owns]] `values` of the named columns, which must all be equal. Defaults equal the golden slice's.
+[effect_language.enums]
+sex               = { columns = ["person.sex", "life_course.sex"], default = "male" }
+death_cause       = { columns = ["person.death_cause", "life_course.death_cause"], default = "none" }
+title_state       = { columns = ["title.state"], default = "held" }
+claim_status      = { columns = ["claim.status"], default = "void" }
+artifact_state    = { columns = ["artifact.state"], default = "lost" }
+vow_status        = { columns = ["vow.status"], default = "void" }
+title_tiers       = { registry = "title_tiers", default = "minor" }
+succession_laws   = { registry = "succession_laws", default = "primogeniture" }
+vocations         = { registry = "vocations", default = "none" }
+office_kinds      = { registry = "office_kinds", default = "chancellor" }
+vow_kinds         = { registry = "vow_kinds", default = "GRUDGE" }
+opinion_modifiers = { registry = "opinion_modifiers", default = "KIN_HARMED_BY" }
+overlays          = { registry = "overlays", default = "paranoia" }
+
+# The entity kind of each reference column a program reads (a u64 id column of the specs; §3.1, §7.4). An unlisted u64
+# column is an int. A bridge (Architect, G1): the kinds move onto [[owns]] (`ref`) at the next EVO, and the table goes.
+[effect_language.refs]
+"person.mother"         = "person"
+"person.father"         = "person"
+"person.spouse"         = "person"
+"life_course.person_id" = "person"
+"life_course.mother"    = "person"
+"life_course.father"    = "person"
+"house_member.person"   = "person"
+"house_member.house"    = "house"
+"tenure.title"          = "title"
+"tenure.holder"         = "person"
+"title.liege"           = "title"
+"title.holder"          = "person"
+"title.regent"          = "person"
+"office.title"          = "title"
+"office.holder"         = "person"
+"claim.claimant"        = "person"
+"claim.title"           = "title"
+"artifact.bearer"       = "person"
+"vow.vower"             = "person"
+"relation.a"            = "person"
+"relation.b"            = "person"
+"opinion.holder"        = "person"
+"opinion.about"         = "person"
+"thought.holder"        = "person"
+"goal.holder"           = "person"
+"goal.vow"              = "vow"
+"feud.party_a"          = "person"
+"feud.party_b"          = "person"
+"knowledge.holder"      = "person"
+"petition.person"       = "person"
+"residence_interval.person_id" = "person"
+
+# A table whose rows are keyed by a column other than its id (§4.5, §5.3): the life-course log is read with a person.
+# A column is in the environment only when a spec owns it (G4): polity.exec_constraint waits for M6's spec.
+[effect_language.keys]
+life_course = "person_id"
+
+# Event-id columns, which no program reads (§3.1: an event exists only as an event-typed command argument). Columns of
+# spec type event_ref are never readable; these are the u64 ones.
+[effect_language.opaque]
+columns = ["opinion.source_event", "thought.source_event", "feud.cause_event", "knowledge.event", "knowledge.via_event"]
+
+[title_tiers]      # M7.dynasty F1: landed titles (seats). Only sovereign titles carry the calibrated ruler-exit hazards (R12 §1–3)
+ids = ["sovereign", "major", "minor"]
+
+[office_kinds]     # M7.dynasty F1: court offices of a title. steward and marshal are the F1 proxies for treasury control and
+ids = ["chancellor", "marshal", "steward", "spymaster", "chaplain"]   # military proximity in succession arbitration (SAGA-13)
+
+[vocations]        # M7.dynasty F1: careers of later children of great houses, who stay in the ledger (RT-2026-10-16 item 12)
+ids = ["none", "holy_orders", "mercenary", "household"]
+
+[institutions]
+ids = ["testing_mandate", "quarantine_law", "standing_army", "guild_charter", "inquisition",
+       "grain_provisioning_authority",   # annona / abbondanza: export bans, buffer stocks, price ceilings, crisis imports (Alfani et al. 2017)
+       "poor_relief"]                    # parish relief (Campbell & O Grada 2011, p. 880)
+
+[goods]          # household holdings and market goods
+ids = ["grain", "sheep", "goats", "cattle", "oxen", "camels", "donkeys", "horses", "animal_products", "oil", "wine", "timber", "fuel", "lighting", "ore", "cloth", "tools", "arms", "luxuries", "silver"]
+
+[baskets.allen2001]
+# Allen (2001) Table 3, p. 421: one adult-male basket per year at the "respectability" poverty line (WR = 1), NOT bare
+# subsistence. kcal and protein per unit from the table's notes; ref_price = Strasbourg 1745-54, grams of silver per unit.
+# Golden values (specs/economy/selftest_basket.py): cost 414.899 g/yr, 1,941 kcal/day, 80 g protein/day.
+# The printed egg price (0.010) is a misprint; 0.1028 is implied by the table's total. Bread and beer are processed grain.
+# Mediterranean climate zones substitute olive oil for butter and wine for beer, and burn 2 MBTU of fuel instead of 5 (p. 422).
+family_baskets = 3.0          # a man, a woman and two children (pp. 425-426)
+rent_markup    = 0.05         # WR denominator = 3 x 1.05 = 3.15 baskets (p. 427)
+days           = 250          # the WR convention; realised days are M4 days_worked
+items = [
+  { id = "bread",    qty = 182.0, unit = "kg",   good = "grain",           kcal = 2450.0, protein_g = 100.0,  ref_price = 0.693 },
+  { id = "pulses",   qty = 52.0,  unit = "l",    good = "grain",           kcal = 1125.0, protein_g = 71.0,   ref_price = 0.477 },
+  { id = "meat",     qty = 26.0,  unit = "kg",   good = "animal_products", kcal = 2500.0, protein_g = 200.0,  ref_price = 2.213 },
+  { id = "butter",   qty = 5.2,   unit = "kg",   good = "animal_products", kcal = 7286.0, protein_g = 7.0,    ref_price = 3.470, mediterranean = "olive_oil" },
+  { id = "cheese",   qty = 5.2,   unit = "kg",   good = "animal_products", kcal = 3750.0, protein_g = 214.0,  ref_price = 2.843 },
+  { id = "eggs",     qty = 52.0,  unit = "each", good = "animal_products", kcal = 79.0,   protein_g = 6.25,   ref_price = 0.1028 },
+  { id = "beer",     qty = 182.0, unit = "l",    good = "grain",           kcal = 426.0,  protein_g = 3.0,    ref_price = 0.470, mediterranean = "wine" },
+  { id = "soap",     qty = 2.6,   unit = "kg",   good = "lighting",        kcal = 0.0,    protein_g = 0.0,    ref_price = 2.880 },
+  { id = "linen",    qty = 5.0,   unit = "m",    good = "cloth",           kcal = 0.0,    protein_g = 0.0,    ref_price = 4.369 },
+  { id = "candles",  qty = 2.6,   unit = "kg",   good = "lighting",        kcal = 0.0,    protein_g = 0.0,    ref_price = 4.980 },
+  { id = "lamp_oil", qty = 2.6,   unit = "l",    good = "lighting",        kcal = 0.0,    protein_g = 0.0,    ref_price = 7.545 },
+  { id = "fuel",     qty = 5.0,   unit = "MBTU", good = "fuel",            kcal = 0.0,    protein_g = 0.0,    ref_price = 4.164, qty_mediterranean = 2.0 },
+]
+substitutes = [
+  { id = "olive_oil", qty = 5.2,   unit = "l", good = "oil",             kcal = 8142.0, protein_g = 0.0, ref_price = 7.545 },
+  { id = "wine",      qty = 68.25, unit = "l", good = "wine",            kcal = 850.0,  protein_g = 0.0, ref_price = 0.965 },
+]
+
+[off_map_kinds]  # actors from beyond the map that can enter it
+ids = ["raiders", "caravan", "nomads", "neighbouring_polity", "empire"]
+
+[inheritance_rules]   # property (not titles): drives land concentration and inequality (Pfister in Nigro 2020; R12 §13)
+ids = ["partible", "impartible", "entail"]
+
+[technologies]
+ids = ["heavy_plough", "crop_rotation", "seed_selection", "second_staple", "printing", "gunpowder", "germ_theory", "blood_assay", "pcr_testing", "rail", "electric_grid"]
+
+# ----------------------------------------------------------------------------- narrative vocabulary
+[act_classes]
+ids = ["harm", "aid", "promise", "betray", "coerce", "conceal", "reveal", "infect_convert", "succeed_to", "depose",
+       "flee", "accuse", "purge", "marry", "birth", "death", "discover", "test", "rebel", "trade", "raid", "bond",
+       "counsel", "lament", "renounce", "restore",
+       "forge", "pass", "destroy", "corrupt", "fulfil", "lapse", "use",   # saga acts (ADR-0035): artifacts and vows
+       "claim"]   # assert a right to a title (M7.dynasty F1: claims created and pressed)
+
+[roles]
+ids = ["authority", "successor", "kin", "ally", "rival", "subordinate", "member", "host", "guest", "investigator", "suspect", "any"]
+
+[channels]
+ids = ["witness", "testimony", "document", "crowd", "whisper", "hive"]
+
+[overlays]
+ids = ["paranoia", "filial_piety", "despair", "hubris", "corruption", "dragon_sympathy"]
+
+[pattern_packs]
+ids = ["succession", "revenge", "famine", "reversal", "irony", "elite_feud", "dragon_age", "covert_infiltration", "plague_era", "witch_hunt",
+       "trial_of_faith", "grief_and_lament", "temptation", "counsel_dispute", "restoration", "betrayal_by_friends",
+       "solitary_life",   # rung-0 smoke patterns: hard season, hunger, recovery, injury, death
+       "vow_arc", "relic_chain", "betrayal", "succession_war", "corrupted_bearer"]   # saga packs (ADR-0035, WP P2.4)
+
+[style_cards]
+ids = ["mythic_chronicle", "deep_time", "saga", "historian", "ensemble_space_opera", "noir_city", "wisdom_dialogue"]
+
+[event_roles]          # the cast and instrument of an event (the cinematic envelope, ADR-0035 §7a; 05.2 §4.1a); plane A
+ids = ["actor", "target", "witness", "instrument"]   # instrument: the S6 artifact used, if any. The index is the role code everywhere
+                                                     # (schema.sql, channel A, the canonical form); a role is only ever appended (envelope_v0.md §8)
+
+[role_domains]         # a pattern role's domain ([roles]) as an anchored bool attribute, captured as a snapshot at emission (SPR-020,
+                       # envelope_v0.md §1, R1): `A = "authority"` compiles to holds_title(A)@e1 == true at A's anchor, the first clause
+                       # whose cast binds A (R16); a relational domain names its partner variable (`S = "successor of A"` ->
+                       # is_successor(S, A)@e1). owner: the system that owns the source column (or "life_course": the ledger's rows;
+                       # "none": no source yet, so the domain is absent and lint_patterns.py warns); column: the column, algorithm or
+                       # log the attribute is read from. Any emitter that reads the column may declare the snapshot. Plane C reads it.
+authority    = { attribute = "holds_title",    relational = false, owner = "M7.dynasty",  column = "title.holder" }
+successor    = { attribute = "is_successor",   relational = true,  owner = "M7.dynasty",  column = "claim.rank" }
+kin          = { attribute = "is_self_or_kin", relational = true,  owner = "life_course", column = "life_course" }
+ally         = { attribute = "is_ally",        relational = true,  owner = "none", column = "none" }
+rival        = { attribute = "is_rival",       relational = true,  owner = "none", column = "none" }
+subordinate  = { attribute = "is_subordinate", relational = true,  owner = "none", column = "none" }
+member       = { attribute = "is_member",      relational = true,  owner = "none", column = "none" }
+host         = { attribute = "is_host",        relational = false, owner = "none", column = "none" }
+guest        = { attribute = "is_guest",       relational = false, owner = "none", column = "none" }
+investigator = { attribute = "is_investigator", relational = false, owner = "none", column = "none" }
+suspect      = { attribute = "is_suspect",     relational = false, owner = "none", column = "none" }
+
+[motive_edges]         # typed motive edges: refinements of motivated_by that point to the inciting event; plane A
+ids = ["RETALIATION_FOR", "JEALOUSY_OF", "VOW_OF", "AMBITION_FOR", "FEAR_OF", "LOYALTY_TO", "GRIEF_FOR", "GREED_FOR", "CORRUPTION_BY"]
+
+[mental_breaks]        # T1.minds (ADR-0035): volatile acts a stressed named actor may commit; relief is the stress removed
+# verb: the event the act emits. needs: what makes the act available (T1.minds spec, submodel break_act): "stressor" a
+#   person the actor's stress points at; "seat" the actor holds a title; "kin" a living named relation; "holdings" a
+#   registered M4 (P1b). weights: trait affinities, weight = clamp(1 + sum(w x trait/100), 0.1, 2.0) (design values).
+# Authored for the saga register (docs/01 principle 9): no rule in plane A filters an outcome for its tone.
+ASSASSINATION_ATTEMPT = { act_classes = ["harm"], relief = 60.0, verb = "MURDER_ATTEMPT", needs = ["stressor"], weights = { agreeableness = -1.0, honesty_humility = -0.5 } }   # relief in stress points (0-100 scale)
+FLIGHT                = { act_classes = ["flee"], relief = 50.0, verb = "FLED", needs = [], weights = { emotionality = 1.0, conscientiousness = -0.5 } }   # the actor becomes a fugitive (SAGA-14)
+BURN_HOLDINGS         = { act_classes = ["harm", "destroy"], relief = 50.0, verb = "HOLDINGS_BURNED", needs = ["seat", "holdings"], weights = { conscientiousness = -1.0, agreeableness = -0.5 } }
+PACT_OF_DESPAIR       = { act_classes = ["bond", "renounce"], relief = 40.0, verb = "DESPAIR_PACT", needs = ["kin"], weights = { extraversion = 0.5, openness = 0.5 } }
+
+[relation_kinds]       # T1.minds F1: the relation edges of a named actor; closeness scales grief (design values; RT-2026-10-16 item 1)
+parent      = { closeness = 1.0 }
+child       = { closeness = 1.0 }
+spouse      = { closeness = 1.0 }
+sibling     = { closeness = 0.6 }
+grandparent = { closeness = 0.4 }
+grandchild  = { closeness = 0.5 }
+kin_other   = { closeness = 0.2 }      # uncle, aunt, nephew, niece, first cousin
+liege       = { closeness = 0.2 }
+vassal      = { closeness = 0.1 }
+
+[opinion_modifiers]    # T1.minds F1 (CK3 style; 05.3 §2): magnitude on the -100..100 opinion scale, constant until it expires after `months`
+KIN_HARMED_BY     = { magnitude = -60.0, months = 600 }   # the holder knows the target harmed the holder's kin (P1b knowledge)
+PASSED_OVER       = { magnitude = -30.0, months = 240 }   # a succession went to the target over the holder's claim or right
+DEPOSED_BY        = { magnitude = -60.0, months = 600 }
+CLAIM_PRESSED_BY  = { magnitude = -30.0, months = 120 }
+FEUD_WITH         = { magnitude = -40.0, months = 240 }
+MARRIED_TO        = { magnitude = 30.0,  months = 600 }
+GRANTED_BY        = { magnitude = 20.0,  months = 240 }
+DESPAIR_PACT_WITH = { magnitude = 30.0,  months = 240 }
+VOW_BROKEN_BY     = { magnitude = 0.0,   months = 240 }   # the magnitude comes with S7's command (broken_vow_opinion)
+VOW_FULFILLED_BY  = { magnitude = 20.0,  months = 240 }
+
+[act_dissonance]       # T1.minds F1 (value conflict): an act of this class costs its actor dissonance_gain x max(0, trait)/100 stress
+harm    = { trait = "agreeableness" }
+coerce  = { trait = "agreeableness" }
+betray  = { trait = "honesty_humility" }
+conceal = { trait = "honesty_humility" }
+claim   = { trait = "honesty_humility" }
+
+[overlay_traits]       # T1.minds F1: trait points per overlay point when an ApplyInfluence or ApplyThought becomes a bounded thought
+# that IAUS reads; the trait columns never change (RT-2026-10-16 item 8). Design values.
+corruption   = { honesty_humility = -100.0 }
+hubris       = { honesty_humility = -50.0, extraversion = 50.0 }
+paranoia     = { agreeableness = -50.0, emotionality = 50.0 }
+despair      = { extraversion = -50.0, emotionality = 50.0 }
+filial_piety = { conscientiousness = 50.0, agreeableness = 50.0 }
+
+[decision_types]       # T1.minds F1: event-driven IAUS (05.3 §3; COG-3). poll_months: the CK3-style polling interval (design values).
+# considerations: keys of [considerations]; their curves are [response_curves.<type>]. idle_score: the score of 'do
+#   nothing'. requires: the owners whose commands the type sends; a world enables the type only when it registers them
+#   all (SPR-006 ruling 5; MIN-11). available_from is informational only (the roadmap phase); code never keys on it.
+# feud has three options: declare (the curves below), attack (the same score, only against an active feud's enemy) and
+#   reconcile (1 - the declare score, only for an active feud).
+marry       = { poll_months = 12, requires = ["M2.demography"], available_from = "P1a", idle_score = 0.5, considerations = ["age", "age_gap", "partner_tier", "opinion", "ambition", "stress"] }
+seek_office = { poll_months = 6,  requires = ["M7.dynasty"], available_from = "P1a", idle_score = 0.5, considerations = ["ambition", "seat_tier", "kin_distance_to_granter", "opinion_of_granter", "stress"] }
+press_claim = { poll_months = 12, requires = ["M7.dynasty"], available_from = "P1a", idle_score = 0.5, considerations = ["ambition", "claim_rank", "opinion_of_holder", "honesty_humility", "holder_is_minor", "stress"] }
+feud        = { poll_months = 6,  requires = ["M2.demography"], available_from = "P1a", idle_score = 0.5, considerations = ["opinion", "agreeableness", "kin_harmed", "rival_claim", "stress"] }
+swear_vow   = { poll_months = 1,  requires = ["S7.vows"], available_from = "P1b", idle_score = 0.5, considerations = ["kin_harmed", "closeness", "conscientiousness", "honesty_humility", "active_vows"] }
+pursue_goal = { poll_months = 3,  requires = ["S6.artifacts", "S7.vows", "M7.dynasty"], available_from = "P1b", idle_score = 0.5, considerations = ["goal_priority", "target_reachable", "ambition", "stress"] }
+
+[considerations]       # T1.minds F1 IAUS inputs (MAJ-6; typed for the A-24 loader): what each reads, its domain and type.
+# All values Q16_16. `actor` is the deciding named actor, `target` the candidate (a person, seat, office, claim or goal).
+# Traits are effective traits (trait + clamped thoughts, T1 spec). An input outside its domain is clamped to it.
+age                    = { input = "(now - birth_tick(actor)) / minutes_per_year", reads = ["person.birth_tick"], domain = [0.0, 100.0], unit = "years" }
+age_gap                = { input = "abs(age(actor) - age(target))", reads = ["person.birth_tick"], domain = [0.0, 60.0], unit = "years" }
+partner_tier           = { input = "max tier of a title held by target or target's father (0 none, 1 minor, 2 major, 3 sovereign)", reads = ["title.holder", "title.tier", "life_course.father"], domain = [0.0, 3.0], unit = "tier" }
+opinion                = { input = "opinion(actor, target)", reads = ["opinion.*"], domain = [-100.0, 100.0], unit = "opinion points" }
+ambition               = { input = "mind.ambition(actor)", reads = ["mind.ambition"], domain = [0.0, 100.0], unit = "points" }
+stress                 = { input = "mind.stress(actor)", reads = ["mind.stress"], domain = [0.0, 100.0], unit = "points" }
+seat_tier              = { input = "tier of the target seat (an office counts as 1)", reads = ["title.tier", "office.title"], domain = [0.0, 3.0], unit = "tier" }
+kin_distance_to_granter = { input = "kinship degrees from actor to the granter (the holder of the seat's liege title or the office's title) the smallest n in 1..6 with related(actor, granter, n) over the life-course columns (PR #41 §5.3); 6 when none", reads = ["life_course.mother", "life_course.father", "title.holder", "title.liege"], domain = [0.0, 6.0], unit = "degrees" }
+opinion_of_granter     = { input = "opinion(actor, granter)", reads = ["opinion.*", "title.holder"], domain = [-100.0, 100.0], unit = "opinion points" }
+claim_rank             = { input = "claim.rank of the claim (an M7 column: 1 = legal heir, capped at 10; 0 outside the line reads as 10). M7 refreshes it at each arbitration of the title and in the yearly pass, so between them a consideration sees the last value; arbitration recomputes it, so succession never reads a stale rank", reads = ["claim.rank"], domain = [1.0, 10.0], unit = "rank" }
+opinion_of_holder      = { input = "opinion(actor, holder of the claimed title)", reads = ["opinion.*", "title.holder"], domain = [-100.0, 100.0], unit = "opinion points" }
+honesty_humility       = { input = "effective honesty_humility(actor)", reads = ["mind.honesty_humility", "thought.*"], domain = [-100.0, 100.0], unit = "trait points" }
+agreeableness          = { input = "effective agreeableness(actor)", reads = ["mind.agreeableness", "thought.*"], domain = [-100.0, 100.0], unit = "trait points" }
+conscientiousness      = { input = "effective conscientiousness(actor)", reads = ["mind.conscientiousness", "thought.*"], domain = [-100.0, 100.0], unit = "trait points" }
+holder_is_minor        = { input = "1 if the claimed title has a regent, else 0", reads = ["title.regent"], domain = [0.0, 1.0], unit = "bool" }
+kin_harmed             = { input = "1 if actor holds an unexpired KIN_HARMED_BY modifier about target, else 0 (always 0 in P1a: the modifier needs knowledge rows, P1b)", reads = ["opinion.*"], domain = [0.0, 1.0], unit = "bool" }
+rival_claim            = { input = "1 if target holds an active claim on a title actor holds or is first in line for, or actor on one of target's, else 0", reads = ["claim.claimant", "claim.title", "claim.status", "title.holder"], domain = [0.0, 1.0], unit = "bool" }
+closeness              = { input = "closeness ([relation_kinds]) of the closest harmed kin behind the vow candidate (P1b)", reads = ["life_course.mother", "life_course.father", "person.spouse"], domain = [0.0, 1.0], unit = "closeness" }
+active_vows            = { input = "number of goal rows of actor (P1b)", reads = ["goal.holder"], domain = [0.0, 8.0], unit = "count" }
+goal_priority          = { input = "goal.priority of the goal (P1b)", reads = ["goal.priority"], domain = [0.0, 0.8], unit = "weight" }
+target_reachable       = { input = "1 - h/7 for a route-graph distance of h <= 6 hops to the goal's target, else 0 (P1b)", reads = ["artifact.location", "artifact.bearer"], domain = [0.0, 1.0], unit = "reach" }
+
+[response_curves]      # T1.minds F1 (MAJ-6; 05.1 §4.3 item 2): one piecewise-linear curve per (decision type, consideration):
+# knots [[x, y], ...] with ascending x, every value a dyadic rational exactly representable in Q16_16, y in [0, 1];
+# the output is clamped to the end knots' y outside them, and linear between knots, rounded down in Q16_16.
+# Design values: no source; V-COG-03/04/10 and the G1a family histories judge them.
+[response_curves.marry]
+age          = [[0.0, 0.0], [16.0, 0.0], [20.0, 1.0], [40.0, 0.5], [60.0, 0.0]]
+age_gap      = [[0.0, 1.0], [10.0, 0.75], [20.0, 0.25], [40.0, 0.0]]
+partner_tier = [[0.0, 0.25], [3.0, 1.0]]
+opinion      = [[-100.0, 0.0], [0.0, 0.5], [100.0, 1.0]]
+ambition     = [[0.0, 0.5], [100.0, 1.0]]
+stress       = [[0.0, 1.0], [100.0, 0.5]]
+[response_curves.seek_office]
+ambition                = [[0.0, 0.0], [100.0, 1.0]]
+seat_tier               = [[0.0, 0.25], [3.0, 1.0]]
+kin_distance_to_granter = [[0.0, 1.0], [6.0, 0.25]]
+opinion_of_granter      = [[-100.0, 0.0], [0.0, 0.5], [100.0, 1.0]]
+stress                  = [[0.0, 1.0], [100.0, 0.5]]
+[response_curves.press_claim]
+ambition          = [[0.0, 0.0], [50.0, 0.25], [100.0, 1.0]]
+claim_rank        = [[1.0, 1.0], [10.0, 0.25]]
+opinion_of_holder = [[-100.0, 1.0], [0.0, 0.5], [100.0, 0.0]]
+honesty_humility  = [[-100.0, 1.0], [100.0, 0.25]]
+holder_is_minor   = [[0.0, 0.5], [1.0, 1.0]]
+stress            = [[0.0, 0.75], [100.0, 1.0]]
+[response_curves.feud]
+opinion       = [[-100.0, 1.0], [-25.0, 0.25], [0.0, 0.0]]
+agreeableness = [[-100.0, 1.0], [100.0, 0.125]]
+kin_harmed    = [[0.0, 0.5], [1.0, 1.0]]
+rival_claim   = [[0.0, 0.5], [1.0, 1.0]]
+stress        = [[0.0, 0.5], [100.0, 1.0]]
+[response_curves.swear_vow]
+kin_harmed        = [[0.0, 0.0], [1.0, 1.0]]
+closeness         = [[0.0, 0.0], [1.0, 1.0]]
+conscientiousness = [[-100.0, 0.5], [100.0, 1.0]]
+honesty_humility  = [[-100.0, 0.75], [100.0, 1.0]]
+active_vows       = [[0.0, 1.0], [8.0, 0.0]]
+[response_curves.pursue_goal]
+goal_priority    = [[0.0, 0.0], [0.75, 1.0]]
+target_reachable = [[0.0, 0.0], [1.0, 1.0]]
+ambition         = [[0.0, 0.5], [100.0, 1.0]]
+stress           = [[0.0, 1.0], [100.0, 0.5]]
+
+[contaminants]         # physical marks on an artifact or a cell, as bitflags in this order (S6; envelope); plane A
+ids = ["blood", "ash", "poison", "mud", "salt_water", "soot", "wine"]
+
+[place_types]          # plane C presentation table (05.11 §3): mechanics never read it
+great_hall     = { acoustic = "stone_hall_reverb", interior = true }
+chapel         = { acoustic = "stone_long_reverb", interior = true }
+crypt          = { acoustic = "close_stone_echo", interior = true }
+hovel          = { acoustic = "small_room_dry", interior = true }
+village_street = { acoustic = "open_street", interior = false }
+field          = { acoustic = "open_field_wind", interior = false }
+forest         = { acoustic = "forest_damped", interior = false }
+battlefield    = { acoustic = "open_field_wind", interior = false }
+
+[visual_style_cards]   # plane C (05.11 §5). No photorealism, and no living artist's name in any card or prompt.
+ids = ["dark_fantasy_ink"]   # dark-fantasy graphic novel: heavy ink, cross-hatching, high-contrast chiaroscuro,
+                             # muted watercolour wash, bold angular silhouettes, textured paper
+
+# ----------------------------------------------------------------------------- sagas (ADR-0035)
+[artifact_kinds]   # S6.artifacts; kind_strength scales the pull on the bearer (design values)
+relic  = { kind_strength = 0.6, overlay = "corruption" }
+crown  = { kind_strength = 0.4, overlay = "hubris", regalia = true }    # passes with its title
+weapon = { kind_strength = 0.3, overlay = "hubris" }
+ring   = { kind_strength = 0.8, overlay = "corruption" }
+tome   = { kind_strength = 0.5, overlay = "paranoia" }
+heirloom = { kind_strength = 0.0, overlay = "corruption" }              # no pull: a family treasure, still sought
+
+[vow_kinds]        # S7.vows; kind_weight scales the agenda priority (design values); target is the kind of entity aimed at
+AVENGE_KIN    = { kind_weight = 1.0, target = "person" }
+RECOVER_RELIC = { kind_weight = 0.8, target = "artifact" }
+DESTROY_RELIC = { kind_weight = 0.9, target = "artifact" }
+PROTECT       = { kind_weight = 0.6, target = "person" }
+CLAIM_TITLE   = { kind_weight = 0.8, target = "title" }
+PILGRIMAGE    = { kind_weight = 0.4, target = "place" }
+GRUDGE        = { kind_weight = 0.3, target = "person" }               # formed without an oath when a known culprit harms self or kin
+
+[visual_vocabulary.agrarian]   # v0 sketch (05.11 §5): the closed token sets visual DNA draws from, per era; cultures override.
+physiognomy = ["long_face", "broad_face", "hawk_nose", "heavy_brow", "high_cheekbones", "round_face", "narrow_jaw", "square_jaw"]
+colouring   = ["pale", "ruddy", "olive", "brown", "dark", "freckled"]
+hair        = ["black", "dark_brown", "auburn", "red", "fair", "grey", "white"]
+build       = ["slight", "lean", "wiry", "broad", "heavy", "tall", "short"]
+signature   = ["scar_left_cheek", "missing_finger", "braided_beard", "shaven_head", "eye_patch", "house_brooch", "iron_torc", "hooded_cloak"]
+
+# ----------------------------------------------------------------------------- templates
+[templates.feudal_realm]
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "M6.polity", "M7.dynasty", "M8.war"]
+horizon_years = [50, 3000]
+modern = false
+
+[templates.merchant_republic]
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "M6.polity", "M7.dynasty"]
+horizon_years = [50, 3000]
+modern = false
+
+[templates.test_solo]   # rung 0 of the complexity ladder (D4): one person on a tiny map, for testing the engine end to end
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "S5.daily_life"]
+horizon_years = [1, 120]
+modern = false
+
+[templates.pastoral_household]   # micro scale (ADR-0028): one household and its neighbours
+default_systems = ["M1.regions", "M2.demography", "M3.agriculture", "M4.economy", "S1.culture"]
+horizon_years = [1, 200]
+modern = false
+
+[templates.modern_metropolis]
+default_systems = ["M1.regions", "M2.demography", "M4.economy", "M5.contagion", "M6.polity"]
+horizon_years = [1, 50]       # longer horizons require horizon.label = "speculative"
+modern = true
+
+# ----------------------------------------------------------------------------- culture & world vocabularies (no free-string semantics)
+[values]       # Schwartz basic values: keys allowed in Culture.value_bias
+ids = ["self_direction", "stimulation", "hedonism", "achievement", "power", "security", "conformity", "tradition", "benevolence", "universalism"]
+
+[doctrine_tags]
+ids = ["divine_kingship", "fire_rites", "ancestor_veneration", "dragon_kinship", "rule_of_law", "communal_service", "asceticism", "holy_war", "tolerance", "inquisitorial",
+       "monotheism", "divine_justice"]
+
+[heightmap_templates]
+ids = ["caldera_with_passes", "river_delta_city", "archipelago", "continental_plains", "mountain_valleys", "flat", "desert_fringe"]
+
+[climate_zones]
+ids = ["temperate_continental", "temperate_maritime", "mediterranean", "arid", "tropical", "boreal", "urban_temperate"]
+
+# ----------------------------------------------------------------------------- eras (ADR-0027; v0 sketch, not yet read by validators)
+# Era-state variables: plane-A quantities that era-sensitive parameters may depend on. Each has exactly one owner.
+[era_state]
+tech_adoption                    = { owner = "S2.technology", scope = "region", type = "q8_8", per = "technology" }
+energy_per_capita                = { owner = "M4.economy",    scope = "region", type = "q16_16" }
+urban_share                      = { owner = "S3.migration",  scope = "region", type = "q8_8" }
+literacy                         = { owner = "S1.culture",    scope = "region_class", type = "q8_8" }
+fiscal_capacity                  = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+exec_constraint                  = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+franchise                        = { owner = "M6.polity",     scope = "polity", type = "q8_8" }
+succession_institutionalisation  = { owner = "M7.dynasty",    scope = "polity", type = "q8_8" }
+medical_level                    = { owner = "S2.technology", scope = "region", type = "q8_8" }
+commons_share                    = { owner = "M4.economy",    scope = "region", type = "q8_8" }
+market_integration               = { owner = "M4.economy",    scope = "region", type = "q8_8" }
+
+# Era labels: predicates over era_state, used by presentation, narrative and validation band selection ONLY.
+# A lint fails the build if any mechanic reads a label.
+[eras]
+ids = ["agrarian", "early_modern", "industrialising", "industrial", "contemporary"]
+frontier = "agrarian"            # last era the engine build supports; reaching beyond it files a gap report
+
+# ----------------------------------------------------------------------------- sifting vocabulary
+# Anchored attributes readable by patterns as `name(args)@eN`. Stored in event_snapshot.value as INTEGER:
+#   q8_8 = fixed-point (value/256); bool = 0/1; enum = index into `values`; int = raw.
+[attributes]
+fear                      = { type = "q8_8", args = ["actor"] }
+trust                     = { type = "q8_8", args = ["actor", "partner"] }
+suspicion                 = { type = "q8_8", args = ["actor", "partner"] }
+succession_rank           = { type = "int",  args = ["actor", "partner"] }
+is_self_or_kin            = { type = "bool", args = ["actor", "partner"] }
+is_parent                 = { type = "bool", args = ["actor", "partner"] }
+notable                   = { type = "bool", args = ["actor"] }
+hive_member               = { type = "bool", args = ["actor"] }
+used_hive_only_knowledge  = { type = "bool", args = ["actor"] }
+knows_event               = { type = "bool", args = ["actor", "event"] }
+in_realm                  = { type = "bool", args = ["event", "actor"] }
+faith                     = { type = "q8_8", args = ["actor"] }         # confidence in the deity's goodness (micro worlds, ADR-0028)
+integrity                 = { type = "q8_8", args = ["actor"] }         # commitment to one's own innocence and conduct
+grief                     = { type = "q8_8", args = ["actor"] }
+test_result               = { type = "enum", args = ["actor"], values = ["negative", "positive", "inconclusive"] }
+bears_artifact            = { type = "bool", args = ["actor"] }          # S6: the actor bears any artifact
+bearer_exposure           = { type = "q8_8", args = ["actor"] }          # S6: cumulative influence from the artifact borne
+artifact_transfer_mode    = { type = "enum", args = ["event"], values = ["inheritance", "theft", "gift", "trade", "loss"] }
+contaminants              = { type = "int",  args = ["event"] }          # envelope: bitflags of [contaminants] on the instrument or cell at the event
+cell_x                    = { type = "int",  args = ["event"] }          # envelope: cell coordinates, where the world tracks cells
+cell_y                    = { type = "int",  args = ["event"] }
+fugitive                  = { type = "bool", args = ["actor"] }          # S3.migration: the actor is fleeing (SAGA-14)
+vow_against               = { type = "bool", args = ["actor", "partner"] }  # S7: actor holds an active vow or grudge against partner
+vow_public                = { type = "bool", args = ["actor"] }          # S7: the vow on this event was sworn publicly
+stress                    = { type = "q8_8", args = ["actor"] }          # T1.minds: stress at the event, 0-100 scale (ADR-0035)
+# The cinematic event envelope (ADR-0035 §7a; 05.2 §4.1a): anchored snapshots, captured only where simulated.
+emotion_pleasure          = { type = "q8_8", args = ["actor"] }          # PAD mood, pleasure axis (signed)
+emotion_arousal           = { type = "q8_8", args = ["actor"] }          # PAD mood, arousal axis (signed)
+emotion_dominance         = { type = "q8_8", args = ["actor"] }          # PAD mood, dominance axis (signed)
+emotion_occ               = { type = "enum", args = ["actor"], values = ["none", "joy", "distress", "hope", "fear", "pride", "shame", "gratitude", "anger", "love", "hate"] }
+emotion_intensity         = { type = "q8_8", args = ["actor"] }          # intensity of emotion_occ
+weather                   = { type = "enum", args = ["event"], values = ["clear", "overcast", "rain", "storm", "snow", "fog", "heat"] }   # once M3 simulates weather
+# Role domains ([role_domains]; envelope_v0.md §1): bool attributes a pattern's `roles` compile to, captured as snapshots by the
+# system that owns the source (M7's title.holder for holds_title; the life-course log for is_self_or_kin, above); "none" sources
+# have no snapshot yet and are absent.
+holds_title               = { type = "bool", args = ["actor"] }                 # the actor holds any title at the event (authority)
+is_successor              = { type = "bool", args = ["actor", "partner"] }      # the actor is the partner's legal heir at the event
+is_ally                   = { type = "bool", args = ["actor", "partner"] }      # no source yet (P1b: S7 vows, M6 factions)
+is_rival                  = { type = "bool", args = ["actor", "partner"] }      # no source yet (feud rows are T1's: a P1b declaration)
+is_subordinate            = { type = "bool", args = ["actor", "partner"] }      # no source yet (M7 liege and vassal, next version)
+is_member                 = { type = "bool", args = ["actor", "partner"] }      # no source yet (factions, P4)
+is_host                   = { type = "bool", args = ["actor"] }                 # no source yet (S5 daily life, P1b)
+is_guest                  = { type = "bool", args = ["actor"] }                 # no source yet
+is_investigator           = { type = "bool", args = ["actor"] }                 # no source yet (M5 contagion, P1b)
+is_suspect                = { type = "bool", args = ["actor"] }                 # no source yet
+
+# Concrete verbs (subset). Systems emit these. The world compiler maps setting verbs onto them.
+# tellability (required, an integer 0-255; SPR-011 ruling 11): the Registry's prior of how worth telling one event of the verb
+# is, copied into the plane-A event row (schema.sql event.tellability; 05.1 §2 item 8). It is NOT significance: significance
+# is computed retroactively in plane C (SIFT-5), with tellability as one of its components. All values are DESIGN VALUES on
+# one scale, to be calibrated against reader judgements with the significance model (P2); no source sets them yet:
+#   0-63 routine (a test, an errand); 64-127 notable inside one life or household (a counsel, a lament, a claim made);
+#   128-191 notable to a community or a house (a death, an arrest, a vow sworn or kept, a feud); 192-254 era-defining for a
+#   polity (a succession, a deposition, a purge, a mass famine); 255 the end of a world's people (EXTINCTION).
+# DEATH is 128 and EXTINCTION 255 (ruling 11). verb_id is the verb's index in this table sorted by name (ruling 11).
+[verbs]
+FAMINE_DECLARED = { act_classes = ["death"], emitted_by = "M4.economy", aggregate = true, tellability = 224 }
+ISSUE_DECREE    = { act_classes = ["coerce"], emitted_by = "M6.polity", tellability = 96 }
+ARREST          = { act_classes = ["coerce", "harm"], emitted_by = "rh-minds", tellability = 128 }
+PURGE           = { act_classes = ["purge", "harm"], emitted_by = "rh-minds", tellability = 192 }
+REVENGE         = { act_classes = ["harm"], emitted_by = "rh-minds", references = ["harm"], tellability = 176 }
+BLOOD_TEST      = { act_classes = ["test"], emitted_by = "M5.contagion", tellability = 64 }
+RAID_LIVESTOCK  = { act_classes = ["raid", "harm"], emitted_by = "S4.ecology", tellability = 112 }
+SUCCEED         = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty", tellability = 192 }
+INCITE_RAID     = { act_classes = ["harm", "raid"], emitted_by = "agents", tellability = 160 }     # an agent moves an off-map actor to raid
+CALL_FIRE       = { act_classes = ["harm"], emitted_by = "agents", tellability = 160 }
+RAISE_WIND      = { act_classes = ["harm"], emitted_by = "agents", tellability = 160 }
+AFFLICT         = { act_classes = ["harm"], emitted_by = "agents", tellability = 160 }
+COUNSEL         = { act_classes = ["counsel"], emitted_by = "rh-minds", tellability = 80 }
+LAMENT          = { act_classes = ["lament"], emitted_by = "rh-minds", tellability = 96 }
+RENOUNCE_FAITH  = { act_classes = ["renounce"], emitted_by = "rh-minds", tellability = 192 }
+RESTORE         = { act_classes = ["restore", "aid"], emitted_by = "rh-minds", tellability = 176 }
+ARTIFACT_FORGED    = { act_classes = ["forge"], emitted_by = "S6.artifacts", tellability = 176 }
+ARTIFACT_PASSED    = { act_classes = ["pass"], emitted_by = "S6.artifacts", tellability = 128 }      # mode: inheritance | theft | gift | trade | loss
+ARTIFACT_USED      = { act_classes = ["use"], emitted_by = "S6.artifacts", tellability = 112 }       # the artifact is the instrument of an act
+ARTIFACT_FOUND     = { act_classes = ["discover"], emitted_by = "S6.artifacts", tellability = 160 }
+ARTIFACT_DESTROYED = { act_classes = ["destroy"], emitted_by = "S6.artifacts", tellability = 192 }
+BEARER_CORRUPTED   = { act_classes = ["corrupt"], emitted_by = "S6.artifacts", tellability = 176 }
+VOW_SWORN          = { act_classes = ["promise"], emitted_by = "S7.vows", tellability = 144 }
+VOW_FULFILLED      = { act_classes = ["fulfil"], emitted_by = "S7.vows", tellability = 192 }
+VOW_BROKEN         = { act_classes = ["betray"], emitted_by = "S7.vows", tellability = 192 }
+VOW_VOIDED         = { act_classes = ["lapse"], emitted_by = "S7.vows", tellability = 96 }
+MENTAL_BREAK       = { act_classes = ["renounce"], emitted_by = "T1.minds", tellability = 160 }   # the break; its act is a separate event from [mental_breaks]
+MURDER_ATTEMPT     = { act_classes = ["harm"], emitted_by = "T1.minds", references = ["harm", "depose", "claim"], tellability = 192 }   # a break act or a feud attack; success is a ScheduleDeath to M2
+FLED               = { act_classes = ["flee"], emitted_by = "T1.minds", tellability = 144 }
+HOLDINGS_BURNED    = { act_classes = ["harm", "destroy"], emitted_by = "T1.minds", tellability = 160 }
+DESPAIR_PACT       = { act_classes = ["bond", "renounce"], emitted_by = "T1.minds", tellability = 176 }
+FEUD_DECLARED      = { act_classes = ["accuse"], emitted_by = "T1.minds", references = ["harm", "depose", "claim", "succeed_to"], tellability = 160 }
+FEUD_ENDED         = { act_classes = ["restore"], emitted_by = "T1.minds", tellability = 128 }
+INTERREGNUM_CRISIS = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty", tellability = 208 }   # arbitration found no clear successor (SAGA-13)
+DEPOSED            = { act_classes = ["depose"], emitted_by = "M7.dynasty", references = ["claim"], tellability = 208 }
+REGENCY_BEGUN      = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty", tellability = 160 }
+REGENCY_ENDED      = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty", tellability = 128 }
+CLAIM_CREATED      = { act_classes = ["claim"], emitted_by = "M7.dynasty", references = ["succeed_to", "depose"], tellability = 112 }
+CLAIM_PRESSED      = { act_classes = ["claim"], emitted_by = "M7.dynasty", tellability = 144 }
+CLAIM_RENOUNCED    = { act_classes = ["renounce"], emitted_by = "M7.dynasty", tellability = 112 }
+SEAT_GRANTED       = { act_classes = ["succeed_to"], emitted_by = "M7.dynasty", tellability = 112 }   # a re-grant of a seat or an office (finite seats)
+HOUSE_EXTINCT      = { act_classes = ["lapse"], emitted_by = "M7.dynasty", tellability = 208 }
+DEATH              = { act_classes = ["death"], emitted_by = "M2.demography", tellability = 128 }      # target: the deceased; actor: the culprit of a caused death (P1.13), none for a natural one
+EXTINCTION         = { act_classes = ["death"], emitted_by = "M2.demography", tellability = 255 }      # the last living person died; caused by that DEATH (SPR-011 ruling 17)
+
+# Command signatures (§6, §7.3; SPR-017 T-06): one entry per command an owner's [[applies]] types, exactly its payload in
+# order (the key field is `person`), with language types: PersonId -> person, ClaimId/OfficeId/VowId -> their kinds,
+# u64 -> int, q8_8 -> q8_8, EventRef -> event, enum(<column>) -> that column's enum. No command carries a date (05.1 §2
+# rule 2; EVO-001 R9). Commands to owners without a spec (M4, S6, S7) get no entry until an [[applies]] types them (Q14).
+# Checked both ways against the owners' [[applies]] and the senders' [[commands]] by lint_odd.py.
+[commands]
+ScheduleDeath   = { owner = "M2.demography", person = "victim", outcome = true, params = [{ name = "cause", type = "enum:death_cause" }, { name = "culprit", type = "person" }, { name = "cause_event", type = "event" }] }
+Marry           = { owner = "M2.demography", person = "a", outcome = true, params = [{ name = "b", type = "person" }] }
+PressClaim      = { owner = "M7.dynasty", person = "claimant", outcome = false, params = [{ name = "claim", type = "claim" }] }
+PetitionSeat    = { owner = "M7.dynasty", person = "person", outcome = false, params = [{ name = "target", type = "int" }] }
+RenounceClaim   = { owner = "M7.dynasty", person = "claimant", outcome = false, params = [{ name = "claim", type = "claim" }] }
+Resign          = { owner = "M7.dynasty", person = "person", outcome = false, params = [{ name = "office", type = "office" }] }
+OpinionModifier = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "about", type = "person" }, { name = "kind", type = "enum:opinion_modifiers" }, { name = "magnitude", type = "q8_8" }, { name = "source_event", type = "event" }] }
+AgendaGoal      = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "vow", type = "vow" }, { name = "kind", type = "enum:vow_kinds" }, { name = "target", type = "int" }, { name = "priority", type = "q8_8" }] }
+ClearGoal       = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "vow", type = "vow" }] }
+ApplyThought    = { owner = "T1.minds", person = "holder", outcome = false, params = [{ name = "overlay", type = "enum:overlays" }, { name = "delta", type = "q8_8" }, { name = "source_event", type = "event" }] }
+ApplyInfluence  = { owner = "T1.minds", person = "bearer", outcome = false, params = [{ name = "overlay", type = "enum:overlays" }, { name = "delta", type = "q8_8" }] }
+Promote         = { owner = "T1.minds", person = "person", outcome = false, params = [] }
+Demote          = { owner = "T1.minds", person = "person", outcome = false, params = [] }

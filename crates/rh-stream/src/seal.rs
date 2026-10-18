@@ -24,11 +24,17 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::StreamError;
-use crate::record::Channel;
+use crate::record::{Channel, Record};
 use crate::segment::SEGMENT_FILE;
 
 /// Observes a seal (test hooks only).
 pub trait SealHook {
+    /// Before sealing begins for `year`, observing the queued records (test hooks only).
+    #[allow(
+        clippy::ptr_arg,
+        reason = "allocated accounts for the vector's capacity"
+    )]
+    fn sealing(&mut self, _channel: Channel, _year: i64, _records: &Vec<Record>) {}
     /// After file `index` (from 0) of the segment `y<year>` has been written and renamed.
     fn file_written(&mut self, _channel: Channel, _year: i64, _index: usize, _name: &str) {}
     /// After the segment `y<year>` is sealed (renamed into place).
@@ -218,4 +224,16 @@ pub fn read_segment(dir: &Path) -> Result<BTreeMap<String, Vec<u8>>, StreamError
         out.insert(name, fs::read(&path).map_err(io(&path))?);
     }
     Ok(out)
+}
+
+/// The `segment` row of the sealed channel-A segment directory `dir`, from its `segment.parquet`
+/// alone (a resumed live edge's start, SPR-026 T-02).
+///
+/// # Errors
+/// [`StreamError::Segment`] for a directory that is not a sealed segment; [`StreamError::Io`];
+/// [`StreamError`] if the row does not decode.
+pub fn read_segment_row(dir: &Path) -> Result<crate::segment::SegmentRow, StreamError> {
+    let path = dir.join(SEGMENT_FILE);
+    let bytes = fs::read(&path).map_err(io(&path))?;
+    crate::segment::read_row(&bytes)
 }

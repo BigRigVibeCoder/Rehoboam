@@ -39,7 +39,7 @@ use rh_core::system::{
 use rh_core::time::{Calendar, DaysPerYear, SeasonsPerYear, SimTime};
 use rh_core::world::{SystemView, WorldTables};
 use rh_core::{Phase, Pulse};
-use rh_events::{Event, EventDraft, EventRef};
+use rh_events::{EdgeKind, Event, EventDraft, EventRef, RoleId};
 use rh_ids::{BranchSalt, EntityRef, PersonId};
 use rh_registry::ownership::{Ownership, SystemSpec};
 use rh_registry::{DemographyParams, Founder, FounderRole, WorldSpec};
@@ -118,6 +118,7 @@ timer = "DEATH_DUE"
 purpose = "outcome_delay"
 [[emits]]
 kind = "MURDER_ATTEMPT"
+roles = ["target"]
 [[schedule]]
 pulse = "Day"
 phase = "Agenda"
@@ -225,6 +226,10 @@ impl SystemModel for Sender {
     fn params_schema(&self) -> ParamSchema {
         ParamSchema::default()
     }
+    fn roles(&self) -> &'static [(&'static str, RoleId)] {
+        static ROLES: [(&str, RoleId); 1] = [("target", RoleId::TARGET)];
+        if self.id == "X1.minds" { &ROLES } else { &[] }
+    }
     fn step(
         &self,
         b: PulseBinding,
@@ -238,8 +243,9 @@ impl SystemModel for Sender {
         }
         let who = PersonId::from_raw(plan[1].cast_unsigned());
         let (cause, purpose_is_murder) = if self.id == "X1.minds" {
-            let draft =
-                c.emit(EventDraft::new("MURDER_ATTEMPT").subject(EntityRef::person(who)))?;
+            let draft = c.emit(
+                EventDraft::new("MURDER_ATTEMPT").role(RoleId::TARGET, EntityRef::person(who)),
+            )?;
             (EventRef::Draft(draft), false)
         } else {
             (EventRef::None, true)
@@ -420,7 +426,7 @@ fn run(e: &mut Engine, end: i64) -> Vec<Event> {
 fn deaths_of(events: &[Event], who: u64) -> Vec<&Event> {
     events
         .iter()
-        .filter(|ev| ev.kind == DEATH && ev.subjects.iter().any(|s| s.raw() == who))
+        .filter(|ev| ev.kind == DEATH && ev.roles.iter().any(|s| s.entity.raw() == who))
         .collect()
 }
 
@@ -498,8 +504,12 @@ fn v_inv_03_commanded_deaths_take_the_single_death_path() {
             .find(|ev| ev.kind == "MURDER_ATTEMPT")
             .unwrap();
         assert_eq!(
-            deaths_of(&events, v1)[0].causes,
-            [attempt.id],
+            deaths_of(&events, v1)[0]
+                .causes
+                .iter()
+                .map(|e| (e.cause, e.kind))
+                .collect::<Vec<_>>(),
+            [(attempt.id, EdgeKind::Triggered)],
             "DEATH <- MURDER_ATTEMPT"
         );
         assert!(

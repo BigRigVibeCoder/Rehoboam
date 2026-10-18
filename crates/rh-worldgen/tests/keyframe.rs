@@ -27,7 +27,7 @@ use rh_snapshot::journal::{JournalPosition, chain_genesis};
 use rh_snapshot::keyframe::{History, load_engine, write_keyframe};
 use rh_snapshot::state_hash;
 use rh_sys_demography::Demography;
-use spec_files::{load_specs, registry_system_ids};
+use spec_files::{load_specs, registry_system_ids, registry_table};
 
 mod spec_files;
 
@@ -41,7 +41,8 @@ fn specs() -> SpecTable {
     let ids =
         registry_system_ids(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
     let specs = load_specs(&repo().join("specs/systems")).expect("specs");
-    Ownership::build(&specs, &ids).spec_table()
+    let table = registry_table(&repo().join("specs/manifest/registry_v0.toml")).expect("registry");
+    Ownership::build(&specs, &ids).spec_table_with(table)
 }
 
 fn spec(seed: u64, n: usize) -> WorldSpec {
