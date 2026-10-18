@@ -65,24 +65,23 @@
 
 | Branch @ head | Node / Role | State & PR | Next Action |
 |:---|:---|:---|:---|
-| `sprint/SPR-015-births-f1`<br>@ `5ee789f` | **Exuberant** (`100.115.214.32`)<br>`AGT-002-CORE` | **Cooking Stage B** ([PR #107](https://github.com/BigRigVibeCoder/Rehoboam/pull/107)). Stage A audited (`VER-SPR-015-INTERIM.md`). Red team Probe B09-01 passed 6/6 traps. | Apply CI fixes from [`exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md), finish T-04, run `check_all`, and push `[C3]` commit. |
-| `sprint/SPR-016-mortality-f1`<br>@ `da6c74d` | Developer<br>`AGT-002-CORE` | **Stage 1 PASS; Stage 2 Staged** ([PR #88](https://github.com/BigRigVibeCoder/Rehoboam/pull/88)). Brass relational logit mortality and infant knots ready. | Fast-forward and rebase/merge `main` immediately upon SPR-015 merge. |
-| `sprint/SPR-027-stream-materializer` | **Adjutant Agent 1** (`100.101.50.50`)<br>`AGT-002-TOOLS` | **In Progress** implementing Task T-03 (`crates/rh-golden/src/governor.rs`). | Complete pace governor, wire `control.sock`, execute `V-STR-02` suite. |
-| `sprint/SPR-033a-viewer-core`<br>@ `17f6ca7` | **Adjutant Agent 2** (`100.101.50.50`)<br>`AGT-002-TOOLS` | **Stage A 100% Complete** ([Draft PR #111](https://github.com/BigRigVibeCoder/Rehoboam/pull/111)). Passed 22/22 gates in `bin/check_viewer.sh`. | Architect audit and merge. Prep brief for SPR-033b. |
-| `arch/pm-agenda-wave5-wave7` | **Architect** (Local Session)<br>`AGT-001` | **Active PM Orchestration & Roadmap Agenda**. | Coordinate PR #107 CI remediation, unblock SPR-016, and sequence Wave 6/7. |
+| `sprint/SPR-015-births-f1`<br>@ `cda5d16` | **Exuberant** (`100.115.214.32`)<br>`AGT-002-CORE` | PR #107 (draft): T-01..T-04 committed. **CI red on all three parts** (core, golden, stream). T-01 incomplete (`next/M2` not removed). No Tester pass yet. | Work order revision 2: [`exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md). Evidence: `VER-SPR-015-INTERIM.md` |
+| `sprint/SPR-016-mortality-f1`<br>@ `da6c74d` | Developer<br>`AGT-002-CORE` | PR #88 (draft): stage 1 only, Tester PASS on stage 1. **232 commits behind `main`.** | Held until SPR-015 merges; then merge `main` by gate name (expect conflicts in the M2 spec and `check_all`) |
+| `sprint/SPR-027-…` | `AGT-002-TOOLS` | **No remote branch exists.** `pm_inbox.md` reports a local T-03 in progress; unverified | Owner pushes it, or the Architect reassigns |
+| `sprint/SPR-033a-viewer-core`<br>@ `17f6ca7` | `AGT-002-TOOLS` | PR #111 (draft): core, golden and viewer checks green; **stream red** on `serve::probe_c…` `ConnectionRefused` (suspected flaky test, A-81) | Rerun once; audit and merge |
+| `arch/pm-agenda-wave5-wave7` | Architect<br>`AGT-001` | PR #112 (draft): this record, the status report, BCK-002 A-78..A-82 | Merge when reviewed |
+| `arch/red-team-batch-04`<br>@ `63046c9` | Red Team | **43 commits ahead of `main`, no PR.** Holds Batch 09 dossier and probe `B09-01` | Open a PR (A-80) |
 
 ---
 
 ## 4. Key Records & Directives
 
-- **Interim Audits:**
-  - [`CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md`](file:///home/bdavidriggins/Documents/Rehoboam/CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md): Stage A/B audit, Red Team probe results, and CI failure triage for PR #107.
-- **Work Orders & Briefings:**
-  - [`docs/handoff/2026-10-18/exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md): Detailed remediation steps for Exuberant to turn PR #107 green.
-  - [`docs/handoff/2026-10-18/viewer_lane_briefing.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/viewer_lane_briefing.md): Roadmap for P2 viewer lane (SPR-033a/b, SPR-034, SPR-035).
-- **Red Team Dossiers:**
-  - [`docs/red_team/RT-2026-10-18-batch-09-dossier.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/red_team/RT-2026-10-18-batch-09-dossier.md): RT-039 (Childbirth Death Race), RT-040 (60s Stream Crucible), RT-041 (Feudal Epistemic Horizons).
-  - [`tests/probes/probe_fertility_adversarial_traps.py`](file:///home/bdavidriggins/Documents/Rehoboam/tests/probes/probe_fertility_adversarial_traps.py): Probe B09-01 covering all 6 adversarial traps.
+- **Status report (read this for the full picture):** [`docs/handoff/2026-10-18/pm_status_report.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/pm_status_report.md): sprint ledger, code status, findings, governance gaps, backlog, next seven days.
+- **Interim audit:** [`CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md`](file:///home/bdavidriggins/Documents/Rehoboam/CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md) (DRAFT; no pass given).
+- **Work orders and briefings:**
+  - [`exuberant_stage_b_work_order.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/exuberant_stage_b_work_order.md) (revision 2).
+  - [`viewer_lane_briefing.md`](file:///home/bdavidriggins/Documents/Rehoboam/docs/handoff/2026-10-18/viewer_lane_briefing.md): P2 lane (SPR-033a/b, 034, 035).
+- **Red-team files** (on `arch/red-team-batch-04` only; not on `main`): `docs/red_team/RT-2026-10-18-batch-09-dossier.md` (RT-039..041) and `tests/probes/probe_fertility_adversarial_traps.py` (B09-01, reported 6 of 6 by the Red Team; not re-run by the Architect).
 - **Roadmap & Plans:**
   - `CODEX/05_PROJECT/PRJ-002_P1aPlan.md` (P1a "Bloodlines" plan through Gate G1a).
   - `CODEX/05_PROJECT/PRJ-003_BevyVoxelViewer.md` (P2 Viewer lane plan).
@@ -122,41 +121,28 @@ flowchart TD
 ```
 
 ### 1. Close Wave 5: SPR-015 & SPR-016
-1. **SPR-015 (M2 F1 Births, PR #107):**
-   - Exuberant applies the 3 fixes in `exuberant_stage_b_work_order.md`:
-     1. Sync `tests/registry_effect/registry_absolute_primogeniture.toml` with `specs/manifest/registry_v0.toml`.
-     2. Update solo snapshot via `RH_UPDATE_SNAPSHOTS=1 cargo nextest run -p rh-golden --release --test tail`.
-     3. Re-record instruction baselines via `python -I bin/perf_gate.py record`.
-   - Complete T-04 (partnering N1–N7, `apply_marry`, households H3/H4).
-   - Push `feat(SPR-015): complete Stage B births & households [C3] [perf-baseline]`.
-   - Architect audits (`VER-SPR-015`) and merges with merge commit pinned to head SHA.
-2. **SPR-016 (M2 F1 Mortality, PR #88):**
-   - Bring `main` into `sprint/SPR-016-mortality-f1`.
-   - Fast-forward Stage 2: Brass relational logit mortality schedule, infant knots, density modifiers.
-   - Independent Tester verification, Architect audit (`VER-SPR-016`), and merge commit.
+1. **SPR-015 (M2 F1 Births, PR #107):** work order revision 2, in order:
+   1. Finish T-01: remove `next/M2`, strip M2 from `next/registry_delta.toml`, update the README, regenerate the lock with its tool.
+   2. Regenerate the registry fixture.
+   3. Explain the +62% quiet-instant cost before any baseline moves.
+   4. Snapshot and baselines in the final `[C3] [perf-baseline]` commit only.
+   5. Full local `bin/check_all.sh`; Tester pass (different model); Architect audit (`VER-SPR-015`); merge pinned to the head SHA.
+2. **SPR-016 (M2 F1 Mortality, PR #88):** after SPR-015 merges, merge `main` (232 commits) by gate name, run the inventory self-check, finish stage 2, Tester, audit, merge.
+3. **Records (A-78):** backfill `VER-SPR-038a`; commission independent Tester passes on SPR-020 and SPR-038a.
 
-### 2. Execute Wave 6: Demography & Space
-1. **SPR-018: Residence at Birth & Settlements:**
-   - Implement `S3.settlements` F0 residence algorithm (`specs/worldgen/selftest_worldgen_lite.py`).
-   - Tie newborn person residence to maternal household settlement.
-2. **SPR-019: Population Synthesis & Dynastic Backfill:**
-   - Execute population synthesis v0 and dynastic backfill reference.
-   - Author manor fixture world (`specs/manifest/examples/manor.yaml`).
+### 2. Wave 6: Demography & Space (scope from the sprint documents; read them, not this summary)
+1. **SPR-018** (`SPR-018_WorldgenLite.md`): M1.regions F0 (elevation raster, regions, seats, routes); `S3.migration` F0 in a new `rh-sys-migration` (residence at genesis and at birth); the manifest validator's two household refusals; bench 4.
+2. **SPR-019** (`SPR-019_PopulationSynthesis.md`): population synthesis v0 from the manifest's `population` marginal (D46) and the dynastic back-fill; stage A comes before SPR-021a (D58 item 5).
 
-### 3. Execute Wave 7: Dynasties & Governance
-*All spec prerequisites (AN-0, AN-1, T-00b) and Director decisions (D58) are merged into `main`.*
-1. **SPR-021a/b: M7 Succession & Cognatic Lineage:**
-   - Promote M7 0.6.0 from `next/` to authoritative frozen spec.
-   - Implement agnatic, cognatic, and elective succession laws in `rh-sys-dynasty`.
-2. **SPR-022a/b: Ruler Exits & Regency:**
-   - Implement interregnum crises, minority regencies, abdication, and deposition.
+### 3. Wave 7: Dynasties (the specs are on `main`: AN-0, AN-1, T-00b merged)
+1. **SPR-021a/b** (`SPR-021_SuccessionF1.md`): T-01 promotes M7 0.6.0 with the Registry's M7 defaults; T-02 builds the instant log's merged events in `rh-core`; the system crate is `rh-sys-dynasty`. Follow the plan's own task list. Known gap to close: M7 0.3.4 lacks a `person.id` read (SPR-017's Tester).
+2. **SPR-022a/b** (`SPR-022_RulerExitsDormancyF1.md`): ruler-exit hazards, murder timer, feud stock, deposition and claims, regencies.
 
-### 4. Execute Wave 8: The Crucible (Gate G1a)
-1. **SPR-028: M9 Statistical Invariant Harness:** Multi-seed demographic stability checks.
-2. **SPR-029: Family Annals & Chronicles:** Template-based natural language chronicles.
-3. **SPR-030: Gate G1a Crucible:** 10,000 persons, 1,000 sim-years in $\le 60$s on `kingdom_10k`.
+### 4. Wave 8: Gate G1a
+1. **SPR-028** (`SPR-028_ValidationHarness.md`), **SPR-029** (`SPR-029_FamilyAnnals.md`), **SPR-030** (`SPR-030_ScaleAndGoldens.md`).
+2. **G1a performance bar:** `kingdom_10k`, 1,000 sim-years in at most 60 s. See the status report §1: expect a miss; SPR-030a's probe decides A-68.
 
 ### 5. P2 Viewer Lane Execution
-1. **SPR-033a (PR #111):** Audit and merge Draft PR #111 (Bevy-free core).
+1. **SPR-033a (PR #111):** rerun the red stream job once (A-81), audit, merge.
 2. **SPR-033b:** Stage Bevy 0.20 application once 14-day lock age criterion matures (2026-10-22).
-3. **SPR-034 & SPR-035:** Stream ingestion and timeline scrubber hookup to Adjutant 1's materializer (SPR-027).
+3. **SPR-034 & SPR-035:** Stream ingestion and timeline scrubber hookup to SPR-027's materializer (no remote branch yet).

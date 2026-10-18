@@ -1,80 +1,49 @@
-# Work Order: SPR-015 Stage B Completion & CI Remediation
+# Work Order: SPR-015 CI remediation and Stage B completion (revision 2)
 
 - **Assignee:** Developer Exuberant (`AGT-002-CORE`)
 - **Assigner:** Architect (`AGT-001`)
 - **Date:** 2026-10-18
-- **Priority:** Priority 1 (Crucible Critical Path)
-- **Branch:** `sprint/SPR-015-births-f1` (PR #107)
-- **Current Head:** `5ee789ff6f275573d29d5ec88749cc25855d84f2`
-- **Change Class:** **C3 `[perf-baseline]`**
+- **Branch:** `sprint/SPR-015-births-f1` (PR #107), head `cda5d16d` at writing
+- **Change class:** C3 `[perf-baseline]`
+- **Record:** `CODEX/40_VERIFICATION/VER-SPR-015-INTERIM.md` (the evidence for everything below)
 
----
+Revision 2 replaces revision 1, which listed three fixes and was wrong about the second. CI is fail-fast: the failures below are the ones seen so far, not necessarily all.
 
-## 1. Executive Summary
+## 1. Do these in order
 
-Your Stage A work (T-01..T-03) and Genesis sentinel column updates (`5ee789ff`) have been audited by the Architect and verified by the Red Team. Red Team probe `B09-01` (`probe_fertility_adversarial_traps.py`) ran against your implementation and passed all 6 adversarial traps.
+### 1. Finish T-01: the promotion was a copy, not a move
+`specs/systems/next/M2.demography.odd.toml` must not exist once M2 0.3.0 is frozen in `specs/systems/`. Today both exist, and the next-version lint reports `spec_version 0.3.0 must be a semver above the frozen 0.3.0`.
+- Remove `next/M2.demography.odd.toml` (`git rm`).
+- Remove M2's section and the `BIRTH` and `MARRIAGE` verbs from `next/registry_delta.toml`. Keep M7's section for SPR-021a.
+- Update `next/README.md` where it still calls M2 a draft ("Current contents", step 4). SPR-016 starts the next M2 version, 0.3.1.
+- Regenerate `next/amendments.lock.toml` with `python -I specs/systems/lint_odd.py --next specs/systems/next --overlay specs/systems/next/registry_delta.toml --write-amendments-lock`, and read the diff. Never type it.
+- Re-run `specs/annals/fixtures/gen_fixtures.py` and `selftest_annals_v0.py --write` as the original work order says.
+- **Check:** `lint_odd.py --next … --overlay …` exits 0.
 
-CI run 39176612229 on PR #107 encountered 3 specific, isolated failures. This work order specifies the exact fixes required to turn PR #107 green and complete Stage B.
+### 2. The registry fixture
+`tests/registry_effect/registry_absolute_primogeniture.toml` must equal `registry_v0.toml` plus the one law (`python/tests/test_registry_effect_extension.py`). Find how the file was produced (SPR-017 T-09) and regenerate it the same way. If no tool exists, say so in the PR and tell the Architect; do not hand-edit silently.
+- **Check:** `pytest python/tests/test_registry_effect_extension.py` passes.
 
----
+### 3. Explain the quiet-instant cost before touching a baseline
+V-PERF-04 reports `instant/quiet` 14,306 to 23,230 instructions (+62%). A quiet instant has no births. Find where about 8,900 instructions go, with `cargo bench -p rh-bench --features arena-alloc --bench instant` and the counts under valgrind.
+- If it is work proportional to N or L that SPR-038a removed, fix it. A baseline move does not excuse it.
+- If it is a fixed cost (a new column, a new index hook), write the cause and the size in the PR body.
+- Only after this, re-record.
 
-## 2. Immediate CI Fixes Required
+### 4. Snapshot and baselines, in the final `[C3] [perf-baseline]` commit only
+- `RH_UPDATE_SNAPSHOTS=1 cargo nextest run -p rh-golden --release --test tail`. Read the diff: the state hash on the keyframe line is expected to change, and **nothing else may change**. Report any other changed line.
+- `python -I bin/perf_gate.py record`, with a `Reason:` line in the commit body.
+- `bin/regen_baseline.sh` for the golden ladders, as the class requires.
 
-### Fix 1: Synchronize Registry Fixture (Part Core)
-- **File:** `tests/registry_effect/registry_absolute_primogeniture.toml`
-- **Issue:** `python/tests/test_registry_effect_extension.py:37` fails because `specs/manifest/registry_v0.toml` was updated with `BIRTH`, `MARRIAGE`, and F1 parameters (`tfr`, `elite_fertility_mult`, `density_capacity`, `density_mortality_slope`), but the fixture copy was not updated.
-- **Action:** Copy the additions made to `specs/manifest/registry_v0.toml` in commit `a61e9195` into `tests/registry_effect/registry_absolute_primogeniture.toml` so that stripping `[succession_laws.absolute_primogeniture]` leaves `registry_v0.toml` byte-identical.
-- **Verification:** Run `pytest -c python/pyproject.toml python/tests/test_registry_effect_extension.py`. Must PASS.
+### 5. Run everything locally
+`bin/check_all.sh` (all three parts) and `python -I bin/check_all_selftest.py inventory`. Attach the report path to the PR. No report, no pass.
 
-### Fix 2: Update Solo Story Snapshot (Part Stream)
-- **File:** `crates/rh-golden/tests/snapshots/solo_story.txt`
-- **Issue:** Gate 8 (`rh-golden::tail the_display_form_matches_its_snapshots`) panicked because the solo year-10 keyframe state plane-A hash moved:
-  ```diff
-  -    121 0009-12-30 23:59 KEYFRAME keyframes/year-0010.rhkf state dc4436a63873b9b9
-  +    121 0009-12-30 23:59 KEYFRAME keyframes/year-0010.rhkf state 14a9bacfe1c3bbc0
-  ```
-- **Action:** Rerun the test with snapshot updating enabled:
-  ```bash
-  RH_UPDATE_SNAPSHOTS=1 cargo nextest run -p rh-golden --release --test tail
-  ```
-  Commit the updated `crates/rh-golden/tests/snapshots/solo_story.txt`.
+## 2. Process corrections
 
-### Fix 3: Re-record Instruction Count Baselines (Part Golden)
-- **File:** `crates/rh-bench/baselines/instructions_v1.txt`
-- **Issue:** Gate 9 (`V-PERF-04`) reported expected instruction regressions in `instant/quiet` and `instant/year` due to M2 demography passes.
-- **Action:** In your final `[C3] [perf-baseline]` commit, re-record the instruction baseline:
-  ```bash
-  python -I bin/perf_gate.py record
-  ```
-  Include `Reason: SPR-015 M2 F1 births and household passes` in the commit body.
+- The Stage A checkpoint is binding (GOV-005 §4.2): after T-01 to T-03 you stop for the Tester. T-04 was pushed an hour later with no Tester pass. Do not start Stage C or any task beyond T-04 until the Tester has passed Stage A and B.
+- Commit subjects follow GOV-009 §3 (`type(SPR-015): T-NN description`, a `Why:`, `What:`, `Refs:` body). `merge(SPR-015): …` is not a type in use; use `Merge origin/main …`, by gate name.
+- Keep PR #107 a draft until the checks above pass.
 
----
+## 3. Then
 
-## 3. Stage B Task Completion (Task T-04)
-
-Complete the remaining Stage B deliverables:
-1. **Partnering (N1–N7):**
-   - Annual marriage eligibility evaluation for unmarried adults $\ge 16$.
-   - Marriage rate and spouse pairing from `rh-sample`.
-   - `apply_marry` command application.
-2. **Household Accounting (H3/H4):**
-   - Creation of new `HouseholdId` upon marriage when leaving natal household.
-   - Dissolution of sole-occupant households on death (`INV-M2-09`).
-   - Clean handling of immediate ID reuse without aliasing.
-3. **Run Full Gates:**
-   - Execute `bin/check_all.sh` across all parts.
-   - Verify `python -I bin/check_all_selftest.py inventory`.
-
----
-
-## 4. Final Commit & Merge Protocol (GOV-009)
-
-When all tests pass locally:
-1. Stage all changes.
-2. Commit with title:
-   ```
-   feat(SPR-015): complete Stage B births & households [C3] [perf-baseline]
-   ```
-3. Push to `sprint/SPR-015-births-f1`.
-4. Ensure PR #107 turns green across all 3 CI jobs (`core`, `golden`, `stream`).
-5. Hand off to Architect for final merge.
+The Architect requests the Tester (a different model from yours), audits (`VER-SPR-015`) and merges. SPR-016 stage 2 waits for that merge.
