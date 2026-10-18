@@ -1549,6 +1549,7 @@ impl Engine {
                     guarded.push(Guarded {
                         name: c.name,
                         rows_before: c.rows_before,
+                        rows_after: c.rows.len(),
                         written: c.written,
                         pre: c.pre,
                     });

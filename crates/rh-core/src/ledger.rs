@@ -411,6 +411,10 @@ impl Ledger {
         guarded: &[Guarded],
         tables: &WorldTables,
     ) -> Result<(), SimError> {
+        // A step that wrote none of its ledger columns changed none of them: nothing to check.
+        if !guarded.iter().any(|g| g.written) {
+            return Ok(());
+        }
         let refuse = |message: String| SimError::Ledger { system, message };
         let pre = |name: &str| {
             guarded
@@ -455,7 +459,7 @@ impl Ledger {
             )));
         }
         for g in guarded.iter().filter(|g| g.name.starts_with(PERSON_PREFIX)) {
-            let after = tables.get(g.name).map_or(0, Vec::len);
+            let after = g.rows_after;
             if after != g.rows_before {
                 return Err(refuse(format!(
                     "{} went from {} to {after} rows: only rh-core's compaction removes ledger \
@@ -512,6 +516,9 @@ impl Ledger {
 pub(crate) struct Guarded {
     pub(crate) name: &'static str,
     pub(crate) rows_before: usize,
+    /// Its row count when the step returned it (the level's put-back): no one else changes it
+    /// before the check.
+    pub(crate) rows_after: usize,
     pub(crate) written: bool,
     pub(crate) pre: Option<Column>,
 }
